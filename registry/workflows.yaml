@@ -1,0 +1,124 @@
+# registry/workflows.yaml — декларативные workflow-контракты (package v0.2.0)
+# MVP: QUICK, ENGINEERING, PRODUCT, RESEARCH. Runtime-independent (принцип 12.6):
+# provider-specific логики нет; adapter преобразует контракт в исполнение.
+# Стадии ссылаются на id из registry/agents.yaml; gates — на id из quality/gates.yaml.
+# Прозаические workflows/*.md остаются рабочими до перевода (Ф11).
+schema_version: 1
+registry_type: workflows
+contract_version: 1
+
+workflows:
+  QUICK:
+    id: QUICK
+    purpose: Малое локальное изменение с низким риском.
+    layer: core
+    selection_criteria: {size: small, risk: low, task_type: [bug-fix, small-change, docs, config]}
+    disqualifying_conditions:
+      - "risk in [high, critical]"
+      - "touches protected_paths"
+      - "requires new requirement or architecture"
+    required_artifacts: [intake, TaskState, VerificationEvidence]
+    optional_artifacts: [LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      - {id: local-change, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
+      - {id: local-verify, owner: final-verifier, review_mode: read-only}
+      - {id: result, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+    quality_gates: [intake_completeness, implementation_verification]
+    required_capabilities: [file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: false, escalate_if: [protected_paths, destructive]}
+    archive_criteria: "implementation_verification pass; изменение применено"
+    resumability: TaskState
+    learning_output: optional
+    maps_from: [workflows/bug-fix.md]
+
+  ENGINEERING:
+    id: ENGINEERING
+    purpose: Инженерная задача с требованиями, спецификацией и ревью.
+    layer: core
+    selection_criteria: {size: [medium, large], risk: [low, medium], task_type: [feature, refactoring, integration-change]}
+    disqualifying_conditions:
+      - "risk == critical"
+      - "pure discovery without code"
+    required_artifacts: [intake, requirements, specification, TaskPlan, TaskState, VerificationEvidence]
+    optional_artifacts: [design, ADR, LearningPatch]
+    stages:
+      - {id: requirements, owner: requirements-writer, writer: requirements-writer, review_mode: writer}
+      - {id: requirements-review, owner: requirements-reviewer, review_mode: read-only}
+      - {id: specification, owner: solution-architect, writer: solution-architect, review_mode: writer}
+      - {id: plan, owner: task-planner, writer: task-planner, review_mode: writer}
+      - {id: plan-critique, owner: plan-reviewer, review_mode: read-only}
+      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
+      - {id: verify, owner: final-verifier, review_mode: read-only}
+      - {id: review, owner: code-reviewer, review_mode: read-only, preset: software-product}
+    quality_gates: [requirements, specification, plan_readiness, implementation_verification, code_review]
+    required_capabilities: [structured_output, file_read, file_write]
+    preferred_execution_mode: orchestrated
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: conditional, when: [protected_paths, medium_risk_release]}
+    archive_criteria: "все blocking gates pass; evidence привязан к tested_revision"
+    resumability: TaskState + tasks
+    learning_output: recommended
+    maps_from: [workflows/feature-development.md, workflows/refactoring.md]
+
+  PRODUCT:
+    id: PRODUCT
+    purpose: Продуктовая задача от проблемы к ценности и валидации.
+    layer: core
+    selection_criteria: {task_type: [new-product-capability, discovery, epic], needs: [problem, users, value]}
+    disqualifying_conditions:
+      - "pure engineering with settled requirements"
+    required_artifacts: [intake, requirements, specification, TaskPlan, VerificationEvidence]
+    optional_artifacts: [design, ADR, product-analytics-plan]
+    stages:
+      - {id: problem, owner: product-manager, writer: product-manager, review_mode: writer, preset: product-discovery}
+      - {id: users, owner: product-analyst, writer: product-analyst, review_mode: writer, preset: product-discovery}
+      - {id: value, owner: product-manager, writer: product-manager, review_mode: writer, preset: product-discovery}
+      - {id: requirements, owner: requirements-writer, writer: requirements-writer, review_mode: writer}
+      - {id: specification, owner: solution-architect, writer: solution-architect, review_mode: writer}
+      - {id: plan, owner: task-planner, writer: task-planner, review_mode: writer}
+      - {id: plan-critique, owner: plan-reviewer, review_mode: read-only}
+      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
+      - {id: validation, owner: final-verifier, review_mode: read-only}
+      - {id: stakeholder-handoff, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+    quality_gates: [intake_completeness, requirements, specification, plan_readiness, stakeholder_readiness]
+    required_capabilities: [structured_output, file_read, file_write]
+    preferred_execution_mode: orchestrated
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: true, stage: stakeholder-handoff}
+    archive_criteria: "validation pass; stakeholder handoff принят"
+    resumability: TaskState
+    learning_output: recommended
+    maps_from: []
+
+  RESEARCH:
+    id: RESEARCH
+    purpose: Исследовательский вопрос с проверкой фактов и синтезом.
+    layer: core
+    selection_criteria: {task_type: [research, market-scan, feasibility, external-evidence]}
+    disqualifying_conditions:
+      - "requires code implementation as primary output"
+    required_artifacts: [intake, proposal, VerificationEvidence, verification]
+    optional_artifacts: [LearningPatch]
+    stages:
+      - {id: question, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      - {id: scope, owner: requirements-writer, writer: requirements-writer, review_mode: writer}
+      - {id: source-strategy, owner: context-builder, writer: context-builder, review_mode: writer}
+      - {id: research, owner: context-builder, writer: context-builder, review_mode: writer, uses_skills: [deep-research]}
+      - {id: fact-check, owner: final-verifier, review_mode: read-only}
+      - {id: synthesis, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+      - {id: recommendations, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+      - {id: knowledge-update, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, evidence]
+    required_capabilities: [web_access, file_read, file_write]
+    preferred_execution_mode: orchestrated
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: false}
+    archive_criteria: "evidence pass; каждый существенный вывод имеет источник"
+    resumability: TaskState
+    learning_output: recommended
+    maps_from: []
+
+# Post-MVP (объявлены, контракты позже): CRITICAL, VISUAL, ANALYTICS, DOCUMENT, LEGACY, INCIDENT.

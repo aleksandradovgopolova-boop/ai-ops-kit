@@ -1,0 +1,95 @@
+# ai-ops-manifest.yaml — central manifest пакета AI-first системы
+# Bootstrap v0.1.0 (первый change package: structured registry + manifest).
+# Аддитивно: тела агентов/workflow не менялись, файлы не перемещались.
+# Полная целевая архитектура — audit/ai-ops-target-v2/.
+schema_version: 1
+kind: ai-ops-manifest
+
+ai_ops:
+  package_version: 0.7.0
+  schema_version: 1
+  minimum_runtime_contract: 1
+
+spec_protocol:
+  engine: openspec
+  version_range: ">=1.5.0 <2.0.0"          # проверено на 1.5.0 (openspec validate --strict)
+  dependency_strategy: cli-and-protocol      # вызываем CLI + читаем markdown; не импорт
+  status: integrated
+  enabled_by_default: false                  # ОПЦИЯ: включается в child флагом openspec.enabled
+  opt_in_flag: ".ai-ops.yaml -> openspec.enabled: true"
+  requires_runtime: node                      # для не-Node репо — контейнер/вложенный CLI
+  deterministic_operations: [validate, archive, sync]   # выполняет CLI, не LLM
+  extension_schemas: [openspec/schemas/product, openspec/schemas/research]
+  change_template: openspec/change-template/
+  example: examples/openspec-demo/            # проходит openspec validate --all --strict
+  parallel_merge_guard: 02_tools/ci/validate_openspec_change.py
+  fallback: [pin-version, fork-mit, our-format-validator]
+
+registries:
+  agents: registry/agents.yaml
+  workflows: registry/workflows.yaml          # MVP: QUICK/ENGINEERING/PRODUCT/RESEARCH
+  quality_gates: quality/gates.yaml           # единый gate registry
+  capability_index: registry/capability-index.yaml
+  routing: config/model-routing.yaml          # расширяется на Ф6
+
+workflows:
+  mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
+
+quality_gates:
+  mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
+                 implementation_verification, code_review, security, spec_synchronization]
+  mvp_blocking_max: 8
+
+agents:
+  registered: 38             # 35 существующих + 3 новых core (intake-classifier, requirements-writer, plan-reviewer)
+  core_target: 12            # целевой минимальный CORE после merge (Ф2-3)
+  core_target_note: >
+    В реестре 16 файлов с target_layer=core: 10 сохраняемых + 3 новых (create) + 3 merge-источника
+    (repository-explorer, system-analyst, business-analyst). После merge источники схлопываются
+    в context-builder и requirements-writer, давая итоговые 12 core-агентов.
+
+providers:
+  status: integrated          # Ф6: реестры + декларативный routing + self-test
+  registry: registry/providers.yaml
+  models: registry/models.yaml
+  runtimes: registry/runtimes.yaml
+  tools: registry/tools.yaml
+  capability_index: registry/capability-index.yaml
+  routing_policy: registry/routing-policy.yaml
+  routing_engine: 02_tools/ci/ai_route.py
+  capability_selftest: 02_tools/ci/ai_capability_selftest.py
+  first_class: [anthropic, openai]
+  planned: [gigachat]         # опциональный провайдер на будущее (config-switch, без ключей сейчас)
+  no_secrets: true            # только имена env-переменных / secret-reference
+
+security_policies:
+  permission_levels: security/permission-levels.yaml   # 6 уровней
+  protected_paths: config/protected-paths.yaml
+  boundary_model: security/boundary-model.md
+  secrets_in_repo: forbidden
+
+update_policy:
+  silent_update: forbidden
+  updater: installer/ai_ops.py            # ai-ops status/diff/update/init/validate/doctor/migrate/verify-capabilities
+  managed_set:                             # что копируется в .ai/managed при install/update
+    - "registry/*.yaml"
+    - "quality/gates.yaml"
+    - "schemas/*.json"
+    - "security/permission-levels.yaml"
+    - "security/boundary-model.md"
+    - "manifest/ai-ops-manifest.yaml"
+  managed_paths: [".ai/managed/**"]
+  protected_paths: [".ai/project/**", ".ai/custom/**"]
+  generated_paths: [".ai/generated/**"]
+  runtime_paths: [".ai/runtime/**"]
+  provenance: ".ai/managed/.provenance.json"
+  checksums: ".ai/managed/.checksums.json"
+  update_lock: ".ai/managed/.update-lock"
+  drift_detection: "02_tools/ci/ai_managed_checksums.py verify"
+  example_install: "02_tools/ai-first-system/examples/child-install/"
+
+package_migrations:
+  chain: []                  # первый релиз; цепочка появится с 0.1.0-to-0.2.0
+
+contracts_dir: schemas/
+compatibility_check: python3 02_tools/ci/validate_ai_first_registry.py

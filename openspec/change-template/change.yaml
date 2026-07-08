@@ -1,0 +1,12 @@
+# change.yaml — метаданные изменения (schemas/change-metadata.schema.json)
+schema_version: 1
+change_id: <kebab-case-name>
+title: <короткое название>
+workflow: ENGINEERING          # QUICK | ENGINEERING | PRODUCT | RESEARCH
+intake_id: <INT-...>
+openspec_schema: spec-driven
+status: draft                  # draft|in-progress|verifying|ready|archived|abandoned
+capabilities: [<capability>]
+owner: <команда/роль>
+created_at: null
+package_version: 0.4.0

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-ops-kit.dev/schemas/child-config.schema.json",
+  "title": "ChildConfig",
+  "description": ".ai-ops.yaml — configuration installed in a child repository (Section 25). Credentials by reference only.",
+  "type": "object",
+  "properties": {
+    "schema_version": { "const": 1 },
+    "kind": { "const": "ai-ops-child-config" },
+    "parent": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string" },
+        "installed_version": { "type": "string" },
+        "allowed_version_range": { "type": "string" },
+        "update_channel": { "type": "string", "enum": ["stable", "beta"] },
+        "update_policy": { "type": "string", "enum": ["pr", "manual"] },
+        "auto_update": { "type": "boolean" }
+      },
+      "required": ["source", "installed_version", "update_channel", "update_policy"],
+      "additionalProperties": false
+    },
+    "project": { "type": "object", "additionalProperties": true },
+    "presets": { "type": "object", "properties": { "enabled": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": false },
+    "adapters": { "type": "object", "properties": { "enabled": { "type": "array", "items": { "type": "string" } } }, "additionalProperties": false },
+    "providers": {
+      "type": "object",
+      "properties": {
+        "default": { "type": "string" },
+        "configured": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "credentials_ref": { "type": "string", "pattern": "^(env:|secret:)" },
+              "scope_ref": { "type": "string" },
+              "base_url_ref": { "type": "string" }
+            },
+            "required": ["id"],
+            "additionalProperties": true
+          }
+        },
+        "fallback_chain": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "runtimes": { "type": "object", "additionalProperties": true },
+    "openspec": { "type": "object", "properties": { "profile": { "type": "string" }, "schema": { "type": "string" } }, "additionalProperties": true },
+    "agents": { "type": "object", "additionalProperties": true },
+    "workflows": { "type": "object", "additionalProperties": true },
+    "quality_gates": { "type": "object", "additionalProperties": true },
+    "routing_policy": { "type": "string" },
+    "approval_policy": { "type": "object", "additionalProperties": true },
+    "overlays": { "type": "object", "additionalProperties": true },
+    "protected_paths": { "type": "array", "items": { "type": "string" } },
+    "confidentiality_policy": { "type": "object", "additionalProperties": true }
+  },
+  "required": ["schema_version", "kind", "parent", "presets", "adapters", "providers"],
+  "additionalProperties": true,
+  "x-no-secrets": "credentials_ref MUST match ^(env:|secret:); a literal key fails validation.",
+  "examples": [
+    {
+      "schema_version": 1,
+      "kind": "ai-ops-child-config",
+      "parent": { "source": "git+https://example.com/org/ai-ops-kit.git", "installed_version": "0.5.0", "allowed_version_range": ">=0.5.0 <1.0.0", "update_channel": "stable", "update_policy": "pr", "auto_update": false },
+      "presets": { "enabled": ["software-product"] },
+      "adapters": { "enabled": ["claude-code", "codex", "generic"] },
+      "providers": { "default": "anthropic", "configured": [{ "id": "anthropic", "credentials_ref": "env:ANTHROPIC_API_KEY" }], "fallback_chain": ["anthropic"] }
+    }
+  ]
+}

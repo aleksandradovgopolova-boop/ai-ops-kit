@@ -1,0 +1,28 @@
+name: package-quality
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: Реестр агентов и манифест
+        run: python3 validation/validate_ai_first_registry.py
+      - name: Workflow-контракты и gates
+        run: python3 validation/validate_ai_first_workflows.py
+      - name: Конфиги
+        run: python3 validation/validate_ai_first_config.py
+      - name: Реестры провайдеров/сред + routing
+        run: python3 validation/validate_ai_first_providers.py
+      - name: Self-test маршрутизации
+        run: python3 validation/ai_route.py --selftest
+      - name: Capability self-test (offline)
+        run: python3 validation/ai_capability_selftest.py
+      - name: OpenSpec guard (пример)
+        run: python3 validation/validate_openspec_change.py examples/openspec-demo

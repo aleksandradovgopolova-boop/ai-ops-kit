@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "algorithm": "sha256",
+  "managed_root": "managed",
+  "files": {
+    "core/rules/ExampleScopeControl.md": "a0fab3f546cce0e06671854ac456db68e0422d0644a4713fe85eedcb4fbd6574"
+  }
+}
