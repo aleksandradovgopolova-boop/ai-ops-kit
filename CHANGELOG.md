@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [1.0.0] — 2026-07-08
+
+**Первый стабильный релиз.** Функциональность 0.8.0 объявляется стабильной: с этой версии
+действуют обещания SemVer — patch/minor не ломают child-репозитории, breaking changes
+только в 2.0.0 с миграцией в migrations/.
+
+### Стабилизировано
+- Контракты: agent registry, workflow contracts (QUICK/ENGINEERING/PRODUCT/RESEARCH),
+  gate-result, route-decision, child-config, update-result (schema_version 1).
+- CLI `ai-ops`: init / status / diff / update / validate / doctor / migrate / verify-capabilities.
+- Boundary-модель managed/project/custom/generated/runtime + drift-детект по контрольным суммам.
+- Provider/runtime абстракция, декларативный routing, capability-index.
+- OpenSpec-опция (>=1.5.0 <2.0.0) + parallel-merge guard.
+- Sequential-оркестратор, генерация runtime-команд, presets, stale-gates детектор.
+
+### Совместимость
+- Подтверждено на двух child-репозиториях (existing + new pilot), обновления 0.6→0.7→0.8
+  прошли штатным updater'ом без потери локальных файлов.
+
 ## [0.8.0] — 2026-07-08
 
 Закрытие post-MVP бэклога: stale-gates, генерация runtime-файлов, sequential-оркестратор,
