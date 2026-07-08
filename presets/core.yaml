@@ -1,0 +1,23 @@
+# presets/core.yaml — ядро (справочно)
+schema_version: 1
+kind: ai-ops-preset
+id: core
+description: Обязательное ядро (устанавливается всегда).
+agents:
+- business-analyst
+- context-builder
+- development-orchestrator
+- documentation-steward
+- final-verifier
+- implementation-integrator
+- intake-classifier
+- plan-reviewer
+- prompt-reviewer
+- repository-explorer
+- repository-memory-curator
+- requirements-reviewer
+- requirements-writer
+- solution-architect
+- system-analyst
+- task-planner
+requires_core: false

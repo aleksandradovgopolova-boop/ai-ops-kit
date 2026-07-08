@@ -1,0 +1,12 @@
+# presets/data-and-integrations.yaml — декларативный preset (без перемещения файлов)
+schema_version: 1
+kind: ai-ops-preset
+id: data-and-integrations
+description: 'Данные и интеграции: БД, контракты, миграции.'
+note: 'Декларативный preset: агенты подключаются по id из registry/agents.yaml; файлы
+  не перемещаются (меньше breaking-риска, чем физический move).'
+agents:
+- database-engineer
+- integration-engineer
+- migration-engineer
+requires_core: true
