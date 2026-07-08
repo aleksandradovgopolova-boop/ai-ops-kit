@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "package": "ai-first-system",
+  "source": "git+https://example.com/org/ai-ops-kit.git",
+  "installed_version": "0.3.0",
+  "installed_at": null,
+  "managed_root": ".ai/managed",
+  "presets": ["software-product"],
+  "checksums_file": ".checksums.json",
+  "note": "Illustrative example of a child install (Phase 4). Not a real installation."
+}

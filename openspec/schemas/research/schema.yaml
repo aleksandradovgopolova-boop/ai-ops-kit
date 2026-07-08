@@ -1,0 +1,23 @@
+# openspec/schemas/research/schema.yaml — расширение spec-протокола для RESEARCH
+# Для исследовательских задач "SHALL/scenario" неестественны: источник истины — не требования,
+# а вопрос, источники и проверенные выводы. Устанавливается как openspec/schemas/research/.
+schema_version: 1
+name: research
+base: spec-driven
+description: Исследовательский вопрос -> источники -> проверенные выводы -> рекомендации.
+
+artifacts:
+  proposal: {requires: []}          # question + scope
+  sources: {requires: [proposal]}
+  findings: {requires: [sources]}
+  recommendations: {requires: [findings]}
+  verification: {requires: [findings]}
+
+# Правила: вместо SHALL/scenario — источник и статус на каждый существенный вывод.
+rules:
+  findings:
+    normative_keywords: []          # не требуем SHALL
+    scenario_required: false
+    evidence_required: true         # каждый вывод -> источник + статус (documented/verified/inferred/...)
+  verification:
+    must_include: [source_per_claim, confidence_or_status]

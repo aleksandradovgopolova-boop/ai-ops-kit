@@ -1,0 +1,127 @@
+# models.yaml — Model capabilities & model classes (AI Ops Platform V2)
+# Model class — абстракция, на которую ссылается routing policy. Конкретные модели
+# НЕ зашиваются в workflow (принцип 17.decl). Реальные ID разрешаются через class -> model.
+schema_version: 1
+registry_type: models
+
+# Абстрактные классы для routing (workflow ссылается только на класс).
+model_classes:
+  high-reasoning:
+    purpose: Архитектура, неоднозначные требования, безопасность, сложный debugging
+    min_capabilities: [tool_calling, large_context]
+  balanced:
+    purpose: Реализация, дизайн тестов, code review, документация
+    min_capabilities: [tool_calling]
+  fast:
+    purpose: Поиск по репозиторию, форматирование, lint, механический рефакторинг
+    min_capabilities: []
+  enterprise-russian:
+    purpose: Русскоязычные и конфиденциальные корпоративные задачи
+    min_capabilities: [russian_language]
+    confidentiality_class: ru-cloud-or-on-prem
+  embeddings:
+    purpose: Векторизация для поиска/памяти
+    min_capabilities: [embeddings]
+
+models:
+  # --- Anthropic ---
+  - id: claude-opus-4-8
+    provider: anthropic
+    classes: [high-reasoning]
+    context_window: {status: documented, value: 200000}
+    capabilities: {tool_calling: true, structured_output: true, vision: true, streaming: true}
+    cost_class: high
+    last_documented_at: "2026-07-08"
+  - id: claude-sonnet-class
+    provider: anthropic
+    classes: [balanced]
+    context_window: {status: documented, value: 200000}
+    capabilities: {tool_calling: true, structured_output: true, vision: true, streaming: true}
+    cost_class: medium
+    last_documented_at: "2026-07-08"
+  - id: claude-haiku-class
+    provider: anthropic
+    classes: [fast]
+    capabilities: {tool_calling: true, structured_output: true, streaming: true}
+    cost_class: low
+    last_documented_at: "2026-07-08"
+
+  # --- OpenAI ---
+  - id: openai-reasoning-class
+    provider: openai
+    classes: [high-reasoning, balanced]
+    capabilities: {tool_calling: true, structured_output: true, vision: true, streaming: true}
+    cost_class: medium
+    last_documented_at: "2026-07-08"
+  - id: openai-embeddings-class
+    provider: openai
+    classes: [embeddings]
+    capabilities: {embeddings: true}
+    cost_class: low
+    last_documented_at: "2026-07-08"
+
+  # --- GigaChat (first-class) ---
+  - id: GigaChat-2-Max
+    provider: gigachat
+    classes: [enterprise-russian, high-reasoning]
+    context_window: {status: inferred, value: 128000, verification_required: true}
+    capabilities:
+      tool_calling: {status: documented, value: true}
+      structured_output: {status: documented, value: true, limitations: Beta}
+      vision: {status: documented, value: true}
+      streaming: {status: documented, value: true}
+      russian_language: {status: documented, value: true}
+    cost_class: medium
+    confidentiality_class: ru-cloud
+    last_documented_at: "2026-07-08"
+    verification_required: true
+  - id: GigaChat-2-Pro
+    provider: gigachat
+    classes: [enterprise-russian, balanced]
+    capabilities:
+      tool_calling: {status: documented, value: true}
+      structured_output: {status: documented, value: true, limitations: Beta}
+      vision: {status: documented, value: true}
+      russian_language: {status: documented, value: true}
+    cost_class: low
+    confidentiality_class: ru-cloud
+    last_documented_at: "2026-07-08"
+    verification_required: true
+  - id: GigaChat-2
+    provider: gigachat
+    classes: [enterprise-russian, fast]
+    capabilities:
+      tool_calling: {status: documented, value: true}
+      russian_language: {status: documented, value: true}
+    cost_class: low
+    confidentiality_class: ru-cloud
+    last_documented_at: "2026-07-08"
+    verification_required: true
+  - id: GigaChat-Embeddings
+    provider: gigachat
+    classes: [embeddings]
+    capabilities:
+      embeddings: {status: documented, value: true, limitations: "dimension не подтверждён"}
+    confidentiality_class: ru-cloud
+    last_documented_at: "2026-07-08"
+    verification_required: true
+
+  # --- Local / fallback ---
+  - id: local-generic
+    provider: local
+    classes: [balanced, fast, enterprise-russian]
+    capabilities:
+      tool_calling: {status: degraded, value: model-dependent}
+      structured_output: {status: degraded, value: model-dependent}
+      embeddings: {status: degraded, value: model-dependent}
+    confidentiality_class: on-premise
+    note: Реальные возможности определяются загруженной моделью и self-test.
+    last_documented_at: "2026-07-08"
+
+# Правила: routing policy ссылается на model_classes; разрешение class->model
+# делает adapter на основании доступности провайдера и capability self-test.
+resolution_policy:
+  bind_by: model_class
+  hardcode_model_in_workflow: forbidden
+  resolve_at: routing_time
+  respect: [provider_availability, confidentiality_class, verified_capabilities]

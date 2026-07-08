@@ -1,0 +1,154 @@
+# quality/gates.yaml — единый gate registry (package v0.2.0)
+# Каждый gate возвращает machine-readable результат (schemas/gate-result.schema.json):
+# status/blocking/tested_revision/artifact_hashes -> stale-detection.
+# responsible_role read-only относительно проверяемого артефакта (write_scope ∩ reviewed = ∅).
+# Расширяет config/quality-gates.yaml (фазовые списки остаются рабочими).
+schema_version: 1
+registry_type: quality-gates
+
+mvp_blocking_gates:
+  - intake_completeness
+  - requirements
+  - specification
+  - plan_readiness
+  - implementation_verification
+  - code_review
+  - security
+  - spec_synchronization
+
+gates:
+  intake_completeness:
+    id: intake_completeness
+    purpose: Полнота intake и классификации до старта.
+    stage: intake
+    blocking: true
+    responsible_role: intake-classifier
+    review_mode: writer
+    validator: validate-intake
+    human_approval: false
+    bypass_policy: forbidden
+    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
+    stale_detection: {bind_to: intake_hash}
+    required_evidence: [classified_type, size, risk]
+
+  requirements:
+    id: requirements
+    purpose: Требования проверяемы, полны, тестируемы.
+    stage: requirements-review
+    blocking: true
+    responsible_role: requirements-reviewer
+    review_mode: read-only
+    validator: validate-requirements
+    human_approval: false
+    bypass_policy: forbidden
+    override_policy: {allowed: true, requires: human, records: override_reason}
+    applicability: [ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [testable_requirements, acceptance_scenarios]
+
+  specification:
+    id: specification
+    purpose: Спецификация полна и тестируема (delta specs валидны).
+    stage: specification
+    blocking: true
+    responsible_role: final-verifier
+    review_mode: read-only
+    validator: openspec-validate-strict
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [openspec_valid, requirements_covered]
+
+  plan_readiness:
+    id: plan_readiness
+    purpose: План исполним; зависимости и write-scope определены.
+    stage: plan-critique
+    blocking: true
+    responsible_role: plan-reviewer
+    review_mode: read-only
+    validator: validate-plan
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [work_packages, dependencies, write_scope]
+
+  implementation_verification:
+    id: implementation_verification
+    purpose: Сборка/линт/тесты пройдены на конкретной ревизии.
+    stage: verify
+    blocking: true
+    responsible_role: final-verifier
+    review_mode: read-only
+    validator: validate-evidence
+    human_approval: false
+    bypass_policy: forbidden
+    applicability: [QUICK, ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [build_passed, lint_passed, tests_passed, tested_revision]
+
+  code_review:
+    id: code_review
+    purpose: Независимое ревью кода (judge != writer).
+    stage: review
+    blocking: true
+    responsible_role: code-reviewer
+    review_mode: read-only
+    human_approval: false
+    applicability: [ENGINEERING]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [reviewed_revision, blockers_closed]
+
+  security:
+    id: security
+    purpose: Проверка безопасности; блокирует рискованные/необратимые изменения.
+    stage: review
+    blocking: true
+    responsible_role: security-reviewer
+    review_mode: read-only
+    human_approval: {required_when: [privileged, destructive, secret_boundary_change]}
+    applicability: [ENGINEERING, CRITICAL, INCIDENT]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [no_secrets, no_injection_surface, deps_approved]
+
+  spec_synchronization:
+    id: spec_synchronization
+    purpose: Delta specs синхронизированы с main specs (детерминированный CLI).
+    stage: sync
+    blocking: true
+    responsible_role: documentation-steward
+    review_mode: writer
+    validator: openspec-validate-and-guard
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: specs_hash}
+    required_evidence: [openspec_valid, no_parallel_conflict]
+
+  # --- non-blocking / для будущих workflow (объявлены) ---
+  evidence:
+    id: evidence
+    purpose: Каждый существенный вывод имеет источник и статус.
+    stage: fact-check
+    blocking: true
+    responsible_role: final-verifier
+    review_mode: read-only
+    applicability: [RESEARCH]
+    required_evidence: [source_per_claim, capability_status]
+  stakeholder_readiness:
+    id: stakeholder_readiness
+    purpose: Материал готов к передаче стейкхолдерам.
+    stage: stakeholder-handoff
+    blocking: false
+    responsible_role: product-manager
+    review_mode: read-only
+    applicability: [PRODUCT]
+  documentation_drift: {id: documentation_drift, blocking: false, responsible_role: documentation-steward, review_mode: writer, applicability: [all]}
+  archive_readiness:
+    id: archive_readiness
+    purpose: Изменение архивируется только если проверено.
+    stage: archive
+    blocking: true
+    responsible_role: final-verifier
+    review_mode: read-only
+    validator: validate-archive-readiness
+    applicability: [all]
+    required_evidence: [all_blocking_gates_pass, no_stale_gate]

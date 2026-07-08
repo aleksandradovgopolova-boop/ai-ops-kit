@@ -1,0 +1,25 @@
+# openspec/schemas/product/schema.yaml — расширение spec-протокола для PRODUCT
+# Наш custom OpenSpec-schema descriptor. Устанавливается в child как openspec/schemas/product/
+# (механизм custom schemas OpenSpec). Смягчает инженерные требования для продуктовых задач.
+schema_version: 1
+name: product
+base: spec-driven
+description: Продуктовые изменения (проблема -> пользователи -> ценность -> требования).
+
+# Артефакты и зависимости (enablers, не жёсткие гейты — как в OpenSpec).
+artifacts:
+  proposal: {requires: []}
+  problem: {requires: [proposal]}
+  users: {requires: [problem]}
+  value: {requires: [users]}
+  requirements: {requires: [value]}
+  specs: {requires: [requirements]}
+  tasks: {requires: [specs]}
+
+# Правила проверки (мягче инженерных: ценность/пользователи обязательны, SHALL — где применимо).
+rules:
+  requirements:
+    normative_keywords: [SHALL, SHOULD]   # SHOULD допустим для продуктовых
+    scenario_required: true
+  problem:
+    must_include: [user_segment, pain, expected_outcome]

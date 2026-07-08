@@ -1,0 +1,94 @@
+# tools.yaml — Tool protocol & tool capability registry (AI Ops Platform V2)
+# Tool protocol отделён от provider/model/runtime (принцип 12.4).
+schema_version: 1
+registry_type: tools
+
+tool_protocols:
+  mcp:
+    display_name: Model Context Protocol
+    status: documented
+    supported_runtimes: [claude-code, codex, cursor, gemini-cli, opencode]
+    provider_native: {gigachat: false, anthropic: true, openai: true}
+    note: GigaChat не поддерживает MCP нативно -> использовать tool gateway.
+  native-tools:
+    display_name: Runtime-native tools
+    status: documented
+    supported_runtimes: [claude-code, codex, cursor]
+  function-calling:
+    display_name: Function calling (provider level)
+    status: documented
+    supported_providers: [anthropic, openai, gigachat, google, deepseek, qwen]
+  rest-api:
+    display_name: REST API tool
+    status: documented
+    universal: true
+  cli:
+    display_name: CLI invocation
+    status: documented
+    universal: true
+    note: OpenSpec CLI, ai-ops CLI, validators — вызываются как детерминированные tools.
+  shell:
+    display_name: Shell execution
+    status: documented
+    permission_level: execution
+    requires_human_approval_for: [destructive]
+  tool-gateway:
+    display_name: Internal tool gateway
+    status: documented
+    purpose: Единая обёртка над function-calling для провайдеров без MCP (напр. GigaChat).
+    implementations: [gpt2giga, litellm-gigachat, custom]
+  custom-adapter:
+    display_name: Custom tool adapter
+    status: declared
+
+tools:
+  - id: openspec-cli
+    protocol: cli
+    deterministic: true
+    purpose: "create/validate/archive/sync change packages, --json output"
+    permission_level: controlled-write
+    provides: [change_scaffold, delta_validation, deterministic_archive, deterministic_sync]
+    source: "@fission-ai/openspec"
+    status: documented
+  - id: ai-ops-cli
+    protocol: cli
+    deterministic: true
+    purpose: "init/status/diff/update/validate/doctor/migrate/verify-capabilities"
+    permission_level: controlled-write
+    status: declared
+  - id: validators
+    protocol: cli
+    deterministic: true
+    purpose: "registry/orphan/reference/stale-gate/secrets/managed-drift checks"
+    permission_level: read-only
+    reuses_existing: "02_tools/ci/ Python validators"
+    status: documented
+  - id: capability-selftest
+    protocol: cli
+    deterministic: true
+    purpose: "provider/runtime smoke tests -> verified capability + timestamp"
+    permission_level: network
+    requires_credentials: true
+    status: declared
+  - id: repo-search
+    protocol: native-tools
+    permission_level: read-only
+    status: documented
+  - id: git
+    protocol: cli
+    permission_level: controlled-write
+    requires_human_approval_for: [force_push, production_branch]
+    status: documented
+  - id: github-mcp
+    protocol: mcp
+    permission_level: network
+    purpose: "PR/issue/CI operations"
+    status: documented
+
+permission_levels:
+  - read-only
+  - controlled-write
+  - execution
+  - network
+  - privileged
+  - destructive

@@ -1,0 +1,181 @@
+# runtimes.yaml — Runtime capability registry (AI Ops Platform V2)
+# Runtime = среда исполнения агента. Отделена от provider и model.
+# execution_modes: native | orchestrated | sequential | manual-assisted
+# status: declared | documented | verified | degraded | unsupported | unknown
+schema_version: 1
+registry_type: runtimes
+
+runtimes:
+  claude-code:
+    display_name: Claude Code
+    kind: cli-agent
+    mvp_adapter: true
+    default_provider: anthropic
+    execution_modes: [native, orchestrated, sequential]
+    preferred_mode: native
+    capabilities:
+      native_subagents: {status: documented, value: true}
+      parallel_execution: {status: documented, value: true}
+      tools: {status: documented, value: true}
+      mcp: {status: documented, value: true}
+      function_calling: {status: documented, value: true}
+      structured_output: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+      shell: {status: documented, value: true}
+      browser: {status: degraded, value: via-mcp-or-playwright}
+      web_access: {status: degraded, value: policy-dependent}
+      session_state: {status: documented, value: true}
+      resumability: {status: documented, value: true}
+      background_execution: {status: documented, value: true}
+    agent_packaging: markdown+frontmatter
+    skill_loading: ".claude/skills/"
+    command_loading: ".claude/commands/"
+    machine_readable_gate_result: supported
+    actions_requiring_human_approval: [destructive_shell, production_write]
+    last_documented_at: "2026-07-08"
+
+  codex:
+    display_name: Codex (CLI / app)
+    kind: cli-agent
+    mvp_adapter: true
+    default_provider: openai
+    execution_modes: [native, orchestrated, sequential]
+    preferred_mode: orchestrated
+    capabilities:
+      native_subagents: {status: degraded, value: "baseline TOML agents, not full parity"}
+      parallel_execution: {status: degraded, value: limited}
+      tools: {status: documented, value: true}
+      mcp: {status: documented, value: true}
+      function_calling: {status: documented, value: true}
+      structured_output: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+      shell: {status: documented, value: true}
+      session_state: {status: documented, value: true}
+      resumability: {status: degraded, value: file-based}
+    agent_packaging: toml
+    command_loading: "$CODEX_HOME/prompts/ or $-invocation"
+    machine_readable_gate_result: supported
+    last_documented_at: "2026-07-08"
+
+  cursor:
+    display_name: Cursor
+    kind: ide-agent
+    execution_modes: [native, sequential]
+    preferred_mode: native
+    capabilities:
+      native_subagents: {status: unsupported, value: false}
+      tools: {status: documented, value: true}
+      mcp: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+      resumability: {status: degraded, value: file-based}
+    agent_packaging: markdown-commands
+    command_loading: ".cursor/commands/"
+    last_documented_at: "2026-07-08"
+
+  gemini-cli:
+    display_name: Gemini CLI
+    kind: cli-agent
+    default_provider: google
+    execution_modes: [native, sequential]
+    preferred_mode: sequential
+    capabilities:
+      native_subagents: {status: unsupported, value: false}
+      tools: {status: documented, value: true}
+      mcp: {status: documented, value: true}
+      structured_output: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+    command_loading: ".gemini/commands/"
+    last_documented_at: "2026-07-08"
+
+  qwen-code:
+    display_name: Qwen Code
+    kind: cli-agent
+    default_provider: qwen
+    execution_modes: [native, sequential]
+    preferred_mode: sequential
+    capabilities:
+      native_subagents: {status: unsupported, value: false}
+      tools: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+    command_loading: ".qwen/commands/"
+    last_documented_at: "2026-07-08"
+
+  opencode:
+    display_name: OpenCode
+    kind: cli-agent
+    execution_modes: [native, sequential]
+    preferred_mode: sequential
+    capabilities:
+      tools: {status: documented, value: true}
+      mcp: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+    last_documented_at: "2026-07-08"
+
+  generic-orchestrator:
+    display_name: Generic orchestrator (our own, provider-agnostic)
+    kind: orchestrator
+    mvp_adapter: true
+    default_provider: any
+    execution_modes: [orchestrated, sequential]
+    preferred_mode: orchestrated
+    minimum_mode: sequential
+    capabilities:
+      native_subagents: {status: unsupported, value: false, note: emulated-via-role-isolation}
+      parallel_execution: {status: degraded, value: "our scheduler, bounded"}
+      tools: {status: documented, value: "via tool gateway"}
+      mcp: {status: degraded, value: optional}
+      function_calling: {status: degraded, value: provider-dependent}
+      structured_output: {status: degraded, value: provider-dependent}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+      shell: {status: documented, value: true}
+      session_state: {status: documented, value: "TaskState.yaml on disk"}
+      resumability: {status: documented, value: "file-based, our contract"}
+    role_isolation: {status: documented, value: true, note: "reviewer видит только опубликованные артефакты"}
+    machine_readable_gate_result: supported
+    last_documented_at: "2026-07-08"
+
+  generic-api:
+    display_name: Generic API (single model, sequential)
+    kind: api-executor
+    mvp_adapter: true
+    default_provider: any
+    execution_modes: [sequential, manual-assisted]
+    preferred_mode: sequential
+    minimum_mode: manual-assisted
+    capabilities:
+      native_subagents: {status: unsupported, value: false}
+      parallel_execution: {status: unsupported, value: false}
+      tools: {status: degraded, value: provider-dependent}
+      structured_output: {status: degraded, value: provider-dependent}
+      file_read: {status: degraded, value: "via harness"}
+      file_write: {status: degraded, value: "via harness / manual-assisted"}
+      resumability: {status: documented, value: "file-based checkpoints"}
+    note: >
+      Минимальный общий знаменатель. Одна модель исполняет роли последовательно
+      с раздельными role prompts и сохранёнными промежуточными артефактами.
+    last_documented_at: "2026-07-08"
+
+  github-actions:
+    display_name: GitHub Actions (CI runtime)
+    kind: ci
+    mvp_adapter: false
+    execution_modes: [orchestrated, sequential]
+    capabilities:
+      shell: {status: documented, value: true}
+      file_read: {status: documented, value: true}
+      file_write: {status: documented, value: true}
+      network: {status: degraded, value: policy-dependent}
+    note: Хостит validators, capability self-test и updater PR flow.
+    last_documented_at: "2026-07-08"
+
+# Общий контракт: workflow не должен ломаться при отсутствии native_subagents/mcp/structured_output.
+degradation_rule:
+  order: [native, orchestrated, sequential, manual-assisted]
+  guarantee: "любой MVP workflow исполним минимум в sequential mode"
