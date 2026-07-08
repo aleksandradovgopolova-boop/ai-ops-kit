@@ -2,13 +2,19 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased]
+## [1.1.0] — 2026-07-08
 
 ### Changed
 - OpenSpec теперь **включён по умолчанию** (`spec_protocol.enabled_by_default: true`,
   в заготовке child-конфига `openspec.enabled: true`). Выключается в child флагом
   `openspec.enabled: false`. Существующие child-репозитории не затронуты — их
-  `.ai-ops.yaml` уже содержит явное значение флага.
+  `.ai-ops.yaml` уже содержит явное значение флага. Новым child-репозиториям нужен
+  Node.js и `@fission-ai/openspec` (>=1.5.0 <2.0.0); `ai-ops doctor` подсказывает.
+
+### Fixed
+- `examples/child-config.example.yaml`: устаревшие `installed_version: 0.7.0` и
+  `allowed_version_range: ">=0.7.0 <1.0.0"` обновлены до 1.x — свежий `ai-ops init`
+  больше не создаёт конфиг, чей диапазон не включает установленную версию пакета.
 
 ## [1.0.0] — 2026-07-08
 

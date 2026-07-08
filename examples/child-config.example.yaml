@@ -3,8 +3,8 @@ schema_version: 1
 kind: ai-ops-child-config
 parent:
   source: git+<ai-ops-kit-repo-url>
-  installed_version: 0.7.0
-  allowed_version_range: ">=0.7.0 <1.0.0"
+  installed_version: 1.1.0
+  allowed_version_range: ">=1.0.0 <2.0.0"
   update_channel: stable
   update_policy: pr
   auto_update: false
