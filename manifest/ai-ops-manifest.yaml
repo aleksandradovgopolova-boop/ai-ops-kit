@@ -15,8 +15,8 @@ spec_protocol:
   version_range: ">=1.5.0 <2.0.0"          # проверено на 1.5.0 (openspec validate --strict)
   dependency_strategy: cli-and-protocol      # вызываем CLI + читаем markdown; не импорт
   status: integrated
-  enabled_by_default: false                  # ОПЦИЯ: включается в child флагом openspec.enabled
-  opt_in_flag: ".ai-ops.yaml -> openspec.enabled: true"
+  enabled_by_default: true                   # включено по умолчанию; выключается в child флагом openspec.enabled
+  opt_out_flag: ".ai-ops.yaml -> openspec.enabled: false"
   requires_runtime: node                      # для не-Node репо — контейнер/вложенный CLI
   deterministic_operations: [validate, archive, sync]   # выполняет CLI, не LLM
   extension_schemas: [openspec/schemas/product, openspec/schemas/research]

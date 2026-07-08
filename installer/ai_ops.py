@@ -303,8 +303,10 @@ def cmd_doctor():
     ok = ok and not drift
     node = shutil.which("node")
     osp = shutil.which("openspec")
-    print(f"node: {'✓' if node else '— (нужен только для OpenSpec-опции)'}")
-    print(f"openspec CLI: {'✓' if osp else '— (опция выключена — норма)'}")
+    osp_hint = ("— (не найден; OpenSpec включён по умолчанию — установите "
+                "@fission-ai/openspec или выключите openspec.enabled)")
+    print(f"node: {'✓' if node else '— (нужен для OpenSpec — включён по умолчанию)'}")
+    print(f"openspec CLI: {'✓' if osp else osp_hint}")
     print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
     return 0 if ok else 1
 

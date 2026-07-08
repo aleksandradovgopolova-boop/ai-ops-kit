@@ -2,6 +2,14 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased]
+
+### Changed
+- OpenSpec теперь **включён по умолчанию** (`spec_protocol.enabled_by_default: true`,
+  в заготовке child-конфига `openspec.enabled: true`). Выключается в child флагом
+  `openspec.enabled: false`. Существующие child-репозитории не затронуты — их
+  `.ai-ops.yaml` уже содержит явное значение флага.
+
 ## [1.0.0] — 2026-07-08
 
 **Первый стабильный релиз.** Функциональность 0.8.0 объявляется стабильной: с этой версии

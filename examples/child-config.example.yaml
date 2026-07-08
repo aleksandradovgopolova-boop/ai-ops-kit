@@ -21,7 +21,7 @@ providers:
     - {id: openai, credentials_ref: "env:OPENAI_API_KEY"}
   fallback_chain: [anthropic, openai]
 runtimes: {default: claude-code, configured: [claude-code, codex, generic-orchestrator]}
-openspec: {enabled: false, profile: core, schema: spec-driven}
+openspec: {enabled: true, profile: core, schema: spec-driven}
 agents: {source: parent-package, disabled: [], custom: []}
 workflows:
   mappings: {bug: QUICK, feature: ENGINEERING, discovery: PRODUCT, research: RESEARCH}
