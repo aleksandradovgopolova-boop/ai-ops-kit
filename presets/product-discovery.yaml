@@ -1,0 +1,12 @@
+schema_version: 1
+kind: ai-ops-preset
+id: product-discovery
+description: 'Продуктовое исследование: проблема, пользователи, ценность, UX, эксперименты.'
+note: 'Декларативный preset: агенты подключаются по id из registry/agents.yaml; файлы
+  не перемещаются (меньше breaking-риска, чем физический move).'
+agents:
+- experiment-designer
+- product-analyst
+- product-manager
+- ui-ux-designer
+requires_core: true

@@ -1,0 +1,23 @@
+# presets/software-product.yaml — декларативный preset (без перемещения файлов)
+schema_version: 1
+kind: ai-ops-preset
+id: software-product
+description: 'Разработка софтверного продукта: исполнители, ревью, тесты, релизы,
+  инциденты.'
+note: 'Декларативный preset: агенты подключаются по id из registry/agents.yaml; файлы
+  не перемещаются (меньше breaking-риска, чем физический move).'
+agents:
+- accessibility-reviewer
+- backend-developer
+- code-reviewer
+- devops-engineer
+- frontend-developer
+- fullstack-developer
+- incident-analyst
+- observability-engineer
+- performance-reviewer
+- regression-analyst
+- release-manager
+- security-reviewer
+- test-engineer
+requires_core: true

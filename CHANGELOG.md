@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [0.8.0] — 2026-07-08
+
+Закрытие post-MVP бэклога: stale-gates, генерация runtime-файлов, sequential-оркестратор,
+декларативные presets. Всё аддитивно; existing agents/workflows не изменялись.
+
+### Added
+- `validation/validate_stale_gates.py` — детектор «протухших» gate-результатов
+  (hash артефактов / expires_at / tested_revision+affected_files); stale blocking = fail.
+- `tools/generate_runtime.py` — генерация `.ai/generated/{claude-code,codex}` команд из
+  workflow-контрактов + `.generation.json` (drift-детект генерации). Принцип 27 выполнен.
+- `tools/orchestrator.py` — sequential-mode оркестратор: изолированные role prompts,
+  judge получает только опубликованные артефакты (handoff), TaskState + возобновление;
+  провайдер подключается как callable (mock включён, сетевые адаптеры — снаружи).
+- `presets/*.yaml` — декларативные presets (core, software-product, product-discovery,
+  data-and-integrations): агенты подключаются по id, файлы не перемещаются.
+- `validation/validate_presets.py` — двусторонняя сверка presets ↔ registry.
+- CI: +4 шага (stale-gates, generator, orchestrator, presets).
+
+### Changed
+- `VERSION`, manifest → 0.8.0.
+
 ## [0.7.0] — 2026-07-08
 
 Фаза 9 миграции: **updater** — CLI `ai-ops` для установки и обновления child-репозиториев.
