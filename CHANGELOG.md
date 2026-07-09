@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.1.1] — 2026-07-09
+
+Патч: первый улов dogfooding — маршрутизация не знала о workflow, добавленных после MVP.
+
+### Fixed
+- **ai_route.py**: детальные task_type (ui-change, instrumentation,
+  post-release-analysis, onboarding, bug-fix, ...) теперь маршрутизируются по
+  `selection_criteria.task_type` из registry/workflows.yaml — единый источник истины,
+  без дублирования в routing-policy. Раньше роутер знал только 4 MVP-имени, а
+  fallback возвращал task_type как имя workflow — отдавал несуществующие маршруты
+  (`workflow: "ui-change"` вместо VISUAL).
+- Passthrough-fallback заменён явным дефолтом: неизвестный task_type -> ENGINEERING
+  с причиной в reasons.
+- +6 selftest-сценариев маршрутизации (VISUAL/ANALYTICS/INSIGHTS/ADOPTION/QUICK по
+  selection_criteria, unknown -> default).
+- Урок зафиксирован: memory/lessons-learned/2026-07-09-routing-unaware-of-new-workflows.md.
+
 ## [2.1.0] — 2026-07-09
 
 **Курируемая интеграция research-пакета** (Product & Design Extension Pack):

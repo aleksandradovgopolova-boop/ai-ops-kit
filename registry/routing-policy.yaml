@@ -14,7 +14,10 @@ inputs:
   - risk                        # low | medium | high | critical
   - data_residency_required     # null | ru | eu | us
 
-# Классификация -> workflow (первый матч).
+# Классификация -> workflow (первый матч). Здесь — только эскалации и грубые имена;
+# детальные task_type (ui-change, instrumentation, launch, ...) движок маршрутизирует
+# по selection_criteria.task_type из registry/workflows.yaml (единый источник, v2.1.1).
+# Неизвестный task_type -> ENGINEERING с причиной в reasons (сквозного passthrough нет).
 workflow_rules:
   - when: {task_type: QUICK}
     workflow: QUICK
