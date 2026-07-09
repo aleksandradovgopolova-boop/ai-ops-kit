@@ -7,7 +7,7 @@ contract_version: 1
 generated_note: Bootstrap-реестр из фактических файлов agents/ (тела не менялись). layer/action/target
   — план миграции (component-classification).
 counts:
-  agents: 45
+  agents: 48
 agents:
 - schema_version: 1
   id: context-builder
@@ -846,3 +846,57 @@ agents:
   action: create
   migration_phase: 4
   migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: ai-evaluator
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: software-product
+  file: agents/quality/ai-evaluator.md
+  domain: quality
+  purpose: "Оценка AI-фич продукта против success criteria: eval-наборы, LLM-as-judge с валидацией, guardrails, regression при смене модели/промпта. Гейт ai_eval"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: software-product
+  action: create
+  migration_phase: 5
+  migration_note: 'NEW: research-pack integration (v2.1)'
+- schema_version: 1
+  id: adoption-manager
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: product-adoption
+  file: agents/product/adoption-manager.md
+  domain: product
+  purpose: "Стадия adoption: активация (aha), онбординг, retention, петля обратной связи, Post-Launch Review; инсайты возвращаются в discovery. Owner workflow ADOPTION"
+  review_mode: writer
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: product-adoption
+  action: create
+  migration_phase: 5
+  migration_note: 'NEW: research-pack integration (v2.1)'
+- schema_version: 1
+  id: user-researcher
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: product-discovery
+  file: agents/product/user-researcher.md
+  domain: product
+  purpose: "Непрерывный discovery: story-based интервью, JTBD, Opportunity Solution Tree с product outcome в корне, проверка рискованных предположений (RAT)"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: product-discovery
+  action: create
+  migration_phase: 5
+  migration_note: 'NEW: research-pack integration (v2.1)'

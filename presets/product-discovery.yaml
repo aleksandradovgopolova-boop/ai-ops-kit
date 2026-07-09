@@ -11,5 +11,6 @@ agents:
 - product-manager
 - product-reviewer
 - ui-ux-designer
+- user-researcher
 - ux-reviewer
 requires_core: true

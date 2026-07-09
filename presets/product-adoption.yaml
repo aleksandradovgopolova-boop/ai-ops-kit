@@ -1,0 +1,10 @@
+# presets/product-adoption.yaml — декларативный preset (без перемещения файлов)
+schema_version: 1
+kind: ai-ops-preset
+id: product-adoption
+description: 'Adoption-стадия: активация, онбординг, retention, обратная связь, post-launch review.'
+note: 'Декларативный preset: агенты подключаются по id из registry/agents.yaml; файлы
+  не перемещаются (меньше breaking-риска, чем физический move).'
+agents:
+- adoption-manager
+requires_core: true

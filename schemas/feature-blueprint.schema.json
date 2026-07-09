@@ -18,7 +18,7 @@
         "status": {"enum": ["planned", "in-progress", "released", "retired"]},
         "current_stage": {
           "enum": ["discovery", "definition", "ux", "architecture", "delivery",
-                   "analytics", "documentation", "release", "monitoring", "retrospective"]
+                   "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]
         }
       }
     },
@@ -39,7 +39,7 @@
       "description": "Ключ — стадия жизненного цикла; значение — список артефактов. Пути относительны каталогу функции. Для стадий не позже current_stage файлы обязаны существовать.",
       "propertyNames": {
         "enum": ["discovery", "definition", "ux", "architecture", "delivery",
-                 "analytics", "documentation", "release", "monitoring", "retrospective"]
+                 "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]
       },
       "additionalProperties": {
         "type": "array",

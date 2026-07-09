@@ -76,6 +76,28 @@
 - Пересмотр schema_version контрактов: breaking НЕ потребовался — все контракты
   остаются schema_version 1, v2.0 полностью обратно совместим с 1.x.
 
+## v2.1 — интеграция research-пакета ✅ выполнена
+
+Курируемая интеграция внешнего исследования (Product & Design Extension Pack):
+взяты реальные пробелы, дубли уже построенного отклонены.
+
+- **AI Feature Evals**: ai-evaluator + rules/ai/EvalPolicy.md +
+  templates/quality/AIFeatureEvalPlan.md + blocking-гейт ai_eval (applies_when:
+  LLM/агентный компонент в фиче). Кит теперь измеряет не только своих агентов,
+  но и AI-возможности, отданные пользователям.
+- **Adoption как стадия**: adoption-manager, контракт ADOPTION (launch-readiness ->
+  adoption-plan -> feedback-loop -> post-launch-review -> independent review),
+  стадия adoption в Feature Blueprint, preset product-adoption.
+- **Discovery-исследование**: user-researcher + UserResearchPlan (story-based
+  интервью) + AssumptionTest (RAT); правила Continuous Discovery в OST-шаблоне.
+- **Источники истины**: context/product/DesignSystem.md (DTCG-токены) и
+  MetricCatalog.md (семантический слой); поле source_of_truth у gates.
+- analytics_readiness усилен evidence events_verified_live; ExperimentReadout,
+  InAppContent; Diátaxis-компас в UserGuide; HEART/AARRR в DashboardSpec.
+
+Идея на будущее (из Spec Kit): валидатор кросс-артефактной консистентности
+(события tracking-plan ↔ воронки dashboard-spec ↔ метрики MetricCatalog).
+
 ## Правила движения по roadmap
 
 - Каждая фаза проходит полный набор валидаторов; новые механизмы приносят свои
