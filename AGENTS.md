@@ -36,6 +36,7 @@ python3 validation/ai_capability_selftest.py
 python3 validation/validate_stale_gates.py --selftest
 python3 tools/generate_runtime.py --selftest
 python3 tools/generate_artifacts.py --selftest
+python3 tools/run_report.py --selftest
 python3 tools/orchestrator.py --selftest
 python3 validation/validate_presets.py
 python3 validation/validate_agent_evals.py

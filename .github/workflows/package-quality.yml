@@ -31,6 +31,8 @@ jobs:
         run: python3 tools/generate_runtime.py --selftest
       - name: Генератор артефактов по blueprint (selftest)
         run: python3 tools/generate_artifacts.py --selftest
+      - name: Отчёт-оценка прогона фичи (selftest)
+        run: python3 tools/run_report.py --selftest
       - name: Sequential-оркестратор (selftest)
         run: python3 tools/orchestrator.py --selftest
       - name: Presets
