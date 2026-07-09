@@ -152,3 +152,82 @@ gates:
     validator: validate-archive-readiness
     applicability: [all]
     required_evidence: [all_blocking_gates_pass, no_stale_gate]
+
+  # --- Ф1 roadmap (v1.3): gates полного продуктового цикла ---
+  # Вводятся non-blocking для обкатки на child-репозиториях; перевод в blocking — фаза 3.
+  discovery_completeness:
+    id: discovery_completeness
+    purpose: Discovery завершён — проблема, аудитория, гипотезы и метрики успеха зафиксированы.
+    stage: problem
+    blocking: false
+    responsible_role: product-manager
+    review_mode: writer
+    applicability: [PRODUCT]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [problem_statement, target_users, hypotheses, success_metrics]
+
+  ux_review:
+    id: ux_review
+    purpose: UX проверен — flow, состояния Empty/Loading/Error/Success, responsive, copy.
+    stage: design-review
+    blocking: false
+    responsible_role: accessibility-reviewer
+    review_mode: read-only
+    applicability: [PRODUCT, VISUAL]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [ux_flow, screen_states, responsive_checked, copy_reviewed]
+
+  design_system_usage:
+    id: design_system_usage
+    purpose: Использована дизайн-система — существующие компоненты и токены; новые обоснованы.
+    stage: design-review
+    blocking: false
+    responsible_role: ui-ux-designer
+    review_mode: writer
+    applicability: [PRODUCT, VISUAL]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [components_from_design_system, new_components_justified]
+
+  analytics_readiness:
+    id: analytics_readiness
+    purpose: Аналитика описана — tracking plan, event schema, метрики и dashboard-спецификация.
+    stage: dashboard-spec
+    blocking: false
+    responsible_role: product-analyst
+    review_mode: writer
+    applicability: [PRODUCT, ANALYTICS]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [tracking_plan, event_schema, product_metrics, dashboard_spec]
+
+  documentation_updated:
+    id: documentation_updated
+    purpose: Документация обновлена вместе с изменением (Definition of Done).
+    stage: result
+    blocking: false
+    responsible_role: documentation-steward
+    review_mode: writer
+    applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [docs_updated_or_explicit_none, release_notes_entry]
+
+  release_safety:
+    id: release_safety
+    purpose: Релиз безопасен — feature flag предусмотрен, rollback описан, rollout спланирован.
+    stage: release
+    blocking: false
+    responsible_role: release-manager
+    review_mode: read-only
+    applicability: [ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [feature_flag_or_justified_absence, rollback_strategy, rollout_plan]
+
+  observability_readiness:
+    id: observability_readiness
+    purpose: Мониторинг определён — логи, метрики, алерты, SLO для нового поведения.
+    stage: release
+    blocking: false
+    responsible_role: observability-engineer
+    review_mode: writer
+    applicability: [ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [logging_defined, metrics_defined, alerts_defined, slo_defined]

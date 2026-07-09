@@ -39,6 +39,8 @@ python3 tools/orchestrator.py --selftest
 python3 validation/validate_presets.py
 python3 validation/validate_agent_evals.py
 python3 validation/validate_openspec_change.py examples/openspec-demo
+python3 validation/validate_feature_blueprint.py --selftest
+python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout
 ```
 
 ## Ключевые инварианты (валидаторы их проверяют, но знать заранее дешевле)
