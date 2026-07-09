@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [1.5.0] — 2026-07-09
+
+**Фаза 3 roadmap** (см. ROADMAP.md): генераторы. Скелеты артефактов создаются
+детерминированно из единого источника (принцип 27); содержание пишут агенты стадий.
+
+### Added
+- **tools/generate_artifacts.py** — generator framework по Feature Blueprint:
+  `new` (blueprint из шаблона), `scaffold` (скелеты недостающих артефактов, все стадии
+  или одна), `add` (внеплановый артефакт, например эксперимент), `check` (drift-статус:
+  edited / untouched-skeleton / template-updated; незаполненный скелет достигнутой
+  стадии = fail). Хэши — в .generation.json. Selftest + шаг CI. Стадийные наборы
+  шаблонов покрывают генераторы VISION.md: Discovery, PRD, UX, Analytics, Dashboard,
+  Documentation, Release, Monitoring, Experiment, Retrospective.
+- Шаблоны: templates/documentation/{UserGuide,FAQ,WhatsNew}.md,
+  templates/task/Retrospective.md (результат vs метрики Discovery, уроки -> memory/,
+  гипотезы следующего цикла).
+- Дефолтный FeatureBlueprint.yaml расширен: documentation (4 артефакта),
+  release (+release-checklist), retrospective с шаблоном. Полный scaffold — 24 скелета
+  по 10 стадиям.
+
+### Changed
+- **Gates переведены в blocking**: discovery_completeness, ux_review,
+  design_system_usage, analytics_readiness (их applicability целиком в
+  PRODUCT/VISUAL/ANALYTICS). documentation_updated, release_safety,
+  observability_readiness остаются non-blocking до обкатки в QUICK/ENGINEERING.
+
 ## [1.4.0] — 2026-07-09
 
 **Фаза 2 roadmap** (см. ROADMAP.md): каждая зона ответственности получила независимого
