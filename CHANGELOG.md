@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.0.0] — 2026-07-09
+
+**Фаза 4 roadmap — платформа AI Product Operating System завершена** (VISION.md,
+все фазы Ф1–Ф4 ✅). Breaking-изменений НЕТ: контракты остаются schema_version 1,
+обновление — штатный `ai-ops update` (см. MIGRATION_GUIDE.md). Мажорная версия
+отмечает завершение платформы, а не слом совместимости. Цикл замкнут:
+Discovery → Delivery → Release → Measurement → Insights → Discovery.
+
+### Added
+- **Knowledge Graph**: registry/entities.yaml — словарь 15 типов сущностей
+  (Goal → Initiative → Epic → Feature → ... → Insight) и 20 допустимых связей;
+  schemas/knowledge-graph.schema.json (граф проекта — knowledge/graph.yaml в child);
+  validate_knowledge_graph.py — ссылочная целостность, допустимость связей,
+  существование blueprint у feature-узлов (+selftest, пример, CI).
+- **Product Health**: schemas/product-health.schema.json (machine-readable отчёт) +
+  tools/product_health.py — детерминированный расчёт Health Score
+  (adoption/activation/retention/reliability/errors/performance/support_load,
+  нормализация против target, веса, band healthy/warning/critical, findings).
+  Интерпретация — за людьми и workflow INSIGHTS, не за скриптом.
+- **Workflow INSIGHTS** (extended): data-collection → health-report (детерминированно)
+  → insight-synthesis → insight-review (product-reviewer) → hypotheses-for-discovery
+  (experiment-designer) → memory-capture (learning_output: required). Инсайты и
+  гипотезы записываются в knowledge graph. Прозаический сценарий workflows/insights.md.
+- manifest: registries.entities, workflows.extended += INSIGHTS.
+
+### Changed
+- Gates intake_completeness и evidence расширили applicability на новые workflow
+  (VISUAL/ANALYTICS/INSIGHTS и INSIGHTS соответственно).
+- README/ROADMAP/MIGRATION_GUIDE: фазы Ф1–Ф4 отмечены выполненными; зафиксировано,
+  что пересмотр schema_version не потребовался.
+
 ## [1.5.0] — 2026-07-09
 
 **Фаза 3 roadmap** (см. ROADMAP.md): генераторы. Скелеты артефактов создаются

@@ -27,7 +27,7 @@ gates:
     validator: validate-intake
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
+    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS]
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
@@ -131,7 +131,7 @@ gates:
     blocking: true
     responsible_role: final-verifier
     review_mode: read-only
-    applicability: [RESEARCH]
+    applicability: [RESEARCH, INSIGHTS]
     required_evidence: [source_per_claim, capability_status]
   stakeholder_readiness:
     id: stakeholder_readiness
