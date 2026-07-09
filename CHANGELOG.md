@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [1.3.0] — 2026-07-09
+
+**Фаза 1 roadmap к AI Product Operating System** (см. VISION.md, ROADMAP.md):
+«Analytics/Design/Docs by Default» как контракты. Всё аддитивно; новые gates —
+non-blocking до обкатки (перевод в blocking — фаза 3).
+
+### Added
+- **15 шаблонов артефактов** полного цикла: discovery (ProblemStatement, JTBD,
+  Personas, Hypotheses, OpportunitySolutionTree), analytics (TrackingPlan, EventSchema,
+  DashboardSpec), ux (UXFlow, ScreenStates, DesignReview), release (RolloutPlan,
+  FeatureFlag, RollbackStrategy), monitoring (MonitoringSpec).
+- **7 quality gates продуктового цикла** (non-blocking): discovery_completeness,
+  ux_review, design_system_usage, analytics_readiness, documentation_updated,
+  release_safety, observability_readiness.
+- **Workflow-контракты VISUAL и ANALYTICS** (заявлены post-MVP с v0.2): стадии,
+  агенты, gates, memory-capture; runtime-команды генерируются автоматически
+  (ai-visual, ai-analytics). Прозаический сценарий workflows/analytics-instrumentation.md.
+- **Feature Blueprint v1**: schemas/feature-blueprint.schema.json,
+  валидатор validate_feature_blueprint.py (+selftest, шаг CI), шаблон
+  templates/blueprint/FeatureBlueprint.yaml, живой пример
+  examples/feature-blueprint-demo/express-checkout. Правило: артефакты достигнутых
+  стадий существуют либо явно declined с причиной.
+- manifest: workflows.extended [VISUAL, ANALYTICS].
+
 ## [1.2.0] — 2026-07-09
 
 Улучшения для работы команд: автообновление child-репозиториев, замкнутый цикл

@@ -39,3 +39,7 @@ jobs:
         run: python3 validation/validate_agent_evals.py
       - name: OpenSpec guard (пример)
         run: python3 validation/validate_openspec_change.py examples/openspec-demo
+      - name: Feature Blueprint (selftest + пример)
+        run: |
+          python3 validation/validate_feature_blueprint.py --selftest
+          python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout

@@ -1,9 +1,11 @@
 # AI Ops Kit
 
-Переиспользуемая **AI-first operating system** для продуктово-технологических команд:
-агенты, workflow-контракты, quality gates, provider/runtime маршрутизация и управляемые
+Открытая **AI Product Operating System** для продуктово-технологических команд:
+AI сопровождает продукт на всём жизненном цикле — от Discovery до эксплуатации.
+Агенты, workflow-контракты, quality gates, provider/runtime маршрутизация и управляемые
 обновления дочерних репозиториев.
 
+Куда идём — в [`VISION.md`](VISION.md) и [`ROADMAP.md`](ROADMAP.md).
 Версия пакета — в [`VERSION`](VERSION), история — в [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Что внутри

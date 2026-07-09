@@ -5,7 +5,7 @@
 
 ## Корень
 
-Версия, история, лицензии, инструкции для людей и агентов (AGENTS.md/CLAUDE.md).
+Версия, история, лицензии, видение и roadmap, инструкции для людей и агентов (AGENTS.md/CLAUDE.md).
 
 - `.gitignore`
 - `AGENTS.md`
@@ -17,7 +17,9 @@
 - `NOTICE.md`
 - `README.md`
 - `RELEASE_NOTES_v1.0.0.md`
+- `ROADMAP.md`
 - `VERSION`
+- `VISION.md`
 
 ## manifest/
 
@@ -84,14 +86,15 @@
 
 ## quality/
 
-Реестр quality gates: machine-readable контракт с revision-binding.
+Реестр quality gates: machine-readable контракт с revision-binding; с v1.3 — gates полного продуктового цикла.
 
 - `quality/gates.yaml`
 
 ## workflows/
 
-Прозаические сценарии типовых задач; MVP-контракты см. registry/workflows.yaml.
+Прозаические сценарии типовых задач; машиночитаемые контракты — registry/workflows.yaml (MVP + VISUAL/ANALYTICS).
 
+- `workflows/analytics-instrumentation.md`
 - `workflows/architecture-change.md`
 - `workflows/bug-fix.md`
 - `workflows/database-migration.md`
@@ -159,9 +162,18 @@
 
 ## templates/
 
-Шаблоны артефактов: task (TaskState, TaskPlan), engineering (ADR), product, quality (VerificationEvidence), documentation, ci (автообновление child).
+Шаблоны артефактов полного цикла: task, engineering, product, quality, documentation, discovery, ux, analytics, release, monitoring, blueprint, ci.
 
+- `templates/analytics/DashboardSpec.md`
+- `templates/analytics/EventSchema.md`
+- `templates/analytics/TrackingPlan.md`
+- `templates/blueprint/FeatureBlueprint.yaml`
 - `templates/ci/ai-ops-update.yml`
+- `templates/discovery/Hypotheses.md`
+- `templates/discovery/JTBD.md`
+- `templates/discovery/OpportunitySolutionTree.md`
+- `templates/discovery/Personas.md`
+- `templates/discovery/ProblemStatement.md`
 - `templates/documentation/ReleaseNotes.md`
 - `templates/documentation/Runbook.md`
 - `templates/engineering/ADR.md`
@@ -170,6 +182,7 @@
 - `templates/engineering/IntegrationContract.md`
 - `templates/engineering/SolutionDesign.md`
 - `templates/meta/AgentTemplate.md`
+- `templates/monitoring/MonitoringSpec.md`
 - `templates/product/Epic.md`
 - `templates/product/Experiment.md`
 - `templates/product/Feature.md`
@@ -181,12 +194,18 @@
 - `templates/quality/TestPlan.md`
 - `templates/quality/TestReport.md`
 - `templates/quality/VerificationEvidence.md`
+- `templates/release/FeatureFlag.md`
+- `templates/release/RollbackStrategy.md`
+- `templates/release/RolloutPlan.md`
 - `templates/task/TaskBrief.md`
 - `templates/task/TaskContext.md`
 - `templates/task/TaskHandoff.md`
 - `templates/task/TaskPlan.md`
 - `templates/task/TaskResult.md`
 - `templates/task/TaskState.md`
+- `templates/ux/DesignReview.md`
+- `templates/ux/ScreenStates.md`
+- `templates/ux/UXFlow.md`
 
 ## context/
 
@@ -236,10 +255,11 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 
 ## schemas/
 
-JSON Schema публичных контрактов: gate-result, route-decision, child-config, update-result и др.
+JSON Schema публичных контрактов: gate-result, route-decision, child-config, feature-blueprint, update-result и др.
 
 - `schemas/capability-entry.schema.json`
 - `schemas/child-config.schema.json`
+- `schemas/feature-blueprint.schema.json`
 - `schemas/gate-result.schema.json`
 - `schemas/package-manifest.schema.json`
 - `schemas/provenance.schema.json`
@@ -312,6 +332,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_ai_first_registry.py`
 - `validation/validate_ai_first_workflows.py`
 - `validation/validate_ai_ops_child.py`
+- `validation/validate_feature_blueprint.py`
 - `validation/validate_openspec_change.py`
 - `validation/validate_presets.py`
 - `validation/validate_stale_gates.py`
@@ -339,7 +360,7 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 
 ## examples/
 
-Примеры: child-конфиг, openspec-demo (проходит openspec validate --strict).
+Примеры: child-конфиг, openspec-demo, feature-blueprint-demo (все проходят свои валидаторы в CI).
 
 - `examples/child-config.example.yaml`
 - `examples/child-install/.ai/custom/.gitkeep`
@@ -350,6 +371,12 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 - `examples/child-install/.ai/project/.gitkeep`
 - `examples/child-install/.ai/runtime/.gitkeep`
 - `examples/child-install/README.md`
+- `examples/feature-blueprint-demo/express-checkout/analytics/tracking-plan.md`
+- `examples/feature-blueprint-demo/express-checkout/blueprint.yaml`
+- `examples/feature-blueprint-demo/express-checkout/discovery/hypotheses.md`
+- `examples/feature-blueprint-demo/express-checkout/discovery/problem-statement.md`
+- `examples/feature-blueprint-demo/express-checkout/prd/feature.md`
+- `examples/feature-blueprint-demo/express-checkout/ux/ux-flow.md`
 - `examples/openspec-demo/openspec/changes/add-csv-export/proposal.md`
 - `examples/openspec-demo/openspec/changes/add-csv-export/specs/reports/spec.md`
 - `examples/openspec-demo/openspec/changes/add-csv-export/tasks.md`

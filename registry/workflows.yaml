@@ -127,4 +127,58 @@ workflows:
     learning_output: recommended
     maps_from: []
 
-# Post-MVP (объявлены, контракты позже): CRITICAL, VISUAL, ANALYTICS, DOCUMENT, LEGACY, INCIDENT.
+  VISUAL:
+    id: VISUAL
+    purpose: Пользовательская функция с UI — flow, состояния, дизайн-система, доступность.
+    layer: extended
+    selection_criteria: {task_type: [ui-change, new-screen, ux-improvement], touches: user-interface}
+    disqualifying_conditions:
+      - "нет пользовательского интерфейса"
+    required_artifacts: [intake, UXFlow, ScreenStates, DesignReview, TaskState, VerificationEvidence]
+    optional_artifacts: [TrackingPlan, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      - {id: ux-flow, owner: ui-ux-designer, writer: ui-ux-designer, review_mode: writer, preset: product-discovery}
+      - {id: states, owner: ui-ux-designer, writer: ui-ux-designer, review_mode: writer}
+      - {id: design-review, owner: accessibility-reviewer, review_mode: read-only}
+      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
+      - {id: verify, owner: final-verifier, review_mode: read-only}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, ux_review, design_system_usage, implementation_verification]
+    required_capabilities: [file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: false, escalate_if: [protected_paths]}
+    archive_criteria: "ux_review и design_system_usage pass; состояния Empty/Loading/Error/Success покрыты"
+    resumability: TaskState
+    learning_output: recommended
+    maps_from: [workflows/ui-change.md]
+
+  ANALYTICS:
+    id: ANALYTICS
+    purpose: Аналитика функции — метрики, события, tracking plan, dashboard-спецификация.
+    layer: extended
+    selection_criteria: {task_type: [instrumentation, tracking-plan, dashboard, metrics-definition]}
+    disqualifying_conditions:
+      - "нет измеряемого пользовательского или бизнес-поведения"
+    required_artifacts: [intake, TrackingPlan, EventSchema, DashboardSpec, TaskState, VerificationEvidence]
+    optional_artifacts: [ProductAnalyticsPlan, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      - {id: metrics-definition, owner: product-analyst, writer: product-analyst, review_mode: writer, preset: product-discovery}
+      - {id: event-design, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      - {id: dashboard-spec, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
+      - {id: verify, owner: final-verifier, review_mode: read-only}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, analytics_readiness, implementation_verification]
+    required_capabilities: [file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: false}
+    archive_criteria: "analytics_readiness pass; события проверены на реальном потоке (QA checklist)"
+    resumability: TaskState
+    learning_output: recommended
+    maps_from: [workflows/analytics-instrumentation.md]
+
+# Post-MVP (объявлены, контракты позже): CRITICAL, DOCUMENT, LEGACY, INSIGHTS (Ф4), INCIDENT.
