@@ -2,6 +2,9 @@
 # Каталог функции: features/<id>/blueprint.yaml; пути артефактов — относительно каталога.
 # Правило: для стадий не позже current_stage каждый артефакт существует
 # либо помечен status: declined с declined_reason (молчаливых пропусков нет).
+# Правило прогона (урок ii-sreda): blueprint закрывается (done/declined + current_stage)
+# В ТОМ ЖЕ PR, что и релиз кода — иначе run_report честно скажет
+# «реальность обогнала blueprint».
 schema_version: 1
 kind: feature-blueprint
 feature:

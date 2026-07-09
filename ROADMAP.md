@@ -95,8 +95,13 @@
 - analytics_readiness усилен evidence events_verified_live; ExperimentReadout,
   InAppContent; Diátaxis-компас в UserGuide; HEART/AARRR в DashboardSpec.
 
-Идея на будущее (из Spec Kit): валидатор кросс-артефактной консистентности
-(события tracking-plan ↔ воронки dashboard-spec ↔ метрики MetricCatalog).
+Идеи на будущее (кандидаты v2.3, подтверждены данными первого боевого прогона —
+см. memory/lessons-learned/2026-07-09-first-child-run-insights.md):
+- **Профили blueprint (lean/full)**: на прогоне ii-sreda 21 из 28 артефактов (75%)
+  были declined — дефолт тяжёл для класса «прототип/MVP». lean-профиль:
+  discovery/definition/delivery/analytics/retrospective.
+- Валидатор кросс-артефактной консистентности (из Spec Kit): события
+  tracking-plan ↔ воронки dashboard-spec ↔ метрики MetricCatalog.
 
 ## Правила движения по roadmap
 
