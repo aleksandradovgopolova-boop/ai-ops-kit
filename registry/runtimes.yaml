@@ -122,12 +122,12 @@ runtimes:
     kind: orchestrator
     mvp_adapter: true
     default_provider: any
-    execution_modes: [orchestrated, sequential]
-    preferred_mode: orchestrated
+    execution_modes: [sequential]                # orchestrated (parallel scheduler) — planned, в коде не реализован
+    preferred_mode: sequential
     minimum_mode: sequential
     capabilities:
       native_subagents: {status: unsupported, value: false, note: emulated-via-role-isolation}
-      parallel_execution: {status: degraded, value: "our scheduler, bounded"}
+      parallel_execution: {status: unsupported, value: false, note: "planned; tools/orchestrator.py — sequential-only"}
       tools: {status: documented, value: "via tool gateway"}
       mcp: {status: degraded, value: optional}
       function_calling: {status: degraded, value: provider-dependent}

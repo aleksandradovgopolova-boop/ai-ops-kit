@@ -114,10 +114,8 @@ def route(inp):
         return isinstance(c, dict) and c.get("value") is True
     if cap_true("native_subagents"):
         execution_mode = "native"
-    elif selected_runtime == "generic-orchestrator":
-        execution_mode = "orchestrated"
     else:
-        execution_mode = "sequential"
+        execution_mode = rt.get("preferred_mode", "sequential")
 
     # 5. approval
     human_approval = "conditional"
@@ -177,13 +175,13 @@ SCENARIOS = [
              "available_providers": ["gigachat", "local"],
              "available_runtimes": ["generic-orchestrator", "generic-api"]},
      "expect": {"workflow": "PRODUCT", "selected_model_class": "enterprise-russian",
-                "execution_mode": "orchestrated"}},
+                "execution_mode": "sequential"}},
     {"name": "confidential RU, gigachat NOT enabled -> local",
      "inp": {"task_type": "ENGINEERING", "risk": "medium", "language": "ru",
              "confidentiality": "confidential", "data_residency_required": "ru",
              "available_providers": ["local"],
              "available_runtimes": ["generic-orchestrator"]},
-     "expect": {"selected_provider": "local", "execution_mode": "orchestrated"}},
+     "expect": {"selected_provider": "local", "execution_mode": "sequential"}},
     {"name": "normal web feature",
      "inp": {"task_type": "ENGINEERING", "risk": "low", "reasoning_complexity": "high",
              "confidentiality": "internal",

@@ -1,0 +1,41 @@
+# release.yml — автоматический выпуск: пуш в main с изменением VERSION
+# создаёт тег vX.Y.Z и GitHub Release с текстом из соответствующего раздела CHANGELOG.
+# Идемпотентен: если тег/Release уже существуют — шаг спокойно завершается.
+name: release
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Создать тег и Release из CHANGELOG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG уже существует — пропуск."; exit 0
+          fi
+          # Раздел CHANGELOG для этой версии (от '## [X.Y.Z]' до следующего '## ')
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" {on=1}
+            on && $0 ~ "^## " && $0 !~ "^## \\[" ver "\\]" {exit}
+            on {print}
+          ' CHANGELOG.md > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            echo "В CHANGELOG.md нет раздела [$VERSION] — записки будут краткими."
+            echo "AI Ops Kit $TAG" > /tmp/notes.md
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "AI Ops Kit $TAG" \
+            --notes-file /tmp/notes.md
+          echo "Создан $TAG -> $GITHUB_SHA"
