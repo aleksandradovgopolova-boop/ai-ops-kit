@@ -185,6 +185,7 @@
 - `templates/analytics/DashboardSpec.md`
 - `templates/analytics/EventSchema.md`
 - `templates/analytics/TrackingPlan.md`
+- `templates/blueprint/FeatureBlueprint.lean.yaml`
 - `templates/blueprint/FeatureBlueprint.yaml`
 - `templates/ci/ai-ops-update.yml`
 - `templates/discovery/AssumptionTest.md`
@@ -265,6 +266,7 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `memory/decisions/README.md`
 - `memory/incidents/README.md`
 - `memory/known-issues/README.md`
+- `memory/lessons-learned/2026-07-09-first-child-run-insights.md`
 - `memory/lessons-learned/2026-07-09-routing-unaware-of-new-workflows.md`
 - `memory/lessons-learned/README.md`
 - `memory/patterns/README.md`
@@ -379,6 +381,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_ai_first_registry.py`
 - `validation/validate_ai_first_workflows.py`
 - `validation/validate_ai_ops_child.py`
+- `validation/validate_cross_artifacts.py`
 - `validation/validate_feature_blueprint.py`
 - `validation/validate_knowledge_graph.py`
 - `validation/validate_openspec_change.py`
@@ -422,6 +425,7 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 - `examples/child-install/.ai/project/.gitkeep`
 - `examples/child-install/.ai/runtime/.gitkeep`
 - `examples/child-install/README.md`
+- `examples/feature-blueprint-demo/express-checkout/analytics/dashboard-spec.md`
 - `examples/feature-blueprint-demo/express-checkout/analytics/tracking-plan.md`
 - `examples/feature-blueprint-demo/express-checkout/blueprint.yaml`
 - `examples/feature-blueprint-demo/express-checkout/discovery/hypotheses.md`

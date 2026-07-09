@@ -16,6 +16,7 @@
         "name": {"type": "string"},
         "owner": {"type": "string"},
         "status": {"enum": ["planned", "in-progress", "released", "retired"]},
+        "profile": {"enum": ["lean", "full"], "description": "Скоуп стадий (v2.3): full — все 11; lean (прототип/MVP) — discovery/definition/delivery/analytics/retrospective. По умолчанию full. Валидатор требует артефакты только для достигнутых стадий профиля; стадии вне профиля можно добавлять в artifacts точечно."},
         "current_stage": {
           "enum": ["discovery", "definition", "ux", "architecture", "delivery",
                    "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]

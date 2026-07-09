@@ -27,6 +27,11 @@ STAGES = ["discovery", "definition", "ux", "architecture", "delivery",
           "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]
 STATUSES = {"planned", "draft", "done", "declined"}
 FEATURE_STATUSES = {"planned", "in-progress", "released", "retired"}
+# Профили (v2.3): скоуп стадий объявляется явно в feature.profile — это не молчаливый пропуск.
+PROFILES = {
+    "full": STAGES,
+    "lean": ["discovery", "definition", "delivery", "analytics", "retrospective"],
+}
 
 
 def validate_dir(feature_dir: Path):
@@ -61,11 +66,19 @@ def validate_dir(feature_dir: Path):
             fail(f"feature без поля '{f}'")
     if feature.get("status") and feature["status"] not in FEATURE_STATUSES:
         fail(f"feature.status '{feature['status']}' вне {sorted(FEATURE_STATUSES)}")
+    profile = feature.get("profile", "full")
+    if profile not in PROFILES:
+        fail(f"feature.profile '{profile}' вне {sorted(PROFILES)}")
+        return errors
     stage = feature.get("current_stage")
     if stage not in STAGES:
         fail(f"current_stage '{stage}' вне словаря стадий")
         return errors
+    if profile == "lean" and stage not in PROFILES["lean"]:
+        fail(f"current_stage '{stage}' вне lean-профиля {PROFILES['lean']}")
+        return errors
     reached = set(STAGES[:STAGES.index(stage) + 1])
+    reached_required = reached & set(PROFILES[profile])
 
     artifacts = bp.get("artifacts")
     if not isinstance(artifacts, dict) or not artifacts:
@@ -93,10 +106,11 @@ def validate_dir(feature_dir: Path):
                     fail(f"artifacts.{st}: файл '{e['path']}' не существует, "
                          f"а стадия '{st}' уже достигнута (либо пометьте declined с причиной)")
 
-    for st in reached:
+    for st in reached_required:
         entries = artifacts.get(st)
         if not entries:
-            fail(f"стадия '{st}' достигнута (current_stage={stage}), но артефактов для неё нет")
+            fail(f"стадия '{st}' достигнута (current_stage={stage}, profile={profile}), "
+                 "но артефактов для неё нет")
 
     return errors
 
@@ -138,6 +152,20 @@ def selftest():
                validate_dir(make_demo(Path(td) / "b", break_file=True)), True)
         expect("неизвестная стадия -> fail",
                validate_dir(make_demo(Path(td) / "c", break_stage=True)), True)
+        # lean-профиль: current_stage=delivery, стадий ux/architecture в blueprint нет — валидно
+        fdir = make_demo(Path(td) / "d")
+        bp = yaml.safe_load((fdir / "blueprint.yaml").read_text(encoding="utf-8"))
+        bp["feature"]["profile"] = "lean"
+        bp["feature"]["current_stage"] = "delivery"
+        (fdir / "delivery").mkdir()
+        (fdir / "delivery" / "task-plan.md").write_text("# Plan\n", encoding="utf-8")
+        bp["artifacts"]["delivery"] = [{"path": "delivery/task-plan.md", "status": "draft"}]
+        (fdir / "blueprint.yaml").write_text(yaml.safe_dump(bp, allow_unicode=True), encoding="utf-8")
+        expect("lean: delivery без ux/architecture -> валидно", validate_dir(fdir), False)
+        bp["feature"]["profile"] = "full"
+        (fdir / "blueprint.yaml").write_text(yaml.safe_dump(bp, allow_unicode=True), encoding="utf-8")
+        expect("full: те же данные -> fail (ux/architecture достигнуты без артефактов)",
+               validate_dir(fdir), True)
     print("feature-blueprint selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

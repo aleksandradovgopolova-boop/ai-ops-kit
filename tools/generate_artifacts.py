@@ -13,7 +13,9 @@ templates/ по blueprint.yaml; СОДЕРЖАНИЕ пишут агенты с�
   (например: add <dir> discovery experiments/exp-1.md templates/product/Experiment.md).
 
 Команды:
-  new <features-dir> <feature-id> [имя]     — новый blueprint из templates/blueprint/
+  new <features-dir> <feature-id> [имя] [--profile lean|full]
+                                            — новый blueprint из templates/blueprint/;
+                                              lean (прототип/MVP) = 5 стадий, full = 11
   scaffold <feature-dir> [--stage <stage>]  — создать недостающие скелеты (все стадии
                                               или одну); фиксирует хэши в .generation.json
   add <feature-dir> <stage> <path> <template> — добавить артефакт в blueprint и создать скелет
@@ -63,14 +65,16 @@ def save_generation(feature_dir: Path, gen):
         json.dumps(gen, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def cmd_new(features_dir: Path, fid: str, name: str | None):
-    if not BLUEPRINT_TEMPLATE.exists():
-        raise SystemExit(f"нет шаблона {BLUEPRINT_TEMPLATE}")
+def cmd_new(features_dir: Path, fid: str, name: str | None, profile: str = "full"):
+    tmpl = (PKG / "templates" / "blueprint" / "FeatureBlueprint.lean.yaml"
+            if profile == "lean" else BLUEPRINT_TEMPLATE)
+    if not tmpl.exists():
+        raise SystemExit(f"нет шаблона {tmpl}")
     fdir = features_dir / fid
     if (fdir / "blueprint.yaml").exists():
         print(f"{fdir}/blueprint.yaml уже существует — используйте scaffold.")
         return 1
-    bp = yaml.safe_load(BLUEPRINT_TEMPLATE.read_text(encoding="utf-8"))
+    bp = yaml.safe_load(tmpl.read_text(encoding="utf-8"))
     bp["feature"]["id"] = fid
     bp["feature"]["name"] = name or fid
     bp["feature"]["status"] = "planned"
@@ -78,7 +82,9 @@ def cmd_new(features_dir: Path, fid: str, name: str | None):
     fdir.mkdir(parents=True, exist_ok=True)
     (fdir / "blueprint.yaml").write_text(
         yaml.safe_dump(bp, allow_unicode=True, sort_keys=False, width=110), encoding="utf-8")
-    print(f"создан {fdir}/blueprint.yaml — запустите scaffold для скелетов discovery.")
+    print(f"создан {fdir}/blueprint.yaml (профиль {profile}) — запустите scaffold для "
+          "скелетов discovery." + ("" if profile == "lean" else
+          " Для прототипа/MVP есть --profile lean (5 стадий вместо 11)."))
     return 0
 
 
@@ -214,7 +220,14 @@ def main(argv):
         return 1
     cmd, args = argv[0], argv[1:]
     if cmd == "new" and len(args) >= 2:
-        return cmd_new(Path(args[0]), args[1], args[2] if len(args) > 2 else None)
+        profile = "full"
+        if "--profile" in args:
+            i = args.index("--profile")
+            profile = args[i + 1]
+            args = args[:i] + args[i + 2:]
+        if profile not in ("lean", "full"):
+            raise SystemExit(f"--profile '{profile}' вне [lean, full]")
+        return cmd_new(Path(args[0]), args[1], args[2] if len(args) > 2 else None, profile)
     if cmd == "scaffold" and args:
         stage = args[args.index("--stage") + 1] if "--stage" in args else None
         return cmd_scaffold(Path(args[0]).resolve(), stage)

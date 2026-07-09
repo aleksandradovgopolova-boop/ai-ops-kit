@@ -95,8 +95,10 @@
 - analytics_readiness усилен evidence events_verified_live; ExperimentReadout,
   InAppContent; Diátaxis-компас в UserGuide; HEART/AARRR в DashboardSpec.
 
-Идея на будущее (из Spec Kit): валидатор кросс-артефактной консистентности
-(события tracking-plan ↔ воронки dashboard-spec ↔ метрики MetricCatalog).
+Кандидаты v2.3 ✅ выполнены в v2.3.0 (оба обоснованы данными первого боевого
+прогона — memory/lessons-learned/2026-07-09-first-child-run-insights.md):
+профили blueprint lean/full и кросс-артефактный валидатор
+(tracking-plan ↔ dashboard-spec; расширение на MetricCatalog — следующий шаг).
 
 ## Правила движения по roadmap
 
