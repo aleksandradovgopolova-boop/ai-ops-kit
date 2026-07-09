@@ -93,7 +93,7 @@
 
 ## quality/
 
-Реестр quality gates: machine-readable контракт с revision-binding; с v1.3 — gates полного продуктового цикла.
+Реестр quality gates: machine-readable контракт с revision-binding; gates продуктового цикла (v1.3), blocking с v1.5.
 
 - `quality/gates.yaml`
 
@@ -184,8 +184,11 @@
 - `templates/discovery/OpportunitySolutionTree.md`
 - `templates/discovery/Personas.md`
 - `templates/discovery/ProblemStatement.md`
+- `templates/documentation/FAQ.md`
 - `templates/documentation/ReleaseNotes.md`
 - `templates/documentation/Runbook.md`
+- `templates/documentation/UserGuide.md`
+- `templates/documentation/WhatsNew.md`
 - `templates/engineering/ADR.md`
 - `templates/engineering/APIContract.md`
 - `templates/engineering/DataMigrationPlan.md`
@@ -207,6 +210,7 @@
 - `templates/release/FeatureFlag.md`
 - `templates/release/RollbackStrategy.md`
 - `templates/release/RolloutPlan.md`
+- `templates/task/Retrospective.md`
 - `templates/task/TaskBrief.md`
 - `templates/task/TaskContext.md`
 - `templates/task/TaskHandoff.md`
@@ -356,8 +360,9 @@ JSON Schema публичных контрактов: gate-result, route-decision
 
 ## tools/
 
-Генератор runtime-команд из контрактов и sequential-оркестратор.
+Генераторы (runtime-команды, артефакты по blueprint) и sequential-оркестратор.
 
+- `tools/generate_artifacts.py`
 - `tools/generate_runtime.py`
 - `tools/orchestrator.py`
 

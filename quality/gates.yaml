@@ -154,12 +154,15 @@ gates:
     required_evidence: [all_blocking_gates_pass, no_stale_gate]
 
   # --- Ф1 roadmap (v1.3): gates полного продуктового цикла ---
-  # Вводятся non-blocking для обкатки на child-репозиториях; перевод в blocking — фаза 3.
+  # Ф3 (v1.5): discovery_completeness / ux_review / design_system_usage / analytics_readiness
+  # переведены в blocking (их applicability целиком в PRODUCT/VISUAL/ANALYTICS).
+  # documentation_updated / release_safety / observability_readiness остаются non-blocking:
+  # они применимы и к QUICK/ENGINEERING — перевод после обкатки в этих workflow.
   discovery_completeness:
     id: discovery_completeness
     purpose: Discovery завершён — проблема, аудитория, гипотезы и метрики успеха зафиксированы.
     stage: discovery-review
-    blocking: false
+    blocking: true
     responsible_role: product-reviewer
     review_mode: read-only
     applicability: [PRODUCT]
@@ -170,7 +173,7 @@ gates:
     id: ux_review
     purpose: UX проверен — flow, состояния Empty/Loading/Error/Success, responsive, copy.
     stage: design-review
-    blocking: false
+    blocking: true
     responsible_role: ux-reviewer
     review_mode: read-only
     checklist: rules/design/ux-heuristics.yaml
@@ -182,7 +185,7 @@ gates:
     id: design_system_usage
     purpose: Использована дизайн-система — существующие компоненты и токены; новые обоснованы.
     stage: design-system-review
-    blocking: false
+    blocking: true
     responsible_role: design-system-reviewer
     review_mode: read-only
     checklist: rules/design/design-system-checklist.yaml
@@ -194,7 +197,7 @@ gates:
     id: analytics_readiness
     purpose: Аналитика описана — tracking plan, event schema, метрики и dashboard-спецификация.
     stage: analytics-review
-    blocking: false
+    blocking: true
     responsible_role: analytics-reviewer
     review_mode: read-only
     applicability: [PRODUCT, ANALYTICS]

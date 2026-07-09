@@ -38,12 +38,16 @@ artifacts:
     - {path: analytics/event-schema.md, template: templates/analytics/EventSchema.md, status: planned}
     - {path: analytics/dashboard-spec.md, template: templates/analytics/DashboardSpec.md, status: planned}
   documentation:
+    - {path: docs/user-guide.md, template: templates/documentation/UserGuide.md, status: planned}
+    - {path: docs/faq.md, template: templates/documentation/FAQ.md, status: planned}
+    - {path: docs/whats-new.md, template: templates/documentation/WhatsNew.md, status: planned}
     - {path: docs/release-notes.md, template: templates/documentation/ReleaseNotes.md, status: planned}
   release:
     - {path: release/rollout-plan.md, template: templates/release/RolloutPlan.md, status: planned}
     - {path: release/feature-flag.md, template: templates/release/FeatureFlag.md, status: planned}
     - {path: release/rollback-strategy.md, template: templates/release/RollbackStrategy.md, status: planned}
+    - {path: release/release-checklist.md, template: templates/quality/ReleaseChecklist.md, status: planned}
   monitoring:
     - {path: monitoring/monitoring-spec.md, template: templates/monitoring/MonitoringSpec.md, status: planned}
   retrospective:
-    - {path: retrospective/retrospective.md, status: planned}
+    - {path: retrospective/retrospective.md, template: templates/task/Retrospective.md, status: planned}
