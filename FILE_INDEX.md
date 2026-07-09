@@ -21,6 +21,14 @@
 - `VERSION`
 - `VISION.md`
 
+## docs/
+
+Документация для людей: Quickstart (+типовые ошибки), Walkthrough (сквозной сценарий), гайд внедрения по ролям.
+
+- `docs/QUICKSTART.md`
+- `docs/WALKTHROUGH.md`
+- `docs/adoption-guide.md`
+
 ## manifest/
 
 Центральный манифест пакета: версия, реестры, gates, spec-протокол, миграции.

@@ -90,6 +90,7 @@ def build_report(feature_dir: Path, graph_path: Path | None):
             bp = {}
     current = ((bp.get("feature") or {}).get("current_stage")) or "?"
     report["current_stage"] = current
+    reached_set = set(STAGES[:STAGES.index(current) + 1]) if current in STAGES else set()
     gen = ga.load_generation(feature_dir).get("artifacts", {})
 
     filled = declined = missing = skeletons = total = 0
@@ -121,6 +122,10 @@ def build_report(feature_dir: Path, graph_path: Path | None):
                 if status in ("done", "draft"):
                     report["findings"].append(
                         ("PROBLEM", f"{st}/{e['path']}: помечен {status}, но это незаполненный скелет"))
+                elif st in reached_set:
+                    report["findings"].append(
+                        ("PROBLEM", f"{st}/{e['path']}: незаполненный скелет достигнутой стадии — "
+                                    "заполните или пометьте declined с причиной"))
             else:
                 filled += 1
                 row["filled"] += 1
@@ -184,6 +189,8 @@ def selftest():
         ga.cmd_new(feats, "demo-r", "Demo R")
         fdir = feats / "demo-r"
         ga.cmd_scaffold(fdir, "discovery")
+        r = build_report(fdir, None)
+        expect("незаполненные скелеты достигнутой стадии -> PROBLEM", r["verdict"], "PROBLEM")
         # заполняем discovery по-настоящему
         for f in ("problem-statement", "hypotheses"):
             p = fdir / "discovery" / f"{f}.md"

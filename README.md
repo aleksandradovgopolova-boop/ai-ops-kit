@@ -7,6 +7,10 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 Knowledge Graph, Product Health, provider/runtime маршрутизация и управляемые
 обновления дочерних репозиториев.
 
+**Начать здесь:** [Quickstart](docs/QUICKSTART.md) (первый день + типовые ошибки) ·
+[Walkthrough](docs/WALKTHROUGH.md) (сквозной сценарий за 15 минут) ·
+[Гайд внедрения по ролям](docs/adoption-guide.md) (CTO / PM / EM / QA / Platform).
+
 Куда идём — в [`VISION.md`](VISION.md) и [`ROADMAP.md`](ROADMAP.md).
 Версия пакета — в [`VERSION`](VERSION), история — в [`CHANGELOG.md`](CHANGELOG.md).
 
