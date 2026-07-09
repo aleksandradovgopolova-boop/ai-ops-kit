@@ -42,7 +42,7 @@
 
 ## agents/
 
-38 агентов по доменам (core/product/engineering/quality/delivery/meta); каждый зарегистрирован в registry/agents.yaml.
+45 агентов по доменам (core/product/engineering/quality/delivery/meta), включая 7 review-агентов полного цикла; каждый зарегистрирован в registry/agents.yaml.
 
 - `agents/README.md`
 - `agents/core/context-builder.md`
@@ -77,12 +77,19 @@
 - `agents/product/product-manager.md`
 - `agents/product/ui-ux-designer.md`
 - `agents/quality/accessibility-reviewer.md`
+- `agents/quality/analytics-reviewer.md`
+- `agents/quality/architecture-reviewer.md`
 - `agents/quality/code-reviewer.md`
+- `agents/quality/design-system-reviewer.md`
+- `agents/quality/documentation-reviewer.md`
+- `agents/quality/observability-reviewer.md`
 - `agents/quality/performance-reviewer.md`
+- `agents/quality/product-reviewer.md`
 - `agents/quality/regression-analyst.md`
 - `agents/quality/requirements-reviewer.md`
 - `agents/quality/security-reviewer.md`
 - `agents/quality/test-engineer.md`
+- `agents/quality/ux-reviewer.md`
 
 ## quality/
 
@@ -132,7 +139,7 @@
 
 ## rules/
 
-Правила: core (working agreement, source of truth), ai (routing, инъекции, секреты), engineering, quality.
+Правила: core, ai, engineering, quality + design (машиночитаемые чек-листы Nielsen/WCAG/дизайн-системы).
 
 - `rules/ai/CostAndTokenPolicy.md`
 - `rules/ai/ModelRouting.md`
@@ -147,6 +154,9 @@
 - `rules/core/HumanApproval.md`
 - `rules/core/ScopeControl.md`
 - `rules/core/SourceOfTruth.md`
+- `rules/design/accessibility-checklist.yaml`
+- `rules/design/design-system-checklist.yaml`
+- `rules/design/ux-heuristics.yaml`
 - `rules/engineering/APICompatibility.md`
 - `rules/engineering/Architecture.md`
 - `rules/engineering/CodeStyle.md`
@@ -237,12 +247,19 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 
 ## evaluations/
 
-Стандарт eval-кейсов для агентов и workflow; кейсы агентов — в evaluations/agents/ (проверяет CI-гейт).
+Стандарт eval-кейсов; кейсы агентов — в evaluations/agents/ (проверяет CI-гейт).
 
 - `evaluations/AgentEvaluationCase.md`
 - `evaluations/README.md`
 - `evaluations/WorkflowEvaluationCase.md`
 - `evaluations/agents/README.md`
+- `evaluations/agents/analytics-reviewer.md`
+- `evaluations/agents/architecture-reviewer.md`
+- `evaluations/agents/design-system-reviewer.md`
+- `evaluations/agents/documentation-reviewer.md`
+- `evaluations/agents/observability-reviewer.md`
+- `evaluations/agents/product-reviewer.md`
+- `evaluations/agents/ux-reviewer.md`
 
 ## presets/
 

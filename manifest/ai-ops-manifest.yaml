@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 1.3.0
+  package_version: 1.4.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -42,7 +42,7 @@ quality_gates:
   mvp_blocking_max: 8
 
 agents:
-  registered: 38             # 35 существующих + 3 новых core (intake-classifier, requirements-writer, plan-reviewer)
+  registered: 45             # 38 (v1.0) + 7 review-агентов Ф2 roadmap (v1.4)
   core_target: 12            # целевой минимальный CORE после merge (Ф2-3)
   core_target_note: >
     В реестре 16 файлов с target_layer=core: 10 сохраняемых + 3 новых (create) + 3 merge-источника

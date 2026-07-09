@@ -7,7 +7,7 @@ contract_version: 1
 generated_note: Bootstrap-реестр из фактических файлов agents/ (тела не менялись). layer/action/target
   — план миграции (component-classification).
 counts:
-  agents: 38
+  agents: 45
 agents:
 - schema_version: 1
   id: context-builder
@@ -720,3 +720,129 @@ agents:
   action: move-later
   migration_phase: 7
   migration_note: writer тестов (Ф7)
+- schema_version: 1
+  id: product-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: product-discovery
+  file: agents/quality/product-reviewer.md
+  domain: quality
+  purpose: "Независимая проверка продуктовых артефактов Discovery/Definition: проблема, JTBD, гипотезы, метрики успеха, PRD. Гейт discovery_completeness"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: product-discovery
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: ux-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: product-discovery
+  file: agents/quality/ux-reviewer.md
+  domain: quality
+  purpose: "Независимая проверка UX: flow, состояния Empty/Loading/Error/Success, эвристики Nielsen (rules/design/ux-heuristics.yaml), copy. Гейт ux_review"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: product-discovery
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: design-system-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: software-product
+  file: agents/quality/design-system-reviewer.md
+  domain: quality
+  purpose: "Проверка соответствия дизайн-системе: существующие компоненты и токены, новые — только обоснованно (rules/design/design-system-checklist.yaml). Гейт design_system_usage"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: software-product
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: analytics-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: product-discovery
+  file: agents/quality/analytics-reviewer.md
+  domain: quality
+  purpose: "Независимая проверка аналитики: tracking plan, event schema, воронки, PII, dashboard-спецификация. Гейт analytics_readiness"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: product-discovery
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: documentation-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: software-product
+  file: agents/quality/documentation-reviewer.md
+  domain: quality
+  purpose: Независимая проверка, что документация обновлена вместе с изменением и пригодна читателю. Поддерживает гейт documentation_updated
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: software-product
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: observability-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: software-product
+  file: agents/quality/observability-reviewer.md
+  domain: quality
+  purpose: "Независимая проверка наблюдаемости: логи, метрики, алерты с runbook, SLO, трейсинг. Гейт observability_readiness"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: software-product
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'
+- schema_version: 1
+  id: architecture-reviewer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: software-product
+  file: agents/quality/architecture-reviewer.md
+  domain: quality
+  purpose: "Независимая проверка архитектурных решений: ADR, совместимость API, модель данных, интеграции и режимы отказа"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: software-product
+  action: create
+  migration_phase: 4
+  migration_note: 'NEW: review-агент Ф2 roadmap (v1.4)'

@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [1.4.0] — 2026-07-09
+
+**Фаза 2 roadmap** (см. ROADMAP.md): каждая зона ответственности получила независимого
+ревьюера; Discovery — первоклассный этап PRODUCT. Всё аддитивно.
+
+### Added
+- **7 review-агентов** (agents/quality/, все read-only, с eval-кейсами в
+  evaluations/agents/): product-reviewer, ux-reviewer, design-system-reviewer,
+  analytics-reviewer, documentation-reviewer, observability-reviewer,
+  architecture-reviewer. Реестр: 38 -> 45 агентов; presets product-discovery (+3)
+  и software-product (+4).
+- **UX-чек-листы как данные** (rules/design/): ux-heuristics.yaml (10 эвристик
+  Nielsen + состояния экранов), accessibility-checklist.yaml (WCAG 2.2 AA),
+  design-system-checklist.yaml. Находки ревью ссылаются на id пунктов.
+- **Discovery-стадии в PRODUCT**: hypotheses (experiment-designer) и
+  discovery-review (product-reviewer, read-only); gate discovery_completeness
+  подключён к контракту.
+- **Review-стадии в контрактах**: VISUAL — design-review (ux-reviewer),
+  design-system-review, accessibility-review; ANALYTICS — analytics-review.
+
+### Changed
+- Gates фазы 1 переназначены на профильных ревьюеров (writer ≠ judge):
+  discovery_completeness -> product-reviewer, ux_review -> ux-reviewer,
+  design_system_usage -> design-system-reviewer (read-only),
+  analytics_readiness -> analytics-reviewer (read-only),
+  observability_readiness -> observability-reviewer (read-only).
+  У ux_review и design_system_usage появилось поле checklist.
+
 ## [1.3.0] — 2026-07-09
 
 **Фаза 1 roadmap к AI Product Operating System** (см. VISION.md, ROADMAP.md):
