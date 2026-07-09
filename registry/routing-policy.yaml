@@ -59,8 +59,7 @@ runtime_rules:
 execution_mode_rules:
   - when: {runtime_has: native_subagents}
     mode: native
-  - when: {runtime_is: generic-orchestrator}
-    mode: orchestrated
+  # generic-orchestrator: orchestrated-режим планируется; пока исполняет sequential (default)
   - default:
     mode: sequential
 

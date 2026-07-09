@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [1.2.0] — 2026-07-09
+
+Улучшения для работы команд: автообновление child-репозиториев, замкнутый цикл
+repository memory, вход для агентов (AGENTS.md), eval-гейт и автоматический релизный
+процесс. Всё аддитивно и обратно совместимо.
+
+### Added
+- `templates/ci/ai-ops-update.yml` — CI-workflow автообновления для child-репозиториев:
+  раз в день сверяет `installed_version` с VERSION parent-пакета и открывает PR с
+  обновлением и отчётом. `ai-ops init` устанавливает его в `.github/workflows/` child.
+- Стадия `memory-capture` (owner — repository-memory-curator) в контрактах ENGINEERING
+  и PRODUCT: опубликовать запись в memory/ или явно отказаться с причиной в TaskState;
+  для incident-resolution запись в `memory/incidents/` обязательна. Контракт описан
+  в `memory/README.md`.
+- `AGENTS.md` — вход для AI-агентов: карта репозитория, обязательные проверки,
+  инварианты, релизный процесс; `CLAUDE.md` ссылается на него.
+- `FILE_INDEX.md` пересобран: полный (234+ файлов вместо 149), с аннотациями разделов —
+  карта в духе llms.txt.
+- `validation/validate_agent_evals.py` + шаг CI — eval-гейт: добавленный/изменённый
+  агент обязан иметь кейсы в `evaluations/agents/<agent-id>.md`; существующие агенты
+  без кейсов не блокируются.
+- `.github/workflows/release.yml` — автоматический выпуск: пуш в main с изменением
+  VERSION создаёт тег vX.Y.Z и GitHub Release из раздела CHANGELOG.
+
+### Changed
+- Честная декларация generic-orchestrator: `preferred_mode: sequential`,
+  `parallel_execution: unsupported` (parallel scheduler — planned, в коде его нет).
+  Правило `execution_mode` в routing-policy и `ai_route.py` теперь берут режим из
+  `preferred_mode` рантайма; ожидания selftest обновлены (orchestrated -> sequential
+  для generic-orchestrator).
+
 ## [1.1.0] — 2026-07-08
 
 ### Changed

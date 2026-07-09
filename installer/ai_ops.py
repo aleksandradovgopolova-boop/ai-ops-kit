@@ -273,6 +273,13 @@ def cmd_init(target_dir):
         example = PKG / "examples" / "child-config.example.yaml"
         shutil.copy2(example, cfg)
         print(f"создана заготовка {cfg} — отредактируйте project.name и providers.")
+    upd_src = PKG / "templates" / "ci" / "ai-ops-update.yml"
+    upd_dst = root / ".github" / "workflows" / "ai-ops-update.yml"
+    if upd_src.exists() and not upd_dst.exists():
+        upd_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(upd_src, upd_dst)
+        print(f"установлен CI-workflow автообновления: {upd_dst} "
+              "(раз в день сверяет версию parent и открывает PR с обновлением).")
     print(f"установлено в {root} (версия {pkg_version()}, {n} файлов). Закоммитьте и настройте CI.")
     return 0
 

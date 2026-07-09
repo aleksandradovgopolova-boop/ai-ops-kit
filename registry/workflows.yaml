@@ -53,6 +53,9 @@ workflows:
       - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
       - {id: verify, owner: final-verifier, review_mode: read-only}
       - {id: review, owner: code-reviewer, review_mode: read-only, preset: software-product}
+      # memory-capture: опубликовать запись в memory/ (decision/pattern/lesson) ИЛИ явно
+      # отказаться с причиной в TaskState — молчаливый пропуск не является выполнением стадии.
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
     quality_gates: [requirements, specification, plan_readiness, implementation_verification, code_review]
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: orchestrated
@@ -83,6 +86,9 @@ workflows:
       - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
       - {id: validation, owner: final-verifier, review_mode: read-only}
       - {id: stakeholder-handoff, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+      # memory-capture: опубликовать запись в memory/ (decision/lesson) ИЛИ явно отказаться
+      # с причиной в TaskState — молчаливый пропуск не является выполнением стадии.
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
     quality_gates: [intake_completeness, requirements, specification, plan_readiness, stakeholder_readiness]
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: orchestrated
