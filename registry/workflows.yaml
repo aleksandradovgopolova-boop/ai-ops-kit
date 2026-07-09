@@ -217,4 +217,36 @@ workflows:
     learning_output: required
     maps_from: [workflows/insights.md]
 
+  ADOPTION:
+    id: ADOPTION
+    purpose: Довести выпущенную функцию до активации и удержания; оценить фактический эффект против baseline.
+    layer: extended
+    selection_criteria: {task_type: [launch, activation, onboarding, post-launch-review], requires: released-feature-with-analytics}
+    disqualifying_conditions:
+      - "функция не выпущена (подготовка релиза — release_safety в ENGINEERING/PRODUCT)"
+    required_artifacts: [intake, LaunchPlan, AdoptionPlan, FeedbackLoop, PostLaunchReview, TaskState, VerificationEvidence]
+    optional_artifacts: [InAppContent, ExperimentReadout, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      # launch-readiness: события tracking plan подтверждены live, dashboard показывает данные, baseline зафиксирован
+      - {id: launch-readiness, owner: adoption-manager, writer: adoption-manager, review_mode: writer, preset: product-adoption}
+      - {id: analytics-review, owner: analytics-reviewer, review_mode: read-only}
+      - {id: adoption-plan, owner: adoption-manager, writer: adoption-manager, review_mode: writer}
+      - {id: user-docs, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+      - {id: docs-review, owner: documentation-reviewer, review_mode: read-only}
+      - {id: feedback-loop, owner: adoption-manager, writer: adoption-manager, review_mode: writer}
+      # post-launch-review: через заданное окно анализа; решение continue/iterate/scale/rollback
+      - {id: post-launch-review, owner: adoption-manager, writer: adoption-manager, review_mode: writer}
+      - {id: review, owner: product-reviewer, review_mode: read-only}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, analytics_readiness, documentation_updated]
+    required_capabilities: [file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: conditional, when: [rollback_decision]}
+    archive_criteria: "PostLaunchReview выполнен в заданном окне; решение зафиксировано; инсайты переданы в INSIGHTS/knowledge graph"
+    resumability: TaskState
+    learning_output: required
+    maps_from: [workflows/adoption.md]
+
 # Post-MVP (объявлены, контракты позже): CRITICAL, DOCUMENT, LEGACY, INCIDENT.

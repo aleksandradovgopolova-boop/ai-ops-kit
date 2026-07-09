@@ -43,7 +43,7 @@
 
 ## agents/
 
-45 агентов по доменам (core/product/engineering/quality/delivery/meta), включая 7 review-агентов полного цикла; каждый зарегистрирован в registry/agents.yaml.
+48 агентов по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, ai-evaluator, adoption-manager, user-researcher; каждый зарегистрирован в registry/agents.yaml.
 
 - `agents/README.md`
 - `agents/core/context-builder.md`
@@ -72,12 +72,15 @@
 - `agents/meta/prompt-reviewer.md`
 - `agents/meta/repository-memory-curator.md`
 - `agents/meta/workflow-designer.md`
+- `agents/product/adoption-manager.md`
 - `agents/product/business-analyst.md`
 - `agents/product/experiment-designer.md`
 - `agents/product/product-analyst.md`
 - `agents/product/product-manager.md`
 - `agents/product/ui-ux-designer.md`
+- `agents/product/user-researcher.md`
 - `agents/quality/accessibility-reviewer.md`
+- `agents/quality/ai-evaluator.md`
 - `agents/quality/analytics-reviewer.md`
 - `agents/quality/architecture-reviewer.md`
 - `agents/quality/code-reviewer.md`
@@ -94,14 +97,15 @@
 
 ## quality/
 
-Реестр quality gates: machine-readable контракт с revision-binding; gates продуктового цикла (v1.3), blocking с v1.5.
+Реестр quality gates: machine-readable контракт с revision-binding; gates полного цикла, включая ai_eval для AI-фич.
 
 - `quality/gates.yaml`
 
 ## workflows/
 
-Прозаические сценарии; машиночитаемые контракты — registry/workflows.yaml (MVP + VISUAL/ANALYTICS/INSIGHTS).
+Прозаические сценарии; машиночитаемые контракты — registry/workflows.yaml (MVP + VISUAL/ANALYTICS/INSIGHTS/ADOPTION).
 
+- `workflows/adoption.md`
 - `workflows/analytics-instrumentation.md`
 - `workflows/architecture-change.md`
 - `workflows/bug-fix.md`
@@ -141,9 +145,10 @@
 
 ## rules/
 
-Правила: core, ai, engineering, quality + design (машиночитаемые чек-листы Nielsen/WCAG/дизайн-системы).
+Правила: core, ai (включая EvalPolicy), product (MeasurementBaseline), engineering, quality + design (машиночитаемые чек-листы Nielsen/WCAG/дизайн-системы).
 
 - `rules/ai/CostAndTokenPolicy.md`
+- `rules/ai/EvalPolicy.md`
 - `rules/ai/ModelRouting.md`
 - `rules/ai/ParallelWork.md`
 - `rules/ai/PromptInjectionDefense.md`
@@ -165,6 +170,7 @@
 - `rules/engineering/DatabaseChanges.md`
 - `rules/engineering/DependencyPolicy.md`
 - `rules/engineering/ErrorHandling.md`
+- `rules/product/MeasurementBaseline.md`
 - `rules/quality/AccessibilityBaseline.md`
 - `rules/quality/PerformanceBudget.md`
 - `rules/quality/QualityGates.md`
@@ -174,19 +180,22 @@
 
 ## templates/
 
-Шаблоны артефактов полного цикла: task, engineering, product, quality, documentation, discovery, ux, analytics, release, monitoring, blueprint, ci.
+Шаблоны артефактов полного цикла: task, engineering, product (включая adoption-набор), quality (включая AIFeatureEvalPlan), documentation, discovery, ux, analytics, release, monitoring, blueprint, ci.
 
 - `templates/analytics/DashboardSpec.md`
 - `templates/analytics/EventSchema.md`
 - `templates/analytics/TrackingPlan.md`
 - `templates/blueprint/FeatureBlueprint.yaml`
 - `templates/ci/ai-ops-update.yml`
+- `templates/discovery/AssumptionTest.md`
 - `templates/discovery/Hypotheses.md`
 - `templates/discovery/JTBD.md`
 - `templates/discovery/OpportunitySolutionTree.md`
 - `templates/discovery/Personas.md`
 - `templates/discovery/ProblemStatement.md`
+- `templates/discovery/UserResearchPlan.md`
 - `templates/documentation/FAQ.md`
+- `templates/documentation/InAppContent.md`
 - `templates/documentation/ReleaseNotes.md`
 - `templates/documentation/Runbook.md`
 - `templates/documentation/UserGuide.md`
@@ -198,11 +207,17 @@
 - `templates/engineering/SolutionDesign.md`
 - `templates/meta/AgentTemplate.md`
 - `templates/monitoring/MonitoringSpec.md`
+- `templates/product/AdoptionPlan.md`
 - `templates/product/Epic.md`
 - `templates/product/Experiment.md`
+- `templates/product/ExperimentReadout.md`
 - `templates/product/Feature.md`
+- `templates/product/FeedbackLoop.md`
+- `templates/product/LaunchPlan.md`
+- `templates/product/PostLaunchReview.md`
 - `templates/product/ProductAnalyticsPlan.md`
 - `templates/product/UserStory.md`
+- `templates/quality/AIFeatureEvalPlan.md`
 - `templates/quality/CodeReview.md`
 - `templates/quality/ReleaseChecklist.md`
 - `templates/quality/SecurityReview.md`
@@ -225,10 +240,12 @@
 
 ## context/
 
-Карта знаний о продукте/системе/команде — заполняется в child-репозитории.
+Карта знаний о продукте/системе/команде; источники истины DesignSystem.md и MetricCatalog.md — заполняются в child-репозитории.
 
 - `context/README.md`
 - `context/product/BusinessRules.md`
+- `context/product/DesignSystem.md`
+- `context/product/MetricCatalog.md`
 - `context/product/ProductMetrics.md`
 - `context/product/ProductOverview.md`
 - `context/product/UsersAndRoles.md`
@@ -259,20 +276,24 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/README.md`
 - `evaluations/WorkflowEvaluationCase.md`
 - `evaluations/agents/README.md`
+- `evaluations/agents/adoption-manager.md`
+- `evaluations/agents/ai-evaluator.md`
 - `evaluations/agents/analytics-reviewer.md`
 - `evaluations/agents/architecture-reviewer.md`
 - `evaluations/agents/design-system-reviewer.md`
 - `evaluations/agents/documentation-reviewer.md`
 - `evaluations/agents/observability-reviewer.md`
 - `evaluations/agents/product-reviewer.md`
+- `evaluations/agents/user-researcher.md`
 - `evaluations/agents/ux-reviewer.md`
 
 ## presets/
 
-Декларативные наборы агентов, подключаемые по id (core, software-product, product-discovery, data-and-integrations).
+Декларативные наборы агентов по id (core, software-product, product-discovery, product-adoption, data-and-integrations).
 
 - `presets/core.yaml`
 - `presets/data-and-integrations.yaml`
+- `presets/product-adoption.yaml`
 - `presets/product-discovery.yaml`
 - `presets/software-product.yaml`
 

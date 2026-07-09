@@ -2,6 +2,41 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.1.0] — 2026-07-09
+
+**Курируемая интеграция research-пакета** (Product & Design Extension Pack):
+взяты два слепых пятна v2.0 — измерение AI-фич и adoption — плюс discovery-исследование
+и источники истины; дубли уже построенного отклонены. Всё аддитивно.
+
+### Added
+- **AI Feature Evals** — кит измерял своих агентов, но не AI-фичи для пользователей:
+  агент ai-evaluator (read-only judge), rules/ai/EvalPolicy.md,
+  templates/quality/AIFeatureEvalPlan.md, **blocking-гейт ai_eval** (task fidelity,
+  faithfulness, guardrails, regression при смене модели/промпта; applies_when —
+  только для фич с LLM/агентным компонентом).
+- **Adoption как стадия**: агент adoption-manager, **контракт ADOPTION**
+  (launch-readiness с проверкой событий live -> adoption-plan -> user-docs ->
+  feedback-loop -> post-launch-review -> независимое ревью; learning_output required),
+  стадия adoption в Feature Blueprint (схема/валидатор/генератор/шаблон),
+  preset product-adoption, шаблоны LaunchPlan/AdoptionPlan/FeedbackLoop/PostLaunchReview.
+- **Discovery-исследование**: агент user-researcher (Continuous Discovery, JTBD),
+  templates/discovery/UserResearchPlan.md (story-based интервью) и AssumptionTest.md
+  (RAT); правила Терезы Торрес в шаблоне OpportunitySolutionTree (product outcome
+  в корне, 3-4 интервью до построения, приоритизация без effort).
+- **Источники истины в context/product/**: DesignSystem.md (принципы, DTCG-токены,
+  компоненты, voice) и MetricCatalog.md (семантический слой: каждая метрика определена
+  ровно один раз); у gates design_system_usage и analytics_readiness — поле source_of_truth.
+- Шаблоны ExperimentReadout (результат эксперимента с decision rule) и InAppContent
+  (тексты интерфейса); rules/product/MeasurementBaseline.md.
+- Реестр: 45 -> 48 агентов (все с eval-кейсами); 5 presets.
+
+### Changed
+- analytics_readiness: + required_evidence events_verified_live; applicability + ADOPTION.
+- intake_completeness/documentation_updated: applicability + ADOPTION (и VISUAL/ANALYTICS
+  для intake).
+- UserGuide — Diátaxis-компас; DashboardSpec — каркасы North Star/HEART/AARRR со ссылкой
+  на MetricCatalog.
+
 ## [2.0.0] — 2026-07-09
 
 **Фаза 4 roadmap — платформа AI Product Operating System завершена** (VISION.md,

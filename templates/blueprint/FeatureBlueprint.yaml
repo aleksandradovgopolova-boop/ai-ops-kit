@@ -10,7 +10,7 @@ feature:
   owner: <роль или человек>
   status: planned               # planned | in-progress | released | retired
   current_stage: discovery      # discovery | definition | ux | architecture | delivery
-                                # | analytics | documentation | release | monitoring | retrospective
+                                # | analytics | documentation | release | monitoring | adoption | retrospective
 links:                          # связи (предвестник Knowledge Graph)
   goal: ""
   epic: ""
@@ -49,5 +49,10 @@ artifacts:
     - {path: release/release-checklist.md, template: templates/quality/ReleaseChecklist.md, status: planned}
   monitoring:
     - {path: monitoring/monitoring-spec.md, template: templates/monitoring/MonitoringSpec.md, status: planned}
+  adoption:
+    - {path: adoption/launch-plan.md, template: templates/product/LaunchPlan.md, status: planned}
+    - {path: adoption/adoption-plan.md, template: templates/product/AdoptionPlan.md, status: planned}
+    - {path: adoption/feedback-loop.md, template: templates/product/FeedbackLoop.md, status: planned}
+    - {path: adoption/post-launch-review.md, template: templates/product/PostLaunchReview.md, status: planned}
   retrospective:
     - {path: retrospective/retrospective.md, template: templates/task/Retrospective.md, status: planned}

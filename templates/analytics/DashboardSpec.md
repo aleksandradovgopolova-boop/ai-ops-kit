@@ -1,5 +1,10 @@
 # Dashboard Specification
 
+<!-- Каркасы: North Star (метрика ценности + input-метрики), HEART (Happiness/
+     Engagement/Adoption/Retention/Task success), AARRR (Acquisition/Activation/
+     Retention/Referral/Revenue). Определения метрик — только из
+     context/product/MetricCatalog.md (каждая метрика определена ровно один раз). -->
+
 ## Audience and decisions supported
 ## North Star metric
 ## Blocks

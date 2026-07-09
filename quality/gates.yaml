@@ -27,7 +27,7 @@ gates:
     validator: validate-intake
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS]
+    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION]
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
@@ -189,6 +189,7 @@ gates:
     responsible_role: design-system-reviewer
     review_mode: read-only
     checklist: rules/design/design-system-checklist.yaml
+    source_of_truth: context/product/DesignSystem.md
     applicability: [PRODUCT, VISUAL]
     stale_detection: {bind_to: artifact_hashes}
     required_evidence: [components_from_design_system, new_components_justified]
@@ -200,9 +201,10 @@ gates:
     blocking: true
     responsible_role: analytics-reviewer
     review_mode: read-only
-    applicability: [PRODUCT, ANALYTICS]
+    source_of_truth: context/product/MetricCatalog.md
+    applicability: [PRODUCT, ANALYTICS, ADOPTION]
     stale_detection: {bind_to: artifact_hashes}
-    required_evidence: [tracking_plan, event_schema, product_metrics, dashboard_spec]
+    required_evidence: [tracking_plan, event_schema, product_metrics, dashboard_spec, events_verified_live]
 
   documentation_updated:
     id: documentation_updated
@@ -211,7 +213,7 @@ gates:
     blocking: false
     responsible_role: documentation-steward
     review_mode: writer
-    applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS]
+    applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS, ADOPTION]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [docs_updated_or_explicit_none, release_notes_entry]
 
@@ -225,6 +227,19 @@ gates:
     applicability: [ENGINEERING, PRODUCT]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [feature_flag_or_justified_absence, rollback_strategy, rollout_plan]
+
+  ai_eval:
+    id: ai_eval
+    purpose: AI-фича прошла eval'ы против success criteria; guardrails и регрессии проверены.
+    stage: verify
+    blocking: true
+    applies_when: "функция содержит LLM/агентный компонент, видимый пользователю; иначе гейт неприменим"
+    responsible_role: ai-evaluator
+    review_mode: read-only
+    checklist: rules/ai/EvalPolicy.md
+    applicability: [ENGINEERING, PRODUCT, VISUAL]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [success_criteria, eval_dataset, offline_results, guardrails, regression_checked]
 
   observability_readiness:
     id: observability_readiness

@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 
 STAGES = ["discovery", "definition", "ux", "architecture", "delivery",
-          "analytics", "documentation", "release", "monitoring", "retrospective"]
+          "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]
 STATUSES = {"planned", "draft", "done", "declined"}
 FEATURE_STATUSES = {"planned", "in-progress", "released", "retired"}
 

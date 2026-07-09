@@ -37,7 +37,7 @@ PKG = Path(__file__).resolve().parents[1]
 BLUEPRINT_TEMPLATE = PKG / "templates" / "blueprint" / "FeatureBlueprint.yaml"
 GENERATION_FILE = ".generation.json"
 STAGES = ["discovery", "definition", "ux", "architecture", "delivery",
-          "analytics", "documentation", "release", "monitoring", "retrospective"]
+          "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]
 HEADER = ("<!-- скелет сгенерирован ai-ops generate_artifacts из {template} "
           "для функции {fid}; заполните содержание -->\n")
 
