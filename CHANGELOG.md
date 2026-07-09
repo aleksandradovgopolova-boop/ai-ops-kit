@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.2.0] — 2026-07-09
+
+Ответ на вопрос первого боевого прогона (child ii-sreda): «как понять, хорошо
+прошёл прогон или плохо». Слой «Метрики эффекта» в минимальной честной версии.
+
+### Added
+- **tools/run_report.py — оценка прогона фичи одной командой**
+  (`run_report.py <feature-dir> [--graph graph.yaml] [--json]`):
+  валидность blueprint; покрытие стадий (заполнено / declined с причинами /
+  скелеты / не начато); ловит артефакты, помеченные done, но оставшиеся
+  незаполненными скелетами; сверяет blueprint с knowledge graph — если фича
+  delivered-by (выпущена), а current_stage раньше release, честно сообщает
+  «реальность обогнала blueprint»; напоминает про retrospective.
+  Вердикт OK/WARN/PROBLEM (exit 1 при PROBLEM). Качество содержания артефактов
+  оценивают ревьюеры (gates) — скрипт оценивает честность процесса.
+  Selftest + шаг CI. Обкатан на реальном прогоне catalog-api-migration в ii-sreda:
+  нашёл 2 PROBLEM (невалидный status в blueprint; выпуск при current_stage=definition)
+  и 1 WARN (retro не заполнена).
+
 ## [2.1.1] — 2026-07-09
 
 Патч: первый улов dogfooding — маршрутизация не знала о workflow, добавленных после MVP.
