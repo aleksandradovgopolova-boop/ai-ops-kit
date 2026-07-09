@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.3.0] — 2026-07-09
+
+Оба изменения обоснованы данными первого боевого прогона (ii-sreda,
+memory/lessons-learned/2026-07-09-first-child-run-insights.md). Аддитивно.
+
+### Added
+- **Профили blueprint lean/full**: на прогоне 75% артефактов full-профиля были
+  declined — для прототипов/MVP введён lean-профиль (discovery / definition /
+  delivery / analytics / retrospective, 10 скелетов вместо 24). Скоуп объявляется
+  явно полем feature.profile (не молчаливый пропуск); стадии вне профиля можно
+  добавлять точечно. `generate_artifacts.py new ... --profile lean`;
+  шаблон FeatureBlueprint.lean.yaml; схема и валидатор понимают профиль
+  (lean: ux/architecture не требуются; full: поведение прежнее).
+- **validate_cross_artifacts.py** — кросс-артефактная консистентность (идея —
+  Spec Kit `analyze`): события из dashboard-spec (Source events, Funnels) обязаны
+  быть объявлены в tracking plan; dashboard без tracking plan — PROBLEM;
+  отсутствие артефактов или нераспарсиваемая таблица — мягкая деградация
+  (skip/WARN, не ложный fail). Встроен в run_report (находки попадают в общий
+  вердикт) и в CI; пример express-checkout дополнен согласованным dashboard-spec.
+
 ## [2.2.0] — 2026-07-09
 
 Ответ на вопрос первого боевого прогона (child ii-sreda): «как понять, хорошо

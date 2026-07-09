@@ -7,19 +7,35 @@ feature:
   status: in-progress
   current_stage: ux
 links:
-  goal: "рост конверсии повторных покупок"
-  epic: ""
+  goal: рост конверсии повторных покупок
+  epic: ''
   stories: []
-  experiments: ["hypotheses.md#1"]
+  experiments:
+  - hypotheses.md#1
 artifacts:
   discovery:
-    - {path: discovery/problem-statement.md, template: templates/discovery/ProblemStatement.md, status: done}
-    - {path: discovery/hypotheses.md, template: templates/discovery/Hypotheses.md, status: done}
+  - path: discovery/problem-statement.md
+    template: templates/discovery/ProblemStatement.md
+    status: done
+  - path: discovery/hypotheses.md
+    template: templates/discovery/Hypotheses.md
+    status: done
   definition:
-    - {path: prd/feature.md, template: templates/product/Feature.md, status: done}
+  - path: prd/feature.md
+    template: templates/product/Feature.md
+    status: done
   ux:
-    - {path: ux/ux-flow.md, template: templates/ux/UXFlow.md, status: draft}
-    - {path: ux/screen-states.md, template: templates/ux/ScreenStates.md, status: declined,
-       declined_reason: "состояния описаны внутри ux-flow.md (один экран); отдельный файл избыточен"}
+  - path: ux/ux-flow.md
+    template: templates/ux/UXFlow.md
+    status: draft
+  - path: ux/screen-states.md
+    template: templates/ux/ScreenStates.md
+    status: declined
+    declined_reason: состояния описаны внутри ux-flow.md (один экран); отдельный файл избыточен
   analytics:
-    - {path: analytics/tracking-plan.md, template: templates/analytics/TrackingPlan.md, status: draft}
+  - path: analytics/tracking-plan.md
+    template: templates/analytics/TrackingPlan.md
+    status: draft
+  - path: analytics/dashboard-spec.md
+    template: templates/analytics/DashboardSpec.md
+    status: draft

@@ -43,6 +43,7 @@ python3 validation/validate_agent_evals.py
 python3 validation/validate_openspec_change.py examples/openspec-demo
 python3 validation/validate_feature_blueprint.py --selftest
 python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout
+python3 validation/validate_cross_artifacts.py --selftest
 python3 validation/validate_knowledge_graph.py --selftest
 python3 validation/validate_knowledge_graph.py examples/knowledge-graph-demo/graph.yaml
 python3 tools/product_health.py --selftest

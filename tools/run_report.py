@@ -40,6 +40,11 @@ _ga_spec = importlib.util.spec_from_file_location("ga", PKG / "tools" / "generat
 ga = importlib.util.module_from_spec(_ga_spec)
 _ga_spec.loader.exec_module(ga)
 
+_ca_spec = importlib.util.spec_from_file_location(
+    "vca", PKG / "validation" / "validate_cross_artifacts.py")
+vca = importlib.util.module_from_spec(_ca_spec)
+_ca_spec.loader.exec_module(vca)
+
 
 def graph_findings(feature_dir: Path, graph_path: Path, current_stage: str):
     """Реальность vs blueprint: релиз в графе при ранней стадии blueprint."""
@@ -126,6 +131,11 @@ def build_report(feature_dir: Path, graph_path: Path | None):
 
     if graph_path and graph_path.exists():
         report["findings"] += graph_findings(feature_dir, graph_path, current)
+
+    # кросс-артефактная консистентность (v2.3): tracking-plan <-> dashboard-spec
+    ca_problems, ca_warns, _skip = vca.check_feature(feature_dir)
+    report["findings"] += [("PROBLEM", p) for p in ca_problems]
+    report["findings"] += [("WARN", w) for w in ca_warns]
 
     retro = (bp.get("artifacts") or {}).get("retrospective") or []
     retro_done = any(isinstance(e, dict) and e.get("status") in ("done", "draft")

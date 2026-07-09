@@ -47,6 +47,10 @@ jobs:
         run: |
           python3 validation/validate_feature_blueprint.py --selftest
           python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout
+      - name: Кросс-артефактная консистентность (selftest + пример)
+        run: |
+          python3 validation/validate_cross_artifacts.py --selftest
+          python3 validation/validate_cross_artifacts.py examples/feature-blueprint-demo/express-checkout
       - name: Knowledge Graph (selftest + пример)
         run: |
           python3 validation/validate_knowledge_graph.py --selftest
