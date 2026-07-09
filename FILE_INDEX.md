@@ -5,7 +5,7 @@
 
 ## Корень
 
-Версия, история, лицензии, инструкции для людей и агентов (AGENTS.md/CLAUDE.md).
+Версия, история, лицензии, видение и roadmap, инструкции для людей и агентов (AGENTS.md/CLAUDE.md).
 
 - `.gitignore`
 - `AGENTS.md`
@@ -17,7 +17,9 @@
 - `NOTICE.md`
 - `README.md`
 - `RELEASE_NOTES_v1.0.0.md`
+- `ROADMAP.md`
 - `VERSION`
+- `VISION.md`
 
 ## manifest/
 
