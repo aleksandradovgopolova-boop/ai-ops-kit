@@ -1,0 +1,17 @@
+# Пример входа Product Health (экспорт метрик за период). Проверяется в CI.
+scope: feature:express-checkout
+period: 2026-W30
+metrics:
+  adoption:     {value: 0.34, target: 0.40, direction: higher-is-better, source: "dashboard: express_checkout_shown/eligible"}
+  activation:   {value: 0.71, target: 0.65, direction: higher-is-better, source: "funnel: started -> completed"}
+  retention:    {value: 0.55, target: 0.60, direction: higher-is-better, source: "повторное использование за 30д"}
+  reliability:  {value: 0.9985, target: 0.999, direction: higher-is-better, source: "SLO monitor"}
+  errors:       {value: 0.7, target: 1.0, direction: lower-is-better, source: "error rate %, alerting"}
+  support_load: {value: 4, target: 10, direction: lower-is-better, source: "обращения/неделя"}
+weights:
+  adoption: 2
+  activation: 2
+  reliability: 1
+  retention: 1
+  errors: 1
+  support_load: 1

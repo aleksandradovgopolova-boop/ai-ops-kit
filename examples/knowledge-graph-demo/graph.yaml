@@ -1,0 +1,28 @@
+# Пример Knowledge Graph: цепочка Goal -> Feature (blueprint) -> Analytics/Metric ->
+# Release -> Insight -> следующий цикл. Проверяется в CI.
+schema_version: 1
+kind: knowledge-graph
+nodes:
+  - {id: grow-repeat-purchases, type: goal, title: "Рост конверсии повторных покупок"}
+  - {id: checkout-q3, type: initiative, title: "Ускорение чекаута (Q3)"}
+  - {id: checkout-epic, type: epic, title: "Оптимизация оформления заказа"}
+  - {id: express-checkout, type: feature, title: "Экспресс-чекаут",
+     blueprint: ../feature-blueprint-demo/express-checkout/blueprint.yaml}
+  - {id: express-tracking, type: analytics, title: "Tracking plan экспресс-чекаута",
+     ref: ../feature-blueprint-demo/express-checkout/analytics/tracking-plan.md}
+  - {id: checkout-conversion, type: metric, title: "checkout_started -> completed"}
+  - {id: release-2026-30, type: release, title: "Релиз недели 30"}
+  - {id: exp-one-step, type: experiment, title: "A/B: один шаг против пяти"}
+  - {id: insight-address-staleness, type: insight,
+     title: "Главная фрикция — неактуальный сохранённый адрес"}
+edges:
+  - {from: grow-repeat-purchases, type: contains, to: checkout-q3}
+  - {from: checkout-q3, type: contains, to: checkout-epic}
+  - {from: checkout-epic, type: contains, to: express-checkout}
+  - {from: express-checkout, type: measured-by, to: express-tracking}
+  - {from: express-checkout, type: measured-by, to: checkout-conversion}
+  - {from: express-checkout, type: delivered-by, to: release-2026-30}
+  - {from: release-2026-30, type: observed-by, to: checkout-conversion}
+  - {from: exp-one-step, type: validates, to: express-checkout}
+  - {from: insight-address-staleness, type: derived-from, to: exp-one-step}
+  - {from: insight-address-staleness, type: feeds, to: grow-repeat-purchases}

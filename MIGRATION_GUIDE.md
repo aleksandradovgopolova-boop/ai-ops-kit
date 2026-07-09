@@ -39,3 +39,15 @@
 ## Совместимость
 
 Файлы написаны vendor-neutral. Платформенные инструкции вынесены отдельно, поэтому роли можно использовать в Claude Code, Codex, Roo Code, ZCode и других средах без переписывания их основной логики.
+
+## Миграция 1.x -> 2.0
+
+Breaking-изменений нет: все контракты остаются schema_version 1, обновление —
+штатный `ai-ops update`. Мажорная версия отмечает завершение платформы
+AI Product Operating System (roadmap Ф1-Ф4), а не слом совместимости.
+
+Новое в 2.0 (всё опционально для child):
+- Knowledge Graph: словарь registry/entities.yaml; граф проекта — knowledge/graph.yaml
+  (валидатор validate_knowledge_graph.py);
+- Product Health: tools/product_health.py + schemas/product-health.schema.json;
+- workflow INSIGHTS (данные после релиза -> инсайты -> гипотезы следующего Discovery).

@@ -18,7 +18,7 @@
 | Память/инсайты | memory/ + стадии memory-capture (замкнуто в 1.2.0) |
 | Генераторы | Образец: tools/generate_runtime.py (единый источник, drift-детект) |
 
-## Фаза 1 — Продуктовый фундамент (v1.3)
+## Фаза 1 — Продуктовый фундамент (v1.3) ✅ выполнена
 
 Цель: «Analytics/Design/Docs by Default» как контракты, а не пожелания.
 
@@ -34,7 +34,7 @@
 - **Workflow-контракты ANALYTICS и VISUAL** (заявлены как post-MVP с v0.2) — стадии,
   агенты, gates.
 
-## Фаза 2 — Review-агенты и Discovery (v1.4)
+## Фаза 2 — Review-агенты и Discovery (v1.4) ✅ выполнена
 
 Цель: каждая зона ответственности имеет своего ревьюера; Discovery — первоклассный этап.
 
@@ -48,7 +48,7 @@
 - **UX-чек-листы как данные**: rules/design/ на основе Nielsen Heuristics и WCAG —
   машиночитаемые списки, на которые ссылаются ревьюеры.
 
-## Фаза 3 — Генераторы (v1.5)
+## Фаза 3 — Генераторы (v1.5) ✅ выполнена
 
 Цель: стандартизированные артефакты создаются генераторами, а не свободной формой.
 
@@ -61,7 +61,7 @@
   Experiment, Retrospective.
 - Gates фазы 1 переводятся в blocking для workflow PRODUCT/VISUAL/ANALYTICS.
 
-## Фаза 4 — Knowledge Graph и Product Health (v2.0)
+## Фаза 4 — Knowledge Graph и Product Health (v2.0) ✅ выполнена
 
 Цель: непрерывный цикл Discovery → Delivery → Release → Measurement → Insights → Discovery.
 
@@ -73,7 +73,8 @@
   аналитики/мониторинга, выход — machine-readable отчёт.
 - **Continuous Improvement**: workflow INSIGHTS — анализ данных после релиза,
   генерация гипотез и экспериментов, запись в memory/ и вход следующего Discovery.
-- Пересмотр schema_version контрактов (единственная фаза, где допустимы breaking).
+- Пересмотр schema_version контрактов: breaking НЕ потребовался — все контракты
+  остаются schema_version 1, v2.0 полностью обратно совместим с 1.x.
 
 ## Правила движения по roadmap
 

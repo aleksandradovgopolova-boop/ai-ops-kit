@@ -188,4 +188,33 @@ workflows:
     learning_output: recommended
     maps_from: [workflows/analytics-instrumentation.md]
 
-# Post-MVP (объявлены, контракты позже): CRITICAL, DOCUMENT, LEGACY, INSIGHTS (Ф4), INCIDENT.
+  INSIGHTS:
+    id: INSIGHTS
+    purpose: Непрерывное улучшение — из данных после релиза к инсайтам и гипотезам следующего Discovery.
+    layer: extended
+    selection_criteria: {task_type: [post-release-analysis, product-health, usage-analysis], requires: released-feature-with-analytics}
+    disqualifying_conditions:
+      - "нет данных после релиза (аналитика не инструментирована или период не прошёл)"
+    required_artifacts: [intake, ProductHealthReport, insights, hypotheses, TaskState, VerificationEvidence]
+    optional_artifacts: [Experiment, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      # данные собираются из источников tracking plan / monitoring-spec функции
+      - {id: data-collection, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      # health-report считает детерминированно tools/product_health.py — не LLM
+      - {id: health-report, owner: product-analyst, writer: product-analyst, review_mode: writer, uses_tools: [product_health]}
+      - {id: insight-synthesis, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      - {id: insight-review, owner: product-reviewer, review_mode: read-only}
+      - {id: hypotheses-for-discovery, owner: experiment-designer, writer: experiment-designer, review_mode: writer, preset: product-discovery}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, evidence]
+    required_capabilities: [file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: false}
+    archive_criteria: "evidence pass; каждый инсайт привязан к данным; гипотезы записаны в knowledge graph (insight -> feeds)"
+    resumability: TaskState
+    learning_output: required
+    maps_from: [workflows/insights.md]
+
+# Post-MVP (объявлены, контракты позже): CRITICAL, DOCUMENT, LEGACY, INCIDENT.

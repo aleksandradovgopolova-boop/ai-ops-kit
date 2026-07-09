@@ -1,8 +1,10 @@
 # AI Ops Kit
 
 Открытая **AI Product Operating System** для продуктово-технологических команд:
-AI сопровождает продукт на всём жизненном цикле — от Discovery до эксплуатации.
-Агенты, workflow-контракты, quality gates, provider/runtime маршрутизация и управляемые
+AI сопровождает продукт на всём жизненном цикле — Discovery → Delivery → Release →
+Measurement → Insights → снова Discovery. Агенты (включая независимых ревьюеров всех
+зон), workflow-контракты, quality gates, Feature Blueprint, генераторы артефактов,
+Knowledge Graph, Product Health, provider/runtime маршрутизация и управляемые
 обновления дочерних репозиториев.
 
 Куда идём — в [`VISION.md`](VISION.md) и [`ROADMAP.md`](ROADMAP.md).

@@ -45,3 +45,11 @@ jobs:
         run: |
           python3 validation/validate_feature_blueprint.py --selftest
           python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout
+      - name: Knowledge Graph (selftest + пример)
+        run: |
+          python3 validation/validate_knowledge_graph.py --selftest
+          python3 validation/validate_knowledge_graph.py examples/knowledge-graph-demo/graph.yaml
+      - name: Product Health (selftest + пример)
+        run: |
+          python3 tools/product_health.py --selftest
+          python3 tools/product_health.py examples/product-health-demo/input.yaml > /dev/null

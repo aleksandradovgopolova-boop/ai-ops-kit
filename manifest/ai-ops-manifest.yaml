@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 1.5.0
+  package_version: 2.0.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -31,10 +31,11 @@ registries:
   quality_gates: quality/gates.yaml           # единый gate registry
   capability_index: registry/capability-index.yaml
   routing: config/model-routing.yaml          # расширяется на Ф6
+  entities: registry/entities.yaml            # Knowledge Graph: типы и связи (v2.0)
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
-  extended: [VISUAL, ANALYTICS]                 # Ф1 roadmap (v1.3)
+  extended: [VISUAL, ANALYTICS, INSIGHTS]       # Ф1 (v1.3) + Ф4 (v2.0)
 
 quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
