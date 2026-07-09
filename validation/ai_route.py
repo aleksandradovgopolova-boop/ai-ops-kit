@@ -47,7 +47,8 @@ def route(inp):
     available_runtimes = inp.get("available_runtimes", list(runtimes.keys()))
     reasons = []
 
-    # 1. workflow
+    # 1. workflow: правила policy (эскалации) -> точное имя контракта ->
+    # selection_criteria.task_type из workflows.yaml (единый источник) -> честный default.
     workflow = None
     for rule in policy.get("workflow_rules", []):
         if "when" in rule and _match(rule["when"], inp):
@@ -56,7 +57,19 @@ def route(inp):
                 reasons.append(rule["escalate_reason"])
             break
     if workflow is None:
-        workflow = inp.get("task_type", "ENGINEERING")
+        tt = inp.get("task_type")
+        if tt in workflows:
+            workflow = tt
+        else:
+            for wid, w in workflows.items():
+                crit = (w.get("selection_criteria") or {}).get("task_type")
+                if isinstance(crit, list) and tt in crit:
+                    workflow = wid
+                    reasons.append(f"task_type '{tt}' -> {wid} (selection_criteria)")
+                    break
+    if workflow is None:
+        workflow = "ENGINEERING"
+        reasons.append(f"unknown task_type '{inp.get('task_type')}' -> default ENGINEERING")
 
     # 2. provider prefer/forbid + model_class (из provider_rules)
     prefer_provider, forbid_provider, model_class = [], [], None
@@ -196,6 +209,31 @@ SCENARIOS = [
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
      "expect": {"workflow": "QUICK", "human_approval_required": False,
                 "selected_model_class": "fast"}},
+    # v2.1.1: детальные task_type маршрутизируются по selection_criteria из workflows.yaml
+    {"name": "ui-change -> VISUAL",
+     "inp": {"task_type": "ui-change", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "VISUAL", "execution_mode": "native"}},
+    {"name": "instrumentation -> ANALYTICS",
+     "inp": {"task_type": "instrumentation", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "ANALYTICS"}},
+    {"name": "post-release-analysis -> INSIGHTS",
+     "inp": {"task_type": "post-release-analysis", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "INSIGHTS"}},
+    {"name": "onboarding -> ADOPTION",
+     "inp": {"task_type": "onboarding", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "ADOPTION"}},
+    {"name": "bug-fix -> QUICK (по selection_criteria)",
+     "inp": {"task_type": "bug-fix", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "QUICK"}},
+    {"name": "неизвестный task_type -> честный default ENGINEERING",
+     "inp": {"task_type": "something-strange", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "ENGINEERING"}},
 ]
 
 

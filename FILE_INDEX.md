@@ -265,6 +265,7 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `memory/decisions/README.md`
 - `memory/incidents/README.md`
 - `memory/known-issues/README.md`
+- `memory/lessons-learned/2026-07-09-routing-unaware-of-new-workflows.md`
 - `memory/lessons-learned/README.md`
 - `memory/patterns/README.md`
 
@@ -439,4 +440,3 @@ CI пакета (package-quality) и релизный workflow (release.yml: VER
 
 - `.github/workflows/package-quality.yml`
 - `.github/workflows/release.yml`
-
