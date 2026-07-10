@@ -411,8 +411,9 @@ JSON Schema публичных контрактов: gate-result, route-decision
 
 ## tools/
 
-Генераторы (runtime-команды, артефакты по blueprint), sequential-оркестратор, Product Health, run_report (оценка прогона фичи).
+Генераторы (runtime-команды, артефакты по blueprint), sequential-оркестратор, Product Health, run_report (оценка прогона + история срезов), effect_metrics (метрики эффекта).
 
+- `tools/effect_metrics.py`
 - `tools/generate_artifacts.py`
 - `tools/generate_runtime.py`
 - `tools/orchestrator.py`

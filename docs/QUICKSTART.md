@@ -45,6 +45,23 @@ python3 <kit>/tools/run_report.py features/my-feature --graph knowledge/graph.ya
 скелеты, согласованность tracking plan ↔ dashboard-spec, сверка с knowledge graph,
 напоминание о ретроспективе. PROBLEM = exit 1 — ставьте в CI.
 
+## 3a. История прогонов и метрики эффекта (v2.5)
+
+Перед коммитом PR запускайте отчёт с записью среза:
+
+```bash
+python3 <kit>/tools/run_report.py features/my-feature --graph knowledge/graph.yaml --record
+```
+
+Срез (дата, вердикт, стадия, покрытие) допишется в `.ai/project/report-history/<фича>.jsonl`
+и закоммитится вместе с PR. По накопленной истории считаются метрики эффекта:
+
+```bash
+python3 <kit>/tools/effect_metrics.py    # PROBLEM-rate, динамика покрытия, дни до retrospective
+```
+
+Инструмент честен: пока нет 3+ фич с 3+ срезами, он явно пишет «baseline не готов».
+
 ## 4. CI child-репозитория (проверенный набор)
 
 ```yaml
