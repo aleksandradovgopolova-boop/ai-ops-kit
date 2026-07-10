@@ -33,6 +33,8 @@ jobs:
         run: python3 tools/generate_artifacts.py --selftest
       - name: Отчёт-оценка прогона фичи (selftest)
         run: python3 tools/run_report.py --selftest
+      - name: Метрики эффекта по истории (selftest)
+        run: python3 tools/effect_metrics.py --selftest
       - name: Sequential-оркестратор (selftest)
         run: python3 tools/orchestrator.py --selftest
       - name: Presets

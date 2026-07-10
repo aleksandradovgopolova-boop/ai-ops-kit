@@ -15,14 +15,18 @@
 ревьюеры (gates), не скрипт.
 
 Использование:  run_report.py <feature-dir> [--graph <graph.yaml>] [--json]
+                           [--record [dir]]   — дописать срез отчёта в историю
+                                                (по умолчанию <child>/.ai/project/report-history/)
                 run_report.py --selftest
-Требует pyyaml.
+История (JSONL, по файлу на фичу) коммитится с PR и служит сырьём для
+tools/effect_metrics.py («метрики эффекта»). Требует pyyaml.
 """
 
 import importlib.util
 import json
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -153,6 +157,41 @@ def build_report(feature_dir: Path, graph_path: Path | None):
     return report
 
 
+def find_child_root(feature_dir: Path):
+    p = feature_dir
+    for _ in range(8):
+        if (p / ".ai-ops.yaml").exists():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return None
+
+
+def record_report(r, feature_dir: Path, hist_dir: Path | None):
+    """Дописать компактный срез отчёта в историю (JSONL, файл на фичу)."""
+    if hist_dir is None:
+        base = find_child_root(feature_dir) or feature_dir.parent.parent
+        hist_dir = base / ".ai" / "project" / "report-history"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    fid = Path(r["feature_dir"]).name
+    entry = {
+        "schema_version": 1,
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "feature": fid,
+        "verdict": r["verdict"],
+        "current_stage": r["current_stage"],
+        "coverage": r["coverage"],
+        "problems": sum(1 for lvl, _ in r["findings"] if lvl == "PROBLEM"),
+        "warns": sum(1 for lvl, _ in r["findings"] if lvl == "WARN"),
+    }
+    out = hist_dir / f"{fid}.jsonl"
+    with out.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    print(f"срез записан: {out}")
+    return out
+
+
 def print_report(r):
     print(f"=== Оценка прогона: {Path(r['feature_dir']).name} "
           f"(current_stage={r['current_stage']}) ===")
@@ -224,6 +263,13 @@ def selftest():
         r = build_report(fdir, graph)
         expect("delivered-by при ранней стадии -> PROBLEM 'реальность обогнала'",
                any("обогнала" in f for _, f in r["findings"]), True)
+        # запись истории: два среза -> две JSONL-строки
+        hist = Path(td) / "hist"
+        record_report(r, fdir, hist)
+        record_report(r, fdir, hist)
+        lines = (hist / "demo-r.jsonl").read_text(encoding="utf-8").strip().split("\n")
+        expect("история: 2 записи JSONL", len(lines), 2)
+        expect("запись содержит verdict", "verdict" in json.loads(lines[0]), True)
     print("run-report selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -237,6 +283,10 @@ def main(argv):
     feature_dir = Path(argv[0]).resolve()
     graph = Path(argv[argv.index("--graph") + 1]).resolve() if "--graph" in argv else None
     r = build_report(feature_dir, graph)
+    if "--record" in argv:
+        i = argv.index("--record")
+        nxt = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else None
+        record_report(r, feature_dir, Path(nxt).resolve() if nxt else None)
     if "--json" in argv:
         print(json.dumps({**r, "findings": [list(f) for f in r["findings"]]},
                          ensure_ascii=False, indent=2))
