@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.6.0] — 2026-07-10
+
+**Responsive by Default** — адаптивность под целевые устройства перестаёт зависеть
+от того, вспомнил ли о ней человек: целевая матрица устройств определяется один раз
+на продукт, дальше процесс проверяет её сам (шаблоны требуют, blocking-гейт проверяет,
+e2e на viewport-матрице ловит регрессии).
+
+### Added
+- **rules/design/responsive-baseline.yaml** — machine-readable чек-лист адаптивности
+  (12 пунктов): матрица устройств определена, mobile-first, fluid layout, breakpoints
+  из токенов, touch-цели >= 44px, независимость от hover, масштабирование текста,
+  адаптивные медиа, overflow внутри контейнеров, safe areas/ориентация, состояния
+  Empty/Loading/Error/Success на всех классах, e2e по viewport-матрице.
+  Критичные пункты: device-matrix-defined, fluid-layout, touch-targets, input-modality.
+- **Device matrix в context/product/DesignSystem.md** — источник истины по целевым
+  классам устройств продукта (класс, min viewport, ввод, обязателен ли); заполняется
+  один раз, все проверки адаптивности идут против него. Явный opt-out класса —
+  только с причиной.
+
+### Changed
+- Гейт **ux_review** (blocking): required_evidence дополнен
+  `device_matrix_defined` — фича не проходит design-review, пока матрица устройств
+  не определена в DesignSystem.
+- Пункт `responsive` в rules/design/ux-heuristics.yaml: severity critical,
+  ссылается на детальный чек-лист responsive-baseline.yaml.
+- Шаблоны templates/ux/UXFlow.md и ScreenStates.md: секции Responsive требуют
+  описания поведения по всем классам Device matrix, не только desktop
+  (пустой скелет по-прежнему PROBLEM в run_report).
+
 ## [2.5.0] — 2026-07-09
 
 Сбор данных о работе кита в child-репозиториях становится системным: история

@@ -157,7 +157,7 @@
 
 ## rules/
 
-Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы).
+Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы/адаптивности).
 
 - `rules/ai/CostAndTokenPolicy.md`
 - `rules/ai/EvalPolicy.md`
@@ -177,6 +177,7 @@
 - `rules/core/SourceOfTruth.md`
 - `rules/design/accessibility-checklist.yaml`
 - `rules/design/design-system-checklist.yaml`
+- `rules/design/responsive-baseline.yaml`
 - `rules/design/ux-heuristics.yaml`
 - `rules/engineering/APICompatibility.md`
 - `rules/engineering/Architecture.md`

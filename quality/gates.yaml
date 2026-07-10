@@ -179,7 +179,7 @@ gates:
     checklist: rules/design/ux-heuristics.yaml
     applicability: [PRODUCT, VISUAL]
     stale_detection: {bind_to: artifact_hashes}
-    required_evidence: [ux_flow, screen_states, responsive_checked, copy_reviewed]
+    required_evidence: [ux_flow, screen_states, device_matrix_defined, responsive_checked, copy_reviewed]
 
   design_system_usage:
     id: design_system_usage
