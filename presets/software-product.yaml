@@ -6,7 +6,6 @@ note: 'Декларативный preset: агенты подключаются 
   (меньше breaking-риска, чем физический move).'
 agents:
 - accessibility-reviewer
-- ai-evaluator
 - architecture-reviewer
 - backend-developer
 - code-reviewer

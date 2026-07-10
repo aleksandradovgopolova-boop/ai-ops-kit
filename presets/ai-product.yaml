@@ -1,0 +1,14 @@
+# presets/ai-product.yaml — декларативный preset (без перемещения файлов)
+schema_version: 1
+kind: ai-ops-preset
+id: ai-product
+description: 'Команда AI-продукта (opt-in — только там, где в продукте есть LLM/агентная часть):
+  архитектура AI-возможности, eval-driven разработка, независимые evals и red team.'
+note: 'Декларативный preset: агенты подключаются по id из registry/agents.yaml; файлы
+  не перемещаются. Включайте в child через presets.enabled только для AI-продуктов.'
+agents:
+- ai-evaluator
+- ai-feature-engineer
+- ai-red-teamer
+- llm-architect
+requires_core: true

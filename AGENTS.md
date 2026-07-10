@@ -10,7 +10,7 @@ child-репозиториев. Здесь разрабатывается сам
 | Зона | Что это | Менять можно? |
 |---|---|---|
 | `registry/` | Машиночитаемые реестры: агенты, workflow-контракты, провайдеры, модели, среды, capability-index, routing-policy | Да, но только синхронно с файлами, на которые они ссылаются |
-| `agents/` | 38 агентов (markdown) | Да; новый/изменённый агент требует записи в `registry/agents.yaml` и eval-кейсов в `evaluations/agents/` |
+| `agents/` | 51 агент (markdown) | Да; новый/изменённый агент требует записи в `registry/agents.yaml` и eval-кейсов в `evaluations/agents/` |
 | `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |

@@ -249,4 +249,35 @@ workflows:
     learning_output: required
     maps_from: [workflows/adoption.md]
 
+  AI_FEATURE:
+    id: AI_FEATURE
+    purpose: AI-возможность продукта — качество, скорость и стоимость ИИ-части в целевом сценарии, eval-driven.
+    layer: extended
+    selection_criteria: {task_type: [ai-feature, llm-integration, rag-pipeline, agent-capability, prompt-change, model-migration], requires: llm-component-in-product}
+    disqualifying_conditions:
+      - "в фиче нет LLM/агентного компонента (обычная разработка -> ENGINEERING)"
+    required_artifacts: [intake, AIFeatureSpec, GoldenDataset, AIFeatureEvalPlan, RedTeamReport, TaskState, VerificationEvidence]
+    optional_artifacts: [TrackingPlan, ExperimentReadout, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      # target-scenario: целевой сценарий измеримо + model_class через routing + бюджеты качества/latency/стоимости
+      - {id: target-scenario, owner: llm-architect, writer: llm-architect, review_mode: writer, preset: ai-product}
+      # eval-dataset: golden set ДО реализации (eval-driven development)
+      - {id: eval-dataset, owner: ai-feature-engineer, writer: ai-feature-engineer, review_mode: writer}
+      - {id: implementation, owner: ai-feature-engineer, writer: ai-feature-engineer, review_mode: writer}
+      # offline-evals: прогон и вердикт — независимый judge (writer != judge)
+      - {id: offline-evals, owner: ai-evaluator, review_mode: read-only}
+      - {id: red-team, owner: ai-red-teamer, review_mode: read-only}
+      - {id: verify, owner: final-verifier, review_mode: read-only}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, ai_eval, ai_red_team, implementation_verification]
+    required_capabilities: [structured_output, file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: conditional, when: [guardrail_threshold_change, external_provider_for_confidential_data]}
+    archive_criteria: "ai_eval pass на golden set в рамках бюджетов spec'а; red-team blockers закрыты; смена модели/промпта после этого = regression-прогон"
+    resumability: TaskState
+    learning_output: recommended
+    maps_from: [workflows/ai-feature.md]
+
 # Post-MVP (объявлены, контракты позже): CRITICAL, DOCUMENT, LEGACY, INCIDENT.

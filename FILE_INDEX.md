@@ -51,7 +51,7 @@
 
 ## agents/
 
-48 агентов по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, ai-evaluator, adoption-manager, user-researcher; каждый зарегистрирован в registry/agents.yaml.
+51 агент по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, команда AI-продукта (llm-architect, ai-feature-engineer, ai-red-teamer, ai-evaluator); каждый зарегистрирован в registry/agents.yaml.
 
 - `agents/README.md`
 - `agents/core/context-builder.md`
@@ -67,12 +67,14 @@
 - `agents/delivery/incident-analyst.md`
 - `agents/delivery/observability-engineer.md`
 - `agents/delivery/release-manager.md`
+- `agents/engineering/ai-feature-engineer.md`
 - `agents/engineering/backend-developer.md`
 - `agents/engineering/database-engineer.md`
 - `agents/engineering/devops-engineer.md`
 - `agents/engineering/frontend-developer.md`
 - `agents/engineering/fullstack-developer.md`
 - `agents/engineering/integration-engineer.md`
+- `agents/engineering/llm-architect.md`
 - `agents/engineering/migration-engineer.md`
 - `agents/engineering/solution-architect.md`
 - `agents/engineering/system-analyst.md`
@@ -89,6 +91,7 @@
 - `agents/product/user-researcher.md`
 - `agents/quality/accessibility-reviewer.md`
 - `agents/quality/ai-evaluator.md`
+- `agents/quality/ai-red-teamer.md`
 - `agents/quality/analytics-reviewer.md`
 - `agents/quality/architecture-reviewer.md`
 - `agents/quality/code-reviewer.md`
@@ -111,9 +114,10 @@
 
 ## workflows/
 
-Прозаические сценарии; машиночитаемые контракты — registry/workflows.yaml (MVP + VISUAL/ANALYTICS/INSIGHTS/ADOPTION).
+Прозаические сценарии; машиночитаемые контракты — registry/workflows.yaml (MVP + VISUAL/ANALYTICS/INSIGHTS/ADOPTION/AI_FEATURE).
 
 - `workflows/adoption.md`
+- `workflows/ai-feature.md`
 - `workflows/analytics-instrumentation.md`
 - `workflows/architecture-change.md`
 - `workflows/bug-fix.md`
@@ -153,15 +157,17 @@
 
 ## rules/
 
-Правила: core, ai (включая EvalPolicy), product (MeasurementBaseline), engineering, quality + design (машиночитаемые чек-листы Nielsen/WCAG/дизайн-системы).
+Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы).
 
 - `rules/ai/CostAndTokenPolicy.md`
 - `rules/ai/EvalPolicy.md`
+- `rules/ai/EvalTooling.md`
 - `rules/ai/ModelRouting.md`
 - `rules/ai/ParallelWork.md`
 - `rules/ai/PromptInjectionDefense.md`
 - `rules/ai/SecretsAndSensitiveData.md`
 - `rules/ai/ToolUsage.md`
+- `rules/ai/red-team-checklist.yaml`
 - `rules/core/AIWorkingAgreement.md`
 - `rules/core/ContextManagement.md`
 - `rules/core/DefinitionOfDone.md`
@@ -210,6 +216,7 @@
 - `templates/documentation/UserGuide.md`
 - `templates/documentation/WhatsNew.md`
 - `templates/engineering/ADR.md`
+- `templates/engineering/AIFeatureSpec.md`
 - `templates/engineering/APIContract.md`
 - `templates/engineering/DataMigrationPlan.md`
 - `templates/engineering/IntegrationContract.md`
@@ -228,6 +235,8 @@
 - `templates/product/UserStory.md`
 - `templates/quality/AIFeatureEvalPlan.md`
 - `templates/quality/CodeReview.md`
+- `templates/quality/GoldenDataset.md`
+- `templates/quality/RedTeamReport.md`
 - `templates/quality/ReleaseChecklist.md`
 - `templates/quality/SecurityReview.md`
 - `templates/quality/TestPlan.md`
@@ -289,10 +298,13 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/README.md`
 - `evaluations/agents/adoption-manager.md`
 - `evaluations/agents/ai-evaluator.md`
+- `evaluations/agents/ai-feature-engineer.md`
+- `evaluations/agents/ai-red-teamer.md`
 - `evaluations/agents/analytics-reviewer.md`
 - `evaluations/agents/architecture-reviewer.md`
 - `evaluations/agents/design-system-reviewer.md`
 - `evaluations/agents/documentation-reviewer.md`
+- `evaluations/agents/llm-architect.md`
 - `evaluations/agents/observability-reviewer.md`
 - `evaluations/agents/product-reviewer.md`
 - `evaluations/agents/user-researcher.md`
@@ -300,8 +312,9 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 
 ## presets/
 
-Декларативные наборы агентов по id (core, software-product, product-discovery, product-adoption, data-and-integrations).
+Декларативные наборы агентов по id (core, software-product, product-discovery, product-adoption, ai-product, data-and-integrations).
 
+- `presets/ai-product.yaml`
 - `presets/core.yaml`
 - `presets/data-and-integrations.yaml`
 - `presets/product-adoption.yaml`
