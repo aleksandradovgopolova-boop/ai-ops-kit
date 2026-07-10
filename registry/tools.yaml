@@ -85,6 +85,53 @@ tools:
     purpose: "PR/issue/CI operations"
     status: documented
 
+  # --- AI Product Pack (v2.4): opensource-инструменты eval/red-team/observability.
+  # Опции (status: declared — в бою китом не верифицированы), НЕ зависимости;
+  # связь CLI-and-protocol, как с OpenSpec. Карта артефактов -> инструментов:
+  # rules/ai/EvalTooling.md.
+  - id: promptfoo
+    protocol: cli
+    deterministic: true
+    purpose: "offline evals as config + red team (адверсариальные плагины); прогон AIFeatureEvalPlan/red-team-checklist в CI"
+    permission_level: network
+    provides: [offline_evals, red_team_scan, model_comparison]
+    source: "npm: promptfoo (MIT)"
+    requires_credentials: true
+    status: declared
+  - id: deepeval
+    protocol: cli
+    deterministic: true
+    purpose: "pytest-style LLM-тесты: quality-метрики как unit-тесты в CI (gate ai_eval)"
+    permission_level: network
+    provides: [ci_quality_gates, llm_as_judge_metrics]
+    source: "pip: deepeval (Apache-2.0)"
+    requires_credentials: true
+    status: declared
+  - id: ragas
+    protocol: cli
+    deterministic: true
+    purpose: "RAG-метрики: faithfulness, answer relevancy, context precision — для фич с retrieval"
+    permission_level: network
+    provides: [rag_metrics]
+    source: "pip: ragas (Apache-2.0)"
+    requires_credentials: true
+    status: declared
+  - id: langfuse
+    protocol: rest-api
+    purpose: "self-hosted LLM-наблюдаемость: traces, стоимость, latency, online-качество на живом трафике (вход для INSIGHTS/Product Health)"
+    permission_level: network
+    provides: [online_quality, cost_latency_tracing]
+    source: "langfuse (OSS, self-hosted)"
+    status: declared
+  - id: garak
+    protocol: cli
+    purpose: "сканер уязвимостей LLM: автоматизация части red-team-checklist (инъекции, jailbreak, утечки)"
+    permission_level: network
+    provides: [red_team_scan]
+    source: "pip: garak (Apache-2.0)"
+    requires_credentials: true
+    status: declared
+
 permission_levels:
   - read-only
   - controlled-write

@@ -2,6 +2,45 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.4.0] — 2026-07-09
+
+**AI Product Pack** — команда, workflow и инструменты для продуктов с LLM/агентной
+частью, где качество и скорость ИИ в целевом сценарии — отдельная дисциплина.
+Строго opt-in: preset ai-product + task_type фичи; продуктам без AI-части ничего
+не добавляется.
+
+### Added
+- **Preset ai-product** (opt-in): llm-architect (архитектура AI-возможности —
+  model_class через routing, контекстная стратегия, числовые бюджеты
+  качества/latency/стоимости, деградация), ai-feature-engineer (eval-driven:
+  golden set до реализации, промпты как код), ai-red-teamer (адверсариальные
+  проверки), ai-evaluator (переезд из software-product). Реестр: 48 -> 51,
+  все с eval-кейсами.
+- **Workflow AI_FEATURE** (девятый контракт): intake -> target-scenario ->
+  golden dataset (ДО реализации) -> implementation -> offline-evals (ai_eval) ->
+  red-team (ai_red_team) -> verify -> memory. Writer ≠ judge дважды: строит
+  ai-feature-engineer, качество меряет ai-evaluator, ломает ai-red-teamer.
+  Маршрутизация по task_type (ai-feature, llm-integration, rag-pipeline,
+  agent-capability, prompt-change, model-migration) — подхватилась data-driven
+  роутером автоматически, закреплена selftest-сценарием.
+- **Гейт ai_red_team** (non-blocking до обкатки, applies_when: LLM-компонент) +
+  машиночитаемый **rules/ai/red-team-checklist.yaml** на основе OWASP Top 10 for
+  LLM Applications (инъекции прямые/косвенные, утечки PII/промпта, excessive
+  agency, RAG-отравление, unbounded consumption, jailbreak).
+- **Шаблоны**: AIFeatureSpec (целевой сценарий + бюджеты числами), GoldenDataset
+  (распределение, edge cases, версионирование), RedTeamReport (находки по id
+  пунктов чек-листа).
+- **Открытый инструментарий как опции** (registry/tools.yaml, status: declared;
+  связь CLI-and-protocol, как с OpenSpec; карта — rules/ai/EvalTooling.md):
+  promptfoo (MIT — evals-as-config + red team), DeepEval (Apache-2.0 —
+  pytest-style LLM-тесты), Ragas (Apache-2.0 — RAG-метрики), Langfuse (OSS —
+  online-наблюдаемость: качество/стоимость/latency, вход для INSIGHTS),
+  garak (Apache-2.0 — сканер уязвимостей LLM).
+
+### Fixed
+- README: устаревшие «38 агентов» и «OpenSpec выключена по умолчанию»;
+  AGENTS.md: счётчик агентов.
+
 ## [2.3.1] — 2026-07-09
 
 Закрытие документационных зон внешнего ревью (демонстрация, UX CLI, adoption-гайд).

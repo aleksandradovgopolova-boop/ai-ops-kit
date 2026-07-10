@@ -27,7 +27,7 @@ gates:
     validator: validate-intake
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION]
+    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE]
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
@@ -82,7 +82,7 @@ gates:
     validator: validate-evidence
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT]
+    applicability: [QUICK, ENGINEERING, PRODUCT, AI_FEATURE]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [build_passed, lint_passed, tests_passed, tested_revision]
 
@@ -237,9 +237,22 @@ gates:
     responsible_role: ai-evaluator
     review_mode: read-only
     checklist: rules/ai/EvalPolicy.md
-    applicability: [ENGINEERING, PRODUCT, VISUAL]
+    applicability: [ENGINEERING, PRODUCT, VISUAL, AI_FEATURE]
     stale_detection: {bind_to: artifact_hashes}
     required_evidence: [success_criteria, eval_dataset, offline_results, guardrails, regression_checked]
+
+  ai_red_team:
+    id: ai_red_team
+    purpose: AI-фича проверена адверсариально — инъекции, jailbreak, утечки PII/промпта, границы агентности.
+    stage: red-team
+    blocking: false
+    applies_when: "LLM/агентный компонент, доступный пользователю; иначе гейт неприменим"
+    responsible_role: ai-red-teamer
+    review_mode: read-only
+    checklist: rules/ai/red-team-checklist.yaml
+    applicability: [AI_FEATURE, ENGINEERING, PRODUCT]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [attack_scenarios_run, injection_resistance, pii_leak_checked, blockers_closed]
 
   observability_readiness:
     id: observability_readiness

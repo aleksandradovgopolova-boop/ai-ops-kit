@@ -7,7 +7,7 @@ contract_version: 1
 generated_note: Bootstrap-реестр из фактических файлов agents/ (тела не менялись). layer/action/target
   — план миграции (component-classification).
 counts:
-  agents: 48
+  agents: 51
 agents:
 - schema_version: 1
   id: context-builder
@@ -852,7 +852,7 @@ agents:
   contract_version: 1
   entity_type: agent
   layer: preset
-  preset: software-product
+  preset: ai-product
   file: agents/quality/ai-evaluator.md
   domain: quality
   purpose: "Оценка AI-фич продукта против success criteria: eval-наборы, LLM-as-judge с валидацией, guardrails, regression при смене модели/промпта. Гейт ai_eval"
@@ -860,10 +860,10 @@ agents:
   vendor_neutral: true
   source_version: '1.0'
   target_layer: preset
-  target_preset: software-product
+  target_preset: ai-product
   action: create
   migration_phase: 5
-  migration_note: 'NEW: research-pack integration (v2.1)'
+  migration_note: 'NEW: research-pack integration (v2.1); v2.4: переезд в preset ai-product'
 - schema_version: 1
   id: adoption-manager
   version: 1.0.0
@@ -900,3 +900,57 @@ agents:
   action: create
   migration_phase: 5
   migration_note: 'NEW: research-pack integration (v2.1)'
+- schema_version: 1
+  id: llm-architect
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: ai-product
+  file: agents/engineering/llm-architect.md
+  domain: engineering
+  purpose: "Архитектура AI-части продукта под целевой сценарий: model_class через routing, контекстная стратегия, бюджеты качества/latency/стоимости, деградация. Владелец target-scenario в AI_FEATURE"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: ai-product
+  action: create
+  migration_phase: 6
+  migration_note: 'NEW: AI Product Pack (v2.4)'
+- schema_version: 1
+  id: ai-feature-engineer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: ai-product
+  file: agents/engineering/ai-feature-engineer.md
+  domain: engineering
+  purpose: "Строит AI-часть eval-driven: golden set до реализации, промпты/RAG/tool use как код, итерации меряются прогоном на наборе против бюджетов spec'а"
+  review_mode: writer
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: ai-product
+  action: create
+  migration_phase: 6
+  migration_note: 'NEW: AI Product Pack (v2.4)'
+- schema_version: 1
+  id: ai-red-teamer
+  version: 1.0.0
+  contract_version: 1
+  entity_type: agent
+  layer: preset
+  preset: ai-product
+  file: agents/quality/ai-red-teamer.md
+  domain: quality
+  purpose: "Адверсариальная проверка AI-фичи по rules/ai/red-team-checklist.yaml (OWASP LLM Top 10): инъекции, jailbreak, утечки PII/промпта, границы агентности. Гейт ai_red_team"
+  review_mode: read-only
+  vendor_neutral: true
+  source_version: '1.0'
+  target_layer: preset
+  target_preset: ai-product
+  action: create
+  migration_phase: 6
+  migration_note: 'NEW: AI Product Pack (v2.4)'

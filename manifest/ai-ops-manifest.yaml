@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.3.1
+  package_version: 2.4.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -35,7 +35,7 @@ registries:
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
-  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION]   # Ф1 (v1.3) + Ф4 (v2.0) + research-pack (v2.1)
+  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4)
 
 quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
@@ -43,7 +43,7 @@ quality_gates:
   mvp_blocking_max: 8
 
 agents:
-  registered: 48             # 38 (v1.0) + 7 ревьюеров (v1.4) + 3 research-pack (v2.1)
+  registered: 51             # 38 (v1.0) + 7 ревьюеров (v1.4) + 3 research-pack (v2.1) + 3 AI Product Pack (v2.4)
   core_target: 12            # целевой минимальный CORE после merge (Ф2-3)
   core_target_note: >
     В реестре 16 файлов с target_layer=core: 10 сохраняемых + 3 новых (create) + 3 merge-источника

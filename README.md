@@ -18,7 +18,7 @@ Knowledge Graph, Product Health, provider/runtime маршрутизация и 
 
 | Папка | Содержимое |
 |---|---|
-| `agents/` | 38 агентов (core / product / engineering / quality / delivery / meta) |
+| `agents/` | 51 агент (core / product / engineering / quality / delivery / meta), включая команду AI-продукта |
 | `registry/` | Машиночитаемые реестры: агенты, workflow, провайдеры, модели, среды, маршрутизация |
 | `quality/` | Реестр quality gates (machine-readable контракт с revision-binding) |
 | `workflows/`, `commands/`, `rules/`, `templates/` | Прозаические сценарии, команды, правила, шаблоны |
@@ -58,7 +58,7 @@ python3 <путь-к-ai-ops-kit>/installer/ai_ops.py update   # применит
 - Writer и judge разделены; проверяющий read-only к проверяемому артефакту.
 - Секреты в репозитории запрещены — только ссылки вида `env:NAME`.
 - Обновления parent→child — только через проверяемый diff и PR.
-- OpenSpec — опция (выключена по умолчанию), детерминированные validate/archive/sync.
+- OpenSpec — опция (включена по умолчанию, opt-out), детерминированные validate/archive/sync.
 - GigaChat — планируемый провайдер (включается конфигом, без переписывания).
 
 Требования: Python 3.10+ и `pyyaml` для CLI/валидаторов; Node.js — только для OpenSpec-опции.
