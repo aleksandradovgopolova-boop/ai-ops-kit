@@ -8,5 +8,5 @@
 ### Error (+ recovery action)
 ### Success
 ### Partial / degraded (если применимо)
-### Responsive (breakpoints, mobile)
+### Responsive (по всем классам Device matrix из DesignSystem, не только desktop)
 ### Offline (если применимо)

@@ -18,5 +18,5 @@ items:
   - {id: h9-error-recovery, check: "Сообщения об ошибках на языке пользователя: что случилось и какое действие доступно", severity_default: critical}
   - {id: h10-help, check: "Помощь доступна в контексте, где она нужна (не только в отдельном разделе)", severity_default: minor}
   - {id: states-coverage, check: "Каждый экран имеет состояния Empty / Loading / Error (с recovery) / Success", severity_default: critical}
-  - {id: responsive, check: "Поведение на мобильных и breakpoints описано; touch-цели достаточного размера", severity_default: major}
+  - {id: responsive, check: "Адаптивность по матрице устройств из DesignSystem — детальный чек-лист rules/design/responsive-baseline.yaml", severity_default: critical, details: rules/design/responsive-baseline.yaml}
   - {id: copy-actionable, check: "Copy проверен: тон, ясность, CTA осмысленны, ошибки содержат действие", severity_default: major}
