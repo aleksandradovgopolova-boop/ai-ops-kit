@@ -131,6 +131,15 @@ tools:
     source: "pip: garak (Apache-2.0)"
     requires_credentials: true
     status: declared
+  # --- v2.12: мета-качество AI-конфигов ---
+  - id: agnix
+    protocol: cli
+    deterministic: true
+    purpose: "линтер AI-конфигов (SKILL.md, CLAUDE.md, hooks, MCP): 156 правил, auto-fix, LSP; дополняет validate_references и rules/meta/skill-authoring"
+    permission_level: local
+    provides: [ai_config_lint]
+    source: "github: avifenesh/agnix (лицензию проверить до adoption)"
+    status: declared
 
 permission_levels:
   - read-only
