@@ -180,6 +180,7 @@
 - `rules/core/ContextManagement.md`
 - `rules/core/DefinitionOfDone.md`
 - `rules/core/EvidencePolicy.md`
+- `rules/core/FreshnessPolicy.md`
 - `rules/core/HumanApproval.md`
 - `rules/core/ScopeControl.md`
 - `rules/core/SourceOfTruth.md`
@@ -273,6 +274,7 @@
 Карта знаний о продукте/системе/команде; источники истины DesignSystem.md и MetricCatalog.md — заполняются в child-репозитории.
 
 - `context/README.md`
+- `context/now.md`
 - `context/product/BusinessRules.md`
 - `context/product/DesignSystem.md`
 - `context/product/MetricCatalog.md`
@@ -286,6 +288,18 @@
 - `context/team/DevelopmentProcess.md`
 - `context/team/Glossary.md`
 - `context/team/OwnershipMap.md`
+
+## knowledge/
+
+Knowledge Integrity (v2.9): claims — утверждения документации о коде, проверяемые детерминированно (validate_claims.py). В child claims живут в `.ai/project/knowledge/`.
+
+- `knowledge/claims.yaml`
+
+## governance/
+
+Границы данных: что можно и что нельзя хранить в репозитории / передавать внешним моделям (важно для гос-контекста).
+
+- `governance/information-boundaries.md`
 
 ## memory/
 
@@ -318,7 +332,9 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/documentation-reviewer.md`
 - `evaluations/agents/llm-architect.md`
 - `evaluations/agents/observability-reviewer.md`
+- `evaluations/agents/product-analyst.md`
 - `evaluations/agents/product-reviewer.md`
+- `evaluations/agents/solution-architect.md`
 - `evaluations/agents/user-researcher.md`
 - `evaluations/agents/ux-reviewer.md`
 
@@ -414,11 +430,14 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_ai_first_registry.py`
 - `validation/validate_ai_first_workflows.py`
 - `validation/validate_ai_ops_child.py`
+- `validation/validate_claims.py`
 - `validation/validate_cross_artifacts.py`
 - `validation/validate_feature_blueprint.py`
+- `validation/validate_freshness.py`
 - `validation/validate_knowledge_graph.py`
 - `validation/validate_openspec_change.py`
 - `validation/validate_presets.py`
+- `validation/validate_references.py`
 - `validation/validate_stale_gates.py`
 
 ## tools/

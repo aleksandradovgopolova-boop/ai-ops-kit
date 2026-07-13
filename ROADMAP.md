@@ -100,6 +100,33 @@
 профили blueprint lean/full и кросс-артефактный валидатор
 (tracking-plan ↔ dashboard-spec; расширение на MetricCatalog — следующий шаг).
 
+## Интеграция team-os-toolkit (референс операционной архитектуры команды)
+
+Из четырёх слоёв team-os-toolkit ~60% уже реализовано в ките под другими именами
+(registry как SoT, Knowledge Graph, memory-loop, human-approval). Берём механику
+недостающего, отклоняем структурный reorg (ковенант: аддитивно, без breaking в 2.x).
+
+- **Фаза 1 — Knowledge Integrity (v2.9) ✅ выполнена.** Drift-control, наведённый
+  сначала на сам пакет: validate_references.py (uses_skills/checklist/owner/gate
+  резолвятся — закрыл латентную дыру 2.7–2.8), claims.yaml + validate_claims.py
+  (утверждения документации о коде: file/symbol/enum), селфтесты с намеренным сломом
+  (гейт видят падающим). Гейт knowledge_integrity (non-blocking до обкатки).
+- **Фаза 2 — Freshness + Governance (v2.9) ✅ выполнена.** FreshnessPolicy (классы
+  stable/evolving/volatile, единый термин stability) + validate_freshness.py + now.md
+  как датированный снимок; governance/information-boundaries.md (что можно/нельзя
+  хранить — критично для гос-контекста). Гейт knowledge_freshness (advisory).
+- **Фаза 3 — Decision Intelligence (планируется).** decisions/ (принципы с
+  confidence/recurrence/review_date, эпизоды, outcomes), workflow recommendation-first
+  (система не выдаёт вердикт, пока человек не сформулировал позицию), one-way-door brief.
+  Связать с systems-thinking (constraint -> contradiction -> decision). После обкатки Ф1–2.
+- **Фаза 4 — Runtime/Robin (спека, не реализация).** Целевая архитектура постоянного
+  агента: декларативные duties, два слоя памяти (staged -> promoted через человека),
+  append-only interaction-log, read-mostly границы. Не строим: постоянного runtime нет,
+  оркестратор честно sequential-only. Референс для будущего продуктового слоя.
+
+Отклонено осознанно: reorg `.ai/` целиком, `capabilities/`/`adapters/` как новые
+верхнеуровневые слои (дублируют capability-index/presets/runtimes), Robin как готовый бот.
+
 ## Правила движения по roadmap
 
 - Каждая фаза проходит полный набор валидаторов; новые механизмы приносят свои
