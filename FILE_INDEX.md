@@ -155,6 +155,12 @@
 - `commands/task/ai-start-task.md`
 - `commands/task/ai-verify.md`
 
+## skills/
+
+Скиллы, поставляемые китом (грузятся раннером из `.claude/skills/`). Реестр — `manifest.skills.shipped`.
+
+- `skills/product-session-review/SKILL.md`
+
 ## rules/
 
 Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы/адаптивности).
@@ -186,6 +192,7 @@
 - `rules/engineering/DependencyPolicy.md`
 - `rules/engineering/ErrorHandling.md`
 - `rules/product/MeasurementBaseline.md`
+- `rules/research/session-review.yaml`
 - `rules/quality/AccessibilityBaseline.md`
 - `rules/quality/PerformanceBudget.md`
 - `rules/quality/QualityGates.md`

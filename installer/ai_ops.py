@@ -65,6 +65,25 @@ def sha256(p: Path):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def sync_skills(child_root: Path):
+    """Скопировать поставляемые китом скиллы в <child>/.claude/skills/<id>/.
+    Скиллы грузятся раннером из .claude/skills/ (registry/runtimes.yaml).
+    Копируется весь каталог скилла; возвращает список синхронизированных id."""
+    synced = []
+    for sk in (manifest().get("skills", {}) or {}).get("shipped", []) or []:
+        sid = sk.get("id")
+        src_path = PKG / sk.get("path", "")
+        src_dir = src_path.parent
+        if not sid or not src_dir.is_dir():
+            continue
+        dst_dir = child_root / ".claude" / "skills" / sid
+        if dst_dir.exists():
+            shutil.rmtree(dst_dir)
+        shutil.copytree(src_dir, dst_dir)
+        synced.append(sid)
+    return synced
+
+
 def installed_version():
     if not CHILD_CONFIG.exists():
         return None
@@ -234,6 +253,7 @@ def cmd_update(force=False):
     n = write_checksums()
     write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
     bump_child_config(target)
+    report["skills_synced"] = sync_skills(REPO_ROOT)
 
     # smoke: валидаторы
     report["smoke_tests"] = run_validators([
@@ -273,6 +293,9 @@ def cmd_init(target_dir):
         example = PKG / "examples" / "child-config.example.yaml"
         shutil.copy2(example, cfg)
         print(f"создана заготовка {cfg} — отредактируйте project.name и providers.")
+    synced = sync_skills(root)
+    if synced:
+        print(f"синхронизированы скиллы в .claude/skills/: {', '.join(synced)}")
     upd_src = PKG / "templates" / "ci" / "ai-ops-update.yml"
     upd_dst = root / ".github" / "workflows" / "ai-ops-update.yml"
     if upd_src.exists() and not upd_dst.exists():

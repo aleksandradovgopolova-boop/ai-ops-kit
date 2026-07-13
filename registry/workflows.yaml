@@ -200,7 +200,7 @@ workflows:
     stages:
       - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
       # данные собираются из источников tracking plan / monitoring-spec функции
-      - {id: data-collection, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      - {id: data-collection, owner: product-analyst, writer: product-analyst, review_mode: writer, uses_skills: [product-session-review]}
       # health-report считает детерминированно tools/product_health.py — не LLM
       - {id: health-report, owner: product-analyst, writer: product-analyst, review_mode: writer, uses_tools: [product_health]}
       - {id: insight-synthesis, owner: product-analyst, writer: product-analyst, review_mode: writer}
