@@ -57,6 +57,12 @@ product_skills:
     purpose: "презентации reveal.js для демо/стейкхолдеров"
     license: "проверить в репозитории"
     status: declared
+  - id: text-editor-ru
+    category: content
+    source: "github: proektnyy-ofis/proektnyy-ofis-hranilishche -> 02_tools/skills/text-editor-ru"
+    purpose: "русский текст: инфостиль, снятие ИИ-следов и канцелярита, типографика; смысл и факты не меняются"
+    license: MIT
+    status: declared
 
 # Как подключить (child):
 # 1) свериться с governance/information-boundaries.md и лицензией источника;
