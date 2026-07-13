@@ -118,6 +118,13 @@ def check(root: Path):
             ref = s.get(key)
             if isinstance(ref, str) and not path_exists(root, ref):
                 bad("path", ref, f"manifest.skills.shipped[{s.get('id')}].{key}")
+        # конвенция авторинга (rules/meta/skill-authoring): frontmatter name + description
+        sp = s.get("path")
+        if isinstance(sp, str) and (root / sp).exists():
+            fm = frontmatter((root / sp).read_text(encoding="utf-8"))
+            for req in ("name", "description"):
+                if not fm.get(req):
+                    bad("skill-frontmatter", f"{s.get('id')}: нет '{req}'", f"{sp} frontmatter")
 
     return findings
 

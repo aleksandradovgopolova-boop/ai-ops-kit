@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.11.0] — 2026-07-13
+
+**Frontend & E2E** — два opt-in скилла из внешнего набора (курируемо: из 10
+предложенных взяты два, закрывающие реальные пробелы; остальные отклонены как дубли
+или вне миссии). Плюс конвенция авторинга скиллов.
+
+### Added
+- **skills/frontend-design/SKILL.md** (адапт. из anthropics/claude-code frontend-design)
+  — создание отличающегося UI: план → критика против AI-клише → HTML/CSS; из токенов
+  DesignSystem; a11y и адаптивность заложены при создании. Закрывает пробел «генерация
+  UI» (ревью у нас уже было). Чек-лист rules/design/frontend-design.yaml.
+- **skills/e2e-browser-testing/SKILL.md** (адапт. из lackeyjb/playwright-skill, MIT)
+  — e2e/визуальные проверки в браузере на **viewport-матрице** из DesignSystem.
+  Замыкает пункт e2e-viewport-matrix из responsive-baseline (в v2.6 объявлен, механизма
+  не было). Чек-лист rules/quality/e2e-baseline.yaml.
+- **rules/meta/skill-authoring.yaml** — конвенция авторинга скиллов (из anthropics/skills
+  skill-creator; сам скилл не вендорился). validate_references теперь проверяет, что у
+  каждого shipped-скилла есть frontmatter name+description.
+
+### Changed
+- manifest: skills.shipped += frontend-design, e2e-browser-testing; authoring_convention;
+  package_version 2.11.0.
+- Проводка (opt-in): VISUAL.implementation → frontend-design; VISUAL.verify →
+  e2e-browser-testing. responsive-baseline e2e-viewport-matrix ссылается на скилл.
+- validate_references: проверка frontmatter shipped-скиллов. NOTICE: 3 новых атрибуции.
+
+### Отклонено осознанно (из 10 предложенных)
+- prompt-master (дублирует AI Product Pack), mcp-builder («интеграции не берём»),
+  superpowers (целый фреймворк, дублирует workflow/gate), ai-website-cloner (вне миссии,
+  IP-риски), visual-explainer / writing-guru / revealjs (nice-to-have / вне миссии).
+
 ## [2.10.0] — 2026-07-13
 
 **Decision Intelligence** (team-os-toolkit Ф3, MIT) — как команда принимает решения,

@@ -22,4 +22,4 @@ items:
   - {id: overflow-content, check: "Длинный контент (таблицы, код, диаграммы) скроллится внутри своего контейнера, а не ломает страницу", severity_default: major}
   - {id: safe-areas-orientation, check: "Safe areas (вырезы, системные бары) учтены; поворот экрана не теряет состояние и не ломает layout", severity_default: minor}
   - {id: states-on-matrix, check: "Состояния Empty/Loading/Error/Success проверены на всех классах матрицы, не только на десктопе", severity_default: major}
-  - {id: e2e-viewport-matrix, check: "e2e/скриншотные проверки гоняются на viewport-матрице из DesignSystem (например, Playwright projects по классам устройств) — регрессии адаптивности ловит CI, не глаз", severity_default: major}
+  - {id: e2e-viewport-matrix, check: "e2e/скриншотные проверки гоняются на viewport-матрице из DesignSystem (Playwright projects по классам устройств) — регрессии адаптивности ловит CI, не глаз; механизм — skill e2e-browser-testing", severity_default: major}

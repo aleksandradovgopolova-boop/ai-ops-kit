@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.10.0
+  package_version: 2.11.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -57,6 +57,15 @@ skills:
       path: skills/decision-support/SKILL.md
       opt_in: true
       checklist: rules/thinking/decision-support.yaml
+    - id: frontend-design               # v2.11, opt-in; used_by VISUAL (ux-flow/implementation), ui-ux-designer
+      path: skills/frontend-design/SKILL.md
+      opt_in: true
+      checklist: rules/design/frontend-design.yaml
+    - id: e2e-browser-testing           # v2.11, opt-in; used_by verify (VISUAL/PRODUCT/ENGINEERING/AI_FEATURE)
+      path: skills/e2e-browser-testing/SKILL.md
+      opt_in: true
+      checklist: rules/quality/e2e-baseline.yaml
+  authoring_convention: rules/meta/skill-authoring.yaml   # v2.11: конвенция авторинга (из skill-creator)
 
 quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
