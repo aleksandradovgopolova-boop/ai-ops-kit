@@ -18,6 +18,11 @@ JTBD, personas, гипотезы, метрики успеха, PRD. Отвеча
 правильную проблему и узнаем ли, что стало лучше», а не «хорошо ли написан текст».
 Не является автором проверяемых артефактов (writer ≠ judge). Гейт: `discovery_completeness`.
 
+В workflow DECISION ведёт principle-review: применяет скилл `decision-support`
+(recommendation-first — вердикт только после рекомендации человека; сверка с принципами
+`decisions/registry.yaml`; классификация обратимости; чек-лист
+`rules/thinking/decision-support.yaml`). Гейт: `decision_quality`.
+
 ## Что проверяет
 
 - проблема сформулирована от пользователя, подтверждена данными (не мнением);

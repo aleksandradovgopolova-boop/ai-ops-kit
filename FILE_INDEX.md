@@ -160,6 +160,7 @@
 Скиллы, поставляемые китом (грузятся раннером из `.claude/skills/`). Реестр — `manifest.skills.shipped`.
 
 - `skills/contradiction-resolution/SKILL.md`
+- `skills/decision-support/SKILL.md`
 - `skills/product-session-review/SKILL.md`
 - `skills/system-constraint-analysis/SKILL.md`
 
@@ -198,6 +199,7 @@
 - `rules/research/session-review.yaml`
 - `rules/thinking/constraint-analysis.yaml`
 - `rules/thinking/contradiction-resolution.yaml`
+- `rules/thinking/decision-support.yaml`
 - `rules/quality/AccessibilityBaseline.md`
 - `rules/quality/PerformanceBudget.md`
 - `rules/quality/QualityGates.md`
@@ -215,6 +217,9 @@
 - `templates/blueprint/FeatureBlueprint.lean.yaml`
 - `templates/blueprint/FeatureBlueprint.yaml`
 - `templates/ci/ai-ops-update.yml`
+- `templates/decisions/DecisionEpisode.md`
+- `templates/decisions/OneWayDoorBrief.md`
+- `templates/decisions/OutcomeReview.md`
 - `templates/discovery/AssumptionTest.md`
 - `templates/discovery/Hypotheses.md`
 - `templates/discovery/JTBD.md`
@@ -295,6 +300,12 @@ Knowledge Integrity (v2.9): claims — утверждения документа
 
 - `knowledge/claims.yaml`
 
+## decisions/
+
+Decision Intelligence (v2.10): реестр решений — принципы (способ мышления), эпизоды, исходы; recommendation-first + one-way-door. В child живёт в `.ai/project/decisions/`.
+
+- `decisions/registry.yaml`
+
 ## governance/
 
 Границы данных: что можно и что нельзя хранить в репозитории / передавать внешним моделям (важно для гос-контекста).
@@ -355,6 +366,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 
 - `schemas/capability-entry.schema.json`
 - `schemas/child-config.schema.json`
+- `schemas/decisions-registry.schema.json`
 - `schemas/feature-blueprint.schema.json`
 - `schemas/gate-result.schema.json`
 - `schemas/knowledge-graph.schema.json`
@@ -432,6 +444,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_ai_ops_child.py`
 - `validation/validate_claims.py`
 - `validation/validate_cross_artifacts.py`
+- `validation/validate_decisions.py`
 - `validation/validate_feature_blueprint.py`
 - `validation/validate_freshness.py`
 - `validation/validate_knowledge_graph.py`

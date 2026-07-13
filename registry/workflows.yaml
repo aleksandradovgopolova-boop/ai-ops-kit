@@ -217,6 +217,36 @@ workflows:
     learning_output: required
     maps_from: [workflows/insights.md]
 
+  DECISION:
+    id: DECISION
+    purpose: Значимое решение по recommendation-first — человек формулирует позицию, система проверяет мышление, необратимое эскалирует.
+    layer: extended
+    selection_criteria: {task_type: [decision, tech-choice, architecture-decision, tradeoff, go-no-go]}
+    disqualifying_conditions:
+      - "мелкое обратимое решение — церемонии избыточны"
+    required_artifacts: [intake, DecisionEpisode, VerificationEvidence]
+    optional_artifacts: [OneWayDoorBrief, OutcomeReview, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      # recommendation-first: человек формулирует рекомендацию ДО вердикта; PM фиксирует эпизод
+      - {id: recommendation, owner: product-manager, writer: product-manager, review_mode: writer, uses_skills: [decision-support]}
+      # writer != judge: разбор рекомендации, пробелы, обратимость, сверка с принципами — read-only
+      - {id: principle-review, owner: product-reviewer, review_mode: read-only, uses_skills: [decision-support]}
+      # one-way door: только бриф на эскалацию, решение за человеком
+      - {id: one-way-door-brief, owner: product-manager, writer: product-manager, review_mode: writer}
+      - {id: decision-record, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+      - {id: outcome-review, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, decision_quality]
+    required_capabilities: [file_read, file_write]
+    preferred_execution_mode: native
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: true, applies_to: [one-way-door-brief]}
+    archive_criteria: "решение зафиксировано эпизодом; one-way door эскалирован, не принят автономно; принцип откалиброван"
+    resumability: TaskState
+    learning_output: required
+    maps_from: []
+
   ADOPTION:
     id: ADOPTION
     purpose: Довести выпущенную функцию до активации и удержания; оценить фактический эффект против baseline.

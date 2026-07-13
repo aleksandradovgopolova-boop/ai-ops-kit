@@ -15,5 +15,10 @@
   адаптированы две методологии в скиллы `skills/system-constraint-analysis/`
   (constraint-finder, теория ограничений Голдратта) и `skills/contradiction-resolution/`
   (triz-dissolve, ТРИЗ); инструмент-агностично, код не копировался.
+- **team-os-toolkit** (https://github.com/BayramAnnakov/team-os-toolkit, MIT) —
+  адаптирована механика: drift-control/claims и freshness-классы (v2.9,
+  knowledge_integrity), границы данных (governance), Decision Intelligence —
+  скилл `skills/decision-support/` + `decisions/registry.yaml` + workflow DECISION
+  (v2.10, recommendation-first + one-way-door). Структурный reorg и Robin-бот не брались.
 - **GigaChat** (Sber) — планируемый провайдер; интеграция через официальный API,
   credentials только по ссылкам env/secret.

@@ -1,0 +1,74 @@
+# decisions/registry.yaml — реестр решений: принципы (способ мышления), эпизоды
+# (конкретные решения) и исходы. Машинно проверяется validate_decisions.py.
+# В child живёт в .ai/project/decisions/. Примеры ниже — реальные решения по киту
+# (догфудинг): они же показывают, как извлекать принцип из повторяющихся эпизодов.
+schema_version: 1
+kind: decisions-registry
+
+principles:
+  - id: dp-001
+    principle: >
+      Внешний материал интегрируем курируемо: берём только недостающую механику,
+      дубли уже построенного и структурные reorg'и отклоняем. «Главное — не излишним».
+    scope: [package-evolution]
+    status: ratified
+    confidence: high
+    recurrence_count: 4        # research-pack, systems-thinking, session-review, team-os
+    counterexamples: []
+    review_date: 2026-12-01
+    supersedes: null
+    derived_from: [ep-2026-07-13-teamos, ep-2026-07-13-systems]
+
+  - id: dp-002
+    principle: >
+      Новая проверка/гейт вводится non-blocking и становится blocking только после
+      обкатки; каждый механизм приносит свой валидатор и селфтест, который видели падающим.
+    scope: [quality-gates, package-evolution]
+    status: ratified
+    confidence: high
+    recurrence_count: 5
+    counterexamples: []
+    review_date: 2026-12-01
+    supersedes: null
+    derived_from: [ep-2026-07-13-teamos]
+
+  - id: dp-003
+    principle: >
+      Не декларировать capability, которой нет: оркестратор sequential-only, постоянного
+      runtime нет — Robin остаётся спекой, а не «реализованным агентом».
+    scope: [honesty, runtime]
+    status: ratified
+    confidence: medium
+    recurrence_count: 2
+    counterexamples: []
+    review_date: 2026-10-01
+    supersedes: null
+    derived_from: [ep-2026-07-13-teamos]
+
+episodes:
+  - id: ep-2026-07-13-teamos
+    question: Как интегрировать team-os-toolkit — целиком или частично?
+    decision: >
+      Взять только недостающую механику (drift/claims, freshness, governance),
+      reorg .ai/ и Robin-бот отклонить; Ф3 сделать, Ф4 оставить спекой.
+    reason: >
+      ~60% идей уже реализовано под другими именами; ковенант «аддитивно, без breaking
+      в 2.x»; нет постоянного runtime под Robin.
+    context: Сессия развития кита; предложение GPT взять всё как есть.
+    reversibility: two-way
+    date: 2026-07-13
+    source: чат-сессия; ROADMAP «Интеграция team-os-toolkit»
+
+  - id: ep-2026-07-13-systems
+    question: Сколько скиллов systems-thinking брать из шести?
+    decision: Два самодостаточных сейчас (constraint, contradiction); leverage — позже; why-tree и stockflow-builder отклонить.
+    reason: leverage требует модель на входе; why-tree дублирует deep-research и он multi-agent; stockflow-builder — не дисциплина мышления.
+    context: Оценка репозитория systems-thinking-skills.
+    reversibility: two-way
+    date: 2026-07-13
+    source: чат-сессия; CHANGELOG v2.8.0
+
+outcomes:
+  - decision: ep-2026-07-13-systems
+    outcome: Оба скилла выпущены (v2.8), проводка в INSIGHTS/PRODUCT/ENGINEERING; обкатка в ии-среде предстоит.
+    reviewed_at: 2026-07-13

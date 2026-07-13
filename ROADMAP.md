@@ -115,10 +115,12 @@
   stable/evolving/volatile, единый термин stability) + validate_freshness.py + now.md
   как датированный снимок; governance/information-boundaries.md (что можно/нельзя
   хранить — критично для гос-контекста). Гейт knowledge_freshness (advisory).
-- **Фаза 3 — Decision Intelligence (планируется).** decisions/ (принципы с
-  confidence/recurrence/review_date, эпизоды, outcomes), workflow recommendation-first
-  (система не выдаёт вердикт, пока человек не сформулировал позицию), one-way-door brief.
-  Связать с systems-thinking (constraint -> contradiction -> decision). После обкатки Ф1–2.
+- **Фаза 3 — Decision Intelligence (v2.10) ✅ выполнена.** decisions/registry.yaml
+  (принципы с confidence/recurrence/counterexamples/review_date, эпизоды, outcomes) +
+  схема + validate_decisions.py; skill decision-support (recommendation-first: система
+  не выдаёт вердикт, пока человек не сформулировал позицию; one-way-door — бриф на
+  эскалацию, AI не решает необратимое сам); workflow DECISION; гейт decision_quality
+  (non-blocking). Связь с systems-thinking (constraint -> contradiction -> decision).
 - **Фаза 4 — Runtime/Robin (спека, не реализация).** Целевая архитектура постоянного
   агента: декларативные duties, два слоя памяти (staged -> promoted через человека),
   append-only interaction-log, read-mostly границы. Не строим: постоянного runtime нет,

@@ -27,7 +27,7 @@ gates:
     validator: validate-intake
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE]
+    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION]
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
@@ -253,6 +253,20 @@ gates:
     applicability: [AI_FEATURE, ENGINEERING, PRODUCT]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [attack_scenarios_run, injection_resistance, pii_leak_checked, blockers_closed]
+
+  decision_quality:
+    id: decision_quality
+    purpose: Решение принято по recommendation-first; обратимость классифицирована; сверено с принципами.
+    stage: decision-review
+    blocking: false          # non-blocking до обкатки
+    applies_when: "принимается/фиксируется значимое решение; мелкие обратимые решения — вне гейта"
+    responsible_role: product-reviewer
+    review_mode: read-only
+    checklist: rules/thinking/decision-support.yaml
+    source_of_truth: decisions/registry.yaml
+    applicability: [DECISION, PRODUCT, ENGINEERING]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [human_recommendation, reversibility_classified, principles_checked]
 
   knowledge_integrity:
     id: knowledge_integrity
