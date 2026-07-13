@@ -11,5 +11,9 @@
   адаптирована методология доказательного разбора сессий в скилл
   `skills/product-session-review/` (инструмент-агностично; Clarity-специфика убрана,
   код не копировался).
+- **systems-thinking-skills** (https://github.com/BayramAnnakov/systems-thinking-skills, MIT) —
+  адаптированы две методологии в скиллы `skills/system-constraint-analysis/`
+  (constraint-finder, теория ограничений Голдратта) и `skills/contradiction-resolution/`
+  (triz-dissolve, ТРИЗ); инструмент-агностично, код не копировался.
 - **GigaChat** (Sber) — планируемый провайдер; интеграция через официальный API,
   credentials только по ссылкам env/secret.
