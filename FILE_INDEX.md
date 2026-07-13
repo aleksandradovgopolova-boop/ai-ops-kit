@@ -161,12 +161,14 @@
 
 - `skills/contradiction-resolution/SKILL.md`
 - `skills/decision-support/SKILL.md`
+- `skills/e2e-browser-testing/SKILL.md`
+- `skills/frontend-design/SKILL.md`
 - `skills/product-session-review/SKILL.md`
 - `skills/system-constraint-analysis/SKILL.md`
 
 ## rules/
 
-Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы/адаптивности), research (разбор сессий), thinking (ограничения, противоречия).
+Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы/адаптивности), research (разбор сессий), thinking (ограничения, противоречия, решения), meta (конвенция авторинга скиллов).
 
 - `rules/ai/CostAndTokenPolicy.md`
 - `rules/ai/EvalPolicy.md`
@@ -187,6 +189,7 @@
 - `rules/core/SourceOfTruth.md`
 - `rules/design/accessibility-checklist.yaml`
 - `rules/design/design-system-checklist.yaml`
+- `rules/design/frontend-design.yaml`
 - `rules/design/responsive-baseline.yaml`
 - `rules/design/ux-heuristics.yaml`
 - `rules/engineering/APICompatibility.md`
@@ -195,12 +198,14 @@
 - `rules/engineering/DatabaseChanges.md`
 - `rules/engineering/DependencyPolicy.md`
 - `rules/engineering/ErrorHandling.md`
+- `rules/meta/skill-authoring.yaml`
 - `rules/product/MeasurementBaseline.md`
 - `rules/research/session-review.yaml`
 - `rules/thinking/constraint-analysis.yaml`
 - `rules/thinking/contradiction-resolution.yaml`
 - `rules/thinking/decision-support.yaml`
 - `rules/quality/AccessibilityBaseline.md`
+- `rules/quality/e2e-baseline.yaml`
 - `rules/quality/PerformanceBudget.md`
 - `rules/quality/QualityGates.md`
 - `rules/quality/ReviewPolicy.md`

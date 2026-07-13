@@ -147,8 +147,8 @@ workflows:
       - {id: design-review, owner: ux-reviewer, review_mode: read-only}
       - {id: design-system-review, owner: design-system-reviewer, review_mode: read-only}
       - {id: accessibility-review, owner: accessibility-reviewer, review_mode: read-only}
-      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
-      - {id: verify, owner: final-verifier, review_mode: read-only}
+      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer, uses_skills: [frontend-design]}
+      - {id: verify, owner: final-verifier, review_mode: read-only, uses_skills: [e2e-browser-testing]}
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
     quality_gates: [intake_completeness, ux_review, design_system_usage, implementation_verification]
     required_capabilities: [file_read, file_write]

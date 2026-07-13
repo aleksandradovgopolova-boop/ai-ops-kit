@@ -15,6 +15,14 @@
   адаптированы две методологии в скиллы `skills/system-constraint-analysis/`
   (constraint-finder, теория ограничений Голдратта) и `skills/contradiction-resolution/`
   (triz-dissolve, ТРИЗ); инструмент-агностично, код не копировался.
+- **anthropics/claude-code — frontend-design** (https://github.com/anthropics/claude-code, plugin) —
+  адаптирована методология создания UI (два прохода, уход от AI-клише, «один оправданный
+  риск») в скилл `skills/frontend-design/`; код не копировался.
+- **anthropics/skills — skill-creator** (https://github.com/anthropics/skills) —
+  взяты конвенции авторинга скиллов в `rules/meta/skill-authoring.yaml`; сам скилл не вендорился.
+- **lackeyjb/playwright-skill** (https://github.com/lackeyjb/playwright-skill, MIT) —
+  адаптирована методология e2e-проверок в браузере в скилл `skills/e2e-browser-testing/`;
+  код не копировался.
 - **team-os-toolkit** (https://github.com/BayramAnnakov/team-os-toolkit, MIT) —
   адаптирована механика: drift-control/claims и freshness-классы (v2.9,
   knowledge_integrity), границы данных (governance), Decision Intelligence —
