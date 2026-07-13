@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.11.0
+  package_version: 2.12.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -32,6 +32,7 @@ registries:
   capability_index: registry/capability-index.yaml
   routing: config/model-routing.yaml          # расширяется на Ф6
   entities: registry/entities.yaml            # Knowledge Graph: типы и связи (v2.0)
+  skills_catalog: registry/skills-catalog.yaml # v2.12: внешние скиллы (declared), ставятся на уровне child
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]

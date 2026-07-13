@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.12.0] — 2026-07-13
+
+**Review-этикет, каталог внешних скиллов, agnix** — курируемо из второго набора (13
+скиллов). Ключевой принцип: ядро остаётся стек-агностичным, стек-специфичные и
+сторонние скиллы **декларируются в каталоге и ставятся на уровне child**, а не
+вендорятся в ядро.
+
+### Added
+- **rules/quality/code-review-etiquette.yaml** (адапт. obra/superpowers
+  requesting/receiving-code-review) — как готовить PR к ревью и как отвечать на
+  замечания (принять/обсудить/отклонить с аргументом). Подключён к гейту code_review.
+- **registry/skills-catalog.yaml** — каталог внешних скиллов (status: declared, ставятся
+  на уровне child): стек — react-best-practices/web-design-guidelines (vercel),
+  postgres-best-practices (supabase), shadcn-ui (google); продуктовые/контентные —
+  visual-explainer, writing-guru, revealjs (по запросу — чтобы продакт мог подключить
+  при необходимости). Ядро не биасится под стек.
+- **agnix** в registry/tools (status: declared) — линтер AI-конфигов (SKILL.md/CLAUDE.md,
+  156 правил); дополняет validate_references и skill-authoring. Не вендорится.
+
+### Changed
+- manifest: registries.skills_catalog; package_version 2.12.0.
+- гейт code_review получил checklist; skill-authoring — пункт про опциональный линтер.
+- NOTICE: атрибуции obra/superpowers, agnix и каталогизированных внешних скиллов.
+
+### Отклонено осознанно
+- subagent-driven-development, dispatching-parallel-agents (конфликт с честной
+  декларацией sequential-only); sentry-workflow, postgres read-only (интеграции —
+  «не берём»); remotion (вне миссии); вендоринг стек-гайдов в ядро (агностичность).
+
 ## [2.11.0] — 2026-07-13
 
 **Frontend & E2E** — два opt-in скилла из внешнего набора (курируемо: из 10

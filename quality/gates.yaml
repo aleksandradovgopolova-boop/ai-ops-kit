@@ -94,6 +94,7 @@ gates:
     responsible_role: code-reviewer
     review_mode: read-only
     human_approval: false
+    checklist: rules/quality/code-review-etiquette.yaml
     applicability: [ENGINEERING]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [reviewed_revision, blockers_closed]

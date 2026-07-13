@@ -18,3 +18,4 @@ items:
   - {id: explanation-over-must, check: "Инструкции объясняют «почему», а не только жёсткие MUST; есть раздел отказов (чего скилл не делает)", severity_default: minor}
   - {id: no-surprise, check: "Нет вредоносного/неожиданного поведения; границы данных соблюдены (governance/information-boundaries)", severity_default: critical}
   - {id: registered-in-manifest, check: "Shipped-скилл зарегистрирован в manifest.skills.shipped (id, path, opt_in, checklist)", severity_default: major}
+  - {id: lintable-optional, check: "Опционально: SKILL.md/CLAUDE.md проходят внешний линтер AI-конфигов (agnix, registry/tools — status: declared)", severity_default: minor}

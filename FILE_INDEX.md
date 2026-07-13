@@ -46,6 +46,7 @@
 - `registry/providers.yaml`
 - `registry/routing-policy.yaml`
 - `registry/runtimes.yaml`
+- `registry/skills-catalog.yaml`
 - `registry/tools.yaml`
 - `registry/workflows.yaml`
 
@@ -205,6 +206,7 @@
 - `rules/thinking/contradiction-resolution.yaml`
 - `rules/thinking/decision-support.yaml`
 - `rules/quality/AccessibilityBaseline.md`
+- `rules/quality/code-review-etiquette.yaml`
 - `rules/quality/e2e-baseline.yaml`
 - `rules/quality/PerformanceBudget.md`
 - `rules/quality/QualityGates.md`
