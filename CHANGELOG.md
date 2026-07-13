@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.7.0] — 2026-07-13
+
+**Product Session Review** — первый скилл, который поставляет сам кит. Дисциплина
+доказательного разбора сессионных записей и поведенческих данных: вывод держится на
+триангуляции (реплей + база + исходник), а не на впечатлении от одного реплея. Строго
+opt-in — включается, только когда у продукта инструментированы session-replay/
+поведенческие данные.
+
+### Added
+- **skills/product-session-review/SKILL.md** — адаптированная методология
+  (из BayramAnnakov/clarity-session-review, MIT): инструмент-агностична (Clarity,
+  FullStory, Hotjar, PostHog, LogRocket…), Clarity-специфика убрана. 8 принципов
+  (вопрос до реплея, идентичность до интерпретации, триангуляция, таймлайн ≠ реплей,
+  координаты доказательства, счёт людей а не сессий, пройди шаг сам, аудит показанного
+  UI), конвейер с adversarial refute-проходом и dead-click анализом, evidence appendix
+  с уровнями MEASURED/OBSERVED/INFERRED, cold-read gate, gated blind spots.
+- **rules/research/session-review.yaml** — machine-readable чек-лист (15 пунктов) к
+  скиллу; находки ссылаются на id. Критичные: question-before-replay, bots-stripped,
+  triangulated, count-people, refute-pass, evidence-coordinates, blind-spots-gated.
+- **manifest: skills.shipped** — реестр скиллов, поставляемых китом.
+
+### Changed
+- **installer/ai_ops.py**: init и update синхронизируют поставляемые скиллы в
+  `<child>/.claude/skills/<id>/` (место загрузки скиллов раннером), драйвится
+  manifest.skills.shipped.
+- **INSIGHTS.data-collection** (`registry/workflows.yaml`): `uses_skills: [product-session-review]`.
+- **user-researcher**: применяет скилл при разборе поведенческих данных/записей сессий.
+- NOTICE.md: атрибуция clarity-session-review (MIT).
+
 ## [2.6.0] — 2026-07-10
 
 **Responsive by Default** — адаптивность под целевые устройства перестаёт зависеть

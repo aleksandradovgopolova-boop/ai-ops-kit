@@ -7,5 +7,9 @@
   код не копировался.
 - **AIKit** (https://github.com/NativeMindNet/aikit, лицензия отсутствует) — заимствованы
   только идеи (workflow-per-task-type, approval-фразы); файлы не копировались.
+- **clarity-session-review** (https://github.com/BayramAnnakov/clarity-session-review, MIT) —
+  адаптирована методология доказательного разбора сессий в скилл
+  `skills/product-session-review/` (инструмент-агностично; Clarity-специфика убрана,
+  код не копировался).
 - **GigaChat** (Sber) — планируемый провайдер; интеграция через официальный API,
   credentials только по ссылкам env/secret.

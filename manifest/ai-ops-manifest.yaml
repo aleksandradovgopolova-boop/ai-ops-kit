@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.6.0
+  package_version: 2.7.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -36,6 +36,15 @@ registries:
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
   extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4)
+
+skills:
+  # Скиллы, которые поставляет сам кит (грузятся в .claude/skills/ у child).
+  # Первый — v2.7. Внешний deep-research остаётся встроенным скиллом раннера.
+  shipped:
+    - id: product-session-review        # v2.7, opt-in; used_by INSIGHTS.data-collection, user-researcher
+      path: skills/product-session-review/SKILL.md
+      opt_in: true
+      checklist: rules/research/session-review.yaml
 
 quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
