@@ -2,6 +2,39 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.10.0] — 2026-07-13
+
+**Decision Intelligence** (team-os-toolkit Ф3, MIT) — как команда принимает решения,
+становится частью системы: не журнал «решили X», а способ мышления с калибровкой.
+Ядро — recommendation-first: система не выдаёт вердикт, пока человек не сформулировал
+позицию; развивает мышление команды, а не заменяет его. Строго opt-in.
+
+### Added
+- **skills/decision-support/SKILL.md** — recommendation-first (жёсткий гейт: нет
+  рекомендации человека → нет вердикта), классификация обратимости (two-way vs
+  one-way door), one-way-door бриф на эскалацию (AI не решает необратимое сам),
+  калибровка принципов (confidence/recurrence/counterexamples/review_date),
+  связь с systems-thinking (constraint → contradiction → decision).
+- **decisions/registry.yaml + schemas/decisions-registry.schema.json +
+  validation/validate_decisions.py** — реестр: принципы (proposed/ratified/retired,
+  scope, калибровка), эпизоды (вопрос/решение/причина/обратимость), исходы.
+  Валидатор проверяет целостность (уникальность id, статусы, supersedes/derived_from
+  резолвятся, retired требует reason) и WARN'ит «принцип из одного случая». Селфтест.
+  Реестр кита задогфужен реальными решениями сессии.
+- **rules/thinking/decision-support.yaml** — 10 машиночитаемых гейтов.
+- **Workflow DECISION** (десятый контракт): intake → recommendation (writer) →
+  principle-review (product-reviewer, read-only judge) → one-way-door-brief
+  (human approval) → decision-record → outcome-review → memory. writer ≠ judge.
+- Шаблоны templates/decisions/{DecisionEpisode, OneWayDoorBrief, OutcomeReview}.md.
+- Гейт **decision_quality** (non-blocking до обкатки).
+
+### Changed
+- manifest: skills.shipped += decision-support; workflows.extended += DECISION;
+  секция decision_intelligence; package_version 2.10.0.
+- product-reviewer ведёт principle-review в DECISION (скилл decision-support).
+- CI: шаг validate_decisions. NOTICE: team-os-toolkit покрывает Ф3.
+- ROADMAP: Ф3 выполнена; Ф4 Runtime/Robin остаётся спекой (постоянного runtime нет).
+
 ## [2.9.0] — 2026-07-13
 
 **Knowledge Integrity + Governance** — интеграция механики team-os-toolkit (MIT):

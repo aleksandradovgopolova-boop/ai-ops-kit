@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.9.0
+  package_version: 2.10.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -35,7 +35,7 @@ registries:
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
-  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4)
+  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4) + Decision Intelligence (v2.10)
 
 skills:
   # Скиллы, которые поставляет сам кит (грузятся в .claude/skills/ у child).
@@ -53,6 +53,10 @@ skills:
       path: skills/contradiction-resolution/SKILL.md
       opt_in: true
       checklist: rules/thinking/contradiction-resolution.yaml
+    - id: decision-support              # v2.10, opt-in; used_by workflow DECISION, product-manager/product-reviewer
+      path: skills/decision-support/SKILL.md
+      opt_in: true
+      checklist: rules/thinking/decision-support.yaml
 
 quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
@@ -94,6 +98,17 @@ knowledge_integrity:
 
 governance:
   information_boundaries: governance/information-boundaries.md   # что можно/нельзя хранить (v2.9)
+
+decision_intelligence:
+  # v2.10: Decision Intelligence (идея team-os-toolkit init-team-decisions).
+  status: integrated
+  registry: decisions/registry.yaml                    # принципы + эпизоды + исходы
+  schema: schemas/decisions-registry.schema.json
+  validator: validation/validate_decisions.py
+  skill: skills/decision-support/SKILL.md              # recommendation-first + one-way-door
+  workflow: DECISION
+  gate: decision_quality                                # non-blocking до обкатки
+  child_registry_path: ".ai/project/decisions/registry.yaml"
 
 security_policies:
   permission_levels: security/permission-levels.yaml   # 6 уровней

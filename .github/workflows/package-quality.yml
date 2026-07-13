@@ -71,3 +71,7 @@ jobs:
         run: |
           python3 validation/validate_freshness.py --selftest
           python3 validation/validate_freshness.py context > /dev/null
+      - name: Реестр решений (selftest + реестр кита)
+        run: |
+          python3 validation/validate_decisions.py --selftest
+          python3 validation/validate_decisions.py
