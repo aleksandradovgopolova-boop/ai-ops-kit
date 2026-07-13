@@ -164,8 +164,10 @@
 - `skills/decision-support/SKILL.md`
 - `skills/e2e-browser-testing/SKILL.md`
 - `skills/frontend-design/SKILL.md`
+- `skills/product-demo-video/SKILL.md`
 - `skills/product-session-review/SKILL.md`
 - `skills/system-constraint-analysis/SKILL.md`
+- `skills/user-documentation/SKILL.md`
 
 ## rules/
 
@@ -179,6 +181,7 @@
 - `rules/ai/PromptInjectionDefense.md`
 - `rules/ai/SecretsAndSensitiveData.md`
 - `rules/ai/ToolUsage.md`
+- `rules/content/demo-video.yaml`
 - `rules/ai/red-team-checklist.yaml`
 - `rules/core/AIWorkingAgreement.md`
 - `rules/core/ContextManagement.md`
@@ -193,6 +196,7 @@
 - `rules/design/frontend-design.yaml`
 - `rules/design/responsive-baseline.yaml`
 - `rules/design/ux-heuristics.yaml`
+- `rules/documentation/user-docs.yaml`
 - `rules/engineering/APICompatibility.md`
 - `rules/engineering/Architecture.md`
 - `rules/engineering/CodeStyle.md`

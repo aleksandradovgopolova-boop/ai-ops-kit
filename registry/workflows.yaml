@@ -261,8 +261,8 @@ workflows:
       # launch-readiness: события tracking plan подтверждены live, dashboard показывает данные, baseline зафиксирован
       - {id: launch-readiness, owner: adoption-manager, writer: adoption-manager, review_mode: writer, preset: product-adoption}
       - {id: analytics-review, owner: analytics-reviewer, review_mode: read-only}
-      - {id: adoption-plan, owner: adoption-manager, writer: adoption-manager, review_mode: writer}
-      - {id: user-docs, owner: documentation-steward, writer: documentation-steward, review_mode: writer}
+      - {id: adoption-plan, owner: adoption-manager, writer: adoption-manager, review_mode: writer, uses_skills: [product-demo-video]}
+      - {id: user-docs, owner: documentation-steward, writer: documentation-steward, review_mode: writer, uses_skills: [user-documentation]}
       - {id: docs-review, owner: documentation-reviewer, review_mode: read-only}
       - {id: feedback-loop, owner: adoption-manager, writer: adoption-manager, review_mode: writer}
       # post-launch-review: через заданное окно анализа; решение continue/iterate/scale/rollback
