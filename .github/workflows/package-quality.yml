@@ -61,3 +61,13 @@ jobs:
         run: |
           python3 tools/product_health.py --selftest
           python3 tools/product_health.py examples/product-health-demo/input.yaml > /dev/null
+      - name: Целостность ссылок пакета (drift-control)
+        run: python3 validation/validate_references.py
+      - name: Claims (selftest + self-claims кита)
+        run: |
+          python3 validation/validate_claims.py --selftest
+          python3 validation/validate_claims.py
+      - name: Свежесть знаний (selftest; context — информационно)
+        run: |
+          python3 validation/validate_freshness.py --selftest
+          python3 validation/validate_freshness.py context > /dev/null

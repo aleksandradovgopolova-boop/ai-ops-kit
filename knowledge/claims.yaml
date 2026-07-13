@@ -1,0 +1,40 @@
+# knowledge/claims.yaml — self-claims пакета: утверждения документации/манифеста,
+# проверяемые против кода детерминированно (validate_claims.py). Пути source.path —
+# относительно этого файла (knowledge/), поэтому корень пакета — ../.
+#
+# Это одновременно рабочая проверка кита и живой пример для child-репозиториев:
+# в child claims.yaml кладётся в .ai/project/knowledge/ и ссылается на код продукта
+# (например, ../../.. -> соседний репозиторий с исходниками).
+schema_version: 1
+kind: claims
+claims:
+  - id: release-workflow-present
+    doc: manifest/ai-ops-manifest.yaml (release-автоматизация)
+    type: file-exists
+    source: {path: ../.github/workflows/release.yml}
+
+  - id: installer-present
+    doc: manifest.update_policy.updater
+    type: file-exists
+    source: {path: ../installer/ai_ops.py}
+
+  - id: mvp-workflows-declared
+    doc: manifest.workflows.mvp
+    type: enum-values
+    source: {path: ../registry/workflows.yaml, values: [QUICK, ENGINEERING, PRODUCT, RESEARCH]}
+
+  - id: extended-workflows-declared
+    doc: manifest.workflows.extended
+    type: enum-values
+    source: {path: ../registry/workflows.yaml,
+             values: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE]}
+
+  - id: blueprint-final-stage
+    doc: Feature Blueprint закрывается стадией retrospective
+    type: symbol-exists
+    source: {path: ../validation/validate_feature_blueprint.py, symbol: retrospective}
+
+  - id: shipped-skills-registered
+    doc: manifest.skills.shipped перечисляет поставляемые скиллы
+    type: symbol-exists
+    source: {path: ../manifest/ai-ops-manifest.yaml, symbol: product-session-review}

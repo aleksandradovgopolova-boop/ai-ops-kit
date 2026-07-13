@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.8.0
+  package_version: 2.9.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -80,6 +80,20 @@ providers:
   first_class: [anthropic, openai]
   planned: [gigachat]         # опциональный провайдер на будущее (config-switch, без ключей сейчас)
   no_secrets: true            # только имена env-переменных / secret-reference
+
+knowledge_integrity:
+  # v2.9: drift-control (идея team-os-toolkit), наведённый сначала на сам пакет.
+  status: integrated
+  references_validator: validation/validate_references.py    # uses_skills/checklist/owner/gate резолвятся
+  claims: knowledge/claims.yaml                              # утверждения документации о коде
+  claims_validator: validation/validate_claims.py            # типы: file-exists, symbol-exists, enum-values
+  freshness_policy: rules/core/FreshnessPolicy.md            # классы stable/evolving/volatile
+  freshness_validator: validation/validate_freshness.py
+  gates: [knowledge_integrity, knowledge_freshness]           # non-blocking до обкатки
+  child_claims_path: ".ai/project/knowledge/claims.yaml"      # где child хранит свои claims
+
+governance:
+  information_boundaries: governance/information-boundaries.md   # что можно/нельзя хранить (v2.9)
 
 security_policies:
   permission_levels: security/permission-levels.yaml   # 6 уровней

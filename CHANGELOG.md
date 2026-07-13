@@ -2,6 +2,44 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.9.0] — 2026-07-13
+
+**Knowledge Integrity + Governance** — интеграция механики team-os-toolkit (MIT):
+drift-control, свежесть знаний и границы данных. ~60% идей репозитория у кита уже были
+(registry как SoT, Knowledge Graph, memory-loop, human-approval) — взята только
+недостающая механика; структурный reorg отклонён (ковенант: аддитивно, без breaking).
+Drift-control наведён сначала на сам пакет и закрыл латентную дыру: ссылки uses_skills/
+checklist/owner, добавленные в 2.7–2.8, не проверялись ничем.
+
+### Added
+- **validation/validate_references.py** — целостность ссылок пакета: каждый `uses_skills`
+  → shipped-скилл (или внешний скилл раннера), `checklist:`/`source_of_truth:` →
+  существующий файл, `owner`/`writer` в workflow → агент реестра, `quality_gates[*]` →
+  gate реестра. Селфтест с искусственным сломом (гейт видят падающим). Шаг CI.
+- **knowledge/claims.yaml + validation/validate_claims.py** — контракты «документация
+  утверждает о коде»: типы file-exists, symbol-exists, enum-values. Расхождение
+  документа с кодом становится видимым (падает в CI). Селфтест ловит намеренный drift.
+  В child claims живут в `.ai/project/knowledge/claims.yaml` и ссылаются на код продукта.
+- **rules/core/FreshnessPolicy.md + validation/validate_freshness.py** — классы
+  устаревания (stable/evolving/volatile; единый термин `stability`, без второго `tier`),
+  сроки по умолчанию (14/90/∞), advisory-предупреждение о протухших документах.
+  Селфтест на фиксированной дате. **context/now.md** — датированный снимок (концепт now.md).
+- **governance/information-boundaries.md** — что можно/нельзя хранить в репозитории и
+  передавать внешним моделям (5 категорий; критично для гос-контекста).
+- Гейты **knowledge_integrity** и **knowledge_freshness** (оба non-blocking до обкатки).
+
+### Changed
+- manifest: секции `knowledge_integrity` и `governance`; package_version 2.9.0.
+- CI: шаги validate_references / validate_claims / validate_freshness.
+- ROADMAP: интеграция team-os-toolkit — Ф1–2 выполнены; Ф3 Decision Intelligence и
+  Ф4 Runtime/Robin (спека, не реализация) запланированы; reorg/adapters/Robin-бот отклонены.
+
+### Fixed
+- **eval-кейсы product-analyst и solution-architect** — эти core-агенты были изменены
+  в v2.8 (ссылки на скиллы), но не имели eval-файлов; eval-гейт справедливо падал.
+  Добавлены evaluations/agents/{product-analyst,solution-architect}.md (по 3 кейса).
+  Дыру вскрыл сам тематический прогон v2.9 (integrity), что и требовалось.
+
 ## [2.8.0] — 2026-07-13
 
 **Systems Thinking (два скилла)** — дисциплины системного мышления как opt-in скиллы:

@@ -254,6 +254,30 @@ gates:
     stale_detection: {bind_to: tested_revision}
     required_evidence: [attack_scenarios_run, injection_resistance, pii_leak_checked, blockers_closed]
 
+  knowledge_integrity:
+    id: knowledge_integrity
+    purpose: Ссылки пакета резолвятся и утверждения документации согласованы с кодом (drift-control).
+    stage: sync
+    blocking: false          # non-blocking до обкатки; ссылочная часть уже зелёная в CI
+    responsible_role: documentation-steward
+    review_mode: writer
+    validator: validate-references + validate-claims
+    applicability: [all]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [references_resolve, claims_hold]
+
+  knowledge_freshness:
+    id: knowledge_freshness
+    purpose: Размеченные знания не протухли (класс устаревания из FreshnessPolicy).
+    stage: sync
+    blocking: false          # advisory: протухший документ — сигнал, не блок
+    responsible_role: documentation-steward
+    review_mode: writer
+    validator: validate-freshness
+    source_of_truth: rules/core/FreshnessPolicy.md
+    applicability: [all]
+    required_evidence: [no_stale_volatile_docs]
+
   observability_readiness:
     id: observability_readiness
     purpose: Мониторинг определён — логи, метрики, алерты, SLO для нового поведения.
