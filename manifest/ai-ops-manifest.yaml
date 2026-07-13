@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.12.0
+  package_version: 2.13.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -66,6 +66,14 @@ skills:
       path: skills/e2e-browser-testing/SKILL.md
       opt_in: true
       checklist: rules/quality/e2e-baseline.yaml
+    - id: user-documentation            # v2.13, opt-in; used_by ADOPTION.user-docs, documentation-steward
+      path: skills/user-documentation/SKILL.md
+      opt_in: true
+      checklist: rules/documentation/user-docs.yaml
+    - id: product-demo-video            # v2.13, opt-in; used_by ADOPTION.adoption-plan; захват на Playwright
+      path: skills/product-demo-video/SKILL.md
+      opt_in: true
+      checklist: rules/content/demo-video.yaml
   authoring_convention: rules/meta/skill-authoring.yaml   # v2.11: конвенция авторинга (из skill-creator)
 
 quality_gates:

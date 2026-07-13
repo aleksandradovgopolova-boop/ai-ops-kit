@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.13.0] — 2026-07-13
+
+**Пользовательская документация и демо-видео** — два поставляемых скилла для того, что
+нужно почти каждому продукту. Оба построены на **реальном механизме** кита (Playwright из
+skills/e2e-browser-testing умеет и скриншоты, и запись экрана), а не на обещаниях.
+
+### Added
+- **skills/user-documentation/SKILL.md** — понятная польз. документация со скриншотами:
+  структура Diátaxis; скриншоты снимаются детерминированно из реального UI на классах
+  Device matrix и **переснимаются при изменении интерфейса** (не расходятся с продуктом);
+  реальный путь к ценности, состояния Empty/Loading/Error/Success, язык пользователя.
+  Чек-лист rules/documentation/user-docs.yaml.
+- **skills/product-demo-video/SKILL.md** — короткий обход продукта: сториборд →
+  закадровый сценарий → запись экрана реального UI (Playwright, webm). Честная граница:
+  кит выдаёт сториборд+сценарий+сырой screen-recording; полировка/монтаж — опционально
+  внешним рендером (Remotion, каталог), не ядром. Чек-лист rules/content/demo-video.yaml.
+
+### Changed
+- manifest: skills.shipped += user-documentation, product-demo-video (итого 8 shipped);
+  package_version 2.13.0.
+- Проводка opt-in: ADOPTION.user-docs → user-documentation; ADOPTION.adoption-plan →
+  product-demo-video.
+
 ## [2.12.0] — 2026-07-13
 
 **Review-этикет, каталог внешних скиллов, agnix** — курируемо из второго набора (13
