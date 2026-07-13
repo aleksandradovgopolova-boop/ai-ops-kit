@@ -159,11 +159,13 @@
 
 Скиллы, поставляемые китом (грузятся раннером из `.claude/skills/`). Реестр — `manifest.skills.shipped`.
 
+- `skills/contradiction-resolution/SKILL.md`
 - `skills/product-session-review/SKILL.md`
+- `skills/system-constraint-analysis/SKILL.md`
 
 ## rules/
 
-Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы/адаптивности).
+Правила: core, ai (EvalPolicy, EvalTooling, red-team-checklist), product, engineering, quality + design (чек-листы Nielsen/WCAG/дизайн-системы/адаптивности), research (разбор сессий), thinking (ограничения, противоречия).
 
 - `rules/ai/CostAndTokenPolicy.md`
 - `rules/ai/EvalPolicy.md`
@@ -193,6 +195,8 @@
 - `rules/engineering/ErrorHandling.md`
 - `rules/product/MeasurementBaseline.md`
 - `rules/research/session-review.yaml`
+- `rules/thinking/constraint-analysis.yaml`
+- `rules/thinking/contradiction-resolution.yaml`
 - `rules/quality/AccessibilityBaseline.md`
 - `rules/quality/PerformanceBudget.md`
 - `rules/quality/QualityGates.md`

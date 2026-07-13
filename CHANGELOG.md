@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.8.0] — 2026-07-13
+
+**Systems Thinking (два скилла)** — дисциплины системного мышления как opt-in скиллы:
+находить главное ограничение и устранять компромиссы, а не оптимизировать всё подряд и
+не искать «золотую середину». Из шести скиллов исходного набора взяты два самых
+самодостаточных и не пересекающихся с китом; leverage — кандидат на потом; why-tree
+(multi-agent, дублирует deep-research/INSIGHTS) и stockflow-builder (генерация
+HTML-симуляторов) отклонены осознанно.
+
+### Added
+- **skills/system-constraint-analysis/SKILL.md** — теория ограничений Голдратта: гейт на
+  цель/единицу пропускной способности, извлечение потока, классификация системы
+  (потоковая/demand-constrained/исследовательская), локализация ОДНОГО ограничения,
+  презумпция политики, 5 фокусирующих шагов (Exploit/Subordinate до Elevate), оценка по
+  T↑/I↓/OE↓. Адаптировано из constraint-finder (MIT), инструмент-агностично.
+- **skills/contradiction-resolution/SKILL.md** — ТРИЗ: техническое + физическое
+  противоречие, классификатор структура/физика (не фабриковать разрешение закона), IFR,
+  4 разделения + 40 приёмов, гейт фальсификации «растворение vs релокация стоимости».
+  Адаптировано из triz-dissolve (MIT).
+- **rules/thinking/constraint-analysis.yaml** (10 пунктов) и
+  **rules/thinking/contradiction-resolution.yaml** (9 пунктов) — машиночитаемые гейты к
+  скиллам; находки ссылаются на id.
+
+### Changed
+- **manifest.skills.shipped**: +2 скилла (реестр поставляемых китом скиллов). Инсталлятор
+  (v2.7) раскладывает их в child `.claude/skills/` автоматически.
+- Проводка (opt-in): INSIGHTS.insight-synthesis → `uses_skills: [system-constraint-analysis]`;
+  ENGINEERING/PRODUCT.specification → `uses_skills: [contradiction-resolution]`.
+  Агенты product-analyst и solution-architect ссылаются на соответствующие скиллы.
+- NOTICE.md: атрибуция systems-thinking-skills (MIT).
+
 ## [2.7.0] — 2026-07-13
 
 **Product Session Review** — первый скилл, который поставляет сам кит. Дисциплина

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.7.0
+  package_version: 2.8.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -45,6 +45,14 @@ skills:
       path: skills/product-session-review/SKILL.md
       opt_in: true
       checklist: rules/research/session-review.yaml
+    - id: system-constraint-analysis    # v2.8, opt-in; used_by INSIGHTS.insight-synthesis, product-analyst
+      path: skills/system-constraint-analysis/SKILL.md
+      opt_in: true
+      checklist: rules/thinking/constraint-analysis.yaml
+    - id: contradiction-resolution      # v2.8, opt-in; used_by PRODUCT.specification, solution-architect
+      path: skills/contradiction-resolution/SKILL.md
+      opt_in: true
+      checklist: rules/thinking/contradiction-resolution.yaml
 
 quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,

@@ -22,7 +22,10 @@ vendor_neutral: true
 - описать события и свойства;
 - определить сегменты и guardrail metrics;
 - выявить аналитические ограничения;
-- подготовить план post-release анализа.
+- подготовить план post-release анализа;
+- при разборе «почему процесс/метрика буксует» применять скилл
+  `system-constraint-analysis` (теория ограничений; чек-лист
+  `rules/thinking/constraint-analysis.yaml`).
 
 ## Результат
 

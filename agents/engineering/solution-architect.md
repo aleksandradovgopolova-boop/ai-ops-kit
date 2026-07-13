@@ -15,6 +15,10 @@ vendor_neutral: true
 
 Проектирует варианты решения, оценивает системные риски и фиксирует архитектурное решение без преждевременной детализации кода.
 
+Для архитектурных компромиссов (`Architectural compromises`) применять скилл
+`contradiction-resolution` (ТРИЗ): устранять противоречие, а не балансировать;
+чек-лист `rules/thinking/contradiction-resolution.yaml`.
+
 ## Результат
 
 ```markdown

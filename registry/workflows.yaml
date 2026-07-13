@@ -47,7 +47,7 @@ workflows:
     stages:
       - {id: requirements, owner: requirements-writer, writer: requirements-writer, review_mode: writer}
       - {id: requirements-review, owner: requirements-reviewer, review_mode: read-only}
-      - {id: specification, owner: solution-architect, writer: solution-architect, review_mode: writer}
+      - {id: specification, owner: solution-architect, writer: solution-architect, review_mode: writer, uses_skills: [contradiction-resolution]}
       - {id: plan, owner: task-planner, writer: task-planner, review_mode: writer}
       - {id: plan-critique, owner: plan-reviewer, review_mode: read-only}
       - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
@@ -84,7 +84,7 @@ workflows:
       - {id: hypotheses, owner: experiment-designer, writer: experiment-designer, review_mode: writer, preset: product-discovery}
       - {id: discovery-review, owner: product-reviewer, review_mode: read-only}
       - {id: requirements, owner: requirements-writer, writer: requirements-writer, review_mode: writer}
-      - {id: specification, owner: solution-architect, writer: solution-architect, review_mode: writer}
+      - {id: specification, owner: solution-architect, writer: solution-architect, review_mode: writer, uses_skills: [contradiction-resolution]}
       - {id: plan, owner: task-planner, writer: task-planner, review_mode: writer}
       - {id: plan-critique, owner: plan-reviewer, review_mode: read-only}
       - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
@@ -203,7 +203,7 @@ workflows:
       - {id: data-collection, owner: product-analyst, writer: product-analyst, review_mode: writer, uses_skills: [product-session-review]}
       # health-report считает детерминированно tools/product_health.py — не LLM
       - {id: health-report, owner: product-analyst, writer: product-analyst, review_mode: writer, uses_tools: [product_health]}
-      - {id: insight-synthesis, owner: product-analyst, writer: product-analyst, review_mode: writer}
+      - {id: insight-synthesis, owner: product-analyst, writer: product-analyst, review_mode: writer, uses_skills: [system-constraint-analysis]}
       - {id: insight-review, owner: product-reviewer, review_mode: read-only}
       - {id: hypotheses-for-discovery, owner: experiment-designer, writer: experiment-designer, review_mode: writer, preset: product-discovery}
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
