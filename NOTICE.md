@@ -28,6 +28,9 @@
   копировался. Multi-agent-скиллы не брались (у кита оркестратор sequential-only).
 - **agnix** (https://github.com/avifenesh/agnix) — задекларирован как опциональный
   линтер AI-конфигов (`registry/tools.yaml`, status: declared); не вендорился.
+- **rendergit** (https://github.com/karpathy/rendergit, BSD0) — задекларирован как
+  опциональный инструмент «репозиторий → одностраничный HTML» (`registry/tools.yaml`,
+  status: declared); не вендорился.
 - **Каталог внешних скиллов** (`registry/skills-catalog.yaml`, status: declared, ставятся
   на уровне child): vercel-labs/agent-skills (react-best-practices, web-design-guidelines),
   supabase/agent-skills (postgres-best-practices), google-labs-code/skills (shadcn-ui),
