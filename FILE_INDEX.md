@@ -23,11 +23,13 @@
 
 ## docs/
 
-Документация для людей: Quickstart (+типовые ошибки), Walkthrough (сквозной сценарий), гайд внедрения по ролям.
+Документация для людей: Onboarding (ценность простым языком), Quickstart (+типовые ошибки), Walkthrough (сквозной сценарий), гайд внедрения по ролям, параллельные сессии.
 
+- `docs/ONBOARDING.md`
 - `docs/QUICKSTART.md`
 - `docs/WALKTHROUGH.md`
 - `docs/adoption-guide.md`
+- `docs/parallel-sessions.md`
 
 ## manifest/
 
