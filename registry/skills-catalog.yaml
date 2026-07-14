@@ -64,6 +64,42 @@ product_skills:
     license: MIT
     status: declared
 
+# Учебно-тренировочные референсы (обучение/дообучение своей модели).
+# Кит НЕ обучает модели — он строит продукты на LLM; эти материалы не исполняются
+# китом и не вендорятся. Курируемый шорт-лист на редкий случай «делаем свою модель»
+# (A. Karpathy). Использование — на уровне child/команды, лицензии проверить.
+model_training:
+  - id: nn-zero-to-hero
+    category: learning
+    source: "github: karpathy/nn-zero-to-hero"
+    purpose: "лучший вход: нейросети с нуля до GPT (курс + код). Начинать отсюда"
+    license: MIT
+    status: declared
+  - id: nanoGPT
+    category: learning
+    source: "github: karpathy/nanoGPT"
+    purpose: "минимальная реализация обучения/дообучения GPT — из чего технически состоит модель"
+    license: MIT
+    status: declared
+  - id: nanochat
+    category: learning
+    source: "github: karpathy/nanochat"
+    purpose: "компактный стек «свой ChatGPT»: обучение, токенизация, инференс, чат-интерфейс"
+    license: MIT
+    status: declared
+  - id: LLM101n
+    category: learning
+    source: "github: karpathy/LLM101n"
+    purpose: "образовательная программа: создание своей LLM/AI-системы с нуля"
+    license: "проверить в репозитории"
+    status: declared
+  - id: llm.c
+    category: learning
+    source: "github: karpathy/llm.c"
+    purpose: "обучение GPT-2 на чистом C/CUDA без PyTorch-абстракций — для глубокого понимания"
+    license: MIT
+    status: declared
+
 # Как подключить (child):
 # 1) свериться с governance/information-boundaries.md и лицензией источника;
 # 2) скопировать скилл в <child>/.claude/skills/<id>/ (как это делает installer для shipped);

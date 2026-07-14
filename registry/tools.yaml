@@ -140,6 +140,14 @@ tools:
     provides: [ai_config_lint]
     source: "github: avifenesh/agnix (лицензию проверить до adoption)"
     status: declared
+  - id: rendergit
+    protocol: cli
+    deterministic: true
+    purpose: "репозиторий -> одна статическая HTML-страница с навигацией/подсветкой/markdown + LLM-view; браузерная карта архива, дополняет текстовый FILE_INDEX.md"
+    permission_level: local
+    provides: [repo_html_render]
+    source: "github: karpathy/rendergit (BSD0)"
+    status: declared
 
 permission_levels:
   - read-only
