@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.25.0] — 2026-07-15
+
+**Session & Repository Orchestration — Срез 4: merge→memory flow.** Знание задачи не
+теряется при мердже: что изменилось, какие решения, какие уроки — фиксируется в
+репозиторную память.
+
+### Added
+- **tools/merge_memory.py** (+ selftest) — `record` пишет запись в
+  `memory/lessons-learned/<дата>-<id>.md` в формате памяти (источник, owner, дата
+  проверки, условие устаревания; зоны, решения со ссылкой на `decisions/registry.yaml`,
+  уроки).
+
+### Changed
+- **commands/task/ai-finish-task.md** — шаг «обновить repository memory (merge→memory)»
+  через инструмент + шаг удаления worktree.
+- **manifest** — `session_orchestration.merge_to_memory` (перенесено из `not_yet`);
+  `package_version` → 2.25.0.
+
 ## [2.24.0] — 2026-07-15
 
 **Session & Repository Orchestration — Срез 3: worktree на WorkItem.** Изоляция файлов
