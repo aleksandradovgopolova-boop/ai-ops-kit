@@ -2,6 +2,38 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.22.0] — 2026-07-15
+
+**Session & Repository Orchestration — Срез 1.** Начало внешнего слоя автоматики вокруг
+ядра `task → workflow → agents → gates`: чтобы новая сессия не начинала с «а что вообще
+происходит в этом репозитории?», а параллельные сессии не уничтожали работу друг друга.
+Кит даёт скиллы/команды/инструменты/схему; «само-срабатывание» (распознать «подключи AI
+Ops», авто-старт bootstrap, worktree-per-WorkItem) — поведение рантайма, объявлено честно
+как runtime-binding (`verified_against_deploy: false`), а не как возможность кита.
+
+### Added
+- **skills/repo-onboarding/SKILL.md** (+ `rules/meta/repo-onboarding.yaml`) — первичный
+  онбординг репозитория: агент исследует стек/структуру/сущности/дизайн-систему/правила/
+  интеграции/метрики/словарь/риски и заполняет **черновики** `context/*`. Инвариант
+  writer≠judge: источник истины подтверждает человек; ничего не выдумывается —
+  неопределённое помечается «требует подтверждения»; секреты не собираются. opt-in.
+- **schemas/active-work.schema.json** + **tools/active_work.py** (+ selftest) — реестр
+  активных работ репозитория: `register`/`list`/`finish` и `check` — **conflict forecast**
+  (предупреждение о пересечении зон между сессиями ДО старта, с вариантами решения).
+  Работа не ведётся в main; each WorkItem — своя ветка, зоны, owner-сессия.
+  Живёт в child по `.ai/runtime/active-work.yaml`, видна всем параллельным сессиям.
+- **commands/task/ai-session-start.md** — session bootstrap: manifest → продуктовый
+  контекст → свежие решения → ветка+WorkItem → параллельные работы (conflict forecast) →
+  короткое резюме → старт. Runtime-исполняемая: только читает, не меняет.
+
+### Changed
+- **commands/task/ai-start-task.md** — шаг регистрации работы в реестре активных работ
+  (со своей ветки, не из main) + показ conflict forecast перед стартом.
+- **commands/task/ai-finish-task.md** — шаг снятия работы с реестра (освобождение зон).
+- **manifest/ai-ops-manifest.yaml** — раздел `session_orchestration` (repo_onboarding,
+  active_work_registry, session_bootstrap, memory_split shared/isolated, честный `not_yet`);
+  скилл repo-onboarding в `skills.shipped`; `package_version` → 2.22.0.
+
 ## [2.21.0] — 2026-07-15
 
 **Спецификация постоянного агента (Robin) — runtime-агностичная.** Кит описывает, что

@@ -23,10 +23,17 @@
 5. Создать **WorkItem** — единую сущность изменения (`tools/workitem.py start <features-dir>
    <feature-id> --task "…"`): один id связывает workflow, Feature Blueprint и прогон
    оркестратора. Blueprint создаётся/находится по этому id; стадии публикуют артефакты в него.
-6. Запросить только обязательные approvals (обязательно — для critical/protected).
-7. Инициализировать `TaskState` (прогон внутри WorkItem) и передать управление команде
+6. **Зарегистрировать работу в реестре активных работ** для координации параллельных
+   сессий: `tools/active_work.py register .ai/runtime/active-work.yaml <id> --branch
+   <ветка> --areas <затрагиваемые зоны> --session <id сессии> --workitem
+   features/<id>/workitem.yaml`. Работа ведётся в своей ветке/worktree, **не в main**.
+   Инструмент вернёт conflict forecast — если зоны пересекаются с другой активной
+   сессией, показать предупреждение и варианты (дождаться / перенести зависимость /
+   объединить / зафиксировать общий контракт / работать в разных слоях) до старта.
+7. Запросить только обязательные approvals (обязательно — для critical/protected).
+8. Инициализировать `TaskState` (прогон внутри WorkItem) и передать управление команде
    выбранного workflow (`ai-<workflow>`).
-8. Итог всего изменения — **единый статус WorkItem** (`tools/workitem.py status`):
+9. Итог всего изменения — **единый статус WorkItem** (`tools/workitem.py status`):
    `done` / `blocked` / `needs_human_decision` / `needs_more_evidence`. Не два разных
    статуса (прогон и blueprint), а один.
 

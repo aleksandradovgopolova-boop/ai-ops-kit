@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.21.0
+  package_version: 2.22.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -74,6 +74,10 @@ skills:
       path: skills/product-demo-video/SKILL.md
       opt_in: true
       checklist: rules/content/demo-video.yaml
+    - id: repo-onboarding               # v2.22, opt-in; первичный онбординг репо -> черновики context/*
+      path: skills/repo-onboarding/SKILL.md
+      opt_in: true
+      checklist: rules/meta/repo-onboarding.yaml
   authoring_convention: rules/meta/skill-authoring.yaml   # v2.11: конвенция авторинга (из skill-creator)
 
 quality_gates:
@@ -150,6 +154,32 @@ security_policies:
   policies: governance/security-policies.md
   information_boundaries: governance/information-boundaries.md
   audit_log: ".ai/runtime/interaction-log.jsonl"       # append-only действия ИИ (orchestrator)
+
+session_orchestration:
+  # v2.22: внешний слой автоматики вокруг ядра task->workflow->agents->gates.
+  # Срез 1: онбординг репозитория + реестр активных работ + session bootstrap.
+  # Кит даёт скиллы/команды/инструменты/схему; «само-срабатывание» (распознать «подключи
+  # AI Ops», авто-старт bootstrap в новой сессии, worktree-per-WorkItem) — поведение
+  # рантайма, объявляется как runtime-binding, не как возможность кита.
+  status: partial
+  verified_against_deploy: false            # ЧЕСТНО: авто-триггеры рантайма отсюда не проверялись
+  repo_onboarding:
+    skill: skills/repo-onboarding/SKILL.md
+    checklist: rules/meta/repo-onboarding.yaml
+    writes: context/**                       # черновики; источник истины подтверждает человек
+  active_work_registry:
+    schema: schemas/active-work.schema.json
+    tool: tools/active_work.py               # register/list/check(conflict forecast)/finish
+    child_path: ".ai/runtime/active-work.yaml"   # видна всем параллельным сессиям
+  session_bootstrap:
+    command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет
+  memory_split:
+    shared: [context/**, decisions/registry.yaml, registry/entities.yaml]   # общая продуктовая память
+    isolated: [".ai/runtime/**", ".ai/generated/**"]                        # состояние прогона/сессии
+  not_yet:                                    # честно: ещё не закрыто (следующие срезы)
+    - conversational-install ("подключи AI Ops" -> авто-установка)          # runtime-триггер
+    - worktree-per-workitem                                                 # изоляция файлов
+    - merge->memory auto-update flow
 
 runtime_spec:
   # v2.21: спецификация постоянного агента-ассистента (Robin), runtime-агностичная.

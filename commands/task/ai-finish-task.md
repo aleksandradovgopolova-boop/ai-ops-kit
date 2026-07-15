@@ -11,6 +11,9 @@
 3. Подготовить release/merge handoff.
 4. Обновить repository memory.
 5. Закрыть TaskState.
+6. **Снять работу с реестра активных работ**: `tools/active_work.py finish
+   .ai/runtime/active-work.yaml <id>` — чтобы параллельные сессии видели, что зоны
+   освободились, и conflict forecast был точным.
 
 ## Результат
 

@@ -155,6 +155,7 @@
 - `commands/task/ai-finish-task.md`
 - `commands/task/ai-implement.md`
 - `commands/task/ai-plan-task.md`
+- `commands/task/ai-session-start.md` — session bootstrap новой сессии (v2.22)
 - `commands/task/ai-start-task.md`
 - `commands/task/ai-verify.md`
 
@@ -167,6 +168,7 @@
 - `skills/e2e-browser-testing/SKILL.md`
 - `skills/frontend-design/SKILL.md`
 - `skills/product-demo-video/SKILL.md`
+- `skills/repo-onboarding/SKILL.md` — первичный онбординг репо -> черновики context/* (v2.22)
 - `skills/product-session-review/SKILL.md`
 - `skills/system-constraint-analysis/SKILL.md`
 - `skills/user-documentation/SKILL.md`
@@ -205,6 +207,7 @@
 - `rules/engineering/DatabaseChanges.md`
 - `rules/engineering/DependencyPolicy.md`
 - `rules/engineering/ErrorHandling.md`
+- `rules/meta/repo-onboarding.yaml` — чек-лист онбординга репозитория (v2.22)
 - `rules/meta/skill-authoring.yaml`
 - `rules/product/MeasurementBaseline.md`
 - `rules/research/session-review.yaml`
@@ -423,6 +426,7 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 
 JSON Schema публичных контрактов: gate-result, route-decision, child-config, feature-blueprint, knowledge-graph, product-health, update-result и др.
 
+- `schemas/active-work.schema.json` — реестр активных работ, conflict forecast (v2.22)
 - `schemas/capability-entry.schema.json`
 - `schemas/child-config.schema.json`
 - `schemas/decisions-registry.schema.json`
@@ -529,6 +533,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/orchestrator.py`
 - `tools/product_health.py`
 - `tools/run_report.py`
+- `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/workitem.py`
 
 ## installer/
