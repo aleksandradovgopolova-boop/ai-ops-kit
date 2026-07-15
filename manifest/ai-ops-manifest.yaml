@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.24.0
+  package_version: 2.25.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -181,12 +181,17 @@ session_orchestration:
     note: >
       Инструмент создаёт worktree реально (тест на temp-репо); «сессия автоматически берёт
       свой worktree» — шаг рантайма через ai-start-task, не гарантия кита.
+  merge_to_memory:                            # v2.25: обновление памяти при мердже WorkItem
+    tool: tools/merge_memory.py                # record -> memory/lessons-learned/<дата>-<id>.md
+    flow: commands/task/ai-finish-task.md      # шаг «обновить repository memory»
+    note: >
+      Инструмент записи и flow — в ките; «авто» на реальном событии мерджа (хук CI/рантайма)
+      — шаг рантайма, не гарантия кита.
   memory_split:
     shared: [context/**, decisions/registry.yaml, registry/entities.yaml]   # общая продуктовая память
     isolated: [".ai/runtime/**", ".ai/generated/**", ".ai/worktrees/**"]    # состояние прогона/сессии
   not_yet:                                    # честно: ещё не закрыто (следующие срезы)
     - conversational-install ("подключи AI Ops" -> авто-установка)          # runtime-триггер
-    - merge->memory auto-update flow
 
 runtime_spec:
   # v2.21: спецификация постоянного агента-ассистента (Robin), runtime-агностичная.

@@ -9,11 +9,16 @@
 1. Проверить Final Verification.
 2. Обновить источники истины.
 3. Подготовить release/merge handoff.
-4. Обновить repository memory.
+4. **Обновить repository memory (merge→memory)**: `tools/merge_memory.py record
+   <memory-dir> <id> --summary "что изменилось" --areas <зоны> --decisions "…"
+   --lessons "…"` — зафиксировать знание задачи как lessons-learned. Значимые/необратимые
+   решения дополнительно занести эпизодом в `decisions/registry.yaml`.
 5. Закрыть TaskState.
 6. **Снять работу с реестра активных работ**: `tools/active_work.py finish
    .ai/runtime/active-work.yaml <id>` — чтобы параллельные сессии видели, что зоны
    освободились, и conflict forecast был точным.
+7. **Удалить worktree** (если создавался): `tools/worktree.py remove <id>` — ветка
+   сохраняется, каталог освобождается.
 
 ## Результат
 
