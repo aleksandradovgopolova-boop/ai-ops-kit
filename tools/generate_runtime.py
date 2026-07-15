@@ -125,6 +125,41 @@ def render_start_task(runtime, workflows):
 """
 
 
+def render_ai_ops_init(runtime):
+    """Разговорная установка/онбординг: «подключи AI Ops» → адаптер исполняет установку и
+    первичный онбординг репозитория. Реальную установку делает installer/ai_ops.py; онбординг
+    (черновики context/*) — скилл repo-onboarding; выбор рантайма/включение — человек."""
+    header = ("---\ndescription: Подключить AI Ops и подготовить репозиторий (установка + онбординг)\n---\n"
+              if runtime == "claude-code" else "")
+    return f"""{header}# ai-ops-init — разговорная установка и онбординг
+
+Сгенерировано из registry/ — НЕ редактировать вручную
+(перегенерация: python3 tools/generate_runtime.py).
+
+## Что делает
+Превращает «подключи AI Ops и подготовь репозиторий» в шаги, без ручных python-команд
+от пользователя. Установку и онбординг исполняет этот раннтайм; кит даёт CLI и скилл.
+
+## Порядок (исполняет этот раннтайм)
+1. Найти доступный кит (parent): локальный чекаут или склонировать источник из
+   `.ai-ops.yaml → parent.source` (при первом подключении — путь к киту известен из запроса).
+2. Установить: `python3 <kit>/installer/ai_ops.py init .` → создаётся `.ai/` (managed/
+   project/custom/generated/runtime) + `.ai-ops.yaml`. Проверить: `... doctor`.
+3. Онбординг репозитория — скилл `repo-onboarding`: исследовать стек/структуру/сущности/
+   дизайн-систему/правила/интеграции/метрики/словарь и заполнить **черновики** `context/*`
+   (источник истины подтверждает человек; ничего не выдумывать; секреты не собирать).
+4. Предложить (не включать сам) подходящие presets/workflow по определённому стеку.
+5. Короткий отчёт человеку: что определено (стек, интеграции), что активировано, что
+   требует подтверждения. Дальше задачи ставятся обычным языком (`ai-start-task`), новая
+   сессия стартует через `ai-session-start`.
+
+## Границы (честно)
+- Реальную установку делает `installer/ai_ops.py` (silent update запрещён; обновления —
+  через diff/PR). Распознавание фразы «подключи AI Ops» и запуск — поведение рантайма.
+- Ничего не выдумывать в `context/*`; неопределённое — «требует подтверждения человеком».
+"""
+
+
 def generate(child_root: Path, verbose=True):
     workflows, agents = load_sources()
     out_files = []
@@ -140,6 +175,10 @@ def generate(child_root: Path, verbose=True):
         st = base / "ai-start-task.md"
         st.write_text(render_start_task(runtime, workflows), encoding="utf-8")
         out_files.append(st)
+        # разговорная установка/онбординг (один на runtime)
+        it = base / "ai-ops-init.md"
+        it.write_text(render_ai_ops_init(runtime), encoding="utf-8")
+        out_files.append(it)
     meta = {
         "schema_version": 1,
         "package_version": (PKG / "VERSION").read_text(encoding="utf-8").strip(),
@@ -200,6 +239,18 @@ def selftest():
                 ok = False; print(f"FAIL в ai-start-task нет '{token}'")
         else:
             print("PASS ai-start-task включает классификацию/маршрутизацию/эскалацию")
+        # разговорная установка ai-ops-init сгенерирована для каждого runtime
+        it_files = [p for p in files if p.stem == "ai-ops-init"]
+        if len(it_files) == len(RUNTIMES):
+            print(f"PASS ai-ops-init сгенерирован для {len(RUNTIMES)} runtime")
+        else:
+            ok = False; print(f"FAIL ai-ops-init не для всех runtime ({len(it_files)}/{len(RUNTIMES)})")
+        it_text = next((p.read_text(encoding="utf-8") for p in it_files if "claude-code" in str(p)), "")
+        for token in ("installer/ai_ops.py", "repo-onboarding", "doctor"):
+            if token not in it_text:
+                ok = False; print(f"FAIL в ai-ops-init нет '{token}'")
+        else:
+            print("PASS ai-ops-init включает установку/онбординг/doctor")
         if check_drift(root):
             ok = False; print("FAIL свежая генерация помечена как drift")
         else:

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.25.0
+  package_version: 2.26.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -187,11 +187,20 @@ session_orchestration:
     note: >
       Инструмент записи и flow — в ките; «авто» на реальном событии мерджа (хук CI/рантайма)
       — шаг рантайма, не гарантия кита.
+  conversational_install:                     # v2.26: «подключи AI Ops» -> установка+онбординг
+    generated_command: ai-ops-init             # tools/generate_runtime.py -> .claude/commands/
+    installer: installer/ai_ops.py             # реальную установку делает CLI (silent update запрещён)
+    onboarding_skill: skills/repo-onboarding/SKILL.md
+    note: >
+      Кит генерирует команду ai-ops-init (установка -> doctor -> repo-onboarding -> предложить
+      presets -> отчёт). Распознавание естественной фразы «подключи AI Ops» и запуск — шаг
+      рантайма; verified_against_deploy: false.
   memory_split:
     shared: [context/**, decisions/registry.yaml, registry/entities.yaml]   # общая продуктовая память
     isolated: [".ai/runtime/**", ".ai/generated/**", ".ai/worktrees/**"]    # состояние прогона/сессии
-  not_yet:                                    # честно: ещё не закрыто (следующие срезы)
-    - conversational-install ("подключи AI Ops" -> авто-установка)          # runtime-триггер
+  # not_yet закрыт: все четыре среза Session & Repository Orchestration поставлены
+  # (onboarding, active-work+связи, worktree, merge->memory, conversational install).
+  # Остаётся runtime-часть: авто-срабатывание триггеров — привязка на уровне рантайма.
 
 runtime_spec:
   # v2.21: спецификация постоянного агента-ассистента (Robin), runtime-агностичная.
