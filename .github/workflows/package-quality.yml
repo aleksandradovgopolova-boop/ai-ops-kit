@@ -75,3 +75,7 @@ jobs:
         run: |
           python3 validation/validate_decisions.py --selftest
           python3 validation/validate_decisions.py
+      - name: Синхронность чеклиста AGENTS.md ↔ CI (drift-control)
+        run: |
+          python3 validation/validate_agents_checklist.py --selftest
+          python3 validation/validate_agents_checklist.py

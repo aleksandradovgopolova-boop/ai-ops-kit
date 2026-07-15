@@ -45,9 +45,20 @@ python3 validation/validate_openspec_change.py examples/openspec-demo
 python3 validation/validate_feature_blueprint.py --selftest
 python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout
 python3 validation/validate_cross_artifacts.py --selftest
+python3 validation/validate_cross_artifacts.py examples/feature-blueprint-demo/express-checkout
 python3 validation/validate_knowledge_graph.py --selftest
 python3 validation/validate_knowledge_graph.py examples/knowledge-graph-demo/graph.yaml
 python3 tools/product_health.py --selftest
+python3 tools/product_health.py examples/product-health-demo/input.yaml
+python3 validation/validate_references.py
+python3 validation/validate_claims.py --selftest
+python3 validation/validate_claims.py
+python3 validation/validate_freshness.py --selftest
+python3 validation/validate_freshness.py context
+python3 validation/validate_decisions.py --selftest
+python3 validation/validate_decisions.py
+python3 validation/validate_agents_checklist.py --selftest
+python3 validation/validate_agents_checklist.py
 ```
 
 ## Ключевые инварианты (валидаторы их проверяют, но знать заранее дешевле)
