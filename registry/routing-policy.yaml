@@ -19,9 +19,9 @@ inputs:
 # по selection_criteria.task_type из registry/workflows.yaml (единый источник, v2.1.1).
 # Неизвестный task_type -> ENGINEERING с причиной в reasons (сквозного passthrough нет).
 workflow_rules:
-  # critical-эскалация объявлена ПЕРВОЙ (приоритет над task_type). CRITICAL — post-MVP:
-  # пока контракт не зарегистрирован в workflows.yaml, движок применяет это как эскалацию
-  # к базовому workflow (reason + ручное одобрение), а не возвращает несуществующий workflow.
+  # critical-эскалация объявлена ПЕРВОЙ (приоритет над task_type). CRITICAL зарегистрирован
+  # в workflows.yaml (v2.15) — движок возвращает его как workflow с эскалацией и ручным
+  # одобрением. Guard в ai_route всё равно не даёт вернуть НЕзарегистрированный контракт.
   - when: {risk: critical}
     workflow: CRITICAL
     escalate_reason: "critical risk overrides declared task_type"

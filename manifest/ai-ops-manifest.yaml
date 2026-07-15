@@ -36,7 +36,7 @@ registries:
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
-  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4) + Decision Intelligence (v2.10)
+  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION, CRITICAL]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4) + Decision Intelligence (v2.10) + CRITICAL (цель critical-эскалации)
 
 skills:
   # Скиллы, которые поставляет сам кит (грузятся в .claude/skills/ у child).
