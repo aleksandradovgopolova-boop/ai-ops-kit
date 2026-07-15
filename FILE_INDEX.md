@@ -158,6 +158,7 @@
 - `commands/task/ai-session-start.md` — session bootstrap новой сессии (v2.22)
 - `commands/task/ai-start-task.md`
 - `commands/task/ai-verify.md`
+- `commands/task/ai-worktree.md` — изоляция работы через git worktree (v2.24)
 
 ## skills/
 
@@ -534,6 +535,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/product_health.py`
 - `tools/run_report.py`
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
+- `tools/worktree.py` — git worktree на WorkItem, изоляция параллельных сессий (v2.24)
 - `tools/workitem.py`
 
 ## installer/

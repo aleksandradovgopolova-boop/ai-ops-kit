@@ -47,6 +47,8 @@ jobs:
         run: python3 tools/workitem.py --selftest
       - name: Реестр активных работ + conflict forecast (selftest)
         run: python3 tools/active_work.py --selftest
+      - name: Изоляция работы через git worktree (selftest)
+        run: python3 tools/worktree.py --selftest
       - name: Постура безопасности (selftest + evidence-drift)
         run: |
           python3 validation/validate_security_posture.py --selftest
