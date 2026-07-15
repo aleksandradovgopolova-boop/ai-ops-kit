@@ -2,6 +2,14 @@
 # Runtime = среда исполнения агента. Отделена от provider и model.
 # execution_modes: native | orchestrated | sequential | manual-assisted
 # status: declared | documented | verified | degraded | unsupported | unknown
+#
+# adapter_depth (честная глубина адаптера; для mvp_adapter: true — обязателен):
+#   executing          — код кита сам исполняет контракт: проводит стадии и БЛОКИРУЕТ
+#                        по гейтам (tools/orchestrator.py + tools/gate_executor.py);
+#   generated-commands — адаптер лишь ГЕНЕРИРУЕТ runtime-native точки входа (команды/
+#                        промпты); исполнение стадий, handoff и enforcement гейтов
+#                        выполняет сам раннтайм, следуя им, — не код кита;
+#   manual-assisted    — одна модель исполняет роли последовательно с помощью harness.
 schema_version: 1
 registry_type: runtimes
 
@@ -10,6 +18,12 @@ runtimes:
     display_name: Claude Code
     kind: cli-agent
     mvp_adapter: true
+    adapter_depth: generated-commands
+    adapter_note: >
+      Адаптер генерирует .claude/commands/ (tools/generate_runtime.py) и ставит их
+      при install. Стадии, handoff и enforcement гейтов исполняет сам Claude Code,
+      следуя командам; код кита их в этом раннтайме не оркестрирует. Полное
+      исполнение контракта с блокировкой гейтов — через generic-orchestrator.
     default_provider: anthropic
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: native
@@ -39,6 +53,10 @@ runtimes:
     display_name: Codex (CLI / app)
     kind: cli-agent
     mvp_adapter: true
+    adapter_depth: generated-commands
+    adapter_note: >
+      Адаптер генерирует $CODEX_HOME/prompts/ ($-промпты); исполнение стадий и
+      enforcement гейтов — на стороне Codex, не в коде кита.
     default_provider: openai
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: orchestrated
@@ -121,6 +139,11 @@ runtimes:
     display_name: Generic orchestrator (our own, provider-agnostic)
     kind: orchestrator
     mvp_adapter: true
+    adapter_depth: executing
+    adapter_note: >
+      Код кита сам исполняет контракт: tools/orchestrator.py проводит стадии
+      sequential с изоляцией ролей, tools/gate_executor.py блокирует переход по
+      невыполненным блокирующим гейтам (GateReport.json).
     default_provider: any
     execution_modes: [sequential]                # orchestrated (parallel scheduler) — planned, в коде не реализован
     preferred_mode: sequential
@@ -145,6 +168,7 @@ runtimes:
     display_name: Generic API (single model, sequential)
     kind: api-executor
     mvp_adapter: true
+    adapter_depth: manual-assisted
     default_provider: any
     execution_modes: [sequential, manual-assisted]
     preferred_mode: sequential

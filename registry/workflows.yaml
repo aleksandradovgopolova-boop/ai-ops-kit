@@ -310,4 +310,37 @@ workflows:
     learning_output: recommended
     maps_from: [workflows/ai-feature.md]
 
-# Post-MVP (объявлены, контракты позже): CRITICAL, DOCUMENT, LEGACY, INCIDENT.
+  CRITICAL:
+    id: CRITICAL
+    purpose: Критическое/необратимое изменение с максимальной строгостью — high/critical risk, hotfix, security-sensitive. Цель critical-эскалации маршрутизатора.
+    layer: extended
+    selection_criteria: {risk: critical, task_type: [hotfix, security-fix, incident-fix, critical-change]}
+    disqualifying_conditions:
+      - "risk ниже high — обычный workflow по task_type"
+    required_artifacts: [intake, RiskAssessment, TaskPlan, TaskState, VerificationEvidence, SecurityReview]
+    optional_artifacts: [ADR, LearningPatch]
+    stages:
+      - {id: intake, owner: intake-classifier, writer: intake-classifier, review_mode: writer}
+      # risk-assessment: обратимость, радиус поражения, blast-radius; вход для плана и одобрения
+      - {id: risk-assessment, owner: solution-architect, writer: solution-architect, review_mode: writer}
+      - {id: plan, owner: task-planner, writer: task-planner, review_mode: writer}
+      - {id: plan-critique, owner: plan-reviewer, review_mode: read-only}
+      - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer}
+      - {id: verify, owner: final-verifier, review_mode: read-only}
+      # security и code-review — независимые judge (writer != judge)
+      - {id: security-review, owner: security-reviewer, review_mode: read-only}
+      - {id: code-review, owner: code-reviewer, review_mode: read-only}
+      # human-approval: решение за человеком (one-way door); PM фиксирует бриф и одобрение
+      - {id: human-approval, owner: product-manager, writer: product-manager, review_mode: writer}
+      - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
+    quality_gates: [intake_completeness, plan_readiness, implementation_verification, security, code_review]
+    required_capabilities: [structured_output, file_read, file_write]
+    preferred_execution_mode: orchestrated
+    minimum_execution_mode: sequential
+    approval_policy: {human_approval_required: true, stage: human-approval}
+    archive_criteria: "все blocking gates pass (вкл. security); человек одобрил; evidence привязан к tested_revision"
+    resumability: TaskState + tasks
+    learning_output: required
+    maps_from: [workflows/hotfix.md, workflows/incident-resolution.md]
+
+# Post-MVP (объявлены, контракты позже): DOCUMENT, LEGACY, INCIDENT.

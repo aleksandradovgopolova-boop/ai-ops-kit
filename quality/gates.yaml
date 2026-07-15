@@ -27,7 +27,7 @@ gates:
     validator: validate-intake
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION]
+    applicability: [QUICK, ENGINEERING, PRODUCT, RESEARCH, VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION, CRITICAL]
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
@@ -68,7 +68,7 @@ gates:
     review_mode: read-only
     validator: validate-plan
     human_approval: false
-    applicability: [ENGINEERING, PRODUCT]
+    applicability: [ENGINEERING, PRODUCT, CRITICAL]
     stale_detection: {bind_to: artifact_hashes}
     required_evidence: [work_packages, dependencies, write_scope]
 
@@ -82,7 +82,7 @@ gates:
     validator: validate-evidence
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, AI_FEATURE]
+    applicability: [QUICK, ENGINEERING, PRODUCT, AI_FEATURE, CRITICAL]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [build_passed, lint_passed, tests_passed, tested_revision]
 
@@ -95,7 +95,7 @@ gates:
     review_mode: read-only
     human_approval: false
     checklist: rules/quality/code-review-etiquette.yaml
-    applicability: [ENGINEERING]
+    applicability: [ENGINEERING, CRITICAL]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [reviewed_revision, blockers_closed]
 

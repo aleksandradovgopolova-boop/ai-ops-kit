@@ -352,13 +352,21 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/ai-red-teamer.md`
 - `evaluations/agents/analytics-reviewer.md`
 - `evaluations/agents/architecture-reviewer.md`
+- `evaluations/agents/code-reviewer.md`
+- `evaluations/agents/context-builder.md`
 - `evaluations/agents/design-system-reviewer.md`
 - `evaluations/agents/documentation-reviewer.md`
+- `evaluations/agents/final-verifier.md`
+- `evaluations/agents/implementation-integrator.md`
+- `evaluations/agents/intake-classifier.md`
 - `evaluations/agents/llm-architect.md`
 - `evaluations/agents/observability-reviewer.md`
+- `evaluations/agents/plan-reviewer.md`
 - `evaluations/agents/product-analyst.md`
 - `evaluations/agents/product-reviewer.md`
+- `evaluations/agents/requirements-writer.md`
 - `evaluations/agents/solution-architect.md`
+- `evaluations/agents/task-planner.md`
 - `evaluations/agents/user-researcher.md`
 - `evaluations/agents/ux-reviewer.md`
 
@@ -450,6 +458,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/ai_managed_checksums.py`
 - `validation/ai_route.py`
 - `validation/validate_agent_evals.py`
+- `validation/validate_agents_checklist.py`
 - `validation/validate_ai_first_config.py`
 - `validation/validate_ai_first_providers.py`
 - `validation/validate_ai_first_registry.py`
@@ -468,9 +477,10 @@ JSON Schema публичных контрактов: gate-result, route-decision
 
 ## tools/
 
-Генераторы (runtime-команды, артефакты по blueprint), sequential-оркестратор, Product Health, run_report (оценка прогона + история срезов), effect_metrics (метрики эффекта).
+Генераторы (runtime-команды, артефакты по blueprint), sequential-оркестратор, gate executor (исполнение и блокировка quality gates), Product Health, run_report (оценка прогона + история срезов), effect_metrics (метрики эффекта).
 
 - `tools/effect_metrics.py`
+- `tools/gate_executor.py`
 - `tools/generate_artifacts.py`
 - `tools/generate_runtime.py`
 - `tools/orchestrator.py`

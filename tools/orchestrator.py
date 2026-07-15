@@ -74,7 +74,7 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
-                 provider=mock_provider, verbose=True):
+                 provider=mock_provider, verbose=True, gate_evidence=None):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -135,12 +135,32 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
             role = "judge" if stage.get("review_mode") == "read-only" else "writer"
             print(f"  stage {sid} [{owner}/{role}] -> stage-{sid}.md")
 
-    state["status"] = "done"
+    # gate executor: контур замыкается здесь — workflow НЕ done, пока блокирующие
+    # гейты контракта не выполнены (writer ≠ judge; честный отказ вместо тихого done).
+    sys.path.insert(0, str(PKG / "tools"))
+    import gate_executor
+    gates = gate_executor.evaluate(workflow_id, gate_evidence or {},
+                                   tested_revision=state.get("tested_revision"))
+    (run_dir / "GateReport.json").write_text(
+        json.dumps(gates, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     state["current_phase"] = None
+    state["gate_report"] = "GateReport.json"
+    if gates["blocked"]:
+        state["status"] = "blocked"
+        state["unmet_gates"] = gates["unmet_gates"]
+    else:
+        state["status"] = "done"
+        state.pop("unmet_gates", None)
     save_state(run_dir, state)
     if verbose:
-        print(f"OK: workflow {workflow_id} завершён sequential-режимом; "
-              f"{len(state['completed_checks'])} стадий, состояние: {run_dir / 'TaskState.yaml'}")
+        if gates["blocked"]:
+            print(f"BLOCKED: workflow {workflow_id} прошёл {len(state['completed_checks'])} стадий, "
+                  f"но блокирующие гейты не выполнены: {', '.join(gates['unmet_gates'])}. "
+                  f"Отчёт гейтов: {run_dir / 'GateReport.json'}")
+        else:
+            print(f"OK: workflow {workflow_id} завершён sequential-режимом; "
+                  f"{len(state['completed_checks'])} стадий, все блокирующие гейты выполнены; "
+                  f"состояние: {run_dir / 'TaskState.yaml'}")
     return state, run_dir
 
 
@@ -148,19 +168,39 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
 
 def selftest():
     ok = True
+    # evidence, эмулирующий выполненные блокирующие гейты QUICK (в реальном прогоне
+    # его дают reviewer-стадии/валидаторы; в mock — подаём явно, чтобы дойти до done)
+    quick_evidence = {"intake_completeness": {"status": "pass"},
+                      "implementation_verification": {"status": "pass"}}
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        state, run_dir = run_workflow("QUICK", "поправить опечатку в README", root, verbose=False)
-        if state["status"] != "done" or len(state["completed_checks"]) != 4:
-            ok = False; print("FAIL QUICK не дошёл до done")
+        # 1. без evidence блокирующие гейты не выполнены -> workflow BLOCKED (не done)
+        sb, rdb = run_workflow("QUICK", "поправить опечатку в README", root, verbose=False)
+        if sb["status"] == "blocked" and set(sb.get("unmet_gates", [])) == {
+                "intake_completeness", "implementation_verification"} and len(sb["completed_checks"]) == 4:
+            print("PASS QUICK без evidence: 4 стадии, но статус blocked (гейты не выполнены)")
         else:
-            print("PASS QUICK: 4 стадии, статус done")
+            ok = False; print(f"FAIL ожидался blocked с невыполненными гейтами, получено {sb['status']}")
+        if (rdb / "GateReport.json").exists():
+            print("PASS GateReport.json записан")
+        else:
+            ok = False; print("FAIL нет GateReport.json")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        # 2. с полным evidence -> done
+        state, run_dir = run_workflow("QUICK", "поправить опечатку в README", root,
+                                      verbose=False, gate_evidence=quick_evidence)
+        if state["status"] != "done" or len(state["completed_checks"]) != 4:
+            ok = False; print("FAIL QUICK с evidence не дошёл до done")
+        else:
+            print("PASS QUICK с evidence: 4 стадии, статус done")
         # resume: удалить состояние последней стадии и перезапустить
         st = load_state(run_dir)
         st["completed_checks"] = st["completed_checks"][:2]
         st["status"] = "in-progress"; st["next_action"] = "local-verify"
         save_state(run_dir, st)
-        state2, _ = run_workflow("QUICK", "поправить опечатку в README", root, verbose=False)
+        state2, _ = run_workflow("QUICK", "поправить опечатку в README", root,
+                                 verbose=False, gate_evidence=quick_evidence)
         if state2["status"] == "done" and len(state2["completed_checks"]) == 4:
             print("PASS resume: продолжил с прерванного места до done")
         else:

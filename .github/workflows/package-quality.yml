@@ -37,6 +37,8 @@ jobs:
         run: python3 tools/effect_metrics.py --selftest
       - name: Sequential-оркестратор (selftest)
         run: python3 tools/orchestrator.py --selftest
+      - name: Gate executor — исполнение и блокировка гейтов (selftest)
+        run: python3 tools/gate_executor.py --selftest
       - name: Presets
         run: python3 validation/validate_presets.py
       - name: Eval-кейсы изменённых агентов
@@ -75,3 +77,9 @@ jobs:
         run: |
           python3 validation/validate_decisions.py --selftest
           python3 validation/validate_decisions.py
+      - name: Синхронность чеклиста AGENTS.md ↔ CI (drift-control)
+        run: |
+          python3 validation/validate_agents_checklist.py --selftest
+          python3 validation/validate_agents_checklist.py
+      - name: "Инсталлер: e2e init + child-валидатор (selftest)"
+        run: python3 installer/ai_ops.py --selftest

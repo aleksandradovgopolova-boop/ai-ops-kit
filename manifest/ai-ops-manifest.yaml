@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.14.1
+  package_version: 2.15.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -36,7 +36,7 @@ registries:
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
-  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4) + Decision Intelligence (v2.10)
+  extended: [VISUAL, ANALYTICS, INSIGHTS, ADOPTION, AI_FEATURE, DECISION, CRITICAL]   # v1.3 + v2.0 + v2.1 + AI Product Pack (v2.4) + Decision Intelligence (v2.10) + CRITICAL (цель critical-эскалации)
 
 skills:
   # Скиллы, которые поставляет сам кит (грузятся в .claude/skills/ у child).
