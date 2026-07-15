@@ -16,7 +16,8 @@
   4-5) обнаружить прямые правки managed (checksums) — при drift БЛОКИРОВАТЬ (не молча);
   6) построить diff; 7) сделать backup; 8) применить миграции; 9) заменить managed-файлы;
   10) не трогать project/custom; 11) перегенерировать provenance/checksums;
-  12-14) прогнать валидаторы; 15) записать machine-readable отчёт
+  12-14) прогнать smoke-валидаторы — при провале ОТКАТ managed-слоя и версии из
+         backup (rollback-safe: полу-обновления не остаётся); 15) machine-readable отчёт
   (.ai/runtime/last-update-report.json, schemas/update-result.schema.json);
   16) коммит/PR делает человек или CI — silent update запрещён.
 
@@ -154,7 +155,9 @@ def installed_version():
     return str((cfg.get("parent") or {}).get("installed_version", ""))
 
 
-def detect_drift(root=MANAGED):
+def detect_drift(root=None):
+    if root is None:
+        root = MANAGED
     cs = root / ".checksums.json"
     if not cs.exists():
         return None
@@ -196,7 +199,9 @@ def build_diff():
     return changes
 
 
-def write_checksums(root=MANAGED):
+def write_checksums(root=None):
+    if root is None:
+        root = MANAGED
     files = {}
     for p in sorted(root.rglob("*")):
         if p.is_file() and p.name not in META and p.name != ".gitkeep":
@@ -206,13 +211,28 @@ def write_checksums(root=MANAGED):
     return len(files)
 
 
-def write_provenance(version, root=MANAGED, note=""):
+def write_provenance(version, root=None, note=""):
+    if root is None:
+        root = MANAGED
     doc = {"schema_version": 1, "package": "ai-first-system",
            "source": "git+<ai-ops-kit-repo-url>", "installed_version": version,
            "installed_at": None, "managed_root": ".ai/managed", "presets": [],
            "checksums_file": ".checksums.json",
            "note": note or "Installed/updated by ai-ops CLI."}
     (root / ".provenance.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def restore_managed_from(backup: Path):
+    """Атомарно вернуть managed-слой к состоянию backup (rollback)."""
+    if MANAGED.exists():
+        shutil.rmtree(MANAGED)
+    shutil.copytree(backup, MANAGED)
+
+
+SMOKE_CHECKS = [
+    ["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
+    ["validate_ai_first_providers.py"], ["validate_ai_first_workflows.py"],
+]
 
 
 def bump_child_config(version):
@@ -263,7 +283,7 @@ def cmd_diff():
     return 0
 
 
-def cmd_update(force=False):
+def cmd_update(force=False, smoke_checks=None):
     inst, target = installed_version(), pkg_version()
     report = {"schema_version": 1, "command": "update", "from_version": inst,
               "to_version": target, "status": "ok", "compatibility": "compatible",
@@ -324,8 +344,8 @@ def cmd_update(force=False):
             return 1
         r = subprocess.run([sys.executable, str(up), str(REPO_ROOT)])
         if r.returncode != 0:
-            if MANAGED.exists() and backup.exists():
-                shutil.rmtree(MANAGED); shutil.copytree(backup, MANAGED)
+            if backup.exists():
+                restore_managed_from(backup)
             report.update(status="failed", migrations_applied=applied,
                           report=f"миграция {step} провалена — managed-слой восстановлен из "
                                  f"backup, обновление прервано.")
@@ -353,13 +373,21 @@ def cmd_update(force=False):
     report["skills_synced"] = sync_skills(REPO_ROOT)
     report["commands_installed"] = materialize_runtime(REPO_ROOT)
 
-    # smoke: валидаторы
-    report["smoke_tests"] = run_validators([
-        ["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
-        ["validate_ai_first_providers.py"], ["validate_ai_first_workflows.py"],
-    ])
+    # smoke: валидаторы. При провале — ОТКАТ (rollback-safe): managed-слой и версия
+    # возвращаются к исходному состоянию из backup, чтобы не оставить полу-обновление.
+    report["smoke_tests"] = run_validators(smoke_checks or SMOKE_CHECKS)
     if any(t["status"] == "fail" for t in report["smoke_tests"]):
-        report["status"] = "failed"
+        if backup.exists():
+            restore_managed_from(backup)
+            if inst:
+                bump_child_config(inst)          # вернуть версию в конфиге
+        report.update(status="rolled_back",
+                      report=f"Smoke-валидаторы упали после применения — обновление ОТКАЧЕНО: "
+                             f"managed-слой и версия восстановлены к {inst or '—'} из backup "
+                             f"({report['backup_ref']}). Полу-обновлённого состояния не осталось.")
+        out = write_report(report)
+        print(report["report"]); print(f"отчёт: {out}")
+        return 1
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
                         f"{n} файлов под контролем. Создайте PR с этим diff — silent update запрещён.")
     out = write_report(report)
@@ -535,6 +563,32 @@ def selftest():
         expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
         if r.returncode != 0:
             print("  " + (r.stdout + r.stderr).strip()[-600:])
+
+        # 3. rollback-safe update: провал smoke -> откат managed-слоя и версии
+        global REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED
+        saved = (REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED)
+        REPO_ROOT = child
+        CHILD_CONFIG = child / ".ai-ops.yaml"
+        AI_DIR = child / ".ai"
+        MANAGED = AI_DIR / "managed"
+        try:
+            # эмулируем более старую установку, чтобы тело update отработало (inst != target)
+            import re as _re
+            t = CHILD_CONFIG.read_text(encoding="utf-8")
+            t = _re.sub(r"(installed_version:\s*)\S+", r"\g<1>2.0.0", t, count=1)
+            CHILD_CONFIG.write_text(t, encoding="utf-8")
+            before = sha256(MANAGED / ".checksums.json")
+            rc = cmd_update(force=False, smoke_checks=[["__does_not_exist__.py"]])
+            rep = json.loads((AI_DIR / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
+            cfg_after = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
+            expect("provalen smoke -> rc=1", rc == 1)
+            expect("статус rolled_back", rep["status"] == "rolled_back")
+            expect("версия в конфиге откачена к 2.0.0",
+                   str((cfg_after.get("parent") or {}).get("installed_version")) == "2.0.0")
+            expect("managed-слой восстановлен (checksums без изменений)",
+                   sha256(MANAGED / ".checksums.json") == before)
+        finally:
+            REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED = saved
 
     print("ai_ops selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
