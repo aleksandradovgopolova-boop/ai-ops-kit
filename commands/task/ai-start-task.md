@@ -23,8 +23,11 @@
 5. Создать **WorkItem** — единую сущность изменения (`tools/workitem.py start <features-dir>
    <feature-id> --task "…"`): один id связывает workflow, Feature Blueprint и прогон
    оркестратора. Blueprint создаётся/находится по этому id; стадии публикуют артефакты в него.
-6. **Зарегистрировать работу в реестре активных работ** для координации параллельных
-   сессий: `tools/active_work.py register .ai/runtime/active-work.yaml <id> --branch
+6. **Изолировать работу** (при вероятных параллельных сессиях): создать git worktree под
+   WorkItem — `tools/worktree.py add <id> --branch <feature/…>` (каталог
+   `.ai/worktrees/<id>` на своей ветке; main не трогается; подробности — `ai-worktree`).
+   Затем **зарегистрировать работу в реестре активных работ**:
+   `tools/active_work.py register .ai/runtime/active-work.yaml <id> --branch
    <ветка> --areas <затрагиваемые зоны> --session <id сессии> --workitem
    features/<id>/workitem.yaml`. Работа ведётся в своей ветке/worktree, **не в main**.
    Объявить явные связи, если есть: `--depends <id зависимостей>` и `--contracts <пути

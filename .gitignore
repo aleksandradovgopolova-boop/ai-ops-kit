@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# git worktrees изоляции работ по WorkItem (v2.24)
+.ai/worktrees/

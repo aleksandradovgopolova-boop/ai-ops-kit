@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.24.0] — 2026-07-15
+
+**Session & Repository Orchestration — Срез 3: worktree на WorkItem.** Изоляция файлов
+между параллельными сессиями: каждая работа получает свой git worktree (рабочий каталог +
+ветка), а не пишет в main. Это реальная git-операция, а не поведение рантайма.
+
+### Added
+- **tools/worktree.py** (+ selftest на временном git-репо) — `add`/`list`/`remove` git
+  worktree под WorkItem в `.ai/worktrees/<id>`; отказ для main/master и дубликата; remove
+  сохраняет ветку.
+- **commands/task/ai-worktree.md** — команда изоляции работы (создать → работать в
+  каталоге → зарегистрировать → по завершении смерджить и удалить).
+
+### Changed
+- **commands/task/ai-start-task.md** — шаг изоляции (worktree) перед регистрацией работы.
+- **.gitignore** — `.ai/worktrees/`.
+- **manifest** — `session_orchestration.worktree_per_workitem` (перенесено из `not_yet`);
+  `memory_split.isolated` += `.ai/worktrees/**`; `package_version` → 2.24.0.
+
 ## [2.23.0] — 2026-07-15
 
 **Session & Repository Orchestration — Срез 2: жёсткие связи задач.** Conflict forecast

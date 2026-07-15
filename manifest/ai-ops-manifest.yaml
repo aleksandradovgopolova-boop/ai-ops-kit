@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.23.0
+  package_version: 2.24.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -174,12 +174,18 @@ session_orchestration:
     conflict_kinds: [area, contract, dependency, cycle]   # v2.23: явные связи задач + типы конфликта
   session_bootstrap:
     command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет
+  worktree_per_workitem:                      # v2.24: изоляция файлов на WorkItem
+    tool: tools/worktree.py                    # add/list/remove — реальная git-операция
+    command: commands/task/ai-worktree.md
+    child_dir: ".ai/worktrees/<id>"            # держать в .gitignore
+    note: >
+      Инструмент создаёт worktree реально (тест на temp-репо); «сессия автоматически берёт
+      свой worktree» — шаг рантайма через ai-start-task, не гарантия кита.
   memory_split:
     shared: [context/**, decisions/registry.yaml, registry/entities.yaml]   # общая продуктовая память
-    isolated: [".ai/runtime/**", ".ai/generated/**"]                        # состояние прогона/сессии
+    isolated: [".ai/runtime/**", ".ai/generated/**", ".ai/worktrees/**"]    # состояние прогона/сессии
   not_yet:                                    # честно: ещё не закрыто (следующие срезы)
     - conversational-install ("подключи AI Ops" -> авто-установка)          # runtime-триггер
-    - worktree-per-workitem                                                 # изоляция файлов
     - merge->memory auto-update flow
 
 runtime_spec:
