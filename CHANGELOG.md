@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.23.0] — 2026-07-15
+
+**Session & Repository Orchestration — Срез 2: жёсткие связи задач.** Conflict forecast
+из «пересекаются зоны?» дорос до явной модели связей между параллельными работами.
+
+### Added / Changed
+- **tools/active_work.py** — работа теперь может объявлять `--depends <id>` (зависимости)
+  и `--contracts <пути>` (общие контракты). Прогноз классифицирует пересечение по типу:
+  **area** (одна зона кода), **contract** (один общий контракт — риск расхождения),
+  **dependency** (ждёт незавершённую задачу). Циклическая зависимость задач — **ошибка**
+  register (детект цикла в графе depends_on), а не предупреждение.
+- **schemas/active-work.schema.json** — поля `depends_on`, `shared_contracts`.
+- **commands/task/ai-start-task.md** — шаг регистрации объявляет связи и показывает тип
+  конфликта.
+- **manifest** — `session_orchestration.active_work_registry.conflict_kinds`
+  [area, contract, dependency, cycle]; `package_version` → 2.23.0.
+
 ## [2.22.0] — 2026-07-15
 
 **Session & Repository Orchestration — Срез 1.** Начало внешнего слоя автоматики вокруг
