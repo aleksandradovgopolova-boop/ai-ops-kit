@@ -16,8 +16,9 @@
   4-5) обнаружить прямые правки managed (checksums) — при drift БЛОКИРОВАТЬ (не молча);
   6) построить diff; 7) сделать backup; 8) применить миграции; 9) заменить managed-файлы;
   10) не трогать project/custom; 11) перегенерировать provenance/checksums;
-  12-14) прогнать smoke-валидаторы — при провале ОТКАТ managed-слоя и версии из
-         backup (rollback-safe: полу-обновления не остаётся); 15) machine-readable отчёт
+  12-14) прогнать smoke-валидаторы — при провале ТРАНЗАКЦИОННЫЙ ОТКАТ всего install
+         footprint (managed + .claude/skills + .claude/commands + .ai/generated +
+         .ai-ops.yaml) из снимка backup; 15) machine-readable отчёт
   (.ai/runtime/last-update-report.json, schemas/update-result.schema.json);
   16) коммит/PR делает человек или CI — silent update запрещён.
 
@@ -251,6 +252,46 @@ def restore_managed_from(backup: Path):
     shutil.copytree(backup, MANAGED)
 
 
+def _footprint_paths():
+    """Весь install footprint, который меняет update: managed + runtime-ассеты + конфиг."""
+    return [MANAGED,
+            REPO_ROOT / ".claude" / "skills",
+            REPO_ROOT / ".claude" / "commands",
+            AI_DIR / "generated",
+            CHILD_CONFIG]
+
+
+def snapshot_footprint(dest: Path):
+    """Снять полный install footprint в dest. Возвращает манифест {rel: existed}, чтобы
+    восстановление было точным — вернуть бывшее и УДАЛИТЬ появившееся при обновлении."""
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    man = {}
+    for p in _footprint_paths():
+        rel = str(p.relative_to(REPO_ROOT))
+        man[rel] = p.exists()
+        if p.exists():
+            b = dest / rel
+            b.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(p, b) if p.is_dir() else shutil.copy2(p, b)
+    (dest / ".footprint.json").write_text(
+        json.dumps(man, ensure_ascii=False, indent=2), encoding="utf-8")
+    return man
+
+
+def restore_footprint(dest: Path, man: dict):
+    """Транзакционный откат всего footprint к снимку: восстановить бывшее, удалить новое."""
+    for rel, existed in man.items():
+        p = REPO_ROOT / rel
+        if p.exists():
+            shutil.rmtree(p) if p.is_dir() else p.unlink()
+        if existed:
+            b = dest / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(b, p) if b.is_dir() else shutil.copy2(b, p)
+
+
 SMOKE_CHECKS = [
     ["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
     ["validate_ai_first_providers.py"], ["validate_ai_first_workflows.py"],
@@ -344,12 +385,10 @@ def cmd_update(force=False, smoke_checks=None):
         report.update(report="Обновление не требуется."); write_report(report)
         print("уже актуально."); return 0
 
-    # backup
+    # backup: снимок ВСЕГО install footprint (managed + .claude/skills + .claude/commands
+    # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
     backup = AI_DIR / "runtime" / "backups" / (inst or "unknown")
-    if MANAGED.exists():
-        if backup.exists():
-            shutil.rmtree(backup)
-        shutil.copytree(MANAGED, backup)
+    footprint = snapshot_footprint(backup)
     report["backup_ref"] = str(backup.relative_to(REPO_ROOT))
 
     # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
@@ -366,10 +405,9 @@ def cmd_update(force=False, smoke_checks=None):
             return 1
         r = subprocess.run([sys.executable, str(up), str(REPO_ROOT)])
         if r.returncode != 0:
-            if backup.exists():
-                restore_managed_from(backup)
+            restore_footprint(backup, footprint)
             report.update(status="failed", migrations_applied=applied,
-                          report=f"миграция {step} провалена — managed-слой восстановлен из "
+                          report=f"миграция {step} провалена — install footprint восстановлен из "
                                  f"backup, обновление прервано.")
             out = write_report(report); print(report["report"]); print(f"отчёт: {out}")
             return 1
@@ -395,18 +433,16 @@ def cmd_update(force=False, smoke_checks=None):
     report["skills_synced"] = sync_skills(REPO_ROOT)
     report["commands_installed"] = materialize_runtime(REPO_ROOT)
 
-    # smoke: валидаторы. При провале — ОТКАТ (rollback-safe): managed-слой и версия
-    # возвращаются к исходному состоянию из backup, чтобы не оставить полу-обновление.
+    # smoke: валидаторы. При провале — ТРАНЗАКЦИОННЫЙ ОТКАТ всего footprint (managed,
+    # .claude/skills, .claude/commands, .ai/generated, .ai-ops.yaml) к снимку из backup.
     report["smoke_tests"] = run_validators(smoke_checks or SMOKE_CHECKS)
     if any(t["status"] == "fail" for t in report["smoke_tests"]):
-        if backup.exists():
-            restore_managed_from(backup)
-            if inst:
-                bump_child_config(inst)          # вернуть версию в конфиге
+        restore_footprint(backup, footprint)
         report.update(status="rolled_back",
                       report=f"Smoke-валидаторы упали после применения — обновление ОТКАЧЕНО: "
-                             f"managed-слой и версия восстановлены к {inst or '—'} из backup "
-                             f"({report['backup_ref']}). Полу-обновлённого состояния не осталось.")
+                             f"весь install footprint (managed + runtime-ассеты + версия) "
+                             f"восстановлен к {inst or '—'} из backup ({report['backup_ref']}). "
+                             f"Полу-обновлённого состояния не осталось.")
         out = write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
@@ -627,6 +663,9 @@ def selftest():
             t = _re.sub(r"(installed_version:\s*)\S+", r"\g<1>2.0.0", t, count=1)
             CHILD_CONFIG.write_text(t, encoding="utf-8")
             before = sha256(MANAGED / ".checksums.json")
+            # sentinel в runtime-ассете (.claude/commands) — update перезапишет, откат обязан вернуть
+            cmd_file = child / ".claude" / "commands" / "ai-engineering.md"
+            cmd_file.write_text("SENTINEL-PRE-UPDATE", encoding="utf-8")
             rc = cmd_update(force=False, smoke_checks=[["__does_not_exist__.py"]])
             rep = json.loads((AI_DIR / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
             cfg_after = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
@@ -636,6 +675,8 @@ def selftest():
                    str((cfg_after.get("parent") or {}).get("installed_version")) == "2.0.0")
             expect("managed-слой восстановлен (checksums без изменений)",
                    sha256(MANAGED / ".checksums.json") == before)
+            expect("runtime-ассет (.claude/commands) откачен транзакционно",
+                   cmd_file.read_text(encoding="utf-8") == "SENTINEL-PRE-UPDATE")
         finally:
             REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED = saved
 
