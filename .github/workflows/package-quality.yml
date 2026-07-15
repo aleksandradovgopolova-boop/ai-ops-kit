@@ -45,6 +45,10 @@ jobs:
           python3 validation/validate_workflow_gates.py
       - name: WorkItem — единая сущность и статус (selftest)
         run: python3 tools/workitem.py --selftest
+      - name: Постура безопасности (selftest + evidence-drift)
+        run: |
+          python3 validation/validate_security_posture.py --selftest
+          python3 validation/validate_security_posture.py
       - name: Presets
         run: python3 validation/validate_presets.py
       - name: Eval-кейсы изменённых агентов

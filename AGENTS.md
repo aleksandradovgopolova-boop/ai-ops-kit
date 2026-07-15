@@ -43,6 +43,8 @@ python3 tools/gate_executor.py --selftest
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
+python3 validation/validate_security_posture.py --selftest
+python3 validation/validate_security_posture.py
 python3 validation/validate_presets.py
 python3 validation/validate_agent_evals.py
 python3 validation/validate_agent_evals.py --selftest

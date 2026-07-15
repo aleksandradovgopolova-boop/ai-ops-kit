@@ -122,6 +122,19 @@ def save_state(run_dir: Path, state: dict):
         yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
+def append_interaction_log(child_root: Path, record: dict):
+    """Append-only аудит действий ИИ (security-posture: audit-log). Пишет одну JSONL-запись
+    в <child>/.ai/runtime/interaction-log.jsonl: кто/что/когда/итог. Секреты/сырые данные
+    не пишем (только имена и статусы). Только дозапись — не перезапись."""
+    from datetime import datetime, timezone
+    log = child_root / ".ai" / "runtime" / "interaction-log.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rec = {"ts": datetime.now(timezone.utc).isoformat(), **record}
+    with log.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return log
+
+
 # ---------------- core ----------------
 
 def agent_body(agent_id: str, agents_index: dict):
@@ -144,7 +157,7 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                  provider=mock_provider, verbose=True, gate_evidence=None,
-                 collect=False, fresh=False):
+                 collect=False, fresh=False, provider_name="mock"):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -227,6 +240,11 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         state["status"] = "done"
         state.pop("unmet_gates", None)
     save_state(run_dir, state)
+    # append-only аудит-лог действия ИИ (security-posture: audit-log)
+    append_interaction_log(child_root, {
+        "workflow": workflow_id, "task": task_text[:200], "status": state["status"],
+        "unmet_gates": gates.get("unmet_gates", []), "provider": provider_name,
+        "stages": len(state.get("completed_checks", []))})
     if verbose:
         if gates["blocked"]:
             print(f"BLOCKED: workflow {workflow_id} прошёл {len(state['completed_checks'])} стадий, "
@@ -312,6 +330,18 @@ def selftest():
             print("PASS collect-evidence: слова ревьюера не закрывают детерминированные гейты -> blocked")
         else:
             ok = False; print(f"FAIL ожидался blocked на implementation_verification, получено {sc['status']}")
+    # аудит-лог (v2.20): append-only запись действия ИИ появляется после прогона
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        run_workflow("QUICK", "починить опечатку", root, verbose=False)
+        run_workflow("QUICK", "починить ещё раз", root, verbose=False, fresh=True)
+        log = root / ".ai" / "runtime" / "interaction-log.jsonl"
+        recs = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines() if x.strip()] if log.exists() else []
+        if len(recs) == 2 and all({"ts", "workflow", "status", "provider"} <= set(r) for r in recs):
+            print("PASS audit-log: append-only записи действий ИИ (ts/workflow/status/provider)")
+        else:
+            ok = False; print(f"FAIL audit-log: ожидалось 2 валидных записи, получено {len(recs)}")
+
     # провайдер-адаптер (v2.18): mock офлайн; живой требует ключ (честная ошибка без него)
     import os as _os
     if make_provider("mock") is mock_provider:
@@ -368,7 +398,7 @@ def main(argv):
         if prov_name != "mock":
             print(f"[live] провайдер {prov_name}, модель {model or DEFAULT_MODELS.get(prov_name)} "
                   f"— реальная модель, gates принудительны.")
-        run_workflow(wf, task, root, provider=provider,
+        run_workflow(wf, task, root, provider=provider, provider_name=prov_name,
                      gate_evidence=gate_evidence, collect=collect, fresh=fresh)
         return 0
     print(__doc__)

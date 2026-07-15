@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.20.0] — 2026-07-15
+
+**Постура безопасности** — сфокусированный проход по 13 областям безопасности: карта
+«что есть → пробел → статус» как данные, валидатор drift на неё, закрыт самый ценный
+реальный пробел (аудит-лог действий ИИ) кодом, остальное — честные политики.
+
+### Added
+- **governance/security-posture.yaml** — машиночитаемая карта по 13 областям (роли/права,
+  ПДн, утечки, prompt-injection, секреты, аудит, human-in-the-loop, MCP/инструменты,
+  red-team/evals, инциденты/kill-switch, TTL данных, test/prod, поставщики) со статусом
+  (implemented/partial/declared/roadmap), severity и evidence (реальные файлы).
+  Итог: 6 implemented, 4 partial, 3 declared.
+- **governance/security-policies.md** — политики по пробелам: аудит-лог, подключение
+  MCP/инструментов, kill-switch/инциденты, TTL/удаление данных, test/prod, контроль
+  поставщиков и закрытого контура. Честно помечено, что политика, а что уже код.
+- **validation/validate_security_posture.py** — проверяет форму постуры и что каждый
+  evidence-путь резолвится (drift: постура не может врать о наличии контроля). Selftest + CI.
+- **Аудит-лог действий ИИ (код):** orchestrator пишет append-only
+  `.ai/runtime/interaction-log.jsonl` (ts/workflow/задача/статус/гейты/провайдер);
+  секреты/сырые данные не пишутся. Закрывает самый ценный пробел области audit-log.
+
+### Changed
+- manifest.security_policies: posture/validator/policies/audit_log; package_version 2.20.0.
+
+### Честная граница
+6 из 13 областей — implemented, 4 partial, 3 — declared (политика написана, автоматический
+enforcement — roadmap: MCP safe-connect, kill-switch постоянного агента, TTL, test/prod,
+формальный vendor-review). Постура прямо показывает, где механизм, а где пока правило.
+
 ## [2.19.0] — 2026-07-15
 
 **Eval-покрытие 51/51 + усиленный валидатор** — закрыт P1 ре-аудита: eval-кейсы были у
