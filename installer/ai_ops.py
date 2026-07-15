@@ -580,6 +580,8 @@ def selftest():
                version_in_range(pkg_version(), (cfg.get("parent") or {}).get("allowed_version_range")))
         expect("runtime-команда установлена в .claude/commands/",
                (child / ".claude" / "commands" / "ai-engineering.md").exists())
+        expect("единая точка входа /ai-start-task установлена",
+               (child / ".claude" / "commands" / "ai-start-task.md").exists())
         r = subprocess.run([sys.executable, str(CI / "validate_ai_ops_child.py")],
                            cwd=str(child), capture_output=True, text=True)
         expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
