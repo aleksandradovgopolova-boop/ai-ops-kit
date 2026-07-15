@@ -195,6 +195,7 @@
 - `rules/core/FreshnessPolicy.md`
 - `rules/core/HumanApproval.md`
 - `rules/core/ScopeControl.md`
+- `rules/core/ProductStatusPolicy.md` — живой статус продукта, читать первым/обновлять на PR (v2.27)
 - `rules/core/SourceOfTruth.md`
 - `rules/design/accessibility-checklist.yaml`
 - `rules/design/design-system-checklist.yaml`
@@ -303,6 +304,7 @@
 - `context/product/MetricCatalog.md`
 - `context/product/ProductMetrics.md`
 - `context/product/ProductOverview.md`
+- `context/product/ProductStatus.md` — живой статус готовности: что реально в проде (v2.27)
 - `context/product/UsersAndRoles.md`
 - `context/system/DataMap.md`
 - `context/system/IntegrationMap.md`
