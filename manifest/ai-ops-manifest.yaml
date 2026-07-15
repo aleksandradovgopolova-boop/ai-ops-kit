@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.22.0
+  package_version: 2.23.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -171,6 +171,7 @@ session_orchestration:
     schema: schemas/active-work.schema.json
     tool: tools/active_work.py               # register/list/check(conflict forecast)/finish
     child_path: ".ai/runtime/active-work.yaml"   # видна всем параллельным сессиям
+    conflict_kinds: [area, contract, dependency, cycle]   # v2.23: явные связи задач + типы конфликта
   session_bootstrap:
     command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет
   memory_split:

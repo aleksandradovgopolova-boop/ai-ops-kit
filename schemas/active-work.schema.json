@@ -18,7 +18,11 @@
           "branch": {"type": "string", "description": "ветка/worktree этой работы; не main"},
           "status": {"enum": ["in-progress", "review", "blocked", "done"]},
           "affected_areas": {"type": "array", "items": {"type": "string"}, "minItems": 1,
-            "description": "зоны продукта/кода, которые задача трогает — основа conflict forecast"},
+            "description": "зоны продукта/кода, которые задача трогает — основа conflict forecast (kind=area)"},
+          "depends_on": {"type": "array", "items": {"type": "string"},
+            "description": "id других работ, от которых эта зависит; цикл — ошибка (kind=dependency)"},
+          "shared_contracts": {"type": "array", "items": {"type": "string"},
+            "description": "пути общих контрактов (схема данных/API/артефакт); пересечение -> риск расхождения (kind=contract)"},
           "owner_session": {"type": "string", "description": "идентификатор владеющей сессии"},
           "started_at": {"type": "string"}
         }
