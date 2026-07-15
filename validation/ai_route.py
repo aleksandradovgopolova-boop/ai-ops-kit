@@ -256,15 +256,15 @@ SCENARIOS = [
      "inp": {"task_type": "something-strange", "risk": "low", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
      "expect": {"workflow": "ENGINEERING"}},
-    # critical risk: эскалация к базовому workflow, НЕ возврат незарегистрированного CRITICAL
-    {"name": "critical PRODUCT -> базовый PRODUCT + эскалация + ручное одобрение",
+    # critical risk переопределяет task_type -> зарегистрированный контракт CRITICAL (v2.15)
+    {"name": "critical PRODUCT -> CRITICAL (override) + ручное одобрение",
      "inp": {"task_type": "PRODUCT", "risk": "critical", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
-     "expect": {"workflow": "PRODUCT", "human_approval_required": True}},
-    {"name": "critical QUICK -> базовый QUICK + эскалация (одобрение обязательно)",
+     "expect": {"workflow": "CRITICAL", "human_approval_required": True}},
+    {"name": "critical QUICK -> CRITICAL (override) + ручное одобрение",
      "inp": {"task_type": "QUICK", "risk": "critical", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
-     "expect": {"workflow": "QUICK", "human_approval_required": True}},
+     "expect": {"workflow": "CRITICAL", "human_approval_required": True}},
 ]
 
 
