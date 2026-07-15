@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.26.0] — 2026-07-15
+
+**Session & Repository Orchestration — Срез 5: разговорная установка.** «Подключи AI Ops
+и подготовь репозиторий» вместо ручных python-команд. Завершает эпик (все пять срезов).
+
+### Added / Changed
+- **tools/generate_runtime.py** — генерирует команду `ai-ops-init` для каждого рантайма
+  (установка `installer/ai_ops.py init` → `doctor` → скилл `repo-onboarding` → предложить
+  presets → отчёт); selftest на неё. Устанавливается в `.claude/commands/` при install.
+- **manifest** — `session_orchestration.conversational_install`; `not_yet` закрыт (остаётся
+  только runtime-часть: авто-срабатывание триггеров — привязка на уровне рантайма);
+  `package_version` → 2.26.0.
+
+Честно: реальную установку делает CLI (silent update запрещён; обновления — через
+diff/PR); распознавание естественной фразы и запуск — поведение рантайма
+(`verified_against_deploy: false`).
+
 ## [2.25.0] — 2026-07-15
 
 **Session & Repository Orchestration — Срез 4: merge→memory flow.** Знание задачи не
