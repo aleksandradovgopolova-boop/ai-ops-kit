@@ -22,7 +22,7 @@ spec_protocol:
   extension_schemas: [openspec/schemas/product, openspec/schemas/research]
   change_template: openspec/change-template/
   example: examples/openspec-demo/            # проходит openspec validate --all --strict
-  parallel_merge_guard: 02_tools/ci/validate_openspec_change.py
+  parallel_merge_guard: validation/validate_openspec_change.py
   fallback: [pin-version, fork-mit, our-format-validator]
 
 registries:
@@ -97,8 +97,8 @@ providers:
   tools: registry/tools.yaml
   capability_index: registry/capability-index.yaml
   routing_policy: registry/routing-policy.yaml
-  routing_engine: 02_tools/ci/ai_route.py
-  capability_selftest: 02_tools/ci/ai_capability_selftest.py
+  routing_engine: validation/ai_route.py
+  capability_selftest: validation/ai_capability_selftest.py
   first_class: [anthropic, openai]
   planned: [gigachat]         # опциональный провайдер на будущее (config-switch, без ключей сейчас)
   no_secrets: true            # только имена env-переменных / secret-reference
@@ -144,6 +144,15 @@ update_policy:
     - "security/permission-levels.yaml"
     - "security/boundary-model.md"
     - "manifest/ai-ops-manifest.yaml"
+    # полные контракты, на которые ссылаются реестры: тела агентов, правила/чек-листы,
+    # шаблоны артефактов, контекст, прозаические workflow/команды — иначе registry
+    # ссылается на файлы (agents/core/*.md, rules/**, templates/**), которых в child нет.
+    - "agents/**/*.md"
+    - "rules/**/*"
+    - "templates/**/*"
+    - "context/**/*"
+    - "workflows/*.md"
+    - "commands/**/*.md"
   managed_paths: [".ai/managed/**"]
   protected_paths: [".ai/project/**", ".ai/custom/**"]
   generated_paths: [".ai/generated/**"]
@@ -151,11 +160,11 @@ update_policy:
   provenance: ".ai/managed/.provenance.json"
   checksums: ".ai/managed/.checksums.json"
   update_lock: ".ai/managed/.update-lock"
-  drift_detection: "02_tools/ci/ai_managed_checksums.py verify"
-  example_install: "02_tools/ai-first-system/examples/child-install/"
+  drift_detection: "validation/ai_managed_checksums.py verify"
+  example_install: "examples/child-install/"
 
 package_migrations:
   chain: []                  # первый релиз; цепочка появится с 0.1.0-to-0.2.0
 
 contracts_dir: schemas/
-compatibility_check: python3 02_tools/ci/validate_ai_first_registry.py
+compatibility_check: python3 validation/validate_ai_first_registry.py
