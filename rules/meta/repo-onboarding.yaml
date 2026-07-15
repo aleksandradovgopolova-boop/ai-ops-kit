@@ -11,6 +11,7 @@ items:
   - {id: stack-detected, check: "Определён стек: языки, фреймворки, менеджеры пакетов, точки входа — из манифестов и дерева репозитория, а не из догадок", severity_default: major}
   - {id: structure-mapped, check: "Составлена карта структуры репозитория (ключевые каталоги, их назначение) -> context/system/RepositoryMap.md", severity_default: major}
   - {id: product-summarized, check: "Зафиксировано что за продукт и для кого; ненайденное помечено «требует подтверждения», не выдумано -> context/product/ProductOverview.md", severity_default: critical}
+  - {id: product-status-drafted, check: "Заполнен черновик context/product/ProductStatus.md: что реально готово/живёт в проде (backend/генерация/хранилище/деплой/провайдер) и что отложено — по фактам из репо/деплоя, не по нормативке", severity_default: critical}
   - {id: architecture-and-data, check: "Описаны компоненты, сущности и модель данных -> context/system/*; связи, где явны", severity_default: major}
   - {id: design-system-captured, check: "Если дизайн-система есть — токены/компоненты/паттерны зафиксированы; если нет — так и сказано -> context/product/DesignSystem.md", severity_default: minor}
   - {id: dev-rules-and-constraints, check: "Собраны правила разработки и активные ограничения (линтеры, конвенции, protected paths, регуляторика) -> context/team/*", severity_default: major}

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.26.0
+  package_version: 2.27.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -172,6 +172,12 @@ session_orchestration:
     tool: tools/active_work.py               # register/list/check(conflict forecast)/finish
     child_path: ".ai/runtime/active-work.yaml"   # видна всем параллельным сессиям
     conflict_kinds: [area, contract, dependency, cycle]   # v2.23: явные связи задач + типы конфликта
+  living_status:                              # v2.27: единая точка правды о «сейчас»
+    doc: context/product/ProductStatus.md      # что реально готово/живёт; volatile + freshness
+    policy: rules/core/ProductStatusPolicy.md  # читать первым; обновлять на PR, меняющем готовность
+    read_first_in: commands/task/ai-session-start.md
+    updated_in: commands/task/ai-finish-task.md
+    anti_pattern: "CLAUDE.md держит только вечные правила; снимок статуса — ссылкой на ProductStatus"
   session_bootstrap:
     command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет
   worktree_per_workitem:                      # v2.24: изоляция файлов на WorkItem

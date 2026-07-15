@@ -7,7 +7,10 @@
 ## Порядок выполнения
 
 1. Проверить Final Verification.
-2. Обновить источники истины.
+2. Обновить источники истины. **Если задача изменила готовность** (что-то вышло в прод,
+   сменился провайдер/хранилище/деплой, область закрыта/отложена) — обновить
+   `context/product/ProductStatus.md` в этом же изменении (`rules/core/ProductStatusPolicy.md`);
+   это часть фичи, не «потом».
 3. Подготовить release/merge handoff.
 4. **Обновить repository memory (merge→memory)**: `tools/merge_memory.py record
    <memory-dir> <id> --summary "что изменилось" --areas <зоны> --decisions "…"
