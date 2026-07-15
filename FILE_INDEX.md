@@ -450,6 +450,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/ai_managed_checksums.py`
 - `validation/ai_route.py`
 - `validation/validate_agent_evals.py`
+- `validation/validate_agents_checklist.py`
 - `validation/validate_ai_first_config.py`
 - `validation/validate_ai_first_providers.py`
 - `validation/validate_ai_first_registry.py`
