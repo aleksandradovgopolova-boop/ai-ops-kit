@@ -2,6 +2,45 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.21.0] — 2026-07-15
+
+**Спецификация постоянного агента (Robin) — runtime-агностичная.** Кит описывает, что
+должен делать постоянно работающий агент-ассистент команды и с какими границами, но НЕ
+навязывает рантайм: даёт абстрактный контракт, спеку, пример обязанностей, валидатор и
+шаблон привязки. Конкретный рантайм (Hermes, свой сервис, cron+CLI — что угодно) —
+привязка на уровне child, как stack-skills. Идея адаптирована из
+BayramAnnakov/team-os-toolkit (ROBIN-SPEC, MIT): «файл → skill, постоянный процесс → spec».
+
+### Added
+- **runtime/robin/ROBIN.md** — спека Робина: read-mostly (читает и синтезирует, не
+  пишет в prod и не меняет базу знаний сам), двухслойная память (curated vs
+  staged→promoted, перенос — только действие человека), append-only interaction-log в
+  формате `tools/orchestrator.py`, границы (недоверенный чат-ввод, секреты только из env),
+  kill-switch и честный критерий «когда внедрять».
+- **runtime/robin/duties.example.yaml** — декларативные обязанности (id, триггер
+  cron/событие, входы, выход+назначение, владелец); минимально обязательная —
+  периодический дайджест.
+- **validation/validate_duties.py** (+ selftest) — проверяет декларацию: обязательные
+  поля, cron требует schedule / event требует event, есть периодический дайджест, и —
+  инвариант read-mostly — destination не пишет в prod и не в curated/promoted-память.
+- **templates/runtime/runtime-binding.example.yaml** — child объявляет, чем закрывает
+  контракт (satisfied/declared по каждой возможности); Hermes — только как пример.
+- **registry/runtimes.yaml → runtime_contracts.persistent-agent-runtime** — абстрактный
+  контракт (always-on, вызов модели, чат-адаптер, kill-switch, audit-log, read-mostly,
+  опция in-perimeter); `verified_against_deploy: false` — из среды разработки деплой не
+  проверялся. Контракт, не адаптер: вне adapter_depth-проверки.
+
+### Changed
+- **governance/security-policies.md §3** — kill-switch развёрнут в runbook (отзыв прав →
+  остановка процесса → отзыв чат-доступа → запись в audit-log) с честной пометкой, что
+  механизм живёт на рантайме и из среды разработки не проверялся.
+- **governance/security-posture.yaml** — области `audit-log` и `incident-killswitch`:
+  evidence и note дополнены контрактом+спекой Robin (формат аудита и kill-switch стали
+  требованием контракта); статусы остаются `partial` — enforcement на рантайме не
+  проверялся (честно).
+- **manifest/ai-ops-manifest.yaml** — раздел `runtime_spec` (contract/spec/validator/
+  binding, `verified_against_deploy: false`); `package_version` → 2.21.0.
+
 ## [2.20.0] — 2026-07-15
 
 **Постура безопасности** — сфокусированный проход по 13 областям безопасности: карта

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.20.0
+  package_version: 2.21.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -150,6 +150,21 @@ security_policies:
   policies: governance/security-policies.md
   information_boundaries: governance/information-boundaries.md
   audit_log: ".ai/runtime/interaction-log.jsonl"       # append-only действия ИИ (orchestrator)
+
+runtime_spec:
+  # v2.21: спецификация постоянного агента-ассистента (Robin), runtime-агностичная.
+  # Кит даёт контракт+спеку+валидатор; привязка к конкретному рантайму — на уровне child.
+  status: contract                          # спека+валидатор есть; деплой рантайма — child
+  verified_against_deploy: false            # ЧЕСТНО: из среды разработки не проверялось
+  contract: persistent-agent-runtime        # registry/runtimes.yaml -> runtime_contracts
+  spec: runtime/robin/ROBIN.md
+  duties_example: runtime/robin/duties.example.yaml
+  duties_validator: validation/validate_duties.py
+  binding_template: templates/runtime/runtime-binding.example.yaml
+  child_duties_path: ".ai/project/runtime/robin/duties.yaml"
+  read_mostly: true                          # нет записи в prod и в curated-память
+  killswitch_runbook: governance/security-policies.md   # §3
+  example_bindings: [Hermes, "cron+cli+webhook"]   # только примеры; не хардкод в ядре
 
 update_policy:
   silent_update: forbidden
