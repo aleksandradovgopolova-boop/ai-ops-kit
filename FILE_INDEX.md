@@ -352,13 +352,21 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/ai-red-teamer.md`
 - `evaluations/agents/analytics-reviewer.md`
 - `evaluations/agents/architecture-reviewer.md`
+- `evaluations/agents/code-reviewer.md`
+- `evaluations/agents/context-builder.md`
 - `evaluations/agents/design-system-reviewer.md`
 - `evaluations/agents/documentation-reviewer.md`
+- `evaluations/agents/final-verifier.md`
+- `evaluations/agents/implementation-integrator.md`
+- `evaluations/agents/intake-classifier.md`
 - `evaluations/agents/llm-architect.md`
 - `evaluations/agents/observability-reviewer.md`
+- `evaluations/agents/plan-reviewer.md`
 - `evaluations/agents/product-analyst.md`
 - `evaluations/agents/product-reviewer.md`
+- `evaluations/agents/requirements-writer.md`
 - `evaluations/agents/solution-architect.md`
+- `evaluations/agents/task-planner.md`
 - `evaluations/agents/user-researcher.md`
 - `evaluations/agents/ux-reviewer.md`
 
