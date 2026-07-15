@@ -312,7 +312,7 @@ def selftest():
     good = {
         "intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
         "implementation_verification": {"status": "pass",
-            "provided": ["build_passed", "lint_passed", "tests_passed", "tested_revision"]},
+            "provided": ["build_passed", "lint_passed", "typecheck_passed", "tests_passed", "tested_revision"]},
     }
     r1 = evaluate("QUICK", good)
     expect("QUICK с подтверждённым evidence -> не blocked", r1["blocked"] is False)

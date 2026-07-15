@@ -150,7 +150,7 @@ workflows:
       - {id: implementation, owner: implementation-integrator, writer: implementation-integrator, review_mode: writer, uses_skills: [frontend-design]}
       - {id: verify, owner: final-verifier, review_mode: read-only, uses_skills: [e2e-browser-testing]}
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
-    quality_gates: [intake_completeness, ux_review, design_system_usage, implementation_verification]
+    quality_gates: [intake_completeness, ux_review, design_system_usage, accessibility_review, visual_regression, implementation_verification]
     required_capabilities: [file_read, file_write]
     preferred_execution_mode: native
     minimum_execution_mode: sequential

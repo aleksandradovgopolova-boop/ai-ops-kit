@@ -84,7 +84,7 @@ gates:
     bypass_policy: forbidden
     applicability: [QUICK, ENGINEERING, PRODUCT, AI_FEATURE, CRITICAL]
     stale_detection: {bind_to: tested_revision}
-    required_evidence: [build_passed, lint_passed, tests_passed, tested_revision]
+    required_evidence: [build_passed, lint_passed, typecheck_passed, tests_passed, tested_revision]
 
   code_review:
     id: code_review
@@ -181,6 +181,35 @@ gates:
     applicability: [PRODUCT, VISUAL]
     stale_detection: {bind_to: artifact_hashes}
     required_evidence: [ux_flow, screen_states, device_matrix_defined, responsive_checked, copy_reviewed]
+    # тяжесть находки -> вердикт: critical всегда fail (override запрещён), major — fail
+    # ИЛИ documented override (override с reason фиксируется), minor/nit — не блокируют
+    severity_policy: {critical: fail, major: fail_or_documented_override, minor: nonblocking}
+
+  accessibility_review:
+    id: accessibility_review
+    purpose: Доступность проверена — клавиатура, фокус, контраст (WCAG AA), screen-reader метки, состояния не только цветом.
+    stage: accessibility-review
+    blocking: true
+    responsible_role: accessibility-reviewer
+    review_mode: read-only
+    checklist: rules/design/accessibility-checklist.yaml
+    applicability: [VISUAL, PRODUCT]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [keyboard_operable, focus_visible, contrast_aa, screen_reader_labels, no_color_only_state]
+    # a11y-политика тяжести: критичная находка блокирует безусловно, major — fail или documented override
+    severity_policy: {critical: fail, major: fail_or_documented_override, minor: nonblocking}
+
+  visual_regression:
+    id: visual_regression
+    purpose: Изменённые экраны сверены с визуальным baseline — незапланированных регрессий нет.
+    stage: verify
+    blocking: true
+    applies_when: "изменены экраны/компоненты с визуальным представлением; иначе гейт неприменим"
+    responsible_role: final-verifier
+    review_mode: read-only
+    applicability: [VISUAL]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [baseline_snapshots, screens_diffed, unintended_diffs_none_or_approved]
 
   design_system_usage:
     id: design_system_usage
