@@ -14,16 +14,18 @@
     + ключ) — сетевые вызовы сознательно вынесены из этого файла.
 
 Использование:
-  orchestrator.py run <WORKFLOW> "<задача>" [child_root] [--evidence <file>]
-                                                            — прогон (mock-провайдер); --evidence
-                                                              подаёт gate-evidence (иначе блокирующие
-                                                              гейты честно не пройдены -> status blocked)
+  orchestrator.py run <WF> "<задача>" [child_root] [--evidence <file>] [--collect-evidence] [--fresh|--resume]
+        — прогон (mock-провайдер). --evidence <file>: gate-evidence по
+          schemas/gate-evidence.schema.json (валидируется). --collect-evidence: вывести evidence из
+          вердиктов reviewer-стадий. --fresh: начать заново; без него — resume из TaskState.
+          Без evidence блокирующие гейты честно не пройдены -> status blocked.
   orchestrator.py --selftest                                — QUICK на временной папке
 
 Требует pyyaml.
 """
 
 import json
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -77,7 +79,8 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
-                 provider=mock_provider, verbose=True, gate_evidence=None):
+                 provider=mock_provider, verbose=True, gate_evidence=None,
+                 collect=False, fresh=False):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -86,6 +89,8 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     w = wf_all[workflow_id]
 
     run_dir = child_root / ".ai" / "runtime" / "orchestrator" / workflow_id.lower()
+    if fresh and run_dir.exists():        # --fresh: начать с чистого состояния (иначе — resume)
+        shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     state = load_state(run_dir) or {
@@ -142,7 +147,10 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     # гейты контракта не выполнены (writer ≠ judge; честный отказ вместо тихого done).
     sys.path.insert(0, str(PKG / "tools"))
     import gate_executor
-    gates = gate_executor.evaluate(workflow_id, gate_evidence or {},
+    gate_ev = dict(gate_evidence or {})
+    if collect:      # вывести evidence из вердиктов reviewer-стадий; явный --evidence имеет приоритет
+        gate_ev = {**gate_executor.collect_evidence(workflow_id, run_dir), **gate_ev}
+    gates = gate_executor.evaluate(workflow_id, gate_ev,
                                    tested_revision=state.get("tested_revision"))
     (run_dir / "GateReport.json").write_text(
         json.dumps(gates, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -227,6 +235,17 @@ def selftest():
             print("PASS judge-промпт изолирован (read-only guard)")
         else:
             ok = False; print("FAIL нет read-only guard в judge-промпте")
+    # --collect-evidence: провайдер, эмитящий вердикт, -> evidence собирается со стадий, done
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        def verdict_provider(role_prompt):
+            return "status: passed\nРезультат стадии готов согласно контракту роли."
+        sc, _ = run_workflow("QUICK", "поправить опечатку", root, provider=verdict_provider,
+                             verbose=False, collect=True)
+        if sc["status"] == "done":
+            print("PASS collect-evidence: вердикты стадий собраны -> done без ручного evidence")
+        else:
+            ok = False; print(f"FAIL collect-evidence не дал done ({sc['status']})")
     print("orchestrator selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -235,17 +254,24 @@ def main(argv):
     if len(argv) > 1 and argv[1] == "--selftest":
         return selftest()
     if len(argv) >= 3 and argv[1] == "run":
-        # опциональный --evidence <file>: JSON {gate_id: {status, provided, checks, ...}}
-        gate_evidence = None
         rest = list(argv[2:])
-        if "--evidence" in rest:
+        collect = "--collect-evidence" in rest
+        fresh = "--fresh" in rest
+        # --resume — поведение по умолчанию (продолжение из TaskState); принимаем явно
+        for fl in ("--collect-evidence", "--fresh", "--resume"):
+            while fl in rest:
+                rest.remove(fl)
+        gate_evidence = None
+        if "--evidence" in rest:            # JSON по schemas/gate-evidence.schema.json (валидируется)
             i = rest.index("--evidence")
-            gate_evidence = json.loads(Path(rest[i + 1]).read_text(encoding="utf-8"))
+            sys.path.insert(0, str(PKG / "tools"))
+            import gate_executor
+            gate_evidence = gate_executor.load_evidence(rest[i + 1])
             del rest[i:i + 2]
         wf = rest[0]
         task = rest[1] if len(rest) > 1 else ""
         root = Path(rest[2]).resolve() if len(rest) > 2 else Path.cwd()
-        run_workflow(wf, task, root, gate_evidence=gate_evidence)
+        run_workflow(wf, task, root, gate_evidence=gate_evidence, collect=collect, fresh=fresh)
         return 0
     print(__doc__)
     return 0
