@@ -26,12 +26,37 @@
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
+
+
+def _run_validator(*args) -> bool:
+    """Запустить package-валидатор офлайн; True при rc==0."""
+    r = subprocess.run([sys.executable, str(PKG / "validation" / args[0]), *args[1:]],
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def deterministic_run(validator):
+    """(status, checks, provided) для валидаторов, которые РЕАЛЬНО запускаемы офлайн;
+    None — если валидатор символический (напр. validate-intake) и требует внешнего evidence.
+    Так gate executor не выдумывает вердикт: он либо честно исполняет проверку, либо ждёт evidence."""
+    if validator == "validate-references + validate-claims":
+        refs, claims = _run_validator("validate_references.py"), _run_validator("validate_claims.py")
+        checks = [{"id": "references_resolve", "status": "pass" if refs else "fail"},
+                  {"id": "claims_hold", "status": "pass" if claims else "fail"}]
+        status = "pass" if refs and claims else "fail"
+        return status, checks, [c["id"] for c in checks if c["status"] == "pass"]
+    if validator == "validate-freshness":
+        ok = _run_validator("validate_freshness.py", "--selftest")
+        checks = [{"id": "no_stale_volatile_docs", "status": "pass" if ok else "warn"}]
+        return ("pass" if ok else "warn"), checks, [c["id"] for c in checks if c["status"] == "pass"]
+    return None
 
 # ключи, разрешённые схемой gate-result (additionalProperties: false)
 _ALLOWED_KEYS = {
@@ -71,17 +96,45 @@ def _unmet_reason(kind: str, gate: dict) -> str:
 
 
 def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None) -> dict:
-    """Один гейт -> machine-readable gate-result (schemas/gate-result.schema.json)."""
+    """Один гейт -> machine-readable gate-result (schemas/gate-result.schema.json).
+
+    Дисциплина evidence (v2.16): бездоказательного pass не существует — если гейт
+    объявляет `required_evidence`, статус pass засчитывается ТОЛЬКО когда эти ключи
+    подтверждены (через `provided` или passing-checks). Для детерминированных гейтов с
+    реально запускаемым валидатором проверка исполняется здесь; символические валидаторы
+    и reviewer/human-гейты требуют внешнего evidence."""
     kind = classify(gate)
     blocking = bool(gate.get("blocking"))
-    ev = (evidence or {}).get(gate_id) or {}
+    required = gate.get("required_evidence", []) or []
+    ev = dict((evidence or {}).get(gate_id) or {})
+
+    # авто-исполнение детерминированного валидатора, если evidence не подан
+    if not ev.get("status") and kind == "deterministic":
+        run = deterministic_run(gate.get("validator"))
+        if run:
+            st, checks, provided = run
+            ev = {"status": st, "checks": checks, "provided": provided,
+                  "evidence": [f"validator {gate.get('validator')} executed"]}
+
     status = ev.get("status")
     if status in ("pass", "warn", "fail"):
         checks = ev.get("checks", [])
-        blockers = ev.get("blockers", []) if status == "fail" else []
-        warnings = ev.get("warnings", [])
+        blockers = list(ev.get("blockers", [])) if status == "fail" else []
+        warnings = list(ev.get("warnings", []))
         evid = ev.get("evidence", [])
         override = ev.get("override")
+        # запрет бездоказательного pass: required_evidence обязан быть подтверждён
+        if status == "pass" and required:
+            covered = set(ev.get("provided", [])) | {c.get("id") for c in checks
+                                                     if c.get("status") == "pass"}
+            missing = [k for k in required if k not in covered]
+            if missing:
+                msg = f"бездоказательный pass: не подтверждены required_evidence: {', '.join(missing)}"
+                status = "fail" if blocking else "warn"
+                if blocking:
+                    blockers = [msg]
+                else:
+                    warnings = warnings + [msg]
     else:
         # evidence не предоставлен: честный отказ. Блокирующий -> fail, иначе advisory warn.
         reason = _unmet_reason(kind, gate)
@@ -171,19 +224,36 @@ def selftest():
     expect("невыполненный блокирующий гейт имеет status=fail",
            all(g["status"] == "fail" for g in r0["gate_results"] if g["blocking"]))
 
-    # 3. с полным evidence -> проходит
-    good = {"intake_completeness": {"status": "pass"}, "implementation_verification": {"status": "pass"}}
+    # 3. с полным evidence (required_evidence подтверждён) -> проходит
+    good = {
+        "intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
+        "implementation_verification": {"status": "pass",
+            "provided": ["build_passed", "lint_passed", "tests_passed", "tested_revision"]},
+    }
     r1 = evaluate("QUICK", good)
-    expect("QUICK с evidence -> не blocked", r1["blocked"] is False)
+    expect("QUICK с подтверждённым evidence -> не blocked", r1["blocked"] is False)
+
+    # 3b. бездоказательный pass (status:pass без required_evidence) -> отклонён, blocked
+    r_bare = evaluate("QUICK", {"intake_completeness": {"status": "pass"},
+                                "implementation_verification": {"status": "pass"}})
+    expect("бездоказательный pass отклонён -> blocked", r_bare["blocked"] is True)
+
+    # 3c. детерминированный валидатор реально исполняется; символический — нет
+    run = deterministic_run("validate-references + validate-claims")
+    expect("детерминированный валидатор исполнен (pass на чистом пакете)",
+           run is not None and run[0] == "pass")
+    expect("символический валидатор не выдумывает вердикт (нужен evidence)",
+           deterministic_run("validate-intake") is None)
 
     # 4. частичный evidence -> всё ещё blocked по недостающему гейту
-    r2 = evaluate("QUICK", {"intake_completeness": {"status": "pass"}})
+    r2 = evaluate("QUICK", {"intake_completeness": {"status": "pass",
+                                                    "provided": ["classified_type", "size", "risk"]}})
     expect("QUICK частичный evidence -> blocked на implementation_verification",
            r2["blocked"] and r2["unmet_gates"] == ["implementation_verification"])
 
     # 5. override снимает блокировку по гейту (records override)
     r3 = evaluate("QUICK", {
-        "intake_completeness": {"status": "pass"},
+        "intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
         "implementation_verification": {"status": "fail",
                                         "override": {"by": "human:lead", "reason": "hotfix, verified manually"}}})
     expect("override снимает блокировку", r3["blocked"] is False)
