@@ -2,6 +2,52 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.15.0] — 2026-07-15
+
+**Замыкание контура: «провода подключены к механизмам».** Релиз соединяет уже
+построенные части в рабочий путь установки/исполнения и приводит декларации в
+соответствие реальности. Без бампа версии автообновление child'ов не увидело бы
+эти фиксы (сравнивается `installed_version` с `VERSION`).
+
+### Fixed — основной путь установки/обновления
+- **`init` больше не ломает собственную валидацию сразу после установки:**
+  подставляет актуальную версию пакета и совместимый SemVer-диапазон в `.ai-ops.yaml`
+  (раньше оставалось `1.1.0`/`<2.0.0`, а provenance писался версией пакета).
+- **Runtime подключён:** `init` генерирует и устанавливает команды в
+  `.claude/commands/` (`command_loading` из `runtimes.yaml`), а не только в
+  `.ai/generated/`, где раннтайм их не ищет.
+- **`update` реально проверяет `allowed_version_range`** и блокирует несовместимый
+  переход (раньше `compatibility` был захардкожен `compatible`).
+- **`update` реально исполняет цепочку миграций** (`up.py`) и помечает applied
+  только по факту; при падении — откат managed из backup.
+- **rollback-safe `update`:** провал smoke-валидаторов откатывает managed-слой и
+  версию из backup.
+- **scheduled workflow уважает `parent.auto_update`:** по расписанию PR открывается
+  только при `true`; ручной запуск — всегда.
+- **shipped-скиллы не теряются молча:** локальная правка сохраняется в
+  `.ai/runtime/backups/skills/<id>/` с предупреждением перед перезаписью.
+
+### Added — исполнение и маршрутизация
+- **Gate executor** (`tools/gate_executor.py`): резолвит `quality_gates` контракта,
+  классифицирует гейты (deterministic / ai-review / human-approval), эмитит
+  machine-readable результат по схеме; невыполненный блокирующий гейт → `fail`.
+- **Оркестратор блокирует по гейтам:** не ставит `done`, пока блокирующие гейты
+  не выполнены (`GateReport.json`, статус `blocked` + `unmet_gates`).
+- **Workflow-контракт `CRITICAL`:** critical risk честно переопределяет task_type
+  (routing возвращает `CRITICAL` с обязательным human approval); контракт с
+  независимыми security/code review и стадией one-way-door.
+
+### Changed — честность деклараций
+- **`adapter_depth` у runtime-адаптеров** (`executing` / `generated-commands` /
+  `manual-assisted`) + машинная проверка: `claude-code`/`codex` честно помечены как
+  `generated-commands`, реальное исполнение — у `generic-orchestrator`.
+- **drift-control:** валидатор синхронности чеклиста `AGENTS.md` ↔ CI; installer
+  e2e-selftest (`init` → child-валидатор); проверка `adapter_depth`.
+
+### Tests
+- Eval-кейсы критической цепочки агентов (intake → context → requirements → plan →
+  plan-review → integrate → verify → code-review), по 3 сценария на роль.
+
 ## [2.14.1] — 2026-07-13
 
 **Курируемое из репозиториев A. Karpathy** — взято только то, что не ломает миссию и
