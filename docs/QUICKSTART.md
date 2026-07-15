@@ -73,7 +73,9 @@ python3 <kit>/tools/effect_metrics.py    # PROBLEM-rate, динамика пок
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: Clone ai-ops-kit (пин на installed_version из .ai-ops.yaml)
-        run: git clone --depth 1 --branch v2.3.0 https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git /tmp/ai-ops-kit
+        run: |
+          VER=$(python3 -c "import yaml; print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
+          git clone --depth 1 --branch "v$VER" https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git /tmp/ai-ops-kit
       - run: python3 /tmp/ai-ops-kit/installer/ai_ops.py validate
       - run: python3 /tmp/ai-ops-kit/installer/ai_ops.py doctor
       - run: python3 /tmp/ai-ops-kit/validation/validate_knowledge_graph.py knowledge/graph.yaml
