@@ -20,12 +20,20 @@
    - иначе → контракт по selection_criteria.task_type;
    - неизвестный тип → ENGINEERING (честный default).
 4. Показать выбранный workflow и причину.
-5. Запросить только обязательные approvals (обязательно — для critical/protected).
-6. Инициализировать `TaskState` и передать управление команде выбранного workflow (`ai-<workflow>`).
+5. Создать **WorkItem** — единую сущность изменения (`tools/workitem.py start <features-dir>
+   <feature-id> --task "…"`): один id связывает workflow, Feature Blueprint и прогон
+   оркестратора. Blueprint создаётся/находится по этому id; стадии публикуют артефакты в него.
+6. Запросить только обязательные approvals (обязательно — для critical/protected).
+7. Инициализировать `TaskState` (прогон внутри WorkItem) и передать управление команде
+   выбранного workflow (`ai-<workflow>`).
+8. Итог всего изменения — **единый статус WorkItem** (`tools/workitem.py status`):
+   `done` / `blocked` / `needs_human_decision` / `needs_more_evidence`. Не два разных
+   статуса (прогон и blueprint), а один.
 
 ## Результат
 
-TaskContext, выбранный workflow с обоснованием, TaskState.
+WorkItem (единый id: workflow + blueprint + прогон), выбранный workflow с обоснованием,
+TaskState, единый статус.
 
 ## Ограничения
 

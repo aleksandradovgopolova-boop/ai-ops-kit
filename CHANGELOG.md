@@ -2,6 +2,33 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.17.0] — 2026-07-15
+
+**Единый продуктовый путь** — два прежде раздельных контура (прогон workflow и Feature
+Blueprint, с разными id и статусами) связаны ОДНОЙ сущностью и ОДНИМ статусом. Закрывает
+P1 ре-аудита «две хорошие подсистемы, а не один продукт».
+
+### Added
+- **tools/workitem.py + schemas/workitem.schema.json** — сущность WorkItem: один id
+  (= id фичи) связывает routed workflow, Feature Blueprint (`features/<id>/`) и прогон
+  оркестратора. `start` маршрутизирует (ai_route) и создаёт запись
+  `features/<id>/workitem.yaml`; `status` выводит **единый статус** детерминированно из
+  gate_executor + run_report. Selftest + шаг CI.
+- **Единый статус (4 действия):** `done` / `blocked` / `needs_human_decision` /
+  `needs_more_evidence`. Приоритет: реальный провал гейта > решение человека > нехватка
+  доказательств > готово. Не два разных статуса (прогон vs blueprint), а один.
+
+### Changed
+- **commands/task/ai-start-task.md** — единственная точка входа теперь создаёт WorkItem
+  (routing → blueprint → прогон под одним id) и подводит единый статус.
+- manifest: секция `unified_product_path`; package_version 2.17.0.
+
+### Честная граница
+WorkItem связывает контуры и подводит итог **детерминированно**; он НЕ запускает живую
+модель (это runtime/orchestrator, а generic-orchestrator пока mock) — заполнение blueprint
+и вердикты ревьюеров остаются за исполнителем. Второй рубеж (живая модель + оркестратор)
+остаётся заявленным, не закрытым.
+
 ## [2.16.0] — 2026-07-15
 
 **Стабилизация ядра** — по итогам внешнего ре-аудита закрыты реальные дыры в главной

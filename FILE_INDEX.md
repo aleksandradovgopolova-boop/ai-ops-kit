@@ -401,6 +401,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/runtime-entry.schema.json`
 - `schemas/update-result.schema.json`
 - `schemas/workflow.schema.json`
+- `schemas/workitem.schema.json`
 
 ## security/
 
@@ -488,6 +489,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/orchestrator.py`
 - `tools/product_health.py`
 - `tools/run_report.py`
+- `tools/workitem.py`
 
 ## installer/
 
