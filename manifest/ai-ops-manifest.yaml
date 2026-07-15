@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.16.0
+  package_version: 2.17.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -116,6 +116,17 @@ knowledge_integrity:
 
 governance:
   information_boundaries: governance/information-boundaries.md   # что можно/нельзя хранить (v2.9)
+
+unified_product_path:
+  # v2.17: единый продуктовый путь — одна сущность связывает два прежде раздельных
+  # контура (прогон workflow и Feature Blueprint) одним id и одним статусом.
+  status: integrated
+  entity: tools/workitem.py                    # start (routing->blueprint->run) + status
+  schema: schemas/workitem.schema.json
+  entry_point: commands/task/ai-start-task.md  # единственная точка входа -> создаёт WorkItem
+  record: "features/<id>/workitem.yaml"        # в child; один id = id фичи
+  single_status: [done, blocked, needs_human_decision, needs_more_evidence]
+  status_source: [tools/gate_executor.py, tools/run_report.py]   # детерминированный вывод
 
 decision_intelligence:
   # v2.10: Decision Intelligence (идея team-os-toolkit init-team-decisions).
