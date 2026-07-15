@@ -143,8 +143,16 @@ runtimes:
     adapter_note: >
       Код кита сам исполняет контракт: tools/orchestrator.py проводит стадии
       sequential с изоляцией ролей, tools/gate_executor.py блокирует переход по
-      невыполненным блокирующим гейтам (GateReport.json).
-    default_provider: any
+      невыполненным блокирующим гейтам (GateReport.json). v2.18: провайдер стадий —
+      живая модель (--provider anthropic|openai, ключ из env) ИЛИ mock (по умолчанию,
+      офлайн). Живой путь opt-in.
+    live_provider:
+      status: implemented          # адаптеры anthropic/openai (env-ключ, urllib, честный фолбэк)
+      verified_against_live_api: false   # ЧЕСТНО: в среде разработки ключа не было — не прогонялось против реального API
+      providers: [anthropic, openai]
+      opt_in: "--provider (default: mock, офлайн, детерминированный для CI)"
+      no_secrets: true             # ключ только из env, в репо/логи не попадает
+    default_provider: mock          # офлайн по умолчанию; живой — opt-in через --provider
     execution_modes: [sequential]                # orchestrated (parallel scheduler) — planned, в коде не реализован
     preferred_mode: sequential
     minimum_mode: sequential

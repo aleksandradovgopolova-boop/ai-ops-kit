@@ -44,6 +44,70 @@ def mock_provider(role_prompt: str) -> str:
             f"Результат стадии подготовлен согласно контракту роли.")
 
 
+# --- живые провайдеры (v2.18): реальная модель по ключу из env ---
+# Секреты НЕ в репо: ключ читается ТОЛЬКО из переменной окружения. Сеть — через
+# системный прокси (urllib берёт HTTPS_PROXY автоматически). Без ключа — честная
+# ошибка, а не тихий фолбэк на mock (иначе «живой» прогон был бы фикцией).
+DEFAULT_MODELS = {"anthropic": "claude-sonnet-5", "openai": "gpt-4o"}
+_MAX_TOKENS = 2048
+
+
+def _http_post_json(url, headers, payload, timeout=120):
+    import json as _json
+    import urllib.request
+    req = urllib.request.Request(url, data=_json.dumps(payload).encode("utf-8"),
+                                 headers={**headers, "content-type": "application/json"},
+                                 method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:   # прокси — из env
+        return _json.loads(r.read().decode("utf-8"))
+
+
+def _anthropic_call(prompt, model):
+    import os
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise SystemExit("ANTHROPIC_API_KEY не задан — живой прогон невозможен. "
+                         "Задайте ключ в окружении или используйте --provider mock (офлайн).")
+    data = _http_post_json(
+        "https://api.anthropic.com/v1/messages",
+        {"x-api-key": key, "anthropic-version": "2023-06-01"},
+        {"model": model, "max_tokens": _MAX_TOKENS,
+         "messages": [{"role": "user", "content": prompt}]})
+    parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
+    return "\n".join(parts).strip() or "(пустой ответ модели)"
+
+
+def _openai_call(prompt, model):
+    import os
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise SystemExit("OPENAI_API_KEY не задан — живой прогон невозможен. "
+                         "Задайте ключ в окружении или используйте --provider mock (офлайн).")
+    data = _http_post_json(
+        "https://api.openai.com/v1/chat/completions",
+        {"authorization": f"Bearer {key}"},
+        {"model": model, "max_tokens": _MAX_TOKENS,
+         "messages": [{"role": "user", "content": prompt}]})
+    return (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip() \
+        or "(пустой ответ модели)"
+
+
+def make_provider(name: str, model: str = None):
+    """Вернуть callable(role_prompt)->text для провайдера.
+    'mock' (по умолчанию, офлайн, детерминированный) | 'anthropic' | 'openai'.
+    Живые провайдеры вызывают реальный API по ключу из env; без ключа — честная ошибка.
+    ВАЖНО: живой путь опционален (opt-in через --provider) — CI/selftest офлайн на mock."""
+    if name in (None, "mock"):
+        return mock_provider
+    if name == "anthropic":
+        m = model or DEFAULT_MODELS["anthropic"]
+        return lambda prompt: _anthropic_call(prompt, m)
+    if name == "openai":
+        m = model or DEFAULT_MODELS["openai"]
+        return lambda prompt: _openai_call(prompt, m)
+    raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai)")
+
+
 # ---------------- state ----------------
 
 def load_state(run_dir: Path):
@@ -248,6 +312,27 @@ def selftest():
             print("PASS collect-evidence: слова ревьюера не закрывают детерминированные гейты -> blocked")
         else:
             ok = False; print(f"FAIL ожидался blocked на implementation_verification, получено {sc['status']}")
+    # провайдер-адаптер (v2.18): mock офлайн; живой требует ключ (честная ошибка без него)
+    import os as _os
+    if make_provider("mock") is mock_provider:
+        print("PASS provider: mock — офлайн-провайдер по умолчанию")
+    else:
+        ok = False; print("FAIL provider: mock не резолвится в mock_provider")
+    _saved = _os.environ.pop("ANTHROPIC_API_KEY", None)
+    try:
+        make_provider("anthropic")("тест")
+        ok = False; print("FAIL provider: anthropic без ключа должен падать честной ошибкой")
+    except SystemExit:
+        print("PASS provider: anthropic без ключа -> честная ошибка (не тихий mock)")
+    finally:
+        if _saved is not None:
+            _os.environ["ANTHROPIC_API_KEY"] = _saved
+    try:
+        make_provider("bogus")
+        ok = False; print("FAIL provider: неизвестный провайдер должен падать")
+    except SystemExit:
+        print("PASS provider: неизвестный провайдер -> ошибка")
+
     print("orchestrator selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -270,10 +355,21 @@ def main(argv):
             import gate_executor
             gate_evidence = gate_executor.load_evidence(rest[i + 1])
             del rest[i:i + 2]
+        # провайдер: mock (по умолчанию, офлайн) | anthropic | openai (живая модель по ключу env)
+        prov_name, model = "mock", None
+        if "--provider" in rest:
+            i = rest.index("--provider"); prov_name = rest[i + 1]; del rest[i:i + 2]
+        if "--model" in rest:
+            i = rest.index("--model"); model = rest[i + 1]; del rest[i:i + 2]
+        provider = make_provider(prov_name, model)
         wf = rest[0]
         task = rest[1] if len(rest) > 1 else ""
         root = Path(rest[2]).resolve() if len(rest) > 2 else Path.cwd()
-        run_workflow(wf, task, root, gate_evidence=gate_evidence, collect=collect, fresh=fresh)
+        if prov_name != "mock":
+            print(f"[live] провайдер {prov_name}, модель {model or DEFAULT_MODELS.get(prov_name)} "
+                  f"— реальная модель, gates принудительны.")
+        run_workflow(wf, task, root, provider=provider,
+                     gate_evidence=gate_evidence, collect=collect, fresh=fresh)
         return 0
     print(__doc__)
     return 0
