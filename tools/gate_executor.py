@@ -114,8 +114,16 @@ def collect_evidence(workflow_id: str, run_dir) -> dict:
             ev[gid] = {"status": "fail", "blockers": [f"reviewer verdict FAIL @ {art.name}"],
                        "evidence": [art.name]}
         elif _VERDICT_PASS.search(text):
-            ev[gid] = {"status": "pass", "provided": list(g.get("required_evidence", []) or []),
-                       "evidence": [f"reviewer verdict @ {art.name}"]}
+            # Дисциплина evidence (v2.16): «pass» ревьюера — доказательство ТОЛЬКО для
+            # ai-review гейтов (судья и есть evidence). Для детерминированных/human гейтов
+            # слово ревьюера НЕ фабрикует required_evidence (build_passed/tests_passed/…):
+            # их закрывают реальные валидаторы/факты, иначе «evidence» снова = «поверьте на слово».
+            if classify(g) == "ai-review":
+                ev[gid] = {"status": "pass", "provided": list(g.get("required_evidence", []) or []),
+                           "evidence": [f"reviewer verdict @ {art.name}"]}
+            else:
+                ev[gid] = {"status": "pass", "evidence": [f"reviewer verdict @ {art.name}"]}
+                # provided пуст -> при наличии required_evidence evaluate_gate честно даст fail
     return ev
 
 
@@ -157,6 +165,22 @@ def load_gates():
 
 def load_workflows():
     return yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8")).get("workflows", {})
+
+
+def override_effective(gate: dict, override) -> bool:
+    """Снимает ли override блокировку гейта — с учётом ПОЛИТИКИ гейта (v2.16).
+    Раньше любой override с by+reason обходил любой блокирующий гейт, игнорируя
+    `bypass_policy: forbidden` — это ломало главную гарантию. Теперь:
+      - нет override / нет by+reason -> нет;
+      - bypass_policy == forbidden -> НИКОГДА (обход запрещён контрактом);
+      - override_policy.allowed == true -> да (с субъектом и причиной);
+      - иначе (нет явного разрешения) -> нет (доказательства, а не слова)."""
+    if not (isinstance(override, dict) and override.get("by") and override.get("reason")):
+        return False
+    if gate.get("bypass_policy") == "forbidden":
+        return False
+    op = gate.get("override_policy")
+    return bool(isinstance(op, dict) and op.get("allowed"))
 
 
 def classify(gate: dict) -> str:
@@ -269,7 +293,7 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None) -> d
         kinds[gid] = classify(gate)
         r = evaluate_gate(gid, gate, evidence, tested_revision)
         results.append(r)
-        overridden = bool(r.get("override") and r["override"].get("by") and r["override"].get("reason"))
+        overridden = override_effective(gate, r.get("override"))
         if r["blocking"] and r["status"] == "fail" and not overridden:
             unmet.append(gid)
 
@@ -335,12 +359,21 @@ def selftest():
     expect("QUICK частичный evidence -> blocked на implementation_verification",
            r2["blocked"] and r2["unmet_gates"] == ["implementation_verification"])
 
-    # 5. override снимает блокировку по гейту (records override)
+    # 5. override уважает политику гейта (v2.16): forbidden не обходится, allowed — да
+    expect("bypass_policy: forbidden -> override НЕ снимает блок",
+           override_effective(gates["implementation_verification"],
+                              {"by": "human:lead", "reason": "hotfix"}) is False)
+    expect("override_policy.allowed -> override снимает блок (requirements)",
+           override_effective(gates["requirements"],
+                              {"by": "human:lead", "reason": "accepted"}) is True)
+    expect("нет явной override_policy -> обход не разрешён",
+           override_effective(gates["specification"], {"by": "x", "reason": "y"}) is False)
+    # на уровне workflow: fail forbidden-гейта с override ОСТАЁТСЯ blocked
     r3 = evaluate("QUICK", {
         "intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
         "implementation_verification": {"status": "fail",
                                         "override": {"by": "human:lead", "reason": "hotfix, verified manually"}}})
-    expect("override снимает блокировку", r3["blocked"] is False)
+    expect("forbidden-гейт с override остаётся blocked", r3["blocked"] is True)
 
     # 6. каждый gate-result соответствует ключам схемы (additionalProperties:false)
     schema_ok = all(set(g).issubset(_ALLOWED_KEYS) and
@@ -372,11 +405,13 @@ def selftest():
         (rd / "stage-intake.md").write_text("Intake\nstatus: passed\n", encoding="utf-8")
         (rd / "stage-local-verify.md").write_text("# Final Verification\nИтог: pass\n", encoding="utf-8")
         collected = collect_evidence("QUICK", rd)
-        expect("collect: вердикт pass извлечён для обоих гейтов QUICK",
+        expect("collect: вердикт pass извлечён (статус) для гейтов QUICK",
                collected.get("intake_completeness", {}).get("status") == "pass"
                and collected.get("implementation_verification", {}).get("status") == "pass")
-        expect("collect: собранного evidence достаточно, QUICK не blocked",
-               evaluate("QUICK", collected)["blocked"] is False)
+        expect("collect: reviewer НЕ фабрикует детерминированный evidence (provided пуст)",
+               not collected.get("implementation_verification", {}).get("provided"))
+        expect("collect: слова ревьюера НЕ закрывают детерминированные гейты -> QUICK blocked",
+               evaluate("QUICK", collected)["blocked"] is True)
         (rd / "stage-local-verify.md").write_text("Recommendation: FAIL\n", encoding="utf-8")
         expect("collect: вердикт fail -> гейт блокирует",
                evaluate("QUICK", collect_evidence("QUICK", rd))["blocked"] is True)

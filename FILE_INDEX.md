@@ -475,6 +475,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_presets.py`
 - `validation/validate_references.py`
 - `validation/validate_stale_gates.py`
+- `validation/validate_workflow_gates.py`
 
 ## tools/
 

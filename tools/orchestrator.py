@@ -235,17 +235,19 @@ def selftest():
             print("PASS judge-промпт изолирован (read-only guard)")
         else:
             ok = False; print("FAIL нет read-only guard в judge-промпте")
-    # --collect-evidence: провайдер, эмитящий вердикт, -> evidence собирается со стадий, done
+    # --collect-evidence: вердикты reviewer-стадий собираются, НО детерминированные гейты
+    # (build/lint/typecheck/tests) словом «pass» не закрываются (дисциплина evidence v2.16) —
+    # QUICK остаётся blocked без реальных доказательств. Раньше тест ждал done — это была дыра.
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         def verdict_provider(role_prompt):
             return "status: passed\nРезультат стадии готов согласно контракту роли."
         sc, _ = run_workflow("QUICK", "поправить опечатку", root, provider=verdict_provider,
                              verbose=False, collect=True)
-        if sc["status"] == "done":
-            print("PASS collect-evidence: вердикты стадий собраны -> done без ручного evidence")
+        if sc["status"] == "blocked" and "implementation_verification" in sc.get("unmet_gates", []):
+            print("PASS collect-evidence: слова ревьюера не закрывают детерминированные гейты -> blocked")
         else:
-            ok = False; print(f"FAIL collect-evidence не дал done ({sc['status']})")
+            ok = False; print(f"FAIL ожидался blocked на implementation_verification, получено {sc['status']}")
     print("orchestrator selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

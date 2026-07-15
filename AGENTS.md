@@ -40,6 +40,8 @@ python3 tools/run_report.py --selftest
 python3 tools/effect_metrics.py --selftest
 python3 tools/orchestrator.py --selftest
 python3 tools/gate_executor.py --selftest
+python3 validation/validate_workflow_gates.py --selftest
+python3 validation/validate_workflow_gates.py
 python3 validation/validate_presets.py
 python3 validation/validate_agent_evals.py
 python3 validation/validate_openspec_change.py examples/openspec-demo

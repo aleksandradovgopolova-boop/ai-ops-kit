@@ -40,7 +40,8 @@ gates:
     review_mode: read-only
     validator: validate-requirements
     human_approval: false
-    bypass_policy: forbidden
+    # override разрешён только с человеком и записью причины (не forbidden — иначе
+    # противоречие с override_policy; enforcement — tools/gate_executor.override_effective)
     override_policy: {allowed: true, requires: human, records: override_reason}
     applicability: [ENGINEERING, PRODUCT]
     stale_detection: {bind_to: artifact_hashes}
@@ -82,7 +83,7 @@ gates:
     validator: validate-evidence
     human_approval: false
     bypass_policy: forbidden
-    applicability: [QUICK, ENGINEERING, PRODUCT, AI_FEATURE, CRITICAL]
+    applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS, AI_FEATURE, CRITICAL]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [build_passed, lint_passed, typecheck_passed, tests_passed, tested_revision]
 
