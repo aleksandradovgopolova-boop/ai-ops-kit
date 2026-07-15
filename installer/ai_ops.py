@@ -582,6 +582,13 @@ def selftest():
                (child / ".claude" / "commands" / "ai-engineering.md").exists())
         expect("единая точка входа /ai-start-task установлена",
                (child / ".claude" / "commands" / "ai-start-task.md").exists())
+        # полные контракты (тела агентов, правила, шаблоны) доезжают в child managed
+        expect("тело агента установлено в .ai/managed/agents/",
+               (child / ".ai" / "managed" / "agents" / "core" / "context-builder.md").exists())
+        expect("правило установлено в .ai/managed/rules/",
+               (child / ".ai" / "managed" / "rules" / "core" / "DefinitionOfDone.md").exists())
+        expect("шаблон установлен в .ai/managed/templates/",
+               any((child / ".ai" / "managed" / "templates").rglob("*.md")))
         r = subprocess.run([sys.executable, str(CI / "validate_ai_ops_child.py")],
                            cwd=str(child), capture_output=True, text=True)
         expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
