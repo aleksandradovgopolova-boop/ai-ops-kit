@@ -59,6 +59,7 @@ python3 validation/validate_decisions.py --selftest
 python3 validation/validate_decisions.py
 python3 validation/validate_agents_checklist.py --selftest
 python3 validation/validate_agents_checklist.py
+python3 installer/ai_ops.py --selftest
 ```
 
 ## Ключевые инварианты (валидаторы их проверяют, но знать заранее дешевле)

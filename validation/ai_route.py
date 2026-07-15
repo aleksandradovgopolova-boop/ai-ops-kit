@@ -49,13 +49,26 @@ def route(inp):
 
     # 1. workflow: правила policy (эскалации) -> точное имя контракта ->
     # selection_criteria.task_type из workflows.yaml (единый источник) -> честный default.
+    # Инвариант: движок НИКОГДА не возвращает workflow, которого нет в реестре.
+    # Правило, целящее в ещё не зарегистрированный контракт (напр. CRITICAL, post-MVP),
+    # применяется как ЭСКАЛАЦИЯ к базовому workflow (reason + ручное одобрение), а не
+    # как отдельный workflow — иначе route ссылается на несуществующую стадийную схему.
     workflow = None
+    escalations = []
     for rule in policy.get("workflow_rules", []):
         if "when" in rule and _match(rule["when"], inp):
-            workflow = rule["workflow"]
+            target = rule.get("workflow")
+            if target in workflows:
+                workflow = target
+                if rule.get("escalate_reason"):
+                    reasons.append(rule["escalate_reason"])
+                break
+            # объявленный, но незарегистрированный контракт -> эскалация, не workflow
             if rule.get("escalate_reason"):
-                reasons.append(rule["escalate_reason"])
-            break
+                escalations.append(
+                    f"{rule['escalate_reason']} (контракт {target} ещё не зарегистрирован — "
+                    f"эскалация применена к базовому workflow, требуется ручное одобрение)")
+            # НЕ break: продолжаем искать реальный базовый workflow ниже
     if workflow is None:
         tt = inp.get("task_type")
         if tt in workflows:
@@ -138,6 +151,10 @@ def route(inp):
                 human_approval = rule["human_approval_required"]
                 break
     human_approval_required = (human_approval is True)
+    # эскалация в незарегистрированный контракт (напр. critical->CRITICAL, post-MVP)
+    # всегда требует ручного одобрения, даже если approval_rules сказали иначе
+    if escalations:
+        human_approval_required = True
 
     # 6. required/missing capabilities (из workflow-контракта)
     required = workflows.get(workflow, {}).get("required_capabilities", [])
@@ -160,6 +177,7 @@ def route(inp):
     if "local" in available_providers and selected_provider != "local" and not any(f["provider"] == "local" for f in fallbacks):
         fallbacks.append({"provider": "local", "runtime": "generic-orchestrator"})
 
+    reasons.extend(escalations)
     if not reasons:
         reasons.append("default routing")
 
@@ -238,6 +256,15 @@ SCENARIOS = [
      "inp": {"task_type": "something-strange", "risk": "low", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
      "expect": {"workflow": "ENGINEERING"}},
+    # critical risk: эскалация к базовому workflow, НЕ возврат незарегистрированного CRITICAL
+    {"name": "critical PRODUCT -> базовый PRODUCT + эскалация + ручное одобрение",
+     "inp": {"task_type": "PRODUCT", "risk": "critical", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "PRODUCT", "human_approval_required": True}},
+    {"name": "critical QUICK -> базовый QUICK + эскалация (одобрение обязательно)",
+     "inp": {"task_type": "QUICK", "risk": "critical", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "QUICK", "human_approval_required": True}},
 ]
 
 

@@ -47,6 +47,69 @@ def pkg_version():
     return (PKG / "VERSION").read_text(encoding="utf-8").strip()
 
 
+def parse_version(v):
+    """'2.14.1' -> (2, 14, 1). Пре-релизы/суффиксы отбрасываются (MVP-семантика)."""
+    core = str(v).strip().lstrip("v").split("-", 1)[0].split("+", 1)[0]
+    parts = (core.split(".") + ["0", "0", "0"])[:3]
+    return tuple(int(x) if x.isdigit() else 0 for x in parts)
+
+
+def version_in_range(version, range_str):
+    """Проверить версию против диапазона вида '>=2.0.0 <3.0.0' (AND через пробел).
+    Поддержка операторов >=, <=, >, <, ==, =. Пустой диапазон -> True (нет ограничений)."""
+    if not range_str or not str(range_str).strip():
+        return True
+    ops = {">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b,
+           ">": lambda a, b: a > b, "<": lambda a, b: a < b,
+           "==": lambda a, b: a == b, "=": lambda a, b: a == b}
+    ver = parse_version(version)
+    for token in str(range_str).split():
+        for op in (">=", "<=", "==", ">", "<", "="):
+            if token.startswith(op):
+                if not ops[op](ver, parse_version(token[len(op):])):
+                    return False
+                break
+        else:
+            # токен без оператора — трактуем как точное равенство
+            if ver != parse_version(token):
+                return False
+    return True
+
+
+def compatible_range_for(version):
+    """Совместимый по SemVer диапазон под текущий major: '>=X.0.0 <(X+1).0.0'."""
+    major = parse_version(version)[0]
+    return f">={major}.0.0 <{major + 1}.0.0"
+
+
+def child_allowed_range():
+    """allowed_version_range из .ai-ops.yaml (пусто, если не задан/нет конфига)."""
+    if not CHILD_CONFIG.exists():
+        return ""
+    cfg = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
+    return str((cfg.get("parent") or {}).get("allowed_version_range", "") or "")
+
+
+def materialize_runtime(child_root: Path):
+    """Сгенерировать runtime-команды и УСТАНОВИТЬ их туда, где их находит раннер.
+    generate_runtime пишет source of truth в .ai/generated/<runtime>/…; здесь мы
+    ставим команды claude-code в .claude/commands/ (command_loading из runtimes.yaml),
+    иначе после установки среда не видит сгенерированные точки входа. Возвращает число
+    установленных команд."""
+    sys.path.insert(0, str(PKG / "tools"))
+    import generate_runtime
+    generate_runtime.generate(child_root, verbose=False)
+    src = child_root / ".ai" / "generated" / "claude-code" / "commands"
+    dst = child_root / ".claude" / "commands"
+    dst.mkdir(parents=True, exist_ok=True)
+    count = 0
+    if src.is_dir():
+        for f in sorted(src.glob("*.md")):
+            shutil.copy2(f, dst / f.name)
+            count += 1
+    return count
+
+
 def manifest():
     return yaml.safe_load((PKG / "manifest" / "ai-ops-manifest.yaml").read_text(encoding="utf-8"))
 
@@ -209,6 +272,20 @@ def cmd_update(force=False):
               "backup_ref": None, "pull_request": None,
               "human_approval_required": False, "report": ""}
 
+    # совместимость: target обязан попадать в allowed_version_range из .ai-ops.yaml
+    allowed = child_allowed_range()
+    if not version_in_range(target, allowed):
+        report["compatibility"] = "incompatible"
+        if not force:
+            report.update(status="blocked", human_approval_required=True,
+                          report=f"Целевая версия {target} вне allowed_version_range "
+                                 f"'{allowed}'. Обновление остановлено — расширьте диапазон "
+                                 f"в .ai-ops.yaml осознанно (major-переход) или запустите с --force.")
+            out = write_report(report)
+            print(report["report"]); print(f"отчёт: {out}")
+            return 1
+        report["compatibility"] = "incompatible-forced"
+
     drift = detect_drift() or []
     if drift and not force:
         report.update(status="blocked", human_approval_required=True,
@@ -233,9 +310,29 @@ def cmd_update(force=False):
         shutil.copytree(MANAGED, backup)
     report["backup_ref"] = str(backup.relative_to(REPO_ROOT))
 
-    # миграции (цепочка из манифеста; сейчас пустая)
+    # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
+    # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
+    # только по факту успешного запуска up.py; при падении откатываемся из backup и стоп.
     chain = manifest().get("package_migrations", {}).get("chain", []) or []
-    report["migrations_applied"] = chain
+    applied = []
+    for step in chain:
+        up = PKG / "migrations" / step / "up.py"
+        if not up.exists():
+            report.update(status="failed", migrations_applied=applied,
+                          report=f"миграция {step}: нет {up} — обновление прервано.")
+            out = write_report(report); print(report["report"]); print(f"отчёт: {out}")
+            return 1
+        r = subprocess.run([sys.executable, str(up), str(REPO_ROOT)])
+        if r.returncode != 0:
+            if MANAGED.exists() and backup.exists():
+                shutil.rmtree(MANAGED); shutil.copytree(backup, MANAGED)
+            report.update(status="failed", migrations_applied=applied,
+                          report=f"миграция {step} провалена — managed-слой восстановлен из "
+                                 f"backup, обновление прервано.")
+            out = write_report(report); print(report["report"]); print(f"отчёт: {out}")
+            return 1
+        applied.append(step)
+    report["migrations_applied"] = applied
 
     # заменить managed-файлы
     for src, rel in managed_set():
@@ -254,6 +351,7 @@ def cmd_update(force=False):
     write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
     bump_child_config(target)
     report["skills_synced"] = sync_skills(REPO_ROOT)
+    report["commands_installed"] = materialize_runtime(REPO_ROOT)
 
     # smoke: валидаторы
     report["smoke_tests"] = run_validators([
@@ -290,12 +388,24 @@ def cmd_init(target_dir):
     MANAGED = saved
     cfg = root / ".ai-ops.yaml"
     if not cfg.exists():
+        import re
         example = PKG / "examples" / "child-config.example.yaml"
-        shutil.copy2(example, cfg)
-        print(f"создана заготовка {cfg} — отредактируйте project.name и providers.")
+        text = example.read_text(encoding="utf-8")
+        # подставить актуальную версию и совместимый диапазон, иначе provenance (пакет)
+        # разойдётся с конфигом и validate упадёт сразу после install (см. child-валидатор)
+        text = re.sub(r"(installed_version:\s*)\S+", rf"\g<1>{pkg_version()}", text, count=1)
+        text = re.sub(r'(allowed_version_range:\s*)"[^"]*"',
+                      rf'\g<1>"{compatible_range_for(pkg_version())}"', text, count=1)
+        cfg.write_text(text, encoding="utf-8")
+        print(f"создана заготовка {cfg} (версия {pkg_version()}) — отредактируйте project.name и providers.")
     synced = sync_skills(root)
     if synced:
         print(f"синхронизированы скиллы в .claude/skills/: {', '.join(synced)}")
+    # подключить runtime: сгенерировать и установить команды туда, где их видит раннер
+    installed_cmds = materialize_runtime(root)
+    if installed_cmds:
+        print(f"установлены команды runtime в .claude/commands/ ({installed_cmds} шт.) "
+              "— среда (Claude Code) видит маршруты сразу.")
     upd_src = PKG / "templates" / "ci" / "ai-ops-update.yml"
     upd_dst = root / ".github" / "workflows" / "ai-ops-update.yml"
     if upd_src.exists() and not upd_dst.exists():
@@ -387,10 +497,55 @@ def cmd_verify_capabilities():
     return r.returncode
 
 
+def selftest():
+    """Offline self-test инсталлера: диапазоны версий + e2e init во временный child,
+    затем прогон child-валидатора на свежей установке (главный путь пользователя)."""
+    import tempfile, io, contextlib
+    ok = True
+
+    def expect(name, cond):
+        nonlocal ok
+        ok = ok and cond
+        print(f"{'PASS' if cond else 'FAIL'} {name}")
+
+    # 1. семантика диапазонов
+    expect("2.14.1 ∈ '>=2.0.0 <3.0.0'", version_in_range("2.14.1", ">=2.0.0 <3.0.0"))
+    expect("2.14.1 ∉ '>=1.0.0 <2.0.0'", not version_in_range("2.14.1", ">=1.0.0 <2.0.0"))
+    expect("пустой диапазон -> без ограничений", version_in_range("9.9.9", ""))
+    expect("compatible_range_for(2.14.1)", compatible_range_for("2.14.1") == ">=2.0.0 <3.0.0")
+
+    # 2. e2e: init во временный child, затем child-валидатор
+    with tempfile.TemporaryDirectory() as td:
+        child = Path(td) / "child"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cmd_init(str(child))
+        expect("init вернул 0", rc == 0)
+        cfg = yaml.safe_load((child / ".ai-ops.yaml").read_text(encoding="utf-8"))
+        prov = json.loads((child / ".ai" / "managed" / ".provenance.json").read_text(encoding="utf-8"))
+        expect("config.installed_version == версия пакета",
+               str((cfg.get("parent") or {}).get("installed_version")) == pkg_version())
+        expect("provenance.installed_version == версия пакета",
+               str(prov.get("installed_version")) == pkg_version())
+        expect("allowed_version_range покрывает текущую версию",
+               version_in_range(pkg_version(), (cfg.get("parent") or {}).get("allowed_version_range")))
+        expect("runtime-команда установлена в .claude/commands/",
+               (child / ".claude" / "commands" / "ai-engineering.md").exists())
+        r = subprocess.run([sys.executable, str(CI / "validate_ai_ops_child.py")],
+                           cwd=str(child), capture_output=True, text=True)
+        expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
+        if r.returncode != 0:
+            print("  " + (r.stdout + r.stderr).strip()[-600:])
+
+    print("ai_ops selftest:", "PASS" if ok else "FAIL")
+    return 0 if ok else 1
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__); return 0
     cmd = argv[1]
+    if cmd in ("selftest", "--selftest"):
+        return selftest()
     if cmd == "status":
         return cmd_status()
     if cmd == "diff":
