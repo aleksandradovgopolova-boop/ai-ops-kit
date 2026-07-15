@@ -389,6 +389,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/child-config.schema.json`
 - `schemas/decisions-registry.schema.json`
 - `schemas/feature-blueprint.schema.json`
+- `schemas/gate-evidence.schema.json`
 - `schemas/gate-result.schema.json`
 - `schemas/knowledge-graph.schema.json`
 - `schemas/package-manifest.schema.json`
@@ -474,6 +475,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_presets.py`
 - `validation/validate_references.py`
 - `validation/validate_stale_gates.py`
+- `validation/validate_workflow_gates.py`
 
 ## tools/
 

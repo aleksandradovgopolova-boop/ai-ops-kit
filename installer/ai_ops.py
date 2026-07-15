@@ -16,8 +16,9 @@
   4-5) обнаружить прямые правки managed (checksums) — при drift БЛОКИРОВАТЬ (не молча);
   6) построить diff; 7) сделать backup; 8) применить миграции; 9) заменить managed-файлы;
   10) не трогать project/custom; 11) перегенерировать provenance/checksums;
-  12-14) прогнать smoke-валидаторы — при провале ОТКАТ managed-слоя и версии из
-         backup (rollback-safe: полу-обновления не остаётся); 15) machine-readable отчёт
+  12-14) прогнать smoke-валидаторы — при провале ТРАНЗАКЦИОННЫЙ ОТКАТ всего install
+         footprint (managed + .claude/skills + .claude/commands + .ai/generated +
+         .ai-ops.yaml) из снимка backup; 15) machine-readable отчёт
   (.ai/runtime/last-update-report.json, schemas/update-result.schema.json);
   16) коммит/PR делает человек или CI — silent update запрещён.
 
@@ -91,24 +92,51 @@ def child_allowed_range():
     return str((cfg.get("parent") or {}).get("allowed_version_range", "") or "")
 
 
+def parent_source():
+    """URL parent-репозитория для parent.source ('git+<url>'), из git remote пакета.
+    userinfo (креды) вырезается — секреты в конфиг не попадают. None, если remote недоступен."""
+    import re as _re
+    r = subprocess.run(["git", "-C", str(PKG), "config", "--get", "remote.origin.url"],
+                       capture_output=True, text=True)
+    url = r.stdout.strip()
+    if r.returncode != 0 or not url:
+        return None
+    url = _re.sub(r"^(https?://)[^/@]*@", r"\1", url)   # убрать user[:pass]@ из http(s)
+    url = _re.sub(r"^(ssh://)[^/@]*@", r"\1", url)
+    return f"git+{url}"
+
+
 def materialize_runtime(child_root: Path):
     """Сгенерировать runtime-команды и УСТАНОВИТЬ их туда, где их находит раннер.
     generate_runtime пишет source of truth в .ai/generated/<runtime>/…; здесь мы
     ставим команды claude-code в .claude/commands/ (command_loading из runtimes.yaml),
     иначе после установки среда не видит сгенерированные точки входа. Возвращает число
     установленных команд."""
+    import os
     sys.path.insert(0, str(PKG / "tools"))
     import generate_runtime
     generate_runtime.generate(child_root, verbose=False)
+    # claude-code -> .claude/commands/ (command_loading из runtimes.yaml)
     src = child_root / ".ai" / "generated" / "claude-code" / "commands"
     dst = child_root / ".claude" / "commands"
     dst.mkdir(parents=True, exist_ok=True)
-    count = 0
+    claude = 0
     if src.is_dir():
         for f in sorted(src.glob("*.md")):
             shutil.copy2(f, dst / f.name)
-            count += 1
-    return count
+            claude += 1
+    # codex -> $CODEX_HOME/prompts/ (env-var путь ВНЕ репо), только если CODEX_HOME задан
+    xsrc = child_root / ".ai" / "generated" / "codex" / "prompts"
+    codex_generated = len(list(xsrc.glob("*.md"))) if xsrc.is_dir() else 0
+    codex = 0
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home and xsrc.is_dir():
+        xdst = Path(codex_home) / "prompts"
+        xdst.mkdir(parents=True, exist_ok=True)
+        for f in sorted(xsrc.glob("*.md")):
+            shutil.copy2(f, xdst / f.name)
+            codex += 1
+    return {"claude_commands": claude, "codex_prompts": codex, "codex_generated": codex_generated}
 
 
 def manifest():
@@ -251,6 +279,46 @@ def restore_managed_from(backup: Path):
     shutil.copytree(backup, MANAGED)
 
 
+def _footprint_paths():
+    """Весь install footprint, который меняет update: managed + runtime-ассеты + конфиг."""
+    return [MANAGED,
+            REPO_ROOT / ".claude" / "skills",
+            REPO_ROOT / ".claude" / "commands",
+            AI_DIR / "generated",
+            CHILD_CONFIG]
+
+
+def snapshot_footprint(dest: Path):
+    """Снять полный install footprint в dest. Возвращает манифест {rel: existed}, чтобы
+    восстановление было точным — вернуть бывшее и УДАЛИТЬ появившееся при обновлении."""
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    man = {}
+    for p in _footprint_paths():
+        rel = str(p.relative_to(REPO_ROOT))
+        man[rel] = p.exists()
+        if p.exists():
+            b = dest / rel
+            b.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(p, b) if p.is_dir() else shutil.copy2(p, b)
+    (dest / ".footprint.json").write_text(
+        json.dumps(man, ensure_ascii=False, indent=2), encoding="utf-8")
+    return man
+
+
+def restore_footprint(dest: Path, man: dict):
+    """Транзакционный откат всего footprint к снимку: восстановить бывшее, удалить новое."""
+    for rel, existed in man.items():
+        p = REPO_ROOT / rel
+        if p.exists():
+            shutil.rmtree(p) if p.is_dir() else p.unlink()
+        if existed:
+            b = dest / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(b, p) if b.is_dir() else shutil.copy2(b, p)
+
+
 SMOKE_CHECKS = [
     ["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
     ["validate_ai_first_providers.py"], ["validate_ai_first_workflows.py"],
@@ -344,12 +412,10 @@ def cmd_update(force=False, smoke_checks=None):
         report.update(report="Обновление не требуется."); write_report(report)
         print("уже актуально."); return 0
 
-    # backup
+    # backup: снимок ВСЕГО install footprint (managed + .claude/skills + .claude/commands
+    # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
     backup = AI_DIR / "runtime" / "backups" / (inst or "unknown")
-    if MANAGED.exists():
-        if backup.exists():
-            shutil.rmtree(backup)
-        shutil.copytree(MANAGED, backup)
+    footprint = snapshot_footprint(backup)
     report["backup_ref"] = str(backup.relative_to(REPO_ROOT))
 
     # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
@@ -366,10 +432,9 @@ def cmd_update(force=False, smoke_checks=None):
             return 1
         r = subprocess.run([sys.executable, str(up), str(REPO_ROOT)])
         if r.returncode != 0:
-            if backup.exists():
-                restore_managed_from(backup)
+            restore_footprint(backup, footprint)
             report.update(status="failed", migrations_applied=applied,
-                          report=f"миграция {step} провалена — managed-слой восстановлен из "
+                          report=f"миграция {step} провалена — install footprint восстановлен из "
                                  f"backup, обновление прервано.")
             out = write_report(report); print(report["report"]); print(f"отчёт: {out}")
             return 1
@@ -395,18 +460,16 @@ def cmd_update(force=False, smoke_checks=None):
     report["skills_synced"] = sync_skills(REPO_ROOT)
     report["commands_installed"] = materialize_runtime(REPO_ROOT)
 
-    # smoke: валидаторы. При провале — ОТКАТ (rollback-safe): managed-слой и версия
-    # возвращаются к исходному состоянию из backup, чтобы не оставить полу-обновление.
+    # smoke: валидаторы. При провале — ТРАНЗАКЦИОННЫЙ ОТКАТ всего footprint (managed,
+    # .claude/skills, .claude/commands, .ai/generated, .ai-ops.yaml) к снимку из backup.
     report["smoke_tests"] = run_validators(smoke_checks or SMOKE_CHECKS)
     if any(t["status"] == "fail" for t in report["smoke_tests"]):
-        if backup.exists():
-            restore_managed_from(backup)
-            if inst:
-                bump_child_config(inst)          # вернуть версию в конфиге
+        restore_footprint(backup, footprint)
         report.update(status="rolled_back",
                       report=f"Smoke-валидаторы упали после применения — обновление ОТКАЧЕНО: "
-                             f"managed-слой и версия восстановлены к {inst or '—'} из backup "
-                             f"({report['backup_ref']}). Полу-обновлённого состояния не осталось.")
+                             f"весь install footprint (managed + runtime-ассеты + версия) "
+                             f"восстановлен к {inst or '—'} из backup ({report['backup_ref']}). "
+                             f"Полу-обновлённого состояния не осталось.")
         out = write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
@@ -446,16 +509,28 @@ def cmd_init(target_dir):
         text = re.sub(r"(installed_version:\s*)\S+", rf"\g<1>{pkg_version()}", text, count=1)
         text = re.sub(r'(allowed_version_range:\s*)"[^"]*"',
                       rf'\g<1>"{compatible_range_for(pkg_version())}"', text, count=1)
+        # parent.source: реальный URL parent-репо из git remote (иначе CI-автообновление
+        # не сможет склонировать parent — в заготовке остаётся плейсхолдер)
+        psrc = parent_source()
+        if psrc:
+            text = re.sub(r"(^\s*source:\s*)\S+", rf"\g<1>{psrc}", text, count=1, flags=re.M)
         cfg.write_text(text, encoding="utf-8")
-        print(f"создана заготовка {cfg} (версия {pkg_version()}) — отредактируйте project.name и providers.")
+        edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
+        print(f"создана заготовка {cfg} (версия {pkg_version()}; "
+              f"source {'из git remote' if psrc else 'placeholder — заполните'}) — отредактируйте {edit_hint}.")
     synced = sync_skills(root)
     if synced:
         print(f"синхронизированы скиллы в .claude/skills/: {', '.join(synced)}")
     # подключить runtime: сгенерировать и установить команды туда, где их видит раннер
-    installed_cmds = materialize_runtime(root)
-    if installed_cmds:
-        print(f"установлены команды runtime в .claude/commands/ ({installed_cmds} шт.) "
+    mat = materialize_runtime(root)
+    if mat["claude_commands"]:
+        print(f"установлены команды runtime в .claude/commands/ ({mat['claude_commands']} шт.) "
               "— среда (Claude Code) видит маршруты сразу.")
+    if mat["codex_prompts"]:
+        print(f"установлены Codex-промпты в $CODEX_HOME/prompts/ ({mat['codex_prompts']} шт.).")
+    elif mat["codex_generated"]:
+        print(f"Codex-промпты сгенерированы в .ai/generated/codex/prompts/ ({mat['codex_generated']} шт.); "
+              "CODEX_HOME не задан — при работе с Codex слинкуйте $CODEX_HOME/prompts на эту папку.")
     upd_src = PKG / "templates" / "ci" / "ai-ops-update.yml"
     upd_dst = root / ".github" / "workflows" / "ai-ops-update.yml"
     if upd_src.exists() and not upd_dst.exists():
@@ -578,8 +653,33 @@ def selftest():
                str(prov.get("installed_version")) == pkg_version())
         expect("allowed_version_range покрывает текущую версию",
                version_in_range(pkg_version(), (cfg.get("parent") or {}).get("allowed_version_range")))
+        exp_src = parent_source()
+        if exp_src:
+            expect("parent.source заполнен реальным URL (без плейсхолдера и кредов)",
+                   str((cfg.get("parent") or {}).get("source")) == exp_src
+                   and "<" not in exp_src and "@" not in exp_src)
         expect("runtime-команда установлена в .claude/commands/",
                (child / ".claude" / "commands" / "ai-engineering.md").exists())
+        expect("единая точка входа /ai-start-task установлена",
+               (child / ".claude" / "commands" / "ai-start-task.md").exists())
+        # полные контракты (тела агентов, правила, шаблоны) доезжают в child managed
+        expect("тело агента установлено в .ai/managed/agents/",
+               (child / ".ai" / "managed" / "agents" / "core" / "context-builder.md").exists())
+        expect("правило установлено в .ai/managed/rules/",
+               (child / ".ai" / "managed" / "rules" / "core" / "DefinitionOfDone.md").exists())
+        expect("шаблон установлен в .ai/managed/templates/",
+               any((child / ".ai" / "managed" / "templates").rglob("*.md")))
+        # Codex: при заданном CODEX_HOME промпты реально ставятся в $CODEX_HOME/prompts
+        import os as _os
+        codex_home = child / ".codex-home"
+        _old = _os.environ.get("CODEX_HOME")
+        _os.environ["CODEX_HOME"] = str(codex_home)
+        try:
+            _mat = materialize_runtime(child)
+            expect("Codex-промпты установлены в $CODEX_HOME/prompts при заданном CODEX_HOME",
+                   _mat["codex_prompts"] > 0 and (codex_home / "prompts" / "ai-engineering.md").exists())
+        finally:
+            _os.environ.pop("CODEX_HOME", None) if _old is None else _os.environ.update(CODEX_HOME=_old)
         r = subprocess.run([sys.executable, str(CI / "validate_ai_ops_child.py")],
                            cwd=str(child), capture_output=True, text=True)
         expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
@@ -618,6 +718,9 @@ def selftest():
             t = _re.sub(r"(installed_version:\s*)\S+", r"\g<1>2.0.0", t, count=1)
             CHILD_CONFIG.write_text(t, encoding="utf-8")
             before = sha256(MANAGED / ".checksums.json")
+            # sentinel в runtime-ассете (.claude/commands) — update перезапишет, откат обязан вернуть
+            cmd_file = child / ".claude" / "commands" / "ai-engineering.md"
+            cmd_file.write_text("SENTINEL-PRE-UPDATE", encoding="utf-8")
             rc = cmd_update(force=False, smoke_checks=[["__does_not_exist__.py"]])
             rep = json.loads((AI_DIR / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
             cfg_after = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
@@ -627,6 +730,8 @@ def selftest():
                    str((cfg_after.get("parent") or {}).get("installed_version")) == "2.0.0")
             expect("managed-слой восстановлен (checksums без изменений)",
                    sha256(MANAGED / ".checksums.json") == before)
+            expect("runtime-ассет (.claude/commands) откачен транзакционно",
+                   cmd_file.read_text(encoding="utf-8") == "SENTINEL-PRE-UPDATE")
         finally:
             REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED = saved
 

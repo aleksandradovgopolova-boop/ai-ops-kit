@@ -1,96 +1,127 @@
-# Walkthrough — сквозной сценарий за 15 минут
+# Walkthrough — от обычной фразы до вердикта
 
-Воспроизводимая демонстрация цикла «фича от идеи до вердикта» на пустом каталоге.
-Сценарий повторяет первый боевой прогон кита (child-репозиторий, фича миграции
-каталога на API-слой) в обезличенном виде. Все команды выполняются из клона кита;
-`$KIT` — путь к нему, `$PROJ` — ваш тестовый каталог.
+Сквозной сценарий реального пути пользователя: вы описываете задачу **обычными
+словами**, кит сам выбирает маршрут, проводит стадии и **не считает работу
+сделанной, пока блокирующие проверки не доказаны**. В Claude Code это выглядит как
+«напишите задачу и вызовите `/ai-start-task`»; ниже — та же механика через CLI, чтобы
+всё было воспроизводимо. `$KIT` — клон кита, `$PROJ` — тестовый проект.
 
 ```bash
 KIT=$(pwd)            # клон ai-ops-kit
 PROJ=$(mktemp -d)     # «репозиторий продукта»
+```
+
+## Шаг 1. Установить кит в проект
+
+```bash
+python3 $KIT/installer/ai_ops.py init $PROJ
 cd $PROJ
 ```
 
-## Шаг 1. Завести фичу (lean-профиль — у нас прототип)
+Появились: `.ai/managed/` с **полными контрактами** (тела агентов, правила, шаблоны,
+реестры), `.claude/commands/` с командой-точкой входа **`ai-start-task`** и командами
+каждого workflow, `.ai-ops.yaml` с реальным `parent.source` (из git remote, без
+кредов). Claude Code видит `/ai-start-task` сразу — маршрут выбирать руками не нужно.
+
+## Шаг 2. Обычная фраза → маршрут выбирается сам
+
+В Claude Code вы просто пишете «добавить фильтр по статусу в списке заказов» и
+вызываете `/ai-start-task`. Под капотом работает движок маршрутизации по реестрам в
+`.ai/managed/` — вот его решение:
 
 ```bash
-python3 $KIT/tools/generate_artifacts.py new features demo-migration "Каталог на API-слое" --profile lean
-python3 $KIT/tools/generate_artifacts.py scaffold features/demo-migration --stage discovery
+python3 $KIT/validation/ai_route.py '{"task_type":"feature","risk":"low","reasoning_complexity":"high","confidentiality":"internal","available_providers":["anthropic"],"available_runtimes":["claude-code"]}'
+# -> workflow: ENGINEERING, human_approval_required: false, с обоснованием в reasons
 ```
 
-Появились `blueprint.yaml` (5 стадий вместо 11) и два скелета discovery.
-
-## Шаг 2. Честность проверяется сразу
+**Критический риск переопределяет тип задачи** и требует ручного одобрения:
 
 ```bash
-python3 $KIT/tools/run_report.py features/demo-migration
-# -> ВЕРДИКТ: PROBLEM: «НЕЗАПОЛНЕННЫЕ СКЕЛЕТЫ достигнутых стадий»
+python3 $KIT/validation/ai_route.py '{"task_type":"feature","risk":"critical","confidentiality":"internal","available_providers":["anthropic"],"available_runtimes":["claude-code"]}'
+# -> workflow: CRITICAL, human_approval_required: true
+#    reason: "critical risk overrides declared task_type"
 ```
 
-Система не принимает созданный-но-пустой артефакт за работу. Заполните оба файла
-по существу (какую проблему решаем, чем докажем) — хотя бы по абзацу:
+## Шаг 3. Прогон workflow — гейты реально блокируют
 
 ```bash
-cat >> features/demo-migration/discovery/problem-statement.md <<'TXT'
-Каталог — последняя страница на legacy-фикстурах, мимо API-слоя: объекты не связаны
-с реальными сущностями, действия не попадают в аудит, состояние не переживает
-перезагрузку. Решено: e2e полного цикла зелёный, события каталога видны в аудите.
-TXT
-cat >> features/demo-migration/discovery/hypotheses.md <<'TXT'
-| 1 | Мы верим, что каталог на API-слое сделает путь «добавил -> вижу после перезагрузки» сквозным; узнаем по e2e полного цикла | e2e | сценарий зелёный без оговорок | planned |
-TXT
-python3 $KIT/tools/run_report.py features/demo-migration
-# -> PROBLEM ушёл; остался WARN про незаполненную ретроспективу — это нормально в начале
+python3 $KIT/tools/orchestrator.py run QUICK "поправить опечатку в README" $PROJ
+# -> BLOCKED: 4 стадии пройдены, но блокирующие гейты не выполнены:
+#    intake_completeness, implementation_verification
+cat $PROJ/.ai/runtime/orchestrator/quick/GateReport.json   # машиночитаемый отчёт
 ```
 
-## Шаг 3. Двигаться по стадиям
+Оркестратор проводит стадии с изоляцией ролей (writer ≠ judge), но **не ставит
+`done`, пока блокирующие гейты не доказаны**. Это и есть замкнутый контур — раньше
+задача помечалась готовой при любом ответе.
+
+## Шаг 4. Evidence снимает блок — но бездоказательный pass запрещён
+
+Доказательства подаются файлом (по `schemas/gate-evidence.schema.json`) или
+собираются из вердиктов reviewer-стадий (`--collect-evidence`):
 
 ```bash
-python3 $KIT/tools/generate_artifacts.py scaffold features/demo-migration --stage definition
-# заполните prd/feature.md и prd/user-stories.md, затем поднимите current_stage:
-python3 - <<'EOF'
-import yaml, pathlib
-p = pathlib.Path("features/demo-migration/blueprint.yaml")
-bp = yaml.safe_load(p.read_text())
-bp["feature"]["current_stage"] = "definition"
-p.write_text(yaml.safe_dump(bp, allow_unicode=True, sort_keys=False))
-EOF
+cat > /tmp/ev.json <<'JSON'
+{"intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
+ "implementation_verification": {"status": "pass",
+   "provided": ["build_passed", "lint_passed", "typecheck_passed", "tests_passed", "tested_revision"]}}
+JSON
+python3 $KIT/tools/orchestrator.py run QUICK "поправить опечатку" $PROJ --fresh --evidence /tmp/ev.json
+# -> OK: workflow QUICK завершён; все блокирующие гейты выполнены
 ```
 
-Правило на каждый шаг: артефакт достигнутой стадии — заполнен или
-`status: declined` + `declined_reason`. И главное правило прогона: **blueprint
-закрывается в том же PR, что и релиз кода** — race «код уехал, бумаги остались»
-run_report ловит через knowledge graph (ребро delivered-by при ранней стадии).
+Голый `{"status": "pass"}` без `provided` executor **отклонит** — доказательство
+обязательно (`required_evidence` из `quality/gates.yaml` должен быть подтверждён).
 
-## Шаг 4. Аналитика с кросс-проверкой
-
-Заполните `analytics/tracking-plan.md` (таблица Events) и `analytics/dashboard-spec.md`
-(Source events, Funnels). Согласованность проверяется механически:
+## Шаг 5. CRITICAL — строгий путь с независимым ревью и одобрением
 
 ```bash
-python3 $KIT/validation/validate_cross_artifacts.py features/demo-migration
-# событие в дашборде, не объявленное в tracking plan -> PROBLEM
+python3 $KIT/tools/gate_executor.py CRITICAL
+# гейты: intake_completeness, plan_readiness, implementation_verification, security, code_review
+# security   -> human-approval (обязательное ручное одобрение)
+# code_review -> ai-review (независимый judge)
+# без evidence/одобрения -> blocked
 ```
 
-## Шаг 5. Финал — вердикт и ретроспектива
-
-Дойдя до релиза: заполните `retrospective/retrospective.md` (результат vs метрики
-из discovery, уроки -> memory) и добейтесь:
-
-```bash
-python3 $KIT/validation/validate_feature_blueprint.py features/demo-migration
-python3 $KIT/tools/run_report.py features/demo-migration
-# -> ВЕРДИКТ: OK
-```
+CRITICAL — отдельный зарегистрированный workflow с independent `security-review`,
+`code-review` и стадией one-way-door (решение за человеком).
 
 ## Что вы только что увидели
 
-1. **Скелеты — детерминированные, содержание — ваше**: генератор никогда не
-   перезаписывает, drift-детект отличает заполненное от пустышки.
-2. **Отказ — легален, молчание — нет**: declined с причиной проходит, пропуск краснит.
-3. **Один вердикт**: run_report собирает blueprint, покрытие, кросс-артефактную
-   консистентность и knowledge graph в один exit-код для CI.
+1. **Обычная фраза → маршрут сам**: классификация и routing по реестрам, а не ручной
+   выбор команды; `critical` переопределяет тип + требует human approval.
+2. **Контур замкнут**: оркестратор проводит стадии, но `done` только при доказанных
+   блокирующих гейтах; иначе `blocked` со списком незакрытых гейтов.
+3. **Доказательства, а не слова**: evidence валидируется по схеме, бездоказательный
+   `pass` отклоняется, вердикты reviewer-стадий можно собрать автоматически.
 
-Реальный прогон этого сценария (с гейтами, ревью и knowledge graph) занял один день
-и нашёл два дефекта процесса — оба теперь автоматически краснят CI. Продолжение:
-[QUICKSTART.md](QUICKSTART.md) §4 — CI-джоб; [adoption-guide.md](adoption-guide.md) — роли.
+---
+
+## Часть B. Продуктовый blueprint (отдельный слой) — фича от идеи до вердикта
+
+Для продуктовых фич кит ведёт машиночитаемый blueprint (проблема → определение →
+аналитика → релиз → ретроспектива) с одним CI-вердиктом. Кратко:
+
+```bash
+python3 $KIT/tools/generate_artifacts.py new features demo "Каталог на API-слое" --profile lean
+python3 $KIT/tools/generate_artifacts.py scaffold features/demo --stage discovery
+python3 $KIT/tools/run_report.py features/demo
+# -> PROBLEM: незаполненные скелеты (созданный-но-пустой артефакт не считается работой)
+```
+
+Заполните discovery по существу (какую проблему решаем, чем докажем), двигайтесь по
+стадиям (артефакт достигнутой стадии — заполнен **или** `status: declined` + причина),
+и добейтесь единого вердикта:
+
+```bash
+python3 $KIT/validation/validate_cross_artifacts.py features/demo   # событие дашборда без tracking plan -> PROBLEM
+python3 $KIT/validation/validate_feature_blueprint.py features/demo
+python3 $KIT/tools/run_report.py features/demo                      # -> ВЕРДИКТ: OK
+```
+
+Ключевые инварианты слоя: скелеты детерминированные — содержание ваше (drift-детект
+отличает заполненное от пустышки); отказ легален, молчание — нет; blueprint
+закрывается в том же PR, что и релиз кода (race «код уехал, бумаги остались» ловит
+run_report через knowledge graph).
+
+Продолжение: [QUICKSTART.md](QUICKSTART.md) §4 — CI-джоб; [adoption-guide.md](adoption-guide.md) — роли.

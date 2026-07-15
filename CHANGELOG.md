@@ -2,6 +2,38 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.16.0] — 2026-07-15
+
+**Стабилизация ядра** — по итогам внешнего ре-аудита закрыты реальные дыры в главной
+гарантии продукта (обход гейтов, бездоказательный evidence, рассинхрон контрактов) +
+выпуск накопленных на main изменений (16 коммитов сверх тега v2.15.0 не доезжали до
+child, т.к. VERSION не менялся).
+
+### Fixed (integrity)
+- **bypass_policy: forbidden теперь соблюдается.** `gate_executor.override_effective`:
+  override НЕ снимает блок с гейта, где `bypass_policy: forbidden` (intake, security,
+  implementation_verification); разрешён только при `override_policy.allowed: true`
+  с субъектом и причиной; без явной политики — обход запрещён. Раньше любой
+  override с by+reason обходил любой блокирующий гейт (нарушение основной гарантии).
+  Selftest, который закреплял старое поведение, переписан.
+- **Reviewer «pass» больше не фабрикует evidence.** `collect_evidence`: словесный
+  вердикт ревьюера засчитывается как доказательство ТОЛЬКО для ai-review гейтов;
+  детерминированные (build/lint/typecheck/tests) и human гейты требуют реальных
+  фактов, а не строки «status: pass». «Evidence, а не слова» восстановлено.
+- **Contract-противоречие у `requirements`** (одновременно bypass_policy: forbidden и
+  override_policy.allowed) снято в пользу overridable-with-human.
+
+### Added
+- **validation/validate_workflow_gates.py** — валидатор согласованности workflow↔gate:
+  гейт из quality_gates обязан числить workflow в applicability; WARN о применимых
+  blocking-гейтах, не включённых в workflow. CI-шаг. Раньше CI это не ловил.
+
+### Changed
+- `implementation_verification.applicability` += VISUAL, ANALYTICS (они его используют).
+- **PRODUCT.quality_gates** += `implementation_verification` — PRODUCT больше не может
+  завершиться, не доказав сборку/тесты.
+- Выпуск main как 2.16.0 (VERSION/manifest/CHANGELOG) — фиксы доезжают до child.
+
 ## [2.15.0] — 2026-07-15
 
 **Замыкание контура: «провода подключены к механизмам».** Релиз соединяет уже

@@ -126,7 +126,51 @@ def check(root: Path):
                 if not fm.get(req):
                     bad("skill-frontmatter", f"{s.get('id')}: нет '{req}'", f"{sp} frontmatter")
 
+    # --- manifest: package-относительные пути (инструменты/контракты/примеры) резолвятся ---
+    # Раньше валидатор смотрел только shipped skills — routing engine, updater, examples,
+    # compatibility check и т.п. могли тихо протухнуть (02_tools/... после переезда структуры).
+    man_p = root / "manifest" / "ai-ops-manifest.yaml"
+    if man_p.exists():
+        man = load_yaml(man_p)
+        for tok in _manifest_path_tokens(man):
+            if not path_exists(root, tok.rstrip("/")):
+                bad("manifest-path", tok, "manifest/ai-ops-manifest.yaml")
+
     return findings
+
+
+# package-относительные префиксы: токены с ними — это пути к файлам/каталогам пакета
+_MANIFEST_PATH_PREFIXES = (
+    "registry/", "installer/", "validation/", "tools/", "examples/", "schemas/",
+    "quality/", "security/", "agents/", "rules/", "templates/", "context/",
+    "manifest/", "evaluations/", "config/", "knowledge/", "decisions/",
+    "governance/", "skills/", "openspec/", "workflows/", "commands/",
+)
+
+
+def _manifest_path_tokens(node):
+    """Собрать из манифеста токены, похожие на package-относительные пути.
+    Пропускает glob (*), URL (://), child-пути (.ai/…) и плейсхолдеры (<…>)."""
+    out = []
+
+    def walk(v):
+        if isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, list):
+            for x in v:
+                walk(x)
+        elif isinstance(v, str):
+            s = v.strip()
+            if "*" in s or "://" in s or s.startswith(".ai") or "<" in s:
+                return
+            for tok in s.split():
+                tok = tok.rstrip(":").strip()
+                if tok.startswith(_MANIFEST_PATH_PREFIXES):
+                    out.append(tok)
+
+    walk(node)
+    return out
 
 
 def run(root: Path, as_json=False):
@@ -168,7 +212,8 @@ def selftest():
         (root / "quality" / "gates.yaml").write_text(
             "gates:\n  real_gate: {id: real_gate}\n", encoding="utf-8")
         (root / "manifest" / "ai-ops-manifest.yaml").write_text(
-            "skills:\n  shipped:\n    - id: real-skill\n      path: skills/real-skill/SKILL.md\n",
+            "skills:\n  shipped:\n    - id: real-skill\n      path: skills/real-skill/SKILL.md\n"
+            "update_policy:\n  updater: installer/does_not_exist.py\n",   # протухший путь
             encoding="utf-8")
         (root / "skills" / "real-skill").mkdir()
         (root / "skills" / "real-skill" / "SKILL.md").write_text(
@@ -188,6 +233,7 @@ def selftest():
         expect("ловит битый checklist-путь", "path" in kinds)
         expect("deep-research (внешний) НЕ ложно-битый",
                all(x["ref"] != "deep-research" for x in f))
+        expect("ловит протухший путь в манифесте", "manifest-path" in kinds)
     print("validate_references selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
