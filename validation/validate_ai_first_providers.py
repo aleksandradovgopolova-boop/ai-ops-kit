@@ -77,6 +77,24 @@ def check_capability_index(cap, prov_ids, runtimes, tools):
             fail("capability-index.yaml", f"entry {kind}/{eid}/{e.get('capability')}: status '{e.get('status')}' вне словаря")
 
 
+ADAPTER_DEPTH_VOCAB = {"executing", "generated-commands", "manual-assisted"}
+
+
+def check_adapter_depth(runtimes):
+    """Честность maturity-декларации адаптеров: каждый mvp_adapter обязан честно
+    заявить adapter_depth (что адаптер реально делает), значение — из словаря."""
+    for rid, rt in (runtimes.get("runtimes", {}) or {}).items():
+        if not isinstance(rt, dict) or not rt.get("mvp_adapter"):
+            continue
+        depth = rt.get("adapter_depth")
+        if depth is None:
+            fail("runtimes.yaml", f"runtime '{rid}': mvp_adapter: true, но нет adapter_depth "
+                                  f"(честная глубина адаптера обязательна)")
+        elif depth not in ADAPTER_DEPTH_VOCAB:
+            fail("runtimes.yaml", f"runtime '{rid}': adapter_depth '{depth}' вне словаря "
+                                  f"{sorted(ADAPTER_DEPTH_VOCAB)}")
+
+
 def check_secrets(providers):
     for pid, p in providers.get("providers", {}).items():
         auth = p.get("auth", {}) if isinstance(p, dict) else {}
@@ -130,6 +148,7 @@ def main():
     else:
         prov_ids, classes = check_models(providers, models)
         check_capability_index(cap, prov_ids, runtimes, tools)
+        check_adapter_depth(runtimes)
         check_secrets(providers)
         check_routing(policy, prov_ids, classes)
         check_router()

@@ -129,10 +129,23 @@ def sha256(p: Path):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def _dir_signature(d: Path):
+    """Множество {относительный путь: sha256} файлов каталога — для сравнения содержимого."""
+    sig = {}
+    if d.is_dir():
+        for p in sorted(d.rglob("*")):
+            if p.is_file():
+                sig[str(p.relative_to(d))] = sha256(p)
+    return sig
+
+
 def sync_skills(child_root: Path):
     """Скопировать поставляемые китом скиллы в <child>/.claude/skills/<id>/.
     Скиллы грузятся раннером из .claude/skills/ (registry/runtimes.yaml).
-    Копируется весь каталог скилла; возвращает список синхронизированных id."""
+    shipped-скиллы — managed assets: перезаписываются из пакета. Но локальную правку
+    НЕ теряем молча — если целевой каталог разошёлся с пакетным, сохраняем его в
+    .ai/runtime/backups/skills/<id>/ и предупреждаем (кастомные скиллы — в .ai/custom/).
+    Возвращает список синхронизированных id."""
     synced = []
     for sk in (manifest().get("skills", {}) or {}).get("shipped", []) or []:
         sid = sk.get("id")
@@ -142,6 +155,15 @@ def sync_skills(child_root: Path):
             continue
         dst_dir = child_root / ".claude" / "skills" / sid
         if dst_dir.exists():
+            if _dir_signature(dst_dir) != _dir_signature(src_dir):
+                backup = child_root / ".ai" / "runtime" / "backups" / "skills" / sid
+                if backup.exists():
+                    shutil.rmtree(backup)
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(dst_dir, backup)
+                print(f"⚠ skill '{sid}': локальные правки сохранены в "
+                      f"{backup.relative_to(child_root)} перед перезаписью. shipped-скиллы "
+                      f"обновляются из пакета — кастомные держите в .ai/custom/ или форкните.")
             shutil.rmtree(dst_dir)
         shutil.copytree(src_dir, dst_dir)
         synced.append(sid)
@@ -563,6 +585,24 @@ def selftest():
         expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
         if r.returncode != 0:
             print("  " + (r.stdout + r.stderr).strip()[-600:])
+
+        # 2b. shipped skill с локальной правкой -> backup перед перезаписью (не теряем молча)
+        skills_dir = child / ".claude" / "skills"
+        some = sorted(p.name for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
+        if some:
+            sid = some[0]
+            edited = skills_dir / sid / "SKILL.md"
+            if edited.exists():
+                edited.write_text(edited.read_text(encoding="utf-8") + "\n<!-- local edit -->\n",
+                                  encoding="utf-8")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    sync_skills(child)
+                backup = child / ".ai" / "runtime" / "backups" / "skills" / sid
+                expect("skill-drift: локальная правка сохранена в backup", backup.exists())
+                expect("skill-drift: shipped-скилл перезаписан из пакета",
+                       "<!-- local edit -->" not in edited.read_text(encoding="utf-8"))
+                expect("skill-drift: backup содержит правку",
+                       backup.exists() and "<!-- local edit -->" in (backup / "SKILL.md").read_text(encoding="utf-8"))
 
         # 3. rollback-safe update: провал smoke -> откат managed-слоя и версии
         global REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED
