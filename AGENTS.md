@@ -45,6 +45,8 @@ python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
 python3 validation/validate_presets.py
 python3 validation/validate_agent_evals.py
+python3 validation/validate_agent_evals.py --selftest
+python3 validation/validate_agent_evals.py --all
 python3 validation/validate_openspec_change.py examples/openspec-demo
 python3 validation/validate_feature_blueprint.py --selftest
 python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout

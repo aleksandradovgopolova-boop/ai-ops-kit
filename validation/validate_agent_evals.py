@@ -19,6 +19,7 @@ evaluations/agents/<agent-id>.md, где <agent-id> — имя файла аге
 """
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,30 @@ from pathlib import Path
 PKG_ROOT = Path(__file__).resolve().parents[1]
 AGENTS_DIR = "agents/"
 EVALS_DIR = "evaluations/agents"
+
+
+def eval_structure_errors(stem):
+    """Структура eval-файла (v2.19): не только наличие, но и качество формы —
+    >=3 кейса и по >=3 Expected/Forbidden (нормальный/граничный/отказной)."""
+    p = PKG_ROOT / EVALS_DIR / f"{stem}.md"
+    if not p.exists():
+        return [f"{stem}: eval-файл отсутствует"]
+    t = p.read_text(encoding="utf-8")
+    errs = []
+    cases = len(re.findall(r"(?m)^##\s*Case", t))
+    if cases < 3:
+        errs.append(f"{stem}: {cases} кейсов < 3 (нужны нормальный/граничный/отказной)")
+    if t.count("Expected") < 3:
+        errs.append(f"{stem}: < 3 блоков Expected")
+    if t.count("Forbidden") < 3:
+        errs.append(f"{stem}: < 3 блоков Forbidden")
+    return errs
+
+
+def registry_agent_ids():
+    import yaml
+    ag = yaml.safe_load((PKG_ROOT / "registry" / "agents.yaml").read_text(encoding="utf-8"))
+    return [a["id"] for a in ag.get("agents", []) if isinstance(a, dict) and "id" in a]
 
 
 def changed_files(base):
@@ -51,6 +76,9 @@ def check(changed, evals_present):
             errors.append(
                 f"агент '{path}' изменён, но нет eval-кейсов {EVALS_DIR}/{stem}.md "
                 "(минимум 3 кейса, см. evaluations/README.md)")
+        else:
+            # eval есть — проверяем и СТРУКТУРУ (не только наличие файла)
+            errors.extend(eval_structure_errors(stem))
     return errors
 
 
@@ -68,7 +96,7 @@ def resolve_base(argv):
 
 def evals_present_on_disk():
     d = PKG_ROOT / EVALS_DIR
-    return {p.stem for p in d.glob("*.md")} if d.is_dir() else set()
+    return {p.stem for p in d.glob("*.md") if p.stem.lower() != "readme"} if d.is_dir() else set()
 
 
 def selftest():
@@ -90,13 +118,42 @@ def selftest():
     errs = check(["registry/agents.yaml", "agents/README.md", "workflows/release.md"],
                  evals_present=set())
     expect("не-агентные изменения -> pass", len(errs), 0)
+    # 4. структура: реальный eval-файл валиден; выдуманный «пустой» — нет
+    expect("структура существующего eval валидна",
+           eval_structure_errors("code-reviewer"), [])
+    expect("структура отсутствующего eval -> ошибка",
+           len(eval_structure_errors("__nope__")) >= 1, True)
     print("agent-evals selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
+
+
+def run_all():
+    """--all: проверить СТРУКТУРУ всех имеющихся eval-файлов + отчёт покрытия по реестру.
+    Структурные ошибки -> exit 1. Отсутствующие агенты -> WARN (цель 51/51)."""
+    present = sorted(evals_present_on_disk())
+    ids = registry_agent_ids()
+    errs = []
+    for stem in present:
+        errs.extend(eval_structure_errors(stem))
+    missing = [a for a in ids if a not in set(present)]
+    for m in missing:
+        print(f"  WARN нет eval-кейсов для агента: {m}")
+    if errs:
+        print(f"AGENT-EVALS: {len(errs)} структурных ошибок:")
+        for e in errs:
+            print(f"  - {e}")
+        return 1
+    cov = f"{len(ids) - len(missing)}/{len(ids)}"
+    print(f"AGENT-EVALS-OK: структура всех {len(present)} eval-файлов валидна; "
+          f"покрытие {cov}" + (" — полное." if not missing else f" ({len(missing)} без eval)."))
+    return 0
 
 
 def main(argv):
     if "--selftest" in argv:
         return selftest()
+    if "--all" in argv:
+        return run_all()
     base = resolve_base(argv)
     if base is None:
         print("OK (с предупреждением): база диффа недоступна — проверка изменённых "

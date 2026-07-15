@@ -51,6 +51,10 @@ jobs:
         env:
           AI_OPS_DIFF_BASE: ${{ github.event.pull_request.base.sha || '' }}
         run: python3 validation/validate_agent_evals.py
+      - name: Eval-кейсы — структура всех + покрытие (selftest + --all)
+        run: |
+          python3 validation/validate_agent_evals.py --selftest
+          python3 validation/validate_agent_evals.py --all
       - name: OpenSpec guard (пример)
         run: python3 validation/validate_openspec_change.py examples/openspec-demo
       - name: Feature Blueprint (selftest + пример)
