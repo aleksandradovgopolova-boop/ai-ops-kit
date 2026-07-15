@@ -14,7 +14,10 @@
     + ключ) — сетевые вызовы сознательно вынесены из этого файла.
 
 Использование:
-  orchestrator.py run <WORKFLOW> "<задача>" [child_root]   — прогон (mock-провайдер)
+  orchestrator.py run <WORKFLOW> "<задача>" [child_root] [--evidence <file>]
+                                                            — прогон (mock-провайдер); --evidence
+                                                              подаёт gate-evidence (иначе блокирующие
+                                                              гейты честно не пройдены -> status blocked)
   orchestrator.py --selftest                                — QUICK на временной папке
 
 Требует pyyaml.
@@ -170,8 +173,11 @@ def selftest():
     ok = True
     # evidence, эмулирующий выполненные блокирующие гейты QUICK (в реальном прогоне
     # его дают reviewer-стадии/валидаторы; в mock — подаём явно, чтобы дойти до done)
-    quick_evidence = {"intake_completeness": {"status": "pass"},
-                      "implementation_verification": {"status": "pass"}}
+    quick_evidence = {
+        "intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
+        "implementation_verification": {"status": "pass",
+            "provided": ["build_passed", "lint_passed", "tests_passed", "tested_revision"]},
+    }
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         # 1. без evidence блокирующие гейты не выполнены -> workflow BLOCKED (не done)
@@ -229,8 +235,17 @@ def main(argv):
     if len(argv) > 1 and argv[1] == "--selftest":
         return selftest()
     if len(argv) >= 3 and argv[1] == "run":
-        root = Path(argv[4]).resolve() if len(argv) > 4 else Path.cwd()
-        run_workflow(argv[2], argv[3], root)
+        # опциональный --evidence <file>: JSON {gate_id: {status, provided, checks, ...}}
+        gate_evidence = None
+        rest = list(argv[2:])
+        if "--evidence" in rest:
+            i = rest.index("--evidence")
+            gate_evidence = json.loads(Path(rest[i + 1]).read_text(encoding="utf-8"))
+            del rest[i:i + 2]
+        wf = rest[0]
+        task = rest[1] if len(rest) > 1 else ""
+        root = Path(rest[2]).resolve() if len(rest) > 2 else Path.cwd()
+        run_workflow(wf, task, root, gate_evidence=gate_evidence)
         return 0
     print(__doc__)
     return 0
