@@ -389,6 +389,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/child-config.schema.json`
 - `schemas/decisions-registry.schema.json`
 - `schemas/feature-blueprint.schema.json`
+- `schemas/gate-evidence.schema.json`
 - `schemas/gate-result.schema.json`
 - `schemas/knowledge-graph.schema.json`
 - `schemas/package-manifest.schema.json`
