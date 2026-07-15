@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.19.0
+  package_version: 2.20.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -144,6 +144,12 @@ security_policies:
   protected_paths: config/protected-paths.yaml
   boundary_model: security/boundary-model.md
   secrets_in_repo: forbidden
+  # v2.20: постура безопасности — карта по 13 областям (status/evidence/severity)
+  posture: governance/security-posture.yaml
+  posture_validator: validation/validate_security_posture.py
+  policies: governance/security-policies.md
+  information_boundaries: governance/information-boundaries.md
+  audit_log: ".ai/runtime/interaction-log.jsonl"       # append-only действия ИИ (orchestrator)
 
 update_policy:
   silent_update: forbidden

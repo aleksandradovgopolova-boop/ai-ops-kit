@@ -321,9 +321,11 @@ Decision Intelligence (v2.10): реестр решений — принципы 
 
 ## governance/
 
-Границы данных: что можно и что нельзя хранить в репозитории / передавать внешним моделям (важно для гос-контекста).
+Границы данных и безопасность: что можно/нельзя хранить и передавать внешним моделям; постура безопасности (карта по 13 областям, security-posture.yaml) и политики (security-policies.md).
 
 - `governance/information-boundaries.md`
+- `governance/security-policies.md`
+- `governance/security-posture.yaml`
 
 ## memory/
 
@@ -503,6 +505,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_openspec_change.py`
 - `validation/validate_presets.py`
 - `validation/validate_references.py`
+- `validation/validate_security_posture.py`
 - `validation/validate_stale_gates.py`
 - `validation/validate_workflow_gates.py`
 

@@ -1,0 +1,113 @@
+# governance/security-posture.yaml — постура безопасности AI Ops Kit (v2.20).
+# Машиночитаемая карта по 13 областям: что уже есть (evidence — реальные файлы),
+# статус и пробелы. Честно: status отражает РЕАЛЬНОЕ состояние, не желаемое.
+#   implemented — механизм/политика есть и проверяется;
+#   partial     — базовое есть, часть не покрыта;
+#   declared    — политика написана, но enforcement не автоматизирован;
+#   roadmap     — пробел, зафиксирован как план (ещё не сделано).
+# validate_security_posture.py проверяет форму и что все evidence-пути резолвятся.
+schema_version: 1
+kind: security-posture
+areas:
+  - id: access-control
+    title: Роли и права доступа к моделям, данным, агентам, инструментам
+    status: implemented
+    severity: critical
+    evidence: [security/permission-levels.yaml, security/boundary-model.md, config/protected-paths.yaml]
+    note: 6 уровней прав; зоны managed/project/custom/generated/runtime; writer≠judge.
+
+  - id: sensitive-data
+    title: Защита чувствительных данных и ПДн
+    status: implemented
+    severity: critical
+    evidence: [governance/information-boundaries.md, rules/ai/SecretsAndSensitiveData.md]
+    note: 5 категорий данных; ПДн — только ссылка на source of truth или после обезличивания.
+
+  - id: leak-prevention
+    title: Запрет утечек через промпты, логи, память, контекст
+    status: partial
+    severity: high
+    evidence: [rules/ai/PromptInjectionDefense.md, governance/information-boundaries.md, tools/orchestrator.py]
+    note: >
+      Изоляция ролей (judge видит только опубликованное), запрет секретов в промптах.
+      Пробел закрыт частично: единый аудит-лог действий (interaction-log) добавлен в
+      orchestrator (v2.20), но не во всех runtime-путях.
+
+  - id: prompt-injection
+    title: Prompt injection, jailbreak, вредоносные файлы
+    status: implemented
+    severity: high
+    evidence: [rules/ai/PromptInjectionDefense.md, rules/ai/red-team-checklist.yaml, quality/gates.yaml]
+    note: >
+      Данные-как-данные в промптах; red-team-checklist (OWASP LLM Top 10); gate ai_red_team.
+      Вредоносные вложения — declared в policy, автопроверки файлов нет (roadmap).
+
+  - id: secrets
+    title: Управление секретами, токенами, API-ключами
+    status: implemented
+    severity: critical
+    evidence: [rules/ai/SecretsAndSensitiveData.md, manifest/ai-ops-manifest.yaml, tools/orchestrator.py]
+    note: secrets_in_repo forbidden; ключи только из env (live-провайдеры), в логи не пишутся.
+
+  - id: audit-log
+    title: Аудит действий ИИ — кто, что, когда, что изменилось
+    status: partial
+    severity: high
+    evidence: [tools/orchestrator.py, governance/security-policies.md]
+    note: >
+      v2.20: orchestrator пишет append-only interaction-log (.ai/runtime/interaction-log.jsonl):
+      ts, workflow, задача, статус, невыполненные гейты, провайдер. Плюс TaskState/GateReport.
+      Пробел: единый стандарт для ВСЕХ runtime-агентов (не только orchestrator) — roadmap.
+
+  - id: human-in-the-loop
+    title: Human-in-the-loop для рискованных операций
+    status: implemented
+    severity: critical
+    evidence: [rules/core/HumanApproval.md, quality/gates.yaml, templates/decisions/OneWayDoorBrief.md]
+    note: gate human_approval; one-way-door brief; override уважает bypass_policy (v2.16).
+
+  - id: tool-mcp-connection
+    title: Безопасное подключение внешних инструментов и MCP
+    status: declared
+    severity: high
+    evidence: [governance/security-policies.md, registry/tools.yaml]
+    note: Политика подключения (доверие, разрешения, отсутствие секретов, sandbox); enforcement — roadmap.
+
+  - id: pre-prod-validation
+    title: Red teaming, evals, тестовые сценарии перед продом
+    status: implemented
+    severity: high
+    evidence: [quality/gates.yaml, rules/ai/red-team-checklist.yaml, validation/validate_agent_evals.py, evaluations/agents]
+    note: gate ai_eval + ai_red_team; eval-покрытие 51/51 со структурной проверкой (v2.19).
+
+  - id: incident-killswitch
+    title: Мониторинг инцидентов, отключение агента, откат, разбор причин
+    status: partial
+    severity: high
+    evidence: [installer/ai_ops.py, agents/delivery/incident-analyst.md, governance/security-policies.md]
+    note: >
+      Транзакционный rollback установки (v2.16); incident-analyst для разбора.
+      Пробел: kill-switch/остановка постоянно работающего агента — declared в policy, runtime нет (roadmap, см. Robin).
+
+  - id: data-lifecycle
+    title: Правила хранения, удаления и сроков жизни данных
+    status: declared
+    severity: medium
+    evidence: [governance/security-policies.md, rules/core/FreshnessPolicy.md]
+    note: FreshnessPolicy (устаревание знаний) + policy по retention/TTL/удалению; enforcement — roadmap.
+
+  - id: env-separation
+    title: Разделение тестовой и продуктивной среды
+    status: declared
+    severity: high
+    evidence: [governance/security-policies.md]
+    note: Политика test/prod (данные, ключи, флаги, mock vs live); механическая проверка — roadmap.
+
+  - id: supplier-control
+    title: Контроль поставщиков моделей и рисков закрытого контура
+    status: partial
+    severity: medium
+    evidence: [registry/providers.yaml, registry/routing-policy.yaml, governance/information-boundaries.md, governance/security-policies.md]
+    note: >
+      Реестр провайдеров (first_class anthropic/openai; planned gigachat); данные ограниченного
+      доступа не уходят внешним моделям (information-boundaries). Пробел: формальный vendor-review — declared.
