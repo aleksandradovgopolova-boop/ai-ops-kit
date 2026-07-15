@@ -276,6 +276,7 @@
 - `templates/release/FeatureFlag.md`
 - `templates/release/RollbackStrategy.md`
 - `templates/release/RolloutPlan.md`
+- `templates/runtime/runtime-binding.example.yaml` — child объявляет, чем закрывает контракт persistent-agent-runtime (v2.21)
 - `templates/task/Retrospective.md`
 - `templates/task/TaskBrief.md`
 - `templates/task/TaskContext.md`
@@ -306,6 +307,13 @@
 - `context/team/DevelopmentProcess.md`
 - `context/team/Glossary.md`
 - `context/team/OwnershipMap.md`
+
+## runtime/
+
+Спецификация постоянного агента-ассистента (Robin), runtime-агностичная (v2.21). Кит даёт контракт+спеку+валидатор; привязка к конкретному рантайму — на уровне child.
+
+- `runtime/robin/ROBIN.md` — спека Робина (read-mostly, память curated/staged→promoted, audit-log, kill-switch, когда внедрять)
+- `runtime/robin/duties.example.yaml` — пример декларативных обязанностей (проверяется validate_duties.py)
 
 ## knowledge/
 
@@ -499,6 +507,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_claims.py`
 - `validation/validate_cross_artifacts.py`
 - `validation/validate_decisions.py`
+- `validation/validate_duties.py` — обязанности постоянного агента Robin (v2.21)
 - `validation/validate_feature_blueprint.py`
 - `validation/validate_freshness.py`
 - `validation/validate_knowledge_graph.py`

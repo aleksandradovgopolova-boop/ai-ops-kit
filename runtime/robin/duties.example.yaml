@@ -1,0 +1,52 @@
+# duties.example.yaml — декларативные обязанности постоянного агента (Robin).
+# Пример из кита; в child живёт свой файл (по умолчанию .ai/runtime/robin/duties.yaml).
+# Проверяется validation/validate_duties.py.
+#
+# Инвариант: Robin read-mostly. destination любой обязанности — чат/файл-дайджест,
+# НЕ запись в prod и НЕ прямая запись в curated-память (перенос staged->promoted
+# делает человек). См. runtime/robin/ROBIN.md.
+schema_version: 1
+kind: robin-duties
+
+# Владелец рантайма-привязки (человек), к кому эскалировать при сбое.
+owner: team-lead
+
+duties:
+  # --- Минимально обязательная обязанность: периодический дайджест -------------
+  - id: weekly-digest
+    description: "Недельный дайджест: что произошло, решения, открытые вопросы."
+    trigger:
+      type: cron                     # cron | event
+      schedule: "0 9 * * MON"        # для cron обязателен schedule
+    inputs:
+      - decisions/registry.yaml       # источники — только на чтение
+      - features/
+    output:
+      artifact: digest
+      destination: team-chat          # чат/файл; не prod, не curated-память
+    owner: team-lead
+
+  - id: onboarding-answers
+    description: Отвечает на повторяющиеся вопросы новичков из базы знаний.
+    trigger:
+      type: event
+      event: chat-question            # для event обязателен event
+    inputs:
+      - knowledge/curated/
+    output:
+      artifact: answer
+      destination: team-chat
+    owner: team-lead
+
+  - id: context-recovery
+    description: "«Что я пропустил?» — восстанавливает контекст по запросу участника."
+    trigger:
+      type: event
+      event: chat-question
+    inputs:
+      - .ai/runtime/interaction-log.jsonl
+      - decisions/registry.yaml
+    output:
+      artifact: brief
+      destination: team-chat
+    owner: team-lead

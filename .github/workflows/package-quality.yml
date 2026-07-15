@@ -49,6 +49,10 @@ jobs:
         run: |
           python3 validation/validate_security_posture.py --selftest
           python3 validation/validate_security_posture.py
+      - name: Обязанности постоянного агента (Robin)
+        run: |
+          python3 validation/validate_duties.py --selftest
+          python3 validation/validate_duties.py
       - name: Presets
         run: python3 validation/validate_presets.py
       - name: Eval-кейсы изменённых агентов

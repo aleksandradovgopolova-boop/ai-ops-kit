@@ -53,11 +53,13 @@ areas:
     title: Аудит действий ИИ — кто, что, когда, что изменилось
     status: partial
     severity: high
-    evidence: [tools/orchestrator.py, governance/security-policies.md]
+    evidence: [tools/orchestrator.py, governance/security-policies.md, registry/runtimes.yaml, runtime/robin/ROBIN.md]
     note: >
       v2.20: orchestrator пишет append-only interaction-log (.ai/runtime/interaction-log.jsonl):
       ts, workflow, задача, статус, невыполненные гейты, провайдер. Плюс TaskState/GateReport.
-      Пробел: единый стандарт для ВСЕХ runtime-агентов (не только orchestrator) — roadmap.
+      v2.21: контракт persistent-agent-runtime требует тот же формат audit-log и для
+      постоянного агента (Robin); формат задан спекой. Пробел: enforcement на рантайме
+      не проверялся из среды разработки (verified_against_deploy: false) — roadmap.
 
   - id: human-in-the-loop
     title: Human-in-the-loop для рискованных операций
@@ -84,10 +86,13 @@ areas:
     title: Мониторинг инцидентов, отключение агента, откат, разбор причин
     status: partial
     severity: high
-    evidence: [installer/ai_ops.py, agents/delivery/incident-analyst.md, governance/security-policies.md]
+    evidence: [installer/ai_ops.py, agents/delivery/incident-analyst.md, governance/security-policies.md, runtime/robin/ROBIN.md]
     note: >
       Транзакционный rollback установки (v2.16); incident-analyst для разбора.
-      Пробел: kill-switch/остановка постоянно работающего агента — declared в policy, runtime нет (roadmap, см. Robin).
+      v2.21: kill-switch стал требованием контракта persistent-agent-runtime, runbook —
+      security-policies.md §3, спека Robin явно объявляет границы read-mostly.
+      Пробел: сам механизм остановки живёт на рантайме и из среды разработки не проверялся
+      (verified_against_deploy: false) — реализация на стороне child (roadmap).
 
   - id: data-lifecycle
     title: Правила хранения, удаления и сроков жизни данных

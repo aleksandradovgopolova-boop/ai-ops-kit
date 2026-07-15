@@ -211,3 +211,32 @@ runtimes:
 degradation_rule:
   order: [native, orchestrated, sequential, manual-assisted]
   guarantee: "любой MVP workflow исполним минимум в sequential mode"
+
+# --- Контракты рантайма (не адаптеры) ------------------------------------------
+# Абстрактный контракт постоянно работающего агента-ассистента (Robin).
+# Кит остаётся runtime-агностичным: здесь описано, ЧТО обязан дать любой рантайм,
+# а НЕ какой именно. Конкретная привязка — на уровне child
+# (templates/runtime/runtime-binding.example.yaml). Спека — runtime/robin/ROBIN.md.
+runtime_contracts:
+  persistent-agent-runtime:
+    display_name: Persistent team assistant runtime (agnostic)
+    kind: contract                       # это контракт, не mvp_adapter -> вне adapter_depth-проверки
+    status: contract                     # спека+валидатор есть; привязка к конкретному рантайму — child
+    verified_against_deploy: false       # ЧЕСТНО: из среды разработки деплой рантайма не проверялся
+    spec: runtime/robin/ROBIN.md
+    binding_template: templates/runtime/runtime-binding.example.yaml
+    duties_validator: validation/validate_duties.py
+    # что обязан обеспечить рантайм, чтобы удовлетворять контракту:
+    required_capabilities:
+      always_on:        {value: true,  note: "процесс работает по расписанию/событию, не только по запросу"}
+      model_call:       {value: true,  note: "может вызвать модель провайдера (ключ — из env рантайма)"}
+      chat_adapter:     {value: true,  note: "читает/пишет в рабочий чат команды; ввод из чата — недоверенный"}
+      kill_switch:      {value: true,  note: "оператор может остановить процесс и отозвать права; runbook в security-policies.md §3"}
+      audit_log:        {value: true,  note: "append-only interaction-log в формате tools/orchestrator.py; без секретов"}
+      read_mostly:      {value: true,  note: "нет записи в prod и в curated-память; инструменты — на чтение"}
+    optional_capabilities:
+      in_perimeter:     {value: true,  note: "закрытый контур для ПДн/гос-данных (child объявляет при необходимости)"}
+    example_bindings:
+      # только примеры; НЕ хардкод в ядре — у каждой команды свой рантайм
+      - "Hermes (собственный сервис в контуре команды)"
+      - "cron + CLI + чат-webhook"
