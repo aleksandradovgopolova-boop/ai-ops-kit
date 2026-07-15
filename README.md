@@ -3,9 +3,10 @@
 Открытая **AI Product Operating System** для продуктово-технологических команд:
 AI сопровождает продукт на всём жизненном цикле — Discovery → Delivery → Release →
 Measurement → Insights → снова Discovery. Агенты (включая независимых ревьюеров всех
-зон), workflow-контракты, quality gates, Feature Blueprint, генераторы артефактов,
-Knowledge Graph, Product Health, provider/runtime маршрутизация и управляемые
-обновления дочерних репозиториев.
+зон), workflow-контракты, quality gates, Feature Blueprint, единый продуктовый путь
+(WorkItem), генераторы артефактов, Knowledge Graph, Product Health, Decision Intelligence,
+постура безопасности, provider/runtime маршрутизация и управляемые обновления
+дочерних репозиториев.
 
 **Начать здесь:** [Quickstart](docs/QUICKSTART.md) (первый день + типовые ошибки) ·
 [Walkthrough](docs/WALKTHROUGH.md) (сквозной сценарий за 15 минут) ·
@@ -25,7 +26,10 @@ Knowledge Graph, Product Health, provider/runtime маршрутизация и 
 | `schemas/` | JSON Schema контракты (gate-result, route-decision, child-config, ...) |
 | `security/` | 6 уровней разрешений, boundary model (managed/project/custom) |
 | `openspec/` | Интеграция OpenSpec (опция): change-template, extension-схемы |
-| `installer/` | CLI `ai-ops`: init / status / diff / update / validate / doctor / migrate |
+| `skills/` | Скиллы, поставляемые китом (opt-in), + каталог внешних скиллов (registry/skills-catalog.yaml) |
+| `decisions/`, `knowledge/`, `governance/` | Decision Intelligence, Knowledge Integrity (claims/freshness), границы данных и постура безопасности |
+| `runtime/` | Спека постоянного агента-ассистента (Robin), runtime-агностичная: контракт + duties + валидатор |
+| `installer/` | CLI `ai-ops`: init / status / diff / update / validate / doctor / migrate / verify-capabilities |
 | `validation/` | Валидаторы (registry, workflows, providers, child-install, drift, guard) |
 | `migrations/` | Механизм миграций между версиями |
 

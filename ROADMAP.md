@@ -121,10 +121,15 @@
   не выдаёт вердикт, пока человек не сформулировал позицию; one-way-door — бриф на
   эскалацию, AI не решает необратимое сам); workflow DECISION; гейт decision_quality
   (non-blocking). Связь с systems-thinking (constraint -> contradiction -> decision).
-- **Фаза 4 — Runtime/Robin (спека, не реализация).** Целевая архитектура постоянного
-  агента: декларативные duties, два слоя памяти (staged -> promoted через человека),
-  append-only interaction-log, read-mostly границы. Не строим: постоянного runtime нет,
-  оркестратор честно sequential-only. Референс для будущего продуктового слоя.
+- **Фаза 4 — Runtime/Robin (v2.21) ✅ выполнена как runtime-агностичная спека.** Кит даёт
+  абстрактный контракт `persistent-agent-runtime` (`registry/runtimes.yaml`), спеку
+  `runtime/robin/ROBIN.md` (декларативные duties, два слоя памяти staged→promoted через
+  человека, append-only interaction-log, read-mostly границы, kill-switch), валидатор
+  `validation/validate_duties.py` и шаблон привязки `templates/runtime/runtime-binding.example.yaml`.
+  Честно: конкретный рантайм (Hermes, свой сервис, cron+CLI) — привязка на уровне child, не
+  в ядре; `verified_against_deploy: false` (из среды разработки деплой не проверялся);
+  постоянного runtime у кита по-прежнему нет, оркестратор sequential-only. Не строим: Robin
+  как готовый бот.
 
 Отклонено осознанно: reorg `.ai/` целиком, `capabilities/`/`adapters/` как новые
 верхнеуровневые слои (дублируют capability-index/presets/runtimes), Robin как готовый бот.
