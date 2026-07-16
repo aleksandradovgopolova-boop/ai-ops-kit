@@ -5,16 +5,21 @@ AI сопровождает продукт на всём жизненном ци
 Measurement → Insights → снова Discovery. Агенты (включая независимых ревьюеров всех
 зон), workflow-контракты, quality gates, Feature Blueprint, единый продуктовый путь
 (WorkItem), генераторы артефактов, Knowledge Graph, Product Health, Decision Intelligence,
-постура безопасности, provider/runtime маршрутизация, **компоненты исполнения**
-(`ai-ops run`: RunPlan + треки качества, Tool Broker с Policy Engine, бюджет прогона,
-tool-loop, детектор стека, сбор evidence) и управляемые обновления дочерних репозиториев.
+постура безопасности, provider/runtime маршрутизация, **единый execution-движок**
+(`ai-ops run --engine pipeline`: worktree-изоляция → детектор стека → tool-loop → commit →
+evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
-> **Честный статус (аудит исполнения, 2026-07-16):** компоненты исполнения есть, но ещё НЕ
-> собраны в единый движок «задача → готовый draft PR». generic-путь пока гоняет
-> doc-оркестратор, не tool-loop; сам движок не ставится в child (нужен клон кита рядом). Кит
-> сегодня — сильная система стандартов/гейтов/шаблонов; автономный coding-runtime — открытый
-> P0-эпик (см. `manifest → execution_engine.execution_audit_2026_07_16`,
-> решение `ep-2026-07-16-execution-audit`).
+> **Честный статус движка (аудит исполнения, 2026-07-16):** единый движок «задача → draft PR»
+> **собран, подключён к контроллеру (`ai-ops run --engine pipeline`) и подтверждён на живой
+> модели end-to-end** до `ready_for_pr` (DeepSeek через `openai-compatible`; изоляция в worktree,
+> commit на ветке, evidence на точном SHA). Дифф аудита прошёл adversarial-review (6 дефектов,
+> включая security, исправлены — v2.63). Осталась **эмпирика на стороне child** (не код): живой
+> draft PR (нужен GITHUB_TOKEN) и 3 реальные задачи на репо с тулчейном против обычного
+> Claude Code. Детали — `manifest → execution_engine.execution_audit_2026_07_16`,
+> решение `ep-2026-07-16-execution-audit`.
+>
+> Границы честности: shell не полностью песочница (FS/сеть-изоляция вне репо = контейнер, в
+> p0_backlog); прогон с пустым репо освобождает build/lint/test умным ослаблением (штатно).
 
 **Начать здесь:** [Quickstart](docs/QUICKSTART.md) (первый день + типовые ошибки) ·
 [Walkthrough](docs/WALKTHROUGH.md) (сквозной сценарий за 15 минут) ·
