@@ -49,6 +49,7 @@
 - `registry/routing-policy.yaml`
 - `registry/runtimes.yaml`
 - `registry/skills-catalog.yaml`
+- `registry/tracks.yaml` — quality tracks: signal->gates (base_workflow + tracks, v2.32)
 - `registry/tools.yaml`
 - `registry/workflows.yaml`
 
@@ -446,6 +447,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/provenance.schema.json`
 - `schemas/provider-entry.schema.json`
 - `schemas/registry-entity.schema.json`
+- `schemas/run-plan.schema.json` — RunPlan: base_workflow + tracks + агрегированные гейты (v2.32)
 - `schemas/route-decision.schema.json`
 - `schemas/runtime-entry.schema.json`
 - `schemas/update-result.schema.json`
@@ -540,6 +542,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/generate_runtime.py`
 - `tools/orchestrator.py`
 - `tools/product_health.py`
+- `tools/run_plan.py` — построение RunPlan (base_workflow + tracks -> gates), validate (v2.32)
 - `tools/run_report.py`
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)

@@ -45,6 +45,10 @@ jobs:
           python3 validation/validate_workflow_gates.py
       - name: WorkItem — единая сущность и статус (selftest)
         run: python3 tools/workitem.py --selftest
+      - name: RunPlan — base_workflow + tracks (selftest + tracks integrity)
+        run: |
+          python3 tools/run_plan.py --selftest
+          python3 tools/run_plan.py validate
       - name: Реестр активных работ + conflict forecast (selftest)
         run: python3 tools/active_work.py --selftest
       - name: Изоляция работы через git worktree (selftest)
