@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.29.0] — 2026-07-15
+
+**Событийный каталог — единое имя события во всех слоях.** Закрывает класс
+contract↔code↔analytics naming drift: событие названо по-разному в контракте
+(`task.completed`), коде (`task.complete`) и MetricCatalog (`catalog.publish`), плюс
+концептуальная подмена domain event на AuditEvent. Родня `validate_claims` (doc↔code) и
+`validate_cross_artifacts` (tracking↔dashboard), но для событий.
+
+### Added
+- **schemas/event-catalog.schema.json** + **validation/validate_event_catalog.py**
+  (+ selftest, + пример) — каждое событие названо один раз; грамматика имени (lowercase
+  dot-нотация, прошедшее время); `kind: domain|audit|analytics`; audit/analytics обязаны
+  `maps_to` domain-событие (или `standalone`+`reason`) — три «языка» сходятся к одному
+  имени; domain нельзя описывать audit-полями (защита от подмены сущности);
+  опциональный `--scan` ловит литералы событий в коде вне каталога (drift кода).
+- **rules/engineering/EventNamingConvention.md** — правило единого имени и разделения слоёв.
+- **quality/gates.yaml → event_contract_consistency** — гейт стадии specification,
+  advisory; добавлен в quality_gates ENGINEERING/PRODUCT/ANALYTICS/AI_FEATURE.
+- **examples/event-catalog-demo/events.yaml** — референс-каталог.
+
+### Changed
+- **manifest** — раздел `event_contract`; `package_version` → 2.29.0.
+
 ## [2.28.0] — 2026-07-15
 
 **Concurrency preflight — коллизии параллельной работы до старта.** Закрывает класс

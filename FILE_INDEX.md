@@ -210,6 +210,7 @@
 - `rules/engineering/DependencyPolicy.md`
 - `rules/engineering/ConcurrencyAwareness.md` — осознание параллельной работы, preflight коллизий (v2.28)
 - `rules/engineering/ErrorHandling.md`
+- `rules/engineering/EventNamingConvention.md` — единое имя события во всех слоях (v2.29)
 - `rules/meta/repo-onboarding.yaml` — чек-лист онбординга репозитория (v2.22)
 - `rules/meta/skill-authoring.yaml`
 - `rules/product/MeasurementBaseline.md`
@@ -434,6 +435,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/capability-entry.schema.json`
 - `schemas/child-config.schema.json`
 - `schemas/decisions-registry.schema.json`
+- `schemas/event-catalog.schema.json` — единый каталог имён событий (v2.29)
 - `schemas/feature-blueprint.schema.json`
 - `schemas/gate-evidence.schema.json`
 - `schemas/gate-result.schema.json`
@@ -515,6 +517,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_claims.py`
 - `validation/validate_cross_artifacts.py`
 - `validation/validate_decisions.py`
+- `validation/validate_event_catalog.py` — согласованность имён событий, drift-скан (v2.29)
 - `validation/validate_duties.py` — обязанности постоянного агента Robin (v2.21)
 - `validation/validate_feature_blueprint.py`
 - `validation/validate_freshness.py`
