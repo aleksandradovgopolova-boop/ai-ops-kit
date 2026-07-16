@@ -79,7 +79,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             provider=orchestrator.make_provider(provider_name),
             provider_name=provider_name, verbose=False, workitem_id=fid,
             budget=plan.get("execution_budget"),   # v2.38: потолок вызовов из RunPlan
-            gate_ids=plan.get("gates"))            # v2.54: прогон оценивает ГЕЙТЫ RUNPLAN (base+треки)
+            gate_ids=plan.get("gates"),            # v2.54: прогон оценивает ГЕЙТЫ RUNPLAN (base+треки)
+            signals=signals)                       # v2.55: условный human_approval по сигналам задачи
         status = st["status"]
         run_state = str(Path(run_dir) / "TaskState.yaml")
         run_state_materialized = True

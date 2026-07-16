@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.55.0] — 2026-07-16
+
+**P0-эпик, срез 2: условный human_approval больше не блокирует безусловно.** Аудит: гейт
+`security` объявляет `human_approval: {required_when: [privileged, destructive,
+secret_boundary_change]}`, но классификатор считал любой непустой human_approval безусловным —
+и обычная ENGINEERING-задача ложно требовала ручного security-одобрения (это приучает обходить гейты).
+
+### Changed
+- **tools/gate_executor.py** — `_approval_required(gate, signals)` + `classify(gate, signals)`:
+  условный approval становится human-approval ТОЛЬКО когда условие активно в сигналах задачи
+  (`secret_boundary_change` ~ `security_surface_changed`). Без сигналов условный гейт → ai-review
+  (required_evidence всё ещё требуется — security не исчезает, просто не требует человека зря).
+  `evaluate`/`evaluate_gate` пробрасывают `signals`.
+- **tools/orchestrator.py**, **tools/ai_ops_run.py** — прокидывают `signals` задачи в оценку.
+- **manifest** — `fixed_v2_55`; пункт про условный approval убран из p0_backlog;
+  `package_version` → 2.55.0.
+
+Selftest: security без сигналов → не human-approval; при `security_surface_changed`/`destructive`
+→ human-approval; безусловный `human_approval: true` → всегда human-approval.
+
 ## [2.54.0] — 2026-07-16
 
 **P0-эпик, срез 1: RunPlan-гейты исполняются в прогоне.** Аудит назвал это «главной

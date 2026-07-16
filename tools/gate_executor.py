@@ -225,9 +225,28 @@ def override_effective(gate: dict, override) -> bool:
     return bool(isinstance(op, dict) and op.get("allowed"))
 
 
-def classify(gate: dict) -> str:
-    """Способ проверки гейта: human-approval | deterministic | ai-review | writer-check."""
-    if gate.get("human_approval"):            # True или dict {required_when: [...]}
+def _approval_required(gate: dict, signals: dict = None) -> bool:
+    """human_approval: True -> всегда; dict {required_when:[...]} -> только если условие активно
+    в сигналах задачи (finding аудита: условный approval не должен блокировать безусловно).
+    Токены условий сверяются с сигналами (secret_boundary_change ~ security_surface_changed)."""
+    ha = gate.get("human_approval")
+    if ha is True:
+        return True
+    if isinstance(ha, dict):
+        conds = ha.get("required_when", []) or []
+        sig = signals or {}
+        alias = {"secret_boundary_change": "security_surface_changed"}
+        for c in conds:
+            if sig.get(c) or sig.get(alias.get(c, c)):
+                return True
+        return False
+    return bool(ha)
+
+
+def classify(gate: dict, signals: dict = None) -> str:
+    """Способ проверки гейта: human-approval | deterministic | ai-review | writer-check.
+    Условный human_approval становится human-approval ТОЛЬКО когда условие активно (signals)."""
+    if _approval_required(gate, signals):
         return "human-approval"
     if gate.get("validator"):
         return "deterministic"
@@ -245,7 +264,7 @@ def _unmet_reason(kind: str, gate: dict) -> str:
     }[kind]
 
 
-def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None) -> dict:
+def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None, signals=None) -> dict:
     """Один гейт -> machine-readable gate-result (schemas/gate-result.schema.json).
 
     Дисциплина evidence (v2.16): бездоказательного pass не существует — если гейт
@@ -253,7 +272,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     подтверждены (через `provided` или passing-checks). Для детерминированных гейтов с
     реально запускаемым валидатором проверка исполняется здесь; символические валидаторы
     и reviewer/human-гейты требуют внешнего evidence."""
-    kind = classify(gate)
+    kind = classify(gate, signals)
     blocking = bool(gate.get("blocking"))
     required = gate.get("required_evidence", []) or []
     ev = dict((evidence or {}).get(gate_id) or {})
@@ -316,7 +335,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     return result
 
 
-def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None) -> dict:
+def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None, signals=None) -> dict:
     """Оценить quality_gates. По умолчанию — гейты контракта; если передан gate_ids (напр.
     агрегированные гейты RunPlan: base_workflow + треки), оцениваются именно они. Так прогон
     проверяет ТО, ЧТО спланировал (finding аудита: треки планировались, но не оценивались).
@@ -334,8 +353,8 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
         gate = gates.get(gid)
         if gate is None:                      # контракт ссылается на несуществующий гейт
             raise SystemExit(f"workflow {workflow_id}: гейт '{gid}' отсутствует в quality/gates.yaml")
-        kinds[gid] = classify(gate)
-        r = evaluate_gate(gid, gate, evidence, tested_revision)
+        kinds[gid] = classify(gate, signals)
+        r = evaluate_gate(gid, gate, evidence, tested_revision, signals=signals)
         results.append(r)
         overridden = override_effective(gate, r.get("override"))
         if r["blocking"] and r["status"] == "fail" and not overridden:
@@ -366,7 +385,8 @@ def selftest():
     # 1. классификация типов
     expect("intake_completeness -> deterministic", classify(gates["intake_completeness"]) == "deterministic")
     expect("code_review -> ai-review", classify(gates["code_review"]) == "ai-review")
-    expect("security -> human-approval (условный)", classify(gates["security"]) == "human-approval")
+    expect("security -> human-approval при активном условии (v2.55)",
+           classify(gates["security"], {"security_surface_changed": True}) == "human-approval")
 
     # 2. без evidence блокирующие гейты QUICK -> fail, workflow blocked
     r0 = evaluate("QUICK")
@@ -393,6 +413,17 @@ def selftest():
            "ux_review" in r_rp["evaluated_gates"])
     expect("gate_ids override: ux_review без evidence блокирует прогон",
            "ux_review" in r_rp["unmet_gates"] and r_rp["blocked"] is True)
+
+    # v2.55 (finding аудита): условный human_approval (security required_when) НЕ безусловен
+    sec_gate = load_gates()["security"]
+    expect("security с required_when + нет сигналов -> НЕ human-approval (не ложная блокировка)",
+           classify(sec_gate, None) != "human-approval")
+    expect("security при secret_boundary_change/security_surface_changed -> human-approval",
+           classify(sec_gate, {"security_surface_changed": True}) == "human-approval")
+    expect("security при destructive-сигнале -> human-approval",
+           classify(sec_gate, {"destructive": True}) == "human-approval")
+    expect("безусловный human_approval:true всегда -> human-approval",
+           classify({"human_approval": True}, None) == "human-approval")
 
     # 3b. бездоказательный pass (status:pass без required_evidence) -> отклонён, blocked
     r_bare = evaluate("QUICK", {"intake_completeness": {"status": "pass"},

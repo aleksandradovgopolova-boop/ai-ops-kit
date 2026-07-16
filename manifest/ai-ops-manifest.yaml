@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.54.0
+  package_version: 2.55.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -209,13 +209,14 @@ execution_engine:
       - "tool-loop слепота: содержимое read и вывод shell (output_tail) теперь идут обратно в контекст модели"
     fixed_v2_54:
       - "RunPlan-гейты исполняются в прогоне: gate_executor.evaluate(gate_ids=...) + orchestrator/ai_ops_run передают plan['gates'] (base+треки) -> треки VISUAL/ANALYTICS/SECURITY/DOCS реально оцениваются"
+    fixed_v2_55:
+      - "условный human_approval: classify(gate, signals) оценивает required_when -> security не блокирует безусловно; approval нужен только при privileged/destructive/secret_boundary (или security_surface_changed)"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано
       - "единый execution pipeline: detect->RunPlan->worktree->inspect->tool-loop->checks->ВСЕ гейты RunPlan->commit->reverify SHA->draft PR (сейчас два движка)"
       - "установимый CLI с движком в child: managed_set без каталогов инструментов/валидаторов — child зависит от внешнего клона кита"
       - "shell — не security boundary: shell=True с полным env, denylist слаб; нужен allowlist/sandbox/сеть-разрешение/scrubbed env"
-      - "условный human_approval (security required_when) классификатор считает безусловным -> ложная блокировка обычных ENGINEERING-задач"
       - "evidence привязан к pre-change HEAD; тесты идут по грязному дереву -> reverify на точном commit SHA после коммита"
       - "structured reviewer.json оркестратор не создаёт (только stage-*.md) -> gate_executor откатывается на regex"
       - "проверка на 3 реальных задачах (баг/UI/средняя фича) против обычной сессии Claude Code"
