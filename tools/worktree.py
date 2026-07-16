@@ -30,6 +30,29 @@ def _git(root, *args):
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
+def _safe_target(root, wt_dir, wid):
+    """Резолвит <root>/<wt_dir>/<wid> и требует, чтобы результат лежал ВНУТРИ root.
+
+    finding аудита (P1.1): wid и wt_dir доходят до пути. `../`, абсолютный путь,
+    разделители — traversal за пределы репо. Возвращает (target, None) при успехе
+    или (None, сообщение_об_ошибке).
+    """
+    root = Path(root).resolve()
+    base = (root / wt_dir).resolve()
+    target = (base / str(wid)).resolve()
+    # Требуем, чтобы worktree лежал СТРОГО внутри <root>/<wt_dir> — не только внутри root.
+    # Так `../escape` (уводит в root/.ai/escape) тоже отвергается, а не только уход за root.
+    for anchor, label in ((base, f"каталога worktree {base}"), (root, f"корня {root}")):
+        try:
+            target.relative_to(anchor)
+        except ValueError:
+            return None, (f"недопустимый worktree-путь {target} вне {label} "
+                          f"(id={wid!r}, dir={wt_dir!r}): traversal запрещён")
+    if target in (root, base):
+        return None, f"worktree-путь совпадает с корнем/базой ({target}): id/dir не должны быть пустыми"
+    return target, None
+
+
 def _branch_exists(root, branch):
     rc, _, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
     return rc == 0
@@ -37,7 +60,10 @@ def _branch_exists(root, branch):
 
 def add(root, wid, branch, base="HEAD", wt_dir=".ai/worktrees", as_json=False):
     root = Path(root).resolve()
-    target = root / wt_dir / wid
+    target, err = _safe_target(root, wt_dir, wid)
+    if err:
+        print(f"ОШИБКА: {err}")
+        return 1
     if target.exists():
         print(f"ОШИБКА: каталог worktree уже есть: {target}")
         return 1
@@ -100,7 +126,10 @@ def list_cmd(root, as_json=False):
 
 def remove(root, wid, wt_dir=".ai/worktrees", force=False):
     root = Path(root).resolve()
-    target = root / wt_dir / wid
+    target, err = _safe_target(root, wt_dir, wid)
+    if err:
+        print(f"ОШИБКА: {err}")
+        return 1
     args = ["worktree", "remove", str(target)]
     if force:
         args.append("--force")
@@ -146,6 +175,12 @@ def selftest():
 
         # ветка feature/wi-1 сохранилась после remove
         expect("remove сохраняет ветку", _branch_exists(root, "feature/wi-1"))
+
+        # P1.1: traversal-guard — id, выводящий за корень, отвергается
+        expect("add: traversal id (../) отвергнут",
+               add(root, "../escape", "feature/x") == 1 and not (root.parent / "escape").exists())
+        expect("add: абсолютный id отвергнут", add(root, "/tmp/evil", "feature/y") == 1)
+        expect("remove: traversal id (../) отвергнут", remove(root, "../escape") == 1)
 
     print("worktree selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

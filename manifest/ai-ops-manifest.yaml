@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.65.0
+  package_version: 2.66.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -200,10 +200,14 @@ execution_engine:
     - "3.1: физический разнос дерева по packages/<name>/ + энтрипойнт-шимы + миграция child-CI + MIGRATION_GUIDE"
   execution_audit_2026_07_16:               # внешний аудит исполнения (решение ep-2026-07-16-execution-audit)
     honest_status: >
-      Компоненты исполнения есть (RunPlan, Tool Broker, budget, tool-loop, project detector,
-      evidence collector), но НЕ собраны в один движок. generic-путь всё ещё гоняет
-      doc-оркестратор (пишет stage-*.md), а не tool-loop. Единый путь task->draft PR: НЕ готов.
-      Кит сегодня — сильная система стандартов/гейтов, но не автономный coding-runtime.
+      Execution engine СОБРАН (execution_pipeline: detect->tool-loop->commit->evidence на точном
+      SHA->RunPlan-гейты->draft PR), подключён к контроллеру (ai-ops run --engine pipeline) и
+      экспериментально подтверждён живьём на ОГРАНИЧЕННОМ QUICK-сценарии (DeepSeek, пустой репо).
+      Канонический путь task -> безопасный проверяемый draft PR для РЕАЛЬНЫХ child-репозиториев
+      (с тулчейном, живым draft PR, standalone-установкой движка) ещё НЕ готов — см. p0_backlog.
+      Trust boundary усилена (v2.66): shell timeout + честная граница «shell не песочница»,
+      валидация WorkItem ID и containment worktree-путей, полный SHA + tree-clean-проверка,
+      строгий ready_for_pr (только реальный коммит), рабочий print_human/exit-code для pipeline.
     fixed_v2_53:
       - "SECURITY path traversal в Tool Broker: decide() запрещает ../ и абсолютный путь; execute() containment-guard (resolve под root)"
       - "tool-loop слепота: содержимое read и вывод shell (output_tail) теперь идут обратно в контекст модели"
@@ -243,14 +247,22 @@ execution_engine:
         - "ai_ops_run: engine=pipeline — собранный движок подключён к контроллеру (был только в selftest)"
         - "honesty: 'профиль подтверждает человек' -> уточнено (детектированный draft; подтверждение рекомендуется, не enforced)"
         - "pr_open: мусор type('e',(),{}) в сообщении об ошибке push -> rc"
-    engine_status: "ПОДТВЕРЖДЁН ЖИВЬЁМ END-TO-END (v2.64): полный pipeline на DeepSeek дошёл до ready_for_pr=True (worktree -> detect -> tool-loop -> commit -> evidence на точном SHA -> гейты). Подключён к контроллеру (ai-ops run --engine pipeline). Остаток — эмпирика на стороне child: живой draft PR (open_pr+токен) и 3 реальные задачи на репо С тулчейном"
+    fixed_v2_66:                               # Trust Boundary (следующий аудит: P0.1/P0.2-contained/P0.5/P1.1)
+      - "P0.1 контроллер: print_human ветвится по kind (pipeline-отчёт больше не роняет KeyError на status/execution/required_tracks); CLI --engine pipeline --model --open-pr проброшены; exit_code(): 2 при error, 1 при not ready_for_pr / blocked, 0 при ready/planned — CI видит провал, а не считает любой прогон успешным"
+      - "P0.2 (contained) shell trust boundary: subprocess timeout (SHELL_TIMEOUT_DEFAULT=300, action.timeout переопределяет) — shell больше не висит вечно; честный module-comment: shell НЕ security boundary (write_scope/protected только для read/write; полный jail = контейнер, в backlog)"
+      - "P0.5 evidence<->revision: _commit_on_branch и _revision дают ПОЛНЫЙ SHA (не --short); pipeline проверяет tree_clean до/после checks (git status --porcelain); ready_for_pr ТРЕБУЕТ реального коммита + evidence на точном SHA + чистого дерева (dry-run commit=False НИКОГДА не ready)"
+      - "P1.1 path safety: validate_workitem_id (slug ^[a-z0-9][a-z0-9._-]{0,63}$, без ../,/,\\, абсолютных) в run_plan.build_plan; worktree.add/remove — _safe_target с containment внутри <root>/<wt_dir> (traversal ../ и абсолютные отвергнуты)"
+    engine_status: "СОБРАН + подтверждён живьём на ОГРАНИЧЕННОМ QUICK-сценарии (v2.64, DeepSeek, пустой репо, ready_for_pr=True). Подключён к контроллеру (ai-ops run --engine pipeline); trust boundary усилена (v2.66). Канонический путь task -> проверяемый draft PR для РЕАЛЬНОГО child (тулчейн + живой PR + standalone-движок в child) — ещё НЕ готов, см. p0_backlog"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
-    p0_backlog:                              # честно: подтверждено по коду, НЕ сделано
-      - "единый execution-pipeline: spine + commit/reverify на SHA готовы offline (v2.58–2.59). ОСТАЛОСЬ (нужен live/GitHub): открытие draft PR, живой предложитель, worktree-изоляция прогона"
-      - "установимый CLI с движком в child: managed_set без каталогов инструментов/валидаторов — child зависит от внешнего клона кита"
-      - "shell FS/сеть-изоляция (частично): env-скраб секретов сделан (v2.56); полный jail (запрет чтения/записи вне worktree, сеть off, allowlist команд) требует контейнера — НЕ сделано"
-      - "проверка на 3 реальных задачах (баг/UI/средняя фича) против обычной сессии Claude Code"
+    p0_backlog:                              # честно: подтверждено по коду, НЕ сделано (остаток после v2.66)
+      - "P0.2 (полное) shell FS/сеть-изоляция: сделаны env-скраб секретов (v2.56/2.63 allowlist), timeout + честная граница (v2.66). ОСТАЛОСЬ: полный jail (writable-mount только worktree, HOME изолирован, сеть off, allowlist команд, лимиты ресурсов) — требует контейнера, НЕ сделано. Не давать pipeline с живой моделью доступ к ценному приватному репо без надзора"
+      - "P0.3 standalone-движок в child: managed_set не содержит каталоги инструментов и валидаторов — child зависит от внешнего клона кита; нужен устанавливаемый пакет с движком внутри child"
+      - "P0.4 полный RunPlan в pipeline: сейчас pipeline гоняет tool-loop + один срез evidence (implementation_verification) + оценку гейтов; ПОСТАДИЙНОЕ исполнение треков RunPlan (VISUAL/ANALYTICS/SECURITY/DOCS как отдельные стадии с артефактами) — НЕ реализовано"
+      - "P1.2 усиление детектора стека: сейчас определяет базовые команды build/lint/typecheck/test по манифестам; edge-случаи (монорепо, нестандартные скрипты) требуют доработки"
+      - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
+      - "живой draft PR: механизм готов (pr_open, open_pr=True), нужен GITHUB_TOKEN + remote — эмпирически не прогнан"
+      - "квалификация: 3–5 реальных задач (баг/UI/средняя фича) на репо С тулчейном против обычной сессии Claude Code — до конца НЕ прогнано"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

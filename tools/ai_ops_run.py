@@ -19,8 +19,10 @@
 
 Использование:
   ai_ops_run.py run "<задача>" <child_root> [--signals '<json>'] [--features-dir dir]
-       [--runtime claude-code|generic-orchestrator] [--provider mock] [--execute] [--json]
+       [--runtime claude-code|generic-orchestrator] [--provider mock] [--model ID]
+       [--engine controller|pipeline] [--execute] [--open-pr] [--json]
   ai_ops_run.py --selftest
+Код возврата: 0 — успех/ready; 1 — blocked или pipeline не готов к PR; 2 — ошибка прогона.
 """
 
 import argparse
@@ -42,7 +44,7 @@ import active_work       # noqa: E402
 
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
-        feature=None, engine="controller", proposer=None):
+        feature=None, engine="controller", proposer=None, open_pr=False, model=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -55,12 +57,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         import execution_pipeline
         import tool_loop
         import orchestrator
-        prop = proposer or tool_loop.make_model_proposer(orchestrator.make_provider(provider_name))
+        prop = proposer or tool_loop.make_model_proposer(
+            orchestrator.make_provider(provider_name, model))
         rep = execution_pipeline.run_pipeline(
             task_text, signals, child_root, prop, feature=feature,
-            commit=execute, isolate=execute)
+            commit=execute, isolate=execute, open_pr=open_pr)
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
+        rep["provider"] = provider_name
+        rep["model"] = model
         return rep
 
     # 1-2. RunPlan (route + треки + агрегированные гейты).
@@ -122,7 +127,52 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     return report
 
 
+def _print_pipeline(r):
+    """Человекочитаемый вывод отчёта собранного движка (kind=execution-pipeline).
+
+    finding аудита (P0.1): print_human безусловно читал ключи controller-отчёта
+    (status/execution/required_tracks) и падал KeyError на pipeline-отчёте. Формат отчёта
+    движка иной (loop/commit/checks/gates/ready_for_pr) — печатаем его явно.
+    """
+    if r.get("status") == "error":
+        print(f"ai-ops run (pipeline) → WorkItem {r.get('workitem_id')} [ОШИБКА]")
+        print(f"  {r.get('error')}")
+        return
+    loop = r.get("loop") or {}
+    commit = r.get("commit") or {}
+    gates = r.get("gates") or {}
+    ready = r.get("ready_for_pr")
+    print(f"ai-ops run (pipeline) → WorkItem {r.get('workitem_id')} "
+          f"[{'READY_FOR_PR' if ready else 'NOT_READY'}]")
+    prov = r.get("provider") or "?"
+    model = f"/{r['model']}" if r.get("model") else ""
+    print(f"  base_workflow: {r.get('base_workflow')} · провайдер: {prov}{model} ({r.get('runtime')})")
+    print(f"  стек: {', '.join(r.get('profile', {}).get('stacks') or ['не определён'])}")
+    print(f"  tool-loop: {loop.get('stopped')} · шагов {loop.get('steps')} · "
+          f"правок {loop.get('applied_writes')} · отклонено {loop.get('denied')}")
+    iso = (r.get("isolation") or {}).get("worktree")
+    print(f"  изоляция: {iso or 'основное дерево (без worktree)'}")
+    if commit.get("sha"):
+        print(f"  commit: {commit['sha'][:12]} на {commit.get('branch')} · "
+              f"evidence на точном SHA: {commit.get('evidence_on_exact_sha')} · "
+              f"дерево чистое: {commit.get('tree_clean_before_checks')}")
+    if r.get("exemptions"):
+        print(f"  освобождены (не применимо): {', '.join(r['exemptions'])}")
+    if r.get("tests_warn"):
+        print(f"  ⚠ {r['tests_warn']}")
+    print(f"  гейты: оценено {len(gates.get('evaluated') or [])} · "
+          f"не закрыто {gates.get('unmet') or []} · блокирует: {gates.get('blocked')}")
+    pr = r.get("draft_pr")
+    if pr:
+        print(f"  draft PR: {pr.get('status')}" + (f" — {pr.get('url')}" if pr.get('url') else ""))
+    for n in r.get("not_yet") or []:
+        print(f"  · not_yet: {n}")
+
+
 def print_human(r):
+    # pipeline-отчёт имеет свою форму — не смешиваем с controller-отчётом (P0.1)
+    if r.get("kind") == "execution-pipeline":
+        return _print_pipeline(r)
     print(f"ai-ops run → WorkItem {r['workitem_id']} [{r['status']}]")
     print(f"  base_workflow: {r['base_workflow']} · execution: {r['execution']} ({r['runtime']})")
     if r["required_tracks"]:
@@ -134,6 +184,19 @@ def print_human(r):
         print(f"  · пропущен {s['track']}: {s['reason']}")
     if r["status"] == "planned":
         print("  → план и каркас готовы; стадии исполняет рантайм (claude-code) по плану.")
+
+
+def exit_code(r):
+    """Код возврата CLI по отчёту (finding аудита P0.1: раньше всегда 0).
+
+    pipeline: 2 при status=error, 1 если не ready_for_pr (гейты/петля/коммит не сошлись), 0 если ready.
+    controller: 1 при status=blocked, 0 иначе (planned/done — успешная транзакция).
+    """
+    if r.get("kind") == "execution-pipeline":
+        if r.get("status") == "error":
+            return 2
+        return 0 if r.get("ready_for_pr") else 1
+    return 1 if r.get("status") == "blocked" else 0
 
 
 def selftest():
@@ -195,6 +258,21 @@ def selftest():
                rp.get("engine") == "pipeline" and rp.get("kind") == "execution-pipeline")
         expect("engine=pipeline: движок применил изменение",
                rp["loop"]["applied_writes"] == 1 and (root / "src" / "a.py").exists())
+        # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            try:
+                print_human(rp); ph_ok = True
+            except KeyError:
+                ph_ok = False
+        expect("P0.1: print_human форматирует pipeline-отчёт без KeyError",
+               ph_ok and "pipeline" in buf.getvalue())
+        # P0.1: exit_code ненулевой, когда движок не дошёл до ready_for_pr (dry-run, commit=False)
+        expect("P0.1: exit_code != 0 при not ready_for_pr", exit_code(rp) != 0)
+        expect("P0.1: exit_code == 2 при status=error",
+               exit_code({"kind": "execution-pipeline", "status": "error"}) == 2)
 
     # orchestrated-путь (generic-orchestrator, mock без evidence -> blocked, но транзакция прошла)
     with tempfile.TemporaryDirectory() as td:
@@ -205,6 +283,9 @@ def selftest():
                r2["status"] in ("blocked", "done") and r2["execution"] == "orchestrated")
         expect("orchestrated: состояние по WorkItem",
                f"workitems/{r2['workitem_id']}" in r2["run_state"])
+        # P0.1: exit_code для controller — blocked -> 1, planned/done -> 0
+        expect("P0.1: exit_code(blocked)=1", exit_code(r2) == (1 if r2["status"] == "blocked" else 0))
+        expect("P0.1: exit_code(planned)=0", exit_code({"status": "planned"}) == 0)
 
     print("ai_ops_run selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
@@ -227,16 +308,22 @@ def main(argv):
                                       "(иначе wi-<hash>; срезы истории не накопятся на одну фичу)")
     rp.add_argument("--engine", default="controller", choices=["controller", "pipeline"],
                     help="controller (план+каркас) или pipeline (собранный движок: detect->tool-loop->evidence->гейты->PR)")
+    rp.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat); engine=pipeline")
+    rp.add_argument("--open-pr", action="store_true",
+                    help="открыть draft PR по результату (нужен GITHUB_TOKEN); engine=pipeline")
     rp.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "run":
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
-                     a.runtime, a.provider, a.session, a.execute, feature=a.feature, engine=a.engine)
+                     a.runtime, a.provider, a.session, a.execute, feature=a.feature,
+                     engine=a.engine, open_pr=a.open_pr, model=a.model)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
             print_human(report)
-        return 0
+        # finding аудита (P0.1): CLI отдаёт ненулевой код при ошибке/не-готовности —
+        # чтобы CI/скрипты видели провал, а не считали любой прогон успешным.
+        return exit_code(report)
     return 1
 
 
