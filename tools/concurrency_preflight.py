@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Concurrency preflight (v2.28) — проверка коллизий параллельной работы до старта.
+
+Класс проблемы «concurrent-edit collision + stale premise»: два потока независимо меняют
+одну поверхность; позже — merge-конфликт и переделки. Хуже — работа на устаревшей
+посылке: удаляешь «мёртвый» контрол, а параллельный PR ровно его оживляет.
+
+Реестр активных работ (tools/active_work.py) ловит это, только если оба потока в нём
+зарегистрированы. Этот preflight смотрит на ФАКТИЧЕСКОЕ состояние репозитория:
+
+  1. base_changes — коммиты в базовой ветке (origin/main), затронувшие целевые пути
+     ПОСЛЕ того, как отделилась текущая ветка (merge-base..base). Непусто => премисса
+     могла устареть: перепроверить против актуального main, а не базы ветки.
+  2. open_prs — открытые PR, трогающие те же пути (best-effort через gh, если доступен).
+  3. active_work — пересечение по зонам с реестром активных работ (если передан --areas).
+
+Вердикт: clean | collision. collision => рекомендация (координация / rebase на актуальный
+main / сузить scope / согласовать владельца по OwnershipMap).
+
+Границы честности: git-часть (base_changes) — детерминирована, только git. Открытые PR
+требуют GitHub API (gh); если gh нет — пункт помечается unavailable, не выдаётся за clean.
+
+Использование:
+  concurrency_preflight.py --paths a.ts,b.ts [--base origin/main] [--repo .]
+                           [--areas x,y] [--active-work .ai/runtime/active-work.yaml] [--json]
+  concurrency_preflight.py --selftest
+Возврат 0 — выполнено (в т.ч. verdict=collision: это предупреждение стадии intake, не крах
+инструмента); 1 — ошибка использования.
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _git(repo, *args):
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+
+def base_changes(repo, base, paths):
+    """Коммиты базовой ветки, затронувшие paths после отделения текущей ветки."""
+    rc, mb, _ = _git(repo, "merge-base", "HEAD", base)
+    if rc != 0 or not mb:
+        return None  # база недоступна (нет ref) — честно не знаем
+    rc, out, _ = _git(repo, "log", "--pretty=%h\t%s", f"{mb}..{base}", "--", *paths)
+    if rc != 0:
+        return None
+    changes = []
+    for line in out.splitlines():
+        if "\t" in line:
+            sha, subj = line.split("\t", 1)
+            changes.append({"sha": sha, "subject": subj})
+    return changes
+
+
+def open_prs_overlapping(repo, paths):
+    """Best-effort: открытые PR, трогающие paths. Требует gh; иначе — unavailable."""
+    # есть ли gh (может вообще отсутствовать -> FileNotFoundError)
+    try:
+        probe = subprocess.run(["gh", "--version"], capture_output=True, text=True)
+    except (OSError, FileNotFoundError):
+        return {"status": "unavailable", "note": "gh CLI недоступен — открытые PR не проверены", "prs": []}
+    if probe.returncode != 0:
+        return {"status": "unavailable", "note": "gh CLI недоступен — открытые PR не проверены", "prs": []}
+    try:
+        r = subprocess.run(["gh", "pr", "list", "--state", "open", "--json", "number,title,files"],
+                           cwd=str(repo), capture_output=True, text=True)
+        if r.returncode != 0:
+            return {"status": "unavailable", "note": r.stderr.strip() or "gh pr list failed", "prs": []}
+        want = set(paths)
+        hits = []
+        for pr in json.loads(r.stdout or "[]"):
+            files = {f.get("path") for f in (pr.get("files") or [])}
+            shared = sorted(want & files)
+            if shared:
+                hits.append({"number": pr.get("number"), "title": pr.get("title"), "shared_paths": shared})
+        return {"status": "checked", "prs": hits}
+    except (OSError, json.JSONDecodeError) as e:
+        return {"status": "unavailable", "note": str(e), "prs": []}
+
+
+def active_work_overlap(active_work_path, areas):
+    if not areas or not active_work_path:
+        return []
+    p = Path(active_work_path)
+    if not p.exists():
+        return []
+    import yaml
+    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    want = set(areas)
+    out = []
+    for w in data.get("active", []):
+        if w.get("status") == "done":
+            continue
+        shared = sorted(want & set(w.get("affected_areas") or []))
+        if shared:
+            out.append({"id": w.get("id"), "branch": w.get("branch"), "shared_areas": shared})
+    return out
+
+
+def preflight(repo, base, paths, areas=None, active_work_path=None):
+    bc = base_changes(repo, base, paths)
+    prs = open_prs_overlapping(repo, paths)
+    aw = active_work_overlap(active_work_path, areas)
+
+    collision = bool(bc) or bool(prs.get("prs")) or bool(aw)
+    result = {
+        "schema_version": 1, "kind": "concurrency-preflight",
+        "base": base, "paths": list(paths),
+        "base_changes": bc if bc is not None else "unknown (база недоступна)",
+        "open_prs": prs, "active_work_overlap": aw,
+        "verdict": "collision" if collision else "clean",
+    }
+    if collision:
+        recs = []
+        if bc:
+            recs.append("премисса могла устареть — перепроверить против актуального main, не базы ветки")
+        if prs.get("prs"):
+            recs.append("координация с открытым PR / rebase на актуальный main / сузить scope")
+        if aw:
+            recs.append("пересечение с активной работой в реестре — согласовать владельца (OwnershipMap)")
+        result["recommendation"] = recs
+    return result
+
+
+def print_human(r):
+    print(f"CONCURRENCY-PREFLIGHT [{r['verdict']}] paths={', '.join(r['paths'])} base={r['base']}")
+    bc = r["base_changes"]
+    if isinstance(bc, list) and bc:
+        print(f"  ⚠ база менялась под целевыми путями ({len(bc)} коммитов) — премисса могла устареть:")
+        for c in bc[:5]:
+            print(f"     {c['sha']} {c['subject']}")
+    prs = r["open_prs"]
+    if prs.get("status") == "unavailable":
+        print(f"  · открытые PR: не проверены ({prs.get('note')})")
+    elif prs.get("prs"):
+        print(f"  ⚠ открытые PR по тем же путям: " +
+              ", ".join(f"#{p['number']}" for p in prs["prs"]))
+    for a in r["active_work_overlap"]:
+        print(f"  ⚠ активная работа '{a['id']}' (ветка {a['branch']}): зоны {', '.join(a['shared_areas'])}")
+    for rec in r.get("recommendation", []):
+        print(f"  → {rec}")
+
+
+def selftest():
+    import tempfile
+    ok = True
+
+    def expect(name, cond):
+        nonlocal ok
+        ok = ok and cond
+        print(f"{'PASS' if cond else 'FAIL'} {name}")
+
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td)
+        _git(repo, "init", "-q")
+        _git(repo, "config", "user.email", "t@t"); _git(repo, "config", "user.name", "t")
+        (repo / "f.txt").write_text("v1", encoding="utf-8")
+        (repo / "other.txt").write_text("x", encoding="utf-8")
+        _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "c1")
+        _git(repo, "branch", "-M", "main")
+        # ветка feature отделяется здесь
+        _git(repo, "checkout", "-q", "-b", "feature")
+        # параллельно в main меняют f.txt (как чужой смерженный PR)
+        _git(repo, "checkout", "-q", "main")
+        (repo / "f.txt").write_text("v2", encoding="utf-8")
+        _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "parallel: f.txt live actions")
+        _git(repo, "checkout", "-q", "feature")
+
+        # preflight по f.txt против main -> collision (база менялась под путём)
+        r = preflight(repo, "main", ["f.txt"])
+        expect("collision: база менялась под целевым файлом",
+               r["verdict"] == "collision" and isinstance(r["base_changes"], list)
+               and any("parallel" in c["subject"] for c in r["base_changes"]))
+
+        # preflight по нетронутому пути -> clean (gh недоступен -> не влияет на clean по base)
+        r2 = preflight(repo, "main", ["other.txt"])
+        expect("clean: путь на базе не менялся", r2["verdict"] in ("clean", "collision"))
+        expect("clean: base_changes пуст для нетронутого пути", r2["base_changes"] == [])
+
+        # active-work overlap по зонам
+        aw = repo / "aw.yaml"
+        aw.write_text("schema_version: 1\nkind: active-work\nactive:\n"
+                      "  - {id: x, branch: feature/x, status: in-progress, "
+                      "affected_areas: [materials-page], owner_session: s}\n", encoding="utf-8")
+        r3 = preflight(repo, "main", ["other.txt"], areas=["materials-page"], active_work_path=str(aw))
+        expect("collision: пересечение по зоне с реестром",
+               r3["verdict"] == "collision" and any(a["id"] == "x" for a in r3["active_work_overlap"]))
+
+        # база недоступна -> base_changes 'unknown', не выдаём за clean молча
+        r4 = preflight(repo, "origin/nonexistent", ["f.txt"])
+        expect("нет базы -> base_changes unknown", isinstance(r4["base_changes"], str))
+
+    print("concurrency_preflight selftest:", "PASS" if ok else "FAIL")
+    return 0 if ok else 1
+
+
+def main(argv):
+    if "--selftest" in argv:
+        return selftest()
+    ap = argparse.ArgumentParser(prog="concurrency_preflight.py")
+    ap.add_argument("--paths", required=True, help="целевые/изменённые пути через запятую")
+    ap.add_argument("--base", default="origin/main")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--areas", help="зоны для сверки с реестром активных работ")
+    ap.add_argument("--active-work", dest="active_work")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    paths = [x.strip() for x in a.paths.split(",") if x.strip()]
+    areas = [x.strip() for x in (a.areas or "").split(",") if x.strip()]
+    r = preflight(Path(a.repo), a.base, paths, areas, a.active_work)
+    if a.json:
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    else:
+        print_human(r)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.28.0] — 2026-07-15
+
+**Concurrency preflight — коллизии параллельной работы до старта.** Закрывает класс
+«concurrent-edit collision + stale premise»: два потока меняют одну поверхность → merge-
+конфликт и переделки; хуже — работа на устаревшей посылке (удаляли «мёртвый» контрол,
+который параллельный PR оживлял). Реестр активных работ (v2.22) ловит это, только если
+оба потока в нём; preflight смотрит на фактическое состояние репозитория.
+
+### Added
+- **tools/concurrency_preflight.py** (+ selftest на temp git-репо) — по целевым путям:
+  свежие мержи в base после отделения ветки (git, детерминировано — сигнал устаревшей
+  премиссы), открытые PR по тем же путям (best-effort через gh; нет gh → `unavailable`, не
+  выдаётся за clean), пересечение по зонам с реестром активных работ. Вердикт clean|collision.
+- **quality/gates.yaml → concurrency_preflight** — гейт стадии intake, advisory (blocking:
+  false; MVP-blocking ≤ 8 не трогаем), applicability пишущих workflow; добавлен в их
+  quality_gates.
+- **rules/engineering/ConcurrencyAwareness.md** — preflight до правки; перепроверять
+  премиссу против актуального main, не базы ветки; «горячие» поверхности → меньше PR;
+  координация по OwnershipMap; реестр и preflight дополняют друг друга.
+
+### Changed
+- **commands/task/ai-start-task.md** — шаг concurrency preflight на intake.
+- **manifest** — `session_orchestration.concurrency_preflight`; `package_version` → 2.28.0.
+
 ## [2.27.0] — 2026-07-15
 
 **Живой статус продукта — единая точка правды о «сейчас».** Закрывает системную дыру:

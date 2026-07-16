@@ -31,6 +31,23 @@ gates:
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
+  concurrency_preflight:
+    id: concurrency_preflight
+    purpose: >
+      До старта проверить коллизии параллельной работы: открытые PR и свежие мержи в base
+      по целевым файлам + перепроверка премиссы против актуального main. Класс
+      concurrent-edit collision + stale premise (инцидент: удаляли «мёртвый» контрол,
+      который параллельный PR оживлял).
+    stage: intake
+    blocking: false          # advisory до обкатки; MVP-blocking ≤ 8 не трогаем (см. ROADMAP)
+    responsible_role: intake-classifier
+    review_mode: writer
+    validator: validate-concurrency          # runnable: tools/concurrency_preflight.py
+    human_approval: false
+    applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]   # пишущие в код
+    required_evidence: [checked_paths, verdict]   # verdict ∈ clean|collision
+    collision_policy: "verdict=collision -> координация / rebase на актуальный main / сузить scope / согласовать владельца (OwnershipMap)"
+
   requirements:
     id: requirements
     purpose: Требования проверяемы, полны, тестируемы.

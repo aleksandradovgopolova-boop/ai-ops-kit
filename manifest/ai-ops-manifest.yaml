@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.27.0
+  package_version: 2.28.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -178,6 +178,13 @@ session_orchestration:
     read_first_in: commands/task/ai-session-start.md
     updated_in: commands/task/ai-finish-task.md
     anti_pattern: "CLAUDE.md держит только вечные правила; снимок статуса — ссылкой на ProductStatus"
+  concurrency_preflight:                      # v2.28: коллизии параллельной работы до старта
+    gate: concurrency_preflight                # quality/gates.yaml, stage intake, advisory
+    tool: tools/concurrency_preflight.py       # base_changes (git) + open PRs (best-effort gh) + active-work
+    rule: rules/engineering/ConcurrencyAwareness.md
+    note: >
+      git-часть (свежие мержи в base под целевыми путями = устаревшая премисса) детерминирована;
+      открытые PR — best-effort через gh (если нет — помечается unavailable, не выдаётся за clean).
   session_bootstrap:
     command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет
   worktree_per_workitem:                      # v2.24: изоляция файлов на WorkItem
