@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.63.0
+  package_version: 2.64.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -230,6 +230,10 @@ execution_engine:
     fixed_v2_62:
       - "worktree-изоляция прогона: pipeline(isolate=True) гоняет весь движок в .ai/worktrees/<id> на ветке ai-ops/<id> — основное дерево не тронуто"
       - "draft PR — механизм: tools/pr_open.py (GitHub REST, токен из env, draft:true); pipeline(open_pr=True) вызывает его когда ready_for_pr; нет токена -> honest unavailable (не имитируется)"
+    live_pipeline_verified_v2_64:
+      note: "ЖИВОЙ прогон ВСЕГО движка на DeepSeek (openai-compatible) с мака: end-to-end до ready_for_pr"
+      evidence: "task=создать src/strutil.py slugify; loop.stopped=done, applied=2, denied=0, isolation=.ai/worktrees/slugify, commit fc87de5 on_exact_sha=True, gates.blocked=False, ready_for_pr=True"
+      honest_caveat: "репо был пустой (без тулчейна) -> все build/lint/typecheck/tests ОСВОБОЖДЕНЫ умным ослаблением (штатно); подтверждена МЕХАНИКА цепи и сходимость к ready_for_pr, но НЕ прохождение реальных build/lint/test — это на репо с тулчейном (см. p0_backlog: 3 реальные задачи)"
     adversarial_review_v2_63:
       note: "workflow-ревью всего диффа аудита (efeab38..HEAD): 3 ревьюера x adversarial-verify; 6 подтверждённых дефектов -> исправлены"
       fixed:
@@ -239,7 +243,7 @@ execution_engine:
         - "ai_ops_run: engine=pipeline — собранный движок подключён к контроллеру (был только в selftest)"
         - "honesty: 'профиль подтверждает человек' -> уточнено (детектированный draft; подтверждение рекомендуется, не enforced)"
         - "pr_open: мусор type('e',(),{}) в сообщении об ошибке push -> rc"
-    engine_status: "Цепочка собрана И подключена к контроллеру: ai_ops_run.run(engine='pipeline') / ai-ops run --engine pipeline делегирует в execution_pipeline (worktree -> detect -> tool-loop -> commit -> evidence на SHA -> гейты -> draft PR). spine+commit подтверждены живьём (v2.60). Остаток — эмпирика на стороне child: полный живой прогон pipeline (live-предложитель), живой PR, 3 реальные задачи"
+    engine_status: "ПОДТВЕРЖДЁН ЖИВЬЁМ END-TO-END (v2.64): полный pipeline на DeepSeek дошёл до ready_for_pr=True (worktree -> detect -> tool-loop -> commit -> evidence на точном SHA -> гейты). Подключён к контроллеру (ai-ops run --engine pipeline). Остаток — эмпирика на стороне child: живой draft PR (open_pr+токен) и 3 реальные задачи на репо С тулчейном"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано
