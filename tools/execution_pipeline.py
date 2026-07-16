@@ -19,6 +19,7 @@
 """
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -77,25 +78,39 @@ def _commit_on_branch(root, branch, message):
 
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
-                 max_steps=20, feature=None, commit=False, allow_missing_tests=True):
-    """Один прогон движка: детект -> правки через tool-loop -> [commit на ветке] ->
-    evidence (на зафиксированном SHA, если commit) -> гейты RunPlan."""
+                 max_steps=20, feature=None, commit=False, allow_missing_tests=True,
+                 isolate=False, open_pr=False):
+    """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
+    [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
     signals = dict(signals or {})
     signals.setdefault("task_text", task)
 
-    # 1. детект стека
-    profile = project_detector.detect(child_root)
-
-    # 2. план (base_workflow + треки -> агрегированные гейты)
+    # 2. план (нужен workitem_id для имени ветки/worktree)
     plan = run_plan.build_plan(signals, workitem_id=feature)
+    wid = plan["workitem_id"]
 
-    # 3. политика по умолчанию: execution, запись в рамках репо (scope можно сузить снаружи)
-    pol = policy or tool_broker.Policy(level="execution", child_root=str(child_root))
+    # 1b. изоляция (finding аудита): весь прогон в отдельном git worktree на ветке ai-ops/<id>,
+    #     основное рабочее дерево child не трогается. work_root = каталог worktree.
+    work_root, worktree_rel = child_root, None
+    if isolate:
+        import worktree as _wt
+        branch = f"ai-ops/{wid}"
+        wp = child_root / ".ai" / "worktrees" / wid
+        rc = _wt.add(child_root, wid, branch)
+        if rc == 0 or wp.is_dir():
+            work_root = wp
+            worktree_rel = str(wp.relative_to(child_root))
+
+    # 1. детект стека (в рабочем дереве)
+    profile = project_detector.detect(work_root)
+
+    # 3. политика по умолчанию: execution, границы — по work_root
+    pol = policy or tool_broker.Policy(level="execution", child_root=str(work_root))
 
     # 4. tool-loop: модель применяет изменения (context = задача + профиль стека)
     ctx = f"{task}\n\n{_profile_summary(profile)}"
-    loop = tool_loop.run_loop(proposer, child_root, pol, budget=budget,
+    loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
                               max_steps=max_steps, base_context=ctx)
     applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
 
@@ -103,12 +118,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
     committed_sha, work_branch = None, None
     if commit and applied:
-        work_branch = f"ai-ops/{plan['workitem_id']}"
-        committed_sha = _commit_on_branch(child_root, work_branch,
+        work_branch = f"ai-ops/{wid}"
+        committed_sha = _commit_on_branch(work_root, work_branch,
                                           f"ai-ops: {task[:60]}")
 
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
-    coll = evidence_collector.collect(profile, child_root, pol)
+    coll = evidence_collector.collect(profile, work_root, pol)
 
     # 6b. intake-evidence из сигналов: классификация УЖЕ произошла (task_type/size/risk в signals) —
     #     это реальный evidence для intake_completeness, а не фабрикация (finding живого прогона).
@@ -141,9 +156,21 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     evidence_revision = coll.get("revision")
     revision_matches = (committed_sha is not None and evidence_revision == committed_sha)
 
-    not_yet = ["открытие draft PR (GitHub API)", "живой предложитель (swap провайдера)"]
+    # 8. финал: draft PR (только если готово к PR и явно запрошено). Механизм честен offline:
+    #    нет токена/remote -> unavailable, PR не имитируется.
+    ready = (loop["stopped"] == "done") and (not gates["blocked"]) and (not commit or revision_matches)
+    pr = None
+    if open_pr and ready and committed_sha and work_branch:
+        import pr_open
+        pr = pr_open.open_draft_pr(work_root, work_branch,
+                                   title=f"ai-ops: {task[:60]}",
+                                   body=f"Автопрогон AI Ops. WorkItem: {wid}. Evidence на {committed_sha}.")
+
+    not_yet = ["живой предложитель (swap провайдера)"]
     if not commit:
         not_yet.insert(0, "commit+reverify (запусти с commit=True)")
+    if not open_pr:
+        not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
 
     return {
         "schema_version": 1, "kind": "execution-pipeline",
@@ -153,6 +180,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                     "undetermined": profile.get("undetermined", [])},
         "loop": {"stopped": loop["stopped"], "steps": loop["steps"],
                  "applied_writes": len(applied), "denied": len(loop["denied"])},
+        "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
         "commit": {"branch": work_branch, "sha": committed_sha,
                    "evidence_revision": evidence_revision,
                    "evidence_on_exact_sha": revision_matches},
@@ -162,8 +190,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
                   "blocked": gates["blocked"]},
         # honest: «готово к PR» = петля done + гейты не блокируют + (если коммитили) evidence на SHA
-        "ready_for_pr": (loop["stopped"] == "done") and (not gates["blocked"])
-                        and (not commit or revision_matches),
+        "ready_for_pr": ready,
+        "draft_pr": pr,                        # результат открытия PR (None/unavailable offline/opened live)
         "not_yet": not_yet,
     }
 
@@ -243,6 +271,35 @@ def selftest():
         expect("require_tests: отсутствие тестов блокирует implementation_verification",
                "implementation_verification" in rep_rt["gates"]["unmet"])
         _git(root, "checkout", "-q", orig_branch)
+
+        # v2.62: isolate=True -> весь прогон в отдельном worktree, основное дерево не тронуто
+        it_iso = iter([{"op":"write","path":"src/iso.py","content":"y=2\n"}, {"done": True}])
+        rep_iso = run_pipeline("в изоляции", sig, root, lambda c: next(it_iso),
+                               budget={"max_model_calls":5}, feature="iso-fn",
+                               commit=True, isolate=True)
+        wt_rel = rep_iso["isolation"]["worktree"]
+        expect("isolate: прогон в отдельном worktree (.ai/worktrees/iso-fn)",
+               wt_rel == ".ai/worktrees/iso-fn" and (root / wt_rel / "src" / "iso.py").exists())
+        expect("isolate: основное дерево НЕ тронуто (нет src/iso.py в корне)",
+               not (root / "src" / "iso.py").exists())
+        expect("isolate: коммит на ветке ai-ops/iso-fn, evidence на точном SHA",
+               rep_iso["commit"]["branch"] == "ai-ops/iso-fn"
+               and rep_iso["commit"]["evidence_on_exact_sha"] is True)
+
+        # v2.62: open_pr=True вызывает механизм draft PR; без токена -> honest unavailable
+        # (токены снимаем, т.к. CI может выставлять GITHUB_TOKEN — иначе тест дёрнет сеть)
+        saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        try:
+            it_pr = iter([{"op": "write", "path": "src/pr.py", "content": "z=3\n"}, {"done": True}])
+            rep_pr = run_pipeline("с PR", sig, root, lambda c: next(it_pr),
+                                  budget={"max_model_calls": 5}, feature="pr-fn",
+                                  commit=True, isolate=True, open_pr=True)
+            expect("open_pr без токена -> draft_pr unavailable (механизм готов, PR не имитируется)",
+                   rep_pr["draft_pr"] and rep_pr["draft_pr"]["status"] == "unavailable")
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

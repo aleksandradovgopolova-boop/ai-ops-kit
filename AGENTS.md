@@ -43,6 +43,7 @@ python3 tools/orchestrator.py --selftest
 python3 tools/budget.py --selftest
 python3 tools/tool_loop.py --selftest
 python3 tools/execution_pipeline.py --selftest
+python3 tools/pr_open.py --selftest
 python3 tools/gate_executor.py --selftest
 python3 validation/validate_reviewer_result.py --selftest
 python3 tools/tool_broker.py --selftest

@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.62.0] — 2026-07-16
+
+**P0-эпик, срезы 9–10: worktree-изоляция + механизм draft PR — цепь движка замкнута.** Теперь
+единый pipeline проходит весь путь: `[worktree] → detect → tool-loop → commit на ветке →
+evidence на SHA → гейты → [draft PR]`.
+
+### Added
+- **tools/pr_open.py** (+ selftest) — `open_draft_pr(root, branch, title, body, base)`: push
+  ветки + POST в GitHub REST (`/pulls`, `draft:true`), токен ТОЛЬКО из env; нет токена/remote →
+  honest `unavailable` (PR не имитируется). Чистый `_pr_payload` тестируется offline.
+- **tools/execution_pipeline.py** — `isolate=True`: весь прогон в `.ai/worktrees/<id>` на ветке
+  `ai-ops/<id>` (основное дерево не тронуто); `open_pr=True`: вызывает механизм draft PR при
+  `ready_for_pr`. Отчёт: `isolation.worktree`, `draft_pr`. Selftest: изоляция (файл в worktree,
+  не в корне), open_pr без токена → unavailable.
+- **CI + AGENTS.md + FILE_INDEX** — шаг `tools/pr_open.py --selftest`.
+
+### Changed
+- **manifest** — `fixed_v2_62`; `engine_status: ПОЛНАЯ цепочка собрана`; p0_backlog теперь =
+  только эмпирический остаток (живой предложитель, живой PR, 3 реальные задачи); `package_version` → 2.62.0.
+
+**Честная граница:** механизмы worktree/commit/evidence-на-SHA/draft-PR — код-полны и
+offline-проверены; сам живой PR и «3 реальные задачи против Claude Code» — эмпирическая
+обкатка на стороне child (нужен токен/egress), не имитируется.
+
 ## [2.61.0] — 2026-07-16
 
 **P0-эпик, срез 8: «умное ослабление» implementation_verification.** Требование ВСЕХ четырёх
