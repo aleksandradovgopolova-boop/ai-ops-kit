@@ -14,7 +14,8 @@
     + ключ) — сетевые вызовы сознательно вынесены из этого файла.
 
 Использование:
-  orchestrator.py run <WF> "<задача>" [child_root] [--evidence <file>] [--collect-evidence] [--fresh|--resume]
+  orchestrator.py run <WF> "<задача>" [child_root] [--workitem-id <id>] [--evidence <file>] [--collect-evidence] [--fresh|--resume]
+  # состояние: .ai/runtime/workitems/<id>/ (по WorkItem, не по workflow — параллельные задачи не делят состояние)
         — прогон (mock-провайдер). --evidence <file>: gate-evidence по
           schemas/gate-evidence.schema.json (валидируется). --collect-evidence: вывести evidence из
           вердиктов reviewer-стадий. --fresh: начать заново; без него — resume из TaskState.
@@ -24,6 +25,7 @@
 Требует pyyaml.
 """
 
+import hashlib
 import json
 import shutil
 import sys
@@ -157,7 +159,7 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                  provider=mock_provider, verbose=True, gate_evidence=None,
-                 collect=False, fresh=False, provider_name="mock"):
+                 collect=False, fresh=False, provider_name="mock", workitem_id=None):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -165,17 +167,31 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         raise SystemExit(f"неизвестный workflow '{workflow_id}' (есть: {', '.join(wf_all)})")
     w = wf_all[workflow_id]
 
-    run_dir = child_root / ".ai" / "runtime" / "orchestrator" / workflow_id.lower()
+    # Per-WorkItem состояние (Ф0): путь по id задачи, не по workflow — иначе две задачи
+    # одного workflow делят состояние. Без явного id — детерминированный из хэша задачи.
+    task_hash = hashlib.sha256(task_text.encode("utf-8")).hexdigest()[:12]
+    wid = workitem_id or f"wi-{task_hash}"
+    run_dir = child_root / ".ai" / "runtime" / "workitems" / wid
     if fresh and run_dir.exists():        # --fresh: начать с чистого состояния (иначе — resume)
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    state = load_state(run_dir) or {
-        "schema_version": 1, "task_id": f"seq-{workflow_id.lower()}",
+    existing = load_state(run_dir)
+    # resume-идентичность: нельзя «продолжить» чужую задачу под тем же id
+    if existing and existing.get("task_hash") and existing["task_hash"] != task_hash:
+        raise SystemExit(f"resume-конфликт: под '{wid}' сохранена другая задача "
+                         f"(task_hash {existing['task_hash']} != {task_hash}). "
+                         f"Используйте другой --workitem-id или --fresh.")
+    state = existing or {
+        "schema_version": 1, "task_id": wid, "workitem_id": wid, "task_hash": task_hash,
         "status": "in-progress", "workflow": workflow_id, "goal": task_text,
         "execution_mode": "sequential", "current_phase": None,
         "completed_checks": [], "artifacts": [], "next_action": w["stages"][0]["id"],
     }
+    # resume-идентичность по workflow тоже (та же задача, но другой маршрут — не resume)
+    if existing and existing.get("workflow") != workflow_id:
+        raise SystemExit(f"resume-конфликт: под '{wid}' сохранён workflow "
+                         f"{existing.get('workflow')} != {workflow_id}. Используйте --fresh.")
 
     stages = w["stages"]
     done_ids = {s for s in state.get("completed_checks", [])}
@@ -241,8 +257,10 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         state.pop("unmet_gates", None)
     save_state(run_dir, state)
     # append-only аудит-лог действия ИИ (security-posture: audit-log)
+    # Ф0: НЕ писать сырой task_text (может содержать ПДн/секреты) — только id и хэш.
     append_interaction_log(child_root, {
-        "workflow": workflow_id, "task": task_text[:200], "status": state["status"],
+        "workitem_id": wid, "task_hash": task_hash,
+        "workflow": workflow_id, "status": state["status"],
         "unmet_gates": gates.get("unmet_gates", []), "provider": provider_name,
         "stages": len(state.get("completed_checks", []))})
     if verbose:
@@ -391,6 +409,9 @@ def main(argv):
             i = rest.index("--provider"); prov_name = rest[i + 1]; del rest[i:i + 2]
         if "--model" in rest:
             i = rest.index("--model"); model = rest[i + 1]; del rest[i:i + 2]
+        workitem_id = None
+        if "--workitem-id" in rest:
+            i = rest.index("--workitem-id"); workitem_id = rest[i + 1]; del rest[i:i + 2]
         provider = make_provider(prov_name, model)
         wf = rest[0]
         task = rest[1] if len(rest) > 1 else ""
@@ -399,7 +420,8 @@ def main(argv):
             print(f"[live] провайдер {prov_name}, модель {model or DEFAULT_MODELS.get(prov_name)} "
                   f"— реальная модель, gates принудительны.")
         run_workflow(wf, task, root, provider=provider, provider_name=prov_name,
-                     gate_evidence=gate_evidence, collect=collect, fresh=fresh)
+                     gate_evidence=gate_evidence, collect=collect, fresh=fresh,
+                     workitem_id=workitem_id)
         return 0
     print(__doc__)
     return 0

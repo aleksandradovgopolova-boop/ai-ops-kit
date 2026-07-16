@@ -308,7 +308,7 @@ gates:
     id: ai_red_team
     purpose: AI-фича проверена адверсариально — инъекции, jailbreak, утечки PII/промпта, границы агентности.
     stage: red-team
-    blocking: false
+    blocking: true          # Ф0: безопасность AI-фичи — блокирующая по применимости (jailbreak/injection/PII)
     applies_when: "LLM/агентный компонент, доступный пользователю; иначе гейт неприменим"
     responsible_role: ai-red-teamer
     review_mode: read-only
