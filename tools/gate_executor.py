@@ -264,7 +264,8 @@ def _unmet_reason(kind: str, gate: dict) -> str:
     }[kind]
 
 
-def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None, signals=None) -> dict:
+def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None, signals=None,
+                  not_applicable=None) -> dict:
     """Один гейт -> machine-readable gate-result (schemas/gate-result.schema.json).
 
     Дисциплина evidence (v2.16): бездоказательного pass не существует — если гейт
@@ -292,10 +293,18 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
         warnings = list(ev.get("warnings", []))
         evid = ev.get("evidence", [])
         override = ev.get("override")
-        # запрет бездоказательного pass: required_evidence обязан быть подтверждён
+        # запрет бездоказательного pass: required_evidence обязан быть подтверждён.
+        # v2.61 «умное ослабление»: флаг, помеченный not_applicable (инструмента нет в
+        # ПОДТВЕРЖДЁННОМ стеке), считается покрытым по освобождению — но это ЗАПИСЫВАЕТСЯ в
+        # warnings (не фабрикуется pass): видно, что проверку не делали, потому что нечем.
         if status == "pass" and required:
-            covered = set(ev.get("provided", [])) | {c.get("id") for c in checks
-                                                     if c.get("status") == "pass"}
+            exempt = set(not_applicable or [])
+            real_covered = set(ev.get("provided", [])) | {c.get("id") for c in checks
+                                                          if c.get("status") == "pass"}
+            covered = real_covered | exempt
+            used_exempt = [k for k in required if k in exempt and k not in real_covered]
+            if used_exempt:
+                warnings = warnings + [f"освобождено (нет инструмента в стеке): {', '.join(used_exempt)}"]
             missing = [k for k in required if k not in covered]
             if missing:
                 msg = f"бездоказательный pass: не подтверждены required_evidence: {', '.join(missing)}"
@@ -335,7 +344,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     return result
 
 
-def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None, signals=None) -> dict:
+def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None, signals=None, not_applicable=None) -> dict:
     """Оценить quality_gates. По умолчанию — гейты контракта; если передан gate_ids (напр.
     агрегированные гейты RunPlan: base_workflow + треки), оцениваются именно они. Так прогон
     проверяет ТО, ЧТО спланировал (finding аудита: треки планировались, но не оценивались).
@@ -354,7 +363,8 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
         if gate is None:                      # контракт ссылается на несуществующий гейт
             raise SystemExit(f"workflow {workflow_id}: гейт '{gid}' отсутствует в quality/gates.yaml")
         kinds[gid] = classify(gate, signals)
-        r = evaluate_gate(gid, gate, evidence, tested_revision, signals=signals)
+        r = evaluate_gate(gid, gate, evidence, tested_revision, signals=signals,
+                          not_applicable=(not_applicable or {}).get(gid))
         results.append(r)
         overridden = override_effective(gate, r.get("override"))
         if r["blocking"] and r["status"] == "fail" and not overridden:
@@ -413,6 +423,20 @@ def selftest():
            "ux_review" in r_rp["evaluated_gates"])
     expect("gate_ids override: ux_review без evidence блокирует прогон",
            "ux_review" in r_rp["unmet_gates"] and r_rp["blocked"] is True)
+
+    # v2.61 «умное ослабление»: неприменимый флаг освобождается (записан в warnings), не фабрикуется
+    partial = {"implementation_verification": {"status": "pass",
+        "provided": ["build_passed", "tests_passed", "tested_revision"]}}  # нет lint/typecheck
+    r_strict = evaluate("QUICK", partial)
+    expect("без освобождения: недостающие lint/typecheck блокируют",
+           "implementation_verification" in r_strict["unmet_gates"])
+    r_exempt = evaluate("QUICK", partial,
+                        not_applicable={"implementation_verification": {"lint_passed", "typecheck_passed"}})
+    expect("с освобождением (нет линтера/тайпчекера в стеке): гейт не блокирует",
+           "implementation_verification" not in r_exempt["unmet_gates"])
+    iv = next(g for g in r_exempt["gate_results"] if g["gate"] == "implementation_verification")
+    expect("освобождение ЗАПИСАНО в warnings (не тихо)",
+           any("освобождено" in w for w in iv.get("warnings", [])))
 
     # v2.55 (finding аудита): условный human_approval (security required_when) НЕ безусловен
     sec_gate = load_gates()["security"]

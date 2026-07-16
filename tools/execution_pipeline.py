@@ -77,7 +77,7 @@ def _commit_on_branch(root, branch, message):
 
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
-                 max_steps=20, feature=None, commit=False):
+                 max_steps=20, feature=None, commit=False, allow_missing_tests=True):
     """Один прогон движка: детект -> правки через tool-loop -> [commit на ветке] ->
     evidence (на зафиксированном SHA, если commit) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -117,9 +117,25 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if intake:
         gate_ev.setdefault("intake_completeness", intake)
 
-    # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval)
+    # 6c. «умное ослабление» (v2.61): инструмента нет в подтверждённом стеке -> флаг освобождается
+    #     (build/lint/typecheck). tests — особый случай: по умолчанию тоже освобождаем + громкий
+    #     warn; policy allow_missing_tests=False эскалирует до блока (untested -> not ready).
+    exempt = set(coll.get("not_applicable") or [])
+    tests_warn = None
+    if coll.get("tests_absent"):
+        if allow_missing_tests:
+            exempt.add("tests_passed")
+            tests_warn = "нет тестов в стеке — implementation_verification освобождён по tests (allow_missing_tests=True); это осознанное послабление"
+        else:
+            exempt.discard("tests_passed")   # тесты обязательны -> гейт заблокирует
+            tests_warn = "нет тестов, а require_tests -> implementation_verification блокирует"
+    not_applicable = {"implementation_verification": exempt}
+
+    # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
+    #    освобождения по неприменимым проверкам
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
-                                   gate_ids=plan["gates"], signals=signals)
+                                   gate_ids=plan["gates"], signals=signals,
+                                   not_applicable=not_applicable)
 
     # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)
     evidence_revision = coll.get("revision")
@@ -141,6 +157,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                    "evidence_revision": evidence_revision,
                    "evidence_on_exact_sha": revision_matches},
         "checks": coll["checks"],
+        "exemptions": sorted(exempt),          # флаги, освобождённые как неприменимые (видно, не тихо)
+        "tests_warn": tests_warn,              # громкий сигнал об отсутствии тестов (если есть)
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
                   "blocked": gates["blocked"]},
         # honest: «готово к PR» = петля done + гейты не блокируют + (если коммитили) evidence на SHA
@@ -166,10 +184,10 @@ def selftest():
         subprocess.run(["git", "-C", td, "config", "user.email", "t@t"])
         subprocess.run(["git", "-C", td, "config", "user.name", "t"])
         (root / "src").mkdir()
-        # python-профиль с тривиальными проверками, которые пройдут
+        # python-профиль БЕЗ тулчейна (нет ruff/mypy/pytest, нет tests/) -> все проверки
+        # not_applicable детерминированно (не зависим от наличия pytest в среде selftest).
         (root / "pyproject.toml").write_text(
-            "[tool.poetry]\nname='x'\n[tool.poetry.dependencies]\npytest='*'\n", encoding="utf-8")
-        (root / "tests").mkdir()
+            "[tool.poetry]\nname='x'\n[tool.poetry.dependencies]\n", encoding="utf-8")
         (root / "f").write_text("x", encoding="utf-8")
         subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"])
 
@@ -212,7 +230,19 @@ def selftest():
                and rep_c["commit"]["evidence_revision"] == rep_c["commit"]["sha"])
         expect("commit: main не тронут (работа на ветке ai-ops/*)",
                _git(root, "rev-parse", "--abbrev-ref", "HEAD")[1] == "ai-ops/mul-fn")
+        expect("умное ослабление: нет тестов -> освобождено + громкий tests_warn (allow_missing_tests)",
+               "tests_passed" in rep_c["exemptions"] and rep_c["tests_warn"])
+        expect("умное ослабление: implementation_verification не заблокирован из-за отсутствия тулчейна",
+               "implementation_verification" not in rep_c["gates"]["unmet"])
         _git(root, "checkout", "-q", orig_branch)   # вернуться на исходную ветку
+
+        # require_tests: allow_missing_tests=False -> отсутствие тестов БЛОКИРУЕТ (эскалация политикой)
+        it_rt = iter([{"op":"write","path":"src/q.py","content":"x=1\n"}, {"done": True}])
+        rep_rt = run_pipeline("нужны тесты", sig, root, lambda c: next(it_rt), policy=pol,
+                              budget={"max_model_calls":5}, feature="need-tests", allow_missing_tests=False)
+        expect("require_tests: отсутствие тестов блокирует implementation_verification",
+               "implementation_verification" in rep_rt["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])
