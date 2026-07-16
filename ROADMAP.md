@@ -151,9 +151,14 @@
   (route→RunPlan→WorkItem→active-work→исполнение→отчёт). Tool Broker + Policy Engine
   («модель предлагает, политика решает»; protected-paths = merge пакет+child). Execution
   budget (потолок вызовов). Провайдеры anthropic/openai/openai-compatible (DeepSeek/local).
-- **На паузе — живое (нужен ключ/токен):** tool-calling петля с живой моделью, preflight
-  к GitHub API. Разблокируется первым живым прогоном на реальном провайдере.
-- **Цель 3.0 (breaking):** `ai-ops run` как основной путь + сплит на 5 пакетов.
+- **Живое — разблокировано (v2.42–2.44) ✅.** tool-calling петля подтверждена живым прогоном
+  на DeepSeek (`openai-compatible`): цикл `write → проверка → done`, политика и бюджет держат
+  (`live_proposal_quality: verified`). Concurrency preflight видит открытые PR через GitHub
+  REST-фоллбэк без `gh` (токен из env). Stack-aware evidence collector гоняет команды
+  RepositoryProfile через Broker и отдаёт структурный evidence в `implementation_verification`.
+- **Цель 3.0 (breaking):** `ai-ops run` как основной путь + сплит на 5 пакетов —
+  детальный план в `docs/3.0-design.md` (запускается по явному решению; аддитивный мост
+  сохраняет работу существующих child до и во время миграции).
 
 ## Правила движения по roadmap
 

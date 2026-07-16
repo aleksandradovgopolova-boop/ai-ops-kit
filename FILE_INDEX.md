@@ -30,6 +30,7 @@
 - `docs/WALKTHROUGH.md`
 - `docs/adoption-guide.md`
 - `docs/parallel-sessions.md`
+- `docs/3.0-design.md` — дизайн 3.0: `ai-ops run` основным путём + сплит на 5 пакетов (план, запуск по явному решению)
 
 ## manifest/
 
