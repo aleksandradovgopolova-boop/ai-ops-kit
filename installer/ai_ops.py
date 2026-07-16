@@ -538,6 +538,13 @@ def cmd_init(target_dir):
         shutil.copy2(upd_src, upd_dst)
         print(f"установлен CI-workflow автообновления: {upd_dst} "
               "(раз в день сверяет версию parent и открывает PR с обновлением).")
+    rec_src = PKG / "templates" / "ci" / "ai-ops-record.yml"
+    rec_dst = root / ".github" / "workflows" / "ai-ops-record.yml"
+    if rec_src.exists() and not rec_dst.exists():
+        rec_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(rec_src, rec_dst)
+        print(f"установлен CI-workflow автонакопления истории эффекта: {rec_dst} "
+              "(на push фиксирует срез по затронутым фичам; baseline метрик закрывается сам).")
     # онбординг: положить рядом объяснение ценности простым языком и показать его
     ob_src = PKG / "docs" / "ONBOARDING.md"
     ob_dst = root / "AI-OPS-ONBOARDING.md"      # не затираем собственный ONBOARDING.md репо
