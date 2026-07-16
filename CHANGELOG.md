@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.34.0] — 2026-07-15
+
+**Execution Engine — Фаза 2 (срез 1): единый контроллер `ai-ops run`.** Разрозненные
+шаги собраны в одну транзакцию — обещанный «task → controlled execution → report».
+
+### Added
+- **tools/ai_ops_run.py** (+ selftest) — `run`: классификация/маршрут → RunPlan
+  (base_workflow + треки + агрегированные гейты) → WorkItem → регистрация в реестре
+  активных работ → исполнение → компактный `run-report.json`.
+  - **claude-code**: план + каркас состояния (RunPlan/WorkItem/active-work), стадии
+    исполняет рантайм по плану — `status: planned` (кит не притворяется, что исполнил);
+  - **generic-orchestrator**: реальный прогон стадий и гейтов — `status: done|blocked`.
+- **commands/task/ai-run.md** — прозаический контракт команды.
+
+### Changed
+- **manifest** — `execution_engine.run_controller`; `not_yet` сдвинут (Tool Broker/Policy
+  Engine для generic-orchestrator, Project Detector + stack-адаптеры, `ai-ops run` как
+  основной путь + сплит на пакеты — 3.0); `package_version` → 2.34.0.
+
+Честно: аддитивно (2.x). Для рантаймов со своим tool loop контроллер компонует и
+готовит план — исполнение и enforcement «всех стадий» держатся на evidence (commit SHA,
+структурный reviewer-result), а не на доверии рантайму. Свой tool loop нужен только
+generic-orchestrator — это следующий, тяжёлый срез.
+
 ## [2.33.0] — 2026-07-15
 
 **Execution Engine — Фаза 1 (часть 2): структурные reviewer-outputs + evidence-схемы

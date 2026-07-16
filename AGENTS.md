@@ -46,6 +46,7 @@ python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
 python3 tools/run_plan.py --selftest
 python3 tools/run_plan.py validate
+python3 tools/ai_ops_run.py --selftest
 python3 tools/active_work.py --selftest
 python3 tools/worktree.py --selftest
 python3 tools/merge_memory.py --selftest
