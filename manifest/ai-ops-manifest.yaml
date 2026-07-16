@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.47.0
+  package_version: 2.48.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -185,9 +185,13 @@ execution_engine:
     slice1_done: true                       # v2.47: ai-run — канонический вход; ai-start-task — совместимый алиас
     canonical_entry: commands/task/ai-run.md  # генерируется в раннтайм (generate_runtime.render_ai_run)
     alias_retained: commands/task/ai-start-task.md  # снятие не раньше 4.0
-    remaining_slices: [per-package-install, physical-tree-split, migration-guide]
+    slice2_done: true                       # v2.48: по-пакетная установка (installer фильтрует managed_set)
+    per_package_install:
+      config_field: ".ai-ops.yaml -> packages: [список]"   # отсутствует -> все (обратная совместимость)
+      rule: "неназначенный пакету файл ставится всегда (до физразноса — срез 3); аддитивно"
+    remaining_slices: [physical-tree-split, migration-guide]
   not_yet:                                  # breaking-часть 3.0 — по явному решению владельца
-    - "3.0 срезы 2–4: по-пакетная установка, физический разнос дерева, MIGRATION_GUIDE"
+    - "3.0 срезы 3–4: физический разнос дерева по packages/<name>/ + MIGRATION_GUIDE (обкатка на child)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
