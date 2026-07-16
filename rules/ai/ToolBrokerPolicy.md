@@ -17,8 +17,11 @@ Policy Engine (`tools/tool_broker.py`) по уровням `security/permission-
    `execution`. Нехватка уровня — отказ, а не «на свой страх».
 2. **Write только в write_scope.** Запись вне объявленного scope — отказ (не «случайно
    поправил соседний модуль»).
-3. **Protected paths** (`config/protected-paths.yaml`) — запись только при `privileged` +
-   явном approval; иначе отказ.
+3. **Protected paths** — запись только при `privileged` + явном approval; иначе отказ.
+   Источник = **MERGE**: дефолт пакета (`config/protected-paths.yaml`) + карта child'а
+   (`<child>/.ai-ops.yaml → protected_paths`). Child добавляет свои пути (напр.
+   `.github/workflows/`), не отменяя универсально-опасные дефолты. Policy знает реальную
+   карту репозитория (передать `child_root` в `Policy(...)`).
 4. **Необратимое/опасное** (`rm -rf`, `git push --force`, `reset --hard`, `drop table`,
    `curl | sh`, …) — только `destructive` + approval. По умолчанию — отказ.
 5. **Evidence обязателен.** Каждое исполненное действие даёт запись с ревизией и exit_code

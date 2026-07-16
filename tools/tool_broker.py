@@ -49,9 +49,48 @@ def _load(rel):
         return {}
 
 
-def _protected_prefixes():
-    pp = _load("config/protected-paths.yaml").get("protected_paths", []) or []
-    return [(p.get("path", "").rstrip("/"), p.get("approval", "required")) for p in pp if p.get("path")]
+def _norm_entry(e, default_appr="required"):
+    """Принимает как {path, approval}, так и строку 'path/' -> (prefix, approval)."""
+    if isinstance(e, str):
+        return (e.strip().rstrip("/"), default_appr) if e.strip() else None
+    if isinstance(e, dict) and e.get("path"):
+        return (str(e["path"]).rstrip("/"), e.get("approval", default_appr))
+    return None
+
+
+def _protected_prefixes(child_root=None):
+    """Дефолт пакета + карта child'а (MERGE, не replace): child ДОБАВЛЯЕт к
+    универсально-опасным путям, не отменяя их. Источники child'а:
+      1. <child>/.ai-ops.yaml -> protected_paths (список строк) — единый источник;
+      2. <child>/config/protected-paths.yaml (если есть) — как у пакета.
+    Так Policy знает реальную карту репозитория (finding обкатки v2.36)."""
+    out, seen = [], set()
+
+    def add(entry):
+        n = _norm_entry(entry)
+        if n and n[0] and n[0] not in seen:
+            seen.add(n[0]); out.append(n)
+
+    for e in _load("config/protected-paths.yaml").get("protected_paths", []) or []:
+        add(e)
+    if child_root:
+        child_root = Path(child_root)
+        cfg = child_root / ".ai-ops.yaml"
+        if cfg.exists():
+            try:
+                data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+                for e in data.get("protected_paths", []) or []:
+                    add(e)
+            except (OSError, yaml.YAMLError):
+                pass
+        cpp = child_root / "config" / "protected-paths.yaml"
+        if cpp.exists():
+            try:
+                for e in (yaml.safe_load(cpp.read_text(encoding="utf-8")) or {}).get("protected_paths", []) or []:
+                    add(e)
+            except (OSError, yaml.YAMLError):
+                pass
+    return out
 
 
 def _under(path: str, prefix: str) -> bool:
@@ -62,14 +101,15 @@ def _under(path: str, prefix: str) -> bool:
 
 class Policy:
     def __init__(self, level="controlled-write", write_scope=None, confidentiality="internal",
-                 approvals=None):
+                 approvals=None, child_root=None):
         if level not in LEVEL_ORDER:
             raise ValueError(f"неизвестный уровень '{level}'")
         self.level = level
         self.write_scope = [s.strip("/") for s in (write_scope or [])]
         self.confidentiality = confidentiality
         self.approvals = set(approvals or [])   # набор одобренных ярлыков (напр. {'destructive'})
-        self.protected = _protected_prefixes()
+        # protected = дефолт пакета MERGE карта child'а (.ai-ops.yaml protected_paths)
+        self.protected = _protected_prefixes(child_root)
 
     def _level_ok(self, required):
         return LEVEL_ORDER.index(self.level) >= LEVEL_ORDER.index(required)
@@ -201,6 +241,24 @@ def selftest():
         dp = Policy(level="destructive", write_scope=["src/"], approvals=["destructive"])
         expect("destructive + approval разрешает опасную команду",
                dp.decide({"op": "shell", "command": "rm -rf build/"})["allow"])
+
+    # v2.37: child-override protected-paths (finding обкатки — Policy знает карту child'а)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / ".ai-ops.yaml").write_text(
+            "kind: ai-ops-child-config\nprotected_paths: [.github/workflows/]\n", encoding="utf-8")
+        # write_scope включает .github/, но child объявил его protected
+        cw = Policy(level="controlled-write", write_scope=[".github/", "src/"], child_root=root)
+        expect("child protected (.github/workflows/) запрещён, хоть и в scope",
+               not cw.decide({"op": "write", "path": ".github/workflows/ci.yml"})["allow"])
+        expect("не-protected путь в scope по-прежнему разрешён",
+               cw.decide({"op": "write", "path": "src/x.ts"})["allow"])
+        expect("дефолт пакета сохраняется (merge, не replace): security/ запрещён",
+               not cw.decide({"op": "write", "path": "security/x.yaml"})["allow"])
+        # без child_root старое поведение: .github/ не защищён дефолтом
+        no_child = Policy(level="controlled-write", write_scope=[".github/"])
+        expect("без child_root .github/ не protected (дефолт пакета)",
+               no_child.decide({"op": "write", "path": ".github/workflows/ci.yml"})["allow"])
 
     print("tool_broker selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
