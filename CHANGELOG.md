@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.35.0] — 2026-07-15
+
+**Фиксы из обкатки 2.34 в ии-среде.** Догфудинг вскрыл три вещи — закрываем аддитивно.
+
+### Added
+- **templates/ci/ai-ops-validate.yml** — канонический child-CI: пин kit =
+  `installed_version` из `.ai-ops.yaml` (клон по тегу `v<version>`), а не хардкод строки в
+  protected `ci.yml`. Убирает трение «каждый `ai-ops update` требует правки protected-файла
+  ради пина». Один источник версии, который и так едет через PR обновления. Ставится
+  `ai-ops init`.
+
+### Changed
+- **tools/ai_ops_run.py** — в planned-режиме run-report честно помечает
+  `run_state_materialized: false`: `.ai/runtime/workitems/<id>/` создаёт рантайм при
+  реальном исполнении стадий, не контроллер; на её наличие после planned-прогона полагаться
+  нельзя (finding обкатки).
+- **manifest** — `execution_engine.dogfood_findings` (planned-run/workitems, preflight
+  слеп к PR без gh, пин-трение) — вход для Tool Broker; `package_version` → 2.35.0.
+
+Finding для Фазы 2 (Tool Broker): `concurrency_preflight` слеп к открытым PR без gh/токена
+(`open_prs.status: unavailable`) — реальная изоляция потребует доступа к GitHub API.
+
 ## [2.34.0] — 2026-07-15
 
 **Execution Engine — Фаза 2 (срез 1): единый контроллер `ai-ops run`.** Разрозненные

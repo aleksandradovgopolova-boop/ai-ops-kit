@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.34.0
+  package_version: 2.35.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -134,6 +134,10 @@ execution_engine:
     tool: tools/ai_ops_run.py                # route -> RunPlan -> WorkItem -> active-work -> exec -> report
     command: commands/task/ai-run.md
     execution: {claude-code: planned+scaffold (рантайм исполняет), generic-orchestrator: orchestrated}
+  dogfood_findings:                         # v2.35: из обкатки 2.34 в ии-среде
+    - planned-run НЕ материализует .ai/runtime/workitems/<id>/ (run_state — обещание пути; папку создаёт рантайм при исполнении) -> run_state_materialized в run-report
+    - concurrency_preflight слеп к открытым PR без gh/токена (open_prs.status: unavailable) -> Tool Broker обязан дать доступ к GitHub API
+    - child-CI пин kit в protected ci.yml давал трение на каждом update -> ai-ops-validate.yml: пин = installed_version из .ai-ops.yaml
   not_yet:                                  # следующие срезы эпика
     - real tool loop for generic-orchestrator (Tool Broker + Policy Engine)
     - stack-aware deterministic evidence collectors (Project Detector + adapters)
