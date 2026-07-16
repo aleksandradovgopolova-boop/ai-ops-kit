@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.32.0] — 2026-07-15
+
+**Execution Engine — Фаза 1 (часть 1): RunPlan + base_workflow/tracks.** Модель «один
+workflow» дополнена планом треков. Реальная фича многослойна; base_workflow задаёт
+характер, а треки (обязательные области качества) выводятся из затронутых зон и
+**добавляют свои гейты**. Так «Design/Analytics/Docs by Default» становится механикой:
+PRODUCT-задача, тронувшая UI и измеримое поведение, сама получает UX/analytics/security
+гейты, которых в самом PRODUCT-контракте не было (прямо по аудиту).
+
+### Added
+- **registry/tracks.yaml** — quality tracks: `signal → gates` (VISUAL/ANALYTICS/SECURITY/
+  DOCUMENTATION/EVENTS — required; AI/RELEASE — conditional), с `skip_reason` для
+  explainable skips.
+- **schemas/run-plan.schema.json** + **tools/run_plan.py** (+ selftest) — `plan`: из
+  сигналов задачи строит RunPlan (base_workflow из ai_route + треки + агрегированные
+  гейты + пропуски с причиной); `validate`: целостность tracks.yaml (гейты резолвятся) и
+  формы RunPlan. Аддитивно: ai_route не менялся.
+
+### Changed
+- **commands/task/ai-start-task.md** — шаг RunPlan (треки + агрегированные гейты) на intake.
+- **manifest** — раздел `execution_engine` (phase0_done + run_plan + честный not_yet);
+  `package_version` → 2.32.0.
+
 ## [2.31.0] — 2026-07-15
 
 **Execution Engine — Фаза 0: correctness & safety.** Пять подтверждённых по коду дыр из

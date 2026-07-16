@@ -43,6 +43,8 @@ python3 tools/gate_executor.py --selftest
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
+python3 tools/run_plan.py --selftest
+python3 tools/run_plan.py validate
 python3 tools/active_work.py --selftest
 python3 tools/worktree.py --selftest
 python3 tools/merge_memory.py --selftest

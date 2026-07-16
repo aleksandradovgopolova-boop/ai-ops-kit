@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.31.0
+  package_version: 2.32.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -117,6 +117,20 @@ knowledge_integrity:
   freshness_validator: validation/validate_freshness.py
   gates: [knowledge_integrity, knowledge_freshness]           # non-blocking до обкатки
   child_claims_path: ".ai/project/knowledge/claims.yaml"      # где child хранит свои claims
+
+execution_engine:
+  # v2.31 Ф0 (correctness&safety) + v2.32 Ф1 (RunPlan + base_workflow/tracks).
+  status: partial
+  phase0_done: [ai-start-task-drift, security-in-engineering, ai_red_team-blocking, audit-log-redaction, per-workitem-state]
+  run_plan:
+    schema: schemas/run-plan.schema.json
+    tool: tools/run_plan.py                 # plan (base_workflow + tracks -> gates) / validate
+    tracks_registry: registry/tracks.yaml   # трек -> signal -> gates (Design/Analytics/Docs by Default)
+    child_path: "features/<id>/run-plan.yaml"
+  not_yet:                                  # следующие срезы Фазы 1+
+    - structured-reviewer-outputs           # источник истины вместо regex по markdown (v2.33)
+    - per-gate-evidence-schema              # build/tests: command/exit_code/revision/log
+    - unified `ai-ops run` controller       # эпик, часть — 3.0
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

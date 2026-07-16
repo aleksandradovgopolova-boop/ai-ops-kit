@@ -20,7 +20,13 @@
    - иначе → контракт по selection_criteria.task_type;
    - неизвестный тип → ENGINEERING (честный default).
 4. Показать выбранный workflow и причину.
-4a. **Concurrency preflight** (гейт `concurrency_preflight`, пишущие workflow): по целевым
+4a. **RunPlan — base_workflow + треки** (`tools/run_plan.py plan --signals '<json>'`): по
+   сигналам задачи (ui_changed, measurable_behavior, security_surface_changed,
+   events_changed, ai_component, deploy_touched, user_facing_change) вывести обязательные
+   и условные **треки качества** и агрегировать их гейты к гейтам base_workflow. Так UX,
+   аналитика, документация, security подключаются сами по затронутым зонам; пропущенные
+   треки — с явной причиной (explainable skips), не молча. RunPlan — `features/<id>/run-plan.yaml`.
+4b. **Concurrency preflight** (гейт `concurrency_preflight`, пишущие workflow): по целевым
    файлам прогнать `tools/concurrency_preflight.py --paths <файлы> --base origin/main` —
    открытые PR по тем же путям + свежие мержи в base + перепроверка премиссы против
    актуального main (не базы ветки). `verdict=collision` → не стартовать вслепую:
