@@ -41,6 +41,8 @@ jobs:
         run: python3 tools/gate_executor.py --selftest
       - name: Structured reviewer-result (selftest)
         run: python3 validation/validate_reviewer_result.py --selftest
+      - name: Tool Broker + Policy Engine (selftest)
+        run: python3 tools/tool_broker.py --selftest
       - name: Согласованность workflow ↔ gate (applicability)
         run: |
           python3 validation/validate_workflow_gates.py --selftest

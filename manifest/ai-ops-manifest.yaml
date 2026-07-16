@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.35.0
+  package_version: 2.36.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -138,8 +138,14 @@ execution_engine:
     - planned-run НЕ материализует .ai/runtime/workitems/<id>/ (run_state — обещание пути; папку создаёт рантайм при исполнении) -> run_state_materialized в run-report
     - concurrency_preflight слеп к открытым PR без gh/токена (open_prs.status: unavailable) -> Tool Broker обязан дать доступ к GitHub API
     - child-CI пин kit в protected ci.yml давал трение на каждом update -> ai-ops-validate.yml: пин = installed_version из .ai-ops.yaml
+  tool_broker:                              # v2.36 Фаза 2 срез 2: контролируемое исполнение
+    tool: tools/tool_broker.py               # Policy(level/write_scope/protected) + execute + Evidence
+    rule: rules/ai/ToolBrokerPolicy.md
+    invariant: "execute() всегда через decide(); модель предлагает, политика решает"
+    status: component-ready                  # компонент готов+тестирован; петля с живой моделью — след. шаг
   not_yet:                                  # следующие срезы эпика
-    - real tool loop for generic-orchestrator (Tool Broker + Policy Engine)
+    - live tool-calling loop в orchestrator (Broker + tool-calling провайдер)
+    - preflight доступ к GitHub API (open_prs без gh слеп — finding обкатки)
     - stack-aware deterministic evidence collectors (Project Detector + adapters)
     - "ai-ops run как ОСНОВНОЙ путь + сплит на 5 пакетов (3.0, breaking)"
 

@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.36.0] — 2026-07-15
+
+**Execution Engine — Фаза 2 (срез 2): Tool Broker + Policy Engine.** Для голого
+API-рантайма (generic-orchestrator) — контролируемое исполнение: модель ПРЕДЛАГАЕТ
+действие, а разрешено ли оно, решает политика, не модель.
+
+### Added
+- **tools/tool_broker.py** (+ selftest, 12 проверок на temp git-репо) — `Policy`
+  (уровни `security/permission-levels.yaml` + write_scope + `config/protected-paths.yaml`)
+  и `execute` с обязательным Evidence (op/target/exit_code/revision/ok). Инвариант:
+  `execute()` всегда вызывает `decide()` первым — обхода политики нет. Правила: read≥read-only,
+  write только в write_scope, protected → privileged+approval, необратимое (rm -rf,
+  git push --force, drop table, curl|sh) → destructive+approval, иначе отказ.
+- **rules/ai/ToolBrokerPolicy.md** — «модель предлагает, политика решает».
+
+### Changed
+- **manifest** — `execution_engine.tool_broker` (status: component-ready); `not_yet` →
+  живая tool-calling петля в оркестраторе + доступ preflight к GitHub API;
+  `package_version` → 2.36.0.
+
+Честно: Broker/Policy/Evidence готовы и протестированы как компонент. Петля «живая модель
+предлагает действия в цикле» интегрируется в оркестратор отдельным шагом (нужен
+tool-calling провайдер). Для рантаймов со своим tool loop (claude-code) enforcement
+держится на Evidence, не на брокере кита.
+
 ## [2.35.0] — 2026-07-15
 
 **Фиксы из обкатки 2.34 в ии-среде.** Догфудинг вскрыл три вещи — закрываем аддитивно.

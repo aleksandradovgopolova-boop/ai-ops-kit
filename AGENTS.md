@@ -41,6 +41,7 @@ python3 tools/effect_metrics.py --selftest
 python3 tools/orchestrator.py --selftest
 python3 tools/gate_executor.py --selftest
 python3 validation/validate_reviewer_result.py --selftest
+python3 tools/tool_broker.py --selftest
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
