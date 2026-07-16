@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.52.0] — 2026-07-16
+
+**Находки обкатки 4 и 6 закрыты.** Из отчёта обкатки в ии-среде.
+
+### Changed
+- **validation/ai_route.py (finding 4)** — неизвестный `task_type` больше не тянет слепо
+  тяжёлый ENGINEERING: при `size` xs/small и не-высоком риске → QUICK (мелкая правка не
+  получает 13 гейтов); medium/high риск и большой размер → ENGINEERING (честный default);
+  `risk: critical` по-прежнему → CRITICAL. Selftest: два новых кейса (small→QUICK, large→ENGINEERING).
+- **validation/validate_feature_blueprint.py (finding 6)** — `feature.status: released` требует
+  хотя бы один артефакт со `status: done`; released при нуле done → fail («reality/blueprint
+  дрейф: выпущено, а сделанного нет»). Кит не видит код произвольного репо — это честный
+  прокси через artifact-evidence. Selftest: released без done → fail; с done → ок.
+- **manifest** — `execution_engine.dogfood_findings_2026_07_16` (findings 4/5/6 → закрыты
+  v2.51/2.52); `package_version` → 2.52.0.
+
+**Итог по отчёту обкатки:** находки 1–3 закрыты ранее (2.37/2.39), 4–6 — сейчас (2.51/2.52).
+Наблюдение 6 (о продукте) стало проверкой кита. Остаток отчёта (North Star/baseline) —
+накапливается эксплуатацией, не код.
+
 ## [2.51.0] — 2026-07-16
 
 **Находка обкатки 5 + честность дока: привязка WorkItem к именованной фиче.** Отчёт обкатки

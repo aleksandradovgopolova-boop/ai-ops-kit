@@ -112,6 +112,17 @@ def validate_dir(feature_dir: Path):
             fail(f"стадия '{st}' достигнута (current_stage={stage}, profile={profile}), "
                  "но артефактов для неё нет")
 
+    # finding обкатки 6: released ⇒ должно быть доказательство поставки. Кит не видит код
+    # в произвольном репо, но честный прокси — released при НУЛЕ done-артефактов = дрейф
+    # «reality/blueprint разошлись» (фича помечена выпущенной, а сделанного нет).
+    if feature.get("status") == "released":
+        any_done = any(e.get("status") == "done"
+                       for entries in artifacts.values() if isinstance(entries, list)
+                       for e in entries if isinstance(e, dict))
+        if not any_done:
+            fail("feature.status=released, но ни один артефакт не 'done' — нет доказательства "
+                 "поставки (reality/blueprint дрейф; пометьте реальные артефакты done или снимите released)")
+
     return errors
 
 
@@ -166,6 +177,20 @@ def selftest():
         (fdir / "blueprint.yaml").write_text(yaml.safe_dump(bp, allow_unicode=True), encoding="utf-8")
         expect("full: те же данные -> fail (ux/architecture достигнуты без артефактов)",
                validate_dir(fdir), True)
+        # finding обкатки 6: released без единого done-артефакта -> fail (reality/blueprint дрейф)
+        rel = make_demo(Path(td) / "r")
+        bpr = yaml.safe_load((rel / "blueprint.yaml").read_text(encoding="utf-8"))
+        bpr["feature"]["status"] = "released"
+        for entries in bpr["artifacts"].values():
+            for e in entries:
+                e["status"] = "draft"   # ничего не done
+        (rel / "blueprint.yaml").write_text(yaml.safe_dump(bpr, allow_unicode=True), encoding="utf-8")
+        expect("released без done-артефактов -> fail (finding 6)", validate_dir(rel), True)
+        # released с done-артефактом -> ок (по этому правилу)
+        bpr["artifacts"]["discovery"][0]["status"] = "done"
+        (rel / "blueprint.yaml").write_text(yaml.safe_dump(bpr, allow_unicode=True), encoding="utf-8")
+        errs_rel = [e for e in validate_dir(rel) if "released" in e]
+        expect("released с done-артефактом -> нет ошибки released-дрейфа", errs_rel, False)
     print("feature-blueprint selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
