@@ -48,6 +48,21 @@ gates:
     required_evidence: [checked_paths, verdict]   # verdict ∈ clean|collision
     collision_policy: "verdict=collision -> координация / rebase на актуальный main / сузить scope / согласовать владельца (OwnershipMap)"
 
+  event_contract_consistency:
+    id: event_contract_consistency
+    purpose: >
+      Имена событий согласованы во всех слоях: единый каталог, каноничная грамматика,
+      audit/analytics ссылаются на domain через maps_to, domain не подменён AuditEvent.
+      Класс contract<->code<->analytics naming drift.
+    stage: specification
+    blocking: false          # advisory до обкатки
+    responsible_role: solution-architect
+    review_mode: writer
+    validator: validate-event-catalog        # runnable: validation/validate_event_catalog.py
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT, ANALYTICS, AI_FEATURE]
+    required_evidence: [catalog_valid, names_reconciled]
+
   requirements:
     id: requirements
     purpose: Требования проверяемы, полны, тестируемы.

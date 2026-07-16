@@ -1,0 +1,40 @@
+# Пример событийного каталога (v2.29). В child: .ai/project/contracts/events.yaml.
+# Демонстрирует реконсиляцию трёх «языков» именования к одному каноничному имени:
+# domain-событие объявлено один раз; audit- и analytics-события ссылаются на него maps_to.
+# Проходит validation/validate_event_catalog.py.
+schema_version: 1
+kind: event-catalog
+
+events:
+  # --- domain events (envelope: eventId/type/occurredAt/payload) --------------
+  - name: object.version_created
+    kind: domain
+    payload: [objectId, version, authorId]
+  - name: task.completed
+    kind: domain
+    payload: [taskId, completedBy]
+  - name: catalog.item_published
+    kind: domain
+    payload: [itemId, publishedBy]
+
+  # --- audit events (AuditEvent: actor/action/objectType/result) --------------
+  # каноничное имя = domain, к которому относится; в коде НЕ выдумывать третий вариант
+  - name: object.version_saved
+    kind: audit
+    maps_to: object.version_created
+    fields: [actorId, action, objectType, objectId, result, createdAt]
+  - name: task.marked_complete
+    kind: audit
+    maps_to: task.completed
+    fields: [actorId, action, result]
+
+  # --- analytics events (метрические; MetricCatalog ссылается сюда) -----------
+  - name: catalog.publish_metric
+    kind: analytics
+    maps_to: catalog.item_published
+
+  # --- standalone (нет domain-соответствия) — только с явной причиной ---------
+  - name: system.healthcheck_ran
+    kind: audit
+    standalone: true
+    reason: "инфраструктурное событие, не относится к предметной области"

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.28.0
+  package_version: 2.29.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -117,6 +117,16 @@ knowledge_integrity:
   freshness_validator: validation/validate_freshness.py
   gates: [knowledge_integrity, knowledge_freshness]           # non-blocking до обкатки
   child_claims_path: ".ai/project/knowledge/claims.yaml"      # где child хранит свои claims
+
+event_contract:
+  # v2.29: единый каталог имён событий — против contract<->code<->analytics drift.
+  status: integrated
+  schema: schemas/event-catalog.schema.json
+  validator: validation/validate_event_catalog.py   # + --scan по коду (best-effort)
+  rule: rules/engineering/EventNamingConvention.md
+  gate: event_contract_consistency                   # advisory до обкатки
+  child_path: ".ai/project/contracts/events.yaml"
+  example: examples/event-catalog-demo/events.yaml
 
 governance:
   information_boundaries: governance/information-boundaries.md   # что можно/нельзя хранить (v2.9)
