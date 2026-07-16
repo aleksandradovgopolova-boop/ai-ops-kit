@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.39.0] — 2026-07-15
+
+**OpenAI-совместимый провайдер (DeepSeek/local) — doc↔code fix + provider-agnostic живой
+прогон.** Шапка `orchestrator.py` обещала `OPENAI_COMPATIBLE_BASE_URL`-адаптер, но код
+бил только в `api.openai.com`. Теперь реализовано — child может гнать живой прогон на
+своём провайдере (напр. DeepSeek), не добывая ключ Anthropic/OpenAI.
+
+### Added / Fixed
+- **tools/orchestrator.py** — провайдер `openai-compatible`: `--provider openai-compatible
+  --model <...>` + env `OPENAI_COMPATIBLE_BASE_URL` + `OPENAI_COMPATIBLE_API_KEY`. Любой
+  OpenAI-совместимый endpoint (DeepSeek: `https://api.deepseek.com/chat/completions`,
+  local, GigaChat-gateway). `_openai_call` получил `base_url`/`key_env`; docstring
+  приведён к реальности. Без base_url/model/ключа — честные ошибки (selftest).
+- **manifest** — `providers.live_executor_providers: [anthropic, openai, openai-compatible]`;
+  `package_version` → 2.39.0.
+
+Секрет — только из env (не в репо/логах). Живой путь opt-in; CI/selftest офлайн на mock.
+
 ## [2.38.0] — 2026-07-15
 
 **Execution budget — enforcement потолка прогона.** `RunPlan.execution_budget` был только
