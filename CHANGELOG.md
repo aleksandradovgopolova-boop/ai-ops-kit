@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.30.0] — 2026-07-15
+
+**Автонакопление истории эффекта — baseline закрывается сам.** Причина, по которой
+baseline метрик застревал: `run_report --record` был «шагом, который надо не забыть», и
+фичи получали 1 срез вместо ≥3. Теперь запись среза — структурная часть каждой стадии +
+CI-нетто, без ручного «не забыть».
+
+### Added
+- **templates/ci/ai-ops-record.yml** — на каждый push фиксирует срез (`run_report
+  --record`) по затронутым фичам и коммитит снимок в `.ai/project/report-history/` с
+  `[skip ci]` (без рекурсии; инструменты из parent, как в ai-ops-update). Ставится
+  `ai-ops init`. Опт-аут — удалить файл.
+
+### Changed
+- **commands/task/ai-plan-task.md, ai-implement.md, ai-verify.md, ai-finish-task.md** —
+  шаг «Записать срез эффекта» на каждой стадии: обычный прогон фичи сам даёт ≥3 среза.
+- **installer/ai_ops.py** — `init` устанавливает и `ai-ops-record.yml`.
+- **manifest** — раздел `effect_metrics.auto_record` (in_session + ci_net, честно про
+  границу CI); `package_version` → 2.30.0.
+
 ## [2.29.0] — 2026-07-15
 
 **Событийный каталог — единое имя события во всех слоях.** Закрывает класс

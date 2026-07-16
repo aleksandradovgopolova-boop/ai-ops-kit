@@ -16,7 +16,9 @@
    <memory-dir> <id> --summary "что изменилось" --areas <зоны> --decisions "…"
    --lessons "…"` — зафиксировать знание задачи как lessons-learned. Значимые/необратимые
    решения дополнительно занести эпизодом в `decisions/registry.yaml`.
-5. Закрыть TaskState.
+5. Закрыть TaskState. **Записать финальный срез эффекта**: `tools/run_report.py
+   features/<id> --record` — последний из ≥3 срезов за прогон (plan/implement/verify/finish);
+   так история накапливается сама, а baseline метрик закрывается без «не забыть».
 6. **Снять работу с реестра активных работ**: `tools/active_work.py finish
    .ai/runtime/active-work.yaml <id>` — чтобы параллельные сессии видели, что зоны
    освободились, и conflict forecast был точным.
