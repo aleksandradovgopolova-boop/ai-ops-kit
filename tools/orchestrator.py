@@ -177,7 +177,7 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                  provider=mock_provider, verbose=True, gate_evidence=None,
                  collect=False, fresh=False, provider_name="mock", workitem_id=None,
-                 budget=None, gate_ids=None):
+                 budget=None, gate_ids=None, signals=None):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -275,7 +275,8 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         gate_ev = {**gate_executor.collect_evidence(workflow_id, run_dir), **gate_ev}
     gates = gate_executor.evaluate(workflow_id, gate_ev,
                                    tested_revision=state.get("tested_revision"),
-                                   gate_ids=gate_ids)   # RunPlan-гейты (треки), если переданы
+                                   gate_ids=gate_ids,   # RunPlan-гейты (треки), если переданы
+                                   signals=signals)     # условный human_approval по сигналам
     (run_dir / "GateReport.json").write_text(
         json.dumps(gates, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     state["current_phase"] = None
