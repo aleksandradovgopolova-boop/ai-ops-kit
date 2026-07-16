@@ -5,9 +5,16 @@ AI сопровождает продукт на всём жизненном ци
 Measurement → Insights → снова Discovery. Агенты (включая независимых ревьюеров всех
 зон), workflow-контракты, quality gates, Feature Blueprint, единый продуктовый путь
 (WorkItem), генераторы артефактов, Knowledge Graph, Product Health, Decision Intelligence,
-постура безопасности, provider/runtime маршрутизация, исполняющее ядро
-(`ai-ops run`: RunPlan + треки качества, Tool Broker с Policy Engine, бюджет прогона) и
-управляемые обновления дочерних репозиториев.
+постура безопасности, provider/runtime маршрутизация, **компоненты исполнения**
+(`ai-ops run`: RunPlan + треки качества, Tool Broker с Policy Engine, бюджет прогона,
+tool-loop, детектор стека, сбор evidence) и управляемые обновления дочерних репозиториев.
+
+> **Честный статус (аудит исполнения, 2026-07-16):** компоненты исполнения есть, но ещё НЕ
+> собраны в единый движок «задача → готовый draft PR». generic-путь пока гоняет
+> doc-оркестратор, не tool-loop; сам движок не ставится в child (нужен клон кита рядом). Кит
+> сегодня — сильная система стандартов/гейтов/шаблонов; автономный coding-runtime — открытый
+> P0-эпик (см. `manifest → execution_engine.execution_audit_2026_07_16`,
+> решение `ep-2026-07-16-execution-audit`).
 
 **Начать здесь:** [Quickstart](docs/QUICKSTART.md) (первый день + типовые ошибки) ·
 [Walkthrough](docs/WALKTHROUGH.md) (сквозной сценарий за 15 минут) ·

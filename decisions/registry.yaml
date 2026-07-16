@@ -86,6 +86,26 @@ episodes:
     date: 2026-07-16
     source: чат-сессия; docs/3.0-design.md
 
+  - id: ep-2026-07-16-execution-audit
+    question: Внешний аудит исполнения — что делать дальше с китом?
+    decision: >
+      ЗАМОРОЗИТЬ фичи (новые агенты, lifecycle-стадии, Knowledge Graph, Robin, физразнос
+      пакетов) и вести один P0-эпик: одна обычная задача на реальном репо проходит через
+      кит до проверяемого draft PR. Сразу закрыты contained security/correctness дефекты
+      (path traversal, слепая tool-loop); остальное — P0-backlog (единый движок вместо
+      двух, установимый CLI с движком в child, sandbox shell, RunPlan-гейты в прогоне,
+      условный approval, evidence на точный SHA, reviewer.json от оркестратора).
+    reason: >
+      Аудит верно показал: компоненты есть, но не собраны в один движок; generic-путь всё ещё
+      гоняет doc-оркестратор, а не tool-loop; child не получает сам движок (только контракты);
+      Policy не была настоящей security boundary. Польза команде «здесь и сейчас» — 4/10, пока
+      нет пути task->PR. Достраивать вокруг исполнения дальше — вредно.
+    context: Отчёт аудита исполнения на main 2.50; проверено по коду (дефекты подтверждены).
+    reversibility: two-way
+    date: 2026-07-16
+    source: чат-сессия; аудит исполнения
+    supersedes: null
+
 outcomes:
   - decision: ep-2026-07-13-systems
     outcome: Оба скилла выпущены (v2.8), проводка в INSIGHTS/PRODUCT/ENGINEERING; обкатка в ии-среде предстоит.
@@ -96,4 +116,13 @@ outcomes:
       3.0 объявлен additive-complete (v2.46–2.48: границы+валидатор, ai-run канонический,
       по-пакетная установка). Физразнос дерева -> 3.1, когда будет раздельная дистрибуция
       пакетов и миграция child-CI на путь-агностичный вызов.
+    reviewed_at: 2026-07-16
+
+  - decision: ep-2026-07-16-execution-audit
+    outcome: >
+      v2.53: закрыты contained дефекты — path traversal в Tool Broker (decide+execute guard)
+      и слепая tool-loop (содержимое read/вывод shell идут в контекст модели). Фичи заморожены;
+      P0-эпик task->draft PR открыт (единый движок, установимый CLI, sandbox, RunPlan-гейты в
+      прогоне, условный approval, evidence на SHA, reviewer.json). Успех эпика = 2/3 реальных
+      задачи доходят до draft PR с зелёным CI и без переписывания ревьюером.
     reviewed_at: 2026-07-16

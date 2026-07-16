@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.53.0] — 2026-07-16
+
+**Аудит исполнения: contained-фиксы (security + tool-loop) + честный разворот к P0.** Внешний
+аудит исполнения (main 2.50) верно показал: компоненты есть, но не собраны в один движок;
+generic-путь гоняет doc-оркестратор, не tool-loop; child не получает сам движок; Policy не
+была настоящей security boundary. Все дефекты проверены по коду — подтвердились. Фичи
+заморожены, открыт один P0-эпик: обычная задача → проверяемый draft PR.
+
+### Fixed (security/correctness)
+- **tools/tool_broker.py — path traversal (SECURITY).** `decide()` запрещает `..`-escape и
+  абсолютный путь для read/write; `execute()` — containment-guard (resolve под root, ловит и
+  симлинки). Selftest: `../`/absolute → deny; execute не создаёт файл вне корня.
+- **tools/tool_loop.py — слепота петли.** Содержимое `read` и вывод `shell` (`output_tail`)
+  теперь возвращаются в контекст модели, а не только `OK/FAILED`. Selftest: модель видит
+  содержимое прочитанного файла (sentinel).
+
+### Changed (честность — снят overclaim)
+- **README** — «исполняющее ядро» → «компоненты исполнения» + блок честного статуса: единый
+  движок task→PR НЕ готов, generic-путь = doc-оркестратор, движок не ставится в child.
+- **manifest** — `execution_engine.execution_audit_2026_07_16`: honest_status, fixed_v2_53,
+  `frozen` (фичи), `p0_epic`, `p0_backlog` (8 подтверждённых по коду, НЕ сделанных пунктов);
+  `package_version` → 2.53.0.
+- **decisions/registry.yaml** — эпизод `ep-2026-07-16-execution-audit` + outcome (заморозка
+  фич, P0-эпик, критерий успеха 2/3 задачи → draft PR с зелёным CI без переписывания).
+
+**P0-backlog (честно, НЕ сделано):** единый pipeline вместо двух движков; RunPlan-гейты в
+прогоне (сейчас берутся из base_workflow — треки планируются, но не оцениваются); установимый
+CLI с движком в child (managed_set без tools/validation); shell-sandbox (allowlist/сеть/env);
+условный human_approval (сейчас блокирует безусловно); evidence на точный commit SHA;
+reviewer.json от оркестратора; проверка на 3 реальных задачах.
+
 ## [2.52.0] — 2026-07-16
 
 **Находки обкатки 4 и 6 закрыты.** Из отчёта обкатки в ии-среде.

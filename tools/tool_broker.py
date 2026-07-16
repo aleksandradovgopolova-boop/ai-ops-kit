@@ -21,6 +21,7 @@ write_scope + config/protected-paths.yaml), НЕ модель. Broker испол
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -123,12 +124,18 @@ class Policy:
                     "reason": f"op '{op}' требует уровень >= {OP_MIN_LEVEL[op]}, текущий {self.level}"}
 
         if op == "read":
+            rel = action.get("path") or ""
+            if _escapes_root(rel):
+                return {"allow": False, "reason": f"путь '{rel}' выходит за пределы репозитория (traversal)"}
             return {"allow": True, "reason": "чтение в пределах репозитория"}
 
         if op == "write":
             path = (action.get("path") or "").strip("/")
             if not path:
                 return {"allow": False, "reason": "write без path"}
+            # security (finding аудита): путь не должен выходить за корень (../, абсолютный)
+            if _escapes_root(action.get("path") or ""):
+                return {"allow": False, "reason": f"путь '{action.get('path')}' выходит за пределы репозитория (traversal)"}
             # protected path -> нужен privileged + approval
             for pre, appr in self.protected:
                 if _under(path, pre):
@@ -152,6 +159,26 @@ class Policy:
         return {"allow": True, "reason": f"{op} в пределах уровня {self.level}"}
 
 
+def _escapes_root(rel):
+    """Лексически: путь выходит за корень рабочего дерева? (абсолютный или ../ после нормализации).
+    Не требует реального root — защищает decide() до любого доступа к ФС."""
+    if not rel:
+        return False
+    if os.path.isabs(rel):
+        return True
+    norm = os.path.normpath(rel)
+    return norm == ".." or norm.startswith(".." + os.sep) or norm.startswith("../")
+
+
+def _within_root(root, rel):
+    """Belt-and-suspenders: итоговый путь физически внутри root (resolve, без симлинк-побега)."""
+    try:
+        (Path(root).resolve() / rel).resolve().relative_to(Path(root).resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
 def _revision(root):
     rc = subprocess.run(["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
                         capture_output=True, text=True)
@@ -170,6 +197,12 @@ def execute(action: dict, root, policy: Policy) -> dict:
 
     op = action["op"]
     try:
+        # belt-and-suspenders: даже после dec() перепроверяем физическую границу (симлинки/resolve)
+        if op in ("read", "write") and not _within_root(root, action.get("path") or ""):
+            ev.update({"ok": False, "error": "путь выходит за пределы репозитория (containment)"})
+            ev["allowed"] = False
+            ev["reason"] = "traversal-guard: путь вне корня"
+            return ev
         if op == "read":
             p = root / action["path"]
             text = p.read_text(encoding="utf-8", errors="ignore") if p.exists() else ""
@@ -259,6 +292,21 @@ def selftest():
         no_child = Policy(level="controlled-write", write_scope=[".github/"])
         expect("без child_root .github/ не protected (дефолт пакета)",
                no_child.decide({"op": "write", "path": ".github/workflows/ci.yml"})["allow"])
+
+        # SECURITY (finding аудита): path traversal — ../ и абсолютный путь запрещены на decide
+        trav = Policy(level="execution", write_scope=["src/"])
+        expect("write ../ escape запрещён (decide)",
+               not trav.decide({"op": "write", "path": "../../etc/evil"})["allow"])
+        expect("read ../ escape запрещён (decide)",
+               not trav.decide({"op": "read", "path": "../../etc/passwd"})["allow"])
+        expect("write абсолютный путь запрещён (decide)",
+               not trav.decide({"op": "write", "path": "/etc/evil"})["allow"])
+        # execute-guard: даже если бы decide пропустил — containment не даст записать вне корня
+        ev_tr = execute({"op": "write", "path": "../escapee", "content": "x"}, root, trav)
+        expect("execute traversal-guard: файл вне корня НЕ создан",
+               not ev_tr["allowed"] and not (root.parent / "escapee").exists())
+        expect("нормальный путь в scope по-прежнему пишется",
+               execute({"op": "write", "path": "src/ok.ts", "content": "y"}, root, trav)["ok"])
 
     print("tool_broker selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

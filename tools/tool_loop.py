@@ -89,9 +89,20 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="")
         evidence.append(ev)
         transcript.append({"step": step, "op": ev.get("op"), "allowed": ev["allowed"],
                            "ok": ev.get("ok"), "reason": ev["reason"]})
-        # результат обратно в контекст (в т.ч. DENIED — чтобы модель скорректировалась)
-        verdict = "OK" if ev.get("ok") else ("DENIED: " + ev["reason"] if not ev["allowed"]
-                                             else "FAILED: " + str(ev.get("output_tail", "")))
+        # результат обратно в контекст (в т.ч. DENIED — чтобы модель скорректировалась).
+        # ВАЖНО (finding аудита): модель должна ВИДЕТЬ содержимое/вывод, иначе read/shell слепы —
+        # это не агентная петля. Передаём output_tail для read (содержимое) и shell (stdout/stderr).
+        if not ev["allowed"]:
+            verdict = "DENIED: " + ev["reason"]
+        elif ev.get("ok"):
+            verdict = "OK"
+            tail = ev.get("output_tail")
+            if ev.get("op") == "read":
+                verdict += f"\n--- содержимое {ev.get('target')} ---\n{tail}\n--- конец ---"
+            elif ev.get("op") in ("shell", "git") and tail:
+                verdict += f" (exit={ev.get('exit_code')})\n--- вывод ---\n{tail}\n--- конец ---"
+        else:
+            verdict = f"FAILED (exit={ev.get('exit_code')}): {ev.get('output_tail') or ev.get('error', '')}"
         context += f"\n[шаг {step}] {ev.get('op')} {ev.get('target')} -> {verdict}"
     return {"schema_version": 1, "kind": "tool-loop-report",
             "stopped": stopped, "steps": len(transcript),
@@ -154,6 +165,21 @@ def selftest():
         it3 = iter([{"op": "read", "path": "f"}] * 100)
         rep3 = run_loop(lambda c: next(it3), root, pol, max_steps=3)
         expect("max_steps-предохранитель", rep3["stopped"] == "max_steps" and rep3["steps"] == 3)
+
+        # finding аудита: модель ДОЛЖНА видеть содержимое прочитанного файла в контексте
+        (root / "readme.txt").write_text("SENTINEL_CONTENT_42", encoding="utf-8")
+        seen = {}
+
+        def prop_read(ctx):
+            seen["ctx"] = ctx
+            if not seen.get("did_read"):
+                seen["did_read"] = True
+                return {"op": "read", "path": "readme.txt"}
+            return {"done": True, "summary": "прочитал"}
+
+        run_loop(prop_read, root, pol, budget={"max_model_calls": 5})
+        expect("модель ВИДИТ содержимое прочитанного файла в контексте",
+               "SENTINEL_CONTENT_42" in seen.get("ctx", ""))
 
     print("tool_loop selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

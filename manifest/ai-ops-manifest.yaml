@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.52.0
+  package_version: 2.53.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -198,6 +198,26 @@ execution_engine:
     deferral_reason: "перенос ломает CI-контракт установленных child (/tmp/ai-ops-kit/installer|validation пути); польза (гранулярная установка) уже дана; разнос оправдан только раздельной дистрибуцией (3.1)"
   not_yet:                                  # 3.1 (breaking) — при раздельной дистрибуции пакетов
     - "3.1: физический разнос дерева по packages/<name>/ + энтрипойнт-шимы + миграция child-CI + MIGRATION_GUIDE"
+  execution_audit_2026_07_16:               # внешний аудит исполнения (решение ep-2026-07-16-execution-audit)
+    honest_status: >
+      Компоненты исполнения есть (RunPlan, Tool Broker, budget, tool-loop, project detector,
+      evidence collector), но НЕ собраны в один движок. generic-путь всё ещё гоняет
+      doc-оркестратор (пишет stage-*.md), а не tool-loop. Единый путь task->draft PR: НЕ готов.
+      Кит сегодня — сильная система стандартов/гейтов, но не автономный coding-runtime.
+    fixed_v2_53:
+      - "SECURITY path traversal в Tool Broker: decide() запрещает ../ и абсолютный путь; execute() containment-guard (resolve под root)"
+      - "tool-loop слепота: содержимое read и вывод shell (output_tail) теперь идут обратно в контекст модели"
+    frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
+    p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
+    p0_backlog:                              # честно: подтверждено по коду, НЕ сделано
+      - "единый execution pipeline: detect->RunPlan->worktree->inspect->tool-loop->checks->ВСЕ гейты RunPlan->commit->reverify SHA->draft PR (сейчас два движка)"
+      - "RunPlan-гейты НЕ исполняются в прогоне: gate_executor берёт gates из base_workflow, треки VISUAL/ANALYTICS/SECURITY/DOCS планируются, но не оцениваются"
+      - "установимый CLI с движком в child: managed_set без каталогов инструментов/валидаторов — child зависит от внешнего клона кита"
+      - "shell — не security boundary: shell=True с полным env, denylist слаб; нужен allowlist/sandbox/сеть-разрешение/scrubbed env"
+      - "условный human_approval (security required_when) классификатор считает безусловным -> ложная блокировка обычных ENGINEERING-задач"
+      - "evidence привязан к pre-change HEAD; тесты идут по грязному дереву -> reverify на точном commit SHA после коммита"
+      - "structured reviewer.json оркестратор не создаёт (только stage-*.md) -> gate_executor откатывается на regex"
+      - "проверка на 3 реальных задачах (баг/UI/средняя фича) против обычной сессии Claude Code"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
