@@ -2,6 +2,33 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.31.0] — 2026-07-15
+
+**Execution Engine — Фаза 0: correctness & safety.** Пять подтверждённых по коду дыр из
+внешнего аудита (2.30.0), среди них безопасность и регрессия установленной команды. Всё
+аддитивно (2.x).
+
+### Fixed
+- **Дрифт `ai-start-task`** — генерируемая команда (`generate_runtime.py`) расходилась с
+  canonical `commands/task/ai-start-task.md`: в установленную версию не попадали
+  concurrency preflight, WorkItem, worktree, active-work (регрессия v2.22–v2.28). Теперь
+  генерируемая команда — тонкий адаптер к canonical со всем потоком; selftest ловит
+  расхождение.
+- **`security` не вызывался в ENGINEERING** — добавлен в `ENGINEERING.quality_gates`
+  (applicability и так включала ENGINEERING).
+- **`ai_red_team` не блокировал** — `blocking: true` (по применимости: LLM/агентный
+  компонент с пользовательским вводом). jailbreak/injection/PII-утечки теперь блокируют.
+- **Сырой task-текст в audit-log** — оркестратор больше НЕ пишет `task_text[:200]` (риск
+  ПДн/секретов); пишет `workitem_id` + `task_hash`. Соответствует заявлению постуры.
+- **Коллизия состояния параллельных задач** — прогон живёт в
+  `.ai/runtime/workitems/<id>/` (по WorkItem), а не `.../orchestrator/<workflow>/`;
+  `task_id = workitem_id`; resume сверяет `task_hash` и `workflow` (нельзя «продолжить»
+  чужую задачу под тем же id). `--workitem-id` в CLI; `tools/workitem.py` run_state
+  синхронизирован.
+
+### Changed
+- **manifest** — `package_version` → 2.31.0.
+
 ## [2.30.0] — 2026-07-15
 
 **Автонакопление истории эффекта — baseline закрывается сам.** Причина, по которой

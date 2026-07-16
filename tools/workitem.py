@@ -72,7 +72,7 @@ def start(features_dir, fid, task, task_type=None, risk=None):
         "human_approval_required": bool(r.get("human_approval_required")),
         "paths": {
             "blueprint": f"features/{fid}/blueprint.yaml",
-            "run_state": f".ai/runtime/orchestrator/{wf.lower()}/TaskState.yaml",
+            "run_state": f".ai/runtime/workitems/{fid}/TaskState.yaml",
             "workitem": f"features/{fid}/workitem.yaml",
         },
         "status": "draft",

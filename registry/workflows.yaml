@@ -56,7 +56,7 @@ workflows:
       # memory-capture: опубликовать запись в memory/ (decision/pattern/lesson) ИЛИ явно
       # отказаться с причиной в TaskState — молчаливый пропуск не является выполнением стадии.
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
-    quality_gates: [concurrency_preflight, requirements, specification, event_contract_consistency, plan_readiness, implementation_verification, code_review]
+    quality_gates: [concurrency_preflight, requirements, specification, event_contract_consistency, plan_readiness, implementation_verification, code_review, security]
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: orchestrated
     minimum_execution_mode: sequential
