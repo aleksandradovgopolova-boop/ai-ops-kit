@@ -51,6 +51,8 @@ jobs:
         run: |
           python3 tools/run_plan.py --selftest
           python3 tools/run_plan.py validate
+      - name: ai-ops run — единый контроллер задачи (selftest)
+        run: python3 tools/ai_ops_run.py --selftest
       - name: Реестр активных работ + conflict forecast (selftest)
         run: python3 tools/active_work.py --selftest
       - name: Изоляция работы через git worktree (selftest)

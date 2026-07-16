@@ -158,6 +158,7 @@
 - `commands/task/ai-plan-task.md`
 - `commands/task/ai-session-start.md` — session bootstrap новой сессии (v2.22)
 - `commands/task/ai-start-task.md`
+- `commands/task/ai-run.md` — единый контроллер задачи: route->RunPlan->WorkItem->exec->report (v2.34)
 - `commands/task/ai-verify.md`
 - `commands/task/ai-worktree.md` — изоляция работы через git worktree (v2.24)
 
@@ -546,6 +547,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/product_health.py`
 - `tools/run_plan.py` — построение RunPlan (base_workflow + tracks -> gates), validate (v2.32)
 - `tools/run_report.py`
+- `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
 - `tools/merge_memory.py` — запись знания задачи в память при мердже (v2.25)

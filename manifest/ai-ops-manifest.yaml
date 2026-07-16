@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.33.0
+  package_version: 2.34.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -130,10 +130,14 @@ execution_engine:
   phase1_done: [run-plan-tracks, structured-reviewer-outputs, per-gate-evidence-schema]
   reviewer_result_schema: schemas/reviewer-result.schema.json   # источник истины вместо regex
   reviewer_result_validator: validation/validate_reviewer_result.py
+  run_controller:                           # v2.34 Фаза 2 срез 1: единый вход задачи
+    tool: tools/ai_ops_run.py                # route -> RunPlan -> WorkItem -> active-work -> exec -> report
+    command: commands/task/ai-run.md
+    execution: {claude-code: planned+scaffold (рантайм исполняет), generic-orchestrator: orchestrated}
   not_yet:                                  # следующие срезы эпика
-    - unified `ai-ops run` controller       # Фаза 2, часть — 3.0
-    - real tool loop for generic-orchestrator
-    - stack-aware deterministic evidence collectors
+    - real tool loop for generic-orchestrator (Tool Broker + Policy Engine)
+    - stack-aware deterministic evidence collectors (Project Detector + adapters)
+    - "ai-ops run как ОСНОВНОЙ путь + сплит на 5 пакетов (3.0, breaking)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
