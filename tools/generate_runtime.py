@@ -95,6 +95,10 @@ def render_start_task(runtime, workflows):
 Сгенерировано из registry/ — НЕ редактировать вручную
 (перегенерация: python3 tools/generate_runtime.py).
 
+> **Канонический вход — `ai-run`** (3.0-срез 1). `ai-start-task` сохраняется как совместимый
+> алиас той же спины (route→RunPlan→WorkItem→preflight→active-work) и не удаляется (снятие —
+> не раньше 4.0). Обе команды ведут к одному потоку ниже.
+
 ## Что делает
 Опиши задачу **обычными словами** — вручную выбирать workflow не нужно. Команда
 классифицирует запрос и запускает подходящий маршрут (принцип intake-classifier:
@@ -135,6 +139,46 @@ def render_start_task(runtime, workflows):
 - Не начинать реализацию до выбора маршрута и (для critical/protected) human approval.
 - Не расширять запрос за пределы сформулированного; конфиденциальные данные — по политике `.ai-ops.yaml`.
 - Классификация и выбор — по реестрам `.ai/managed/` (источник истины), не по догадке.
+"""
+
+
+def render_ai_run(runtime, workflows):
+    """КАНОНИЧЕСКИЙ вход (3.0-срез 1): задача -> контролируемое исполнение -> отчёт одной
+    транзакцией через контроллер tools/ai_ops_run.py. `ai-start-task` сохраняется как
+    совместимый алиас (та же спина route->RunPlan->WorkItem->preflight->active-work)."""
+    header = ("---\ndescription: Канонический вход — задача в контролируемое исполнение и отчёт\n---\n"
+              if runtime == "claude-code" else "")
+    alias = "/ai-start-task" if runtime == "claude-code" else "$ai-start-task"
+    return f"""{header}# ai-run — канонический вход (задача → исполнение → отчёт)
+
+Сгенерировано из registry/ — НЕ редактировать вручную
+(перегенерация: python3 tools/generate_runtime.py).
+
+## Что делает
+Единый транзакционный вход: классификация/маршрут → RunPlan (base_workflow + треки +
+агрегированные гейты) → WorkItem → регистрация активной работы → исполнение → компактный
+отчёт. Это **основной путь** (3.0-срез 1); `{alias}` сохраняется как совместимый алиас той же
+спины и НЕ удаляется (снятие — не раньше 4.0).
+
+## Порядок (исполняет этот раннтайм)
+```
+tools/ai_ops_run.py run "<задача>" <child_root> --signals '<json сигналов>' \\
+    [--runtime claude-code|generic-orchestrator] [--provider mock] [--execute]
+```
+1. Контроллер строит RunPlan по сигналам и создаёт WorkItem (`features/<id>/run-plan.yaml`).
+2. Регистрирует активную работу (ветка/зоны/сессия) — conflict forecast.
+3. Исполнение: **claude-code** — контроллер готовит план и каркас, стадии/патчи/тесты
+   исполняет раннтайм по процедуре `ai-start-task` (status=`planned`); **generic-orchestrator** —
+   контроллер реально прогоняет стадии и гейты (status=`done`/`blocked` по evidence).
+4. Пишет `features/<id>/run-report.json` и показывает резюме.
+
+## Источник истины
+Авторитетная процедура спины — `.ai/managed/commands/task/ai-run.md` (и `ai-start-task.md`
+для интерактивных стадий). Не дублируй логику; следуй канону.
+
+## Границы (честно)
+Кит не притворяется, что исполнил за раннтайм: для claude-code «сделал» = evidence (commit
+SHA, exit codes, структурный reviewer-result), а не факт вызова.
 """
 
 
@@ -184,7 +228,11 @@ def generate(child_root: Path, verbose=True):
             p = base / f"ai-{wid.lower()}.md"
             p.write_text(render_command(wid, w, agents, runtime), encoding="utf-8")
             out_files.append(p)
-        # единая точка входа — классификатор+маршрутизатор (один на runtime)
+        # канонический вход (3.0-срез 1) — контроллер задача->исполнение->отчёт
+        rn = base / "ai-run.md"
+        rn.write_text(render_ai_run(runtime, workflows), encoding="utf-8")
+        out_files.append(rn)
+        # ai-start-task — совместимый алиас той же спины (сохраняется, снятие не раньше 4.0)
         st = base / "ai-start-task.md"
         st.write_text(render_start_task(runtime, workflows), encoding="utf-8")
         out_files.append(st)
@@ -240,7 +288,19 @@ def selftest():
                 ok = False; print(f"FAIL в ai-engineering нет '{token}'")
         else:
             print("PASS содержимое включает стадии/судей/gates")
-        # единая точка входа ai-start-task сгенерирована для каждого runtime
+        # канонический вход ai-run (3.0-срез 1) сгенерирован для каждого runtime
+        rn_files = [p for p in files if p.stem == "ai-run"]
+        if len(rn_files) == len(RUNTIMES):
+            print(f"PASS ai-run (канонический вход) сгенерирован для {len(RUNTIMES)} runtime")
+        else:
+            ok = False; print(f"FAIL ai-run не для всех runtime ({len(rn_files)}/{len(RUNTIMES)})")
+        rn_text = next((p.read_text(encoding="utf-8") for p in rn_files if "claude-code" in str(p)), "")
+        for token in ("ai_ops_run.py", "канонический вход", "run-report.json", "совместимый алиас"):
+            if token not in rn_text:
+                ok = False; print(f"FAIL в ai-run нет '{token}'")
+        else:
+            print("PASS ai-run — канонический контроллер (задача->исполнение->отчёт) + алиас-нота")
+        # ai-start-task сохранён как совместимый алиас для каждого runtime
         st_files = [p for p in files if p.stem == "ai-start-task"]
         if len(st_files) == len(RUNTIMES):
             print(f"PASS ai-start-task сгенерирован для {len(RUNTIMES)} runtime")

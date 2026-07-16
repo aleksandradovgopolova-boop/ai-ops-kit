@@ -156,9 +156,11 @@
   (`live_proposal_quality: verified`). Concurrency preflight видит открытые PR через GitHub
   REST-фоллбэк без `gh` (токен из env). Stack-aware evidence collector гоняет команды
   RepositoryProfile через Broker и отдаёт структурный evidence в `implementation_verification`.
-- **Цель 3.0 (breaking):** `ai-ops run` как основной путь + сплит на 5 пакетов —
-  детальный план в `docs/3.0-design.md` (запускается по явному решению; аддитивный мост
-  сохраняет работу существующих child до и во время миграции).
+- **3.0 в работе (по срезам, `docs/3.0-design.md`):** срез 0 ✅ — границы 5 пакетов объявлены
+  и стережутся валидатором (`validate_package_boundaries.py`), файлы не двигали; срез 1 ✅ —
+  `ai-run` канонический вход, `ai-start-task` сохранён совместимым алиасом. Остаётся (breaking,
+  по явному решению + обкатка на child): по-пакетная установка, физический разнос дерева,
+  MIGRATION_GUIDE.
 
 ## Правила движения по roadmap
 
