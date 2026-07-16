@@ -18,12 +18,32 @@
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
+
+# finding аудита (P1.1): workitem_id доходит до путей (worktree add строит root/<wt>/<wid>).
+# Пускаем только безопасный slug — иначе `../`, абсолютные пути и разделители дают traversal.
+WORKITEM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def validate_workitem_id(wid):
+    """Возвращает wid если он безопасный slug, иначе бросает ValueError.
+
+    Отвергаем всё, что может выйти за пределы каталога worktree: разделители пути,
+    `..`, абсолютные пути, пустое/слишком длинное. Точку-в-начале и '..' режем явно.
+    """
+    if not isinstance(wid, str) or not WORKITEM_ID_RE.match(wid):
+        raise ValueError(
+            f"недопустимый workitem_id {wid!r}: разрешён slug {WORKITEM_ID_RE.pattern} "
+            "(нижний регистр, [a-z0-9._-], без '/', '\\', '..', 1..64 символа)")
+    if wid.startswith(".") or ".." in wid:
+        raise ValueError(f"недопустимый workitem_id {wid!r}: '.' в начале или '..' запрещены")
+    return wid
 
 
 def load(rel):
@@ -66,7 +86,8 @@ def build_plan(signals, workitem_id=None):
 
     task_text = signals.get("task_text", "")
     task_hash = hashlib.sha256(task_text.encode("utf-8")).hexdigest()[:12] if task_text else None
-    wid = workitem_id or (f"wi-{task_hash}" if task_hash else "wi-unknown")
+    # Явный workitem_id валидируем (может дойти до путей); авто-сгенерированный безопасен by construction.
+    wid = validate_workitem_id(workitem_id) if workitem_id else (f"wi-{task_hash}" if task_hash else "wi-unknown")
     return {
         "schema_version": 1, "kind": "run-plan",
         "workitem_id": wid, "task_hash": task_hash,
@@ -150,6 +171,16 @@ def selftest():
     expect("ai_component -> AI в conditional_tracks",
            any(t["track"] == "AI" for t in p3["conditional_tracks"]))
     expect("AI-трек добавил ai_red_team", "ai_red_team" in p3["gates"])
+
+    # P1.1: валидация workitem_id (доходит до путей)
+    expect("валидный wid принят", validate_workitem_id("wi-abc_123.v2") == "wi-abc_123.v2")
+    expect("wid принят в build_plan", build_plan(sig, "feat-42")["workitem_id"] == "feat-42")
+    for bad in ["../evil", "a/b", "/abs", "..", ".hidden", "UPPER", "x" * 65, "", "a b", "a\\b"]:
+        try:
+            validate_workitem_id(bad)
+            expect(f"невалидный wid отвергнут: {bad!r}", False)
+        except ValueError:
+            expect(f"невалидный wid отвергнут: {bad!r}", True)
 
     print("run_plan selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

@@ -149,3 +149,16 @@ outcomes:
       прогоне, условный approval, evidence на SHA, reviewer.json). Успех эпика = 2/3 реальных
       задачи доходят до draft PR с зелёным CI и без переписывания ревьюером.
     reviewed_at: 2026-07-16
+
+  - decision: ep-2026-07-16-execution-audit
+    outcome: >
+      v2.54–2.66: движок собран (execution_pipeline) и подключён к контроллеру
+      (ai-ops run --engine pipeline); подтверждён живьём на ограниченном QUICK-сценарии
+      (v2.64, ready_for_pr=True). v2.66 «Trust Boundary» по следующему аудиту: P0.1
+      (print_human/exit-code/CLI-флаги для pipeline), P0.2-contained (shell timeout + честная
+      граница «shell не песочница»), P0.5 (полный SHA + tree-clean + строгий ready_for_pr),
+      P1.1 (валидация WorkItem ID + containment worktree-путей). Overclaim'ы понижены до честной
+      формулировки аудита. ОСТАЛОСЬ в p0_backlog: полный jail (контейнер), standalone-движок в
+      child, постадийный RunPlan, усиление детектора, CI на пользовательском пути, живой PR,
+      квалификация 3–5 задач.
+    reviewed_at: 2026-07-16

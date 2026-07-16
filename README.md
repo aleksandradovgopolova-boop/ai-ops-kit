@@ -10,12 +10,18 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
 > **Честный статус движка (аудит исполнения, 2026-07-16):** единый движок «задача → draft PR»
-> **собран, подключён к контроллеру (`ai-ops run --engine pipeline`) и подтверждён на живой
-> модели end-to-end** до `ready_for_pr` (DeepSeek через `openai-compatible`; изоляция в worktree,
-> commit на ветке, evidence на точном SHA). Дифф аудита прошёл adversarial-review (6 дефектов,
-> включая security, исправлены — v2.63). Осталась **эмпирика на стороне child** (не код): живой
-> draft PR (нужен GITHUB_TOKEN) и 3 реальные задачи на репо с тулчейном против обычного
-> Claude Code. Детали — `manifest → execution_engine.execution_audit_2026_07_16`,
+> **собран, подключён к контроллеру (`ai-ops run --engine pipeline`) и экспериментально
+> подтверждён живьём на ОГРАНИЧЕННОМ QUICK-сценарии** до `ready_for_pr` (DeepSeek через
+> `openai-compatible`; изоляция в worktree, commit на ветке, evidence на точном SHA). Дифф прошёл
+> adversarial-review (6 дефектов, включая security, исправлены — v2.63). Trust boundary усилена
+> (v2.66): shell-timeout + честная граница «shell не песочница», валидация WorkItem ID и
+> containment worktree-путей, полный SHA + проверка чистоты дерева, строгий `ready_for_pr`,
+> рабочие `print_human`/exit-code для pipeline.
+>
+> **Канонический путь для РЕАЛЬНЫХ child-репозиториев ещё не готов** — остаток в `p0_backlog`:
+> полный jail shell (контейнер), standalone-движок внутри child (не внешний клон), постадийное
+> исполнение треков RunPlan, живой draft PR (нужен GITHUB_TOKEN), квалификация на 3–5 реальных
+> задачах против обычного Claude Code. Детали — `manifest → execution_engine.execution_audit_2026_07_16`,
 > решение `ep-2026-07-16-execution-audit`.
 >
 > Границы честности: shell не полностью песочница (FS/сеть-изоляция вне репо = контейнер, в

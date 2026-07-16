@@ -29,6 +29,14 @@ from pathlib import Path
 
 import yaml
 
+# ВАЖНО (finding аудита исполнения): shell — НЕ полноценная security boundary. write_scope и
+# protected_paths применяются к операциям read/write; для shell действуют только timeout +
+# denylist деструктивных команд + scrub_env. Модель через shell МОЖЕТ писать вне write_scope
+# (python -c open(...), tee, sed -i), читать файлы вне репо, ходить в сеть. Полный jail
+# (worktree-only writable mount, HOME изолирован, сеть off, лимиты) = контейнер — НЕ реализован.
+# Не давать --engine pipeline с живой моделью доступ к ценному приватному репо без надзора.
+SHELL_TIMEOUT_DEFAULT = 300   # сек: shell-команда не висит вечно
+
 PKG = Path(__file__).resolve().parents[1]
 
 # уровни по возрастанию (security/permission-levels.yaml order)
@@ -214,7 +222,9 @@ def scrub_env(env=None, passthrough=None):
 
 
 def _revision(root):
-    rc = subprocess.run(["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+    # finding аудита (P0.5): полный SHA (не --short) — надёжный идентификатор ревизии,
+    # к которому привязывается evidence; короткий SHA теоретически коллизирует.
+    rc = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
                         capture_output=True, text=True)
     return rc.stdout.strip() if rc.returncode == 0 else None
 
@@ -248,11 +258,18 @@ def execute(action: dict, root, policy: Policy) -> dict:
             p.write_text(action.get("content", ""), encoding="utf-8")
             ev.update({"ok": True, "bytes": len(action.get("content", "").encode("utf-8"))})
         else:  # shell / git — env со скрабленными секретами (модель не получает токены)
-            r = subprocess.run(action["command"], shell=True, cwd=str(root),
-                               capture_output=True, text=True, env=scrub_env())
-            ev.update({"ok": r.returncode == 0, "exit_code": r.returncode,
-                       "command": action["command"],
-                       "output_tail": (r.stdout + r.stderr)[-400:]})
+            timeout = action.get("timeout", SHELL_TIMEOUT_DEFAULT)
+            try:
+                r = subprocess.run(action["command"], shell=True, cwd=str(root),
+                                   capture_output=True, text=True, env=scrub_env(),
+                                   timeout=timeout)
+                ev.update({"ok": r.returncode == 0, "exit_code": r.returncode,
+                           "command": action["command"],
+                           "output_tail": (r.stdout + r.stderr)[-400:]})
+            except subprocess.TimeoutExpired:
+                # finding аудита: без timeout shell мог висеть вечно
+                ev.update({"ok": False, "exit_code": None, "command": action["command"],
+                           "timed_out": True, "output_tail": f"timeout {timeout}s"})
     except (OSError, KeyError) as e:
         ev.update({"ok": False, "error": str(e)})
     return ev

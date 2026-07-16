@@ -66,15 +66,30 @@ def _git(root, *args):
 
 
 def _commit_on_branch(root, branch, message):
-    """Зафиксировать применённые изменения на рабочей ветке (не в main). -> commit SHA или None."""
+    """Зафиксировать применённые изменения на рабочей ветке (не в main). -> полный commit SHA или None.
+
+    finding аудита (P0.5): возвращаем ПОЛНЫЙ SHA (не --short) — evidence бьётся о точную ревизию,
+    а короткий SHA теоретически коллизирует и не годится как надёжный идентификатор ревизии.
+    """
     _git(root, "checkout", "-q", "-B", branch)   # рабочая ветка (не трогаем main)
     _git(root, "add", "-A")
     rc, _, _ = _git(root, "diff", "--cached", "--quiet")
     if rc == 0:                                   # нечего коммитить
         return None
     _git(root, "commit", "-q", "-m", message)
-    rc, sha, _ = _git(root, "rev-parse", "--short", "HEAD")
+    rc, sha, _ = _git(root, "rev-parse", "HEAD")
     return sha if rc == 0 else None
+
+
+def _tree_clean(root):
+    """git status --porcelain пуст? -> рабочее дерево совпадает с HEAD (нет незакоммиченных правок).
+
+    finding аудита (P0.5): evidence должен отражать ЗАКОММИЧЕННУЮ ревизию. Если дерево грязное
+    (правки вне коммита или checks намутили артефакты), evidence не бьётся о SHA — это нужно видеть,
+    а не молча объявлять ready_for_pr.
+    """
+    rc, out, _ = _git(root, "status", "--porcelain")
+    return rc == 0 and out.strip() == ""
 
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
@@ -126,13 +141,22 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 5. commit на рабочей ветке (finding аудита: evidence должен биться о ТОЧНЫЙ SHA, не
     #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
     committed_sha, work_branch = None, None
+    tree_clean_before_checks = None
+    is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
     if commit and applied:
         work_branch = f"ai-ops/{wid}"
         committed_sha = _commit_on_branch(work_root, work_branch,
                                           f"ai-ops: {task[:60]}")
+        # finding аудита (P0.5): после коммита дерево обязано быть чистым — иначе часть правок
+        # не в SHA, и evidence соберётся о смешанном состоянии.
+        tree_clean_before_checks = _tree_clean(work_root)
 
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     coll = evidence_collector.collect(profile, work_root, pol)
+
+    # 6a. finding аудита (P0.5): проверки могли намутить дерево (build-артефакты, lock-файлы) —
+    #     тогда собранный evidence уже не отражает закоммиченный SHA. Фиксируем факт, не скрываем.
+    tree_clean_after_checks = _tree_clean(work_root) if (commit and is_git) else None
 
     # 6b. intake-evidence из сигналов: классификация УЖЕ произошла (task_type/size/risk в signals) —
     #     это реальный evidence для intake_completeness, а не фабрикация (finding живого прогона).
@@ -167,7 +191,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 8. финал: draft PR (только если готово к PR и явно запрошено). Механизм честен offline:
     #    нет токена/remote -> unavailable, PR не имитируется.
-    ready = (loop["stopped"] == "done") and (not gates["blocked"]) and (not commit or revision_matches)
+    # finding аудита (P0.5): ready_for_pr ТРЕБУЕТ реального коммита (committed_sha),
+    # evidence на точном SHA и чистого дерева до/после проверок. dry-run (commit=False) НИКОГДА
+    # не бывает ready — нет ревизии, к которой привязать draft PR.
+    tree_ok = bool(tree_clean_before_checks) and (tree_clean_after_checks is not False)
+    ready = (loop["stopped"] == "done") and (not gates["blocked"]) \
+        and (committed_sha is not None) and revision_matches and tree_ok
     pr = None
     if open_pr and ready and committed_sha and work_branch:
         import pr_open
@@ -177,7 +206,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     not_yet = ["живой предложитель (swap провайдера)"]
     if not commit:
-        not_yet.insert(0, "commit+reverify (запусти с commit=True)")
+        not_yet.insert(0, "commit+reverify (запусти с commit=True) — без коммита ready_for_pr всегда False")
     if not open_pr:
         not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
 
@@ -192,7 +221,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
         "commit": {"branch": work_branch, "sha": committed_sha,
                    "evidence_revision": evidence_revision,
-                   "evidence_on_exact_sha": revision_matches},
+                   "evidence_on_exact_sha": revision_matches,
+                   "tree_clean_before_checks": tree_clean_before_checks,
+                   "tree_clean_after_checks": tree_clean_after_checks},
         "checks": coll["checks"],
         "exemptions": sorted(exempt),          # флаги, освобождённые как неприменимые (видно, не тихо)
         "tests_warn": tests_warn,              # громкий сигнал об отсутствии тестов (если есть)
@@ -251,6 +282,8 @@ def selftest():
                "intake_completeness" not in rep["gates"]["unmet"])
         expect("pipeline: workitem привязан к именованной фиче", rep["workitem_id"] == "add-fn")
         expect("pipeline: честный not_yet (commit/PR/живой)", len(rep["not_yet"]) == 3)
+        # P0.5: dry-run (commit=False) НИКОГДА не ready_for_pr — нет ревизии для draft PR
+        expect("P0.5: commit=False -> ready_for_pr всегда False", rep["ready_for_pr"] is False)
 
         # v2.59 (finding аудита): commit=True -> изменения на рабочей ветке, evidence на ТОЧНОМ SHA
         _, orig_branch, _ = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
@@ -267,6 +300,13 @@ def selftest():
                and rep_c["commit"]["evidence_revision"] == rep_c["commit"]["sha"])
         expect("commit: main не тронут (работа на ветке ai-ops/*)",
                _git(root, "rev-parse", "--abbrev-ref", "HEAD")[1] == "ai-ops/mul-fn")
+        # P0.5: полный SHA (40 hex), не short; дерево чистое до/после проверок
+        expect("P0.5: commit SHA полный (40 hex)",
+               isinstance(rep_c["commit"]["sha"], str) and len(rep_c["commit"]["sha"]) == 40)
+        expect("P0.5: дерево чистое до проверок (все правки в коммите)",
+               rep_c["commit"]["tree_clean_before_checks"] is True)
+        expect("P0.5: commit=True + чисто + SHA совпал -> ready_for_pr True",
+               rep_c["ready_for_pr"] is True)
         expect("умное ослабление: нет тестов -> освобождено + громкий tests_warn (allow_missing_tests)",
                "tests_passed" in rep_c["exemptions"] and rep_c["tests_warn"])
         expect("умное ослабление: implementation_verification не заблокирован из-за отсутствия тулчейна",

@@ -2,6 +2,38 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.66.0] — 2026-07-16
+
+**Trust Boundary — contained-фиксы следующего аудита (P0.1, P0.2-contained, P0.5, P1.1).**
+Аудит указал на реальные дефекты канонического пути. Исправлены те, что закрываются в коде;
+overclaim'ы честно понижены; остаток (полный jail, standalone-движок в child, постадийный
+RunPlan, квалификация на реальных задачах) чётко разложен в `p0_backlog`.
+
+### Fixed
+- **P0.1 контроллер (`tools/ai_ops_run.py`)** — `print_human` ветвится по `kind`: pipeline-отчёт
+  (loop/commit/checks/gates/ready_for_pr) больше НЕ роняет `KeyError` на ключах controller-отчёта.
+  CLI получил `--engine pipeline`, `--model`, `--open-pr`; добавлен `exit_code()` — `2` при
+  `status=error`, `1` при `not ready_for_pr`/`blocked`, `0` при ready/planned — CI/скрипты видят
+  провал, а не считают любой прогон успешным.
+- **P0.2 shell trust boundary (contained, `tools/tool_broker.py`)** — `subprocess.run(timeout=…)`
+  (`SHELL_TIMEOUT_DEFAULT=300`, `action.timeout` переопределяет): shell не висит вечно. Честный
+  module-comment: shell — **НЕ** security boundary (`write_scope`/`protected_paths` только для
+  read/write; полный jail = контейнер, в backlog).
+- **P0.5 evidence ↔ ревизия (`execution_pipeline.py`, `evidence_collector.py`, `tool_broker._revision`)**
+  — полный SHA (не `--short`); `git status --porcelain` до/после проверок (`tree_clean_*`);
+  `ready_for_pr` ТРЕБУЕТ реального коммита + evidence на точном SHA + чистого дерева. Dry-run
+  (`commit=False`) теперь НИКОГДА не `ready_for_pr` — нет ревизии для draft PR.
+- **P1.1 path safety (`run_plan.py`, `worktree.py`)** — `validate_workitem_id` (slug
+  `^[a-z0-9][a-z0-9._-]{0,63}$`, без `../`, `/`, `\`, абсолютных) в `build_plan`; `worktree.add/remove`
+  — `_safe_target` с containment строго внутри `<root>/<wt_dir>` (traversal `../` и абсолютные пути
+  отвергнуты, файл вне каталога worktree не создаётся).
+
+### Changed
+- **manifest** — `execution_audit_2026_07_16.fixed_v2_66`; `honest_status` и `engine_status`
+  понижены до честной формулировки аудита («собран + подтверждён на ограниченном QUICK-сценарии;
+  канонический путь для реальных child ещё не готов»); `p0_backlog` переразложен (P0.2-full/P0.3/
+  P0.4/P1.2/P1.4 + живой PR + квалификация). `package_version` → 2.66.0.
+
 ## [2.65.0] — 2026-07-16
 
 **README синхронизирован с реальностью движка (drift-fix).** В v2.53 README честно говорил
