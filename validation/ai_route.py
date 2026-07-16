@@ -81,8 +81,17 @@ def route(inp):
                     reasons.append(f"task_type '{tt}' -> {wid} (selection_criteria)")
                     break
     if workflow is None:
-        workflow = "ENGINEERING"
-        reasons.append(f"unknown task_type '{inp.get('task_type')}' -> default ENGINEERING")
+        # finding обкатки 4: неизвестный task_type НЕ должен слепо тянуть тяжёлый ENGINEERING —
+        # мелкая правка (size xs/small при не-высоком риске) уходит в QUICK. Риск critical уже
+        # переопределён выше (CRITICAL); medium/high оставляем ENGINEERING (честный default).
+        size, risk = inp.get("size"), inp.get("risk")
+        if size in ("xs", "small") and risk in (None, "low") and "QUICK" in workflows:
+            workflow = "QUICK"
+            reasons.append(f"unknown task_type + size={size}/risk={risk or 'none'} -> QUICK "
+                           f"(мелкая правка не тянет ENGINEERING; finding обкатки)")
+        else:
+            workflow = "ENGINEERING"
+            reasons.append(f"unknown task_type '{inp.get('task_type')}' -> default ENGINEERING")
 
     # 2. provider prefer/forbid + model_class (из provider_rules)
     prefer_provider, forbid_provider, model_class = [], [], None
@@ -254,6 +263,16 @@ SCENARIOS = [
      "expect": {"workflow": "AI_FEATURE"}},
     {"name": "неизвестный task_type -> честный default ENGINEERING",
      "inp": {"task_type": "something-strange", "risk": "low", "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "ENGINEERING"}},
+    # finding обкатки 4: неизвестный task_type + мелкий размер -> QUICK, не тяжёлый ENGINEERING
+    {"name": "unknown task_type + size small/low risk -> QUICK (finding 4)",
+     "inp": {"task_type": None, "size": "small", "risk": "low", "ui_changed": True,
+             "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "QUICK"}},
+    {"name": "unknown task_type + size large -> остаётся ENGINEERING",
+     "inp": {"task_type": None, "size": "large", "risk": "low", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
      "expect": {"workflow": "ENGINEERING"}},
     # critical risk переопределяет task_type -> зарегистрированный контракт CRITICAL (v2.15)
