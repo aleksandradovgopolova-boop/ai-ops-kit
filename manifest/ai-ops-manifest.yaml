@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.38.0
+  package_version: 2.39.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -104,6 +104,7 @@ providers:
   routing_engine: validation/ai_route.py
   capability_selftest: validation/ai_capability_selftest.py
   first_class: [anthropic, openai]
+  live_executor_providers: [anthropic, openai, openai-compatible]  # v2.39: openai-compatible (DeepSeek/local) через OPENAI_COMPATIBLE_BASE_URL+ключ
   planned: [gigachat]         # опциональный провайдер на будущее (config-switch, без ключей сейчас)
   no_secrets: true            # только имена env-переменных / secret-reference
 

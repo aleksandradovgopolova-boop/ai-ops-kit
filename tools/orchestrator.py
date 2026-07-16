@@ -8,10 +8,13 @@
   - промежуточные результаты сохраняются на диск (возобновляемость);
   - состояние — TaskState.yaml; при прерывании перезапуск продолжает с next_action.
 
-Провайдер подключается как callable "role prompt -> text":
+Провайдер подключается как callable "role prompt -> text" (provider-agnostic):
   - mock (по умолчанию): детерминированный ответ без сети — для selftest/CI;
-  - openai-compatible HTTP-адаптер подключается снаружи (env OPENAI_COMPATIBLE_BASE_URL
-    + ключ) — сетевые вызовы сознательно вынесены из этого файла.
+  - anthropic: api.anthropic.com, ключ ANTHROPIC_API_KEY;
+  - openai: api.openai.com, ключ OPENAI_API_KEY;
+  - openai-compatible: любой OpenAI-совместимый endpoint (DeepSeek, local, GigaChat-gw…)
+    через env OPENAI_COMPATIBLE_BASE_URL + OPENAI_COMPATIBLE_API_KEY + --model.
+  Ключ — ТОЛЬКО из env (не в репо/логах); без ключа — честная ошибка, не тихий mock.
 
 Использование:
   orchestrator.py run <WF> "<задача>" [child_root] [--workitem-id <id>] [--evidence <file>] [--collect-evidence] [--fresh|--resume]
@@ -79,15 +82,17 @@ def _anthropic_call(prompt, model):
     return "\n".join(parts).strip() or "(пустой ответ модели)"
 
 
-def _openai_call(prompt, model):
+def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/completions",
+                 key_env="OPENAI_API_KEY"):
+    """OpenAI Chat Completions и любой OpenAI-совместимый endpoint (DeepSeek, local, …)
+    через base_url + ключ из указанной env. Секрет — только из env, не в репо/логах."""
     import os
-    key = os.environ.get("OPENAI_API_KEY")
+    key = os.environ.get(key_env)
     if not key:
-        raise SystemExit("OPENAI_API_KEY не задан — живой прогон невозможен. "
+        raise SystemExit(f"{key_env} не задан — живой прогон невозможен. "
                          "Задайте ключ в окружении или используйте --provider mock (офлайн).")
     data = _http_post_json(
-        "https://api.openai.com/v1/chat/completions",
-        {"authorization": f"Bearer {key}"},
+        base_url, {"authorization": f"Bearer {key}"},
         {"model": model, "max_tokens": _MAX_TOKENS,
          "messages": [{"role": "user", "content": prompt}]})
     return (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip() \
@@ -107,7 +112,19 @@ def make_provider(name: str, model: str = None):
     if name == "openai":
         m = model or DEFAULT_MODELS["openai"]
         return lambda prompt: _openai_call(prompt, m)
-    raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai)")
+    if name == "openai-compatible":
+        # DeepSeek / local / любой OpenAI-совместимый: base_url + ключ из env (provider-agnostic).
+        import os
+        base = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
+        if not base:
+            raise SystemExit("OPENAI_COMPATIBLE_BASE_URL не задан — для openai-совместимого "
+                             "провайдера (напр. DeepSeek: https://api.deepseek.com/chat/completions) "
+                             "укажите base URL в env.")
+        if not model:
+            raise SystemExit("--model обязателен для openai-compatible (напр. deepseek-chat).")
+        return lambda prompt: _openai_call(prompt, model, base_url=base,
+                                           key_env="OPENAI_COMPATIBLE_API_KEY")
+    raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai, openai-compatible)")
 
 
 # ---------------- state ----------------
@@ -401,6 +418,33 @@ def selftest():
         ok = False; print("FAIL provider: неизвестный провайдер должен падать")
     except SystemExit:
         print("PASS provider: неизвестный провайдер -> ошибка")
+    # openai-compatible (v2.39): DeepSeek/local через base_url; ключ из env, без — честная ошибка
+    _b = _os.environ.pop("OPENAI_COMPATIBLE_BASE_URL", None)
+    try:
+        make_provider("openai-compatible", "deepseek-chat")
+        ok = False; print("FAIL openai-compatible без BASE_URL должен падать")
+    except SystemExit:
+        print("PASS openai-compatible без BASE_URL -> ошибка")
+    _os.environ["OPENAI_COMPATIBLE_BASE_URL"] = "https://api.deepseek.com/chat/completions"
+    _kb = _os.environ.pop("OPENAI_COMPATIBLE_API_KEY", None)
+    try:
+        try:
+            make_provider("openai-compatible")   # без model
+            ok = False; print("FAIL openai-compatible без model должен падать")
+        except SystemExit:
+            print("PASS openai-compatible без --model -> ошибка")
+        try:
+            make_provider("openai-compatible", "deepseek-chat")("тест")   # base есть, ключа нет
+            ok = False; print("FAIL openai-compatible без ключа должен падать")
+        except SystemExit:
+            print("PASS openai-compatible c BASE_URL, но без ключа -> честная ошибка")
+    finally:
+        if _b is None:
+            _os.environ.pop("OPENAI_COMPATIBLE_BASE_URL", None)
+        else:
+            _os.environ["OPENAI_COMPATIBLE_BASE_URL"] = _b
+        if _kb is not None:
+            _os.environ["OPENAI_COMPATIBLE_API_KEY"] = _kb
 
     # execution budget (v2.38): max_model_calls останавливает до завершения стадий
     with tempfile.TemporaryDirectory() as td:
