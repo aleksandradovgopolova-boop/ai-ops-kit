@@ -2,6 +2,22 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.42.2] — 2026-07-16
+
+**tool-loop подтверждён живьём полностью — `live_proposal_quality: verified`.** Повторный живой
+прогон на DeepSeek после фикса промпта (v2.42.1): та же задача прошла циклом
+`write → shell(проверка) → done` за 3 шага (`executed=2, denied=0, stopped=done`) — модель больше
+не зацикливается на записи, а завершает задачу. Execution Engine Фаза 2 закрыта.
+
+### Changed
+- **manifest** — `execution_engine.tool_loop.live_proposal_quality: partial → verified` +
+  evidence обоих прогонов (до/после фикса); добавлен `execution_engine.phase2_done`
+  (`tool-loop-live-verified`); из `not_yet` убран пункт про живой прогон петли;
+  `package_version` → 2.42.2.
+
+Совместно v2.42.0–2.42.2 замыкают петлю `task → controlled execution` и подтверждают её
+на реальной модели через провайдер-swap — без изменения кода петли (`openai-compatible`).
+
 ## [2.42.1] — 2026-07-16
 
 **Живой прогон tool-loop подтвердил механику — и вскрыл слабость промпта.** Первый живой
