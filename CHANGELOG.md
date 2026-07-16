@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.58.0] — 2026-07-16
+
+**P0-эпик, срез 5: единый execution-pipeline (spine) — сборка исполнения в ОДИН движок.**
+Аудит: «перестать достраивать вокруг исполнения и собрать само исполнение». Компоненты (detect,
+tool-loop, evidence collector, RunPlan-гейты) теперь соединены в одну цепочку, а не живут порознь.
+
+### Added
+- **tools/execution_pipeline.py** (+ selftest) — `run_pipeline(task, signals, root, proposer,
+  policy, budget)`: detect стек → tool-loop (модель применяет изменения, Policy+Broker) →
+  evidence collector (реальный прогон build/lint/test) → RunPlan-гейты (base+треки, с сигналами) →
+  единый отчёт (`ready_for_pr`, `not_yet`). Offline-проверено mock-предложителем: петля до done,
+  write применён/вне-scope отклонён, профиль определён, evidence собран, гейты оценены.
+- **CI + AGENTS.md + FILE_INDEX** — шаг `execution_pipeline.py --selftest`.
+
+### Changed
+- **manifest** — `fixed_v2_58`; пункт p0_backlog про единый pipeline уточнён: SPINE готов,
+  осталось git-worktree в прогоне + commit/reverify на точном SHA + draft PR + живой предложитель;
+  `package_version` → 2.58.0.
+
+**Честная граница:** spine доводит до «изменения применены + evidence собран + гейты оценены».
+commit на точном SHA, reverify и открытие draft PR — ещё НЕ здесь (нужны git-commit шаг и живой
+прогон); помечено в `not_yet`, не имитируется.
+
 ## [2.57.0] — 2026-07-16
 
 **P0-эпик, срез 4: structured reviewer.json от оркестратора.** Аудит: gate_executor умел читать

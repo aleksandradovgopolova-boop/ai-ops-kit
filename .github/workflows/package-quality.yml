@@ -41,6 +41,8 @@ jobs:
         run: python3 tools/budget.py --selftest
       - name: Tool-calling петля — механика (selftest)
         run: python3 tools/tool_loop.py --selftest
+      - name: Единый execution-pipeline — сборка движка (selftest)
+        run: python3 tools/execution_pipeline.py --selftest
       - name: Gate executor — исполнение и блокировка гейтов (selftest)
         run: python3 tools/gate_executor.py --selftest
       - name: Structured reviewer-result (selftest)

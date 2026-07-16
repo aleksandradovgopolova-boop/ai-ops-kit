@@ -560,6 +560,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42)
+- `tools/execution_pipeline.py` — единый движок: detect → tool-loop → evidence → RunPlan-гейты (spine, v2.58)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
 - `tools/merge_memory.py` — запись знания задачи в память при мердже (v2.25)

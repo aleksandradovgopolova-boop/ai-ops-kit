@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.57.0
+  package_version: 2.58.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -215,10 +215,12 @@ execution_engine:
       - "shell env scrub: секреты (TOKEN/SECRET/KEY/AWS_/GH_/OPENAI_/ANTHROPIC_…) не попадают в окружение shell-команд Broker; PATH/NODE_ENV сохранены"
     fixed_v2_57:
       - "reviewer.json от оркестратора: judge-стадии просят структурный reviewer-result (JSON) и пишут валидный stage-<sid>.reviewer.json -> gate_executor берёт источник истины, а не regex по прозе"
+    fixed_v2_58:
+      - "единый execution-pipeline (spine): tools/execution_pipeline.py собирает detect->tool-loop->evidence collector->RunPlan-гейты в ОДИН прогон; offline-проверено mock-предложителем"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано
-      - "единый execution pipeline: detect->RunPlan->worktree->inspect->tool-loop->checks->ВСЕ гейты RunPlan->commit->reverify SHA->draft PR (сейчас два движка)"
+      - "единый execution-pipeline: SPINE готов (v2.58, detect->tool-loop->evidence->гейты, offline). ОСТАЛОСЬ: git-worktree изоляция в прогоне, commit+reverify на точном SHA, открытие draft PR, живой предложитель"
       - "установимый CLI с движком в child: managed_set без каталогов инструментов/валидаторов — child зависит от внешнего клона кита"
       - "shell FS/сеть-изоляция (частично): env-скраб секретов сделан (v2.56); полный jail (запрет чтения/записи вне worktree, сеть off, allowlist команд) требует контейнера — НЕ сделано"
       - "evidence привязан к pre-change HEAD; тесты идут по грязному дереву -> reverify на точном commit SHA после коммита"
