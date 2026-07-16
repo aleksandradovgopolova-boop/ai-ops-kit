@@ -5,8 +5,9 @@ AI сопровождает продукт на всём жизненном ци
 Measurement → Insights → снова Discovery. Агенты (включая независимых ревьюеров всех
 зон), workflow-контракты, quality gates, Feature Blueprint, единый продуктовый путь
 (WorkItem), генераторы артефактов, Knowledge Graph, Product Health, Decision Intelligence,
-постура безопасности, provider/runtime маршрутизация и управляемые обновления
-дочерних репозиториев.
+постура безопасности, provider/runtime маршрутизация, исполняющее ядро
+(`ai-ops run`: RunPlan + треки качества, Tool Broker с Policy Engine, бюджет прогона) и
+управляемые обновления дочерних репозиториев.
 
 **Начать здесь:** [Quickstart](docs/QUICKSTART.md) (первый день + типовые ошибки) ·
 [Walkthrough](docs/WALKTHROUGH.md) (сквозной сценарий за 15 минут) ·
@@ -29,6 +30,7 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 | `skills/` | Скиллы, поставляемые китом (opt-in), + каталог внешних скиллов (registry/skills-catalog.yaml) |
 | `decisions/`, `knowledge/`, `governance/` | Decision Intelligence, Knowledge Integrity (claims/freshness), границы данных и постура безопасности |
 | `runtime/` | Спека постоянного агента-ассистента (Robin), runtime-агностичная: контракт + duties + валидатор |
+| `tools/` (Execution Engine) | `ai_ops_run` (route→RunPlan→WorkItem→исполнение→отчёт), `run_plan` (base_workflow + треки), `tool_broker` (Policy решает, модель предлагает), `budget` (потолок вызовов), `orchestrator` (sequential + провайдеры anthropic/openai/openai-compatible) |
 | `installer/` | CLI `ai-ops`: init / status / diff / update / validate / doctor / migrate / verify-capabilities |
 | `validation/` | Валидаторы (registry, workflows, providers, child-install, drift, guard) |
 | `migrations/` | Механизм миграций между версиями |
