@@ -2,6 +2,20 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.50.0] — 2026-07-16
+
+**Чеклист обкатки: как метрики закрываются сами.** Короткий док для child о том, что North Star
+(`autonomous_reviewable_pr_rate`) и baseline набираются не вручную, а прогоном реальных задач
+через `/ai-run`: автозапись срезов вшита в стадии, порог `baseline_ready` — 3 фичи × ≥3 среза.
+
+### Added
+- **docs/dogfooding-metrics.md** — чеклист: обновление кита, запуск задач через `/ai-run`,
+  проверка прогресса через `effect_metrics.py`, что закрывается попутно (golden-repo/lifecycle,
+  interaction-log). Кладётся под руку в каждой сессии child.
+
+### Changed
+- **FILE_INDEX** — ссылка на новый док; **manifest** `package_version` → 2.50.0.
+
 ## [2.49.0] — 2026-07-16
 
 **3.0 — additive-complete; физразнос дерева отложен до 3.1 (осознанное решение).** При
