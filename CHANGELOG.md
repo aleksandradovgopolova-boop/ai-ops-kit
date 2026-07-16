@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.51.0] — 2026-07-16
+
+**Находка обкатки 5 + честность дока: привязка WorkItem к именованной фиче.** Отчёт обкатки
+в ии-среде (кит проведён 2.26→2.50, `baseline_ready` достигнут на 6 фичах) вскрыл: в
+claude-code задача идёт на ad-hoc `wi-<hash>`, поэтому срез истории падает на новую фичу с
+1 срезом и **baseline не двигается**. Плюс мой же `docs/dogfooding-metrics.md` (v2.50)
+переоценивал: «автозапись вшита в стадии» верно только для generic-orchestrator.
+
+### Added
+- **tools/ai_ops_run.py** — `run(..., feature=...)` + CLI `--feature <имя>`: WorkItem
+  привязывается к именованной фиче (`build_plan(workitem_id=feature)`), срезы копятся на неё.
+  Selftest: без `--feature` → `wi-<hash>`; с `--feature library-view` → WorkItem на фиче.
+
+### Changed
+- **docs/dogfooding-metrics.md** — ЧЕСТНО: полностью автоматичная запись — только
+  generic-orchestrator; в claude-code срез пишется на стадии `finish` (`run_report --record`),
+  на ИМЕНОВАННОЙ фиче; ad-hoc `wi-<hash>` baseline не двигает. (Исправлен overclaim v2.50.)
+- **commands/task/ai-finish-task.md** + генерируемый `ai-run` — требование именованной фичи
+  и явной записи среза в `finish`; «автозаписи за стадию» в claude-code нет.
+- **manifest** — `effect_metrics.by_runtime` (честная разница generic vs claude-code) +
+  `auto_record.feature_binding`; `package_version` → 2.51.0.
+
+Прочие находки обкатки: #4 (мис-роутинг `task_type: None → ENGINEERING` для мелкой UI-правки)
+и #6 (drift-гейт «released ⇒ код присутствует») — на следующий срез. Находки 1–3 уже закрыты
+ранее (2.37/2.39).
+
 ## [2.50.0] — 2026-07-16
 
 **Чеклист обкатки: как метрики закрываются сами.** Короткий док для child о том, что North Star

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.50.0
+  package_version: 2.51.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -202,11 +202,17 @@ effect_metrics:
   recorder: tools/run_report.py                      # --record: срез в историю
   metrics: tools/effect_metrics.py                   # baseline_ready при 3 фичах x >=3 срезов
   auto_record:
-    in_session: [commands/task/ai-plan-task.md, commands/task/ai-implement.md, commands/task/ai-verify.md, commands/task/ai-finish-task.md]  # срез на каждой стадии
+    in_session: [commands/task/ai-plan-task.md, commands/task/ai-implement.md, commands/task/ai-verify.md, commands/task/ai-finish-task.md]  # процедуры, где рантайм пишет срез
     ci_net: templates/ci/ai-ops-record.yml           # на push фиксирует срез по затронутым фичам
+    feature_binding: "ai-run --feature <имя> (v2.51) — иначе wi-<hash>, срезы не копятся на фичу"
+  by_runtime:                                        # ЧЕСТНО (finding обкатки): «авто» зависит от рантайма
+    generic-orchestrator: "оркестратор кита пишет срезы сам при прогоне стадий"
+    claude-code: "срез пишется, когда рантайм исполняет finish (run_report --record); автозаписи 'за стадию' нет — процедура, не магия"
   note: >
-    Стадийная запись (in_session) + CI-нетто дают >=3 срезов на фичу без ручного «не забыть».
-    CI-часть исполняет рантайм GitHub Actions; из среды разработки кита не проверялась.
+    Запись срезов даёт >=3 на фичу; полностью автоматично — только в generic-orchestrator.
+    В claude-code история копится, когда рантайм честно исполняет finish на ИМЕНОВАННОЙ фиче
+    (ad-hoc wi-<hash> baseline не двигает). CI-часть исполняет GitHub Actions; из среды
+    разработки кита не проверялась.
 
 event_contract:
   # v2.29: единый каталог имён событий — против contract<->code<->analytics drift.
