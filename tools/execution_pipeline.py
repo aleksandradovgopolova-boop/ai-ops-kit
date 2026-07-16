@@ -47,6 +47,18 @@ def _profile_summary(profile):
     return f"Стек: {langs}. Команды проверки: {cmds or 'нет'}."
 
 
+def _intake_evidence(signals):
+    """intake_completeness evidence из сигналов: классификация уже сделана (реальный evidence,
+    не фабрикация). Маппинг сигнал->required_evidence-флаг; provided только для присутствующих."""
+    sig = signals or {}
+    mapping = {"classified_type": "task_type", "size": "size", "risk": "risk"}
+    provided = [flag for flag, key in mapping.items() if sig.get(key)]
+    if not provided:
+        return None
+    return {"status": "pass", "provided": provided,
+            "evidence": [f"intake из сигналов: {', '.join(provided)}"]}
+
+
 def _git(root, *args):
     r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
@@ -98,8 +110,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     coll = evidence_collector.collect(profile, child_root, pol)
 
+    # 6b. intake-evidence из сигналов: классификация УЖЕ произошла (task_type/size/risk в signals) —
+    #     это реальный evidence для intake_completeness, а не фабрикация (finding живого прогона).
+    gate_ev = dict(coll["gate_evidence"])
+    intake = _intake_evidence(signals)
+    if intake:
+        gate_ev.setdefault("intake_completeness", intake)
+
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval)
-    gates = gate_executor.evaluate(plan["base_workflow"], coll["gate_evidence"],
+    gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
                                    gate_ids=plan["gates"], signals=signals)
 
     # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)
@@ -162,7 +181,7 @@ def selftest():
         ]
         it = iter(script)
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
-        sig = {"task_type": "QUICK", "affected_areas": ["core"]}
+        sig = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
         rep = run_pipeline("добавить функцию add", sig, root, lambda c: next(it),
                            policy=pol, budget={"max_model_calls": 10}, feature="add-fn")
 
@@ -173,6 +192,8 @@ def selftest():
         expect("pipeline: evidence-проверки собраны", isinstance(rep["checks"], dict) and rep["checks"])
         expect("pipeline: гейты RunPlan оценены (есть вердикт blocked)",
                "blocked" in rep["gates"] and isinstance(rep["gates"]["evaluated"], list))
+        expect("pipeline: intake_completeness закрыт evidence из сигналов (finding живого прогона)",
+               "intake_completeness" not in rep["gates"]["unmet"])
         expect("pipeline: workitem привязан к именованной фиче", rep["workitem_id"] == "add-fn")
         expect("pipeline: честный not_yet (commit/PR/живой)", len(rep["not_yet"]) == 3)
 

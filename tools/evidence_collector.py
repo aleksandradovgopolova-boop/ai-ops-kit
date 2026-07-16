@@ -80,16 +80,26 @@ def collect(profile, root, policy):
             runs.append({"language": lang, "command": cmd,
                          "exit_code": ev.get("exit_code"), "ok": ok,
                          "output_tail": ev.get("output_tail", "")})
-        status = "pass" if all_ok else "fail"
-        checks_report[check] = {"status": status, "runs": runs}
+        # honest (finding живого прогона): pytest exit 5 = «нет собранных тестов», это НЕ
+        # проваленный тест. Такой прогон -> warn (no_tests): флаг tests_passed НЕ выдаём
+        # (тестов не было), но и hard-fail не ставим (нечему было падать).
+        no_tests = (check == "test" and not any_denied
+                    and all(("pytest" in (r.get("command") or "") and r.get("exit_code") == 5)
+                            for r in runs))
+        if no_tests:
+            checks_report[check] = {"status": "warn", "reason": "нет собранных тестов (pytest exit 5)",
+                                    "runs": runs}
+        else:
+            status = "pass" if all_ok else "fail"
+            checks_report[check] = {"status": status, "runs": runs}
         # структурный evidence по evidence_schema гейта (первый стек репрезентативен)
         first = runs[0]
         schema_evidence[schema_key] = {"command": first.get("command"),
                                        "exit_code": first.get("exit_code"),
                                        "revision": revision}
-        if all_ok:
+        if all_ok and not no_tests:
             provided.append(flag)
-        else:
+        elif not no_tests:
             reason = "отклонено policy" if any_denied else "команда завершилась с ненулевым кодом"
             blockers.append(f"{check}: {reason}")
 
@@ -189,8 +199,21 @@ def selftest():
         prof_detected = project_detector.detect(root)
         r4 = collect(prof_detected, root, pol)
         expect("detect->collect: test-проверка запущена (есть runs)",
-               r4["checks"]["test"]["status"] in ("pass", "fail")
+               r4["checks"]["test"]["status"] in ("pass", "fail", "warn")
                and r4["checks"]["test"].get("runs"))
+
+        # finding живого прогона: pytest exit 5 (нет тестов) -> warn, НЕ fail; tests_passed не выдан,
+        # но и hard-fail нет (нечему падать). Команда содержит 'pytest' и возвращает 5.
+        prof_notest = {"stacks": [{"language": "demo", "commands": {
+            "build": "true", "lint": None, "typecheck": None,
+            "test": "bash -c 'exit 5'  # pytest"}}]}
+        r5 = collect(prof_notest, root, pol)
+        ge5 = r5["gate_evidence"]["implementation_verification"]
+        expect("нет тестов (pytest exit 5) -> warn, не fail",
+               r5["checks"]["test"]["status"] == "warn")
+        expect("нет тестов -> tests_passed НЕ выдан и НЕ hard-fail",
+               "tests_passed" not in ge5["provided"]
+               and not any("test" in b for b in ge5.get("blockers", [])))
 
     print("evidence_collector selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
