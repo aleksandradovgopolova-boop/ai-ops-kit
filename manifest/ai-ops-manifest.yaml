@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.36.0
+  package_version: 2.37.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -143,6 +143,7 @@ execution_engine:
     rule: rules/ai/ToolBrokerPolicy.md
     invariant: "execute() всегда через decide(); модель предлагает, политика решает"
     status: component-ready                  # компонент готов+тестирован; петля с живой моделью — след. шаг
+    protected_paths_source: "MERGE: config/protected-paths.yaml (дефолт) + child .ai-ops.yaml protected_paths (v2.37)"
   not_yet:                                  # следующие срезы эпика
     - live tool-calling loop в orchestrator (Broker + tool-calling провайдер)
     - preflight доступ к GitHub API (open_prs без gh слеп — finding обкатки)

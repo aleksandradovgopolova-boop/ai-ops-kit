@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.37.0] — 2026-07-15
+
+**Tool Broker: child-override protected-paths (finding обкатки 2.36).** Обкатка в ии-среде
+вскрыла: Policy читал protected-paths только из пакета kit → защищал несуществующие
+дефолты (`production/`, `security/`, `migrations/destructive/`) и НЕ защищал реальный
+protected путь репозитория (`.github/workflows/` из `.ai-ops.yaml`). Корректностный/
+security-баг — закрыт.
+
+### Changed
+- **tools/tool_broker.py** — `Policy(child_root=...)`; protected-paths = **MERGE**: дефолт
+  пакета `config/protected-paths.yaml` + карта child'а (`.ai-ops.yaml → protected_paths`,
+  список строк; опционально `<child>/config/protected-paths.yaml`). Child добавляет свои
+  пути, не отменяя универсально-опасные дефолты. Форматы строки и `{path,approval}` оба
+  поддержаны. Selftest: child-protected `.github/workflows/` запрещён, дефолт `security/`
+  сохраняется (merge, не replace).
+- **rules/ai/ToolBrokerPolicy.md** — источник protected-paths = merge пакет+child.
+- **manifest** — `tool_broker.protected_paths_source`; `package_version` → 2.37.0.
+
 ## [2.36.0] — 2026-07-15
 
 **Execution Engine — Фаза 2 (срез 2): Tool Broker + Policy Engine.** Для голого
