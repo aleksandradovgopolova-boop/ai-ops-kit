@@ -84,27 +84,45 @@ def collect(profile, root, policy):
             runs.append({"language": lang, "command": cmd,
                          "exit_code": ev.get("exit_code"), "ok": ok,
                          "output_tail": ev.get("output_tail", "")})
-        # honest (finding живого прогона): pytest exit 5 = «нет собранных тестов», это НЕ
-        # проваленный тест. Такой прогон -> warn (no_tests): флаг tests_passed НЕ выдаём
-        # (тестов не было), но и hard-fail не ставим (нечему было падать).
-        no_tests = (check == "test" and not any_denied
-                    and all(("pytest" in (r.get("command") or "") and r.get("exit_code") == 5)
-                            for r in runs))
-        if no_tests:
-            checks_report[check] = {"status": "warn", "reason": "нет собранных тестов (pytest exit 5)",
-                                    "runs": runs}
-            tests_absent = True
-        else:
-            status = "pass" if all_ok else "fail"
+        # honest: pytest exit 5 = «нет собранных тестов» — НЕ проваленный тест. Считаем ПО-РУНОВО
+        # (finding adversarial-review: прежний all(...) ломался в полиглот-репо, где рядом с
+        # pytest-exit5 есть реальный проходящий тест другого стека, напр. npm test).
+        def _no_tests_run(r):
+            return "pytest" in (r.get("command") or "") and r.get("exit_code") == 5
+
+        if check == "test":
+            real_runs = [r for r in runs if not _no_tests_run(r)]
+            if not real_runs:                       # все прогоны — «нет тестов»
+                checks_report[check] = {"status": "warn", "reason": "нет собранных тестов",
+                                        "runs": runs}
+                tests_absent = True
+                first = runs[0]
+                schema_evidence[schema_key] = {"command": first.get("command"),
+                                               "exit_code": first.get("exit_code"), "revision": revision}
+                continue                            # флаг не выдаём, блокер не ставим
+            ok_real = all(r.get("ok") for r in real_runs)
+            status = "pass" if ok_real else "fail"
             checks_report[check] = {"status": status, "runs": runs}
+            first = runs[0]
+            schema_evidence[schema_key] = {"command": first.get("command"),
+                                           "exit_code": first.get("exit_code"), "revision": revision}
+            if ok_real:
+                provided.append(flag)
+            else:
+                reason = "отклонено policy" if any_denied else "команда завершилась с ненулевым кодом"
+                blockers.append(f"{check}: {reason}")
+            continue
+
+        status = "pass" if all_ok else "fail"
+        checks_report[check] = {"status": status, "runs": runs}
         # структурный evidence по evidence_schema гейта (первый стек репрезентативен)
         first = runs[0]
         schema_evidence[schema_key] = {"command": first.get("command"),
                                        "exit_code": first.get("exit_code"),
                                        "revision": revision}
-        if all_ok and not no_tests:
+        if all_ok:
             provided.append(flag)
-        elif not no_tests:
+        else:
             reason = "отклонено policy" if any_denied else "команда завершилась с ненулевым кодом"
             blockers.append(f"{check}: {reason}")
 
@@ -224,6 +242,17 @@ def selftest():
         expect("нет тестов -> tests_passed НЕ выдан и НЕ hard-fail",
                "tests_passed" not in ge5["provided"]
                and not any("test" in b for b in ge5.get("blockers", [])))
+
+        # adversarial-review: полиглот — реальный проходящий тест + pytest exit5 рядом ->
+        # tests_passed ВЫДАН (реальный прогон прошёл), а pytest-exit5 не роняет весь check.
+        prof_poly = {"stacks": [
+            {"language": "node", "commands": {"build": None, "lint": None, "typecheck": None, "test": "true"}},
+            {"language": "python", "commands": {"build": None, "lint": None, "typecheck": None,
+                                                "test": "bash -c 'exit 5'  # pytest"}}]}
+        r6 = collect(prof_poly, root, pol)
+        ge6 = r6["gate_evidence"]["implementation_verification"]
+        expect("полиглот: реальный тест прошёл рядом с pytest-exit5 -> tests_passed выдан, check pass",
+               "tests_passed" in ge6["provided"] and r6["checks"]["test"]["status"] == "pass")
 
     print("evidence_collector selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

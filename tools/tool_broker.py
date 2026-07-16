@@ -179,25 +179,38 @@ def _within_root(root, rel):
         return False
 
 
-_SECRET_RE = re.compile(
-    r"(TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|APIKEY|PRIVATE[_-]?KEY|CREDENTIAL|"
-    r"AUTH[_-]?KEY|ACCESS[_-]?KEY|SESSION|COOKIE)", re.I)
-_SECRET_PREFIX = ("AWS_", "GH_", "GITHUB_", "OPENAI_", "ANTHROPIC_", "GIGACHAT_",
-                  "SSH_", "GPG_", "NPM_TOKEN", "PYPI_")
+# v2.63 (adversarial-review finding): denylist по именам дыряв (пропускал голый _KEY,
+# DATABASE_URL/DSN/JWT/PAT…). Переход на ALLOWLIST: в shell-команду модели попадает ТОЛЬКО
+# явно безопасное окружение; всё остальное (включая любые секреты под любыми именами) режется.
+_ENV_ALLOW_EXACT = {
+    # базовое окружение оболочки/сборки
+    "PATH", "HOME", "LANG", "LANGUAGE", "TZ", "TERM", "SHELL", "USER", "LOGNAME",
+    "HOSTNAME", "PWD", "OLDPWD", "TMPDIR", "TEMP", "TMP", "SHLVL",
+    # тулчейны (не секреты)
+    "NODE_ENV", "CI", "PYTHONPATH", "PYTHONUNBUFFERED", "PYTHONDONTWRITEBYTECODE",
+    "VIRTUAL_ENV", "LD_LIBRARY_PATH", "GOPATH", "GOCACHE", "GOROOT", "JAVA_HOME",
+    "CARGO_HOME", "RUSTUP_HOME", "PIP_CACHE_DIR", "npm_config_cache", "COLUMNS", "LINES",
+    # НЕ-секретный контекст GitHub Actions (его отсутствие ломает build/test) — токены сюда НЕ входят
+    "GITHUB_SHA", "GITHUB_REF", "GITHUB_REF_NAME", "GITHUB_REPOSITORY", "GITHUB_RUN_ID",
+    "GITHUB_RUN_NUMBER", "GITHUB_WORKSPACE", "GITHUB_ACTIONS", "GITHUB_HEAD_REF",
+    "GITHUB_BASE_REF", "GITHUB_EVENT_NAME",
+    # base_url провайдера — не секрет (ключ OPENAI_COMPATIBLE_API_KEY НЕ в allowlist -> режется)
+    "OPENAI_COMPATIBLE_BASE_URL", "GITHUB_API_URL",
+}
+_ENV_ALLOW_PREFIX = ("LC_", "XDG_")
 
 
-def scrub_env(env=None):
-    """Убрать переменные-секреты из окружения shell-команд (finding аудита: shell=True отдавал
-    модели весь env с токенами). Скрабим по имени: паттерн-секрет ИЛИ известный секрет-префикс.
-    Функциональный env (PATH, HOME, NODE_ENV, LANG…) сохраняется — сборка/тесты не ломаются.
-    Полная FS/сеть-изоляция — это контейнер (заявлено в постуре, не имитируется здесь)."""
+def scrub_env(env=None, passthrough=None):
+    """ALLOWLIST окружения для shell-команд Broker (finding adversarial-review: denylist по именам
+    пропускал целые классы секретов — голый _KEY, DATABASE_URL/DSN/JWT/PAT…). В подпроцесс,
+    команду которого предлагает модель, попадает ТОЛЬКО безопасное окружение: exact-allowlist +
+    префиксы LC_/XDG_ + явный passthrough. Любой секрет под любым именем режется по умолчанию.
+    passthrough — список имён, которые child осознанно разрешает (напр. нужная build-переменная).
+    Полная FS/сеть-изоляция — контейнер (заявлено в постуре, не имитируется здесь)."""
     src = dict(os.environ if env is None else env)
-    out = {}
-    for k, v in src.items():
-        if _SECRET_RE.search(k) or any(k.startswith(p) for p in _SECRET_PREFIX):
-            continue
-        out[k] = v
-    return out
+    allow = set(_ENV_ALLOW_EXACT) | set(passthrough or [])
+    return {k: v for k, v in src.items()
+            if k in allow or k.startswith(_ENV_ALLOW_PREFIX)}
 
 
 def _revision(root):
@@ -342,9 +355,19 @@ def selftest():
             expect("функциональный env (PATH) сохранён для сборки", "PATH_SET=yes" in out)
         finally:
             os.environ.pop("MY_FAKE_TOKEN", None); os.environ.pop("ANTHROPIC_API_KEY", None)
-        expect("scrub_env убирает секрет-по-имени, оставляет обычные",
-               "GITHUB_TOKEN" not in scrub_env({"GITHUB_TOKEN": "x", "PATH": "/bin", "NODE_ENV": "prod"})
-               and scrub_env({"PATH": "/bin"}).get("PATH") == "/bin")
+        expect("scrub_env allowlist: обычные env сохранены (PATH/NODE_ENV)",
+               scrub_env({"PATH": "/bin", "NODE_ENV": "prod"}) == {"PATH": "/bin", "NODE_ENV": "prod"})
+        # adversarial-review: denylist пропускал эти классы — allowlist режет их ВСЕ
+        leaky = {"GITHUB_TOKEN": "1", "AZURE_OPENAI_KEY": "2", "STRIPE_KEY": "3",
+                 "DATABASE_URL": "postgres://u:p@h/d", "SENTRY_DSN": "4", "JWT": "5",
+                 "PAT": "6", "GEMINI_KEY": "7", "ENCRYPTION_KEY": "8", "PATH": "/bin"}
+        scrubbed = scrub_env(leaky)
+        expect("scrub_env allowlist: ВСЕ секреты (в т.ч. голый _KEY/URL/DSN/JWT/PAT) вырезаны",
+               set(scrubbed) == {"PATH"})
+        expect("scrub_env: не-секретный контекст GitHub сохранён (GITHUB_SHA), токен вырезан",
+               scrub_env({"GITHUB_SHA": "abc", "GITHUB_TOKEN": "t"}) == {"GITHUB_SHA": "abc"})
+        expect("scrub_env: passthrough пускает явно разрешённое",
+               scrub_env({"MY_BUILD_FLAG": "1"}, passthrough=["MY_BUILD_FLAG"]) == {"MY_BUILD_FLAG": "1"})
 
     print("tool_broker selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
