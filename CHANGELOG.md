@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.48.0] — 2026-07-16
+
+**3.0-срез 2: по-пакетная установка — аддитивно, дефолт = все.** Installer научился ставить
+подмножество пакетов: `.ai-ops.yaml -> packages: [ai-ops-core, ...]` фильтрует managed_set по
+границам из `packages/*/package.yaml`. Обратная совместимость железная: поля нет → ставится
+всё (footprint как раньше); существующие child ничего не замечают.
+
+### Added
+- **installer/ai_ops.py** — `package_ownership` (файл→пакет из деклараций), `selected_packages`
+  (читает `.ai-ops.yaml -> packages`, дефолт None=все), `filter_by_packages` (чистая функция
+  фильтра). `managed_set()` применяет фильтр. Selftest: ownership резолвит декларации, выбор
+  `[ai-ops-core]` оставляет core-файлы и отсекает product, неназначенный файл ставится всегда,
+  `None` → всё.
+
+### Changed
+- **manifest** — `release_3_0.slice2_done: true` + `per_package_install` (config_field, rule);
+  `remaining_slices` = [physical-tree-split, migration-guide]; `package_version` → 2.48.0.
+- **docs/3.0-design.md** — срез 2 помечен ✅ (v2.48).
+
+**Инвариант честности:** файл, не назначенный ни одному пакету, ставится ВСЕГДА — пока дерево
+физически не разбито (срез 3), частичная установка не должна ронять неразмеченные файлы.
+Оставшиеся срезы 3–4 (физразнос + MIGRATION_GUIDE) — breaking, по явному решению с обкаткой.
+
 ## [2.47.0] — 2026-07-16
 
 **3.0-срез 1: `ai-run` — канонический вход; `ai-start-task` — совместимый алиас.** Единый

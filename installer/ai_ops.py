@@ -143,14 +143,59 @@ def manifest():
     return yaml.safe_load((PKG / "manifest" / "ai-ops-manifest.yaml").read_text(encoding="utf-8"))
 
 
+def package_ownership(pkg_root=PKG):
+    """v2.48 (3.0-срез 2): {relative_path: package_name} из packages/*/package.yaml.
+    Пусто, если деклараций нет. Паттерн 'dir/**' нормализуется в 'dir/**/*' (pathlib)."""
+    root = Path(pkg_root)
+    owned = {}
+    for pf in sorted(root.glob("packages/*/package.yaml")):
+        try:
+            decl = yaml.safe_load(pf.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        name = decl.get("name", pf.parent.name)
+        for pat in decl.get("includes", []) or []:
+            eff = pat + "/*" if pat.endswith("/**") else pat
+            for p in root.glob(eff):
+                if p.is_file():
+                    owned[str(p.relative_to(root))] = name
+    return owned
+
+
+def selected_packages():
+    """Опциональный список пакетов из child .ai-ops.yaml -> packages. None -> все (дефолт).
+    Обратная совместимость: поля нет -> None -> ставится всё (footprint как раньше)."""
+    if not CHILD_CONFIG.exists():
+        return None
+    try:
+        cfg = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    pkgs = cfg.get("packages")
+    return list(pkgs) if isinstance(pkgs, list) and pkgs else None
+
+
+def filter_by_packages(pairs, selected, ownership):
+    """Оставить managed-файлы по выбору пакетов. Инвариант честности: файл, не назначенный
+    НИ ОДНОМУ пакету, ставится ВСЕГДА (структура ещё не разбита целиком — срез 3); файл,
+    принадлежащий пакету, ставится только если пакет выбран. selected=None -> всё."""
+    if not selected:
+        return pairs
+    sel = set(selected)
+    return [(src, rel) for (src, rel) in pairs
+            if ownership.get(rel) is None or ownership.get(rel) in sel]
+
+
 def managed_set():
-    """Список (source_path, relative_target) managed-файлов — из манифеста."""
+    """Список (source_path, relative_target) managed-файлов — из манифеста.
+    v2.48: при заданном .ai-ops.yaml -> packages фильтруется по выбранным пакетам (аддитивно;
+    дефолт — все пакеты, footprint без изменений)."""
     pairs = []
     for pattern in manifest().get("update_policy", {}).get("managed_set", []):
         for src in sorted(PKG.glob(pattern)):
             if src.is_file():
                 pairs.append((src, str(src.relative_to(PKG))))
-    return pairs
+    return filter_by_packages(pairs, selected_packages(), package_ownership())
 
 
 def sha256(p: Path):
@@ -652,6 +697,22 @@ def selftest():
     expect("2.14.1 ∉ '>=1.0.0 <2.0.0'", not version_in_range("2.14.1", ">=1.0.0 <2.0.0"))
     expect("пустой диапазон -> без ограничений", version_in_range("9.9.9", ""))
     expect("compatible_range_for(2.14.1)", compatible_range_for("2.14.1") == ">=2.0.0 <3.0.0")
+
+    # 1b. per-package install (3.0-срез 2): фильтр по выбору пакетов, аддитивно
+    own = package_ownership()
+    expect("ownership читает декларации пакетов (registry -> core)",
+           own.get("registry/agents.yaml") == "ai-ops-core")
+    sample = [(None, "registry/agents.yaml"),      # core
+              (None, "agents/core/context-builder.md"),  # product
+              (None, "security/permission-levels.yaml")]  # не назначен ни пакету
+    only_core = filter_by_packages(sample, ["ai-ops-core"], own)
+    only_core_rels = {rel for _, rel in only_core}
+    expect("выбор [core] оставляет core-файл", "registry/agents.yaml" in only_core_rels)
+    expect("выбор [core] отсекает product-файл", "agents/core/context-builder.md" not in only_core_rels)
+    expect("неназначенный файл ставится ВСЕГДА (честность до срез 3)",
+           "security/permission-levels.yaml" in only_core_rels)
+    expect("selected=None -> ставится всё (обратная совместимость)",
+           len(filter_by_packages(sample, None, own)) == len(sample))
 
     # 2. e2e: init во временный child, затем child-валидатор
     with tempfile.TemporaryDirectory() as td:
