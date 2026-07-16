@@ -42,11 +42,26 @@ import active_work       # noqa: E402
 
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
-        feature=None):
+        feature=None, engine="controller", proposer=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
     features_dir = Path(features_dir) if features_dir else child_root / "features"
+
+    # engine=pipeline (v2.63): собранный единый движок как РЕАЛЬНЫЙ путь из контроллера
+    # (adversarial-review: раньше execution_pipeline вызывался только из selftest). Делегируем
+    # весь прогон в execution_pipeline.run_pipeline; proposer — из провайдера (или передан).
+    if engine == "pipeline":
+        import execution_pipeline
+        import tool_loop
+        import orchestrator
+        prop = proposer or tool_loop.make_model_proposer(orchestrator.make_provider(provider_name))
+        rep = execution_pipeline.run_pipeline(
+            task_text, signals, child_root, prop, feature=feature,
+            commit=execute, isolate=execute)
+        rep["runtime"] = runtime
+        rep["engine"] = "pipeline"
+        return rep
 
     # 1-2. RunPlan (route + треки + агрегированные гейты).
     # feature (v2.51): привязка WorkItem к ИМЕНОВАННОЙ фиче — иначе wid=wi-<hash>, и срезы
@@ -162,6 +177,25 @@ def selftest():
                rf["workitem_id"] == "library-view"
                and (root / "features" / "library-view" / "run-plan.yaml").exists())
 
+    # v2.63 (adversarial-review): engine=pipeline РЕАЛЬНО делегирует в собранный движок из
+    # контроллера (а не только selftest). Проверяем mock-предложителем в git-репо.
+    import subprocess
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        subprocess.run(["git", "-C", td, "init", "-q"])
+        subprocess.run(["git", "-C", td, "config", "user.email", "t@t"])
+        subprocess.run(["git", "-C", td, "config", "user.name", "t"])
+        (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"])
+        pscript = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+        rp = run("добавить a", {"task_type": "QUICK", "size": "small", "risk": "low",
+                                "affected_areas": ["core"]}, root, engine="pipeline",
+                 proposer=lambda c: next(pscript))
+        expect("engine=pipeline: контроллер делегирует в собранный движок",
+               rp.get("engine") == "pipeline" and rp.get("kind") == "execution-pipeline")
+        expect("engine=pipeline: движок применил изменение",
+               rp["loop"]["applied_writes"] == 1 and (root / "src" / "a.py").exists())
+
     # orchestrated-путь (generic-orchestrator, mock без evidence -> blocked, но транзакция прошла)
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -191,11 +225,13 @@ def main(argv):
     rp.add_argument("--execute", action="store_true")
     rp.add_argument("--feature", help="имя существующей фичи — привязать WorkItem к ней "
                                       "(иначе wi-<hash>; срезы истории не накопятся на одну фичу)")
+    rp.add_argument("--engine", default="controller", choices=["controller", "pipeline"],
+                    help="controller (план+каркас) или pipeline (собранный движок: detect->tool-loop->evidence->гейты->PR)")
     rp.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "run":
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
-                     a.runtime, a.provider, a.session, a.execute, feature=a.feature)
+                     a.runtime, a.provider, a.session, a.execute, feature=a.feature, engine=a.engine)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

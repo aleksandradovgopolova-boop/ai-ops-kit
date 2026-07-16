@@ -57,7 +57,7 @@ def open_draft_pr(root, branch, title, body="", base="main", push=True):
     if push:
         prc, _, perr = _git(root, "push", "-u", "origin", branch)
         if prc != 0:
-            return {"status": "error", "note": f"git push не удался ({type('e',(),{})}): {perr[:200]}"}
+            return {"status": "error", "note": f"git push не удался (rc={prc}): {perr[:200]}"}
     payload = _pr_payload(branch, title, body, base)
     base_url = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     req = urllib.request.Request(

@@ -101,6 +101,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         if rc == 0 or wp.is_dir():
             work_root = wp
             worktree_rel = str(wp.relative_to(child_root))
+        else:
+            # finding adversarial-review: НЕ деградируем молча в основное дерево — это исполнило бы
+            # правки и коммит в main вопреки isolate=True. Останавливаемся честной ошибкой.
+            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                    "status": "error",
+                    "error": f"isolate=True, но worktree .ai/worktrees/{wid} не создан "
+                             f"(ветка занята? не в .gitignore?) — прогон остановлен, основное дерево не тронуто",
+                    "loop": None, "isolation": {"worktree": None}, "gates": None,
+                    "ready_for_pr": False}
 
     # 1. детект стека (в рабочем дереве)
     profile = project_detector.detect(work_root)

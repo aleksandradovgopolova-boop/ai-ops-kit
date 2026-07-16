@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.62.0
+  package_version: 2.63.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -226,11 +226,20 @@ execution_engine:
         - "intake_completeness закрывается evidence из сигналов (классификация уже есть) — execution_pipeline._intake_evidence"
         - "pytest exit 5 (нет тестов) -> warn, не fail; tests_passed не выдаётся, hard-fail не ставится — evidence_collector"
     fixed_v2_61:
-      - "умное ослабление implementation_verification: build/lint/typecheck освобождаются, если инструмента НЕТ в подтверждённом стеке (не фабрикация — записано в warnings); tests освобождаются по умолчанию + громкий warn, allow_missing_tests=False эскалирует до блока. Решение ep-2026-07-16-smart-loosening"
+      - "умное ослабление implementation_verification: build/lint/typecheck освобождаются, если инструмента НЕТ в ДЕТЕКТИРОВАННОМ (draft) стеке — детерминированно из манифестов, не фабрикация; записано в warnings; tests освобождаются по умолчанию + warn, allow_missing_tests=False -> блок. Честно: подтверждение профиля человеком рекомендуется, но не enforced в offline-pipeline (adversarial-review). Решение ep-2026-07-16-smart-loosening"
     fixed_v2_62:
       - "worktree-изоляция прогона: pipeline(isolate=True) гоняет весь движок в .ai/worktrees/<id> на ветке ai-ops/<id> — основное дерево не тронуто"
       - "draft PR — механизм: tools/pr_open.py (GitHub REST, токен из env, draft:true); pipeline(open_pr=True) вызывает его когда ready_for_pr; нет токена -> honest unavailable (не имитируется)"
-    engine_status: "ПОЛНАЯ цепочка собрана: worktree -> detect -> tool-loop -> commit -> evidence на SHA -> гейты -> draft PR. spine+commit подтверждены живьём (v2.60). Механизмы draft PR/worktree/умное-ослабление — offline; живой PR и 3 реальные задачи — эмпирическая обкатка на стороне child"
+    adversarial_review_v2_63:
+      note: "workflow-ревью всего диффа аудита (efeab38..HEAD): 3 ревьюера x adversarial-verify; 6 подтверждённых дефектов -> исправлены"
+      fixed:
+        - "SECURITY: scrub_env denylist был дыряв (голый _KEY, DATABASE_URL/DSN/JWT/PAT доходили до shell модели) -> перевод на ALLOWLIST + passthrough"
+        - "evidence_collector: pytest exit5 в полиглот-репо ронял весь test-check -> по-руновая обработка (реальный тест рядом с pytest-exit5 засчитывается)"
+        - "execution_pipeline: isolate=True при сбое worktree.add молча уходил в основное дерево -> теперь честная ошибка, прогон остановлен"
+        - "ai_ops_run: engine=pipeline — собранный движок подключён к контроллеру (был только в selftest)"
+        - "honesty: 'профиль подтверждает человек' -> уточнено (детектированный draft; подтверждение рекомендуется, не enforced)"
+        - "pr_open: мусор type('e',(),{}) в сообщении об ошибке push -> rc"
+    engine_status: "Цепочка собрана И подключена к контроллеру: ai_ops_run.run(engine='pipeline') / ai-ops run --engine pipeline делегирует в execution_pipeline (worktree -> detect -> tool-loop -> commit -> evidence на SHA -> гейты -> draft PR). spine+commit подтверждены живьём (v2.60). Остаток — эмпирика на стороне child: полный живой прогон pipeline (live-предложитель), живой PR, 3 реальные задачи"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано
