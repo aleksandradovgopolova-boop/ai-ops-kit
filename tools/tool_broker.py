@@ -179,6 +179,27 @@ def _within_root(root, rel):
         return False
 
 
+_SECRET_RE = re.compile(
+    r"(TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|APIKEY|PRIVATE[_-]?KEY|CREDENTIAL|"
+    r"AUTH[_-]?KEY|ACCESS[_-]?KEY|SESSION|COOKIE)", re.I)
+_SECRET_PREFIX = ("AWS_", "GH_", "GITHUB_", "OPENAI_", "ANTHROPIC_", "GIGACHAT_",
+                  "SSH_", "GPG_", "NPM_TOKEN", "PYPI_")
+
+
+def scrub_env(env=None):
+    """Убрать переменные-секреты из окружения shell-команд (finding аудита: shell=True отдавал
+    модели весь env с токенами). Скрабим по имени: паттерн-секрет ИЛИ известный секрет-префикс.
+    Функциональный env (PATH, HOME, NODE_ENV, LANG…) сохраняется — сборка/тесты не ломаются.
+    Полная FS/сеть-изоляция — это контейнер (заявлено в постуре, не имитируется здесь)."""
+    src = dict(os.environ if env is None else env)
+    out = {}
+    for k, v in src.items():
+        if _SECRET_RE.search(k) or any(k.startswith(p) for p in _SECRET_PREFIX):
+            continue
+        out[k] = v
+    return out
+
+
 def _revision(root):
     rc = subprocess.run(["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
                         capture_output=True, text=True)
@@ -213,9 +234,9 @@ def execute(action: dict, root, policy: Policy) -> dict:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(action.get("content", ""), encoding="utf-8")
             ev.update({"ok": True, "bytes": len(action.get("content", "").encode("utf-8"))})
-        else:  # shell / git
+        else:  # shell / git — env со скрабленными секретами (модель не получает токены)
             r = subprocess.run(action["command"], shell=True, cwd=str(root),
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, env=scrub_env())
             ev.update({"ok": r.returncode == 0, "exit_code": r.returncode,
                        "command": action["command"],
                        "output_tail": (r.stdout + r.stderr)[-400:]})
@@ -307,6 +328,23 @@ def selftest():
                not ev_tr["allowed"] and not (root.parent / "escapee").exists())
         expect("нормальный путь в scope по-прежнему пишется",
                execute({"op": "write", "path": "src/ok.ts", "content": "y"}, root, trav)["ok"])
+
+        # SECURITY (finding аудита): секрет из env НЕ виден shell-команде, а PATH сохранён
+        os.environ["MY_FAKE_TOKEN"] = "sk-super-secret-123"
+        os.environ["ANTHROPIC_API_KEY"] = "sk-ant-xyz"
+        try:
+            ev_sec = execute({"op": "shell", "command": "echo TOK=[$MY_FAKE_TOKEN] KEY=[$ANTHROPIC_API_KEY] PATH_SET=${PATH:+yes}"},
+                             root, trav)
+            out = ev_sec.get("output_tail", "")
+            expect("shell не видит секрет из env (scrub)",
+                   "sk-super-secret-123" not in out and "sk-ant-xyz" not in out
+                   and "TOK=[]" in out and "KEY=[]" in out)
+            expect("функциональный env (PATH) сохранён для сборки", "PATH_SET=yes" in out)
+        finally:
+            os.environ.pop("MY_FAKE_TOKEN", None); os.environ.pop("ANTHROPIC_API_KEY", None)
+        expect("scrub_env убирает секрет-по-имени, оставляет обычные",
+               "GITHUB_TOKEN" not in scrub_env({"GITHUB_TOKEN": "x", "PATH": "/bin", "NODE_ENV": "prod"})
+               and scrub_env({"PATH": "/bin"}).get("PATH") == "/bin")
 
     print("tool_broker selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

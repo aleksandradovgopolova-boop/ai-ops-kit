@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.56.0] — 2026-07-16
+
+**P0-эпик, срез 3 (security): shell-команды больше не видят секреты.** Аудит: `shell=True`
+исполнял строку с ПОЛНЫМ окружением процесса — модель-предложитель могла прочитать любые
+токены. Теперь Broker скрабит секреты из env перед запуском команды.
+
+### Fixed (security)
+- **tools/tool_broker.py** — `scrub_env()`: удаляет переменные-секреты по имени
+  (TOKEN/SECRET/PASSWORD/API_KEY/PRIVATE_KEY/CREDENTIAL/… + префиксы AWS_/GH_/GITHUB_/OPENAI_/
+  ANTHROPIC_/GIGACHAT_/SSH_/GPG_/PYPI_); функциональный env (PATH/HOME/NODE_ENV/LANG) сохранён,
+  сборка/тесты не ломаются. `execute()` запускает shell/git с этим env. Selftest: секрет из
+  env не виден команде (`TOK=[]`), PATH сохранён, `scrub_env` чистит по имени.
+
+### Changed
+- **manifest** — `fixed_v2_56`; shell-пункт p0_backlog уточнён: env-скраб сделан, полный
+  FS/сеть-jail (контейнер) — честно НЕ сделано; `package_version` → 2.56.0.
+
+**Честная граница:** это НЕ полный sandbox. Запрет чтения/записи вне worktree через shell,
+отключение сети и allowlist команд требуют контейнера/namespace — заявлено в p0_backlog как
+не сделанное, не имитируется.
+
 ## [2.55.0] — 2026-07-16
 
 **P0-эпик, срез 2: условный human_approval больше не блокирует безусловно.** Аудит: гейт
