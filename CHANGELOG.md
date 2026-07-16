@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.43.0] — 2026-07-16
+
+**Concurrency preflight видит открытые PR без gh — REST-фоллбэк.** Раньше, если в среде нет
+`gh` CLI, пункт «открытые PR по тем же путям» помечался `unavailable` (finding обкатки в
+ии-среде). Теперь при отсутствии `gh` preflight ходит в GitHub REST API напрямую (`urllib`,
+stdlib) с токеном из env — и честно видит конкурирующие PR.
+
+### Added
+- **tools/concurrency_preflight.py** — `open_prs_via_rest` (REST-фоллбэк), `_parse_owner_repo`
+  (owner/repo из https/ssh remote), `_prs_overlap` (чистая функция пересечения путей),
+  `_github_token`/`_gh_api_get`. Порядок источников: `gh` CLI → GitHub REST → `unavailable`.
+  Новые selftest-кейсы: разбор URL, пересечение путей, REST без токена → честный `unavailable`.
+
+### Changed
+- **manifest** — `execution_engine.concurrency_preflight.open_prs_sources: [gh-cli, github-rest]`;
+  dogfood-finding о слепоте к PR помечен ЗАКРЫТО; `execution_engine.phase3_done: [preflight-github-rest]`;
+  из `not_yet` убран пункт про доступ preflight к GitHub API; `package_version` → 2.43.0.
+
+**Границы честности:** токен только из env (`GITHUB_TOKEN`/`GH_TOKEN`), в вывод и логи не
+попадает; при ошибке API сообщается класс ошибки, не тело запроса. GHE — через `GITHUB_API_URL`.
+Нет ни `gh`, ни токена → `unavailable` (не выдаётся за `clean`).
+
 ## [2.42.2] — 2026-07-16
 
 **tool-loop подтверждён живьём полностью — `live_proposal_quality: verified`.** Повторный живой

@@ -11,14 +11,16 @@
   1. base_changes — коммиты в базовой ветке (origin/main), затронувшие целевые пути
      ПОСЛЕ того, как отделилась текущая ветка (merge-base..base). Непусто => премисса
      могла устареть: перепроверить против актуального main, а не базы ветки.
-  2. open_prs — открытые PR, трогающие те же пути (best-effort через gh, если доступен).
+  2. open_prs — открытые PR, трогающие те же пути. Порядок: gh CLI (если авторизован) ->
+     GitHub REST API (токен GITHUB_TOKEN/GH_TOKEN из env) -> unavailable.
   3. active_work — пересечение по зонам с реестром активных работ (если передан --areas).
 
 Вердикт: clean | collision. collision => рекомендация (координация / rebase на актуальный
 main / сузить scope / согласовать владельца по OwnershipMap).
 
 Границы честности: git-часть (base_changes) — детерминирована, только git. Открытые PR
-требуют GitHub API (gh); если gh нет — пункт помечается unavailable, не выдаётся за clean.
+проверяются через gh или REST (v2.43): токен только из env, в вывод/логи не попадает; если
+нет ни gh, ни токена — пункт помечается unavailable, не выдаётся за clean.
 
 Использование:
   concurrency_preflight.py --paths a.ts,b.ts [--base origin/main] [--repo .]
@@ -30,14 +32,85 @@ main / сузить scope / согласовать владельца по Owner
 
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
 def _git(repo, *args):
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+
+def _parse_owner_repo(remote_url):
+    """owner/repo из git remote URL (https, ssh, с .git и без). None, если не GitHub-подобный."""
+    if not remote_url:
+        return None
+    u = remote_url.strip()
+    # git@host:owner/repo(.git)  |  https://host/owner/repo(.git)  |  ssh://git@host/owner/repo
+    m = re.search(r"[:/]([^/:]+)/([^/]+?)(?:\.git)?$", u)
+    if not m:
+        return None
+    return m.group(1), m.group(2)
+
+
+def _prs_overlap(pr_records, paths):
+    """Чистая функция: из [{number,title,files:[...]}] выбрать PR, трогающие paths."""
+    want = set(paths)
+    hits = []
+    for pr in pr_records:
+        files = set(pr.get("files") or [])
+        shared = sorted(want & files)
+        if shared:
+            hits.append({"number": pr.get("number"), "title": pr.get("title"),
+                         "shared_paths": shared})
+    return hits
+
+
+def _github_token():
+    """Токен только из env (GITHUB_TOKEN / GH_TOKEN). В логи/вывод не попадает."""
+    return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+
+
+def _gh_api_get(path, token):
+    """GET к GitHub REST API. host из GITHUB_API_URL (для GHE) или api.github.com."""
+    base = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+    req = urllib.request.Request(base + path, headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "ai-ops-preflight",
+    })
+    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 (доверенный host из env)
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def open_prs_via_rest(repo, paths, max_prs=30):
+    """REST-фоллбэк (без gh): открытые PR, трогающие paths. Токен — из env; иначе unavailable."""
+    token = _github_token()
+    if not token:
+        return {"status": "unavailable", "note": "нет gh и нет GITHUB_TOKEN/GH_TOKEN — открытые PR не проверены", "prs": []}
+    rc, url, _ = _git(repo, "remote", "get-url", "origin")
+    owner_repo = _parse_owner_repo(url) if rc == 0 else None
+    if not owner_repo:
+        return {"status": "unavailable", "note": "не удалось определить owner/repo из origin", "prs": []}
+    owner, name = owner_repo
+    try:
+        prs = _gh_api_get(f"/repos/{owner}/{name}/pulls?state=open&per_page={max_prs}", token)
+        records = []
+        for pr in prs[:max_prs]:
+            num = pr.get("number")
+            files = _gh_api_get(f"/repos/{owner}/{name}/pulls/{num}/files?per_page=100", token)
+            records.append({"number": num, "title": pr.get("title"),
+                            "files": [f.get("filename") for f in files]})
+        return {"status": "checked", "via": "rest", "prs": _prs_overlap(records, paths)}
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as e:
+        # не раскрываем токен: сообщаем класс ошибки, не тело запроса
+        return {"status": "unavailable", "note": f"GitHub API недоступен ({type(e).__name__})", "prs": []}
 
 
 def base_changes(repo, base, paths):
@@ -56,30 +129,34 @@ def base_changes(repo, base, paths):
     return changes
 
 
-def open_prs_overlapping(repo, paths):
-    """Best-effort: открытые PR, трогающие paths. Требует gh; иначе — unavailable."""
-    # есть ли gh (может вообще отсутствовать -> FileNotFoundError)
+def open_prs_via_gh(repo, paths):
+    """Открытые PR через gh CLI (если установлен и авторизован). None -> gh недоступен."""
     try:
         probe = subprocess.run(["gh", "--version"], capture_output=True, text=True)
     except (OSError, FileNotFoundError):
-        return {"status": "unavailable", "note": "gh CLI недоступен — открытые PR не проверены", "prs": []}
+        return None
     if probe.returncode != 0:
-        return {"status": "unavailable", "note": "gh CLI недоступен — открытые PR не проверены", "prs": []}
+        return None
     try:
         r = subprocess.run(["gh", "pr", "list", "--state", "open", "--json", "number,title,files"],
                            cwd=str(repo), capture_output=True, text=True)
         if r.returncode != 0:
-            return {"status": "unavailable", "note": r.stderr.strip() or "gh pr list failed", "prs": []}
-        want = set(paths)
-        hits = []
-        for pr in json.loads(r.stdout or "[]"):
-            files = {f.get("path") for f in (pr.get("files") or [])}
-            shared = sorted(want & files)
-            if shared:
-                hits.append({"number": pr.get("number"), "title": pr.get("title"), "shared_paths": shared})
-        return {"status": "checked", "prs": hits}
-    except (OSError, json.JSONDecodeError) as e:
-        return {"status": "unavailable", "note": str(e), "prs": []}
+            return None
+        records = [{"number": pr.get("number"), "title": pr.get("title"),
+                    "files": [f.get("path") for f in (pr.get("files") or [])]}
+                   for pr in json.loads(r.stdout or "[]")]
+        return {"status": "checked", "via": "gh", "prs": _prs_overlap(records, paths)}
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def open_prs_overlapping(repo, paths):
+    """Открытые PR, трогающие paths. Порядок: gh (авторизован) -> REST (токен из env) -> unavailable.
+    unavailable НЕ выдаётся за clean — честная неизвестность."""
+    via_gh = open_prs_via_gh(repo, paths)
+    if via_gh is not None:
+        return via_gh
+    return open_prs_via_rest(repo, paths)   # REST-фоллбэк или честный unavailable
 
 
 def active_work_overlap(active_work_path, areas):
@@ -137,8 +214,10 @@ def print_human(r):
     if prs.get("status") == "unavailable":
         print(f"  · открытые PR: не проверены ({prs.get('note')})")
     elif prs.get("prs"):
-        print(f"  ⚠ открытые PR по тем же путям: " +
+        print(f"  ⚠ открытые PR по тем же путям (via {prs.get('via', '?')}): " +
               ", ".join(f"#{p['number']}" for p in prs["prs"]))
+    elif prs.get("status") == "checked":
+        print(f"  · открытые PR проверены (via {prs.get('via', '?')}): пересечений нет")
     for a in r["active_work_overlap"]:
         print(f"  ⚠ активная работа '{a['id']}' (ветка {a['branch']}): зоны {', '.join(a['shared_areas'])}")
     for rec in r.get("recommendation", []):
@@ -193,6 +272,31 @@ def selftest():
         # база недоступна -> base_changes 'unknown', не выдаём за clean молча
         r4 = preflight(repo, "origin/nonexistent", ["f.txt"])
         expect("нет базы -> base_changes unknown", isinstance(r4["base_changes"], str))
+
+        # REST-фоллбэк без токена -> честный unavailable (сеть не трогаем)
+        _saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        try:
+            rest = open_prs_via_rest(repo, ["f.txt"])
+            expect("REST без токена -> unavailable (не clean молча)",
+                   rest["status"] == "unavailable" and "GITHUB_TOKEN" in rest["note"])
+        finally:
+            for k, v in _saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    # разбор owner/repo из разных форм remote URL (чистая функция)
+    expect("parse: https .git", _parse_owner_repo("https://github.com/acme/widget.git") == ("acme", "widget"))
+    expect("parse: https без .git", _parse_owner_repo("https://github.com/acme/widget") == ("acme", "widget"))
+    expect("parse: ssh scp-стиль", _parse_owner_repo("git@github.com:acme/widget.git") == ("acme", "widget"))
+    expect("parse: мусор -> None", _parse_owner_repo("не-url") is None)
+
+    # чистая логика пересечения PR (без сети)
+    recs = [{"number": 7, "title": "A", "files": ["src/a.ts", "src/b.ts"]},
+            {"number": 8, "title": "B", "files": ["docs/x.md"]}]
+    hits = _prs_overlap(recs, ["src/b.ts"])
+    expect("overlap: PR#7 трогает целевой путь", len(hits) == 1 and hits[0]["number"] == 7
+           and hits[0]["shared_paths"] == ["src/b.ts"])
+    expect("overlap: непересекающийся -> пусто", _prs_overlap(recs, ["src/c.ts"]) == [])
 
     print("concurrency_preflight selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
