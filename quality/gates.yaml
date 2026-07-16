@@ -118,6 +118,14 @@ gates:
     applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS, AI_FEATURE, CRITICAL]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [build_passed, lint_passed, typecheck_passed, tests_passed, tested_revision]
+    # v2.33: детерминированный evidence-контракт — что должен вернуть исполняемый runner
+    # (не «pass словом»). Enforcement формы — validate_evidence_schema.py; в gate_executor
+    # применяется, когда evidence подан в структурной форме (иначе required_evidence-дисциплина).
+    evidence_schema:
+      build:  {command: string, exit_code: integer, revision: git_sha, log_path: path}
+      lint:   {command: string, exit_code: integer, revision: git_sha}
+      typecheck: {command: string, exit_code: integer, revision: git_sha}
+      tests:  {command: string, passed: integer, failed: integer, revision: git_sha, log_path: path}
 
   code_review:
     id: code_review

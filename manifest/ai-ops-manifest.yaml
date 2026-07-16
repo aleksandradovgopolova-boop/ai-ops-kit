@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.32.0
+  package_version: 2.33.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -127,10 +127,13 @@ execution_engine:
     tool: tools/run_plan.py                 # plan (base_workflow + tracks -> gates) / validate
     tracks_registry: registry/tracks.yaml   # трек -> signal -> gates (Design/Analytics/Docs by Default)
     child_path: "features/<id>/run-plan.yaml"
-  not_yet:                                  # следующие срезы Фазы 1+
-    - structured-reviewer-outputs           # источник истины вместо regex по markdown (v2.33)
-    - per-gate-evidence-schema              # build/tests: command/exit_code/revision/log
-    - unified `ai-ops run` controller       # эпик, часть — 3.0
+  phase1_done: [run-plan-tracks, structured-reviewer-outputs, per-gate-evidence-schema]
+  reviewer_result_schema: schemas/reviewer-result.schema.json   # источник истины вместо regex
+  reviewer_result_validator: validation/validate_reviewer_result.py
+  not_yet:                                  # следующие срезы эпика
+    - unified `ai-ops run` controller       # Фаза 2, часть — 3.0
+    - real tool loop for generic-orchestrator
+    - stack-aware deterministic evidence collectors
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

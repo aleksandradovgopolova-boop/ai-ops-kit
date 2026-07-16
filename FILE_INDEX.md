@@ -447,6 +447,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/provenance.schema.json`
 - `schemas/provider-entry.schema.json`
 - `schemas/registry-entity.schema.json`
+- `schemas/reviewer-result.schema.json` — структурный вердикт ревьюера (источник истины, v2.33)
 - `schemas/run-plan.schema.json` — RunPlan: base_workflow + tracks + агрегированные гейты (v2.32)
 - `schemas/route-decision.schema.json`
 - `schemas/runtime-entry.schema.json`
@@ -528,6 +529,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_openspec_change.py`
 - `validation/validate_presets.py`
 - `validation/validate_references.py`
+- `validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
 - `validation/validate_security_posture.py`
 - `validation/validate_stale_gates.py`
 - `validation/validate_workflow_gates.py`

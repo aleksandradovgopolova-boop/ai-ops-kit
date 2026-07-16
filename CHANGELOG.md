@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.33.0] — 2026-07-15
+
+**Execution Engine — Фаза 1 (часть 2): структурные reviewer-outputs + evidence-схемы
+гейтов.** Убирает «pass словом»: истина о гейте — структура, а не regex по markdown.
+
+### Added
+- **schemas/reviewer-result.schema.json** + **validation/validate_reviewer_result.py**
+  (+ selftest) — reviewer возвращает `{status, checks[], blockers[]}`; `status=fail`
+  обязан иметь blockers; несогласованность (fail-check при общем pass) — ошибка.
+- **gate_executor.collect_evidence** — читает `stage-<id>.reviewer.json` как **источник
+  истины** (приоритет над markdown-regex; regex остался фолбэком для старых артефактов).
+- **quality/gates.yaml → implementation_verification.evidence_schema** — детерминированный
+  контракт evidence (build/lint/typecheck/tests: command/exit_code/revision/log_path);
+  `gate_executor.validate_evidence_schemas` проверяет well-formedness (типы из словаря).
+
+### Changed
+- **manifest** — `execution_engine.phase1_done` [run-plan-tracks, structured-reviewer-outputs,
+  per-gate-evidence-schema]; `not_yet` сдвинут на Фазу 2 (`ai-ops run`, tool loop, stack
+  evidence collectors); `package_version` → 2.33.0.
+
+Фаза 1 закрыта. Enforcement структурной формы evidence — по мере обкатки (сейчас
+gate_executor принимает структурный reviewer-result как истину; строгая проверка формы
+build/test-evidence — опция, не ломает существующие потоки).
+
 ## [2.32.0] — 2026-07-15
 
 **Execution Engine — Фаза 1 (часть 1): RunPlan + base_workflow/tracks.** Модель «один
