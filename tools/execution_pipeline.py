@@ -19,6 +19,7 @@
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -46,9 +47,27 @@ def _profile_summary(profile):
     return f"Стек: {langs}. Команды проверки: {cmds or 'нет'}."
 
 
+def _git(root, *args):
+    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+
+def _commit_on_branch(root, branch, message):
+    """Зафиксировать применённые изменения на рабочей ветке (не в main). -> commit SHA или None."""
+    _git(root, "checkout", "-q", "-B", branch)   # рабочая ветка (не трогаем main)
+    _git(root, "add", "-A")
+    rc, _, _ = _git(root, "diff", "--cached", "--quiet")
+    if rc == 0:                                   # нечего коммитить
+        return None
+    _git(root, "commit", "-q", "-m", message)
+    rc, sha, _ = _git(root, "rev-parse", "--short", "HEAD")
+    return sha if rc == 0 else None
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
-                 max_steps=20, feature=None):
-    """Один прогон движка: детект -> правки через tool-loop -> evidence -> гейты RunPlan."""
+                 max_steps=20, feature=None, commit=False):
+    """Один прогон движка: детект -> правки через tool-loop -> [commit на ветке] ->
+    evidence (на зафиксированном SHA, если commit) -> гейты RunPlan."""
     child_root = Path(child_root)
     signals = dict(signals or {})
     signals.setdefault("task_text", task)
@@ -66,15 +85,31 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     ctx = f"{task}\n\n{_profile_summary(profile)}"
     loop = tool_loop.run_loop(proposer, child_root, pol, budget=budget,
                               max_steps=max_steps, base_context=ctx)
+    applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
 
-    # 5. evidence: реальный прогон команд профиля через Broker
+    # 5. commit на рабочей ветке (finding аудита: evidence должен биться о ТОЧНЫЙ SHA, не
+    #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
+    committed_sha, work_branch = None, None
+    if commit and applied:
+        work_branch = f"ai-ops/{plan['workitem_id']}"
+        committed_sha = _commit_on_branch(child_root, work_branch,
+                                          f"ai-ops: {task[:60]}")
+
+    # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     coll = evidence_collector.collect(profile, child_root, pol)
 
-    # 6. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval)
+    # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval)
     gates = gate_executor.evaluate(plan["base_workflow"], coll["gate_evidence"],
                                    gate_ids=plan["gates"], signals=signals)
 
-    applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
+    # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)
+    evidence_revision = coll.get("revision")
+    revision_matches = (committed_sha is not None and evidence_revision == committed_sha)
+
+    not_yet = ["открытие draft PR (GitHub API)", "живой предложитель (swap провайдера)"]
+    if not commit:
+        not_yet.insert(0, "commit+reverify (запусти с commit=True)")
+
     return {
         "schema_version": 1, "kind": "execution-pipeline",
         "workitem_id": plan["workitem_id"],
@@ -83,12 +118,16 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                     "undetermined": profile.get("undetermined", [])},
         "loop": {"stopped": loop["stopped"], "steps": loop["steps"],
                  "applied_writes": len(applied), "denied": len(loop["denied"])},
+        "commit": {"branch": work_branch, "sha": committed_sha,
+                   "evidence_revision": evidence_revision,
+                   "evidence_on_exact_sha": revision_matches},
         "checks": coll["checks"],
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
                   "blocked": gates["blocked"]},
-        # honest: «готово» = петля дошла до done И гейты не блокируют. Draft PR/commit — ещё не тут.
-        "ready_for_pr": (loop["stopped"] == "done") and (not gates["blocked"]),
-        "not_yet": ["commit+reverify на точном SHA", "открытие draft PR", "живой предложитель"],
+        # honest: «готово к PR» = петля done + гейты не блокируют + (если коммитили) evidence на SHA
+        "ready_for_pr": (loop["stopped"] == "done") and (not gates["blocked"])
+                        and (not commit or revision_matches),
+        "not_yet": not_yet,
     }
 
 
@@ -136,6 +175,23 @@ def selftest():
                "blocked" in rep["gates"] and isinstance(rep["gates"]["evaluated"], list))
         expect("pipeline: workitem привязан к именованной фиче", rep["workitem_id"] == "add-fn")
         expect("pipeline: честный not_yet (commit/PR/живой)", len(rep["not_yet"]) == 3)
+
+        # v2.59 (finding аудита): commit=True -> изменения на рабочей ветке, evidence на ТОЧНОМ SHA
+        _, orig_branch, _ = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+        it_c = iter([
+            {"op": "write", "path": "src/mul.py", "content": "def mul(a,b): return a*b\n"},
+            {"done": True, "summary": "mul"},
+        ])
+        rep_c = run_pipeline("добавить mul", sig, root, lambda c: next(it_c),
+                             policy=pol, budget={"max_model_calls": 10}, feature="mul-fn", commit=True)
+        expect("commit: создан коммит на рабочей ветке (не main)",
+               rep_c["commit"]["sha"] and rep_c["commit"]["branch"] == "ai-ops/mul-fn")
+        expect("commit: evidence собран на ТОЧНОМ зафиксированном SHA",
+               rep_c["commit"]["evidence_on_exact_sha"] is True
+               and rep_c["commit"]["evidence_revision"] == rep_c["commit"]["sha"])
+        expect("commit: main не тронут (работа на ветке ai-ops/*)",
+               _git(root, "rev-parse", "--abbrev-ref", "HEAD")[1] == "ai-ops/mul-fn")
+        _git(root, "checkout", "-q", orig_branch)   # вернуться на исходную ветку
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

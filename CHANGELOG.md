@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.59.0] — 2026-07-16
+
+**P0-эпик, срез 6: commit + reverify evidence на точном SHA.** Аудит: evidence бился о
+pre-change HEAD, а тесты шли по грязному дереву — «revision есть, но не идентифицирует
+проверенное состояние». Теперь pipeline коммитит и собирает evidence на зафиксированном SHA.
+
+### Changed
+- **tools/execution_pipeline.py** — `run_pipeline(..., commit=True)`: применённые изменения
+  коммитятся на рабочей ветке `ai-ops/<workitem>` (НЕ в main), затем evidence собирается на
+  чистом дереве -> `commit.evidence_on_exact_sha`. `ready_for_pr` теперь требует совпадения
+  ревизии evidence с зафиксированным SHA. Selftest: коммит на ветке, evidence на точном SHA,
+  main не тронут.
+- **manifest** — `fixed_v2_59`; пункт про evidence-на-SHA убран из p0_backlog; пункт про
+  единый pipeline уточнён (осталось live: draft PR, живой предложитель, worktree-изоляция);
+  `package_version` → 2.59.0.
+
+**Осталось в P0 (нужен live/GitHub, НЕ offline):** открытие draft PR (GitHub API), живой
+предложитель (swap провайдера), worktree-изоляция прогона, установимый CLI с движком в child,
+проверка на 3 реальных задачах.
+
 ## [2.58.0] — 2026-07-16
 
 **P0-эпик, срез 5: единый execution-pipeline (spine) — сборка исполнения в ОДИН движок.**
