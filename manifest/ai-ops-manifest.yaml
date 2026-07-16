@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.48.0
+  package_version: 2.49.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -188,10 +188,12 @@ execution_engine:
     slice2_done: true                       # v2.48: по-пакетная установка (installer фильтрует managed_set)
     per_package_install:
       config_field: ".ai-ops.yaml -> packages: [список]"   # отсутствует -> все (обратная совместимость)
-      rule: "неназначенный пакету файл ставится всегда (до физразноса — срез 3); аддитивно"
-    remaining_slices: [physical-tree-split, migration-guide]
-  not_yet:                                  # breaking-часть 3.0 — по явному решению владельца
-    - "3.0 срезы 3–4: физический разнос дерева по packages/<name>/ + MIGRATION_GUIDE (обкатка на child)"
+      rule: "неназначенный пакету файл ставится всегда (до физразноса); аддитивно"
+    additive_complete: true                 # v2.49: срезы 0–2 дают всю пользу пакетов без переноса
+    physical_split_deferred_to: "3.1"       # решение decisions ep-2026-07-16-tree-split
+    deferral_reason: "перенос ломает CI-контракт установленных child (/tmp/ai-ops-kit/installer|validation пути); польза (гранулярная установка) уже дана; разнос оправдан только раздельной дистрибуцией (3.1)"
+  not_yet:                                  # 3.1 (breaking) — при раздельной дистрибуции пакетов
+    - "3.1: физический разнос дерева по packages/<name>/ + энтрипойнт-шимы + миграция child-CI + MIGRATION_GUIDE"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
