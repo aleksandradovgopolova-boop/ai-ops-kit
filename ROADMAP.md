@@ -156,11 +156,13 @@
   (`live_proposal_quality: verified`). Concurrency preflight видит открытые PR через GitHub
   REST-фоллбэк без `gh` (токен из env). Stack-aware evidence collector гоняет команды
   RepositoryProfile через Broker и отдаёт структурный evidence в `implementation_verification`.
-- **3.0 в работе (по срезам, `docs/3.0-design.md`):** срез 0 ✅ — границы 5 пакетов объявлены
-  и стережутся валидатором (`validate_package_boundaries.py`), файлы не двигали; срез 1 ✅ —
-  `ai-run` канонический вход, `ai-start-task` сохранён совместимым алиасом. Остаётся (breaking,
-  по явному решению + обкатка на child): по-пакетная установка, физический разнос дерева,
-  MIGRATION_GUIDE.
+- **3.0 additive-complete (`docs/3.0-design.md`):** срез 0 ✅ границы 5 пакетов + валидатор
+  (`validate_package_boundaries.py`); срез 1 ✅ `ai-run` канонический вход (`ai-start-task` —
+  совместимый алиас); срез 2 ✅ по-пакетная установка (`.ai-ops.yaml packages`, дефолт = все).
+  Всё аддитивно, ни один child не сломан.
+- **Физический разнос дерева → 3.1** (решение `ep-2026-07-16-tree-split`): перенос ломает
+  CI-контракт установленных child и не даёт пользы сверх уже сделанного; оправдан только
+  раздельной дистрибуцией пакетов. Тогда же — энтрипойнт-шимы, миграция child-CI, MIGRATION_GUIDE.
 
 ## Правила движения по roadmap
 
