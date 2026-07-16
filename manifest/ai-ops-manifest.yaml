@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.42.2
+  package_version: 2.43.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -142,7 +142,7 @@ execution_engine:
     execution: {claude-code: planned+scaffold (рантайм исполняет), generic-orchestrator: orchestrated}
   dogfood_findings:                         # v2.35: из обкатки 2.34 в ии-среде
     - planned-run НЕ материализует .ai/runtime/workitems/<id>/ (run_state — обещание пути; папку создаёт рантайм при исполнении) -> run_state_materialized в run-report
-    - concurrency_preflight слеп к открытым PR без gh/токена (open_prs.status: unavailable) -> Tool Broker обязан дать доступ к GitHub API
+    - concurrency_preflight слеп к открытым PR без gh/токена (open_prs.status: unavailable) -> ЗАКРЫТО v2.43 REST-фоллбэком (токен из env)
     - child-CI пин kit в protected ci.yml давал трение на каждом update -> ai-ops-validate.yml: пин = installed_version из .ai-ops.yaml
   tool_broker:                              # v2.36 Фаза 2 срез 2: контролируемое исполнение
     tool: tools/tool_broker.py               # Policy(level/write_scope/protected) + execute + Evidence
@@ -171,8 +171,8 @@ execution_engine:
     live_proposal_quality: verified          # v2.42.2: живая модель сходится (write->verify->done), не зацикливается
     live_path: "make_model_proposer(make_provider('openai-compatible', <model>)) — swap провайдера"
   phase2_done: [run-controller, tool-broker, execution-budget, tool-loop-live-verified]  # v2.42.2: петля подтверждена живьём
+  phase3_done: [preflight-github-rest]      # v2.43: open_prs через REST-фоллбэк (не только gh)
   not_yet:                                  # следующие срезы эпика
-    - preflight доступ к GitHub API (open_prs без gh слеп — finding обкатки)
     - stack-aware deterministic evidence collectors (Project Detector + adapters)
     - "ai-ops run как ОСНОВНОЙ путь + сплит на 5 пакетов (3.0, breaking)"
 
@@ -261,11 +261,13 @@ session_orchestration:
     anti_pattern: "CLAUDE.md держит только вечные правила; снимок статуса — ссылкой на ProductStatus"
   concurrency_preflight:                      # v2.28: коллизии параллельной работы до старта
     gate: concurrency_preflight                # quality/gates.yaml, stage intake, advisory
-    tool: tools/concurrency_preflight.py       # base_changes (git) + open PRs (best-effort gh) + active-work
+    tool: tools/concurrency_preflight.py       # base_changes (git) + open PRs (gh -> REST) + active-work
     rule: rules/engineering/ConcurrencyAwareness.md
+    open_prs_sources: [gh-cli, github-rest]     # v2.43: REST-фоллбэк (urllib), токен GITHUB_TOKEN/GH_TOKEN из env
     note: >
       git-часть (свежие мержи в base под целевыми путями = устаревшая премисса) детерминирована;
-      открытые PR — best-effort через gh (если нет — помечается unavailable, не выдаётся за clean).
+      открытые PR: gh CLI (если авторизован) -> GitHub REST API (токен только из env, не в логах) ->
+      unavailable (нет ни gh, ни токена; не выдаётся за clean). GHE — через GITHUB_API_URL.
   session_bootstrap:
     command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет
   worktree_per_workitem:                      # v2.24: изоляция файлов на WorkItem
