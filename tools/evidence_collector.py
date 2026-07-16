@@ -60,6 +60,7 @@ def collect(profile, root, policy):
     by_check = _commands_by_check(profile)
     revision = tool_broker._revision(root)
     checks_report, schema_evidence, provided, blockers = {}, {}, [], []
+    not_applicable, tests_absent = [], False   # v2.61: инструмент отсутствует в подтверждённом стеке
 
     for check in CHECK_ORDER:
         flag, schema_key = CHECK_MAP[check]
@@ -67,6 +68,9 @@ def collect(profile, root, policy):
         if not cmds:
             checks_report[check] = {"status": "not_run",
                                     "reason": "команда не определена в профиле (undetermined)"}
+            not_applicable.append(flag)         # нечем проверять -> не применимо к этому стеку
+            if check == "test":
+                tests_absent = True
             continue
         runs, all_ok, any_denied = [], True, False
         for lang, cmd in cmds:
@@ -89,6 +93,7 @@ def collect(profile, root, policy):
         if no_tests:
             checks_report[check] = {"status": "warn", "reason": "нет собранных тестов (pytest exit 5)",
                                     "runs": runs}
+            tests_absent = True
         else:
             status = "pass" if all_ok else "fail"
             checks_report[check] = {"status": status, "runs": runs}
@@ -130,6 +135,11 @@ def collect(profile, root, policy):
         "revision": revision, "checks": checks_report,
         "schema_evidence": schema_evidence,
         "gate_evidence": gate_evidence,
+        # v2.61: флаги, для которых инструмента нет в подтверждённом стеке (не «провал», а
+        # «не применимо»). Потребитель (pipeline/gate) решает: exempt build/lint/typecheck,
+        # tests — по политике (tests_absent).
+        "not_applicable": not_applicable,
+        "tests_absent": tests_absent,
     }
 
 
