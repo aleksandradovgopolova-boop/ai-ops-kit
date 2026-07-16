@@ -147,9 +147,18 @@ runtimes:
       живая модель (--provider anthropic|openai, ключ из env) ИЛИ mock (по умолчанию,
       офлайн). Живой путь opt-in.
     live_provider:
-      status: implemented          # адаптеры anthropic/openai (env-ключ, urllib, честный фолбэк)
-      verified_against_live_api: false   # ЧЕСТНО: в среде разработки ключа не было — не прогонялось против реального API
-      providers: [anthropic, openai]
+      status: implemented          # адаптеры anthropic/openai/openai-compatible (env-ключ, urllib, честный фолбэк)
+      verified_against_live_api: true    # v2.40: живой прогон QUICK на DeepSeek (openai-compatible) в ии-среде
+      verified_evidence:                 # что реально подтверждено живым прогоном (не «поверьте на слово»)
+        provider: openai-compatible      # DeepSeek, base_url + ключ из env
+        workflow: QUICK
+        checked:
+          - "4 стадии, связные артефакты на живой модели (без деградации против mock)"
+          - "audit-log редакция держится: только task_hash, без сырого текста (v2.31)"
+          - "гейты честны против живой модели: убедительный «pass» словами -> BLOCKED без evidence"
+          - "budget-счётчик живой: model_calls=4, budget_exceeded=false (v2.38)"
+        not_verified_yet: "tool-calling петля (модель предлагает действия) — Шаг B, отдельно"
+      providers: [anthropic, openai, openai-compatible]
       opt_in: "--provider (default: mock, офлайн, детерминированный для CI)"
       no_secrets: true             # ключ только из env, в репо/логи не попадает
     default_provider: mock          # офлайн по умолчанию; живой — opt-in через --provider

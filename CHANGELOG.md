@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.40.0] — 2026-07-15
+
+**Живой прогон подтверждён — `verified_against_live_api: true`.** Первый живой Шаг A
+(QUICK на DeepSeek через `openai-compatible`) в ии-среде прошёл чисто по всем точкам.
+
+### Changed
+- **registry/runtimes.yaml → generic-orchestrator.live_provider** — `verified_against_live_api`
+  false → **true** с `verified_evidence` (что именно подтверждено, не «поверьте на слово»):
+  - 4 стадии, связные артефакты на живой модели без деградации против mock;
+  - audit-log редакция держится (только `task_hash`, без сырого текста) — v2.31 на живом вызове;
+  - **гейты честны против живой модели**: убедительный «pass» словами → BLOCKED без evidence;
+  - budget-счётчик живой (`model_calls=4`, `budget_exceeded=false`) — v2.38;
+  - `providers` += `openai-compatible`.
+- **manifest** — `package_version` → 2.40.0.
+
+Честная граница: подтверждён живой **провайдер-адаптер** (модель генерит артефакты стадий).
+tool-calling петля (модель предлагает действия → broker исполняет) — **не** входит в этот
+флип, это отдельный Шаг B. «Зелёный» прогон (evidence-пайплайн + tool-loop) — следующий срез.
+
 ## [2.39.0] — 2026-07-15
 
 **OpenAI-совместимый провайдер (DeepSeek/local) — doc↔code fix + provider-agnostic живой
