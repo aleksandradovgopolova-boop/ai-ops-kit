@@ -545,6 +545,13 @@ def cmd_init(target_dir):
         shutil.copy2(rec_src, rec_dst)
         print(f"установлен CI-workflow автонакопления истории эффекта: {rec_dst} "
               "(на push фиксирует срез по затронутым фичам; baseline метрик закрывается сам).")
+    val_src = PKG / "templates" / "ci" / "ai-ops-validate.yml"
+    val_dst = root / ".github" / "workflows" / "ai-ops-validate.yml"
+    if val_src.exists() and not val_dst.exists():
+        val_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(val_src, val_dst)
+        print(f"установлен CI-workflow валидации установки: {val_dst} "
+              "(пин kit = installed_version из .ai-ops.yaml, без protected-трения).")
     # онбординг: положить рядом объяснение ценности простым языком и показать его
     ob_src = PKG / "docs" / "ONBOARDING.md"
     ob_dst = root / "AI-OPS-ONBOARDING.md"      # не затираем собственный ONBOARDING.md репо

@@ -68,6 +68,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
     # 6. исполнение
     status, run_state = "planned", f".ai/runtime/workitems/{fid}/TaskState.yaml"
+    run_state_materialized = False   # честно: в planned run_state — обещание пути, не файл
     if execute or runtime == "generic-orchestrator":
         import orchestrator
         st, run_dir = orchestrator.run_workflow(
@@ -76,6 +77,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             provider_name=provider_name, verbose=False, workitem_id=fid)
         status = st["status"]
         run_state = str(Path(run_dir) / "TaskState.yaml")
+        run_state_materialized = True
 
     # 7. компактный отчёт
     report = {
@@ -87,6 +89,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         "gates": plan["gates"],
         "runtime": runtime, "execution": "orchestrated" if (execute or runtime == "generic-orchestrator") else "planned",
         "status": status, "run_state": run_state,
+        # честно: в planned run_state — ОБЕЩАНИЕ пути; папку workitems/<id>/ создаёт
+        # рантайм при реальном исполнении стадий, не контроллер. Не полагаться на её
+        # наличие после planned-прогона (finding обкатки v2.34).
+        "run_state_materialized": run_state_materialized,
         "artifacts": {"workitem": f"features/{fid}/workitem.yaml",
                       "run_plan": f"features/{fid}/run-plan.yaml"},
     }
@@ -129,6 +135,8 @@ def selftest():
         r = run("фильтр по статусу в каталоге заказов", sig, root, runtime="claude-code")
         fid = r["workitem_id"]
         expect("planned: статус planned", r["status"] == "planned")
+        expect("planned: run_state НЕ материализован (обещание пути)",
+               r["run_state_materialized"] is False)
         expect("planned: RunPlan записан", (root / "features" / fid / "run-plan.yaml").exists())
         expect("planned: WorkItem записан", (root / "features" / fid / "workitem.yaml").exists())
         expect("planned: run-report записан", (root / "features" / fid / "run-report.json").exists())

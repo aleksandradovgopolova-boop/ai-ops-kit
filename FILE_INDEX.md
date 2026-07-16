@@ -239,6 +239,7 @@
 - `templates/blueprint/FeatureBlueprint.lean.yaml`
 - `templates/blueprint/FeatureBlueprint.yaml`
 - `templates/ci/ai-ops-record.yml` — CI-нетто автонакопления срезов эффекта (v2.30)
+- `templates/ci/ai-ops-validate.yml` — child-CI валидации: пин kit = installed_version, без protected-трения (v2.35)
 - `templates/ci/ai-ops-update.yml`
 - `templates/decisions/DecisionEpisode.md`
 - `templates/decisions/OneWayDoorBrief.md`
