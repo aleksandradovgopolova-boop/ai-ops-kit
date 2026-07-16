@@ -208,6 +208,7 @@
 - `rules/engineering/CodeStyle.md`
 - `rules/engineering/DatabaseChanges.md`
 - `rules/engineering/DependencyPolicy.md`
+- `rules/engineering/ConcurrencyAwareness.md` — осознание параллельной работы, preflight коллизий (v2.28)
 - `rules/engineering/ErrorHandling.md`
 - `rules/meta/repo-onboarding.yaml` — чек-лист онбординга репозитория (v2.22)
 - `rules/meta/skill-authoring.yaml`
@@ -537,6 +538,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/product_health.py`
 - `tools/run_report.py`
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
+- `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
 - `tools/merge_memory.py` — запись знания задачи в память при мердже (v2.25)
 - `tools/worktree.py` — git worktree на WorkItem, изоляция параллельных сессий (v2.24)
 - `tools/workitem.py`

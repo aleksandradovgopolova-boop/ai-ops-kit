@@ -46,6 +46,7 @@ python3 tools/workitem.py --selftest
 python3 tools/active_work.py --selftest
 python3 tools/worktree.py --selftest
 python3 tools/merge_memory.py --selftest
+python3 tools/concurrency_preflight.py --selftest
 python3 validation/validate_security_posture.py --selftest
 python3 validation/validate_security_posture.py
 python3 validation/validate_duties.py --selftest

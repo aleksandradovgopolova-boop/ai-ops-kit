@@ -20,6 +20,12 @@
    - иначе → контракт по selection_criteria.task_type;
    - неизвестный тип → ENGINEERING (честный default).
 4. Показать выбранный workflow и причину.
+4a. **Concurrency preflight** (гейт `concurrency_preflight`, пишущие workflow): по целевым
+   файлам прогнать `tools/concurrency_preflight.py --paths <файлы> --base origin/main` —
+   открытые PR по тем же путям + свежие мержи в base + перепроверка премиссы против
+   актуального main (не базы ветки). `verdict=collision` → не стартовать вслепую:
+   координация / rebase на актуальный main / сузить scope / согласовать владельца
+   (`context/team/OwnershipMap.md`). См. `rules/engineering/ConcurrencyAwareness.md`.
 5. Создать **WorkItem** — единую сущность изменения (`tools/workitem.py start <features-dir>
    <feature-id> --task "…"`): один id связывает workflow, Feature Blueprint и прогон
    оркестратора. Blueprint создаётся/находится по этому id; стадии публикуют артефакты в него.
