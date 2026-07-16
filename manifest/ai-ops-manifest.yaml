@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.59.0
+  package_version: 2.60.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -219,6 +219,13 @@ execution_engine:
       - "единый execution-pipeline (spine): tools/execution_pipeline.py собирает detect->tool-loop->evidence collector->RunPlan-гейты в ОДИН прогон; offline-проверено mock-предложителем"
     fixed_v2_59:
       - "commit+reverify на точном SHA: pipeline(commit=True) коммитит применённые изменения на ветке ai-ops/<id> (не main) и собирает evidence на зафиксированном SHA (evidence_on_exact_sha), а не по грязному дереву"
+    live_verified_v2_60:
+      note: "ЖИВОЙ прогон pipeline на DeepSeek (openai-compatible) в ии-среде: движок отработал end-to-end"
+      evidence: "task=создать src/strutil.py; loop.stopped=done, applied_writes=1, denied=0, commit на ветке ai-ops/slugify, evidence_on_exact_sha=True; гейты честно blocked (нет тестов/intake) -> ready_for_pr=False, не соврал"
+      fixed_from_run:
+        - "intake_completeness закрывается evidence из сигналов (классификация уже есть) — execution_pipeline._intake_evidence"
+        - "pytest exit 5 (нет тестов) -> warn, не fail; tests_passed не выдаётся, hard-fail не ставится — evidence_collector"
+    engine_status: "spine + commit/reverify ПОДТВЕРЖДЁН ЖИВЬЁМ end-to-end; осталось (live/GitHub): draft PR, worktree-изоляция, установимый CLI, 3 реальные задачи"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано

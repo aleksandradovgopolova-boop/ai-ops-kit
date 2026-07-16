@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.60.0] — 2026-07-16
+
+**P0-эпик, срез 7: ЖИВОЙ прогон движка подтверждён end-to-end + 2 находки прогона.** Первый
+живой прогон единого execution-pipeline на DeepSeek (`openai-compatible`) в ии-среде: реальная
+модель провела `detect → правки → commit на ветке ai-ops/<id> → evidence на ТОЧНОМ SHA`.
+`loop.stopped=done, applied_writes=1, denied=0, evidence_on_exact_sha=True`. Движок НЕ соврал:
+гейты честно заблокировали (`ready_for_pr=False`), потому что нет тестов и intake-evidence.
+
+### Changed (по находкам живого прогона)
+- **tools/execution_pipeline.py** — `_intake_evidence(signals)`: `intake_completeness`
+  закрывается evidence из сигналов (классификация task_type/size/risk уже произошла — это
+  реальный evidence, не фабрикация).
+- **tools/evidence_collector.py** — pytest exit 5 («нет собранных тестов») → `warn`, не `fail`:
+  `tests_passed` не выдаётся (тестов не было), но и hard-fail не ставится (нечему падать).
+- **manifest** — `execution_audit_2026_07_16.live_verified_v2_60` (evidence прогона) +
+  `engine_status: spine+commit/reverify ПОДТВЕРЖДЁН ЖИВЬЁМ`; `package_version` → 2.60.0.
+
+**Итог:** ядро P0-эпика («собрать само исполнение») собрано И подтверждено на живой модели.
+Осталось (нужен live/GitHub, не offline): открытие draft PR, worktree-изоляция прогона,
+установимый CLI с движком в child, проверка на 3 реальных задачах.
+
 ## [2.59.0] — 2026-07-16
 
 **P0-эпик, срез 6: commit + reverify evidence на точном SHA.** Аудит: evidence бился о
