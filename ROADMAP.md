@@ -134,6 +134,27 @@
 Отклонено осознанно: reorg `.ai/` целиком, `capabilities/`/`adapters/` как новые
 верхнеуровневые слои (дублируют capability-index/presets/runtimes), Robin как готовый бот.
 
+## Execution Engine (v2.31–2.39) — от «конституции» к исполняющему ядру
+
+По внешнему аудиту: у кита сильное ядро `task → workflow → agents → gates`, но не хватало
+внешнего слоя автоматики. Всё, что строится **детерминированно/offline**, — сделано и
+обкатано на реальном child (ии-среда):
+
+- **Фаза 0 — correctness & safety (v2.31) ✅.** Устранён дрифт `ai-start-task`; `security`
+  в ENGINEERING; `ai_red_team` блокирующий; сырой task-текст убран из audit-log;
+  состояние прогона — per-WorkItem (`.ai/runtime/workitems/<id>/`).
+- **Фаза 1 — контракт исполнения (v2.32–2.33) ✅.** RunPlan = base_workflow + треки
+  (`registry/tracks.yaml`): «Design/Analytics/Docs by default» выводится из сигналов и
+  добавляет свои гейты. Structured reviewer-result — источник истины вместо regex;
+  evidence-схемы гейтов.
+- **Фаза 2 — исполнение (v2.34–2.39) ✅ offline-часть.** `ai-ops run` — единый контроллер
+  (route→RunPlan→WorkItem→active-work→исполнение→отчёт). Tool Broker + Policy Engine
+  («модель предлагает, политика решает»; protected-paths = merge пакет+child). Execution
+  budget (потолок вызовов). Провайдеры anthropic/openai/openai-compatible (DeepSeek/local).
+- **На паузе — живое (нужен ключ/токен):** tool-calling петля с живой моделью, preflight
+  к GitHub API. Разблокируется первым живым прогоном на реальном провайдере.
+- **Цель 3.0 (breaking):** `ai-ops run` как основной путь + сплит на 5 пакетов.
+
 ## Правила движения по roadmap
 
 - Каждая фаза проходит полный набор валидаторов; новые механизмы приносят свои
