@@ -550,6 +550,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/run_plan.py` — построение RunPlan (base_workflow + tracks -> gates), validate (v2.32)
 - `tools/run_report.py`
 - `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34)
+- `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
