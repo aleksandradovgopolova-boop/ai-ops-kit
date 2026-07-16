@@ -2,6 +2,22 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.54.0] — 2026-07-16
+
+**P0-эпик, срез 1: RunPlan-гейты исполняются в прогоне.** Аудит назвал это «главной
+интеграционной ошибкой»: `ai-ops run` планировал треки (VISUAL/ANALYTICS/SECURITY/DOCS) и их
+гейты, но прогон оценивал только гейты `base_workflow`. Теперь прогон проверяет ТО, ЧТО
+спланировал.
+
+### Changed
+- **tools/gate_executor.py** — `evaluate(..., gate_ids=None)`: при переданном списке оценивает
+  именно его (агрегированные гейты RunPlan), иначе — гейты контракта (обратная совместимость).
+  Selftest: трековый `ux_review` попадает в оценку и без evidence блокирует прогон.
+- **tools/orchestrator.py** — `run_workflow(..., gate_ids=None)` пробрасывает список в evaluate.
+- **tools/ai_ops_run.py** — orchestrated-прогон передаёт `plan['gates']` (base + треки).
+- **manifest** — `execution_audit_2026_07_16.fixed_v2_54`; пункт про неоцениваемые треки убран
+  из p0_backlog; `package_version` → 2.54.0.
+
 ## [2.53.0] — 2026-07-16
 
 **Аудит исполнения: contained-фиксы (security + tool-loop) + честный разворот к P0.** Внешний

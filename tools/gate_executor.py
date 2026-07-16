@@ -316,8 +316,10 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     return result
 
 
-def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None) -> dict:
-    """Оценить все quality_gates контракта. Возвращает сводку + per-gate результаты.
+def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None) -> dict:
+    """Оценить quality_gates. По умолчанию — гейты контракта; если передан gate_ids (напр.
+    агрегированные гейты RunPlan: base_workflow + треки), оцениваются именно они. Так прогон
+    проверяет ТО, ЧТО спланировал (finding аудита: треки планировались, но не оценивались).
 
     blocked=True, если хотя бы один БЛОКИРУЮЩИЙ гейт получил status=fail. override с
     полем 'by'+'reason' на fail-гейте снимает блокировку по этому гейту (records override)."""
@@ -325,7 +327,7 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None) -> d
     gates = load_gates()
     if workflow_id not in workflows:
         raise SystemExit(f"неизвестный workflow '{workflow_id}' (есть: {', '.join(workflows)})")
-    gate_ids = workflows[workflow_id].get("quality_gates", []) or []
+    gate_ids = list(gate_ids) if gate_ids is not None else (workflows[workflow_id].get("quality_gates", []) or [])
 
     results, kinds, unmet = [], {}, []
     for gid in gate_ids:
@@ -382,6 +384,15 @@ def selftest():
     }
     r1 = evaluate("QUICK", good)
     expect("QUICK с подтверждённым evidence -> не blocked", r1["blocked"] is False)
+
+    # v2.54 (finding аудита): gate_ids override — прогон оценивает ГЕЙТЫ RUNPLAN (base+треки),
+    # а не только quality_gates контракта. Добавляем трековый гейт -> он реально оценивается.
+    rp_gates = list(load_workflows()["QUICK"].get("quality_gates", [])) + ["ux_review"]
+    r_rp = evaluate("QUICK", good, gate_ids=rp_gates)
+    expect("gate_ids override: ux_review (трек) попал в оценку",
+           "ux_review" in r_rp["evaluated_gates"])
+    expect("gate_ids override: ux_review без evidence блокирует прогон",
+           "ux_review" in r_rp["unmet_gates"] and r_rp["blocked"] is True)
 
     # 3b. бездоказательный pass (status:pass без required_evidence) -> отклонён, blocked
     r_bare = evaluate("QUICK", {"intake_completeness": {"status": "pass"},
