@@ -41,14 +41,17 @@ import active_work       # noqa: E402
 
 
 def run(task_text, signals, child_root: Path, features_dir=None,
-        runtime="claude-code", provider_name="mock", session="cli", execute=False):
+        runtime="claude-code", provider_name="mock", session="cli", execute=False,
+        feature=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
     features_dir = Path(features_dir) if features_dir else child_root / "features"
 
-    # 1-2. RunPlan (route + треки + агрегированные гейты)
-    plan = run_plan.build_plan(signals)
+    # 1-2. RunPlan (route + треки + агрегированные гейты).
+    # feature (v2.51): привязка WorkItem к ИМЕНОВАННОЙ фиче — иначе wid=wi-<hash>, и срезы
+    # истории падают на новую фичу с 1 срезом (baseline не двигается — finding обкатки 5).
+    plan = run_plan.build_plan(signals, workitem_id=feature)
     fid = plan["workitem_id"]
     base_wf = plan["base_workflow"]
 
@@ -146,6 +149,16 @@ def selftest():
         expect("треки VISUAL/ANALYTICS в отчёте", {"VISUAL", "ANALYTICS"} <= set(r["required_tracks"]))
         expect("гейты треков агрегированы (ux_review/analytics_readiness)",
                {"ux_review", "analytics_readiness"} <= set(r["gates"]))
+        expect("planned: без --feature wid = wi-<hash>", fid.startswith("wi-"))
+
+    # v2.51: привязка к ИМЕНОВАННОЙ фиче — срезы истории копятся на неё, не на wi-<hash>
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        rf = run("фильтр по типу в библиотеке", sig, root, runtime="claude-code",
+                 feature="library-view")
+        expect("feature: WorkItem привязан к именованной фиче",
+               rf["workitem_id"] == "library-view"
+               and (root / "features" / "library-view" / "run-plan.yaml").exists())
 
     # orchestrated-путь (generic-orchestrator, mock без evidence -> blocked, но транзакция прошла)
     with tempfile.TemporaryDirectory() as td:
@@ -174,11 +187,13 @@ def main(argv):
     rp.add_argument("--provider", default="mock")
     rp.add_argument("--session", default="cli")
     rp.add_argument("--execute", action="store_true")
+    rp.add_argument("--feature", help="имя существующей фичи — привязать WorkItem к ней "
+                                      "(иначе wi-<hash>; срезы истории не накопятся на одну фичу)")
     rp.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "run":
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
-                     a.runtime, a.provider, a.session, a.execute)
+                     a.runtime, a.provider, a.session, a.execute, feature=a.feature)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

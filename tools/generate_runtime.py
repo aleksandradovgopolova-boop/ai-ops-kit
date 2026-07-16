@@ -163,8 +163,12 @@ def render_ai_run(runtime, workflows):
 ## Порядок (исполняет этот раннтайм)
 ```
 tools/ai_ops_run.py run "<задача>" <child_root> --signals '<json сигналов>' \\
-    [--runtime claude-code|generic-orchestrator] [--provider mock] [--execute]
+    [--feature <имя-фичи>] [--runtime claude-code|generic-orchestrator] [--provider mock] [--execute]
 ```
+0. **Привязка к именованной фиче:** для реальной работы дай `--feature <имя>` — WorkItem
+   ляжет на эту фичу, и срезы истории накопятся на неё. Без `--feature` id = `wi-<hash>`,
+   и baseline метрик НЕ двигается (finding обкатки). Срез истории в claude-code пишется на
+   стадии `finish` (рантайм исполняет `run_report.py --record`), автозаписи «за стадию» нет.
 1. Контроллер строит RunPlan по сигналам и создаёт WorkItem (`features/<id>/run-plan.yaml`).
 2. Регистрирует активную работу (ветка/зоны/сессия) — conflict forecast.
 3. Исполнение: **claude-code** — контроллер готовит план и каркас, стадии/патчи/тесты
