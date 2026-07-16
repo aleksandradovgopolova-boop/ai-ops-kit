@@ -451,6 +451,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `schemas/provider-entry.schema.json`
 - `schemas/registry-entity.schema.json`
 - `schemas/reviewer-result.schema.json` — структурный вердикт ревьюера (источник истины, v2.33)
+- `schemas/repository-profile.schema.json` — профиль репозитория: стек+команды (v2.41)
 - `schemas/run-plan.schema.json` — RunPlan: base_workflow + tracks + агрегированные гейты (v2.32)
 - `schemas/route-decision.schema.json`
 - `schemas/runtime-entry.schema.json`
@@ -551,6 +552,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/run_report.py`
 - `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34)
 - `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
+- `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)

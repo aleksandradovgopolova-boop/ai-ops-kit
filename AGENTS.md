@@ -49,6 +49,7 @@ python3 tools/workitem.py --selftest
 python3 tools/run_plan.py --selftest
 python3 tools/run_plan.py validate
 python3 tools/ai_ops_run.py --selftest
+python3 tools/project_detector.py --selftest
 python3 tools/active_work.py --selftest
 python3 tools/worktree.py --selftest
 python3 tools/merge_memory.py --selftest

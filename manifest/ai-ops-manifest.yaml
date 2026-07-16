@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.40.0
+  package_version: 2.41.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -131,6 +131,11 @@ execution_engine:
   phase1_done: [run-plan-tracks, structured-reviewer-outputs, per-gate-evidence-schema]
   reviewer_result_schema: schemas/reviewer-result.schema.json   # источник истины вместо regex
   reviewer_result_validator: validation/validate_reviewer_result.py
+  project_detector:                         # v2.41 (P0#5 аудита): stack-aware evidence
+    tool: tools/project_detector.py          # detect -> RepositoryProfile (стек, команды build/lint/test)
+    schema: schemas/repository-profile.schema.json
+    child_path: ".ai/project/RepositoryProfile.yaml"
+    note: "детерминированно из манифестов; неопределённое -> undetermined; status draft (человек подтверждает)"
   run_controller:                           # v2.34 Фаза 2 срез 1: единый вход задачи
     tool: tools/ai_ops_run.py                # route -> RunPlan -> WorkItem -> active-work -> exec -> report
     command: commands/task/ai-run.md
