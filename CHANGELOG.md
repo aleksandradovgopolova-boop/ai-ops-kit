@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.64.0] — 2026-07-16
+
+**Движок подтверждён ЖИВЬЁМ end-to-end — до `ready_for_pr: True`.** Полный единый pipeline
+прогнан на реальном DeepSeek (`openai-compatible`) с мака: `detect → tool-loop (живая модель) →
+commit в изолированном worktree → evidence на точном SHA → RunPlan-гейты → ready_for_pr`.
+Результат: `loop.stopped=done, applied=2, denied=0, isolation=.ai/worktrees/slugify,
+commit fc87de5 on_exact_sha=True, gates.blocked=False, ready_for_pr=True`. Это закрывает
+центральную цель эпика аудита («собрать само исполнение») — собрано, подключено к контроллеру
+и подтверждено на живой модели.
+
+### Changed
+- **manifest** — `execution_audit_2026_07_16.live_pipeline_verified_v2_64` (evidence прогона +
+  честная оговорка); `engine_status: ПОДТВЕРЖДЁН ЖИВЬЁМ END-TO-END`; из p0_backlog убран
+  «живой предложитель на pipeline» (закрыт этим прогоном); `package_version` → 2.64.0.
+
+**Честная оговорка:** репо прогона был пустой (без тулчейна) → все build/lint/typecheck/tests
+ОСВОБОЖДЕНЫ умным ослаблением (штатное поведение). Подтверждена МЕХАНИКА всей цепи и сходимость
+к `ready_for_pr`, но НЕ прохождение реальных build/lint/test — это эмпирика на репо С тулчейном
+(остаток p0_backlog: живой draft PR + 3 реальные задачи против обычного Claude Code).
+
 ## [2.63.0] — 2026-07-16
 
 **Adversarial-review всего диффа аудита -> 6 подтверждённых дефектов исправлены.** Прогнал
