@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.41.0
+  package_version: 2.42.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -155,8 +155,16 @@ execution_engine:
     enforced: [max_model_calls]              # детерминировано
     declared_only: [max_cost, max_duration]  # нужен учёт токенов/времени на рантайме
     wired_into: tools/orchestrator.py        # превышение -> blocked + budget_exceeded
+  tool_loop:                                # v2.42 Фаза 2 срез 3: tool-calling петля (механика)
+    tool: tools/tool_loop.py                 # proposer -> Policy решает (Broker) -> Evidence -> обратно в контекст
+    stop_conditions: [done, budget, max_steps]
+    invariant: "запрещённое не исполняется, а возвращается модели как DENIED (само-коррекция)"
+    status: component-ready                  # МЕХАНИКА детерминирована и тестируется offline (mock-предложитель)
+    verified_offline: true                   # selftest: write в scope / denied вне scope / shell / done / budget / max_steps
+    live_proposal_quality: unverified        # качество предложений живой модели — проверяется живым прогоном (как Шаг A)
+    live_path: "make_model_proposer(make_provider('openai-compatible', <model>)) — swap провайдера"
   not_yet:                                  # следующие срезы эпика
-    - live tool-calling loop в orchestrator (Broker + tool-calling провайдер)
+    - live-прогон tool-loop с реальной моделью (механика готова; нужен ключ+egress к хосту)
     - preflight доступ к GitHub API (open_prs без gh слеп — finding обкатки)
     - stack-aware deterministic evidence collectors (Project Detector + adapters)
     - "ai-ops run как ОСНОВНОЙ путь + сплит на 5 пакетов (3.0, breaking)"
