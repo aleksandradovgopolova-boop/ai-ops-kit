@@ -554,6 +554,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
 - `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
+- `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
 - `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
 - `tools/merge_memory.py` — запись знания задачи в память при мердже (v2.25)

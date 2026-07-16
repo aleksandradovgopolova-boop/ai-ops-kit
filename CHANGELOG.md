@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.42.0] — 2026-07-16
+
+**Tool-calling петля — механика (Execution Engine Фаза 2, срез 3).** Замыкает
+`task → controlled execution`: модель ПРЕДЛАГАЕТ действие (JSON), Policy решает
+(`tool_broker`), Broker исполняет и собирает Evidence, результат идёт обратно в контекст —
+до `done` / потолка `budget` / `max_steps`. «Модель предлагает, политика решает»: запрещённое
+не исполняется, а возвращается модели как `DENIED`, чтобы та скорректировалась.
+
+### Added
+- **tools/tool_loop.py** (+ selftest) — механика петли: `parse_action` (JSON из ответа
+  модели), `make_model_proposer` (обёртка text-provider в JSON-протокол действий),
+  `run_loop(proposer, root, policy, budget, max_steps)` → отчёт (executed/denied/evidence/
+  transcript, стоп по done/budget/max_steps). Selftest: write в scope исполнен, write вне
+  scope запрещён и НЕ создан, shell даёт evidence, budget обрывает петлю, max_steps-предохранитель.
+
+### Changed
+- **CI + AGENTS.md** — шаг `tools/tool_loop.py --selftest`.
+- **manifest** — `execution_engine.tool_loop` (status `component-ready`,
+  `verified_offline: true`, `live_proposal_quality: unverified`); `package_version` → 2.42.0.
+
+**Честная граница:** МЕХАНИКА петли детерминирована и проверена offline (mock-предложитель).
+Качество предложений ЖИВОЙ модели — это `live_path` (swap провайдера на `openai-compatible`),
+проверяется живым прогоном (как Шаг A для текста), а не этим offline-кодом.
+
 ## [2.41.0] — 2026-07-15
 
 **Project Detector → RepositoryProfile (P0#5 аудита: stack-aware evidence).** Система сама
