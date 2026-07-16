@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.45.0
+  package_version: 2.46.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -177,8 +177,14 @@ execution_engine:
     live_path: "make_model_proposer(make_provider('openai-compatible', <model>)) — swap провайдера"
   phase2_done: [run-controller, tool-broker, execution-budget, tool-loop-live-verified]  # v2.42.2: петля подтверждена живьём
   phase3_done: [preflight-github-rest, stack-aware-evidence-collector]  # v2.43 + v2.44
-  not_yet:                                  # следующий большой заход — отдельный major
-    - "ai-ops run как ОСНОВНОЙ путь + сплит на 5 пакетов (3.0, breaking)"
+  release_3_0:                              # docs/3.0-design.md; запускается по явному решению
+    design: docs/3.0-design.md
+    packages_declared: packages/            # v2.46 (срез 0): 5 деклараций границ, БЕЗ переноса файлов
+    boundary_validator: validation/validate_package_boundaries.py  # DAG + непересечение + резолв
+    slice0_done: true                       # границы объявлены и стережутся валидатором
+    remaining_slices: [ai-ops-run-canonical, per-package-install, physical-tree-split, migration-guide]
+  not_yet:                                  # breaking-часть 3.0 — по явному решению владельца
+    - "3.0 срезы 1–4: канонизация ai-ops run, по-пакетная установка, физический разнос дерева, MIGRATION_GUIDE"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

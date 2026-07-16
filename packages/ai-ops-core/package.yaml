@@ -1,0 +1,12 @@
+schema_version: 1
+kind: ai-ops-package
+name: ai-ops-core
+description: >
+  Конституция: машиночитаемые источники истины (агенты/workflow/gates/провайдеры/routing),
+  контракты-схемы, конфиги. От core зависят все остальные пакеты; сам он не зависит ни от кого.
+depends_on: []
+includes:
+  - registry/**
+  - manifest/**
+  - schemas/**
+  - config/**

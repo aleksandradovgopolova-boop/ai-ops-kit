@@ -555,6 +555,8 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
 - `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
 - `tools/evidence_collector.py` — stack-aware сбор evidence: гоняет команды профиля через Broker -> gate implementation_verification (v2.44)
+- `validation/validate_package_boundaries.py` — границы 5 пакетов 3.0: DAG зависимостей + непересечение + резолв include (v2.46, срез 0)
+- `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)

@@ -1,0 +1,21 @@
+schema_version: 1
+kind: ai-ops-package
+name: ai-ops-execution
+description: >
+  Исполняющее ядро: единый контроллер ai-ops run, RunPlan/tracks, Tool Broker + Policy,
+  execution budget, tool-calling петля, WorkItem, session/repository-оркестрация. Зависит от
+  core и quality (исполняет гейты).
+depends_on: [ai-ops-core, ai-ops-quality]
+includes:
+  - tools/ai_ops_run.py
+  - tools/orchestrator.py
+  - tools/run_plan.py
+  - tools/tool_broker.py
+  - tools/budget.py
+  - tools/tool_loop.py
+  - tools/workitem.py
+  - tools/active_work.py
+  - tools/worktree.py
+  - tools/concurrency_preflight.py
+  - tools/merge_memory.py
+  - tools/generate_runtime.py

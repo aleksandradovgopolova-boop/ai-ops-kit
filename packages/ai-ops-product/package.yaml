@@ -1,0 +1,25 @@
+schema_version: 1
+kind: ai-ops-package
+name: ai-ops-product
+description: >
+  Продуктовый слой: тела агентов и их eval-кейсы, шаблоны артефактов, скиллы, blueprint,
+  product-health, knowledge-graph, метрики эффекта, продуктовые правила и контекст. Зависит
+  от core.
+depends_on: [ai-ops-core]
+includes:
+  - agents/**
+  - evaluations/**
+  - templates/**
+  - skills/**
+  - presets/**
+  - context/**
+  - memory/**
+  - rules/ai/**
+  - rules/thinking/**
+  - rules/research/**
+  - rules/documentation/**
+  - rules/content/**
+  - tools/generate_artifacts.py
+  - tools/product_health.py
+  - tools/run_report.py
+  - tools/effect_metrics.py
