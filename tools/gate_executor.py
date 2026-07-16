@@ -106,6 +106,26 @@ def collect_evidence(workflow_id: str, run_dir) -> dict:
                         None)
         if not stage_id:
             continue
+        # v2.33: структурный reviewer-result — ИСТОЧНИК ИСТИНЫ (не regex по markdown).
+        # Если рядом со стадией есть stage-<id>.reviewer.json (schemas/reviewer-result.schema.json),
+        # берём вердикт/blockers из него; markdown-regex остаётся фолбэком для старых артефактов.
+        rjson = run_dir / f"stage-{stage_id}.reviewer.json"
+        if rjson.exists():
+            try:
+                rr = json.loads(rjson.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                rr = None
+            if isinstance(rr, dict) and rr.get("status") in ("pass", "warn", "fail"):
+                if rr["status"] == "fail":
+                    ev[gid] = {"status": "fail",
+                               "blockers": rr.get("blockers") or [f"reviewer FAIL @ {rjson.name}"],
+                               "evidence": [rjson.name]}
+                else:
+                    # pass/warn: та же дисциплина — required_evidence авто-даём только ai-review
+                    prov = list(g.get("required_evidence", []) or []) if classify(g) == "ai-review" else []
+                    ev[gid] = {"status": rr["status"], "provided": prov,
+                               "checks": rr.get("checks", []), "evidence": [rjson.name]}
+                continue
         art = run_dir / f"stage-{stage_id}.md"
         if not art.exists():
             continue
@@ -157,6 +177,28 @@ _ALLOWED_KEYS = {
     "artifact_hashes", "owner", "review_mode", "created_at", "expires_at", "override",
     "suggested_next",
 }
+
+
+_EVIDENCE_TYPES = {"string", "integer", "number", "boolean", "git_sha", "path"}
+
+
+def validate_evidence_schemas(gates=None) -> list:
+    """v2.33: well-formedness gate.evidence_schema — типы полей из словаря, структура вложена."""
+    gates = gates or load_gates()
+    errs = []
+    for gid, g in gates.items():
+        es = g.get("evidence_schema")
+        if es is None:
+            continue
+        if not isinstance(es, dict):
+            errs.append(f"{gid}.evidence_schema должен быть mapping"); continue
+        for group, fields in es.items():
+            if not isinstance(fields, dict):
+                errs.append(f"{gid}.evidence_schema.{group} должен быть mapping поле->тип"); continue
+            for fname, ftype in fields.items():
+                if ftype not in _EVIDENCE_TYPES:
+                    errs.append(f"{gid}.evidence_schema.{group}.{fname}: тип '{ftype}' вне {sorted(_EVIDENCE_TYPES)}")
+    return errs
 
 
 def load_gates():
@@ -415,6 +457,25 @@ def selftest():
         (rd / "stage-local-verify.md").write_text("Recommendation: FAIL\n", encoding="utf-8")
         expect("collect: вердикт fail -> гейт блокирует",
                evaluate("QUICK", collect_evidence("QUICK", rd))["blocked"] is True)
+
+    # 9b. структурный reviewer-result (v2.33) — источник истины, приоритет над markdown
+    with tempfile.TemporaryDirectory() as td:
+        rd = Path(td)
+        # markdown говорит pass, но структурный json говорит fail с блокером -> fail побеждает
+        (rd / "stage-local-verify.md").write_text("Итог: pass\n", encoding="utf-8")
+        (rd / "stage-local-verify.reviewer.json").write_text(json.dumps({
+            "schema_version": 1, "kind": "reviewer-result", "gate": "implementation_verification",
+            "status": "fail", "checks": [{"id": "tests", "status": "fail"}],
+            "blockers": ["2 теста упали на ревизии abc123"]}), encoding="utf-8")
+        col = collect_evidence("QUICK", rd)
+        expect("structured reviewer-result побеждает markdown (fail, не pass)",
+               col.get("implementation_verification", {}).get("status") == "fail")
+        expect("structured fail -> QUICK blocked", evaluate("QUICK", col)["blocked"] is True)
+
+    # 10. well-formedness evidence_schema (v2.33): типы полей из словаря
+    expect("evidence_schema гейтов well-formed", validate_evidence_schemas() == [])
+    expect("битый тип в evidence_schema -> ошибка",
+           validate_evidence_schemas({"g": {"evidence_schema": {"build": {"exit_code": "bogus"}}}}) != [])
 
     print("gate_executor selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
