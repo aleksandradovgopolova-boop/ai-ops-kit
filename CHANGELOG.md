@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.41.0] — 2026-07-15
+
+**Project Detector → RepositoryProfile (P0#5 аудита: stack-aware evidence).** Система сама
+определяет стек и команды build/lint/typecheck/test, а не спрашивает — основа для того,
+чтобы гейт `implementation_verification` знал, ЧЕМ собирать/тестировать именно этот репо.
+
+### Added
+- **tools/project_detector.py** (+ selftest) — `detect`: из манифестов (package.json/
+  pyproject/go.mod/pom/Cargo…) выводит стеки, package manager, фреймворки, команды
+  build/lint/typecheck/test, CI, monorepo. Детерминированно; неопределённое → `undetermined`
+  (не выдумано); `status: draft` (подтверждает человек — writer≠judge).
+- **schemas/repository-profile.schema.json** — контракт профиля.
+
+### Changed
+- **manifest** — `execution_engine.project_detector` (child: `.ai/project/RepositoryProfile.yaml`);
+  `package_version` → 2.41.0.
+
+Связь: RepositoryProfile — stack-часть онбординга (repo-onboarding) и вход будущих
+stack-aware evidence collectors. Сам сбор build/test-evidence по профилю (запуск команд) —
+следующий срез (перекликается с tool-loop, часть — на живой прогон).
+
 ## [2.40.0] — 2026-07-15
 
 **Живой прогон подтверждён — `verified_against_live_api: true`.** Первый живой Шаг A
