@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.44.0] — 2026-07-16
+
+**Stack-aware evidence collector — детерминированный сбор доказательств из профиля репо.**
+Замыкает Project Detector → gate: RepositoryProfile знает команды build/lint/typecheck/test
+конкретного репо, а коллектор их ИСПОЛНЯЕТ (через Tool Broker, уровень execution) и превращает
+результат в структурный evidence для `implementation_verification` — ровно по его evidence_schema.
+Вердикт = exit_code реальной команды, не «pass словом» и не LLM.
+
+### Added
+- **tools/evidence_collector.py** (+ selftest) — `collect(profile, root, policy)`:
+  прогоняет команды всех стеков профиля через `tool_broker.execute`, собирает `checks`
+  (pass/fail/not_run), структурный `schema_evidence` (command/exit_code/revision) и готовый
+  `gate_evidence` для `implementation_verification`. Selftest: всё прошло → gate pass; провал
+  команды → fail + blocker; команда не определена → not_run (флаг не выдан); деструктивная
+  команда → отклонена Policy (не исполнена); вывод валиден по gate-evidence-схеме; интеграция
+  detect → collect на python-репо.
+
+### Changed
+- **CI + AGENTS.md** — шаг `tools/evidence_collector.py --selftest`.
+- **manifest** — `execution_engine.evidence_collector` (feeds_gate implementation_verification);
+  `phase3_done += stack-aware-evidence-collector`; в `not_yet` остался только 3.0-заход;
+  `package_version` → 2.44.0.
+
+**Инвариант честности:** в `provided` попадают только реально запущенные и прошедшие проверки;
+команда `None` (undetermined) → `not_run`, флаг не фабрикуется (гейт честно останется
+невыполненным, пока человек не задаст команду). Исполнение — только через Tool Broker
+(`policy.decide` первым): деструктивная команда в профиле отклоняется, а не выполняется.
+
 ## [2.43.0] — 2026-07-16
 
 **Concurrency preflight видит открытые PR без gh — REST-фоллбэк.** Раньше, если в среде нет

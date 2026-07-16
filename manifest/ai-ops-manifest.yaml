@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.43.0
+  package_version: 2.44.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -136,6 +136,11 @@ execution_engine:
     schema: schemas/repository-profile.schema.json
     child_path: ".ai/project/RepositoryProfile.yaml"
     note: "детерминированно из манифестов; неопределённое -> undetermined; status draft (человек подтверждает)"
+  evidence_collector:                       # v2.44: детерминированный stack-aware сбор evidence
+    tool: tools/evidence_collector.py        # RepositoryProfile -> прогон команд через Broker -> gate evidence
+    feeds_gate: implementation_verification  # по evidence_schema (build/lint/typecheck/tests)
+    invariant: "вердикт = exit_code реальной команды (не LLM); в provided только реально прошедшие проверки"
+    honesty: "команда не определена (None) -> not_run, флаг НЕ выдаётся; деструктивное отклоняет Policy"
   run_controller:                           # v2.34 Фаза 2 срез 1: единый вход задачи
     tool: tools/ai_ops_run.py                # route -> RunPlan -> WorkItem -> active-work -> exec -> report
     command: commands/task/ai-run.md
@@ -171,9 +176,8 @@ execution_engine:
     live_proposal_quality: verified          # v2.42.2: живая модель сходится (write->verify->done), не зацикливается
     live_path: "make_model_proposer(make_provider('openai-compatible', <model>)) — swap провайдера"
   phase2_done: [run-controller, tool-broker, execution-budget, tool-loop-live-verified]  # v2.42.2: петля подтверждена живьём
-  phase3_done: [preflight-github-rest]      # v2.43: open_prs через REST-фоллбэк (не только gh)
-  not_yet:                                  # следующие срезы эпика
-    - stack-aware deterministic evidence collectors (Project Detector + adapters)
+  phase3_done: [preflight-github-rest, stack-aware-evidence-collector]  # v2.43 + v2.44
+  not_yet:                                  # следующий большой заход — отдельный major
     - "ai-ops run как ОСНОВНОЙ путь + сплит на 5 пакетов (3.0, breaking)"
 
 effect_metrics:

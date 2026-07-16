@@ -553,6 +553,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34)
 - `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
 - `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
+- `tools/evidence_collector.py` — stack-aware сбор evidence: гоняет команды профиля через Broker -> gate implementation_verification (v2.44)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
