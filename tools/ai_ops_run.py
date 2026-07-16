@@ -78,7 +78,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             base_wf, task_text, child_root,
             provider=orchestrator.make_provider(provider_name),
             provider_name=provider_name, verbose=False, workitem_id=fid,
-            budget=plan.get("execution_budget"))   # v2.38: потолок вызовов из RunPlan
+            budget=plan.get("execution_budget"),   # v2.38: потолок вызовов из RunPlan
+            gate_ids=plan.get("gates"))            # v2.54: прогон оценивает ГЕЙТЫ RUNPLAN (base+треки)
         status = st["status"]
         run_state = str(Path(run_dir) / "TaskState.yaml")
         run_state_materialized = True
