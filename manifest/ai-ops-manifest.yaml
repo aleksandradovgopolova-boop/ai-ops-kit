@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.42.0
+  package_version: 2.42.1
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -161,7 +161,13 @@ execution_engine:
     invariant: "запрещённое не исполняется, а возвращается модели как DENIED (само-коррекция)"
     status: component-ready                  # МЕХАНИКА детерминирована и тестируется offline (mock-предложитель)
     verified_offline: true                   # selftest: write в scope / denied вне scope / shell / done / budget / max_steps
-    live_proposal_quality: unverified        # качество предложений живой модели — проверяется живым прогоном (как Шаг A)
+    live_mechanics_verified: true            # v2.42 живой прогон на DeepSeek (openai-compatible): реальные JSON-предложения
+    live_verified_evidence:                  #   распарсились и исполнились, denied=0 (scope соблюдён), budget честно оборвал петлю
+      provider: openai-compatible
+      model: deepseek-chat
+      run: "task=создать src/add.py; 6/6 write executed, denied=0, stopped=budget(max_model_calls=6)"
+      finding: "модель зациклилась на write (не перешла к shell-проверке и done) -> усилён промпт предложителя (v2.42.1)"
+    live_proposal_quality: partial           # механика — да; сходимость к done требует более жёсткого промпта (в работе)
     live_path: "make_model_proposer(make_provider('openai-compatible', <model>)) — swap провайдера"
   not_yet:                                  # следующие срезы эпика
     - live-прогон tool-loop с реальной моделью (механика готова; нужен ключ+egress к хосту)
