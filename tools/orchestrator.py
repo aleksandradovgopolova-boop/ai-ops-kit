@@ -159,7 +159,8 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                  provider=mock_provider, verbose=True, gate_evidence=None,
-                 collect=False, fresh=False, provider_name="mock", workitem_id=None):
+                 collect=False, fresh=False, provider_name="mock", workitem_id=None,
+                 budget=None):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -193,6 +194,11 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         raise SystemExit(f"resume-конфликт: под '{wid}' сохранён workflow "
                          f"{existing.get('workflow')} != {workflow_id}. Используйте --fresh.")
 
+    # execution budget (v2.38): жёсткий потолок вызовов модели; enforcement ДО вызова
+    import budget as _budget_mod
+    bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
+    budget_exceeded = None
+
     stages = w["stages"]
     done_ids = {s for s in state.get("completed_checks", [])}
     published = {}  # name -> content (опубликованные артефакты)
@@ -210,6 +216,13 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         save_state(run_dir, state)
 
         prompt = build_role_prompt(stage, owner, agents_index, task_text, published)
+        try:
+            bud.charge_call()          # потолок проверяется ДО вызова — превышение = не вызываем
+        except _budget_mod.BudgetExceeded as e:
+            budget_exceeded = str(e)
+            if verbose:
+                print(f"  BUDGET: остановка перед стадией {sid}: {e}")
+            break
         result = provider(prompt)
 
         # опубликовать результат стадии (это и есть handoff-артефакт)
@@ -249,7 +262,13 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         json.dumps(gates, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     state["current_phase"] = None
     state["gate_report"] = "GateReport.json"
-    if gates["blocked"]:
+    state["budget"] = bud.to_dict()
+    if budget_exceeded:
+        # бюджет исчерпан до завершения стадий — честный blocked с причиной
+        state["status"] = "blocked"
+        state["budget_exceeded"] = budget_exceeded
+        state["unmet_gates"] = gates.get("unmet_gates", [])
+    elif gates["blocked"]:
         state["status"] = "blocked"
         state["unmet_gates"] = gates["unmet_gates"]
     else:
@@ -262,7 +281,9 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         "workitem_id": wid, "task_hash": task_hash,
         "workflow": workflow_id, "status": state["status"],
         "unmet_gates": gates.get("unmet_gates", []), "provider": provider_name,
-        "stages": len(state.get("completed_checks", []))})
+        "stages": len(state.get("completed_checks", [])),
+        "model_calls": bud.model_calls,
+        "budget_exceeded": bool(budget_exceeded)})
     if verbose:
         if gates["blocked"]:
             print(f"BLOCKED: workflow {workflow_id} прошёл {len(state['completed_checks'])} стадий, "
@@ -380,6 +401,18 @@ def selftest():
         ok = False; print("FAIL provider: неизвестный провайдер должен падать")
     except SystemExit:
         print("PASS provider: неизвестный провайдер -> ошибка")
+
+    # execution budget (v2.38): max_model_calls останавливает до завершения стадий
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        st, rd = run_workflow("QUICK", "любая задача", root, verbose=False,
+                              budget={"max_model_calls": 1})
+        if st["status"] == "blocked" and st.get("budget_exceeded") and st["budget"]["model_calls"] == 1 \
+                and len(st["completed_checks"]) == 1:
+            print("PASS budget: max_model_calls=1 -> 1 стадия, blocked с budget_exceeded")
+        else:
+            ok = False; print(f"FAIL budget не сработал: {st.get('status')}, "
+                              f"calls={st.get('budget',{}).get('model_calls')}")
 
     print("orchestrator selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

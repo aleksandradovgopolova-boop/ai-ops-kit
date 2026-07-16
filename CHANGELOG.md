@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.38.0] — 2026-07-15
+
+**Execution budget — enforcement потолка прогона.** `RunPlan.execution_budget` был только
+декларацией; теперь `max_model_calls` реально ограничивает вызовы модели (перед будущей
+tool-calling петлёй — чтобы «дал задачу» не стало неограниченным расходом).
+
+### Added
+- **tools/budget.py** (+ selftest) — `Budget(max_model_calls, max_cost)`; `charge_call()`
+  проверяет потолок ДО вызова (превышение → `BudgetExceeded`, вызов не делается);
+  `from_dict(RunPlan.execution_budget)`.
+
+### Changed
+- **tools/orchestrator.py** — `run_workflow(budget=...)`: перед каждой стадией
+  `charge_call()`; превышение → остановка, `status: blocked` + `budget_exceeded`;
+  `model_calls` в interaction-log и TaskState.
+- **tools/ai_ops_run.py** — прокидывает `RunPlan.execution_budget` в оркестратор.
+- **manifest** — `execution_engine.execution_budget` (enforced: max_model_calls;
+  declared_only: max_cost/max_duration — нужен учёт токенов/времени на рантайме);
+  `package_version` → 2.38.0.
+
+Честно: `max_model_calls` детерминирован и enforced; `max_cost`/`max_duration` — объявлены,
+но без учёта токенов/времени провайдером по ним не блокируем (не выдаём за enforced).
+
 ## [2.37.0] — 2026-07-15
 
 **Tool Broker: child-override protected-paths (finding обкатки 2.36).** Обкатка в ии-среде

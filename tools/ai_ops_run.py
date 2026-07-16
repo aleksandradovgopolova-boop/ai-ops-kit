@@ -74,7 +74,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         st, run_dir = orchestrator.run_workflow(
             base_wf, task_text, child_root,
             provider=orchestrator.make_provider(provider_name),
-            provider_name=provider_name, verbose=False, workitem_id=fid)
+            provider_name=provider_name, verbose=False, workitem_id=fid,
+            budget=plan.get("execution_budget"))   # v2.38: потолок вызовов из RunPlan
         status = st["status"]
         run_state = str(Path(run_dir) / "TaskState.yaml")
         run_state_materialized = True
