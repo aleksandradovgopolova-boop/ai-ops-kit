@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.46.0] — 2026-07-16
+
+**3.0-срез 0: границы 5 пакетов объявлены и стерегутся — БЕЗ переноса файлов.** Первый
+безопасный шаг к 3.0 (`docs/3.0-design.md`): декларируем, какой файл к какому пакету
+относится и как пакеты зависят друг от друга, и добавляем валидатор, который эту структуру
+охраняет. Ничего не ломается (аддитивно), но будущий физический сплит теперь опирается на
+проверенную непротиворечивую карту.
+
+### Added
+- **packages/{ai-ops-core,ai-ops-quality,ai-ops-execution,ai-ops-product,ai-ops-installer}/package.yaml** —
+  декларации границ: `name`, `description`, `depends_on`, `includes` (glob'ы файлов). Зависимости
+  однонаправленные: core ← quality ← execution, core ← product, installer → все.
+- **validation/validate_package_boundaries.py** (+ selftest) — проверяет: форму package.yaml;
+  существование зависимостей без self-dep; ацикличность графа (DAG); резолв каждого include-glob
+  (нет висячих деклараций); непересечение границ (файл не в двух пакетах); отчёт покрытия.
+  На реальном ките: 308 файлов назначено, границы не пересекаются, граф ацикличен.
+
+### Changed
+- **CI + AGENTS.md** — шаг `validate_package_boundaries.py` (+ карта репозитория: зона `packages/`).
+- **manifest** — `execution_engine.release_3_0` (design, packages_declared, boundary_validator,
+  `slice0_done: true`, remaining_slices); `not_yet` теперь = breaking-срезы 1–4 (по явному решению);
+  `package_version` → 2.46.0.
+
+**Честная граница:** это ДЕКЛАРАЦИЯ границ, не сам сплит. Файлы на местах; канонизация
+`ai-ops run`, по-пакетная установка и физический разнос дерева — срезы 1–4, запускаются по
+явному решению владельца с обкаткой на child (docs/3.0-design.md). 173 файла пока не назначены
+(validation/docs/examples/… — назначаются в срезе 3).
+
 ## [2.45.0] — 2026-07-16
 
 **Дизайн 3.0 + актуализация ROADMAP.** Живая часть Execution Engine разблокирована (2.42–2.44):

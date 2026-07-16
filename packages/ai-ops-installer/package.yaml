@@ -1,0 +1,10 @@
+schema_version: 1
+kind: ai-ops-package
+name: ai-ops-installer
+description: >
+  Композитор: CLI ai-ops (init/update/doctor), CI-шаблоны, онбординг, транзакционный
+  rollback-safe update. Ставит выбранные пакеты в child-репозиторий. Зависит от всех
+  (оркеструет их установку).
+depends_on: [ai-ops-core, ai-ops-quality, ai-ops-execution, ai-ops-product]
+includes:
+  - installer/**

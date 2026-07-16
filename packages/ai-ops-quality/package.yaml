@@ -1,0 +1,15 @@
+schema_version: 1
+kind: ai-ops-package
+name: ai-ops-quality
+description: >
+  Quality gates, исполнение и блокировка гейтов, structured reviewer-result, детект стека и
+  stack-aware сбор evidence, чек-листы ревью/дизайна/инженерии. Зависит от core.
+depends_on: [ai-ops-core]
+includes:
+  - quality/**
+  - tools/gate_executor.py
+  - tools/project_detector.py
+  - tools/evidence_collector.py
+  - rules/quality/**
+  - rules/design/**
+  - rules/engineering/**
