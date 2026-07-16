@@ -169,9 +169,39 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
     pub = "\n".join(f"--- {name} ---\n{content}" for name, content in published.items()) or "(пока нет)"
     guard = ("\nВНИМАНИЕ: ты judge (read-only). Не изменяй проверяемые артефакты; "
              "верни только заключение. Тебе доступны ТОЛЬКО опубликованные артефакты ниже — "
-             "рассуждения предыдущих ролей тебе не передаются.\n") if is_judge else ""
+             "рассуждения предыдущих ролей тебе не передаются.\n"
+             "В КОНЦЕ ответа верни СТРУКТУРНОЕ заключение одним JSON-блоком (source of truth, "
+             "не проза): {\"schema_version\":1,\"kind\":\"reviewer-result\",\"gate\":\"<gate id>\","
+             "\"status\":\"pass|warn|fail\",\"checks\":[{\"id\":\"...\",\"status\":\"pass|warn|fail\"}],"
+             "\"blockers\":[\"...при fail...\"]}.\n") if is_judge else ""
     return (f"{agent_body(agent_id, agents_index)}\n"
             f"{guard}\n## Задача\n{task_text}\n\n## Опубликованные артефакты\n{pub}\n")
+
+
+def _write_reviewer_json(run_dir, sid, text):
+    """Из ответа judge-роли достать JSON reviewer-result и, если валиден по схеме, записать
+    stage-<sid>.reviewer.json (структурный источник истины). Иначе — ничего (фолбэк на markdown)."""
+    import re as _re
+    m = _re.search(r"\{.*\}", text or "", _re.S)
+    if not m:
+        return False
+    try:
+        obj = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return False
+    if not (isinstance(obj, dict) and obj.get("kind") == "reviewer-result"
+            and obj.get("status") in ("pass", "warn", "fail")):
+        return False
+    try:
+        sys.path.insert(0, str(PKG / "validation"))
+        import validate_reviewer_result as _vrr
+        if _vrr.check(obj):           # непустой список ошибок -> невалидно
+            return False
+    except Exception:
+        return False
+    (run_dir / f"stage-{sid}.reviewer.json").write_text(
+        json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
 
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
@@ -246,6 +276,12 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         out = run_dir / f"stage-{sid}.md"
         out.write_text(result, encoding="utf-8")
         published[out.stem] = result
+
+        # judge-стадии: извлечь СТРУКТУРНОЕ reviewer-result из ответа (source of truth для гейтов,
+        # не regex по прозе — finding аудита). Пишем stage-<sid>.reviewer.json только если он
+        # валиден по схеме; иначе остаётся markdown-фолбэк в collect_evidence.
+        if stage.get("review_mode") == "read-only":
+            _write_reviewer_json(run_dir, sid, result)
 
         # handoff: judge следующей стадии увидит только published
         handoff = {
@@ -375,6 +411,20 @@ def selftest():
             print("PASS judge-промпт изолирован (read-only guard)")
         else:
             ok = False; print("FAIL нет read-only guard в judge-промпте")
+        # v2.57: judge, вернувший JSON reviewer-result, -> валидный stage-*.reviewer.json
+        def json_judge(prompt):
+            if "read-only" in prompt:   # judge-стадия
+                return ('Заключение.\n{"schema_version":1,"kind":"reviewer-result",'
+                        '"gate":"code_review","status":"pass",'
+                        '"checks":[{"id":"style","status":"pass"}]}')
+            return "готово"
+        st_j, run_dir_j = run_workflow("QUICK", "структурный вердикт judge", root,
+                                       provider=json_judge, verbose=False, fresh=True)
+        rj = list(Path(run_dir_j).glob("stage-*.reviewer.json"))
+        if rj:
+            print("PASS judge пишет структурный reviewer.json (не regex)")
+        else:
+            ok = False; print("FAIL reviewer.json не создан из JSON-вердикта judge")
     # --collect-evidence: вердикты reviewer-стадий собираются, НО детерминированные гейты
     # (build/lint/typecheck/tests) словом «pass» не закрываются (дисциплина evidence v2.16) —
     # QUICK остаётся blocked без реальных доказательств. Раньше тест ждал done — это была дыра.

@@ -2,6 +2,20 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.57.0] — 2026-07-16
+
+**P0-эпик, срез 4: structured reviewer.json от оркестратора.** Аудит: gate_executor умел читать
+`stage-*.reviewer.json` как источник истины, но оркестратор писал только `stage-*.md` — система
+откатывалась на regex по прозе. Теперь judge-стадии дают структурный вердикт.
+
+### Changed
+- **tools/orchestrator.py** — judge-промпт (read-only) просит вернуть JSON reviewer-result
+  (schema); `_write_reviewer_json` извлекает его, валидирует через `validate_reviewer_result.check`
+  и пишет `stage-<sid>.reviewer.json` (иначе — фолбэк на markdown-regex, как раньше). Selftest:
+  judge с JSON-вердиктом -> валидный reviewer.json создан.
+- **manifest** — `fixed_v2_57`; пункт про отсутствие reviewer.json убран из p0_backlog;
+  `package_version` → 2.57.0.
+
 ## [2.56.0] — 2026-07-16
 
 **P0-эпик, срез 3 (security): shell-команды больше не видят секреты.** Аудит: `shell=True`
