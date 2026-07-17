@@ -229,6 +229,26 @@ def main(argv):
             argv2.append("--json")
         return ai_ops_run.main(argv2)
 
+    # v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не только превью).
+    if intent == "specify":
+        import spec_levels
+        import run_plan
+        if not signals.get("task_type"):
+            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
+        wid = a.feature or run_plan.build_plan(dict(signals, task_text=task or ""))["workitem_id"]
+        sp, created = spec_levels.create_spec(Path(child_root), wid, signals, overwrite=a.force)
+        cov = spec_levels.assess_from_artifacts(signals, Path(child_root), wid)
+        if a.json:
+            print(json.dumps({"path": str(sp), "created": created, "coverage": cov},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(f"SPECIFY: {'создан' if created else 'уже существует'} {sp}")
+            print(f"  уровень {cov['level_name']} · обязательных разделов {len(cov['sections'])} · "
+                  f"заполнить: {len(cov['blocking_missing'])}")
+            print(f"  заполни разделы в {sp.relative_to(Path(child_root)) if str(sp).startswith(child_root) else sp}, "
+                  f"затем: ai-ops run \"{task or '<задача>'}\" {child_root} --feature {wid} --execute")
+        return 0
+
     pv = build_preview(intent, task, Path(child_root), signals)
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))

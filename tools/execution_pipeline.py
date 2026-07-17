@@ -864,6 +864,19 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                  if s in _req_sections and g in plan["gates"] and g in _unmet})
     spec_depth_ok = not spec_depth_missing
 
+    # v2.110 Real Spec-First enforcement: если для этого WorkItem СУЩЕСТВУЕТ явный spec-артефакт
+    # (features/<wid>/spec.yaml), но он НЕ полон (есть blocking_missing) -> «неполная спека не
+    # пускает в implementation» (аудит). Спеки нет -> поведение прежнее (spec-first опционален для
+    # мелких задач, spec_depth через гейты). Читаем реальный артефакт, а не сигналы.
+    spec_incomplete = []
+    try:
+        _cov = _sl.assess_from_artifacts(signals, child_root, wid, work_root=work_root)
+        if _cov.get("spec_artifact") and _cov.get("blocking_missing"):
+            spec_incomplete = list(_cov["blocking_missing"])
+    except Exception:  # noqa: BLE001
+        spec_incomplete = []
+    spec_complete_ok = not spec_incomplete
+
     # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
     # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
     # превышении context budget выполнение блокируется или задача дробится"). Мягкие оси
@@ -899,10 +912,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
         # fix-задач): дополнительно требуем, чтобы правка РЕАЛЬНО починила падавшую проверку.
         ready = base_ok and no_regressions and (not other_blocking_unmet) \
-            and (not require_fix or len(fixed) > 0) and spec_depth_ok and (not context_overflow)
+            and (not require_fix or len(fixed) > 0) and spec_depth_ok and (not context_overflow) \
+            and spec_complete_ok
         ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
-        ready = base_ok and (not gates["blocked"]) and spec_depth_ok and (not context_overflow)
+        ready = base_ok and (not gates["blocked"]) and spec_depth_ok and (not context_overflow) \
+            and spec_complete_ok
         ready_criterion = "all-green"
 
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
@@ -927,6 +942,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
     if spec_depth_missing:
         not_yet.append("spec-depth: не закрыты разделы уровня " + ", ".join(spec_depth_missing))
+    if spec_incomplete:
+        not_yet.append("spec-first: features/<wid>/spec.yaml неполон — заполни разделы: "
+                       + ", ".join(spec_incomplete))
     if context_overflow:
         not_yet.append("context budget превышен — задачу нужно декомпозировать (см. work_package)")
 
@@ -990,6 +1008,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v2.106 enforcement: spec-depth (незакрытые разделы уровня, мапящиеся на unmet-гейты) и
         # context-budget overflow — блокируют ready наравне с гейтами.
         "spec_depth": {"level": _level, "missing": spec_depth_missing, "ok": spec_depth_ok},
+        # v2.110 Real Spec-First: реальный spec.yaml существует, но неполон -> блокирует implementation
+        "spec_first": {"artifact_present": bool(spec_incomplete) or _sl._spec_path(child_root, wid).is_file(),
+                       "incomplete_sections": spec_incomplete, "ok": spec_complete_ok},
         "context_overflow": context_overflow,
         # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + spec-depth +
         # не-overflow + (all-green: гейты не блокируют | no-regressions: нет новых провалов И blocking-гейты пройдены)
@@ -1213,6 +1234,34 @@ def selftest():
         expect("v2.109 resume: нет прошлого прогона -> честный fresh (resumed=False + причина)",
                rinfo3.get("resumed") is False and bool(rinfo3.get("reason"))
                and rep_r3.get("status") != "error")
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.110 Real Spec-First: неполный spec.yaml для WorkItem -> «не пускает в implementation»
+        import spec_levels as _sl_t
+        sig_sf = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        _sl_t.create_spec(root, "spec-fn", sig_sf)   # все разделы missing (неполон)
+        it_sf = iter([{"op": "write", "path": "src/sf.py", "content": "s=1\n"}, {"done": True}])
+        rep_sf = run_pipeline("spec-first блок", sig_sf, root, lambda c: next(it_sf),
+                              budget={"max_model_calls": 5}, feature="spec-fn",
+                              commit=True, isolate=True, install_deps=False, baseline_diff=True)
+        expect("v2.110 spec-first: неполный spec.yaml -> ready_for_pr=False + incomplete_sections",
+               rep_sf.get("ready_for_pr") is False
+               and rep_sf["spec_first"]["ok"] is False and rep_sf["spec_first"]["incomplete_sections"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # заполнить spec.yaml -> spec-first больше НЕ блокирует (проверяем именно спек-гейт)
+        import yaml as _yaml_t
+        _sp = root / "features" / "spec-fn2" / "spec.yaml"
+        _sp.parent.mkdir(parents=True, exist_ok=True)
+        _full_secs = {s: {"status": "complete", "content": "x"} for s in _sl_t.required_sections(0)}
+        _sp.write_text(_yaml_t.safe_dump({"schema_version": 1, "kind": "spec", "workitem_id": "spec-fn2",
+                                          "level": 0, "sections": _full_secs}), encoding="utf-8")
+        it_sf2 = iter([{"op": "write", "path": "src/sf2.py", "content": "s=2\n"}, {"done": True}])
+        rep_sf2 = run_pipeline("spec-first полон", sig_sf, root, lambda c: next(it_sf2),
+                               budget={"max_model_calls": 5}, feature="spec-fn2",
+                               commit=True, isolate=True, install_deps=False, baseline_diff=True)
+        expect("v2.110 spec-first: полный spec.yaml -> спек-гейт не блокирует (ok=True)",
+               rep_sf2["spec_first"]["ok"] is True and not rep_sf2["spec_first"]["incomplete_sections"])
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями

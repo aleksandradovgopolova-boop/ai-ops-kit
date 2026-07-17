@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.109.0
+  package_version: 2.110.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_110_real_spec_first:
+      - "P0 аудита закрыт: SpecCoverage перестал быть фикцией. Раньше spec_levels.assess(signals) звался с пустым provided -> ВСЕ разделы missing (оценка не отражала реальность). Теперь assess_from_artifacts(signals, child_root, wid) собирает provided из РЕАЛЬНЫХ артефактов: features/<wid>/spec.yaml (что описано явно) + засчёт разделов по артефактам прогона (requirements.yaml->requirements, plan.yaml->implementation_plan/verification_strategy, openspec/changes/<wid>->contracts/acceptance_scenarios). covered_sections/provided_sources в отчёте — видно, откуда засчитано"
+      - "`specify` РЕАЛЬНО создаёт артефакт: spec_levels.create_spec пишет features/<wid>/spec.yaml нужной глубины (все обязательные разделы уровня, заготовки status=missing), не перезаписывает существующий без --overwrite (не теряем описанное). validate_spec валидирует реальный артефакт против уровня; нет spec.yaml -> честная пометка (не притворяется). ai-ops specify и spec_levels create/validate — CLI"
+      - "enforcement (аудит: 'неполная спека не пускает в implementation'): если для WorkItem СУЩЕСТВУЕТ spec.yaml, но он неполон (blocking_missing) -> ready_for_pr=False + report['spec_first'].incomplete_sections. Спеки НЕТ -> поведение прежнее (spec-first опционален для мелких задач, spec_depth через гейты) -> зелёные QUICK-потоки не сломаны (e2e без spec.yaml проходит). Q5b в qualification + spec-first сценарии в execution_pipeline selftest (неполный блокирует, полный из реального файла — нет)"
     fixed_v2_109_real_resume:
       - "P0 аудита закрыт: resume больше НЕ рестарт и не заглушка (раньше `ai-ops resume` делал только preflight и ПЕЧАТАЛ подсказку; а `run --feature X` поверх ветки с коммитами ПАДАЛ ошибкой P0.3 — продолжить было нечем). Теперь run_pipeline(resume=True): ветка ai-ops/<wid> и её коммиты НЕ удаляются, worktree переиспользуется (или пере-подключается к сохранившейся ветке), tool loop продолжает ПОВЕРХ подтверждённой работы"
       - "состояние в prompt: контроллер собирает resume_context из RunHandoff (completed/decisions/changed_files/open_questions/next_action) и подаёт его в начало base_context tool loop -> модель ПРОДОЛЖАЕТ, а не переделывает подтверждённое. Доказано тестом: MARKER_RESUME_STATE_ABC найден в prompt; работа фазы 1 (src/first.py) сохранена в worktree рядом с фазой 2"

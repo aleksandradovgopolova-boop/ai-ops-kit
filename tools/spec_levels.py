@@ -29,6 +29,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 
 # Уровень по типу задачи (базовый), далее возможна эскалация.
 TASK_TYPE_LEVEL = {"QUICK": 0, "ENGINEERING": 1, "PRODUCT": 2, "CRITICAL": 3,
@@ -132,6 +133,106 @@ def assess(signals, provided=None):
     }
 
 
+# v2.110 Real Spec-First: разделы, которые ЗАСЧИТЫВАЮТСЯ реальными артефактами прогона (а не только
+# текстом spec.yaml). Ключ — id раздела; значение — (относительный путь артефакта, статус-если-есть).
+# requirements.yaml/plan.yaml пишет authoring в .ai/runplan/<wid>/; openspec-change — в openspec/changes/<wid>.
+_SECTION_ARTIFACT_CREDIT = {
+    "requirements": (".ai/runplan/{wid}/requirements.yaml", "complete"),
+    "implementation_plan": (".ai/runplan/{wid}/plan.yaml", "complete"),
+    "verification_strategy": (".ai/runplan/{wid}/plan.yaml", "complete"),
+    "contracts": ("openspec/changes/{wid}", "complete"),
+    "acceptance_scenarios": ("openspec/changes/{wid}", "complete"),
+}
+
+
+def _spec_path(child_root, wid):
+    return Path(child_root) / "features" / str(wid) / "spec.yaml"
+
+
+def provided_from_artifacts(child_root, wid, work_root=None):
+    """v2.110: собрать provided-карту РАЗДЕЛОВ из РЕАЛЬНЫХ артефактов на диске (не из сигналов).
+
+    Источники: features/<wid>/spec.yaml (явно описанные разделы) + засчитанные артефакты прогона
+    (requirements/plan/openspec) в work_root (или child_root, если work_root не задан). Возвращает
+    {section_id: {"status": ..., "note": ...}} — вход для assess(). Детерминированно, без модели.
+    """
+    child_root = Path(child_root)
+    roots_for_credit = [Path(work_root)] if work_root else []
+    roots_for_credit.append(child_root)
+    provided = {}
+
+    # 1) явный spec.yaml — источник истины по разделам (что человек/автор реально описал)
+    sp = _spec_path(child_root, wid)
+    if sp.is_file():
+        try:
+            import yaml
+            doc = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+            for sid, entry in (doc.get("sections") or {}).items():
+                if isinstance(entry, dict):
+                    provided[sid] = {"status": entry.get("status", "missing"), "note": entry.get("note")}
+                elif isinstance(entry, str):
+                    provided[sid] = {"status": "complete", "note": None}
+        except Exception:  # noqa: BLE001 — битый spec.yaml не должен ронять оценку
+            pass
+
+    # 2) засчитать разделы по реальным артефактам прогона (если раздел ещё не описан явно)
+    for sid, (rel_tmpl, status) in _SECTION_ARTIFACT_CREDIT.items():
+        if provided.get(sid, {}).get("status") in ("complete", "not_applicable"):
+            continue
+        rel = rel_tmpl.format(wid=wid)
+        for base in roots_for_credit:
+            p = base / rel
+            if p.exists():
+                provided[sid] = {"status": status,
+                                 "note": f"засчитан по артефакту {rel}"}
+                break
+    return provided
+
+
+def assess_from_artifacts(signals, child_root, wid, work_root=None):
+    """v2.110: SpecCoverage, где provided взят из РЕАЛЬНЫХ артефактов (spec.yaml + прогон), а не пуст.
+    Добавляет `spec_artifact` (есть ли явный spec.yaml) и `provided_sources` для честности отчёта."""
+    provided = provided_from_artifacts(child_root, wid, work_root=work_root)
+    cov = assess(signals, provided=provided)
+    cov["spec_artifact"] = _spec_path(child_root, wid).is_file()
+    cov["provided_sources"] = {sid: e.get("note") for sid, e in provided.items()
+                               if e.get("note")}
+    cov["covered_sections"] = sorted(sid for sid, e in provided.items()
+                                     if e.get("status") in ("complete", "not_applicable"))
+    return cov
+
+
+def create_spec(child_root, wid, signals, overwrite=False):
+    """v2.110: РЕАЛЬНО создать spec-артефакт нужной глубины (features/<wid>/spec.yaml) со всеми
+    обязательными разделами уровня (заготовки status=missing). -> (path, created). Не перезаписывает
+    существующий без overwrite (не теряем описанное)."""
+    import yaml
+    sp = _spec_path(child_root, wid)
+    cls = classify(signals)
+    level = cls["level"]
+    if sp.is_file() and not overwrite:
+        return sp, False
+    sections = {sid: {"status": "missing", "content": "", "note": None}
+                for sid in required_sections(level)}
+    doc = {"schema_version": 1, "kind": "spec", "workitem_id": str(wid),
+           "level": level, "level_name": cls["level_name"],
+           "level_reason": cls["reason"], "sections": sections}
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    sp.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return sp, True
+
+
+def validate_spec(child_root, wid, signals, work_root=None):
+    """v2.110: провалидировать реальный spec-артефакт против обязательных разделов уровня.
+    -> SpecCoverage (assess_from_artifacts) + флаг spec_artifact. Если spec.yaml нет — честно
+    отмечает отсутствие (не притворяется, что спека есть)."""
+    cov = assess_from_artifacts(signals, child_root, wid, work_root=work_root)
+    if not cov["spec_artifact"]:
+        cov["note"] = (f"spec-артефакт features/{wid}/spec.yaml отсутствует — создай "
+                       f"`ai-ops specify` (разделы засчитаны только по артефактам прогона, если есть)")
+    return cov
+
+
 def selftest():
     ok = True
 
@@ -186,6 +287,51 @@ def selftest():
     nh = dict(full); nh["constraints"] = {"status": "needs_human", "note": "нужен владелец"}
     expect("needs_human зафиксирован", "constraints" in assess({"task_type": "QUICK"}, nh)["needs_human"])
 
+    # v2.110 Real Spec-First: create_spec реально создаёт артефакт нужной глубины
+    import tempfile
+    import yaml
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        sig_eng = {"task_type": "ENGINEERING", "affected_areas": ["core"]}
+        sp, created = create_spec(root, "sf", sig_eng)
+        expect("v2.110 create_spec: артефакт создан на диске", created and sp.is_file())
+        doc = yaml.safe_load(sp.read_text(encoding="utf-8"))
+        expect("v2.110 create_spec: разделы уровня L1 в артефакте (заготовки missing)",
+               "requirements" in doc["sections"] and doc["sections"]["goal"]["status"] == "missing"
+               and doc["level"] == 1)
+        # повторный create без overwrite не перезаписывает (не теряем описанное)
+        _, created2 = create_spec(root, "sf", sig_eng)
+        expect("v2.110 create_spec: без overwrite не перезаписывает", created2 is False)
+
+        # пустой spec (всё missing) -> assess_from_artifacts НЕ готов, spec_artifact=True
+        cov0 = assess_from_artifacts(sig_eng, root, "sf")
+        expect("v2.110 from_artifacts: пустой spec -> ready_to_implement=False + spec_artifact=True",
+               cov0["ready_to_implement"] is False and cov0["spec_artifact"] is True
+               and cov0["blocking_missing"])
+
+        # заполнить разделы L0/L1 в spec.yaml -> покрытие растёт (из РЕАЛЬНОГО артефакта)
+        for sid in doc["sections"]:
+            doc["sections"][sid] = {"status": "complete", "content": "x"}
+        sp.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        cov1 = assess_from_artifacts(sig_eng, root, "sf")
+        expect("v2.110 from_artifacts: заполненный spec.yaml -> ready_to_implement=True (реально из файла)",
+               cov1["ready_to_implement"] is True and not cov1["blocking_missing"])
+
+        # засчёт по артефакту прогона: requirements.yaml закрывает раздел requirements
+        with tempfile.TemporaryDirectory() as td2:
+            wr = Path(td2)
+            (wr / ".ai" / "runplan" / "art").mkdir(parents=True)
+            (wr / ".ai" / "runplan" / "art" / "requirements.yaml").write_text("k: v\n", encoding="utf-8")
+            prov = provided_from_artifacts(root, "art", work_root=wr)
+            expect("v2.110 credit: requirements.yaml засчитывает раздел requirements",
+                   prov.get("requirements", {}).get("status") == "complete"
+                   and "requirements.yaml" in (prov["requirements"].get("note") or ""))
+
+        # validate_spec без артефакта -> честная пометка об отсутствии (не притворяется)
+        cov_none = validate_spec(root, "never", sig_eng)
+        expect("v2.110 validate_spec: нет spec.yaml -> spec_artifact=False + note (честно)",
+               cov_none["spec_artifact"] is False and "note" in cov_none)
+
     print("spec_levels selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -198,7 +344,36 @@ def main(argv):
     c = sub.add_parser("classify")
     c.add_argument("--signals", default="{}")
     c.add_argument("--json", action="store_true")
+    # v2.110 Real Spec-First: create/validate реального spec-артефакта
+    cr = sub.add_parser("create", help="создать features/<wid>/spec.yaml нужной глубины")
+    cr.add_argument("child_root"); cr.add_argument("wid")
+    cr.add_argument("--signals", default="{}"); cr.add_argument("--overwrite", action="store_true")
+    cr.add_argument("--json", action="store_true")
+    vd = sub.add_parser("validate", help="провалидировать реальный spec-артефакт против уровня")
+    vd.add_argument("child_root"); vd.add_argument("wid")
+    vd.add_argument("--signals", default="{}"); vd.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "create":
+        sp, created = create_spec(Path(a.child_root), a.wid, json.loads(a.signals), overwrite=a.overwrite)
+        cov = assess_from_artifacts(json.loads(a.signals), Path(a.child_root), a.wid)
+        if a.json:
+            print(json.dumps({"path": str(sp), "created": created, "coverage": cov},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(f"SPECIFY: {'создан' if created else 'уже существует'} {sp} · {cov['level_name']} · "
+                  f"обязательных разделов {len(cov['sections'])} · не хватает {len(cov['blocking_missing'])}")
+        return 0
+    if a.cmd == "validate":
+        cov = validate_spec(Path(a.child_root), a.wid, json.loads(a.signals))
+        if a.json:
+            print(json.dumps(cov, ensure_ascii=False, indent=2))
+        else:
+            print(f"SPEC-VALIDATE: {cov['level_name']} · spec_artifact={cov['spec_artifact']} · "
+                  f"ready_to_implement={cov['ready_to_implement']} · "
+                  f"не хватает: {', '.join(cov['blocking_missing']) or '—'}")
+            if cov.get("note"):
+                print(f"  · {cov['note']}")
+        return 0 if cov["ready_to_implement"] else 1
     if a.cmd == "classify":
         cov = assess(json.loads(a.signals))
         if a.json:

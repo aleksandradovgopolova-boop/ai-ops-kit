@@ -156,7 +156,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
         import spec_levels
         try:
-            spec_cov = spec_levels.assess(signals)
+            # v2.110 Real Spec-First: coverage из РЕАЛЬНЫХ артефактов (features/<fid>/spec.yaml +
+            # засчёт requirements/plan/openspec), а не из сигналов с пустым provided.
+            _wt_pre = child_root / ".ai" / "worktrees" / fid
+            spec_cov = spec_levels.assess_from_artifacts(
+                signals, child_root, fid, work_root=(_wt_pre if _wt_pre.is_dir() else None))
             (features_dir / fid / "spec-coverage.yaml").write_text(
                 yaml.safe_dump(spec_cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001
@@ -243,7 +247,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             rep["spec_coverage"] = {"level": spec_cov["level"], "level_name": spec_cov["level_name"],
                                     "escalated_from": spec_cov["escalated_from"],
                                     "blocking_missing": spec_cov["blocking_missing"],
-                                    "needs_human": spec_cov["needs_human"]}
+                                    "needs_human": spec_cov["needs_human"],
+                                    # v2.110: реальность — есть ли явный spec.yaml и что засчитано из артефактов
+                                    "spec_artifact": spec_cov.get("spec_artifact", False),
+                                    "covered_sections": spec_cov.get("covered_sections", []),
+                                    "provided_sources": spec_cov.get("provided_sources", {})}
         if work_pkg:
             rep["work_package"] = {"atomic": work_pkg["atomic"],
                                    "should_decompose": work_pkg["should_decompose"],
