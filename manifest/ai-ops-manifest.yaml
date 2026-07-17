@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.73.0
+  package_version: 2.74.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -298,6 +298,10 @@ execution_engine:
     problem_1_paths: "str(Path.relative_to()) давал 'a\\b' на Windows -> ложный провал валидатора реестра и ложный дрейф managed-слоя (.checksums.json с '\\'-ключами непереносим). Фикс: все 18 сайтов -> .relative_to().as_posix(); detect_drift нормализует старые '\\'-ключи при чтении (миграция без ложного дрейфа)"
     problem_2_encoding: "installer печатал рамки/галочки/кириллицу -> UnicodeEncodeError на cp1251/cp866-консоли Windows. Фикс: _force_utf8_stdio() (sys.stdout/stderr.reconfigure utf-8, errors=replace) в начале main()"
     acceptance: "selftest инсталлера: ключи checksums только '/'; Windows-стиль '\\'-ключей не даёт ложного дрейфа. Все проверки AGENTS.md PASS. POSIX-установки не ломаются (sha256 те же, меняется только форма ключей)"
+  live_qual_green_2026_07_17:                 # ПЕРВЫЙ ЗЕЛЁНЫЙ qual-прогон на реальном child
+    result: "README-задача на ii-sreda (DeepSeek, класс QUICK, baseline-diff): [PASS] 1/1, ready_for_pr=True, no_regressions=True. Полный путь detect->tool-loop(живая модель)->npm ci->commit в worktree->evidence на точном SHA->baseline-diff подтверждён ЖИВЬЁМ на реальном репозитории"
+    fix_tasks_findings: "2 задачи-починки вскрыли ещё два: (1) на реальной починке модель крутилась до max_steps с 0 правок — не знала ЧТО чинить -> v2.74 подаёт в контекст ФАКТИЧЕСКИЙ вывод падающих проверок базы (_baseline_failure_summary); (2) SSL-handshake timeout оборвал задачу -> v2.74 _http_post_json ретраит транзиентные сетевые сбои и 5xx/429 (не 4xx) с бэкоффом"
+    remaining: "модель (DeepSeek) на сложных fix-задачах может не сходиться даже с выводом ошибок — это предел модели/подсказки, не крэш движка; квалификация зелёного вердикта на задачах-починках — эмпирика, требует ещё прогонов (возможно с более сильной моделью)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

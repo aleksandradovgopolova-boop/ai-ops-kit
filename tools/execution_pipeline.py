@@ -116,6 +116,24 @@ def _install_dependencies(profile, root, policy):
     return results
 
 
+def _baseline_failure_summary(checks, tail=500):
+    """Свод падающих проверок базы с ФАКТИЧЕСКИМ выводом — чтобы модель знала, что чинить.
+
+    finding живого прогона: на fix-задаче модель без вывода теста крутилась до max_steps с 0
+    правок. Даём реальный stderr/stdout (не фабрикация — вывод настоящего прогона).
+    """
+    lines = []
+    for name, c in (checks or {}).items():
+        if (c or {}).get("status") != "fail":
+            continue
+        for run in (c.get("runs") or []):
+            if run.get("ok"):
+                continue
+            out = (run.get("output_tail") or "")[-tail:]
+            lines.append(f"[{name}] {run.get('command')} (exit {run.get('exit_code')}):\n{out}")
+    return "\n".join(lines)
+
+
 def _diff_checks(baseline, after):
     """Сравнить статусы проверок ДО и ПОСЛЕ правки. -> (regressions, fixed).
 
@@ -188,8 +206,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if baseline_diff:
         baseline_checks = evidence_collector.collect(profile, work_root, pol)["checks"]
 
-    # 4. tool-loop: модель применяет изменения (context = задача + профиль стека)
+    # 4. tool-loop: модель применяет изменения (context = задача + профиль стека +
+    #    ФАКТИЧЕСКИЙ вывод падающих проверок базы — finding живого прогона: без него модель
+    #    не знала, ЧТО чинить, и крутилась до max_steps с 0 правок на fix-задачах).
     ctx = f"{task}\n\n{_profile_summary(profile)}"
+    if baseline_diff:
+        fails = _baseline_failure_summary(baseline_checks)
+        if fails:
+            ctx += ("\n\n=== ТЕКУЩИЕ ПРОВАЛЫ ПРОВЕРОК НА БАЗЕ (почини относящиеся к задаче; "
+                    "не ломай остальное) ===\n" + fails)
     loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
                               max_steps=max_steps, base_context=ctx)
     applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
@@ -443,6 +468,15 @@ def selftest():
         expect("baseline-diff: test fail->pass = починка", fx == ["test"])
         expect("baseline-diff: пред-существующий fail->fail не в счёт",
                _diff_checks({"x": {"status": "fail"}}, {"x": {"status": "fail"}}) == ([], []))
+
+        # v2.74: свод падающих проверок базы -> модель видит реальный вывод (что чинить)
+        fs = _baseline_failure_summary({
+            "test": {"status": "fail", "runs": [
+                {"command": "npm test", "exit_code": 1, "ok": False,
+                 "output_tail": "expected 'Вчера' got 'Сегодня'"}]},
+            "build": {"status": "pass", "runs": [{"command": "npm run build", "ok": True}]}})
+        expect("baseline-summary: включает падающий тест с выводом, пропускает прошедший build",
+               "expected 'Вчера'" in fs and "npm test" in fs and "npm run build" not in fs)
 
         # интеграция: baseline_diff на репо без тулчейна (проверки not_run -> нет регрессий) ->
         # правка проходит по критерию no-regressions даже без «всё зелёное»
