@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Context Lifecycle -> RunHandoff + resume (v2.99, эпик Context Engineering, этап 3).
+
+Длинная задача должна переживать несколько сессий без потери решений, архитектуры и состояния
+(борьба с context rot). Сущности: Feature -> WorkItem -> Run -> Stage -> Step -> Handoff.
+
+После значимого этапа сохраняем RunHandoff: что сделано, что изменилось, какие решения приняты,
+какие проверки прошли/упали, что осталось, открытые вопросы/риски, СЛЕДУЮЩИЙ безопасный шаг и
+актуальный commit/revision. Resume перечитывает последний Handoff и продолжает с подтверждённого
+шага — НЕ начинает заново, НЕ повторяет подтверждённое без причины, НЕ использует старый контекст
+после изменения main, НЕ удаляет предыдущий результат.
+
+Использование:
+  run_handoff.py build <run-report.json> [--out handoff.yaml]
+  run_handoff.py resume-preflight <child_root> <workitem_id> [--base main] [--json]
+  run_handoff.py --selftest
+Возврат 0 — ок, 1 — ошибка/resume небезопасен.
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+
+def _git(root, *args):
+    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+
+def build_handoff(report, work_root=None):
+    """Собрать RunHandoff из отчёта прогона движка (execution-pipeline). Детерминированно."""
+    rep = report or {}
+    wid = rep.get("workitem_id", "unknown")
+    commit = rep.get("commit") or {}
+    sha = commit.get("sha")
+    loop = rep.get("loop") or {}
+    gates = rep.get("gates") or {}
+
+    # completed: подтверждённые шаги петли (успешные write/shell) — краткое резюме
+    completed = []
+    if loop.get("applied_writes"):
+        completed.append(f"применено правок: {loop['applied_writes']}")
+    if commit.get("sha"):
+        completed.append(f"коммит {sha[:12]} на {commit.get('branch')} (evidence на точном SHA: "
+                         f"{commit.get('evidence_on_exact_sha')})")
+
+    # changed_files: имена из diff коммита (если есть git и sha)
+    changed_files = []
+    if work_root and sha:
+        rc, out, _ = _git(work_root, "diff", "--name-only", f"{sha}~1..{sha}")
+        if rc == 0:
+            changed_files = [ln for ln in out.splitlines() if ln.strip()]
+
+    # verification: закрытые/незакрытые гейты + проверки
+    evaluated = gates.get("evaluated") or []
+    unmet = gates.get("unmet") or []
+    passed = [g for g in evaluated if g not in unmet]
+    checks = rep.get("checks") or {}
+    checks_failed = [k for k, v in checks.items() if (v or {}).get("status") == "fail"]
+
+    # known_risks: секреты/новые зависимости + регрессии baseline
+    known_risks = []
+    ss = rep.get("security_scan") or {}
+    if ss.get("secrets"):
+        known_risks.append(f"security: секретов {len(ss['secrets'])}")
+    if ss.get("new_dependencies"):
+        known_risks.append("security: новые зависимости " + ", ".join(ss["new_dependencies"]))
+    baseline = rep.get("baseline") or {}
+    if baseline.get("regressions"):
+        known_risks.append("регрессии: " + ", ".join(baseline["regressions"]))
+
+    # next_action: следующий безопасный шаг
+    if rep.get("ready_for_pr"):
+        next_action = "открыть/обновить draft PR (--open-pr) либо передать на ревью человеку"
+    elif unmet:
+        next_action = "закрыть незакрытые гейты: " + ", ".join(unmet)
+    elif loop.get("stopped") and loop["stopped"] != "done":
+        next_action = f"продолжить реализацию (петля остановилась: {loop['stopped']})"
+    else:
+        next_action = "проверить отчёт и решить следующий шаг"
+
+    return {
+        "schema_version": 1, "kind": "RunHandoff",
+        "run_id": f"{wid}@{sha[:12]}" if sha else wid,
+        "workitem_id": wid,
+        "completed": completed,
+        "decisions": rep.get("decisions") or [],
+        "changed_files": changed_files,
+        "verification": {"passed": passed, "failed": unmet + [f"check:{c}" for c in checks_failed]},
+        "open_questions": rep.get("not_yet") or [],
+        "known_risks": known_risks,
+        "next_action": next_action,
+        "resume_from_revision": sha,
+    }
+
+
+def resume_preflight(child_root, wid, base="main"):
+    """Проверить, безопасно ли продолжать WorkItem, и что требует ревалидации. Детерминированно.
+    -> {can_resume, revalidation_needed, reasons[], handoff?, next_action?, resume_from_revision?}."""
+    child_root = Path(child_root)
+    reasons, revalidation = [], False
+    hp = child_root / "features" / wid / "run-handoff.yaml"
+    if not hp.is_file():
+        return {"can_resume": False, "revalidation_needed": False,
+                "reasons": [f"нет RunHandoff для {wid} (features/{wid}/run-handoff.yaml) — нечего продолжать"]}
+    handoff = yaml.safe_load(hp.read_text(encoding="utf-8")) or {}
+    sha = handoff.get("resume_from_revision")
+    branch = f"ai-ops/{wid}"
+
+    # ветка/worktree на месте?
+    rc_b, _, _ = _git(child_root, "rev-parse", "--verify", branch)
+    branch_exists = rc_b == 0
+    if not branch_exists:
+        reasons.append(f"ветка {branch} не найдена — worktree прошлого прогона утерян; resume пересоберёт с базы")
+        revalidation = True
+    wt = child_root / ".ai" / "worktrees" / wid
+    if not wt.is_dir():
+        reasons.append(f"worktree {wt.relative_to(child_root)} отсутствует — будет пересоздан")
+
+    # изменился ли base с момента handoff? (main ушёл вперёд относительно ревизии прогона)
+    if sha:
+        rc_h, _, _ = _git(child_root, "rev-parse", "--verify", sha)
+        if rc_h != 0:
+            reasons.append(f"ревизия прогона {sha[:12]} не найдена в репозитории — evidence устарел")
+            revalidation = True
+        else:
+            rc_a, ahead, _ = _git(child_root, "rev-list", "--count", f"{sha}..{base}")
+            if rc_a == 0 and ahead.isdigit() and int(ahead) > 0:
+                reasons.append(f"{base} ушёл вперёд на {ahead} коммит(ов) с момента прогона — "
+                               "нужна ревалидация (старый evidence НЕ действителен для нового состояния)")
+                revalidation = True
+
+    # устаревшие решения (ссылки на прошлую версию)
+    for d in handoff.get("decisions") or []:
+        if isinstance(d, dict) and d.get("stale"):
+            reasons.append(f"решение {d.get('id')} помечено устаревшим — пересмотреть")
+            revalidation = True
+
+    if not reasons:
+        reasons.append("состояние актуально: ветка на месте, base не двигался — можно продолжить с "
+                       "последнего подтверждённого шага")
+    return {"can_resume": True, "revalidation_needed": revalidation, "reasons": reasons,
+            "handoff": {"next_action": handoff.get("next_action"),
+                        "open_questions": handoff.get("open_questions"),
+                        "resume_from_revision": sha},
+            "next_action": handoff.get("next_action"),
+            "resume_from_revision": sha}
+
+
+def selftest():
+    import tempfile
+    ok = True
+
+    def expect(name, cond):
+        nonlocal ok
+        ok = ok and cond
+        print(f"{'PASS' if cond else 'FAIL'} {name}")
+
+    # build_handoff из ready-отчёта
+    rep_ready = {"workitem_id": "feat-x", "ready_for_pr": True,
+                 "commit": {"sha": "a" * 40, "branch": "ai-ops/feat-x", "evidence_on_exact_sha": True},
+                 "loop": {"applied_writes": 2, "stopped": "done"},
+                 "gates": {"evaluated": ["requirements", "code_review"], "unmet": []},
+                 "not_yet": [], "checks": {}}
+    h = build_handoff(rep_ready)
+    expect("handoff: kind=RunHandoff", h["kind"] == "RunHandoff")
+    expect("handoff: resume_from_revision = commit SHA", h["resume_from_revision"] == "a" * 40)
+    expect("handoff: ready -> next_action про PR", "PR" in h["next_action"])
+    expect("handoff: verification.passed непуст", set(h["verification"]["passed"]) == {"requirements", "code_review"})
+
+    # build_handoff из not-ready (гейты unmet) -> next_action про гейты
+    rep_block = {"workitem_id": "feat-y", "ready_for_pr": False,
+                 "commit": {"sha": "b" * 40, "branch": "ai-ops/feat-y", "evidence_on_exact_sha": True},
+                 "loop": {"applied_writes": 1, "stopped": "done"},
+                 "gates": {"evaluated": ["requirements", "security"], "unmet": ["security"]},
+                 "security_scan": {"secrets": [{"path": "a"}], "new_dependencies": [], "injection_flags": []},
+                 "not_yet": ["draft PR"], "checks": {}}
+    hb = build_handoff(rep_block)
+    expect("handoff: unmet -> next_action про гейты", "security" in hb["next_action"])
+    expect("handoff: known_risks содержит секреты", any("секрет" in r for r in hb["known_risks"]))
+    expect("handoff: verification.failed содержит security", "security" in hb["verification"]["failed"])
+
+    # resume_preflight: нет handoff -> can_resume False
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        subprocess.run(["git", "-C", td, "init", "-q"])
+        subprocess.run(["git", "-C", td, "config", "user.email", "t@t"])
+        subprocess.run(["git", "-C", td, "config", "user.name", "t"])
+        (root / "f").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"])
+        pf0 = resume_preflight(root, "nope")
+        expect("resume: нет handoff -> can_resume=False", pf0["can_resume"] is False)
+
+        # положим handoff, ветку не создаём -> revalidation (worktree утерян)
+        rc, head, _ = _git(root, "rev-parse", "HEAD")
+        fdir = root / "features" / "feat-z"; fdir.mkdir(parents=True)
+        (fdir / "run-handoff.yaml").write_text(yaml.safe_dump(
+            {"kind": "RunHandoff", "workitem_id": "feat-z", "resume_from_revision": head,
+             "next_action": "продолжить", "open_questions": []}), encoding="utf-8")
+        pf = resume_preflight(root, "feat-z", base="master")
+        expect("resume: handoff есть -> can_resume=True", pf["can_resume"] is True)
+        expect("resume: ветки нет -> revalidation_needed", pf["revalidation_needed"] is True)
+        expect("resume: next_action перенесён из handoff", pf["next_action"] == "продолжить")
+
+        # base ушёл вперёд -> revalidation
+        (root / "g").write_text("y", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "advance"])
+        # текущая ветка (master/main) ушла вперёд от head
+        cur = _git(root, "rev-parse", "--abbrev-ref", "HEAD")[1]
+        pf2 = resume_preflight(root, "feat-z", base=cur)
+        expect("resume: base ушёл вперёд -> revalidation + причина",
+               pf2["revalidation_needed"] is True and any("вперёд" in r for r in pf2["reasons"]))
+
+    print("run_handoff selftest:", "PASS" if ok else "FAIL")
+    return 0 if ok else 1
+
+
+def main(argv):
+    if "--selftest" in argv:
+        return selftest()
+    ap = argparse.ArgumentParser(prog="run_handoff.py")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    b = sub.add_parser("build"); b.add_argument("report"); b.add_argument("--out"); b.add_argument("--root")
+    r = sub.add_parser("resume-preflight"); r.add_argument("child_root"); r.add_argument("workitem_id")
+    r.add_argument("--base", default="main"); r.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    if a.cmd == "build":
+        rep = json.loads(Path(a.report).read_text(encoding="utf-8"))
+        h = build_handoff(rep, work_root=a.root)
+        text = yaml.safe_dump(h, allow_unicode=True, sort_keys=False)
+        if a.out:
+            Path(a.out).write_text(text, encoding="utf-8")
+            print(f"RUN-HANDOFF: записан {a.out}")
+        else:
+            print(text)
+        return 0
+    if a.cmd == "resume-preflight":
+        pf = resume_preflight(a.child_root, a.workitem_id, base=a.base)
+        if a.json:
+            print(json.dumps(pf, ensure_ascii=False, indent=2))
+        else:
+            print(f"RESUME-PREFLIGHT {a.workitem_id}: can_resume={pf['can_resume']} · "
+                  f"revalidation_needed={pf.get('revalidation_needed')}")
+            for r_ in pf["reasons"]:
+                print(f"  · {r_}")
+            if pf.get("next_action"):
+                print(f"  next: {pf['next_action']}")
+        return 0 if pf["can_resume"] else 1
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
