@@ -270,7 +270,7 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   v2.104), resume-ревалидация при неразрешимой base (v2.105), enforcement-виринг security-reviewer/
   spec-depth/context-budget (v2.106), ложный green medium-fail + dependency_diff + дрейф
   secret_boundary + единая классификация + не-глушение ошибок слоя + active-work finally (v2.107).
-- **Operational Context (planned)** — ГЛАВНОЕ: ContextBundle должен реально попадать в prompt модели
+- **Operational Context (v2.108) ✅** — ГЛАВНОЕ: ContextBundle должен реально попадать в prompt модели
   (compiled payload: содержимое правил/решений/спек/skills/project+repo context с hash+revision+
   причиной), бюджет с учётом модели/output-reserve/tool-loop. Сейчас bundle — аналитический артефакт,
   а tool loop получает task+стек+baseline. Это ключевой разрыв «описывает, но не управляет».

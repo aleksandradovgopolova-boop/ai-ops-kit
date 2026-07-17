@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.108.0] — 2026-07-17 — Operational Context: ContextBundle реально в prompt модели
+
+Внешний аудит на v2.104 держал #1 P0: Context Compiler измерял и фильтровал контекст, но собранное
+**не доходило до модели** — оставалось отчётом. Закрыто: контекст стал реальным входом рантайма.
+
+### Added
+- **`build_payload()`** (`context_compiler.py`) — собирает из ContextBundle РЕАЛЬНОЕ содержимое
+  (project/task, repository_context, спецификации, релевантные решения, тело правил из
+  `rules/<cat>/*.md`, имена skills) в текстовый prelude для prompt. Каждый включённый элемент несёт
+  `{source, kind, hash, revision, tokens, reason}`; не влезшее — в `excluded_for_budget` (не молча,
+  task не выбрасывается). Бюджет = `context_budget` минус резервы **output (25%)** и **tool-loop
+  (15%)**, сверху ограничен окном модели (`MODEL_CONTEXT`, напр. `deepseek-chat=64k`).
+- **Виринг в рантайм** (`execution_pipeline.py`) — `run_pipeline(context_prelude=...)`: prelude
+  встаёт **перед** task+profile в `base_context` tool-loop. Selftest с маркером доказывает, что
+  содержимое payload реально достигает контекста модели (не только файла-отчёта).
+- **Контроллер** (`ai_ops_run.py`) — считает payload, пишет `features/<id>/context-payload.yaml`
+  (манифест без текста), подаёт `context_prelude` в pipeline, отчёт `context_payload.fed_to_model`.
+
+### Fixed
+- **Пути спецификаций** — `compile_bundle` ищет spec и в `features/<id>`, и в `.ai/runplan/<id>`.
+- **Релевантность решений** — decisions фильтруются по `affected_areas`/ключам задачи (иначе 3
+  свежих), а не тянутся все подряд.
+
+Q1b (qualification) и e2e-ассерт проверяют, что payload несёт реальное содержимое правил и подаётся
+модели. Селф-аудит: остаётся real resume-mode (продолжение tool-loop с next_action, а не рестарт) —
+следующим релизом.
+
+### Осталось (крупные, отдельными релизами)
+Real resume-mode, real spec-first authoring (`specify`), Atomic Planner создаёт WorkPackages,
+product-qualification с живой моделью, container delivery только текущей ветки. См. ROADMAP.
+
 ## [2.107.0] — 2026-07-17 — Trust Fixes по внешнему аудиту v2.104
 
 Внешний аудит на v2.104 вскрыл дефекты доверия (часть уже была закрыта в v2.105/2.106; здесь —

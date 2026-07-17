@@ -96,6 +96,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001 — не роняем прогон, но и не молчим
             bundle = None; lifecycle_errors.append(f"context_compiler: {type(e).__name__}: {e}")
+        # v2.108 Operational Context: compiled payload -> реально в prompt модели (context_prelude).
+        payload = None
+        try:
+            payload = context_compiler.build_payload(signals, child_root, plan=plan, bundle=bundle, model=model)
+            (features_dir / fid / "context-payload.yaml").write_text(
+                yaml.safe_dump({k: v for k, v in payload.items() if k != "text"},
+                               allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            payload = None; lifecycle_errors.append(f"context_payload: {type(e).__name__}: {e}")
         # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
         import spec_levels
         try:
@@ -138,7 +147,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
                 require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
-                author=author, author_proposer=auth_prop, install_deps=install_deps)
+                author=author, author_proposer=auth_prop, install_deps=install_deps,
+                context_prelude=(payload or {}).get("text"))
         except BaseException:
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
@@ -152,6 +162,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             "workitem": f"features/{fid}/workitem.yaml",
             "run_plan": f"features/{fid}/run-plan.yaml",
             "context_bundle": (f"features/{fid}/context-bundle.yaml" if bundle else None),
+            "context_payload": (f"features/{fid}/context-payload.yaml" if payload else None),
             "spec_coverage": (f"features/{fid}/spec-coverage.yaml" if spec_cov else None),
             "work_package": (f"features/{fid}/work-package.yaml" if work_pkg else None),
             "active_work": ".ai/runtime/active-work.yaml",
@@ -166,6 +177,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                      "agents": bundle["included"]["agents"],
                                      "rules": bundle["included"]["rules"],
                                      "excluded_count": len(bundle["excluded"])}
+        if payload:
+            rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
+                                      "payload_budget": payload["payload_budget"],
+                                      "context_budget": payload["context_budget"],
+                                      "included_items": len(payload["included_items"]),
+                                      "excluded_for_budget": len(payload["excluded_for_budget"]),
+                                      "fed_to_model": bool(payload.get("text"))}
         if spec_cov:
             rep["spec_coverage"] = {"level": spec_cov["level"], "level_name": spec_cov["level_name"],
                                     "escalated_from": spec_cov["escalated_from"],
@@ -431,6 +449,12 @@ def selftest():
                isinstance(rp.get("context_bundle"), dict)
                and rp["context_bundle"]["estimated_tokens"] > 0
                and rp["context_bundle"]["context_budget"] > 0)
+        # v2.108 Operational Context: compiled payload собран, сохранён и помечен как поданный модели
+        expect("v2.108: ContextPayload сохранён", (root / "features" / pfid / "context-payload.yaml").exists())
+        expect("v2.108: payload подан модели (fed_to_model) + бюджет с резервом",
+               isinstance(rp.get("context_payload"), dict)
+               and rp["context_payload"]["fed_to_model"] is True
+               and rp["context_payload"]["payload_budget"] < rp["context_payload"]["context_budget"])
         # v2.98 Adaptive Spec-First: уровень спецификации определён и сохранён
         expect("v2.98: SpecCoverage сохранён", (root / "features" / pfid / "spec-coverage.yaml").exists())
         expect("v2.98: spec-level в отчёте (QUICK -> L0)",

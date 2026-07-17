@@ -524,9 +524,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
-                 author=False, author_proposer=None, plan=None):
+                 author=False, author_proposer=None, plan=None, context_prelude=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
+
+    v2.108 (Operational Context): context_prelude — compiled payload из ContextBundle (реальное
+    содержимое релевантных правил/решений/спек), который РЕАЛЬНО попадает в prompt модели (prepend к
+    base_context tool loop) — не только статистика в отчёте.
 
     v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
     чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
@@ -644,6 +648,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #    ФАКТИЧЕСКИЙ вывод падающих проверок базы — finding живого прогона: без него модель
     #    не знала, ЧТО чинить, и крутилась до max_steps с 0 правок на fix-задачах).
     ctx = f"{task}\n\n{_profile_summary(profile)}"
+    # v2.108 Operational Context: compiled payload из ContextBundle РЕАЛЬНО в prompt (не только отчёт).
+    if context_prelude:
+        ctx = context_prelude + "\n\n" + ctx
     if baseline_diff:
         fails = _baseline_failure_summary(baseline_checks)
         if fails:
@@ -1108,6 +1115,18 @@ def selftest():
                               commit=True, isolate=True, install_deps=False)
         expect("v2.93: правка через shell (applied_writes=0) всё равно даёт коммит",
                rep_sh["loop"]["applied_writes"] == 0 and bool(rep_sh["commit"]["sha"]))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.108 Operational Context: context_prelude РЕАЛЬНО доходит до модели (в base_context петли).
+        seen_ctx = {}
+        def _capturing(c):
+            seen_ctx.setdefault("first", c)
+            return {"done": True}
+        run_pipeline("проверка prelude", sig, root, _capturing, policy=pol,
+                     budget={"max_model_calls": 3}, feature="prelude-fn", isolate=True,
+                     install_deps=False, context_prelude="MARKER_CONTEXT_PAYLOAD_XYZ")
+        expect("v2.108: context_prelude попал в prompt модели (base_context петли)",
+               "MARKER_CONTEXT_PAYLOAD_XYZ" in (seen_ctx.get("first") or ""))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями

@@ -68,6 +68,11 @@ def run_scenarios():
         ok("Q1 context filtering: включены только агенты RunPlan, остальное excluded с причиной",
            len(b["included"]["agents"]) > 0 and b["excluded"]
            and all(e.get("reason") for e in b["excluded"]))
+        # Q1b (v2.108): ContextBundle РЕАЛЬНО становится payload для prompt (не только отчёт)
+        pay = context_compiler.build_payload(eng, root, bundle=b)
+        ok("Q1b operational context: compiled payload несёт РЕАЛЬНОЕ содержимое правил + подаётся модели",
+           "=== [rule]" in pay["text"] and pay["payload_tokens"] > 0
+           and pay["payload_budget"] < pay["context_budget"])
 
         # Q2 context overflow -> декомпозиция (не молча)
         b_of = context_compiler.compile_bundle(eng, root, context_budget=10)

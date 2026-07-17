@@ -25,6 +25,7 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -162,15 +163,29 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None):
                 for s in profile.get("stacks", [])]
     files = sorted({src for s in profile.get("stacks", []) for src in (s.get("evidence_source") or [])})
 
-    # --- specifications / decisions: существующие артефакты (если есть) ---
-    specs, decisions = [], []
-    feat_dir = child_root / "features" / wid
-    for name in ("requirements.md", "requirements.yaml", "plan.md", "spec.md"):
-        if (feat_dir / name).is_file():
-            specs.append(f"features/{wid}/{name}")
+    # --- specifications: артефакты в features/<wid> И в .ai/runplan/<wid> (v2.108 finding аудита:
+    #     authoring пишет часть артефактов в .ai/runplan/<wid> — раньше их не находили) ---
+    specs = []
+    for base in (child_root / "features" / wid, child_root / ".ai" / "runplan" / wid):
+        if base.is_dir():
+            for name in ("requirements.md", "requirements.yaml", "plan.md", "plan.yaml", "spec.md"):
+                if (base / name).is_file():
+                    specs.append(str((base / name).relative_to(child_root)))
+    # --- decisions: relevance-фильтр (v2.108 finding аудита: раньше включались ВСЕ разом). Берём те,
+    #     чей текст пересекается с affected_areas/ключевыми словами задачи; иначе — 3 самых свежих ---
+    decisions = []
     dec_dir = child_root / ".ai" / "project" / "decisions"
     if dec_dir.is_dir():
-        decisions = sorted(f"{p.relative_to(child_root)}" for p in dec_dir.glob("*.md"))
+        all_dec = sorted(dec_dir.glob("*.md"))
+        kws = {a.lower() for a in (signals.get("affected_areas") or [])}
+        kws |= {w.lower() for w in re.findall(r"\w{4,}", signals.get("task_text", ""))}
+        relevant = []
+        for p in all_dec:
+            txt = p.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(k in txt for k in kws):
+                relevant.append(p)
+        chosen = relevant or all_dec[-3:]     # релевантные; иначе 3 самых свежих (не все разом)
+        decisions = [str(p.relative_to(child_root)) for p in chosen]
 
     # --- excluded (с причиной): агенты не из RunPlan, правила и skills не по задаче ---
     all_rule_cats = sorted(p.name for p in (PKG / "rules").iterdir() if p.is_dir()) if (PKG / "rules").is_dir() else []
@@ -245,6 +260,98 @@ def _git_head(root):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+# Грубые контекстные окна моделей (токены). Бюджет payload режем по МЕНЬШЕМУ из заданного и окна модели.
+MODEL_CONTEXT = {
+    "deepseek-chat": 64_000, "gpt-4o": 128_000, "gpt-4o-mini": 128_000,
+    "claude-3-5-sonnet": 200_000, "claude-3-5-haiku": 200_000,
+}
+_PER_FILE_TOKEN_CAP = 1500        # один файл не съедает весь бюджет payload
+_OUTPUT_RESERVE_FRAC = 0.25       # резерв под вывод модели
+_TOOLLOOP_RESERVE_FRAC = 0.15     # резерв под tool-loop (шаги/наблюдения)
+
+
+def _sha(text):
+    import hashlib
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:12]
+
+
+def build_payload(signals, child_root, plan=None, bundle=None, context_budget=None, model=None):
+    """v2.108 Operational Context: собрать РЕАЛЬНЫЙ compiled payload для prompt модели из ContextBundle
+    (содержимое правил/решений/спек/repo+project context), с бюджетом (output/tool-loop reserve + окно
+    модели) и манифестом (source, hash, revision, tokens, reason). Превышение НЕ обрезает молча —
+    вытесненное фиксируется в excluded_for_budget. -> dict с text (для инъекции) + манифест."""
+    child_root = Path(child_root)
+    signals = dict(signals or {})
+    if bundle is None:
+        bundle = compile_bundle(signals, child_root, plan=plan, context_budget=context_budget)
+    budget = context_budget or bundle.get("context_budget") or CONTEXT_BUDGET_DEFAULT
+    if model and model in MODEL_CONTEXT:
+        budget = min(budget, MODEL_CONTEXT[model])
+    payload_budget = int(budget * (1 - _OUTPUT_RESERVE_FRAC - _TOOLLOOP_RESERVE_FRAC))
+    rev = bundle.get("revision")
+
+    # источники в порядке приоритета: (kind, source_id, loader) -> текст
+    inc = bundle.get("included", {})
+    candidates = []
+    task_text = signals.get("task_text", "")
+    if task_text:
+        candidates.append(("project_context", "task", task_text, "текст задачи"))
+    if inc.get("repository_context"):
+        candidates.append(("repository_context", "RepositoryProfile",
+                           "Стек: " + "; ".join(inc["repository_context"]), "профиль репозитория"))
+    for rel in inc.get("specifications", []):
+        p = child_root / rel
+        if p.is_file():
+            candidates.append(("specification", rel, p.read_text(encoding="utf-8", errors="ignore"),
+                               "спецификация задачи"))
+    for rel in inc.get("decisions", []):
+        p = child_root / rel
+        if p.is_file():
+            candidates.append(("decision", rel, p.read_text(encoding="utf-8", errors="ignore"),
+                               "архитектурное решение"))
+    for cat in inc.get("rules", []):
+        for p in sorted((PKG / "rules" / cat).glob("*.md")):
+            candidates.append(("rule", str(p.relative_to(PKG)),
+                               p.read_text(encoding="utf-8", errors="ignore"),
+                               f"правило категории {cat} (из RunPlan)"))
+    if inc.get("skills"):
+        candidates.append(("skills", "skills", "Нужные skills: " + ", ".join(inc["skills"]),
+                           "релевантные skills (по стадиям)"))
+
+    included_items, excluded_for_budget, parts, used = [], [], [], 0
+    for kind, source, text, reason in candidates:
+        capped = text
+        tok = _est_tokens(capped)
+        if tok > _PER_FILE_TOKEN_CAP:                 # обрезаем ОДИН источник до кэпа (честно помечаем)
+            capped = capped[: _PER_FILE_TOKEN_CAP * 4] + "\n…[обрезано до кэпа]"
+            tok = _est_tokens(capped)
+        if used + tok > payload_budget and kind not in ("project_context",):
+            excluded_for_budget.append({"source": source, "kind": kind, "tokens": tok,
+                                        "reason": "вытеснено бюджетом payload"})
+            continue
+        used += tok
+        included_items.append({"source": source, "kind": kind, "hash": _sha(text),
+                               "revision": rev, "tokens": tok, "reason": reason})
+        parts.append(f"=== [{kind}] {source} (причина: {reason}) ===\n{capped}")
+
+    text = ("=== СОБРАННЫЙ КОНТЕКСТ (Context Compiler) ===\n"
+            "Ниже — только релевантный этому WorkItem контекст (правила/решения/спеки/стек), "
+            "отобранный из RunPlan и урезанный по бюджету. Учитывай его при работе.\n\n"
+            + "\n\n".join(parts)) if parts else ""
+
+    return {
+        "schema_version": 1, "kind": "ContextPayload", "workitem_id": bundle.get("workitem_id"),
+        "revision": rev, "model": model,
+        "context_budget": budget, "payload_budget": payload_budget,
+        "output_reserve": int(budget * _OUTPUT_RESERVE_FRAC),
+        "tool_loop_reserve": int(budget * _TOOLLOOP_RESERVE_FRAC),
+        "payload_tokens": used,
+        "included_items": included_items,
+        "excluded_for_budget": excluded_for_budget,
+        "text": text,
+    }
+
+
 def selftest():
     import tempfile
     ok = True
@@ -292,6 +399,27 @@ def selftest():
         p = compile_bundle({"task_type": "PRODUCT", "risk": "medium", "affected_areas": ["catalog"],
                             "measurable_behavior": True, "task_text": "новая фича"}, root)
         expect("PRODUCT включает правила product", "product" in p["included"]["rules"])
+
+        # v2.108 Operational Context: build_payload даёт РЕАЛЬНЫЙ текст для prompt + манифест
+        pay = build_payload(eng, root)
+        expect("payload: kind=ContextPayload + непустой text", pay["kind"] == "ContextPayload"
+               and len(pay["text"]) > 0)
+        expect("payload: содержит РЕАЛЬНОЕ содержимое правил (не только пути)",
+               "=== [rule]" in pay["text"] and pay["payload_tokens"] > 0)
+        expect("payload: у каждого элемента hash+revision+reason+tokens",
+               all({"hash", "revision", "reason", "tokens", "source"} <= set(i) for i in pay["included_items"]))
+        expect("payload: бюджет с резервами (output+tool-loop < полный бюджет)",
+               pay["payload_budget"] < pay["context_budget"]
+               and pay["output_reserve"] > 0 and pay["tool_loop_reserve"] > 0)
+        # маленький бюджет -> вытеснение фиксируется (не молча), задача остаётся
+        pay_of = build_payload(eng, root, context_budget=60)
+        expect("payload: превышение бюджета -> excluded_for_budget непуст (не молча), task остался",
+               pay_of["excluded_for_budget"]
+               and any(i["kind"] == "project_context" for i in pay_of["included_items"]))
+        # модель сужает бюджет по окну
+        pay_m = build_payload(eng, root, context_budget=500_000, model="deepseek-chat")
+        expect("payload: окно модели сужает бюджет (deepseek-chat=64k)",
+               pay_m["context_budget"] == MODEL_CONTEXT["deepseek-chat"])
 
     print("context_compiler selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
