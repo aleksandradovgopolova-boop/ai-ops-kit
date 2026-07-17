@@ -154,6 +154,25 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
     return gate_ev, reviews
 
 
+def _review_security(reviewer_proposer, work_root, pack_result, revision, budget):
+    """v2.106: независимый security-reviewer выносит вердикт по needs_review доменам (writer≠judge,
+    read-only, отдельный провайдер). -> (status|None, result). Закрывает то, что детерминированный
+    сканер не может (no_injection_surface и т.п.), НО только по чек-листам применимых доменов."""
+    import security_pack
+    ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
+    domains = {d["id"]: d for d in security_pack.load_domains()[0]}
+    checklist_items = []
+    for did in pack_result.get("needs_review", []):
+        checklist_items += (domains.get(did, {}).get("reviewer_checklist") or [])
+    checklist = "; ".join(checklist_items)
+    reviewer = tool_loop.make_reviewer_proposer(
+        reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
+    rv = tool_loop.run_review(reviewer, work_root, ro_policy, "security", budget=budget,
+                              required_evidence=["security_reviewer"], reviewed_revision=revision)
+    res = rv.get("result")
+    return (res or {}).get("status"), res
+
+
 def _parse_yaml_block(text):
     """Достать YAML из ответа author-модели (терпимо к ```yaml-обрамлению/тексту вокруг)."""
     import yaml
@@ -721,11 +740,40 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if security_pack_result:
         overall = security_pack_result["overall"]
         gate_ev = dict(gate_ev)
-        if overall == "clear":
+        # человеко-approval: границы секретов/деструктив требуют человека ВСЕГДА (даже при чистом
+        # scan и pass ревьюера) — иначе secret_boundary с невинным диффом обошёл бы человеко-контроль.
+        human_gate = bool(signals.get("secret_boundary") or signals.get("destructive"))
+        human_ok = bool(signals.get("human_approved"))
+        if overall == "clear" and (not human_gate or human_ok):
             gate_ev["security"] = {"status": "pass",
                                    "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "note": "все применимые security-домены закрыты детерминированным evidence"}}
+        elif overall == "clear" and human_gate and not human_ok:
+            gate_ev["security"] = {"status": "fail",
+                                   "blockers": ["secret_boundary/destructive требует человеко-одобрения "
+                                                "(signals.human_approved) даже при чистом security-скане"],
+                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
+        elif (overall == "needs_review" and not security_pack_result["blocking"]
+              and review and reviewer_proposer is not None and committed_sha):
+            # v2.106: независимый security-reviewer закрывает needs_review домены (writer≠judge).
+            # Блокирующие детерминированные находки (secrets и т.п.) reviewer НЕ переопределяет.
+            sec_status, sec_res = _review_security(reviewer_proposer, work_root,
+                                                   security_pack_result, committed_sha, budget)
+            if sec_status == "pass" and (not human_gate or human_ok):
+                gate_ev["security"] = {"status": "pass",
+                                       "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                       "reviewer": {"status": sec_status},
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "note": "детерминированные домены чисты + независимый "
+                                                        "security-reviewer вынес pass по needs_review"}}
+            else:
+                why = ("security-reviewer не вынес pass" if sec_status != "pass"
+                       else "нужно человеко-одобрение (secret_boundary/destructive), signals.human_approved не задан")
+                gate_ev["security"] = {"status": "fail", "blockers": [why],
+                                       "reviewer": {"status": sec_status},
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "needs_review": security_pack_result["needs_review"]}}
         else:
             blockers = []
             if security_pack_result["blocking"]:
@@ -747,6 +795,38 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)
     evidence_revision = coll.get("revision")
     revision_matches = (committed_sha is not None and evidence_revision == committed_sha)
+
+    # v2.106 #2 Spec-depth enforcement: разделы спецификации уровня задачи, ЗАКРЫВАЕМЫЕ evidence
+    # гейтов, но незакрытые -> блокируют ready. Маппим только доказуемые разделы (недоказуемые не
+    # над-блокируем). Это подмножество unmet-гейтов -> не блокирует сверх гейтов, но делает
+    # spec-depth явным ready-критерием ("реализация не начинается без блокирующих разделов").
+    import spec_levels as _sl
+    _SECTION_GATE = {
+        "goal": "intake_completeness", "scope": "intake_completeness",
+        "acceptance_criteria": "intake_completeness",
+        "requirements": "requirements", "acceptance_scenarios": "requirements",
+        "implementation_plan": "plan_readiness", "verification_strategy": "implementation_verification",
+        "problem": "discovery_completeness", "users_jtbd": "discovery_completeness",
+        "value": "discovery_completeness", "success_metrics": "analytics_readiness",
+    }
+    _unmet = set(gates["unmet_gates"])
+    _level = _sl.classify(signals)["level"]
+    _req_sections = set(_sl.required_sections(_level))
+    spec_depth_missing = sorted({s for s, g in _SECTION_GATE.items()
+                                 if s in _req_sections and g in plan["gates"] and g in _unmet})
+    spec_depth_ok = not spec_depth_missing
+
+    # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
+    # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
+    # превышении context budget выполнение блокируется или задача дробится"). Мягкие оси
+    # (подсистемы/размер) остаются advisory (в report['work_package']), блокирует только жёсткий лимит.
+    context_overflow = False
+    try:
+        import context_compiler as _cc
+        _bundle = _cc.compile_bundle(signals, work_root, plan=plan)
+        context_overflow = bool(_bundle.get("overflow"))
+    except Exception:  # noqa: BLE001
+        context_overflow = False
 
     # baseline-diff (finding живого прогона): что правка сломала/починила против базы
     regressions, fixed = _diff_checks(baseline_checks, coll["checks"]) if baseline_diff else ([], [])
@@ -771,10 +851,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
         # fix-задач): дополнительно требуем, чтобы правка РЕАЛЬНО починила падавшую проверку.
         ready = base_ok and no_regressions and (not other_blocking_unmet) \
-            and (not require_fix or len(fixed) > 0)
+            and (not require_fix or len(fixed) > 0) and spec_depth_ok and (not context_overflow)
         ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
-        ready = base_ok and (not gates["blocked"])
+        ready = base_ok and (not gates["blocked"]) and spec_depth_ok and (not context_overflow)
         ready_criterion = "all-green"
 
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
@@ -797,6 +877,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         not_yet.insert(0, "commit+reverify (запусти с commit=True) — без коммита ready_for_pr всегда False")
     if not open_pr:
         not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
+    if spec_depth_missing:
+        not_yet.append("spec-depth: не закрыты разделы уровня " + ", ".join(spec_depth_missing))
+    if context_overflow:
+        not_yet.append("context budget превышен — задачу нужно декомпозировать (см. work_package)")
 
     return {
         "schema_version": 1, "kind": "execution-pipeline",
@@ -854,8 +938,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                       "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
                      if baseline_diff else None),
         "ready_criterion": ready_criterion,    # all-green | no-regressions
-        # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + (all-green:
-        # гейты не блокируют | no-regressions: нет новых провалов И остальные blocking-гейты пройдены)
+        # v2.106 enforcement: spec-depth (незакрытые разделы уровня, мапящиеся на unmet-гейты) и
+        # context-budget overflow — блокируют ready наравне с гейтами.
+        "spec_depth": {"level": _level, "missing": spec_depth_missing, "ok": spec_depth_ok},
+        "context_overflow": context_overflow,
+        # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + spec-depth +
+        # не-overflow + (all-green: гейты не блокируют | no-regressions: нет новых провалов И blocking-гейты пройдены)
         "ready_for_pr": ready,
         "delivery": delivery,                  # P0.4: статус доставки draft PR отдельно от ready
         "overall_status": overall_status,      # error | delivery-failed | delivered
@@ -1034,6 +1122,50 @@ def selftest():
                rep_sec.get("security_scan") and "secrets" in rep_sec["security_scan"]["blocking"])
         expect("v2.101: секрет -> security блокирует (в unmet, не ложный green)",
                "security" in rep_sec["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.106 #1: независимый security-reviewer закрывает needs_review домены -> security НЕ в unmet.
+        # Чистая (без секретов) ENGINEERING-правка + --review + mock-ревьюер pass.
+        it_secrev = iter([{"op": "write", "path": "src/clean.py", "content": "def f():\n    return 1\n"},
+                          {"done": True}])
+        sec_reviewer = lambda c: {"kind": "reviewer-result", "status": "pass",
+                                  "summary": "injection-surface чист"}  # noqa: E731
+        rep_secrev = run_pipeline("чистая правка", sig_eng, root, lambda c: next(it_secrev),
+                                  policy=pol, budget={"max_model_calls": 8}, feature="secrev-fn",
+                                  commit=True, isolate=True, install_deps=False,
+                                  review=True, reviewer_proposer=sec_reviewer)
+        expect("v2.106 #1: security-reviewer pass -> security закрыт (не в unmet)",
+               "security" not in rep_secrev["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.106 #1 (fail-closed): secret_boundary требует человека даже при pass ревьюера
+        it_sb = iter([{"op": "write", "path": "src/sb.py", "content": "def g():\n    return 2\n"}, {"done": True}])
+        rep_sb = run_pipeline("граница секретов", dict(sig_eng, secret_boundary=True), root,
+                              lambda c: next(it_sb), policy=pol, budget={"max_model_calls": 8},
+                              feature="sb-fn", commit=True, isolate=True, install_deps=False,
+                              review=True, reviewer_proposer=sec_reviewer)
+        expect("v2.106 #1: secret_boundary без human_approved -> security остаётся заблокирован",
+               "security" in rep_sb["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.106 #2: spec-depth — ENGINEERING без --author -> requirements/plan незакрыты -> в spec_depth.missing
+        it_sd = iter([{"op": "write", "path": "src/sd.py", "content": "x=1\n"}, {"done": True}])
+        rep_sd = run_pipeline("eng без артефактов", sig_eng, root, lambda c: next(it_sd),
+                              policy=pol, budget={"max_model_calls": 5}, feature="sd-fn",
+                              commit=True, isolate=True, install_deps=False)
+        expect("v2.106 #2: spec-depth блокирует (незакрытые разделы уровня) + в отчёте",
+               rep_sd["spec_depth"]["ok"] is False and rep_sd["spec_depth"]["missing"]
+               and rep_sd["ready_for_pr"] is False)
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.106 #3: context budget overflow -> ready False + причина декомпозиции
+        it_ov = iter([{"op": "write", "path": "src/ov.py", "content": "y=2\n"}, {"done": True}])
+        rep_ov = run_pipeline("overflow", dict(sig, context_budget=1), root, lambda c: next(it_ov),
+                              policy=pol, budget={"max_model_calls": 5}, feature="ov-fn",
+                              commit=True, isolate=True, install_deps=False)
+        expect("v2.106 #3: context overflow -> ready_for_pr False + причина декомпозиции",
+               rep_ov["context_overflow"] is True and rep_ov["ready_for_pr"] is False
+               and any("декомпоз" in n for n in rep_ov["not_yet"]))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.62: open_pr=True вызывает механизм draft PR; без токена -> honest unavailable
