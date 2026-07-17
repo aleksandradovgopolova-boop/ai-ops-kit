@@ -167,6 +167,49 @@ def selftest():
                            {"task_type": "ENGINEERING", "affected_areas": ["a", "b", "c", "d"], "size": "large"})
         expect("preview: советует декомпозицию для большой задачи", pd["decomposition_advised"] is True)
 
+        # v2.112 Intent UX: настоящие действия (не только превью)
+        import io
+        import contextlib as _cl
+
+        def _run(argv):
+            buf = io.StringIO()
+            with _cl.redirect_stdout(buf):
+                rc = main(argv)
+            return rc, buf.getvalue()
+
+        rc_o, _ = _run(["onboard", str(root)])
+        expect("v2.112 onboard: РЕАЛЬНО пишет repository-profile.yaml",
+               rc_o == 0 and (root / ".ai" / "repository-profile.yaml").is_file())
+
+        rc_n, _ = _run(["new", str(root), "--feature", "nf",
+                        "--signals", '{"task_type":"ENGINEERING","affected_areas":["core"]}'])
+        expect("v2.112 new: РЕАЛЬНО создаёт workitem + spec.yaml",
+               rc_n == 0 and (root / "features" / "nf" / "workitem.yaml").is_file()
+               and (root / "features" / "nf" / "spec.yaml").is_file())
+
+        rc_p, _ = _run(["plan", "сделать X", str(root), "--feature", "pf",
+                        "--signals", '{"affected_areas":["core"]}'])
+        expect("v2.112 plan: РЕАЛЬНО пишет план+артефакты без правок кода",
+               rc_p == 0 and (root / "features" / "pf" / "run-plan.yaml").is_file()
+               and (root / "features" / "pf" / "work-package.yaml").is_file())
+
+        rc_d, _ = _run(["discuss", "идея", str(root), "--feature", "df"])
+        expect("v2.112 discuss: РЕАЛЬНО создаёт discovery-draft.md",
+               rc_d == 0 and (root / "features" / "df" / "discovery-draft.md").is_file())
+
+        rc_s, out_s = _run(["status", str(root)])
+        expect("v2.112 status: реальное чтение active-work (не превью)", rc_s == 0 and "STATUS" in out_s or rc_s == 0)
+
+        rc_h, out_h = _run(["health", str(root)])
+        expect("v2.112 health: без метрик — честный отказ (не фабрикует score)",
+               rc_h == 1 and "нет входных метрик" in out_h)
+
+        # preview-режим НЕ выполняет действие, а показывает превью
+        (root / ".ai" / "repository-profile.yaml").unlink()
+        rc_pv, _ = _run(["preview", "onboard", str(root)])
+        expect("v2.112 preview onboard: НЕ выполняет действие (профиль не пере-создан)",
+               rc_pv == 0 and not (root / ".ai" / "repository-profile.yaml").is_file())
+
     print("ai_ops_cli selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -188,6 +231,143 @@ def _print_preview(pv):
     print(f"  ожидаю: {pv['expected_result']}")
 
 
+def _wid_for(task, signals, feature):
+    import run_plan
+    return feature or run_plan.build_plan(dict(signals, task_text=task or ""),
+                                          workitem_id=feature)["workitem_id"]
+
+
+def _run_intent(intent, task, child_root, signals, a):
+    """v2.112 Intent UX: РЕАЛЬНОЕ действие для намерения. -> код возврата или None (нет спец-действия)."""
+    import yaml
+    child_root = Path(child_root)
+    js = a.json
+
+    if intent == "onboard":
+        import project_detector
+        prof = project_detector.detect(child_root)
+        out = child_root / ".ai" / "repository-profile.yaml"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(yaml.safe_dump(prof, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        if js:
+            print(json.dumps({"written": str(out), "profile": prof}, ensure_ascii=False, indent=2))
+        else:
+            stacks = ", ".join(s.get("language", "?") for s in prof.get("stacks", [])) or "не определён"
+            print(f"ONBOARD: стек {stacks} · профиль записан {out.relative_to(child_root)}")
+            for s in prof.get("stacks", []):
+                cmds = {k: v for k, v in (s.get("commands") or {}).items() if v}
+                print(f"  · {s.get('language')}: {', '.join(f'{k}={v}' for k, v in cmds.items()) or 'команды не найдены'}")
+            if prof.get("undetermined"):
+                print(f"  ⚠ не определено: {', '.join(prof['undetermined'])}")
+        return 0
+
+    if intent == "status":
+        import active_work
+        awp = child_root / ".ai" / "runtime" / "active-work.yaml"
+        if not awp.is_file():
+            print("STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)")
+            return 0
+        return active_work.list_cmd(awp, as_json=js)
+
+    if intent == "health":
+        import product_health
+        cand = [child_root / "product" / "product-health.yaml",
+                child_root / ".ai" / "product-health.yaml",
+                child_root / "product-health.yaml"]
+        src = next((p for p in cand if p.is_file()), None)
+        if not src:
+            print("HEALTH: нет входных метрик (ожидается product/product-health.yaml) — "
+                  "честно: без данных score не считается")
+            return 1
+        report = product_health.compute(yaml.safe_load(src.read_text(encoding="utf-8")))
+        if js:
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            hs = report["health_score"]
+            print(f"HEALTH: score {hs['value']} ({hs['band']}) · источник {src.relative_to(child_root)}")
+        return 0
+
+    if intent == "new":
+        import workitem
+        import spec_levels
+        import run_plan
+        if not signals.get("task_type"):
+            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
+        wid = _wid_for(task, signals, a.feature)
+        workitem.start(str(child_root / "features"), wid, task or wid,
+                       task_type=signals.get("task_type"), risk=signals.get("risk"))
+        sp, created = spec_levels.create_spec(child_root, wid, signals)
+        if js:
+            print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
+                              "spec": str(sp), "spec_created": created}, ensure_ascii=False, indent=2))
+        else:
+            print(f"NEW: каркас фичи '{wid}' · features/{wid}/workitem.yaml + spec.yaml "
+                  f"({'создан' if created else 'уже был'})")
+            print(f"  далее: ai-ops specify \"{task or '<задача>'}\" {child_root} --feature {wid}")
+        return 0
+
+    if intent == "plan":
+        import run_plan
+        import context_compiler
+        import spec_levels
+        import atomic_planner
+        if not signals.get("task_type"):
+            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
+        plan = run_plan.build_plan(dict(signals, task_text=task or ""), workitem_id=a.feature)
+        wid = plan["workitem_id"]
+        fdir = child_root / "features" / wid
+        fdir.mkdir(parents=True, exist_ok=True)
+        (fdir / "run-plan.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        bundle = None
+        try:
+            bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
+            (fdir / "context-bundle.yaml").write_text(
+                yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            bundle = None
+        cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
+        (fdir / "spec-coverage.yaml").write_text(yaml.safe_dump(cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        wp = atomic_planner.decompose(signals, wid=wid, child_root=child_root, bundle=bundle)
+        (fdir / "work-package.yaml").write_text(yaml.safe_dump(wp, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        if js:
+            print(json.dumps({"workitem_id": wid, "plan": f"features/{wid}/run-plan.yaml",
+                              "spec_level": cov["level_name"], "should_decompose": wp["should_decompose"],
+                              "work_packages": len(wp["work_packages"])}, ensure_ascii=False, indent=2))
+        else:
+            print(f"PLAN: '{wid}' · workflow {plan['base_workflow']} · спека {cov['level_name']} · "
+                  f"пакетов {len(wp['work_packages']) or 'атомарно'}")
+            print(f"  артефакты в features/{wid}/ (run-plan, context-bundle, spec-coverage, work-package) — код НЕ менялся")
+        return 0
+
+    if intent == "discuss":
+        import run_plan
+        wid = _wid_for(task, signals, a.feature)
+        fdir = child_root / "features" / wid
+        fdir.mkdir(parents=True, exist_ok=True)
+        draft = fdir / "discovery-draft.md"
+        if not draft.is_file():
+            draft.write_text(
+                f"# Discovery: {task or wid}\n\n"
+                "## Проблема\n_TODO: какую боль решаем, чьи слова_\n\n"
+                "## Пользователи и JTBD\n_TODO_\n\n"
+                "## Гипотезы\n_TODO: если … то … потому что …_\n\n"
+                "## Как измерим\n_TODO: сигнал успеха_\n\n"
+                "## Открытые вопросы / риски\n_TODO_\n\n"
+                "## Что НЕ делаем (scope out)\n_TODO_\n", encoding="utf-8")
+            created = True
+        else:
+            created = False
+        if js:
+            print(json.dumps({"workitem_id": wid, "draft": str(draft), "created": created},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(f"DISCUSS: {'создан' if created else 'уже есть'} черновик discovery {draft.relative_to(child_root)}")
+            print("  заполни разделы, затем: ai-ops specify …")
+        return 0
+
+    return None
+
+
 def main(argv):
     if "--selftest" in argv:
         return selftest()
@@ -205,7 +385,8 @@ def main(argv):
 
     intent = a.intent
     rest = list(a.rest)
-    if intent == "preview":
+    preview_mode = intent == "preview"
+    if preview_mode:
         intent = rest.pop(0) if rest else "run"
     # разбор [задача] child_root
     needs_task = INTENTS.get(intent, ("", "", False))[2]
@@ -248,6 +429,12 @@ def main(argv):
             print(f"  заполни разделы в {sp.relative_to(Path(child_root)) if str(sp).startswith(child_root) else sp}, "
                   f"затем: ai-ops run \"{task or '<задача>'}\" {child_root} --feature {wid} --execute")
         return 0
+
+    # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
+    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss"):
+        rc = _run_intent(intent, task, Path(child_root), signals, a)
+        if rc is not None:
+            return rc
 
     pv = build_preview(intent, task, Path(child_root), signals)
     if a.json:
