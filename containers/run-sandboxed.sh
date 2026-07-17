@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # run-sandboxed.sh — запустить движок AI Ops в ИЗОЛИРОВАННОМ контейнере (P0.2 runtime jail).
 #
+# worktree-only изоляция (v2.93): в контейнер монтируется НЕ основной child-репозиторий, а его
+# ОДНОРАЗОВЫЙ клон (disposable checkout). Модель физически не может тронуть основной checkout — он
+# не смонтирован. После прогона доверенный host-слой ЗАБИРАЕТ ветку ai-ops/* из клона обратно в
+# основной репозиторий (git fetch) — доставка вне контейнера. Клон удаляется (кроме случая ошибки
+# доставки — тогда путь печатается, чтобы работа не пропала).
+#
 # Что enforce'ит контейнер (чего брокер в процессе НЕ может):
 #   --read-only            root-fs только для чтения; писать некуда, кроме bind'а и tmpfs
-#   bind <child> -> /work   ЕДИНСТВЕННАЯ writable точка (worktree ребёнка); хост не тронут
+#   bind <disposable-clone> -> /work   ЕДИНСТВЕННАЯ writable точка; основной child НЕ смонтирован
 #   --tmpfs /tmp,/home     writable временные каталоги (npm/pip кэш) без записи на root-fs
 #   --memory/--cpus/--pids-limit   лимиты ресурсов (модель/сборка не съедят машину)
 #   --cap-drop=ALL + --security-opt=no-new-privileges   без привилегий/эскалации
@@ -31,6 +37,22 @@ NET="${AI_OPS_NETWORK:-bridge}"   # bridge (нужен egress к модели/р
 
 CHILD_ABS="$(cd "$CHILD" && pwd)"
 
+if [ ! -d "$CHILD_ABS/.git" ]; then
+  echo "ОШИБКА: $CHILD_ABS — не git-репозиторий; worktree-only изоляция требует git." >&2
+  exit 2
+fi
+
+# 1. Одноразовый клон child (без хардлинков -> полностью независимые объекты; основной репо не
+#    делится инодами с контейнером). Монтируем в /work ТОЛЬКО его. AI_OPS_WORKDIR — переопределить
+#    базу под клоны (по умолчанию системный tmp).
+WORKBASE="${AI_OPS_WORKDIR:-${TMPDIR:-/tmp}}"
+DISPOSABLE="$(mktemp -d "${WORKBASE%/}/ai-ops-run.XXXXXX")"
+CLONE="$DISPOSABLE/repo"
+echo "worktree-only: клонирую child в одноразовый checkout $CLONE (основной репо не монтируется)…" >&2
+git clone --quiet --no-hardlinks --local "$CHILD_ABS" "$CLONE"
+
+cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
+
 # Пробрасываем ТОЛЬКО имена секрет-переменных (значения берутся из окружения, не в образ).
 ENVFLAGS=()
 for v in OPENAI_COMPATIBLE_BASE_URL OPENAI_COMPATIBLE_API_KEY ANTHROPIC_API_KEY \
@@ -38,10 +60,12 @@ for v in OPENAI_COMPATIBLE_BASE_URL OPENAI_COMPATIBLE_API_KEY ANTHROPIC_API_KEY 
   [ -n "${!v:-}" ] && ENVFLAGS+=(-e "$v")
 done
 
-exec docker run --rm \
+# 2. Запуск движка в jail'е над ОДНОРАЗОВЫМ клоном (не над основным репо).
+set +e
+docker run --rm \
   --read-only \
   --network "$NET" \
-  --mount "type=bind,src=${CHILD_ABS},dst=/work" \
+  --mount "type=bind,src=${CLONE},dst=/work" \
   --tmpfs /tmp:rw,size=1g \
   --tmpfs /home/runner:rw,size=1g \
   --workdir /work \
@@ -50,3 +74,19 @@ exec docker run --rm \
   "${ENVFLAGS[@]}" \
   "$IMAGE" \
   run "$TASK" /work "$@"
+RC=$?
+set -e
+
+# 3. Доставка доверенным host-слоем: забираем ветки ai-ops/* из клона обратно в основной репо.
+#    Модель этого сделать НЕ могла — она была заперта в клоне. push в remote — по желанию человека.
+if git -C "$CLONE" for-each-ref --format='%(refname:short)' 'refs/heads/ai-ops/*' | grep -q .; then
+  if git -C "$CHILD_ABS" fetch --quiet "$CLONE" '+refs/heads/ai-ops/*:refs/heads/ai-ops/*'; then
+    echo "доставка: ветки ai-ops/* перенесены в $CHILD_ABS (посмотри: git -C $CHILD_ABS branch --list 'ai-ops/*')" >&2
+  else
+    echo "ВНИМАНИЕ: не удалось забрать ветки из клона; работа сохранена в $CLONE (не удаляю)." >&2
+    trap - EXIT; exit "$RC"
+  fi
+fi
+
+cleanup
+exit "$RC"

@@ -40,6 +40,14 @@ WRAPPER_REQUIRED = {
     "--pids-limit": "лимит процессов",
     "--cap-drop": "сброс Linux capabilities",
     "no-new-privileges": "запрет эскалации привилегий",
+    # v2.93 worktree-only: монтируется ОДНОРАЗОВЫЙ клон, а не основной child; доставка — host-слоем
+    "git clone": "одноразовый клон child (основной репо не монтируется в контейнер)",
+    "src=${CLONE}": "в /work монтируется клон, НЕ основной child-репозиторий",
+    "fetch": "доставка веток ai-ops/* обратно доверенным host-слоем (вне контейнера)",
+}
+# Анти-маркер: основной child НЕ должен монтироваться как writable напрямую (регресс worktree-only).
+WRAPPER_FORBIDDEN = {
+    "src=${CHILD_ABS},dst=/work": "основной child смонтирован в /work напрямую (нарушает worktree-only; монтируй клон)",
 }
 
 
@@ -48,7 +56,10 @@ def check_dockerfile(text):
 
 
 def check_wrapper(text):
-    return [f"run-sandboxed.sh: нет '{k}' ({why})" for k, why in WRAPPER_REQUIRED.items() if k not in text]
+    errs = [f"run-sandboxed.sh: нет '{k}' ({why})" for k, why in WRAPPER_REQUIRED.items() if k not in text]
+    errs += [f"run-sandboxed.sh: запрещённый паттерн '{k}' ({why})"
+             for k, why in WRAPPER_FORBIDDEN.items() if k in text]
+    return errs
 
 
 def check_assets(root=PKG):
@@ -79,13 +90,19 @@ def selftest():
     expect("dockerfile: полный набор маркеров -> без ошибок", check_dockerfile(good_df) == [])
     expect("dockerfile: без USER runner -> ошибка (root запрещён)",
            any("USER runner" in e for e in check_dockerfile(good_df.replace("USER runner", "USER root"))))
-    good_wr = ("docker run --read-only --tmpfs /tmp --memory 2g --cpus 2 --pids-limit 512 "
-               "--cap-drop ALL --security-opt no-new-privileges --mount type=bind,dst=/work img\n")
-    expect("wrapper: полный набор jail-флагов -> без ошибок", check_wrapper(good_wr) == [])
+    good_wr = ('git clone --no-hardlinks --local "$CHILD_ABS" "$CLONE"\n'
+               "docker run --read-only --tmpfs /tmp --memory 2g --cpus 2 --pids-limit 512 "
+               '--cap-drop ALL --security-opt no-new-privileges --mount type=bind,src=${CLONE},dst=/work img\n'
+               'git -C "$CHILD_ABS" fetch "$CLONE" refs/heads/ai-ops/*\n')
+    expect("wrapper: полный набор jail-флагов + worktree-only -> без ошибок", check_wrapper(good_wr) == [])
     expect("wrapper: убрали --cap-drop -> ошибка",
            any("--cap-drop" in e for e in check_wrapper(good_wr.replace("--cap-drop ALL", ""))))
     expect("wrapper: убрали --read-only -> ошибка",
            any("--read-only" in e for e in check_wrapper(good_wr.replace("--read-only", ""))))
+    # v2.93: регресс worktree-only — прямой монтаж основного child в /work запрещён
+    bad_wr = good_wr.replace("src=${CLONE},dst=/work", "src=${CHILD_ABS},dst=/work")
+    expect("wrapper: прямой монтаж основного child в /work -> ошибка (нарушает worktree-only)",
+           any("worktree-only" in e for e in check_wrapper(bad_wr)))
     # поставляемые ассеты валидны
     expect("поставляемые containers/* содержат все гарантии jail'а", check_assets() == [])
     print("validate_container_assets selftest:", "PASS" if ok else "FAIL")
