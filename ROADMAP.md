@@ -229,7 +229,7 @@ next_action/resume_from_revision). Resume: проверить актуально
 отдельный коммит; зависимости явные; пакет не стартует без подтверждённой зависимости; превышение
 бюджета блокирует или дробит; причина декомпозиции в отчёте.
 
-**Этап 5 — Security Pack.** Security review из одного вердикта → набор применимых доменов:
+**Этап 5 — Security Pack. ✅ v2.101.** Security review из одного вердикта → набор применимых доменов:
 authentication; authorization и IDOR; input validation; secrets; dependencies и supply chain;
 rate limiting; file upload; network и SSRF; logging и monitoring; deployment и configuration;
 AI prompt injection; data isolation и tenant boundaries. На домен: applicability(signals),

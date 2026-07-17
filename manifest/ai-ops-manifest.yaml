@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.100.0
+  package_version: 2.101.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -347,11 +347,15 @@ execution_engine:
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
     context_engineering_epic:                 # эпик Context Engineering & Spec-Driven Execution (после аудита)
-      status: "в работе (этапы 1-4 из 7)"
+      status: "в работе (этапы 1-5 из 7)"
       stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First ✅ v2.98",
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
-               "5 Security Pack", "6 Product UX", "7 Qualification"]
+               "5 Security Pack ✅ v2.101", "6 Product UX", "7 Qualification"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_101_security_pack:
+      - "этап 5 Security Pack: security/security-domains.yaml — 12 доменов (authentication, authorization/IDOR, input_validation, secrets, dependencies, rate_limiting, file_upload, network/SSRF, logging/monitoring, deployment/config, ai_prompt_injection, data_isolation) с applicability(signals+file_patterns), deterministic_checks, reviewer_checklist, required_evidence, severity_policy, blocking/human_approval conditions, remediation_template"
+      - "tools/security_pack.py: выбирает ТОЛЬКО применимые к изменению домены (frontend-only не запускает database/tenant audit, но проверяет XSS/secrets), гоняет детерминированные проверки (secret_scan/dependency_audit/injection_scan из security_scan) и даёт доменный вердикт. Честность: домен нельзя закрыть фразой «уязвимостей нет» (allowed_evidence_sources); авто-закрыть можно ТОЛЬКО домены, чьё required_evidence целиком детерминированно (secrets/dependencies) и чисто; домены с security_reviewer/human -> needs_review; находка -> fail+блок по severity"
+      - "гейт security в pipeline теперь domain-aware: проходит ТОЛЬКО при pack overall='clear' (все применимые домены закрыты детерминированным evidence); иначе честный блок с перечнем блокирующих/needs_review доменов. validation/validate_security_domains.py стережёт контракт (12 доменов, required_evidence ⊆ allowed, severity, remediation). В checklist и CI"
     fixed_v2_100_atomic_planning:
       - "этап 4 Atomic Planning и Context Budget: tools/atomic_planner.py оценивает рабочий пакет (объём контекста из ContextBundle, файлы, системные границы/подсистемы, зависимости, ожидаемые model calls, риск, критерий завершения) и предлагает декомпозицию, если контекст превышает бюджет / слишком много подсистем (>2) / несколько независимых результатов / нужно >1 коммита / не проверяемо одним критерием / размер large-xl"
       - "инвариант: декомпозиция называет ОСИ разбиения (by-context-budget/by-subsystem/by-result/by-commit/by-verifiable-unit/by-size), но НЕ меняет продуктовый смысл и не принимает новых бизнес-решений ради удобства модели (constraint_note); итог подтверждает человек. acceptance: один проверяемый результат на пакет, каждый пакет — отдельный commit, зависимости явные"
