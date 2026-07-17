@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.103.0] — 2026-07-17 — Qualification нового слоя Q1–Q10 (эпик Context Engineering, этап 7 — ФИНАЛ)
+
+Финал эпика. Новый слой готов только после отдельных сценариев.
+
+### Added
+- **`validation/validate_context_qualification.py`** — гоняет **Q1–Q10 детерминированно** против
+  построенных инструментов (без модели, в CI): Q1 context filtering, Q2 context overflow →
+  декомпозиция, Q3 resume, Q4 stale context (main ушёл → ревалидация), Q5 spec depth (QUICK L0 /
+  PRODUCT L2 с метриками), Q6 unsafe assumption → эскалация, Q7 security applicability (frontend без
+  DB/tenant audit, но XSS/secrets), Q8 prompt injection не переопределяет policy (push заблокирован),
+  Q9 long-running (решение первой фазы сохранено в Handoff), Q10 human approval для auth/secret
+  boundary. В checklist и CI.
+
+### Эпик Context Engineering & Spec-Driven Execution — ЗАВЕРШЁН (7/7)
+Context Compiler (v2.97) · Adaptive Spec-First (v2.98) · Context Lifecycle/Resume (v2.99) · Atomic
+Planning/Context Budget (v2.100) · Security Pack (v2.101) · Intent UX (v2.102) · Qualification
+(v2.103). Живые сценарии с моделью — на машине пользователя; механика слоя покрыта детерминированно.
+
 ## [2.102.0] — 2026-07-17 — Простой внешний UX: intent-команды (эпик Context Engineering, этап 6)
 
 Этап 6: снаружи AI Ops проще внутренней архитектуры — обычный сценарий управляется намерениями, а

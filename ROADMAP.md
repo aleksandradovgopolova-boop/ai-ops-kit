@@ -249,7 +249,7 @@ secrets/deps уже есть.)
 перед запуском — execution preview (что понято, что будет сделано, какие данные, какие approvals,
 ожидаемый результат); продвинутые настройки доступны, но не обязательны.
 
-**Этап 7 — Qualification нового слоя.** Обязательные сценарии: Q1 context filtering; Q2 context
+**Этап 7 — Qualification нового слоя. ✅ v2.103.** Обязательные сценарии: Q1 context filtering; Q2 context
 overflow → автодекомпозиция; Q3 resume в новой сессии; Q4 stale context после смены main; Q5 spec
 depth (QUICK короткая, PRODUCT — discovery+метрики); Q6 небезопасное предположение эскалируется, а
 не додумывается; Q7 security applicability (frontend-only не запускает database audit, но проверяет
