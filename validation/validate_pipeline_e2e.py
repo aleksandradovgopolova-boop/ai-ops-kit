@@ -82,6 +82,9 @@ def run_e2e():
         ok("e2e: ContextBundle записан (v2.97)", (root / "features" / fid / "context-bundle.yaml").exists())
         ok("e2e: context измерен ДО модели (estimated_tokens>0)",
            isinstance(rep.get("context_bundle"), dict) and rep["context_bundle"]["estimated_tokens"] > 0)
+        ok("e2e: ContextPayload записан + подан модели (v2.108)",
+           (root / "features" / fid / "context-payload.yaml").exists()
+           and isinstance(rep.get("context_payload"), dict) and rep["context_payload"]["fed_to_model"] is True)
         ok("e2e: SpecCoverage записан (v2.98)", (root / "features" / fid / "spec-coverage.yaml").exists())
         ok("e2e: RunHandoff записан + next_action (v2.99)",
            (root / "features" / fid / "run-handoff.yaml").exists()

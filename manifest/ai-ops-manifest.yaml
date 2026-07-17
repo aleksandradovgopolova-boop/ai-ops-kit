@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.107.0
+  package_version: 2.108.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_108_operational_context:
+      - "ГЛАВНЫЙ P0 аудита закрыт: ContextBundle теперь РЕАЛЬНО попадает в prompt модели, а не только в отчёт. context_compiler.build_payload собирает compiled payload — СОДЕРЖИМОЕ релевантных правил/решений/спек/repo+project context (не пути), с манифестом (source/hash/revision/tokens/reason). Бюджет: output_reserve 25% + tool_loop_reserve 15% + окно модели (MODEL_CONTEXT) — payload режется по МЕНЬШЕМУ. Вытеснение фиксируется в excluded_for_budget (не молча)"
+      - "вплетение: run_pipeline(context_prelude=...) prepend'ит payload к base_context tool loop -> модель РЕАЛЬНО его видит. Доказано тестом: MARKER_CONTEXT_PAYLOAD_XYZ найден в base_context петли. Контроллер собирает payload из bundle, сохраняет features/<wid>/context-payload.yaml (манифест без text), report['context_payload'].fed_to_model=True"
+      - "сопутствующие finding аудита: спеки ищутся И в features/<wid>, И в .ai/runplan/<wid> (куда пишет authoring); decisions теперь с relevance-фильтром (по affected_areas/ключам задачи; иначе 3 свежих), а не все разом. Q1b в context-qualification проверяет реальное содержимое payload"
     fixed_v2_107_trust_fixes:
       - "внешний аудит v2.104 (Trust Fixes): security_pack агрегация — ЛОЖНЫЙ GREEN. status=fail с severity=medium (напр. новая зависимость) исчезал из blocking И needs_review -> overall=clear -> security проходил. Фикс: ИНВАРИАНТ 'fail НИКОГДА не даёт overall=clear' — critical/high -> blocking, medium/low -> needs_review (нужен судья/человек). Регрессия в selftest"
       - "честность имени: dependency_audit -> dependency_diff (CVE не проверяются, выполняется только diff новых зависимостей) — в security-domains.yaml, security_pack, validate_security_domains"
