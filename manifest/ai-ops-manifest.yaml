@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.69.0
+  package_version: 2.70.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -286,6 +286,10 @@ execution_engine:
     fixed_v2_69:                              # первый реальный finding квалификационного харнесса
       - "PORTABILITY: generate_artifacts.py и run_report.py использовали `X | None` (PEP 604) в аннотациях без future-import -> на Python 3.9 (дефолт macOS CommandLineTools) весь движок падал TypeError при импорте (ai_ops_run->workitem->run_report->generate_artifacts). Пойман попыткой живого qual-прогона с Mac. Фикс: `from __future__ import annotations` (ленивые аннотации, PEP 563)"
       - "guard: validation/validate_python_compat.py (AST) — union-аннотация `X | Y` без future-import = ERROR в CI; класс «падает на 3.9» больше не пройдёт. Документированный floor понижен 3.10+ -> 3.9+ (честно: дефолтный python3 macOS подходит)"
+    live_qual_run_2026_07_17:                 # первый живой прогон qual-харнесса на реальном child (ii-sreda, DeepSeek)
+      result: "движок отработал на ii-sreda: изолированный worktree создан, петля прошла. Для ENGINEERING-класса гейты ЧЕСТНО заблокировали (unmet: requirements/specification/plan_readiness/code_review — pipeline не производит для них evidence). Это подтверждает backlog P0.4, а не баг: движок не подделывает pass"
+      fixed_v2_70: "qual_run завышал класс задачи до ENGINEERING по умолчанию -> любая задача блокировалась гейтами, для которых pipeline не даёт evidence. Дефолт -> QUICK (реально поддерживаемый класс: tool-loop + intake + implementation_verification) + флаг --task-type для осознанного выбора класса"
+      honest_boundary: "квалифицируется ПОДДЕРЖИВАЕМЫЙ сегодня QUICK-путь; полный ENGINEERING/PRODUCT-путь заблокирован до P0.4 (постадийное исполнение RunPlan с производством evidence для upstream-гейтов)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

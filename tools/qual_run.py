@@ -100,12 +100,19 @@ def read_tasks(path):
     return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
 
 
-def default_runner(child_root, provider, model, open_pr):
-    """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute)."""
+def default_runner(child_root, provider, model, open_pr, task_type="QUICK"):
+    """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute).
+
+    task_type по умолчанию QUICK — класс, который pipeline РЕАЛЬНО поддерживает сегодня
+    (tool-loop + intake + implementation_verification). ENGINEERING/PRODUCT добавляют гейты
+    requirements/specification/plan_readiness/code_review, для которых pipeline пока не
+    производит evidence (backlog P0.4 — постадийное исполнение RunPlan) -> они честно
+    заблокируют. Класс задаётся флагом --task-type осознанно, не для обхода гейтов.
+    """
     import ai_ops_run
 
     def run_one(task):
-        signals = {"task_text": task, "task_type": "ENGINEERING", "risk": "low",
+        signals = {"task_text": task, "task_type": task_type, "size": "small", "risk": "low",
                    "affected_areas": ["core"]}
         return ai_ops_run.run(task, signals, Path(child_root), provider_name=provider,
                               model=model, engine="pipeline", execute=True,
@@ -239,6 +246,10 @@ def main(argv):
     ap.add_argument("--out", default="qual-reports", help="каталог для JSON-отчётов")
     ap.add_argument("--provider", default="openai-compatible")
     ap.add_argument("--model", default="deepseek-chat")
+    ap.add_argument("--task-type", default="QUICK",
+                    help="класс задачи для RunPlan (по умолчанию QUICK — то, что pipeline "
+                         "поддерживает сегодня; ENGINEERING/PRODUCT заблокируют гейты без "
+                         "evidence — backlog P0.4)")
     ap.add_argument("--open-pr", action="store_true", help="открыть draft PR (нужен GITHUB_TOKEN)")
     a = ap.parse_args(argv)
 
@@ -263,9 +274,9 @@ def main(argv):
         print(f"КОНФИГ: в {tasks_path} нет задач (пустые/# игнорируются).")
         return 2
 
-    print(f"QUAL: {len(tasks)} задач через {a.provider}/{a.model} на {a.child_root} "
-          f"-> отчёты в {a.out}")
-    runner = default_runner(a.child_root, a.provider, a.model, a.open_pr)
+    print(f"QUAL: {len(tasks)} задач через {a.provider}/{a.model} "
+          f"(класс {a.task_type}) на {a.child_root} -> отчёты в {a.out}")
+    runner = default_runner(a.child_root, a.provider, a.model, a.open_pr, a.task_type)
     results = run_qualification(tasks, a.out, runner)
     overall = print_summary(results)
     return 0 if overall else 1
