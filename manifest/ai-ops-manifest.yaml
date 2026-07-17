@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.95.0
+  package_version: 2.96.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -346,6 +346,11 @@ execution_engine:
       - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
+    fixed_v2_96_real_qualification:
+      - "канонический e2e в CI (аудит 2.96): validation/validate_pipeline_e2e.py поднимает НАСТОЯЩИЙ git-репо из python-фикстуры и гоняет ПОЛНЫЙ путь `ai-ops run --engine pipeline --execute` со scripted-proposer (без модели) -> проверяет цепочку task->RunPlan->WorkItem->active-work->detect->tool-loop->commit на ветке->evidence на точном SHA->гейты->run-report->active-work закрыта. Раньше CI гонял в основном selftest-модули"
+      - "матрица Python в CI: новый job pipeline-e2e гоняет e2e + стек-квалификацию + ядро движка на Python 3.9 И 3.12 (раньше только 3.12). ai_ops_run.run получил проброс install_deps (e2e offline, без pip)"
+      - "живые сценарии расширены до S1-S10 (qualification/scenarios.yaml): + prompt-injection в репо, попытка изменить основной checkout из контейнера (worktree-only), повтор/resume и идемпотентный PR, настоящий push+draft PR, работа на КРАСНОЙ базе. Прогон полной живой матрицы (Node/Python/Go × macOS/Linux с моделью) — на машине пользователя (docs/qualification-runbook.md); scripted-e2e закрывает механику детерминированно, качество правок — модель"
+      - "ЧЕСТНО (остаток, требует окружения пользователя): (1) полная живая матрица с моделью посильнее DeepSeek; (2) реальная сборка Docker-образа в CI закрыта egress-прокси песочницы кита -> на Docker-хосте пользователя; (3) сохранение execution-report как CI-artifact — можно добавить, когда живая матрица переедет в CI с моделью"
     fixed_v2_95_security_evidence:
       - "детерминированный security-producer (аудит 2.95): tools/security_scan.py сканирует diff коммита — СЕКРЕТЫ (AKIA/private-key/ghp/generic key-in-quotes, плейсхолдеры/env отсеиваются) и НОВЫЕ зависимости (package.json/requirements/go.mod/pyproject/Cargo). Закрывает факты no_secrets и deps_approved когда чисто; находка -> гейт security блокирует С ДЕТАЛЯМИ (раньше security молчал без производителя evidence)"
       - "injection-surface — СУЖДЕНИЕ, не автоприёмка: сканер лишь ФЛАГИТ места (eval/exec, shell=True, os.system, pickle.loads, yaml.load без Loader, SQL f-string, dangerouslySetInnerHTML, child_process, innerHTML=). no_injection_surface закрывает независимый security-reviewer/человек (writer≠judge). Поэтому security здесь НЕ авто-проходит — НЕТ ложного green; реальные секреты/deps теперь ловятся, а не молчат. Встроено в pipeline (после коммита, на diff), поле report['security_scan']"

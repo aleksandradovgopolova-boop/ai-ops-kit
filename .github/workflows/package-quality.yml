@@ -162,5 +162,34 @@ jobs:
           python3 validation/validate_container_assets.py
       - name: "Security evidence: детерминированный секрет/dep-скан для гейта security (selftest)"
         run: python3 tools/security_scan.py --selftest
+      - name: "Канонический e2e: ai-ops run --engine pipeline на реальной фикстуре (без модели)"
+        run: python3 validation/validate_pipeline_e2e.py --selftest
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"
         run: python3 installer/ai_ops.py --selftest
+
+  # v2.96 Real Qualification: канонический e2e движка на РЕАЛЬНОЙ фикстуре, на нескольких версиях
+  # Python (раньше CI гонял только 3.12). Стек-квалификация failure-парсера — тоже здесь.
+  pipeline-e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python-version }}"}
+      - run: pip install pyyaml
+      - name: "Совместимость Python (stdlib + pyyaml)"
+        run: python3 validation/validate_python_compat.py
+      - name: "Канонический e2e движка (task -> commit -> evidence -> gates, без модели)"
+        run: python3 validation/validate_pipeline_e2e.py --selftest
+      - name: "Стек-квалификация failure-парсера (golden + live при наличии тулчейна)"
+        run: python3 validation/validate_stack_qualification.py --selftest
+      - name: "Ядро движка: контроллер + pipeline + broker + security-scan (selftest)"
+        run: |
+          python3 tools/ai_ops_run.py --selftest
+          python3 tools/execution_pipeline.py --selftest
+          python3 tools/tool_broker.py --selftest
+          python3 tools/security_scan.py --selftest

@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.96.0] — 2026-07-17 — Real Qualification: канонический e2e в CI + матрица Python + живые сценарии S6–S10
+
+Финал плана 2.93→2.96. CI кита раньше гонял в основном selftest-модули; теперь есть канонический
+end-to-end движка на настоящей фикстуре, на нескольких версиях Python.
+
+### Added
+- **`validation/validate_pipeline_e2e.py`** — канонический e2e БЕЗ модели: настоящий git-репо из
+  python-фикстуры → полный `ai-ops run --engine pipeline --execute` со scripted-proposer → проверка
+  всей цепочки в одной транзакции (task → RunPlan → WorkItem → active-work → detect → tool-loop →
+  commit на ветке → evidence на точном SHA → гейты → run-report → active-work закрыта → изоляция
+  worktree). В checklist и CI.
+- **CI job `pipeline-e2e`** — e2e + стек-квалификация + ядро движка на **Python 3.9 и 3.12** (раньше
+  CI шёл только на 3.12).
+- **Живые сценарии S6–S10** (`qualification/scenarios.yaml`): prompt-injection внутри репозитория,
+  попытка изменить основной checkout из контейнера (worktree-only), повтор/resume + идемпотентный PR,
+  настоящий push + draft PR, работа на красной базе.
+
+### Changed
+- **`tools/ai_ops_run.py`** — `run()` получил проброс `install_deps` (e2e идёт offline, без pip).
+
+### Honest (требует окружения пользователя)
+Полная живая матрица (Node/Python/Go × macOS/Linux с моделью посильнее DeepSeek), реальная сборка
+Docker-образа в CI (в песочнице кита закрыта egress-прокси → на Docker-хосте пользователя) и сохранение
+execution-report как CI-artifact при живой матрице. scripted-e2e закрывает **механику** детерминированно;
+качество правок остаётся за моделью.
+
 ## [2.95.0] — 2026-07-17 — Security evidence: детерминированный секрет/dep-скан для гейта security
 
 Гейт `security` требует `[no_secrets, no_injection_surface, deps_approved]`, но в pipeline не было
