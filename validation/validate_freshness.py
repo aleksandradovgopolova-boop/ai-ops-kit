@@ -66,7 +66,7 @@ def build(root: Path, today: date):
     for p in sorted(root.rglob("*.md")):
         res = assess(frontmatter(p.read_text(encoding="utf-8", errors="replace")), today)
         if res:
-            results.append({"path": str(p.relative_to(root)), "status": res[0], "detail": res[1]})
+            results.append({"path": p.relative_to(root).as_posix(), "status": res[0], "detail": res[1]})
     return results
 
 

@@ -107,7 +107,7 @@ def check_registry():
     for p in agent_files():
         fm = parse_frontmatter(p)
         fid = fm.get("id")
-        rel = str(p.relative_to(SYS_DIR))
+        rel = p.relative_to(SYS_DIR).as_posix()
         if not fid:
             fail(rel, "во frontmatter нет id")
             continue

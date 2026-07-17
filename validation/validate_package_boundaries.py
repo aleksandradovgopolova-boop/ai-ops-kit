@@ -47,7 +47,7 @@ def _expand(root, patterns):
         eff = pat + "/*" if pat.endswith("/**") else pat
         for p in root.glob(eff):
             if p.is_file():
-                files.add(str(p.relative_to(root)))
+                files.add(p.relative_to(root).as_posix())
     return files
 
 
@@ -135,8 +135,8 @@ def check(pkg_root):
                     owned[f] = name
 
     # 6. покрытие (информационно)
-    all_files = {str(p.relative_to(root)) for p in root.rglob("*")
-                 if p.is_file() and ".git/" not in str(p.relative_to(root))}
+    all_files = {p.relative_to(root).as_posix() for p in root.rglob("*")
+                 if p.is_file() and ".git/" not in p.relative_to(root).as_posix()}
     assigned = set(owned)
     unassigned = sorted(all_files - assigned)
     report = {"packages": len(pkgs), "files_assigned": len(assigned),

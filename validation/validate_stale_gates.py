@@ -117,7 +117,7 @@ def scan(root: Path):
                 blocking = json.loads(gp.read_text(encoding="utf-8")).get("blocking", True)
             except Exception:
                 blocking = True
-            rec = (str(gp.relative_to(root)), stale)
+            rec = (gp.relative_to(root).as_posix(), stale)
             (stale_blocking if blocking else stale_nonblocking).append(rec)
     return gates, stale_blocking, stale_nonblocking, warnings
 

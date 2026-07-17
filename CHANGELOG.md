@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.73.0] — 2026-07-17
+
+**Устойчивость к битому JSON модели + кросс-платформенность (Windows).** Два независимых
+finding'а: живой прогон споткнулся о невалидный JSON от DeepSeek, а внешний отчёт установки на
+Windows 11 вскрыл непереносимость путей и падение вывода в консоли.
+
+### Fixed
+- **`tools/tool_loop.py`** — живая модель недетерминирована: иногда отдаёт невалидный JSON, и
+  ОДНА кривая реплика обрывала весь прогон (`bad-proposal: bad-json`). Теперь до
+  `max_bad_proposals=3` подряд **корректирующих переспросов** (модели показывают её ошибку и
+  просят чистый JSON); счётчик сбрасывается на любом валидном действии. Прогон переживает
+  случайные срывы парсинга.
+- **Кросс-платформенность путей (Windows ↔ POSIX)** — 18 сайтов `str(Path.relative_to())`
+  (давали `a\b` на Windows) → `.relative_to().as_posix()` в `installer/ai_ops.py`,
+  `validation/*` (registry/boundaries/freshness/stale-gates/checksums), `tools/*`
+  (generate_runtime/orchestrator/execution_pipeline). Устранён ложный провал валидатора реестра
+  и ложный дрейф managed-слоя. `detect_drift` нормализует старые `\`-ключи `.checksums.json` при
+  чтении — миграция уже установленных child-репо без ложного дрейфа (sha256 не меняются).
+- **Кодировка вывода на Windows-консоли** — `installer/ai_ops.py` печатал рамки/галочки/кириллицу
+  → `UnicodeEncodeError` на cp1251/cp866. Добавлен `_force_utf8_stdio()` (reconfigure stdout/stderr
+  в UTF-8, `errors=replace`) в начале `main()`.
+
+### Changed
+- **selftest `installer/ai_ops.py`** — ассерты кросс-ОС: ключи checksums только `/`;
+  Windows-стиль `\`-ключей не даёт ложного дрейфа.
+- **manifest** — `execution_engine.self_audit_2026_07_17.fixed_v2_73` + `cross_platform_2026_07_17`.
+  `package_version` → 2.73.0.
+
 ## [2.72.0] — 2026-07-17
 
 **Третий finding живого прогона: baseline-diff (регрессии vs пред-существующие провалы).** С

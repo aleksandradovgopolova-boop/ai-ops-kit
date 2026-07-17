@@ -157,7 +157,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         rc = _wt.add(child_root, wid, branch)
         if rc == 0 or wp.is_dir():
             work_root = wp
-            worktree_rel = str(wp.relative_to(child_root))
+            worktree_rel = wp.relative_to(child_root).as_posix()
         else:
             # finding adversarial-review: НЕ деградируем молча в основное дерево — это исполнило бы
             # правки и коммит в main вопреки isolate=True. Останавливаемся честной ошибкой.
