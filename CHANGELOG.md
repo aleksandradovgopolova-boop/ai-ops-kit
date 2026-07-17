@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.111.0] — 2026-07-17 — Atomic Planner создаёт конкретные WorkPackages
+
+Аудит: Atomic Planner только называл ОСИ разбиения, но не создавал сами пакеты. Закрыто.
+
+### Added
+- **`atomic_planner.decompose(signals, wid)`** — при `should_decompose` строит КОНКРЕТНЫЕ
+  `WorkPackage`-пакеты `{id, title, axis, scope, depends_on, acceptance, order}` по основной оси
+  (приоритет `by-subsystem > by-result > by-commit > by-verifiable-unit > by-context-budget >
+  by-size`). `by-subsystem` → пакет на подсистему с цепочкой зависимостей; `by-result` → N
+  независимых; size/commit/бюджет → 2 последовательных `part-1/part-2` (человек уточняет дробление).
+- Контроллер зовёт `decompose` (надмножество `assess`), сохраняет пакеты в
+  `features/<wid>/work-package.yaml` и в `report['work_package'].work_packages/primary_axis`.
+
+### Инвариант
+Декомпозиция **не выдумывает** новых бизнес-решений: `scope` пакетов ⊆ подсистем сигналов;
+`human_confirms=True` (финал за человеком).
+
+Q2b (qualification) + decompose-сценарии в `atomic_planner` selftest.
+
+### Осталось (крупные, отдельными релизами)
+Intent UX (настоящие действия), container delivery только текущей ветки, product-qualification с
+живой моделью. См. ROADMAP.
+
 ## [2.110.0] — 2026-07-17 — Real Spec-First: SpecCoverage из реальных артефактов, `specify` создаёт спеку
 
 Аудит держал P0: SpecCoverage «заполняется из сигналов с пустым provided» — оценка не отражала

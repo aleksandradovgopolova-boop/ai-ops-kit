@@ -124,6 +124,57 @@ def assess(signals, child_root=None, bundle=None, budget=None):
     }
 
 
+# v2.111: приоритет оси разбиения (детерминированно берём ПЕРВУЮ применимую как основную).
+_AXIS_PRIORITY = ["by-subsystem", "by-result", "by-commit", "by-verifiable-unit",
+                  "by-context-budget", "by-size"]
+
+
+def decompose(signals, wid=None, child_root=None, bundle=None, budget=None):
+    """v2.111: если пакет НЕ атомарен — построить КОНКРЕТНЫЕ WorkPackages (не только назвать оси).
+
+    Каждый пакет: {id, title, axis, scope, depends_on, acceptance, order}. Разбиение детерминированно
+    по ОСНОВНОЙ оси (первая применимая по приоритету). Инвариант: не выдумываем новых бизнес-решений —
+    для subsystem/result оси разбиваем по реальным данным сигналов; для остальных (size/commit/бюджет)
+    даём 2 последовательных пакета part-1/part-2 c пометкой, что дробление уточняет человек.
+    -> {..assess.., "work_packages": [...], "primary_axis": ..} (work_packages пуст, если атомарно)."""
+    wp = assess(signals, child_root=child_root, bundle=bundle, budget=budget)
+    wid = str(wid or (signals or {}).get("feature") or "wi")
+    packages = []
+    if wp["should_decompose"]:
+        axes = wp["decomposition_axes"]
+        primary = next((a for a in _AXIS_PRIORITY if a in axes), axes[0])
+        subsystems = wp["estimate"]["subsystems"]
+        base_acc = wp["acceptance"]
+        if primary == "by-subsystem" and subsystems:
+            for i, sub in enumerate(subsystems):
+                packages.append({
+                    "id": f"{wid}-pkg-{i+1}-{sub}", "title": f"{sub}: часть задачи по подсистеме",
+                    "axis": "by-subsystem", "scope": [sub],
+                    "depends_on": ([f"{wid}-pkg-{i}-{subsystems[i-1]}"] if i > 0 else []),
+                    "acceptance": base_acc, "order": i + 1})
+        elif primary == "by-result":
+            n = int(signals.get("independent_results") or 2)
+            for i in range(n):
+                packages.append({
+                    "id": f"{wid}-pkg-{i+1}", "title": f"независимый результат {i+1}",
+                    "axis": "by-result", "scope": subsystems or ["unspecified"],
+                    "depends_on": [], "acceptance": base_acc, "order": i + 1})
+        else:
+            # size/commit/бюджет/verifiable — 2 последовательных пакета, человек уточняет дробление
+            for i in range(2):
+                packages.append({
+                    "id": f"{wid}-pkg-{i+1}", "title": f"часть {i+1} (ось {primary}; уточнить дробление)",
+                    "axis": primary, "scope": subsystems or ["unspecified"],
+                    "depends_on": ([f"{wid}-pkg-1"] if i == 1 else []),
+                    "acceptance": base_acc, "order": i + 1})
+        wp["primary_axis"] = primary
+    else:
+        wp["primary_axis"] = None
+    wp["work_packages"] = packages
+    wp["human_confirms"] = bool(packages)   # дробление предлагается, финал подтверждает человек
+    return wp
+
+
 def selftest():
     import tempfile
     ok = True
@@ -175,6 +226,40 @@ def selftest():
         expect("acceptance: один результат + отдельный commit + явные зависимости",
                len(a["acceptance"]) == 3)
 
+        # v2.111 decompose: атомарный пакет -> work_packages пуст
+        da = decompose({"task_type": "QUICK", "size": "small", "affected_areas": ["core"]},
+                       wid="wi-a", child_root=root)
+        expect("v2.111 decompose: атомарный -> work_packages=[] + primary_axis=None",
+               da["work_packages"] == [] and da["primary_axis"] is None)
+
+        # by-subsystem -> КОНКРЕТНЫЕ пакеты по подсистемам с зависимостями (цепочка)
+        db = decompose({"task_type": "ENGINEERING", "size": "medium",
+                        "affected_areas": ["catalog", "orders", "billing", "search"]},
+                       wid="wi-b", child_root=root)
+        expect("v2.111 decompose: by-subsystem -> пакет на каждую подсистему (4)",
+               db["primary_axis"] == "by-subsystem" and len(db["work_packages"]) == 4
+               and all(p["scope"] and p["id"] and p["acceptance"] for p in db["work_packages"]))
+        expect("v2.111 decompose: последовательные пакеты зависят от предыдущего (явные deps)",
+               db["work_packages"][0]["depends_on"] == []
+               and db["work_packages"][1]["depends_on"] == [db["work_packages"][0]["id"]])
+        expect("v2.111 decompose: дробление предлагается, финал за человеком", db["human_confirms"] is True)
+
+        # by-result -> N независимых пакетов
+        dc = decompose({"task_type": "ENGINEERING", "size": "medium", "affected_areas": ["core"],
+                        "independent_results": 3}, wid="wi-c", child_root=root)
+        expect("v2.111 decompose: by-result -> 3 пакета",
+               dc["primary_axis"] == "by-result" and len(dc["work_packages"]) == 3)
+
+        # size-only (нет subsystem/result) -> 2 последовательных пакета part-1/part-2
+        dd = decompose({"task_type": "ENGINEERING", "size": "xl", "affected_areas": ["core"]},
+                       wid="wi-d", child_root=root)
+        expect("v2.111 decompose: size-ось -> 2 последовательных пакета (уточнить дробление)",
+               len(dd["work_packages"]) == 2
+               and dd["work_packages"][1]["depends_on"] == [dd["work_packages"][0]["id"]])
+        # инвариант: пакеты не выдумывают новых scope-областей сверх сигналов
+        expect("v2.111 decompose: scope пакетов ⊆ подсистем сигналов (не выдумано)",
+               all(set(p["scope"]) <= set(db["estimate"]["subsystems"]) for p in db["work_packages"]))
+
     print("atomic_planner selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -189,7 +274,25 @@ def main(argv):
     a_.add_argument("--signals", default="{}")
     a_.add_argument("--budget", type=int)
     a_.add_argument("--json", action="store_true")
+    # v2.111: decompose — построить конкретные WorkPackages
+    d_ = sub.add_parser("decompose", help="построить конкретные WorkPackages при необходимости разбиения")
+    d_.add_argument("child_root", nargs="?", default=".")
+    d_.add_argument("--wid", default="wi"); d_.add_argument("--signals", default="{}")
+    d_.add_argument("--budget", type=int); d_.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "decompose":
+        wp = decompose(json.loads(a.signals), wid=a.wid, child_root=Path(a.child_root), budget=a.budget)
+        if a.json:
+            print(json.dumps(wp, ensure_ascii=False, indent=2))
+        else:
+            print(f"DECOMPOSE: atomic={wp['atomic']} · основная ось {wp['primary_axis'] or '—'} · "
+                  f"пакетов {len(wp['work_packages'])}")
+            for p in wp["work_packages"]:
+                dep = f" ← {', '.join(p['depends_on'])}" if p["depends_on"] else ""
+                print(f"  [{p['order']}] {p['id']} · scope={','.join(p['scope'])}{dep}")
+            if wp["human_confirms"]:
+                print("  (дробление предложено; продуктовый смысл сохранён; финал подтверждает человек)")
+        return 1 if wp["should_decompose"] else 0
     if a.cmd == "assess":
         wp = assess(json.loads(a.signals), child_root=Path(a.child_root), budget=a.budget)
         if a.json:
