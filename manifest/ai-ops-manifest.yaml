@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.110.0
+  package_version: 2.111.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_111_atomic_workpackages:
+      - "P0 аудита закрыт: Atomic Planner создаёт КОНКРЕТНЫЕ WorkPackages, а не только называет оси. atomic_planner.decompose(signals, wid): при should_decompose строит пакеты {id, title, axis, scope, depends_on, acceptance, order} по ОСНОВНОЙ оси (приоритет: subsystem>result>commit>verifiable>context-budget>size). by-subsystem -> пакет на подсистему с цепочкой зависимостей; by-result -> N независимых; size/commit/бюджет -> 2 последовательных part-1/part-2 (человек уточняет)"
+      - "инвариант сохранён: декомпозиция НЕ выдумывает новых бизнес-решений — scope пакетов ⊆ подсистем сигналов; human_confirms=True (финал подтверждает человек). Контроллер зовёт decompose (надмножество assess), сохраняет пакеты в features/<wid>/work-package.yaml + report['work_package'].work_packages/primary_axis"
+      - "проверки: decompose-сценарии в atomic_planner selftest (атомарный -> пусто; by-subsystem -> 4 пакета с deps; by-result -> 3; size -> 2; scope ⊆ сигналов); Q2b в qualification (конкретные пакеты с id/scope/deps); v2.111 в ai_ops_run selftest (атомарный QUICK -> work_packages пуст)"
     fixed_v2_110_real_spec_first:
       - "P0 аудита закрыт: SpecCoverage перестал быть фикцией. Раньше spec_levels.assess(signals) звался с пустым provided -> ВСЕ разделы missing (оценка не отражала реальность). Теперь assess_from_artifacts(signals, child_root, wid) собирает provided из РЕАЛЬНЫХ артефактов: features/<wid>/spec.yaml (что описано явно) + засчёт разделов по артефактам прогона (requirements.yaml->requirements, plan.yaml->implementation_plan/verification_strategy, openspec/changes/<wid>->contracts/acceptance_scenarios). covered_sections/provided_sources в отчёте — видно, откуда засчитано"
       - "`specify` РЕАЛЬНО создаёт артефакт: spec_levels.create_spec пишет features/<wid>/spec.yaml нужной глубины (все обязательные разделы уровня, заготовки status=missing), не перезаписывает существующий без --overwrite (не теряем описанное). validate_spec валидирует реальный артефакт против уровня; нет spec.yaml -> честная пометка (не притворяется). ai-ops specify и spec_levels create/validate — CLI"

@@ -168,7 +168,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v2.100 Atomic Planning: оценка размера пакета + нужна ли декомпозиция по контекстному бюджету.
         import atomic_planner
         try:
-            work_pkg = atomic_planner.assess(signals, child_root=child_root, bundle=bundle)
+            # v2.111: decompose — при необходимости строит КОНКРЕТНЫЕ WorkPackages (не только оси).
+            work_pkg = atomic_planner.decompose(signals, wid=fid, child_root=child_root, bundle=bundle)
             (features_dir / fid / "work-package.yaml").write_text(
                 yaml.safe_dump(work_pkg, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001
@@ -256,7 +257,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             rep["work_package"] = {"atomic": work_pkg["atomic"],
                                    "should_decompose": work_pkg["should_decompose"],
                                    "decomposition_axes": work_pkg["decomposition_axes"],
-                                   "decomposition_reasons": work_pkg["decomposition_reasons"]}
+                                   "decomposition_reasons": work_pkg["decomposition_reasons"],
+                                   # v2.111: конкретные пакеты (id/scope/deps) + основная ось
+                                   "primary_axis": work_pkg.get("primary_axis"),
+                                   "work_packages": work_pkg.get("work_packages", [])}
         if lifecycle_errors:
             rep["lifecycle_errors"] = lifecycle_errors   # v2.107: сбои слоя контекста видны, не гаснут
         try:
@@ -534,6 +538,9 @@ def selftest():
         expect("v2.100: WorkPackagePlan сохранён", (root / "features" / pfid / "work-package.yaml").exists())
         expect("v2.100: work_package в отчёте (QUICK/1 подсистема -> atomic)",
                isinstance(rp.get("work_package"), dict) and rp["work_package"]["atomic"] is True)
+        # v2.111: атомарный -> конкретных пакетов нет (не выдумываем разбиение)
+        expect("v2.111: атомарный пакет -> work_packages пуст",
+               rp["work_package"].get("work_packages") == [])
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib

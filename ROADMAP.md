@@ -278,8 +278,12 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   глубины) и валидирует спеку; SpecCoverage заполняется из РЕАЛЬНЫХ артефактов (spec.yaml + засчёт
   requirements/plan/openspec), а не из сигналов с пустым provided. Enforcement: существующий, но
   неполный spec.yaml не пускает в implementation (`ready_for_pr=False`), спеки нет → поведение
-  прежнее (spec-first опционален для мелких задач). Осталось: Atomic Planner создаёт конкретные
-  WorkPackages (v2.111).
+  прежнее (spec-first опционален для мелких задач).
+- **Atomic Planner создаёт WorkPackages (v2.111) ✅** — при необходимости разбиения `decompose`
+  строит КОНКРЕТНЫЕ пакеты (id/scope/depends_on/acceptance/order) по основной оси
+  (subsystem/result/commit/size), а не только называет оси. Инвариант: не выдумывает новых бизнес-
+  решений (scope ⊆ подсистем сигналов), финал подтверждает человек. Контроллер сохраняет пакеты в
+  `features/<wid>/work-package.yaml` и отчёт.
 - **Real Resume (v2.109) ✅** — resume-mode ПРОДОЛЖАЕТ поверх подтверждённой работы: переиспользует
   ветку/worktree прошлого прогона (коммиты НЕ удаляются), подаёт модели состояние из RunHandoff
   (что сделано/решения/next_action), tool loop продолжает, а не начинает заново. Честность: нечего

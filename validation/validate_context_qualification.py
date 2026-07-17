@@ -74,12 +74,15 @@ def run_scenarios():
            "=== [rule]" in pay["text"] and pay["payload_tokens"] > 0
            and pay["payload_budget"] < pay["context_budget"])
 
-        # Q2 context overflow -> декомпозиция (не молча)
+        # Q2 context overflow -> декомпозиция (не молча) + КОНКРЕТНЫЕ пакеты (v2.111)
         b_of = context_compiler.compile_bundle(eng, root, context_budget=10)
-        wp = atomic_planner.assess(eng, child_root=root, bundle=b_of, budget=10)
+        wp = atomic_planner.decompose(eng, wid="q2", child_root=root, bundle=b_of, budget=10)
         ok("Q2 context overflow: overflow + авто-декомпозиция by-context-budget (open_question, не молча)",
            b_of["overflow"] is True and wp["should_decompose"]
            and "by-context-budget" in wp["decomposition_axes"] and b_of["open_questions"])
+        ok("Q2b atomic planning: decompose строит КОНКРЕТНЫЕ WorkPackages с id/scope/deps (не только оси)",
+           wp["work_packages"] and all(p["id"] and p["scope"] and "depends_on" in p
+                                       for p in wp["work_packages"]) and wp["human_confirms"] is True)
 
     # Q3 resume + Q4 stale + Q9 long-running (решение сохранено)
     with tempfile.TemporaryDirectory() as td:
