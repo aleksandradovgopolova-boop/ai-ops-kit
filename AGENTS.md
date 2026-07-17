@@ -50,6 +50,8 @@ python3 tools/gate_executor.py --selftest
 python3 validation/validate_reviewer_result.py --selftest
 python3 tools/tool_broker.py --selftest
 python3 tools/security_scan.py --selftest
+python3 tools/context_compiler.py --selftest
+python3 validation/validate_context_bundle.py --selftest
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest

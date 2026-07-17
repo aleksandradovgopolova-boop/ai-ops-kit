@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.96.0
+  package_version: 2.97.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -346,6 +346,15 @@ execution_engine:
       - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
+    context_engineering_epic:                 # эпик Context Engineering & Spec-Driven Execution (после аудита)
+      status: "начат (этап 1 из 7)"
+      stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First", "3 Context Lifecycle+Resume",
+               "4 Atomic Planning+Context Budget", "5 Security Pack", "6 Product UX", "7 Qualification"]
+      note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_97_context_compiler:
+      - "этап 1 Context Compiler: tools/context_compiler.py собирает МИНИМАЛЬНЫЙ релевантный ContextBundle на WorkItem вместо загрузки всего репо/правил/агентов. Селекция ДЕТЕРМИНИРОВАННА и обоснована реальными данными: agents = владельцы стадий base_workflow + responsible_role гейтов плана (∩ registry); skills = uses_skills стадий; rules = категории по workflow+трекам (core всегда); repository_context = RepositoryProfile; files = манифесты стека; specs/decisions = существующие артефакты"
+      - "честность отбора: excluded несёт причину для КАЖДОГО источника (агенты не из RunPlan, правила не по задаче); estimated_tokens считается ДО вызова модели; overflow НЕ обрезает контекст молча (поднимает open_question); stale-артефакты помечаются; тот же WorkItem при тех же входах -> ВОСПРОИЗВОДИМЫЙ пакет (без времени/рандома)"
+      - "артефакт schemas/context-bundle.schema.json + валидатор validation/validate_context_bundle.py (форма + инварианты честности: excluded с причинами, overflow не молча, агент не в included и excluded одновременно). Встроено в lifecycle контроллера (v2.94): bundle сохраняется features/<wid>/context-bundle.yaml рядом с планом, сводка в report['context_bundle'], проверяется e2e-харнессом. В checklist и CI"
     fixed_v2_96_real_qualification:
       - "канонический e2e в CI (аудит 2.96): validation/validate_pipeline_e2e.py поднимает НАСТОЯЩИЙ git-репо из python-фикстуры и гоняет ПОЛНЫЙ путь `ai-ops run --engine pipeline --execute` со scripted-proposer (без модели) -> проверяет цепочку task->RunPlan->WorkItem->active-work->detect->tool-loop->commit на ветке->evidence на точном SHA->гейты->run-report->active-work закрыта. Раньше CI гонял в основном selftest-модули"
       - "матрица Python в CI: новый job pipeline-e2e гоняет e2e + стек-квалификацию + ядро движка на Python 3.9 И 3.12 (раньше только 3.12). ai_ops_run.run получил проброс install_deps (e2e offline, без pip)"
