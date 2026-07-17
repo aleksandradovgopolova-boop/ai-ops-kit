@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.85.0
+  package_version: 2.86.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -267,7 +267,7 @@ execution_engine:
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано (остаток после v2.66)
       - "P0.2 (полное) shell FS-сеть-изоляция: сделаны env-скраб секретов (v2.56 и v2.63 allowlist), timeout + честная граница (v2.66); v2.81 добавил brokered-containment — block_push по умолчанию, allowlist команд и денай сетевых бинарников по флагу --sandbox. ОСТАЛОСЬ: полный jail на уровне runtime (writable-mount только worktree, HOME изолирован, сеть off, лимиты ресурсов) — требует контейнера, НЕ сделано. Не давать pipeline с живой моделью доступ к ценному приватному репо без надзора"
       - "P0.3 standalone-движок в child: ЗАКРЫТО в v2.82 — managed_set теперь содержит tools, validation, config, VERSION; движок ставится в .ai/managed и `ai-ops run` работает без клона parent (доказано validate_standalone_engine.py). Остаток: child-CI валидатор всё ещё клонирует parent по тегу (отдельный контур пина версии)"
-      - "P0.4 полный RunPlan в pipeline: ЧАСТИЧНО (v2.83) — добавлен постадийный НЕЗАВИСИМЫЙ ревью ai-review гейтов (code_review/ux_review/security-non-human) отдельным read-only вызовом (writer ≠ judge, --review). ОСТАЛОСЬ: production артефактов для детерминированных гейтов requirements/specification/plan_readiness (product-authoring) — сейчас они честно блокируют без артефактов"
+      - "P0.4 полный RunPlan в pipeline: ЧАСТИЧНО (v2.83 ревью + v2.86 authoring) — постадийный НЕЗАВИСИМЫЙ ревью ai-review гейтов (--review) + производство артефактов requirements/plan с детерминированной проверкой формы (--author), закрывающее requirements и plan_readiness. ОСТАЛОСЬ: specification (нужен внешний openspec CLI) — честно блокирует"
       - "P1.2 усиление детектора стека: ЧАСТИЧНО (v2.84) — wrapper'ы ./gradlew ./mvnw предпочтены глобальным бинарям, монорепо-маркеры (pnpm-workspace/lerna/turbo/nx/много package.json) + честный note. ОСТАЛОСЬ: нестандартные скрипты, per-package таргет-фильтр в монорепо"
       - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
       - "живой draft PR: механизм готов (pr_open, open_pr=True), нужен GITHUB_TOKEN + remote — эмпирически не прогнан"
@@ -339,9 +339,13 @@ execution_engine:
       - "reviewer `warn` на БЛОКИРУЮЩЕМ гейте раньше тихо закрывал его (evaluate требует required_evidence только для pass) -> теперь warn на blocking = блок"
       - "гейты security и ai_red_team больше НЕ отдаются авто-ревью той же модели (NO_SELF_REVIEW) — self-attestation недопустима для security-критичных гейтов; нужна независимость/человек"
       - "output_tail shell поднят 400 -> 4000: сводка теста / список упавших node-id для structured-id baseline-diff часто не попадали в окно (fail-open) -> регрессии терялись"
+    fixed_v2_86_product_authoring:
+      - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
+      - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Качество судит независимый ревьюер (--review) / человек. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации)"
+      - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
     remaining_backlog:
       - "P0.2 полный контейнерный jail: лимиты ресурсов и изоляция файловой системы и сети на уровне runtime (namespaces, read-only mounts) — вне брокера; brokered-подмножество закрыто в v2.81 (--sandbox, block_push). Пока: недоверенной модели без надзора не давать ценный приватный репо"
-      - "product-authoring: производство артефактов requirements/specification/plan (+ запускаемые валидаторы) для закрытия детерминированных артефакт-гейтов ENGINEERING/PRODUCT — сейчас честно блокируют без артефактов"
+      - "specification-authoring: производство OpenSpec-артефакта (+ openspec-validate-strict) для гейта specification — нужен внешний openspec CLI; requirements и plan_readiness закрыты в v2.86"
       - "живая квалификация: прогнать 5 сценариев × матрица ОС/стеков на машине с моделью и приложить отчёты (харнесс+сценарии+runbook готовы, v2.84) — требует Mac/Linux пользователя"
 
 effect_metrics:

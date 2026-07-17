@@ -46,7 +46,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="controller", proposer=None, open_pr=False, model=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
-        sandbox=False, review=False, reviewer_proposer=None):
+        sandbox=False, review=False, reviewer_proposer=None,
+        author=False, author_proposer=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -68,11 +69,16 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rev_prop = reviewer_proposer
         if review and rev_prop is None and provider_name != "mock":
             rev_prop = orchestrator.make_provider(provider_name, model)
+        # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
+        auth_prop = author_proposer
+        if author and auth_prop is None and provider_name != "mock":
+            auth_prop = orchestrator.make_provider(provider_name, model)
         rep = execution_pipeline.run_pipeline(
             task_text, signals, child_root, prop, feature=feature,
             commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
             require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
-            sandbox=sandbox, review=review, reviewer_proposer=rev_prop)
+            sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
+            author=author, author_proposer=auth_prop)
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
@@ -346,6 +352,12 @@ def main(argv):
                          "политикой выносит структурный вердикт (writer ≠ judge). Артефакт-гейты "
                          "(requirements/spec/plan) и human-approval ревьюер НЕ закрывает; "
                          "engine=pipeline, нужна живая модель (не mock)")
+    rp.add_argument("--author", action="store_true",
+                    help="product authoring (v2.86): движок производит артефакты requirements/plan "
+                         "(отдельный вызов модели) и подтверждает их ФОРМУ детерминированно -> "
+                         "закрывает артефакт-гейты requirements/plan_readiness. Качество судит "
+                         "ревьюер (--review)/человек. specification (OpenSpec) не входит; нужна "
+                         "живая модель (не mock)")
     rp.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "run":
@@ -353,7 +365,7 @@ def main(argv):
                      a.runtime, a.provider, a.session, a.execute, feature=a.feature,
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
-                     discard_previous=a.discard, sandbox=a.sandbox, review=a.review)
+                     discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

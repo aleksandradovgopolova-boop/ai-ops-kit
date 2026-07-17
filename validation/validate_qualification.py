@@ -27,7 +27,7 @@ PKG = Path(__file__).resolve().parents[1]
 # известные флаги сценариев (ai-ops run / qual_run). Значения флагов с аргументом (--task-type X)
 # пишутся как два токена; проверяем имя флага.
 KNOWN_FLAGS = {
-    "--sandbox", "--review", "--require-fix", "--baseline-diff", "--strict-green",
+    "--sandbox", "--review", "--author", "--require-fix", "--baseline-diff", "--strict-green",
     "--open-pr", "--discard", "--task-type", "--max-steps", "--execute", "--json",
 }
 REQUIRED_FIELDS = ("id", "title", "task", "task_type", "acceptance", "proves")

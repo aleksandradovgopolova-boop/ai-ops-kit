@@ -49,18 +49,18 @@ scenarios:
       - "ready_for_pr=false при регрессии — движок не пропустил 'починил один, сломал другой'"
     proves: "structured-id baseline-diff (v2.84) ловит смену набора падений, не только рост числа"
 
-  - id: S4-engineering-review
-    title: "ENGINEERING: независимый ревью ai-review гейтов (writer != judge)"
+  - id: S4-engineering-review-author
+    title: "ENGINEERING: независимый ревью + производство артефактов (writer != judge)"
     task: "отрефактори модуль расчёта скидок и добавь тесты"
     task_type: ENGINEERING
-    flags: ["--sandbox", "--review", "--task-type", "ENGINEERING"]
+    flags: ["--sandbox", "--review", "--author", "--task-type", "ENGINEERING"]
     baseline: no-regressions
-    expected: "code_review закрыт независимым ревьюером; requirements/specification/plan честно блокируют"
+    expected: "code_review закрыт независимым ревьюером; requirements/plan_readiness закрыты произведёнными артефактами (форма); specification (OpenSpec) честно блокирует без CLI"
     acceptance:
       - "reviews содержит вердикт по code_review (status pass|fail) от read-only судьи"
-      - "gates.unmet включает requirements/specification/plan_readiness (артефактов нет) — честный not-ready"
-      - "ready_for_pr=false с ЧЕСТНОЙ причиной (артефакт-гейты), НЕ ложный green"
-    proves: "постадийный ревью закрывает то, что судья может проверить; артефакт-гейты не обходятся"
+      - "authored содержит валидные requirements+plan артефакты; их гейты НЕ в unmet (форма подтверждена)"
+      - "specification остаётся в gates.unmet (OpenSpec-артефакт не производится) — честный not-ready, НЕ ложный green"
+    proves: "постадийный ревью + производство артефактов закрывают то, что можно детерминированно/судьёй; недоказуемое (spec) честно блокирует"
 
   - id: S5-containment
     title: "Containment: sandbox реально ограничивает петлю"
