@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.98.0] — 2026-07-17 — Adaptive Spec-First: глубина спецификации по уровням (эпик Context Engineering, этап 2)
+
+Этап 2: не требовать полной спецификации для мелкой задачи, но не начинать сложное изменение без
+достаточного описания.
+
+### Added
+- **`tools/spec_levels.py`** — детерминированный классификатор глубины: **L0 QUICK** (цель/scope/
+  поведение/acceptance/ограничения/файлы) → **L1 ENGINEERING** (+requirements/scenarios/контракты/
+  зависимости/edge cases/архитектура/план/write scope/verification) → **L2 PRODUCT** (+проблема/
+  пользователи+JTBD/ценность/сценарии/гипотезы/метрики/UX/аналитика/rollout/риски) → **L3 CRITICAL**
+  (+threat model/rollback/migration/failure modes/audit/approvals/compliance/DR). Разделы
+  кумулятивны. **Инварианты**: уровень виден почему; можно повысить (эскалация по риску/необратимости/
+  secret_boundary), **нельзя понизить молча**; статус раздела complete|not_applicable|declined|
+  needs_human|missing; `declined` требует объяснения; `ready_to_implement=False` при missing-разделах.
+- **`validation/validate_spec_coverage.py`** — форма `SpecCoverage` + инварианты (declined с note,
+  blocking_missing = ровно missing, ready несовместим с missing, escalated_from < level). В checklist и CI.
+
+### Changed
+- **`tools/ai_ops_run.py`** — в lifecycle добавлена `SpecCoverage`: `features/<wid>/spec-coverage.yaml`
+  + сводка в `report['spec_coverage']` (уровень, эскалация, пробелы, needs_human). Пока информативно
+  (не хард-блок, чтобы QUICK-из-промпта не ломался); enforcement блокирующих разделов — на стыке с
+  этапом 4 (Atomic Planning).
+
+Дальше по эпику: этап 3 Context Lifecycle + Resume.
+
 ## [2.97.0] — 2026-07-17 — Context Compiler: минимальный релевантный ContextBundle (эпик Context Engineering, этап 1)
 
 Старт эпика **Context Engineering & Spec-Driven Execution** (после execution-аудита). Этап 1: перед

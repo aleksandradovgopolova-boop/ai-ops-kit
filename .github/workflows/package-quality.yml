@@ -166,6 +166,10 @@ jobs:
         run: |
           python3 tools/context_compiler.py --selftest
           python3 validation/validate_context_bundle.py --selftest
+      - name: "Adaptive Spec-First: уровень спецификации L0-L3 + SpecCoverage (selftest + валидатор)"
+        run: |
+          python3 tools/spec_levels.py --selftest
+          python3 validation/validate_spec_coverage.py --selftest
       - name: "Канонический e2e: ai-ops run --engine pipeline на реальной фикстуре (без модели)"
         run: python3 validation/validate_pipeline_e2e.py --selftest
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"
