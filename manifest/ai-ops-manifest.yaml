@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.82.0
+  package_version: 2.83.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -267,7 +267,7 @@ execution_engine:
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано (остаток после v2.66)
       - "P0.2 (полное) shell FS-сеть-изоляция: сделаны env-скраб секретов (v2.56 и v2.63 allowlist), timeout + честная граница (v2.66); v2.81 добавил brokered-containment — block_push по умолчанию, allowlist команд и денай сетевых бинарников по флагу --sandbox. ОСТАЛОСЬ: полный jail на уровне runtime (writable-mount только worktree, HOME изолирован, сеть off, лимиты ресурсов) — требует контейнера, НЕ сделано. Не давать pipeline с живой моделью доступ к ценному приватному репо без надзора"
       - "P0.3 standalone-движок в child: ЗАКРЫТО в v2.82 — managed_set теперь содержит tools, validation, config, VERSION; движок ставится в .ai/managed и `ai-ops run` работает без клона parent (доказано validate_standalone_engine.py). Остаток: child-CI валидатор всё ещё клонирует parent по тегу (отдельный контур пина версии)"
-      - "P0.4 полный RunPlan в pipeline: сейчас pipeline гоняет tool-loop + один срез evidence (implementation_verification) + оценку гейтов; ПОСТАДИЙНОЕ исполнение треков RunPlan (VISUAL/ANALYTICS/SECURITY/DOCS как отдельные стадии с артефактами) — НЕ реализовано"
+      - "P0.4 полный RunPlan в pipeline: ЧАСТИЧНО (v2.83) — добавлен постадийный НЕЗАВИСИМЫЙ ревью ai-review гейтов (code_review/ux_review/security-non-human) отдельным read-only вызовом (writer ≠ judge, --review). ОСТАЛОСЬ: production артефактов для детерминированных гейтов requirements/specification/plan_readiness (product-authoring) — сейчас они честно блокируют без артефактов"
       - "P1.2 усиление детектора стека: сейчас определяет базовые команды build/lint/typecheck/test по манифестам; edge-случаи (монорепо, нестандартные скрипты) требуют доработки"
       - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
       - "живой draft PR: механизм готов (pr_open, open_pr=True), нужен GITHUB_TOKEN + remote — эмпирически не прогнан"
@@ -323,9 +323,13 @@ execution_engine:
       - "ДОКАЗАНО, не задекларировано: validate_standalone_engine.py строит managed из managed_set и гоняет движок отдельным процессом из .ai/managed с чистым окружением (parent не на path) — scripted-proposer пишет файл, движок коммитит на ai-ops/*, собирает evidence на точном SHA, ready_for_pr=True. Плюс completeness-проверка рантайм-замыкания (регресс managed_set падает тестом)"
       - "doctor сообщает наличие движка в .ai/managed; --json-вывод очищен (worktree-прогресс ушёл в stderr) — отчёт машиночитаем"
       - "ЧЕСТНАЯ ГРАНИЦА: child-CI валидация (ai-ops-validate.yml) по-прежнему клонирует parent по тегу — это отдельный контур (пин версии), не путь исполнения движка. По выбору packages без ai-ops-execution движок в child не ставится (осознанный opt-out)"
+    fixed_v2_83_full_runplan:
+      - "постадийный НЕЗАВИСИМЫЙ ревью ai-review гейтов плана (code_review, ux_review, security-non-human, ...): движок гоняет ОТДЕЛЬНЫЙ вызов модели (writer ≠ judge) под READ-ONLY политикой — судья читает изменение и выносит СТРУКТУРНЫЙ reviewer-result (валидируется validate_reviewer_result), который закрывает/блокирует гейт. Флаг --review в ai-ops run и qual_run; трейс в report.reviews"
+      - "capability-независимость: ревьюер физически не может писать/шеллить (read-only Policy отклоняет), а его pass закрывает required_evidence по той же дисциплине, что collect_evidence для ai-review. Вердикт fail блокирует — писатель не переопределяет судью"
+      - "ЧЕСТНАЯ ГРАНИЦА (что НЕ закрывается): детерминированные артефакт-гейты (requirements/specification/plan_readiness) ревьюер словом НЕ закрывает — нужны артефакты + запускаемые валидаторы (product-authoring, отдельная фаза); human-approval (security при privileged/destructive/secret_boundary) требует человека; та же базовая модель как судья — более слабая независимость, чем другой судья/человек (сильнее — другая модель/человек)"
     remaining_backlog:
       - "P0.2 полный контейнерный jail: лимиты ресурсов и изоляция файловой системы и сети на уровне runtime (namespaces, read-only mounts) — вне брокера; brokered-подмножество закрыто в v2.81 (--sandbox, block_push). Пока: недоверенной модели без надзора не давать ценный приватный репо"
-      - "полный RunPlan: постадийное исполнение ENGINEERING и PRODUCT (requirements, spec, plan, review, треки) с производством evidence (v2.83)"
+      - "product-authoring: производство артефактов requirements/specification/plan (+ запускаемые валидаторы) для закрытия детерминированных артефакт-гейтов ENGINEERING/PRODUCT — сейчас честно блокируют без артефактов"
       - "квалификация: 5 живых сценариев + матрица ОС/стеков; baseline-diff по структурным id ошибок, а не по числу; усиление детектора (monorepo/wrappers) (v2.84)"
 
 effect_metrics:

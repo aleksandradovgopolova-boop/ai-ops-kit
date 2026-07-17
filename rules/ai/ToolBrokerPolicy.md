@@ -38,6 +38,13 @@ Policy Engine (`tools/tool_broker.py`) по уровням `security/permission-
    `nc`, `ssh`, `scp`, `rsync`, …) отклоняются. Это НЕ полный сетевой jail — это
    enforceable-денай частых векторов на уровне брокера.
 
+## Ревьюер под read-only (v2.83, writer ≠ judge)
+
+Независимый ревьюер RunPlan-гейтов (`tool_loop.run_review`) гоняется под `Policy(level="read-only")`:
+он МОЖЕТ читать изменение, но `write`/`shell` брокер отклоняет. Это делает разделение «писатель ≠
+судья» не только ролевым (отдельный вызов/промпт), но и **capability-enforced**: судья физически
+не может править код, который оценивает. Его вердикт — структурный `reviewer-result`, а не слово.
+
 ## Sandbox-профиль (v2.81)
 
 `tool_broker.sandbox_policy(child_root, write_scope)` собирает усиленную политику для

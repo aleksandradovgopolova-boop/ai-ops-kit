@@ -60,6 +60,83 @@ def _intake_evidence(signals):
             "evidence": [f"intake из сигналов: {', '.join(provided)}"]}
 
 
+def _reviewable_gates(gate_ids, signals):
+    """v2.83: гейты плана, которые НЕЗАВИСИМЫЙ ревьюер может закрыть легитимно — только ai-review
+    (writer ≠ judge: судья читает и выносит вердикт). Детерминированные гейты с валидатором
+    (requirements/specification/plan_readiness) НЕ закрываются словом ревьюера — им нужны артефакты
+    и запускаемые валидаторы (честно остаются блокирующими). human-approval-гейты (security при
+    privileged/destructive/secret_boundary) ревьюер тоже НЕ закрывает — нужен человек."""
+    gates = gate_executor.load_gates()
+    out = []
+    for gid in gate_ids:
+        g = gates.get(gid) or {}
+        if gate_executor.classify(g, signals) == "ai-review":
+            out.append(gid)
+    return out
+
+
+def _gate_checklist(gate):
+    """Короткий чек-лист для ревьюера: required_evidence + ответственная роль. (Тела правил в
+    rules/ доступны ревьюеру через read; здесь — компактный ориентир, не весь файл.)"""
+    req = gate.get("required_evidence", []) or []
+    role = gate.get("responsible_role", "reviewer")
+    parts = [f"роль: {role}"]
+    if req:
+        parts.append("подтверди по факту: " + ", ".join(req))
+    return "; ".join(parts)
+
+
+def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
+                 max_reads=6):
+    """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence.
+    Возвращает (обновлённый gate_ev, список трейсов ревью). Ревьюер гоняется под READ-ONLY
+    политикой (capability-независимость от писателя). Вердикт валидируется по reviewer-result
+    и кладётся в gate_ev; невынесенный вердикт -> гейт остаётся неподтверждённым (честный fail)."""
+    import validate_reviewer_result as vrr
+    gates = gate_executor.load_gates()
+    ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
+    reviews = []
+    gate_ev = dict(gate_ev)
+    valid_ids = None
+    try:
+        valid_ids = set(gates)
+    except Exception:
+        valid_ids = None
+    for gid in _reviewable_gates(gate_ids, signals):
+        if gid in gate_ev:                     # evidence уже есть (напр. из reviewer-артефактов)
+            continue
+        g = gates.get(gid) or {}
+        req = g.get("required_evidence", []) or []
+        reviewer = tool_loop.make_reviewer_proposer(
+            reviewer_proposer, gid, checklist=_gate_checklist(g),
+            required_evidence=req, reviewed_revision=revision)
+        rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
+                                  max_reads=max_reads, required_evidence=req,
+                                  reviewed_revision=revision)
+        res = rv.get("result")
+        errs = vrr.check(res, gate_ids=valid_ids) if isinstance(res, dict) else ["ревьюер не вынес вердикт"]
+        entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
+                 "denied": rv.get("denied"), "valid": not errs,
+                 "status": (res or {}).get("status") if not errs else None,
+                 "errors": errs or None}
+        reviews.append(entry)
+        if errs:
+            continue                            # невалидный/пустой вердикт -> гейт не закрываем
+        status = res.get("status")
+        if status == "fail":
+            gate_ev[gid] = {"status": "fail",
+                            "blockers": res.get("blockers") or [f"reviewer FAIL @ {gid}"],
+                            "checks": res.get("checks", []),
+                            "evidence": [f"independent reviewer verdict @ {revision or 'HEAD'}"]}
+        else:
+            # ai-review pass/warn: судья И ЕСТЬ evidence -> required_evidence считается предоставленным
+            # (та же дисциплина, что в gate_executor.collect_evidence для ai-review).
+            gate_ev[gid] = {"status": status, "provided": list(req),
+                            "checks": res.get("checks", []),
+                            "evidence": [f"independent reviewer verdict @ {revision or 'HEAD'}"]}
+    return gate_ev, reviews
+
+
 def _git(root, *args):
     r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
@@ -175,7 +252,8 @@ def _diff_checks(baseline, after):
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
-                 require_fix=False, discard_previous=False, sandbox=False):
+                 require_fix=False, discard_previous=False, sandbox=False,
+                 review=False, reviewer_proposer=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -323,6 +401,17 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             tests_warn = "нет тестов, а require_tests -> implementation_verification блокирует"
     not_applicable = {"implementation_verification": exempt}
 
+    # 6d. v2.83 Full RunPlan: постадийный НЕЗАВИСИМЫЙ ревью для ai-review гейтов плана
+    #     (code_review, ux_review, security-non-human, ...). writer ≠ judge: ревьюер — отдельный
+    #     вызов под READ-ONLY политикой (писать/шеллить не может), выносит СТРУКТУРНЫЙ вердикт.
+    #     Честно: детерминированные артефакт-гейты (requirements/specification/plan_readiness) и
+    #     human-approval (security при privileged/destructive) ревьюер НЕ закрывает — остаются
+    #     блокирующими. review только на зафиксированной ревизии (иначе судить нечего).
+    reviews = None
+    if review and reviewer_proposer is not None and committed_sha:
+        gate_ev, reviews = _run_reviews(reviewer_proposer, work_root, plan["gates"], gate_ev,
+                                        signals, committed_sha, budget)
+
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
     #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
@@ -419,6 +508,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                   # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
                   "gate_results": gates.get("gate_results"),
                   "tested_revision": committed_sha},
+        # v2.83 Full RunPlan: трейс независимых ревью (какие ai-review гейты судились, вердикт,
+        # что читал судья, что отклонено). None -> ревью не запускалось (нет --review/reviewer).
+        "reviews": reviews,
         # baseline-diff: None вне режима; иначе — статусы проверок на базе + регрессии/починки
         "baseline": ({"checks": {k: (v or {}).get("status") for k, v in (baseline_checks or {}).items()},
                       "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
@@ -665,6 +757,47 @@ def selftest():
                and rep_sb["containment"]["shell_mode"] == "allowlist"
                and rep_sb["containment"]["block_push"] is True)
         _git(root, "checkout", "-q", orig_branch)
+
+        # v2.83 Full RunPlan: независимый ревью ai-review гейтов (writer ≠ judge).
+        # QUICK + ui_changed -> трек VISUAL добавляет ux_review (ai-review). Без ревью он блокирует.
+        sig_rv = dict(sig); sig_rv["ui_changed"] = True
+        it_nr = iter([{"op": "write", "path": "src/nr.py", "content": "n=1\n"}, {"done": True}])
+        rep_nr = run_pipeline("ui без ревью", sig_rv, root, lambda c: next(it_nr),
+                              budget={"max_model_calls": 5}, feature="nr-fn",
+                              commit=True, isolate=True, install_deps=False)
+        expect("review: ui_changed -> ux_review в плане и БЕЗ ревью блокирует (unmet)",
+               "ux_review" in rep_nr["gates"]["evaluated"] and "ux_review" in rep_nr["gates"]["unmet"]
+               and rep_nr["reviews"] is None)
+        _git(root, "checkout", "-q", orig_branch)
+
+        # с независимым ревьюером, который выносит pass -> ux_review закрыт легитимно (вердикт judge)
+        pass_provider = lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        it_rp = iter([{"op": "write", "path": "src/rp.py", "content": "p=1\n"}, {"done": True}])
+        rep_rp = run_pipeline("ui с ревью pass", sig_rv, root, lambda c: next(it_rp),
+                              budget={"max_model_calls": 20}, feature="rp-fn",
+                              commit=True, isolate=True, install_deps=False,
+                              review=True, reviewer_proposer=pass_provider)
+        expect("review: независимый reviewer pass -> ux_review НЕ в unmet (закрыт вердиктом)",
+               "ux_review" not in rep_rp["gates"]["unmet"]
+               and any(r["gate"] == "ux_review" and r["status"] == "pass" for r in (rep_rp["reviews"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # ревьюер выносит fail -> ux_review блокирует (судья сильнее писателя; writer не переопределяет)
+        fail_provider = lambda prompt: '{"kind":"reviewer-result","status":"fail","checks":[{"id":"ux","status":"fail"}],"blockers":["нет состояний экрана"]}'
+        it_rf2 = iter([{"op": "write", "path": "src/rf2.py", "content": "f=1\n"}, {"done": True}])
+        rep_rf2 = run_pipeline("ui с ревью fail", sig_rv, root, lambda c: next(it_rf2),
+                               budget={"max_model_calls": 20}, feature="rf2-fn",
+                               commit=True, isolate=True, install_deps=False,
+                               review=True, reviewer_proposer=fail_provider)
+        expect("review: reviewer fail -> ux_review блокирует (writer не переопределяет судью)",
+               "ux_review" in rep_rf2["gates"]["unmet"]
+               and any(r["gate"] == "ux_review" and r["status"] == "fail" for r in (rep_rf2["reviews"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # честная граница: детерминированный артефакт-гейт ревьюер НЕ закрывает (requirements — не ai-review)
+        expect("review: детерминированные артефакт-гейты не входят в reviewable (requirements)",
+               "requirements" not in _reviewable_gates(["requirements", "specification", "ux_review"], sig_rv)
+               and "ux_review" in _reviewable_gates(["requirements", "ux_review"], sig_rv))
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])
