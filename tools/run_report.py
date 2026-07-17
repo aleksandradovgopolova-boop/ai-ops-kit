@@ -22,6 +22,10 @@
 tools/effect_metrics.py («метрики эффекта»). Требует pyyaml.
 """
 
+# PEP 563: ленивые аннотации — `Path | None` (PEP 604) не вычисляется при импорте,
+# поэтому модуль грузится и на Python 3.9 (дефолт macOS CommandLineTools).
+from __future__ import annotations
+
 import importlib.util
 import json
 import sys

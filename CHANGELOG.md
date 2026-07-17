@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.69.0] — 2026-07-17
+
+**Portability — первый реальный finding квалификационного харнесса (Python 3.9).** Попытка
+живого qual-прогона с Mac упала ещё до вызова модели: `python3` из macOS CommandLineTools —
+это 3.9, а два модуля использовали `X | None` (PEP 604) в аннотациях без future-import, из-за
+чего весь движок падал `TypeError` при импорте. То есть харнесс сработал по назначению —
+поймал портируемость-дефект на реальной машине.
+
+### Fixed
+- **`tools/generate_artifacts.py`, `tools/run_report.py`** — добавлен `from __future__ import
+  annotations` (PEP 563: аннотации становятся ленивыми, `str | None` не вычисляется при
+  импорте). Движок (`ai_ops_run → workitem → run_report → generate_artifacts`) теперь грузится
+  на Python 3.9.
+
+### Added
+- **`validation/validate_python_compat.py`** — AST-guard: union-аннотация `X | Y` без
+  `from __future__ import annotations` = ERROR в CI. Класс «падает на <3.10» больше не пройдёт.
+  Offline `--selftest`. Wired в AGENTS.md + CI (`package-quality.yml`).
+
+### Changed
+- **README** — документированный floor Python 3.10+ → **3.9+** (честно: дефолтный `python3`
+  macOS подходит), со ссылкой на compat-валидатор.
+- **manifest** — `execution_engine.self_audit_2026_07_17.fixed_v2_69`;
+  `knowledge_integrity.python_compat_validator`. `package_version` → 2.69.0.
+
 ## [2.68.0] — 2026-07-17
 
 **Квалификационный харнесс — `tools/qual_run.py`.** Инструмент для последнего реального пункта

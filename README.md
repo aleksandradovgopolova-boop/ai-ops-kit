@@ -85,4 +85,7 @@ python3 <путь-к-ai-ops-kit>/installer/ai_ops.py update   # применит
 - OpenSpec — опция (включена по умолчанию, opt-out), детерминированные validate/archive/sync.
 - GigaChat — планируемый провайдер (включается конфигом, без переписывания).
 
-Требования: Python 3.10+ и `pyyaml` для CLI/валидаторов; Node.js — только для OpenSpec-опции.
+Требования: Python **3.9+** (дефолтный python3 macOS подходит) и `pyyaml` для CLI/валидаторов;
+Node.js — только для OpenSpec-опции. Совместимость с 3.9 проверяется в CI
+(`validation/validate_python_compat.py`: union-аннотации `X | Y` допускаются лишь под
+`from __future__ import annotations`).
