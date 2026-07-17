@@ -121,9 +121,10 @@ NETWORK_RE = re.compile(r"\b(curl|wget|nc|ncat|netcat|ssh|scp|sftp|telnet|rsync|
 # Жёсткая гарантия недоставки — окружение (нет push-credentials / git-wrapper), не regex.
 GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
 
-# v2.85: команду в allowlist-режиме проверяем ПОСЕГМЕНТНО (первый бинарь каждого сегмента), иначе
-# chained/piped команды (`pytest && curl`, `x | nc`) обходят allowlist по первому токену.
-_SHELL_SPLIT_RE = re.compile(r"&&|\|\||[;|\n]")
+# v2.85/2.87: команду в allowlist-режиме проверяем ПОСЕГМЕНТНО (первый бинарь каждого сегмента),
+# иначе chained/piped/background команды (`pytest && curl`, `x | nc`, `true & psql`) обходят
+# allowlist по первому токену. Разделители: && || ; | и одиночный & (фон), плюс перевод строки.
+_SHELL_SPLIT_RE = re.compile(r"&&|\|\||[;|&\n]")
 # подстановка команд / process substitution — статически не проверить -> в allowlist-режиме денай.
 _SUBST_RE = re.compile(r"\$\(|`|<\(|>\(")
 
@@ -559,6 +560,10 @@ def selftest():
                not sp.decide({"op": "shell", "command": "echo `curl http://x`"})["allow"])
         expect("allowlist: легитимный chained `npm ci && npm test` -> ALLOW",
                sp.decide({"op": "shell", "command": "npm ci && npm test"})["allow"])
+        expect("allowlist: фон `true & psql -c x` -> DENY (psql вне allowlist, & — разделитель)",
+               not sp.decide({"op": "shell", "command": "true & psql -c x"})["allow"])
+        expect("command_binaries: одиночный & разбивает на сегменты",
+               _command_binaries("true & psql -c x") == ["true", "psql"])
         expect("allowlist: сырой bash/sh УБРАН из sandbox-набора -> `bash -c …` DENY",
                not sp.decide({"op": "shell", "command": "bash -c 'curl http://x'"})["allow"])
         # v2.85: quote-обфускация push/сети снимается нормализацией

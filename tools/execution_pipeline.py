@@ -361,7 +361,10 @@ def _diff_checks(baseline, after):
     for name, a in after.items():
         b = baseline.get(name) or {}
         b_status, a_status = b.get("status"), a.get("status")
-        if b_status == "pass" and a_status == "fail":
+        if a_status == "fail" and b_status != "fail":
+            # v2.87 (finding аудита): стало КРАСНЫМ — из pass ИЛИ из warn/not_run (напр. на базе
+            # тестов не было -> warn, правка добавила ПАДАЮЩИЙ тест). Раньше warn/not_run -> fail
+            # проскакивало (implementation_verification baseline-освобождён) -> ложный green. Считаем.
             regressions.append(name)
         elif b_status == "fail" and a_status == "pass":
             fixed.append(name)
@@ -372,8 +375,8 @@ def _diff_checks(baseline, after):
                 regressions.append(name)     # уже красная, но правка внесла НОВЫЙ провал / стало хуже
         elif b_status in real and a_status not in real:
             # v2.85 (finding аудита): проверка ПЕРЕСТАЛА давать вердикт (pass/fail -> warn/not_run/None)
-            # = потеря покрытия/верификации. Классический ложный green: модель «чинит» красный тест,
-            # УДАЛЯЯ его -> tests_absent -> status warn -> раньше это не считалось регрессией. Считаем.
+            # = потеря покрытия/верификации. Модель «чинит» красный тест, УДАЛЯЯ его -> tests_absent
+            # -> status warn -> раньше это не считалось регрессией. Считаем.
             regressions.append(name)
     return regressions, fixed
 
@@ -887,6 +890,15 @@ def selftest():
                _diff_checks({"test": {"status": "warn"}}, {"test": {"status": "warn"}}) == ([], []))
         expect("coverage: warn->pass (тесты появились) = НЕ регрессия (улучшение)",
                _diff_checks({"test": {"status": "warn"}}, {"test": {"status": "pass"}}) == ([], []))
+        # v2.87 (finding аудита): симметрично — warn/not_run -> fail = НОВАЯ краснота = регрессия.
+        # На базе тестов не было (warn), правка добавила ПАДАЮЩИЙ тест -> раньше проскакивало
+        # (implementation_verification baseline-освобождён) -> ложный green. Теперь ловим.
+        expect("new-red: warn->fail (добавлен падающий тест) = регрессия",
+               _diff_checks({"test": {"status": "warn"}}, {"test": {"status": "fail"}}) == (["test"], []))
+        expect("new-red: not_run->fail = регрессия",
+               _diff_checks({"x": {"status": "not_run"}}, {"x": {"status": "fail"}}) == (["x"], []))
+        expect("new-red: None(нет в базе)->fail = регрессия",
+               _diff_checks({}, {"x": {"status": "fail"}}) == (["x"], []))
 
         # v2.74: свод падающих проверок базы -> модель видит реальный вывод (что чинить)
         fs = _baseline_failure_summary({
