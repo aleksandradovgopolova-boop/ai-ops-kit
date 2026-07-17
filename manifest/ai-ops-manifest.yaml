@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.98.0
+  package_version: 2.99.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -347,10 +347,15 @@ execution_engine:
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
     context_engineering_epic:                 # эпик Context Engineering & Spec-Driven Execution (после аудита)
-      status: "в работе (этапы 1-2 из 7)"
-      stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First ✅ v2.98", "3 Context Lifecycle+Resume",
-               "4 Atomic Planning+Context Budget", "5 Security Pack", "6 Product UX", "7 Qualification"]
+      status: "в работе (этапы 1-3 из 7)"
+      stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First ✅ v2.98",
+               "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget",
+               "5 Security Pack", "6 Product UX", "7 Qualification"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_99_context_lifecycle_resume:
+      - "этап 3 Context Lifecycle и Resume: tools/run_handoff.py — артефакт RunHandoff (что сделано, changed_files, verification passed/failed, open_questions, known_risks, next_action, resume_from_revision) собирается из отчёта прогона. Сущности Feature->WorkItem->Run->Stage->Step->Handoff. Встроено в lifecycle: features/<wid>/run-handoff.yaml + report['handoff']"
+      - "resume: run_handoff.resume_preflight(child, wid, base) детерминированно проверяет — есть ли handoff, на месте ли ветка/worktree, УШЁЛ ЛИ base вперёд с момента прогона (revalidation_needed: старый evidence не действителен для нового состояния), устарели ли решения. CLI `ai-ops resume <child> <feature>` печатает preflight + указывает, как продолжить (worktree/ветка переиспользуются, не начиная заново)"
+      - "артефакт schemas/run-handoff.schema.json + validation/validate_run_handoff.py (форма: next_action обязателен, verification passed/failed, decisions с id+summary, resume_from_revision строка|null). В checklist, CI и e2e-харнессе. Инварианты resume: не начинать заново, не повторять подтверждённое без причины, ревалидация при смене main, не удалять предыдущий результат"
     fixed_v2_98_adaptive_spec_first:
       - "этап 2 Adaptive Spec-First: tools/spec_levels.py выбирает глубину спецификации L0 QUICK / L1 ENGINEERING / L2 PRODUCT / L3 CRITICAL детерминированно из сигналов (базовый уровень по task_type + эскалация по риску/необратимости/secret_boundary/измеримому польз.изменению). Разделы КУМУЛЯТИВНЫ (уровень N включает всё <= N)"
       - "инварианты честности: уровень видно ПОЧЕМУ (level_reason); можно повысить, нельзя понизить молча (запрос ниже расчётного -> остаётся расчётный + escalated_from); статус раздела complete|not_applicable|declined|needs_human|missing; declined ТРЕБУЕТ note; ready_to_implement=False при непустом blocking_missing (missing-разделах)"

@@ -139,6 +139,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             "spec_coverage": (f"features/{fid}/spec-coverage.yaml" if spec_cov else None),
             "active_work": ".ai/runtime/active-work.yaml",
             "run_report": f"features/{fid}/run-report.json",
+            "run_handoff": f"features/{fid}/run-handoff.yaml",
             "concurrency_preflight": preflight,
         }
         if bundle:
@@ -157,6 +158,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             (features_dir / fid / "run-report.json").write_text(
                 json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         except OSError:
+            pass
+        # v2.99 Context Lifecycle: RunHandoff — состояние для продолжения в новой сессии (что сделано,
+        # проверки, следующий безопасный шаг, актуальный SHA). Не начинать заново -> resume читает его.
+        import run_handoff
+        try:
+            wt = child_root / ".ai" / "worktrees" / fid
+            handoff = run_handoff.build_handoff(rep, work_root=(wt if wt.is_dir() else child_root))
+            (features_dir / fid / "run-handoff.yaml").write_text(
+                yaml.safe_dump(handoff, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            rep["handoff"] = {"next_action": handoff["next_action"],
+                              "resume_from_revision": handoff["resume_from_revision"],
+                              "open_questions": handoff["open_questions"]}
+        except Exception:  # noqa: BLE001
             pass
         # закрываем активную работу по завершении прогона (была in-progress -> done)
         with contextlib.redirect_stdout(sys.stderr):
@@ -394,6 +408,14 @@ def selftest():
         expect("v2.98: SpecCoverage сохранён", (root / "features" / pfid / "spec-coverage.yaml").exists())
         expect("v2.98: spec-level в отчёте (QUICK -> L0)",
                isinstance(rp.get("spec_coverage"), dict) and rp["spec_coverage"]["level"] == 0)
+        # v2.99 Context Lifecycle: RunHandoff сохранён + next_action для resume
+        expect("v2.99: RunHandoff сохранён", (root / "features" / pfid / "run-handoff.yaml").exists())
+        expect("v2.99: handoff несёт next_action (следующий шаг)",
+               isinstance(rp.get("handoff"), dict) and bool(rp["handoff"].get("next_action")))
+        # resume-preflight по этому WorkItem: handoff есть -> can_resume
+        import run_handoff as _rh
+        _pf = _rh.resume_preflight(root, pfid, base=_rh._git(root, "rev-parse", "--abbrev-ref", "HEAD")[1])
+        expect("v2.99: resume-preflight видит handoff (can_resume=True)", _pf["can_resume"] is True)
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib
@@ -478,7 +500,28 @@ def main(argv):
                          "ревьюер (--review)/человек. specification (OpenSpec) не входит; нужна "
                          "живая модель (не mock)")
     rp.add_argument("--json", action="store_true")
+    # v2.99: resume — продолжить WorkItem по последнему RunHandoff (не начинать заново)
+    rs = sub.add_parser("resume")
+    rs.add_argument("child_root"); rs.add_argument("feature")
+    rs.add_argument("--base", default="main"); rs.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "resume":
+        import run_handoff
+        pf = run_handoff.resume_preflight(a.child_root, a.feature, base=a.base)
+        if a.json:
+            print(json.dumps(pf, ensure_ascii=False, indent=2))
+        else:
+            print(f"ai-ops resume {a.feature}: can_resume={pf['can_resume']} · "
+                  f"revalidation_needed={pf.get('revalidation_needed')}")
+            for r_ in pf["reasons"]:
+                print(f"  · {r_}")
+            if pf.get("next_action"):
+                print(f"  следующий шаг: {pf['next_action']}")
+            if pf["can_resume"]:
+                print(f"  продолжить: ai-ops run \"<задача>\" {a.child_root} --engine pipeline "
+                      f"--feature {a.feature} --execute   (worktree/ветка переиспользуются; "
+                      f"{'ревалидация нужна' if pf.get('revalidation_needed') else 'база актуальна'})")
+        return 0 if pf["can_resume"] else 1
     if a.cmd == "run":
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
                      a.runtime, a.provider, a.session, a.execute, feature=a.feature,

@@ -209,7 +209,7 @@ L3 CRITICAL (+threat model/rollback/migration/failure modes/audit/approvals/comp
 превращается в бюрократию; ENGINEERING не стартует с однострочника; PRODUCT несёт проблему/пользо­
 вателей/ценность/метрики; CRITICAL всегда требует человека; предположения модели сохраняются.
 
-**Этап 3 — Context Lifecycle и Resume (защита от context rot).** Сущности Feature → WorkItem → Run
+**Этап 3 — Context Lifecycle и Resume (защита от context rot). ✅ v2.99.** Сущности Feature → WorkItem → Run
 → Stage → Step → Handoff. После каждого значимого этапа сохранять сделанное/изменённое/решения/
 проверки/остаток/открытые допущения/следующий безопасный шаг/актуальный SHA. Новый артефакт
 `kind: RunHandoff` (completed/decisions/changed_files/verification/open_questions/known_risks/

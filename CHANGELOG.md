@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.99.0] — 2026-07-17 — Context Lifecycle и Resume: состояние между сессиями (эпик Context Engineering, этап 3)
+
+Этап 3: длинная задача переживает несколько сессий без потери решений, архитектуры и состояния
+(борьба с context rot).
+
+### Added
+- **`tools/run_handoff.py`** — артефакт `RunHandoff` (что сделано, `changed_files`, `verification`
+  passed/failed, `open_questions`, `known_risks`, `next_action` — следующий безопасный шаг,
+  `resume_from_revision`) собирается из отчёта прогона. Сущности Feature → WorkItem → Run → Stage →
+  Step → Handoff. **`resume_preflight`** детерминированно проверяет: есть ли handoff, на месте ли
+  ветка/worktree, **ушёл ли `base` вперёд** с момента прогона (→ revalidation: старый evidence
+  недействителен для нового состояния), устарели ли решения.
+- **`ai-ops resume <child> <feature>`** — печатает preflight и указывает, как продолжить (worktree/
+  ветка переиспользуются, работа не начинается заново).
+- **`schemas/run-handoff.schema.json`** + **`validation/validate_run_handoff.py`** — форма
+  (next_action обязателен, verification passed/failed, decisions с id+summary). В checklist, CI, e2e.
+
+### Changed
+- **`tools/ai_ops_run.py`** — в lifecycle: `features/<wid>/run-handoff.yaml` + `report['handoff']`.
+
+Инварианты resume: не начинать заново, не повторять подтверждённое без причины, ревалидация при
+смене `main`, не удалять предыдущий результат. Дальше по эпику: этап 4 Atomic Planning + Context Budget.
+
 ## [2.98.0] — 2026-07-17 — Adaptive Spec-First: глубина спецификации по уровням (эпик Context Engineering, этап 2)
 
 Этап 2: не требовать полной спецификации для мелкой задачи, но не начинать сложное изменение без
