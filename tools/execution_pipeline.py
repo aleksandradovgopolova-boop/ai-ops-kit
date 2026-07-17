@@ -505,15 +505,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
-                 author=False, author_proposer=None):
+                 author=False, author_proposer=None, plan=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
-    [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
+    [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
+
+    v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
+    чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
     child_root = Path(child_root)
     signals = dict(signals or {})
     signals.setdefault("task_text", task)
 
-    # 2. план (нужен workitem_id для имени ветки/worktree)
-    plan = run_plan.build_plan(signals, workitem_id=feature)
+    # 2. план (нужен workitem_id для имени ветки/worktree). v2.94: принимаем готовый план от
+    #    контроллера; иначе строим сами (обратная совместимость: прямой вызов run_pipeline).
+    if plan is None:
+        plan = run_plan.build_plan(signals, workitem_id=feature)
     wid = plan["workitem_id"]
 
     # 1b. изоляция (finding аудита): весь прогон в отдельном git worktree на ветке ai-ops/<id>,
