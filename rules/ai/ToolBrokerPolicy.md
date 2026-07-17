@@ -26,10 +26,32 @@ Policy Engine (`tools/tool_broker.py`) по уровням `security/permission-
    `curl | sh`, …) — только `destructive` + approval. По умолчанию — отказ.
 5. **Evidence обязателен.** Каждое исполненное действие даёт запись с ревизией и exit_code
    — это и есть доказательство стадии (не «модель написала pass»).
+6. **Доставку модель не делает (`block_push`).** `git push` из tool-loop запрещён всегда,
+   когда `block_push=True` (по умолчанию у движка). Ветку/PR доставляет только доверенный
+   delivery-слой движка (`pr_open`), не модель. Иначе модель могла бы отправить незачтённую
+   работу мимо гейтов.
+7. **Containment shell (`shell_mode`).** `unrestricted` (обратная совместимость) |
+   `allowlist` (только бинарь из `shell_allowlist` — типовые build/test/pkg-инструменты) |
+   `off` (shell запрещён совсем). Первый токен команды берётся с учётом `VAR=val`-префиксов
+   (`CI=1 npm test` → бинарь `npm`).
+8. **Сетевой денай (`allow_network=False`).** Частые сетевые бинарники (`curl`, `wget`,
+   `nc`, `ssh`, `scp`, `rsync`, …) отклоняются. Это НЕ полный сетевой jail — это
+   enforceable-денай частых векторов на уровне брокера.
+
+## Sandbox-профиль (v2.81)
+
+`tool_broker.sandbox_policy(child_root, write_scope)` собирает усиленную политику для
+прогонов с **недоверенной живой моделью**: `shell_mode="allowlist"` (dev-инструменты из
+`SANDBOX_SHELL_ALLOWLIST`) + `block_push=True`. Включается флагом `--sandbox` в
+`ai_ops_run.py run` и `qual_run.py`; в отчёте прогона это честно объявлено в блоке
+`containment` (`sandbox`, `shell_mode`, `block_push`, `allow_network`).
 
 ## Граница (честно)
 
-Broker/Policy/Evidence — готовы и протестированы как компонент. Полная петля «живая
-модель предлагает действия в цикле» интегрируется в оркестратор отдельным шагом (нужен
-tool-calling-провайдер); сейчас оркестратор sequential/mock. Для рантаймов со своим tool
-loop (claude-code) enforcement всё равно держится на Evidence, не на брокере кита.
+Broker/Policy/Evidence — готовы, протестированы и **включены в живую петлю** движка
+(`execution_pipeline.run_pipeline` гоняет tool-calling-провайдера через `tool_loop`).
+`--sandbox` сужает поверхность (shell по allowlist, push/сеть — денай), но это
+**enforceable-подмножество на уровне брокера, а не полный jail**: модель всё ещё может
+навредить внутри своего worktree, а полная изоляция ФС/сети/ресурсов (лимиты CPU/RAM,
+namespaces, read-only mounts) — задача **контейнерного runtime**, вне брокера кита. Для
+рантаймов со своим tool loop (claude-code) enforcement держится на Evidence, не на брокере.

@@ -108,9 +108,19 @@ def _under(path: str, prefix: str) -> bool:
     return p == pre or p.startswith(pre + "/")
 
 
+# v2.81 Containment: сетевые команды (exfil/доставка в обход движка). Денайлист best-effort —
+# НЕ настоящий сетевой jail (это контейнер), но закрывает частые векторы, когда allow_network=False.
+NETWORK_RE = re.compile(r"\b(curl|wget|nc|ncat|netcat|ssh|scp|sftp|telnet|rsync|ftp|"
+                        r"nmap|dig|nslookup|http|https)\b", re.I)
+# git push из tool-loop модели запрещён всегда, когда block_push: доставка ветки/PR — только
+# доверенным кодом движка (pr_open), не самой моделью (finding аудита v2.79 P0.2).
+GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
+
+
 class Policy:
     def __init__(self, level="controlled-write", write_scope=None, confidentiality="internal",
-                 approvals=None, child_root=None):
+                 approvals=None, child_root=None, shell_mode="unrestricted",
+                 shell_allowlist=None, allow_network=True, block_push=False):
         if level not in LEVEL_ORDER:
             raise ValueError(f"неизвестный уровень '{level}'")
         self.level = level
@@ -119,6 +129,16 @@ class Policy:
         self.approvals = set(approvals or [])   # набор одобренных ярлыков (напр. {'destructive'})
         # protected = дефолт пакета MERGE карта child'а (.ai-ops.yaml protected_paths)
         self.protected = _protected_prefixes(child_root)
+        # v2.81 Containment (shell — не полноценный jail; enforceable-подмножество границы):
+        #   shell_mode: unrestricted (обратная совместимость) | allowlist (только бинарь из
+        #   shell_allowlist) | off (shell запрещён совсем). allow_network=False -> денай сетевых
+        #   команд. block_push -> модель не может git push (доставка только через pr_open).
+        if shell_mode not in ("unrestricted", "allowlist", "off"):
+            raise ValueError(f"неизвестный shell_mode '{shell_mode}'")
+        self.shell_mode = shell_mode
+        self.shell_allowlist = set(shell_allowlist or [])
+        self.allow_network = allow_network
+        self.block_push = block_push
 
     def _level_ok(self, required):
         return LEVEL_ORDER.index(self.level) >= LEVEL_ORDER.index(required)
@@ -159,12 +179,62 @@ class Policy:
 
         # shell / git
         cmd = action.get("command") or ""
+        # v2.81 Containment: доставка (git push) — только доверенным движком (pr_open), не моделью
+        if self.block_push and GIT_PUSH_RE.search(cmd):
+            return {"allow": False,
+                    "reason": "git push из tool-loop запрещён (block_push): доставка только через движок (pr_open)"}
         if DESTRUCTIVE_RE.search(cmd):
             if self._level_ok("destructive") and "destructive" in self.approvals:
                 return {"allow": True, "reason": "destructive + approval"}
             return {"allow": False,
                     "reason": "необратимая/опасная команда — нужен уровень destructive + approval"}
+        if op == "shell":
+            if self.shell_mode == "off":
+                return {"allow": False, "reason": "shell запрещён политикой (shell_mode=off)"}
+            if not self.allow_network and NETWORK_RE.search(cmd):
+                return {"allow": False,
+                        "reason": "сетевая команда запрещена (allow_network=False); это не полный "
+                                  "jail, а enforceable-денай частых векторов"}
+            if self.shell_mode == "allowlist":
+                binary = _first_binary(cmd)
+                if binary not in self.shell_allowlist:
+                    return {"allow": False,
+                            "reason": f"'{binary}' не в shell_allowlist {sorted(self.shell_allowlist)}"}
         return {"allow": True, "reason": f"{op} в пределах уровня {self.level}"}
+
+
+# v2.81: типовые dev-инструменты (build/test/pkg + безопасное чтение) для shell_mode=allowlist.
+# Это НЕ jail — модель всё ещё может навредить внутри worktree; но сужает поверхность и
+# отсекает произвольные бинарники. Полная изоляция ФС/сети — контейнер.
+SANDBOX_SHELL_ALLOWLIST = {
+    # пакетные менеджеры / раннеры
+    "npm", "npx", "yarn", "pnpm", "node", "corepack",
+    "python", "python3", "pip", "pip3", "poetry", "uv", "pytest", "tox",
+    "go", "cargo", "rustc", "mvn", "gradle", "./gradlew", "./mvnw", "make",
+    "ruff", "mypy", "flake8", "black", "isort", "eslint", "tsc", "vitest", "jest",
+    # безопасное чтение/навигация (модель исследует репо)
+    "ls", "cat", "head", "tail", "grep", "rg", "find", "wc", "pwd", "echo",
+    "git", "sed", "awk", "test", "true", "false", "bash", "sh",
+}
+
+
+def _first_binary(cmd):
+    """Первый токен команды (бинарь) — для shell_mode=allowlist. Учитывает VAR=val префиксы."""
+    for tok in (cmd or "").strip().split():
+        if "=" in tok and not tok.startswith(("/", "./", "-")):
+            continue                      # env-присваивание FOO=bar перед командой
+        return tok
+    return ""
+
+
+def sandbox_policy(child_root=None, write_scope=None, allow_network=True):
+    """v2.81 Containment: усиленная политика для pipeline с живой моделью — shell по allowlist
+    dev-инструментов, доставка (git push) заблокирована. allow_network оставляем True по
+    умолчанию (npm ci/pip нуждаются в сети на этапе установки); отдельные шаги могут ужесточать.
+    ЧЕСТНО: это enforceable-подмножество; полная FS/сеть/ресурс-изоляция — контейнер (v2.81 доп.)."""
+    return Policy(level="execution", child_root=child_root, write_scope=write_scope,
+                  shell_mode="allowlist", shell_allowlist=SANDBOX_SHELL_ALLOWLIST,
+                  allow_network=allow_network, block_push=True)
 
 
 def _escapes_root(rel):
@@ -284,6 +354,12 @@ def selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
+    def _raises(fn):
+        try:
+            fn(); return False
+        except Exception:
+            return True
+
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         subprocess.run(["git", "-C", td, "init", "-q"])
@@ -385,6 +461,48 @@ def selftest():
                scrub_env({"GITHUB_SHA": "abc", "GITHUB_TOKEN": "t"}) == {"GITHUB_SHA": "abc"})
         expect("scrub_env: passthrough пускает явно разрешённое",
                scrub_env({"MY_BUILD_FLAG": "1"}, passthrough=["MY_BUILD_FLAG"]) == {"MY_BUILD_FLAG": "1"})
+
+        # v2.81 Containment: block_push — модель не может доставлять сама (push только движком)
+        bp = Policy(level="execution", write_scope=["src/"], block_push=True)
+        expect("block_push: git push запрещён", not bp.decide({"op": "git", "command": "git push origin x"})["allow"])
+        expect("block_push: git push -u origin запрещён",
+               not bp.decide({"op": "shell", "command": "git push -u origin feat"})["allow"])
+        expect("block_push: обычный git (status/add/commit) по-прежнему разрешён",
+               bp.decide({"op": "git", "command": "git status"})["allow"]
+               and bp.decide({"op": "shell", "command": "git commit -m x"})["allow"])
+        expect("block_push=False (дефолт): push разрешён политикой",
+               Policy(level="execution").decide({"op": "shell", "command": "git push"})["allow"])
+
+        # v2.81: shell_mode — off запрещает shell совсем; allowlist пускает только dev-бинарники
+        off = Policy(level="execution", shell_mode="off")
+        expect("shell_mode=off: любой shell запрещён", not off.decide({"op": "shell", "command": "ls"})["allow"])
+        al = Policy(level="execution", shell_mode="allowlist", shell_allowlist={"npm", "pytest", "git"})
+        expect("shell_mode=allowlist: npm разрешён", al.decide({"op": "shell", "command": "npm ci"})["allow"])
+        expect("shell_mode=allowlist: env-префикс не сбивает бинарь (CI=1 npm test)",
+               al.decide({"op": "shell", "command": "CI=1 npm test"})["allow"])
+        expect("shell_mode=allowlist: произвольный бинарь (curl) запрещён",
+               not al.decide({"op": "shell", "command": "curl http://x"})["allow"])
+        expect("неизвестный shell_mode -> ValueError на конструкции",
+               _raises(lambda: Policy(level="execution", shell_mode="bogus")))
+
+        # v2.81: allow_network=False -> частые сетевые бинарники запрещены (не полный jail)
+        nonet = Policy(level="execution", allow_network=False)
+        expect("allow_network=False: curl запрещён", not nonet.decide({"op": "shell", "command": "curl http://x"})["allow"])
+        expect("allow_network=False: wget запрещён", not nonet.decide({"op": "shell", "command": "wget http://x"})["allow"])
+        expect("allow_network=False: обычная сборка (npm) не задета",
+               nonet.decide({"op": "shell", "command": "npm run build"})["allow"])
+        expect("allow_network=True (дефолт): curl разрешён политикой",
+               Policy(level="execution").decide({"op": "shell", "command": "curl http://x"})["allow"])
+
+        # v2.81: sandbox_policy() — усиленная политика для живой модели (allowlist + block_push)
+        sp = sandbox_policy(child_root=str(root), write_scope=["src/"])
+        expect("sandbox_policy: shell_mode=allowlist + block_push=True",
+               sp.shell_mode == "allowlist" and sp.block_push is True)
+        expect("sandbox_policy: dev-инструмент (pytest) разрешён, произвольный (nc) нет",
+               sp.decide({"op": "shell", "command": "pytest -q"})["allow"]
+               and not sp.decide({"op": "shell", "command": "nc -l 1234"})["allow"])
+        expect("sandbox_policy: git push заблокирован (доставка только движком)",
+               not sp.decide({"op": "shell", "command": "git push origin x"})["allow"])
 
     print("tool_broker selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
