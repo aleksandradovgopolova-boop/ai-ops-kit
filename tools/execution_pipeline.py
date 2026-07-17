@@ -92,9 +92,33 @@ def _tree_clean(root):
     return rc == 0 and out.strip() == ""
 
 
+def _install_dependencies(profile, root, policy):
+    """Поставить зависимости стеков (install_command) через Broker перед сбором evidence.
+
+    finding живого прогона (ii-sreda/DeepSeek): в СВЕЖЕМ git-worktree нет node_modules/venv,
+    поэтому build/lint/test падают exit 127 (command not found) — это не «код сломан», а
+    «окружение не подготовлено». Ставим детерминированную install-команду стека (npm ci /
+    poetry install / pip install ...). Только в изолированном worktree (не трогаем основное
+    дерево пользователя, где npm ci снёс бы node_modules). -> список результатов.
+    """
+    results = []
+    seen = set()
+    for stack in profile.get("stacks", []) or []:
+        cmd = stack.get("install_command")
+        if not cmd or cmd in seen:
+            continue
+        seen.add(cmd)
+        ev = tool_broker.execute({"op": "shell", "command": cmd, "timeout": 600}, root, policy)
+        results.append({"language": stack.get("language"), "command": cmd,
+                        "allowed": ev.get("allowed"), "ok": ev.get("ok", False),
+                        "exit_code": ev.get("exit_code"),
+                        "output_tail": (ev.get("output_tail") or "")[-200:]})
+    return results
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=20, feature=None, commit=False, allow_missing_tests=True,
-                 isolate=False, open_pr=False):
+                 isolate=False, open_pr=False, install_deps=True):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -150,6 +174,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # finding аудита (P0.5): после коммита дерево обязано быть чистым — иначе часть правок
         # не в SHA, и evidence соберётся о смешанном состоянии.
         tree_clean_before_checks = _tree_clean(work_root)
+
+    # 5b. подготовка окружения: поставить зависимости стека В ИЗОЛИРОВАННОМ worktree, иначе
+    #     build/lint/test упадут exit 127 (нет node_modules/venv). node_modules обычно в
+    #     .gitignore -> дерево остаётся чистым для evidence-на-SHA. В основном дереве НЕ ставим.
+    prepare = None
+    if install_deps and isolate:
+        prepare = _install_dependencies(profile, work_root, pol)
 
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     coll = evidence_collector.collect(profile, work_root, pol)
@@ -219,6 +250,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "loop": {"stopped": loop["stopped"], "steps": loop["steps"],
                  "applied_writes": len(applied), "denied": len(loop["denied"])},
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
+        "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
         "commit": {"branch": work_branch, "sha": committed_sha,
                    "evidence_revision": evidence_revision,
                    "evidence_on_exact_sha": revision_matches,
@@ -325,7 +357,7 @@ def selftest():
         it_iso = iter([{"op":"write","path":"src/iso.py","content":"y=2\n"}, {"done": True}])
         rep_iso = run_pipeline("в изоляции", sig, root, lambda c: next(it_iso),
                                budget={"max_model_calls":5}, feature="iso-fn",
-                               commit=True, isolate=True)
+                               commit=True, isolate=True, install_deps=False)  # offline: не ставим deps
         wt_rel = rep_iso["isolation"]["worktree"]
         expect("isolate: прогон в отдельном worktree (.ai/worktrees/iso-fn)",
                wt_rel == ".ai/worktrees/iso-fn" and (root / wt_rel / "src" / "iso.py").exists())
@@ -342,13 +374,22 @@ def selftest():
             it_pr = iter([{"op": "write", "path": "src/pr.py", "content": "z=3\n"}, {"done": True}])
             rep_pr = run_pipeline("с PR", sig, root, lambda c: next(it_pr),
                                   budget={"max_model_calls": 5}, feature="pr-fn",
-                                  commit=True, isolate=True, open_pr=True)
+                                  commit=True, isolate=True, open_pr=True, install_deps=False)
             expect("open_pr без токена -> draft_pr unavailable (механизм готов, PR не имитируется)",
                    rep_pr["draft_pr"] and rep_pr["draft_pr"]["status"] == "unavailable")
         finally:
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
+
+        # v2.71 (finding живого прогона): _install_dependencies ставит зависимости стека перед
+        # проверками. Детерминированно проверяем механизм безвредной install-командой (true).
+        prof_inst = {"stacks": [{"language": "node", "install_command": "true"},
+                                {"language": "python", "install_command": "true"},
+                                {"language": "go", "install_command": None}]}
+        prep = _install_dependencies(prof_inst, root, pol)
+        expect("install: install_command выполнены (dedup, None пропущен)",
+               len(prep) == 1 and prep[0]["ok"] is True and prep[0]["command"] == "true")
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

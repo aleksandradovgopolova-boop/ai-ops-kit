@@ -59,10 +59,19 @@ def _node_stack(d: Path, root: Path):
             if n in scripts:
                 return f"{run} {n}"
         return None
+    # install-команда: в изолированном worktree нет node_modules -> build/lint/test упадут
+    # exit 127 (command not found), пока зависимости не поставлены. С lockfile — детерминированный
+    # ci; без него — обычный install.
+    has_lock = any((d / lf).exists() for lf in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml")) \
+        or any((root / lf).exists() for lf in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml"))
+    install = {"npm": "npm ci" if has_lock else "npm install",
+               "yarn": "yarn install --frozen-lockfile" if has_lock else "yarn install",
+               "pnpm": "pnpm install --frozen-lockfile" if has_lock else "pnpm install"}[pm]
     return {
         "language": "node",
         "package_manager": pm,
         "frameworks": fw,
+        "install_command": install,
         "commands": {
             "build": cmd("build"),
             "lint": cmd("lint"),
@@ -85,11 +94,24 @@ def _python_stack(d: Path):
         if name in low:
             fw.append(name)
     pm = "poetry" if "[tool.poetry]" in deps_text else ("uv" if (d / "uv.lock").exists() else "pip")
+    # install-команда стека (для изолированного worktree). pip: requirements.txt приоритетнее,
+    # иначе editable-install пакета, если есть pyproject; иначе None (нечего ставить).
+    if pm == "poetry":
+        install = "poetry install"
+    elif pm == "uv":
+        install = "uv sync"
+    elif (d / "requirements.txt").exists():
+        install = "pip install -r requirements.txt"
+    elif (d / "pyproject.toml").exists():
+        install = "pip install -e ."
+    else:
+        install = None
     # команды — по конвенции (детектор не выдумывает несуществующие таргеты)
     return {
         "language": "python",
         "package_manager": pm,
         "frameworks": fw,
+        "install_command": install,
         "commands": {
             "build": None,
             "lint": "ruff check ." if "ruff" in low else ("flake8" if "flake8" in low else None),
@@ -188,6 +210,7 @@ def selftest():
         expect("команды из scripts", s["commands"]["build"] == "npm run build"
                and s["commands"]["test"] == "npm run test"
                and s["commands"]["typecheck"] == "npm run typecheck")
+        expect("install-команда node с lockfile -> npm ci", s.get("install_command") == "npm ci")
         expect("CI обнаружен", "github-actions" in prof["ci"])
         expect("status draft (подтверждает человек)", prof["status"] == "draft")
 

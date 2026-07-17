@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.70.0
+  package_version: 2.71.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -290,6 +290,7 @@ execution_engine:
       result: "движок отработал на ii-sreda: изолированный worktree создан, петля прошла. Для ENGINEERING-класса гейты ЧЕСТНО заблокировали (unmet: requirements/specification/plan_readiness/code_review — pipeline не производит для них evidence). Это подтверждает backlog P0.4, а не баг: движок не подделывает pass"
       fixed_v2_70: "qual_run завышал класс задачи до ENGINEERING по умолчанию -> любая задача блокировалась гейтами, для которых pipeline не даёт evidence. Дефолт -> QUICK (реально поддерживаемый класс: tool-loop + intake + implementation_verification) + флаг --task-type для осознанного выбора класса"
       honest_boundary: "квалифицируется ПОДДЕРЖИВАЕМЫЙ сегодня QUICK-путь; полный ENGINEERING/PRODUCT-путь заблокирован до P0.4 (постадийное исполнение RunPlan с производством evidence для upstream-гейтов)"
+      fixed_v2_71: "второй finding живого прогона: в изолированном worktree не было node_modules -> build/typecheck/test падали exit 127 (command not found), implementation_verification блокировал. Добавлен stack-aware шаг подготовки: project_detector отдаёт install_command (npm ci/poetry install/pip install...), execution_pipeline ставит зависимости в worktree ПЕРЕД сбором evidence (только в изоляции; основное дерево не трогаем). node_modules в .gitignore -> дерево остаётся чистым для evidence-на-SHA"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

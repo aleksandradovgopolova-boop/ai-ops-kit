@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.71.0] — 2026-07-17
+
+**Второй finding живого прогона: установка зависимостей в изолированном worktree.** На QUICK-классе
+движок дошёл до реального прогона build/lint/test на ii-sreda, но они упали `exit 127`
+(`vite/tsc/vitest: command not found`) — в свежем git-worktree нет `node_modules`. Движок честно
+не засчитал (не подделал pass), но канонический путь физически не мог верифицироваться без
+установки зависимостей.
+
+### Added
+- **`tools/project_detector.py`** — поле `install_command` для стеков: node → `npm ci`
+  (с lockfile) / `npm install`, yarn/pnpm аналогично; python → `poetry install` / `uv sync` /
+  `pip install -r requirements.txt` / `pip install -e .`.
+- **`tools/execution_pipeline.py`** — шаг подготовки `_install_dependencies`: перед сбором
+  evidence ставит зависимости стека через Broker **только в изолированном worktree** (основное
+  дерево пользователя не трогаем — `npm ci` там снёс бы `node_modules`). Результат — в отчёте
+  (`prepare`). `node_modules` в `.gitignore` → дерево остаётся чистым для evidence-на-SHA.
+  Параметр `install_deps=True` (по умолчанию вкл. при `isolate`).
+
+### Changed
+- **manifest** — `self_audit_2026_07_17.live_qual_run_2026_07_17.fixed_v2_71`.
+  `package_version` → 2.71.0.
+
 ## [2.70.0] — 2026-07-17
 
 **Первый живой прогон движка на реальном child (ii-sreda, DeepSeek) — и честный класс задачи.**
