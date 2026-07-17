@@ -77,6 +77,10 @@ jobs:
         run: python3 tools/concurrency_preflight.py --selftest
       - name: Квалификационный прогон-харнесс (selftest, offline)
         run: python3 tools/qual_run.py --selftest
+      - name: Python-совместимость (PEP 604 union-аннотации не ломают <3.10)
+        run: |
+          python3 validation/validate_python_compat.py --selftest
+          python3 validation/validate_python_compat.py
       - name: Событийный каталог — согласованность имён (selftest + пример)
         run: |
           python3 validation/validate_event_catalog.py --selftest

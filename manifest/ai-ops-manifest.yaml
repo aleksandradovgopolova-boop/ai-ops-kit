@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.68.0
+  package_version: 2.69.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -120,7 +120,8 @@ knowledge_integrity:
   status: integrated
   references_validator: validation/validate_references.py    # uses_skills/checklist/owner/gate резолвятся
   claims: knowledge/claims.yaml                              # утверждения документации о коде
-  claims_validator: validation/validate_claims.py            # типы: file-exists, symbol-exists, enum-values
+  claims_validator: validation/validate_claims.py            # типы: file-exists, symbol-exists, enum-values, count (v2.67)
+  python_compat_validator: validation/validate_python_compat.py  # v2.69: PEP 604 union без future-import ломает <3.10
   freshness_policy: rules/core/FreshnessPolicy.md            # классы stable/evolving/volatile
   freshness_validator: validation/validate_freshness.py
   gates: [knowledge_integrity, knowledge_freshness]           # non-blocking до обкатки
@@ -282,6 +283,9 @@ execution_engine:
     kept_deliberately:
       - "phase-3 non-blocking гейты (documentation_updated, release_safety, observability_readiness, stakeholder_readiness, knowledge_*, decision_quality) оставлены non-blocking: baseline_ready на ОДНОМ child; критерий промоушена — стабильный зелёный на >=2 child (ep-2026-07-17-vision-audit)"
     clean_areas: "51 агент, 14 ревьюеров, workflow-декларации, AGENTS.md checklist ⊆ CI, reference/claim integrity — расхождений нет"
+    fixed_v2_69:                              # первый реальный finding квалификационного харнесса
+      - "PORTABILITY: generate_artifacts.py и run_report.py использовали `X | None` (PEP 604) в аннотациях без future-import -> на Python 3.9 (дефолт macOS CommandLineTools) весь движок падал TypeError при импорте (ai_ops_run->workitem->run_report->generate_artifacts). Пойман попыткой живого qual-прогона с Mac. Фикс: `from __future__ import annotations` (ленивые аннотации, PEP 563)"
+      - "guard: validation/validate_python_compat.py (AST) — union-аннотация `X | Y` без future-import = ERROR в CI; класс «падает на 3.9» больше не пройдёт. Документированный floor понижен 3.10+ -> 3.9+ (честно: дефолтный python3 macOS подходит)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

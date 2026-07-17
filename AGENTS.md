@@ -60,6 +60,8 @@ python3 tools/worktree.py --selftest
 python3 tools/merge_memory.py --selftest
 python3 tools/concurrency_preflight.py --selftest
 python3 tools/qual_run.py --selftest
+python3 validation/validate_python_compat.py --selftest
+python3 validation/validate_python_compat.py
 python3 validation/validate_event_catalog.py --selftest
 python3 validation/validate_event_catalog.py examples/event-catalog-demo/events.yaml
 python3 validation/validate_security_posture.py --selftest
