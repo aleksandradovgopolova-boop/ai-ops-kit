@@ -108,7 +108,7 @@ def read_tasks(path):
 
 
 def default_runner(child_root, provider, model, open_pr, task_type="QUICK", baseline_diff=True,
-                   require_fix=False, max_steps=40):
+                   require_fix=False, max_steps=40, discard_previous=True):
     """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute).
 
     task_type по умолчанию QUICK — класс, который pipeline РЕАЛЬНО поддерживает сегодня
@@ -125,7 +125,8 @@ def default_runner(child_root, provider, model, open_pr, task_type="QUICK", base
         return ai_ops_run.run(task, signals, Path(child_root), provider_name=provider,
                               model=model, engine="pipeline", execute=True,
                               open_pr=open_pr, feature=slugify(task), baseline_diff=baseline_diff,
-                              require_fix=require_fix, max_steps=max_steps)
+                              require_fix=require_fix, max_steps=max_steps,
+                              discard_previous=discard_previous)
     return run_one
 
 

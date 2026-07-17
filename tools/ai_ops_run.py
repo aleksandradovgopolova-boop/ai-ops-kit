@@ -45,7 +45,7 @@ import active_work       # noqa: E402
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="controller", proposer=None, open_pr=False, model=None,
-        baseline_diff=False, require_fix=False, max_steps=40):
+        baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -63,7 +63,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep = execution_pipeline.run_pipeline(
             task_text, signals, child_root, prop, feature=feature,
             commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
-            require_fix=require_fix, max_steps=max_steps)
+            require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous)
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
@@ -322,13 +322,18 @@ def main(argv):
     rp.add_argument("--max-steps", type=int, default=40,
                     help="потолок шагов tool-loop (по умолчанию 40; reasoning-моделям нужен "
                          "запас на цикл понять->починить->проверить->done); engine=pipeline")
+    rp.add_argument("--discard", action="store_true",
+                    help="перезаписать worktree/ветку прошлого прогона того же --feature, даже "
+                         "если там есть несохранённые коммиты (по умолчанию — остановка, чтобы "
+                         "не потерять работу); engine=pipeline+isolate")
     rp.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "run":
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
                      a.runtime, a.provider, a.session, a.execute, feature=a.feature,
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
-                     baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps)
+                     baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
+                     discard_previous=a.discard)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

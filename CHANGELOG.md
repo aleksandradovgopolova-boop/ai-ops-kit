@@ -2,6 +2,37 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.80.0] — 2026-07-17 — Trust Correctness (ответ на внешний аудит v2.79)
+
+Внешний аудит (~5/10) верно вскрыл класс проблем корректности доверия. Закрыты пять contained-
+дефектов (код, проверяются селфтестами); sandbox/standalone/full-RunPlan честно оставлены
+отдельными фазами (нужен контейнер/инфра).
+
+### Fixed
+- **P0.1 (самый острый — наш регресс): baseline-diff обходил ВСЕ блокирующие гейты.** Было
+  `ready = base_ok and no_regressions` — без проверки `gates.blocked`. Задача с незакрытыми
+  `security`/`code_review`/`requirements` могла стать `ready`. Теперь baseline-осведомлён **только**
+  `implementation_verification`; **все прочие блокирующие гейты обязательны** (`other_blocking_unmet`).
+  Ложный `ready_for_pr` устранён.
+- **P0.4: `--open-pr` мог провалиться, а прогон = успех.** Разделены `ready_for_pr` и `delivery`;
+  `overall_status=delivery-failed`, если PR запрошен, но не открыт; `exit_code` это учитывает.
+- **P0.6: подготовка окружения могла загрязнить AI-коммит.** `npm ci`/baseline меняли tracked-файлы
+  (lock/снапшоты), а `git add -A` их втягивал. Теперь tracked-изменения подготовки откатываются
+  **до** работы модели; провал install → `prepare_ok=False` → не `ready`.
+- **P0.3: повторный запуск мог снести предыдущую работу.** Guard: если на ветке `ai-ops/<feature>`
+  есть коммиты не в HEAD и нет `--discard` → honest error (работа не теряется); `--discard` для
+  явной перезаписи. qual-харнесс — disposable, discard по умолчанию.
+- **Evidence/аудит:** в отчёт добавлены полный `gate_results` + `tested_revision` (раньше
+  выбрасывались) — видно, чем закрыт каждый гейт и к какой ревизии.
+
+### Added
+- **`ai-ops run` / `qual_run`** — флаг `--discard`.
+
+### Changed
+- **manifest** — `execution_engine.external_audit_2026_07_17_v2_79` (fixed_v2_80 + честный
+  remaining_backlog: P0.2 sandbox → v2.81, standalone → v2.82, full RunPlan → v2.83, квалификация
+  → v2.84). `package_version` → 2.80.0.
+
 ## [2.79.0] — 2026-07-17
 
 **Больше шагов tool-loop (reasoning-модели упирались в бюджет, не в потолок).** Трейс
