@@ -94,6 +94,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception:  # noqa: BLE001 — компиляция контекста не должна ронять прогон
             bundle = None
+        # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску;
+        # какие обязательные разделы отсутствуют. Информативно (не хард-блок здесь), в отчёт+на диск.
+        import spec_levels
+        try:
+            spec_cov = spec_levels.assess(signals)
+            (features_dir / fid / "spec-coverage.yaml").write_text(
+                yaml.safe_dump(spec_cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            spec_cov = None
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
         areas = signals.get("affected_areas") or ["unspecified"]
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
@@ -127,6 +136,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             "workitem": f"features/{fid}/workitem.yaml",
             "run_plan": f"features/{fid}/run-plan.yaml",
             "context_bundle": (f"features/{fid}/context-bundle.yaml" if bundle else None),
+            "spec_coverage": (f"features/{fid}/spec-coverage.yaml" if spec_cov else None),
             "active_work": ".ai/runtime/active-work.yaml",
             "run_report": f"features/{fid}/run-report.json",
             "concurrency_preflight": preflight,
@@ -138,6 +148,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                      "agents": bundle["included"]["agents"],
                                      "rules": bundle["included"]["rules"],
                                      "excluded_count": len(bundle["excluded"])}
+        if spec_cov:
+            rep["spec_coverage"] = {"level": spec_cov["level"], "level_name": spec_cov["level_name"],
+                                    "escalated_from": spec_cov["escalated_from"],
+                                    "blocking_missing": spec_cov["blocking_missing"],
+                                    "needs_human": spec_cov["needs_human"]}
         try:
             (features_dir / fid / "run-report.json").write_text(
                 json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -253,6 +268,11 @@ def _print_pipeline(r):
         print(f"  context: ~{cb['estimated_tokens']}/{cb['context_budget']} ток."
               f"{' ⚠OVERFLOW' if cb.get('overflow') else ''} · агентов {len(cb['agents'])} · "
               f"исключено {cb['excluded_count']} источн.")
+    sc = r.get("spec_coverage")
+    if sc:
+        esc = f" (эскалация с L{sc['escalated_from']})" if sc.get("escalated_from") is not None else ""
+        print(f"  spec-level: {sc['level_name']}{esc} · не хватает разделов: "
+              f"{len(sc['blocking_missing'])} · needs_human: {len(sc['needs_human'])}")
     pr = r.get("draft_pr")
     if pr:
         print(f"  draft PR: {pr.get('status')}" + (f" — {pr.get('url')}" if pr.get('url') else ""))
@@ -370,6 +390,10 @@ def selftest():
                isinstance(rp.get("context_bundle"), dict)
                and rp["context_bundle"]["estimated_tokens"] > 0
                and rp["context_bundle"]["context_budget"] > 0)
+        # v2.98 Adaptive Spec-First: уровень спецификации определён и сохранён
+        expect("v2.98: SpecCoverage сохранён", (root / "features" / pfid / "spec-coverage.yaml").exists())
+        expect("v2.98: spec-level в отчёте (QUICK -> L0)",
+               isinstance(rp.get("spec_coverage"), dict) and rp["spec_coverage"]["level"] == 0)
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib
