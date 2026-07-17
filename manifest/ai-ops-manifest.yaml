@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.94.0
+  package_version: 2.95.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -346,6 +346,10 @@ execution_engine:
       - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
+    fixed_v2_95_security_evidence:
+      - "детерминированный security-producer (аудит 2.95): tools/security_scan.py сканирует diff коммита — СЕКРЕТЫ (AKIA/private-key/ghp/generic key-in-quotes, плейсхолдеры/env отсеиваются) и НОВЫЕ зависимости (package.json/requirements/go.mod/pyproject/Cargo). Закрывает факты no_secrets и deps_approved когда чисто; находка -> гейт security блокирует С ДЕТАЛЯМИ (раньше security молчал без производителя evidence)"
+      - "injection-surface — СУЖДЕНИЕ, не автоприёмка: сканер лишь ФЛАГИТ места (eval/exec, shell=True, os.system, pickle.loads, yaml.load без Loader, SQL f-string, dangerouslySetInnerHTML, child_process, innerHTML=). no_injection_surface закрывает независимый security-reviewer/человек (writer≠judge). Поэтому security здесь НЕ авто-проходит — НЕТ ложного green; реальные секреты/deps теперь ловятся, а не молчат. Встроено в pipeline (после коммита, на diff), поле report['security_scan']"
+      - "ЧЕСТНО (осталось): (1) полный ENGINEERING-to-ready требует ещё wiring security-reviewer на no_injection_surface (тогда чистый скан + вердикт судьи закроют security) — сознательно не спешим с авто-pass самого острого гейта; (2) применение plan.write_scope к Policy: в плане пока НЕТ write_scope (вывод путей из affected_areas не детерминирован между репо) — нужен слой area->paths; (3) quality-review артефактов с привязкой к artifact hash. PRODUCT-evidence (discovery/stakeholder) — тоже 2.95-остаток"
     fixed_v2_94_one_run_transaction:
       - "One Run Transaction (аудит #2): pipeline-путь БОЛЬШЕ НЕ обходит lifecycle. Раньше `engine=pipeline` вызывал run_pipeline и возвращал отчёт, пропуская WorkItem/RunPlan/active-work/run-report — 'два мира' (Product OS lifecycle отдельно от Execution pipeline). Теперь контроллер строит план ОДИН раз и передаёт в движок (run_pipeline(plan=...) — не строит второй), создаёт WorkItem, пишет run-plan.yaml, регистрирует active-work, гоняет concurrency-preflight ДО правок, пишет единый run-report.json и ЗАКРЫВАЕТ active-work (done) по завершении"
       - "единый идентификатор: workitem_id общий для плана, WorkItem, ветки ai-ops/<id>, active-work и run-report (движок использует ПЕРЕданный план, а не строит свой -> id не расходятся). Координационные строки active-work идут в stderr (stdout чист для --json)"

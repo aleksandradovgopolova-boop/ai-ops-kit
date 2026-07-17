@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.95.0] — 2026-07-17 — Security evidence: детерминированный секрет/dep-скан для гейта security
+
+Гейт `security` требует `[no_secrets, no_injection_surface, deps_approved]`, но в pipeline не было
+производителя этого evidence — ENGINEERING честно, но всегда упирался в security «в тишине». Дали
+детерминированную часть.
+
+### Added
+- **`tools/security_scan.py`** — детерминированный сканер diff коммита: **секреты** (AKIA, private-key
+  блоки, `ghp_`, slack/google-токены, generic key-in-quotes; плейсхолдеры/`${ENV}` отсеиваются) и
+  **новые зависимости** (`package.json`/`requirements.txt`/`go.mod`/`pyproject.toml`/`Cargo.toml`).
+  Плюс **флаги injection-surface** (`eval`/`exec`, `shell=True`, `os.system`, `pickle.loads`,
+  `yaml.load` без Loader, SQL f-string, `dangerouslySetInnerHTML`, `child_process`, `innerHTML=`).
+  `--selftest`, в checklist и CI.
+
+### Changed
+- **`tools/execution_pipeline.py`** — после коммита прогоняет security-скан (когда гейт `security` в
+  плане): закрывает **факты** `no_secrets`/`deps_approved`, когда чисто; находка → `security`
+  блокирует **с деталями** (что за секрет, какие новые зависимости). `no_injection_surface` —
+  **суждение**: сканер лишь флагит, закрывает независимый security-reviewer/человек (writer≠judge).
+  Поэтому `security` здесь **не авто-проходит** — никакого ложного green; но реальные секреты/deps
+  теперь ловятся, а не молчат. Результат в `report['security_scan']`.
+
+### Honest (осталось)
+Полный ENGINEERING-to-ready требует ещё wiring security-reviewer на `no_injection_surface` (сознательно
+не спешим с авто-pass самого острого гейта); применение `plan.write_scope` к Policy нужен слой
+area→paths (в плане пока нет write_scope); quality-review артефактов по hash и PRODUCT-evidence —
+тоже остаток 2.95. Дальше — 2.96 (живая квалификация + e2e-CI, требует машины с моделью).
+
 ## [2.94.0] — 2026-07-17 — One Run Transaction: pipeline и lifecycle — одна транзакция
 
 Второй слой плана. Раньше AI Ops был «два мира»: Product OS lifecycle (WorkItem/RunPlan/active-work/
