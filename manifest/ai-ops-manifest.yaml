@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.99.0
+  package_version: 2.100.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -347,11 +347,15 @@ execution_engine:
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
     context_engineering_epic:                 # эпик Context Engineering & Spec-Driven Execution (после аудита)
-      status: "в работе (этапы 1-3 из 7)"
+      status: "в работе (этапы 1-4 из 7)"
       stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First ✅ v2.98",
-               "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget",
+               "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack", "6 Product UX", "7 Qualification"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_100_atomic_planning:
+      - "этап 4 Atomic Planning и Context Budget: tools/atomic_planner.py оценивает рабочий пакет (объём контекста из ContextBundle, файлы, системные границы/подсистемы, зависимости, ожидаемые model calls, риск, критерий завершения) и предлагает декомпозицию, если контекст превышает бюджет / слишком много подсистем (>2) / несколько независимых результатов / нужно >1 коммита / не проверяемо одним критерием / размер large-xl"
+      - "инвариант: декомпозиция называет ОСИ разбиения (by-context-budget/by-subsystem/by-result/by-commit/by-verifiable-unit/by-size), но НЕ меняет продуктовый смысл и не принимает новых бизнес-решений ради удобства модели (constraint_note); итог подтверждает человек. acceptance: один проверяемый результат на пакет, каждый пакет — отдельный commit, зависимости явные"
+      - "встроено в lifecycle: features/<wid>/work-package.yaml + report['work_package'] (atomic/should_decompose/оси/причины); в checklist, CI и e2e-харнессе. Артефакт WorkPackagePlan"
     fixed_v2_99_context_lifecycle_resume:
       - "этап 3 Context Lifecycle и Resume: tools/run_handoff.py — артефакт RunHandoff (что сделано, changed_files, verification passed/failed, open_questions, known_risks, next_action, resume_from_revision) собирается из отчёта прогона. Сущности Feature->WorkItem->Run->Stage->Step->Handoff. Встроено в lifecycle: features/<wid>/run-handoff.yaml + report['handoff']"
       - "resume: run_handoff.resume_preflight(child, wid, base) детерминированно проверяет — есть ли handoff, на месте ли ветка/worktree, УШЁЛ ЛИ base вперёд с момента прогона (revalidation_needed: старый evidence не действителен для нового состояния), устарели ли решения. CLI `ai-ops resume <child> <feature>` печатает preflight + указывает, как продолжить (worktree/ветка переиспользуются, не начиная заново)"

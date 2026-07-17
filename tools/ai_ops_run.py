@@ -103,6 +103,14 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 yaml.safe_dump(spec_cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception:  # noqa: BLE001
             spec_cov = None
+        # v2.100 Atomic Planning: оценка размера пакета + нужна ли декомпозиция по контекстному бюджету.
+        import atomic_planner
+        try:
+            work_pkg = atomic_planner.assess(signals, child_root=child_root, bundle=bundle)
+            (features_dir / fid / "work-package.yaml").write_text(
+                yaml.safe_dump(work_pkg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            work_pkg = None
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
         areas = signals.get("affected_areas") or ["unspecified"]
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
@@ -137,6 +145,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             "run_plan": f"features/{fid}/run-plan.yaml",
             "context_bundle": (f"features/{fid}/context-bundle.yaml" if bundle else None),
             "spec_coverage": (f"features/{fid}/spec-coverage.yaml" if spec_cov else None),
+            "work_package": (f"features/{fid}/work-package.yaml" if work_pkg else None),
             "active_work": ".ai/runtime/active-work.yaml",
             "run_report": f"features/{fid}/run-report.json",
             "run_handoff": f"features/{fid}/run-handoff.yaml",
@@ -154,6 +163,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                     "escalated_from": spec_cov["escalated_from"],
                                     "blocking_missing": spec_cov["blocking_missing"],
                                     "needs_human": spec_cov["needs_human"]}
+        if work_pkg:
+            rep["work_package"] = {"atomic": work_pkg["atomic"],
+                                   "should_decompose": work_pkg["should_decompose"],
+                                   "decomposition_axes": work_pkg["decomposition_axes"],
+                                   "decomposition_reasons": work_pkg["decomposition_reasons"]}
         try:
             (features_dir / fid / "run-report.json").write_text(
                 json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -287,6 +301,9 @@ def _print_pipeline(r):
         esc = f" (эскалация с L{sc['escalated_from']})" if sc.get("escalated_from") is not None else ""
         print(f"  spec-level: {sc['level_name']}{esc} · не хватает разделов: "
               f"{len(sc['blocking_missing'])} · needs_human: {len(sc['needs_human'])}")
+    wp = r.get("work_package")
+    if wp and wp.get("should_decompose"):
+        print(f"  ⚠ пакет не атомарен — рекомендуется декомпозиция ({', '.join(wp['decomposition_axes'])})")
     pr = r.get("draft_pr")
     if pr:
         print(f"  draft PR: {pr.get('status')}" + (f" — {pr.get('url')}" if pr.get('url') else ""))
@@ -416,6 +433,10 @@ def selftest():
         import run_handoff as _rh
         _pf = _rh.resume_preflight(root, pfid, base=_rh._git(root, "rev-parse", "--abbrev-ref", "HEAD")[1])
         expect("v2.99: resume-preflight видит handoff (can_resume=True)", _pf["can_resume"] is True)
+        # v2.100 Atomic Planning: оценка пакета сохранена + в отчёте
+        expect("v2.100: WorkPackagePlan сохранён", (root / "features" / pfid / "work-package.yaml").exists())
+        expect("v2.100: work_package в отчёте (QUICK/1 подсистема -> atomic)",
+               isinstance(rp.get("work_package"), dict) and rp["work_package"]["atomic"] is True)
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib
