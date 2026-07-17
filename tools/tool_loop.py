@@ -67,6 +67,77 @@ def make_model_proposer(provider):
     return propose
 
 
+def make_reviewer_proposer(provider, gate_id, checklist="", required_evidence=None,
+                           reviewed_revision=None):
+    """v2.83 Full RunPlan: НЕЗАВИСИМЫЙ ревьюер (writer ≠ judge). Оборачивает text-provider в
+    read-only судью: он читает изменение и выносит СТРУКТУРНЫЙ вердикт reviewer-result, а НЕ
+    правит код. Independence обеспечивается на уровне роли (отдельный вызов, отдельный промпт)
+    и на уровне capability (петля гоняет его под read-only Policy — write/shell брокер отклонит).
+    ЧЕСТНО: та же базовая модель — более слабая независимость, чем другой судья/человек; но
+    писатель НЕ может закрыть свой же гейт словом, и физически не может писать в роли ревьюера."""
+    req = list(required_evidence or [])
+    def propose(context):
+        prompt = (
+            f"Ты НЕЗАВИСИМЫЙ ревьюер гейта '{gate_id}' (не автор изменения). Только чтение.\n"
+            f"Проверяемая ревизия: {reviewed_revision or 'HEAD'}.\n"
+            + (f"Чек-лист:\n{checklist}\n" if checklist else "")
+            + (f"Требуемые доказательства (required_evidence): {', '.join(req)}. Ставь pass ТОЛЬКО "
+               f"если реально подтвердил их чтением; иначе fail/warn с конкретикой.\n" if req else "")
+            + "На каждом шаге верни РОВНО ОДИН JSON:\n"
+            '  {"op":"read","path":"..."}  — прочитать файл, чтобы удостовериться\n'
+            '  {"kind":"reviewer-result","gate":"' + gate_id + '","status":"pass|warn|fail",'
+            '"checks":[{"id":"...","status":"pass|warn|fail"}],"blockers":["..."]}  — ИТОГ\n'
+            "Правила: читай минимально; выноси вердикт по фактам из прочитанного. status=fail "
+            "требует непустой blockers. НЕ выдумывай — чего не подтвердил, то не pass. Только JSON.\n\n"
+            "=== КОНТЕКСТ (изменение и журнал чтений) ===\n" + context)
+        return parse_action(provider(prompt))
+    return propose
+
+
+def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_context="",
+               required_evidence=None, reviewed_revision=None):
+    """Один независимый ревью-проход под READ-ONLY политикой -> reviewer-result (dict) + трейс.
+
+    Ревьюер может читать файлы (write/shell брокер отклонит — capability-независимость от писателя),
+    затем обязан вернуть терминальный reviewer-result. Возвращает {"result": <reviewer-result|None>,
+    "stopped": ..., "reads": [...], "denied": [...]}. Если ревьюер не вынес вердикт за max_reads —
+    result=None (гейт останется неподтверждённым, честный fail на уровне gate_executor)."""
+    root = Path(root)
+    bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
+    context = base_context
+    reads, denied = [], []
+    stopped = "no-verdict"
+    for _ in range(max_reads + 1):
+        try:
+            bud.charge_call()
+        except _budget_mod.BudgetExceeded as e:
+            stopped = f"budget: {e}"; break
+        action = reviewer(context)
+        if not isinstance(action, dict) or action.get("error"):
+            context += "\n[ревью] верни РОВНО один JSON: read-действие или reviewer-result."
+            continue
+        # терминальный вердикт: reviewer-result (по kind/status)
+        if action.get("kind") == "reviewer-result" or (action.get("status") and "op" not in action):
+            action.setdefault("schema_version", 1)
+            action.setdefault("kind", "reviewer-result")
+            action.setdefault("gate", gate_id)
+            if reviewed_revision:
+                action.setdefault("reviewed_revision", reviewed_revision)
+            return {"result": action, "stopped": "verdict", "reads": reads, "denied": denied}
+        # иначе — действие через брокер (read-only Policy: write/shell -> DENIED)
+        ev = tool_broker.execute(action, root, policy)
+        if ev["allowed"] and ev.get("ok") and ev.get("op") == "read":
+            reads.append(ev.get("target"))
+            context += f"\n--- {ev.get('target')} ---\n{ev.get('output_tail')}\n--- конец ---"
+        elif not ev["allowed"]:
+            denied.append({"op": ev.get("op"), "reason": ev["reason"]})
+            context += (f"\n[ревью] действие {ev.get('op')} ОТКЛОНЕНО (ты read-only судья, не автор): "
+                        f"{ev['reason']}. Верни read или reviewer-result.")
+        else:
+            context += f"\n[ревью] {ev.get('op')} -> {ev.get('reason')}"
+    return {"result": None, "stopped": stopped, "reads": reads, "denied": denied}
+
+
 def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
              max_bad_proposals=3, max_consecutive_reads=5):
     """Гонять петлю до done / budget / max_steps. proposer(context)->action|{'done':true}.
@@ -256,6 +327,43 @@ def selftest():
                             max_consecutive_reads=5)
         expect("read-cap: нормальный поток (2 read -> write -> done) не задет",
                rep_norm["stopped"] == "done" and (root / "src" / "z.ts").exists())
+
+        # v2.83: независимый ревьюер (writer ≠ judge) под READ-ONLY политикой
+        ro = tool_broker.Policy(level="read-only")
+        # (a) прямой вердикт pass
+        rev_pass = run_review(lambda c: {"kind": "reviewer-result", "gate": "code_review",
+                                         "status": "pass", "checks": [{"id": "logic", "status": "pass"}]},
+                              root, ro, "code_review", budget={"max_model_calls": 5})
+        expect("reviewer: терминальный вердикт pass возвращён",
+               rev_pass["result"] and rev_pass["result"]["status"] == "pass"
+               and rev_pass["result"]["gate"] == "code_review")
+        # (b) ревьюер физически НЕ может писать (read-only): попытка write отклонена, затем вердикт fail
+        rev_seq = iter([{"op": "write", "path": "src/evil.ts", "content": "x"},
+                        {"kind": "reviewer-result", "gate": "code_review", "status": "fail",
+                         "checks": [{"id": "logic", "status": "fail"}], "blockers": ["баг в ветке"]}])
+        rev_wr = run_review(lambda c: next(rev_seq), root, ro, "code_review", budget={"max_model_calls": 5})
+        expect("reviewer: write ОТКЛОНЁН (read-only судья, не автор) + файл не создан",
+               rev_wr["denied"] and not (root / "src" / "evil.ts").exists())
+        expect("reviewer: вердикт fail с blockers", rev_wr["result"]["status"] == "fail"
+               and rev_wr["result"]["blockers"])
+        # (c) ревьюер читает файл -> содержимое в контексте вердикта
+        (root / "reviewme.txt").write_text("REVIEW_SENTINEL_7", encoding="utf-8")
+        cap_r = {}
+        rseq = iter([{"op": "read", "path": "reviewme.txt"},
+                     {"kind": "reviewer-result", "gate": "code_review", "status": "pass",
+                      "checks": [{"id": "x", "status": "pass"}]}])
+        def rprop(ctx):
+            cap_r["ctx"] = ctx
+            return next(rseq_it)
+        rseq_it = rseq
+        run_review(rprop, root, ro, "code_review", budget={"max_model_calls": 5})
+        expect("reviewer: ВИДИТ содержимое прочитанного файла в контексте",
+               "REVIEW_SENTINEL_7" in cap_r.get("ctx", ""))
+        # (d) не вынес вердикт за лимит -> result=None (гейт останется неподтверждённым)
+        rev_none = run_review(lambda c: {"op": "read", "path": "f"}, root, ro, "code_review",
+                              budget={"max_model_calls": 20}, max_reads=3)
+        expect("reviewer: без вердикта за лимит -> result=None (честный не-pass)",
+               rev_none["result"] is None)
 
     print("tool_loop selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

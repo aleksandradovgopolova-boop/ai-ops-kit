@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.83.0] — 2026-07-17 — Full RunPlan: постадийный независимый ревью (аудит v2.79, P0.4)
+
+RunPlan-гейты ai-review больше не блокируют «просто потому что»: движок гоняет **независимого
+ревьюера** (writer ≠ judge), который читает изменение и выносит структурный вердикт. Честно:
+только то, что судья МОЖЕТ проверить — артефакт-гейты и human-approval остаются блокирующими.
+
+### Added
+- **Постадийный ревью в `execution_pipeline`** (`--review`). Для каждого ai-review гейта плана
+  (code_review, ux_review, security-non-human, ...) без evidence движок запускает ОТДЕЛЬНЫЙ вызов
+  модели под **read-only Policy** — судья читает ревизию и возвращает `reviewer-result`
+  (валидируется `validate_reviewer_result`). pass закрывает `required_evidence` (дисциплина
+  ai-review), fail блокирует. Трейс — в `report.reviews`.
+- **`tool_loop.make_reviewer_proposer` / `run_review`** — механика независимого ревью: read-only
+  цикл, судья может только читать (write/shell брокер отклоняет), обязан вернуть структурный
+  вердикт. Полностью тестируется offline scripted-ревьюером.
+- **Флаг `--review`** в `ai-ops run` и `qual_run`; независимый ревьюер — отдельный экземпляр
+  провайдера (writer ≠ judge на уровне вызова).
+
+### Boundary (честно)
+- **Детерминированные артефакт-гейты** (requirements/specification/plan_readiness) ревьюер словом
+  НЕ закрывает — им нужны артефакты + запускаемые валидаторы (product-authoring, отдельная фаза);
+  без артефактов они честно блокируют.
+- **human-approval** (security при privileged/destructive/secret_boundary) требует человека.
+- Та же базовая модель как судья — более слабая независимость, чем другой судья/человек; capability
+  (read-only) и роль (отдельный вызов) разделены, но полная независимость сильнее.
+
 ## [2.82.0] — 2026-07-17 — Standalone Child (аудит v2.79, P0.3)
 
 Движок теперь **самодостаточен внутри child**: `ai-ops run` работает БЕЗ внешнего `git clone`

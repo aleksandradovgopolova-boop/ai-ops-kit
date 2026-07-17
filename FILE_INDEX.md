@@ -560,7 +560,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_standalone_engine.py` — доказывает самодостаточность движка: строит managed из managed_set и гоняет `ai-ops run` из `.ai/managed/` отдельным процессом без parent-клона (v2.82)
 - `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
-- `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42)
+- `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
 - `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
 - `tools/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
