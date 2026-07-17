@@ -193,8 +193,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         import worktree as _wt
         branch = f"ai-ops/{wid}"
         wp = child_root / ".ai" / "worktrees" / wid
+        # finding живого прогона: worktree от ПРЕДЫДУЩЕГО прогона того же wid молча
+        # переиспользовался -> прогон шёл поверх грязного состояния (нечистый baseline).
+        # Свежий worktree на каждый прогон: убрать прежний и удалить его ветку, стартовать с HEAD.
+        if wp.is_dir() or _wt._branch_exists(child_root, branch):
+            _wt.remove(child_root, wid, force=True)
+            _git(child_root, "worktree", "prune")
+            _git(child_root, "branch", "-D", branch)
         rc = _wt.add(child_root, wid, branch)
-        if rc == 0 or wp.is_dir():
+        if rc == 0:
             work_root = wp
             worktree_rel = wp.relative_to(child_root).as_posix()
         else:
@@ -462,6 +469,19 @@ def selftest():
         expect("isolate: коммит на ветке ai-ops/iso-fn, evidence на точном SHA",
                rep_iso["commit"]["branch"] == "ai-ops/iso-fn"
                and rep_iso["commit"]["evidence_on_exact_sha"] is True)
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.78 (finding живого прогона): ПОВТОРНЫЙ прогон того же feature -> свежий worktree,
+        # не ошибка 'каталог уже есть' и не грязное переиспользование
+        it_iso2 = iter([{"op": "write", "path": "src/iso.py", "content": "y=3\n"}, {"done": True}])
+        rep_iso2 = run_pipeline("в изоляции повторно", sig, root, lambda c: next(it_iso2),
+                                budget={"max_model_calls": 5}, feature="iso-fn",
+                                commit=True, isolate=True, install_deps=False)
+        expect("isolate: повторный прогон -> свежий worktree (не error, чистый старт)",
+               rep_iso2.get("status") != "error"
+               and rep_iso2["isolation"]["worktree"] == ".ai/worktrees/iso-fn"
+               and rep_iso2["commit"]["evidence_on_exact_sha"] is True)
+        _git(root, "checkout", "-q", orig_branch)
 
         # v2.62: open_pr=True вызывает механизм draft PR; без токена -> honest unavailable
         # (токены снимаем, т.к. CI может выставлять GITHUB_TOKEN — иначе тест дёрнет сеть)
