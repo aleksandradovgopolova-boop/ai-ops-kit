@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.86.0] — 2026-07-17 — Product Authoring: движок производит артефакты (аудит P0.4)
+
+Артефакт-гейты ENGINEERING/PRODUCT (`requirements`, `plan_readiness`) больше не блокируют
+безусловно: движок **производит артефакты** и подтверждает их **форму** детерминированно.
+Честно: подтверждается структура (как у blueprint), а не качество — качество судит независимый
+ревьюер (`--review`) / человек.
+
+### Added
+- **Author-стадия в `execution_pipeline`** (`--author`). Для артефакт-гейтов плана без evidence
+  движок вызывает модель-автора (отдельный вызов), пишет её YAML в `.ai/runplan/<wid>/` **до
+  коммита** и валидирует **форму** детерминированно → закрывает гейт. Трейс — в `report.authored`.
+- **`validation/validate_requirements_artifact.py`** — структура требований (тестируемые
+  requirements + acceptance_scenarios) → evidence гейта `requirements`.
+- **`validation/validate_plan_artifact.py`** — структура плана (work_packages + dependencies +
+  write_scope, с проверкой ссылочной целостности зависимостей) → evidence гейта `plan_readiness`.
+- **Флаг `--author`** в `ai-ops run` и `qual_run`; автор — отдельный экземпляр провайдера. Оба
+  валидатора в AGENTS.md checklist и `package-quality.yml`.
+
+### Boundary (честно)
+- Валидатор проверяет **структуру, не качество** (та же дисциплина, что `validate_feature_blueprint`).
+  Невалидный артефакт → гейт остаётся блокирующим (нет фабрикации). Качество → ревьюер/человек.
+- **`specification` (OpenSpec) не производится** — нужен внешний `openspec` CLI; честно блокирует.
+- Живое качество артефактов требует живой модели + человека; механика (author → структурная
+  проверка → evidence) полностью тестируется offline scripted-автором.
+
 ## [2.85.0] — 2026-07-17 — Containment hardening (адверсарный ре-ревью v2.81–2.84)
 
 Независимый адверсарный ре-ревью только что выпущенного trust-кода (writer ≠ judge, применённый

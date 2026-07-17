@@ -153,6 +153,82 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
     return gate_ev, reviews
 
 
+def _parse_yaml_block(text):
+    """Достать YAML из ответа author-модели (терпимо к ```yaml-обрамлению/тексту вокруг)."""
+    import yaml
+    if isinstance(text, dict):
+        return text
+    s = text or ""
+    if "```" in s:                          # вырезать первый fenced-блок
+        parts = s.split("```")
+        if len(parts) >= 2:
+            block = parts[1]
+            if block.lstrip().lower().startswith("yaml"):
+                block = block.split("\n", 1)[1] if "\n" in block else ""
+            s = block
+    try:
+        data = yaml.safe_load(s)
+        return data if isinstance(data, dict) else None
+    except yaml.YAMLError:
+        return None
+
+
+# v2.86: артефакт-гейты, которые движок умеет ЗАКРЫВАТЬ производством артефакта + детерминированной
+# проверкой ФОРМЫ (не «качества» — его судит независимый ревьюер/человек). specification (OpenSpec)
+# сюда НЕ входит — нужен внешний openspec CLI (честный defer).
+def _authoring_specs():
+    import validate_requirements_artifact as vra
+    import validate_plan_artifact as vpa
+    return {
+        "requirements": ("requirements.yaml", vra, "requirements-artifact",
+                         "requirements: список объектов {id, statement (тестируемое требование), "
+                         "acceptance: [сценарии приёмки]}"),
+        "plan_readiness": ("plan.yaml", vpa, "plan-artifact",
+                           "work_packages: [{id, summary, depends_on: [id,...]}], "
+                           "write_scope: [пути]"),
+    }
+
+
+def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, budget):
+    """v2.86 Product Authoring: движок производит артефакты requirements/plan. author-модель даёт
+    СОДЕРЖИМОЕ (YAML), движок пишет его в .ai/runplan/<wid>/ (доверенный путь, не произвольная
+    запись модели) и подтверждает ФОРМУ детерминированным валидатором -> legitimate evidence для
+    гейта. КАЧЕСТВО артефакта судит независимый ревьюер (--review) / человек, не эта проверка.
+    -> (gate_ev, authored_trace, wrote_files)."""
+    import budget as _budget_mod
+    bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
+    out_dir = Path(work_root) / ".ai" / "runplan" / wid
+    gate_ev = dict(gate_ev)
+    authored, wrote = [], False
+    for gid, (fname, mod, kind, shape) in _authoring_specs().items():
+        if gid not in gate_ids or gid in gate_ev:
+            continue                        # гейта нет в плане, либо evidence уже есть
+        try:
+            bud.charge_call()
+        except _budget_mod.BudgetExceeded as e:
+            authored.append({"gate": gid, "valid": False, "errors": [f"budget: {e}"]})
+            break
+        prompt = (
+            f"Ты автор артефакта '{kind}' для задачи. Верни ТОЛЬКО YAML (без пояснений) со схемой:\n"
+            f"  schema_version: 1\n  kind: {kind}\n  workitem_id: {wid}\n  {shape}\n"
+            f"Артефакт должен точно отражать задачу ниже. Требования/пакеты — конкретные и "
+            f"тестируемые, не общие слова.\n\n=== ЗАДАЧА ===\n{task}")
+        data = _parse_yaml_block(author_proposer(prompt))
+        errs = mod.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML артефакта"]
+        entry = {"gate": gid, "artifact": fname, "valid": not errs, "errors": errs or None}
+        if not errs:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            import yaml as _yaml
+            (out_dir / fname).write_text(
+                _yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            wrote = True
+            gate_ev[gid] = {"status": "pass", "provided": mod.provided_evidence(data),
+                            "evidence": [f".ai/runplan/{wid}/{fname} — форма подтверждена детерминированно"]}
+            entry["provided"] = mod.provided_evidence(data)
+        authored.append(entry)
+    return gate_ev, authored, wrote
+
+
 def _git(root, *args):
     r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
@@ -306,7 +382,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
                  require_fix=False, discard_previous=False, sandbox=False,
-                 review=False, reviewer_proposer=None):
+                 review=False, reviewer_proposer=None,
+                 author=False, author_proposer=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -414,6 +491,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                               max_steps=max_steps, base_context=ctx)
     applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
 
+    # 4b. v2.86 Product Authoring: движок производит артефакты requirements/plan (author-модель даёт
+    #     содержимое, движок пишет в .ai/runplan/<wid>/ и валидирует ФОРМУ) ДО коммита, чтобы они
+    #     попали в SHA. Валидная форма -> deterministic evidence для артефакт-гейтов. Качество —
+    #     независимый ревьюер (--review)/человек. Только для планов с этими гейтами (ENGINEERING/PRODUCT).
+    authored, authored_ev = None, {}
+    if author and author_proposer is not None:
+        authored_ev, authored, _wrote_art = _run_authoring(
+            author_proposer, work_root, plan["gates"], {}, wid, task, budget)
+
     # 5. commit на рабочей ветке (finding аудита: evidence должен биться о ТОЧНЫЙ SHA, не
     #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
     committed_sha, work_branch = None, None
@@ -439,6 +525,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     intake = _intake_evidence(signals)
     if intake:
         gate_ev.setdefault("intake_completeness", intake)
+    # v2.86: evidence артефакт-гейтов (requirements/plan_readiness) из author-стадии — форма
+    # подтверждена детерминированно; НЕ перетираем уже имеющееся evidence (setdefault).
+    for _gid, _ev in (authored_ev or {}).items():
+        gate_ev.setdefault(_gid, _ev)
 
     # 6c. «умное ослабление» (v2.61): инструмента нет в подтверждённом стеке -> флаг освобождается
     #     (build/lint/typecheck). tests — особый случай: по умолчанию тоже освобождаем + громкий
@@ -564,6 +654,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v2.83 Full RunPlan: трейс независимых ревью (какие ai-review гейты судились, вердикт,
         # что читал судья, что отклонено). None -> ревью не запускалось (нет --review/reviewer).
         "reviews": reviews,
+        # v2.86 Product Authoring: трейс произведённых артефактов (requirements/plan) — что
+        # авторизовано, валидна ли форма, какие required_evidence закрыты. None -> без --author.
+        "authored": authored,
         # baseline-diff: None вне режима; иначе — статусы проверок на базе + регрессии/починки
         "baseline": ({"checks": {k: (v or {}).get("status") for k, v in (baseline_checks or {}).items()},
                       "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
@@ -901,6 +994,55 @@ def selftest():
         expect("no-self-review: security не в reviewable даже без спец-сигналов",
                "security" not in _reviewable_gates(["security", "ux_review"], sig_rv)
                and "ai_red_team" not in _reviewable_gates(["ai_red_team", "ux_review"], sig_rv))
+
+        # v2.86 Product Authoring: ENGINEERING-план содержит артефакт-гейты requirements/plan_readiness.
+        # БЕЗ --author они блокируют; с --author (валидный артефакт) — закрываются формой.
+        sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        it_na = iter([{"op": "write", "path": "src/na.py", "content": "n=1\n"}, {"done": True}])
+        rep_na = run_pipeline("рефактор без артефактов", sig_eng, root, lambda c: next(it_na),
+                              budget={"max_model_calls": 5}, feature="eng-na",
+                              commit=True, isolate=True, install_deps=False)
+        has_art_gates = ("requirements" in rep_na["gates"]["evaluated"]
+                         and "plan_readiness" in rep_na["gates"]["evaluated"])
+        expect("authoring: ENGINEERING-план содержит requirements/plan_readiness",
+               has_art_gates)
+        expect("authoring: БЕЗ --author артефакт-гейты блокируют (unmet)",
+               "requirements" in rep_na["gates"]["unmet"] and "plan_readiness" in rep_na["gates"]["unmet"]
+               and rep_na["authored"] is None)
+        _git(root, "checkout", "-q", orig_branch)
+
+        def author_provider(prompt):
+            if "requirements-artifact" in prompt:
+                return ("schema_version: 1\nkind: requirements-artifact\nrequirements:\n"
+                        "  - id: R1\n    statement: фильтр по статусу сужает список\n"
+                        "    acceptance:\n      - when статус=paid then только оплаченные\n")
+            return ("schema_version: 1\nkind: plan-artifact\nwork_packages:\n"
+                    "  - id: WP1\n    summary: добавить фильтр\n    depends_on: []\n"
+                    "write_scope:\n  - src/\n")
+        it_au = iter([{"op": "write", "path": "src/au.py", "content": "a=1\n"}, {"done": True}])
+        rep_au = run_pipeline("рефактор с артефактами", sig_eng, root, lambda c: next(it_au),
+                              budget={"max_model_calls": 5}, feature="eng-au",
+                              commit=True, isolate=True, install_deps=False,
+                              author=True, author_proposer=author_provider)
+        expect("authoring: валидный артефакт закрывает requirements/plan_readiness (форма)",
+               "requirements" not in rep_au["gates"]["unmet"]
+               and "plan_readiness" not in rep_au["gates"]["unmet"])
+        expect("authoring: трейс authored валиден + артефакт на диске",
+               rep_au["authored"] and all(a["valid"] for a in rep_au["authored"])
+               and (root / ".ai" / "worktrees" / "eng-au" / ".ai" / "runplan" / "eng-au" / "requirements.yaml").exists())
+        _git(root, "checkout", "-q", orig_branch)
+
+        # невалидный артефакт (author вернул мусор) -> гейт НЕ закрывается (форма не подтверждена)
+        bad_author = lambda prompt: "это не yaml артефакта, просто текст"
+        it_ba = iter([{"op": "write", "path": "src/ba.py", "content": "b=1\n"}, {"done": True}])
+        rep_ba = run_pipeline("рефактор с битым артефактом", sig_eng, root, lambda c: next(it_ba),
+                              budget={"max_model_calls": 5}, feature="eng-ba",
+                              commit=True, isolate=True, install_deps=False,
+                              author=True, author_proposer=bad_author)
+        expect("authoring: невалидный артефакт -> requirements остаётся блокирующим (нет фабрикации)",
+               "requirements" in rep_ba["gates"]["unmet"]
+               and any(not a["valid"] for a in (rep_ba["authored"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])
