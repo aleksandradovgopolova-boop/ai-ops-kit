@@ -2,6 +2,19 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.75.0] — 2026-07-17
+
+**Наблюдаемость петли: трейс в отчёте.** На fix-задаче петля упиралась в `max_steps`, но по
+отчёту нельзя было понять ПОЧЕМУ (модель флудит read? denied? bad-json?). Отчёт движка теперь
+включает компактный трейс шагов и причины denied.
+
+### Added
+- **`tools/execution_pipeline.py`** — `loop.transcript` (шаг/op/allowed/ok/done/reason, до 40) и
+  `loop.denied_reasons` в отчёте. Диагностика живого прогона без догадок.
+
+### Changed
+- **manifest** — `package_version` → 2.75.0.
+
 ## [2.74.0] — 2026-07-17
 
 **Первый ЗЕЛЁНЫЙ qual-прогон на реальном child + два finding'а с задач-починок.** README-задача
