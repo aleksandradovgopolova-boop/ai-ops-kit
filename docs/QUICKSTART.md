@@ -84,11 +84,13 @@ push/сеть из петли; `--json` даёт машиночитаемый о
 
 Для ENGINEERING/PRODUCT-задач добавьте `--review` (v2.83) и `--author` (v2.86): `--review` даёт
 независимый read-only вердикт по ai-review гейтам (code_review/ux_review/...) — writer ≠ judge;
-`--author` производит артефакты requirements/plan и подтверждает их **форму** детерминированно
-(закрывает гейты requirements/plan_readiness). Честно: эти гейты детерминированные, поэтому их
-**качество** судит **человек**, а не in-loop `--review` (ревьюер закрывает только ai-review гейты
-вроде code_review/ux_review). `specification` (OpenSpec) и human-approval честно остаются
-блокирующими без внешнего CLI/человека — движок не выдаёт ложный «готово».
+`--author` производит артефакты requirements/plan и **specification** (OpenSpec-изменение) и
+подтверждает их детерминированно: requirements/plan — по форме; specification — рендерит OpenSpec-
+markdown и валидирует настоящим `openspec validate --strict` (нужен `npm i -g @fission-ai/openspec`).
+Закрывает гейты requirements/plan_readiness/specification. Честно: эти гейты детерминированные,
+поэтому **качество** требований судит **человек**, а не in-loop `--review` (ревьюер закрывает только
+ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI или битый артефакт → гейт остаётся
+блокирующим; human-approval-гейты тоже — движок не выдаёт ложный «готово».
 
 Граница: child-CI (раздел 4) по-прежнему клонирует kit по тегу — это пин версии для проверки
 установки, отдельный от пути исполнения движка.

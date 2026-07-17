@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.89.0] — 2026-07-17 — Specification authoring (OpenSpec): закрыт последний артефакт-гейт
+
+Гейт `specification` больше не блокирует ENGINEERING/PRODUCT безусловно — движок **производит
+OpenSpec-изменение и валидирует его настоящим `openspec` CLI**. Это закрывает последний
+артефакт-гейт P0.4.
+
+### Added
+- **Spec-authoring в `execution_pipeline`** (часть `--author`). Author-модель отдаёт **структурное**
+  описание изменения (`capability` + требования + сценарии); движок **рендерит** точный OpenSpec-
+  markdown (`proposal.md`/`tasks.md`/`specs/<cap>/spec.md`) и прогоняет `openspec validate <id>
+  --strict`. Формат markdown контролирует движок, а не модель, — валидная структура надёжно проходит
+  strict. Трейс — в `report.authored`.
+- **`validation/validate_spec_artifact.py`** — форма spec-change + рендер в OpenSpec (проверено
+  реальным CLI 1.6.0: `render()` → `openspec validate --strict` = rc 0). В checklist и CI.
+
+### Boundary (честно)
+- `specification` закрывается **только** если `openspec` CLI установлен в child И strict-валидация
+  прошла. Нет CLI (`npm i -g @fission-ai/openspec`) или битый spec от модели → гейт остаётся
+  блокирующим (нет фабрикации). **Качество** требований судит человек. Механика тестируется offline
+  (стаб), реальный CLI-путь подтверждён вживую.
+- **Итог P0.4:** полный RunPlan для ENGINEERING закрыт — requirements/plan_readiness (v2.86) +
+  specification (v2.89) производятся и проверяются, code_review судит независимый ревьюер (v2.83).
+
 ## [2.88.0] — 2026-07-17 — Live-qual fix: ложная регрессия сборки (первый живой прогон ii-sreda)
 
 Первый живой прогон движка на реальном node/vite-репозитории (ii-sreda, DeepSeek) сразу дал ценную
