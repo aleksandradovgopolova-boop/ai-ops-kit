@@ -174,9 +174,23 @@ def _parse_yaml_block(text):
         return None
 
 
+def _openspec_validate(work_root, change_id):
+    """v2.89: прогнать НАСТОЯЩИЙ openspec CLI на произведённом change. -> (available, ok, output).
+    available=False -> CLI не установлен в child (гейт честно остаётся блокирующим, не фабрикуем)."""
+    try:
+        r = subprocess.run(["openspec", "validate", change_id, "--strict"],
+                           cwd=str(work_root), capture_output=True, text=True, timeout=120,
+                           env={**os.environ, "OPENSPEC_TELEMETRY": "0"})
+        return True, r.returncode == 0, (r.stdout + r.stderr)[-600:]
+    except FileNotFoundError:
+        return False, False, "openspec CLI не найден в PATH (npm i -g @fission-ai/openspec)"
+    except subprocess.TimeoutExpired:
+        return True, False, "openspec validate: timeout"
+
+
 # v2.86: артефакт-гейты, которые движок умеет ЗАКРЫВАТЬ производством артефакта + детерминированной
-# проверкой ФОРМЫ (не «качества» — его судит независимый ревьюер/человек). specification (OpenSpec)
-# сюда НЕ входит — нужен внешний openspec CLI (честный defer).
+# проверкой ФОРМЫ (не «качества» — его судит независимый ревьюер/человек). specification (v2.89)
+# обрабатывается ОТДЕЛЬНО — рендерит OpenSpec-change и валидирует реальным openspec CLI.
 def _authoring_specs():
     import validate_requirements_artifact as vra
     import validate_plan_artifact as vpa
@@ -190,7 +204,47 @@ def _authoring_specs():
     }
 
 
-def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, budget):
+def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
+    """v2.89: произвести OpenSpec change для гейта specification. author даёт СТРУКТУРУ, движок
+    рендерит точный OpenSpec-markdown и валидирует РЕАЛЬНЫМ openspec CLI. Закрывает гейт ТОЛЬКО
+    если CLI доступен И strict-валидация прошла (иначе честный блок). -> (gate_ev, entry)."""
+    import budget as _budget_mod
+    import validate_spec_artifact as vsa
+    try:
+        bud.charge_call()
+    except _budget_mod.BudgetExceeded as e:
+        return gate_ev, {"gate": "specification", "valid": False, "errors": [f"budget: {e}"]}
+    prompt = (
+        "Ты автор OpenSpec-изменения (spec-change) для задачи. Верни ТОЛЬКО YAML со схемой:\n"
+        "  schema_version: 1\n  kind: spec-change\n  capability: <slug>\n  why: <зачем>\n"
+        "  what_changes: [<что меняется>]\n  tasks: [<шаг>, ...]\n"
+        "  requirements:\n    - name: <имя>\n      text: <нормативное требование со словом SHALL>\n"
+        "      scenarios:\n        - {name: <имя>, when: <условие>, then: <результат>}\n"
+        "Требования конкретные и проверяемые. Только JSON/YAML.\n\n=== ЗАДАЧА ===\n" + task)
+    data = _parse_yaml_block(author_proposer(prompt))
+    errs = vsa.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML spec-change"]
+    entry = {"gate": "specification", "artifact": f"openspec/changes/{wid}", "valid": not errs,
+             "errors": errs or None}
+    if errs:
+        return gate_ev, entry
+    vsa.render(data, Path(work_root) / "openspec", wid)
+    available, ok, out = openspec_validate(work_root, wid)
+    entry["openspec_cli"] = "available" if available else "absent"
+    entry["openspec_valid"] = ok if available else None
+    if available and ok:
+        gate_ev = dict(gate_ev)
+        gate_ev["specification"] = {"status": "pass", "provided": ["openspec_valid", "requirements_covered"],
+                                    "evidence": [f"openspec validate --strict OK @ openspec/changes/{wid}"]}
+        entry["closed"] = True
+    else:
+        entry["closed"] = False
+        entry["note"] = ("openspec CLI не установлен -> гейт остаётся блокирующим (честно)"
+                         if not available else f"openspec validate провалился: {out}")
+    return gate_ev, entry
+
+
+def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, budget,
+                   openspec_validate=None):
     """v2.86 Product Authoring: движок производит артефакты requirements/plan. author-модель даёт
     СОДЕРЖИМОЕ (YAML), движок пишет его в .ai/runplan/<wid>/ (доверенный путь, не произвольная
     запись модели) и подтверждает ФОРМУ детерминированным валидатором -> legitimate evidence для
@@ -227,6 +281,14 @@ def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, bud
                             "evidence": [f".ai/runplan/{wid}/{fname} — форма подтверждена детерминированно"]}
             entry["provided"] = mod.provided_evidence(data)
         authored.append(entry)
+    # v2.89: specification — отдельно (рендер OpenSpec-change + реальный openspec validate --strict).
+    if "specification" in gate_ids and "specification" not in gate_ev:
+        gate_ev, spec_entry = _run_spec_authoring(
+            author_proposer, work_root, gate_ev, wid, task, bud,
+            openspec_validate or _openspec_validate)
+        if spec_entry.get("closed"):
+            wrote = True
+        authored.append(spec_entry)
     return gate_ev, authored, wrote
 
 
@@ -1061,6 +1123,11 @@ def selftest():
                 return ("schema_version: 1\nkind: requirements-artifact\nrequirements:\n"
                         "  - id: R1\n    statement: фильтр по статусу сужает список\n"
                         "    acceptance:\n      - when статус=paid then только оплаченные\n")
+            if "spec-change" in prompt:      # v2.89: ENGINEERING-план включает specification
+                return ("schema_version: 1\nkind: spec-change\ncapability: catalog\nwhy: нужен фильтр\n"
+                        "what_changes:\n  - добавить фильтр по статусу\ntasks:\n  - реализовать\n"
+                        "requirements:\n  - name: Filter\n    text: The system SHALL filter by status.\n"
+                        "    scenarios:\n      - {name: T, when: статус=paid, then: показаны оплаченные}\n")
             return ("schema_version: 1\nkind: plan-artifact\nwork_packages:\n"
                     "  - id: WP1\n    summary: добавить фильтр\n    depends_on: []\n"
                     "write_scope:\n  - src/\n")
@@ -1088,6 +1155,33 @@ def selftest():
                "requirements" in rep_ba["gates"]["unmet"]
                and any(not a["valid"] for a in (rep_ba["authored"] or [])))
         _git(root, "checkout", "-q", orig_branch)
+
+        # v2.89: specification authoring (OpenSpec). Тестируем _run_authoring напрямую со стабом
+        # openspec_validate (реальный CLI в CI может отсутствовать — стаб делает тест детерминированным).
+        spec_author = lambda prompt: (
+            "schema_version: 1\nkind: spec-change\ncapability: pricing\nwhy: нужна утилита цены\n"
+            "what_changes:\n  - добавить formatPrice\ntasks:\n  - реализовать\n  - тест\n"
+            "requirements:\n  - name: Formatting\n    text: The system SHALL format price.\n"
+            "    scenarios:\n      - {name: T, when: formatPrice(1000), then: returns 1 000}\n")
+        gev_ok, auth_ok, _ = _run_authoring(spec_author, root, ["specification"], {}, "spec-ok",
+                                            "форматирование цены", {"max_model_calls": 5},
+                                            openspec_validate=lambda wr, cid: (True, True, "valid"))
+        expect("spec-authoring: CLI доступен + strict OK -> specification закрыт (openspec_valid)",
+               "specification" in gev_ok
+               and gev_ok["specification"]["provided"] == ["openspec_valid", "requirements_covered"]
+               and (root / "openspec" / "changes" / "spec-ok" / "proposal.md").exists())
+        gev_absent, auth_absent, _ = _run_authoring(spec_author, root, ["specification"], {}, "spec-abs",
+                                                    "форматирование", {"max_model_calls": 5},
+                                                    openspec_validate=lambda wr, cid: (False, False, "нет CLI"))
+        expect("spec-authoring: CLI отсутствует -> specification НЕ закрыт (честный блок, нет фабрикации)",
+               "specification" not in gev_absent
+               and any(a["gate"] == "specification" and a.get("closed") is False for a in auth_absent))
+        gev_bad, auth_bad, _ = _run_authoring(lambda p: "не yaml", root, ["specification"], {}, "spec-bad",
+                                              "x", {"max_model_calls": 5},
+                                              openspec_validate=lambda wr, cid: (True, True, "valid"))
+        expect("spec-authoring: битый spec от автора -> не закрыт (форма не прошла)",
+               "specification" not in gev_bad
+               and any(a["gate"] == "specification" and not a["valid"] for a in auth_bad))
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

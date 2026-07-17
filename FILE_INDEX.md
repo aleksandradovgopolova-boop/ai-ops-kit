@@ -561,6 +561,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 - `validation/validate_qualification.py` — согласованность пакета живых сценариев (форма, task_type из workflows, известные флаги, матрица ОС/стеков) (v2.84)
 - `validation/validate_requirements_artifact.py` — структура артефакта требований (testable requirements + acceptance scenarios) -> evidence гейта requirements (v2.86)
 - `validation/validate_plan_artifact.py` — структура плана (work_packages + dependencies + write_scope) -> evidence гейта plan_readiness (v2.86)
+- `validation/validate_spec_artifact.py` — форма spec-change + рендер в OpenSpec-markdown; движок валидирует реальным `openspec` CLI -> evidence гейта specification (v2.89)
 - `qualification/scenarios.yaml` — 5 канонических live-сценариев квалификации движка + матрица ОС/стеков (v2.84)
 - `docs/qualification-runbook.md` — как прогнать живую квалификацию на реальном child (env, команды, чтение отчёта, матрица) (v2.84)
 - `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)

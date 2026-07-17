@@ -98,6 +98,7 @@ python3 validation/validate_qualification.py --selftest
 python3 validation/validate_qualification.py
 python3 validation/validate_requirements_artifact.py --selftest
 python3 validation/validate_plan_artifact.py --selftest
+python3 validation/validate_spec_artifact.py --selftest
 python3 installer/ai_ops.py --selftest
 ```
 
