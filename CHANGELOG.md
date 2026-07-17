@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.74.0] — 2026-07-17
+
+**Первый ЗЕЛЁНЫЙ qual-прогон на реальном child + два finding'а с задач-починок.** README-задача
+на ii-sreda (DeepSeek, baseline-diff) дала `[PASS] 1/1, ready_for_pr=True` — полный путь
+`detect → tool-loop (живая модель) → npm ci → commit в worktree → evidence на точном SHA →
+baseline-diff` подтверждён живьём. Две задачи-починки вскрыли ещё два дефекта.
+
+### Fixed
+- **`tools/orchestrator.py`** — `_http_post_json` ретраит **транзиентные** сетевые сбои
+  (SSL-handshake timeout оборвал задачу) и `5xx`/`429` с бэкоффом (1s/2s/4s); `4xx` (кроме 429)
+  не ретраится (это ошибка запроса, не транзиент).
+- **`tools/execution_pipeline.py`** — на fix-задаче модель крутилась до `max_steps` с 0 правок,
+  потому что не знала, ЧТО чинить. Теперь в контекст tool-loop подаётся **фактический вывод
+  падающих проверок базы** (`_baseline_failure_summary`: команда + exit + stderr/stdout) — модель
+  видит реальную ошибку (напр. «expected 'Вчера' got 'Сегодня'») и может её таргетить.
+
+### Changed
+- **manifest** — `execution_engine.live_qual_green_2026_07_17` (первый зелёный прогон + findings
+  задач-починок + честный остаток: слабая модель может не сходиться даже с выводом ошибок).
+  `package_version` → 2.74.0.
+
 ## [2.73.0] — 2026-07-17
 
 **Устойчивость к битому JSON модели + кросс-платформенность (Windows).** Два независимых

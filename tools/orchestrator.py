@@ -57,14 +57,34 @@ DEFAULT_MODELS = {"anthropic": "claude-sonnet-5", "openai": "gpt-4o"}
 _MAX_TOKENS = 2048
 
 
-def _http_post_json(url, headers, payload, timeout=120):
+def _http_post_json(url, headers, payload, timeout=120, retries=3):
+    """POST JSON с ретраями на ТРАНЗИЕНТНЫЕ сбои (finding живого прогона: SSL-handshake timeout
+    оборвал задачу). Ретраим сетевые таймауты/сбросы и 5xx/429 с бэкоффом; 4xx (кроме 429) —
+    не ретраим (это не транзиент, а ошибка запроса/ключа). Бэкофф детерминированный (без сна на
+    последней попытке)."""
     import json as _json
+    import time
+    import urllib.error
     import urllib.request
-    req = urllib.request.Request(url, data=_json.dumps(payload).encode("utf-8"),
-                                 headers={**headers, "content-type": "application/json"},
-                                 method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:   # прокси — из env
-        return _json.loads(r.read().decode("utf-8"))
+    body = _json.dumps(payload).encode("utf-8")
+    last = None
+    for attempt in range(retries):
+        req = urllib.request.Request(url, data=body,
+                                     headers={**headers, "content-type": "application/json"},
+                                     method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:   # прокси — из env
+                return _json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in (429, 500, 502, 503, 504) or attempt == retries - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            last = e                                    # сетевой транзиент (в т.ч. SSL timeout)
+            if attempt == retries - 1:
+                raise
+        time.sleep(2 ** attempt)                        # 1s, 2s, 4s между попытками
+    raise last if last else RuntimeError("http retry exhausted")
 
 
 def _anthropic_call(prompt, model):
@@ -497,6 +517,49 @@ def selftest():
             _os.environ["OPENAI_COMPATIBLE_BASE_URL"] = _b
         if _kb is not None:
             _os.environ["OPENAI_COMPATIBLE_API_KEY"] = _kb
+
+    # v2.74 (finding живого прогона): _http_post_json ретраит ТРАНЗИЕНТНЫЕ сбои (SSL-timeout
+    # оборвал задачу). Монкипатчим urlopen + sleep: 2 сетевых сбоя -> успех; 4xx не ретраится.
+    import urllib.request as _ur
+    import urllib.error as _ue
+    import time as _time
+    _real_open, _real_sleep = _ur.urlopen, _time.sleep
+    _time.sleep = lambda *_a, **_k: None                     # без реальных пауз в тесте
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"ok": true}'
+
+    try:
+        calls = {"n": 0}
+        def flaky(req, timeout=0):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise _ue.URLError("ssl handshake timed out")
+            return _Resp()
+        _ur.urlopen = flaky
+        r = _http_post_json("http://x", {}, {}, retries=3)
+        expect_ok = r.get("ok") is True and calls["n"] == 3
+        print(("PASS" if expect_ok else "FAIL")
+              + " http-retry: 2 транзиентных сбоя -> успех на 3-й попытке")
+        ok = ok and expect_ok
+
+        calls2 = {"n": 0}
+        def not_found(req, timeout=0):
+            calls2["n"] += 1
+            raise _ue.HTTPError("http://x", 404, "not found", {}, None)
+        _ur.urlopen = not_found
+        try:
+            _http_post_json("http://x", {}, {}, retries=3)
+            ok = False; print("FAIL http-retry: 404 не должен возвращать успех")
+        except _ue.HTTPError:
+            good = calls2["n"] == 1                          # 4xx не ретраится
+            print(("PASS" if good else "FAIL") + " http-retry: 4xx (404) не ретраится (1 попытка)")
+            ok = ok and good
+    finally:
+        _ur.urlopen = _real_open
+        _time.sleep = _real_sleep
 
     # execution budget (v2.38): max_model_calls останавливает до завершения стадий
     with tempfile.TemporaryDirectory() as td:
