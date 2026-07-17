@@ -38,3 +38,15 @@ claims:
     doc: manifest.skills.shipped перечисляет поставляемые скиллы
     type: symbol-exists
     source: {path: ../manifest/ai-ops-manifest.yaml, symbol: product-session-review}
+
+  # Пиннинг счётчиков против прозы-дрифта (self-audit v2.67: ROADMAP говорил «26 gates»,
+  # фактически было 28). Каждый gate имеет строку `    id: <name>` (4 пробела).
+  - id: gate-count
+    doc: "ROADMAP/докуметация о числе quality gates (quality/gates.yaml)"
+    type: count
+    source: {path: ../quality/gates.yaml, pattern: '^    id: ', expected: 28}
+
+  - id: mvp-blocking-count
+    doc: "AGENTS.md инвариант «blocking-гейтов MVP ≤ 8» (ровно 8 объявлено)"
+    type: count
+    source: {path: ../quality/gates.yaml, pattern: '^  - ', expected: 8}

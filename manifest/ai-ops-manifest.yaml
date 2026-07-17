@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.66.0
+  package_version: 2.67.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -84,6 +84,13 @@ quality_gates:
   mvp_blocking: [intake_completeness, requirements, specification, plan_readiness,
                  implementation_verification, code_review, security, spec_synchronization]
   mvp_blocking_max: 8
+  # Честность пути исполнения (self-audit v2.67): 7 из 8 MVP-blocking гейтов enforced per-task
+  # gate_executor'ом через workflow.quality_gates/треки; spec_synchronization — детерминированный
+  # OpenSpec-гейт, enforced OpenSpec CLI + validation/validate_openspec_change.py в CI
+  # (gate.enforced_by=openspec-ci-guard), НЕ per-task прогоном. validate_workflow_gates теперь
+  # ERROR'ит недостижимый MVP-blocking гейт (orphan-guard), так что этот класс дрифта не повторится.
+  enforced_by_ci_guard: [spec_synchronization, archive_readiness]
+  count_pinned_by_claims: [gate-count, mvp-blocking-count]   # knowledge/claims.yaml (тип count)
 
 agents:
   registered: 51             # 38 (v1.0) + 7 ревьюеров (v1.4) + 3 research-pack (v2.1) + 3 AI Product Pack (v2.4)
@@ -263,6 +270,18 @@ execution_engine:
       - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
       - "живой draft PR: механизм готов (pr_open, open_pr=True), нужен GITHUB_TOKEN + remote — эмпирически не прогнан"
       - "квалификация: 3–5 реальных задач (баг/UI/средняя фича) на репо С тулчейном против обычной сессии Claude Code — до конца НЕ прогнано"
+  self_audit_2026_07_17:                     # собственный аудит на соответствие видению (решение ep-2026-07-17-vision-audit)
+    scope: "VISION.md/ROADMAP.md vs код (агент-ревьюер + ручная верификация); НЕ execution-engine backlog"
+    fixed_v2_67:
+      - "P0 orphan-гейт: spec_synchronization (MVP-blocking) и archive_readiness были применимы, но не запускались ни в одном workflow/треке. Честная модель: оба — детерминированные OpenSpec-гейты, enforced OpenSpec CLI + validate_openspec_change.py в CI. Зафиксировано gate.enforced_by=openspec-ci-guard"
+      - "orphan-guard: validate_workflow_gates стал track-aware (перестал сыпать ложными WARN про track-гейты ux_review/ai_eval/...) и enforced_by-aware; недостижимый MVP-blocking гейт теперь ERROR (был WARN) — класс дрифта «8 blocking, а реально 7» не повторится; applicability на несуществующий workflow тоже ERROR"
+      - "P1 intake_completeness добавлен в ENGINEERING (per-run гейт, реально пропускался; QUICK/PRODUCT/... его имели)"
+      - "P1 счётчик gates: ROADMAP говорил «26 gates», фактически 28. Исправлено + запиннено claim'ами gate-count(28)/mvp-blocking-count(8) новым типом claim `count` в validate_claims"
+      - "P2 security.applicability ссылалась на несуществующий workflow INCIDENT -> убран (инциденты идут через CRITICAL)"
+      - "P2 documentation_drift развёрнут из one-liner в полную форму (stage/purpose) как у соседних гейтов"
+    kept_deliberately:
+      - "phase-3 non-blocking гейты (documentation_updated, release_safety, observability_readiness, stakeholder_readiness, knowledge_*, decision_quality) оставлены non-blocking: baseline_ready на ОДНОМ child; критерий промоушена — стабильный зелёный на >=2 child (ep-2026-07-17-vision-audit)"
+    clean_areas: "51 агент, 14 ревьюеров, workflow-декларации, AGENTS.md checklist ⊆ CI, reference/claim integrity — расхождений нет"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

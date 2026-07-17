@@ -148,7 +148,7 @@ gates:
     responsible_role: security-reviewer
     review_mode: read-only
     human_approval: {required_when: [privileged, destructive, secret_boundary_change]}
-    applicability: [ENGINEERING, CRITICAL, INCIDENT]
+    applicability: [ENGINEERING, CRITICAL]   # INCIDENT — post-MVP (не определён); инциденты идут через CRITICAL
     stale_detection: {bind_to: tested_revision}
     required_evidence: [no_secrets, no_injection_surface, deps_approved]
 
@@ -160,6 +160,10 @@ gates:
     responsible_role: documentation-steward
     review_mode: writer
     validator: openspec-validate-and-guard
+    # Детерминированный OpenSpec-гейт: enforced НЕ per-task gate_executor'ом, а OpenSpec CLI
+    # + validation/validate_openspec_change.py в CI (см. openspec/README). Поэтому он не в
+    # workflow.quality_gates — enforced_by фиксирует реальный путь исполнения (честность).
+    enforced_by: openspec-ci-guard
     human_approval: false
     applicability: [ENGINEERING, PRODUCT]
     stale_detection: {bind_to: specs_hash}
@@ -183,7 +187,14 @@ gates:
     responsible_role: product-manager
     review_mode: read-only
     applicability: [PRODUCT]
-  documentation_drift: {id: documentation_drift, blocking: false, responsible_role: documentation-steward, review_mode: writer, applicability: [all]}
+  documentation_drift:
+    id: documentation_drift
+    purpose: Документация не отстаёт от кода/поведения (advisory до обкатки).
+    stage: result
+    blocking: false
+    responsible_role: documentation-steward
+    review_mode: writer
+    applicability: [all]
   archive_readiness:
     id: archive_readiness
     purpose: Изменение архивируется только если проверено.
@@ -192,7 +203,10 @@ gates:
     responsible_role: final-verifier
     review_mode: read-only
     validator: validate-archive-readiness
-    applicability: [all]
+    # Детерминированный OpenSpec archive-гейт: enforced OpenSpec CLI archive-шагом в CI, не
+    # per-task gate_executor'ом (мета-гейт: «архивируем, только если все blocking прошли»).
+    enforced_by: openspec-ci-guard
+    applicability: [ENGINEERING, PRODUCT]   # OpenSpec-tracked workflows (было [all] — overclaim)
     required_evidence: [all_blocking_gates_pass, no_stale_gate]
 
   # --- Ф1 roadmap (v1.3): gates полного продуктового цикла ---
