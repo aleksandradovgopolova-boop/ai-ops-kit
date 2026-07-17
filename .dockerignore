@@ -1,0 +1,7 @@
+.git
+**/__pycache__
+**/*.pyc
+.ai/worktrees
+qual-reports
+examples/*/node_modules
+**/node_modules

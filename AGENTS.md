@@ -19,6 +19,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `manifest/ai-ops-manifest.yaml` | Центральный манифест пакета | `package_version` — только при релизе |
 | `packages/` | Декларации границ 5 пакетов 3.0 (файл→пакет, зависимости) — БЕЗ переноса файлов (3.0-срез 0) | Синхронно с `validate_package_boundaries.py` |
 | `qualification/` | Пакет живых сценариев для квалификации движка (данные) | Синхронно с `validate_qualification.py` |
+| `containers/` | Эталонный контейнер изоляции движка (P0.2 jail): Dockerfile + run-sandboxed.sh | Синхронно с `validate_container_assets.py` |
 | `VERSION`, `CHANGELOG.md` | Версия и история (SemVer) | Только при релизе |
 
 Полный аннотированный список файлов — в `FILE_INDEX.md`.
@@ -99,6 +100,8 @@ python3 validation/validate_qualification.py
 python3 validation/validate_requirements_artifact.py --selftest
 python3 validation/validate_plan_artifact.py --selftest
 python3 validation/validate_spec_artifact.py --selftest
+python3 validation/validate_container_assets.py --selftest
+python3 validation/validate_container_assets.py
 python3 installer/ai_ops.py --selftest
 ```
 
