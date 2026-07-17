@@ -127,6 +127,24 @@ def _simple_stack(lang, files, d: Path, commands):
             "commands": commands, "evidence_source": [f for f in files if (d / f).exists()]}
 
 
+def _detect_monorepo(root: Path):
+    """v2.84: усиленный детект монорепо -> (is_monorepo, reason|None). Кроме node workspaces —
+    pnpm-workspace / lerna / turbo / nx и несколько package.json в apps|packages|подкаталогах."""
+    pkg = _read_json(root / "package.json")
+    if pkg.get("workspaces"):
+        return True, "node workspaces в package.json"
+    for marker in ("pnpm-workspace.yaml", "lerna.json", "turbo.json", "nx.json"):
+        if (root / marker).exists():
+            return True, marker
+    sub = (list(root.glob("*/package.json")) + list(root.glob("packages/*/package.json"))
+           + list(root.glob("apps/*/package.json")))
+    # уникальные каталоги (glob '*/...' и 'packages/...' могут пересечься)
+    dirs = {p.parent.resolve() for p in sub}
+    if len(dirs) > 1:
+        return True, f"{len(dirs)} package.json в подкаталогах (apps/packages/*)"
+    return False, None
+
+
 def detect(root):
     root = Path(root)
     stacks, undetermined = [], []
@@ -141,30 +159,28 @@ def detect(root):
         stacks.append(_simple_stack("go", ["go.mod"], root,
                                     {"build": "go build ./...", "lint": None,
                                      "typecheck": "go vet ./...", "test": "go test ./..."}))
-    # java
+    # java: предпочитаем wrapper (./mvnw, ./gradlew) глобальному бинарю — иначе на машине без
+    # установленного mvn/gradle сборка падает exit 127 (частый finding). Wrapper — в репо.
     if (root / "pom.xml").exists():
-        stacks.append(_simple_stack("java", ["pom.xml"], root,
-                                    {"build": "mvn -q package", "lint": None,
-                                     "typecheck": None, "test": "mvn -q test"}))
+        mvn = "./mvnw" if (root / "mvnw").exists() else "mvn"
+        src = ["pom.xml"] + (["mvnw"] if mvn == "./mvnw" else [])
+        stacks.append(_simple_stack("java", src, root,
+                                    {"build": f"{mvn} -q package", "lint": None,
+                                     "typecheck": None, "test": f"{mvn} -q test"}))
     elif (root / "build.gradle").exists() or (root / "build.gradle.kts").exists():
-        stacks.append(_simple_stack("java", ["build.gradle"], root,
-                                    {"build": "gradle build", "lint": None,
-                                     "typecheck": None, "test": "gradle test"}))
+        gradle = "./gradlew" if (root / "gradlew").exists() else "gradle"
+        src = ["build.gradle"] + (["gradlew"] if gradle == "./gradlew" else [])
+        stacks.append(_simple_stack("java", src, root,
+                                    {"build": f"{gradle} build", "lint": None,
+                                     "typecheck": None, "test": f"{gradle} test"}))
     # rust
     if (root / "Cargo.toml").exists():
         stacks.append(_simple_stack("rust", ["Cargo.toml"], root,
                                     {"build": "cargo build", "lint": "cargo clippy",
                                      "typecheck": "cargo check", "test": "cargo test"}))
 
-    # monorepo: node workspaces или несколько package.json в подкаталогах
-    monorepo = False
-    pkg = _read_json(root / "package.json")
-    if pkg.get("workspaces"):
-        monorepo = True
-    else:
-        sub = [p for p in root.glob("*/package.json")] + [p for p in root.glob("packages/*/package.json")]
-        if len(sub) > 1:
-            monorepo = True
+    # monorepo (v2.84): workspaces / pnpm-workspace / lerna / turbo / nx / много package.json
+    monorepo, monorepo_reason = _detect_monorepo(root)
 
     ci = []
     if (root / ".github" / "workflows").is_dir():
@@ -178,10 +194,17 @@ def detect(root):
         miss = [k for k, v in s["commands"].items() if v is None]
         if miss:
             undetermined.append(f"{s['language']}: не выведены команды {miss} — задать вручную/подтвердить")
+    # монорепо: команды на корне могут НЕ покрывать сборку/тесты каждого пакета — честно предупреждаем,
+    # чтобы evidence одного корневого прогона не считался покрытием всего репозитория.
+    if monorepo:
+        undetermined.append(
+            f"монорепо ({monorepo_reason}): корневые команды могут не покрывать все пакеты — "
+            "подтвердить per-package build/test или таргет-фильтр")
 
     return {
         "schema_version": 1, "kind": "repository-profile", "status": "draft",
-        "monorepo": monorepo, "stacks": stacks, "ci": ci, "undetermined": undetermined,
+        "monorepo": monorepo, "monorepo_reason": monorepo_reason,
+        "stacks": stacks, "ci": ci, "undetermined": undetermined,
     }
 
 
@@ -232,6 +255,50 @@ def selftest():
         prof = detect(root)
         expect("пустой репо -> стек не определён (честно в undetermined)",
                prof["stacks"] == [] and any("стек не определён" in u for u in prof["undetermined"]))
+
+    # v2.84: java wrapper (./gradlew, ./mvnw) предпочитается глобальному бинарю (иначе exit 127)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "build.gradle").write_text("plugins {}\n", encoding="utf-8")
+        (root / "gradlew").write_text("#!/bin/sh\n", encoding="utf-8")
+        s = detect(root)["stacks"][0]
+        expect("java: ./gradlew предпочтён глобальному gradle",
+               s["commands"]["build"] == "./gradlew build" and s["commands"]["test"] == "./gradlew test")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "pom.xml").write_text("<project/>\n", encoding="utf-8")
+        s = detect(root)["stacks"][0]
+        expect("java: без wrapper -> глобальный mvn (fallback)",
+               s["commands"]["build"] == "mvn -q package")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "pom.xml").write_text("<project/>\n", encoding="utf-8")
+        (root / "mvnw").write_text("#!/bin/sh\n", encoding="utf-8")
+        s = detect(root)["stacks"][0]
+        expect("java: ./mvnw предпочтён глобальному mvn", s["commands"]["test"] == "./mvnw -q test")
+
+    # v2.84: монорепо-маркеры (pnpm-workspace / turbo) + честный undetermined-note
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "package.json").write_text("{}", encoding="utf-8")
+        (root / "pnpm-workspace.yaml").write_text("packages:\n  - 'packages/*'\n", encoding="utf-8")
+        prof = detect(root)
+        expect("monorepo: pnpm-workspace.yaml -> monorepo=True с причиной",
+               prof["monorepo"] is True and "pnpm-workspace" in (prof.get("monorepo_reason") or ""))
+        expect("monorepo: честный undetermined-note про покрытие пакетов",
+               any("монорепо" in u for u in prof["undetermined"]))
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "apps").mkdir(); (root / "packages").mkdir()
+        (root / "apps" / "package.json").write_text("{}", encoding="utf-8")
+        (root / "packages" / "package.json").write_text("{}", encoding="utf-8")
+        expect("monorepo: несколько package.json в apps/packages -> monorepo",
+               detect(root)["monorepo"] is True)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "package.json").write_text(json.dumps({"scripts": {"build": "tsc"}}), encoding="utf-8")
+        expect("не-монорепо: одиночный package.json -> monorepo=False",
+               detect(root)["monorepo"] is False)
 
     print("project_detector selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
