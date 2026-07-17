@@ -324,6 +324,24 @@ def _tree_clean(root):
     return rc == 0 and out.strip() == ""
 
 
+def _untracked(root):
+    """Множество untracked-файлов (git status --porcelain, префикс '??'). Игнорируемые (.gitignore,
+    напр. node_modules) сюда НЕ попадают — porcelain их не показывает без --ignored."""
+    rc, out, _ = _git(root, "status", "--porcelain")
+    if rc != 0:
+        return set()
+    return {ln[3:] for ln in out.splitlines() if ln.startswith("?? ")}
+
+
+def _has_changes(root):
+    """Есть ли ЛЮБЫЕ правки в рабочем дереве (tracked-diff ИЛИ новые untracked)? -> bool.
+
+    v2.93 (finding аудита): раньше наличие правок считали ТОЛЬКО по успешным write-операциям петли.
+    Если модель изменила код через разрешённый shell (sed/форматтер), правки реальны, но applied
+    пусто -> коммит не создавался и работа не доставлялась. Считаем факт по git, а не по счётчику op."""
+    return not _tree_clean(root)
+
+
 def _install_dependencies(profile, root, policy):
     """Поставить зависимости стеков (install_command) через Broker перед сбором evidence.
 
@@ -557,6 +575,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         pol = tool_broker.Policy(level="execution", child_root=str(work_root), block_push=True)
     is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
 
+    # P0.6/v2.93: снимок untracked-файлов ДО install/baseline — чтобы потом удалить только НОВЫЕ
+    # (созданные подготовкой, напр. package-lock.json от `npm install`), не тронув untracked-файлы,
+    # которые уже были у пользователя. Игнорируемые (node_modules) сюда не попадают.
+    untracked_before_prep = _untracked(work_root) if is_git else set()
+
     # 3b. подготовка окружения ДО петли и baseline: поставить зависимости стека В ИЗОЛИРОВАННОМ
     #     worktree, иначе build/lint/test упадут exit 127 (нет node_modules/venv). node_modules
     #     обычно в .gitignore -> дерево остаётся чистым. В основном дереве НЕ ставим.
@@ -574,13 +597,24 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if baseline_diff:
         baseline_checks = evidence_collector.collect(profile, work_root, pol)["checks"]
 
-    # P0.6 (аудит v2.79): install/baseline могли намутить TRACKED-файлы (lock, снапшоты, конфиги).
-    # Откатываем их ДО работы модели, чтобы `git add -A` в коммите не втянул чужие изменения
-    # подготовки. node_modules/venv в .gitignore -> checkout их не трогает; остаются для проверок.
+    # P0.6 (аудит v2.79) + v2.93 (finding аудита): install/baseline могли намутить TRACKED-файлы
+    # (lock, снапшоты, конфиги) И создать НОВЫЕ untracked (классика: `npm install` создаёт
+    # package-lock.json, которого не было). Откатываем ОБА вида ДО работы модели, иначе `git add -A`
+    # в коммите втянул бы файлы подготовки в AI-коммит. Откат tracked — `checkout -- .`; новые
+    # untracked (delta к снимку до install) — удаляем адресно (untracked ПОЛЬЗОВАТЕЛЯ не трогаем).
+    # node_modules/venv в .gitignore -> в porcelain не видны, остаются для проверок.
     prepare_mutated_tree = False
     if is_git and not _tree_clean(work_root):
         prepare_mutated_tree = True
         _git(work_root, "checkout", "--", ".")
+        new_untracked = _untracked(work_root) - untracked_before_prep
+        for rel in new_untracked:
+            try:
+                fp = (work_root / rel)
+                if fp.is_file() or fp.is_symlink():
+                    fp.unlink()
+            except OSError:
+                pass
 
     # 4. tool-loop: модель применяет изменения (context = задача + профиль стека +
     #    ФАКТИЧЕСКИЙ вывод падающих проверок базы — finding живого прогона: без него модель
@@ -594,6 +628,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
                               max_steps=max_steps, base_context=ctx)
     applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
+    # v2.93 (finding аудита): факт правок берём из git (tracked-diff ИЛИ новые untracked), а не
+    # только из счётчика write-операций. Иначе правки через разрешённый shell (sed/форматтер)
+    # не распознавались как «применено» -> коммит не создавался и работа терялась.
+    shell_changed = bool(applied) or (is_git and _has_changes(work_root))
 
     # 4b. v2.86 Product Authoring: движок производит артефакты requirements/plan (author-модель даёт
     #     содержимое, движок пишет в .ai/runplan/<wid>/ и валидирует ФОРМУ) ДО коммита, чтобы они
@@ -608,7 +646,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
     committed_sha, work_branch = None, None
     tree_clean_before_checks = None
-    if commit and applied:
+    # v2.93: коммитим, если В ДЕРЕВЕ есть правки (git-diff/untracked) — включая правки через shell и
+    # произведённые артефакты — а не только при непустом applied. Для не-git репо fallback на applied.
+    have_work = (is_git and _has_changes(work_root)) or bool(applied) or bool(authored)
+    if commit and have_work:
         work_branch = f"ai-ops/{wid}"
         committed_sha = _commit_on_branch(work_root, work_branch,
                                           f"ai-ops: {task[:60]}")
@@ -709,7 +750,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     delivery = {"requested": bool(open_pr),
                 "status": ((pr or {}).get("status") if open_pr else "not-requested")
                           or ("not-attempted" if open_pr and not ready else None)}
-    delivery_ok = (not open_pr) or ((pr or {}).get("status") == "opened")
+    # v2.93: "updated" (PR для ветки уже был открыт, ветка обновлена push'ем) — тоже успех доставки
+    delivery_ok = (not open_pr) or ((pr or {}).get("status") in ("opened", "updated"))
     overall_status = ("error" if not ready else ("delivered" if delivery_ok else "delivery-failed"))
 
     not_yet = ["живой предложитель (swap провайдера)"]
@@ -895,6 +937,43 @@ def selftest():
                rep_iso3.get("status") != "error"
                and rep_iso3["isolation"]["worktree"] == ".ai/worktrees/iso-fn"
                and rep_iso3["commit"]["evidence_on_exact_sha"] is True)
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.93 (finding аудита): целостность коммита — хелперы состояния файлов
+        with tempfile.TemporaryDirectory() as td2:
+            r2 = Path(td2)
+            subprocess.run(["git", "-C", td2, "init", "-q"])
+            subprocess.run(["git", "-C", td2, "config", "user.email", "t@t"])
+            subprocess.run(["git", "-C", td2, "config", "user.name", "t"])
+            (r2 / "a.py").write_text("x=1\n", encoding="utf-8")
+            subprocess.run(["git", "-C", td2, "add", "-A"]); subprocess.run(["git", "-C", td2, "commit", "-q", "-m", "i"])
+            expect("v2.93 _has_changes: чистое дерево -> нет правок", _has_changes(r2) is False)
+            # правка через «shell» (прямое изменение файла, не через write-op) -> детектится
+            (r2 / "a.py").write_text("x=2\n", encoding="utf-8")
+            expect("v2.93 _has_changes: правка tracked-файла (как из shell) детектится", _has_changes(r2) is True)
+            _git(r2, "checkout", "--", ".")
+            # снимок untracked ДО подготовки; пользовательский untracked существует заранее
+            (r2 / "user_note.txt").write_text("mine\n", encoding="utf-8")
+            before = _untracked(r2)
+            expect("v2.93 _untracked: видит пользовательский untracked", "user_note.txt" in before)
+            # подготовка создаёт НОВЫЙ untracked (эмуляция package-lock.json от npm install)
+            (r2 / "package-lock.json").write_text("{}\n", encoding="utf-8")
+            delta = _untracked(r2) - before
+            expect("v2.93 snapshot-delta: новый untracked подготовки в delta", delta == {"package-lock.json"})
+            expect("v2.93 snapshot-delta: пользовательский untracked НЕ в delta (не удалим)",
+                   "user_note.txt" not in delta)
+
+        # v2.93 интеграция: правка ТОЛЬКО через shell (0 write-op) всё равно коммитится (не теряем работу)
+        it_sh = iter([
+            {"op": "shell", "command": "python3 -c \"open('shelledit.py','w').write('s=1\\n')\""},
+            {"done": True, "summary": "через shell"},
+        ])
+        pol_sh = tool_broker.Policy(level="execution", write_scope=["src/"])
+        rep_sh = run_pipeline("правка через shell", sig, root, lambda c: next(it_sh),
+                              policy=pol_sh, budget={"max_model_calls": 5}, feature="shell-fn",
+                              commit=True, isolate=True, install_deps=False)
+        expect("v2.93: правка через shell (applied_writes=0) всё равно даёт коммит",
+               rep_sh["loop"]["applied_writes"] == 0 and bool(rep_sh["commit"]["sha"]))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.62: open_pr=True вызывает механизм draft PR; без токена -> honest unavailable

@@ -55,12 +55,13 @@ scenarios:
     task_type: ENGINEERING
     flags: ["--sandbox", "--review", "--author", "--task-type", "ENGINEERING"]
     baseline: no-regressions
-    expected: "code_review закрыт независимым ревьюером; requirements/plan_readiness закрыты произведёнными артефактами (форма); specification (OpenSpec) честно блокирует без CLI"
+    expected: "code_review закрыт независимым ревьюером; requirements/plan_readiness/specification закрыты произведёнными артефактами (v2.86/2.89); security честно остаётся блокирующим (нет производителя evidence)"
     acceptance:
       - "reviews содержит вердикт по code_review (status pass|fail) от read-only судьи"
       - "authored содержит валидные requirements+plan артефакты; их гейты НЕ в unmet (форма подтверждена)"
-      - "specification остаётся в gates.unmet (OpenSpec-артефакт не производится) — честный not-ready, НЕ ложный green"
-    proves: "постадийный ревью + производство артефактов закрывают то, что можно детерминированно/судьёй; недоказуемое (spec) честно блокирует"
+      - "specification закрыт, ЕСЛИ доступен openspec CLI (v2.89: движок рендерит OpenSpec + validate --strict); БЕЗ CLI — честно остаётся в unmet (не фабрикуем)"
+      - "security остаётся в gates.unmet — нет детерминированного производителя no_secrets/no_injection_surface/deps_approved (честный not-ready, НЕ ложный green; закрывается в 2.95)"
+    proves: "постадийный ревью + производство артефактов закрывают requirements/plan/specification; недоказуемое (security-evidence) честно блокирует"
 
   - id: S5-containment
     title: "Containment: sandbox реально ограничивает петлю"
