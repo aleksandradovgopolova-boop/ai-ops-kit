@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.72.0] — 2026-07-17
+
+**Третий finding живого прогона: baseline-diff (регрессии vs пред-существующие провалы).** С
+установленными зависимостями движок прогнал реальные build/typecheck/test на ii-sreda — и они
+красные **сами по себе** (коллизия регистра `Markdown.ts`/`markdown.ts` рушит build+typecheck;
+1 из 532 тестов — `recentTimeGroup` про даты). Движок честно не дал `ready_for_pr` поверх
+красного репо. Но требовать «всё зелёное» от правки в уже-красном репозитории неверно — правку
+судят по тому, не внесла ли она **новых** провалов.
+
+### Added
+- **`tools/execution_pipeline.py`** — `baseline_diff` (param): прогон проверок на БАЗЕ до правок
+  модели, затем `_diff_checks` вычисляет `regressions` (было pass → стало fail) и `fixed`
+  (fail → pass). Критерий `ready_for_pr` в этом режиме — **no-regressions** (пред-существующие
+  красные проверки репо не блокируют; чинятся отдельно). Отчёт: `baseline` (статусы на базе +
+  regressions/fixed/no_regressions), `ready_criterion` (`all-green` | `no-regressions`).
+- **`tools/ai_ops_run.py`** — флаг `--baseline-diff`.
+- **`tools/qual_run.py`** — baseline-diff **по умолчанию** (реальные репо редко all-green);
+  `--strict-green` возвращает критерий «всё зелёное». `evaluate_report` теперь доверяет
+  вердикту движка `ready_for_pr` (учитывает критерий) и собирает диагностику при не-готовности.
+
+### Changed
+- **manifest** — `self_audit_2026_07_17.live_qual_run_2026_07_17.fixed_v2_72` +
+  `qualification_status` (движок подтверждён end-to-end на реальном child; верификация настоящая —
+  вскрыла 3 реальных бага ii-sreda). `package_version` → 2.72.0.
+
 ## [2.71.0] — 2026-07-17
 
 **Второй finding живого прогона: установка зависимостей в изолированном worktree.** На QUICK-классе

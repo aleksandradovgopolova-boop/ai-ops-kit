@@ -116,9 +116,27 @@ def _install_dependencies(profile, root, policy):
     return results
 
 
+def _diff_checks(baseline, after):
+    """Сравнить статусы проверок ДО и ПОСЛЕ правки. -> (regressions, fixed).
+
+    regression = было pass, стало fail (правка сломала). fixed = было fail, стало pass
+    (правка починила). Пред-существующие провалы (fail->fail) не в счёт — не вина правки.
+    """
+    baseline, after = baseline or {}, after or {}
+    regressions, fixed = [], []
+    for name, a in after.items():
+        b_status = (baseline.get(name) or {}).get("status")
+        a_status = a.get("status")
+        if b_status == "pass" and a_status == "fail":
+            regressions.append(name)
+        elif b_status == "fail" and a_status == "pass":
+            fixed.append(name)
+    return regressions, fixed
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=20, feature=None, commit=False, allow_missing_tests=True,
-                 isolate=False, open_pr=False, install_deps=True):
+                 isolate=False, open_pr=False, install_deps=True, baseline_diff=False):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -156,6 +174,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 3. политика по умолчанию: execution, границы — по work_root
     pol = policy or tool_broker.Policy(level="execution", child_root=str(work_root))
 
+    # 3b. подготовка окружения ДО петли и baseline: поставить зависимости стека В ИЗОЛИРОВАННОМ
+    #     worktree, иначе build/lint/test упадут exit 127 (нет node_modules/venv). node_modules
+    #     обычно в .gitignore -> дерево остаётся чистым. В основном дереве НЕ ставим.
+    prepare = None
+    if install_deps and isolate:
+        prepare = _install_dependencies(profile, work_root, pol)
+
+    # 3c. baseline-evidence (finding живого прогона: ii-sreda был красным САМ ПО СЕБЕ — build/
+    #     typecheck/test падали до любой правки). Прогон проверок на БАЗЕ до правок модели, чтобы
+    #     отличить пред-существующие провалы репо от РЕГРЕССИЙ, внесённых этой правкой.
+    baseline_checks = None
+    if baseline_diff:
+        baseline_checks = evidence_collector.collect(profile, work_root, pol)["checks"]
+
     # 4. tool-loop: модель применяет изменения (context = задача + профиль стека)
     ctx = f"{task}\n\n{_profile_summary(profile)}"
     loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
@@ -174,13 +206,6 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # finding аудита (P0.5): после коммита дерево обязано быть чистым — иначе часть правок
         # не в SHA, и evidence соберётся о смешанном состоянии.
         tree_clean_before_checks = _tree_clean(work_root)
-
-    # 5b. подготовка окружения: поставить зависимости стека В ИЗОЛИРОВАННОМ worktree, иначе
-    #     build/lint/test упадут exit 127 (нет node_modules/venv). node_modules обычно в
-    #     .gitignore -> дерево остаётся чистым для evidence-на-SHA. В основном дереве НЕ ставим.
-    prepare = None
-    if install_deps and isolate:
-        prepare = _install_dependencies(profile, work_root, pol)
 
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     coll = evidence_collector.collect(profile, work_root, pol)
@@ -220,14 +245,27 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     evidence_revision = coll.get("revision")
     revision_matches = (committed_sha is not None and evidence_revision == committed_sha)
 
+    # baseline-diff (finding живого прогона): что правка сломала/починила против базы
+    regressions, fixed = _diff_checks(baseline_checks, coll["checks"]) if baseline_diff else ([], [])
+    no_regressions = (len(regressions) == 0) if baseline_diff else None
+
     # 8. финал: draft PR (только если готово к PR и явно запрошено). Механизм честен offline:
     #    нет токена/remote -> unavailable, PR не имитируется.
     # finding аудита (P0.5): ready_for_pr ТРЕБУЕТ реального коммита (committed_sha),
     # evidence на точном SHA и чистого дерева до/после проверок. dry-run (commit=False) НИКОГДА
     # не бывает ready — нет ревизии, к которой привязать draft PR.
     tree_ok = bool(tree_clean_before_checks) and (tree_clean_after_checks is not False)
-    ready = (loop["stopped"] == "done") and (not gates["blocked"]) \
-        and (committed_sha is not None) and revision_matches and tree_ok
+    base_ok = (loop["stopped"] == "done") and (committed_sha is not None) \
+        and revision_matches and tree_ok
+    if baseline_diff:
+        # критерий «no-regressions»: правка не внесла НОВЫХ провалов (пред-существующие красные
+        # репо не в счёт — их чинят отдельно). Гейты оцениваются и показываются честно, но
+        # блокировка по пред-существующему красному не держит PR.
+        ready = base_ok and no_regressions
+        ready_criterion = "no-regressions"
+    else:
+        ready = base_ok and (not gates["blocked"])
+        ready_criterion = "all-green"
     pr = None
     if open_pr and ready and committed_sha and work_branch:
         import pr_open
@@ -261,7 +299,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "tests_warn": tests_warn,              # громкий сигнал об отсутствии тестов (если есть)
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
                   "blocked": gates["blocked"]},
-        # honest: «готово к PR» = петля done + гейты не блокируют + (если коммитили) evidence на SHA
+        # baseline-diff: None вне режима; иначе — статусы проверок на базе + регрессии/починки
+        "baseline": ({"checks": {k: (v or {}).get("status") for k, v in (baseline_checks or {}).items()},
+                      "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
+                     if baseline_diff else None),
+        "ready_criterion": ready_criterion,    # all-green | no-regressions
+        # honest: «готово к PR» = петля done + коммит + evidence на SHA + (all-green: гейты
+        # не блокируют | no-regressions: правка не внесла новых провалов против базы)
         "ready_for_pr": ready,
         "draft_pr": pr,                        # результат открытия PR (None/unavailable offline/opened live)
         "not_yet": not_yet,
@@ -390,6 +434,27 @@ def selftest():
         prep = _install_dependencies(prof_inst, root, pol)
         expect("install: install_command выполнены (dedup, None пропущен)",
                len(prep) == 1 and prep[0]["ok"] is True and prep[0]["command"] == "true")
+
+        # v2.72 (finding живого прогона): baseline-diff отличает регрессии от пред-существующих
+        base = {"build": {"status": "pass"}, "test": {"status": "fail"}, "lint": {"status": "pass"}}
+        after = {"build": {"status": "fail"}, "test": {"status": "pass"}, "lint": {"status": "pass"}}
+        regr, fx = _diff_checks(base, after)
+        expect("baseline-diff: build pass->fail = регрессия", regr == ["build"])
+        expect("baseline-diff: test fail->pass = починка", fx == ["test"])
+        expect("baseline-diff: пред-существующий fail->fail не в счёт",
+               _diff_checks({"x": {"status": "fail"}}, {"x": {"status": "fail"}}) == ([], []))
+
+        # интеграция: baseline_diff на репо без тулчейна (проверки not_run -> нет регрессий) ->
+        # правка проходит по критерию no-regressions даже без «всё зелёное»
+        it_bd = iter([{"op": "write", "path": "src/bd.py", "content": "b=1\n"}, {"done": True}])
+        rep_bd = run_pipeline("baseline-diff", sig, root, lambda c: next(it_bd), policy=pol,
+                              budget={"max_model_calls": 5}, feature="bd-fn",
+                              commit=True, baseline_diff=True)
+        expect("baseline_diff: критерий no-regressions в отчёте",
+               rep_bd["ready_criterion"] == "no-regressions" and rep_bd["baseline"] is not None)
+        expect("baseline_diff: нет регрессий -> ready_for_pr True",
+               rep_bd["baseline"]["no_regressions"] is True and rep_bd["ready_for_pr"] is True)
+        _git(root, "checkout", "-q", orig_branch)
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

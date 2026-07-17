@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.71.0
+  package_version: 2.72.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -291,6 +291,8 @@ execution_engine:
       fixed_v2_70: "qual_run завышал класс задачи до ENGINEERING по умолчанию -> любая задача блокировалась гейтами, для которых pipeline не даёт evidence. Дефолт -> QUICK (реально поддерживаемый класс: tool-loop + intake + implementation_verification) + флаг --task-type для осознанного выбора класса"
       honest_boundary: "квалифицируется ПОДДЕРЖИВАЕМЫЙ сегодня QUICK-путь; полный ENGINEERING/PRODUCT-путь заблокирован до P0.4 (постадийное исполнение RunPlan с производством evidence для upstream-гейтов)"
       fixed_v2_71: "второй finding живого прогона: в изолированном worktree не было node_modules -> build/typecheck/test падали exit 127 (command not found), implementation_verification блокировал. Добавлен stack-aware шаг подготовки: project_detector отдаёт install_command (npm ci/poetry install/pip install...), execution_pipeline ставит зависимости в worktree ПЕРЕД сбором evidence (только в изоляции; основное дерево не трогаем). node_modules в .gitignore -> дерево остаётся чистым для evidence-на-SHA"
+      fixed_v2_72: "третий finding живого прогона: с установленными deps ii-sreda оказался КРАСНЫМ САМ ПО СЕБЕ (build+typecheck: коллизия регистра Markdown.ts/markdown.ts; 1 из 532 тестов: recentTimeGroup дата). Движок честно не дал ready_for_pr поверх красного. Добавлен baseline-diff: прогон проверок на БАЗЕ до правок + критерий 'no-regressions' (правка не должна вносить НОВЫХ провалов; пред-существующие красные репо чинят отдельно). execution_pipeline baseline_diff=True (regressions/fixed/no_regressions, ready_criterion); ai-ops run --baseline-diff; qual_run по умолчанию baseline-diff (--strict-green для all-green)"
+      qualification_status: "движок ПОДТВЕРЖДЁН на реальном child (ii-sreda, DeepSeek) end-to-end: detect -> tool-loop (живая модель) -> npm ci -> commit в worktree -> evidence на точном SHA -> реальные build/typecheck/test -> гейты. Верификация настоящая (вскрыла 3 реальных бага репо). Остаётся эмпирика: прогон 3–5 задач с зелёным вердиктом (нужна либо зелёная база, либо baseline-diff, либо задачи-починки)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
