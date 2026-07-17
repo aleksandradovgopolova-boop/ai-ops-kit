@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.81.0] — 2026-07-17 — Containment (аудит v2.79, P0.2)
+
+Модель больше **не доставляет сама и не гоняет произвольный shell**. Это enforceable-подмножество
+изоляции на уровне брокера — **честно НЕ полный jail**: полная ФС/сеть/ресурс-изоляция остаётся
+задачей контейнерного runtime, и это прямо объявлено в отчёте и в правилах.
+
+### Added
+- **`tool_broker.Policy` — контроль изоляции.** Новые параметры: `block_push` (git push из
+  tool-loop запрещён — доставку делает только движок через `pr_open`), `shell_mode`
+  (`unrestricted` | `allowlist` | `off`), `shell_allowlist`, `allow_network` (денай частых сетевых
+  бинарников `curl`/`wget`/`nc`/`ssh`/…). Первый токен команды берётся с учётом `VAR=val`-префиксов.
+- **`tool_broker.sandbox_policy()`** — готовый усиленный профиль для недоверенной живой модели:
+  shell по allowlist dev-инструментов (`SANDBOX_SHELL_ALLOWLIST`) + `block_push`.
+- **Флаг `--sandbox`** в `ai-ops run` и `qual_run` — включает sandbox-профиль для прогона.
+- **Блок `containment` в отчёте движка** — честная декларация действующей политики
+  (`sandbox`, `shell_mode`, `block_push`, `allow_network` + note про контейнер).
+
+### Changed
+- **Дефолт движка теперь `block_push=True`.** Модель не может отправить незачтённую работу мимо
+  гейтов; ветку/PR доставляет только доверенный delivery-слой. (Аддитивно: явная `policy=` уважается
+  как есть; поведение вне движка не меняется.)
+- **`qual_run --max-steps`** теперь реально прокидывается в раннер (был объявлен, но не применялся).
+- **`rules/ai/ToolBrokerPolicy.md`** — правила 6–8 (block_push / shell_mode / allow_network),
+  секция sandbox-профиля и честная граница «enforceable-подмножество ≠ контейнерный jail».
+- **manifest** — P0.2 sandbox отмечен `done_v2_81`; `package_version` → 2.81.0.
+
 ## [2.80.0] — 2026-07-17 — Trust Correctness (ответ на внешний аудит v2.79)
 
 Внешний аудит (~5/10) верно вскрыл класс проблем корректности доверия. Закрыты пять contained-

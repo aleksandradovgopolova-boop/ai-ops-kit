@@ -175,7 +175,7 @@ def _diff_checks(baseline, after):
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
-                 require_fix=False, discard_previous=False):
+                 require_fix=False, discard_previous=False, sandbox=False):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -232,8 +232,17 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 1. детект стека (в рабочем дереве)
     profile = project_detector.detect(work_root)
 
-    # 3. политика по умолчанию: execution, границы — по work_root
-    pol = policy or tool_broker.Policy(level="execution", child_root=str(work_root))
+    # 3. политика по умолчанию: execution, границы — по work_root.
+    #    v2.81 Containment: даже базовая политика запрещает модели push-ить (block_push=True) —
+    #    доставка (PR) идёт ТОЛЬКО через доверенный delivery-слой, не через tool-loop.
+    #    sandbox=True дополнительно включает allowlist на shell (произвольный shell выключен)
+    #    и denylist на сетевые бинарники — см. tool_broker.sandbox_policy().
+    if policy is not None:
+        pol = policy
+    elif sandbox:
+        pol = tool_broker.sandbox_policy(child_root=str(work_root), write_scope=None)
+    else:
+        pol = tool_broker.Policy(level="execution", child_root=str(work_root), block_push=True)
     is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
 
     # 3b. подготовка окружения ДО петли и baseline: поставить зависимости стека В ИЗОЛИРОВАННОМ
@@ -379,6 +388,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "base_workflow": plan["base_workflow"],
         "profile": {"stacks": [s.get("language") for s in profile.get("stacks", [])],
                     "undetermined": profile.get("undetermined", [])},
+        # v2.81 Containment: честная декларация действующей политики изоляции (что реально
+        # enforced в этом прогоне) — sandbox сужает shell до allowlist; block_push всегда True.
+        "containment": {"sandbox": sandbox, "shell_mode": pol.shell_mode,
+                        "block_push": pol.block_push, "allow_network": pol.allow_network,
+                        "note": "enforceable-подмножество на уровне брокера; полная FS/сеть/ресурс-"
+                                "изоляция — контейнерный runtime"},
         "loop": {"stopped": loop["stopped"], "steps": loop["steps"],
                  "applied_writes": len(applied), "denied": len(loop["denied"]),
                  # observability (finding живого прогона): без трейса не понять, ПОЧЕМУ петля
@@ -630,6 +645,25 @@ def selftest():
         expect("require_fix: без fixed -> ready_for_pr False (не сломал, но и не починил)",
                rep_rf["baseline"]["no_regressions"] is True and rep_rf["ready_for_pr"] is False
                and rep_rf["ready_criterion"] == "no-regressions+require-fix")
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.81 Containment: политика ПО УМОЛЧАНИЮ (policy не передан) блокирует git push
+        # (block_push) и объявляет действующую изоляцию честно в report["containment"].
+        # rep_iso создан без явной policy -> дефолт движка.
+        expect("containment: дефолтная политика движка блокирует push + честный report",
+               isinstance(rep_iso.get("containment"), dict)
+               and rep_iso["containment"]["block_push"] is True
+               and rep_iso["containment"]["sandbox"] is False
+               and rep_iso["containment"]["shell_mode"] == "unrestricted")
+        # sandbox=True -> shell по allowlist (произвольный shell выключен) — видно в отчёте
+        it_sb = iter([{"op": "write", "path": "src/sb.py", "content": "s=1\n"}, {"done": True}])
+        rep_sb = run_pipeline("в песочнице", sig, root, lambda c: next(it_sb),
+                              budget={"max_model_calls": 5}, feature="sb-fn",
+                              commit=True, sandbox=True, install_deps=False)
+        expect("containment: sandbox=True -> shell_mode=allowlist + block_push в отчёте",
+               rep_sb["containment"]["sandbox"] is True
+               and rep_sb["containment"]["shell_mode"] == "allowlist"
+               and rep_sb["containment"]["block_push"] is True)
         _git(root, "checkout", "-q", orig_branch)
 
         # write вне scope -> denied, файл не создан, но pipeline не падает

@@ -108,7 +108,7 @@ def read_tasks(path):
 
 
 def default_runner(child_root, provider, model, open_pr, task_type="QUICK", baseline_diff=True,
-                   require_fix=False, max_steps=40, discard_previous=True):
+                   require_fix=False, max_steps=40, discard_previous=True, sandbox=False):
     """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute).
 
     task_type по умолчанию QUICK — класс, который pipeline РЕАЛЬНО поддерживает сегодня
@@ -126,7 +126,7 @@ def default_runner(child_root, provider, model, open_pr, task_type="QUICK", base
                               model=model, engine="pipeline", execute=True,
                               open_pr=open_pr, feature=slugify(task), baseline_diff=baseline_diff,
                               require_fix=require_fix, max_steps=max_steps,
-                              discard_previous=discard_previous)
+                              discard_previous=discard_previous, sandbox=sandbox)
     return run_one
 
 
@@ -285,6 +285,10 @@ def main(argv):
                          "(fixed непустой), а не просто 'не сломала'")
     ap.add_argument("--max-steps", type=int, default=40,
                     help="потолок шагов tool-loop (по умолчанию 40; поднимай для reasoning-моделей)")
+    ap.add_argument("--sandbox", action="store_true",
+                    help="containment (v2.81): shell модели — только allowlist dev-инструментов, "
+                         "сеть/push из петли запрещены. Рекомендуется для живых прогонов на "
+                         "недоверенных моделях. Полная FS/сеть/ресурс-изоляция — контейнер.")
     a = ap.parse_args(argv)
 
     # окружение: для живого провайдера ключ и base обязаны быть в env (не в аргументах)
@@ -312,7 +316,8 @@ def main(argv):
     print(f"QUAL: {len(tasks)} задач через {a.provider}/{a.model} "
           f"(класс {a.task_type}, критерий {criterion}) на {a.child_root} -> отчёты в {a.out}")
     runner = default_runner(a.child_root, a.provider, a.model, a.open_pr, a.task_type,
-                            baseline_diff=not a.strict_green, require_fix=a.require_fix)
+                            baseline_diff=not a.strict_green, require_fix=a.require_fix,
+                            max_steps=a.max_steps, sandbox=a.sandbox)
     results = run_qualification(tasks, a.out, runner)
     overall = print_summary(results)
     return 0 if overall else 1
