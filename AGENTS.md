@@ -92,6 +92,7 @@ python3 validation/validate_agents_checklist.py --selftest
 python3 validation/validate_agents_checklist.py
 python3 validation/validate_package_boundaries.py --selftest
 python3 validation/validate_package_boundaries.py
+python3 validation/validate_standalone_engine.py --selftest
 python3 installer/ai_ops.py --selftest
 ```
 

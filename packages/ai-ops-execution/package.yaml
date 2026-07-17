@@ -8,6 +8,7 @@ description: >
 depends_on: [ai-ops-core, ai-ops-quality]
 includes:
   - tools/ai_ops_run.py
+  - tools/execution_pipeline.py
   - tools/orchestrator.py
   - tools/run_plan.py
   - tools/tool_broker.py

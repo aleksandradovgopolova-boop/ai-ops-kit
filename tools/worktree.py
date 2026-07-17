@@ -62,16 +62,16 @@ def add(root, wid, branch, base="HEAD", wt_dir=".ai/worktrees", as_json=False):
     root = Path(root).resolve()
     target, err = _safe_target(root, wt_dir, wid)
     if err:
-        print(f"ОШИБКА: {err}")
+        print(f"ОШИБКА: {err}", file=sys.stderr)
         return 1
     if target.exists():
-        print(f"ОШИБКА: каталог worktree уже есть: {target}")
+        print(f"ОШИБКА: каталог worktree уже есть: {target}", file=sys.stderr)
         return 1
     if not branch:
-        print("ОШИБКА: нужна ветка (--branch); работа не ведётся в main.")
+        print("ОШИБКА: нужна ветка (--branch); работа не ведётся в main.", file=sys.stderr)
         return 1
     if branch in ("main", "master"):
-        print("ОШИБКА: worktree для main/master не создаём — задайте рабочую ветку.")
+        print("ОШИБКА: worktree для main/master не создаём — задайте рабочую ветку.", file=sys.stderr)
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
     if _branch_exists(root, branch):
@@ -79,14 +79,15 @@ def add(root, wid, branch, base="HEAD", wt_dir=".ai/worktrees", as_json=False):
     else:
         rc, out, err = _git(root, "worktree", "add", str(target), "-b", branch, base)
     if rc != 0:
-        print(f"ОШИБКА git worktree add: {err or out}")
+        print(f"ОШИБКА git worktree add: {err or out}", file=sys.stderr)
         return 1
     rel = target.relative_to(root)
     if as_json:
         print(json.dumps({"id": wid, "branch": branch, "path": str(rel)}, ensure_ascii=False))
     else:
+        # операционный прогресс -> stderr, чтобы --json оставался машиночитаемым (stdout = только данные)
         print(f"WORKTREE: '{wid}' -> {rel} (ветка {branch}). "
-              f"Работайте в этом каталоге; main не трогается.")
+              f"Работайте в этом каталоге; main не трогается.", file=sys.stderr)
     return 0
 
 
@@ -111,16 +112,16 @@ def _parse_list(porcelain):
 def list_cmd(root, as_json=False):
     rc, out, err = _git(root, "worktree", "list", "--porcelain")
     if rc != 0:
-        print(f"ОШИБКА git worktree list: {err or out}")
+        print(f"ОШИБКА git worktree list: {err or out}", file=sys.stderr)
         return 1
     trees = _parse_list(out)
     if as_json:
         print(json.dumps({"schema_version": 1, "kind": "worktree-list", "worktrees": trees},
                          ensure_ascii=False, indent=2))
         return 0
-    print(f"WORKTREE: {len(trees)} рабочих деревьев:")
+    print(f"WORKTREE: {len(trees)} рабочих деревьев:", file=sys.stderr)
     for t in trees:
-        print(f"  - {t.get('path')} (ветка {t.get('branch', '?')})")
+        print(f"  - {t.get('path')} (ветка {t.get('branch', '?')})", file=sys.stderr)
     return 0
 
 
@@ -128,16 +129,16 @@ def remove(root, wid, wt_dir=".ai/worktrees", force=False):
     root = Path(root).resolve()
     target, err = _safe_target(root, wt_dir, wid)
     if err:
-        print(f"ОШИБКА: {err}")
+        print(f"ОШИБКА: {err}", file=sys.stderr)
         return 1
     args = ["worktree", "remove", str(target)]
     if force:
         args.append("--force")
     rc, out, err = _git(root, *args)
     if rc != 0:
-        print(f"ОШИБКА git worktree remove: {err or out}")
+        print(f"ОШИБКА git worktree remove: {err or out}", file=sys.stderr)
         return 1
-    print(f"WORKTREE: '{wid}' удалён ({target.relative_to(root)}). Ветка сохранена.")
+    print(f"WORKTREE: '{wid}' удалён ({target.relative_to(root)}). Ветка сохранена.", file=sys.stderr)
     return 0
 
 

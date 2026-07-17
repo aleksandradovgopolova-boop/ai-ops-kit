@@ -653,6 +653,16 @@ def cmd_doctor():
     drift = detect_drift() or []
     print(f"целостность managed: {'✓' if not drift else '✗ drift (' + str(len(drift)) + ')'}")
     ok = ok and not drift
+    # v2.82 Standalone Child: движок должен быть в .ai/managed, чтобы `ai-ops run` работал без
+    # внешнего клона кита. Наличие ai_ops_run.py в managed = движок установлен; если его нет,
+    # это не всегда ошибка (child мог выбрать packages без ai-ops-execution) — сообщаем честно.
+    engine_entry = AI_DIR / "managed" / "tools" / "ai_ops_run.py"
+    if engine_entry.exists():
+        print("движок (standalone): ✓ .ai/managed/tools/ai_ops_run.py "
+              "(ai-ops run работает без клона parent)")
+    else:
+        print("движок (standalone): — не установлен (пакет ai-ops-execution не выбран? "
+              "тогда `ai-ops run` требует клон parent)")
     node = shutil.which("node")
     osp = shutil.which("openspec")
     osp_hint = ("— (не найден; OpenSpec включён по умолчанию — установите "
