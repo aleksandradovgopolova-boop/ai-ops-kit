@@ -71,15 +71,20 @@ def slugify(text, maxlen=48):
 
 
 def evaluate_report(rep):
-    """Проверить отчёт движка по критериям квалификации. -> {ok, reasons:[...]}."""
+    """Вердикт по отчёту движка. Источник истины — ready_for_pr (движок сам учёл критерий:
+    all-green или no-regressions в baseline-diff). При не-готовности собираем диагностику."""
     if not isinstance(rep, dict):
         return {"ok": False, "reasons": ["нет отчёта (None) — прогон не вернул результат"]}
     if rep.get("status") == "error":
         return {"ok": False, "reasons": [f"status=error: {rep.get('error')}"]}
+    ok = bool(rep.get("ready_for_pr"))
+    if ok:
+        return {"ok": True, "reasons": []}
     reasons = []
     loop = rep.get("loop") or {}
     commit = rep.get("commit") or {}
     gates = rep.get("gates") or {}
+    base = rep.get("baseline") or {}
     if loop.get("stopped") != "done":
         reasons.append(f"loop.stopped={loop.get('stopped')} (ожидалось done)")
     if loop.get("denied"):
@@ -88,11 +93,13 @@ def evaluate_report(rep):
         reasons.append("нет commit.sha (нечего коммитить/коммит не создан)")
     elif not commit.get("evidence_on_exact_sha"):
         reasons.append("evidence НЕ на точном SHA")
-    if gates.get("blocked"):
+    if base.get("regressions"):
+        reasons.append(f"регрессии против базы: {base['regressions']}")
+    elif gates.get("blocked"):
         reasons.append(f"gates.blocked=true, unmet={gates.get('unmet')}")
-    if not rep.get("ready_for_pr"):
+    if not reasons:
         reasons.append("ready_for_pr=false")
-    return {"ok": not reasons, "reasons": reasons}
+    return {"ok": False, "reasons": reasons}
 
 
 def read_tasks(path):
@@ -100,7 +107,7 @@ def read_tasks(path):
     return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
 
 
-def default_runner(child_root, provider, model, open_pr, task_type="QUICK"):
+def default_runner(child_root, provider, model, open_pr, task_type="QUICK", baseline_diff=True):
     """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute).
 
     task_type по умолчанию QUICK — класс, который pipeline РЕАЛЬНО поддерживает сегодня
@@ -116,7 +123,7 @@ def default_runner(child_root, provider, model, open_pr, task_type="QUICK"):
                    "affected_areas": ["core"]}
         return ai_ops_run.run(task, signals, Path(child_root), provider_name=provider,
                               model=model, engine="pipeline", execute=True,
-                              open_pr=open_pr, feature=slugify(task))
+                              open_pr=open_pr, feature=slugify(task), baseline_diff=baseline_diff)
     return run_one
 
 
@@ -191,16 +198,21 @@ def selftest():
             "gates": {"blocked": False, "unmet": []}, "ready_for_pr": True}
     expect("evaluate: успешный отчёт -> ok", evaluate_report(good)["ok"] is True)
 
-    # каждый критерий по отдельности роняет вердикт
+    # ready_for_pr — источник истины вердикта. При не-готовности собираем диагностику.
     def broke(**patch):
         r = json.loads(json.dumps(good)); r.update(patch); return evaluate_report(r)
     expect("evaluate: not ready_for_pr -> fail", broke(ready_for_pr=False)["ok"] is False)
-    expect("evaluate: gates.blocked -> fail",
-           broke(gates={"blocked": True, "unmet": ["x"]})["ok"] is False)
-    expect("evaluate: не на точном SHA -> fail",
-           broke(commit={"sha": "a" * 40, "evidence_on_exact_sha": False})["ok"] is False)
-    expect("evaluate: loop не done -> fail",
-           broke(loop={"stopped": "budget", "denied": 0})["ok"] is False)
+    gb = broke(ready_for_pr=False, gates={"blocked": True, "unmet": ["x"]})
+    expect("evaluate: not ready + gates.blocked -> fail c причиной gates",
+           gb["ok"] is False and any("gates" in r for r in gb["reasons"]))
+    sha = broke(ready_for_pr=False, commit={"sha": "a" * 40, "evidence_on_exact_sha": False})
+    expect("evaluate: not ready + не точный SHA -> причина про SHA",
+           sha["ok"] is False and any("SHA" in r for r in sha["reasons"]))
+    reg = broke(ready_for_pr=False, baseline={"regressions": ["build"], "no_regressions": False})
+    expect("evaluate: not ready + регрессии -> причина про регрессии",
+           reg["ok"] is False and any("регресс" in r for r in reg["reasons"]))
+    expect("evaluate: ready_for_pr=True -> ok даже при gates.blocked (baseline-diff)",
+           broke(gates={"blocked": True, "unmet": ["x"]})["ok"] is True)
     expect("evaluate: status=error -> fail",
            evaluate_report({"status": "error", "error": "boom"})["ok"] is False)
     expect("evaluate: None -> fail", evaluate_report(None)["ok"] is False)
@@ -251,6 +263,9 @@ def main(argv):
                          "поддерживает сегодня; ENGINEERING/PRODUCT заблокируют гейты без "
                          "evidence — backlog P0.4)")
     ap.add_argument("--open-pr", action="store_true", help="открыть draft PR (нужен GITHUB_TOKEN)")
+    ap.add_argument("--strict-green", action="store_true",
+                    help="требовать ВСЕ проверки зелёными (по умолчанию — baseline-diff: правка "
+                         "лишь не должна вносить НОВЫХ провалов; пред-существующие красные репо не блокируют)")
     a = ap.parse_args(argv)
 
     # окружение: для живого провайдера ключ и base обязаны быть в env (не в аргументах)
@@ -274,9 +289,11 @@ def main(argv):
         print(f"КОНФИГ: в {tasks_path} нет задач (пустые/# игнорируются).")
         return 2
 
+    criterion = "all-green" if a.strict_green else "no-regressions (baseline-diff)"
     print(f"QUAL: {len(tasks)} задач через {a.provider}/{a.model} "
-          f"(класс {a.task_type}) на {a.child_root} -> отчёты в {a.out}")
-    runner = default_runner(a.child_root, a.provider, a.model, a.open_pr, a.task_type)
+          f"(класс {a.task_type}, критерий {criterion}) на {a.child_root} -> отчёты в {a.out}")
+    runner = default_runner(a.child_root, a.provider, a.model, a.open_pr, a.task_type,
+                            baseline_diff=not a.strict_green)
     results = run_qualification(tasks, a.out, runner)
     overall = print_summary(results)
     return 0 if overall else 1
