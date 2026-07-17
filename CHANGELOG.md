@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.70.0] — 2026-07-17
+
+**Первый живой прогон движка на реальном child (ii-sreda, DeepSeek) — и честный класс задачи.**
+После фикса 3.9 движок реально отработал на ii-sreda: создал изолированный worktree, прошёл
+петлю. Для ENGINEERING-класса гейты честно заблокировали (`requirements/specification/
+plan_readiness/code_review` без evidence — движок не подделывает pass). Это подтверждает
+backlog P0.4 (постадийное исполнение RunPlan ещё не реализовано), а не баг.
+
+### Fixed
+- **`tools/qual_run.py`** — харнесс по умолчанию завышал класс задачи до `ENGINEERING`, из-за
+  чего любая задача упиралась в гейты, для которых pipeline пока не производит evidence. Дефолт
+  → **`QUICK`** (реально поддерживаемый сегодня класс: tool-loop + `intake` +
+  `implementation_verification`) + флаг **`--task-type`** для осознанного выбора класса.
+
+### Changed
+- **manifest** — `execution_engine.self_audit_2026_07_17.live_qual_run_2026_07_17` (результат
+  первого живого прогона + honest_boundary: квалифицируется QUICK-путь; полный ENGINEERING/
+  PRODUCT — до P0.4). `package_version` → 2.70.0.
+
 ## [2.69.0] — 2026-07-17
 
 **Portability — первый реальный finding квалификационного харнесса (Python 3.9).** Попытка
