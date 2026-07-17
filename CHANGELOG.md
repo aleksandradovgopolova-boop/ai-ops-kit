@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.94.0] — 2026-07-17 — One Run Transaction: pipeline и lifecycle — одна транзакция
+
+Второй слой плана. Раньше AI Ops был «два мира»: Product OS lifecycle (WorkItem/RunPlan/active-work/
+run-report) и Execution pipeline жили порознь — `engine=pipeline` вызывал движок и возвращал отчёт,
+пропуская весь lifecycle. Объединили в одну транзакцию.
+
+### Changed
+- **`tools/ai_ops_run.py`** — pipeline-путь теперь проходит ЕДИНЫЙ lifecycle: контроллер строит план
+  **один раз**, создаёт WorkItem, пишет `run-plan.yaml`, регистрирует active-work, гоняет
+  concurrency-preflight **до** правок, пишет единый `run-report.json` и **закрывает** active-work
+  (`done`) по завершении. Координационные строки active-work уходят в stderr (stdout чист для `--json`).
+- **`tools/execution_pipeline.py`** — `run_pipeline(plan=...)` принимает готовый план от контроллера и
+  НЕ строит второй (единый `workitem_id` для плана, WorkItem, ветки `ai-ops/<id>`, active-work и
+  run-report). Прямой вызов без `plan` работает по-прежнему (обратная совместимость).
+
+### Honest (осталось)
+Отдельный `run_id` на каждый прогон и полноценный resume пока не введены (повтор того же feature
+перезаписывает WorkItem/ветку; isolation-guard не даёт потерять несохранённые коммиты). Дальше — 2.95
+(security/PRODUCT evidence), 2.96 (живая квалификация + e2e-CI).
+
 ## [2.93.0] — 2026-07-17 — Truth & Execution Integrity: worktree-only контейнер, целостность коммита, честные safety-claim'ы
 
 По внешнему разбору (9 из 9 пунктов подтвердились по коду) закрыт первый слой — остаточные дефекты

@@ -26,6 +26,7 @@
 """
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -73,8 +74,37 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         auth_prop = author_proposer
         if author and auth_prop is None and provider_name != "mock":
             auth_prop = orchestrator.make_provider(provider_name, model)
+
+        # v2.94 (One Run Transaction, аудит #2): pipeline БОЛЬШЕ НЕ обходит lifecycle. Один план
+        # строится здесь и передаётся в движок (не второй раз внутри); WorkItem/RunPlan/active-work/
+        # concurrency-preflight/run-report — как в controller-пути. Прежде было «два мира»: движок
+        # возвращал отчёт, не создавая WorkItem/active-work/run-report.
+        plan = run_plan.build_plan(signals, workitem_id=feature)
+        fid = plan["workitem_id"]
+        workitem.start(str(features_dir), fid, task_text,
+                       task_type=signals.get("task_type"), risk=signals.get("risk"))
+        (features_dir / fid / "run-plan.yaml").write_text(
+            yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
+        areas = signals.get("affected_areas") or ["unspecified"]
+        # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
+        # активной работой (тихо, через classify — без печати и без себя). Advisory в отчёт.
+        try:
+            _aw = active_work.load(aw_path)
+            _conf = active_work.classify(
+                [w for w in _aw.get("active", []) if w.get("id") != fid],
+                {"id": fid, "affected_areas": list(areas), "depends_on": [], "shared_contracts": []})
+            preflight = {"conflicts": _conf}
+        except Exception:  # noqa: BLE001 — preflight не должен ронять прогон
+            preflight = None
+        # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
+        # stdout оставался чистым для --json.
+        with contextlib.redirect_stdout(sys.stderr):
+            active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
+                                 workitem=f"features/{fid}/workitem.yaml")
+
         rep = execution_pipeline.run_pipeline(
-            task_text, signals, child_root, prop, feature=feature,
+            task_text, signals, child_root, prop, feature=feature, plan=plan,
             commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
             require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
             sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
@@ -83,6 +113,22 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
         rep["model"] = model
+        # v2.94: единая транзакция — фиксируем lifecycle-артефакты в отчёте и на диске
+        rep["lifecycle"] = {
+            "workitem": f"features/{fid}/workitem.yaml",
+            "run_plan": f"features/{fid}/run-plan.yaml",
+            "active_work": ".ai/runtime/active-work.yaml",
+            "run_report": f"features/{fid}/run-report.json",
+            "concurrency_preflight": preflight,
+        }
+        try:
+            (features_dir / fid / "run-report.json").write_text(
+                json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        except OSError:
+            pass
+        # закрываем активную работу по завершении прогона (была in-progress -> done)
+        with contextlib.redirect_stdout(sys.stderr):
+            active_work.finish_cmd(aw_path, fid)
         return rep
 
     # 1-2. RunPlan (route + треки + агрегированные гейты).
@@ -179,6 +225,12 @@ def _print_pipeline(r):
         print(f"  ⚠ {r['tests_warn']}")
     print(f"  гейты: оценено {len(gates.get('evaluated') or [])} · "
           f"не закрыто {gates.get('unmet') or []} · блокирует: {gates.get('blocked')}")
+    lc = r.get("lifecycle")
+    if lc:
+        pf = (lc.get("concurrency_preflight") or {})
+        conflicts = len(pf.get("conflicts") or []) if isinstance(pf, dict) else 0
+        print(f"  lifecycle: WorkItem+RunPlan+active-work+run-report записаны · "
+              f"preflight-конфликтов: {conflicts}")
     pr = r.get("draft_pr")
     if pr:
         print(f"  draft PR: {pr.get('status')}" + (f" — {pr.get('url')}" if pr.get('url') else ""))
@@ -275,6 +327,20 @@ def selftest():
                rp.get("engine") == "pipeline" and rp.get("kind") == "execution-pipeline")
         expect("engine=pipeline: движок применил изменение",
                rp["loop"]["applied_writes"] == 1 and (root / "src" / "a.py").exists())
+        # v2.94 One Run Transaction: pipeline-путь проходит ЕДИНЫЙ lifecycle (не обходит его)
+        pfid = rp["workitem_id"]
+        expect("v2.94: pipeline создал WorkItem", (root / "features" / pfid / "workitem.yaml").exists())
+        expect("v2.94: pipeline записал RunPlan", (root / "features" / pfid / "run-plan.yaml").exists())
+        expect("v2.94: pipeline записал run-report", (root / "features" / pfid / "run-report.json").exists())
+        expect("v2.94: pipeline зарегистрировал active-work",
+               (root / ".ai" / "runtime" / "active-work.yaml").exists())
+        expect("v2.94: lifecycle-артефакты в отчёте", isinstance(rp.get("lifecycle"), dict)
+               and rp["lifecycle"].get("workitem") == f"features/{pfid}/workitem.yaml")
+        _awd = active_work.load(root / ".ai" / "runtime" / "active-work.yaml")
+        expect("v2.94: active-work закрыта (done) по завершении прогона",
+               any(w.get("id") == pfid and w.get("status") == "done" for w in _awd.get("active", [])))
+        expect("v2.94: единый план — движок НЕ строил второй (workitem_id совпал)",
+               rp["workitem_id"] == pfid)
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib

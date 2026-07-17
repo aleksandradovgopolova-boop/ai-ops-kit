@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.93.0
+  package_version: 2.94.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -346,6 +346,10 @@ execution_engine:
       - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
+    fixed_v2_94_one_run_transaction:
+      - "One Run Transaction (аудит #2): pipeline-путь БОЛЬШЕ НЕ обходит lifecycle. Раньше `engine=pipeline` вызывал run_pipeline и возвращал отчёт, пропуская WorkItem/RunPlan/active-work/run-report — 'два мира' (Product OS lifecycle отдельно от Execution pipeline). Теперь контроллер строит план ОДИН раз и передаёт в движок (run_pipeline(plan=...) — не строит второй), создаёт WorkItem, пишет run-plan.yaml, регистрирует active-work, гоняет concurrency-preflight ДО правок, пишет единый run-report.json и ЗАКРЫВАЕТ active-work (done) по завершении"
+      - "единый идентификатор: workitem_id общий для плана, WorkItem, ветки ai-ops/<id>, active-work и run-report (движок использует ПЕРЕданный план, а не строит свой -> id не расходятся). Координационные строки active-work идут в stderr (stdout чист для --json)"
+      - "ЧЕСТНО (осталось на будущее): отдельный run_id на КАЖДЫЙ прогон и полноценный resume пока не введены — повторный прогон того же feature перезаписывает WorkItem/ветку (isolation-guard v2.79 не даёт потерять несохранённые коммиты). TaskState orchestrator-формата для pipeline не пишется — у движка свой evidence/commit-record в run-report"
     fixed_v2_93_truth_and_integrity:
       - "worktree-only контейнер (аудит #1): run-sandboxed.sh раньше монтировал ВЕСЬ child как writable /work — shell из allowlist мог писать в основной checkout мимо write_scope. Теперь wrapper делает `git clone --no-hardlinks` и монтирует ТОЛЬКО одноразовый клон; основной репо не смонтирован (модель физически не тронет). Доставка веток ai-ops/* обратно — доверенным host-слоем (git fetch) вне контейнера. validate_container_assets.py стережёт это (запрещённый паттерн: прямой монтаж child)"
       - "целостность коммита 4a (аудит): install/baseline мог создать НОВЫЕ untracked (напр. package-lock.json от npm install), а `git add -A` втягивал их в AI-коммит. Теперь снимаем снимок untracked ДО install и удаляем адресно только НОВЫЕ (untracked пользователя не трогаем; игнорируемые node_modules в porcelain не видны)"
