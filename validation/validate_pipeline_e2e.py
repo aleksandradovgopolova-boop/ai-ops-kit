@@ -86,6 +86,7 @@ def run_e2e():
         ok("e2e: RunHandoff записан + next_action (v2.99)",
            (root / "features" / fid / "run-handoff.yaml").exists()
            and isinstance(rep.get("handoff"), dict) and bool(rep["handoff"].get("next_action")))
+        ok("e2e: WorkPackagePlan записан (v2.100)", (root / "features" / fid / "work-package.yaml").exists())
         ok("e2e: lifecycle-трейс в отчёте", isinstance(rep.get("lifecycle"), dict))
         # active-work закрыта (done)
         awp = root / ".ai" / "runtime" / "active-work.yaml"
