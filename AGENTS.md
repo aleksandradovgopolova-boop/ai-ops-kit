@@ -117,6 +117,7 @@ python3 validation/validate_plan_artifact.py --selftest
 python3 validation/validate_spec_artifact.py --selftest
 python3 validation/validate_container_assets.py --selftest
 python3 validation/validate_container_assets.py
+python3 validation/validate_container_delivery.py
 python3 installer/ai_ops.py --selftest
 ```
 

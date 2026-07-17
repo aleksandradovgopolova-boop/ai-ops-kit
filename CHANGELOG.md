@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.113.0] — 2026-07-17 — Container delivery scope: доставка только ветки текущего прогона
+
+Аудит: контейнерная доставка забирала обратно ВСЕ `ai-ops/*` ветки из одноразового клона — риск
+перезаписать параллельную ветку устаревшей версией из клона.
+
+### Fixed
+- **Scoped-доставка** — `containers/deliver-run-branches.sh`: снимок `ai-ops/*` клона ДО прогона +
+  доставка ТОЛЬКО новых/изменённых веток (диф SHA). Нетронутые прогоном ветки не трогаются →
+  параллельная работа в другой `ai-ops/*` ветке не затирается. `run-sandboxed.sh` вызывает deliverer
+  (снимок снимается сразу после клонирования).
+
+### Added
+- **`validation/validate_container_delivery.py`** — детерминированно (на настоящем git, без docker)
+  проверяет: `ai-ops/new` доставлена, изменённая прогоном `ai-ops/old` доставлена, concurrent-
+  продвинутая `ai-ops/untouched` НЕ затёрта, «нечего доставлять» когда прогон ничего не менял.
+  `validate_container_assets` требует deliverer + scoping-маркеры; шаг добавлен в CI и AGENTS.md.
+
+### Осталось
+Product-qualification с живой моделью (на машине пользователя). См. ROADMAP.
+
 ## [2.112.0] — 2026-07-17 — Real Intent UX: намерения — настоящие действия
 
 Аудит: `onboard/discuss/plan/status/health/new` только показывали execution preview. Закрыто —
