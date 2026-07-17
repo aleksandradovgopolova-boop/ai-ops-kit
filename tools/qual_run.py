@@ -107,7 +107,8 @@ def read_tasks(path):
     return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
 
 
-def default_runner(child_root, provider, model, open_pr, task_type="QUICK", baseline_diff=True):
+def default_runner(child_root, provider, model, open_pr, task_type="QUICK", baseline_diff=True,
+                   require_fix=False):
     """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute).
 
     task_type по умолчанию QUICK — класс, который pipeline РЕАЛЬНО поддерживает сегодня
@@ -123,7 +124,8 @@ def default_runner(child_root, provider, model, open_pr, task_type="QUICK", base
                    "affected_areas": ["core"]}
         return ai_ops_run.run(task, signals, Path(child_root), provider_name=provider,
                               model=model, engine="pipeline", execute=True,
-                              open_pr=open_pr, feature=slugify(task), baseline_diff=baseline_diff)
+                              open_pr=open_pr, feature=slugify(task), baseline_diff=baseline_diff,
+                              require_fix=require_fix)
     return run_one
 
 
@@ -145,8 +147,11 @@ def run_qualification(tasks, out_dir, run_one):
         (out / f"{i:02d}-{slug}.json").write_text(
             json.dumps({"task": task, "verdict": verdict, "report": rep},
                        ensure_ascii=False, indent=2), encoding="utf-8")
+        base = (rep or {}).get("baseline") or {}
         results.append({"index": i, "task": task, "slug": slug,
-                        "ok": verdict["ok"], "reasons": verdict["reasons"]})
+                        "ok": verdict["ok"], "reasons": verdict["reasons"],
+                        "fixed": base.get("fixed"), "regressions": base.get("regressions"),
+                        "applied_writes": ((rep or {}).get("loop") or {}).get("applied_writes")})
     (out / "summary.json").write_text(
         json.dumps({"schema_version": 1, "kind": "qual-summary", "results": results},
                    ensure_ascii=False, indent=2), encoding="utf-8")
@@ -158,6 +163,14 @@ def print_summary(results):
     for r in results:
         mark = "PASS" if r["ok"] else "FAIL"
         line = f"  [{mark}] {r['index']:02d} {r['slug']}"
+        # видно РЕАЛЬНЫЙ эффект правки: что починилось / что сломалось (не только pass/fail)
+        tags = []
+        if r.get("fixed"):
+            tags.append(f"fixed={r['fixed']}")
+        if r.get("regressions"):
+            tags.append(f"regressions={r['regressions']}")
+        if tags:
+            line += " (" + ", ".join(tags) + ")"
         if not r["ok"]:
             line += " — " + "; ".join(r["reasons"])
         print(line)
@@ -266,6 +279,9 @@ def main(argv):
     ap.add_argument("--strict-green", action="store_true",
                     help="требовать ВСЕ проверки зелёными (по умолчанию — baseline-diff: правка "
                          "лишь не должна вносить НОВЫХ провалов; пред-существующие красные репо не блокируют)")
+    ap.add_argument("--require-fix", action="store_true",
+                    help="для fix-задач: PASS только если правка РЕАЛЬНО починила падавшую проверку "
+                         "(fixed непустой), а не просто 'не сломала'")
     a = ap.parse_args(argv)
 
     # окружение: для живого провайдера ключ и base обязаны быть в env (не в аргументах)
@@ -293,7 +309,7 @@ def main(argv):
     print(f"QUAL: {len(tasks)} задач через {a.provider}/{a.model} "
           f"(класс {a.task_type}, критерий {criterion}) на {a.child_root} -> отчёты в {a.out}")
     runner = default_runner(a.child_root, a.provider, a.model, a.open_pr, a.task_type,
-                            baseline_diff=not a.strict_green)
+                            baseline_diff=not a.strict_green, require_fix=a.require_fix)
     results = run_qualification(tasks, a.out, runner)
     overall = print_summary(results)
     return 0 if overall else 1
