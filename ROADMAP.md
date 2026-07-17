@@ -164,6 +164,103 @@
   CI-контракт установленных child и не даёт пользы сверх уже сделанного; оправдан только
   раздельной дистрибуцией пакетов. Тогда же — энтрипойнт-шимы, миграция child-CI, MIGRATION_GUIDE.
 
+## Execution integrity audit (v2.93–2.96) ✅ — доведение исполнения
+
+По внешнему разбору (9 из 9 пунктов подтверждены по коду) закрыт слой корректности исполнения,
+аддитивно к Execution Engine:
+
+- **v2.93 Truth & Integrity** — worktree-only контейнер (одноразовый клон, основной checkout не
+  смонтирован, доставка host-слоем); целостность коммита (снимок untracked до install; факт правок
+  из git-diff, а не по числу write-op); PR delivery без хардкода дефолт-ветки + идемпотентность;
+  синхронизация safety-claim'ов с кодом.
+- **v2.94 One Run Transaction** — pipeline и lifecycle в одной транзакции: единый план, WorkItem,
+  active-work, concurrency-preflight, run-report, закрытие active-work.
+- **v2.95 Security evidence** — детерминированный секрет/dep-скан (`security_scan.py`) закрывает
+  факты `no_secrets`/`deps_approved`; находки блокируют с деталями; injection-surface — судье.
+- **v2.96 Real Qualification** — канонический e2e движка на реальной фикстуре в CI, матрица Python
+  3.9/3.12, живые сценарии S6–S10.
+
+## Следующий горизонт — Context Engineering & Spec-Driven Execution (planned)
+
+Отдельный эпик ПОСЛЕ текущего execution-аудита (не блокер, не меняет уже переданные постановки).
+Продуктовая гипотеза: AI Ops должен управлять не только тем, что модель **делает**, но и тем, что
+она **знает**, что **помнит**, насколько глубоко задача **описана** и когда автономность должна
+**остановиться**. Источники подхода — Spec-First, GSD (борьба с context rot), структурный Security
+Review. Порядок — строго последовательный; каждый блок — свой minor-релиз с валидаторами и
+self-test'ами, аддитивно.
+
+**Этап 1 — Context Compiler.** Перед прогоном собирать минимальный релевантный `ContextBundle` для
+WorkItem (задача, часть Project Context, RepositoryProfile, применимые спеки/решения, нужные файлы
+или summaries, релевантные правила, только нужные skills/роли/reviewers, состояние прошлого прогона,
+открытые допущения). Явно исключать нерелевантное/устаревшее с указанием причины. Новый артефакт
+`kind: ContextBundle` (included/excluded+reason/assumptions/open_questions/estimated_tokens/
+context_budget). Приёмка: у каждого прогона сохранён bundle; видно, почему источник включён; размер
+считается ДО вызова модели; превышение бюджета не обрезает контекст молча; устаревшее не включается
+без предупреждения; тот же WorkItem при тех же входах даёт воспроизводимый пакет.
+
+**Этап 2 — Adaptive Spec-First.** Глубина спецификации = f(масштаб, риск, неопределённость,
+необратимость). Уровни: L0 QUICK (цель/scope/acceptance/ограничения/файлы), L1 ENGINEERING
+(+requirements/scenarios/контракты/зависимости/edge cases/план/write scope/verification), L2 PRODUCT
+(+проблема/пользователи+JTBD/ценность/сценарии/гипотезы/метрики/UX-состояния/аналитика/rollout/риски),
+L3 CRITICAL (+threat model/rollback/migration/failure modes/audit/approvals/compliance/DR).
+Классификатор выбирает уровень (видно почему); уровень повышается при риске, не понижается молча;
+у каждого обязательного раздела статус complete|not_applicable|declined|needs_human|missing
+(`declined` требует объяснения); реализация не стартует без блокирующих разделов. Приёмка: QUICK не
+превращается в бюрократию; ENGINEERING не стартует с однострочника; PRODUCT несёт проблему/пользо­
+вателей/ценность/метрики; CRITICAL всегда требует человека; предположения модели сохраняются.
+
+**Этап 3 — Context Lifecycle и Resume (защита от context rot).** Сущности Feature → WorkItem → Run
+→ Stage → Step → Handoff. После каждого значимого этапа сохранять сделанное/изменённое/решения/
+проверки/остаток/открытые допущения/следующий безопасный шаг/актуальный SHA. Новый артефакт
+`kind: RunHandoff` (completed/decisions/changed_files/verification/open_questions/known_risks/
+next_action/resume_from_revision). Resume: проверить актуальность base branch, worktree/branch,
+перечитать последний Handoff, проверить устаревание решений, пересобрать ContextBundle, продолжить
+с последнего подтверждённого шага; НЕ начинать заново, не повторять подтверждённое без причины, не
+использовать старый контекст после смены main, не удалять предыдущий результат. Приёмка: задача
+продолжается в новой сессии; решения не теряются; смена main вызывает revalidation; точка
+возобновления видна; старый evidence не идёт для нового SHA.
+
+**Этап 4 — Atomic Planning и Context Budget.** Каждый work package оценивается (объём контекста,
+файлы, системные границы, зависимости, ожидаемые model calls, риск, критерий завершения).
+Автодекомпозиция при: слишком многих файлах/подсистемах, превышении контекста, нескольких
+независимых результатах, потребности в >1 логически завершённом коммите, неверифицируемости одним
+набором критериев. Ограничение: декомпозиция не меняет продуктовый смысл; новые бизнес-решения не
+принимаются ради удобства модели. Приёмка: один проверяемый результат на пакет; каждый пакет —
+отдельный коммит; зависимости явные; пакет не стартует без подтверждённой зависимости; превышение
+бюджета блокирует или дробит; причина декомпозиции в отчёте.
+
+**Этап 5 — Security Pack.** Security review из одного вердикта → набор применимых доменов:
+authentication; authorization и IDOR; input validation; secrets; dependencies и supply chain;
+rate limiting; file upload; network и SSRF; logging и monitoring; deployment и configuration;
+AI prompt injection; data isolation и tenant boundaries. На домен: applicability(signals),
+deterministic_checks, reviewer_checklist, required_evidence, severity_policy, blocking_conditions,
+human_approval_conditions, remediation_template. Правило: гейт нельзя закрыть фразой модели «уязви­
+мостей нет» — только scanner/dependency audit/secret scan/test/policy check/diff review/отдельный
+security reviewer/human approval. Приёмка: проверяются только применимые домены; finding несёт
+файл+строку+риск+способ исправления; Critical/High блокируют PR; Medium — по policy; false-positive
+отклоняется только с причиной; evidence привязан к tested revision; reviewer без write-доступа;
+security не закрывает автор кода. (Основа — `security_scan.py` v2.95: детерминированные домены
+secrets/deps уже есть.)
+
+**Этап 6 — Простой внешний UX.** Intent-based команды поверх флагов: `new`, `onboard`, `discuss`,
+`specify`, `plan`, `run`, `resume`, `review`, `status`, `health`. Пользователь не обязан помнить
+`--engine pipeline`/`--author`/`--review`/`--baseline-diff`/`--sandbox` (остаются как низкоуровневый
+интерфейс). Приёмка: для запуска достаточно задачи и проекта; система сама подбирает workflow/стадии;
+перед запуском — execution preview (что понято, что будет сделано, какие данные, какие approvals,
+ожидаемый результат); продвинутые настройки доступны, но не обязательны.
+
+**Этап 7 — Qualification нового слоя.** Обязательные сценарии: Q1 context filtering; Q2 context
+overflow → автодекомпозиция; Q3 resume в новой сессии; Q4 stale context после смены main; Q5 spec
+depth (QUICK короткая, PRODUCT — discovery+метрики); Q6 небезопасное предположение эскалируется, а
+не додумывается; Q7 security applicability (frontend-only не запускает database audit, но проверяет
+XSS/secrets); Q8 prompt injection в README/issue не меняет policy; Q9 решение первой фазы учтено в
+последней; Q10 auth/secret-boundary не становится ready_for_pr без человека.
+
+**Очерёдность:** 1 Context Compiler → 2 Adaptive Spec-First → 3 Context Lifecycle и Resume →
+4 Atomic Planning и Context Budget → 5 Security Pack → 6 Product UX → 7 Qualification. Общий план:
+audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRODUCT → qualification
+движка (всё ✅) → **Context Engineering & Spec-Driven Execution** (этот эпик).
+
 ## Правила движения по roadmap
 
 - Каждая фаза проходит полный набор валидаторов; новые механизмы приносят свои
