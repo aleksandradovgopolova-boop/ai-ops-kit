@@ -66,6 +66,12 @@ def run_checks():
     ok("detect: go-фикстура определена как go", go is not None)
     ok("detect: go test-команда = go test ./...", go and go["commands"].get("test") == "go test ./...")
     ok("detect: go build-команда = go build ./...", go and go["commands"].get("build") == "go build ./...")
+    rs = _stack(FIX / "rust", "rust")
+    ok("detect: rust-фикстура определена как rust", rs is not None)
+    ok("detect: rust test-команда = cargo test", rs and rs["commands"].get("test") == "cargo test")
+    jv = _stack(FIX / "java", "java")
+    ok("detect: java-фикстура определена как java", jv is not None)
+    ok("detect: java test-команда = mvn -q test", jv and jv["commands"].get("test") == "mvn -q test")
 
     # 2. Разбор РЕАЛЬНОГО вывода раннеров (golden) — извлечение id + swap = регрессия
     pytest_out = (GOLDEN / "pytest.txt").read_text(encoding="utf-8")
@@ -86,6 +92,20 @@ def run_checks():
     reg2, _ = ep._diff_checks({"test": _check(go_sub)}, {"test": _check(go_sub)})
     ok("golden go: тот же упавший тест = НЕ регрессия", reg2 == [])
 
+    rs_sub = (GOLDEN / "rust-test-sub.txt").read_text(encoding="utf-8")
+    rs_add = (GOLDEN / "rust-test-add.txt").read_text(encoding="utf-8")
+    ok("golden rust: извлечено имя упавшего теста tests::test_sub",
+       any("tests::test_sub" in i for i in ep._failure_ids(_check(rs_sub))))
+    rreg, _ = ep._diff_checks({"test": _check(rs_sub)}, {"test": _check(rs_add)})
+    ok("golden rust: swap (починил test_sub, сломал test_add) = регрессия", rreg == ["test"])
+
+    jv_sub = (GOLDEN / "java-test-sub.txt").read_text(encoding="utf-8")
+    jv_add = (GOLDEN / "java-test-add.txt").read_text(encoding="utf-8")
+    ok("golden java: извлечён Class.method упавшего теста CalcTest.testSub",
+       any("CalcTest.testSub" in i for i in ep._failure_ids(_check(jv_sub))))
+    jreg, _ = ep._diff_checks({"test": _check(jv_sub)}, {"test": _check(jv_add)})
+    ok("golden java: swap (починил testSub, сломал testAdd) = регрессия", jreg == ["test"])
+
     # 3. Живой прогон фикстур (если тулчейн доступен) — страховка от дрейфа формата раннера
     if shutil.which("pytest"):
         out = subprocess.run(["pytest", "-q"], cwd=FIX / "python",
@@ -105,6 +125,20 @@ def run_checks():
            "TestSub" in ep._failure_ids(_check(out)))
     else:
         skips.append("live go: тулчейн go недоступен -> только golden")
+
+    if shutil.which("cargo"):
+        with tempfile.TemporaryDirectory() as td:
+            dst = Path(td) / "rs"
+            shutil.copytree(FIX / "rust", dst)
+            res = subprocess.run(["cargo", "test"], cwd=dst, capture_output=True, text=True)
+            out = res.stdout + res.stderr  # cargo пишет падения в stderr
+        ok("live rust: реальный вывод cargo test -> имя теста tests::test_sub извлечено",
+           any("tests::test_sub" in i for i in ep._failure_ids(_check(out))))
+    else:
+        skips.append("live rust: тулчейн cargo недоступен -> только golden")
+
+    # java: живой прогон требует Maven Central (junit5) -> в CI кита не гоняем; golden снят живьём.
+    skips.append("live java: прогон требует сети к Maven Central -> проверка по golden (снят живьём)")
 
     return r, skips
 

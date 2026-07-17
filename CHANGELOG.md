@@ -2,6 +2,33 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.92.0] — 2026-07-17 — Стек-квалификация rust+java: найден и закрыт ложный green ещё для двух стеков
+
+Продолжили начатое в v2.91: прогнали настоящие фикстуры по **всем** стекам, которые детектор
+объявляет поддерживаемыми. Rust и Java прятали ложный green того же класса, что go — парсер падений
+писался node-first и на других раннерах извлекал бесполезный id.
+
+### Fixed
+- **`tools/execution_pipeline.py` (`_failure_ids`)** — **rust**: `cargo test` не парсился, id
+  схлопывался в константу из строки `error: test failed, to rerun pass \`--lib\`` (одинакова для
+  любого падения) → swap `test_sub`↔`test_add` не ловился. Добавлен паттерн
+  `thread '<test>' panicked at <file>.rs:<line>` (pid в скобках отбрасывается).
+- **`tools/execution_pipeline.py` (`_failure_ids`)** — **java**: падение JUnit не ловилось вообще
+  (id пустой), а maven печатает `Failures: 1` (слово перед числом) → счётчик тоже 0 → swap не
+  ловился. Добавлены паттерны maven-surefire (`Class.method -- … <<< FAILURE`,
+  `[ERROR] Class.method:line`) и gradle (`Class > method() FAILED`). Проверено на **реальном**
+  выводе maven + junit5.
+
+### Added
+- **`qualification/fixtures/{rust,java}/`** — настоящие мини-репозитории (`cargo test` / `mvn test`);
+  **`golden/{rust,java}-test-*.txt`** — снятый живьём вывод раннеров.
+- **`validation/validate_stack_qualification.py`** — расширен на rust и java; теперь покрывает все
+  **5** декларированных детектором стеков (node/python/go/rust/java). Rust гоняется вживую при
+  наличии `cargo`; java — по golden (junit тянется из Maven Central, в CI кита не гоняем).
+
+Итог: go, rust и java прятали ложный green одного класса — все найдены на реальном выводе раннеров и
+закрыты регрессиями.
+
 ## [2.91.0] — 2026-07-17 — Стек-квалификация python/go: найден и закрыт ложный green для go
 
 Идея пользователя — «сделать репо с go и python для квалификации» — сразу дала результат: на

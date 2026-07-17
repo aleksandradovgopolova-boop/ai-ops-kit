@@ -401,7 +401,20 @@ _FAILURE_ID_PATTERNS = [
     # vite/rollup/esbuild: "src/a.tsx (19:9): "X" is not exported by ..." — РЕАЛЬНАЯ строка ошибки
     # сборки (файл + позиция + сообщение). Даёт СТАБИЛЬНЫЙ id: новая поломка -> другой файл/позиция.
     r"([\w./\-]+\.\w+)\s*\((\d+)[,:](\d+)\):\s*(.+)",
-    r"error\[(E\d+)\]",                               # rust: error[E0308]
+    r"error\[(E\d+)\]",                               # rust: error[E0308] (компиляция)
+    # rust `cargo test`: "thread 'tests::test_sub' (13663) panicked at src/lib.rs:10:21". Раньше
+    # НИ один паттерн не ловил имя упавшего теста -> id схлопывался в константу из строки
+    # "error: test failed, to rerun pass `--lib`" (одинакова для ЛЮБОГО падения) -> "починил один
+    # тест, сломал другой" (rust печатает 'N failed', но счётчик 1->1 не растёт) не различалось =
+    # ложный green (finding стек-квалификации rust). Берём имя теста + файл; pid в (...) отбрасываем.
+    r"thread '([^']+)' .*?panicked at ([\w./\-]+\.rs):(\d+)",
+    # java (maven-surefire / gradle + JUnit). Раньше НИ один паттерн не ловил падение java: id
+    # оставался пустым, а maven печатает "Failures: 1" (слово ПЕРЕД числом) -> _failure_signal тоже
+    # 0 -> swap (починил testSub, сломал testAdd) не ловился = ложный green для java-репо. Берём
+    # Class.method упавшего теста. Проверено на РЕАЛЬНОМ surefire-выводе junit5 (v2.92).
+    r"([\w.$]+\.[\w$]+)\s+--\s+Time elapsed[^\n]*<<<\s+(?:FAILURE|ERROR)",   # surefire header
+    r"\[ERROR\]\s+([\w.$]+\.[\w$]+):(\d+)\b",                                # surefire summary: Class.method:line
+    r"([\w.$]+)\s+>\s+([\w$]+)\(\)\s+FAILED",                                # gradle: Class > method() FAILED
     r"(?:✕|×|✗)\s+(.+?)(?:\s+\(\d+\s*ms\))?\s*$",     # jest/vitest: ✕ suite > test name
     r"(?:^|\n)\s*FAIL\s+(\S+)",                       # jest/vitest файловый: FAIL src/a.test.ts
     r"(?:^|\n)\s*(?:AssertionError|Error):\s*(.+)$",  # generic ассерт/ошибка
@@ -972,6 +985,42 @@ def selftest():
         expect("go: тот же упавший тест, другое ВРЕМЯ прогона = НЕ регрессия",
                _diff_checks(go_sub, {"test": {"status": "fail", "runs": [{"output_tail":
                    "--- FAIL: TestSub (0.01s)\n    calc_test.go:13: Sub(5,2) = 3; want 999\nFAIL\nFAIL\tcalc\t0.009s\nFAIL"}]}}) == ([], []))
+        # стек-квалификация rust: РЕАЛЬНЫЙ вывод `cargo test`. Раньше id был константой из строки
+        # "error: test failed" -> swap (починил test_sub, сломал test_add) не ловился -> ложный green.
+        rs_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "thread 'tests::test_sub' (13663) panicked at src/lib.rs:10:21:\nassertion `left == right` failed\n"
+                  "failures:\n    tests::test_sub\ntest result: FAILED. 1 passed; 1 failed; finished in 0.28s\n"
+                  "error: test failed, to rerun pass `--lib`"}]}}
+        rs_add = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "thread 'tests::test_add' (13999) panicked at src/lib.rs:8:21:\nassertion `left == right` failed\n"
+                  "failures:\n    tests::test_add\ntest result: FAILED. 1 passed; 1 failed; finished in 0.19s\n"
+                  "error: test failed, to rerun pass `--lib`"}]}}
+        expect("rust: извлекает имя упавшего теста (thread 'tests::test_sub' panicked)",
+               any("tests::test_sub" in i for i in _failure_ids(rs_sub["test"])))
+        expect("rust structured-id: починил test_sub, сломал test_add = регрессия",
+               _diff_checks(rs_sub, rs_add) == (["test"], []))
+        expect("rust: тот же упавший тест (другой pid) = НЕ регрессия",
+               _diff_checks(rs_sub, {"test": {"status": "fail", "runs": [{"output_tail":
+                   "thread 'tests::test_sub' (55555) panicked at src/lib.rs:10:21:\nassertion `left == right` failed\n"
+                   "failures:\n    tests::test_sub\ntest result: FAILED. 1 passed; 1 failed; finished in 0.30s\n"
+                   "error: test failed, to rerun pass `--lib`"}]}}) == ([], []))
+        # стек-квалификация java: РЕАЛЬНЫЙ вывод maven-surefire. Раньше НИ один паттерн не ловил
+        # java-падение (id пустой), maven печатает "Failures: 1" (слово перед числом -> счётчик 0)
+        # -> swap не ловился = ложный green. Теперь берём Class.method упавшего теста.
+        jv_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "[ERROR] CalcTest.testSub -- Time elapsed: 0.007 s <<< FAILURE!\n"
+                  "org.opentest4j.AssertionFailedError: expected: <999> but was: <3>\n"
+                  "[ERROR]   CalcTest.testSub:5 expected: <999> but was: <3>\n"
+                  "[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0"}]}}
+        jv_add = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "[ERROR] CalcTest.testAdd -- Time elapsed: 0.008 s <<< FAILURE!\n"
+                  "org.opentest4j.AssertionFailedError: expected: <999> but was: <5>\n"
+                  "[ERROR]   CalcTest.testAdd:4 expected: <999> but was: <5>\n"
+                  "[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0"}]}}
+        expect("java: извлекает Class.method упавшего теста (CalcTest.testSub)",
+               any("CalcTest.testSub" in i for i in _failure_ids(jv_sub["test"])))
+        expect("java structured-id: починил testSub, сломал testAdd = регрессия",
+               _diff_checks(jv_sub, jv_add) == (["test"], []))
         # tsc: новый код ошибки в новом месте = регрессия
         base_ts = {"typecheck": {"status": "fail", "runs": [{"output_tail":
                    "src/a.ts(3,5): error TS2322: Type error"}]}}

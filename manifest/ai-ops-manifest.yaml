@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.91.0
+  package_version: 2.92.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -343,6 +343,11 @@ execution_engine:
       - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
+    fixed_v2_92_stack_qualification_rust_java:
+      - "БАГ rust (найден стек-квалификацией, тот же класс, что go v2.91): _failure_ids не извлекал имя упавшего теста из `cargo test` -> id схлопывался в КОНСТАНТУ из строки 'error: test failed, to rerun pass --lib' (одинакова для ЛЮБОГО падения). rust печатает 'N failed', но при swap счётчик 1->1 не растёт -> 'починил test_sub, сломал test_add' не детектилось = ложный green для rust-репо. Фикс: паттерн \"thread '<test>' panicked at <file>.rs:<line>\" (pid в скобках отбрасывается)"
+      - "БАГ java (найден стек-квалификацией): _failure_ids не ловил java-падение ВООБЩЕ (id пустой), а maven-surefire печатает 'Failures: 1' (слово ПЕРЕД числом) -> _failure_signal тоже 0 -> swap не ловился = ложный green для java-репо. Фикс: паттерны surefire (Class.method -- ... <<< FAILURE / [ERROR] Class.method:line) + gradle (Class > method() FAILED). Проверено на РЕАЛЬНОМ выводе maven+junit5 (online)"
+      - "фикстуры расширены: qualification/fixtures/{rust,java} — настоящие мини-репо (cargo test / mvn test); golden/{rust,java}-test-*.txt — снятый живьём вывод раннеров. validate_stack_qualification.py покрывает все 5 декларированных детектором стеков (node уже был; python/go — v2.91; rust/java — v2.92). rust гоняется вживую при наличии cargo; java — golden-only (junit тянется из Maven Central, в CI кита не гоняем)"
+      - "ИТОГ: все НЕ-node стеки, которые детектор объявляет поддерживаемыми (python/go/rust/java), проверены на РЕАЛЬНОМ выводе раннеров; go/rust/java прятали ложный green одного класса (парсер писался node-first) — найдены и закрыты. Осталось живьём-с-моделью: полные сценарии на этих стеках"
     fixed_v2_91_stack_qualification:
       - "БАГ go (найден стек-квалификацией): _failure_ids не извлекал имя упавшего теста из вывода `go test` (--- FAIL: TestName) -> id падения схлопывался в мусорный {'FAIL'} из summary. Так как go не печатает 'N failed', счётчик тоже молчал -> 'починил TestSub, сломал TestAdd в ОДНОМ пакете' не детектилось = ЛОЖНЫЙ GREEN для go-репо. Тот же класс, что баг vite v2.88, но для другого раннера"
       - "фикс: паттерны go в _failure_ids — '--- FAIL: <Test>' (обрывает волатильное '(0.00s)') и go build/vet 'file.go:line[:col]: msg'. Регрессия в execution_pipeline selftest на РЕАЛЬНОМ выводе go: swap TestSub<->TestAdd = регрессия; то же имя+другое время = не регрессия"
@@ -361,7 +366,7 @@ execution_engine:
     remaining_backlog:
       - "P0.2 контейнерный jail: ЗАКРЫТО эталоном (v2.90) — containers/Dockerfile + run-sandboxed.sh (read-only root, worktree-only write, лимиты ресурсов, cap-drop, non-root). ОСТАЛОСЬ у пользователя: собрать образ на своём Docker-хосте и, при желании, egress-allowlist прокси перед контейнером"
       - "живой ENGINEERING end-to-end: прогнать полный ENGINEERING-класс с --author --review и установленным openspec на машине пользователя (механика requirements/plan/specification/code_review закрыта в v2.83/2.86/2.89, но целиком вживую не прогонялась)"
-      - "живая квалификация: продолжить матрицу ОС/стеков (первый node/vite-прогон дал фикс v2.88); baseline-diff по structured error-ids крепче, но на не-тестовом шумном выводе — best-effort. v2.91: разбор падений python(pytest)/go(go test) теперь покрыт ДЕТЕРМИНИРОВАННО (фикстуры + golden в validate_stack_qualification.py, без модели) — нашёл и закрыл ложный green для go; осталось живьём-с-моделью прогнать полные сценарии на этих стеках"
+      - "живая квалификация: продолжить матрицу ОС/стеков (первый node/vite-прогон дал фикс v2.88); baseline-diff по structured error-ids крепче, но на не-тестовом шумном выводе — best-effort. v2.91-92: разбор падений ВСЕХ декларированных детектором стеков (python/go/rust/java) покрыт ДЕТЕРМИНИРОВАННО (фикстуры + golden в validate_stack_qualification.py, без модели) — нашёл и закрыл ложный green одного класса для go, rust и java; осталось живьём-с-моделью прогнать полные сценарии на этих стеках"
       - "живая квалификация: прогнать 5 сценариев × матрица ОС/стеков на машине с моделью и приложить отчёты (харнесс+сценарии+runbook готовы, v2.84) — требует Mac/Linux пользователя"
 
 effect_metrics:
