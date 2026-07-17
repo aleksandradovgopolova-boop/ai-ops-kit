@@ -121,13 +121,21 @@ def resume_preflight(child_root, wid, base="main"):
     if not wt.is_dir():
         reasons.append(f"worktree {wt.relative_to(child_root)} отсутствует — будет пересоздан")
 
+    # base-ветку вообще можно разрешить? Иначе устаревание НЕ проверить — честно отметим (не молчим).
+    rc_base, _, _ = _git(child_root, "rev-parse", "--verify", base)
+    base_resolvable = rc_base == 0
+    if not base_resolvable:
+        reasons.append(f"base-ветку '{base}' не удалось разрешить — устаревание относительно базы НЕ "
+                       f"проверено; укажи --base явно. Требуется ревалидация из осторожности")
+        revalidation = True
+
     # изменился ли base с момента handoff? (main ушёл вперёд относительно ревизии прогона)
     if sha:
         rc_h, _, _ = _git(child_root, "rev-parse", "--verify", sha)
         if rc_h != 0:
             reasons.append(f"ревизия прогона {sha[:12]} не найдена в репозитории — evidence устарел")
             revalidation = True
-        else:
+        elif base_resolvable:
             rc_a, ahead, _ = _git(child_root, "rev-list", "--count", f"{sha}..{base}")
             if rc_a == 0 and ahead.isdigit() and int(ahead) > 0:
                 reasons.append(f"{base} ушёл вперёд на {ahead} коммит(ов) с момента прогона — "
@@ -214,6 +222,10 @@ def selftest():
         pf2 = resume_preflight(root, "feat-z", base=cur)
         expect("resume: base ушёл вперёд -> revalidation + причина",
                pf2["revalidation_needed"] is True and any("вперёд" in r for r in pf2["reasons"]))
+        # v2.105 (самоаудит): неразрешимая base-ветка -> НЕ молчим, требуем ревалидацию из осторожности
+        pf3 = resume_preflight(root, "feat-z", base="no-such-branch-xyz")
+        expect("resume: неразрешимая base -> revalidation + честная причина (не молча 'актуально')",
+               pf3["revalidation_needed"] is True and any("не удалось разрешить" in r for r in pf3["reasons"]))
 
     print("run_handoff selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
