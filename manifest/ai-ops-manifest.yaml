@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.89.0
+  package_version: 2.90.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -343,6 +343,10 @@ execution_engine:
       - "движок ПРОИЗВОДИТ артефакты requirements и plan (author-модель даёт содержимое, движок пишет в .ai/runplan/<wid>/ ДО коммита) и подтверждает их ФОРМУ детерминированными валидаторами (validate_requirements_artifact / validate_plan_artifact) -> legitimate evidence, закрывающее гейты requirements и plan_readiness. Флаг --author в ai-ops run и qual_run; трейс в report.authored"
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
+    fixed_v2_90_container_isolation:
+      - "P0.2 полный jail: эталонный контейнер (containers/Dockerfile + run-sandboxed.sh) даёт изоляцию рантайма, которую брокер в процессе не может — read-only root, writable только смонтированный worktree, лимиты CPU/RAM/pids, cap-drop ALL, no-new-privileges, non-root (uid 10001). Два слоя честно разделены: брокер (in-process, best-effort) + контейнер (реальный jail ФС/ресурсов/привилегий)"
+      - "validate_container_assets.py стережёт присутствие jail-флагов (регресс любого -> ошибка CI). Docker принял все флаги (flag-parse проверен). ЧЕСТНО: сборка образа (pull базового) в CI-песочнице кита закрыта egress-прокси -> выполняется на Docker-хосте пользователя; команда движка, которую оборачивает wrapper, подтверждена живыми прогонами"
+      - "ЧЕСТНАЯ ГРАНИЦА: контейнер НЕ air-gap — движку нужен egress к API модели и реестрам (npm/pip). Жёсткий контроль egress — allowlist-прокси на уровне хоста (вне флагов docker), см. docs/container-isolation.md"
     fixed_v2_89_specification_authoring:
       - "гейт specification ЗАКРЫТ: author-модель даёт СТРУКТУРНЫЙ spec-change (capability + требования + сценарии), движок рендерит точный OpenSpec-markdown (proposal/tasks/specs) и валидирует РЕАЛЬНЫМ openspec CLI (validate --strict). Пройдено -> evidence openspec_valid + requirements_covered. validate_spec_artifact.py (check+render) проверен реальным CLI 1.6.0 (rc=0)"
       - "ЧЕСТНО: openspec CLI отсутствует в child -> гейт остаётся блокирующим (не фабрикуем); битый spec от автора -> тоже блок. Формат markdown контролирует движок (не модель) -> валидная структура надёжно проходит strict. Качество требований — человек. Механика тестируется offline (стаб openspec_validate), реальный CLI-путь подтверждён вживую"
@@ -351,7 +355,7 @@ execution_engine:
       - "ЛОЖНАЯ РЕГРЕССИЯ (первый живой прогон на ii-sreda, node/vite): _failure_ids включал в id падения ВОЛАТИЛЬНОЕ время из строки vite '✗ Build failed in 1.41s' -> id менялся каждый прогон -> на неизменной красной сборке build ложно помечался регрессией. Фикс: нормализация id (выкидываем длительности N.NNs / N ms / hex-адреса) + паттерн реальной строки ошибки сборки (файл (строка:кол): сообщение), чтобы РЕАЛЬНУЮ новую поломку всё же различать. Селфтест воспроизводит кейс ii-sreda"
       - "подтверждено живьём: test-регрессия РЕАЛЬНА и поймана корректно (DeepSeek написала formatPrice без конвертации десятичного разделителя -> её же тест 1234.56 -> '1 234,56' падает); движок честно отказал в ready. База ii-sreda сама красная (предсуществующий build-break Markdown-экспорта + баг даты recentTimeGroup) — движок это уважает через baseline-diff"
     remaining_backlog:
-      - "P0.2 полный контейнерный jail: лимиты ресурсов и изоляция файловой системы и сети на уровне runtime (namespaces, read-only mounts) — вне брокера; brokered-подмножество закрыто в v2.81 (--sandbox, block_push). Пока: недоверенной модели без надзора не давать ценный приватный репо"
+      - "P0.2 контейнерный jail: ЗАКРЫТО эталоном (v2.90) — containers/Dockerfile + run-sandboxed.sh (read-only root, worktree-only write, лимиты ресурсов, cap-drop, non-root). ОСТАЛОСЬ у пользователя: собрать образ на своём Docker-хосте и, при желании, egress-allowlist прокси перед контейнером"
       - "живой ENGINEERING end-to-end: прогнать полный ENGINEERING-класс с --author --review и установленным openspec на машине пользователя (механика requirements/plan/specification/code_review закрыта в v2.83/2.86/2.89, но целиком вживую не прогонялась)"
       - "живая квалификация: продолжить матрицу ОС/стеков (первый node/vite-прогон дал фикс v2.88); baseline-diff по structured error-ids крепче, но на не-тестовом шумном выводе — best-effort"
       - "живая квалификация: прогнать 5 сценариев × матрица ОС/стеков на машине с моделью и приложить отчёты (харнесс+сценарии+runbook готовы, v2.84) — требует Mac/Linux пользователя"
@@ -529,6 +533,7 @@ update_policy:
     - "validation/**/*.py"
     - "config/**/*"
     - "qualification/**/*"
+    - "containers/*"
     - "VERSION"
   managed_paths: [".ai/managed/**"]
   protected_paths: [".ai/project/**", ".ai/custom/**"]

@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.90.0] — 2026-07-17 — Container isolation: полный jail рантайма (аудит P0.2)
+
+Последний пункт аудита без кода — контейнерная изоляция — закрыт **эталонным контейнером**. Брокер
+даёт enforceable-подмножество в процессе; настоящую изоляцию ФС/ресурсов/привилегий даёт контейнер.
+Два слоя честно разделены.
+
+### Added
+- **`containers/Dockerfile`** — образ изолированного рантайма движка: non-root (uid 10001),
+  python + node + `openspec`, кит внутри, child монтируется в `/work`.
+- **`containers/run-sandboxed.sh`** — запуск в jail'е: `--read-only` root, bind только worktree,
+  `--tmpfs`, `--memory/--cpus/--pids-limit`, `--cap-drop ALL`, `--security-opt no-new-privileges`,
+  non-root. Секреты — только по именам env (не в образ). Docker принял все флаги (flag-parse проверен).
+- **`validation/validate_container_assets.py`** — стережёт присутствие jail-флагов (регресс любого →
+  ошибка CI). В checklist и `package-quality.yml`.
+- **`docs/container-isolation.md`** — два слоя изоляции, что enforce'ит jail, как собрать/запустить,
+  честная граница по сети.
+- **`managed_set`** += `containers/*` — ассеты едут в child.
+
+### Boundary (честно)
+- Контейнер **не air-gap**: движку нужен egress к API модели и реестрам (npm/pip). Жёсткий контроль
+  egress — allowlist-прокси на уровне хоста (вне флагов docker).
+- **Сборка образа** (pull базового) в CI-песочнице кита закрыта egress-прокси — выполняется на
+  Docker-хосте пользователя. Флаги стандартные; команда движка в wrapper подтверждена живыми прогонами.
+
 ## [2.89.0] — 2026-07-17 — Specification authoring (OpenSpec): закрыт последний артефакт-гейт
 
 Гейт `specification` больше не блокирует ENGINEERING/PRODUCT безусловно — движок **производит

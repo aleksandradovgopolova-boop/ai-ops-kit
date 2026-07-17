@@ -154,5 +154,9 @@ jobs:
           python3 validation/validate_requirements_artifact.py --selftest
           python3 validation/validate_plan_artifact.py --selftest
           python3 validation/validate_spec_artifact.py --selftest
+      - name: "Container isolation: ассеты jail'а декларируют изоляцию (selftest + проверка)"
+        run: |
+          python3 validation/validate_container_assets.py --selftest
+          python3 validation/validate_container_assets.py
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"
         run: python3 installer/ai_ops.py --selftest
