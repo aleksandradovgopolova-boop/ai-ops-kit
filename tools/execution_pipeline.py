@@ -173,7 +173,7 @@ def _diff_checks(baseline, after):
 
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
-                 max_steps=20, feature=None, commit=False, allow_missing_tests=True,
+                 max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
                  require_fix=False):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
