@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.75.0
+  package_version: 2.76.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -302,6 +302,7 @@ execution_engine:
     result: "README-задача на ii-sreda (DeepSeek, класс QUICK, baseline-diff): [PASS] 1/1, ready_for_pr=True, no_regressions=True. Полный путь detect->tool-loop(живая модель)->npm ci->commit в worktree->evidence на точном SHA->baseline-diff подтверждён ЖИВЬЁМ на реальном репозитории"
     fix_tasks_findings: "2 задачи-починки вскрыли ещё два: (1) на реальной починке модель крутилась до max_steps с 0 правок — не знала ЧТО чинить -> v2.74 подаёт в контекст ФАКТИЧЕСКИЙ вывод падающих проверок базы (_baseline_failure_summary); (2) SSL-handshake timeout оборвал задачу -> v2.74 _http_post_json ретраит транзиентные сетевые сбои и 5xx/429 (не 4xx) с бэкоффом"
     remaining: "модель (DeepSeek) на сложных fix-задачах может не сходиться даже с выводом ошибок — это предел модели/подсказки, не крэш движка; квалификация зелёного вердикта на задачах-починках — эмпирика, требует ещё прогонов (возможно с более сильной моделью)"
+    fix_task_flail_v2_76: "трейс (v2.75) показал корень: DeepSeek делал 20 read подряд, 0 записей (читал по кругу, не решался писать). Не предел 'понять код', а зацикливание. Фикс: (1) tool_loop read-cap — после max_consecutive_reads=5 чтений подряд без записи следующее read ОТКЛОНЯЕТСЯ с требованием вернуть write/done; (2) усилен промпт make_model_proposer ('читай 1-2 файла, не читай уже прочитанное, сразу пиши фикс'). Нормальный поток (read->write->done) не задет"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
