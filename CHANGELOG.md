@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.110.0] — 2026-07-17 — Real Spec-First: SpecCoverage из реальных артефактов, `specify` создаёт спеку
+
+Аудит держал P0: SpecCoverage «заполняется из сигналов с пустым provided» — оценка не отражала
+реальность (все разделы всегда `missing`), а `specify` только показывал превью. Закрыто: спека —
+реальный артефакт, а покрытие считается из него.
+
+### Added
+- **`spec_levels.assess_from_artifacts(signals, child_root, wid)`** — `provided` берётся из РЕАЛЬНЫХ
+  артефактов: `features/<wid>/spec.yaml` (описанные разделы) + засчёт разделов по артефактам прогона
+  (`requirements.yaml`→requirements, `plan.yaml`→implementation_plan/verification_strategy,
+  `openspec/changes/<wid>`→contracts/acceptance_scenarios). В отчёте — `covered_sections`,
+  `provided_sources`, `spec_artifact`.
+- **`specify` реально создаёт/валидирует** — `create_spec` пишет `features/<wid>/spec.yaml` нужной
+  глубины (все обязательные разделы уровня, заготовки `missing`), не перезаписывает без `--overwrite`;
+  `validate_spec` валидирует реальный артефакт против уровня. CLI: `ai-ops specify`,
+  `spec_levels create|validate`.
+
+### Enforcement (fail-closed)
+- Существующий, но **неполный** `spec.yaml` → `ready_for_pr=False` + `report['spec_first']`
+  (аудит: «неполная спека не пускает в implementation»). Спеки нет → поведение прежнее (spec-first
+  опционален для мелких задач; spec-depth через гейты) — зелёные QUICK-потоки не сломаны.
+
+Q5b (qualification) + spec-first сценарии в `execution_pipeline` selftest (неполный блокирует, полный
+из реального файла — нет). e2e без spec.yaml проходит.
+
+### Осталось (крупные, отдельными релизами)
+Atomic Planner создаёт конкретные WorkPackages, Intent UX (настоящие действия), container delivery
+только текущей ветки, product-qualification с живой моделью. См. ROADMAP.
+
 ## [2.109.0] — 2026-07-17 — Real Resume: продолжение работы, а не рестарт
 
 Аудит держал P0: resume «не продолжает». `ai-ops resume` делал только preflight и печатал подсказку,

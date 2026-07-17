@@ -135,6 +135,24 @@ def run_scenarios():
        and any(s["id"] == "success_metrics" for s in p["sections"])
        and len(q["sections"]) < len(p["sections"]))
 
+    # Q5b (v2.110 Real Spec-First): specify реально создаёт артефакт; неполная спека -> не готова;
+    # заполнение из РЕАЛЬНОГО файла -> готова (не из сигналов).
+    with tempfile.TemporaryDirectory() as td:
+        root = _repo(td, {"f": "x"})
+        import yaml
+        sig_pr = {"task_type": "PRODUCT", "affected_areas": ["core"]}
+        sp, created = spec_levels.create_spec(root, "sp1", sig_pr)
+        cov_empty = spec_levels.assess_from_artifacts(sig_pr, root, "sp1")
+        # заполняем реальный файл
+        doc = yaml.safe_load(sp.read_text(encoding="utf-8"))
+        for s in doc["sections"]:
+            doc["sections"][s] = {"status": "complete", "content": "x"}
+        sp.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        cov_full = spec_levels.assess_from_artifacts(sig_pr, root, "sp1")
+        ok("Q5b real spec-first: specify создаёт артефакт; неполный -> не готов, заполненный из файла -> готов",
+           created and cov_empty["ready_to_implement"] is False and cov_empty["spec_artifact"] is True
+           and cov_full["ready_to_implement"] is True and not cov_full["blocking_missing"])
+
     # Q6 unsafe assumption -> эскалация (не додумывается)
     esc = spec_levels.classify({"task_type": "QUICK", "secret_boundary": True})
     ok("Q6 unsafe assumption: неизвестное решение о доступах -> эскалация до CRITICAL",

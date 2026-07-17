@@ -274,8 +274,12 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   (compiled payload: содержимое правил/решений/спек/skills/project+repo context с hash+revision+
   причиной), бюджет с учётом модели/output-reserve/tool-loop. Сейчас bundle — аналитический артефакт,
   а tool loop получает task+стек+baseline. Это ключевой разрыв «описывает, но не управляет».
-- **Real Spec-First & Planning (planned)** — `specify` реально создаёт/валидирует спеку; SpecCoverage
-  заполняется из артефактов; Atomic Planner создаёт конкретные WorkPackages.
+- **Real Spec-First (v2.110) ✅** — `specify` реально создаёт (`features/<wid>/spec.yaml` нужной
+  глубины) и валидирует спеку; SpecCoverage заполняется из РЕАЛЬНЫХ артефактов (spec.yaml + засчёт
+  requirements/plan/openspec), а не из сигналов с пустым provided. Enforcement: существующий, но
+  неполный spec.yaml не пускает в implementation (`ready_for_pr=False`), спеки нет → поведение
+  прежнее (spec-first опционален для мелких задач). Осталось: Atomic Planner создаёт конкретные
+  WorkPackages (v2.111).
 - **Real Resume (v2.109) ✅** — resume-mode ПРОДОЛЖАЕТ поверх подтверждённой работы: переиспользует
   ветку/worktree прошлого прогона (коммиты НЕ удаляются), подаёт модели состояние из RunHandoff
   (что сделано/решения/next_action), tool loop продолжает, а не начинает заново. Честность: нечего
