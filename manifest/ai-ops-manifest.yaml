@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.105.0
+  package_version: 2.106.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,11 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_106_enforcement_wiring:
+      - "#1 security-reviewer закрывает no_injection_surface: при --review независимый security-reviewer (writer≠judge, read-only, отдельный провайдер) выносит вердикт по needs_review доменам Security Pack. pass + чистые детерминированные домены -> security ЗАКРЫТ (разблокирует честный зелёный ENGINEERING). Блокирующие детерминированные находки (секреты) reviewer НЕ переопределяет. secret_boundary/destructive требуют signals.human_approved ВСЕГДА (даже при чистом scan/pass ревьюера) — самоаудит нашёл gap: невинный дифф с secret_boundary обходил человеко-контроль -> закрыто"
+      - "#2 spec-depth enforcement: разделы спецификации уровня задачи, мапящиеся на evidence-гейты (goal/scope/acceptance->intake; requirements->requirements; plan->plan_readiness; verification->implementation_verification; problem/users/value->discovery; metrics->analytics), но незакрытые -> блокируют ready. report['spec_depth']. Мапятся только доказуемые разделы (недоказуемые не над-блокируют)"
+      - "#3 context-budget enforcement: ContextBundle overflow (контекст задачи > бюджета) -> ready_for_pr=False + причина декомпозиции в not_yet (аудит: 'при превышении context budget выполнение блокируется или дробится'). Мягкие оси (подсистемы/размер) остаются advisory. report['context_overflow']"
+      - "все три с регрессиями в execution_pipeline selftest; enforcement — надмножество гейтов (не ломает существующие зелёные потоки: QUICK L0 -> intake закрывает spec-depth, дефолтный бюджет 120k не переполняется)"
     fixed_v2_105_resume_selfaudit:
       - "САМОАУДИТ (2-я находка): run_handoff.resume_preflight при неразрешимой base-ветке (репо на master, а дефолт --base=main) МОЛЧА пропускал проверку устаревания и мог сказать «состояние актуально», не проверив базу (честностная дыра — claim без верификации). Фикс: если base-ref не разрешается -> явная причина + revalidation_needed=True из осторожности (не молчим). Регрессия в selftest"
     fixed_v2_104_security_pack_selfaudit:

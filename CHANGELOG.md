@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.106.0] — 2026-07-17 — Enforcement-виринг: security-reviewer, spec-depth, context-budget
+
+Задокументированные остатки эпика доведены до реального enforcement (безопасно, каждый — надмножество
+существующих гейтов, без ложных green).
+
+### Added / Changed
+- **#1 security-reviewer закрывает `no_injection_surface`** (`execution_pipeline.py`) — при `--review`
+  независимый security-reviewer (writer≠judge, read-only, отдельный провайдер) выносит вердикт по
+  `needs_review` доменам Security Pack. `pass` + чистые детерминированные домены → `security` закрыт
+  → **разблокирован честный зелёный ENGINEERING**. Блокирующие детерминированные находки (секреты)
+  reviewer не переопределяет. `secret_boundary`/`destructive` требуют `signals.human_approved`
+  **всегда** (самоаудит нашёл gap: невинный дифф с secret_boundary обходил человеко-контроль → закрыт).
+- **#2 spec-depth enforcement** — разделы уровня спецификации, мапящиеся на evidence-гейты, но
+  незакрытые → блокируют `ready`. `report['spec_depth']`. Мапятся только доказуемые разделы.
+- **#3 context-budget enforcement** — `ContextBundle` overflow → `ready_for_pr=False` + причина
+  декомпозиции. `report['context_overflow']`. Мягкие оси остаются advisory.
+
+Все три с регрессиями в selftest; enforcement — надмножество гейтов (существующие зелёные потоки не
+сломаны). Самоаудит по ходу закрыл ещё один обход человеко-контроля.
+
 ## [2.105.0] — 2026-07-17 — Самоаудит Resume: честная ревалидация при неразрешимой base-ветке
 
 ### Fixed
