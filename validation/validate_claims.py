@@ -10,7 +10,9 @@ Claims делают утверждение машинно-проверяемым
 Поддерживаемые типы (детерминированные, без исполнения кода):
   - file-exists    : source.path существует;
   - symbol-exists  : source.path содержит source.symbol (подстрока/regex);
-  - enum-values    : каждое значение из source.values встречается в source.path.
+  - enum-values    : каждое значение из source.values встречается в source.path;
+  - count          : число строк source.path, матчащих source.pattern (regex, MULTILINE),
+                     равно source.expected (пиннинг счётчиков против прозы-дрифта).
 
 Формат claims.yaml:
   schema_version: 1
@@ -65,6 +67,17 @@ def check_claim(base: Path, c: dict):
     if ctype == "enum-values":
         missing = [v for v in (src.get("values") or []) if v not in text]
         return ("ok", "") if not missing else ("drift", f"значения отсутствуют в коде: {missing}")
+    if ctype == "count":
+        pat = src.get("pattern")
+        expected = src.get("expected")
+        if pat is None or expected is None:
+            return "error", "count требует source.pattern и source.expected"
+        try:
+            actual = len(re.findall(pat, text, re.M))
+        except re.error as e:
+            return "error", f"некорректный pattern: {e}"
+        return ("ok", "") if actual == expected else (
+            "drift", f"счётчик {pat!r}: фактически {actual}, ожидалось {expected}")
     return "error", f"неизвестный тип claim: {ctype}"
 
 
@@ -122,6 +135,11 @@ def selftest():
             {"id": "enum-drift", "type": "enum-values",
              "source": {"path": "types.ts", "values": ["DRAFT", "DELIVERED"]}},
             {"id": "file-drift", "type": "file-exists", "source": {"path": "missing.ts"}},
+            # count: 2 строки '=' -> ожидаем 2 (ok) и намеренно-неверные 3 (drift)
+            {"id": "count-ok", "type": "count",
+             "source": {"path": "types.ts", "pattern": "'[A-Z]+'", "expected": 2}},
+            {"id": "count-drift", "type": "count",
+             "source": {"path": "types.ts", "pattern": "'[A-Z]+'", "expected": 3}},
         ]}), encoding="utf-8")
         res = {r["id"]: r["status"] for r in build(cf)}
         expect("file-exists проходит", res["file-ok"] == "ok")
@@ -129,6 +147,8 @@ def selftest():
         expect("enum-values проходит", res["enum-ok"] == "ok")
         expect("enum-drift ВИДЕН падающим (принцип team-os)", res["enum-drift"] == "drift")
         expect("file-drift виден падающим", res["file-drift"] == "drift")
+        expect("count совпадает -> ok", res["count-ok"] == "ok")
+        expect("count расходится ВИДЕН падающим", res["count-drift"] == "drift")
 
     # реальные self-claims кита должны выполняться
     kit_claims = PKG / "knowledge" / "claims.yaml"

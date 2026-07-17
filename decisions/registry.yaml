@@ -109,6 +109,37 @@ episodes:
     source: чат-сессия; аудит исполнения
     supersedes: null
 
+  - id: ep-2026-07-17-vision-audit
+    question: >
+      Собственный аудит на соответствие видению нашёл orphan-гейты (spec_synchronization и
+      archive_readiness применимы, но не запускались) и non-blocking phase-3 гейты после
+      завершённого dogfooding. Что делать?
+    decision: >
+      (1) OpenSpec-гейты (spec_synchronization, archive_readiness) НЕ пихать в per-task
+      quality_gates: они детерминированно enforced OpenSpec CLI + validate_openspec_change.py
+      в CI. Зафиксировать это полем gate.enforced_by=openspec-ci-guard; validate_workflow_gates
+      стал track-aware и enforced_by-aware, а недостижимый MVP-blocking гейт теперь ERROR
+      (orphan-guard), не WARN. (2) intake_completeness ДОБАВИТЬ в ENGINEERING (это per-run гейт,
+      реально пропущенный). (3) Phase-3 non-blocking гейты (documentation_updated, release_safety,
+      observability_readiness, stakeholder_readiness и knowledge_*/decision_quality) ОСТАВИТЬ
+      non-blocking пока: baseline_ready достигнут на ОДНОМ child (ии-среда), а критерий
+      промоушена — стабильный зелёный на ≥2 child. Промоушен — отдельным решением по данным.
+    reason: >
+      Видение требует честных деклараций и отсутствия тихого дрифта. Orphan MVP-blocking гейт
+      делал гарантию «8 blocking» ложной (7 из 8 реально исполнимы). enforced_by честно
+      фиксирует РЕАЛЬНЫЙ путь исполнения вместо того, чтобы имитировать per-run проверку,
+      которую pipeline не может произвести. Промоушен phase-3 в blocking по одному child —
+      преждевременно: изменит child-CI и может ломать прогоны там, где практики ещё не улеглись;
+      ковенант — ужесточать по данным обкатки, а не по календарю.
+    context: >
+      Собственный аудит кита против VISION.md/ROADMAP.md (агент-ревьюер + ручная верификация);
+      находки P0 orphan-гейт, P1 счётчик gates 26→28, P2 applicability→INCIDENT, форма
+      documentation_drift.
+    reversibility: two-way
+    date: 2026-07-17
+    source: чат-сессия; self-audit против видения
+    supersedes: null
+
   - id: ep-2026-07-16-execution-audit
     question: Внешний аудит исполнения — что делать дальше с китом?
     decision: >

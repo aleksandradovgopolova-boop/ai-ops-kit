@@ -2,6 +2,44 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.67.0] — 2026-07-17
+
+**Contract Integrity — собственный аудит на соответствие видению.** После закрытия внешних
+аудитов прогнан свой аудит `VISION.md`/`ROADMAP.md` vs код (агент-ревьюер + ручная
+верификация). Найдены и исправлены orphan-гейт и доковый дрифт; введён guard, чтобы этот
+класс не повторился. Решение — `ep-2026-07-17-vision-audit`.
+
+### Fixed
+- **P0 orphan-гейт (`quality/gates.yaml`, `registry/workflows.yaml`)** — `spec_synchronization`
+  (один из 8 MVP-blocking) и `archive_readiness` были *применимы* по `applicability`, но не
+  запускались НИ в одном workflow/треке — гарантия «8 MVP-blocking» была ложной (реально 7/8).
+  Честная модель: оба — детерминированные OpenSpec-гейты, enforced OpenSpec CLI +
+  `validation/validate_openspec_change.py` в CI. Зафиксировано полем `gate.enforced_by:
+  openspec-ci-guard`.
+- **orphan-guard (`validation/validate_workflow_gates.py`)** — валидатор стал **track-aware**
+  (перестал сыпать ложными WARN про гейты, что даёт RunPlan-трек: ux_review/ai_eval/…) и
+  **enforced_by-aware**; недостижимый MVP-blocking гейт теперь **ERROR** (был WARN) — дрифт
+  «8 blocking, а реально 7» больше не пройдёт CI. `gate.applicability` на несуществующий
+  workflow — тоже ERROR (ловит класс `security → INCIDENT`).
+- **P1 `intake_completeness` → ENGINEERING** — per-run гейт реально пропускался в ENGINEERING
+  (QUICK/PRODUCT/VISUAL/… его имели). Добавлен.
+- **P1 счётчик gates** — `ROADMAP.md` говорил «26 gates», фактически 28. Исправлено и
+  **запиннено** claim'ами `gate-count`(28)/`mvp-blocking-count`(8) — для этого в
+  `validate_claims.py` добавлен тип claim **`count`** (регексом считает и сверяет с ожидаемым;
+  дрифт числа теперь виден в CI).
+- **P2 `security.applicability`** ссылалась на несуществующий workflow `INCIDENT` — убран
+  (инциденты идут через CRITICAL).
+- **P2 `documentation_drift`** развёрнут из one-liner в полную форму (`stage`/`purpose`) как у
+  соседних гейтов.
+
+### Changed
+- **manifest** — `execution_engine.self_audit_2026_07_17` (fixed_v2_67 + kept_deliberately +
+  clean_areas); `quality_gates.enforced_by_ci_guard` и `count_pinned_by_claims`.
+  `package_version` → 2.67.0.
+- **decisions** — эпизод `ep-2026-07-17-vision-audit`: OpenSpec-гейты не пихаем в per-task
+  quality_gates; phase-3 non-blocking гейты оставлены non-blocking до стабильного зелёного на
+  ≥2 child (критерий промоушена).
+
 ## [2.66.0] — 2026-07-16
 
 **Trust Boundary — contained-фиксы следующего аудита (P0.1, P0.2-contained, P0.5, P1.1).**

@@ -9,7 +9,7 @@
 | Механизм видения | Состояние в ките |
 |---|---|
 | Product First | Контракт PRODUCT (problem → users → value → ... → handoff), агенты product/* |
-| Writer ≠ judge, gates | 26 gates с revision-binding, machine-readable результаты (MVP-blocking ≤ 8) |
+| Writer ≠ judge, gates | 28 gates с revision-binding, machine-readable результаты (MVP-blocking = 8; счётчик запиннен claim gate-count/mvp-blocking-count) |
 | Everything as Code | Registry как источник истины, схемы контрактов, валидаторы в CI |
 | Review-агенты | 14 независимых ревьюеров по зонам: plan, prompt, requirements, code, architecture, performance, security, accessibility, ux, design-system, analytics, documentation, observability, product |
 | Аналитика | Частично: ProductAnalyticsPlan, Experiment (шаблоны), experiment-designer, product-analyst |
