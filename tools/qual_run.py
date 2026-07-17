@@ -108,7 +108,7 @@ def read_tasks(path):
 
 
 def default_runner(child_root, provider, model, open_pr, task_type="QUICK", baseline_diff=True,
-                   require_fix=False):
+                   require_fix=False, max_steps=40):
     """Боевой раннер: одна задача -> отчёт движка через ai_ops_run.run (engine=pipeline, execute).
 
     task_type по умолчанию QUICK — класс, который pipeline РЕАЛЬНО поддерживает сегодня
@@ -125,7 +125,7 @@ def default_runner(child_root, provider, model, open_pr, task_type="QUICK", base
         return ai_ops_run.run(task, signals, Path(child_root), provider_name=provider,
                               model=model, engine="pipeline", execute=True,
                               open_pr=open_pr, feature=slugify(task), baseline_diff=baseline_diff,
-                              require_fix=require_fix)
+                              require_fix=require_fix, max_steps=max_steps)
     return run_one
 
 
@@ -282,6 +282,8 @@ def main(argv):
     ap.add_argument("--require-fix", action="store_true",
                     help="для fix-задач: PASS только если правка РЕАЛЬНО починила падавшую проверку "
                          "(fixed непустой), а не просто 'не сломала'")
+    ap.add_argument("--max-steps", type=int, default=40,
+                    help="потолок шагов tool-loop (по умолчанию 40; поднимай для reasoning-моделей)")
     a = ap.parse_args(argv)
 
     # окружение: для живого провайдера ключ и base обязаны быть в env (не в аргументах)
