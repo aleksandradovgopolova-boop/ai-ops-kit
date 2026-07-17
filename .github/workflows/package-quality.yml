@@ -160,6 +160,8 @@ jobs:
         run: |
           python3 validation/validate_container_assets.py --selftest
           python3 validation/validate_container_assets.py
+      - name: "Container delivery scope: доставка только ветки текущего прогона (не затирает чужое)"
+        run: python3 validation/validate_container_delivery.py
       - name: "Security evidence: детерминированный секрет/dep-скан для гейта security (selftest)"
         run: python3 tools/security_scan.py --selftest
       - name: "Context Compiler: релевантный ContextBundle на WorkItem (selftest + валидатор)"

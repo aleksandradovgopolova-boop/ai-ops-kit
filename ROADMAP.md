@@ -293,8 +293,12 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   пишет RepositoryProfile, `status` читает active-work, `health` считает Product Health (или честно
   отказывает без метрик), `plan` пишет RunPlan+context+spec+work-package без правок кода, `new`
   ставит workitem+spec-каркас, `discuss` создаёт discovery-draft. `run`/`resume`/`specify` уже
-  реальны; `preview <intent>` по-прежнему только показывает. Осталось: container delivery забирает
-  только ветку текущего run.
+  реальны; `preview <intent>` по-прежнему только показывает.
+- **Container delivery scope (v2.113) ✅** — доставка из одноразового клона забирает ТОЛЬКО ветки,
+  которые создал/изменил ЭТОТ прогон (диф снимка `ai-ops/*` до/после), а не все `ai-ops/*`. Раньше
+  force-fetch всех `ai-ops/*` мог перезаписать параллельную ветку устаревшей версией из клона.
+  Логика — в `containers/deliver-run-branches.sh`, проверяется `validate_container_delivery.py` без
+  docker (на настоящем git). Осталось: product-qualification с живой моделью.
 - **Product Qualification (planned)** — сквозные сценарии с живой моделью (ContextBundle меняет
   prompt; неполная спека не пускает в implementation; resume после сессии; auth/secret без человека
   не проходит; и т.д.) — на машине пользователя.

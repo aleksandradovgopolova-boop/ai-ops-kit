@@ -28,6 +28,8 @@
 #       --execute --sandbox --baseline-diff
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 CHILD="${1:?укажи путь к child-репозиторию}"; shift
 TASK="${1:?укажи текст задачи}"; shift
 IMAGE="${AI_OPS_IMAGE:-ai-ops-engine:latest}"
@@ -50,6 +52,13 @@ DISPOSABLE="$(mktemp -d "${WORKBASE%/}/ai-ops-run.XXXXXX")"
 CLONE="$DISPOSABLE/repo"
 echo "worktree-only: клонирую child в одноразовый checkout $CLONE (основной репо не монтируется)…" >&2
 git clone --quiet --no-hardlinks --local "$CHILD_ABS" "$CLONE"
+
+# v2.113 Container delivery scope: снимок ai-ops/* веток клона ДО прогона. После прогона доставляем
+# ТОЛЬКО ветки, которые ЭТОТ прогон создал или изменил (новые ИЛИ с другим SHA) — не все ai-ops/*.
+# Так параллельные ai-ops/* ветки в основном репо не будут перезаписаны устаревшей версией из клона.
+SNAP_BEFORE="$DISPOSABLE/ai-ops-refs.before"
+git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/heads/ai-ops/*' \
+  > "$SNAP_BEFORE" 2>/dev/null || : > "$SNAP_BEFORE"
 
 cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
 
@@ -77,15 +86,14 @@ docker run --rm \
 RC=$?
 set -e
 
-# 3. Доставка доверенным host-слоем: забираем ветки ai-ops/* из клона обратно в основной репо.
-#    Модель этого сделать НЕ могла — она была заперта в клоне. push в remote — по желанию человека.
-if git -C "$CLONE" for-each-ref --format='%(refname:short)' 'refs/heads/ai-ops/*' | grep -q .; then
-  if git -C "$CHILD_ABS" fetch --quiet "$CLONE" '+refs/heads/ai-ops/*:refs/heads/ai-ops/*'; then
-    echo "доставка: ветки ai-ops/* перенесены в $CHILD_ABS (посмотри: git -C $CHILD_ABS branch --list 'ai-ops/*')" >&2
-  else
-    echo "ВНИМАНИЕ: не удалось забрать ветки из клона; работа сохранена в $CLONE (не удаляю)." >&2
-    trap - EXIT; exit "$RC"
-  fi
+# 3. Доставка доверенным host-слоем: ТОЛЬКО ветки, которые создал/изменил ЭТОТ прогон (диф снимка
+#    ai-ops/* до/после), а не все ai-ops/*. Логика — в отдельном deliver-run-branches.sh (тестируется
+#    валидатором без docker). Модель этого сделать НЕ могла — была заперта в клоне.
+if "$SCRIPT_DIR/deliver-run-branches.sh" "$CLONE" "$CHILD_ABS" "$SNAP_BEFORE" >&2; then
+  :
+else
+  echo "ВНИМАНИЕ: доставка веток прогона не удалась; работа сохранена в $CLONE (не удаляю)." >&2
+  trap - EXIT; exit "$RC"
 fi
 
 cleanup

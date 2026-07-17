@@ -43,7 +43,8 @@ WRAPPER_REQUIRED = {
     # v2.93 worktree-only: монтируется ОДНОРАЗОВЫЙ клон, а не основной child; доставка — host-слоем
     "git clone": "одноразовый клон child (основной репо не монтируется в контейнер)",
     "src=${CLONE}": "в /work монтируется клон, НЕ основной child-репозиторий",
-    "fetch": "доставка веток ai-ops/* обратно доверенным host-слоем (вне контейнера)",
+    # v2.113: доставка вынесена в scoped-deliverer (только ветки прогона) — вызывается из wrapper
+    "deliver-run-branches.sh": "доставка ТОЛЬКО веток прогона через scoped host-deliverer",
 }
 # Анти-маркер: основной child НЕ должен монтироваться как writable напрямую (регресс worktree-only).
 WRAPPER_FORBIDDEN = {
@@ -75,6 +76,17 @@ def check_assets(root=PKG):
         errors.append("нет containers/run-sandboxed.sh")
     else:
         errors += check_wrapper(wr.read_text(encoding="utf-8"))
+    # v2.113: scoped-deliverer обязателен и должен доставлять ТОЛЬКО ветки прогона (диф снимка)
+    dl = root / "containers" / "deliver-run-branches.sh"
+    if not dl.exists():
+        errors.append("нет containers/deliver-run-branches.sh (scoped-доставка веток прогона)")
+    else:
+        dtext = dl.read_text(encoding="utf-8")
+        for k, why in {"for-each-ref": "снимок ai-ops/* для дифа (доставить только изменённое)",
+                       "fetch": "перенос веток прогона в основной репо",
+                       "ai-ops/*": "область — только ai-ops/* ветки"}.items():
+            if k not in dtext:
+                errors.append(f"deliver-run-branches.sh: нет '{k}' ({why})")
     return errors
 
 
@@ -93,7 +105,7 @@ def selftest():
     good_wr = ('git clone --no-hardlinks --local "$CHILD_ABS" "$CLONE"\n'
                "docker run --read-only --tmpfs /tmp --memory 2g --cpus 2 --pids-limit 512 "
                '--cap-drop ALL --security-opt no-new-privileges --mount type=bind,src=${CLONE},dst=/work img\n'
-               'git -C "$CHILD_ABS" fetch "$CLONE" refs/heads/ai-ops/*\n')
+               '"$SCRIPT_DIR/deliver-run-branches.sh" "$CLONE" "$CHILD_ABS" "$SNAP_BEFORE"\n')
     expect("wrapper: полный набор jail-флагов + worktree-only -> без ошибок", check_wrapper(good_wr) == [])
     expect("wrapper: убрали --cap-drop -> ошибка",
            any("--cap-drop" in e for e in check_wrapper(good_wr.replace("--cap-drop ALL", ""))))

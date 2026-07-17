@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.112.0
+  package_version: 2.113.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,9 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_113_container_delivery_scope:
+      - "P0 аудита закрыт: контейнерная доставка забирает ТОЛЬКО ветки текущего прогона. Раньше run-sandboxed.sh делал force-fetch ВСЕХ refs/heads/ai-ops/* из одноразового клона обратно в основной репо -> параллельная ai-ops/* ветка (другой прогон/сессия) МОГЛА быть перезаписана устаревшей версией из клона (клон снят раньше). Теперь: снимок ai-ops/* клона ДО прогона + доставка только НОВЫХ или ИЗМЕНЁННЫХ веток (диф SHA) -> нетронутые прогоном ветки не трогаются"
+      - "логика вынесена в containers/deliver-run-branches.sh (снимок-диф + точечный fetch по refspec), run-sandboxed.sh её вызывает. validate_container_delivery.py проверяет ДЕТЕРМИНИРОВАННО на настоящем git (без docker): ai-ops/new доставлена, изменённая прогоном ai-ops/old доставлена, а concurrent-продвинутая в основном репо ai-ops/untouched НЕ затёрта; 'нечего доставлять' если прогон ничего не менял. validate_container_assets требует deliver-run-branches.sh + scoping-маркеры; шаг добавлен в CI и AGENTS.md"
     fixed_v2_112_real_intent_ux:
       - "P0 аудита закрыт: намерения стали настоящими действиями, а не только execution preview. _run_intent в ai_ops_cli: onboard -> project_detector.detect + запись .ai/repository-profile.yaml; status -> active_work.list_cmd (реальное чтение); health -> product_health.compute из product/product-health.yaml (или ЧЕСТНЫЙ отказ без метрик, не фабрикует score); plan -> пишет features/<wid>/{run-plan,context-bundle,spec-coverage,work-package}.yaml БЕЗ правок кода; new -> workitem.start + spec-каркас; discuss -> features/<wid>/discovery-draft.md"
       - "run/resume/specify уже реальны (v2.34/2.109/2.110). preview <intent> ПО-ПРЕЖНЕМУ только показывает превью (preview_mode гейтит спец-действия) — не выполняет побочных эффектов. v2.112-сценарии в ai_ops_cli selftest: каждое действие проверено на РЕАЛЬНЫЙ артефакт на диске + preview onboard НЕ пере-создаёт профиль"
