@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.104.0
+  package_version: 2.105.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,8 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_105_resume_selfaudit:
+      - "САМОАУДИТ (2-я находка): run_handoff.resume_preflight при неразрешимой base-ветке (репо на master, а дефолт --base=main) МОЛЧА пропускал проверку устаревания и мог сказать «состояние актуально», не проверив базу (честностная дыра — claim без верификации). Фикс: если base-ref не разрешается -> явная причина + revalidation_needed=True из осторожности (не молчим). Регрессия в selftest"
     fixed_v2_104_security_pack_selfaudit:
       - "САМОАУДИТ нового слоя нашёл ложный green (тот же класс, что аудит execution-движка): security_pack (v2.101) проверял применимость доменов только по ПУТИ изменённого файла -> auth-логика в файле, чей путь не матчит паттерны (напр. src/users.py с plaintext-сравнением пароля), не поднимала домен authentication -> применим только secrets -> чисто -> security АВТО-ПРОХОДИЛ (ложный green в самом остром гейте)"
       - "фикс: _applies проверяет file_patterns по пути И по СОДЕРЖИМОМУ изменённых файлов. Под-срабатывание (опасное, ведёт к ложному green) устранено; пере-срабатывание -> лишний needs_review (fail-closed, безопасно). Регрессия в security_pack selftest: src/users.py c 'password' -> authentication применим, overall != clear"
