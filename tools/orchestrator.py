@@ -288,7 +288,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
             "schema_version": 1, "from_agent": owner,
             "to_agent": stages[stages.index(stage) + 1]["owner"] if stages.index(stage) + 1 < len(stages) else None,
             "stage_from": sid,
-            "published_artifacts": sorted(str(p.relative_to(child_root)) for p in run_dir.glob("stage-*.md")),
+            "published_artifacts": sorted(p.relative_to(child_root).as_posix() for p in run_dir.glob("stage-*.md")),
         }
         (run_dir / "TaskHandoff.json").write_text(
             json.dumps(handoff, indent=2, ensure_ascii=False), encoding="utf-8")

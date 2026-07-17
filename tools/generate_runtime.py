@@ -251,7 +251,7 @@ def generate(child_root: Path, verbose=True):
             "registry/workflows.yaml": sha256_file(PKG / "registry" / "workflows.yaml"),
             "registry/agents.yaml": sha256_file(PKG / "registry" / "agents.yaml"),
         },
-        "generated": sorted(str(p.relative_to(child_root)) for p in out_files),
+        "generated": sorted(p.relative_to(child_root).as_posix() for p in out_files),
         "note": "Do not edit by hand; regenerate with tools/generate_runtime.py",
     }
     (child_root / ".ai" / "generated" / ".generation.json").write_text(

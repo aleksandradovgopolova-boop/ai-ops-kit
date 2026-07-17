@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.72.0
+  package_version: 2.73.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -293,6 +293,11 @@ execution_engine:
       fixed_v2_71: "второй finding живого прогона: в изолированном worktree не было node_modules -> build/typecheck/test падали exit 127 (command not found), implementation_verification блокировал. Добавлен stack-aware шаг подготовки: project_detector отдаёт install_command (npm ci/poetry install/pip install...), execution_pipeline ставит зависимости в worktree ПЕРЕД сбором evidence (только в изоляции; основное дерево не трогаем). node_modules в .gitignore -> дерево остаётся чистым для evidence-на-SHA"
       fixed_v2_72: "третий finding живого прогона: с установленными deps ii-sreda оказался КРАСНЫМ САМ ПО СЕБЕ (build+typecheck: коллизия регистра Markdown.ts/markdown.ts; 1 из 532 тестов: recentTimeGroup дата). Движок честно не дал ready_for_pr поверх красного. Добавлен baseline-diff: прогон проверок на БАЗЕ до правок + критерий 'no-regressions' (правка не должна вносить НОВЫХ провалов; пред-существующие красные репо чинят отдельно). execution_pipeline baseline_diff=True (regressions/fixed/no_regressions, ready_criterion); ai-ops run --baseline-diff; qual_run по умолчанию baseline-diff (--strict-green для all-green)"
       qualification_status: "движок ПОДТВЕРЖДЁН на реальном child (ii-sreda, DeepSeek) end-to-end: detect -> tool-loop (живая модель) -> npm ci -> commit в worktree -> evidence на точном SHA -> реальные build/typecheck/test -> гейты. Верификация настоящая (вскрыла 3 реальных бага репо). Остаётся эмпирика: прогон 3–5 задач с зелёным вердиктом (нужна либо зелёная база, либо baseline-diff, либо задачи-починки)"
+      fixed_v2_73: "четвёртый finding живого прогона: живая модель (DeepSeek) недетерминирована — иногда отдаёт невалидный JSON, и ОДНА кривая реплика обрывала весь прогон (loop.stopped=bad-proposal: bad-json). tool_loop.run_loop: до max_bad_proposals=3 подряд КОРРЕКТИРУЮЩИХ переспросов (модели показывают её ошибку + просят чистый JSON), счётчик сбрасывается на валидном действии. Прогон переживает случайные срывы парсинга"
+  cross_platform_2026_07_17:                 # патч Windows-совместимости (внешний отчёт установки на Win11/py3.11)
+    problem_1_paths: "str(Path.relative_to()) давал 'a\\b' на Windows -> ложный провал валидатора реестра и ложный дрейф managed-слоя (.checksums.json с '\\'-ключами непереносим). Фикс: все 18 сайтов -> .relative_to().as_posix(); detect_drift нормализует старые '\\'-ключи при чтении (миграция без ложного дрейфа)"
+    problem_2_encoding: "installer печатал рамки/галочки/кириллицу -> UnicodeEncodeError на cp1251/cp866-консоли Windows. Фикс: _force_utf8_stdio() (sys.stdout/stderr.reconfigure utf-8, errors=replace) в начале main()"
+    acceptance: "selftest инсталлера: ключи checksums только '/'; Windows-стиль '\\'-ключей не даёт ложного дрейфа. Все проверки AGENTS.md PASS. POSIX-установки не ломаются (sha256 те же, меняется только форма ключей)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

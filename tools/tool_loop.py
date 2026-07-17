@@ -65,13 +65,21 @@ def make_model_proposer(provider):
     return propose
 
 
-def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context=""):
-    """Гонять петлю до done / budget / max_steps. proposer(context)->action|{'done':true}."""
+def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
+             max_bad_proposals=3):
+    """Гонять петлю до done / budget / max_steps. proposer(context)->action|{'done':true}.
+
+    finding живого прогона: живая модель (DeepSeek) недетерминирована и иногда возвращает
+    невалидный JSON. Раньше ОДНА кривая реплика обрывала весь прогон. Теперь — до
+    max_bad_proposals ПОДРЯД корректирующих переспросов (модели показывают её ошибку и
+    просят чистый JSON); счётчик сбрасывается на любом валидном действии.
+    """
     root = Path(root)
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     evidence, transcript = [], []
     context = base_context
     stopped = "max_steps"
+    bad_streak = 0
     for step in range(max_steps):
         try:
             bud.charge_call()                       # каждый запрос к модели — под потолком
@@ -79,8 +87,16 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="")
             stopped = f"budget: {e}"; break
         action = proposer(context)
         if not isinstance(action, dict) or action.get("error"):
-            stopped = f"bad-proposal: {action.get('error') if isinstance(action, dict) else action}"
-            break
+            bad_streak += 1
+            err = action.get("error") if isinstance(action, dict) else action
+            if bad_streak >= max_bad_proposals:
+                stopped = f"bad-proposal: {err}"; break
+            # корректирующий переспрос: показать модели её ошибку и потребовать чистый JSON
+            context += (f"\n[шаг {step}] ОШИБКА РАЗБОРА ({err}): твой ответ не распарсился как "
+                        f"JSON. Верни РОВНО ОДИН JSON-объект действия и НИЧЕГО больше — без "
+                        f"markdown-обрамления, без пояснений, без текста до/после.")
+            continue
+        bad_streak = 0
         if action.get("done"):
             stopped = "done"
             transcript.append({"step": step, "done": True, "summary": action.get("summary", "")})
@@ -180,6 +196,32 @@ def selftest():
         run_loop(prop_read, root, pol, budget={"max_model_calls": 5})
         expect("модель ВИДИТ содержимое прочитанного файла в контексте",
                "SENTINEL_CONTENT_42" in seen.get("ctx", ""))
+
+        # finding живого прогона: битый JSON НЕ убивает прогон — до N корректирующих переспросов.
+        # Модель «оступается» дважды (bad-json), потом отдаёт валидный write + done.
+        seq = iter([
+            {"error": "bad-json"}, {"error": "bad-json"},
+            {"op": "write", "path": "src/rec.ts", "content": "ok"}, {"done": True},
+        ])
+        rep_rec = run_loop(lambda c: next(seq), root, pol, budget={"max_model_calls": 10})
+        expect("bad-json: петля восстановилась после переспросов -> done",
+               rep_rec["stopped"] == "done" and (root / "src" / "rec.ts").exists())
+
+        # корректирующая подсказка попала в контекст переспроса
+        cap = {}
+        seq2 = iter([{"error": "bad-json"}, {"done": True}])
+        def prop_corr(ctx):
+            cap["ctx"] = ctx
+            return next(seq2)
+        run_loop(prop_corr, root, pol, budget={"max_model_calls": 5})
+        expect("bad-json: модель получает корректирующую подсказку про JSON",
+               "ОШИБКА РАЗБОРА" in cap.get("ctx", ""))
+
+        # много битых подряд -> честная остановка bad-proposal (не вечный цикл)
+        rep_bad = run_loop(lambda c: {"error": "bad-json"}, root, pol,
+                           budget={"max_model_calls": 10}, max_bad_proposals=3)
+        expect("bad-json: N подряд -> честная остановка bad-proposal",
+               rep_bad["stopped"].startswith("bad-proposal"))
 
     print("tool_loop selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

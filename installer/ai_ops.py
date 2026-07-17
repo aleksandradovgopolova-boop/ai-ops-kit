@@ -158,7 +158,7 @@ def package_ownership(pkg_root=PKG):
             eff = pat + "/*" if pat.endswith("/**") else pat
             for p in root.glob(eff):
                 if p.is_file():
-                    owned[str(p.relative_to(root))] = name
+                    owned[p.relative_to(root).as_posix()] = name
     return owned
 
 
@@ -194,7 +194,7 @@ def managed_set():
     for pattern in manifest().get("update_policy", {}).get("managed_set", []):
         for src in sorted(PKG.glob(pattern)):
             if src.is_file():
-                pairs.append((src, str(src.relative_to(PKG))))
+                pairs.append((src, src.relative_to(PKG).as_posix()))
     return filter_by_packages(pairs, selected_packages(), package_ownership())
 
 
@@ -208,7 +208,7 @@ def _dir_signature(d: Path):
     if d.is_dir():
         for p in sorted(d.rglob("*")):
             if p.is_file():
-                sig[str(p.relative_to(d))] = sha256(p)
+                sig[p.relative_to(d).as_posix()] = sha256(p)
     return sig
 
 
@@ -256,7 +256,10 @@ def detect_drift(root=None):
     cs = root / ".checksums.json"
     if not cs.exists():
         return None
-    recorded = json.loads(cs.read_text(encoding="utf-8")).get("files", {})
+    # cross-OS: старые .checksums.json (снятые на Windows) имеют ключи со '\'. Нормализуем
+    # к POSIX при чтении — иначе `root / 'a\b'` на POSIX не резолвится и даёт ложный дрейф.
+    recorded = {k.replace("\\", "/"): v
+                for k, v in json.loads(cs.read_text(encoding="utf-8")).get("files", {}).items()}
     drift = []
     for rel, digest in recorded.items():
         p = root / rel
@@ -267,7 +270,7 @@ def detect_drift(root=None):
                           "checksum_expected": digest, "checksum_actual": sha256(p)})
     for p in sorted(root.rglob("*")):
         if p.is_file() and p.name not in META and p.name != ".gitkeep":
-            rel = str(p.relative_to(root))
+            rel = p.relative_to(root).as_posix()
             if rel not in recorded and p.name != "README.md" or (rel not in recorded and p.name == "README.md" and rel != "README.md"):
                 if rel not in recorded:
                     drift.append({"path": rel, "kind": "added"})
@@ -282,7 +285,7 @@ def build_diff():
     if MANAGED.exists():
         for p in MANAGED.rglob("*"):
             if p.is_file() and p.name not in META:
-                installed[str(p.relative_to(MANAGED))] = p
+                installed[p.relative_to(MANAGED).as_posix()] = p
     for rel, src in sorted(pkg_files.items()):
         if rel not in installed:
             changes.append({"path": f".ai/managed/{rel}", "action": "add", "reason": "новый managed-файл"})
@@ -300,7 +303,7 @@ def write_checksums(root=None):
     files = {}
     for p in sorted(root.rglob("*")):
         if p.is_file() and p.name not in META and p.name != ".gitkeep":
-            files[str(p.relative_to(root))] = sha256(p)
+            files[p.relative_to(root).as_posix()] = sha256(p)
     doc = {"schema_version": 1, "algorithm": "sha256", "managed_root": root.name, "files": files}
     (root / ".checksums.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return len(files)
@@ -341,7 +344,7 @@ def snapshot_footprint(dest: Path):
     dest.mkdir(parents=True, exist_ok=True)
     man = {}
     for p in _footprint_paths():
-        rel = str(p.relative_to(REPO_ROOT))
+        rel = p.relative_to(REPO_ROOT).as_posix()
         man[rel] = p.exists()
         if p.exists():
             b = dest / rel
@@ -461,7 +464,7 @@ def cmd_update(force=False, smoke_checks=None):
     # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
     backup = AI_DIR / "runtime" / "backups" / (inst or "unknown")
     footprint = snapshot_footprint(backup)
-    report["backup_ref"] = str(backup.relative_to(REPO_ROOT))
+    report["backup_ref"] = backup.relative_to(REPO_ROOT).as_posix()
 
     # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
     # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
@@ -761,6 +764,20 @@ def selftest():
         if r.returncode != 0:
             print("  " + (r.stdout + r.stderr).strip()[-600:])
 
+        # cross-OS (Windows-патч): ключи checksums — только POSIX '/', ни одного '\'
+        cs_doc = json.loads((child / ".ai" / "managed" / ".checksums.json").read_text(encoding="utf-8"))
+        cs_keys = list((cs_doc.get("files") or {}).keys())
+        expect("checksums: ключи только с '/' (нет '\\', кросс-ОС)",
+               cs_keys and not any("\\" in k for k in cs_keys))
+        # cross-OS инвариант: checksums со '\'-ключами (как с Windows) не дают ложного дрейфа
+        managed_child = child / ".ai" / "managed"
+        win_style = {"schema_version": cs_doc.get("schema_version", 1),
+                     "files": {k.replace("/", "\\"): v for k, v in cs_doc["files"].items()}}
+        (managed_child / ".checksums.json").write_text(
+            json.dumps(win_style, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        expect("cross-OS: Windows-стиль ключей ('\\') -> нет ложного дрейфа",
+               detect_drift(managed_child) == [])
+
         # 2b. shipped skill с локальной правкой -> backup перед перезаписью (не теряем молча)
         skills_dir = child / ".claude" / "skills"
         some = sorted(p.name for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
@@ -814,7 +831,19 @@ def selftest():
     return 0 if ok else 1
 
 
+def _force_utf8_stdio():
+    """Windows-консоль (cp1251/cp866) роняет UnicodeEncodeError на рамках/галочках/кириллице
+    в выводе. Форсируем UTF-8 (Python >=3.7). errors=replace — не падаем, если терминал не тянет."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv):
+    _force_utf8_stdio()
     if len(argv) < 2:
         print(__doc__); return 0
     cmd = argv[1]

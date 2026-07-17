@@ -45,7 +45,7 @@ def content_files(root):
 
 
 def compute(root):
-    return {str(p.relative_to(root)): sha256(p) for p in content_files(root)}
+    return {p.relative_to(root).as_posix(): sha256(p) for p in content_files(root)}
 
 
 def generate(root):
