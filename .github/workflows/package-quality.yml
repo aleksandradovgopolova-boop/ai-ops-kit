@@ -181,6 +181,8 @@ jobs:
           python3 tools/security_pack.py --selftest
           python3 validation/validate_security_domains.py --selftest
           python3 validation/validate_security_domains.py
+      - name: "Intent-UX: команды намерений + execution preview (selftest)"
+        run: python3 tools/ai_ops_cli.py --selftest
       - name: "Канонический e2e: ai-ops run --engine pipeline на реальной фикстуре (без модели)"
         run: python3 validation/validate_pipeline_e2e.py --selftest
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"

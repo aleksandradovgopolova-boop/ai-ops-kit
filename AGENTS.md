@@ -60,6 +60,7 @@ python3 tools/atomic_planner.py --selftest
 python3 tools/security_pack.py --selftest
 python3 validation/validate_security_domains.py --selftest
 python3 validation/validate_security_domains.py
+python3 tools/ai_ops_cli.py --selftest
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest

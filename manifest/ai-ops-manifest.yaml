@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.101.0
+  package_version: 2.102.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -347,11 +347,15 @@ execution_engine:
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
     context_engineering_epic:                 # эпик Context Engineering & Spec-Driven Execution (после аудита)
-      status: "в работе (этапы 1-5 из 7)"
+      status: "в работе (этапы 1-6 из 7)"
       stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First ✅ v2.98",
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
-               "5 Security Pack ✅ v2.101", "6 Product UX", "7 Qualification"]
+               "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_102_intent_ux:
+      - "этап 6 Простой внешний UX: tools/ai_ops_cli.py — intent-команды new/onboard/discuss/specify/plan/run/resume/review/status/health поверх флагов. Пользователь НЕ обязан помнить --engine pipeline/--author/--review/--baseline-diff/--sandbox: resolve_flags авто-подбирает пресет по классу задачи (ENGINEERING/PRODUCT/CRITICAL -> review+author; всегда sandbox+baseline). Флаги остаются доступны как низкоуровневый интерфейс"
+      - "execution preview ДО запуска (ExecutionPreview): что понято (workflow+spec-level), что будет сделано (гейты/треки/авто-флаги), какие данные (агенты/правила/~токены/бюджет из ContextBundle), какие approvals (CRITICAL/needs_human/secret_boundary -> человек), советует ли декомпозицию, ожидаемый результат. Только `run --execute` реально запускает движок; остальное — превью/делегация"
+      - "selftest + в checklist/CI. Живьём: `ai_ops_cli.py plan \"<задача>\" <repo>` печатает превью без изменений кода"
     fixed_v2_101_security_pack:
       - "этап 5 Security Pack: security/security-domains.yaml — 12 доменов (authentication, authorization/IDOR, input_validation, secrets, dependencies, rate_limiting, file_upload, network/SSRF, logging/monitoring, deployment/config, ai_prompt_injection, data_isolation) с applicability(signals+file_patterns), deterministic_checks, reviewer_checklist, required_evidence, severity_policy, blocking/human_approval conditions, remediation_template"
       - "tools/security_pack.py: выбирает ТОЛЬКО применимые к изменению домены (frontend-only не запускает database/tenant audit, но проверяет XSS/secrets), гоняет детерминированные проверки (secret_scan/dependency_audit/injection_scan из security_scan) и даёт доменный вердикт. Честность: домен нельзя закрыть фразой «уязвимостей нет» (allowed_evidence_sources); авто-закрыть можно ТОЛЬКО домены, чьё required_evidence целиком детерминированно (secrets/dependencies) и чисто; домены с security_reviewer/human -> needs_review; находка -> fail+блок по severity"

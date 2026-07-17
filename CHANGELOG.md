@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.102.0] — 2026-07-17 — Простой внешний UX: intent-команды (эпик Context Engineering, этап 6)
+
+Этап 6: снаружи AI Ops проще внутренней архитектуры — обычный сценарий управляется намерениями, а
+не флагами.
+
+### Added
+- **`tools/ai_ops_cli.py`** — intent-команды `new · onboard · discuss · specify · plan · run ·
+  resume · review · status · health` поверх флагов. Пользователь **не обязан помнить**
+  `--engine pipeline`/`--author`/`--review`/`--baseline-diff`/`--sandbox`: пресет авто-подбирается по
+  классу задачи (ENGINEERING/PRODUCT/CRITICAL → review+author; всегда sandbox+baseline). Флаги
+  остаются доступны как низкоуровневый интерфейс.
+- **Execution preview** до запуска (`ExecutionPreview`): что понято (workflow + spec-level), что
+  будет сделано (гейты/треки/авто-флаги), какие данные (агенты/правила/~токены/бюджет из
+  ContextBundle), какие approvals (CRITICAL/needs_human/secret_boundary → человек), советует ли
+  декомпозицию, ожидаемый результат. Только `run --execute` реально запускает движок. selftest, CI.
+
+Дальше по эпику: этап 7 Qualification нового слоя (Q1–Q10).
+
 ## [2.101.0] — 2026-07-17 — Security Pack: доменный security-вердикт (эпик Context Engineering, этап 5)
 
 Этап 5: security review — не один общий вердикт модели, а набор применимых доменов с доказуемым
