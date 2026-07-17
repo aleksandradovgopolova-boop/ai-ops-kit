@@ -20,6 +20,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -327,22 +328,39 @@ _FAILURE_ID_PATTERNS = [
     r"(?:FAILED|ERROR)\s+(\S+::\S+)",                 # pytest: FAILED tests/x.py::test_y
     r"(\S+::\S+)\s+(?:FAILED|ERROR)\b",               # pytest альт.: x.py::test_y FAILED
     r"(\S+\.\w+\(\d+,\d+\)):\s*error\s+(TS\d+)",      # tsc: file.ts(12,5): error TS2322
+    # vite/rollup/esbuild: "src/a.tsx (19:9): "X" is not exported by ..." — РЕАЛЬНАЯ строка ошибки
+    # сборки (файл + позиция + сообщение). Даёт СТАБИЛЬНЫЙ id: новая поломка -> другой файл/позиция.
+    r"([\w./\-]+\.\w+)\s*\((\d+)[,:](\d+)\):\s*(.+)",
     r"error\[(E\d+)\]",                               # rust: error[E0308]
     r"(?:✕|×|✗)\s+(.+?)(?:\s+\(\d+\s*ms\))?\s*$",     # jest/vitest: ✕ suite > test name
     r"(?:^|\n)\s*FAIL\s+(\S+)",                       # jest/vitest файловый: FAIL src/a.test.ts
     r"(?:^|\n)\s*(?:AssertionError|Error):\s*(.+)$",  # generic ассерт/ошибка
 ]
 
+# v2.88 (finding живого прогона на ii-sreda): волатильные токены в выводе -> РАЗНЫЙ id при ОДНОЙ и
+# той же поломке -> ложная регрессия. Классика: vite печатает "✗ Build failed in 1.41s" — время
+# меняется от прогона к прогону. Нормализуем: выкидываем длительности (1.41s / 12 ms), hex-адреса и
+# голые числа-времена, схлопываем пробелы. Реальные test-node-id (x.py::test) не содержат таких
+# токенов -> не страдают.
+_VOLATILE_RE = re.compile(r"\b\d+(?:\.\d+)?\s*m?s\b|0x[0-9a-fA-F]+|\b\d+(?:\.\d+)?\s*ms\b")
+
+
+def _normalize_failure_id(token):
+    import re as _re
+    return _re.sub(r"\s+", " ", _VOLATILE_RE.sub("", token)).strip()
+
 
 def _failure_ids(check):
-    """Множество нормализованных id падений из output_tail проверки (best-effort по раннерам)."""
+    """Множество нормализованных id падений из output_tail проверки (best-effort по раннерам).
+    v2.88: id нормализуется (убраны волатильные длительности/адреса), иначе "Build failed in 1.41s"
+    даёт новый id каждый прогон -> ложная fail->fail регрессия."""
     import re
     ids = set()
     for run in (check or {}).get("runs", []) or []:
         tail = run.get("output_tail") or ""
         for pat in _FAILURE_ID_PATTERNS:
             for m in re.finditer(pat, tail, re.I | re.M):
-                token = " ".join(t for t in m.groups() if t).strip()
+                token = _normalize_failure_id(" ".join(t for t in m.groups() if t).strip())
                 if token:
                     ids.add(token[:200])
     return ids
@@ -878,6 +896,21 @@ def selftest():
                   "src/a.ts(3,5): error TS2322: Type error\nsrc/b.ts(9,1): error TS2531: Object is possibly null"}]}}
         expect("structured-id: новая tsc-ошибка в новом файле = регрессия",
                _diff_checks(base_ts, new_ts) == (["typecheck"], []))
+
+        # v2.88 (finding живого прогона ii-sreda): vite печатает "Build failed in 1.41s" — ВРЕМЯ
+        # волатильно. Раньше id падения включал время -> новый id каждый прогон -> ЛОЖНАЯ регрессия
+        # на неизменной красной сборке. Теперь время нормализуется, а реальная строка ошибки — id.
+        vite_err = ('src/shared/ui/index.tsx (19:9): "Markdown" is not exported by '
+                    '"src/shared/ui/markdown.ts", imported by "src/shared/ui/index.tsx".')
+        base_vite = {"build": {"status": "fail", "runs": [{"output_tail": "✗ Build failed in 1.38s\nerror during build:\n" + vite_err}]}}
+        after_vite = {"build": {"status": "fail", "runs": [{"output_tail": "✗ Build failed in 1.41s\nerror during build:\n" + vite_err}]}}
+        expect("vite: та же ошибка сборки, другое ВРЕМЯ (1.38s->1.41s) = НЕ регрессия (ложный триггер устранён)",
+               _diff_checks(base_vite, after_vite) == ([], []))
+        new_vite = {"build": {"status": "fail", "runs": [{"output_tail": "✗ Build failed in 1.55s\nerror during build:\nsrc/shared/lib/formatPrice.ts (2:9): \"x\" is not defined"}]}}
+        expect("vite: НОВАЯ ошибка сборки в другом файле = регрессия (реальную поломку различаем)",
+               _diff_checks(base_vite, new_vite) == (["build"], []))
+        expect("failure-ids: время нормализовано (id стабилен между прогонами)",
+               _failure_ids(base_vite["build"]) == _failure_ids(after_vite["build"]))
 
         # v2.85 (finding аудита): потеря покрытия — самый острый ложный green. Модель «чинит»
         # красный тест, УДАЛЯЯ его -> tests_absent -> status warn. Раньше fail->warn/pass->warn не
