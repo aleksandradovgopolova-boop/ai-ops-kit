@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.101.0] — 2026-07-17 — Security Pack: доменный security-вердикт (эпик Context Engineering, этап 5)
+
+Этап 5: security review — не один общий вердикт модели, а набор применимых доменов с доказуемым
+evidence.
+
+### Added
+- **`security/security-domains.yaml`** — 12 доменов (authentication, authorization/IDOR,
+  input_validation, secrets, dependencies, rate_limiting, file_upload, network/SSRF,
+  logging/monitoring, deployment/config, ai_prompt_injection, data_isolation) с applicability
+  (signals + file_patterns), deterministic_checks, reviewer_checklist, required_evidence,
+  severity_policy, blocking/human_approval conditions, remediation_template.
+- **`tools/security_pack.py`** — выбирает **только применимые** к изменению домены (frontend-only
+  не запускает database/tenant audit, но проверяет XSS/secrets), гоняет детерминированные проверки
+  и даёт доменный вердикт. **Честность**: домен нельзя закрыть фразой «уязвимостей нет»; авто-закрыть
+  можно только домены с целиком детерминированным `required_evidence` (secrets/dependencies);
+  остальные → `needs_review` (судья/человек); находка → fail + блок по severity.
+- **`validation/validate_security_domains.py`** — контракт доменов (12 доменов, required_evidence ⊆
+  allowed_evidence_sources, severity, remediation). В checklist и CI.
+
+### Changed
+- **`tools/execution_pipeline.py`** — гейт `security` теперь domain-aware: проходит только при
+  `overall='clear'` (все применимые домены закрыты детерминированным evidence); иначе честный блок
+  с перечнем блокирующих/needs_review доменов. Развивает `security_scan` из v2.95.
+
+Дальше по эпику: этап 6 Простой внешний UX (intent-команды).
+
 ## [2.100.0] — 2026-07-17 — Atomic Planning и Context Budget (эпик Context Engineering, этап 4)
 
 Этап 4: размер рабочего пакета должен соответствовать способности модели выполнить его до деградации

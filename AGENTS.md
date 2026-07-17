@@ -57,6 +57,9 @@ python3 validation/validate_spec_coverage.py --selftest
 python3 tools/run_handoff.py --selftest
 python3 validation/validate_run_handoff.py --selftest
 python3 tools/atomic_planner.py --selftest
+python3 tools/security_pack.py --selftest
+python3 validation/validate_security_domains.py --selftest
+python3 validation/validate_security_domains.py
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
