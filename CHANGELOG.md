@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.107.0] — 2026-07-17 — Trust Fixes по внешнему аудиту v2.104
+
+Внешний аудит на v2.104 вскрыл дефекты доверия (часть уже была закрыта в v2.105/2.106; здесь —
+остальное, что могло дать неверный verdict).
+
+### Fixed
+- **Security Pack — новый ложный green** (`security_pack.py`): `status=fail` с `severity=medium`
+  (напр. новая зависимость) исчезал из `blocking` **и** `needs_review` → `overall=clear` → security
+  проходил. Инвариант: **`fail` никогда не даёт `overall=clear`** — critical/high → `blocking`,
+  medium/low → `needs_review` (судья/человек). Регрессия в selftest.
+- **Честность имени**: `dependency_audit` → `dependency_diff` (CVE не проверяются, только diff новых
+  зависимостей) — в domains/pack/validator.
+- **Дрейф сигнала**: `gates.yaml` ждал `secret_boundary_change`, а spec/pack/cli используют
+  `secret_boundary` → gate human_approval не срабатывал. `gate_executor` теперь единым алиасом
+  принимает `secret_boundary_change ~ security_surface_changed ~ secret_boundary`. Регрессия.
+- **Единая классификация Intent UX**: без `task_type` router мог решить ENGINEERING, а preset/Spec-First
+  — QUICK (противоречивый режим). Теперь `task_type` берётся из решения роутера (`base_workflow`).
+- **Операционные риски**: ошибки слоя контекста больше не гаснут молча → `report['lifecycle_errors']`;
+  active-work гарантированно закрывается при исключении pipeline (не остаётся `in-progress`).
+
+### Осталось (крупные, отдельными релизами)
+Operational Context (ContextBundle реально в prompt модели), real resume-mode, real spec-first
+authoring (`specify`), Atomic Planner создаёт WorkPackages, product-qualification с живой моделью,
+container delivery только текущей ветки. См. ROADMAP.
+
 ## [2.106.0] — 2026-07-17 — Enforcement-виринг: security-reviewer, spec-depth, context-budget
 
 Задокументированные остатки эпика доведены до реального enforcement (безопасно, каждый — надмножество

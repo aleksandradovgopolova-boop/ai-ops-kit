@@ -5,14 +5,14 @@ kind: security-domains
 # изменению домены (frontend-only не запускает database audit, но проверяет XSS/secrets).
 #
 # Правило evidence (жёсткое): security-домен нельзя закрыть фразой модели «уязвимостей нет».
-# Допустимые источники: scanner_result | dependency_audit | secret_scan | test_result |
+# Допустимые источники: scanner_result | dependency_diff | secret_scan | test_result |
 # policy_check | diff_review | security_reviewer | human_approval.
 #
 # applicability.signals — сигналы задачи; applicability.file_patterns — regex по изменённым файлам
 # (любое совпадение делает домен применимым). deterministic_checks — что кит может проверить сам
 # (см. tools/security_scan.py / security_pack.py). Остальное — вход для судьи/человека.
 
-allowed_evidence_sources: [scanner_result, dependency_audit, secret_scan, injection_scan, test_result,
+allowed_evidence_sources: [scanner_result, dependency_diff, secret_scan, injection_scan, test_result,
                            policy_check, diff_review, security_reviewer, human_approval]
 
 domains:
@@ -72,10 +72,10 @@ domains:
     applicability:
       signals: []
       file_patterns: ["(?i)package\\.json|requirements\\.txt|go\\.mod|pyproject\\.toml|Cargo\\.toml|package-lock|yarn\\.lock|pnpm-lock"]
-    deterministic_checks: [dependency_audit]
+    deterministic_checks: [dependency_diff]
     reviewer_checklist: ["новые зависимости оправданы и одобрены", "нет известных CVE",
                          "источник пакета доверенный"]
-    required_evidence: [dependency_audit]
+    required_evidence: [dependency_diff]
     severity_policy: {default: medium}
     blocking_conditions: ["добавлена зависимость с известной critical/high CVE"]
     human_approval_conditions: ["добавление новой прямой зависимости"]

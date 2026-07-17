@@ -3,7 +3,7 @@
 
 Security review как набор ПРИМЕНИМЫХ доменов (security/security-domains.yaml), а не один вердикт.
 Проверяются только применимые к изменению домены (frontend-only не запускает database audit, но
-проверяет XSS/secrets). Детерминированные проверки (secret_scan/dependency_audit/injection_scan)
+проверяет XSS/secrets). Детерминированные проверки (secret_scan/dependency_diff/injection_scan)
 берутся из tools/security_scan.py; остальное — вход для независимого security-reviewer/человека.
 
 Честность: домен нельзя закрыть фразой «уязвимостей нет». Авто-закрыть можно ТОЛЬКО домены, чьё
@@ -31,7 +31,7 @@ for _p in (PKG / "tools",):
 import security_scan  # noqa: E402
 import yaml           # noqa: E402
 
-DETERMINISTIC = {"secret_scan", "dependency_audit", "injection_scan"}
+DETERMINISTIC = {"secret_scan", "dependency_diff", "injection_scan"}
 
 
 def load_domains():
@@ -102,16 +102,20 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
             findings += [{"type": "secret", "path": s["path"], "line": s["line"], "id": s["id"]} for s in secrets]
         if "injection_scan" in checks:
             findings += [{"type": "injection", "path": i["path"], "line": i["line"], "id": i["id"]} for i in injections]
-        if "dependency_audit" in checks:
+        if "dependency_diff" in checks:
             findings += [{"type": "new_dependency", "name": n} for n in new_deps]
 
         req = set(d.get("required_evidence", []) or [])
         severity = (d.get("severity_policy", {}) or {}).get("default", "medium")
-        # статус домена
+        # статус домена. ИНВАРИАНТ (finding аудита v2.104->исправлен): status=fail НИКОГДА не даёт
+        # overall=clear. critical/high -> blocking (reviewer не переопределяет); medium/low ->
+        # needs_review (нужен судья/человек — напр. новая зависимость требует одобрения).
         if findings:
             status = "fail"
             if severity in ("critical", "high"):
                 blocking.append(d["id"])
+            else:
+                needs_review.append(d["id"])
         elif req and req <= DETERMINISTIC:
             # всё required_evidence — детерминированное и прошло чисто -> можно авто-закрыть
             status = "pass"
@@ -176,6 +180,10 @@ def selftest():
                    signals={}, )
     # before пуст -> left-pad считается новой
     expect("новая зависимость -> dependencies применим", "dependencies" in dep["applicable_domains"])
+    # РЕГРЕССИЯ (finding аудита v2.104): medium-fail (новая зависимость) НЕ даёт overall=clear.
+    # Раньше fail с severity=medium исчезал из blocking И needs_review -> ложный green.
+    expect("medium-fail (новая зависимость) -> в needs_review, overall != clear (не ложный green)",
+           "dependencies" in dep["needs_review"] and dep["overall"] != "clear")
 
     # auth-домен needs_review (required_evidence включает security_reviewer)
     auth = run_pack(files_content={"src/auth/login.py": "def login(): pass\n"}, signals={"auth_change": True})

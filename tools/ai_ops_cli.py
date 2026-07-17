@@ -63,6 +63,12 @@ def build_preview(intent, task, child_root, signals):
     if task:
         signals.setdefault("task_text", task)
     plan = run_plan.build_plan(signals, workitem_id=signals.get("feature"))
+    # v2.107 (finding аудита): единый результат классификации. Раньше router мог решить ENGINEERING,
+    # а preset/Spec-First — QUICK (task_type по умолчанию) -> противоречивый режим (workflow
+    # ENGINEERING, spec L0, review/author off -> закономерный блок). Теперь task_type берём из
+    # РЕШЕНИЯ роутера (base_workflow), и его же используют resolve_flags и spec_levels.
+    if not signals.get("task_type"):
+        signals["task_type"] = plan["base_workflow"]
     flags = resolve_flags(signals)
     bundle = None
     try:
@@ -146,6 +152,15 @@ def selftest():
                            {"task_type": "CRITICAL", "risk": "critical", "affected_areas": ["db"]})
         expect("preview CRITICAL: требует human approval",
                any("человек" in a for a in pc["approvals_needed"]))
+
+        # v2.107: единая классификация — без task_type preset/spec берут решение роутера (не расходятся)
+        pv_u = build_preview("run", "поправить логику расчёта", root,
+                             {"affected_areas": ["core"], "risk": "medium"})  # без task_type
+        wf_u = pv_u["understood"]["workflow"]
+        af_u = pv_u["will_do"]["auto_flags"]
+        # если роутер выбрал ENGINEERING+ -> review/author включены (согласовано, не противоречиво)
+        expect("v2.107: без task_type preset согласован с роутером (нет ENGINEERING+L0+review off)",
+               (wf_u in ("QUICK",)) or (af_u["review"] and af_u["author"]))
 
         # много подсистем -> decomposition_advised
         pd = build_preview("run", "большой рефактор", root,

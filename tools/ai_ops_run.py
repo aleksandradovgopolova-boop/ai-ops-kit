@@ -85,32 +85,33 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
         (features_dir / fid / "run-plan.yaml").write_text(
             yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
+        # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
+        lifecycle_errors = []
         # v2.97 Context Compiler: минимальный релевантный ContextBundle для WorkItem (детерминированно).
-        # Сохраняем рядом с планом; overflow не обрезает контекст молча (поднимает open_question).
         import context_compiler
         try:
             bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
             (features_dir / fid / "context-bundle.yaml").write_text(
                 yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception:  # noqa: BLE001 — компиляция контекста не должна ронять прогон
-            bundle = None
-        # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску;
-        # какие обязательные разделы отсутствуют. Информативно (не хард-блок здесь), в отчёт+на диск.
+        except Exception as e:  # noqa: BLE001 — не роняем прогон, но и не молчим
+            bundle = None; lifecycle_errors.append(f"context_compiler: {type(e).__name__}: {e}")
+        # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
         import spec_levels
         try:
             spec_cov = spec_levels.assess(signals)
             (features_dir / fid / "spec-coverage.yaml").write_text(
                 yaml.safe_dump(spec_cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception:  # noqa: BLE001
-            spec_cov = None
+        except Exception as e:  # noqa: BLE001
+            spec_cov = None; lifecycle_errors.append(f"spec_levels: {type(e).__name__}: {e}")
         # v2.100 Atomic Planning: оценка размера пакета + нужна ли декомпозиция по контекстному бюджету.
         import atomic_planner
         try:
             work_pkg = atomic_planner.assess(signals, child_root=child_root, bundle=bundle)
             (features_dir / fid / "work-package.yaml").write_text(
                 yaml.safe_dump(work_pkg, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception:  # noqa: BLE001
-            work_pkg = None
+        except Exception as e:  # noqa: BLE001
+            work_pkg = None; lifecycle_errors.append(f"atomic_planner: {type(e).__name__}: {e}")
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
         areas = signals.get("affected_areas") or ["unspecified"]
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
@@ -129,12 +130,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
                                  workitem=f"features/{fid}/workitem.yaml")
 
-        rep = execution_pipeline.run_pipeline(
-            task_text, signals, child_root, prop, feature=feature, plan=plan,
-            commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
-            require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
-            sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
-            author=author, author_proposer=auth_prop, install_deps=install_deps)
+        # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
+        # останется in-progress навсегда) — гарантируем через except+re-raise.
+        try:
+            rep = execution_pipeline.run_pipeline(
+                task_text, signals, child_root, prop, feature=feature, plan=plan,
+                commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
+                require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
+                sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
+                author=author, author_proposer=auth_prop, install_deps=install_deps)
+        except BaseException:
+            with contextlib.redirect_stdout(sys.stderr):
+                active_work.finish_cmd(aw_path, fid)
+            raise
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
@@ -168,6 +176,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                    "should_decompose": work_pkg["should_decompose"],
                                    "decomposition_axes": work_pkg["decomposition_axes"],
                                    "decomposition_reasons": work_pkg["decomposition_reasons"]}
+        if lifecycle_errors:
+            rep["lifecycle_errors"] = lifecycle_errors   # v2.107: сбои слоя контекста видны, не гаснут
         try:
             (features_dir / fid / "run-report.json").write_text(
                 json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")

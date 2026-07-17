@@ -228,16 +228,19 @@ def override_effective(gate: dict, override) -> bool:
 def _approval_required(gate: dict, signals: dict = None) -> bool:
     """human_approval: True -> всегда; dict {required_when:[...]} -> только если условие активно
     в сигналах задачи (finding аудита: условный approval не должен блокировать безусловно).
-    Токены условий сверяются с сигналами (secret_boundary_change ~ security_surface_changed)."""
+    Токены условий сверяются с сигналами. v2.107 (finding аудита): единый набор алиасов —
+    secret_boundary_change ~ security_surface_changed ~ secret_boundary (spec_levels/security_pack
+    используют secret_boundary; раньше гейт не срабатывал от него -> дрейф имён сигнала)."""
     ha = gate.get("human_approval")
     if ha is True:
         return True
     if isinstance(ha, dict):
         conds = ha.get("required_when", []) or []
         sig = signals or {}
-        alias = {"secret_boundary_change": "security_surface_changed"}
+        alias = {"secret_boundary_change": ["security_surface_changed", "secret_boundary"]}
         for c in conds:
-            if sig.get(c) or sig.get(alias.get(c, c)):
+            names = [c] + (alias.get(c) or [])
+            if any(sig.get(n) for n in names):
                 return True
         return False
     return bool(ha)
@@ -444,6 +447,10 @@ def selftest():
            classify(sec_gate, None) != "human-approval")
     expect("security при secret_boundary_change/security_surface_changed -> human-approval",
            classify(sec_gate, {"security_surface_changed": True}) == "human-approval")
+    # v2.107 (finding аудита): единый сигнал secret_boundary (его используют spec_levels/security_pack)
+    # тоже поднимает human-approval — дрейф имён устранён
+    expect("security при secret_boundary (имя из spec/pack) -> human-approval",
+           classify(sec_gate, {"secret_boundary": True}) == "human-approval")
     expect("security при destructive-сигнале -> human-approval",
            classify(sec_gate, {"destructive": True}) == "human-approval")
     expect("безусловный human_approval:true всегда -> human-approval",
