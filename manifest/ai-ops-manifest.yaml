@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.102.0
+  package_version: 2.103.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -347,11 +347,14 @@ execution_engine:
       - "дисциплина честности: валидатор проверяет СТРУКТУРУ (есть тестируемые требования + сценарии приёмки; work_packages + dependencies + write_scope), НЕ качество — как validate_feature_blueprint. Невалидный артефакт -> гейт остаётся блокирующим (нет фабрикации). ЧЕСТНО (v2.87): качество артефактов судит ЧЕЛОВЕК — эти гейты детерминированные, поэтому in-loop --review их НЕ ревьюит (ревьюер закрывает только ai-review гейты); write_scope артефакта — декларация, движок не сужает по ней запись"
       - "ЧЕСТНАЯ ГРАНИЦА: specification (OpenSpec) НЕ производится — нужен внешний openspec CLI; честно остаётся блокирующим. Живое КАЧЕСТВО артефактов требует живой модели + человека; механика (author -> структурная проверка -> evidence) полностью тестируется offline scripted-author'ом"
     context_engineering_epic:                 # эпик Context Engineering & Spec-Driven Execution (после аудита)
-      status: "в работе (этапы 1-6 из 7)"
+      status: "ЗАВЕРШЁН (7 из 7 этапов)"
       stages: ["1 Context Compiler ✅ v2.97", "2 Adaptive Spec-First ✅ v2.98",
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
-               "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification"]
+               "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_103_context_qualification:
+      - "этап 7 (финал эпика) Qualification нового слоя: validation/validate_context_qualification.py гоняет Q1-Q10 ДЕТЕРМИНИРОВАННО против построенных инструментов (без модели, в CI): Q1 context filtering, Q2 context overflow->декомпозиция, Q3 resume, Q4 stale context, Q5 spec depth (QUICK L0 / PRODUCT L2), Q6 unsafe assumption->эскалация, Q7 security applicability (frontend без DB/tenant audit), Q8 prompt injection не переопределяет policy, Q9 long-running (решение сохранено в Handoff), Q10 human approval для auth/secret boundary"
+      - "ЭПИК Context Engineering & Spec-Driven Execution ЗАВЕРШЁН (7/7): Context Compiler (v2.97) + Adaptive Spec-First (v2.98) + Context Lifecycle/Resume (v2.99) + Atomic Planning/Context Budget (v2.100) + Security Pack (v2.101) + Intent UX (v2.102) + Qualification (v2.103). Живые сценарии с моделью — на машине пользователя; механика слоя покрыта детерминированно в CI"
     fixed_v2_102_intent_ux:
       - "этап 6 Простой внешний UX: tools/ai_ops_cli.py — intent-команды new/onboard/discuss/specify/plan/run/resume/review/status/health поверх флагов. Пользователь НЕ обязан помнить --engine pipeline/--author/--review/--baseline-diff/--sandbox: resolve_flags авто-подбирает пресет по классу задачи (ENGINEERING/PRODUCT/CRITICAL -> review+author; всегда sandbox+baseline). Флаги остаются доступны как низкоуровневый интерфейс"
       - "execution preview ДО запуска (ExecutionPreview): что понято (workflow+spec-level), что будет сделано (гейты/треки/авто-флаги), какие данные (агенты/правила/~токены/бюджет из ContextBundle), какие approvals (CRITICAL/needs_human/secret_boundary -> человек), советует ли декомпозицию, ожидаемый результат. Только `run --execute` реально запускает движок; остальное — превью/делегация"
