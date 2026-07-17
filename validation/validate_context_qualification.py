@@ -108,6 +108,25 @@ def run_scenarios():
         ok("Q4 stale context: main ушёл вперёд -> revalidation_needed",
            pf2["revalidation_needed"] is True)
 
+    # Q3b (v2.109 Real Resume): resume РЕАЛЬНО продолжает поверх подтверждённой работы (не рестарт).
+    import ai_ops_run  # noqa: E402
+    with tempfile.TemporaryDirectory() as td:
+        root = _repo(td, {"src/keep": "seed"})
+        cur = subprocess.run(["git", "-C", td, "rev-parse", "--abbrev-ref", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        sig = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        s1 = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+        r1 = ai_ops_run.run("фаза 1", sig, root, engine="pipeline", proposer=lambda c: next(s1),
+                            execute=True, feature="q3b", install_deps=False)
+        s2 = iter([{"op": "write", "path": "src/b.py", "content": "b=2\n"}, {"done": True}])
+        r2 = ai_ops_run.run("фаза 2", sig, root, engine="pipeline", proposer=lambda c: next(s2),
+                            execute=True, feature="q3b", install_deps=False, resume=True, base=cur)
+        wt = root / ".ai" / "worktrees" / "q3b"
+        ok("Q3b real resume: продолжил поверх (обе фазы в worktree, ветка переиспользована, не рестарт)",
+           bool((r1.get("commit") or {}).get("sha")) and r2.get("status") != "error"
+           and (r2.get("resume") or {}).get("resumed") is True
+           and (wt / "src" / "a.py").exists() and (wt / "src" / "b.py").exists())
+
     # Q5 spec depth
     q = spec_levels.assess({"task_type": "QUICK"})
     p = spec_levels.assess({"task_type": "PRODUCT"})

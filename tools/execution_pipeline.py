@@ -524,13 +524,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
-                 author=False, author_proposer=None, plan=None, context_prelude=None):
+                 author=False, author_proposer=None, plan=None, context_prelude=None,
+                 resume=False, resume_context=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
     v2.108 (Operational Context): context_prelude — compiled payload из ContextBundle (реальное
     содержимое релевантных правил/решений/спек), который РЕАЛЬНО попадает в prompt модели (prepend к
     base_context tool loop) — не только статистика в отчёте.
+
+    v2.109 (Real Resume): resume=True — ПРОДОЛЖИТЬ WorkItem поверх уже подтверждённой работы, а не
+    начинать заново. Ветка ai-ops/<wid> и её коммиты НЕ удаляются (иначе потеряли бы результат);
+    worktree переиспользуется (или пере-подключается к сохранившейся ветке). resume_context —
+    состояние из RunHandoff (что сделано/решения/следующий шаг), реально подаётся модели в начало
+    prompt, чтобы она продолжила, а не переделала подтверждённое.
 
     v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
     чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
@@ -547,37 +554,67 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 1b. изоляция (finding аудита): весь прогон в отдельном git worktree на ветке ai-ops/<id>,
     #     основное рабочее дерево child не трогается. work_root = каталог worktree.
     work_root, worktree_rel = child_root, None
+    resume_info = {"requested": bool(resume), "resumed": False,
+                   "reused_worktree": False, "reused_branch": False} if resume else None
     if isolate:
         import worktree as _wt
         branch = f"ai-ops/{wid}"
         wp = child_root / ".ai" / "worktrees" / wid
-        # finding живого прогона: worktree от ПРЕДЫДУЩЕГО прогона того же wid молча
-        # переиспользовался -> прогон шёл поверх грязного состояния (нечистый baseline).
-        # P0.3 (аудит v2.79): но слепо удалять прошлую ветку ОПАСНО — там могут быть НЕсохранённые
-        # коммиты (PR не открылся и т.п.). Удаляем только если на ветке нет работы ЛИБО явный discard.
-        if wp.is_dir() or _wt._branch_exists(child_root, branch):
-            ahead = 0
-            if _wt._branch_exists(child_root, branch):
-                # коммиты на ветке ai-ops/<wid>, которых нет в текущем HEAD -> несохранённая работа
-                rc_a, out_a, _ = _git(child_root, "rev-list", "--count", branch, "^HEAD")
-                ahead = int(out_a) if rc_a == 0 and out_a.isdigit() else 0
-            if ahead > 0 and not discard_previous:
-                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
-                        "status": "error",
-                        "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
-                                 f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
-                                 f"остановлен. Передай discard_previous=True (--discard) для "
-                                 f"перезаписи ИЛИ запусти с другим --feature.",
-                        "loop": None, "isolation": {"worktree": None}, "gates": None,
-                        "ready_for_pr": False, "overall_status": "error"}
-            _wt.remove(child_root, wid, force=True)
-            _git(child_root, "worktree", "prune")
-            _git(child_root, "branch", "-D", branch)
-        rc = _wt.add(child_root, wid, branch)
-        if rc == 0:
+        branch_exists = _wt._branch_exists(child_root, branch)
+        # v2.109 Real Resume: продолжаем ПОВЕРХ подтверждённой работы — ветку/коммиты НЕ удаляем.
+        reused = False
+        if resume and (branch_exists or wp.is_dir()):
+            if not wp.is_dir() and branch_exists:
+                # worktree утерян, но ветка (коммиты) на месте -> пере-подключаем worktree к ветке
+                rc = _wt.add(child_root, wid, branch)
+                if rc != 0:
+                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                            "status": "error",
+                            "error": f"resume: не удалось пере-подключить worktree к ветке {branch} "
+                                     f"(занята? не в .gitignore?) — прогон остановлен, работа не тронута",
+                            "loop": None, "isolation": {"worktree": None}, "gates": None,
+                            "ready_for_pr": False, "resume": {**resume_info, "resumed": False}}
+                resume_info["reused_branch"] = True
+            else:
+                resume_info["reused_worktree"] = True
+                resume_info["reused_branch"] = branch_exists
             work_root = wp
             worktree_rel = wp.relative_to(child_root).as_posix()
-        else:
+            resume_info["resumed"] = True
+            reused = True
+        if not reused:
+            if resume:
+                # resume запрошен, но продолжать нечего (ни ветки, ни worktree) — честный свежий старт
+                resume_info["reason"] = (f"ни ветки {branch}, ни worktree нет — продолжать нечего; "
+                                         f"выполняется свежий старт")
+            # finding живого прогона: worktree от ПРЕДЫДУЩЕГО прогона того же wid молча
+            # переиспользовался -> прогон шёл поверх грязного состояния (нечистый baseline).
+            # P0.3 (аудит v2.79): но слепо удалять прошлую ветку ОПАСНО — там могут быть НЕсохранённые
+            # коммиты (PR не открылся и т.п.). Удаляем только если на ветке нет работы ЛИБО явный discard.
+            if wp.is_dir() or branch_exists:
+                ahead = 0
+                if branch_exists:
+                    # коммиты на ветке ai-ops/<wid>, которых нет в текущем HEAD -> несохранённая работа
+                    rc_a, out_a, _ = _git(child_root, "rev-list", "--count", branch, "^HEAD")
+                    ahead = int(out_a) if rc_a == 0 and out_a.isdigit() else 0
+                if ahead > 0 and not discard_previous:
+                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                            "status": "error",
+                            "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
+                                     f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
+                                     f"остановлен. Передай resume=True (--resume) чтобы ПРОДОЛЖИТЬ "
+                                     f"поверх них, discard_previous=True (--discard) для перезаписи ИЛИ "
+                                     f"запусти с другим --feature.",
+                            "loop": None, "isolation": {"worktree": None}, "gates": None,
+                            "ready_for_pr": False, "overall_status": "error"}
+                _wt.remove(child_root, wid, force=True)
+                _git(child_root, "worktree", "prune")
+                _git(child_root, "branch", "-D", branch)
+            rc = _wt.add(child_root, wid, branch)
+            if rc == 0:
+                work_root = wp
+                worktree_rel = wp.relative_to(child_root).as_posix()
+        if work_root is child_root:
             # finding adversarial-review: НЕ деградируем молча в основное дерево — это исполнило бы
             # правки и коммит в main вопреки isolate=True. Останавливаемся честной ошибкой.
             return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
@@ -651,6 +688,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # v2.108 Operational Context: compiled payload из ContextBundle РЕАЛЬНО в prompt (не только отчёт).
     if context_prelude:
         ctx = context_prelude + "\n\n" + ctx
+    # v2.109 Real Resume: состояние из RunHandoff в самое начало prompt — модель ПРОДОЛЖАЕТ, а не
+    # переделывает подтверждённое (что сделано / решения / следующий шаг).
+    if resume_context:
+        ctx = resume_context + "\n\n" + ctx
     if baseline_diff:
         fails = _baseline_failure_summary(baseline_checks)
         if fails:
@@ -909,6 +950,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  "transcript": [{k: t.get(k) for k in ("step", "op", "allowed", "ok", "done", "reason")
                                  if k in t} for t in (loop.get("transcript") or [])][:40]},
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
+        "resume": resume_info,                     # v2.109: продолжение поверх подтверждённой работы (None если resume не запрошен)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
         "prepare_ok": prepare_ok,                  # P0.6: install прошёл -> окружение квалифицировано
         "prepare_mutated_tree": prepare_mutated_tree,  # P0.6: подготовка меняла tracked -> откачено до модели
@@ -1127,6 +1169,50 @@ def selftest():
                      install_deps=False, context_prelude="MARKER_CONTEXT_PAYLOAD_XYZ")
         expect("v2.108: context_prelude попал в prompt модели (base_context петли)",
                "MARKER_CONTEXT_PAYLOAD_XYZ" in (seen_ctx.get("first") or ""))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.109 Real Resume: первый прогон коммитит работу; resume ПРОДОЛЖАЕТ поверх неё
+        # (ветка/коммит НЕ удаляются, worktree переиспользуется, resume_context доходит до модели).
+        it_r1 = iter([{"op": "write", "path": "src/first.py", "content": "a=1\n"},
+                      {"done": True, "summary": "фаза 1"}])
+        rep_r1 = run_pipeline("resume фаза 1", sig, root, lambda c: next(it_r1),
+                              budget={"max_model_calls": 5}, feature="resume-fn",
+                              commit=True, isolate=True, install_deps=False)
+        sha1 = (rep_r1.get("commit") or {}).get("sha")
+        expect("v2.109 resume: фаза 1 закоммичена на ветке", bool(sha1))
+        _git(root, "checkout", "-q", orig_branch)
+
+        seen_r = {}
+        it_r2 = iter([{"op": "write", "path": "src/second.py", "content": "b=2\n"},
+                      {"done": True, "summary": "фаза 2"}])
+        def _resume_prop(c):
+            seen_r.setdefault("ctx", c)
+            return next(it_r2)
+        rep_r2 = run_pipeline("resume фаза 2", sig, root, _resume_prop,
+                              budget={"max_model_calls": 5}, feature="resume-fn",
+                              commit=True, isolate=True, install_deps=False,
+                              resume=True, resume_context="MARKER_RESUME_STATE_ABC")
+        rinfo = rep_r2.get("resume") or {}
+        expect("v2.109 resume: НЕ ошибка про несохранённые коммиты (продолжаем, а не падаем)",
+               rep_r2.get("status") != "error")
+        expect("v2.109 resume: resumed=True + ветка переиспользована (работа не потеряна)",
+               rinfo.get("resumed") is True and rinfo.get("reused_branch") is True)
+        expect("v2.109 resume: resume_context РЕАЛЬНО в prompt модели",
+               "MARKER_RESUME_STATE_ABC" in (seen_r.get("ctx") or ""))
+        wt_r = root / ".ai" / "worktrees" / "resume-fn"
+        expect("v2.109 resume: работа фазы 1 сохранена в worktree (продолжили поверх, не с нуля)",
+               (wt_r / "src" / "first.py").exists() and (wt_r / "src" / "second.py").exists())
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.109 resume: нечего продолжать (нет ветки) -> честный fresh, resumed=False + причина
+        it_r3 = iter([{"op": "write", "path": "src/n.py", "content": "n=1\n"}, {"done": True}])
+        rep_r3 = run_pipeline("resume без прошлого", sig, root, lambda c: next(it_r3),
+                              budget={"max_model_calls": 5}, feature="resume-none",
+                              commit=True, isolate=True, install_deps=False, resume=True)
+        rinfo3 = rep_r3.get("resume") or {}
+        expect("v2.109 resume: нет прошлого прогона -> честный fresh (resumed=False + причина)",
+               rinfo3.get("resumed") is False and bool(rinfo3.get("reason"))
+               and rep_r3.get("status") != "error")
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями

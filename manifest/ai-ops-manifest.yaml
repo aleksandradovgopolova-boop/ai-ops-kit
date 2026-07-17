@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.108.0
+  package_version: 2.109.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,11 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_109_real_resume:
+      - "P0 аудита закрыт: resume больше НЕ рестарт и не заглушка (раньше `ai-ops resume` делал только preflight и ПЕЧАТАЛ подсказку; а `run --feature X` поверх ветки с коммитами ПАДАЛ ошибкой P0.3 — продолжить было нечем). Теперь run_pipeline(resume=True): ветка ai-ops/<wid> и её коммиты НЕ удаляются, worktree переиспользуется (или пере-подключается к сохранившейся ветке), tool loop продолжает ПОВЕРХ подтверждённой работы"
+      - "состояние в prompt: контроллер собирает resume_context из RunHandoff (completed/decisions/changed_files/open_questions/next_action) и подаёт его в начало base_context tool loop -> модель ПРОДОЛЖАЕТ, а не переделывает подтверждённое. Доказано тестом: MARKER_RESUME_STATE_ABC найден в prompt; работа фазы 1 (src/first.py) сохранена в worktree рядом с фазой 2"
+      - "честность (fail-closed): нечего продолжать (нет ни ветки, ни worktree) -> preflight can_resume=False -> honest error, не притворяемся свежим прогоном; база/состояние устарели (main ушёл вперёд, ревизия прогона не найдена) -> status=blocked без --force (не продолжаем молча на устаревшем evidence); при --force продолжаем, но отчёт помечает resume.revalidation_overridden=True + preflight_reasons (осознанное решение видно)"
+      - "CLI: `ai-ops resume <root> <feature> [--base] [--execute] [--force] [--task]` — без --execute только preflight; с --execute реально продолжает (task по умолчанию = next_action из Handoff). ai_ops_cli проксирует --execute/--force/--base. Q3b в context-qualification + resume-сценарии в execution_pipeline/ai_ops_run selftest проверяют реальное продолжение (не рестарт) и обе честностные блокировки"
     fixed_v2_108_operational_context:
       - "ГЛАВНЫЙ P0 аудита закрыт: ContextBundle теперь РЕАЛЬНО попадает в prompt модели, а не только в отчёт. context_compiler.build_payload собирает compiled payload — СОДЕРЖИМОЕ релевантных правил/решений/спек/repo+project context (не пути), с манифестом (source/hash/revision/tokens/reason). Бюджет: output_reserve 25% + tool_loop_reserve 15% + окно модели (MODEL_CONTEXT) — payload режется по МЕНЬШЕМУ. Вытеснение фиксируется в excluded_for_budget (не молча)"
       - "вплетение: run_pipeline(context_prelude=...) prepend'ит payload к base_context tool loop -> модель РЕАЛЬНО его видит. Доказано тестом: MARKER_CONTEXT_PAYLOAD_XYZ найден в base_context петли. Контроллер собирает payload из bundle, сохраняет features/<wid>/context-payload.yaml (манифест без text), report['context_payload'].fed_to_model=True"
