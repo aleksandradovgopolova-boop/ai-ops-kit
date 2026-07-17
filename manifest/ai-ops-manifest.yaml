@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.67.0
+  package_version: 2.68.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -269,7 +269,7 @@ execution_engine:
       - "P1.2 усиление детектора стека: сейчас определяет базовые команды build/lint/typecheck/test по манифестам; edge-случаи (монорепо, нестандартные скрипты) требуют доработки"
       - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
       - "живой draft PR: механизм готов (pr_open, open_pr=True), нужен GITHUB_TOKEN + remote — эмпирически не прогнан"
-      - "квалификация: 3–5 реальных задач (баг/UI/средняя фича) на репо С тулчейном против обычной сессии Claude Code — до конца НЕ прогнано"
+      - "квалификация: харнесс ГОТОВ (tools/qual_run.py: прогон N задач -> JSON-отчёты + сводка pass/fail по критериям; offline-selftest в CI). ОСТАЛОСЬ (нужен Mac+DeepSeek): реально прогнать 3–5 задач на репо С тулчейном и приложить отчёты"
   self_audit_2026_07_17:                     # собственный аудит на соответствие видению (решение ep-2026-07-17-vision-audit)
     scope: "VISION.md/ROADMAP.md vs код (агент-ревьюер + ручная верификация); НЕ execution-engine backlog"
     fixed_v2_67:

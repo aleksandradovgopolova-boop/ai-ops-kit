@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.68.0] — 2026-07-17
+
+**Квалификационный харнесс — `tools/qual_run.py`.** Инструмент для последнего реального пункта
+`p0_backlog`: прогнать 3–5 обычных задач через собранный движок на child-репо с тулчейном и
+получить объективный вердикт «дошло до проверяемого draft PR или нет».
+
+### Added
+- **`tools/qual_run.py`** — гоняет список задач через `ai-ops run --engine pipeline --execute`,
+  складывает JSON-отчёт на каждую задачу + `summary.json`, печатает сводку pass/fail по
+  критериям квалификации (`status≠error`, `loop.stopped=done`, `denied=0`, `commit` на точном
+  SHA, `gates.blocked=false`, `ready_for_pr=true`). Ключ/токен — только из env; в отчёты не
+  попадают (`scrub_env`). Код возврата 0/1/2 (успех/провал/конфиг). Offline `--selftest`
+  проверяет логику вердикта, серию и запись отчётов на mock-раннере без сети. Русские задачи
+  транслитерируются в уникальные slug (workitem_id/имя отчёта не коллизируют).
+- **`examples/qual-tasks.example.txt`** — шаблон списка задач.
+
+### Changed
+- **AGENTS.md + CI (`package-quality.yml`)** — добавлен `qual_run.py --selftest`.
+- **manifest** — `p0_backlog`: пункт квалификации уточнён (харнесс готов; остаётся живой прогон
+  с Mac). `package_version` → 2.68.0.
+
 ## [2.67.0] — 2026-07-17
 
 **Contract Integrity — собственный аудит на соответствие видению.** После закрытия внешних

@@ -75,6 +75,8 @@ jobs:
         run: python3 tools/merge_memory.py --selftest
       - name: Concurrency preflight — коллизии параллельной работы (selftest)
         run: python3 tools/concurrency_preflight.py --selftest
+      - name: Квалификационный прогон-харнесс (selftest, offline)
+        run: python3 tools/qual_run.py --selftest
       - name: Событийный каталог — согласованность имён (selftest + пример)
         run: |
           python3 validation/validate_event_catalog.py --selftest
