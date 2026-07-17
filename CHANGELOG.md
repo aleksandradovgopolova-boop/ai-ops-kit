@@ -2,6 +2,39 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.109.0] — 2026-07-17 — Real Resume: продолжение работы, а не рестарт
+
+Аудит держал P0: resume «не продолжает». `ai-ops resume` делал только preflight и печатал подсказку,
+а повторный `run --feature X` поверх ветки с коммитами **падал** ошибкой P0.3 — продолжить работу
+было нечем. Закрыто: resume реально продолжает поверх подтверждённой работы.
+
+### Added
+- **`run_pipeline(resume=True, resume_context=...)`** (`execution_pipeline.py`) — ветка
+  `ai-ops/<wid>` и её коммиты **не удаляются**; worktree переиспользуется (или пере-подключается к
+  сохранившейся ветке); tool loop продолжает **поверх** результата, а не с нуля. `report['resume']`
+  фиксирует `{resumed, reused_worktree, reused_branch}`.
+- **Состояние в prompt** (`ai_ops_run.py`) — контроллер собирает `resume_context` из RunHandoff
+  (что сделано / решения / изменённые файлы / открытые вопросы / next_action) и подаёт его в начало
+  `base_context` tool loop → модель **продолжает**, не переделывая подтверждённое.
+- **`ai-ops resume <root> <feature> [--base] [--execute] [--force] [--task]`** — без `--execute`
+  только preflight; с `--execute` реально продолжает (task по умолчанию = `next_action` из Handoff).
+  `ai_ops_cli` проксирует `--execute/--force/--base`.
+
+### Честность (fail-closed)
+- **Нечего продолжать** (нет ни ветки, ни worktree) → `can_resume=False` → honest error (не
+  притворяемся свежим прогоном).
+- **База/состояние устарели** (main ушёл вперёд, ревизия прогона не найдена) → `status=blocked`
+  без `--force` — не продолжаем молча на устаревшем evidence. С `--force` продолжаем, но отчёт
+  честно помечает `resume.revalidation_overridden=True` + `preflight_reasons`.
+
+Q3b (qualification) + resume-сценарии в `execution_pipeline`/`ai_ops_run` selftest проверяют реальное
+продолжение (обе фазы в worktree, ветка переиспользована) и обе честностные блокировки.
+
+### Осталось (крупные, отдельными релизами)
+Real spec-first authoring (`specify`), Atomic Planner создаёт WorkPackages, Intent UX
+(onboard/discuss/plan/review/status/health — настоящие действия), container delivery только текущей
+ветки, product-qualification с живой моделью. См. ROADMAP.
+
 ## [2.108.0] — 2026-07-17 — Operational Context: ContextBundle реально в prompt модели
 
 Внешний аудит на v2.104 держал #1 P0: Context Compiler измерял и фильтровал контекст, но собранное

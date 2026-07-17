@@ -43,12 +43,36 @@ import workitem          # noqa: E402
 import active_work       # noqa: E402
 
 
+def _resume_context_from_handoff(child_root, fid):
+    """v2.109 Real Resume: собрать из RunHandoff текст-состояние для prompt tool-loop, чтобы модель
+    ПРОДОЛЖИЛА, а не переделала подтверждённое. Детерминированно, из features/<fid>/run-handoff.yaml."""
+    hp = Path(child_root) / "features" / fid / "run-handoff.yaml"
+    if not hp.is_file():
+        return None
+    h = yaml.safe_load(hp.read_text(encoding="utf-8")) or {}
+    lines = ["=== RESUME: ПРОДОЛЖЕНИЕ РАБОТЫ (НЕ начинай заново, НЕ переделывай уже подтверждённое) ==="]
+    if h.get("completed"):
+        lines.append("Уже сделано:\n" + "\n".join(f"- {c}" for c in h["completed"]))
+    dec = [d for d in (h.get("decisions") or []) if isinstance(d, dict)]
+    if dec:
+        lines.append("Принятые решения (не пересматривай без причины):\n"
+                     + "\n".join(f"- {d.get('id', '?')}: {d.get('summary', '')}" for d in dec))
+    if h.get("changed_files"):
+        lines.append("Уже изменены файлы: " + ", ".join(h["changed_files"]))
+    if h.get("open_questions"):
+        lines.append("Открытые вопросы / осталось:\n" + "\n".join(f"- {q}" for q in h["open_questions"]))
+    if h.get("next_action"):
+        lines.append("СЛЕДУЮЩИЙ БЕЗОПАСНЫЙ ШАГ: " + str(h["next_action"]))
+    return "\n\n".join(lines)
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="controller", proposer=None, open_pr=False, model=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
-        author=False, author_proposer=None, install_deps=True):
+        author=False, author_proposer=None, install_deps=True,
+        resume=False, force_resume=False, base="main"):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -81,6 +105,30 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # возвращал отчёт, не создавая WorkItem/active-work/run-report.
         plan = run_plan.build_plan(signals, workitem_id=feature)
         fid = plan["workitem_id"]
+
+        # v2.109 Real Resume: продолжить WorkItem поверх подтверждённой работы (не начинать заново).
+        # Проверяем ДО регистрации/изменения состояния, чтобы честный ранний выход ничего не оставил.
+        resume_ctx = None
+        if resume:
+            import run_handoff
+            pf = run_handoff.resume_preflight(child_root, fid, base=base)
+            if not pf["can_resume"]:
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                        "status": "error", "engine": "pipeline", "ready_for_pr": False,
+                        "error": "resume невозможен: " + "; ".join(pf["reasons"]),
+                        "resume": {"requested": True, "resumed": False, "can_resume": False,
+                                   "reasons": pf["reasons"]}}
+            # ЧЕСТНОСТЬ: база/состояние изменились -> НЕ продолжаем молча на устаревшем evidence.
+            if pf["revalidation_needed"] and not force_resume:
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                        "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
+                        "error": "resume требует ревалидации (база/состояние изменились с прошлого "
+                                 "прогона) — перепроверь и запусти с force_resume=True (--force), "
+                                 "чтобы продолжить осознанно",
+                        "resume": {"requested": True, "resumed": False, "revalidation_needed": True,
+                                   "reasons": pf["reasons"]}}
+            resume_ctx = _resume_context_from_handoff(child_root, fid)
+
         workitem.start(str(features_dir), fid, task_text,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
         (features_dir / fid / "run-plan.yaml").write_text(
@@ -148,7 +196,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
-                context_prelude=(payload or {}).get("text"))
+                context_prelude=(payload or {}).get("text"),
+                resume=resume, resume_context=resume_ctx)
         except BaseException:
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
@@ -157,6 +206,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
         rep["model"] = model
+        # v2.109 Real Resume: если продолжали — честно фиксируем в отчёте preflight-контекст (в т.ч.
+        # что ревалидация требовалась и была осознанно переопределена --force), не только факт reuse.
+        if resume and isinstance(rep.get("resume"), dict):
+            rep["resume"]["preflight_reasons"] = pf["reasons"]
+            rep["resume"]["revalidation_needed"] = pf["revalidation_needed"]
+            rep["resume"]["revalidation_overridden"] = bool(pf["revalidation_needed"] and force_resume)
         # v2.94: единая транзакция — фиксируем lifecycle-артефакты в отчёте и на диске
         rep["lifecycle"] = {
             "workitem": f"features/{fid}/workitem.yaml",
@@ -487,6 +542,58 @@ def selftest():
         expect("P0.1: exit_code == 2 при status=error",
                exit_code({"kind": "execution-pipeline", "status": "error"}) == 2)
 
+    # v2.109 Real Resume (контроллер): первый прогон коммитит + пишет RunHandoff; resume ПРОДОЛЖАЕТ
+    # поверх той же ветки (не рестарт, работа не потеряна), а не выдаёт ошибку про несохранённые коммиты.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        subprocess.run(["git", "-C", td, "init", "-q"])
+        subprocess.run(["git", "-C", td, "config", "user.email", "t@t"])
+        subprocess.run(["git", "-C", td, "config", "user.name", "t"])
+        (root / "src").mkdir(); (root / "seed").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"])
+        cur = subprocess.run(["git", "-C", td, "rev-parse", "--abbrev-ref", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        sig_r = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        s1 = iter([{"op": "write", "path": "src/phase1.py", "content": "p=1\n"}, {"done": True}])
+        r_p1 = run("фаза 1", sig_r, root, engine="pipeline", proposer=lambda c: next(s1),
+                   execute=True, feature="ctl-resume", install_deps=False)
+        expect("v2.109 ctl: фаза 1 закоммичена + handoff записан",
+               bool((r_p1.get("commit") or {}).get("sha"))
+               and (root / "features" / "ctl-resume" / "run-handoff.yaml").exists())
+        # resume БЕЗ execute-параметра тут не нужен — вызываем run(resume=True); ветка переиспользуется
+        s2 = iter([{"op": "write", "path": "src/phase2.py", "content": "p=2\n"}, {"done": True}])
+        r_p2 = run("фаза 2", sig_r, root, engine="pipeline", proposer=lambda c: next(s2),
+                   execute=True, feature="ctl-resume", install_deps=False, resume=True, base=cur)
+        expect("v2.109 ctl: resume продолжил (не ошибка про несохранённые коммиты)",
+               r_p2.get("status") != "error" and (r_p2.get("resume") or {}).get("resumed") is True)
+        wt_c = root / ".ai" / "worktrees" / "ctl-resume"
+        expect("v2.109 ctl: обе фазы в worktree (продолжили поверх, не с нуля)",
+               (wt_c / "src" / "phase1.py").exists() and (wt_c / "src" / "phase2.py").exists())
+        # честность: нечего продолжать -> resume даёт honest error (не притворяется свежим прогоном)
+        r_none = run("продолжить пустоту", sig_r, root, engine="pipeline",
+                     proposer=lambda c: {"done": True}, execute=True, feature="never-ran",
+                     install_deps=False, resume=True, base=cur)
+        expect("v2.109 ctl: resume без прошлого -> honest error (can_resume=False)",
+               r_none.get("status") == "error" and (r_none.get("resume") or {}).get("can_resume") is False)
+        # честность: base ушёл вперёд -> resume БЕЗ --force блокируется (не продолжаем молча на устаревшем)
+        (root / "moved.txt").write_text("z", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "base+1"])
+        s3 = iter([{"op": "write", "path": "src/phase3.py", "content": "p=3\n"}, {"done": True}])
+        r_block = run("фаза 3", sig_r, root, engine="pipeline", proposer=lambda c: next(s3),
+                      execute=True, feature="ctl-resume", install_deps=False, resume=True, base=cur)
+        expect("v2.109 ctl: устаревшая база -> resume блокируется без --force (честно, не молча)",
+               r_block.get("status") == "blocked"
+               and (r_block.get("resume") or {}).get("revalidation_needed") is True)
+        # с --force продолжает осознанно, и отчёт ЧЕСТНО помечает, что ревалидация переопределена
+        s4 = iter([{"op": "write", "path": "src/phase4.py", "content": "p=4\n"}, {"done": True}])
+        r_force = run("фаза 4", sig_r, root, engine="pipeline", proposer=lambda c: next(s4),
+                      execute=True, feature="ctl-resume", install_deps=False, resume=True,
+                      force_resume=True, base=cur)
+        expect("v2.109 ctl: --force продолжает + отчёт помечает revalidation_overridden=True (честно)",
+               r_force.get("status") != "error"
+               and (r_force.get("resume") or {}).get("resumed") is True
+               and (r_force.get("resume") or {}).get("revalidation_overridden") is True)
+
     # orchestrated-путь (generic-orchestrator, mock без evidence -> blocked, но транзакция прошла)
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -556,27 +663,59 @@ def main(argv):
                          "живая модель (не mock)")
     rp.add_argument("--json", action="store_true")
     # v2.99: resume — продолжить WorkItem по последнему RunHandoff (не начинать заново)
+    # v2.109 Real Resume: с --execute РЕАЛЬНО продолжает tool-loop поверх ветки/worktree прошлого
+    # прогона (не рестарт); без --execute — только preflight (что продолжим, нужна ли ревалидация).
     rs = sub.add_parser("resume")
     rs.add_argument("child_root"); rs.add_argument("feature")
     rs.add_argument("--base", default="main"); rs.add_argument("--json", action="store_true")
+    rs.add_argument("--task", help="задача-продолжение (по умолчанию — next_action из RunHandoff)")
+    rs.add_argument("--signals", default="{}")
+    rs.add_argument("--execute", action="store_true",
+                    help="РЕАЛЬНО продолжить прогон (tool-loop поверх ветки прошлого прогона); "
+                         "без флага — только preflight")
+    rs.add_argument("--force", action="store_true",
+                    help="продолжить, даже если нужна ревалидация (база/состояние изменились) — "
+                         "осознанное решение человека")
+    rs.add_argument("--provider", default="mock")
+    rs.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat)")
     a = ap.parse_args(argv)
     if a.cmd == "resume":
         import run_handoff
         pf = run_handoff.resume_preflight(a.child_root, a.feature, base=a.base)
+        if not a.execute:
+            if a.json:
+                print(json.dumps(pf, ensure_ascii=False, indent=2))
+            else:
+                print(f"ai-ops resume {a.feature}: can_resume={pf['can_resume']} · "
+                      f"revalidation_needed={pf.get('revalidation_needed')}")
+                for r_ in pf["reasons"]:
+                    print(f"  · {r_}")
+                if pf.get("next_action"):
+                    print(f"  следующий шаг: {pf['next_action']}")
+                if pf["can_resume"]:
+                    reval = pf.get("revalidation_needed")
+                    print(f"  продолжить: ai-ops resume {a.child_root} {a.feature} --execute"
+                          f"{' --force' if reval else ''}   (worktree/ветка переиспользуются; "
+                          f"{'нужна ревалидация -> --force' if reval else 'база актуальна'})")
+            return 0 if pf["can_resume"] else 1
+        # РЕАЛЬНОЕ продолжение (v2.109)
+        task = a.task or (pf.get("next_action") if pf.get("can_resume") else None) or "продолжить работу"
+        report = run(task, json.loads(a.signals), Path(a.child_root),
+                     provider_name=a.provider, model=a.model, engine="pipeline",
+                     execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base)
+        rinfo = report.get("resume") or {}
         if a.json:
-            print(json.dumps(pf, ensure_ascii=False, indent=2))
+            print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         else:
-            print(f"ai-ops resume {a.feature}: can_resume={pf['can_resume']} · "
-                  f"revalidation_needed={pf.get('revalidation_needed')}")
-            for r_ in pf["reasons"]:
-                print(f"  · {r_}")
-            if pf.get("next_action"):
-                print(f"  следующий шаг: {pf['next_action']}")
-            if pf["can_resume"]:
-                print(f"  продолжить: ai-ops run \"<задача>\" {a.child_root} --engine pipeline "
-                      f"--feature {a.feature} --execute   (worktree/ветка переиспользуются; "
-                      f"{'ревалидация нужна' if pf.get('revalidation_needed') else 'база актуальна'})")
-        return 0 if pf["can_resume"] else 1
+            print(f"ai-ops resume {a.feature}: status={report.get('status') or report.get('overall_status')} · "
+                  f"resumed={rinfo.get('resumed')} · reused_branch={rinfo.get('reused_branch')}")
+            if report.get("error"):
+                print(f"  · {report['error']}")
+            if report.get("ready_for_pr") is not None:
+                print(f"  ready_for_pr={report.get('ready_for_pr')}")
+        if report.get("status") in ("error", "blocked"):
+            return 2 if report.get("status") == "error" else 1
+        return 0 if report.get("ready_for_pr") else 1
     if a.cmd == "run":
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
                      a.runtime, a.provider, a.session, a.execute, feature=a.feature,

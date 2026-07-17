@@ -276,8 +276,11 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   а tool loop получает task+стек+baseline. Это ключевой разрыв «описывает, но не управляет».
 - **Real Spec-First & Planning (planned)** — `specify` реально создаёт/валидирует спеку; SpecCoverage
   заполняется из артефактов; Atomic Planner создаёт конкретные WorkPackages.
-- **Real Resume & Intent UX (planned)** — отдельный resume-mode (открывает существующий worktree,
-  ревалидирует SHA, продолжает tool loop с next_action, не начиная заново); onboard/discuss/plan/
+- **Real Resume (v2.109) ✅** — resume-mode ПРОДОЛЖАЕТ поверх подтверждённой работы: переиспользует
+  ветку/worktree прошлого прогона (коммиты НЕ удаляются), подаёт модели состояние из RunHandoff
+  (что сделано/решения/next_action), tool loop продолжает, а не начинает заново. Честность: нечего
+  продолжать → honest error; база/состояние устарели → блок без `--force` (не молча на старом
+  evidence). `ai-ops resume … --execute [--force]`. Осталось (Intent UX): onboard/discuss/plan/
   review/status/health — настоящие действия; container delivery забирает только ветку текущего run.
 - **Product Qualification (planned)** — сквозные сценарии с живой моделью (ContextBundle меняет
   prompt; неполная спека не пускает в implementation; resume после сессии; auth/secret без человека

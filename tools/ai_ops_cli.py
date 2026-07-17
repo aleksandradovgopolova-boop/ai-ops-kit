@@ -197,6 +197,9 @@ def main(argv):
     ap.add_argument("--signals", default="{}")
     ap.add_argument("--feature")
     ap.add_argument("--execute", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    help="resume: продолжить даже при нужной ревалидации (осознанно)")
+    ap.add_argument("--base", default="main", help="resume: base-ветка для проверки устаревания")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -216,7 +219,15 @@ def main(argv):
 
     if intent == "resume":
         import ai_ops_run
-        return ai_ops_run.main(["resume", child_root, a.feature or (task or "")])
+        # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
+        argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
+        if a.execute:
+            argv2.append("--execute")
+        if a.force:
+            argv2.append("--force")
+        if a.json:
+            argv2.append("--json")
+        return ai_ops_run.main(argv2)
 
     pv = build_preview(intent, task, Path(child_root), signals)
     if a.json:
