@@ -59,20 +59,25 @@ def make_model_proposer(provider):
             '  {"done":true,"summary":"..."}                 — верни ЭТО, когда задача выполнена\n'
             "Правила: НЕ повторяй уже успешно выполненный шаг (см. журнал ниже — там строки "
             "'-> OK'). Как только нужные файлы записаны и проверка (shell) прошла — сразу верни "
-            "done, не пиши файл повторно. Только JSON, без пояснений.\n\n"
+            "done, не пиши файл повторно. ЧИТАЙ (read) МИНИМУМ — 1-2 файла, чтобы понять, затем "
+            "СРАЗУ вноси правку через write. НЕ читай по кругу: если файл уже прочитан (есть в "
+            "журнале), не читай его снова — пиши фикс. Только JSON, без пояснений.\n\n"
             "=== ЗАДАЧА И ЖУРНАЛ УЖЕ ВЫПОЛНЕННЫХ ШАГОВ ===\n" + context)
         return parse_action(provider(prompt))
     return propose
 
 
 def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
-             max_bad_proposals=3):
+             max_bad_proposals=3, max_consecutive_reads=5):
     """Гонять петлю до done / budget / max_steps. proposer(context)->action|{'done':true}.
 
     finding живого прогона: живая модель (DeepSeek) недетерминирована и иногда возвращает
     невалидный JSON. Раньше ОДНА кривая реплика обрывала весь прогон. Теперь — до
-    max_bad_proposals ПОДРЯД корректирующих переспросов (модели показывают её ошибку и
-    просят чистый JSON); счётчик сбрасывается на любом валидном действии.
+    max_bad_proposals ПОДРЯД корректирующих переспросов; счётчик сбрасывается на валидном действии.
+
+    finding живого прогона (fix-задача): слабая модель может «читать по кругу» — 20 read подряд,
+    0 записей, упор в max_steps. Анти-флейл: после max_consecutive_reads чтений подряд без
+    записи следующее read ОТКЛОНЯЕТСЯ на уровне петли с требованием вернуть write/done.
     """
     root = Path(root)
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
@@ -80,6 +85,7 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
     context = base_context
     stopped = "max_steps"
     bad_streak = 0
+    consec_reads = 0
     for step in range(max_steps):
         try:
             bud.charge_call()                       # каждый запрос к модели — под потолком
@@ -97,12 +103,26 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
                         f"markdown-обрамления, без пояснений, без текста до/после.")
             continue
         bad_streak = 0
+        # анти-флейл: слишком много чтений подряд без записи -> не исполняем ещё одно чтение
+        if action.get("op") == "read" and consec_reads >= max_consecutive_reads:
+            transcript.append({"step": step, "op": "read", "allowed": False,
+                               "reason": f"read-cap: {consec_reads} чтений подряд без записи"})
+            context += (f"\n[шаг {step}] СТОП-ЧТЕНИЕ: уже {consec_reads} чтений подряд без единой "
+                        f"записи. Больше НЕ читай. Верни СЛЕДУЮЩИМ РОВНО одно "
+                        f"{{\"op\":\"write\",\"path\":...,\"content\":...}} с фактическим фиксом "
+                        f"или {{\"done\":true}}.")
+            continue
         if action.get("done"):
             stopped = "done"
             transcript.append({"step": step, "done": True, "summary": action.get("summary", "")})
             break
         ev = tool_broker.execute(action, root, policy)   # Policy решает + исполнение + Evidence
         evidence.append(ev)
+        # счётчик подряд-чтений: read увеличивает, любое другое исполненное действие — сбрасывает
+        if ev.get("op") == "read" and ev.get("ok"):
+            consec_reads += 1
+        else:
+            consec_reads = 0
         transcript.append({"step": step, "op": ev.get("op"), "allowed": ev["allowed"],
                            "ok": ev.get("ok"), "reason": ev["reason"]})
         # результат обратно в контекст (в т.ч. DENIED — чтобы модель скорректировалась).
@@ -222,6 +242,20 @@ def selftest():
                            budget={"max_model_calls": 10}, max_bad_proposals=3)
         expect("bad-json: N подряд -> честная остановка bad-proposal",
                rep_bad["stopped"].startswith("bad-proposal"))
+
+        # анти-флейл (finding живого прогона): чтение по кругу -> read-cap отклоняет лишние reads
+        rep_flail = run_loop(lambda c: {"op": "read", "path": "f"}, root, pol,
+                             budget={"max_model_calls": 30}, max_steps=12, max_consecutive_reads=5)
+        capped = [t for t in rep_flail["transcript"] if not t.get("allowed") and "read-cap" in (t.get("reason") or "")]
+        expect("read-cap: чтение по кругу отклоняется после лимита", len(capped) > 0)
+
+        # но НОРМАЛЬНЫЙ поток (2 чтения -> write -> done) не задет read-cap'ом
+        norm = iter([{"op": "read", "path": "f"}, {"op": "read", "path": "f"},
+                     {"op": "write", "path": "src/z.ts", "content": "z"}, {"done": True}])
+        rep_norm = run_loop(lambda c: next(norm), root, pol, budget={"max_model_calls": 10},
+                            max_consecutive_reads=5)
+        expect("read-cap: нормальный поток (2 read -> write -> done) не задет",
+               rep_norm["stopped"] == "done" and (root / "src" / "z.ts").exists())
 
     print("tool_loop selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
