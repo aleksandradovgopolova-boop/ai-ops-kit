@@ -299,9 +299,13 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   force-fetch всех `ai-ops/*` мог перезаписать параллельную ветку устаревшей версией из клона.
   Логика — в `containers/deliver-run-branches.sh`, проверяется `validate_container_delivery.py` без
   docker (на настоящем git). Осталось: product-qualification с живой моделью.
-- **Product Qualification (planned)** — сквозные сценарии с живой моделью (ContextBundle меняет
-  prompt; неполная спека не пускает в implementation; resume после сессии; auth/secret без человека
-  не проходит; и т.д.) — на машине пользователя.
+- **Product Qualification (v2.114) ✅** — сквозные ГАРАНТИИ продукта проверяются ДЕТЕРМИНИРОВАННО в
+  CI через реальный контроллер (`validate_product_qualification.py`, PQ1-PQ6): ContextBundle реально
+  в prompt; неполная спека не пускает в implementation; resume поверх коммита; secret_boundary без
+  человека не проходит; крупная задача → конкретные WorkPackages; нет ложного green (dry-run не ready;
+  честный прогон даёт реальный evidence, но ready=False с названным блокером). Живые прогоны с
+  МОДЕЛЬЮ (качество правок) — на машине пользователя (`qualification/scenarios.yaml` + `qual_run.py`,
+  DeepSeek/стек, см. `docs/qualification-runbook.md`).
 
 Главный принцип (из аудита): не добавлять новый концептуальный слой, а превратить уже созданные
 ContextBundle/SpecCoverage/WorkPackage/RunHandoff из отчётных артефактов в реальные управляющие входы

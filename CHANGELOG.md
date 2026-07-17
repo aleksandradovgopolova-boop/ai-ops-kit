@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.114.0] — 2026-07-17 — Product Qualification: сквозные гарантии продукта в CI (детерминированно)
+
+Закрыт последний пункт аудита. Сквозные ГАРАНТИИ продукта теперь проверяются детерминированно в CI
+через реальный контроллер — дополнение к живым сценариям с моделью (на машине пользователя).
+
+### Added
+- **`validation/validate_product_qualification.py`** (PQ1-PQ6) — через `ai_ops_run.run`:
+  - PQ1 ContextBundle реально в prompt (`=== [` header + задача + `fed_to_model`);
+  - PQ2 неполная спека → `ready_for_pr=False` + `spec_first.incomplete`;
+  - PQ3 resume поверх коммита (обе фазы в worktree, `resumed`);
+  - PQ4 `secret_boundary` без человека → `security` в unmet + `ready_for_pr=False`;
+  - PQ5 крупная задача → `should_decompose` + конкретные WorkPackages;
+  - PQ6 нет ложного green: dry-run никогда не ready; честный прогон даёт реальный коммит+evidence на
+    SHA+петля done, но `ready_for_pr=False` с названным блокером (движок не фабрикует зелёное без
+    authoring-evidence).
+- Шаг добавлен в CI (`package-quality`) и в чек-лист AGENTS.md.
+
+### Граница честности
+Живые прогоны с МОДЕЛЬЮ (качество правок) — на машине пользователя:
+`qualification/scenarios.yaml` + `tools/qual_run.py` (DeepSeek/стек, `docs/qualification-runbook.md`).
+Мы не фабрикуем живые прогоны — детерминированный харнесс проверяет МЕХАНИКУ гарантий, живой —
+качество.
+
+С этим релизом закрыт весь остаток внешнего аудита (Operational Context → Real Resume → Real
+Spec-First → Atomic WorkPackages → Real Intent UX → Container delivery scope → Product Qualification).
+
 ## [2.113.0] — 2026-07-17 — Container delivery scope: доставка только ветки текущего прогона
 
 Аудит: контейнерная доставка забирала обратно ВСЕ `ai-ops/*` ветки из одноразового клона — риск

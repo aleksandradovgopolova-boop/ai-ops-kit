@@ -187,6 +187,8 @@ jobs:
         run: python3 tools/ai_ops_cli.py --selftest
       - name: "Context Engineering qualification: Q1-Q10 нового слоя (детерминированно)"
         run: python3 validation/validate_context_qualification.py
+      - name: "Product qualification: сквозные гарантии продукта через контроллер (детерминированно)"
+        run: python3 validation/validate_product_qualification.py
       - name: "Канонический e2e: ai-ops run --engine pipeline на реальной фикстуре (без модели)"
         run: python3 validation/validate_pipeline_e2e.py --selftest
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"

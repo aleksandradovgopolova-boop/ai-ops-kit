@@ -62,6 +62,7 @@ python3 validation/validate_security_domains.py --selftest
 python3 validation/validate_security_domains.py
 python3 tools/ai_ops_cli.py --selftest
 python3 validation/validate_context_qualification.py
+python3 validation/validate_product_qualification.py
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 tools/workitem.py --selftest
