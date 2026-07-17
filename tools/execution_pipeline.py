@@ -134,27 +134,48 @@ def _baseline_failure_summary(checks, tail=500):
     return "\n".join(lines)
 
 
-def _diff_checks(baseline, after):
-    """Сравнить статусы проверок ДО и ПОСЛЕ правки. -> (regressions, fixed).
+def _failure_signal(check):
+    """Грубая метрика 'насколько плохо' для проверки: макс. число failed/errors в выводе.
 
-    regression = было pass, стало fail (правка сломала). fixed = было fail, стало pass
-    (правка починила). Пред-существующие провалы (fail->fail) не в счёт — не вина правки.
+    finding живого прогона: baseline-diff на уровне check (pass/fail) пропускал УХУДШЕНИЕ внутри
+    уже-красной проверки — модель превратила 1 падающий тест в 8, а check как был 'fail', так и
+    остался -> ложный 'no regression'. Считаем число падений из output_tail (vitest/jest/pytest:
+    'N failed'; tsc: 'N errors'); рост числа при fail->fail = регрессия. Best-effort: output_tail
+    усечён, поэтому счётчик может быть 0, если строка-итог не попала в хвост (тогда не хуже).
+    """
+    import re
+    n = 0
+    for run in (check or {}).get("runs", []) or []:
+        for m in re.finditer(r"(\d+)\s+(?:failed|errors?)\b", run.get("output_tail") or "", re.I):
+            n = max(n, int(m.group(1)))
+    return n
+
+
+def _diff_checks(baseline, after):
+    """Сравнить проверки ДО и ПОСЛЕ правки. -> (regressions, fixed).
+
+    regression = было pass -> стало fail (сломал), ИЛИ было fail и стало ХУЖЕ (больше падений/
+    ошибок внутри уже-красной проверки — finding живого прогона). fixed = было fail -> стало pass.
     """
     baseline, after = baseline or {}, after or {}
     regressions, fixed = [], []
     for name, a in after.items():
-        b_status = (baseline.get(name) or {}).get("status")
-        a_status = a.get("status")
+        b = baseline.get(name) or {}
+        b_status, a_status = b.get("status"), a.get("status")
         if b_status == "pass" and a_status == "fail":
             regressions.append(name)
         elif b_status == "fail" and a_status == "pass":
             fixed.append(name)
+        elif b_status == "fail" and a_status == "fail":
+            if _failure_signal(a) > _failure_signal(b):
+                regressions.append(name)     # уже красная, но правка сделала её ХУЖЕ
     return regressions, fixed
 
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=20, feature=None, commit=False, allow_missing_tests=True,
-                 isolate=False, open_pr=False, install_deps=True, baseline_diff=False):
+                 isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
+                 require_fix=False):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -284,10 +305,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         and revision_matches and tree_ok
     if baseline_diff:
         # критерий «no-regressions»: правка не внесла НОВЫХ провалов (пред-существующие красные
-        # репо не в счёт — их чинят отдельно). Гейты оцениваются и показываются честно, но
-        # блокировка по пред-существующему красному не держит PR.
-        ready = base_ok and no_regressions
-        ready_criterion = "no-regressions"
+        # репо не в счёт — их чинят отдельно). require_fix (для fix-задач): дополнительно требуем,
+        # чтобы правка РЕАЛЬНО починила хотя бы одну падавшую проверку (fixed непустой) — иначе
+        # «ничего не сломал, но и не починил» не считается успехом.
+        ready = base_ok and no_regressions and (not require_fix or len(fixed) > 0)
+        ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
         ready = base_ok and (not gates["blocked"])
         ready_criterion = "all-green"
@@ -471,8 +493,18 @@ def selftest():
         regr, fx = _diff_checks(base, after)
         expect("baseline-diff: build pass->fail = регрессия", regr == ["build"])
         expect("baseline-diff: test fail->pass = починка", fx == ["test"])
-        expect("baseline-diff: пред-существующий fail->fail не в счёт",
+        expect("baseline-diff: пред-существующий fail->fail (без ухудшения) не в счёт",
                _diff_checks({"x": {"status": "fail"}}, {"x": {"status": "fail"}}) == ([], []))
+
+        # v2.77 (finding живого прогона): fail->fail, но ХУЖЕ (1 failed -> 8 failed) = регрессия
+        base_t = {"test": {"status": "fail", "runs": [{"output_tail": "Tests  1 failed | 531 passed"}]}}
+        worse_t = {"test": {"status": "fail", "runs": [{"output_tail": "Tests  8 failed | 524 passed"}]}}
+        same_t = {"test": {"status": "fail", "runs": [{"output_tail": "Tests  1 failed | 531 passed"}]}}
+        expect("within-check: 1 failed -> 8 failed = регрессия", _diff_checks(base_t, worse_t) == (["test"], []))
+        expect("within-check: 1 failed -> 1 failed (без роста) = не регрессия",
+               _diff_checks(base_t, same_t) == ([], []))
+        expect("failure-signal: считает 'N failed'/'N errors'",
+               _failure_signal({"runs": [{"output_tail": "Found 5 errors"}]}) == 5)
 
         # v2.74: свод падающих проверок базы -> модель видит реальный вывод (что чинить)
         fs = _baseline_failure_summary({
@@ -493,6 +525,16 @@ def selftest():
                rep_bd["ready_criterion"] == "no-regressions" and rep_bd["baseline"] is not None)
         expect("baseline_diff: нет регрессий -> ready_for_pr True",
                rep_bd["baseline"]["no_regressions"] is True and rep_bd["ready_for_pr"] is True)
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.77 require_fix: no-regressions есть, но fixed пуст -> НЕ ready (правка не починила)
+        it_rf = iter([{"op": "write", "path": "src/rf.py", "content": "r=1\n"}, {"done": True}])
+        rep_rf = run_pipeline("require-fix", sig, root, lambda c: next(it_rf), policy=pol,
+                              budget={"max_model_calls": 5}, feature="rf-fn",
+                              commit=True, baseline_diff=True, require_fix=True)
+        expect("require_fix: без fixed -> ready_for_pr False (не сломал, но и не починил)",
+               rep_rf["baseline"]["no_regressions"] is True and rep_rf["ready_for_pr"] is False
+               and rep_rf["ready_criterion"] == "no-regressions+require-fix")
         _git(root, "checkout", "-q", orig_branch)
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
