@@ -162,6 +162,10 @@ jobs:
           python3 validation/validate_container_assets.py
       - name: "Security evidence: детерминированный секрет/dep-скан для гейта security (selftest)"
         run: python3 tools/security_scan.py --selftest
+      - name: "Context Compiler: релевантный ContextBundle на WorkItem (selftest + валидатор)"
+        run: |
+          python3 tools/context_compiler.py --selftest
+          python3 validation/validate_context_bundle.py --selftest
       - name: "Канонический e2e: ai-ops run --engine pipeline на реальной фикстуре (без модели)"
         run: python3 validation/validate_pipeline_e2e.py --selftest
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"

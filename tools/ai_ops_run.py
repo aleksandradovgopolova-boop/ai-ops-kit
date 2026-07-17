@@ -85,6 +85,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
         (features_dir / fid / "run-plan.yaml").write_text(
             yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        # v2.97 Context Compiler: минимальный релевантный ContextBundle для WorkItem (детерминированно).
+        # Сохраняем рядом с планом; overflow не обрезает контекст молча (поднимает open_question).
+        import context_compiler
+        try:
+            bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
+            (features_dir / fid / "context-bundle.yaml").write_text(
+                yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001 — компиляция контекста не должна ронять прогон
+            bundle = None
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
         areas = signals.get("affected_areas") or ["unspecified"]
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
@@ -117,10 +126,18 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["lifecycle"] = {
             "workitem": f"features/{fid}/workitem.yaml",
             "run_plan": f"features/{fid}/run-plan.yaml",
+            "context_bundle": (f"features/{fid}/context-bundle.yaml" if bundle else None),
             "active_work": ".ai/runtime/active-work.yaml",
             "run_report": f"features/{fid}/run-report.json",
             "concurrency_preflight": preflight,
         }
+        if bundle:
+            rep["context_bundle"] = {"estimated_tokens": bundle["estimated_tokens"],
+                                     "context_budget": bundle["context_budget"],
+                                     "overflow": bundle["overflow"],
+                                     "agents": bundle["included"]["agents"],
+                                     "rules": bundle["included"]["rules"],
+                                     "excluded_count": len(bundle["excluded"])}
         try:
             (features_dir / fid / "run-report.json").write_text(
                 json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -231,6 +248,11 @@ def _print_pipeline(r):
         conflicts = len(pf.get("conflicts") or []) if isinstance(pf, dict) else 0
         print(f"  lifecycle: WorkItem+RunPlan+active-work+run-report записаны · "
               f"preflight-конфликтов: {conflicts}")
+    cb = r.get("context_bundle")
+    if cb:
+        print(f"  context: ~{cb['estimated_tokens']}/{cb['context_budget']} ток."
+              f"{' ⚠OVERFLOW' if cb.get('overflow') else ''} · агентов {len(cb['agents'])} · "
+              f"исключено {cb['excluded_count']} источн.")
     pr = r.get("draft_pr")
     if pr:
         print(f"  draft PR: {pr.get('status')}" + (f" — {pr.get('url')}" if pr.get('url') else ""))
@@ -341,6 +363,13 @@ def selftest():
                any(w.get("id") == pfid and w.get("status") == "done" for w in _awd.get("active", [])))
         expect("v2.94: единый план — движок НЕ строил второй (workitem_id совпал)",
                rp["workitem_id"] == pfid)
+        # v2.97 Context Compiler: у прогона сохранён ContextBundle, размер измерен ДО модели
+        expect("v2.97: ContextBundle сохранён рядом с планом",
+               (root / "features" / pfid / "context-bundle.yaml").exists())
+        expect("v2.97: context измерен (estimated_tokens>0) + бюджет в отчёте",
+               isinstance(rp.get("context_bundle"), dict)
+               and rp["context_bundle"]["estimated_tokens"] > 0
+               and rp["context_bundle"]["context_budget"] > 0)
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib

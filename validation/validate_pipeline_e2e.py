@@ -79,6 +79,9 @@ def run_e2e():
         ok("e2e: WorkItem записан", (root / "features" / fid / "workitem.yaml").exists())
         ok("e2e: RunPlan записан", (root / "features" / fid / "run-plan.yaml").exists())
         ok("e2e: run-report записан", (root / "features" / fid / "run-report.json").exists())
+        ok("e2e: ContextBundle записан (v2.97)", (root / "features" / fid / "context-bundle.yaml").exists())
+        ok("e2e: context измерен ДО модели (estimated_tokens>0)",
+           isinstance(rep.get("context_bundle"), dict) and rep["context_bundle"]["estimated_tokens"] > 0)
         ok("e2e: lifecycle-трейс в отчёте", isinstance(rep.get("lifecycle"), dict))
         # active-work закрыта (done)
         awp = root / ".ai" / "runtime" / "active-work.yaml"

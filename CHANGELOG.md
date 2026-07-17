@@ -2,6 +2,33 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.97.0] — 2026-07-17 — Context Compiler: минимальный релевантный ContextBundle (эпик Context Engineering, этап 1)
+
+Старт эпика **Context Engineering & Spec-Driven Execution** (после execution-аудита). Этап 1: перед
+прогоном собирать минимальный релевантный пакет контекста, а не грузить в модель весь репозиторий,
+все правила и всех агентов.
+
+### Added
+- **`tools/context_compiler.py`** — детерминированный компилятор `ContextBundle` на WorkItem.
+  Селекция **обоснована реальными данными** (RunPlan/workflows/gates/tracks/registry): агенты =
+  владельцы стадий base_workflow + `responsible_role` гейтов плана (∩ registry); skills =
+  `uses_skills` стадий; rules = категории по workflow + трекам (`core` всегда); repository_context =
+  RepositoryProfile; files = манифесты стека; specs/decisions = существующие артефакты. **Честность
+  отбора**: у каждого исключённого источника — причина; `estimated_tokens` считается **до** вызова
+  модели; **overflow не обрезает контекст молча** (open_question + флаг); stale-артефакты помечаются;
+  тот же WorkItem при тех же входах → воспроизводимый пакет.
+- **`schemas/context-bundle.schema.json`** + **`validation/validate_context_bundle.py`** — форма и
+  инварианты честности (excluded с причинами, overflow не молча, агент не included+excluded
+  одновременно). В checklist и CI.
+
+### Changed
+- **`tools/ai_ops_run.py`** — в lifecycle (v2.94) добавлена компиляция bundle: сохраняется
+  `features/<wid>/context-bundle.yaml` рядом с планом, сводка в `report['context_bundle']`,
+  проверяется e2e-харнессом.
+
+Дальше по эпику: этап 2 Adaptive Spec-First → 3 Context Lifecycle+Resume → 4 Atomic Planning+Context
+Budget → 5 Security Pack → 6 Product UX → 7 Qualification нового слоя.
+
 ## [2.96.0] — 2026-07-17 — Real Qualification: канонический e2e в CI + матрица Python + живые сценарии S6–S10
 
 Финал плана 2.93→2.96. CI кита раньше гонял в основном selftest-модули; теперь есть канонический
