@@ -26,6 +26,10 @@
 ```bash
 # 1. Собрать образ (на вашем Docker-хосте; контекст — корень кита):
 docker build -f containers/Dockerfile -t ai-ops-engine:latest .
+# Если Docker Hub недоступен (VPN/фаервол/троттлинг реестров) — укажи доступное зеркало:
+#   docker build --build-arg BASE_IMAGE=public.ecr.aws/docker/library/node:22-slim \
+#     -f containers/Dockerfile -t ai-ops-engine:latest .
+# Требуется сеть с доступом хотя бы к ОДНОМУ контейнерному реестру (base image + npm/pip на сборке).
 
 # 2. Запустить движок в jail'е против child-репозитория (ключи — из env, не в образ):
 OPENAI_COMPATIBLE_BASE_URL=... OPENAI_COMPATIBLE_API_KEY=... \

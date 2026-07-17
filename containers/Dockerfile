@@ -6,7 +6,11 @@
 #
 # Сеть НЕ air-gap: движку нужен egress к API модели и пакетным реестрам (npm/pip). Для жёсткого
 # контроля ставьте egress-allowlist прокси перед контейнером — см. docs/container-isolation.md.
-FROM node:22-slim
+#
+# BASE_IMAGE конфигурируем: если Docker Hub недоступен (VPN/фаервол/троттлинг), укажи зеркало,
+# напр. docker build --build-arg BASE_IMAGE=public.ecr.aws/docker/library/node:22-slim ...
+ARG BASE_IMAGE=node:22-slim
+FROM ${BASE_IMAGE}
 
 # Python (stdlib + pyyaml), git, OpenSpec CLI (для гейта specification).
 RUN apt-get update \
