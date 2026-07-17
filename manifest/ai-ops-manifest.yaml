@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.79.0
+  package_version: 2.80.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -304,6 +304,19 @@ execution_engine:
     remaining: "модель (DeepSeek) на сложных fix-задачах может не сходиться даже с выводом ошибок — это предел модели/подсказки, не крэш движка; квалификация зелёного вердикта на задачах-починках — эмпирика, требует ещё прогонов (возможно с более сильной моделью)"
     fix_task_flail_v2_76: "трейс (v2.75) показал корень: DeepSeek делал 20 read подряд, 0 записей (читал по кругу, не решался писать). Не предел 'понять код', а зацикливание. Фикс: (1) tool_loop read-cap — после max_consecutive_reads=5 чтений подряд без записи следующее read ОТКЛОНЯЕТСЯ с требованием вернуть write/done; (2) усилен промпт make_model_proposer ('читай 1-2 файла, не читай уже прочитанное, сразу пиши фикс'). Нормальный поток (read->write->done) не задет"
     false_green_v2_77: "read-cap заставил модель писать (5 правок), НО фикс был неверным: 1 падавший тест стал 8. Check-level baseline-diff пропустил ухудшение (fail->fail = 'не регрессия') -> ЛОЖНЫЙ PASS. Критичный дефект критерия, пойман живой обкаткой. Фикс: _failure_signal считает число failed/errors; рост при fail->fail = регрессия. Плюс --require-fix (для fix-задач ready требует fixed непустым) и вывод fixed/regressions в сводке qual_run. Итог обкатки: DeepSeek на этой fix-задаче НЕ справился (неверный фикс), но движок теперь это ЧЕСТНО ловит (не выдаёт ложный зелёный)"
+  external_audit_2026_07_17_v2_79:            # внешний аудит v2.79 (оценка ~5/10; коммит bed8e7b9)
+    verdict: "работающая supervised-alpha для QUICK на реальном child; НЕ безопасная standalone task->verified draft PR. Аудит верно вскрыл класс проблем живого исполнения"
+    fixed_v2_80_trust_correctness:
+      - "P0.1 (самый острый, наш регресс): baseline-diff ОБХОДИЛ ВСЕ блокирующие гейты (ready=base_ok and no_regressions, без gates.blocked) -> задача с незакрытыми гейтами security, code-review, requirements могла стать ready. Фикс: baseline-осведомлён ТОЛЬКО implementation_verification; все прочие блокирующие гейты (other_blocking_unmet) обязательны. Ложный ready устранён"
+      - "P0.4: --open-pr падал, а прогон = успех (exit 0). Разделены ready_for_pr и delivery; overall_status=delivery-failed если PR запрошен, но не открыт; exit_code это учитывает"
+      - "P0.6: install/baseline мутировали tracked-файлы (lock/снапшоты) -> git add -A втягивал их в AI-коммит. Откат tracked-изменений подготовки ДО модели (checkout -- .); prepare-fail -> prepare_ok=False -> не ready"
+      - "P0.3: повторный прогон удалял ветку прошлого прогона вслепую (мог снести несохранённую работу). Guard: если на ai-ops/<wid> есть коммиты не в HEAD и нет discard_previous -> honest error; --discard для явной перезаписи; qual disposable -> discard по умолчанию"
+      - "evidence/аудит: в отчёт добавлены полный gate_results + tested_revision (раньше выбрасывались) — можно проверить, чем закрыт каждый гейт и к какой ревизии"
+    remaining_backlog:
+      - "P0.2 sandbox (контейнер): shell вне Policy — arbitrary shell по умолчанию, нет FS/сеть-jail. Требует контейнера (v2.81 Containment). Пока: не давать живой модели ценный приватный репо без надзора"
+      - "standalone child: движок (каталоги инструментов и валидаторов) не ставится в child — зависит от внешнего клона (v2.82)"
+      - "полный RunPlan: постадийное исполнение ENGINEERING и PRODUCT (requirements, spec, plan, review, треки) с производством evidence (v2.83)"
+      - "квалификация: 5 живых сценариев + матрица ОС/стеков; baseline-diff по структурным id ошибок, а не по числу; усиление детектора (monorepo/wrappers) (v2.84)"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.

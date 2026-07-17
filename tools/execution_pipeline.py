@@ -175,7 +175,7 @@ def _diff_checks(baseline, after):
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
-                 require_fix=False):
+                 require_fix=False, discard_previous=False):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan."""
     child_root = Path(child_root)
@@ -195,8 +195,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         wp = child_root / ".ai" / "worktrees" / wid
         # finding живого прогона: worktree от ПРЕДЫДУЩЕГО прогона того же wid молча
         # переиспользовался -> прогон шёл поверх грязного состояния (нечистый baseline).
-        # Свежий worktree на каждый прогон: убрать прежний и удалить его ветку, стартовать с HEAD.
+        # P0.3 (аудит v2.79): но слепо удалять прошлую ветку ОПАСНО — там могут быть НЕсохранённые
+        # коммиты (PR не открылся и т.п.). Удаляем только если на ветке нет работы ЛИБО явный discard.
         if wp.is_dir() or _wt._branch_exists(child_root, branch):
+            ahead = 0
+            if _wt._branch_exists(child_root, branch):
+                # коммиты на ветке ai-ops/<wid>, которых нет в текущем HEAD -> несохранённая работа
+                rc_a, out_a, _ = _git(child_root, "rev-list", "--count", branch, "^HEAD")
+                ahead = int(out_a) if rc_a == 0 and out_a.isdigit() else 0
+            if ahead > 0 and not discard_previous:
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                        "status": "error",
+                        "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
+                                 f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
+                                 f"остановлен. Передай discard_previous=True (--discard) для "
+                                 f"перезаписи ИЛИ запусти с другим --feature.",
+                        "loop": None, "isolation": {"worktree": None}, "gates": None,
+                        "ready_for_pr": False, "overall_status": "error"}
             _wt.remove(child_root, wid, force=True)
             _git(child_root, "worktree", "prune")
             _git(child_root, "branch", "-D", branch)
@@ -219,6 +234,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 3. политика по умолчанию: execution, границы — по work_root
     pol = policy or tool_broker.Policy(level="execution", child_root=str(work_root))
+    is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
 
     # 3b. подготовка окружения ДО петли и baseline: поставить зависимости стека В ИЗОЛИРОВАННОМ
     #     worktree, иначе build/lint/test упадут exit 127 (нет node_modules/venv). node_modules
@@ -226,6 +242,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     prepare = None
     if install_deps and isolate:
         prepare = _install_dependencies(profile, work_root, pol)
+    # P0.6 (аудит v2.79): установка зависимостей должна ПРОЙТИ — иначе baseline/проверки
+    # недостоверны. Провал install -> окружение не квалифицировано, прогон не может быть ready.
+    prepare_ok = (prepare is None) or all(p.get("ok") for p in prepare)
 
     # 3c. baseline-evidence (finding живого прогона: ii-sreda был красным САМ ПО СЕБЕ — build/
     #     typecheck/test падали до любой правки). Прогон проверок на БАЗЕ до правок модели, чтобы
@@ -233,6 +252,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     baseline_checks = None
     if baseline_diff:
         baseline_checks = evidence_collector.collect(profile, work_root, pol)["checks"]
+
+    # P0.6 (аудит v2.79): install/baseline могли намутить TRACKED-файлы (lock, снапшоты, конфиги).
+    # Откатываем их ДО работы модели, чтобы `git add -A` в коммите не втянул чужие изменения
+    # подготовки. node_modules/venv в .gitignore -> checkout их не трогает; остаются для проверок.
+    prepare_mutated_tree = False
+    if is_git and not _tree_clean(work_root):
+        prepare_mutated_tree = True
+        _git(work_root, "checkout", "--", ".")
 
     # 4. tool-loop: модель применяет изменения (context = задача + профиль стека +
     #    ФАКТИЧЕСКИЙ вывод падающих проверок базы — finding живого прогона: без него модель
@@ -251,7 +278,6 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
     committed_sha, work_branch = None, None
     tree_clean_before_checks = None
-    is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
     if commit and applied:
         work_branch = f"ai-ops/{wid}"
         committed_sha = _commit_on_branch(work_root, work_branch,
@@ -289,10 +315,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     not_applicable = {"implementation_verification": exempt}
 
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
-    #    освобождения по неприменимым проверкам
+    #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
-                                   gate_ids=plan["gates"], signals=signals,
-                                   not_applicable=not_applicable)
+                                   gate_ids=plan["gates"], tested_revision=committed_sha,
+                                   signals=signals, not_applicable=not_applicable)
 
     # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)
     evidence_revision = coll.get("revision")
@@ -301,6 +327,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # baseline-diff (finding живого прогона): что правка сломала/починила против базы
     regressions, fixed = _diff_checks(baseline_checks, coll["checks"]) if baseline_diff else ([], [])
     no_regressions = (len(regressions) == 0) if baseline_diff else None
+    # P0.1 (аудит v2.79): baseline-режим делает baseline-осведомлённым ТОЛЬКО
+    # implementation_verification (красная база не должна блокировать). ВСЕ ОСТАЛЬНЫЕ блокирующие
+    # гейты (requirements/specification/plan/code_review/security/треки) остаются обязательными —
+    # иначе baseline-diff обходит их и выдаёт ложный ready. unmet_gates уже только блокирующие.
+    other_blocking_unmet = [g for g in gates["unmet_gates"] if g != "implementation_verification"]
 
     # 8. финал: draft PR (только если готово к PR и явно запрошено). Механизм честен offline:
     #    нет токена/remote -> unavailable, PR не имитируется.
@@ -308,24 +339,33 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # evidence на точном SHA и чистого дерева до/после проверок. dry-run (commit=False) НИКОГДА
     # не бывает ready — нет ревизии, к которой привязать draft PR.
     tree_ok = bool(tree_clean_before_checks) and (tree_clean_after_checks is not False)
+    # P0.6: окружение должно быть квалифицировано (install прошёл) — иначе baseline недостоверен
     base_ok = (loop["stopped"] == "done") and (committed_sha is not None) \
-        and revision_matches and tree_ok
+        and revision_matches and tree_ok and prepare_ok
     if baseline_diff:
-        # критерий «no-regressions»: правка не внесла НОВЫХ провалов (пред-существующие красные
-        # репо не в счёт — их чинят отдельно). require_fix (для fix-задач): дополнительно требуем,
-        # чтобы правка РЕАЛЬНО починила хотя бы одну падавшую проверку (fixed непустой) — иначе
-        # «ничего не сломал, но и не починил» не считается успехом.
-        ready = base_ok and no_regressions and (not require_fix or len(fixed) > 0)
+        # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
+        # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
+        # fix-задач): дополнительно требуем, чтобы правка РЕАЛЬНО починила падавшую проверку.
+        ready = base_ok and no_regressions and (not other_blocking_unmet) \
+            and (not require_fix or len(fixed) > 0)
         ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
         ready = base_ok and (not gates["blocked"])
         ready_criterion = "all-green"
+
+    # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
+    #    УСПЕХ прогона требует реально открытого PR; провал доставки не маскируется зелёным.
     pr = None
     if open_pr and ready and committed_sha and work_branch:
         import pr_open
         pr = pr_open.open_draft_pr(work_root, work_branch,
                                    title=f"ai-ops: {task[:60]}",
                                    body=f"Автопрогон AI Ops. WorkItem: {wid}. Evidence на {committed_sha}.")
+    delivery = {"requested": bool(open_pr),
+                "status": ((pr or {}).get("status") if open_pr else "not-requested")
+                          or ("not-attempted" if open_pr and not ready else None)}
+    delivery_ok = (not open_pr) or ((pr or {}).get("status") == "opened")
+    overall_status = ("error" if not ready else ("delivered" if delivery_ok else "delivery-failed"))
 
     not_yet = ["живой предложитель (swap провайдера)"]
     if not commit:
@@ -348,6 +388,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                  if k in t} for t in (loop.get("transcript") or [])][:40]},
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
+        "prepare_ok": prepare_ok,                  # P0.6: install прошёл -> окружение квалифицировано
+        "prepare_mutated_tree": prepare_mutated_tree,  # P0.6: подготовка меняла tracked -> откачено до модели
         "commit": {"branch": work_branch, "sha": committed_sha,
                    "evidence_revision": evidence_revision,
                    "evidence_on_exact_sha": revision_matches,
@@ -357,15 +399,21 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "exemptions": sorted(exempt),          # флаги, освобождённые как неприменимые (видно, не тихо)
         "tests_warn": tests_warn,              # громкий сигнал об отсутствии тестов (если есть)
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
-                  "blocked": gates["blocked"]},
+                  "blocked": gates["blocked"],
+                  "other_blocking_unmet": other_blocking_unmet,   # P0.1: блокирующие ≠ impl_verification
+                  # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
+                  "gate_results": gates.get("gate_results"),
+                  "tested_revision": committed_sha},
         # baseline-diff: None вне режима; иначе — статусы проверок на базе + регрессии/починки
         "baseline": ({"checks": {k: (v or {}).get("status") for k, v in (baseline_checks or {}).items()},
                       "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
                      if baseline_diff else None),
         "ready_criterion": ready_criterion,    # all-green | no-regressions
-        # honest: «готово к PR» = петля done + коммит + evidence на SHA + (all-green: гейты
-        # не блокируют | no-regressions: правка не внесла новых провалов против базы)
+        # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + (all-green:
+        # гейты не блокируют | no-regressions: нет новых провалов И остальные blocking-гейты пройдены)
         "ready_for_pr": ready,
+        "delivery": delivery,                  # P0.4: статус доставки draft PR отдельно от ready
+        "overall_status": overall_status,      # error | delivery-failed | delivered
         "draft_pr": pr,                        # результат открытия PR (None/unavailable offline/opened live)
         "not_yet": not_yet,
     }
@@ -471,16 +519,25 @@ def selftest():
                and rep_iso["commit"]["evidence_on_exact_sha"] is True)
         _git(root, "checkout", "-q", orig_branch)
 
-        # v2.78 (finding живого прогона): ПОВТОРНЫЙ прогон того же feature -> свежий worktree,
-        # не ошибка 'каталог уже есть' и не грязное переиспользование
+        # P0.3 (аудит v2.79): повторный прогон того же feature с НЕсохранённым коммитом
+        # прошлого прогона -> БЕЗ discard останавливается ошибкой (не теряем работу)
         it_iso2 = iter([{"op": "write", "path": "src/iso.py", "content": "y=3\n"}, {"done": True}])
-        rep_iso2 = run_pipeline("в изоляции повторно", sig, root, lambda c: next(it_iso2),
+        rep_iso_guard = run_pipeline("в изоляции повторно", sig, root, lambda c: next(it_iso2),
+                                     budget={"max_model_calls": 5}, feature="iso-fn",
+                                     commit=True, isolate=True, install_deps=False)
+        expect("P0.3: повторный прогон без discard -> honest error (работа не потеряна)",
+               rep_iso_guard.get("status") == "error" and "discard" in (rep_iso_guard.get("error") or ""))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # P0.3: с discard_previous=True повторный прогон перезаписывает и стартует чисто
+        it_iso3 = iter([{"op": "write", "path": "src/iso.py", "content": "y=4\n"}, {"done": True}])
+        rep_iso3 = run_pipeline("в изоляции c discard", sig, root, lambda c: next(it_iso3),
                                 budget={"max_model_calls": 5}, feature="iso-fn",
-                                commit=True, isolate=True, install_deps=False)
-        expect("isolate: повторный прогон -> свежий worktree (не error, чистый старт)",
-               rep_iso2.get("status") != "error"
-               and rep_iso2["isolation"]["worktree"] == ".ai/worktrees/iso-fn"
-               and rep_iso2["commit"]["evidence_on_exact_sha"] is True)
+                                commit=True, isolate=True, install_deps=False, discard_previous=True)
+        expect("P0.3: discard=True -> свежий worktree, чистый старт",
+               rep_iso3.get("status") != "error"
+               and rep_iso3["isolation"]["worktree"] == ".ai/worktrees/iso-fn"
+               and rep_iso3["commit"]["evidence_on_exact_sha"] is True)
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.62: open_pr=True вызывает механизм draft PR; без токена -> honest unavailable
@@ -493,10 +550,28 @@ def selftest():
                                   commit=True, isolate=True, open_pr=True, install_deps=False)
             expect("open_pr без токена -> draft_pr unavailable (механизм готов, PR не имитируется)",
                    rep_pr["draft_pr"] and rep_pr["draft_pr"]["status"] == "unavailable")
+            # P0.4 (аудит v2.79): --open-pr запрошен, но PR не открыт -> overall НЕ 'delivered'
+            expect("P0.4: open_pr не открылся -> delivery.requested=True, overall=delivery-failed",
+                   rep_pr["delivery"]["requested"] is True
+                   and rep_pr["overall_status"] == "delivery-failed")
         finally:
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
+
+        # P0.1 (аудит v2.79): baseline-diff НЕ обходит прочие блокирующие гейты. Сигнал ui_changed
+        # добавляет трек VISUAL с блокирующим ux_review (без evidence) -> not ready, хоть регрессий нет.
+        sig_ui = dict(sig); sig_ui["ui_changed"] = True
+        it_p01 = iter([{"op": "write", "path": "src/p01.py", "content": "p=1\n"}, {"done": True}])
+        rep_p01 = run_pipeline("baseline не обходит гейты", sig_ui, root, lambda c: next(it_p01),
+                               policy=pol, budget={"max_model_calls": 5}, feature="p01-fn",
+                               commit=True, baseline_diff=True)
+        expect("P0.1: baseline-diff НЕ обходит прочие блокирующие гейты (ux_review unmet -> not ready)",
+               rep_p01["gates"]["other_blocking_unmet"] and rep_p01["ready_for_pr"] is False)
+        expect("P0.1: gate_results и tested_revision в отчёте (evidence/аудит)",
+               isinstance(rep_p01["gates"]["gate_results"], list)
+               and rep_p01["gates"]["tested_revision"] == rep_p01["commit"]["sha"])
+        _git(root, "checkout", "-q", orig_branch)
 
         # v2.71 (finding живого прогона): _install_dependencies ставит зависимости стека перед
         # проверками. Детерминированно проверяем механизм безвредной install-командой (true).
