@@ -228,11 +228,40 @@ def _failure_signal(check):
     return n
 
 
+# v2.84: СТРУКТУРНЫЕ идентификаторы падений — чтобы ловить «починил один тест, сломал другой»
+# (число падений то же 1->1, но это ДРУГОЙ провал = регрессия, которую счётчик пропускал).
+# Best-effort по типовым раннерам; неизвестный формат -> пустое множество (падаем обратно на счётчик).
+_FAILURE_ID_PATTERNS = [
+    r"(?:FAILED|ERROR)\s+(\S+::\S+)",                 # pytest: FAILED tests/x.py::test_y
+    r"(\S+::\S+)\s+(?:FAILED|ERROR)\b",               # pytest альт.: x.py::test_y FAILED
+    r"(\S+\.\w+\(\d+,\d+\)):\s*error\s+(TS\d+)",      # tsc: file.ts(12,5): error TS2322
+    r"error\[(E\d+)\]",                               # rust: error[E0308]
+    r"(?:✕|×|✗)\s+(.+?)(?:\s+\(\d+\s*ms\))?\s*$",     # jest/vitest: ✕ suite > test name
+    r"(?:^|\n)\s*FAIL\s+(\S+)",                       # jest/vitest файловый: FAIL src/a.test.ts
+    r"(?:^|\n)\s*(?:AssertionError|Error):\s*(.+)$",  # generic ассерт/ошибка
+]
+
+
+def _failure_ids(check):
+    """Множество нормализованных id падений из output_tail проверки (best-effort по раннерам)."""
+    import re
+    ids = set()
+    for run in (check or {}).get("runs", []) or []:
+        tail = run.get("output_tail") or ""
+        for pat in _FAILURE_ID_PATTERNS:
+            for m in re.finditer(pat, tail, re.I | re.M):
+                token = " ".join(t for t in m.groups() if t).strip()
+                if token:
+                    ids.add(token[:200])
+    return ids
+
+
 def _diff_checks(baseline, after):
     """Сравнить проверки ДО и ПОСЛЕ правки. -> (regressions, fixed).
 
-    regression = было pass -> стало fail (сломал), ИЛИ было fail и стало ХУЖЕ (больше падений/
-    ошибок внутри уже-красной проверки — finding живого прогона). fixed = было fail -> стало pass.
+    regression = было pass -> стало fail (сломал), ИЛИ было fail и стало ХУЖЕ: (v2.84) появился
+    НОВЫЙ структурный id падения, которого не было в базе (починил один — сломал другой), ЛИБО
+    (v2.77 fallback) выросло число падений. fixed = было fail -> стало pass.
     """
     baseline, after = baseline or {}, after or {}
     regressions, fixed = [], []
@@ -244,8 +273,10 @@ def _diff_checks(baseline, after):
         elif b_status == "fail" and a_status == "pass":
             fixed.append(name)
         elif b_status == "fail" and a_status == "fail":
-            if _failure_signal(a) > _failure_signal(b):
-                regressions.append(name)     # уже красная, но правка сделала её ХУЖЕ
+            # структурно: НОВЫЙ id падения = регрессия (даже если общее число не выросло)
+            new_ids = _failure_ids(a) - _failure_ids(b)
+            if new_ids or _failure_signal(a) > _failure_signal(b):
+                regressions.append(name)     # уже красная, но правка внесла НОВЫЙ провал / стало хуже
     return regressions, fixed
 
 
@@ -707,6 +738,28 @@ def selftest():
                _diff_checks(base_t, same_t) == ([], []))
         expect("failure-signal: считает 'N failed'/'N errors'",
                _failure_signal({"runs": [{"output_tail": "Found 5 errors"}]}) == 5)
+
+        # v2.84: структурные id падений — «починил один тест, сломал другой» (1 failed -> 1 failed,
+        # но ДРУГОЙ тест) счётчик пропускал; теперь новый id = регрессия.
+        base_id = {"test": {"status": "fail", "runs": [{"output_tail":
+                   "FAILED tests/test_a.py::test_one\n1 failed, 10 passed"}]}}
+        swap_id = {"test": {"status": "fail", "runs": [{"output_tail":
+                   "FAILED tests/test_b.py::test_two\n1 failed, 10 passed"}]}}
+        same_id = {"test": {"status": "fail", "runs": [{"output_tail":
+                   "FAILED tests/test_a.py::test_one\n1 failed, 10 passed"}]}}
+        expect("structured-id: тот же счётчик, но ДРУГОЙ упавший тест = регрессия",
+               _diff_checks(base_id, swap_id) == (["test"], []))
+        expect("structured-id: тот же упавший тест (тот же id) = не регрессия",
+               _diff_checks(base_id, same_id) == ([], []))
+        expect("failure-ids: извлекает pytest FAILED node id",
+               "tests/test_a.py::test_one" in _failure_ids(base_id["test"]))
+        # tsc: новый код ошибки в новом месте = регрессия
+        base_ts = {"typecheck": {"status": "fail", "runs": [{"output_tail":
+                   "src/a.ts(3,5): error TS2322: Type error"}]}}
+        new_ts = {"typecheck": {"status": "fail", "runs": [{"output_tail":
+                  "src/a.ts(3,5): error TS2322: Type error\nsrc/b.ts(9,1): error TS2531: Object is possibly null"}]}}
+        expect("structured-id: новая tsc-ошибка в новом файле = регрессия",
+               _diff_checks(base_ts, new_ts) == (["typecheck"], []))
 
         # v2.74: свод падающих проверок базы -> модель видит реальный вывод (что чинить)
         fs = _baseline_failure_summary({

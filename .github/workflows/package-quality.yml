@@ -145,5 +145,9 @@ jobs:
           python3 validation/validate_package_boundaries.py
       - name: "Standalone-движок: прогон из .ai/managed без parent-клона (selftest)"
         run: python3 validation/validate_standalone_engine.py --selftest
+      - name: "Квалификация: пакет живых сценариев согласован (selftest + декларации)"
+        run: |
+          python3 validation/validate_qualification.py --selftest
+          python3 validation/validate_qualification.py
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"
         run: python3 installer/ai_ops.py --selftest

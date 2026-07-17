@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.83.0
+  package_version: 2.84.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -268,10 +268,10 @@ execution_engine:
       - "P0.2 (полное) shell FS-сеть-изоляция: сделаны env-скраб секретов (v2.56 и v2.63 allowlist), timeout + честная граница (v2.66); v2.81 добавил brokered-containment — block_push по умолчанию, allowlist команд и денай сетевых бинарников по флагу --sandbox. ОСТАЛОСЬ: полный jail на уровне runtime (writable-mount только worktree, HOME изолирован, сеть off, лимиты ресурсов) — требует контейнера, НЕ сделано. Не давать pipeline с живой моделью доступ к ценному приватному репо без надзора"
       - "P0.3 standalone-движок в child: ЗАКРЫТО в v2.82 — managed_set теперь содержит tools, validation, config, VERSION; движок ставится в .ai/managed и `ai-ops run` работает без клона parent (доказано validate_standalone_engine.py). Остаток: child-CI валидатор всё ещё клонирует parent по тегу (отдельный контур пина версии)"
       - "P0.4 полный RunPlan в pipeline: ЧАСТИЧНО (v2.83) — добавлен постадийный НЕЗАВИСИМЫЙ ревью ai-review гейтов (code_review/ux_review/security-non-human) отдельным read-only вызовом (writer ≠ judge, --review). ОСТАЛОСЬ: production артефактов для детерминированных гейтов requirements/specification/plan_readiness (product-authoring) — сейчас они честно блокируют без артефактов"
-      - "P1.2 усиление детектора стека: сейчас определяет базовые команды build/lint/typecheck/test по манифестам; edge-случаи (монорепо, нестандартные скрипты) требуют доработки"
+      - "P1.2 усиление детектора стека: ЧАСТИЧНО (v2.84) — wrapper'ы ./gradlew ./mvnw предпочтены глобальным бинарям, монорепо-маркеры (pnpm-workspace/lerna/turbo/nx/много package.json) + честный note. ОСТАЛОСЬ: нестандартные скрипты, per-package таргет-фильтр в монорепо"
       - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
       - "живой draft PR: механизм готов (pr_open, open_pr=True), нужен GITHUB_TOKEN + remote — эмпирически не прогнан"
-      - "квалификация: харнесс ГОТОВ (tools/qual_run.py: прогон N задач -> JSON-отчёты + сводка pass/fail по критериям; offline-selftest в CI). ОСТАЛОСЬ (нужен Mac+DeepSeek): реально прогнать 3–5 задач на репо С тулчейном и приложить отчёты"
+      - "квалификация: харнесс + пакет сценариев ГОТОВЫ (tools/qual_run.py; qualification/scenarios.yaml — 5 сценариев + матрица; docs/qualification-runbook.md; validate_qualification.py в CI, v2.84). ОСТАЛОСЬ (нужен Mac/Linux+модель): реально прогнать сценарии на репо С тулчейном и приложить отчёты"
   self_audit_2026_07_17:                     # собственный аудит на соответствие видению (решение ep-2026-07-17-vision-audit)
     scope: "VISION.md/ROADMAP.md vs код (агент-ревьюер + ручная верификация); НЕ execution-engine backlog"
     fixed_v2_67:
@@ -327,10 +327,15 @@ execution_engine:
       - "постадийный НЕЗАВИСИМЫЙ ревью ai-review гейтов плана (code_review, ux_review, security-non-human, ...): движок гоняет ОТДЕЛЬНЫЙ вызов модели (writer ≠ judge) под READ-ONLY политикой — судья читает изменение и выносит СТРУКТУРНЫЙ reviewer-result (валидируется validate_reviewer_result), который закрывает/блокирует гейт. Флаг --review в ai-ops run и qual_run; трейс в report.reviews"
       - "capability-независимость: ревьюер физически не может писать/шеллить (read-only Policy отклоняет), а его pass закрывает required_evidence по той же дисциплине, что collect_evidence для ai-review. Вердикт fail блокирует — писатель не переопределяет судью"
       - "ЧЕСТНАЯ ГРАНИЦА (что НЕ закрывается): детерминированные артефакт-гейты (requirements/specification/plan_readiness) ревьюер словом НЕ закрывает — нужны артефакты + запускаемые валидаторы (product-authoring, отдельная фаза); human-approval (security при privileged/destructive/secret_boundary) требует человека; та же базовая модель как судья — более слабая независимость, чем другой судья/человек (сильнее — другая модель/человек)"
+    fixed_v2_84_qualification:
+      - "baseline-diff по СТРУКТУРНЫМ id падений (_failure_ids): 'починил один тест, сломал другой' (то же число, но другой id) теперь = регрессия; раньше счётчик пропускал. Best-effort по pytest/jest/vitest/tsc/rust; неизвестный формат -> fallback на счётчик"
+      - "детектор стека усилен: предпочитает wrapper'ы (./gradlew, ./mvnw) глобальным бинарям (иначе exit 127 без установленного gradle/mvn); монорепо-маркеры (pnpm-workspace, lerna, turbo, nx, много package.json в apps/packages) + честный undetermined-note про покрытие пакетов; monorepo_reason в профиле"
+      - "пакет живых сценариев qualification/scenarios.yaml (5 сценариев: greenfield, fix-true-green, regression-guard, engineering-review, containment) + docs/qualification-runbook.md (env, команды, чтение отчёта, матрица ОС/стеков); валидатор validate_qualification.py (форма/классы/флаги/матрица) в CI"
+      - "ЧЕСТНАЯ ГРАНИЦА: САМ живой прогон 5 сценариев × матрица ОС/стеков требует машины пользователя с моделью и стеком (egress-blocked из cloud-сессии). Харнесс, сценарии, приёмка и runbook готовы; прогон и приложение отчётов — за пользователем"
     remaining_backlog:
       - "P0.2 полный контейнерный jail: лимиты ресурсов и изоляция файловой системы и сети на уровне runtime (namespaces, read-only mounts) — вне брокера; brokered-подмножество закрыто в v2.81 (--sandbox, block_push). Пока: недоверенной модели без надзора не давать ценный приватный репо"
       - "product-authoring: производство артефактов requirements/specification/plan (+ запускаемые валидаторы) для закрытия детерминированных артефакт-гейтов ENGINEERING/PRODUCT — сейчас честно блокируют без артефактов"
-      - "квалификация: 5 живых сценариев + матрица ОС/стеков; baseline-diff по структурным id ошибок, а не по числу; усиление детектора (monorepo/wrappers) (v2.84)"
+      - "живая квалификация: прогнать 5 сценариев × матрица ОС/стеков на машине с моделью и приложить отчёты (харнесс+сценарии+runbook готовы, v2.84) — требует Mac/Linux пользователя"
 
 effect_metrics:
   # v2.30: автонакопление истории эффекта — чтобы baseline закрывался сам.
@@ -504,6 +509,7 @@ update_policy:
     - "tools/**/*.py"
     - "validation/**/*.py"
     - "config/**/*"
+    - "qualification/**/*"
     - "VERSION"
   managed_paths: [".ai/managed/**"]
   protected_paths: [".ai/project/**", ".ai/custom/**"]

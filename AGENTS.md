@@ -18,6 +18,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
 | `manifest/ai-ops-manifest.yaml` | Центральный манифест пакета | `package_version` — только при релизе |
 | `packages/` | Декларации границ 5 пакетов 3.0 (файл→пакет, зависимости) — БЕЗ переноса файлов (3.0-срез 0) | Синхронно с `validate_package_boundaries.py` |
+| `qualification/` | Пакет живых сценариев для квалификации движка (данные) | Синхронно с `validate_qualification.py` |
 | `VERSION`, `CHANGELOG.md` | Версия и история (SemVer) | Только при релизе |
 
 Полный аннотированный список файлов — в `FILE_INDEX.md`.
@@ -93,6 +94,8 @@ python3 validation/validate_agents_checklist.py
 python3 validation/validate_package_boundaries.py --selftest
 python3 validation/validate_package_boundaries.py
 python3 validation/validate_standalone_engine.py --selftest
+python3 validation/validate_qualification.py --selftest
+python3 validation/validate_qualification.py
 python3 installer/ai_ops.py --selftest
 ```
 
