@@ -48,7 +48,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         feature=None, engine="controller", proposer=None, open_pr=False, model=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
-        author=False, author_proposer=None):
+        author=False, author_proposer=None, install_deps=True):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -108,7 +108,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
             require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
             sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
-            author=author, author_proposer=auth_prop)
+            author=author, author_proposer=auth_prop, install_deps=install_deps)
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
