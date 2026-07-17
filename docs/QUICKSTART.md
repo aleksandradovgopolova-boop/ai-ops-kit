@@ -66,6 +66,25 @@ python3 <kit>/tools/effect_metrics.py    # PROBLEM-rate, динамика пок
 
 Инструмент честен: пока нет 3+ фич с 3+ срезами, он явно пишет «baseline не готов».
 
+## 3b. Исполнение движком без клона кита (v2.82)
+
+После `ai-ops init` движок лежит **внутри репозитория** в `.ai/managed/` — клонировать
+parent-кит для `ai-ops run` не нужно:
+
+```bash
+python3 .ai/managed/tools/ai_ops_run.py run "почини падающий тест даты" . \
+  --engine pipeline --provider openai-compatible --model deepseek-chat \
+  --execute --baseline-diff --sandbox --json
+```
+
+`--sandbox` (v2.81) ограничивает shell модели allowlist'ом dev-инструментов и запрещает
+push/сеть из петли; `--json` даёт машиночитаемый отчёт (прогресс идёт в stderr). Проверить,
+что движок установлен целиком: `python3 .ai/managed/validation/validate_standalone_engine.py .`
+или `ai-ops doctor` (строка «движок (standalone)»).
+
+Граница: child-CI (раздел 4) по-прежнему клонирует kit по тегу — это пин версии для проверки
+установки, отдельный от пути исполнения движка.
+
 ## 4. CI child-репозитория (проверенный набор)
 
 ```yaml

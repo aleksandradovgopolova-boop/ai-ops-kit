@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.81.0
+  package_version: 2.82.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -212,7 +212,8 @@ execution_engine:
       SHA->RunPlan-гейты->draft PR), подключён к контроллеру (ai-ops run --engine pipeline) и
       экспериментально подтверждён живьём на ОГРАНИЧЕННОМ QUICK-сценарии (DeepSeek, пустой репо).
       Канонический путь task -> безопасный проверяемый draft PR для РЕАЛЬНЫХ child-репозиториев
-      (с тулчейном, живым draft PR, standalone-установкой движка) ещё НЕ готов — см. p0_backlog.
+      (с тулчейном, живым draft PR) ещё НЕ прогнан живьём широко — см. p0_backlog. standalone-
+      установка движка в child ЗАКРЫТА (v2.82: движок в .ai/managed, `ai-ops run` без клона parent).
       Trust boundary усилена (v2.66): shell timeout + честная граница «shell не песочница»,
       валидация WorkItem ID и containment worktree-путей, полный SHA + tree-clean-проверка,
       строгий ready_for_pr (только реальный коммит), рабочий print_human/exit-code для pipeline.
@@ -260,12 +261,12 @@ execution_engine:
       - "P0.2 (contained) shell trust boundary: subprocess timeout (SHELL_TIMEOUT_DEFAULT=300, action.timeout переопределяет) — shell больше не висит вечно; честный module-comment: shell НЕ security boundary (write_scope/protected только для read/write; полный jail = контейнер, в backlog)"
       - "P0.5 evidence<->revision: _commit_on_branch и _revision дают ПОЛНЫЙ SHA (не --short); pipeline проверяет tree_clean до/после checks (git status --porcelain); ready_for_pr ТРЕБУЕТ реального коммита + evidence на точном SHA + чистого дерева (dry-run commit=False НИКОГДА не ready)"
       - "P1.1 path safety: validate_workitem_id (slug ^[a-z0-9][a-z0-9._-]{0,63}$, без ../,/,\\, абсолютных) в run_plan.build_plan; worktree.add/remove — _safe_target с containment внутри <root>/<wt_dir> (traversal ../ и абсолютные отвергнуты)"
-    engine_status: "СОБРАН + подтверждён живьём на ОГРАНИЧЕННОМ QUICK-сценарии (v2.64, DeepSeek, пустой репо, ready_for_pr=True). Подключён к контроллеру (ai-ops run --engine pipeline); trust boundary усилена (v2.66). Канонический путь task -> проверяемый draft PR для РЕАЛЬНОГО child (тулчейн + живой PR + standalone-движок в child) — ещё НЕ готов, см. p0_backlog"
+    engine_status: "СОБРАН + подтверждён живьём на ОГРАНИЧЕННОМ QUICK-сценарии (v2.64, DeepSeek, пустой репо, ready_for_pr=True). Подключён к контроллеру (ai-ops run --engine pipeline); trust boundary усилена (v2.66); containment (v2.81) и standalone-движок в child (v2.82) закрыты. Канонический путь task -> проверяемый draft PR для РЕАЛЬНОГО child (тулчейн + живой PR) — широко живьём ещё НЕ прогнан, см. p0_backlog"
     frozen: [новые агенты, lifecycle-стадии, Knowledge Graph, Robin, Decision Intelligence, физразнос пакетов]
     p0_epic: "одна обычная задача на реальном репо -> проверяемый draft PR"
     p0_backlog:                              # честно: подтверждено по коду, НЕ сделано (остаток после v2.66)
       - "P0.2 (полное) shell FS-сеть-изоляция: сделаны env-скраб секретов (v2.56 и v2.63 allowlist), timeout + честная граница (v2.66); v2.81 добавил brokered-containment — block_push по умолчанию, allowlist команд и денай сетевых бинарников по флагу --sandbox. ОСТАЛОСЬ: полный jail на уровне runtime (writable-mount только worktree, HOME изолирован, сеть off, лимиты ресурсов) — требует контейнера, НЕ сделано. Не давать pipeline с живой моделью доступ к ценному приватному репо без надзора"
-      - "P0.3 standalone-движок в child: managed_set не содержит каталоги инструментов и валидаторов — child зависит от внешнего клона кита; нужен устанавливаемый пакет с движком внутри child"
+      - "P0.3 standalone-движок в child: ЗАКРЫТО в v2.82 — managed_set теперь содержит tools, validation, config, VERSION; движок ставится в .ai/managed и `ai-ops run` работает без клона parent (доказано validate_standalone_engine.py). Остаток: child-CI валидатор всё ещё клонирует parent по тегу (отдельный контур пина версии)"
       - "P0.4 полный RunPlan в pipeline: сейчас pipeline гоняет tool-loop + один срез evidence (implementation_verification) + оценку гейтов; ПОСТАДИЙНОЕ исполнение треков RunPlan (VISUAL/ANALYTICS/SECURITY/DOCS как отдельные стадии с артефактами) — НЕ реализовано"
       - "P1.2 усиление детектора стека: сейчас определяет базовые команды build/lint/typecheck/test по манифестам; edge-случаи (монорепо, нестандартные скрипты) требуют доработки"
       - "P1.4 CI: покрыть канонический пользовательский путь (ai-ops run --engine pipeline --execute на репо с тулчейном), а не только selftest-модули"
@@ -317,9 +318,13 @@ execution_engine:
       - "P0.2 (частично): произвольный shell выключается флагом --sandbox — Policy.shell_mode allowlist (только dev-инструменты из SANDBOX_SHELL_ALLOWLIST) либо off; частые сетевые бинарники (curl, wget, nc, ssh) отклоняются при allow_network=False; первый токен берётся с учётом VAR=val-префиксов"
       - "sandbox_policy() — готовый усиленный профиль для недоверенной живой модели; блок containment в отчёте честно объявляет действующую политику (sandbox, shell_mode, block_push, allow_network)"
       - "ЧЕСТНАЯ ГРАНИЦА: это enforceable-подмножество на уровне брокера, НЕ полный jail. Полная изоляция файловой системы, сети и ресурсов (лимиты CPU и RAM, namespaces, read-only mounts) остаётся задачей контейнерного runtime — вне брокера кита"
+    fixed_v2_82_standalone:
+      - "движок (инструменты + валидаторы + их данные) теперь в managed-слое: managed_set += tools, validation, config, VERSION. PKG движка резолвится как .ai/managed (Path(__file__).parents[1]); registry, quality, security уже там. child запускает `ai-ops run` БЕЗ внешнего клона кита"
+      - "ДОКАЗАНО, не задекларировано: validate_standalone_engine.py строит managed из managed_set и гоняет движок отдельным процессом из .ai/managed с чистым окружением (parent не на path) — scripted-proposer пишет файл, движок коммитит на ai-ops/*, собирает evidence на точном SHA, ready_for_pr=True. Плюс completeness-проверка рантайм-замыкания (регресс managed_set падает тестом)"
+      - "doctor сообщает наличие движка в .ai/managed; --json-вывод очищен (worktree-прогресс ушёл в stderr) — отчёт машиночитаем"
+      - "ЧЕСТНАЯ ГРАНИЦА: child-CI валидация (ai-ops-validate.yml) по-прежнему клонирует parent по тегу — это отдельный контур (пин версии), не путь исполнения движка. По выбору packages без ai-ops-execution движок в child не ставится (осознанный opt-out)"
     remaining_backlog:
       - "P0.2 полный контейнерный jail: лимиты ресурсов и изоляция файловой системы и сети на уровне runtime (namespaces, read-only mounts) — вне брокера; brokered-подмножество закрыто в v2.81 (--sandbox, block_push). Пока: недоверенной модели без надзора не давать ценный приватный репо"
-      - "standalone child: движок (каталоги инструментов и валидаторов) не ставится в child — зависит от внешнего клона (v2.82)"
       - "полный RunPlan: постадийное исполнение ENGINEERING и PRODUCT (requirements, spec, plan, review, треки) с производством evidence (v2.83)"
       - "квалификация: 5 живых сценариев + матрица ОС/стеков; baseline-diff по структурным id ошибок, а не по числу; усиление детектора (monorepo/wrappers) (v2.84)"
 
@@ -485,6 +490,17 @@ update_policy:
     - "context/**/*"
     - "workflows/*.md"
     - "commands/**/*.md"
+    # v2.82 Standalone Child: сам ДВИЖОК (инструменты + валидаторы + их данные) ставится в
+    # child, чтобы `ai-ops run` и проверки работали БЕЗ внешнего клона кита. PKG движка =
+    # .ai/managed/ (Path(__file__).parents[1]); registry/quality/security уже здесь, добавляем
+    # код и остаток данных (config/*, VERSION). Пакетный фильтр применяется как обычно:
+    # файлы, принадлежащие ai-ops-execution/quality/..., ставятся при выборе этих пакетов;
+    # без выбора packages (дефолт) — ставится всё. Полный self-contained доказан
+    # validate_standalone_engine.py (subprocess из .ai/managed без parent на path).
+    - "tools/**/*.py"
+    - "validation/**/*.py"
+    - "config/**/*"
+    - "VERSION"
   managed_paths: [".ai/managed/**"]
   protected_paths: [".ai/project/**", ".ai/custom/**"]
   generated_paths: [".ai/generated/**"]

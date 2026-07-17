@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.82.0] — 2026-07-17 — Standalone Child (аудит v2.79, P0.3)
+
+Движок теперь **самодостаточен внутри child**: `ai-ops run` работает БЕЗ внешнего `git clone`
+parent-кита. И это **доказано прогоном**, а не задекларировано.
+
+### Changed
+- **`update_policy.managed_set`** += `tools/**/*.py`, `validation/**/*.py`, `config/**/*`,
+  `VERSION`. Движок (инструменты + валидаторы + их данные) едет в `.ai/managed/`; PKG движка
+  резолвится как `Path(__file__).parents[1]` == `.ai/managed/`, а `registry`/`quality`/`security`
+  уже там. Пакетный фильтр как обычно: без выбора `packages` (дефолт) ставится всё; выбор без
+  `ai-ops-execution` — осознанный opt-out (движок не ставится).
+- **`ai-ops doctor`** сообщает наличие движка в `.ai/managed`.
+- **`worktree` прогресс → stderr.** `WORKTREE:`/`ОШИБКА` больше не пишутся в stdout —
+  `ai-ops run --json` выдаёт чистый машиночитаемый JSON (данные на stdout, прогресс на stderr).
+
+### Added
+- **`validation/validate_standalone_engine.py`** — ДОКАЗЫВАЕТ самодостаточность: строит managed
+  из `managed_set` и гоняет движок **отдельным процессом** из `.ai/managed/tools/ai_ops_run.py`
+  с чистым окружением (parent не на `PYTHONPATH`, cwd = временный child). Scripted-proposer пишет
+  файл → движок коммитит на `ai-ops/*`, собирает evidence на точном SHA, `ready_for_pr=True`.
+  Плюс completeness-проверка рантайм-замыкания: пропажа файла движка из `managed_set` роняет тест.
+  Включён в AGENTS.md checklist и `package-quality.yml`.
+- **`ai-ops-execution/package.yaml`** += `tools/execution_pipeline.py` (был неназначенным).
+
+### Boundary (честно)
+- child-CI валидатор (`ai-ops-validate.yml`) по-прежнему клонирует parent по тегу — это отдельный
+  контур (пин версии для проверки установки), не путь исполнения движка. Standalone здесь — про
+  `ai-ops run`, не про CI-валидатор.
+
 ## [2.81.0] — 2026-07-17 — Containment (аудит v2.79, P0.2)
 
 Модель больше **не доставляет сама и не гоняет произвольный shell**. Это enforceable-подмножество
