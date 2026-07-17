@@ -389,7 +389,15 @@ def _failure_signal(check):
 _FAILURE_ID_PATTERNS = [
     r"(?:FAILED|ERROR)\s+(\S+::\S+)",                 # pytest: FAILED tests/x.py::test_y
     r"(\S+::\S+)\s+(?:FAILED|ERROR)\b",               # pytest альт.: x.py::test_y FAILED
+    # go test: "--- FAIL: TestSub (0.00s)" / "--- FAIL: TestX/case (0.0s)". Раньше go-падения не
+    # извлекались вовсе -> id схлопывался в мусорный {'FAIL'} из summary -> "починил один тест,
+    # сломал другой" в ОДНОМ пакете не различалось (go не печатает 'N failed' -> счётчик тоже
+    # молчит) -> ложный green (finding стек-квалификации go). \S+ обрывает волатильное "(0.00s)".
+    r"---\s+FAIL:\s+(\S+)",
     r"(\S+\.\w+\(\d+,\d+\)):\s*error\s+(TS\d+)",      # tsc: file.ts(12,5): error TS2322
+    # go build/vet: "./pkg/a.go:3:6: undefined: foo" / "a.go:13: msg" (file.go:line[:col]: message).
+    # Стабильный id по файлу+позиции; для сборки/вета go (нет '--- FAIL:').
+    r"([\w./\-]+\.go):(\d+):(?:(\d+):)?\s*(.+)",
     # vite/rollup/esbuild: "src/a.tsx (19:9): "X" is not exported by ..." — РЕАЛЬНАЯ строка ошибки
     # сборки (файл + позиция + сообщение). Даёт СТАБИЛЬНЫЙ id: новая поломка -> другой файл/позиция.
     r"([\w./\-]+\.\w+)\s*\((\d+)[,:](\d+)\):\s*(.+)",
@@ -951,6 +959,19 @@ def selftest():
                _diff_checks(base_id, same_id) == ([], []))
         expect("failure-ids: извлекает pytest FAILED node id",
                "tests/test_a.py::test_one" in _failure_ids(base_id["test"]))
+        # стек-квалификация go: РЕАЛЬНЫЙ вывод `go test`. Раньше id схлопывался в {'FAIL'} и swap
+        # (починил TestSub, сломал TestAdd в ОДНОМ пакете) не ловился -> ложный green для go-репо.
+        go_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "--- FAIL: TestSub (0.00s)\n    calc_test.go:13: Sub(5,2) = 3; want 999\nFAIL\nFAIL\tcalc\t0.002s\nFAIL"}]}}
+        go_add = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "--- FAIL: TestAdd (0.00s)\n    calc_test.go:6: Add(2,3) = 6; want 5\nFAIL\nFAIL\tcalc\t0.003s\nFAIL"}]}}
+        expect("go: извлекает имя упавшего теста (--- FAIL: TestSub)",
+               "TestSub" in _failure_ids(go_sub["test"]))
+        expect("go structured-id: починил TestSub, сломал TestAdd (тот же пакет) = регрессия",
+               _diff_checks(go_sub, go_add) == (["test"], []))
+        expect("go: тот же упавший тест, другое ВРЕМЯ прогона = НЕ регрессия",
+               _diff_checks(go_sub, {"test": {"status": "fail", "runs": [{"output_tail":
+                   "--- FAIL: TestSub (0.01s)\n    calc_test.go:13: Sub(5,2) = 3; want 999\nFAIL\nFAIL\tcalc\t0.009s\nFAIL"}]}}) == ([], []))
         # tsc: новый код ошибки в новом месте = регрессия
         base_ts = {"typecheck": {"status": "fail", "runs": [{"output_tail":
                    "src/a.ts(3,5): error TS2322: Type error"}]}}

@@ -149,6 +149,8 @@ jobs:
         run: |
           python3 validation/validate_qualification.py --selftest
           python3 validation/validate_qualification.py
+      - name: "Стек-квалификация: детект+failure-id на реальных фикстурах python/go (golden+live)"
+        run: python3 validation/validate_stack_qualification.py --selftest
       - name: "Product authoring: структурные валидаторы артефактов (selftest)"
         run: |
           python3 validation/validate_requirements_artifact.py --selftest
