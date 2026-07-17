@@ -705,6 +705,35 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         gate_ev, reviews = _run_reviews(reviewer_proposer, work_root, plan["gates"], gate_ev,
                                         signals, committed_sha, budget)
 
+    # 6e. v2.95: детерминированный security-producer. Ловит СЕКРЕТЫ и НОВЫЕ зависимости на diff
+    #     коммита (no_secrets/deps_approved — факты). no_injection_surface — СУЖДЕНИЕ: сканер лишь
+    #     флагит места, закрывает независимый security-reviewer/человек (writer≠judge). Поэтому
+    #     security здесь НЕ авто-проходит (нет ложного green) — но реальные секреты/deps теперь
+    #     ловятся с деталями, а не молчат. Находка -> гейт блокирует.
+    security_scan_report = None
+    if "security" in plan["gates"] and committed_sha and is_git and "security" not in gate_ev:
+        import security_scan
+        try:
+            security_scan_report = security_scan.scan_repo(work_root, base=f"{committed_sha}~1")
+        except Exception:  # noqa: BLE001 — скан не должен ронять прогон
+            security_scan_report = None
+    if security_scan_report:
+        sev = security_scan_report["evidence"]
+        blockers = []
+        if sev["no_secrets"]["status"] != "pass":
+            blockers.append(f"секреты в изменениях: {len(sev['no_secrets']['findings'])} — убрать/ротировать")
+        if sev["deps_approved"]["status"] != "pass":
+            blockers.append("новые зависимости требуют одобрения: " + ", ".join(sev["deps_approved"]["new_dependencies"]))
+        if sev["no_injection_surface"]["status"] == "fail":
+            blockers.append(f"injection-surface флаги ({len(sev['no_injection_surface']['flags'])}) — нужен security-reviewer")
+        else:
+            blockers.append("no_injection_surface: нужен независимый security-reviewer/человек (детерминированный сканер суждение не выносит)")
+        gate_ev = dict(gate_ev)
+        gate_ev["security"] = {"status": "fail", "blockers": blockers,
+                               "scan": {"secrets": len(security_scan_report["secrets"]),
+                                        "new_dependencies": security_scan_report["new_dependencies"],
+                                        "injection_flags": len(security_scan_report["injection_flags"])}}
+
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
     #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
@@ -805,6 +834,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v2.83 Full RunPlan: трейс независимых ревью (какие ai-review гейты судились, вердикт,
         # что читал судья, что отклонено). None -> ревью не запускалось (нет --review/reviewer).
         "reviews": reviews,
+        # v2.95: детерминированный security-скан (секреты/новые зависимости/injection-флаги). None,
+        # если гейта security нет в плане или не коммитили. Закрывает no_secrets/deps_approved (факты);
+        # no_injection_surface — судье. Находка -> security блокирует.
+        "security_scan": ({"secrets": security_scan_report["secrets"],
+                           "new_dependencies": security_scan_report["new_dependencies"],
+                           "injection_flags": security_scan_report["injection_flags"]}
+                          if security_scan_report else None),
         # v2.86 Product Authoring: трейс произведённых артефактов (requirements/plan) — что
         # авторизовано, валидна ли форма, какие required_evidence закрыты. None -> без --author.
         "authored": authored,
@@ -979,6 +1015,20 @@ def selftest():
                               commit=True, isolate=True, install_deps=False)
         expect("v2.93: правка через shell (applied_writes=0) всё равно даёт коммит",
                rep_sh["loop"]["applied_writes"] == 0 and bool(rep_sh["commit"]["sha"]))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями
+        # (ENGINEERING-план содержит security). Не ложный green: секрет -> security в unmet.
+        sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
+        it_sec = iter([{"op": "write", "path": "src/leak.py",
+                        "content": 'API_KEY = "AKIAIOSFODNN7EXAMPLE"\n'}, {"done": True}])
+        rep_sec = run_pipeline("добавить конфиг", sig_eng, root, lambda c: next(it_sec),
+                               policy=pol, budget={"max_model_calls": 5}, feature="sec-fn",
+                               commit=True, isolate=True, install_deps=False)
+        expect("v2.95: security-скан поймал секрет в изменениях",
+               rep_sec.get("security_scan") and len(rep_sec["security_scan"]["secrets"]) >= 1)
+        expect("v2.95: секрет -> security блокирует (в unmet, не ложный green)",
+               "security" in rep_sec["gates"]["unmet"])
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.62: open_pr=True вызывает механизм draft PR; без токена -> honest unavailable

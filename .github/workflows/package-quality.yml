@@ -160,5 +160,7 @@ jobs:
         run: |
           python3 validation/validate_container_assets.py --selftest
           python3 validation/validate_container_assets.py
+      - name: "Security evidence: детерминированный секрет/dep-скан для гейта security (selftest)"
+        run: python3 tools/security_scan.py --selftest
       - name: "Инсталлер: e2e init + child-валидатор (selftest)"
         run: python3 installer/ai_ops.py --selftest
