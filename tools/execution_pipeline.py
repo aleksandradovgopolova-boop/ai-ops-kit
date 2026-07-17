@@ -60,15 +60,24 @@ def _intake_evidence(signals):
             "evidence": [f"intake из сигналов: {', '.join(provided)}"]}
 
 
+# v2.85 (finding аудита): гейты, которые НЕЛЬЗЯ закрывать автоматическим ревьюером той же модели —
+# слишком консеквентны для self-attestation. Даже когда classify=ai-review (нет спец-сигналов),
+# security/red-team требуют ЛИБО настоящей независимости (другая модель/человек), ЛИБО остаются
+# блокирующими. Иначе security-ревью деградирует до «сам себя проверил».
+NO_SELF_REVIEW = {"security", "ai_red_team"}
+
+
 def _reviewable_gates(gate_ids, signals):
-    """v2.83: гейты плана, которые НЕЗАВИСИМЫЙ ревьюер может закрыть легитимно — только ai-review
-    (writer ≠ judge: судья читает и выносит вердикт). Детерминированные гейты с валидатором
-    (requirements/specification/plan_readiness) НЕ закрываются словом ревьюера — им нужны артефакты
-    и запускаемые валидаторы (честно остаются блокирующими). human-approval-гейты (security при
-    privileged/destructive/secret_boundary) ревьюер тоже НЕ закрывает — нужен человек."""
+    """v2.83/2.85: гейты плана, которые НЕЗАВИСИМЫЙ ревьюер той же модели может закрыть легитимно —
+    только ai-review (writer ≠ judge), И НЕ из NO_SELF_REVIEW. Детерминированные гейты с валидатором
+    (requirements/specification/plan_readiness) НЕ закрываются словом ревьюера — им нужны артефакты и
+    запускаемые валидаторы. security/ai_red_team не отдаём self-review — нужна настоящая
+    независимость/человек; они честно остаются блокирующими."""
     gates = gate_executor.load_gates()
     out = []
     for gid in gate_ids:
+        if gid in NO_SELF_REVIEW:
+            continue
         g = gates.get(gid) or {}
         if gate_executor.classify(g, signals) == "ai-review":
             out.append(gid)
@@ -123,17 +132,24 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         if errs:
             continue                            # невалидный/пустой вердикт -> гейт не закрываем
         status = res.get("status")
-        if status == "fail":
-            gate_ev[gid] = {"status": "fail",
-                            "blockers": res.get("blockers") or [f"reviewer FAIL @ {gid}"],
-                            "checks": res.get("checks", []),
-                            "evidence": [f"independent reviewer verdict @ {revision or 'HEAD'}"]}
+        blocking = bool(g.get("blocking"))
+        ev_ref = f"independent reviewer verdict @ {revision or 'HEAD'}"
+        if status == "fail" or (status == "warn" and blocking):
+            # v2.85 (finding аудита): reviewer `warn` на БЛОКИРУЮЩЕМ гейте раньше тихо закрывал его
+            # (evaluate требует required_evidence только для pass). warn — это «есть сомнения», НЕ
+            # чистый pass -> для блокирующего гейта это блок, а не молчаливое прохождение.
+            blockers = res.get("blockers") or (
+                [f"reviewer WARN на блокирующем гейте — не чистый pass @ {gid}"] if status == "warn"
+                else [f"reviewer FAIL @ {gid}"])
+            gate_ev[gid] = {"status": "fail", "blockers": blockers,
+                            "checks": res.get("checks", []), "evidence": [ev_ref]}
+            entry["closed_as"] = "blocked"
         else:
-            # ai-review pass/warn: судья И ЕСТЬ evidence -> required_evidence считается предоставленным
-            # (та же дисциплина, что в gate_executor.collect_evidence для ai-review).
+            # ai-review pass (или warn на НЕблокирующем): судья И ЕСТЬ evidence -> required_evidence
+            # предоставлен (та же дисциплина, что gate_executor.collect_evidence для ai-review).
             gate_ev[gid] = {"status": status, "provided": list(req),
-                            "checks": res.get("checks", []),
-                            "evidence": [f"independent reviewer verdict @ {revision or 'HEAD'}"]}
+                            "checks": res.get("checks", []), "evidence": [ev_ref]}
+            entry["closed_as"] = status
     return gate_ev, reviews
 
 
@@ -265,6 +281,7 @@ def _diff_checks(baseline, after):
     """
     baseline, after = baseline or {}, after or {}
     regressions, fixed = [], []
+    real = ("pass", "fail")            # «настоящий» вердикт проверки (реально исполнена)
     for name, a in after.items():
         b = baseline.get(name) or {}
         b_status, a_status = b.get("status"), a.get("status")
@@ -277,6 +294,11 @@ def _diff_checks(baseline, after):
             new_ids = _failure_ids(a) - _failure_ids(b)
             if new_ids or _failure_signal(a) > _failure_signal(b):
                 regressions.append(name)     # уже красная, но правка внесла НОВЫЙ провал / стало хуже
+        elif b_status in real and a_status not in real:
+            # v2.85 (finding аудита): проверка ПЕРЕСТАЛА давать вердикт (pass/fail -> warn/not_run/None)
+            # = потеря покрытия/верификации. Классический ложный green: модель «чинит» красный тест,
+            # УДАЛЯЯ его -> tests_absent -> status warn -> раньше это не считалось регрессией. Считаем.
+            regressions.append(name)
     return regressions, fixed
 
 
@@ -761,6 +783,18 @@ def selftest():
         expect("structured-id: новая tsc-ошибка в новом файле = регрессия",
                _diff_checks(base_ts, new_ts) == (["typecheck"], []))
 
+        # v2.85 (finding аудита): потеря покрытия — самый острый ложный green. Модель «чинит»
+        # красный тест, УДАЛЯЯ его -> tests_absent -> status warn. Раньше fail->warn/pass->warn не
+        # считались регрессией -> ready_for_pr=true на удалённых тестах. Теперь = регрессия.
+        expect("coverage-loss: pass->warn (проверка перестала выполняться) = регрессия",
+               _diff_checks({"test": {"status": "pass"}}, {"test": {"status": "warn"}}) == (["test"], []))
+        expect("coverage-loss: fail->warn (падавший тест удалён, а не починен) = регрессия",
+               _diff_checks({"test": {"status": "fail"}}, {"test": {"status": "warn"}}) == (["test"], []))
+        expect("coverage: warn->warn (тестов не было и нет) = НЕ регрессия",
+               _diff_checks({"test": {"status": "warn"}}, {"test": {"status": "warn"}}) == ([], []))
+        expect("coverage: warn->pass (тесты появились) = НЕ регрессия (улучшение)",
+               _diff_checks({"test": {"status": "warn"}}, {"test": {"status": "pass"}}) == ([], []))
+
         # v2.74: свод падающих проверок базы -> модель видит реальный вывод (что чинить)
         fs = _baseline_failure_summary({
             "test": {"status": "fail", "runs": [
@@ -851,6 +885,22 @@ def selftest():
         expect("review: детерминированные артефакт-гейты не входят в reviewable (requirements)",
                "requirements" not in _reviewable_gates(["requirements", "specification", "ux_review"], sig_rv)
                and "ux_review" in _reviewable_gates(["requirements", "ux_review"], sig_rv))
+
+        # v2.85 (finding аудита): reviewer WARN на блокирующем гейте НЕ закрывает его тихо -> блок
+        warn_provider = lambda prompt: '{"kind":"reviewer-result","status":"warn","checks":[{"id":"x","status":"warn"}]}'
+        it_rw = iter([{"op": "write", "path": "src/rw.py", "content": "w=1\n"}, {"done": True}])
+        rep_rw = run_pipeline("ui с ревью warn", sig_rv, root, lambda c: next(it_rw),
+                              budget={"max_model_calls": 20}, feature="rw-fn",
+                              commit=True, isolate=True, install_deps=False,
+                              review=True, reviewer_proposer=warn_provider)
+        expect("review: reviewer WARN на блокирующем ux_review -> гейт блокирует (не тихий pass)",
+               "ux_review" in rep_rw["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
+        expect("no-self-review: security не в reviewable даже без спец-сигналов",
+               "security" not in _reviewable_gates(["security", "ux_review"], sig_rv)
+               and "ai_red_team" not in _reviewable_gates(["ai_red_team", "ux_review"], sig_rv))
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.84.0
+  package_version: 2.85.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -332,6 +332,13 @@ execution_engine:
       - "детектор стека усилен: предпочитает wrapper'ы (./gradlew, ./mvnw) глобальным бинарям (иначе exit 127 без установленного gradle/mvn); монорепо-маркеры (pnpm-workspace, lerna, turbo, nx, много package.json в apps/packages) + честный undetermined-note про покрытие пакетов; monorepo_reason в профиле"
       - "пакет живых сценариев qualification/scenarios.yaml (5 сценариев: greenfield, fix-true-green, regression-guard, engineering-review, containment) + docs/qualification-runbook.md (env, команды, чтение отчёта, матрица ОС/стеков); валидатор validate_qualification.py (форма/классы/флаги/матрица) в CI"
       - "ЧЕСТНАЯ ГРАНИЦА: САМ живой прогон 5 сценариев × матрица ОС/стеков требует машины пользователя с моделью и стеком (egress-blocked из cloud-сессии). Харнесс, сценарии, приёмка и runbook готовы; прогон и приложение отчётов — за пользователем"
+    fixed_v2_85_hardening:            # внутренний адверсарный ре-ревью кода v2.81-2.84 (writer ≠ judge)
+      - "ЛОЖНЫЙ GREEN (самый острый): _diff_checks пропускал pass->warn / fail->warn. Модель «чинила» красный тест, УДАЛЯЯ его -> tests_absent -> warn -> no_regressions=true -> ready_for_pr=true на удалённых тестах. Теперь потеря вердикта (pass/fail -> warn/not_run) = регрессия"
+      - "shell allowlist обходился chained/piped/subst командами (проверялся только первый токен): `pytest && curl`, `x | nc`, `echo $(curl)` проходили. Теперь ПОСЕГМЕНТНАЯ проверка + денай подстановки команд; сырые bash/sh убраны из sandbox-набора"
+      - "block_push/сеть-денай обходились quote-обфускацией (`git pu\"\"sh`, `cu\"r\"l`): теперь матч по нормализованной команде. ЧЕСТНО: переменные/eval так не ловятся -> claim понижен с 'всегда' до best-effort; жёсткая гарантия — окружение без push-credentials"
+      - "reviewer `warn` на БЛОКИРУЮЩЕМ гейте раньше тихо закрывал его (evaluate требует required_evidence только для pass) -> теперь warn на blocking = блок"
+      - "гейты security и ai_red_team больше НЕ отдаются авто-ревью той же модели (NO_SELF_REVIEW) — self-attestation недопустима для security-критичных гейтов; нужна независимость/человек"
+      - "output_tail shell поднят 400 -> 4000: сводка теста / список упавших node-id для structured-id baseline-diff часто не попадали в окно (fail-open) -> регрессии терялись"
     remaining_backlog:
       - "P0.2 полный контейнерный jail: лимиты ресурсов и изоляция файловой системы и сети на уровне runtime (namespaces, read-only mounts) — вне брокера; brokered-подмножество закрыто в v2.81 (--sandbox, block_push). Пока: недоверенной модели без надзора не давать ценный приватный репо"
       - "product-authoring: производство артефактов requirements/specification/plan (+ запускаемые валидаторы) для закрытия детерминированных артефакт-гейтов ENGINEERING/PRODUCT — сейчас честно блокируют без артефактов"
