@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.113.0
+  package_version: 2.114.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,9 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_114_product_qualification:
+      - "закрыт последний пункт аудита: product-qualification. validate_product_qualification.py проверяет сквозные ГАРАНТИИ продукта ДЕТЕРМИНИРОВАННО через РЕАЛЬНЫЙ контроллер ai_ops_run.run (не юнит-механику компонентов): PQ1 ContextBundle реально в prompt (=== [ header + задача + fed_to_model); PQ2 неполная спека -> ready=False+spec_first.incomplete; PQ3 resume поверх коммита (обе фазы в worktree, resumed); PQ4 secret_boundary без человека -> security в unmet + ready=False; PQ5 крупная задача -> should_decompose + конкретные WorkPackages; PQ6 нет ложного green (dry-run никогда не ready; честный прогон -> реальный коммит+evidence на SHA+петля done, но ready=False с названным блокером, т.к. движок не фабрикует зелёное без authoring-evidence)"
+      - "граница честности: ЖИВЫЕ прогоны с моделью (качество правок) остаются на машине пользователя — qualification/scenarios.yaml + tools/qual_run.py (DeepSeek/стек, docs/qualification-runbook.md); мы НЕ фабрикуем живые прогоны. Детерминированный харнесс проверяет МЕХАНИКУ гарантий, живой — качество. Шаг добавлен в CI (package-quality) и AGENTS.md чек-лист"
     fixed_v2_113_container_delivery_scope:
       - "P0 аудита закрыт: контейнерная доставка забирает ТОЛЬКО ветки текущего прогона. Раньше run-sandboxed.sh делал force-fetch ВСЕХ refs/heads/ai-ops/* из одноразового клона обратно в основной репо -> параллельная ai-ops/* ветка (другой прогон/сессия) МОГЛА быть перезаписана устаревшей версией из клона (клон снят раньше). Теперь: снимок ai-ops/* клона ДО прогона + доставка только НОВЫХ или ИЗМЕНЁННЫХ веток (диф SHA) -> нетронутые прогоном ветки не трогаются"
       - "логика вынесена в containers/deliver-run-branches.sh (снимок-диф + точечный fetch по refspec), run-sandboxed.sh её вызывает. validate_container_delivery.py проверяет ДЕТЕРМИНИРОВАННО на настоящем git (без docker): ai-ops/new доставлена, изменённая прогоном ai-ops/old доставлена, а concurrent-продвинутая в основном репо ai-ops/untouched НЕ затёрта; 'нечего доставлять' если прогон ничего не менял. validate_container_assets требует deliver-run-branches.sh + scoping-маркеры; шаг добавлен в CI и AGENTS.md"
