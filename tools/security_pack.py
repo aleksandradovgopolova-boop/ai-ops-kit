@@ -40,7 +40,12 @@ def load_domains():
     return data.get("domains", []), data.get("allowed_evidence_sources", [])
 
 
-def _applies(domain, signals, changed_files):
+def _applies(domain, signals, files_content):
+    """Домен применим по сигналу, ИЛИ по пути изменённого файла, ИЛИ по его СОДЕРЖИМОМУ.
+    v2.104 (finding самоаудита): раньше проверялся только ПУТЬ -> auth-логика в файле, чей путь
+    не матчит (напр. src/users.py c 'password'), не поднимала домен -> security авто-проходил
+    (ложный green). Совпадение по содержимому шире -> под-срабатывание (опасное) устранено;
+    пере-срабатывание -> лишний needs_review (fail-closed, безопасно)."""
     reasons = []
     app = domain.get("applicability", {}) or {}
     for sig in app.get("signals", []) or []:
@@ -51,10 +56,14 @@ def _applies(domain, signals, changed_files):
             reasons.append("применим всегда (детерминированная проверка)")
             break
         rx = re.compile(pat)
-        for f in changed_files:
+        hit = None
+        for f, content in files_content.items():
             if rx.search(f):
-                reasons.append(f"файл {f}")
-                break
+                hit = f"файл {f}"; break
+            if content and rx.search(content):
+                hit = f"содержимое {f}"; break
+        if hit:
+            reasons.append(hit)
     return reasons
 
 
@@ -84,7 +93,7 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
 
     results, blocking, needs_review = [], [], []
     for d in domains:
-        reasons = _applies(d, signals, changed_files)
+        reasons = _applies(d, signals, files_content)
         if not reasons:
             continue
         checks = set(d.get("deterministic_checks", []) or [])
@@ -178,6 +187,15 @@ def selftest():
     # ai prompt injection применим по сигналу
     ai = run_pack(files_content={"src/agent/prompt.py": "system = 'do x'\n"}, signals={"ai_component": True})
     expect("ai_prompt_injection применим по ai_component", "ai_prompt_injection" in ai["applicable_domains"])
+
+    # v2.104 (finding самоаудита): применимость по СОДЕРЖИМОМУ, не только по пути. auth-логика в
+    # файле, чей путь не матчит (src/users.py c 'password'), поднимает authentication -> не ложный green.
+    hidden_auth = run_pack(files_content={"src/users.py": "def check(u, p):\n    return u.password == p\n"},
+                           signals={})
+    expect("самоаудит: auth-логика по содержимому (не по пути) -> authentication применим",
+           "authentication" in hidden_auth["applicable_domains"])
+    expect("самоаудит: скрытая auth-логика -> overall != clear (нет ложного green)",
+           hidden_auth["overall"] != "clear")
 
     # у каждой находки есть путь/локация + remediation у домена
     expect("finding несёт path+line; домен несёт remediation",
