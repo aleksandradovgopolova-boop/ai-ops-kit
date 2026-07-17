@@ -311,7 +311,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "profile": {"stacks": [s.get("language") for s in profile.get("stacks", [])],
                     "undetermined": profile.get("undetermined", [])},
         "loop": {"stopped": loop["stopped"], "steps": loop["steps"],
-                 "applied_writes": len(applied), "denied": len(loop["denied"])},
+                 "applied_writes": len(applied), "denied": len(loop["denied"]),
+                 # observability (finding живого прогона): без трейса не понять, ПОЧЕМУ петля
+                 # уткнулась в max_steps (модель флудит read? denied? bad-json?). Компактный трейс.
+                 "denied_reasons": [d.get("reason") for d in loop["denied"]][:10],
+                 "transcript": [{k: t.get(k) for k in ("step", "op", "allowed", "ok", "done", "reason")
+                                 if k in t} for t in (loop.get("transcript") or [])][:40]},
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
         "commit": {"branch": work_branch, "sha": committed_sha,
