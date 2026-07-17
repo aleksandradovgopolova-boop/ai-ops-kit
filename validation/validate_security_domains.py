@@ -6,7 +6,7 @@
   2. у каждого домена: id, applicability (signals|file_patterns), required_evidence,
      severity_policy.default из {critical,high,medium,low}, remediation_template;
   3. required_evidence ссылается только на allowed_evidence_sources;
-  4. deterministic_checks — из известного набора (secret_scan/dependency_audit/injection_scan);
+  4. deterministic_checks — из известного набора (secret_scan/dependency_diff/injection_scan);
   5. id уникальны; поставляемый набор покрывает 12 обязательных доменов.
 
 Использование:
@@ -22,7 +22,7 @@ import yaml
 
 PKG = Path(__file__).resolve().parents[1]
 SEVERITIES = {"critical", "high", "medium", "low"}
-KNOWN_CHECKS = {"secret_scan", "dependency_audit", "injection_scan"}
+KNOWN_CHECKS = {"secret_scan", "dependency_diff", "injection_scan"}
 REQUIRED_DOMAINS = {
     "authentication", "authorization_idol", "input_validation", "secrets", "dependencies",
     "rate_limiting", "file_upload", "network_ssrf", "logging_monitoring", "deployment_config",
