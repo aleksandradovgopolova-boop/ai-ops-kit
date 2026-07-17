@@ -288,8 +288,13 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   ветку/worktree прошлого прогона (коммиты НЕ удаляются), подаёт модели состояние из RunHandoff
   (что сделано/решения/next_action), tool loop продолжает, а не начинает заново. Честность: нечего
   продолжать → honest error; база/состояние устарели → блок без `--force` (не молча на старом
-  evidence). `ai-ops resume … --execute [--force]`. Осталось (Intent UX): onboard/discuss/plan/
-  review/status/health — настоящие действия; container delivery забирает только ветку текущего run.
+  evidence). `ai-ops resume … --execute [--force]`.
+- **Real Intent UX (v2.112) ✅** — намерения — настоящие действия, а не только превью: `onboard`
+  пишет RepositoryProfile, `status` читает active-work, `health` считает Product Health (или честно
+  отказывает без метрик), `plan` пишет RunPlan+context+spec+work-package без правок кода, `new`
+  ставит workitem+spec-каркас, `discuss` создаёт discovery-draft. `run`/`resume`/`specify` уже
+  реальны; `preview <intent>` по-прежнему только показывает. Осталось: container delivery забирает
+  только ветку текущего run.
 - **Product Qualification (planned)** — сквозные сценарии с живой моделью (ContextBundle меняет
   prompt; неполная спека не пускает в implementation; resume после сессии; auth/secret без человека
   не проходит; и т.д.) — на машине пользователя.

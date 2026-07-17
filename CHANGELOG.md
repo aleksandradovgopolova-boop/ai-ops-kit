@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.112.0] — 2026-07-17 — Real Intent UX: намерения — настоящие действия
+
+Аудит: `onboard/discuss/plan/status/health/new` только показывали execution preview. Закрыто —
+намерения выполняют реальное действие (низкоуровневые флаги по-прежнему не нужны).
+
+### Added
+- **`onboard`** — `project_detector.detect` + запись `.ai/repository-profile.yaml`.
+- **`status`** — реальное чтение `active-work` (`active_work.list_cmd`).
+- **`health`** — `product_health.compute` из `product/product-health.yaml`; без метрик — честный отказ
+  (score не фабрикуется).
+- **`plan`** — пишет `features/<wid>/{run-plan,context-bundle,spec-coverage,work-package}.yaml` без
+  правок кода.
+- **`new`** — `workitem.start` + spec-каркас (`spec.yaml`).
+- **`discuss`** — `features/<wid>/discovery-draft.md`.
+
+`run`/`resume`/`specify` уже были реальны. `preview <intent>` по-прежнему только показывает превью
+(без побочных эффектов) — проверено в selftest.
+
+### Осталось (крупные, отдельными релизами)
+Container delivery только текущей ветки, product-qualification с живой моделью. См. ROADMAP.
+
 ## [2.111.0] — 2026-07-17 — Atomic Planner создаёт конкретные WorkPackages
 
 Аудит: Atomic Planner только называл ОСИ разбиения, но не создавал сами пакеты. Закрыто.
