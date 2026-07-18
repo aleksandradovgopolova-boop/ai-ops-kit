@@ -242,6 +242,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["provider"] = provider_name
         rep["model"] = model
         rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
+        # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
+        # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.
+        if provider_name and provider_name != "mock" and isinstance(rep.get("not_yet"), list):
+            rep["not_yet"] = [n for n in rep["not_yet"] if "живой предложитель" not in n]
         # v2.109 Real Resume: если продолжали — честно фиксируем в отчёте preflight-контекст (в т.ч.
         # что ревалидация требовалась и была осознанно переопределена --force), не только факт reuse.
         if resume and isinstance(rep.get("resume"), dict):
@@ -574,6 +578,16 @@ def selftest():
         # v2.111: атомарный -> конкретных пакетов нет (не выдумываем разбиение)
         expect("v2.111: атомарный пакет -> work_packages пуст",
                rp["work_package"].get("work_packages") == [])
+        # v2.119: mock-прогон -> заметка «живой предложитель» уместна (осталась в not_yet)
+        expect("v2.119: mock-провайдер -> заметка «живой предложитель» присутствует",
+               any("живой предложитель" in n for n in (rp.get("not_yet") or [])))
+        # v2.119: живой провайдер -> заметка убрана (не вводит в заблуждение)
+        pscript2 = iter([{"op": "write", "path": "src/b.py", "content": "b=1\n"}, {"done": True}])
+        rp_live = run("добавить b", {"task_type": "QUICK", "size": "small", "risk": "low",
+                                     "affected_areas": ["core"]}, root, engine="pipeline",
+                      proposer=lambda c: next(pscript2), provider_name="anthropic", feature="live-fn")
+        expect("v2.119: живой провайдер -> заметка «живой предложитель» убрана из not_yet",
+               not any("живой предложитель" in n for n in (rp_live.get("not_yet") or [])))
         # P0.1: print_human не падает KeyError на pipeline-отчёте (раньше читал controller-ключи)
         import io
         import contextlib
