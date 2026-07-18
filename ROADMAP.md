@@ -306,6 +306,24 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   честный прогон даёт реальный evidence, но ready=False с названным блокером). Живые прогоны с
   МОДЕЛЬЮ (качество правок) — на машине пользователя (`qualification/scenarios.yaml` + `qual_run.py`,
   DeepSeek/стек, см. `docs/qualification-runbook.md`).
+- **Preflight Truth (v2.115) ✅** — обязательный trust-релиз перед RC. Проверки выполняются ДО
+  запуска модели (`tools/preflight.py`, в контроллере перед `run_pipeline`): classification →
+  ContextPayload собран → spec достаточна → задача атомарна ИЛИ декомпозиция подтверждена → context
+  budget не превышен → необходимые human approvals присутствуют. Блок → tool loop НЕ запускается,
+  правок/коммита НЕТ (Spec-First блокирует РЕАЛИЗАЦИЮ, а не только доставку — главный дефект аудита).
+  Ошибки Context Compiler/Spec/Planner → fail-closed для ENGINEERING/PRODUCT/CRITICAL. Human-approval
+  — настоящий `ApprovalRecord` (`tools/approvals.py`: approval/approved_by/scope/revision/created_at/
+  reason), доменные `human_approval_conditions` реально исполняются (не boolean). PQ2/PQ4/PQ5
+  доказывают ноль вызовов tool loop и отсутствие коммита при блоке.
+
+### Дальше (план после Preflight Truth)
+- **v2.116 Release Candidate Qualification** — `ai-ops review` как настоящий read-only review ветки;
+  актуализация S1–S10; детерминированный полностью зелёный QUICK и ENGINEERING (author+review+
+  security evidence); доказать «incomplete spec → ноль вызовов tool loop»; живые S1/S2/S4/S6/S7/S9 и
+  настоящий draft PR — на машине пользователя. Затем **v3.0-rc1**.
+- **v3.1 Sequential WorkPackage Executor** — последовательное исполнение пакетов (пакет→commit→
+  evidence→gates→handoff→следующий), свой SHA/проверки/resume у каждого; зависимый пакет не стартует
+  без подтверждённого предыдущего. Не задерживает RC.
 
 Главный принцип (из аудита): не добавлять новый концептуальный слой, а превратить уже созданные
 ContextBundle/SpecCoverage/WorkPackage/RunHandoff из отчётных артефактов в реальные управляющие входы

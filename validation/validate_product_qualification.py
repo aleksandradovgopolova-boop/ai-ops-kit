@@ -76,16 +76,20 @@ def run_scenarios():
        "=== [" in ctx and "PQ1_TASK_MARKER" in ctx
        and (rep1.get("context_payload") or {}).get("fed_to_model") is True)
 
-    # PQ2: неполная спека не пускает в implementation
+    # PQ2: неполная спека не пускает в РЕАЛИЗАЦИЮ (v2.115: блок ДО tool loop — ноль вызовов, ноль коммита)
     root2 = _mkrepo({"src/keep": "x"})
     spec_levels.create_spec(root2, "pq2", {"task_type": "QUICK", "affected_areas": ["core"]})  # всё missing
-    s2 = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+    calls2 = {"n": 0}
+    def _prop2(c):
+        calls2["n"] += 1; return {"done": True}
     rep2 = _run("PQ2 сделать", {"task_type": "QUICK", "affected_areas": ["core"]}, root2,
-                engine="pipeline", proposer=lambda c: next(s2), execute=True, feature="pq2",
+                engine="pipeline", proposer=_prop2, execute=True, feature="pq2",
                 install_deps=False, baseline_diff=True)
-    ok("PQ2 spec-first: существующая неполная спека -> ready_for_pr=False + spec_first.incomplete",
-       rep2.get("ready_for_pr") is False
-       and (rep2.get("spec_first") or {}).get("incomplete_sections"))
+    ok("PQ2 spec-first: неполная спека -> preflight blocked, tool loop НЕ запускался, коммита нет",
+       rep2.get("ready_for_pr") is False and rep2.get("status") == "blocked"
+       and calls2["n"] == 0 and not (rep2.get("commit") or {}).get("sha")
+       and rep2.get("loop") is None
+       and not (root2 / ".ai" / "worktrees" / "pq2").exists())
 
     # PQ3: resume поверх подтверждённой работы (не рестарт)
     root3 = _mkrepo({"src/keep": "x"})
@@ -103,27 +107,45 @@ def run_scenarios():
        bool((rep3a.get("commit") or {}).get("sha")) and (rep3b.get("resume") or {}).get("resumed") is True
        and (wt3 / "src" / "p1.py").exists() and (wt3 / "src" / "p2.py").exists())
 
-    # PQ4: secret_boundary без человека -> security не проходит (fail-closed)
+    # PQ4: secret_boundary без ApprovalRecord -> preflight блокирует ДО модели (человек не пройден)
     root4 = _mkrepo({"src/keep": "x"})
-    s4 = iter([{"op": "write", "path": "src/auth.py", "content": "TOKEN='x'\n"}, {"done": True}])
+    calls4 = {"n": 0}
+    def _prop4(c):
+        calls4["n"] += 1; return {"done": True}
     rep4 = _run("PQ4 трогает секреты", {"task_type": "ENGINEERING", "affected_areas": ["core"],
                                         "secret_boundary": True},
-                root4, engine="pipeline", proposer=lambda c: next(s4), execute=True, feature="pq4",
+                root4, engine="pipeline", proposer=_prop4, execute=True, feature="pq4",
                 install_deps=False, baseline_diff=True)
-    ok("PQ4 human control: secret_boundary без human_approved -> security в unmet + ready_for_pr=False",
-       rep4.get("ready_for_pr") is False
-       and "security" in ((rep4.get("gates") or {}).get("unmet") or []))
+    appr4 = ((rep4.get("preflight") or {}).get("checks") or {}).get("approvals") or {}
+    ok("PQ4 human control: secret_boundary без ApprovalRecord -> preflight blocked, модель не звалась",
+       rep4.get("status") == "blocked" and rep4.get("ready_for_pr") is False and calls4["n"] == 0
+       and any(m["domain"] == "secrets" for m in (appr4.get("missing") or [])))
 
-    # PQ5: крупная задача -> декомпозиция на конкретные пакеты
+    # PQ5: крупная задача -> preflight требует подтверждения декомпозиции (не исполняет одним блобом);
+    # конкретные WorkPackages реально сохранены на диске
+    import yaml as _yaml
     root5 = _mkrepo({"src/keep": "x"})
-    s5 = iter([{"op": "write", "path": "src/x.py", "content": "x=1\n"}, {"done": True}])
+    calls5 = {"n": 0}
+    def _prop5(c):
+        calls5["n"] += 1; return {"done": True}
     rep5 = _run("PQ5 большой рефактор", {"task_type": "ENGINEERING", "size": "large",
                                          "affected_areas": ["catalog", "orders", "billing", "search"]},
-                root5, engine="pipeline", proposer=lambda c: next(s5), execute=True, feature="pq5",
+                root5, engine="pipeline", proposer=_prop5, execute=True, feature="pq5",
                 install_deps=False)
-    wp5 = rep5.get("work_package") or {}
-    ok("PQ5 atomic planning: крупная задача -> should_decompose + конкретные WorkPackages",
-       wp5.get("should_decompose") is True and len(wp5.get("work_packages") or []) > 0)
+    wp5_disk = _yaml.safe_load((root5 / "features" / "pq5" / "work-package.yaml").read_text(encoding="utf-8"))
+    ok("PQ5 atomic planning: неатомарная задача -> preflight blocked (не блоб), конкретные WorkPackages на диске",
+       rep5.get("status") == "blocked" and calls5["n"] == 0
+       and wp5_disk.get("should_decompose") is True and len(wp5_disk.get("work_packages") or []) > 0
+       and any("atomic-planning" in r for r in (rep5.get("preflight") or {}).get("reasons", [])))
+    # с подтверждением декомпозиции + выбором пакета — preflight по атомарности пройден
+    s5b = iter([{"op": "write", "path": "src/x.py", "content": "x=1\n"}, {"done": True}])
+    rep5b = _run("PQ5 один пакет", {"task_type": "ENGINEERING", "size": "large",
+                                    "affected_areas": ["catalog", "orders", "billing", "search"],
+                                    "work_package_id": "pq5b-pkg-1-catalog"},
+                 root5, engine="pipeline", proposer=lambda c: next(s5b), execute=True, feature="pq5b",
+                 install_deps=False)
+    ok("PQ5b atomic planning: выбран один пакет -> preflight по атомарности пройден (исполнение началось)",
+       (rep5b.get("preflight") or {}).get("checks", {}).get("atomic", {}).get("ok") is True)
 
     # PQ6: нет ложного green. dry-run (без коммита) НИКОГДА не ready. Прогон с правкой ЧЕСТНО работает
     # (реальный коммит + evidence на точном SHA + петля done), но ready_for_pr=False с НАЗВАННЫМ
