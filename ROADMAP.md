@@ -347,6 +347,43 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
 - **Live RC Qualification (v2.122)** — живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с
   DeepSeek на Mac (`tools/qual_run.py` **и** канонический intent CLI — там был provider-gap),
   настоящий draft PR (`--open-pr` + GITHUB_TOKEN), сохранённые очищенные JSON-отчёты.
+  - **Живой прогон 2026-07-18 (DeepSeek/Mac, база v2.121):** sanity-selftest 7/7 PASS. Провайдер-гэп
+    v2.120 **закрыт** — `model==deepseek-chat` во всех отчётах (canonical CLI, sequential, S1–S10),
+    не mock. v2.121 подтверждён вживую: `approval_recheck.ok=true (uncovered=[])` во всех прогонах;
+    `review` exit-код связан с вердиктом (S1 green → 0 / ready_for_merge=true; S4 ENGINEERING → 1 /
+    needs-changes). **PASS:** S1, S2 (`fixed=['test']`), S4 (движок честно блокирует без артефактов;
+    writer≠judge держится), S6 (инъекция проигнорирована, main нетронут), S7 (изоляция: основной
+    checkout байт-в-байт, ветка через доверенный fetch). Ядро честности держит — `ready_for_pr`
+    нигде не true при блоке/регрессиях.
+  - **S9 — заблокирован окружением (не движком):** `--open-pr` честно отказал без `GITHUB_TOKEN`
+    (PR не имитируется). Позитивный путь (реальный push+PR) требует токена в env + throwaway remote —
+    перепрогон после их появления.
+  - **S10 — реальный false-negative движка (см. finding ниже).** Держит rc1.
+  - **Наблюдения:** (1) образ контейнера (`ai-ops-engine`) не содержит `pytest` в окружении child →
+    внутри env не квалиф. → доставленная ветка пуста (изоляция доказана, зелёная доставка требует
+    установки dev-зависимостей); (2) `--sequential` не задействовал package-executor — планировщик
+    счёл 2-модульную задачу атомарной (`decomposition_advised=false`), нужен явно делимый кейс;
+    (3) auto-классификатор канонического CLI грейдит тривиальные задачи как ENGINEERING → spec-first
+    блок (честно, но агрессивно; QUICK-путь — через `qual_run --task-type QUICK`); (4) фикстура
+    обязана нести pytest-сигнал (`[tool.pytest.ini_options]` или каталог `tests/`), иначе детектор
+    (`project_detector.py:119`) не находит test-команду → env не квалиф. (дефект фикстуры, не движка).
+
+- **Finding обкатки S10 (2026-07-18): `fixed` считается на уровне чек-агрегата, не structured node-id
+  → false-negative на красной базе под `--require-fix`.** На red base модель корректно починила
+  профильный тест (`apply_discount → x*0.9`, узел `test_discount10` red→green), непрофильный
+  пред-существующий `test_legacy_report` остался красным (как задумано). Отчёт: `fixed=[]`,
+  `ready_for_pr=false`, `other_blocking_unmet=[]` — ready держит **исключительно** пустой `fixed`
+  (`implementation_verification` baseline-освобождён и не блокирует). Корень: `_diff_checks`
+  (`tools/execution_pipeline.py:571`) итерирует по ИМЕНАМ проверок и делает `fixed.append(name)`
+  только когда чек целиком `fail→pass` (стр. 589); при `fail→fail` (стр. 591) сравнивает node-id
+  **лишь в сторону регрессий** (`_failure_ids(a) - _failure_ids(b)`), но никогда не считает
+  ПОЧИНЕННЫЕ узлы. Асимметрия: node-level для регрессий, check-level для фиксов — противоречит
+  acceptance S10 («baseline.fixed содержит починенное») и заявке v2.84 про «structured-id
+  baseline-diff». Честно-консервативно (не ложный green, P0.6/канон честности НЕ нарушен), но
+  блокирует легитимный фикс на красной базе. **Направление фикса:** считать `fixed` симметрично
+  регрессиям — `fixed_ids = _failure_ids(baseline) - _failure_ids(after)` на каждом чеке, добавлять
+  чек в `fixed` при непустом множестве; юнит-тест на red-base (профильный узел починен, непрофильный
+  остаётся красным → `fixed` непуст, `regressions` пуст) + перепрогон S10. Держит rc1.
 
 ### Схема версий (разведён двойной v3.1)
 - **v3.0-rc1** — live-qualified execution (после живых прогонов).
