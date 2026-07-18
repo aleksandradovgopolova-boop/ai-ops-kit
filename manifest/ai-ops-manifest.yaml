@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.115.0
+  package_version: 2.116.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_116_rc_qualification_deterministic:
+      - "`ai-ops review` стал НАСТОЯЩИМ intent (аудит #4: раньше падал в preview, движок реально запускался только для run --execute). tools/review_branch.py: независимый ревьюер под READ-ONLY политикой над worktree ветки ai-ops/<wid>, БЕЗ tool loop/правок/коммита; вердикт по ai-review гейтам плана (writer≠judge); диф ветки против базы — контекст. verdict pass|needs-changes|no-branch|needs-reviewer. ai_ops_cli проксирует review (+ --provider/--model); mock -> needs-reviewer (честно, вердикт не фабрикуется)"
+      - "доказаны ДЕТЕРМИНИРОВАННО положительные ЗЕЛЁНЫЕ пути (аудит #5: раньше не было теста, что корректная задача РЕАЛЬНО даёт ready=true). PQ7: корректная QUICK (task_type+size+risk закрывают intake, зелёный тест) -> ready_for_pr=true, overall=delivered, гейты закрыты, run-report.json на диске. PQ8: ENGINEERING с author+review -> ready_for_pr=true при доступном openspec CLI (security-reviewer v2.106 закрывает security на чистом скане); без openspec -> спек-гейт честно блокирует (fail-closed, conditional-тест портируем)"
+      - "актуализированы устаревшие живые сценарии: S4 (security больше НЕ 'нет производителя evidence' — security-reviewer v2.106 закрывает на чистой правке; секреты/deps требуют ApprovalRecord v2.115); S8 переименован в S8-resume-and-rerun и описывает настоящий resume v2.109 (продолжение поверх коммита, блок на устаревшей базе без --force), а не только rerun/discard. review_branch selftest в CI+AGENTS.md. ГРАНИЦА: живые прогоны S1/S2/S4/S6/S7/S9 и настоящий draft PR — на машине пользователя (не фабрикуем); тег v3.0-rc1 после зелёных живых прогонов"
     fixed_v2_115_preflight_truth:
       - "ГЛАВНЫЙ дефект аудита закрыт: Spec-First блокировал ДОСТАВКУ, а не РЕАЛИЗАЦИЮ. Раньше pipeline гонял tool loop, писал код+коммит и лишь ПОТОМ проверял полноту спеки (delivery-gate). Теперь tools/preflight.py выполняется в контроллере ДО run_pipeline: classification -> ContextPayload собран -> spec достаточна -> атомарна ИЛИ декомпозиция подтверждена -> context budget не превышен -> human approvals присутствуют. Блок -> tool loop НЕ запускается, правок/коммита НЕТ (status=blocked, loop=None, commit.sha=None). Доказано PQ2/PQ4/PQ5: ноль вызовов proposer, worktree не создан"
       - "fail-closed для heavy (ENGINEERING/PRODUCT/CRITICAL): ошибки Context Compiler/Spec/Planner (lifecycle_errors) и несобранный ContextPayload -> preflight блокирует (не 'продолжаем молча'); для QUICK — не блокирует (light). context overflow -> блок ДО исполнения. Неатомарная задача -> блок, пока не decomposition_confirmed ИЛИ не выбран work_package_id"

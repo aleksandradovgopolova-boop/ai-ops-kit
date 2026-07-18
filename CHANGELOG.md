@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.116.0] — 2026-07-18 — RC Qualification (детерминированная часть): real review + green paths
+
+Детерминированная часть Release Candidate Qualification. Живые прогоны с моделью и настоящий draft PR
+остаются на машине пользователя (не фабрикуются) — после них тег v3.0-rc1.
+
+### Added
+- **`ai-ops review` — настоящий intent** (`tools/review_branch.py`): независимый ревьюер под
+  **read-only** политикой над worktree ветки `ai-ops/<wid>` — без tool loop, правок и коммитов.
+  Вердикт по ai-review гейтам плана (writer ≠ judge); диф ветки против базы — контекст. `verdict`:
+  pass | needs-changes | no-branch | needs-reviewer. `ai_ops_cli` проксирует `review` (+
+  `--provider`/`--model`); mock → needs-reviewer (вердикт не фабрикуется).
+- **Доказанные положительные зелёные пути** (детерминированно, без модели): **PQ7** — корректная
+  QUICK → `ready_for_pr=true`, `overall=delivered`, гейты закрыты; **PQ8** — ENGINEERING с
+  author+review+security → `ready_for_pr=true` при доступном openspec CLI (иначе спек-гейт честно
+  блокирует). Закрывает пробел аудита «нет доказанного positive-green пути».
+
+### Changed
+- Актуализированы живые сценарии: **S4** (security-reviewer v2.106 закрывает security на чистой
+  правке; секреты/deps требуют ApprovalRecord); **S8** → `S8-resume-and-rerun` (настоящий resume
+  v2.109, а не только rerun/discard).
+
+### Осталось до v3.0-rc1 (на машине пользователя)
+Живые S1/S2/S4/S6/S7/S9 с DeepSeek, настоящий draft PR (`--open-pr` + GITHUB_TOKEN), сохранённые
+JSON-отчёты. Затем — тег v3.0-rc1. Далее v3.1 (Sequential WorkPackage Executor). См. ROADMAP.
+
 ## [2.115.0] — 2026-07-18 — Preflight Truth: проверки до модели (Spec-First блокирует реализацию)
 
 Главный дефект внешнего аудита: Spec-First блокировал **доставку**, а не **реализацию** — pipeline
