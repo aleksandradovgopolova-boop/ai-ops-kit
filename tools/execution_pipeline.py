@@ -385,6 +385,32 @@ def _install_dependencies(profile, root, policy):
     return results
 
 
+def _env_unqualified(checks):
+    """v2.118 (finding живого прогона DeepSeek/Mac): провал install-команды стека блокирует ready
+    ТОЛЬКО если он реально оставил проверки нерабочими (тулчейн/зависимость отсутствуют: exit 127,
+    'command not found', 'No module named', ...). Если применимые проверки РЕАЛЬНО отработали (pass
+    или честный fail с настоящим exit-кодом), окружение функционально квалифицировано, а неудачная
+    install-команда (напр. `pip install -e .` на репо, который не является устанавливаемым пакетом) —
+    не повод держать ready. Сохраняет P0.6-честность (сломанное окружение ≠ зелёное), убирает
+    false-negative (проверки прошли, но install упал).
+    -> True, если среди упавших проверок ЕСТЬ симптом неподготовленного окружения."""
+    symptoms = ("command not found", "not found", "no such file", "no module named",
+                "modulenotfounderror", "cannot find module", "is not recognized",
+                "executable not found", "no such command")
+    for _name, c in (checks or {}).items():
+        if (c or {}).get("status") not in ("fail", "error"):
+            continue
+        for run in (c.get("runs") or []):
+            if run.get("ok"):
+                continue
+            if run.get("exit_code") == 127:
+                return True
+            out = (run.get("output_tail") or "").lower()
+            if any(s in out for s in symptoms):
+                return True
+    return False
+
+
 def _baseline_failure_summary(checks, tail=500):
     """Свод падающих проверок базы с ФАКТИЧЕСКИМ выводом — чтобы модель знала, что чинить.
 
@@ -904,9 +930,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # evidence на точном SHA и чистого дерева до/после проверок. dry-run (commit=False) НИКОГДА
     # не бывает ready — нет ревизии, к которой привязать draft PR.
     tree_ok = bool(tree_clean_before_checks) and (tree_clean_after_checks is not False)
-    # P0.6: окружение должно быть квалифицировано (install прошёл) — иначе baseline недостоверен
+    # P0.6 + v2.118: окружение квалифицировано, если install прошёл ЛИБО проверки реально отработали
+    # (нет симптомов неподготовленного окружения). Провал install при прошедших проверках больше не
+    # даёт false-negative (finding живого прогона: `pip install -e .` падает на не-пакете, а pytest
+    # проходит) — при этом сломанное окружение (exit 127 / нет тулчейна) по-прежнему блокирует.
+    env_qualified = prepare_ok or (not _env_unqualified(coll["checks"]))
     base_ok = (loop["stopped"] == "done") and (committed_sha is not None) \
-        and revision_matches and tree_ok and prepare_ok
+        and revision_matches and tree_ok and env_qualified
     if baseline_diff:
         # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
@@ -938,6 +968,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     not_yet = ["живой предложитель (swap провайдера)"]
     if not commit:
         not_yet.insert(0, "commit+reverify (запусти с commit=True) — без коммита ready_for_pr всегда False")
+    if not env_qualified:
+        not_yet.insert(0, "окружение не квалифицировано: install упал И проверки не смогли отработать "
+                          "(нет тулчейна/зависимостей) — почини установку стека")
     if not open_pr:
         not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
     if spec_depth_missing:
@@ -970,7 +1003,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
         "resume": resume_info,                     # v2.109: продолжение поверх подтверждённой работы (None если resume не запрошен)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
-        "prepare_ok": prepare_ok,                  # P0.6: install прошёл -> окружение квалифицировано
+        "prepare_ok": prepare_ok,                  # install-команды стека прошли (для наблюдаемости)
+        "env_qualified": env_qualified,            # v2.118: install прошёл ЛИБО проверки реально отработали
         "prepare_mutated_tree": prepare_mutated_tree,  # P0.6: подготовка меняла tracked -> откачено до модели
         "commit": {"branch": work_branch, "sha": committed_sha,
                    "evidence_revision": evidence_revision,
@@ -1263,6 +1297,20 @@ def selftest():
         expect("v2.110 spec-first: полный spec.yaml -> спек-гейт не блокирует (ok=True)",
                rep_sf2["spec_first"]["ok"] is True and not rep_sf2["spec_first"]["incomplete_sections"])
         _git(root, "checkout", "-q", orig_branch)
+
+        # v2.118 (finding живого прогона): провал install при ПРОШЕДШИХ проверках не блокирует ready
+        expect("v2.118 env: проверки прошли (test=pass) -> окружение квалифицировано, install-провал не в счёт",
+               _env_unqualified({"test": {"status": "pass"}, "build": {"status": "not_run"}}) is False)
+        expect("v2.118 env: exit 127 в упавшей проверке -> окружение НЕ квалифицировано (блок сохраняется)",
+               _env_unqualified({"test": {"status": "fail", "runs": [{"ok": False, "exit_code": 127}]}}) is True)
+        expect("v2.118 env: 'No module named' в выводе -> окружение НЕ квалифицировано",
+               _env_unqualified({"test": {"status": "fail",
+                                          "runs": [{"ok": False, "exit_code": 1,
+                                                    "output_tail": "ModuleNotFoundError: No module named 'foo'"}]}}) is True)
+        expect("v2.118 env: честный fail проверки (exit 1, код сломан) -> НЕ считается env-провалом",
+               _env_unqualified({"test": {"status": "fail",
+                                          "runs": [{"ok": False, "exit_code": 1,
+                                                    "output_tail": "AssertionError: 2 != 3"}]}}) is False)
 
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями
         # (ENGINEERING-план содержит security). Не ложный green: секрет -> security в unmet.

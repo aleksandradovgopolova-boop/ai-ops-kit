@@ -1,6 +1,6 @@
 # Quickstart — первый день с AI Ops Kit
 
-Требования: python3 (3.10+) и pyyaml. Node.js нужен только для OpenSpec-опции
+Требования: python3 (3.9+) и pyyaml. Node.js нужен только для OpenSpec-опции
 (включена по умолчанию, выключается `openspec.enabled: false` в `.ai-ops.yaml`).
 
 ## 1. Установка в ваш репозиторий (child)
@@ -15,6 +15,46 @@ python3 <путь>/ai-ops-kit/installer/ai_ops.py doctor
 Появятся: `.ai/` (managed-слой с реестрами и контрактами; не редактируйте — правки
 кладите в `.ai/custom/`), `.ai-ops.yaml` (отредактируйте `project.name` и providers)
 и `.github/workflows/ai-ops-update.yml` (ежедневный PR с обновлением кита).
+
+## 1a. Задача одной командой (intent UX, v2.117)
+
+Движок управляется **намерениями**, а не флагами — не нужно помнить
+`--engine`/`--author`/`--review`/`--sandbox`. Один вход:
+
+```bash
+python3 .ai/managed/tools/ai_ops_cli.py <intent> "<задача>" . [--feature NAME] [--execute]
+```
+
+Типовой поток продуктовой задачи:
+
+```bash
+# 1. один раз на репозиторий — определить стек и команды
+python3 .ai/managed/tools/ai_ops_cli.py onboard .
+
+# 2. спецификация нужной глубины (создаёт features/<id>/spec.yaml — заполните разделы)
+python3 .ai/managed/tools/ai_ops_cli.py specify "добавить фильтр заказов по статусу" . --feature orders-filter
+
+# 3. план без правок кода (RunPlan + контекст + WorkPackages)
+python3 .ai/managed/tools/ai_ops_cli.py plan "добавить фильтр заказов по статусу" . --feature orders-filter
+
+# 4. исполнить (preflight → tool-loop → commit → evidence → гейты → draft PR)
+python3 .ai/managed/tools/ai_ops_cli.py run "добавить фильтр заказов по статусу" . --feature orders-filter --execute
+
+# 5. независимый read-only ревью действующей ветки (writer ≠ judge)
+python3 .ai/managed/tools/ai_ops_cli.py review "проверь ветку" . --feature orders-filter --provider openai-compatible --model deepseek-chat
+```
+
+Другие намерения: `new` (каркас фичи), `discuss` (черновик discovery), `status` (активная работа),
+`health` (Product Health), `resume … --execute [--force]` (продолжить прерванную работу поверх коммита,
+**не рестарт**), `preview <intent> …` (показать план без выполнения).
+
+**Preflight Truth (v2.115):** перед запуском модели проверяются classification → контекст → достаточность
+спеки → атомарность/декомпозиция → бюджет → human-approvals. Если спека неполна или нужен человек
+(secret-boundary/деструктив/новая зависимость) — **модель не запускается, правок и коммита нет**. Одобрение —
+настоящий `ApprovalRecord` (`tools/approvals.py record …`: автор/scope/причина), не флаг.
+
+Крупную неатомарную задачу можно исполнить **по WorkPackages последовательно** (пакет→commit→
+evidence→gates→следующий): добавьте `--sequential`.
 
 ## 2. Первая фича
 
@@ -95,6 +135,18 @@ markdown и валидирует настоящим `openspec validate --strict`
 поэтому **качество** требований судит **человек**, а не in-loop `--review` (ревьюер закрывает только
 ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI или битый артефакт → гейт остаётся
 блокирующим; human-approval-гейты тоже — движок не выдаёт ложный «готово».
+
+Новые флаги пути исполнения (v2.109–2.117):
+- `--resume [--force]` — продолжить прерванную работу того же `--feature` **поверх коммита** (не
+  рестарт): переиспользует ветку/worktree, подаёт состояние из RunHandoff в prompt. Устаревшая база
+  (main ушёл вперёд) → блок без `--force` (не продолжаем молча на старом evidence).
+- `--sequential` — неатомарную задачу исполнить по WorkPackages последовательно; у каждого пакета свой
+  коммит/SHA/гейты/точка resume; зависимый пакет не стартует без подтверждённого предыдущего; блок
+  пакета останавливает последовательность. Отчёты — `features/<id>/work-packages/<pkg>/report.json`.
+- **Preflight**: неполная `features/<id>/spec.yaml`, превышение context-budget, неподтверждённая
+  декомпозиция или отсутствие нужного `ApprovalRecord` → прогон останавливается **до** tool-loop
+  (`status=blocked`, коммита нет). Одобрение создаётся:
+  `python3 .ai/managed/tools/approvals.py record . <feature> --approval secrets --by you@x --scope config --reason "…"`.
 
 Граница: child-CI (раздел 4) по-прежнему клонирует kit по тегу — это пин версии для проверки
 установки, отдельный от пути исполнения движка.
