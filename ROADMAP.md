@@ -355,9 +355,10 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
     writer≠judge держится), S6 (инъекция проигнорирована, main нетронут), S7 (изоляция: основной
     checkout байт-в-байт, ветка через доверенный fetch). Ядро честности держит — `ready_for_pr`
     нигде не true при блоке/регрессиях.
-  - **S9 — заблокирован окружением (не движком):** `--open-pr` честно отказал без `GITHUB_TOKEN`
-    (PR не имитируется). Позитивный путь (реальный push+PR) требует токена в env + throwaway remote —
-    перепрогон после их появления.
+  - **S9 — ✅ PASS (обе половины).** Негатив: `--open-pr` честно отказал без `GITHUB_TOKEN` (PR не
+    имитируется). Позитив (через `gh auth token` + throwaway repo под authed-аккаунтом): `ready_for_pr=
+    true`, `overall=delivered`, `delivery.status=opened`, `draft_pr` — реальный draft PR, `base==main`
+    (default_branch репо, не хардкод). Токен только в env прогона, не в отчётах/коммитах.
   - **S10 — реальный false-negative движка (см. finding ниже).** Держит rc1.
   - **Наблюдения:** (1) образ контейнера (`ai-ops-engine`) не содержит `pytest` в окружении child →
     внутри env не квалиф. → доставленная ветка пуста (изоляция доказана, зелёная доставка требует
