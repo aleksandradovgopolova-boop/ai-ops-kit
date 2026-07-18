@@ -59,7 +59,9 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     if heavy and not payload_ok:
         block("context_payload: compiled payload не собран для heavy-задачи (fail-closed)")
 
-    # 3. spec достаточна — существующая, но неполная спека НЕ пускает в реализацию (главный фикс #1)
+    # 3. spec достаточна — существующая, но неполная спека НЕ пускает в реализацию (главный фикс #1).
+    #    (P1.1 — обязательность спеки до tool loop для heavy — отдельным релизом v2.121 с authoring-
+    #    пре-стадией, чтобы не сломать --author-поток.)
     spec_artifact = bool((spec_cov or {}).get("spec_artifact"))
     spec_missing = list((spec_cov or {}).get("blocking_missing") or [])
     spec_ok = not (spec_artifact and spec_missing)
@@ -68,17 +70,27 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
         block(f"spec-first: спека features/{wid}/spec.yaml существует, но неполна "
               f"(не заполнено: {', '.join(spec_missing)}) — реализация не начинается")
 
-    # 4. атомарность / подтверждённая декомпозиция
+    # 4. атомарность. v2.120 (P0.4/P0.6): boolean-подтверждения НЕДОСТАТОЧНО — неатомарная задача
+    #    идёт либо через sequential executor, либо как КОНКРЕТНЫЙ существующий WorkPackage
+    #    (work_package_id, который РЕАЛЬНО есть в плане). Вымышленный id и голый decomposition_confirmed
+    #    больше не пускают блоб одним tool loop.
     should_decompose = bool((work_pkg or {}).get("should_decompose"))
-    confirmed = bool(signals.get("decomposition_confirmed") or signals.get("work_package_id"))
-    atomic_ok = (not should_decompose) or confirmed
+    selected = signals.get("work_package_id")
+    # авторитетный источник id пакетов — из sequence-исполнителя (он строит план), плюс work_pkg прогона
+    plan_ids = set(signals.get("_sequence_plan_ids") or [])
+    plan_ids |= {p.get("id") for p in ((work_pkg or {}).get("work_packages") or [])}
+    selected_valid = bool(selected) and selected in plan_ids
+    atomic_ok = (not should_decompose) or selected_valid
     checks["atomic"] = {"ok": atomic_ok, "should_decompose": should_decompose,
-                        "confirmed": confirmed,
-                        "selected_package": signals.get("work_package_id")}
+                        "selected_package": selected, "selected_valid": selected_valid}
     if not atomic_ok:
         n = len((work_pkg or {}).get("work_packages") or [])
-        block(f"atomic-planning: задача не атомарна ({n} пакетов) — подтверди декомпозицию "
-              f"(decomposition_confirmed) ИЛИ выбери один пакет (work_package_id) до исполнения")
+        if selected and not selected_valid:
+            block(f"atomic-planning: work_package_id='{selected}' отсутствует в плане ({n} пакетов) — "
+                  f"нельзя исполнить по вымышленному ID")
+        else:
+            block(f"atomic-planning: задача не атомарна ({n} пакетов) — исполняй через sequential "
+                  f"executor (ai-ops run … --sequential) ИЛИ выбери СУЩЕСТВУЮЩИЙ work_package_id из плана")
 
     # 5. context budget не превышен -> блок ДО исполнения
     overflow = bool((bundle or {}).get("overflow"))
@@ -144,12 +156,26 @@ def selftest():
         pf_a = assess({"task_type": "ENGINEERING"}, root, "w", payload=good_payload,
                       spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
         expect("preflight: неатомарная без подтверждения -> blocked", pf_a["blocked"])
+        # v2.120: голый decomposition_confirmed БОЛЬШЕ не пускает блоб -> всё ещё blocked
         pf_a2 = assess({"task_type": "ENGINEERING", "decomposition_confirmed": True}, root, "w",
                        payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
-        expect("preflight: декомпозиция подтверждена -> atomic-гейт пройден", pf_a2["checks"]["atomic"]["ok"])
+        expect("v2.120 preflight: голый decomposition_confirmed -> НЕ пускает блоб (blocked)", pf_a2["blocked"])
+        # выбран СУЩЕСТВУЮЩИЙ пакет из плана -> atomic-гейт пройден
         pf_a3 = assess({"task_type": "ENGINEERING", "work_package_id": "a"}, root, "w",
                        payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
-        expect("preflight: выбран один пакет -> atomic-гейт пройден", pf_a3["checks"]["atomic"]["ok"])
+        expect("preflight: выбран существующий пакет (id в плане) -> atomic-гейт пройден",
+               pf_a3["checks"]["atomic"]["ok"])
+        # v2.120: ВЫМЫШЛЕННЫЙ id (нет в плане) -> blocked
+        pf_a4 = assess({"task_type": "ENGINEERING", "work_package_id": "ghost"}, root, "w",
+                       payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
+        expect("v2.120 preflight: вымышленный work_package_id (нет в плане) -> blocked",
+               pf_a4["blocked"] and pf_a4["checks"]["atomic"]["selected_valid"] is False)
+        # id из авторитетного плана sequence-исполнителя -> пройден
+        pf_a5 = assess({"task_type": "ENGINEERING", "work_package_id": "seq-2",
+                        "_sequence_plan_ids": ["seq-1", "seq-2"]}, root, "w", payload=good_payload,
+                       spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
+        expect("v2.120 preflight: id из плана sequence-исполнителя -> atomic-гейт пройден",
+               pf_a5["checks"]["atomic"]["ok"])
 
         # overflow -> блок
         pf_of = assess({"task_type": "ENGINEERING"}, root, "w", payload=good_payload,

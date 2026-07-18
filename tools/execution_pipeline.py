@@ -586,7 +586,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
-                 resume=False, resume_context=None):
+                 resume=False, resume_context=None, write_scope=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -696,9 +696,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if policy is not None:
         pol = policy
     elif sandbox:
-        pol = tool_broker.sandbox_policy(child_root=str(work_root), write_scope=None)
+        pol = tool_broker.sandbox_policy(child_root=str(work_root), write_scope=write_scope)
     else:
-        pol = tool_broker.Policy(level="execution", child_root=str(work_root), block_push=True)
+        pol = tool_broker.Policy(level="execution", child_root=str(work_root), block_push=True,
+                                 write_scope=write_scope)
     is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
 
     # P0.6/v2.93: снимок untracked-файлов ДО install/baseline — чтобы потом удалить только НОВЫЕ

@@ -215,6 +215,24 @@ def selftest():
         expect("v2.116 review: настоящий intent — без ветки честный no-branch (не падает в preview)",
                "REVIEW" in out_rv and "no-branch" in out_rv and rc_rv != 0)
 
+    # v2.120: `run --execute` РЕАЛЬНО проводит provider/model/max-steps/open-pr в движок (не mock-хардкод).
+    import subprocess as _sp
+    with tempfile.TemporaryDirectory() as gtd:
+        groot = Path(gtd)
+        (groot / "calc.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        for aa in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t"),
+                   ("add", "-A"), ("commit", "-q", "-m", "i")):
+            _sp.run(["git", "-C", gtd, *aa], capture_output=True)
+        buf = io.StringIO()
+        with _cl.redirect_stdout(buf), _cl.redirect_stderr(io.StringIO()):
+            main(["run", "добавить x", str(groot), "--execute", "--feature", "wiref",
+                  "--model", "marker-model-xyz",
+                  "--signals", '{"task_type":"QUICK","size":"small","risk":"low","affected_areas":["core"]}'])
+        rep_p = groot / "features" / "wiref" / "run-report.json"
+        model_wired = rep_p.is_file() and json.loads(rep_p.read_text(encoding="utf-8")).get("model") == "marker-model-xyz"
+        expect("v2.120 CLI: run --execute проводит --model до движка (provider/model провязаны, не mock-хардкод)",
+               model_wired)
+
     print("ai_ops_cli selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -411,6 +429,9 @@ def main(argv):
     ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--sequential", action="store_true",
                     help="run: неатомарную задачу исполнять по WorkPackages последовательно (v3.1)")
+    ap.add_argument("--open-pr", action="store_true",
+                    help="run: открыть draft PR по результату (нужен GITHUB_TOKEN)")
+    ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -478,7 +499,9 @@ def main(argv):
     if intent == "run" and a.execute:
         import ai_ops_run
         flags = pv["will_do"]["auto_flags"]
-        # v3.1: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом)
+        # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом).
+        # v2.120: sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget обычного
+        # пути — иначе тихая потеря containment и live-провайдера (дефект аудита P0.2).
         if a.sequential:
             import atomic_planner
             import workpackage_executor
@@ -495,18 +518,26 @@ def main(argv):
                     task, signals, Path(child_root), wp["work_packages"], lambda pkg: base_prop,
                     feature=wid, base=a.base, provider_name=a.provider, model=a.model,
                     author=flags["author"], author_proposer=auth,
-                    review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"])
+                    review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"],
+                    sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps)
                 print(f"SEQUENCE {wid}: executed_all={seq['executed_all']} · ready_all={seq['ready_all']} · "
                       f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}")
                 for p in seq["packages"]:
                     print(f"  [{p['id']}] {p['status']} · sha={(p.get('sha') or '')[:12] or '—'} · ready={p.get('ready')}")
-                return 0 if seq["executed_all"] else 1
+                # v2.120 exit-код: 0 только при ready_all; 1 — исполнено, но не готово; 2 — цепочка блокирована/ошибка
+                if seq["ready_all"]:
+                    return 0
+                return 1 if seq["executed_all"] else 2
             print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
         print("— запускаю —")
+        # v2.120: канонический вход ПРОВОДИТ провайдера/модель/base/open-pr/max-steps/require-fix в движок
+        # (дефект аудита P0.1: раньше уходило в mock и без пути до draft PR).
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
-                             author=flags["author"])
+                             author=flags["author"], provider_name=a.provider, model=a.model,
+                             base=a.base, open_pr=a.open_pr, max_steps=a.max_steps,
+                             require_fix=flags.get("require_fix", False))
         ai_ops_run.print_human(rep)
         return ai_ops_run.exit_code(rep)
     return 0

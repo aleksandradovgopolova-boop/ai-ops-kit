@@ -72,7 +72,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
-        resume=False, force_resume=False, base="main"):
+        resume=False, force_resume=False, base="main", write_scope=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -232,7 +232,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
                 context_prelude=(payload or {}).get("text"),
-                resume=resume, resume_context=resume_ctx)
+                resume=resume, resume_context=resume_ctx, write_scope=write_scope)
         except BaseException:
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
