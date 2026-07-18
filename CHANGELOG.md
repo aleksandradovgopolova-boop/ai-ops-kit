@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.120.0] — 2026-07-18 — Canonical Runtime Wiring: провязка CLI↔движок и безопасность sequential
+
+Новый аудит (v2.119) нашёл дефекты в СКЛЕЙКЕ готовых механизмов, не в архитектуре. Закрыты все P0.
+
+### Fixed
+- **P0.1 — канонический `run --execute` уходил в mock.** Теперь CLI проводит
+  `provider/model/base/open-pr/max-steps/require-fix` в `ai_ops_run.run`. Добавлены `--open-pr`,
+  `--max-steps`.
+- **P0.2 — sequential терял containment.** `execute_sequence` наследует
+  `sandbox/install-deps/open-pr/budget`; exit-код: `0` только при `ready_all`, `1` — исполнено-не-
+  готово, `2` — цепочка блокирована (раньше `0` при `executed_all` с незакрытыми гейтами).
+- **P0.3 — цепочка продолжалась после blocking gate.** `_hard_stop` останавливает последовательность
+  на security/reviewer FAIL, регрессии, нет-коммита, scope-violation, preflight-блоке; «awaiting
+  evidence» (нет author/review) — не стоп (пакет исполнен, но не ready).
+- **P0.4/P0.6 — обход декомпозиции.** `work_package_id` валидируется против плана (вымышленный →
+  блок); голый `decomposition_confirmed` больше не пускает неатомарную задачу одним tool loop.
+- **P0.7 — package write-scope** провязан `run → run_pipeline → tool_broker.Policy`.
+
+### Changed
+- ROADMAP: разведён двойной `v3.1` (v3.0-rc1 → v3.0 → v3.1 Sequential-веха → v3.2/v4.0 package split).
+
+Тесты: preflight (id-validation, blob-block), executor (`_hard_stop`, reviewer-fail стоп, sandbox-
+наследование), CLI (`--model` доходит до движка), PQ5c. Осталось (P1) — v2.121.
+
 ## [2.119.0] — 2026-07-18 — Полировка по живой обкатке: честный not_yet + терпимость к тул-кэшам
 
 Две мелочи из живой обкатки на Mac (после зелёного S1/S2), обе — про честность отчёта.

@@ -137,15 +137,24 @@ def run_scenarios():
        rep5.get("status") == "blocked" and calls5["n"] == 0
        and wp5_disk.get("should_decompose") is True and len(wp5_disk.get("work_packages") or []) > 0
        and any("atomic-planning" in r for r in (rep5.get("preflight") or {}).get("reasons", [])))
-    # с подтверждением декомпозиции + выбором пакета — preflight по атомарности пройден
+    # выбор СУЩЕСТВУЮЩЕГО пакета из плана -> preflight по атомарности пройден; вымышленный id -> блок (v2.120)
+    import atomic_planner as _ap5
+    sig5b = {"task_type": "ENGINEERING", "size": "large",
+             "affected_areas": ["catalog", "orders", "billing", "search"]}
+    real_pid = _ap5.decompose(sig5b, wid="pq5b", child_root=root5)["work_packages"][0]["id"]
     s5b = iter([{"op": "write", "path": "src/x.py", "content": "x=1\n"}, {"done": True}])
-    rep5b = _run("PQ5 один пакет", {"task_type": "ENGINEERING", "size": "large",
-                                    "affected_areas": ["catalog", "orders", "billing", "search"],
-                                    "work_package_id": "pq5b-pkg-1-catalog"},
+    rep5b = _run("PQ5 один пакет", dict(sig5b, work_package_id=real_pid),
                  root5, engine="pipeline", proposer=lambda c: next(s5b), execute=True, feature="pq5b",
                  install_deps=False)
-    ok("PQ5b atomic planning: выбран один пакет -> preflight по атомарности пройден (исполнение началось)",
+    ok("PQ5b atomic planning: выбран СУЩЕСТВУЮЩИЙ пакет из плана -> preflight по атомарности пройден",
        (rep5b.get("preflight") or {}).get("checks", {}).get("atomic", {}).get("ok") is True)
+    # v2.120: ВЫМЫШЛЕННЫЙ work_package_id -> preflight блокирует (нельзя по фиктивному ID)
+    rep5c = _run("PQ5 вымышленный id", dict(sig5b, work_package_id="pq5-ghost-id"),
+                 root5, engine="pipeline", proposer=lambda c: {"done": True}, execute=True, feature="pq5c",
+                 install_deps=False)
+    ok("PQ5c atomic planning (v2.120): вымышленный work_package_id -> preflight blocked (нет обхода)",
+       rep5c.get("status") == "blocked"
+       and (rep5c.get("preflight") or {}).get("checks", {}).get("atomic", {}).get("selected_valid") is False)
 
     # PQ6: нет ложного green. dry-run (без коммита) НИКОГДА не ready. Прогон с правкой ЧЕСТНО работает
     # (реальный коммит + evidence на точном SHA + петля done), но ready_for_pr=False с НАЗВАННЫМ

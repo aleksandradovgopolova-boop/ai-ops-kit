@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.119.0
+  package_version: 2.120.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,12 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_120_canonical_runtime_wiring:
+      - "P0.1 канонический вход провязан: ai_ops_cli `run --execute` теперь передаёт provider_name/model/base/open_pr/max_steps/require_fix в ai_ops_run.run (раньше уходил в mock, model=None, без пути до draft PR). Добавлены CLI-флаги --open-pr, --max-steps. Тест: run --execute --model MARKER -> report.model==MARKER"
+      - "P0.2 sequential наследует безопасность/окружение: execute_sequence получил sandbox/install_deps/open_pr/max_steps/write_scope_for и передаёт их в per-package run (containment больше не теряется молча). open_pr — только на финальном пакете (интегрированная ветка). CLI exit-код sequential: 0 при ready_all, 1 при executed_all-но-не-ready, 2 при блокировке/ошибке (раньше 0 при executed_all даже с незакрытыми гейтами)"
+      - "P0.3 цепочка стоп на настоящем блокере: _hard_stop(rep) различает «awaiting evidence» (нет author/review -> исполнен, не ready, цепочка идёт) от deterministic/security/reviewer FAIL, регрессии, нет-коммита, scope-violation (write вне write_scope), preflight-блок — эти ОСТАНАВЛИВАЮТ последовательность (зависимый пакет не строится поверх). Тесты: reviewer FAIL на пакете 1 -> стоп; заблокированный push != scope-violation"
+      - "P0.4/P0.6 обход декомпозиции закрыт: preflight валидирует work_package_id против плана (авторитетный _sequence_plan_ids от исполнителя + work_pkg прогона); вымышленный id -> блок; голый decomposition_confirmed БОЛЬШЕ не пускает неатомарную задачу одним tool loop — только sequential executor ИЛИ конкретный существующий пакет. PQ5c: вымышленный id -> blocked"
+      - "P0.7 package write-scope провязан: write_scope проходит run -> run_pipeline -> tool_broker.Policy/sandbox_policy; execute_sequence(write_scope_for) задаёт scope пакета; брокер отклоняет запись вне scope, executor трактует это как scope-violation (стоп). Roadmap: разведён двойной v3.1 (v3.0-rc1 live-qualified -> v3.0 stable -> v3.1 Sequential как веха -> v3.2/v4.0 физический package split). Осталось (P1) в v2.121: spec до tool loop для heavy, binding ApprovalRecord, review как lifecycle-evidence, строгий install-фикс"
     fixed_v2_119_live_polish:
       - "#2 честность отчёта: заметка not_yet «живой предложитель (swap провайдера)» уместна только на mock-прогоне — на ЖИВОМ провайдере (DeepSeek и т.п.) она вводит в заблуждение (предложитель уже живой). Контроллер убирает её из not_yet при provider != 'mock'. Регрессия в ai_ops_run selftest (mock -> есть, anthropic -> убрана)"
       - "#3 (finding живого прогона): тул-кэши (untracked __pycache__/.pytest_cache/.mypy_cache/node_modules/target/dist/... ) делали дерево 'грязным после проверок' (tree_after=False) в репо БЕЗ .gitignore -> ложный not-ready, хотя checks реально прошли (тот же класс, что prepare-false-negative). _tree_clean_after_checks игнорирует ТОЛЬКО untracked тул-кэши; модификации TRACKED-файлов и прочий untracked по-прежнему = грязь (evidence-целостность P0.5 сохранена). Проверено end-to-end: фикстура без .gitignore в baseline-diff теперь tree_after=True, ready=True (до фикса — False)"

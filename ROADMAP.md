@@ -325,11 +325,32 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   `ready_for_pr=true` (при доступном openspec CLI; иначе спек-гейт честно блокирует). «Incomplete
   spec → ноль вызовов tool loop» доказано в PQ2 (v2.115).
 
+### Интеграционная честность склейки (аудит v2.119) — короткий слой до RC
+- **Canonical Runtime Wiring (v2.120) ✅** — устранён P0-разрыв: канонический `run --execute` теперь
+  проводит provider/model/base/open-pr/max-steps/require-fix в движок (раньше уходил в `mock`);
+  sequential наследует sandbox/install/provider/baseline/open-pr/budget (containment не теряется);
+  exit-код sequential = 0 только при `ready_all`, 1 — исполнено-не-готово, 2 — цепочка блокирована;
+  цепочка ОСТАНАВЛИВАЕТСЯ на настоящем блокере (security/reviewer FAIL, регрессия, нет коммита,
+  scope-violation, preflight-блок), а не только на preflight; `work_package_id` валидируется против
+  плана (вымышленный id → блок); голый `decomposition_confirmed` больше не пускает блоб; package-level
+  write-scope провязан в Tool Broker.
+- **Spec & Approval Binding (v2.121, next)** — spec обязателен до tool loop для ENG/PRODUCT/CRITICAL
+  (authoring-пре-стадия); ApprovalRecord ← hash spec/RunPlan + scope + тип риска + автор/срок,
+  re-check после diff; `review` пишет lifecycle-evidence и пересчитывает гейты; `needs-reviewer` →
+  ненулевой код; install-фикс требует реально выполненной env-проверки.
+
 ### Осталось до v3.0-rc1 (на машине пользователя — не фабрикуем)
-- Живые прогоны S1/S2/S4/S6/S7/S9 с DeepSeek на Mac (`tools/qual_run.py`), настоящий draft PR
-  (`--open-pr` + GITHUB_TOKEN), сохранённые JSON-отчёты квалификации. После зелёных живых прогонов —
-  тег **v3.0-rc1** (trustworthy task → verified draft PR для QUICK и small/medium ENGINEERING).
-- **Sequential WorkPackage Executor (milestone v3.1; поставлен аддитивно в 2.117) ✅** — WorkPackages теперь РЕАЛЬНО исполняются по одному
+- **Live RC Qualification (v2.122)** — живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с
+  DeepSeek на Mac (`tools/qual_run.py` **и** канонический intent CLI — там был provider-gap),
+  настоящий draft PR (`--open-pr` + GITHUB_TOKEN), сохранённые очищенные JSON-отчёты.
+
+### Схема версий (разведён двойной v3.1)
+- **v3.0-rc1** — live-qualified execution (после живых прогонов).
+- **v3.0** — stable после dogfood.
+- **v3.1** — Sequential WorkPackages как веха (капабилити поставлена аддитивно в 2.117).
+- **v3.2 / v4.0** — физический разнос дерева по packages (breaking).
+
+- **Sequential WorkPackage Executor (веха v3.1; поставлен аддитивно в 2.117) ✅** — WorkPackages теперь РЕАЛЬНО исполняются по одному
   (`tools/workpackage_executor.py`): пакет→commit→evidence→gates→handoff→следующий, на общей ветке
   `ai-ops/<wid>` (resume поверх предыдущего). У каждого пакета свой коммит/SHA, свои гейты, свой
   RunHandoff и своя точка resume; зависимый пакет не стартует, пока `depends_on` не подтверждены;
