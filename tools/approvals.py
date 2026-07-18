@@ -74,6 +74,69 @@ def _approvals_dir(child_root, wid):
     return Path(child_root) / "features" / str(wid) / "approvals"
 
 
+# ── v2.121 (P1.2): связывание ApprovalRecord ─────────────────────────────────────────────────────
+# Аудит: одобрение было «слабо связано» — валидная запись требовала лишь непустых author/scope/reason,
+# поэтому одобрение, выданное для одного плана/ревизии, автоматически покрывало ЛЮБЫЕ последующие
+# изменения. Теперь запись связывается с: (1) хэшем плана/спеки (binds_to) — если план меняется после
+# одобрения, запись перестаёт покрывать новую ревизию; (2) сроком (expires_at) — просроченное одобрение
+# невалидно; (3) scope, который после диффа обязан покрывать реально изменённые пути (recheck_after_diff).
+# Связывание аддитивно: старые записи без binds_to/expires_at валидируются как раньше (нет регрессии),
+# но НОВЫЕ записи создаются связанными и корректно инвалидируются при расхождении.
+
+def plan_binding_hash(child_root, wid):
+    """Стабильный хэш плана+спеки WorkItem — то, к чему привязывается одобрение. None, если привязывать
+    не к чему (нет ни run-plan.yaml, ни spec.yaml)."""
+    import hashlib
+    fdir = Path(child_root) / "features" / str(wid)
+    blob = b""
+    for name in ("run-plan.yaml", "spec.yaml"):
+        p = fdir / name
+        if p.is_file():
+            blob += name.encode() + b"\0" + p.read_bytes() + b"\n"
+    if not blob:
+        return None
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
+def _now_iso():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _parse_iso(s):
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+def _is_expired(rec, now):
+    """True, если у записи есть expires_at и он в прошлом относительно now (обе метки парсятся)."""
+    exp = rec.get("expires_at")
+    if not exp or not now:
+        return False
+    ed, nd = _parse_iso(exp), _parse_iso(now)
+    return bool(ed and nd and nd > ed)
+
+
+def covers_paths(rec, changed_paths):
+    """Scope одобрения покрывает изменённые пути? scope трактуется как список путей/префиксов (через
+    запятую/пробел/перевод строки). Пустой changed_paths -> покрывает (нечего проверять). Каждый путь
+    должен попасть под хотя бы один префикс scope; иначе одобрение не покрывает реальные изменения."""
+    paths = [p for p in (changed_paths or []) if p]
+    if not paths:
+        return True
+    raw = str(rec.get("scope") or "")
+    prefixes = [s.strip() for s in raw.replace(",", " ").replace("\n", " ").split(" ") if s.strip()]
+    if not prefixes:
+        return False
+    def under(path):
+        return any(path == pre or path.startswith(pre.rstrip("/") + "/") or pre == "." for pre in prefixes)
+    return all(under(p) for p in paths)
+
+
 def load_approvals(child_root, wid):
     """Прочитать все ApprovalRecord из features/<wid>/approvals/*.yaml. -> [record]."""
     import yaml
@@ -90,38 +153,86 @@ def load_approvals(child_root, wid):
     return recs
 
 
-def _record_valid(rec):
-    """ApprovalRecord валиден, если несёт автора, scope и причину (не пустые). Иначе не одобрение."""
-    return bool(rec.get("approval")) and bool(rec.get("approved_by")) \
-        and bool(rec.get("scope")) and bool(rec.get("reason"))
+def _record_reason_invalid(rec, now=None, plan_hash=None):
+    """Причина невалидности ApprovalRecord или None, если валиден. v2.121: помимо базовых полей —
+    срок (expires_at) и привязка к плану (binds_to). Привязка/срок проверяются, только когда есть с чем
+    сравнивать (plan_hash/now переданы) и поле присутствует в записи — иначе аддитивно (старые записи ок)."""
+    if not (bool(rec.get("approval")) and bool(rec.get("approved_by"))
+            and bool(rec.get("scope")) and bool(rec.get("reason"))):
+        return "нужны approved_by/scope/reason"
+    if _is_expired(rec, now):
+        return f"одобрение просрочено (expires_at={rec.get('expires_at')})"
+    if rec.get("binds_to") and plan_hash and rec.get("binds_to") != plan_hash:
+        return "одобрение выдано для другой ревизии плана/спеки (binds_to не совпадает)"
+    return None
 
 
-def check(signals, child_root, wid, domains=None):
-    """-> {ok, required[], satisfied[], missing[], records_seen}. missing непуст -> человек не пройден."""
+def _record_valid(rec, now=None, plan_hash=None):
+    """ApprovalRecord валиден: базовые поля + не просрочен + (если связан) привязан к текущему плану."""
+    return _record_reason_invalid(rec, now=now, plan_hash=plan_hash) is None
+
+
+def check(signals, child_root, wid, domains=None, now=None, plan_hash=None):
+    """-> {ok, required[], satisfied[], missing[], records_seen}. missing непуст -> человек не пройден.
+    v2.121: одобрение проверяется на срок и привязку к текущему плану (plan_hash берётся с диска, now —
+    реальное время, если не переданы явно — для детерминизма тестов можно передать)."""
     req = required_approvals(signals, domains=domains)
     recs = load_approvals(child_root, wid)
-    valid_by_domain = {r["approval"] for r in recs if _record_valid(r)}
+    now = now or _now_iso()
+    plan_hash = plan_hash if plan_hash is not None else plan_binding_hash(child_root, wid)
+    valid_by_domain = {r["approval"] for r in recs if _record_valid(r, now=now, plan_hash=plan_hash)}
     satisfied, missing = [], []
     for r in req:
         if r["domain"] in valid_by_domain:
             satisfied.append(r)
         else:
-            has_invalid = any(rc.get("approval") == r["domain"] for rc in recs)
-            missing.append({**r, "reason": ("ApprovalRecord есть, но невалиден (нужны approved_by/scope/reason)"
-                                            if has_invalid else "нет валидного ApprovalRecord")})
+            bad = next((rc for rc in recs if rc.get("approval") == r["domain"]), None)
+            why = (_record_reason_invalid(bad, now=now, plan_hash=plan_hash) if bad
+                   else None)
+            missing.append({**r, "reason": (f"ApprovalRecord есть, но невалиден: {why}" if why
+                                            else "нет валидного ApprovalRecord")})
     return {"ok": not missing, "required": req, "satisfied": satisfied,
             "missing": missing, "records_seen": len(recs)}
 
 
-def write_record(child_root, wid, approval, approved_by, scope, reason, revision="-", created_at=None):
+def recheck_after_diff(child_root, wid, changed_paths, signals=None, domains=None, now=None, plan_hash=None):
+    """v2.121 (P1.2, п.4): ПОСЛЕ диффа перепроверить, что одобрение покрывает РЕАЛЬНО изменённые пути.
+    -> {ok, uncovered[]}. Для каждого требуемого домена с валидной записью scope обязан покрыть
+    changed_paths; иначе домен попадает в uncovered (одобрено не то, что изменилось)."""
+    req = required_approvals(signals or {}, domains=domains)
+    recs = load_approvals(child_root, wid)
+    now = now or _now_iso()
+    plan_hash = plan_hash if plan_hash is not None else plan_binding_hash(child_root, wid)
+    by_domain = {r["approval"]: r for r in recs if _record_valid(r, now=now, plan_hash=plan_hash)}
+    uncovered = []
+    for r in req:
+        rec = by_domain.get(r["domain"])
+        if rec is not None and not covers_paths(rec, changed_paths):
+            uncovered.append({"domain": r["domain"], "scope": rec.get("scope"),
+                              "changed": list(changed_paths or []),
+                              "reason": "scope одобрения не покрывает изменённые пути"})
+    return {"ok": not uncovered, "uncovered": uncovered}
+
+
+def write_record(child_root, wid, approval, approved_by, scope, reason, revision="-", created_at=None,
+                 binds_to=None, expires_at=None, risk=None, bind_to_plan=False):
     """Создать ApprovalRecord на диске (features/<wid>/approvals/<approval>.yaml). created_at обязателен
-    в проде (передаётся вызывающим — детерминированность/отсутствие скрытого времени)."""
+    в проде (передаётся вызывающим — детерминированность/отсутствие скрытого времени). v2.121: связать с
+    планом (binds_to или bind_to_plan=True -> хэш с диска), сроком (expires_at) и типом риска (risk)."""
     import yaml
     d = _approvals_dir(child_root, wid)
     d.mkdir(parents=True, exist_ok=True)
+    if bind_to_plan and binds_to is None:
+        binds_to = plan_binding_hash(child_root, wid)
     rec = {"schema_version": 1, "kind": "ApprovalRecord", "approval": approval,
            "approved_by": approved_by, "scope": scope, "revision": revision,
            "created_at": created_at or "unspecified", "reason": reason}
+    if binds_to:
+        rec["binds_to"] = binds_to
+    if expires_at:
+        rec["expires_at"] = expires_at
+    if risk:
+        rec["risk"] = risk
     p = d / f"{approval}.yaml"
     p.write_text(yaml.safe_dump(rec, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return p
@@ -171,6 +282,69 @@ def selftest():
         expect("check: запись secrets НЕ закрывает authentication",
                c3["ok"] is False and any(m["domain"] == "authentication" for m in c3["missing"]))
 
+        # ── v2.121 (P1.2): связывание одобрения ──────────────────────────────────────────────────
+        # срок: просроченное одобрение невалидно
+        write_record(root, "wi", "secrets", "u@x", "config/s.py", "ротация",
+                     created_at="2026-07-01T00:00:00Z", expires_at="2026-07-10T00:00:00Z")
+        c_exp = check(sig, root, "wi", now="2026-07-18T00:00:00Z")
+        expect("v2.121: просроченное одобрение НЕ засчитано (expires_at в прошлом)",
+               c_exp["ok"] is False and "просроч" in c_exp["missing"][0]["reason"])
+        c_ok = check(sig, root, "wi", now="2026-07-05T00:00:00Z")
+        expect("v2.121: одобрение в пределах срока -> ok",
+               c_ok["ok"] is True)
+
+        # привязка к плану: запись, привязанная к одному плану, не покрывает другой
+        write_record(root, "wi", "secrets", "u@x", "config/s.py", "ротация",
+                     created_at="2026-07-05T00:00:00Z", binds_to="planhashA")
+        c_bind_ok = check(sig, root, "wi", now="2026-07-05T00:00:00Z", plan_hash="planhashA")
+        c_bind_bad = check(sig, root, "wi", now="2026-07-05T00:00:00Z", plan_hash="planhashB")
+        expect("v2.121: binds_to совпал с планом -> ok", c_bind_ok["ok"] is True)
+        expect("v2.121: binds_to НЕ совпал (план изменился) -> одобрение невалидно",
+               c_bind_bad["ok"] is False and "ревизи" in c_bind_bad["missing"][0]["reason"])
+
+        # plan_binding_hash: меняется при изменении плана
+        fdir = root / "features" / "wi"
+        (fdir).mkdir(parents=True, exist_ok=True)
+        (fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a]\n", encoding="utf-8")
+        h1 = plan_binding_hash(root, "wi")
+        (fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a, b]\n", encoding="utf-8")
+        h2 = plan_binding_hash(root, "wi")
+        expect("v2.121: plan_binding_hash меняется при смене плана", bool(h1) and bool(h2) and h1 != h2)
+
+        # bind_to_plan=True стамповка + авто-инвалидция при смене плана
+        write_record(root, "wi", "secrets", "u@x", "config/s.py", "ротация",
+                     created_at="2026-07-05T00:00:00Z", bind_to_plan=True)
+        c_live_ok = check(sig, root, "wi", now="2026-07-05T00:00:00Z")   # plan_hash берётся с диска
+        (fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a, b, c]\n", encoding="utf-8")
+        c_live_bad = check(sig, root, "wi", now="2026-07-05T00:00:00Z")
+        expect("v2.121: bind_to_plan -> ok на исходном плане", c_live_ok["ok"] is True)
+        expect("v2.121: bind_to_plan -> невалидно после правки run-plan.yaml", c_live_bad["ok"] is False)
+
+        # ── v2.121 (P1.2 п.4): recheck после диффа — scope обязан покрыть изменённые пути ─────────
+        with tempfile.TemporaryDirectory() as td2:
+            r2 = Path(td2)
+            write_record(r2, "w2", "secrets", "u@x", "config/secrets.py", "ротация",
+                         created_at="2026-07-05T00:00:00Z")
+            rc_cov = recheck_after_diff(r2, "w2", ["config/secrets.py"], signals=sig, now="2026-07-05T00:00:00Z")
+            rc_unc = recheck_after_diff(r2, "w2", ["src/other.py"], signals=sig, now="2026-07-05T00:00:00Z")
+            expect("v2.121: recheck — scope покрывает изменённый путь -> ok", rc_cov["ok"] is True)
+            expect("v2.121: recheck — изменён путь ВНЕ scope одобрения -> uncovered",
+                   rc_unc["ok"] is False and rc_unc["uncovered"][0]["domain"] == "secrets")
+
+        # covers_paths: префикс-покрытие директории
+        expect("v2.121: covers_paths — путь под scope-префиксом покрыт",
+               covers_paths({"scope": "src/auth"}, ["src/auth/login.py"]) is True)
+        expect("v2.121: covers_paths — путь вне scope НЕ покрыт",
+               covers_paths({"scope": "src/auth"}, ["src/billing/pay.py"]) is False)
+
+        # аддитивность: старая запись без binds_to/expires_at валидна как раньше
+        with tempfile.TemporaryDirectory() as td3:
+            r3 = Path(td3)
+            write_record(r3, "w3", "secrets", "u@x", "config/s.py", "ротация", created_at="2026-07-05T00:00:00Z")
+            c_old = check(sig, r3, "w3", now="2026-07-18T00:00:00Z", plan_hash="anything")
+            expect("v2.121: запись без binds_to/expires_at валидна (аддитивно, нет регрессии)",
+                   c_old["ok"] is True)
+
     print("approvals selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -187,6 +361,10 @@ def main(argv):
     rc.add_argument("--approval", required=True); rc.add_argument("--by", required=True)
     rc.add_argument("--scope", required=True); rc.add_argument("--reason", required=True)
     rc.add_argument("--revision", default="-"); rc.add_argument("--created-at")
+    rc.add_argument("--expires-at", help="срок действия одобрения (ISO 8601); после — невалидно")
+    rc.add_argument("--risk", help="тип риска, который покрывает одобрение")
+    rc.add_argument("--bind-to-plan", action="store_true",
+                    help="привязать к хэшу текущего run-plan.yaml+spec.yaml (при смене плана — невалидно)")
     a = ap.parse_args(argv)
     if a.cmd == "require":
         req = required_approvals(json.loads(a.signals))
@@ -204,7 +382,8 @@ def main(argv):
         return 0 if res["ok"] else 1
     if a.cmd == "record":
         p = write_record(Path(a.child_root), a.wid, a.approval, a.by, a.scope, a.reason,
-                         revision=a.revision, created_at=a.created_at)
+                         revision=a.revision, created_at=a.created_at,
+                         expires_at=a.expires_at, risk=a.risk, bind_to_plan=a.bind_to_plan)
         print(f"APPROVAL-RECORD: записан {p}")
         return 0
     return 1

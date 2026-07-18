@@ -316,6 +316,16 @@ def _git(root, *args):
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
+def _committed_changed_files(root, sha):
+    """Файлы, изменённые коммитом sha относительно его первого родителя. -> [path] (пусто при ошибке)."""
+    if not sha:
+        return []
+    rc, out, _ = _git(root, "diff", "--name-only", f"{sha}~1", sha)
+    if rc != 0:
+        rc, out, _ = _git(root, "show", "--name-only", "--pretty=format:", sha)
+    return [ln for ln in out.splitlines() if ln.strip()] if rc == 0 else []
+
+
 def _commit_on_branch(root, branch, message):
     """Зафиксировать применённые изменения на рабочей ветке (не в main). -> полный commit SHA или None.
 
@@ -420,30 +430,41 @@ def _install_dependencies(profile, root, policy):
     return results
 
 
-def _env_unqualified(checks):
-    """v2.118 (finding живого прогона DeepSeek/Mac): провал install-команды стека блокирует ready
-    ТОЛЬКО если он реально оставил проверки нерабочими (тулчейн/зависимость отсутствуют: exit 127,
-    'command not found', 'No module named', ...). Если применимые проверки РЕАЛЬНО отработали (pass
-    или честный fail с настоящим exit-кодом), окружение функционально квалифицировано, а неудачная
-    install-команда (напр. `pip install -e .` на репо, который не является устанавливаемым пакетом) —
-    не повод держать ready. Сохраняет P0.6-честность (сломанное окружение ≠ зелёное), убирает
-    false-negative (проверки прошли, но install упал).
-    -> True, если среди упавших проверок ЕСТЬ симптом неподготовленного окружения."""
-    symptoms = ("command not found", "not found", "no such file", "no module named",
-                "modulenotfounderror", "cannot find module", "is not recognized",
-                "executable not found", "no such command")
-    for _name, c in (checks or {}).items():
-        if (c or {}).get("status") not in ("fail", "error"):
+_ENV_SYMPTOMS = ("command not found", "not found", "no such file", "no module named",
+                 "modulenotfounderror", "cannot find module", "is not recognized",
+                 "executable not found", "no such command")
+
+
+def _check_has_env_symptom(c):
+    """У проверки есть симптом неподготовленного окружения (нет тулчейна/зависимости)?"""
+    for run in ((c or {}).get("runs") or []):
+        if run.get("ok"):
             continue
-        for run in (c.get("runs") or []):
-            if run.get("ok"):
-                continue
-            if run.get("exit_code") == 127:
-                return True
-            out = (run.get("output_tail") or "").lower()
-            if any(s in out for s in symptoms):
-                return True
+        if run.get("exit_code") == 127:
+            return True
+        if any(s in (run.get("output_tail") or "").lower() for s in _ENV_SYMPTOMS):
+            return True
     return False
+
+
+def _env_proven_ok(checks):
+    """v2.121 (P1.4, строгий install-фикс): окружение считается ДОКАЗАННО рабочим ТОЛЬКО если хотя бы
+    одна применимая проверка РЕАЛЬНО отработала — прошла (pass) ЛИБО упала по настоящей причине кода
+    (fail БЕЗ env-симптома: тулчейн есть, тест честно красный). Если проверок не запускалось вовсе
+    (все not_run/not_applicable) ИЛИ все падения — env-симптомы (exit 127/нет модуля) -> НЕ доказано.
+    Это устраняет дыру v2.118: раньше install-провал игнорировался и при полном отсутствии проверок."""
+    for c in (checks or {}).values():
+        st = (c or {}).get("status")
+        if st == "pass":
+            return True
+        if st in ("fail", "error") and not _check_has_env_symptom(c):
+            return True
+    return False
+
+
+def _env_unqualified(checks):
+    """Обратная форма для совместимости/наглядности: окружение НЕ квалифицировано доказательно."""
+    return not _env_proven_ok(checks)
 
 
 def _baseline_failure_summary(checks, tail=500):
@@ -972,9 +993,26 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # (нет симптомов неподготовленного окружения). Провал install при прошедших проверках больше не
     # даёт false-negative (finding живого прогона: `pip install -e .` падает на не-пакете, а pytest
     # проходит) — при этом сломанное окружение (exit 127 / нет тулчейна) по-прежнему блокирует.
-    env_qualified = prepare_ok or (not _env_unqualified(coll["checks"]))
+    # v2.121 (P1.4): провал install игнорируется ТОЛЬКО если окружение ДОКАЗАННО рабочее — хотя бы
+    # одна проверка реально отработала (pass или честный fail без env-симптома). Нет проверок вовсе
+    # ИЛИ все падения — env-симптомы -> НЕ квалифицировано (дыра v2.118 закрыта).
+    env_qualified = prepare_ok or _env_proven_ok(coll["checks"])
+
+    # v2.121 (P1.2, п.4): ПОСЛЕ диффа перепроверяем, что человеко-одобрение покрывает РЕАЛЬНО
+    # изменённые пути. Preflight проверил наличие одобрения ДО правок; здесь — что scope одобрения
+    # накрыл то, что модель реально тронула. scope не покрывает изменения -> одобрено не то -> НЕ ready.
+    approval_recheck = {"ok": True, "uncovered": []}
+    if commit and committed_sha:
+        try:
+            import approvals as _appr
+            _changed = _committed_changed_files(work_root, committed_sha)
+            approval_recheck = _appr.recheck_after_diff(child_root, wid, _changed, signals=signals)
+        except Exception:  # noqa: BLE001 — recheck не должен ронять прогон; при сбое не ослабляем (ok=True)
+            approval_recheck = {"ok": True, "uncovered": []}
+    approvals_cover_ok = bool(approval_recheck.get("ok"))
+
     base_ok = (loop["stopped"] == "done") and (committed_sha is not None) \
-        and revision_matches and tree_ok and env_qualified
+        and revision_matches and tree_ok and env_qualified and approvals_cover_ok
     if baseline_diff:
         # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
@@ -1018,6 +1056,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                        + ", ".join(spec_incomplete))
     if context_overflow:
         not_yet.append("context budget превышен — задачу нужно декомпозировать (см. work_package)")
+    if not approvals_cover_ok:
+        not_yet.insert(0, "human-approval: scope одобрения не покрывает изменённые пути ("
+                       + ", ".join(u["domain"] for u in approval_recheck.get("uncovered") or [])
+                       + ") — переодобри под фактический дифф")
 
     return {
         "schema_version": 1, "kind": "execution-pipeline",
@@ -1058,6 +1100,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                   # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
                   "gate_results": gates.get("gate_results"),
                   "tested_revision": committed_sha},
+        # v2.121 (P1.2 п.4): покрыло ли человеко-одобрение фактически изменённые пути (после диффа)
+        "approval_recheck": approval_recheck,
         # v2.83 Full RunPlan: трейс независимых ревью (какие ai-review гейты судились, вердикт,
         # что читал судья, что отклонено). None -> ревью не запускалось (нет --review/reviewer).
         "reviews": reviews,
@@ -1165,6 +1209,20 @@ def selftest():
                rep_c["commit"]["tree_clean_before_checks"] is True)
         expect("P0.5: commit=True + чисто + SHA совпал -> ready_for_pr True",
                rep_c["ready_for_pr"] is True)
+        # v2.121 (P1.2 п.4): recheck-after-diff присутствует в отчёте; для QUICK одобрений нет -> ok
+        expect("v2.121: approval_recheck в отчёте, для QUICK пусто -> ok",
+               isinstance(rep_c.get("approval_recheck"), dict) and rep_c["approval_recheck"]["ok"] is True)
+        # helper: изменённые коммитом файлы извлекаются
+        _chg = _committed_changed_files(root, rep_c["commit"]["sha"])
+        expect("v2.121: _committed_changed_files -> src/mul.py в диффе коммита", "src/mul.py" in _chg)
+        # интеграция: одобрение со scope, НЕ покрывающим изменённый путь -> recheck uncovered
+        import approvals as _appr_t
+        _appr_t.write_record(root, "mul-fn", "secrets", "u@x", "config/other.py", "ротация",
+                             created_at="2026-07-05T00:00:00Z")
+        _rc_bad = _appr_t.recheck_after_diff(root, "mul-fn", _chg, signals={"secret_boundary": True},
+                                             now="2026-07-05T00:00:00Z")
+        expect("v2.121: scope одобрения не покрывает изменённый путь -> uncovered",
+               _rc_bad["ok"] is False and _rc_bad["uncovered"][0]["domain"] == "secrets")
         expect("умное ослабление: нет тестов -> освобождено + громкий tests_warn (allow_missing_tests)",
                "tests_passed" in rep_c["exemptions"] and rep_c["tests_warn"])
         expect("умное ослабление: implementation_verification не заблокирован из-за отсутствия тулчейна",
@@ -1349,6 +1407,14 @@ def selftest():
                _env_unqualified({"test": {"status": "fail",
                                           "runs": [{"ok": False, "exit_code": 1,
                                                     "output_tail": "AssertionError: 2 != 3"}]}}) is False)
+        # v2.121 (P1.4): install-провал НЕ прощается без доказательства — нет запущенных проверок ->
+        # окружение НЕ доказано (раньше _env_unqualified возвращал False при пустых checks — дыра)
+        expect("v2.121 env: проверок не запускалось -> окружение НЕ доказано (proven_ok=False)",
+               _env_proven_ok({}) is False and _env_proven_ok({"build": {"status": "not_run"},
+                                                               "test": {"status": "not_run"}}) is False)
+        expect("v2.121 env: хотя бы одна pass -> доказано; только env-симптомы -> НЕ доказано",
+               _env_proven_ok({"test": {"status": "pass"}}) is True
+               and _env_proven_ok({"test": {"status": "fail", "runs": [{"ok": False, "exit_code": 127}]}}) is False)
 
         # v2.119 (finding живого прогона): тул-кэши (untracked) не делают дерево «грязным после проверок»
         with tempfile.TemporaryDirectory() as tdc:

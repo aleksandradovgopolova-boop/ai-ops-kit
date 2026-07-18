@@ -2,6 +2,45 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.121.0] — 2026-07-18 — Spec & Approval Binding: спека до реализации, связанное одобрение, review как lifecycle
+
+Продолжение аудита v2.119: закрыты P1-дефекты честности интеграции — там, где механизм есть, но
+слабо связан с тем, что реально происходит. Аддитивно (2.x), все гейты — fail-closed.
+
+### Fixed
+- **P1.1 — спека не была обязательна ДО tool loop для heavy.** `preflight.assess` получил
+  `author`-параметр и правило **author-or-spec**: `ENGINEERING/PRODUCT/CRITICAL` без `spec.yaml` и без
+  `--author` блокируется (spec-first блокирует РЕАЛИЗАЦИЮ, не только доставку). С `--author` движок
+  авторизует спеку пре-стадией, а артефакт-гейты `specification`/`requirements` всё равно проверяют её
+  готовность. `QUICK` остаётся light. Ripple: heavy-прогоны в `review_branch`/executor/PQ9 переведены
+  на `author=True`.
+- **P1.2 — ApprovalRecord был слабо связан** (хватало непустых `approved_by`/`scope`/`reason`). Теперь
+  запись связывается с (1) хэшем плана+спеки (`binds_to`/`bind_to_plan` → `plan_binding_hash`) — при
+  изменении `run-plan.yaml`/`spec.yaml` одобрение перестаёт покрывать новую ревизию; (2) сроком
+  (`expires_at`) — просроченное невалидно; (3) типом риска (`risk`). `check()` авто-берёт `plan_hash` с
+  диска и реальное время. **Аддитивно**: старые записи без `binds_to`/`expires_at` валидны как раньше.
+- **P1.2 п.4 — одобрение не сверялось с фактическим диффом.** `recheck_after_diff` (+`covers_paths`)
+  проверяет, что `scope` одобрения покрывает реально изменённые пути; `execution_pipeline` после
+  коммита считает `_committed_changed_files` и вызывает recheck — scope не покрывает изменения →
+  `ready_for_pr=False` + `not_yet` + `report.approval_recheck`.
+- **P1.3 — review был диагностикой, а не событием жизненного цикла.** `review_branch.review`
+  пере-считывает готовность к merge (`readiness.ready_for_merge`: `True` только при `pass` /
+  `no-ai-review-gates`) и ФИКСИРУЕТ вердикт артефактом `features/<wid>/branch-review.yaml`. Exit-код
+  `ai-ops review` = `ready_for_merge` → `needs-reviewer`/`needs-changes` теперь **non-zero** (раньше
+  `needs-reviewer` считался ok).
+- **P1.4 — install-фикс был недостаточно строг.** Провал install игнорируется ТОЛЬКО если окружение
+  ДОКАЗАННО рабочее: `_env_proven_ok` требует ≥1 реально отработавшей проверки (pass или честный fail
+  без env-симптома). Ноль проверок ИЛИ все падения — env-симптомы (`exit 127`/`command not found`/
+  `No module named` …) → НЕ квалифицировано (закрыта дыра v2.118: install-fail + ноль проверок больше
+  не считается qualified).
+
+### Проверки
+- Расширены selftest: `approvals` (срок/binding/recheck/covers_paths/аддитивность),
+  `preflight` (author-or-spec heavy/QUICK), `review_branch` (readiness/persist/needs-reviewer),
+  `workpackage_executor` (heavy author-ripple), `execution_pipeline` (recheck-after-diff/env-proven).
+- `validate_product_qualification` PQ1–PQ9 зелёные. Осталось до `v3.0-rc1`: **v2.122** живая
+  RC-квалификация (S1/S2/S4/S6/S7/S8/S9/S10 + живой sequential) — на машине пользователя, не фабрикуем.
+
 ## [2.120.0] — 2026-07-18 — Canonical Runtime Wiring: провязка CLI↔движок и безопасность sequential
 
 Новый аудит (v2.119) нашёл дефекты в СКЛЕЙКЕ готовых механизмов, не в архитектуре. Закрыты все P0.

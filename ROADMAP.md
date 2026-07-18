@@ -334,10 +334,14 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   scope-violation, preflight-блок), а не только на preflight; `work_package_id` валидируется против
   плана (вымышленный id → блок); голый `decomposition_confirmed` больше не пускает блоб; package-level
   write-scope провязан в Tool Broker.
-- **Spec & Approval Binding (v2.121, next)** — spec обязателен до tool loop для ENG/PRODUCT/CRITICAL
-  (authoring-пре-стадия); ApprovalRecord ← hash spec/RunPlan + scope + тип риска + автор/срок,
-  re-check после diff; `review` пишет lifecycle-evidence и пересчитывает гейты; `needs-reviewer` →
-  ненулевой код; install-фикс требует реально выполненной env-проверки.
+- **Spec & Approval Binding (v2.121) ✅** — spec обязателен до tool loop для ENG/PRODUCT/CRITICAL по
+  правилу **author-or-spec** (без spec.yaml и без `--author` → preflight-блок; с `--author` спека
+  авторизуется пре-стадией, артефакт-гейты проверяют готовность; QUICK — light); ApprovalRecord ←
+  hash spec/RunPlan (`binds_to`/`bind_to_plan`) + `scope` + тип риска (`risk`) + срок (`expires_at`),
+  `recheck_after_diff` сверяет `scope` с реально изменёнными путями (не покрыл → не ready); `review`
+  пишет lifecycle-evidence (`features/<wid>/branch-review.yaml`) и пересчитывает `ready_for_merge`,
+  `needs-reviewer`/`needs-changes` → ненулевой код; install-фикс требует реально отработавшей
+  env-проверки (`_env_proven_ok`; ноль проверок или только env-симптомы → не квалифицировано).
 
 ### Осталось до v3.0-rc1 (на машине пользователя — не фабрикуем)
 - **Live RC Qualification (v2.122)** — живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с

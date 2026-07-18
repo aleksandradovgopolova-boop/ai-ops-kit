@@ -179,7 +179,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # точка: spec/атомарность/overflow/approvals/lifecycle. Выполняется и для fresh, и для resume.
         import preflight as _pf
         pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
-                              spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors)
+                              spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors,
+                              author=author)
         (features_dir / fid / "preflight.yaml").write_text(
             yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
         if pretruth["blocked"]:

@@ -318,8 +318,10 @@ def selftest():
 
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
+            # v2.121: author=True снимает spec-first блок heavy для пакетов 1/3 -> изолируем ИМЕННО
+            # блок пакета 2 по secret_boundary (approvals-гейт независим от author).
             seq2 = execute_sequence("рефактор с блоком", sig, root, pkgs, prop_for, feature="seqb",
-                                    base=cur, signals_for=sig_for)
+                                    base=cur, signals_for=sig_for, author=True, author_proposer=author)
         # пакет 1 исполнен, пакет 2 заблокирован preflight (secret_boundary без ApprovalRecord),
         # пакет 3 НЕ стартовал
         ids_seen = [p["id"] for p in seq2["packages"]]

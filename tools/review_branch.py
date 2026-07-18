@@ -36,23 +36,65 @@ def _load_plan(child_root, wid):
     return {}
 
 
-def review(child_root, wid, reviewer_proposer, base="main", budget=None):
+# v2.121 (P1.3): review — не диагностика, а событие жизненного цикла. Вердикт ветки пере-считывает
+# готовность к merge и ФИКСИРУЕТСЯ артефактом (features/<wid>/branch-review.yaml), иначе слово
+# ревьюера ни на что не влияет. Готовность честная: ready_for_merge=True только когда вердикт вынесен
+# и он pass (или ai-review гейтов нет). needs-reviewer/needs-changes/no-branch -> НЕ готово.
+_READY_VERDICTS = ("pass", "no-ai-review-gates")
+
+
+def _readiness_for(verdict):
+    return {"ready_for_merge": verdict in _READY_VERDICTS,
+            "reason": {"pass": "все ревьюируемые ai-review гейты получили pass",
+                       "no-ai-review-gates": "у плана нет ai-review гейтов — merge не гейтится ревью",
+                       "needs-reviewer": "вердикт не вынесен (нет живого ревьюера) — ready нельзя",
+                       "needs-changes": "ревьюер вернул fail хотя бы по одному гейту",
+                       "no-branch": "ветки нет — ревьюить нечего",
+                       "error": "ревью не удалось выполнить"}.get(verdict, "неизвестный вердикт")}
+
+
+def _persist_review(child_root, wid, rep):
+    """Зафиксировать вердикт ревью как артефакт жизненного цикла (features/<wid>/branch-review.yaml).
+    created_at обязателен — без метки времени это не запись, а заметка."""
+    import yaml
+    from datetime import datetime, timezone
+    fdir = Path(child_root) / "features" / str(wid)
+    try:
+        fdir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    record = {"schema_version": 1, "kind": "BranchReview", "workitem_id": str(wid),
+              "branch": rep.get("branch"), "revision": rep.get("revision"),
+              "verdict": rep["verdict"], "reviewable": rep.get("reviewable"),
+              "review_statuses": {r["gate"]: (r.get("status") if r.get("valid") else "invalid")
+                                  for r in rep.get("reviews") or []},
+              "changed_files": rep.get("changed_files") or [],
+              "readiness": rep.get("readiness"),
+              "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+    path = fdir / "branch-review.yaml"
+    path.write_text(yaml.safe_dump(record, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return str(path.relative_to(Path(child_root))) if path.is_relative_to(Path(child_root)) else str(path)
+
+
+def review(child_root, wid, reviewer_proposer, base="main", budget=None, persist=True):
     """Read-only ревью ветки ai-ops/<wid>. -> {kind, workitem_id, revision, reviewable, reviews[],
-    verdict, changed_files, note?}. НЕ создаёт правок/коммитов (reviewer под read-only политикой)."""
+    verdict, readiness, evidence_path?, changed_files, note?}. НЕ создаёт правок/коммитов (reviewer
+    под read-only политикой), но ФИКСИРУЕТ вердикт как артефакт (persist=True) — это lifecycle-событие."""
     child_root = Path(child_root)
     branch = f"ai-ops/{wid}"
     wp = child_root / ".ai" / "worktrees" / wid
 
     if not _wt._branch_exists(child_root, branch):
         return {"kind": "BranchReview", "workitem_id": wid, "reviewable": False,
-                "reviews": [], "verdict": "no-branch",
+                "reviews": [], "verdict": "no-branch", "readiness": _readiness_for("no-branch"),
                 "note": f"ветка {branch} не найдена — нечего ревьюить (сначала ai-ops run --execute)"}
     # worktree утерян, но ветка есть -> пере-подключаем (read-only ревью на существующих коммитах)
     reattached = False
     if not wp.is_dir():
         if _wt.add(child_root, wid, branch) != 0:
             return {"kind": "BranchReview", "workitem_id": wid, "reviewable": False, "reviews": [],
-                    "verdict": "error", "note": f"не удалось пере-подключить worktree к {branch}"}
+                    "verdict": "error", "readiness": _readiness_for("error"),
+                    "note": f"не удалось пере-подключить worktree к {branch}"}
         reattached = True
 
     rc, revision, _ = _git(wp, "rev-parse", "HEAD")
@@ -85,9 +127,12 @@ def review(child_root, wid, reviewer_proposer, base="main", budget=None):
     else:
         verdict = "needs-changes"
 
-    return {"kind": "BranchReview", "workitem_id": wid, "branch": branch, "revision": revision,
-            "reattached_worktree": reattached, "reviewable": reviewable, "reviews": reviews,
-            "verdict": verdict, "changed_files": changed}
+    rep = {"kind": "BranchReview", "workitem_id": wid, "branch": branch, "revision": revision,
+           "reattached_worktree": reattached, "reviewable": reviewable, "reviews": reviews,
+           "verdict": verdict, "readiness": _readiness_for(verdict), "changed_files": changed}
+    if persist:
+        rep["evidence_path"] = _persist_review(child_root, wid, rep)
+    return rep
 
 
 def selftest():
@@ -115,10 +160,11 @@ def selftest():
         it = iter([{"op": "write", "path": "src/rv.py", "content": "x=1\n"}, {"done": True}])
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
+            # v2.121: heavy требует спеку ДО tool loop -> запускаем с author=True (движок авторизует спеку)
             ai_ops_run.run("рефактор", {"task_type": "ENGINEERING", "size": "small", "risk": "low",
                                         "affected_areas": ["core"], "decomposition_confirmed": True},
                            root, engine="pipeline", proposer=lambda c: next(it), execute=True,
-                           feature="rv", install_deps=False)
+                           feature="rv", install_deps=False, author=True)
 
         # нет ветки -> честный no-branch
         r_nb = review(root, "never", reviewer_proposer=lambda p: '{"kind":"reviewer-result","status":"pass"}', base=cur)
@@ -139,6 +185,26 @@ def selftest():
         r_bad = review(root, "rv", reviewer_proposer=failrev, base=cur)
         expect("review: reviewer fail -> verdict=needs-changes", r_bad["verdict"] == "needs-changes")
 
+        # v2.121 (P1.3): вердикт пере-считывает готовность и фиксируется артефактом (lifecycle, не диагностика)
+        expect("v2.121 review: pass -> readiness.ready_for_merge=True",
+               (r_ok.get("readiness") or {}).get("ready_for_merge") is True)
+        expect("v2.121 review: needs-changes -> ready_for_merge=False",
+               (r_bad.get("readiness") or {}).get("ready_for_merge") is False)
+        ev = root / "features" / "rv" / "branch-review.yaml"
+        expect("v2.121 review: вердикт зафиксирован артефактом features/rv/branch-review.yaml", ev.is_file())
+        if ev.is_file():
+            import yaml as _y
+            rec = _y.safe_load(ev.read_text(encoding="utf-8"))
+            # последний прогон был needs-changes -> артефакт отражает актуальный вердикт + метку времени
+            expect("v2.121 review: артефакт хранит вердикт + created_at",
+                   rec.get("verdict") == "needs-changes" and bool(rec.get("created_at")))
+
+        # v2.121 (P1.3): needs-reviewer (нет живого ревьюера) -> готовность НЕ подтверждена
+        r_nr = review(root, "rv", reviewer_proposer=None, base=cur)
+        expect("v2.121 review: needs-reviewer -> ready_for_merge=False (вердикт не вынесен)",
+               r_nr["verdict"] == "needs-reviewer"
+               and (r_nr.get("readiness") or {}).get("ready_for_merge") is False)
+
     print("review_branch selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -156,10 +222,12 @@ def main(argv):
     if a.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
-        print(f"BRANCH-REVIEW {a.wid}: verdict={rep['verdict']} · ревьюируемо={rep.get('reviewable')}")
+        print(f"BRANCH-REVIEW {a.wid}: verdict={rep['verdict']} · ревьюируемо={rep.get('reviewable')} "
+              f"· ready_for_merge={(rep.get('readiness') or {}).get('ready_for_merge')}")
         if rep.get("note"):
             print(f"  · {rep['note']}")
-    return 0 if rep["verdict"] in ("pass", "no-ai-review-gates", "needs-reviewer") else 1
+    # v2.121 (P1.3): needs-reviewer -> НЕ ok. Вердикт не вынесен = готовность не подтверждена.
+    return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
 
 
 if __name__ == "__main__":
