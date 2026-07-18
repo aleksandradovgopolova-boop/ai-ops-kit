@@ -343,6 +343,41 @@ def _tree_clean(root):
     return rc == 0 and out.strip() == ""
 
 
+# v2.119 (finding живого прогона): известные тул-кэши/артефакты, которые тесты/сборка РУТИННО создают
+# (pytest/npm/mypy/rust/...). В репо БЕЗ .gitignore этих путей они показываются в `git status` как
+# untracked и делали дерево «грязным после проверок» (tree_after=False) -> ложный not-ready, хотя
+# checks реально прошли. Их наличие как UNTRACKED-артефактов не нарушает evidence-целостность.
+_TOOL_CACHE_RE = re.compile(
+    r"(^|/)("
+    r"__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|\.tox|\.nox|\.hypothesis|"
+    r"htmlcov|\.eggs|[^/]+\.egg-info|\.coverage[^/]*|"
+    r"node_modules|\.next|\.nuxt|\.turbo|\.parcel-cache|\.svelte-kit|"
+    r"target|\.gradle|\.mvn|"
+    r"dist|build|coverage|\.cache|__snapshots__"
+    r")(/|$)"
+    r"|\.(pyc|pyo|class)$"
+)
+
+
+def _tree_clean_after_checks(root):
+    """v2.119: чистота дерева ПОСЛЕ проверок, игнорируя известные тул-кэши (UNTRACKED-артефакты тестов/
+    сборки: __pycache__, .pytest_cache, node_modules, target, dist, ...). Модификации TRACKED-файлов и
+    любой прочий untracked по-прежнему считаются грязью — evidence-целостность (P0.5) сохранена.
+    Устраняет false not-ready в репозиториях без .gitignore этих кэшей. -> bool."""
+    rc, out, _ = _git(root, "status", "--porcelain")
+    if rc != 0:
+        return False
+    for ln in out.splitlines():
+        if not ln.strip():
+            continue
+        code, path = ln[:2], ln[3:]
+        # игнорируем ТОЛЬКО untracked (??) тул-кэши; tracked-правки и прочий untracked = грязь
+        if code == "??" and _TOOL_CACHE_RE.search(path):
+            continue
+        return False
+    return True
+
+
 def _untracked(root):
     """Множество untracked-файлов (git status --porcelain, префикс '??'). Игнорируемые (.gitignore,
     напр. node_modules) сюда НЕ попадают — porcelain их не показывает без --ignored."""
@@ -760,7 +795,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 6a. finding аудита (P0.5): проверки могли намутить дерево (build-артефакты, lock-файлы) —
     #     тогда собранный evidence уже не отражает закоммиченный SHA. Фиксируем факт, не скрываем.
-    tree_clean_after_checks = _tree_clean(work_root) if (commit and is_git) else None
+    # v2.119: чистота ПОСЛЕ проверок терпима к тул-кэшам (pytest/npm/... создают их рутинно);
+    # tracked-правки от проверок по-прежнему делают дерево грязным (evidence-целостность сохранена).
+    tree_clean_after_checks = _tree_clean_after_checks(work_root) if (commit and is_git) else None
 
     # 6b. intake-evidence из сигналов: классификация УЖЕ произошла (task_type/size/risk в signals) —
     #     это реальный evidence для intake_completeness, а не фабрикация (finding живого прогона).
@@ -1311,6 +1348,29 @@ def selftest():
                _env_unqualified({"test": {"status": "fail",
                                           "runs": [{"ok": False, "exit_code": 1,
                                                     "output_tail": "AssertionError: 2 != 3"}]}}) is False)
+
+        # v2.119 (finding живого прогона): тул-кэши (untracked) не делают дерево «грязным после проверок»
+        with tempfile.TemporaryDirectory() as tdc:
+            rc = Path(tdc)
+            _git(rc, "init", "-q"); _git(rc, "config", "user.email", "t@t"); _git(rc, "config", "user.name", "t")
+            (rc / "m.py").write_text("x=1\n", encoding="utf-8")
+            _git(rc, "add", "-A"); _git(rc, "commit", "-q", "-m", "i")
+            expect("v2.119 tree: чистое дерево -> clean", _tree_clean_after_checks(rc) is True)
+            # pytest/npm кэши как untracked -> терпимо (после проверок)
+            (rc / "__pycache__").mkdir(); (rc / "__pycache__" / "m.cpython-311.pyc").write_text("x", encoding="utf-8")
+            (rc / ".pytest_cache").mkdir(); (rc / ".pytest_cache" / "v").write_text("x", encoding="utf-8")
+            (rc / "node_modules").mkdir(); (rc / "node_modules" / "pkg.js").write_text("x", encoding="utf-8")
+            expect("v2.119 tree: только тул-кэши (untracked) -> дерево считается чистым (не блок)",
+                   _tree_clean_after_checks(rc) is True and _tree_clean(rc) is False)
+            # НЕ-кэш untracked файл -> грязь (не прячем реальные артефакты)
+            (rc / "leftover.txt").write_text("real", encoding="utf-8")
+            expect("v2.119 tree: НЕ-кэш untracked (leftover.txt) -> дерево грязное (честно)",
+                   _tree_clean_after_checks(rc) is False)
+            (rc / "leftover.txt").unlink()
+            # модификация TRACKED файла проверками -> грязь (evidence-целостность сохранена)
+            (rc / "m.py").write_text("x=2\n", encoding="utf-8")
+            expect("v2.119 tree: правка TRACKED файла проверками -> дерево грязное (P0.5 сохранён)",
+                   _tree_clean_after_checks(rc) is False)
 
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями
         # (ENGINEERING-план содержит security). Не ложный green: секрет -> security в unmet.

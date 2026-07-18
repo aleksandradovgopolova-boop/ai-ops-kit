@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.118.0
+  package_version: 2.119.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_119_live_polish:
+      - "#2 честность отчёта: заметка not_yet «живой предложитель (swap провайдера)» уместна только на mock-прогоне — на ЖИВОМ провайдере (DeepSeek и т.п.) она вводит в заблуждение (предложитель уже живой). Контроллер убирает её из not_yet при provider != 'mock'. Регрессия в ai_ops_run selftest (mock -> есть, anthropic -> убрана)"
+      - "#3 (finding живого прогона): тул-кэши (untracked __pycache__/.pytest_cache/.mypy_cache/node_modules/target/dist/... ) делали дерево 'грязным после проверок' (tree_after=False) в репо БЕЗ .gitignore -> ложный not-ready, хотя checks реально прошли (тот же класс, что prepare-false-negative). _tree_clean_after_checks игнорирует ТОЛЬКО untracked тул-кэши; модификации TRACKED-файлов и прочий untracked по-прежнему = грязь (evidence-целостность P0.5 сохранена). Проверено end-to-end: фикстура без .gitignore в baseline-diff теперь tree_after=True, ready=True (до фикса — False)"
+      - "оба — из живой обкатки на Mac (после зелёного S1/S2). 4 юнит-теста _tree_clean_after_checks (чисто / только кэши -> clean; не-кэш untracked / tracked-правка -> грязь) + 2 теста not_yet в ai_ops_run selftest. PQ7/PQ8/e2e не задеты"
     fixed_v2_118_prepare_false_negative:
       - "FINDING ЖИВОГО ПРОГОНА (DeepSeek/Mac, S1/S2): движок отработал ЧЕСТНО (модель написала код, test=pass, evidence на точном SHA, регрессий нет, все гейты пройдены), но ready_for_pr=false держал ЕДИНСТВЕННО provale install-команды стека. prepare: `pip install -e .` -> exit 1 'Failed to build editable' (фикстура/репо не является устанавливаемым пакетом), при этом pytest прошёл. P0.6-инвариант блокировал ready по экзит-коду install, хотя окружение доказанно рабочее (проверки отработали) — false-negative"
       - "фикс: провал install блокирует ready ТОЛЬКО если он реально оставил проверки нерабочими (симптомы неподготовленного окружения: exit 127 / 'command not found' / 'No module named' / нет тулчейна). _env_unqualified(checks) детектит симптом среди УПАВШИХ проверок; env_qualified = prepare_ok OR not _env_unqualified. base_ok использует env_qualified вместо prepare_ok. Честный fail проверки (exit 1, код сломан) и exit 127 (нет тулчейна) по-прежнему блокируют — P0.6 сохранён (сломанное окружение ≠ зелёное). report['env_qualified'] + not_yet при реальном env-провале"
