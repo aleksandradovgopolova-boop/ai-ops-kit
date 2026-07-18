@@ -224,3 +224,5 @@ jobs:
         run: |
           python3 tools/preflight.py --selftest
           python3 tools/approvals.py --selftest
+      - name: "Real review intent: read-only ревью ветки (selftest)"
+        run: python3 tools/review_branch.py --selftest

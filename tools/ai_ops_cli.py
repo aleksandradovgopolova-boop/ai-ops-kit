@@ -210,6 +210,11 @@ def selftest():
         expect("v2.112 preview onboard: НЕ выполняет действие (профиль не пере-создан)",
                rc_pv == 0 and not (root / ".ai" / "repository-profile.yaml").is_file())
 
+        # v2.116: `review` — настоящий intent (не preview). Без ветки -> честный no-branch (rc!=0).
+        rc_rv, out_rv = _run(["review", "поревьюить", str(root), "--feature", "nope-wid"])
+        expect("v2.116 review: настоящий intent — без ветки честный no-branch (не падает в preview)",
+               "REVIEW" in out_rv and "no-branch" in out_rv and rc_rv != 0)
+
     print("ai_ops_cli selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -339,6 +344,28 @@ def _run_intent(intent, task, child_root, signals, a):
             print(f"  артефакты в features/{wid}/ (run-plan, context-bundle, spec-coverage, work-package) — код НЕ менялся")
         return 0
 
+    if intent == "review":
+        import review_branch
+        import run_plan
+        wid = a.feature or _wid_for(task, signals, a.feature)
+        # реальный ревьюер — отдельный провайдер (writer ≠ judge); mock не выносит вердикт (needs-reviewer)
+        rev_prop = None
+        prov = getattr(a, "provider", "mock") or "mock"
+        if prov != "mock":
+            import orchestrator
+            rev_prop = orchestrator.make_provider(prov, getattr(a, "model", None))
+        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2))
+        else:
+            print(f"REVIEW {wid}: verdict={rep['verdict']} · ревьюируемых гейтов "
+                  f"{len(rep.get('reviewable') or [])} · изменено файлов {len(rep.get('changed_files') or [])}")
+            for rv in rep.get("reviews") or []:
+                print(f"  · {rv['gate']}: {rv.get('status') or 'invalid'}")
+            if rep.get("note"):
+                print(f"  {rep['note']}")
+        return 0 if rep["verdict"] in ("pass", "no-ai-review-gates", "needs-reviewer") else 1
+
     if intent == "discuss":
         import run_plan
         wid = _wid_for(task, signals, a.feature)
@@ -379,7 +406,9 @@ def main(argv):
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
-    ap.add_argument("--base", default="main", help="resume: base-ветка для проверки устаревания")
+    ap.add_argument("--base", default="main", help="resume/review: base-ветка")
+    ap.add_argument("--provider", default="mock", help="review: провайдер ревьюера (не mock -> живой вердикт)")
+    ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -431,7 +460,8 @@ def main(argv):
         return 0
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
-    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss"):
+    # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
+    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss", "review"):
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc

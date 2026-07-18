@@ -170,6 +170,61 @@ def run_scenarios():
        and commit6.get("evidence_on_exact_sha") is True
        and rep6.get("ready_for_pr") is False and blocked_named)
 
+    # PQ7: доказанный POSITIVE-GREEN — полностью корректная QUICK-задача РЕАЛЬНО достигает ready=True
+    # (детерминированно, без модели). intake закрыт сигналами task_type+size+risk; тест зелёный.
+    root7 = _mkrepo({"calc.py": "def add(a, b):\n    return a + b\n"})
+    s7 = iter([{"op": "write", "path": "mathx.py", "content": "def clamp(x, lo, hi):\n    return max(lo, min(hi, x))\n"},
+               {"op": "write", "path": "test_mathx.py",
+                "content": "from mathx import clamp\n\ndef test_clamp():\n    assert clamp(5, 0, 3) == 3\n"},
+               {"done": True}])
+    rep7 = _run("добавить clamp с тестом", {"task_type": "QUICK", "size": "small", "risk": "low",
+                                            "affected_areas": ["core"]},
+                root7, engine="pipeline", proposer=lambda c: next(s7), execute=True, feature="pq7",
+                install_deps=False, baseline_diff=True)
+    ok("PQ7 positive-green QUICK: корректная задача -> ready_for_pr=True, overall=delivered, гейты закрыты",
+       rep7.get("ready_for_pr") is True and rep7.get("overall_status") == "delivered"
+       and not (rep7.get("gates") or {}).get("unmet")
+       and (rep7.get("commit") or {}).get("evidence_on_exact_sha") is True
+       and (root7 / "features" / "pq7" / "run-report.json").is_file())
+
+    # PQ8: полностью зелёный ENGINEERING с author + review + security evidence. specification (OpenSpec)
+    # требует реального openspec CLI -> если его нет, честно проверяем, что спек-гейт БЛОКИРУЕТ (fail-closed).
+    import shutil as _sh
+
+    def _author(prompt):
+        if "requirements-artifact" in prompt:
+            return ("schema_version: 1\nkind: requirements-artifact\nrequirements:\n"
+                    "  - id: R1\n    statement: clamp ограничивает значение диапазоном\n"
+                    "    acceptance:\n      - when x>hi then возвращает hi\n")
+        if "spec-change" in prompt:
+            return ("schema_version: 1\nkind: spec-change\ncapability: mathx\nwhy: нужен clamp\n"
+                    "what_changes:\n  - добавить clamp\ntasks:\n  - реализовать\n"
+                    "requirements:\n  - name: Clamp\n    text: The system SHALL clamp values to a range.\n"
+                    "    scenarios:\n      - {name: T, when: x>hi, then: возвращает hi}\n")
+        return ("schema_version: 1\nkind: plan-artifact\nwork_packages:\n"
+                "  - id: WP1\n    summary: clamp\n    depends_on: []\nwrite_scope:\n  - .\n")
+    _reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+    root8 = _mkrepo({"calc.py": "def add(a, b):\n    return a + b\n"})
+    s8 = iter([{"op": "write", "path": "mathx.py", "content": "def clamp(x, lo, hi):\n    return max(lo, min(hi, x))\n"},
+               {"op": "write", "path": "test_mathx.py",
+                "content": "from mathx import clamp\n\ndef test_clamp():\n    assert clamp(5, 0, 3) == 3\n"},
+               {"done": True}])
+    rep8 = _run("добавить clamp (engineering)", {"task_type": "ENGINEERING", "size": "small", "risk": "low",
+                                                 "affected_areas": ["core"]},
+                root8, engine="pipeline", proposer=lambda c: next(s8), execute=True, feature="pq8",
+                install_deps=False, baseline_diff=True, author=True, author_proposer=_author,
+                review=True, reviewer_proposer=_reviewer)
+    reviews8 = {rv.get("gate"): rv.get("status") for rv in (rep8.get("reviews") or [])}
+    sec8 = (rep8.get("security_scan") or {}).get("overall")
+    if _sh.which("openspec"):
+        ok("PQ8 positive-green ENGINEERING: author+review+security -> ready_for_pr=True (openspec доступен)",
+           rep8.get("ready_for_pr") is True and not (rep8.get("gates") or {}).get("unmet")
+           and all(a.get("valid") for a in (rep8.get("authored") or []))
+           and reviews8.get("code_review") == "pass" and sec8 == "clear")
+    else:
+        ok("PQ8 fail-closed ENGINEERING: без openspec CLI спек-гейт БЛОКИРУЕТ (честно, не зелёный)",
+           rep8.get("ready_for_pr") is False and "specification" in ((rep8.get("gates") or {}).get("unmet") or []))
+
     return r
 
 

@@ -55,13 +55,14 @@ scenarios:
     task_type: ENGINEERING
     flags: ["--sandbox", "--review", "--author", "--task-type", "ENGINEERING"]
     baseline: no-regressions
-    expected: "code_review закрыт независимым ревьюером; requirements/plan_readiness/specification закрыты произведёнными артефактами (v2.86/2.89); security честно остаётся блокирующим (нет производителя evidence)"
+    expected: "code_review закрыт независимым ревьюером; requirements/plan_readiness/specification закрыты произведёнными артефактами (v2.86/2.89); security закрыт security-reviewer'ом (v2.106) при чистом детерминированном скане — на чистой правке ENGINEERING реально достигает ready_for_pr=true (доказано детерминированно в PQ8)"
     acceptance:
       - "reviews содержит вердикт по code_review (status pass|fail) от read-only судьи"
       - "authored содержит валидные requirements+plan артефакты; их гейты НЕ в unmet (форма подтверждена)"
       - "specification закрыт, ЕСЛИ доступен openspec CLI (v2.89: движок рендерит OpenSpec + validate --strict); БЕЗ CLI — честно остаётся в unmet (не фабрикуем)"
-      - "security остаётся в gates.unmet — нет детерминированного производителя no_secrets/no_injection_surface/deps_approved (честный not-ready, НЕ ложный green; закрывается в 2.95)"
-    proves: "постадийный ревью + производство артефактов закрывают requirements/plan/specification; недоказуемое (security-evidence) честно блокирует"
+      - "security: security-reviewer (v2.106) закрывает needs_review домены при pass + чистом детерминированном скане; секреты/новые прямые зависимости требуют ApprovalRecord (v2.115) — без него security честно блокирует"
+      - "если код и скан чистые + openspec доступен -> ready_for_pr=true, overall=delivered (положительный зелёный путь)"
+    proves: "постадийный ревью + производство артефактов + security-reviewer закрывают все гейты; чистая ENGINEERING-правка достигает проверяемого draft PR (не только offline-механика — см. PQ8 детерминированно)"
 
   - id: S5-containment
     title: "Containment: sandbox реально ограничивает петлю"
@@ -102,18 +103,20 @@ scenarios:
       - "ветки ai-ops/* появились в основном репо только через доверенный fetch, не из контейнера"
     proves: "worktree-only контейнер (v2.93): модель физически не достаёт до основного дерева"
 
-  - id: S8-rerun-idempotent
-    title: "Повторный запуск и resume того же feature"
-    task: "повторить прогон того же --feature после первого"
+  - id: S8-resume-and-rerun
+    title: "Настоящий resume (v2.109) + идемпотентность повтора того же feature"
+    task: "продолжить прерванную работу того же --feature (ai-ops resume), затем повтор"
     task_type: QUICK
     flags: ["--sandbox"]
     baseline: no-regressions
-    setup: "первый прогон оставил ветку ai-ops/<feature> с коммитом"
-    expected: "без --discard повтор не теряет несохранённую работу (honest error); с --discard стартует чисто; PR идемпотентен (updated, не дубль)"
+    setup: "первый прогон оставил ветку ai-ops/<feature> с коммитом и RunHandoff"
+    expected: "resume ПРОДОЛЖАЕТ поверх коммита (не рестарт): переиспользует ветку/worktree, подаёт состояние из RunHandoff в prompt; устаревшая база -> блок без --force; повтор run без --resume/--discard не теряет работу (honest error); PR идемпотентен (updated)"
     acceptance:
-      - "повтор без --discard при несохранённых коммитах -> status=error с упоминанием discard (работа сохранена)"
+      - "ai-ops resume <feature> --execute -> resume.resumed=true, работа прошлой фазы сохранена, tool loop продолжил (не начал заново)"
+      - "если main ушёл вперёд с момента прогона -> resume status=blocked без --force (не молча на устаревшем evidence); с --force продолжает + revalidation_overridden=true"
+      - "повтор run без --resume/--discard при несохранённых коммитах -> status=error с упоминанием resume/discard (работа сохранена)"
       - "--open-pr при уже открытом PR -> delivery.status=updated (ветка обновлена, дубль не создан)"
-    proves: "повтор/resume не теряет работу и не плодит дублирующие PR (v2.79 guard + v2.93 идемпотентность)"
+    proves: "resume реально продолжает работу (v2.109), а не рестартит; повтор не теряет работу и не плодит дублирующие PR"
 
   - id: S9-real-draft-pr
     title: "Доставка: настоящий push + настоящий draft PR"

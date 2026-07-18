@@ -121,6 +121,7 @@ python3 validation/validate_container_assets.py
 python3 validation/validate_container_delivery.py
 python3 tools/preflight.py --selftest
 python3 tools/approvals.py --selftest
+python3 tools/review_branch.py --selftest
 python3 installer/ai_ops.py --selftest
 ```
 

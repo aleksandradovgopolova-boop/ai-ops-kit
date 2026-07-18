@@ -316,11 +316,19 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   reason), доменные `human_approval_conditions` реально исполняются (не boolean). PQ2/PQ4/PQ5
   доказывают ноль вызовов tool loop и отсутствие коммита при блоке.
 
-### Дальше (план после Preflight Truth)
-- **v2.116 Release Candidate Qualification** — `ai-ops review` как настоящий read-only review ветки;
-  актуализация S1–S10; детерминированный полностью зелёный QUICK и ENGINEERING (author+review+
-  security evidence); доказать «incomplete spec → ноль вызовов tool loop»; живые S1/S2/S4/S6/S7/S9 и
-  настоящий draft PR — на машине пользователя. Затем **v3.0-rc1**.
+- **RC Qualification — детерминированная часть (v2.116) ✅** — `ai-ops review` стал настоящим
+  read-only review действующей ветки (`tools/review_branch.py`: независимый ревьюер под read-only
+  политикой над worktree ветки, БЕЗ tool loop/правок/коммита, вердикт по ai-review гейтам). S1–S10
+  актуализированы (S4: security-reviewer закрывает security на чистой правке; S8: настоящий resume
+  v2.109). Доказаны ДЕТЕРМИНИРОВАННО положительные зелёные пути: **PQ7** — корректная QUICK →
+  `ready_for_pr=true`, `overall=delivered`; **PQ8** — ENGINEERING с author+review+security →
+  `ready_for_pr=true` (при доступном openspec CLI; иначе спек-гейт честно блокирует). «Incomplete
+  spec → ноль вызовов tool loop» доказано в PQ2 (v2.115).
+
+### Осталось до v3.0-rc1 (на машине пользователя — не фабрикуем)
+- Живые прогоны S1/S2/S4/S6/S7/S9 с DeepSeek на Mac (`tools/qual_run.py`), настоящий draft PR
+  (`--open-pr` + GITHUB_TOKEN), сохранённые JSON-отчёты квалификации. После зелёных живых прогонов —
+  тег **v3.0-rc1** (trustworthy task → verified draft PR для QUICK и small/medium ENGINEERING).
 - **v3.1 Sequential WorkPackage Executor** — последовательное исполнение пакетов (пакет→commit→
   evidence→gates→handoff→следующий), свой SHA/проверки/resume у каждого; зависимый пакет не стартует
   без подтверждённого предыдущего. Не задерживает RC.
