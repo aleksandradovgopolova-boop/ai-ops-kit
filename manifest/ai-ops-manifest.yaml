@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.120.0
+  package_version: 2.121.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_121_spec_and_approval_binding:
+      - "P1.1 спека обязательна ДО tool loop для heavy (ENGINEERING/PRODUCT/CRITICAL): preflight.assess получил author-параметр и правило author-or-spec — heavy без spec.yaml и без --author блокируется (spec-first ДО реализации, не только доставки); с --author движок авторизует спеку пре-стадией, а артефакт-гейты specification/requirements всё равно проверят её готовность; QUICK остаётся light. Тесты: heavy без спеки/без author -> blocked; c author -> spec-гейт пройден; QUICK -> не блокирует. Ripple: review_branch/executor/PQ9 heavy-прогоны переведены на author=True"
+      - "P1.2 ApprovalRecord связан (раньше — слабо: хватало непустых author/scope/reason). Теперь запись связывается с: (1) хэшем плана+спеки (binds_to / bind_to_plan -> plan_binding_hash) — при смене run-plan.yaml/spec.yaml одобрение перестаёт покрывать новую ревизию; (2) сроком (expires_at) — просроченное невалидно; (3) типом риска (risk). check() авто-берёт plan_hash с диска и реальное время. Связывание АДДИТИВНО: старые записи без binds_to/expires_at валидны как раньше (нет регрессии)"
+      - "P1.2 п.4 recheck после диффа: recheck_after_diff проверяет, что scope одобрения ПОКРЫВАЕТ реально изменённые пути (covers_paths — путь/префикс). execution_pipeline после коммита считает _committed_changed_files и вызывает recheck; scope не покрывает изменения -> approvals_cover_ok=False -> НЕ ready + not_yet + report.approval_recheck. Preflight проверяет наличие одобрения ДО правок, recheck — что одобрено ИМЕННО изменённое"
+      - "P1.3 review как lifecycle-событие (раньше — диагностика, слово ревьюера ни на что не влияло). review_branch.review пере-считывает готовность к merge (readiness.ready_for_merge: True только при вердикте pass / no-ai-review-gates) и ФИКСИРУЕТ вердикт артефактом features/<wid>/branch-review.yaml (verdict/statuses/changed_files/readiness/created_at). Exit-код review (CLI и модуль) = ready_for_merge -> needs-reviewer/needs-changes теперь non-zero (раньше needs-reviewer считался ok)"
+      - "P1.4 строгий install-фикс: провал install игнорируется ТОЛЬКО если окружение ДОКАЗАННО рабочее — _env_proven_ok требует ≥1 реально отработавшей проверки (pass или честный fail без env-симптома). Нет проверок вовсе ИЛИ все падения — env-симптомы (exit 127 / 'command not found' / 'No module named' ...) -> НЕ квалифицировано (закрыта дыра v2.118, где install-fail + ноль проверок трактовался как qualified)"
+      - "проверки: approvals/preflight/review_branch/workpackage_executor/execution_pipeline selftest расширены (срок/binding/recheck/covers_paths/readiness/env-proven), PQ1-PQ9 зелёные. Аддитивно в 2.x. Осталось до v3.0-rc1: v2.122 живая RC-квалификация (S1/S2/S4/S6/S7/S8/S9/S10 + живой sequential) — на машине пользователя, не фабрикуем"
     fixed_v2_120_canonical_runtime_wiring:
       - "P0.1 канонический вход провязан: ai_ops_cli `run --execute` теперь передаёт provider_name/model/base/open_pr/max_steps/require_fix в ai_ops_run.run (раньше уходил в mock, model=None, без пути до draft PR). Добавлены CLI-флаги --open-pr, --max-steps. Тест: run --execute --model MARKER -> report.model==MARKER"
       - "P0.2 sequential наследует безопасность/окружение: execute_sequence получил sandbox/install_deps/open_pr/max_steps/write_scope_for и передаёт их в per-package run (containment больше не теряется молча). open_pr — только на финальном пакете (интегрированная ветка). CLI exit-код sequential: 0 при ready_all, 1 при executed_all-но-не-ready, 2 при блокировке/ошибке (раньше 0 при executed_all даже с незакрытыми гейтами)"

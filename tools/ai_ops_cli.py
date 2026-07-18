@@ -376,13 +376,17 @@ def _run_intent(intent, task, child_root, signals, a):
         if js:
             print(json.dumps(rep, ensure_ascii=False, indent=2))
         else:
-            print(f"REVIEW {wid}: verdict={rep['verdict']} · ревьюируемых гейтов "
+            rmerge = (rep.get("readiness") or {}).get("ready_for_merge")
+            print(f"REVIEW {wid}: verdict={rep['verdict']} · ready_for_merge={rmerge} · ревьюируемых гейтов "
                   f"{len(rep.get('reviewable') or [])} · изменено файлов {len(rep.get('changed_files') or [])}")
             for rv in rep.get("reviews") or []:
                 print(f"  · {rv['gate']}: {rv.get('status') or 'invalid'}")
+            if rep.get("evidence_path"):
+                print(f"  evidence: {rep['evidence_path']}")
             if rep.get("note"):
                 print(f"  {rep['note']}")
-        return 0 if rep["verdict"] in ("pass", "no-ai-review-gates", "needs-reviewer") else 1
+        # v2.121 (P1.3): exit code = готовность к merge (needs-reviewer/needs-changes -> non-zero)
+        return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
 
     if intent == "discuss":
         import run_plan

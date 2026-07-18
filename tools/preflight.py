@@ -35,7 +35,7 @@ _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
 
 
 def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
-           spec_cov=None, work_pkg=None, lifecycle_errors=None, domains=None):
+           spec_cov=None, work_pkg=None, lifecycle_errors=None, domains=None, author=False):
     """-> {kind, ok, blocked, checks{...}, reasons[]}. Детерминированно, без модели и без правок."""
     signals = dict(signals or {})
     child_root = Path(child_root)
@@ -59,16 +59,24 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     if heavy and not payload_ok:
         block("context_payload: compiled payload не собран для heavy-задачи (fail-closed)")
 
-    # 3. spec достаточна — существующая, но неполная спека НЕ пускает в реализацию (главный фикс #1).
-    #    (P1.1 — обязательность спеки до tool loop для heavy — отдельным релизом v2.121 с authoring-
-    #    пре-стадией, чтобы не сломать --author-поток.)
+    # 3. spec достаточна. Два условия (v2.121 P1.1 — обязательность спеки ДО tool loop для heavy):
+    #    (a) существующая, но неполная спека НЕ пускает в реализацию (фикс #1, все workflow);
+    #    (b) для heavy (ENGINEERING/PRODUCT/CRITICAL) спека ОБЯЗАТЕЛЬНА до реализации: её отсутствие
+    #        блокирует, ЕСЛИ прогон не идёт с --author (тогда движок авторизует спеку пре-стадией, а
+    #        артефакт-гейты specification/requirements всё равно проверят её на готовность). QUICK — light.
     spec_artifact = bool((spec_cov or {}).get("spec_artifact"))
     spec_missing = list((spec_cov or {}).get("blocking_missing") or [])
-    spec_ok = not (spec_artifact and spec_missing)
-    checks["spec"] = {"ok": spec_ok, "artifact_present": spec_artifact, "missing": spec_missing}
-    if not spec_ok:
+    spec_incomplete = spec_artifact and bool(spec_missing)
+    spec_absent_heavy = heavy and (not spec_artifact) and (not author)
+    spec_ok = not (spec_incomplete or spec_absent_heavy)
+    checks["spec"] = {"ok": spec_ok, "artifact_present": spec_artifact, "missing": spec_missing,
+                      "required_for_heavy": heavy, "author_stage": bool(author)}
+    if spec_incomplete:
         block(f"spec-first: спека features/{wid}/spec.yaml существует, но неполна "
               f"(не заполнено: {', '.join(spec_missing)}) — реализация не начинается")
+    elif spec_absent_heavy:
+        block(f"spec-first: {tt} требует спеку ДО реализации — features/{wid}/spec.yaml отсутствует; "
+              f"создай спеку (ai-ops specify/new) ИЛИ запусти с --author (движок авторизует её пре-стадией)")
 
     # 4. атомарность. v2.120 (P0.4/P0.6): boolean-подтверждения НЕДОСТАТОЧНО — неатомарная задача
     #    идёт либо через sequential executor, либо как КОНКРЕТНЫЙ существующий WorkPackage
@@ -160,8 +168,8 @@ def selftest():
         pf_a2 = assess({"task_type": "ENGINEERING", "decomposition_confirmed": True}, root, "w",
                        payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
         expect("v2.120 preflight: голый decomposition_confirmed -> НЕ пускает блоб (blocked)", pf_a2["blocked"])
-        # выбран СУЩЕСТВУЮЩИЙ пакет из плана -> atomic-гейт пройден
-        pf_a3 = assess({"task_type": "ENGINEERING", "work_package_id": "a"}, root, "w",
+        # выбран СУЩЕСТВУЮЩИЙ пакет из плана -> atomic-гейт пройден (author=True снимает spec-блок heavy)
+        pf_a3 = assess({"task_type": "ENGINEERING", "work_package_id": "a"}, root, "w", author=True,
                        payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
         expect("preflight: выбран существующий пакет (id в плане) -> atomic-гейт пройден",
                pf_a3["checks"]["atomic"]["ok"])
@@ -172,10 +180,37 @@ def selftest():
                pf_a4["blocked"] and pf_a4["checks"]["atomic"]["selected_valid"] is False)
         # id из авторитетного плана sequence-исполнителя -> пройден
         pf_a5 = assess({"task_type": "ENGINEERING", "work_package_id": "seq-2",
-                        "_sequence_plan_ids": ["seq-1", "seq-2"]}, root, "w", payload=good_payload,
+                        "_sequence_plan_ids": ["seq-1", "seq-2"]}, root, "w", payload=good_payload, author=True,
                        spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=wp)
         expect("v2.120 preflight: id из плана sequence-исполнителя -> atomic-гейт пройден",
                pf_a5["checks"]["atomic"]["ok"])
+
+        # ── v2.121 (P1.1): спека обязательна ДО tool loop для heavy (author-or-spec) ──────────────
+        atomic_wp = {"should_decompose": False}
+        # ENGINEERING без спеки и без --author -> блок (spec-first до реализации)
+        pf_h1 = assess({"task_type": "ENGINEERING", "size": "small", "affected_areas": ["core"]},
+                       root, "w", payload=good_payload,
+                       spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=atomic_wp)
+        expect("v2.121 preflight: heavy без спеки и без --author -> blocked (spec-first)",
+               pf_h1["blocked"] and any("spec-first" in r and "ДО реализации" in r for r in pf_h1["reasons"]))
+        # тот же кейс c --author -> spec-блок снят (движок авторизует спеку пре-стадией)
+        pf_h2 = assess({"task_type": "ENGINEERING", "size": "small", "affected_areas": ["core"]},
+                       root, "w", payload=good_payload, author=True,
+                       spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=atomic_wp)
+        expect("v2.121 preflight: heavy без спеки, но с --author -> spec-гейт пройден",
+               pf_h2["checks"]["spec"]["ok"] and not any("spec-first" in r for r in pf_h2["reasons"]))
+        # QUICK без спеки -> НЕ требует спеку (light)
+        pf_q = assess({"task_type": "QUICK", "size": "small", "affected_areas": ["core"]},
+                      root, "w", payload=good_payload,
+                      spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=atomic_wp)
+        expect("v2.121 preflight: QUICK без спеки -> НЕ блокирует (light)",
+               pf_q["ok"] and pf_q["checks"]["spec"]["ok"])
+        # heavy с ПОЛНОЙ спекой на диске -> ok даже без --author
+        pf_h3 = assess({"task_type": "ENGINEERING", "size": "small", "affected_areas": ["core"]},
+                       root, "w", payload=good_payload,
+                       spec_cov={"spec_artifact": True, "blocking_missing": []}, work_pkg=atomic_wp)
+        expect("v2.121 preflight: heavy с полной спекой -> spec-гейт пройден без --author",
+               pf_h3["checks"]["spec"]["ok"])
 
         # overflow -> блок
         pf_of = assess({"task_type": "ENGINEERING"}, root, "w", payload=good_payload,

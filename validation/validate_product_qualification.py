@@ -247,8 +247,10 @@ def run_scenarios():
     def _prop_for(pkg):
         it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
         return lambda c: next(it)
+    # v2.121 (P1.1): heavy требует спеку ДО tool loop -> исполняем пакеты с author=True (движок
+    # авторизует спеку пре-стадией). Иначе первый же пакет блокируется preflight (spec-first).
     seq9 = _wpe.execute_sequence("большой рефактор", sig9, root9, pkgs9, _prop_for, feature="pq9",
-                                 base=cur9, baseline_diff=False)
+                                 base=cur9, baseline_diff=False, author=True, author_proposer=_author)
     shas9 = [p.get("sha") for p in seq9["packages"]]
     ok("PQ9 sequential executor: 3 пакета исполнены по одному (свой SHA, цепочкой), не одним блобом",
        seq9["executed_all"] is True and len(pkgs9) == 3 and all(shas9) and len(set(shas9)) == 3
