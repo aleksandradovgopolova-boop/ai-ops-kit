@@ -329,9 +329,15 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
 - Живые прогоны S1/S2/S4/S6/S7/S9 с DeepSeek на Mac (`tools/qual_run.py`), настоящий draft PR
   (`--open-pr` + GITHUB_TOKEN), сохранённые JSON-отчёты квалификации. После зелёных живых прогонов —
   тег **v3.0-rc1** (trustworthy task → verified draft PR для QUICK и small/medium ENGINEERING).
-- **v3.1 Sequential WorkPackage Executor** — последовательное исполнение пакетов (пакет→commit→
-  evidence→gates→handoff→следующий), свой SHA/проверки/resume у каждого; зависимый пакет не стартует
-  без подтверждённого предыдущего. Не задерживает RC.
+- **Sequential WorkPackage Executor (milestone v3.1; поставлен аддитивно в 2.117) ✅** — WorkPackages теперь РЕАЛЬНО исполняются по одному
+  (`tools/workpackage_executor.py`): пакет→commit→evidence→gates→handoff→следующий, на общей ветке
+  `ai-ops/<wid>` (resume поверх предыдущего). У каждого пакета свой коммит/SHA, свои гейты, свой
+  RunHandoff и своя точка resume; зависимый пакет не стартует, пока `depends_on` не подтверждены;
+  блок пакета (preflight/нет коммита/регрессия) ОСТАНАВЛИВАЕТ последовательность (следующие не
+  стартуют). per-package отчёты в `features/<wid>/work-packages/<id>/report.json` + агрегат
+  `sequence-report.yaml`. `ai-ops run … --sequential`. Доказано детерминированно: PQ9 + executor
+  selftest (3 пакета, цепочка коммитов, стоп на блоке). Закрывает «WorkPackages создаются, но не
+  исполняются».
 
 Главный принцип (из аудита): не добавлять новый концептуальный слой, а превратить уже созданные
 ContextBundle/SpecCoverage/WorkPackage/RunHandoff из отчётных артефактов в реальные управляющие входы
