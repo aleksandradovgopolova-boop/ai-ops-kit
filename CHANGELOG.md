@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.118.0] — 2026-07-18 — Fix: провал install не блокирует ready, если проверки прошли (finding живого прогона)
+
+Первый **живой прогон с DeepSeek на Mac** (S1/S2) нашёл честный false-negative: движок всё сделал
+правильно (код написан, `test=pass`, evidence на точном SHA, регрессий нет, все гейты пройдены), но
+`ready_for_pr=false` держал **единственно** провал install-команды стека — `pip install -e .` падал с
+exit 1 «Failed to build editable» (репо не является устанавливаемым пакетом), хотя pytest прошёл.
+
+### Fixed
+- Провал install блокирует `ready` **только** если он реально оставил проверки нерабочими (симптомы
+  неподготовленного окружения: `exit 127`, `command not found`, `No module named`, нет тулчейна).
+  `_env_unqualified(checks)` ищет симптом среди упавших проверок; `env_qualified = prepare_ok or not
+  _env_unqualified(...)`; `base_ok` использует `env_qualified`. Честный fail проверки (exit 1, код
+  сломан) и отсутствие тулчейна (exit 127) по-прежнему блокируют — P0.6 сохранён (сломанное окружение
+  ≠ зелёное). В отчёте — `env_qualified`; `not_yet` только при реальном env-провале.
+
+Проверки: 4 юнит-теста `_env_unqualified` в `execution_pipeline` selftest. PQ7/PQ8/e2e не задеты.
+Интеграционное подтверждение — повторный живой прогон.
+
 ## [2.117.0] — 2026-07-18 — Sequential WorkPackage Executor (roadmap-веха v3.1, аддитивно в 2.x)
 
 Закрыт аудит #2: WorkPackages создавались, но не исполнялись — задача шла одним общим tool loop.

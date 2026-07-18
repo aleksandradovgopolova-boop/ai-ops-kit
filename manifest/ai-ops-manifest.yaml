@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.117.0
+  package_version: 2.118.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_118_prepare_false_negative:
+      - "FINDING ЖИВОГО ПРОГОНА (DeepSeek/Mac, S1/S2): движок отработал ЧЕСТНО (модель написала код, test=pass, evidence на точном SHA, регрессий нет, все гейты пройдены), но ready_for_pr=false держал ЕДИНСТВЕННО provale install-команды стека. prepare: `pip install -e .` -> exit 1 'Failed to build editable' (фикстура/репо не является устанавливаемым пакетом), при этом pytest прошёл. P0.6-инвариант блокировал ready по экзит-коду install, хотя окружение доказанно рабочее (проверки отработали) — false-negative"
+      - "фикс: провал install блокирует ready ТОЛЬКО если он реально оставил проверки нерабочими (симптомы неподготовленного окружения: exit 127 / 'command not found' / 'No module named' / нет тулчейна). _env_unqualified(checks) детектит симптом среди УПАВШИХ проверок; env_qualified = prepare_ok OR not _env_unqualified. base_ok использует env_qualified вместо prepare_ok. Честный fail проверки (exit 1, код сломан) и exit 127 (нет тулчейна) по-прежнему блокируют — P0.6 сохранён (сломанное окружение ≠ зелёное). report['env_qualified'] + not_yet при реальном env-провале"
+      - "проверки: 4 юнит-теста _env_unqualified в execution_pipeline selftest (test=pass -> qualified; exit 127 -> unqualified; 'No module named' -> unqualified; честный AssertionError exit 1 -> qualified). PQ7/PQ8 (install_deps=False) и e2e не задеты. Интеграционное подтверждение — повторный живой прогон на Mac"
     fixed_v2_117_sequential_workpackage_executor:
       - "закрыт аудит #2 (WorkPackages создаются, но не исполняются): tools/workpackage_executor.py исполняет пакеты ПОСЛЕДОВАТЕЛЬНО — пакет 1 -> commit -> evidence -> gates -> handoff -> пакет 2 -> ... на общей ветке ai-ops/<wid> (resume поверх предыдущего, v2.109). У каждого пакета СВОЙ коммит/SHA, свои гейты, свой RunHandoff, своя точка resume. per-package отчёт features/<wid>/work-packages/<id>/report.json + агрегат sequence-report.yaml. Раньше пакеты были только планом — задача шла одним общим tool loop"
       - "инварианты: пакеты в порядке order; зависимый пакет НЕ стартует, пока depends_on не подтверждены (completed); блок пакета ОСТАНАВЛИВАЕТ последовательность (следующие не стартуют) — стоп на hard preflight-блоке / отсутствии коммита / регрессии базы; «гейты требуют evidence» (нет author/review) — НЕ стоп (пакет исполнен, но не ready). Исполнитель = подтверждение декомпозиции (work_package_id пакета -> preflight атомарности пройден)"
