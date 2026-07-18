@@ -220,3 +220,7 @@ jobs:
           python3 tools/execution_pipeline.py --selftest
           python3 tools/tool_broker.py --selftest
           python3 tools/security_scan.py --selftest
+      - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
+        run: |
+          python3 tools/preflight.py --selftest
+          python3 tools/approvals.py --selftest

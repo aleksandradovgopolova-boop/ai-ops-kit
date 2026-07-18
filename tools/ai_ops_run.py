@@ -174,6 +174,36 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 yaml.safe_dump(work_pkg, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001
             work_pkg = None; lifecycle_errors.append(f"atomic_planner: {type(e).__name__}: {e}")
+        # v2.115 Preflight Truth: проверки ДО запуска модели. Блок -> tool loop НЕ запускается,
+        # правки/коммит НЕ создаются (Spec-First блокирует РЕАЛИЗАЦИЮ, а не только доставку). Единая
+        # точка: spec/атомарность/overflow/approvals/lifecycle. Выполняется и для fresh, и для resume.
+        import preflight as _pf
+        pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
+                              spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors)
+        (features_dir / fid / "preflight.yaml").write_text(
+            yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        if pretruth["blocked"]:
+            rep = {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                   "status": "blocked", "engine": "pipeline", "runtime": runtime,
+                   "provider": provider_name, "model": model, "ready_for_pr": False,
+                   "overall_status": "blocked-preflight",
+                   "error": "preflight не пройден (модель не запускалась, правок/коммита нет): "
+                            + "; ".join(pretruth["reasons"]),
+                   "preflight": pretruth,
+                   "loop": None, "commit": {"sha": None},   # честно: ни петли, ни коммита
+                   "not_yet": pretruth["reasons"],
+                   "lifecycle": {"workitem": f"features/{fid}/workitem.yaml",
+                                 "run_plan": f"features/{fid}/run-plan.yaml",
+                                 "preflight": f"features/{fid}/preflight.yaml"}}
+            if lifecycle_errors:
+                rep["lifecycle_errors"] = lifecycle_errors
+            try:
+                (features_dir / fid / "run-report.json").write_text(
+                    json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+            except OSError:
+                pass
+            return rep
+
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
         areas = signals.get("affected_areas") or ["unspecified"]
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
@@ -211,6 +241,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
         rep["model"] = model
+        rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
         # v2.109 Real Resume: если продолжали — честно фиксируем в отчёте preflight-контекст (в т.ч.
         # что ревалидация требовалась и была осознанно переопределена --force), не только факт reuse.
         if resume and isinstance(rep.get("resume"), dict):
@@ -432,6 +463,8 @@ def exit_code(r):
     if r.get("kind") == "execution-pipeline":
         if r.get("status") == "error":
             return 2
+        if r.get("status") == "blocked":   # v2.115: preflight не пройден — не ready, но не ошибка исполнения
+            return 1
         return 0 if r.get("ready_for_pr") else 1
     return 1 if r.get("status") == "blocked" else 0
 

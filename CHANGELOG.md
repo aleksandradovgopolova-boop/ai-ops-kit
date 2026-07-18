@@ -2,6 +2,38 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.115.0] — 2026-07-18 — Preflight Truth: проверки до модели (Spec-First блокирует реализацию)
+
+Главный дефект внешнего аудита: Spec-First блокировал **доставку**, а не **реализацию** — pipeline
+сначала гонял tool loop, писал код и коммит, и лишь потом проверял полноту спеки. Закрыто: единый
+preflight выполняется ДО запуска модели; при провале модель не запускается, правок/коммита нет.
+
+### Added
+- **`tools/preflight.py`** — preflight в контроллере ДО `run_pipeline`: classification → ContextPayload
+  собран → spec достаточна → задача атомарна ИЛИ декомпозиция подтверждена → context budget не
+  превышен → human approvals присутствуют. Блок → `status=blocked`, `loop=None`, `commit.sha=None`
+  (tool loop не запускался). `features/<wid>/preflight.yaml` + `report['preflight']`.
+- **`tools/approvals.py`** — настоящий `ApprovalRecord` (kind/approval/approved_by/scope/revision/
+  created_at/reason) вместо boolean. Доменные `human_approval_conditions` реально исполняются:
+  `secret_boundary`→secrets, `dependency_addition`→dependencies, `auth_change`→authentication+
+  authorization, `multi_tenant`→data_isolation, `deploy_change`→deployment_config,
+  `ai_component`→ai_prompt_injection; `destructive` требует отдельный record. Невалидная запись
+  (без approved_by/scope/reason) не засчитывается.
+
+### Fixed / Enforcement (fail-closed)
+- Неполная существующая спека → блок **до** реализации (ноль вызовов tool loop, ноль коммитов).
+- Context overflow → блок до исполнения.
+- Неатомарная задача → блок, пока нет `decomposition_confirmed` или выбранного `work_package_id`.
+- Ошибки Context Compiler/Spec/Planner + несобранный payload → fail-closed для ENGINEERING/PRODUCT/
+  CRITICAL; для QUICK — не блокирует (light).
+
+PQ2/PQ4/PQ5 в product-qualification доказывают: при блоке proposer вызван 0 раз, worktree/коммит не
+созданы. `preflight`/`approvals` selftest добавлены в CI и AGENTS.md.
+
+### Дальше
+v2.116 (RC Qualification: настоящий `ai-ops review`, зелёные QUICK/ENGINEERING, живые S1-S10, draft PR)
+→ v3.0-rc1; затем v3.1 (Sequential WorkPackage Executor). См. ROADMAP.
+
 ## [2.114.0] — 2026-07-17 — Product Qualification: сквозные гарантии продукта в CI (детерминированно)
 
 Закрыт последний пункт аудита. Сквозные ГАРАНТИИ продукта теперь проверяются детерминированно в CI
