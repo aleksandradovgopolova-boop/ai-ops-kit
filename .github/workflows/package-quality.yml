@@ -226,3 +226,5 @@ jobs:
           python3 tools/approvals.py --selftest
       - name: "Real review intent: read-only ревью ветки (selftest)"
         run: python3 tools/review_branch.py --selftest
+      - name: "Sequential WorkPackage Executor: пакет->commit->gates->handoff->следующий (selftest)"
+        run: python3 tools/workpackage_executor.py --selftest

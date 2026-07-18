@@ -225,6 +225,28 @@ def run_scenarios():
         ok("PQ8 fail-closed ENGINEERING: без openspec CLI спек-гейт БЛОКИРУЕТ (честно, не зелёный)",
            rep8.get("ready_for_pr") is False and "specification" in ((rep8.get("gates") or {}).get("unmet") or []))
 
+    # PQ9 (v3.1): WorkPackages РЕАЛЬНО исполняются последовательно (не одним блобом). Каждый пакет —
+    # свой коммит/SHA, поверх предыдущего; зависимый пакет не стартует без подтверждённого.
+    import atomic_planner as _ap
+    import workpackage_executor as _wpe
+    root9 = _mkrepo({"calc.py": "def add(a, b):\n    return a + b\n"})
+    cur9 = subprocess.run(["git", "-C", str(root9), "rev-parse", "--abbrev-ref", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    sig9 = {"task_type": "ENGINEERING", "size": "large", "risk": "low",
+            "affected_areas": ["catalog", "orders", "billing"]}
+    pkgs9 = _ap.decompose(sig9, wid="pq9", child_root=root9)["work_packages"]
+    def _prop_for(pkg):
+        it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
+        return lambda c: next(it)
+    seq9 = _wpe.execute_sequence("большой рефактор", sig9, root9, pkgs9, _prop_for, feature="pq9",
+                                 base=cur9, baseline_diff=False)
+    shas9 = [p.get("sha") for p in seq9["packages"]]
+    ok("PQ9 sequential executor: 3 пакета исполнены по одному (свой SHA, цепочкой), не одним блобом",
+       seq9["executed_all"] is True and len(pkgs9) == 3 and all(shas9) and len(set(shas9)) == 3
+       and seq9["sequential_chain"] is True
+       and all((root9 / "features" / "pq9" / "work-packages" / p["id"] / "report.json").is_file()
+               for p in seq9["packages"]))
+
     return r
 
 

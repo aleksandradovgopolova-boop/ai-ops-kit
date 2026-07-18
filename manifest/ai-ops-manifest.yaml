@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.116.0
+  package_version: 2.117.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_117_sequential_workpackage_executor:
+      - "закрыт аудит #2 (WorkPackages создаются, но не исполняются): tools/workpackage_executor.py исполняет пакеты ПОСЛЕДОВАТЕЛЬНО — пакет 1 -> commit -> evidence -> gates -> handoff -> пакет 2 -> ... на общей ветке ai-ops/<wid> (resume поверх предыдущего, v2.109). У каждого пакета СВОЙ коммит/SHA, свои гейты, свой RunHandoff, своя точка resume. per-package отчёт features/<wid>/work-packages/<id>/report.json + агрегат sequence-report.yaml. Раньше пакеты были только планом — задача шла одним общим tool loop"
+      - "инварианты: пакеты в порядке order; зависимый пакет НЕ стартует, пока depends_on не подтверждены (completed); блок пакета ОСТАНАВЛИВАЕТ последовательность (следующие не стартуют) — стоп на hard preflight-блоке / отсутствии коммита / регрессии базы; «гейты требуют evidence» (нет author/review) — НЕ стоп (пакет исполнен, но не ready). Исполнитель = подтверждение декомпозиции (work_package_id пакета -> preflight атомарности пройден)"
+      - "доказано детерминированно: executor selftest (3 пакета by-subsystem, уникальные SHA, цепочка коммитов merge-base --is-ancestor, стоп на secret_boundary-пакете -> пакет 3 не стартовал, с author+review+openspec -> ready_all) + PQ9 в product-qualification. CLI: ai-ops run … --sequential (неатомарную задачу исполнить по пакетам). АДДИТИВНО в 2.x (новый модуль, opt-in флаг — ничего не ломает); тег v3.1 — после v3.0-rc1 (живой квалификации)"
     fixed_v2_116_rc_qualification_deterministic:
       - "`ai-ops review` стал НАСТОЯЩИМ intent (аудит #4: раньше падал в preview, движок реально запускался только для run --execute). tools/review_branch.py: независимый ревьюер под READ-ONLY политикой над worktree ветки ai-ops/<wid>, БЕЗ tool loop/правок/коммита; вердикт по ai-review гейтам плана (writer≠judge); диф ветки против базы — контекст. verdict pass|needs-changes|no-branch|needs-reviewer. ai_ops_cli проксирует review (+ --provider/--model); mock -> needs-reviewer (честно, вердикт не фабрикуется)"
       - "доказаны ДЕТЕРМИНИРОВАННО положительные ЗЕЛЁНЫЕ пути (аудит #5: раньше не было теста, что корректная задача РЕАЛЬНО даёт ready=true). PQ7: корректная QUICK (task_type+size+risk закрывают intake, зелёный тест) -> ready_for_pr=true, overall=delivered, гейты закрыты, run-report.json на диске. PQ8: ENGINEERING с author+review -> ready_for_pr=true при доступном openspec CLI (security-reviewer v2.106 закрывает security на чистом скане); без openspec -> спек-гейт честно блокирует (fail-closed, conditional-тест портируем)"

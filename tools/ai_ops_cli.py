@@ -409,6 +409,8 @@ def main(argv):
     ap.add_argument("--base", default="main", help="resume/review: base-ветка")
     ap.add_argument("--provider", default="mock", help="review: провайдер ревьюера (не mock -> живой вердикт)")
     ap.add_argument("--model", help="review: модель ревьюера")
+    ap.add_argument("--sequential", action="store_true",
+                    help="run: неатомарную задачу исполнять по WorkPackages последовательно (v3.1)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -476,6 +478,30 @@ def main(argv):
     if intent == "run" and a.execute:
         import ai_ops_run
         flags = pv["will_do"]["auto_flags"]
+        # v3.1: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом)
+        if a.sequential:
+            import atomic_planner
+            import workpackage_executor
+            import tool_loop
+            import orchestrator
+            wid = a.feature or _wid_for(task, signals, a.feature)
+            wp = atomic_planner.decompose(signals, wid=wid, child_root=Path(child_root))
+            if wp["should_decompose"] and wp["work_packages"]:
+                base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(a.provider, a.model))
+                auth = orchestrator.make_provider(a.provider, a.model) if flags["author"] and a.provider != "mock" else None
+                rev = orchestrator.make_provider(a.provider, a.model) if flags["review"] and a.provider != "mock" else None
+                print(f"— исполняю по WorkPackages: {len(wp['work_packages'])} пакет(ов) —")
+                seq = workpackage_executor.execute_sequence(
+                    task, signals, Path(child_root), wp["work_packages"], lambda pkg: base_prop,
+                    feature=wid, base=a.base, provider_name=a.provider, model=a.model,
+                    author=flags["author"], author_proposer=auth,
+                    review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"])
+                print(f"SEQUENCE {wid}: executed_all={seq['executed_all']} · ready_all={seq['ready_all']} · "
+                      f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}")
+                for p in seq["packages"]:
+                    print(f"  [{p['id']}] {p['status']} · sha={(p.get('sha') or '')[:12] or '—'} · ready={p.get('ready')}")
+                return 0 if seq["executed_all"] else 1
+            print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
         print("— запускаю —")
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],

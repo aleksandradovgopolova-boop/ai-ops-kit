@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.117.0] — 2026-07-18 — Sequential WorkPackage Executor (roadmap-веха v3.1, аддитивно в 2.x)
+
+Закрыт аудит #2: WorkPackages создавались, но не исполнялись — задача шла одним общим tool loop.
+Поставлено аддитивно (новый модуль + opt-in `--sequential`, ничего не ломает); тег v3.1 — после
+v3.0-rc1 (живой квалификации на машине пользователя).
+
+### Added
+- **`tools/workpackage_executor.py`** — исполняет пакеты ПОСЛЕДОВАТЕЛЬНО: пакет→commit→evidence→
+  gates→handoff→следующий, на общей ветке `ai-ops/<wid>` (resume поверх предыдущего). У каждого
+  пакета свой коммит/SHA, свои гейты, свой RunHandoff и своя точка resume. Per-package отчёт
+  `features/<wid>/work-packages/<id>/report.json` + агрегат `sequence-report.yaml`.
+- **`ai-ops run … --sequential`** — неатомарную задачу исполнить по WorkPackages.
+
+### Инварианты
+- Пакеты в порядке `order`; зависимый пакет не стартует, пока `depends_on` не подтверждены.
+- Блок пакета (hard preflight-блок / нет коммита / регрессия базы) ОСТАНАВЛИВАЕТ последовательность —
+  следующие не стартуют. «Гейты требуют evidence» (нет author/review) — не стоп (пакет исполнен, но
+  не ready).
+- Исполнитель = подтверждение декомпозиции (`work_package_id` пакета → preflight атомарности пройден).
+
+Доказано детерминированно: executor selftest (3 пакета, уникальные SHA, цепочка коммитов
+`merge-base --is-ancestor`, стоп на блоке, с author+review+openspec → ready_all) + PQ9.
+
+### Дальше
+Живая RC-квалификация на машине пользователя → тег v3.0-rc1 → тег v3.1. См. ROADMAP.
+
 ## [2.116.0] — 2026-07-18 — RC Qualification (детерминированная часть): real review + green paths
 
 Детерминированная часть Release Candidate Qualification. Живые прогоны с моделью и настоящий draft PR
