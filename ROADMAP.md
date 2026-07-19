@@ -343,10 +343,35 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   `needs-reviewer`/`needs-changes` → ненулевой код; install-фикс требует реально отработавшей
   env-проверки (`_env_proven_ok`; ноль проверок или только env-симптомы → не квалифицировано).
 
-### Осталось до v3.0-rc1 (на машине пользователя — не фабрикуем)
-- **Live RC Qualification (v2.122)** — живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с
-  DeepSeek на Mac (`tools/qual_run.py` **и** канонический intent CLI — там был provider-gap),
-  настоящий draft PR (`--open-pr` + GITHUB_TOKEN), сохранённые очищенные JSON-отчёты.
+### v3.0-rc1 ✅ ВЫПУЩЕН (2026-07-20) — узкий честный claim: QUICK
+
+**AI Ops v3.0-rc1 (QUICK): trustworthy task → verified draft PR для supervised low-risk задач.**
+Живая RC-квалификация (DeepSeek/Mac, v2.122→v2.125) пройдена; движок честен по всем осям.
+
+- **Live-qualified (QUICK):** S1/S2 (fix true-green), S6 (prompt-injection проигнорирована), S7
+  (контейнер-изоляция: основной checkout байт-в-байт, ветка через доверенный fetch), S9 (реальный
+  draft PR, base=default_branch), S8 resume (`resumed=True`), canonical CLI без ручного task_type
+  (тривиальная задача → QUICK), approval negative/positive (ApprovalRecord binding в обе стороны),
+  dependency-без-signal (security форсируется даже в QUICK). Провайдер-гэп v2.120 закрыт; v2.121
+  approval_recheck/review-exit подтверждены; S10 false-negative (v2.122) починен и перепройден.
+- **Найдено и починено живой квалификацией:** v2.118/2.119 (env/тул-кэши), v2.122 (baseline-diff
+  fixed node-id), v2.123 (Spec-First/ApprovalDecision/write-scope/классификатор), v2.124 (sequence
+  transaction), **v2.125→v2.124.1** (security в QUICK; ложный scope-violation на артефактах движка).
+
+### Осталось до v3.0 stable (НЕ входит в rc1 QUICK-claim)
+- **Positive-green small/medium ENGINEERING на живой модели.** DeepSeek стабильно не доводит
+  needs_review-домены/independent review до pass и не всегда доделывает реализацию (finding S4,
+  подтверждён в v2.125). Нужна более сильная модель (Anthropic) ИЛИ усиленные author/review-промпты.
+  Движок при этом честен (блокирует плохой результат) — не соврать ≠ сценарий отработал.
+- **Живой 3-пакетный sequential до `ready_all` + намеренный fail на package 2 → стоп package 3.**
+  Структура транзакции доказана детерминированно (immutable plan / per-package lifecycle / aggregate
+  verify / стоп на блоке); живой green недостижим, пока пакеты не доходят до ready (та же слабость модели).
+- **dogfood на 2–3 реальных репозиториях** (после positive ENGINEERING) → затем **v3.0 stable**.
+
+### Историческое: Live RC Qualification (v2.122) — исходный план прогонов
+- Живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с DeepSeek на Mac (`tools/qual_run.py`
+  **и** канонический intent CLI — там был provider-gap), настоящий draft PR (`--open-pr` +
+  GITHUB_TOKEN), сохранённые очищенные JSON-отчёты.
   - **Живой прогон 2026-07-18 (DeepSeek/Mac, база v2.121):** sanity-selftest 7/7 PASS. Провайдер-гэп
     v2.120 **закрыт** — `model==deepseek-chat` во всех отчётах (canonical CLI, sequential, S1–S10),
     не mock. v2.121 подтверждён вживую: `approval_recheck.ok=true (uncovered=[])` во всех прогонах;
@@ -387,8 +412,8 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   остаётся красным → `fixed` непуст, `regressions` пуст) + перепрогон S10. Держит rc1.
 
 ### Схема версий (разведён двойной v3.1)
-- **v3.0-rc1** — live-qualified execution (после живых прогонов).
-- **v3.0** — stable после dogfood.
+- **v3.0-rc1 ✅ (2026-07-20)** — live-qualified execution (QUICK-claim; ENGINEERING positive-green → v3.0).
+- **v3.0** — stable после positive-green ENGINEERING + dogfood.
 - **v3.1** — Sequential WorkPackages как веха (капабилити поставлена аддитивно в 2.117).
 - **v3.2 / v4.0** — физический разнос дерева по packages (breaking).
 

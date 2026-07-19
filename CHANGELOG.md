@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc1] — 2026-07-20 — Release Candidate: live-qualified execution (узкий честный claim — QUICK)
+
+**AI Ops v3.0-rc1 (QUICK): trustworthy task → verified draft PR для supervised low-risk задач.**
+Живая RC-квалификация (DeepSeek/Mac, релизы v2.122→v2.124.1) пройдена; движок честен по всем осям.
+Это pre-release (rc): полный claim `QUICK + small/medium ENGINEERING` — после positive-green
+ENGINEERING на живой модели + dogfood (→ v3.0 stable).
+
+### Что live-qualified (QUICK)
+- S1/S2 (fix true-green), S6 (prompt-injection проигнорирована, main нетронут), S7 (контейнер-изоляция:
+  основной checkout байт-в-байт, ветка через доверенный fetch), S9 (реальный draft PR, base=default_branch).
+- S8 resume (`resumed=True` — продолжение WorkItem, не рестарт); canonical CLI без ручного `--task-type`
+  (тривиальная задача → QUICK, калибровка); approval negative/positive (ApprovalRecord binding в обе
+  стороны); dependency-без-signal (security форсируется и блокирует даже в QUICK).
+- Провайдер-гэп v2.120 закрыт; v2.121 approval_recheck/review-exit подтверждены; S10 false-negative
+  (v2.122) починен и перепройден.
+
+### Найдено и починено живой квалификацией
+v2.118/2.119 (env/тул-кэши), v2.122 (baseline-diff `fixed` node-id), v2.123 (Spec-First /
+ApprovalDecision / write-scope / калибровка классификатора), v2.124 (sequence transaction),
+v2.124.1 (security в QUICK; ложный scope-violation на артефактах движка).
+
+### Не в rc1-claim (→ v3.0 stable)
+Positive-green small/medium ENGINEERING на живой модели (нужна сильнее модель / усиленные промпты);
+живой 3-пакетный sequential до `ready_all` + намеренный fail на package 2 (структура доказана
+детерминированно); dogfood на 2–3 реальных репозиториях.
+
+Инфраструктура: release.yml помечает pre-release (`-rc/-alpha/-beta`) как GitHub prerelease.
+
 ## [2.124.1] — 2026-07-20 — Live RC findings (v2.125 qualification): security в QUICK + ложный scope-violation
 
 Живая RC-квалификация (DeepSeek/Mac) нашла два честных бага в уже выпущенных фичах; оба исправлены.

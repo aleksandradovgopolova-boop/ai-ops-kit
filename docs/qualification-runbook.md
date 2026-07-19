@@ -111,6 +111,20 @@ pass` лишь потому, что нет краснеющего теста. К
 Читая S4-отчёт: всегда сверяй `git diff <baseline> ai-ops/<wid>` — тронут ли реальный целевой файл,
 а не только починен ли тривиальный тест.
 
+## 6c. Итог живой RC-квалификации (v2.125 → v3.0-rc1, 2026-07-20)
+
+Живая квалификация (DeepSeek/Mac) закрыта; выпущен **v3.0-rc1** с узким честным claim: **QUICK —
+trustworthy task → verified draft PR для supervised low-risk задач**. Что подтверждено живьём:
+S1/S2/S6/S7/S9, S8 resume (`resumed=True`), canonical CLI без `--task-type` (тривиальная → QUICK),
+approval negative/positive (ApprovalRecord binding), dependency-без-signal (security форсируется даже
+в QUICK). Квалификация нашла и починила 2 бага в выпущенных фичах (→ v2.124.1): security проскакивал
+в QUICK; ложный `scope-violation` на артефактах движка в sequential.
+
+**Не в rc1-claim (→ v3.0 stable):** positive-green small/medium ENGINEERING на живой модели (DeepSeek
+не доводит review/needs_review до pass и не всегда доделывает реализацию — движок честно блокирует, но
+сценарий не «зелёный»); живой 3-пакетный sequential до `ready_all` + намеренный fail на package 2
+(структура доказана детерминированно). Нужна более сильная модель / усиленные промпты + dogfood.
+
 ## 7. Готчи прогона (из живой обкатки)
 
 - **Фикстура обязана нести pytest-сигнал.** Детектор (`project_detector.py:119`) выводит `test=pytest`

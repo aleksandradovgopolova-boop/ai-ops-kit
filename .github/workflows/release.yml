@@ -33,9 +33,12 @@ jobs:
             echo "В CHANGELOG.md нет раздела [$VERSION] — записки будут краткими."
             echo "AI Ops Kit $TAG" > /tmp/notes.md
           fi
+          PRERELEASE=""
+          case "$VERSION" in *-*) PRERELEASE="--prerelease" ;; esac   # SemVer pre-release (rc/alpha/beta)
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "AI Ops Kit $TAG" \
+            $PRERELEASE \
             --notes-file /tmp/notes.md
           echo "Создан $TAG -> $GITHUB_SHA"
