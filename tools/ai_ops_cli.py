@@ -437,6 +437,8 @@ def main(argv):
     ap.add_argument("--open-pr", action="store_true",
                     help="run: открыть draft PR по результату (нужен GITHUB_TOKEN)")
     ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
+    ap.add_argument("--resume-from", help="run --sequential: продолжить с конкретного WorkPackage (id); "
+                                          "пакеты до него берутся из снимков прошлого прогона")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -526,13 +528,19 @@ def main(argv):
                     review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"],
                     sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps,
                     # v2.123 (P0.3): package write_scope РЕАЛЬНО протянут — брокер ограничит пакет его каталогом
-                    write_scope_for=lambda pkg: pkg.get("write_scope"))
+                    write_scope_for=lambda pkg: pkg.get("write_scope"),
+                    resume_from=a.resume_from)   # v2.124: resume с конкретного пакета
+                _dlv = seq.get("delivery") or {}
                 print(f"SEQUENCE {wid}: executed_all={seq['executed_all']} · ready_all={seq['ready_all']} · "
-                      f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}")
+                      f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}"
+                      + (f" · доставка={_dlv.get('status')}" if _dlv.get('requested') else ""))
                 for p in seq["packages"]:
                     print(f"  [{p['id']}] {p['status']} · sha={(p.get('sha') or '')[:12] or '—'} · ready={p.get('ready')}")
-                # v2.120 exit-код: 0 только при ready_all; 1 — исполнено, но не готово; 2 — цепочка блокирована/ошибка
+                # v2.120/2.124 exit-код: 0 — ready_all И (если запрошен PR) он реально открыт;
+                # 1 — исполнено, но не готово / доставка не удалась; 2 — цепочка блокирована/ошибка.
                 if seq["ready_all"]:
+                    if _dlv.get("requested") and _dlv.get("status") not in ("opened", "updated"):
+                        return 1   # готово, но draft PR не открыт -> не полный успех
                     return 0
                 return 1 if seq["executed_all"] else 2
             print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
