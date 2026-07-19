@@ -184,8 +184,12 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             import approvals as _appr
             wt = child_root / ".ai" / "worktrees" / wid
             changed = _changed_files(wt if wt.is_dir() else child_root, sha)
+            # v2.124.1 (finding живого прогона): write_scope ограничивает КОД модели, а НЕ артефакты,
+            # которые пишет сам движок (pre-authoring: .ai/runplan/, openspec/, features/, .ai/). Иначе
+            # authored requirements/openspec ложно ловятся как scope-violation и убивают цепочку на п.1.
             outside = [f for f in changed
-                       if not _appr.covers_paths({"scope": " ".join(pkg_scope)}, [f])]
+                       if not f.startswith((".ai/", "openspec/", "features/"))
+                       and not _appr.covers_paths({"scope": " ".join(pkg_scope)}, [f])]
             if outside:
                 stop_reason = f"scope-violation: пакет изменил пути вне write_scope: {', '.join(outside[:5])}"
         hard_blocked = rep.get("status") == "blocked"
@@ -385,6 +389,21 @@ def selftest():
         expect("v2.124 resume: пакеты до resume_from помечены resumed-skip (восстановлены из снимков)",
                seq_r.get("resumed_from") == pkgs[1]["id"] and len(skipped) == 1
                and skipped[0]["id"] == pkgs[0]["id"] and skipped[0].get("sha"))
+
+        # v2.124.1 (finding живого прогона): с write_scope_for + author артефакты движка (.ai/runplan,
+        # openspec) НЕ должны ловиться как scope-violation — write_scope ограничивает КОД, не артефакты.
+        def prop_ws(pkg):
+            sub = (pkg.get("scope") or ["core"])[0]
+            it = iter([{"op": "write", "path": f"src/{sub}/mod.py", "content": "x = 1\n"}, {"done": True}])
+            return lambda c: next(it)
+        buf3 = io.StringIO()
+        with contextlib.redirect_stderr(buf3):
+            seq_ws = execute_sequence("рефактор со scope", sig, root, pkgs, prop_ws, feature="seqws",
+                                      base=cur, author=True, author_proposer=author,
+                                      review=True, reviewer_proposer=reviewer,
+                                      write_scope_for=lambda pkg: pkg.get("write_scope"))
+        expect("v2.124.1: authored-артефакты движка (.ai/openspec) НЕ ловятся как scope-violation",
+               not any("scope-violation" in (p.get("stop_reason") or "") for p in seq_ws["packages"]))
         # с author+review+openspec — пакеты доходят до ready (если openspec доступен)
         import shutil
         if shutil.which("openspec"):
