@@ -245,7 +245,8 @@ def selftest():
                        work_pkg={"should_decompose": False})
         expect("preflight: secret_boundary без ApprovalRecord -> blocked (человек не пройден)",
                pf_ap["blocked"] and any("human-approval" in r for r in pf_ap["reasons"]))
-        approvals.write_record(root, "w", "secrets", "u@x", "config", "согласовано", created_at="2026-07-18")
+        approvals.write_record(root, "w", "secrets", "u@x", "config", "согласовано", created_at="2026-07-18",
+                               binds_to="p", expires_at="2027-01-01T00:00:00Z", risk="secret", source="user")
         pf_ap2 = assess({"task_type": "ENGINEERING", "secret_boundary": True}, root, "w",
                         payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []},
                         work_pkg={"should_decompose": False})

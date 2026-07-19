@@ -55,6 +55,21 @@ def _domain_triggers(dom):
     return sigs
 
 
+def signals_from_findings(security_pack_result):
+    """v2.123 (P0.2): вывести триггер-сигналы одобрения из РЕАЛЬНЫХ находок security pack (пост-дифф),
+    даже если во ВХОДНЫХ signals их не было. Новая зависимость/секрет, добавленные самой правкой, обязаны
+    требовать ApprovalRecord — иначе независимый reviewer мог бы закрыть их без человека. -> {signal: True}."""
+    sigs = {}
+    _map = {"new_dependency": "dependency_addition", "secret": "secret_boundary",
+            "auth_change": "auth_change", "deploy_change": "deploy_change"}
+    for r in (security_pack_result or {}).get("results", []) or []:
+        for f in (r.get("findings") or []):
+            sig = _map.get(f.get("type"))
+            if sig:
+                sigs[sig] = True
+    return sigs
+
+
 def required_approvals(signals, domains=None):
     """-> [{domain, condition, trigger}] для доменов с human_approval_conditions, чей триггер взведён."""
     signals = dict(signals or {})
@@ -153,10 +168,27 @@ def load_approvals(child_root, wid):
     return recs
 
 
-def _record_reason_invalid(rec, now=None, plan_hash=None):
-    """Причина невалидности ApprovalRecord или None, если валиден. v2.121: помимо базовых полей —
-    срок (expires_at) и привязка к плану (binds_to). Привязка/срок проверяются, только когда есть с чем
-    сравнивать (plan_hash/now переданы) и поле присутствует в записи — иначе аддитивно (старые записи ок)."""
+# ── v2.123 (Approval schema v2): для HIGH-RISK доменов legacy-записи без binding БОЛЬШЕ НЕ принимаются ──
+# high-risk = домен severity high/critical (secrets/auth/authz/deploy/data-isolation/...) + destructive.
+# Обязательны: binds_to (привязка к плану), expires_at (срок), risk, source ∈ доверенный контекст
+# (не произвольная строка модели). medium/low домены (напр. dependencies) остаются аддитивными.
+_TRUSTED_SOURCES = {"user", "ci", "human"}
+
+
+def _is_high_risk(domain_id, domains=None):
+    """Домен требует schema v2 (binding)? severity high/critical среди security-доменов; destructive — всегда."""
+    if domain_id == "destructive":
+        return True
+    for d in (domains if domains is not None else load_domains()):
+        if d.get("id") == domain_id:
+            return ((d.get("severity_policy") or {}).get("default")) in ("high", "critical")
+    return False
+
+
+def _record_reason_invalid(rec, now=None, plan_hash=None, strict=False):
+    """Причина невалидности ApprovalRecord или None, если валиден. v2.121: срок (expires_at) + привязка
+    к плану (binds_to) — аддитивно (проверяются при наличии поля). v2.123: strict=True (high-risk домен)
+    ТРЕБУЕТ полный binding — binds_to, expires_at, risk и доверенный source; legacy-запись без них невалидна."""
     if not (bool(rec.get("approval")) and bool(rec.get("approved_by"))
             and bool(rec.get("scope")) and bool(rec.get("reason"))):
         return "нужны approved_by/scope/reason"
@@ -164,30 +196,40 @@ def _record_reason_invalid(rec, now=None, plan_hash=None):
         return f"одобрение просрочено (expires_at={rec.get('expires_at')})"
     if rec.get("binds_to") and plan_hash and rec.get("binds_to") != plan_hash:
         return "одобрение выдано для другой ревизии плана/спеки (binds_to не совпадает)"
+    if strict:
+        missing = [f for f in ("binds_to", "expires_at", "risk") if not rec.get(f)]
+        if missing:
+            return (f"high-risk одобрение требует связывания (schema v2): нет {', '.join(missing)} "
+                    f"(legacy-запись без binding не принимается)")
+        src = str(rec.get("source") or "")
+        if src not in _TRUSTED_SOURCES:
+            return (f"high-risk одобрение требует source из доверенного контекста {sorted(_TRUSTED_SOURCES)} "
+                    f"(получено: '{src or 'нет'}') — identity не из произвольной строки модели")
     return None
 
 
-def _record_valid(rec, now=None, plan_hash=None):
-    """ApprovalRecord валиден: базовые поля + не просрочен + (если связан) привязан к текущему плану."""
-    return _record_reason_invalid(rec, now=now, plan_hash=plan_hash) is None
+def _record_valid(rec, now=None, plan_hash=None, strict=False):
+    """ApprovalRecord валиден: базовые поля + не просрочен + (если связан) привязан + (strict) полный binding."""
+    return _record_reason_invalid(rec, now=now, plan_hash=plan_hash, strict=strict) is None
 
 
 def check(signals, child_root, wid, domains=None, now=None, plan_hash=None):
     """-> {ok, required[], satisfied[], missing[], records_seen}. missing непуст -> человек не пройден.
     v2.121: одобрение проверяется на срок и привязку к текущему плану (plan_hash берётся с диска, now —
     реальное время, если не переданы явно — для детерминизма тестов можно передать)."""
-    req = required_approvals(signals, domains=domains)
+    domains_list = domains if domains is not None else load_domains()
+    req = required_approvals(signals, domains=domains_list)
     recs = load_approvals(child_root, wid)
     now = now or _now_iso()
     plan_hash = plan_hash if plan_hash is not None else plan_binding_hash(child_root, wid)
-    valid_by_domain = {r["approval"] for r in recs if _record_valid(r, now=now, plan_hash=plan_hash)}
     satisfied, missing = [], []
     for r in req:
-        if r["domain"] in valid_by_domain:
+        strict = _is_high_risk(r["domain"], domains_list)   # v2.123: high-risk -> требуется binding
+        rec = next((rc for rc in recs if rc.get("approval") == r["domain"]), None)
+        if rec is not None and _record_valid(rec, now=now, plan_hash=plan_hash, strict=strict):
             satisfied.append(r)
         else:
-            bad = next((rc for rc in recs if rc.get("approval") == r["domain"]), None)
-            why = (_record_reason_invalid(bad, now=now, plan_hash=plan_hash) if bad
+            why = (_record_reason_invalid(rec, now=now, plan_hash=plan_hash, strict=strict) if rec
                    else None)
             missing.append({**r, "reason": (f"ApprovalRecord есть, но невалиден: {why}" if why
                                             else "нет валидного ApprovalRecord")})
@@ -199,11 +241,14 @@ def recheck_after_diff(child_root, wid, changed_paths, signals=None, domains=Non
     """v2.121 (P1.2, п.4): ПОСЛЕ диффа перепроверить, что одобрение покрывает РЕАЛЬНО изменённые пути.
     -> {ok, uncovered[]}. Для каждого требуемого домена с валидной записью scope обязан покрыть
     changed_paths; иначе домен попадает в uncovered (одобрено не то, что изменилось)."""
-    req = required_approvals(signals or {}, domains=domains)
+    domains_list = domains if domains is not None else load_domains()
+    req = required_approvals(signals or {}, domains=domains_list)
     recs = load_approvals(child_root, wid)
     now = now or _now_iso()
     plan_hash = plan_hash if plan_hash is not None else plan_binding_hash(child_root, wid)
-    by_domain = {r["approval"]: r for r in recs if _record_valid(r, now=now, plan_hash=plan_hash)}
+    by_domain = {rc["approval"]: rc for rc in recs
+                 if _record_valid(rc, now=now, plan_hash=plan_hash,
+                                  strict=_is_high_risk(rc.get("approval"), domains_list))}
     uncovered = []
     for r in req:
         rec = by_domain.get(r["domain"])
@@ -215,7 +260,7 @@ def recheck_after_diff(child_root, wid, changed_paths, signals=None, domains=Non
 
 
 def write_record(child_root, wid, approval, approved_by, scope, reason, revision="-", created_at=None,
-                 binds_to=None, expires_at=None, risk=None, bind_to_plan=False):
+                 binds_to=None, expires_at=None, risk=None, bind_to_plan=False, source=None):
     """Создать ApprovalRecord на диске (features/<wid>/approvals/<approval>.yaml). created_at обязателен
     в проде (передаётся вызывающим — детерминированность/отсутствие скрытого времени). v2.121: связать с
     планом (binds_to или bind_to_plan=True -> хэш с диска), сроком (expires_at) и типом риска (risk)."""
@@ -233,6 +278,8 @@ def write_record(child_root, wid, approval, approved_by, scope, reason, revision
         rec["expires_at"] = expires_at
     if risk:
         rec["risk"] = risk
+    if source:                       # v2.123: доверенный источник identity (user|ci|human), не модель
+        rec["source"] = source
     p = d / f"{approval}.yaml"
     p.write_text(yaml.safe_dump(rec, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return p
@@ -260,41 +307,46 @@ def selftest():
     expect("required: auth_change -> authentication + authorization", "authentication" in req_a and "authorization_idol" in req_a)
     expect("required: чистые сигналы -> одобрений не требуется", required_approvals({"task_type": "QUICK"}) == [])
 
+    # v2.123 (P0.2): findings-derived сигналы — новая зависимость/секрет из РЕАЛЬНОГО диффа
+    spr = {"results": [{"domain": "dependencies", "findings": [{"type": "new_dependency", "name": "requests"}]},
+                       {"domain": "secrets", "findings": [{"type": "secret", "path": "x", "line": 1, "id": "s"}]}]}
+    dsig = signals_from_findings(spr)
+    expect("v2.123: new_dependency finding -> dependency_addition", dsig.get("dependency_addition") is True)
+    expect("v2.123: secret finding -> secret_boundary", dsig.get("secret_boundary") is True)
+    expect("v2.123: находка новой зависимости -> требуется одобрение dependencies (пост-дифф)",
+           "dependencies" in {r["domain"] for r in required_approvals(dsig)})
+    expect("v2.123: пустой pack -> нет производных сигналов", signals_from_findings({}) == {})
+
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        sig = {"secret_boundary": True}
-        # нет записи -> missing -> not ok
+        # базовые + binding-механики (v2.121) тестируем на MEDIUM-risk домене (dependencies): он аддитивен
+        # (binding не обязателен). strict schema v2 для HIGH-risk — отдельным блоком ниже.
+        sig = {"dependency_addition": True}
         c0 = check(sig, root, "wi")
-        expect("check: требуется secrets, записи нет -> missing + ok=False",
-               c0["ok"] is False and any(m["domain"] == "secrets" for m in c0["missing"]))
-        # невалидная запись (без reason) -> всё ещё missing
-        write_record(root, "wi", "secrets", approved_by="u@x", scope="config", reason="")
+        expect("check: требуется dependencies, записи нет -> missing + ok=False",
+               c0["ok"] is False and any(m["domain"] == "dependencies" for m in c0["missing"]))
+        write_record(root, "wi", "dependencies", approved_by="u@x", scope="pkg", reason="")
         c1 = check(sig, root, "wi")
         expect("check: невалидный ApprovalRecord (пустой reason) НЕ засчитан",
                c1["ok"] is False and "невалиден" in c1["missing"][0]["reason"])
-        # валидная запись -> ok
-        write_record(root, "wi", "secrets", approved_by="u@x", scope="config/secrets.py",
-                     reason="ротация ключа согласована", created_at="2026-07-18T10:00:00Z")
+        write_record(root, "wi", "dependencies", approved_by="u@x", scope="package.json",
+                     reason="новая зависимость согласована", created_at="2026-07-18T10:00:00Z")
         c2 = check(sig, root, "wi")
-        expect("check: валидный ApprovalRecord -> ok=True", c2["ok"] is True and not c2["missing"])
-        # запись не того домена не закрывает нужный
+        expect("check: валидный ApprovalRecord (medium, аддитивно) -> ok=True", c2["ok"] is True and not c2["missing"])
         c3 = check({"auth_change": True}, root, "wi")
-        expect("check: запись secrets НЕ закрывает authentication",
+        expect("check: запись dependencies НЕ закрывает authentication",
                c3["ok"] is False and any(m["domain"] == "authentication" for m in c3["missing"]))
 
-        # ── v2.121 (P1.2): связывание одобрения ──────────────────────────────────────────────────
-        # срок: просроченное одобрение невалидно
-        write_record(root, "wi", "secrets", "u@x", "config/s.py", "ротация",
+        # ── v2.121 (P1.2): связывание одобрения (механика на dependencies, аддитивно) ──────────────
+        write_record(root, "wi", "dependencies", "u@x", "package.json", "деп",
                      created_at="2026-07-01T00:00:00Z", expires_at="2026-07-10T00:00:00Z")
         c_exp = check(sig, root, "wi", now="2026-07-18T00:00:00Z")
         expect("v2.121: просроченное одобрение НЕ засчитано (expires_at в прошлом)",
                c_exp["ok"] is False and "просроч" in c_exp["missing"][0]["reason"])
         c_ok = check(sig, root, "wi", now="2026-07-05T00:00:00Z")
-        expect("v2.121: одобрение в пределах срока -> ok",
-               c_ok["ok"] is True)
+        expect("v2.121: одобрение в пределах срока -> ok", c_ok["ok"] is True)
 
-        # привязка к плану: запись, привязанная к одному плану, не покрывает другой
-        write_record(root, "wi", "secrets", "u@x", "config/s.py", "ротация",
+        write_record(root, "wi", "dependencies", "u@x", "package.json", "деп",
                      created_at="2026-07-05T00:00:00Z", binds_to="planhashA")
         c_bind_ok = check(sig, root, "wi", now="2026-07-05T00:00:00Z", plan_hash="planhashA")
         c_bind_bad = check(sig, root, "wi", now="2026-07-05T00:00:00Z", plan_hash="planhashB")
@@ -302,17 +354,15 @@ def selftest():
         expect("v2.121: binds_to НЕ совпал (план изменился) -> одобрение невалидно",
                c_bind_bad["ok"] is False and "ревизи" in c_bind_bad["missing"][0]["reason"])
 
-        # plan_binding_hash: меняется при изменении плана
         fdir = root / "features" / "wi"
-        (fdir).mkdir(parents=True, exist_ok=True)
+        fdir.mkdir(parents=True, exist_ok=True)
         (fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a]\n", encoding="utf-8")
         h1 = plan_binding_hash(root, "wi")
         (fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a, b]\n", encoding="utf-8")
         h2 = plan_binding_hash(root, "wi")
         expect("v2.121: plan_binding_hash меняется при смене плана", bool(h1) and bool(h2) and h1 != h2)
 
-        # bind_to_plan=True стамповка + авто-инвалидция при смене плана
-        write_record(root, "wi", "secrets", "u@x", "config/s.py", "ротация",
+        write_record(root, "wi", "dependencies", "u@x", "package.json", "деп",
                      created_at="2026-07-05T00:00:00Z", bind_to_plan=True)
         c_live_ok = check(sig, root, "wi", now="2026-07-05T00:00:00Z")   # plan_hash берётся с диска
         (fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a, b, c]\n", encoding="utf-8")
@@ -323,13 +373,13 @@ def selftest():
         # ── v2.121 (P1.2 п.4): recheck после диффа — scope обязан покрыть изменённые пути ─────────
         with tempfile.TemporaryDirectory() as td2:
             r2 = Path(td2)
-            write_record(r2, "w2", "secrets", "u@x", "config/secrets.py", "ротация",
+            write_record(r2, "w2", "dependencies", "u@x", "package.json", "деп",
                          created_at="2026-07-05T00:00:00Z")
-            rc_cov = recheck_after_diff(r2, "w2", ["config/secrets.py"], signals=sig, now="2026-07-05T00:00:00Z")
+            rc_cov = recheck_after_diff(r2, "w2", ["package.json"], signals=sig, now="2026-07-05T00:00:00Z")
             rc_unc = recheck_after_diff(r2, "w2", ["src/other.py"], signals=sig, now="2026-07-05T00:00:00Z")
             expect("v2.121: recheck — scope покрывает изменённый путь -> ok", rc_cov["ok"] is True)
             expect("v2.121: recheck — изменён путь ВНЕ scope одобрения -> uncovered",
-                   rc_unc["ok"] is False and rc_unc["uncovered"][0]["domain"] == "secrets")
+                   rc_unc["ok"] is False and rc_unc["uncovered"][0]["domain"] == "dependencies")
 
         # covers_paths: префикс-покрытие директории
         expect("v2.121: covers_paths — путь под scope-префиксом покрыт",
@@ -337,13 +387,39 @@ def selftest():
         expect("v2.121: covers_paths — путь вне scope НЕ покрыт",
                covers_paths({"scope": "src/auth"}, ["src/billing/pay.py"]) is False)
 
-        # аддитивность: старая запись без binds_to/expires_at валидна как раньше
+        # аддитивность (medium домен): старая запись без binds_to/expires_at валидна как раньше
         with tempfile.TemporaryDirectory() as td3:
             r3 = Path(td3)
-            write_record(r3, "w3", "secrets", "u@x", "config/s.py", "ротация", created_at="2026-07-05T00:00:00Z")
+            write_record(r3, "w3", "dependencies", "u@x", "package.json", "деп", created_at="2026-07-05T00:00:00Z")
             c_old = check(sig, r3, "w3", now="2026-07-18T00:00:00Z", plan_hash="anything")
-            expect("v2.121: запись без binds_to/expires_at валидна (аддитивно, нет регрессии)",
+            expect("v2.121: medium-домен без binds_to/expires_at валиден (аддитивно, нет регрессии)",
                    c_old["ok"] is True)
+
+        # ── v2.123 (Approval schema v2): HIGH-risk (secrets) требует ПОЛНОГО binding + доверенный source ──
+        with tempfile.TemporaryDirectory() as td4:
+            r4 = Path(td4)
+            hsig = {"secret_boundary": True}
+            expect("v2.123: _is_high_risk(secrets)=True, dependencies=False (medium)",
+                   _is_high_risk("secrets") and not _is_high_risk("dependencies"))
+            # legacy: нет binding/source -> high-risk БОЛЬШЕ НЕ принимается
+            write_record(r4, "w4", "secrets", "u@x", "config/s.py", "ротация", created_at="2026-07-05T00:00:00Z")
+            c_legacy = check(hsig, r4, "w4", now="2026-07-05T00:00:00Z", plan_hash="P")
+            expect("v2.123: high-risk legacy-запись без binding -> НЕ принята",
+                   c_legacy["ok"] is False and "schema v2" in c_legacy["missing"][0]["reason"])
+            # полностью связанная + доверенный source -> принята
+            write_record(r4, "w4", "secrets", "u@x", "config/s.py", "ротация",
+                         created_at="2026-07-05T00:00:00Z", binds_to="P",
+                         expires_at="2027-01-01T00:00:00Z", risk="secret_rotation", source="user")
+            c_bound = check(hsig, r4, "w4", now="2026-07-05T00:00:00Z", plan_hash="P")
+            expect("v2.123: high-risk полностью связанная (binds_to+expires+risk+source=user) -> ok",
+                   c_bound["ok"] is True)
+            # source не из доверенного контекста (модель) -> отклонено
+            write_record(r4, "w4", "secrets", "u@x", "config/s.py", "ротация",
+                         created_at="2026-07-05T00:00:00Z", binds_to="P",
+                         expires_at="2027-01-01T00:00:00Z", risk="secret_rotation", source="model")
+            c_untrusted = check(hsig, r4, "w4", now="2026-07-05T00:00:00Z", plan_hash="P")
+            expect("v2.123: high-risk source='model' (недоверенный) -> отклонено",
+                   c_untrusted["ok"] is False and "source" in c_untrusted["missing"][0]["reason"])
 
     print("approvals selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
@@ -362,7 +438,8 @@ def main(argv):
     rc.add_argument("--scope", required=True); rc.add_argument("--reason", required=True)
     rc.add_argument("--revision", default="-"); rc.add_argument("--created-at")
     rc.add_argument("--expires-at", help="срок действия одобрения (ISO 8601); после — невалидно")
-    rc.add_argument("--risk", help="тип риска, который покрывает одобрение")
+    rc.add_argument("--risk", help="тип риска, который покрывает одобрение (обязателен для high-risk)")
+    rc.add_argument("--source", help="доверенный источник identity: user|ci|human (обязателен для high-risk)")
     rc.add_argument("--bind-to-plan", action="store_true",
                     help="привязать к хэшу текущего run-plan.yaml+spec.yaml (при смене плана — невалидно)")
     a = ap.parse_args(argv)
@@ -381,9 +458,17 @@ def main(argv):
                 print(f"  ✗ {m['domain']}: {m['reason']} (условие: {m['condition']})")
         return 0 if res["ok"] else 1
     if a.cmd == "record":
+        # v2.123: high-risk домен -> запись обязана быть связанной (schema v2). Авто-привязываем к плану
+        # и требуем risk+source, иначе запись будет невалидна при проверке (сообщаем сразу, не молча).
+        high_risk = _is_high_risk(a.approval)
+        bind = a.bind_to_plan or high_risk
+        if high_risk and (not a.risk or (a.source or "") not in _TRUSTED_SOURCES):
+            print(f"APPROVAL-RECORD: домен '{a.approval}' high-risk (schema v2) — обязательны --risk и "
+                  f"--source из {sorted(_TRUSTED_SOURCES)}; запись без них будет отклонена при проверке.")
+            return 2
         p = write_record(Path(a.child_root), a.wid, a.approval, a.by, a.scope, a.reason,
                          revision=a.revision, created_at=a.created_at,
-                         expires_at=a.expires_at, risk=a.risk, bind_to_plan=a.bind_to_plan)
+                         expires_at=a.expires_at, risk=a.risk, bind_to_plan=bind, source=a.source)
         print(f"APPROVAL-RECORD: записан {p}")
         return 0
     return 1

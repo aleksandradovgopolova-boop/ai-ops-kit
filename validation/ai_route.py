@@ -46,6 +46,7 @@ def route(inp):
     available_providers = inp.get("available_providers", list(providers.keys()))
     available_runtimes = inp.get("available_runtimes", list(runtimes.keys()))
     reasons = []
+    low_confidence = False   # v2.123: классификация без явного сигнала тяжести -> подтвердить preview
 
     # 1. workflow: правила policy (эскалации) -> точное имя контракта ->
     # selection_criteria.task_type из workflows.yaml (единый источник) -> честный default.
@@ -81,17 +82,26 @@ def route(inp):
                     reasons.append(f"task_type '{tt}' -> {wid} (selection_criteria)")
                     break
     if workflow is None:
-        # finding обкатки 4: неизвестный task_type НЕ должен слепо тянуть тяжёлый ENGINEERING —
-        # мелкая правка (size xs/small при не-высоком риске) уходит в QUICK. Риск critical уже
-        # переопределён выше (CRITICAL); medium/high оставляем ENGINEERING (честный default).
+        # v2.123 калибровка классификатора (finding обкатки: тривиальные задачи слепо уходили в
+        # тяжёлый ENGINEERING -> Spec-First блок). Тяжёлый ENGINEERING — ТОЛЬКО при ЯВНОМ сигнале
+        # тяжести (size medium+/risk medium+). При неопределённости (size/risk неизвестны ИЛИ низкие)
+        # НЕ эскалируем автоматически: уходим в QUICK и помечаем low-confidence (движок предлагает
+        # подтвердить/уточнить через preview, а не молча блокировать Spec-First). Риск critical уже
+        # переопределён в CRITICAL выше.
         size, risk = inp.get("size"), inp.get("risk")
-        if size in ("xs", "small") and risk in (None, "low") and "QUICK" in workflows:
+        heavy = size in ("medium", "large", "xl") or risk in ("medium", "high", "critical")
+        if heavy and "ENGINEERING" in workflows:
+            workflow = "ENGINEERING"
+            reasons.append(f"unknown task_type + size={size}/risk={risk} -> ENGINEERING (явный сигнал тяжести)")
+        elif "QUICK" in workflows:
             workflow = "QUICK"
-            reasons.append(f"unknown task_type + size={size}/risk={risk or 'none'} -> QUICK "
-                           f"(мелкая правка не тянет ENGINEERING; finding обкатки)")
+            low_confidence = True
+            reasons.append(f"unknown task_type + size={size or 'unknown'}/risk={risk or 'unknown'} -> QUICK "
+                           f"(нет сигнала тяжести; при неопределённости не эскалируем в ENGINEERING — "
+                           f"подтверди/уточни через preview)")
         else:
             workflow = "ENGINEERING"
-            reasons.append(f"unknown task_type '{inp.get('task_type')}' -> default ENGINEERING")
+            reasons.append(f"unknown task_type '{inp.get('task_type')}' -> ENGINEERING (QUICK недоступен)")
 
     # 2. provider prefer/forbid + model_class (из provider_rules)
     prefer_provider, forbid_provider, model_class = [], [], None
@@ -198,6 +208,7 @@ def route(inp):
         "selected_model_class": model_class,
         "execution_mode": execution_mode,
         "reasons": reasons,
+        "classification_confidence": "low" if low_confidence else "normal",
         "required_capabilities": required,
         "missing_capabilities": missing,
         "fallbacks": fallbacks,
@@ -261,10 +272,14 @@ SCENARIOS = [
      "inp": {"task_type": "ai-feature", "risk": "low", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
      "expect": {"workflow": "AI_FEATURE"}},
-    {"name": "неизвестный task_type -> честный default ENGINEERING",
+    {"name": "v2.123: неизвестный task_type + low risk, нет сигнала тяжести -> QUICK (не эскалируем)",
      "inp": {"task_type": "something-strange", "risk": "low", "confidentiality": "internal",
              "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
-     "expect": {"workflow": "ENGINEERING"}},
+     "expect": {"workflow": "QUICK"}},
+    {"name": "v2.123: неопределённость (нет size/risk) -> QUICK + classification_confidence=low",
+     "inp": {"task_type": None, "confidentiality": "internal",
+             "available_providers": ["anthropic"], "available_runtimes": ["claude-code"]},
+     "expect": {"workflow": "QUICK", "classification_confidence": "low"}},
     # finding обкатки 4: неизвестный task_type + мелкий размер -> QUICK, не тяжёлый ENGINEERING
     {"name": "unknown task_type + size small/low risk -> QUICK (finding 4)",
      "inp": {"task_type": None, "size": "small", "risk": "low", "ui_changed": True,

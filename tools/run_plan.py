@@ -51,23 +51,23 @@ def load(rel):
 
 
 def _base_workflow(signals):
-    """base_workflow из ai_route; при сбое — честный fallback."""
+    """base_workflow из ai_route; при сбое — честный fallback. -> (workflow, reasons, confidence)."""
     try:
         sys.path.insert(0, str(PKG / "validation"))
         import ai_route
         d = ai_route.route(signals)
-        return d.get("workflow"), d.get("reasons", [])
+        return d.get("workflow"), d.get("reasons", []), d.get("classification_confidence", "normal")
     except Exception as e:  # маршрутизатор не должен ронять планирование
         tt = signals.get("task_type")
         wfs = load("registry/workflows.yaml")["workflows"]
         wf = tt if tt in wfs else "ENGINEERING"
-        return wf, [f"fallback base_workflow={wf} (ai_route недоступен: {e})"]
+        return wf, [f"fallback base_workflow={wf} (ai_route недоступен: {e})"], "normal"
 
 
 def build_plan(signals, workitem_id=None):
     tracks = load("registry/tracks.yaml")["tracks"]
     wfs = load("registry/workflows.yaml")["workflows"]
-    base_wf, route_reasons = _base_workflow(signals)
+    base_wf, route_reasons, classification_confidence = _base_workflow(signals)
     base_gates = list(wfs.get(base_wf, {}).get("quality_gates", []))
 
     required, conditional, skipped = [], [], []
@@ -94,6 +94,7 @@ def build_plan(signals, workitem_id=None):
         "base_workflow": base_wf,
         "required_tracks": required, "conditional_tracks": conditional, "skipped_tracks": skipped,
         "gates": gates, "route_reasons": route_reasons,
+        "classification_confidence": classification_confidence,
         "execution_budget": {"max_cost": None, "max_duration": None, "max_model_calls": None},
     }
 

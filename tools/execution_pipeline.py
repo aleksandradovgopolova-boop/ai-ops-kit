@@ -311,6 +311,25 @@ def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, bud
     return gate_ev, authored, wrote
 
 
+def _authored_context(authored, work_root, wid):
+    """v2.123 (P0.1): текст ВАЛИДНЫХ author-артефактов (requirements/plan) для подачи в prompt
+    реализации — реализация идёт ПО спеке, созданной до кода (Spec-First), а не до неё."""
+    out = Path(work_root) / ".ai" / "runplan" / wid
+    parts = []
+    for e in (authored or []):
+        fn = e.get("artifact")
+        if e.get("valid") is False or not fn or str(fn).startswith("openspec"):
+            continue                       # спека-change — каталог, не файл; берём requirements/plan
+        p = out / fn
+        try:
+            if p.is_file():
+                parts.append(f"# {e.get('gate')} ({fn})\n" + p.read_text(encoding="utf-8")[:2000])
+        except OSError:
+            pass
+    return ("=== СПЕЦИФИКАЦИЯ ЗАДАЧИ (создана ДО реализации; следуй ей) ===\n" + "\n\n".join(parts)
+            if parts else "")
+
+
 def _git(root, *args):
     r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
@@ -789,22 +808,36 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         if fails:
             ctx += ("\n\n=== ТЕКУЩИЕ ПРОВАЛЫ ПРОВЕРОК НА БАЗЕ (почини относящиеся к задаче; "
                     "не ломай остальное) ===\n" + fails)
-    loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
-                              max_steps=max_steps, base_context=ctx)
+    # 4a. v2.123 (P0.1) НАСТОЯЩИЙ Spec-First: СНАЧАЛА автор создаёт requirements/plan/specification,
+    #     движок валидирует ФОРМУ (v2.86). Невалидный author-артефакт -> tool loop НЕ запускается
+    #     (ноль implementation-вызовов). Валидные артефакты подаются в prompt реализации (код по спеке).
+    #     Качество артефактов судит независимый ревьюер (--review)/человек, не эта проверка формы.
+    #     Раньше authoring шёл ПОСЛЕ tool loop -> с --author heavy начинал писать код до спеки (обход
+    #     Spec-First). Теперь порядок: authoring -> валидация -> [tool loop только при валидной спеке].
+    authored, authored_ev = None, {}
+    spec_prestage_bad = []
+    if author and author_proposer is not None:
+        authored_ev, authored, _wrote_art = _run_authoring(
+            author_proposer, work_root, plan["gates"], {}, wid, task, budget)
+        spec_prestage_bad = [e for e in (authored or []) if e.get("valid") is False]
+        if not spec_prestage_bad:
+            _spec_ctx = _authored_context(authored, work_root, wid)
+            if _spec_ctx:
+                ctx = _spec_ctx + "\n\n" + ctx
+
+    # 4b. tool-loop: реализация. Пропускается, если pre-authoring дал невалидную спецификацию
+    #     (Spec-First: нет валидной спеки -> нет кода — ноль tool-loop вызовов).
+    if spec_prestage_bad:
+        loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "spec-prestage-failed",
+                "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
+    else:
+        loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
+                                  max_steps=max_steps, base_context=ctx)
     applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
     # v2.93 (finding аудита): факт правок берём из git (tracked-diff ИЛИ новые untracked), а не
     # только из счётчика write-операций. Иначе правки через разрешённый shell (sed/форматтер)
     # не распознавались как «применено» -> коммит не создавался и работа терялась.
     shell_changed = bool(applied) or (is_git and _has_changes(work_root))
-
-    # 4b. v2.86 Product Authoring: движок производит артефакты requirements/plan (author-модель даёт
-    #     содержимое, движок пишет в .ai/runplan/<wid>/ и валидирует ФОРМУ) ДО коммита, чтобы они
-    #     попали в SHA. Валидная форма -> deterministic evidence для артефакт-гейтов. Качество —
-    #     независимый ревьюер (--review)/человек. Только для планов с этими гейтами (ENGINEERING/PRODUCT).
-    authored, authored_ev = None, {}
-    if author and author_proposer is not None:
-        authored_ev, authored, _wrote_art = _run_authoring(
-            author_proposer, work_root, plan["gates"], {}, wid, task, budget)
 
     # 5. commit на рабочей ветке (finding аудита: evidence должен биться о ТОЧНЫЙ SHA, не
     #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
@@ -882,27 +915,39 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if security_pack_result:
         overall = security_pack_result["overall"]
         gate_ev = dict(gate_ev)
-        # человеко-approval: границы секретов/деструктив требуют человека ВСЕГДА (даже при чистом
-        # scan и pass ревьюера) — иначе secret_boundary с невинным диффом обошёл бы человеко-контроль.
-        human_gate = bool(signals.get("secret_boundary") or signals.get("destructive"))
-        human_ok = bool(signals.get("human_approved"))
-        if overall == "clear" and (not human_gate or human_ok):
+        # v2.123 (P0.2): ЕДИНЫЙ ApprovalDecision. Требования человеко-одобрения выводим из ВХОДНЫХ signals
+        # И из РЕАЛЬНЫХ находок security pack (новая зависимость/секрет, внесённые самой правкой), даже
+        # если сигнала заранее не было. boolean signals.human_approved БОЛЬШЕ НЕ используется — засчитывается
+        # ТОЛЬКО валидный ApprovalRecord (человек). Reviewer (writer≠judge) НЕ заменяет человеко-одобрение.
+        import approvals as _appr
+        _merged_sig = {**signals, **_appr.signals_from_findings(security_pack_result)}
+        _appr_missing = list(_appr.check(_merged_sig, child_root, wid).get("missing") or [])
+        if _merged_sig.get("destructive"):
+            _recs = _appr.load_approvals(child_root, wid)
+            if not any(r.get("approval") == "destructive" and _appr._record_valid(r) for r in _recs):
+                _appr_missing.append({"domain": "destructive",
+                                      "reason": "нет валидного ApprovalRecord для деструктивного действия"})
+        human_ok = not _appr_missing
+        if not human_ok:
+            # человеко-одобрение требуется (по сигналам ИЛИ по находкам диффа) и его нет -> fail, независимо
+            # от чистого scan / pass ревьюера.
+            gate_ev["security"] = {"status": "fail",
+                                   "blockers": [f"{m['domain']}: {m.get('reason', 'нужно человеко-одобрение (ApprovalRecord)')}"
+                                                for m in _appr_missing],
+                                   "approvals_missing": _appr_missing,
+                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
+        elif overall == "clear":
             gate_ev["security"] = {"status": "pass",
                                    "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "note": "все применимые security-домены закрыты детерминированным evidence"}}
-        elif overall == "clear" and human_gate and not human_ok:
-            gate_ev["security"] = {"status": "fail",
-                                   "blockers": ["secret_boundary/destructive требует человеко-одобрения "
-                                                "(signals.human_approved) даже при чистом security-скане"],
-                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
               and review and reviewer_proposer is not None and committed_sha):
             # v2.106: независимый security-reviewer закрывает needs_review домены (writer≠judge).
             # Блокирующие детерминированные находки (secrets и т.п.) reviewer НЕ переопределяет.
             sec_status, sec_res = _review_security(reviewer_proposer, work_root,
                                                    security_pack_result, committed_sha, budget)
-            if sec_status == "pass" and (not human_gate or human_ok):
+            if sec_status == "pass":
                 gate_ev["security"] = {"status": "pass",
                                        "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
                                        "reviewer": {"status": sec_status},
@@ -910,9 +955,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                                 "note": "детерминированные домены чисты + независимый "
                                                         "security-reviewer вынес pass по needs_review"}}
             else:
-                why = ("security-reviewer не вынес pass" if sec_status != "pass"
-                       else "нужно человеко-одобрение (secret_boundary/destructive), signals.human_approved не задан")
-                gate_ev["security"] = {"status": "fail", "blockers": [why],
+                gate_ev["security"] = {"status": "fail", "blockers": ["security-reviewer не вынес pass"],
                                        "reviewer": {"status": sec_status},
                                        "pack": {"applicable": security_pack_result["applicable_domains"],
                                                 "needs_review": security_pack_result["needs_review"]}}
@@ -1016,8 +1059,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             import approvals as _appr
             _changed = _committed_changed_files(work_root, committed_sha)
             approval_recheck = _appr.recheck_after_diff(child_root, wid, _changed, signals=signals)
-        except Exception:  # noqa: BLE001 — recheck не должен ронять прогон; при сбое не ослабляем (ok=True)
-            approval_recheck = {"ok": True, "uncovered": []}
+        except Exception as _e:  # noqa: BLE001 — v2.123 (P0.2b): approval FAIL-CLOSED. Сбой recheck НЕ
+            # трактуется как «покрыто»: для одобрения безопаснее заблокировать, чем пропустить непроверенное.
+            approval_recheck = {"ok": False, "uncovered": [{"domain": "*", "reason": f"recheck упал: {_e}"}],
+                                "error": str(_e)}
     approvals_cover_ok = bool(approval_recheck.get("ok"))
 
     base_ok = (loop["stopped"] == "done") and (committed_sha is not None) \
@@ -1051,6 +1096,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     overall_status = ("error" if not ready else ("delivered" if delivery_ok else "delivery-failed"))
 
     not_yet = ["живой предложитель (swap провайдера)"]
+    if spec_prestage_bad:
+        not_yet.insert(0, "spec-first (P0.1): author вернул невалидную спецификацию ["
+                       + ", ".join(str(e.get("gate")) for e in spec_prestage_bad)
+                       + "] — реализация НЕ запускалась (0 tool-loop вызовов); почини author/спеку")
     if not commit:
         not_yet.insert(0, "commit+reverify (запусти с commit=True) — без коммита ready_for_pr всегда False")
     if not env_qualified:
@@ -1135,7 +1184,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "spec_depth": {"level": _level, "missing": spec_depth_missing, "ok": spec_depth_ok},
         # v2.110 Real Spec-First: реальный spec.yaml существует, но неполон -> блокирует implementation
         "spec_first": {"artifact_present": bool(spec_incomplete) or _sl._spec_path(child_root, wid).is_file(),
-                       "incomplete_sections": spec_incomplete, "ok": spec_complete_ok},
+                       "incomplete_sections": spec_incomplete, "ok": spec_complete_ok,
+                       # v2.123 (P0.1): pre-authoring запущен ДО реализации; невалидная спека -> 0 кода
+                       "prestage": {"ran": bool(author and author_proposer is not None),
+                                    "invalid": [e.get("gate") for e in spec_prestage_bad],
+                                    "implementation_skipped": bool(spec_prestage_bad)}},
         "context_overflow": context_overflow,
         # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + spec-depth +
         # не-overflow + (all-green: гейты не блокируют | no-regressions: нет новых провалов И blocking-гейты пройдены)
@@ -1227,9 +1280,10 @@ def selftest():
         # интеграция: одобрение со scope, НЕ покрывающим изменённый путь -> recheck uncovered
         import approvals as _appr_t
         _appr_t.write_record(root, "mul-fn", "secrets", "u@x", "config/other.py", "ротация",
-                             created_at="2026-07-05T00:00:00Z")
+                             created_at="2026-07-05T00:00:00Z", binds_to="P",
+                             expires_at="2027-01-01T00:00:00Z", risk="secret", source="user")
         _rc_bad = _appr_t.recheck_after_diff(root, "mul-fn", _chg, signals={"secret_boundary": True},
-                                             now="2026-07-05T00:00:00Z")
+                                             now="2026-07-05T00:00:00Z", plan_hash="P")
         expect("v2.121: scope одобрения не покрывает изменённый путь -> uncovered",
                _rc_bad["ok"] is False and _rc_bad["uncovered"][0]["domain"] == "secrets")
         expect("умное ослабление: нет тестов -> освобождено + громкий tests_warn (allow_missing_tests)",
@@ -1847,6 +1901,17 @@ def selftest():
         expect("authoring: невалидный артефакт -> requirements остаётся блокирующим (нет фабрикации)",
                "requirements" in rep_ba["gates"]["unmet"]
                and any(not a["valid"] for a in (rep_ba["authored"] or [])))
+        # v2.123 (P0.1) НАСТОЯЩИЙ Spec-First: невалидная author-спека -> tool loop НЕ запущен (0 кода)
+        expect("v2.123 (P0.1): невалидная спека -> tool loop НЕ запущен (spec-prestage-failed, 0 impl)",
+               rep_ba["loop"]["stopped"] == "spec-prestage-failed"
+               and rep_ba["spec_first"]["prestage"]["implementation_skipped"] is True
+               and rep_ba["ready_for_pr"] is False)
+        expect("v2.123 (P0.1): при невалидной спеке код НЕ записан (src/ba.py отсутствует)",
+               not (root / ".ai" / "worktrees" / "eng-ba" / "src" / "ba.py").exists())
+        # позитив: валидная спека -> реализация ЗАПУСКАЕТСЯ (src/au.py записан), prestage не пропущен
+        expect("v2.123 (P0.1): валидная спека -> реализация запущена (src/au.py записан)",
+               (root / ".ai" / "worktrees" / "eng-au" / "src" / "au.py").exists()
+               and rep_au["spec_first"]["prestage"]["implementation_skipped"] is False)
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.89: specification authoring (OpenSpec). Тестируем _run_authoring напрямую со стабом

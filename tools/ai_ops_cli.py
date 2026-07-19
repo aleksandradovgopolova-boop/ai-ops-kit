@@ -101,6 +101,7 @@ def build_preview(intent, task, child_root, signals):
         "schema_version": 1, "kind": "ExecutionPreview",
         "intent": intent, "understood": {"task": task, "task_type": signals.get("task_type", "QUICK"),
                                           "workflow": plan["base_workflow"],
+                                          "classification_confidence": plan.get("classification_confidence", "normal"),
                                           "spec_level": cov["level_name"]},
         "will_do": {"stages": plan["gates"], "tracks": [t["track"] for t in plan.get("required_tracks", [])],
                     "auto_flags": flags},
@@ -523,7 +524,9 @@ def main(argv):
                     feature=wid, base=a.base, provider_name=a.provider, model=a.model,
                     author=flags["author"], author_proposer=auth,
                     review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"],
-                    sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps)
+                    sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps,
+                    # v2.123 (P0.3): package write_scope РЕАЛЬНО протянут — брокер ограничит пакет его каталогом
+                    write_scope_for=lambda pkg: pkg.get("write_scope"))
                 print(f"SEQUENCE {wid}: executed_all={seq['executed_all']} · ready_all={seq['ready_all']} · "
                       f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}")
                 for p in seq["packages"]:
