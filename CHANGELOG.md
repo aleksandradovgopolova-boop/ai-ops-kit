@@ -2,6 +2,33 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.124.0] — 2026-07-19 — Sequence Transaction: доставка после агрегатного вердикта, immutable план, per-package lifecycle, resume
+
+Последовательное исполнение WorkPackages стало настоящей транзакцией: результат интегрируется и
+проверяется ЦЕЛИКОМ до доставки. Всё аддитивно; полный pre-commit набор 34/34 PASS.
+
+### Fixed
+- **P0.4 — draft PR только после агрегатного вердикта.** Пакеты больше не открывают PR
+  (`open_pr=False` в per-package run); доставка — отдельный шаг после цикла, ТОЛЬКО при
+  `aggregate_ready` (`ready_all AND chain_ok AND` чистый финальный SHA) на интегрированной ветке.
+  Раньше готовый финальный пакет открывал PR, пока ранний пакет был `awaiting-evidence` → PR при
+  `ready_all=false`. CLI exit-код учитывает доставку (готово, но PR не открыт → non-zero).
+- **Immutable parent SequencePlan.** `features/<wid>/sequence-plan.yaml` пишется один раз в начале и
+  не перетирается локальным планом последнего пакета (P1 аудита).
+- **Per-package lifecycle-каталог.** Снимок `run-plan/run-handoff/context-bundle/spec-coverage` в
+  `work-packages/<pid>/` у каждого пакета (родительские `features/<wid>/` перетираются следующим).
+- **Aggregate verification на финальном SHA.** После всех пакетов проверки перезапускаются на
+  интегрированном worktree и сравниваются с базой (до пакета 1) — ловит межпакетные регрессии (пакет
+  зелен по отдельности, интеграция сломана). Verified regression блокирует `aggregate_ready`;
+  недоступность инфры не над-блокирует (инкрементальная per-package baseline-diff уже проверила цепочку).
+- **Resume с конкретного пакета.** `execute_sequence(resume_from=<pid>)` + CLI `--resume-from`. Пакеты
+  до целевого восстанавливаются из снимков (`resumed-skip`), исполняется целевой и последующие поверх
+  сохранённой ветки. Стоп на блоке пакета N → N+1 не стартует (v2.120, тест зелёный).
+
+Проверки: `workpackage_executor` selftest расширен (P0.4 not-attempted, immutable plan, lifecycle-снимок,
+aggregate verify на финальном SHA, resume-skip). Живой 3-пакетный sequential + намеренный fail на
+package 2 → v2.125 (живая квалификация).
+
 ## [2.123.0] — 2026-07-19 — Semantic Trust: настоящий Spec-First, единый ApprovalDecision, package write-scope, калибровка классификатора
 
 Закрыты 5 семантических дыр аудита в уже существующем цикле исполнения (не новые возможности —
