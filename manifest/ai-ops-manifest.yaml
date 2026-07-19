@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.124.1
+  package_version: 3.0.0-rc1
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -354,7 +354,7 @@ execution_engine:
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
     fixed_v2_124_1_live_rc_findings:
       - "finding живой RC-квалификации v2.125 (DeepSeek/Mac): security-релевантная находка проскакивала в QUICK. Раньше security pack запускался ТОЛЬКО если 'security' в gates workflow (QUICK его не содержит) -> новая зависимость/секрет в QUICK-задаче не проверялись. Теперь security pack запускается на ЛЮБОМ коммите, и если результат fail (напр. новая зависимость без ApprovalRecord) -> security ФОРСИРУЕТСЯ в оценку гейтов и блокирует НЕЗАВИСИМО от workflow. Чистый QUICK остаётся лёгким (security=pass не добавляется). Тест: QUICK + новая зависимость -> security в evaluated+unmet, ready=False; живьём подтверждено (requests в requirements.txt -> блок; +ApprovalRecord -> требование снято)"
-      - "finding живой RC: ложный scope-violation в sequential. Пост-дифф проверка write_scope (v2.124) ловила АРТЕФАКТЫ движка (pre-authoring: .ai/runplan/, openspec/, features/) как изменения вне scope пакета -> убивала цепочку на пакете 1. Теперь engine-managed пути (.ai/, openspec/, features/) исключены из проверки — write_scope ограничивает КОД модели, не артефакты движка. Тест: write_scope_for + author -> authored-артефакты НЕ ловятся как scope-violation"
+      - "finding живой RC: ложный scope-violation в sequential. Пост-дифф проверка write_scope (v2.124) ловила АРТЕФАКТЫ движка (pre-authoring: каталоги .ai/runplan, openspec, features) как изменения вне scope пакета -> убивала цепочку на пакете 1. Теперь engine-managed каталоги (.ai, openspec, features) исключены из проверки — write_scope ограничивает КОД модели, не артефакты движка. Тест: write_scope_for + author -> authored-артефакты НЕ ловятся как scope-violation"
       - "оба найдены живой квалификацией v2.125 (S8 resume=resumed True; canonical CLI trivial->QUICK; approval negative/positive подтверждены). полный pre-commit набор 34/34 PASS. Аддитивно (патч)"
     fixed_v2_124_sequence_transaction:
       - "P0.4 draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта. Пакеты больше не открывают PR (open_pr=False в per-package run); доставка после цикла ТОЛЬКО при aggregate_ready (ready_all AND chain_ok) на финальном интегрированном SHA. Раньше готовый финальный пакет открывал PR, пока ранний пакет awaiting-evidence -> PR при ready_all=false. Тест: не-ready_all + open_pr -> delivery=not-attempted, draft_pr=None. CLI exit-код учитывает доставку"
