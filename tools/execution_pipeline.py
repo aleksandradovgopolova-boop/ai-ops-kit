@@ -906,7 +906,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #     security_reviewer/human — needs_review (судья/человек). security проходит ТОЛЬКО если
     #     pack "clear" (все применимые домены закрыты детерминированно) — иначе честный блок.
     security_pack_result = None
-    if "security" in plan["gates"] and committed_sha and is_git and "security" not in gate_ev:
+    # v2.125 (finding живого прогона): security pack запускается на ЛЮБОМ коммите (не только когда
+    # "security" в плане workflow). Security-релевантная находка в диффе (новая зависимость/секрет)
+    # обязана быть замечена и в QUICK — иначе новая зависимость в QUICK-задаче проскакивала без
+    # ApprovalRecord. Если находка -> gate_ev.security=fail -> ниже security форсируется в оценку гейтов.
+    if committed_sha and is_git and "security" not in gate_ev:
         import security_pack
         try:
             security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
@@ -973,8 +977,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
     #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.
+    # v2.125 (finding живого прогона): security-релевантная НАХОДКА в диффе (новая зависимость/секрет →
+    # gate_ev.security=fail) обязана блокировать НЕЗАВИСИМО от workflow. QUICK не содержит security-гейта,
+    # поэтому новая зависимость в QUICK-задаче проскакивала. Форсируем security в оценку, если он упал.
+    _gate_ids = list(plan["gates"])
+    if (gate_ev.get("security") or {}).get("status") == "fail" and "security" not in _gate_ids:
+        _gate_ids.append("security")
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
-                                   gate_ids=plan["gates"], tested_revision=committed_sha,
+                                   gate_ids=_gate_ids, tested_revision=committed_sha,
                                    signals=signals, not_applicable=not_applicable)
 
     # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)
@@ -1514,6 +1524,22 @@ def selftest():
                rep_sec.get("security_scan") and "secrets" in rep_sec["security_scan"]["blocking"])
         expect("v2.101: секрет -> security блокирует (в unmet, не ложный green)",
                "security" in rep_sec["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v2.125 (finding живого прогона): новая зависимость в QUICK-задаче — security pack ЗАПУСКАЕТСЯ
+        # (не только когда security в плане workflow) и security ФОРСИРУЕТСЯ в оценку гейтов -> блокирует
+        # без ApprovalRecord даже в QUICK (раньше новая зависимость в QUICK проскакивала).
+        sig_q = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        pol_dep = tool_broker.Policy(level="execution", block_push=True)   # без write_scope: requirements.txt в корне
+        it_dep = iter([{"op": "write", "path": "requirements.txt", "content": "flask\n"}, {"done": True}])
+        rep_dep = run_pipeline("добавить зависимость", sig_q, root, lambda c: next(it_dep),
+                               policy=pol_dep, budget={"max_model_calls": 5}, feature="dep-fn",
+                               commit=True, isolate=True, install_deps=False)
+        expect("v2.125: QUICK + новая зависимость -> security pack запущен (домен dependencies)",
+               rep_dep.get("security_scan") and "dependencies" in (rep_dep["security_scan"].get("needs_review") or []))
+        expect("v2.125: security ФОРСИРОВАН в оценку и блокирует без ApprovalRecord даже в QUICK",
+               "security" in rep_dep["gates"]["evaluated"] and "security" in rep_dep["gates"]["unmet"]
+               and rep_dep["ready_for_pr"] is False)
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.106 #1: независимый security-reviewer закрывает needs_review домены -> security НЕ в unmet.

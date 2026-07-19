@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.124.1] — 2026-07-20 — Live RC findings (v2.125 qualification): security в QUICK + ложный scope-violation
+
+Живая RC-квалификация (DeepSeek/Mac) нашла два честных бага в уже выпущенных фичах; оба исправлены.
+Полный pre-commit набор 34/34 PASS.
+
+### Fixed
+- **Security-релевантная находка проскакивала в QUICK.** `security_pack` запускался ТОЛЬКО если гейт
+  `security` в workflow (QUICK его не содержит) — новая зависимость/секрет в QUICK-задаче не
+  проверялись, и derived-approval (v2.123 P0.2) не срабатывал. Теперь `security_pack` запускается на
+  ЛЮБОМ коммите; если результат `fail` (напр. новая зависимость без ApprovalRecord) — `security`
+  **форсируется** в оценку гейтов и блокирует НЕЗАВИСИМО от workflow. Чистый QUICK остаётся лёгким
+  (`security=pass` в гейты не добавляется). Живьём: `requests` в `requirements.txt` в QUICK-задаче →
+  блок с требованием ApprovalRecord; после добавления записи — требование снято.
+- **Ложный `scope-violation` в sequential.** Пост-дифф проверка `write_scope` (v2.124) ловила
+  АРТЕФАКТЫ движка (pre-authoring: `.ai/runplan/`, `openspec/`, `features/`) как изменения вне scope
+  пакета и убивала цепочку на пакете 1. Engine-managed пути (`.ai/`, `openspec/`, `features/`)
+  исключены из проверки — `write_scope` ограничивает КОД модели, не артефакты движка.
+
+Найдено живой квалификацией v2.125: S8 resume (`resumed=True`), canonical CLI trivial→QUICK,
+approval negative/positive — подтверждены. Живой positive-green ENGINEERING и 3-пакетный sequential с
+намеренным fail на package 2 остаются на сильной модели / v3.0-rc1.
+
 ## [2.124.0] — 2026-07-19 — Sequence Transaction: доставка после агрегатного вердикта, immutable план, per-package lifecycle, resume
 
 Последовательное исполнение WorkPackages стало настоящей транзакцией: результат интегрируется и
