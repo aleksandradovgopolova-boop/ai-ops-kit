@@ -2,6 +2,40 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.123.0] — 2026-07-19 — Semantic Trust: настоящий Spec-First, единый ApprovalDecision, package write-scope, калибровка классификатора
+
+Закрыты 5 семантических дыр аудита в уже существующем цикле исполнения (не новые возможности —
+доведение честности). Всё аддитивно в 2.x; полный pre-commit набор 35/35 PASS.
+
+### Fixed
+- **P0.1 — настоящий Spec-First (pre-authoring ДО реализации).** Раньше с `--author` heavy-задача
+  сначала писала код (`tool_loop`), и лишь потом автор создавал requirements/plan/spec — обход
+  Spec-First. Теперь порядок: `_run_authoring` → валидация формы → **tool loop ТОЛЬКО при валидной
+  спеке**. Невалидный author-артефакт (`valid=False`) → `loop.stopped='spec-prestage-failed'`, **ноль
+  implementation-вызовов**, `ready_for_pr=false`. Валидные артефакты подаются в prompt реализации
+  (`_authored_context`) — код пишется ПО спеке. В отчёте `spec_first.prestage`. Отсутствие openspec CLI
+  не блокирует loop (форма валидна → гейт `specification` честно unmet, как раньше).
+- **P0.2 — единый ApprovalDecision.** Из security-гейта убран boolean `signals.human_approved` —
+  засчитывается ТОЛЬКО валидный `ApprovalRecord` (+ `destructive` как в preflight). Требования
+  одобрения выводятся из ВХОДНЫХ signals И из РЕАЛЬНЫХ находок security pack
+  (`approvals.signals_from_findings`: new_dependency→dependency_addition, secret→secret_boundary) —
+  независимый reviewer больше не закрывает новую зависимость без человеко-одобрения. **P0.2b:** сбой
+  post-diff `recheck_after_diff` → **fail-closed** (`approval_recheck.ok=False`), было fail-open.
+- **P0.3 — package write-scope реально действует.** `atomic_planner` кладёт `write_scope` (пути из
+  подсистемы) в каждый WorkPackage; канонический CLI передаёт `write_scope_for` в `execute_sequence` →
+  брокер ограничивает пакет его каталогом; executor делает ПОСТ-ДИФФ проверку (изменение вне
+  `write_scope` → scope-violation → стоп последовательности).
+- **Approval schema v2.** High-risk домены (severity high/critical + `destructive`) БОЛЬШЕ не принимают
+  legacy-записи без binding — обязательны `binds_to`, `expires_at`, `risk` и `source` из доверенного
+  контекста (`user|ci|human`, не произвольная строка модели). Medium/low (`dependencies`) — аддитивно.
+- **Калибровка классификатора.** Тяжёлый ENGINEERING — ТОЛЬКО при явном сигнале тяжести
+  (size medium+/risk medium+). Неопределённость → QUICK + `classification_confidence=low` (не
+  авто-эскалация в Spec-First). Закрыт трап: тривиальные задачи канонического CLI больше не блокируются.
+
+Проверки: selftest'ы execution_pipeline/approvals/atomic_planner/ai_route/preflight/workpackage_executor
+расширены (pre-authoring 0-impl, findings-derived approval, fail-closed recheck, schema v2 strict,
+write_scope, калибровка). Живая RC-квалификация P0-фиксов на модели — v2.125 (по плану).
+
 ## [2.122.0] — 2026-07-19 — Live RC Qualification: baseline-diff `fixed` симметричен регрессиям (node-id)
 
 Живая RC-квалификация на Mac (DeepSeek, база v2.121): sanity 7/7 PASS; провайдер-гэп v2.120 закрыт

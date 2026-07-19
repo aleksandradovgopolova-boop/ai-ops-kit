@@ -129,6 +129,17 @@ _AXIS_PRIORITY = ["by-subsystem", "by-result", "by-commit", "by-verifiable-unit"
                   "by-context-budget", "by-size"]
 
 
+def _scope_paths(subsystems):
+    """v2.123 (P0.3): пути write-scope пакета по подсистемам (эвристика раскладки: <sub>/, src/<sub>/,
+    tests/<sub>/, test_<sub>). Покрывает и flat-, и src-layout. 'unspecified'/пусто -> нет путей."""
+    paths = []
+    for s in (subsystems or []):
+        if not s or s == "unspecified":
+            continue
+        paths += [f"{s}/", f"src/{s}/", f"tests/{s}/", f"test_{s}"]
+    return sorted(set(paths))
+
+
 def decompose(signals, wid=None, child_root=None, bundle=None, budget=None):
     """v2.111: если пакет НЕ атомарен — построить КОНКРЕТНЫЕ WorkPackages (не только назвать оси).
 
@@ -167,6 +178,11 @@ def decompose(signals, wid=None, child_root=None, bundle=None, budget=None):
                     "axis": primary, "scope": subsystems or ["unspecified"],
                     "depends_on": ([f"{wid}-pkg-1"] if i == 1 else []),
                     "acceptance": base_acc, "order": i + 1})
+        # v2.123 (P0.3): каждый пакет несёт write_scope (пути), выведенный из его подсистемного scope —
+        # чтобы брокер РЕАЛЬНО ограничил пакет его каталогом, а не только репо/общей политикой. None,
+        # если scope не даёт осмысленных путей (unspecified) — тогда пакет ограничен лишь репо/политикой.
+        for p in packages:
+            p["write_scope"] = _scope_paths(p.get("scope")) or None
         wp["primary_axis"] = primary
     else:
         wp["primary_axis"] = None
@@ -243,6 +259,11 @@ def selftest():
                db["work_packages"][0]["depends_on"] == []
                and db["work_packages"][1]["depends_on"] == [db["work_packages"][0]["id"]])
         expect("v2.111 decompose: дробление предлагается, финал за человеком", db["human_confirms"] is True)
+        # v2.123 (P0.3): каждый пакет несёт write_scope (пути) из СВОЕЙ подсистемы, не чужой
+        pc = next(p for p in db["work_packages"] if "catalog" in (p.get("scope") or []))
+        expect("v2.123 decompose: пакет несёт write_scope путей своей подсистемы (catalog, не orders)",
+               bool(pc.get("write_scope")) and any("catalog" in s for s in pc["write_scope"])
+               and all("orders" not in s for s in pc["write_scope"]))
 
         # by-result -> N независимых пакетов
         dc = decompose({"task_type": "ENGINEERING", "size": "medium", "affected_areas": ["core"],

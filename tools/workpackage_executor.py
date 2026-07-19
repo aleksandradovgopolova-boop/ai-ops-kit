@@ -34,6 +34,12 @@ def _git(root, *a):
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
+def _changed_files(root, sha):
+    """Файлы, изменённые коммитом sha относительно его родителя (для пост-дифф проверки write_scope)."""
+    rc, out, _ = _git(root, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+    return [ln for ln in out.splitlines() if ln] if rc == 0 else []
+
+
 def _ordered(packages):
     return sorted(packages, key=lambda p: (p.get("order", 0), p.get("id", "")))
 
@@ -118,6 +124,18 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         # Отличаем «awaiting evidence» (нет author/review -> исполнен, но не ready, цепочка идёт) от
         # deterministic/security/reviewer FAIL и регрессии (обязаны остановить).
         stop_reason = _hard_stop(rep)
+        # v2.123 (P0.3): ПОСТ-ДИФФ проверка write_scope — пакет не должен был изменить НИЧЕГО вне своего
+        # каталога (belt-and-suspenders поверх брокера, который отклоняет out-of-scope записи в петле).
+        # Escape = scope-violation -> останавливает последовательность (нельзя строить поверх «уехавшего»).
+        pkg_scope = write_scope_for(pkg) if write_scope_for else None
+        if stop_reason is None and sha and pkg_scope:
+            import approvals as _appr
+            wt = child_root / ".ai" / "worktrees" / wid
+            changed = _changed_files(wt if wt.is_dir() else child_root, sha)
+            outside = [f for f in changed
+                       if not _appr.covers_paths({"scope": " ".join(pkg_scope)}, [f])]
+            if outside:
+                stop_reason = f"scope-violation: пакет изменил пути вне write_scope: {', '.join(outside[:5])}"
         hard_blocked = rep.get("status") == "blocked"
         executed = bool(sha) and stop_reason is None
         ready = bool(rep.get("ready_for_pr"))
