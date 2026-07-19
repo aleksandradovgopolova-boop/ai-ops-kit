@@ -85,6 +85,28 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         import execution_pipeline
         import tool_loop
         import orchestrator
+        # v3.0-rc2 (P0.1) Canonical Resume Context: при resume восстанавливаем ПОЛИТИКУ исходного прогона
+        # (signals/task_type/risk + sandbox/baseline_diff/require_fix/author/review/open_pr/write_scope/
+        # max_steps) из сохранённого run-settings.yaml — иначе resume молча теряет политику и
+        # переклассифицирует задачу. provider/model/base приходят от вызывающего (runtime-выбор);
+        # изменение базы/состояния уже требует явной ревалидации (resume_preflight).
+        if resume and feature:
+            _sp = features_dir / feature / "run-settings.yaml"
+            if _sp.is_file():
+                import yaml as _yr
+                _saved = _yr.safe_load(_sp.read_text(encoding="utf-8")) or {}
+                _ss, _pp = (_saved.get("signals") or {}), (_saved.get("policy") or {})
+                signals = {**_ss, **signals}
+                sandbox = sandbox or bool(_pp.get("sandbox"))
+                baseline_diff = baseline_diff or bool(_pp.get("baseline_diff"))
+                require_fix = require_fix or bool(_pp.get("require_fix"))
+                author = author or bool(_pp.get("author"))
+                review = review or bool(_pp.get("review"))
+                open_pr = open_pr or bool(_pp.get("open_pr"))
+                if write_scope is None:
+                    write_scope = _pp.get("write_scope")
+                if max_steps == 40 and _pp.get("max_steps"):
+                    max_steps = _pp["max_steps"]
         prop = proposer or tool_loop.make_model_proposer(
             orchestrator.make_provider(provider_name, model))
         # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),
@@ -133,6 +155,16 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
         (features_dir / fid / "run-plan.yaml").write_text(
             yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        # v3.0-rc2 (P0.1): сохраняем ЭФФЕКТИВНУЮ политику прогона -> resume восстановит её, а не
+        # переклассифицирует/деградирует до дефолтов. provider/model НЕ храним (runtime-выбор/секрет).
+        if execute:
+            (features_dir / fid / "run-settings.yaml").write_text(yaml.safe_dump({
+                "schema_version": 1, "kind": "run-settings", "workitem_id": fid,
+                "signals": {k: v for k, v in signals.items() if k != "task_text"},
+                "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
+                           "author": author, "review": review, "open_pr": open_pr,
+                           "write_scope": write_scope, "max_steps": max_steps, "engine": engine},
+            }, allow_unicode=True, sort_keys=False), encoding="utf-8")
         # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
         # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
         lifecycle_errors = []

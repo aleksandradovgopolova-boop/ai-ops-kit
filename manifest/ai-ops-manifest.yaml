@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc1
+  package_version: 3.0.0-rc2
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,14 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc2_continuity_and_aggregate_trust:
+      - "P0.1 Canonical Resume Context: intent CLI resume ПРОВОДИТ provider/model/signals в низкоуровневый resume (раньше молча уходил в mock). run() при resume ВОССТАНАВЛИВАЕТ политику исходного прогона из features/<wid>/run-settings.yaml (signals/task_type/risk + sandbox/baseline_diff/require_fix/author/review/open_pr/write_scope/max_steps) — resume не переклассифицирует задачу и не деградирует до дефолтов. provider/model — от вызывающего (runtime/секрет, не хранится)"
+      - "P0.2 Sequence hard-stop truth: _hard_stop останавливал цепочку по НЕДОСТИЖИМОМУ security_scan.overall=='fail' (пакет возвращает blocked/needs_review/clear). Теперь стоп на РЕАЛЬНОМ блокере: overall=='blocked' (блокирующая находка) ИЛИ security-гейт fail из-за отсутствующего человеко-ApprovalRecord. needs_review без поданного ревьюера = awaiting evidence (не стоп)"
+      - "P0.3 Verified package resume: resume_from валидируется — неизвестный id -> ошибка (не старт с нуля); пропускаемый пакет добавляется в completed ТОЛЬКО при подтверждении (отчёт есть, commit SHA есть, SHA в sequence-ветке и предок HEAD, пакет executed без hard-блокера). Неподтверждённый пропуск -> ошибка, зависимый пакет не стартует"
+      - "P0.4 Aggregate fail-closed: aggregate_ready ТОЛЬКО при verified=True И no_regressions И HEAD==final_sha И дерево чистое после проверок. Сбой/недоступность агрегатной верификации -> НЕ ready (раньше verified=False трактовался как ok -> PR мог открыться на непроверенной интеграции)"
+      - "P0.5 Effective ApprovalDecision: post-diff scope recheck использует ЭФФЕКТИВНЫЕ сигналы (намерение + findings-derived), а не только входные — scope одобрения для НАЙДЕННОЙ зависимости/секрета теперь перепроверяется на реально изменённые пути"
+      - "P0.6 Universal security scan fail-closed: техническая ОШИБКА security_pack.run_pack (exception) теперь = gate_ev.security=fail (форсируется в оценку и блокирует), а не result=None -> тихий зелёный обход в QUICK. Найдено аудитом после того, как security scan стал инвариантом любого diff"
+      - "все 6 P0 — из аудита после v3.0-rc1; +тесты (hard_stop security truth/approval; resume unknown/unverified; effective-signals; security fail-closed); полный pre-commit набор 37/37 PASS. Аддитивно (rc2 hardening). Осталось до v3.0 stable: positive-green ENGINEERING на сильной модели + живой 3-пакетный sequential с fail на package 2 + dogfood"
     fixed_v2_124_1_live_rc_findings:
       - "finding живой RC-квалификации v2.125 (DeepSeek/Mac): security-релевантная находка проскакивала в QUICK. Раньше security pack запускался ТОЛЬКО если 'security' в gates workflow (QUICK его не содержит) -> новая зависимость/секрет в QUICK-задаче не проверялись. Теперь security pack запускается на ЛЮБОМ коммите, и если результат fail (напр. новая зависимость без ApprovalRecord) -> security ФОРСИРУЕТСЯ в оценку гейтов и блокирует НЕЗАВИСИМО от workflow. Чистый QUICK остаётся лёгким (security=pass не добавляется). Тест: QUICK + новая зависимость -> security в evaluated+unmet, ready=False; живьём подтверждено (requests в requirements.txt -> блок; +ApprovalRecord -> требование снято)"
       - "finding живой RC: ложный scope-violation в sequential. Пост-дифф проверка write_scope (v2.124) ловила АРТЕФАКТЫ движка (pre-authoring: каталоги .ai/runplan, openspec, features) как изменения вне scope пакета -> убивала цепочку на пакете 1. Теперь engine-managed каталоги (.ai, openspec, features) исключены из проверки — write_scope ограничивает КОД модели, не артефакты движка. Тест: write_scope_for + author -> authored-артефакты НЕ ловятся как scope-violation"
