@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc3] — 2026-07-20 — CI parity: зелёный package-quality (был красным с v2.123)
+
+Аудит отметил, что зелёный CI независимо не подтверждён. Проверка показала: `package-quality` был
+**красным с v2.123** (локальный gate этого не ловил). Причины найдены и исправлены; полный набор
+CI (91 проверка) прогнан локально — **91/91 PASS**.
+
+### Fixed
+- **Standalone-движок падал** (`validate_standalone_engine --selftest`): `security/security-domains.yaml`
+  не входил в `managed_set`, а universal security (v2.124.1+) грузит его на любом коммите через
+  `approvals.load_domains()` → `.ai/managed` без файла → `FileNotFoundError`. Добавлен в
+  `manifest.update_policy.managed_set` И в `ENGINE_CLOSURE` (регресс теперь ловит completeness-проверка).
+- **`_failure_ids` не снимал ANSI-цвета** раннера: `\x1b[31mFAILED\x1b[0m test::id` не парсился в
+  node-id (ложный «нет падений» при forced-color pytest/jest). Теперь ANSI снимается —
+  `stack_qualification` live-pytest снова зелёный.
+- **Локальный gate ↔ CI паритет**: `validate_standalone_engine` в локальном прогоне запускался БЕЗ
+  `--selftest` (печатал usage → ложный PASS). Прогнан полный набор package-quality (91) локально.
+
 ## [3.0.0-rc2] — 2026-07-20 — Continuity & Aggregate Trust: 6 P0 из аудита rc1
 
 Аудит rc1 нашёл 6 честных P0 в continuity/transaction-путях; все исправлены. Полный pre-commit

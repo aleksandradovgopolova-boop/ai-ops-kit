@@ -51,6 +51,8 @@ ENGINE_DATA = [
     "config/protected-paths.yaml", "quality/gates.yaml",
     "registry/providers.yaml", "registry/routing-policy.yaml",
     "registry/runtimes.yaml", "registry/tracks.yaml", "registry/workflows.yaml",
+    # v3.0-rc2: approvals.load_domains() / security_pack грузят это на ЛЮБОМ коммите (universal security)
+    "security/security-domains.yaml",
 ]
 ENGINE_CLOSURE = ENGINE_MODULES + ENGINE_DATA
 

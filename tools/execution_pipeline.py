@@ -579,6 +579,10 @@ def _failure_ids(check):
     ids = set()
     for run in (check or {}).get("runs", []) or []:
         tail = run.get("output_tail") or ""
+        # v3.0-rc2: снимаем ANSI-цвета раннера (pytest/jest/... с forced color) — иначе "FAILED\x1b[0m
+        # test::id" не парсится и node-id теряется (ложный «нет падений»). CI без TTY обычно без цвета,
+        # но color может быть форсирован конфигом/окружением — делаем извлечение устойчивым.
+        tail = re.sub(r"\x1b\[[0-9;]*m", "", tail)
         for pat in _FAILURE_ID_PATTERNS:
             for m in re.finditer(pat, tail, re.I | re.M):
                 token = _normalize_failure_id(" ".join(t for t in m.groups() if t).strip())
