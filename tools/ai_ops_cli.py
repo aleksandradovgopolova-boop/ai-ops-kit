@@ -461,6 +461,11 @@ def main(argv):
         import ai_ops_run
         # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
+        # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
+        # `ai-ops resume --provider X --model Y` молча уходил в mock (политика/провайдер терялись).
+        argv2 += ["--provider", a.provider, "--signals", a.signals]
+        if a.model:
+            argv2 += ["--model", a.model]
         if a.execute:
             argv2.append("--execute")
         if a.force:

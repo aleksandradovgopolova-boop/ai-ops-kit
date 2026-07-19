@@ -906,6 +906,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #     security_reviewer/human — needs_review (судья/человек). security проходит ТОЛЬКО если
     #     pack "clear" (все применимые домены закрыты детерминированно) — иначе честный блок.
     security_pack_result = None
+    _security_scan_error = None
     # v2.125 (finding живого прогона): security pack запускается на ЛЮБОМ коммите (не только когда
     # "security" в плане workflow). Security-релевантная находка в диффе (новая зависимость/секрет)
     # обязана быть замечена и в QUICK — иначе новая зависимость в QUICK-задаче проскакивала без
@@ -914,9 +915,17 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         import security_pack
         try:
             security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
-        except Exception:  # noqa: BLE001 — пакет не должен ронять прогон
+        except Exception as _e:  # noqa: BLE001
+            _security_scan_error = str(_e)
             security_pack_result = None
-    if security_pack_result:
+    # v3.0-rc2 (P0.6): universal security scan — техническая ОШИБКА скана = FAIL-CLOSED, а не тихий обход.
+    # Раньше exception -> result=None -> security-гейт не добавлялся -> QUICK оставался зелёным.
+    effective_approval_signals = dict(signals)   # v3.0-rc2 (P0.5): signals намерения + findings-derived
+    if _security_scan_error:
+        gate_ev = dict(gate_ev)
+        gate_ev["security"] = {"status": "fail",
+                               "blockers": [f"security scan упал (fail-closed): {_security_scan_error}"]}
+    elif security_pack_result:
         overall = security_pack_result["overall"]
         gate_ev = dict(gate_ev)
         # v2.123 (P0.2): ЕДИНЫЙ ApprovalDecision. Требования человеко-одобрения выводим из ВХОДНЫХ signals
@@ -925,6 +934,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # ТОЛЬКО валидный ApprovalRecord (человек). Reviewer (writer≠judge) НЕ заменяет человеко-одобрение.
         import approvals as _appr
         _merged_sig = {**signals, **_appr.signals_from_findings(security_pack_result)}
+        effective_approval_signals = _merged_sig   # v3.0-rc2 (P0.5): используется и в recheck ниже
         _appr_missing = list(_appr.check(_merged_sig, child_root, wid).get("missing") or [])
         if _merged_sig.get("destructive"):
             _recs = _appr.load_approvals(child_root, wid)
@@ -1068,7 +1078,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         try:
             import approvals as _appr
             _changed = _committed_changed_files(work_root, committed_sha)
-            approval_recheck = _appr.recheck_after_diff(child_root, wid, _changed, signals=signals)
+            # v3.0-rc2 (P0.5): recheck по ЭФФЕКТИВНЫМ сигналам (намерение + findings-derived), а не только
+            # входным — иначе scope одобрения для НАЙДЕННОЙ зависимости/секрета не перепроверяется на дифф.
+            approval_recheck = _appr.recheck_after_diff(child_root, wid, _changed, signals=effective_approval_signals)
         except Exception as _e:  # noqa: BLE001 — v2.123 (P0.2b): approval FAIL-CLOSED. Сбой recheck НЕ
             # трактуется как «покрыто»: для одобрения безопаснее заблокировать, чем пропустить непроверенное.
             approval_recheck = {"ok": False, "uncovered": [{"domain": "*", "reason": f"recheck упал: {_e}"}],

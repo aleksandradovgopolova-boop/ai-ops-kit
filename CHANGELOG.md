@@ -2,6 +2,36 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc2] — 2026-07-20 — Continuity & Aggregate Trust: 6 P0 из аудита rc1
+
+Аудит rc1 нашёл 6 честных P0 в continuity/transaction-путях; все исправлены. Полный pre-commit
+набор 37/37 PASS. Claim rc остаётся: QUICK — trustworthy task → verified draft PR.
+
+### Fixed
+- **P0.1 Canonical Resume Context.** intent CLI `resume` проводит `provider/model/signals` в
+  низкоуровневый resume (раньше молча уходил в mock). `run()` при resume **восстанавливает политику**
+  исходного прогона из `features/<wid>/run-settings.yaml` (signals/task_type/risk + sandbox/
+  baseline_diff/require_fix/author/review/open_pr/write_scope/max_steps) — resume не переклассифицирует
+  задачу и не деградирует до дефолтов. provider/model — от вызывающего (runtime/секрет, не хранится).
+- **P0.2 Sequence hard-stop truth.** `_hard_stop` останавливал по НЕДОСТИЖИМОМУ
+  `security_scan.overall=='fail'`. Теперь стоп на реальном блокере: `overall=='blocked'` (блокирующая
+  находка) ИЛИ security-гейт fail из-за отсутствующего человеко-`ApprovalRecord`. needs_review без
+  поданного ревьюера = awaiting evidence (не стоп).
+- **P0.3 Verified package resume.** `resume_from` валидируется: неизвестный id → ошибка (не старт с
+  нуля); пропускаемый пакет идёт в `completed` ТОЛЬКО при подтверждении (отчёт + commit SHA + SHA в
+  sequence-ветке и предок HEAD + executed без hard-блокера). Неподтверждённый пропуск → ошибка.
+- **P0.4 Aggregate fail-closed.** `aggregate_ready` ТОЛЬКО при `verified=True` И `no_regressions` И
+  `HEAD==final_sha` И чистом дереве после проверок. Сбой/недоступность верификации → НЕ ready (раньше
+  `verified=False` трактовался как ok → PR мог открыться на непроверенной интеграции).
+- **P0.5 Effective ApprovalDecision.** Post-diff scope recheck использует эффективные сигналы
+  (намерение + findings-derived) — scope одобрения для найденной зависимости/секрета перепроверяется
+  на реально изменённые пути.
+- **P0.6 Universal security scan fail-closed.** Техническая ошибка `security_pack.run_pack` теперь =
+  `security` gate fail (форсируется и блокирует), а не `None` → тихий зелёный обход в QUICK.
+
+Осталось до v3.0 stable: positive-green ENGINEERING на сильной модели; живой 3-пакетный sequential с
+намеренным fail на package 2; dogfood на 2–3 репозиториях.
+
 ## [3.0.0-rc1] — 2026-07-20 — Release Candidate: live-qualified execution (узкий честный claim — QUICK)
 
 **AI Ops v3.0-rc1 (QUICK): trustworthy task → verified draft PR для supervised low-risk задач.**

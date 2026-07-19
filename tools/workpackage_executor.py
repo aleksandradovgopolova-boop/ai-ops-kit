@@ -57,8 +57,18 @@ def _hard_stop(rep):
         return "no-commit"
     if (rep.get("baseline") or {}).get("regressions"):
         return "regression"
-    if (rep.get("security_scan") or {}).get("overall") == "fail":
+    # v3.0-rc2 (P0.2): security pack возвращает blocked/needs_review/clear — НИКОГДА "fail". Старое условие
+    # overall=="fail" было недостижимо -> security-заблокированный пакет проходил как «awaiting evidence».
+    # СТОП на НАСТОЯЩЕМ блокере: (1) блокирующая находка (overall=blocked: secrets/critical); (2) security-
+    # гейт fail из-за ОТСУТСТВУЮЩЕГО человеко-approval (ApprovalRecord). НЕ стоп: needs_review без
+    # поданного ревьюера — это awaiting evidence (как артефакт-гейты без author), цепочка продолжается.
+    if (rep.get("security_scan") or {}).get("overall") in ("blocked", "fail"):
         return "security-fail"
+    for g in ((rep.get("gates") or {}).get("gate_results") or []):
+        if g.get("gate") == "security" and g.get("status") == "fail":
+            _blk = " ".join(g.get("blockers") or [])
+            if "ApprovalRecord" in _blk or "approval" in _blk.lower() or "одобрен" in _blk.lower():
+                return "security-approval-missing"
     if any((rv or {}).get("status") == "fail" for rv in (rep.get("reviews") or [])):
         return "reviewer-fail"
     # нарушение package scope: модель пыталась ПИСАТЬ вне write_scope пакета -> брокер отклонил.
@@ -120,25 +130,55 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     start_index = 0
     if resume_from:
         _ids = [p.get("id") for p in ordered]
-        if resume_from in _ids:
-            start_index = _ids.index(resume_from)
+        # v3.0-rc2 (P0.3): неизвестный resume_from -> ОШИБКА, а не тихий старт с нуля.
+        if resume_from not in _ids:
+            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                    "error": f"resume_from='{resume_from}' нет в SequencePlan (пакеты: {_ids})"}
+        start_index = _ids.index(resume_from)
+
+    _branch = f"ai-ops/{wid}"
+    _wt = child_root / ".ai" / "worktrees" / wid
+    _rev_root = _wt if _wt.is_dir() else child_root
+
+    def _verify_skipped(pid):
+        # v3.0-rc2 (P0.3): пакет можно считать выполненным ТОЛЬКО при подтверждении: отчёт есть, SHA есть,
+        # SHA реально коммит в sequence-ветке и предок её HEAD, пакет executed и без hard-блокера.
+        prior = features_dir / wid / "work-packages" / pid / "report.json"
+        if not prior.is_file():
+            return None, "нет отчёта прошлого прогона"
+        try:
+            rep = json.loads(prior.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            return None, f"битый отчёт: {e}"
+        sha = (rep.get("commit") or {}).get("sha")
+        if not sha:
+            return None, "в отчёте нет commit SHA"
+        if _git(_rev_root, "cat-file", "-e", sha + "^{commit}")[0] != 0:
+            return None, f"SHA {sha[:8]} не существует в репозитории"
+        if _git(_rev_root, "merge-base", "--is-ancestor", sha, _branch)[0] != 0:
+            return None, f"SHA {sha[:8]} не в sequence-ветке {_branch} (не предок HEAD)"
+        if not rep.get("ready_for_pr") and _hard_stop(rep) is not None:
+            return None, f"пакет имел hard-блокер: {_hard_stop(rep)}"
+        return rep, None
 
     for i, pkg in enumerate(ordered):
         pid = pkg.get("id", f"pkg-{i+1}")
         if i < start_index:
-            prior = features_dir / wid / "work-packages" / pid / "report.json"
-            prior_rep = {}
-            if prior.is_file():
-                try:
-                    prior_rep = json.loads(prior.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    prior_rep = {}
-            psha = (prior_rep.get("commit") or {}).get("sha")
+            rep_ok, why = _verify_skipped(pid)
+            if rep_ok is None:
+                # неподтверждённый пропуск -> НЕ добавляем в completed, останавливаем resume честной ошибкой
+                return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                        "packages": results, "completed": sorted(completed), "stopped_at": pid,
+                        "executed_all": False, "ready_all": False, "aggregate_ready": False,
+                        "total": len(ordered),
+                        "error": f"resume: пакет '{pid}' до resume_from не подтверждён — {why}"}
+            psha = (rep_ok.get("commit") or {}).get("sha")
             completed.add(pid)
-            if psha:
-                prev_sha = final_sha = psha
-            results.append({"id": pid, "sha": psha, "ready": bool(prior_rep.get("ready_for_pr")),
-                            "executed": bool(psha), "status": "resumed-skip", "resume_point": psha})
+            prev_sha = final_sha = psha
+            results.append({"id": pid, "sha": psha, "ready": bool(rep_ok.get("ready_for_pr")),
+                            "executed": True, "status": "resumed-skip", "resume_point": psha})
             continue
         unmet_deps = [d for d in (pkg.get("depends_on") or []) if d not in completed]
         if unmet_deps:
@@ -248,19 +288,28 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             import execution_pipeline as _ep
             wt = child_root / ".ai" / "worktrees" / wid
             vroot = wt if wt.is_dir() else child_root
+            # v3.0-rc2 (P0.4): проверяем ИМЕННО финальный SHA — HEAD worktree обязан == final_sha.
+            head_sha = _git(vroot, "rev-parse", "HEAD")[1]
+            revision_ok = (head_sha == final_sha)
             _vpol = (_tb2.sandbox_policy(child_root=str(vroot)) if sandbox
                      else _tb2.Policy(level="execution", child_root=str(vroot), block_push=True))
-            final_checks = _ec2.collect(_pd2.detect(vroot), vroot, _vpol)["checks"]
+            coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol)
+            final_checks = coll["checks"]
+            # дерево чистое ПОСЛЕ проверок (терпимо к тул-кэшам) — иначе evidence не о финальном SHA
+            _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
+            tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True
             agg_reg, _agg_fix = _ep._diff_checks(base_checks, final_checks) if base_checks else ([], [])
             aggregate = {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
-                         "final_sha": final_sha,
+                         "final_sha": final_sha, "revision_ok": revision_ok, "tree_clean": tree_clean,
+                         "evidence_revision": coll.get("revision"),
                          "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
         except Exception as e:  # noqa: BLE001
             aggregate = {"verified": False, "error": str(e)}
-    # verified regression блокирует; недоступность инфры (verified=False) не над-блокирует
-    # (инкрементальная per-package baseline-diff уже проверила цепочку).
-    agg_ok = (not aggregate.get("verified")) or aggregate.get("no_regressions", True)
-    # v2.124: агрегатный вердикт — вся последовательность готова, цепочка целостна И финальный SHA чист.
+    # v3.0-rc2 (P0.4): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена И чиста:
+    # verified=True, нет регрессий, HEAD==final_sha, дерево чистое. Сбой/недоступность верификации ->
+    # НЕ ready (раньше verified=False трактовался как ok -> PR мог открыться на непроверенной интеграции).
+    agg_ok = bool(aggregate.get("verified") and aggregate.get("no_regressions")
+                  and aggregate.get("revision_ok") and aggregate.get("tree_clean"))
     aggregate_ready = ready_all and chain_ok and agg_ok
 
     # v2.124 (P0.4): доставка draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта, на финальном
@@ -389,6 +438,20 @@ def selftest():
         expect("v2.124 resume: пакеты до resume_from помечены resumed-skip (восстановлены из снимков)",
                seq_r.get("resumed_from") == pkgs[1]["id"] and len(skipped) == 1
                and skipped[0]["id"] == pkgs[0]["id"] and skipped[0].get("sha"))
+        # v3.0-rc2 (P0.3): неизвестный resume_from -> ОШИБКА, не тихий старт с нуля
+        seq_bad = execute_sequence("x", sig, root, pkgs, prop_for, feature="seq", base=cur,
+                                   resume_from="pkg-НЕТ-ТАКОГО")
+        expect("v3.0-rc2 resume: неизвестный resume_from -> error (не старт с нуля)",
+               "error" in seq_bad and seq_bad["executed_all"] is False and not seq_bad["packages"])
+        # v3.0-rc2 (P0.3): пакет до resume_from без подтверждённого снимка -> error (не добавляем в completed)
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as td_e:
+            re = Path(td_e); cur_e = mkrepo(td_e)
+            pkgs_e = atomic_planner.decompose(sig, wid="seqe", child_root=re)["work_packages"]
+            seq_e = execute_sequence("x", sig, re, pkgs_e, prop_for, feature="seqe", base=cur_e,
+                                     resume_from=pkgs_e[1]["id"])   # снимков нет — пакет 1 не подтверждён
+            expect("v3.0-rc2 resume: неподтверждённый пропущенный пакет -> error (не в completed)",
+                   "error" in seq_e and pkgs_e[0]["id"] not in seq_e.get("completed", []))
 
         # v2.124.1 (finding живого прогона): с write_scope_for + author артефакты движка (.ai/runplan,
         # openspec) НЕ должны ловиться как scope-violation — write_scope ограничивает КОД, не артефакты.
@@ -424,6 +487,18 @@ def selftest():
                _hard_stop({"commit": {"sha": "a"}, "gates": {"blocked": True, "unmet": ["requirements"]}}) is None)
         expect("v2.120 _hard_stop: заблокированный push (не scope) -> НЕ scope-violation",
                _hard_stop({"commit": {"sha": "a"}, "loop": {"denied_reasons": ["git push запрещён политикой"]}}) is None)
+        # v3.0-rc2 (P0.2): security-стоп по РЕАЛЬНОМУ вердикту (pack blocked / security-гейт fail),
+        # а не по недостижимому overall=="fail". Иначе security-блок проходил как awaiting evidence.
+        expect("v3.0-rc2 _hard_stop: security_scan blocked -> стоп",
+               _hard_stop({"commit": {"sha": "a"}, "security_scan": {"overall": "blocked"}}) == "security-fail")
+        expect("v3.0-rc2 _hard_stop: security-гейт fail из-за нет ApprovalRecord -> стоп",
+               _hard_stop({"commit": {"sha": "a"}, "gates": {"gate_results": [
+                   {"gate": "security", "status": "fail", "blockers": ["dependencies: нет валидного ApprovalRecord"]}]}})
+               == "security-approval-missing")
+        expect("v3.0-rc2 _hard_stop: security needs_review без ревьюера (awaiting) -> НЕ стоп",
+               _hard_stop({"commit": {"sha": "a"}, "security_scan": {"overall": "needs_review"},
+                           "gates": {"gate_results": [{"gate": "security", "status": "fail",
+                           "blockers": ["нужен независимый security-reviewer/человек по доменам: input_validation"]}]}}) is None)
 
     # v2.124 (P0.4): open_pr запрошен, но последовательность НЕ ready_all -> draft PR НЕ открывается
     # (доставка ПОСЛЕ агрегатного вердикта, не по готовности отдельного пакета).
