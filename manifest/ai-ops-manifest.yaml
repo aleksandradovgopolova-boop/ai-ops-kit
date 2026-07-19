@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc2
+  package_version: 3.0.0-rc3
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc3_ci_parity:
+      - "CI package-quality был КРАСНЫМ с v2.123 (независимо не подтверждён — finding аудита). Причина: security/security-domains.yaml не входил в managed_set, а universal security (v2.124.1+) грузит его на ЛЮБОМ коммите -> standalone-движок из .ai/managed падал FileNotFoundError. Добавлен в manifest.update_policy.managed_set И в ENGINE_CLOSURE (validate_standalone_engine) — регресс теперь ловится completeness-проверкой, не только рантаймом"
+      - "_failure_ids снимает ANSI-цвета раннера (pytest/jest с forced color): '\\x1b[31mFAILED\\x1b[0m test::id' теперь парсится в node-id (иначе цветной вывод -> ложный «нет падений»). Живой pytest в stack_qualification снова зелёный"
+      - "локальный gate приведён в паритет с CI: полный набор package-quality (91 проверка) прогнан локально -> 91/91 PASS. Раньше local-gate вызывал validate_standalone_engine БЕЗ --selftest (печатал usage, ложный PASS) — теперь с --selftest"
     fixed_v3_0_rc2_continuity_and_aggregate_trust:
       - "P0.1 Canonical Resume Context: intent CLI resume ПРОВОДИТ provider/model/signals в низкоуровневый resume (раньше молча уходил в mock). run() при resume ВОССТАНАВЛИВАЕТ политику исходного прогона из features/<wid>/run-settings.yaml (signals/task_type/risk + sandbox/baseline_diff/require_fix/author/review/open_pr/write_scope/max_steps) — resume не переклассифицирует задачу и не деградирует до дефолтов. provider/model — от вызывающего (runtime/секрет, не хранится)"
       - "P0.2 Sequence hard-stop truth: _hard_stop останавливал цепочку по НЕДОСТИЖИМОМУ security_scan.overall=='fail' (пакет возвращает blocked/needs_review/clear). Теперь стоп на РЕАЛЬНОМ блокере: overall=='blocked' (блокирующая находка) ИЛИ security-гейт fail из-за отсутствующего человеко-ApprovalRecord. needs_review без поданного ревьюера = awaiting evidence (не стоп)"
@@ -682,6 +686,7 @@ update_policy:
     - "schemas/*.json"
     - "security/permission-levels.yaml"
     - "security/boundary-model.md"
+    - "security/security-domains.yaml"   # v3.0-rc2: approvals/security_pack грузят универсально (любой diff)
     - "manifest/ai-ops-manifest.yaml"
     # полные контракты, на которые ссылаются реестры: тела агентов, правила/чек-листы,
     # шаблоны артефактов, контекст, прозаические workflow/команды — иначе registry
