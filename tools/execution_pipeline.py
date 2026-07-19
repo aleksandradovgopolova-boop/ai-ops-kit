@@ -590,9 +590,18 @@ def _diff_checks(baseline, after):
             fixed.append(name)
         elif b_status == "fail" and a_status == "fail":
             # структурно: НОВЫЙ id падения = регрессия (даже если общее число не выросло)
-            new_ids = _failure_ids(a) - _failure_ids(b)
+            b_ids, a_ids = _failure_ids(b), _failure_ids(a)
+            new_ids = a_ids - b_ids
             if new_ids or _failure_signal(a) > _failure_signal(b):
                 regressions.append(name)     # уже красная, но правка внесла НОВЫЙ провал / стало хуже
+            # v2.122 (finding обкатки S10): чек ОСТАЁТСЯ red из-за НЕ связанного пред-существующего
+            # падения, но профильный узел реально починен -> засчитываем fixed СИММЕТРИЧНО регрессиям
+            # (по node-id), а не только когда чек целиком fail->pass. Эта elif-ветка = чистое улучшение
+            # (нет новых падений и счётчик не вырос); swap «починил один — сломал другой» уже ушёл в
+            # регрессию выше. Требует извлечённых id ПОСЛЕ правки (a_ids) — иначе не фабрикуем fixed на
+            # непарсибельном выводе (build-fail без node-id и т.п.); пустой diff id -> нечего засчитывать.
+            elif a_ids and (b_ids - a_ids):
+                fixed.append(name)
         elif b_status in real and a_status not in real:
             # v2.85 (finding аудита): проверка ПЕРЕСТАЛА давать вердикт (pass/fail -> warn/not_run/None)
             # = потеря покрытия/верификации. Модель «чинит» красный тест, УДАЛЯЯ его -> tests_absent
@@ -1572,6 +1581,20 @@ def selftest():
                _diff_checks(base_id, same_id) == ([], []))
         expect("failure-ids: извлекает pytest FAILED node id",
                "tests/test_a.py::test_one" in _failure_ids(base_id["test"]))
+        # v2.122 (finding обкатки S10): красная база — профильный узел починен, НЕ связанный
+        # пред-существующий остаётся красным. Чек в целом red (fail->fail), но fixed должен быть
+        # непуст на уровне node-id, а regressions — пуст (нет новых падений). Раньше fixed=[] держал
+        # ложный not-ready под --require-fix на легитимном фиксе.
+        s10_base = {"test": {"status": "fail", "runs": [{"output_tail":
+                    "FAILED test_task.py::test_target\nFAILED test_legacy.py::test_old\n2 failed"}]}}
+        s10_after = {"test": {"status": "fail", "runs": [{"output_tail":
+                     "FAILED test_legacy.py::test_old\n1 failed, 1 passed"}]}}
+        expect("S10 red-base: профильный узел починен, пред-существующий остался = fixed непуст, regress пуст",
+               _diff_checks(s10_base, s10_after) == ([], ["test"]))
+        expect("S10 guard: непарсибельный after (build-fail без node-id) НЕ фабрикует fixed",
+               _diff_checks(s10_base, {"test": {"status": "fail", "runs": [{"output_tail": "BUILD FAILED"}]}}) == ([], []))
+        expect("S10 не ломает swap: починил один — сломал другой = регрессия, НЕ fixed",
+               _diff_checks(base_id, swap_id) == (["test"], []))
         # стек-квалификация go: РЕАЛЬНЫЙ вывод `go test`. Раньше id схлопывался в {'FAIL'} и swap
         # (починил TestSub, сломал TestAdd в ОДНОМ пакете) не ловился -> ложный green для go-репо.
         go_sub = {"test": {"status": "fail", "runs": [{"output_tail":

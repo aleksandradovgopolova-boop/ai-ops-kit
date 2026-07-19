@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [2.122.0] — 2026-07-19 — Live RC Qualification: baseline-diff `fixed` симметричен регрессиям (node-id)
+
+Живая RC-квалификация на Mac (DeepSeek, база v2.121): sanity 7/7 PASS; провайдер-гэп v2.120 закрыт
+(`model==deepseek-chat` во всех отчётах, включая канонический CLI и sequential); v2.121 подтверждён
+вживую (`approval_recheck.ok=true`; `review` exit-код связан с вердиктом); S1/S2/S4/S6/S7/S9 PASS —
+S9 открыл **реальный draft PR** (`base==default_branch`). Прогон нашёл один честный баг движка (S10).
+
+### Fixed
+- **S10 (red base + `--require-fix`): `fixed` считался на уровне чек-агрегата, не structured node-id
+  → false-negative на легитимном фиксе.** На красной базе модель корректно чинила профильный тест
+  (узел `red->green`), а НЕ связанный пред-существующий узел оставался красным; чек в целом оставался
+  `fail`, поэтому `fixed=[]` и `--require-fix` держал ложный not-ready. `_diff_checks`
+  (`tools/execution_pipeline.py`) в ветке `fail->fail` теперь считает ПОЧИНЕННЫЕ узлы симметрично
+  регрессиям: `fixed_ids = _failure_ids(baseline) - _failure_ids(after)`, чек → `fixed` при непустом
+  множестве. Только чистое улучшение (swap «починил один — сломал другой» по-прежнему уходит в
+  `regressions`); fail-safe: нужен непустой `a_ids` (id извлечены после правки) — иначе не фабрикуем
+  `fixed` на непарсибельном выводе. Честность сохранена: правится ложный NEGATIVE, ложный green не
+  вводится (P0.5/P0.6 целы).
+
+Проверки: 3 юнит-теста в `execution_pipeline` selftest (red-base фикс → `fixed` непуст/`regress` пуст;
+guard непарсибельного after; swap = регрессия без fixed); полный pre-commit набор 28/28 PASS. Живой
+перепрогон S10: `ready_for_pr=true`, `baseline.fixed=['test']`, `regressions=[]`, `delivered`.
+Аддитивно в 2.x; PQ1–PQ9 не задеты.
+
 ## [2.121.0] — 2026-07-18 — Spec & Approval Binding: спека до реализации, связанное одобрение, review как lifecycle
 
 Продолжение аудита v2.119: закрыты P1-дефекты честности интеграции — там, где механизм есть, но
