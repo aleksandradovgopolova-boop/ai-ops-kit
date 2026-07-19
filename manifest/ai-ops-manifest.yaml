@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 2.121.0
+  package_version: 2.122.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,11 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v2_122_baseline_diff_symmetric_fixed:
+      - "finding живой RC-квалификации (S10 red base + --require-fix, DeepSeek/Mac): _diff_checks считал fixed на уровне чек-агрегата (fixed только при fail->pass ВСЕГО чека), а node-id использовался лишь в сторону регрессий. На красной базе, где профильный тест реально починен (узел red->green), но НЕ связанный пред-существующий узел остаётся красным, чек в целом остаётся fail -> fixed=[] -> --require-fix держал ложный not-ready на легитимном фиксе. Асимметрия против заявки v2.84 про structured-id baseline-diff и acceptance S10"
+      - "фикс: в ветке fail->fail считаем ПОЧИНЕННЫЕ узлы симметрично регрессиям — fixed_ids = _failure_ids(baseline) - _failure_ids(after); чек добавляется в fixed при непустом множестве. Только чистое улучшение (elif после регрессии): swap «починил один — сломал другой» уже уходит в regressions. Fail-safe: требуется непустой a_ids (id извлечены ПОСЛЕ правки), иначе не фабрикуем fixed на непарсибельном выводе (build-fail без node-id)"
+      - "проверки: 3 юнит-теста в execution_pipeline selftest (red-base профильный фикс -> fixed непуст/regress пуст; guard непарсибельного after -> без fixed; swap по-прежнему регрессия без fixed); полный pre-commit набор 28/28 PASS. Живой перепрогон S10 подтвердил: ready_for_pr=True, baseline.fixed=['test'], regressions=[], delivered. Аддитивно; честность (не ложный green) сохранена — правится ложный NEGATIVE"
+      - "остальная live RC (v2.122): sanity 7/7; провайдер-гэп v2.120 закрыт (model==deepseek-chat везде); v2.121 approval_recheck.ok + review exit-код подтверждены вживую; S1/S2/S4/S6/S7/S9 PASS (S9 — реальный draft PR, base=default_branch)"
     fixed_v2_121_spec_and_approval_binding:
       - "P1.1 спека обязательна ДО tool loop для heavy (ENGINEERING/PRODUCT/CRITICAL): preflight.assess получил author-параметр и правило author-or-spec — heavy без spec.yaml и без --author блокируется (spec-first ДО реализации, не только доставки); с --author движок авторизует спеку пре-стадией, а артефакт-гейты specification/requirements всё равно проверят её готовность; QUICK остаётся light. Тесты: heavy без спеки/без author -> blocked; c author -> spec-гейт пройден; QUICK -> не блокирует. Ripple: review_branch/executor/PQ9 heavy-прогоны переведены на author=True"
       - "P1.2 ApprovalRecord связан (раньше — слабо: хватало непустых author/scope/reason). Теперь запись связывается с: (1) хэшем плана+спеки (binds_to / bind_to_plan -> plan_binding_hash) — при смене run-plan.yaml/spec.yaml одобрение перестаёт покрывать новую ревизию; (2) сроком (expires_at) — просроченное невалидно; (3) типом риска (risk). check() авто-берёт plan_hash с диска и реальное время. Связывание АДДИТИВНО: старые записи без binds_to/expires_at валидны как раньше (нет регрессии)"
