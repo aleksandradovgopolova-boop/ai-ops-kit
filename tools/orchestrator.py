@@ -54,10 +54,13 @@ def mock_provider(role_prompt: str) -> str:
 # системный прокси (urllib берёт HTTPS_PROXY автоматически). Без ключа — честная
 # ошибка, а не тихий фолбэк на mock (иначе «живой» прогон был бы фикцией).
 DEFAULT_MODELS = {"anthropic": "claude-sonnet-5", "openai": "gpt-4o"}
-_MAX_TOKENS = 2048
+# v3.0-rc7 (finding живого прогона kimi): reasoning-модели (kimi-k3 и т.п.) тратят большой бюджет на
+# внутренний reasoning ПЕРЕД контентом. При 2048 весь бюджет уходил в reasoning -> finish_reason=length,
+# content пустой. 8192 даёт место reasoning + артефакт. Обычные модели стопятся раньше по stop (без вреда).
+_MAX_TOKENS = 8192
 
 
-def _http_post_json(url, headers, payload, timeout=120, retries=3):
+def _http_post_json(url, headers, payload, timeout=120, retries=6):
     """POST JSON с ретраями на ТРАНЗИЕНТНЫЕ сбои (finding живого прогона: SSL-handshake timeout
     оборвал задачу). Ретраим сетевые таймауты/сбросы и 5xx/429 с бэкоффом; 4xx (кроме 429) —
     не ретраим (это не транзиент, а ошибка запроса/ключа). Бэкофф детерминированный (без сна на
@@ -79,11 +82,20 @@ def _http_post_json(url, headers, payload, timeout=120, retries=3):
             last = e
             if e.code not in (429, 500, 502, 503, 504) or attempt == retries - 1:
                 raise
+            # v3.0-rc7 (finding kimi): 429/overload перегруженного провайдера — уважаем Retry-After,
+            # иначе экспон. бэкофф с бОльшим потолком (multi-call ENGINEERING-прогон переживает всплеск).
+            ra = 0
+            try:
+                ra = int((e.headers or {}).get("Retry-After") or 0)
+            except (ValueError, TypeError):
+                ra = 0
+            time.sleep(max(ra, min(3 * (2 ** attempt), 60)))
+            continue
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             last = e                                    # сетевой транзиент (в т.ч. SSL timeout)
             if attempt == retries - 1:
                 raise
-        time.sleep(2 ** attempt)                        # 1s, 2s, 4s между попытками
+        time.sleep(min(3 * (2 ** attempt), 60))         # 3s,6,12,24,48,60 между попытками
     raise last if last else RuntimeError("http retry exhausted")
 
 
@@ -119,7 +131,8 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
         data = _http_post_json(
             base_url, {"authorization": f"Bearer {key}"},
             {"model": model, "max_tokens": _MAX_TOKENS,
-             "messages": [{"role": "user", "content": prompt}]})
+             "messages": [{"role": "user", "content": prompt}]},
+            timeout=300)   # v3.0-rc7: reasoning-модели медленные (kimi-k3) — 120с не хватало
         msg = (data.get("choices", [{}])[0] or {}).get("message", {}) or {}
         content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
         if content:
