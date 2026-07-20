@@ -439,6 +439,9 @@ def main(argv):
     ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
     ap.add_argument("--resume-from", help="run --sequential: продолжить с конкретного WorkPackage (id); "
                                           "пакеты до него берутся из снимков прошлого прогона")
+    ap.add_argument("--retry-package", help="run --sequential: ДОВЕРЕННЫЙ retry заблокированного пакета (id) "
+                                            "— архивирует проваленную попытку, восстанавливает ветку на "
+                                            "checkpoint предшественника и продолжает (без ручного git reset)")
     ap.add_argument("--replan", action="store_true",
                     help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
     ap.add_argument("--json", action="store_true")
@@ -525,6 +528,18 @@ def main(argv):
             import orchestrator
             wid = a.feature or _wid_for(task, signals, a.feature)
             wp = atomic_planner.decompose(signals, wid=wid, child_root=Path(child_root))
+            # v3.0-rc13 (P1): доверенный retry — архив попытки + reset на checkpoint предшественника,
+            # затем продолжаем как resume_from (без ручного git reset у пользователя).
+            resume_from = a.resume_from
+            if a.retry_package:
+                rt = workpackage_executor.retry_package(Path(child_root), wid, a.retry_package)
+                if not rt.get("ok"):
+                    print(f"RETRY ОТКАЗ: {rt.get('error')}")
+                    return 2
+                print(f"RETRY {a.retry_package}: ветка восстановлена на checkpoint "
+                      f"{(rt.get('checkpoint') or '')[:12]} (предшественник {rt.get('predecessor') or 'база'}); "
+                      f"попытка заархивирована -> {rt.get('archived_attempt') or '—'}")
+                resume_from = a.retry_package
             if wp["should_decompose"] and wp["work_packages"]:
                 base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(a.provider, a.model))
                 auth = orchestrator.make_provider(a.provider, a.model) if flags["author"] and a.provider != "mock" else None
@@ -538,7 +553,7 @@ def main(argv):
                     sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps,
                     # v2.123 (P0.3): package write_scope РЕАЛЬНО протянут — брокер ограничит пакет его каталогом
                     write_scope_for=lambda pkg: pkg.get("write_scope"),
-                    resume_from=a.resume_from)   # v2.124: resume с конкретного пакета
+                    resume_from=resume_from)   # v2.124: resume; v3.0-rc13: retry -> resume_from=retry-package
                 _dlv = seq.get("delivery") or {}
                 print(f"SEQUENCE {wid}: executed_all={seq['executed_all']} · ready_all={seq['ready_all']} · "
                       f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}"
