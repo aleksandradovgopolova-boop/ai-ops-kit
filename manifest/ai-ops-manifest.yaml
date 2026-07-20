@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc3
+  package_version: 3.0.0-rc4
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc4_continuity_semantics:
+      - "P0.1 immutable resume: resume НЕ меняет классификацию/policy. Смена task_type/risk/size/affected_areas/write_scope при resume -> drift-ошибка (нужен явный --replan с ревалидацией). Внутренний per-package resume executor'а (_sequence_internal) освобождён (его affected_areas меняются легитимно). run-settings хранятся per-run (run-history/run-NNN.yaml), не только последнее состояние"
+      - "P0.2 complete sequence hard-stop: security-гейт fail останавливает цепочку В ЛЮБОМ случае, КРОМE awaiting (нужен reviewer/человек, но не подан). Теперь ловятся: сбой сканера (fail-closed), блокирующая находка, security-reviewer НЕ pass, отсутствующий approval — раньше стоп был только когда blocker содержал слово approval"
+      - "P0.3 SequencePlan binding: план и каждый пакет получили hash (_plan_hash/_pkg_hash), записаны в sequence-plan.yaml; отчёт пакета привязан к pkg_hash. resume при ДРЕЙФЕ плана (planner перестроил пакеты: тот же id — другой scope) -> отказ (нужен replan), а не приём старого отчёта за выполненный"
+      - "P0.4 exact checkpoint resume: перед исполнением resume_from-пакета HEAD sequence-ветки обязан быть РОВНО на коммите предшественника (не просто потомком). Ветка ушла вперёд (попытки последующих пакетов) -> отказ со ссылкой на checkpoint. Раньше новый прогон строился поверх текущего HEAD, а не гарантированно поверх checkpoint"
+      - "P1.1 aggregate verdict полнее: agg_ok теперь требует и evidence_revision==final_sha, и AGGREGATE SECURITY на ПОЛНОМ диффе base..final_sha (ловит риск от комбинации пакетов) в дополнение к tests/baseline/HEAD/чистое дерево. Draft PR — только при полном aggregate green"
+      - "doc: ROADMAP — breaking changes «только в 2.0» -> актуализировано (3.x обратно совместим, breaking в v3.2/v4.0); Context Engineering помечен выполненным (был 'planned'). проверки: полный CI-набор (91) локально 91/91 PASS + деттесты на P0.1-P0.4. ОСТАЛОСЬ в rc4-scope: P1.2 semantic dependency approval (fingerprint package/version/manifest/operation) — вынесено в отдельный шаг"
     fixed_v3_0_rc3_ci_parity:
       - "CI package-quality был КРАСНЫМ с v2.123 (независимо не подтверждён — finding аудита). Причина: security/security-domains.yaml не входил в managed_set, а universal security (v2.124.1+) грузит его на ЛЮБОМ коммите -> standalone-движок из .ai/managed падал FileNotFoundError. Добавлен в manifest.update_policy.managed_set И в ENGINE_CLOSURE (validate_standalone_engine) — регресс теперь ловится completeness-проверкой, не только рантаймом"
       - "_failure_ids снимает ANSI-цвета раннера (pytest/jest с forced color): '\\x1b[31mFAILED\\x1b[0m test::id' теперь парсится в node-id (иначе цветной вывод -> ложный «нет падений»). Живой pytest в stack_qualification снова зелёный"

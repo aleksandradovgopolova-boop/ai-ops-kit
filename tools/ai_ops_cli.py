@@ -439,6 +439,8 @@ def main(argv):
     ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
     ap.add_argument("--resume-from", help="run --sequential: продолжить с конкретного WorkPackage (id); "
                                           "пакеты до него берутся из снимков прошлого прогона")
+    ap.add_argument("--replan", action="store_true",
+                    help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -466,6 +468,8 @@ def main(argv):
         argv2 += ["--provider", a.provider, "--signals", a.signals]
         if a.model:
             argv2 += ["--model", a.model]
+        if getattr(a, "replan", False):
+            argv2.append("--replan")   # v3.0-rc4 (P0.1): осознанная смена policy при продолжении
         if a.execute:
             argv2.append("--execute")
         if a.force:
