@@ -249,6 +249,17 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
         "      scenarios:\n        - {name: <имя>, when: <условие>, then: <результат>}\n"
         "Требования конкретные и проверяемые. Только JSON/YAML.\n\n=== ЗАДАЧА ===\n" + task)
     data = _parse_yaml_block(author_proposer(prompt))
+    # v3.0-rc8 (finding живого прогона kimi): строки в tasks/what_changes часто содержат двоеточие
+    # («Написать unit-тесты: все ветвления...») -> YAML разбирает элемент списка как MAPPING {key: val},
+    # а не строку -> vsa.check «непустой список строк» падает. Нормализуем: одноключевой dict от
+    # случайного «k: v» -> строка «k: v». Модель имела в виду строку — восстанавливаем её.
+    if isinstance(data, dict):
+        for _k in ("tasks", "what_changes"):
+            _v = data.get(_k)
+            if isinstance(_v, list):
+                data[_k] = [(x if isinstance(x, str)
+                             else "; ".join(f"{k}: {vv}" for k, vv in x.items()) if isinstance(x, dict)
+                             else str(x)) for x in _v]
     errs = vsa.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML spec-change"]
     entry = {"gate": "specification", "artifact": f"openspec/changes/{wid}", "valid": not errs,
              "errors": errs or None}
@@ -2009,6 +2020,19 @@ def selftest():
         expect("spec-authoring: битый spec от автора -> не закрыт (форма не прошла)",
                "specification" not in gev_bad
                and any(a["gate"] == "specification" and not a["valid"] for a in auth_bad))
+        # v3.0-rc8 (finding живого прогона kimi): task-строка с двоеточием («Написать тесты: A, B») YAML
+        # парсит как mapping -> раньше vsa.check «список строк» падал. Нормализация -> валиден.
+        colon_author = lambda prompt: (
+            "schema_version: 1\nkind: spec-change\ncapability: pricing\nwhy: нужна утилита\n"
+            "what_changes:\n  - добавить formatPrice\n"
+            "tasks:\n  - Написать unit-тесты: все ветвления, граничные значения, ошибочный ввод\n  - реализовать\n"
+            "requirements:\n  - name: Fmt\n    text: The system SHALL format price.\n"
+            "    scenarios:\n      - {name: T, when: x, then: y}\n")
+        gev_colon, auth_colon, _ = _run_authoring(colon_author, root, ["specification"], {}, "spec-colon",
+                                                  "цена", {"max_model_calls": 5},
+                                                  openspec_validate=lambda wr, cid: (True, True, "valid"))
+        expect("v3.0-rc8: task-строка с двоеточием нормализуется -> specification валиден (не ложный блок)",
+               any(a["gate"] == "specification" and a["valid"] for a in auth_colon))
 
         # write вне scope -> denied, файл не создан, но pipeline не падает
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])

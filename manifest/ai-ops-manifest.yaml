@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc7
+  package_version: 3.0.0-rc8
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,9 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc8_spec_tasks_colon_normalization:
+      - "finding живого прогона kimi (добить specification-форму): строки в spec-change tasks/what_changes часто содержат двоеточие («Написать unit-тесты: все ветвления...») -> YAML разбирает элемент списка как MAPPING {key: val}, не строку -> vsa.check «непустой список строк» ложно падал (specification невалидна даже при осмысленном выводе). _run_spec_authoring нормализует: одноключевой dict от случайного 'k: v' -> строка 'k: v' (модель имела в виду строку). Подтверждено на реальном выводе kimi: vsa.check []  (было ['tasks: непустой список непустых строк'])"
+      - "проверки: +деттест (task с двоеточием -> specification валиден); полный CI-набор (91) 91/91 PASS. После rc7 (reasoning tokens) + rc8 (spec-tasks) kimi-k3 производит валидные requirements+plan+specification; остаётся флаки провайдера (429/пустой) под нагрузкой multi-call прогона"
     fixed_v3_0_rc7_reasoning_model_support:
       - "finding живого прогона kimi (диагностика 'пустого ответа'): kimi-k3 — reasoning-модель, тратит большой бюджет токенов на внутренний reasoning ДО контента. При _MAX_TOKENS=2048 весь бюджет уходил в reasoning (finish_reason=length, content_len=0, reasoning_tokens=2045) -> author-артефакт 'не вернулся'. Конфиг пользователя был верный (ключ/base_url рабочие: probe 200, /models отдал список). Фикс: _MAX_TOKENS 2048->8192 (место reasoning+артефакт); обычные модели стопятся по stop без вреда"
       - "reasoning-модели медленные + перегруженные: timeout _openai_call 120->300с; _http_post_json retries 3->6 с бэкоффом 3..60с и уважением Retry-After на 429/overload (multi-call ENGINEERING переживает всплеск лимита). Подтверждено: kimi-k3 @8192 отдаёт валидный requirements-artifact (было пусто)"
