@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc7] — 2026-07-20 — Reasoning-model support (диагностика «пустого ответа» kimi)
+
+Диагностика «почему kimi отдаёт пустой ответ» (вопрос пользователя): **конфиг был верный** (ключ/
+base_url рабочие). Причина в движке — не хватало токенов reasoning-модели. Исправлено. CI 91/91 PASS.
+
+### Fixed
+- **Reasoning-модели (kimi-k3) отдавали пустой content.** kimi-k3 тратит большой бюджет на внутренний
+  reasoning ДО контента; при `_MAX_TOKENS=2048` весь бюджет уходил в reasoning (`finish_reason=length`,
+  `reasoning_tokens=2045`, `content_len=0`) → author-артефакт «не вернулся». `_MAX_TOKENS` 2048→**8192**
+  (место reasoning + артефакт; обычные модели стопятся по `stop` без вреда). Подтверждено: kimi-k3
+  @8192 отдаёт валидный requirements-artifact.
+- **Reasoning-модели медленные/перегруженные.** `_openai_call` timeout 120→**300с**; `_http_post_json`
+  retries 3→**6**, бэкофф 3..60с с уважением `Retry-After` на 429/overload (multi-call ENGINEERING
+  переживает всплеск лимита).
+
+### Живой ENGINEERING на kimi-k3 (после фиксов)
+`requirements` + `plan` теперь **валидны** (были пустые), `code_review` даёт **реальный вердикт**.
+Остаётся невалидной `specification` (форма openspec spec-change от kimi) → pre-authoring честно
+блокирует (0 implementation). **Positive-green в одном артефакте**; движок честен на сильной модели.
+Периодически k3 отдаёт 429 (rate-limit ключа) — под нагрузкой ENGINEERING-прогон может упасть; нужен
+запас квоты или ещё ретраи.
+
 ## [3.0.0-rc6] — 2026-07-20 — Author/provider resilience (finding живой квалификации kimi)
 
 Живая квалификация rc5 на **kimi (Moonshot)** дала два инженерных улучшения устойчивости + честный

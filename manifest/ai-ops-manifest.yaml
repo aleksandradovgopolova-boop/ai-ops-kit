@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc6
+  package_version: 3.0.0-rc7
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc7_reasoning_model_support:
+      - "finding живого прогона kimi (диагностика 'пустого ответа'): kimi-k3 — reasoning-модель, тратит большой бюджет токенов на внутренний reasoning ДО контента. При _MAX_TOKENS=2048 весь бюджет уходил в reasoning (finish_reason=length, content_len=0, reasoning_tokens=2045) -> author-артефакт 'не вернулся'. Конфиг пользователя был верный (ключ/base_url рабочие: probe 200, /models отдал список). Фикс: _MAX_TOKENS 2048->8192 (место reasoning+артефакт); обычные модели стопятся по stop без вреда"
+      - "reasoning-модели медленные + перегруженные: timeout _openai_call 120->300с; _http_post_json retries 3->6 с бэкоффом 3..60с и уважением Retry-After на 429/overload (multi-call ENGINEERING переживает всплеск лимита). Подтверждено: kimi-k3 @8192 отдаёт валидный requirements-artifact (было пусто)"
+      - "живой ENGINEERING на kimi-k3 после фиксов: requirements + plan теперь ВАЛИДНЫ (были пустые), code_review даёт РЕАЛЬНЫЙ вердикт (DeepSeek не давал). Остаётся невалидной specification (форма openspec spec-change от kimi) -> pre-authoring честно блокирует (0 impl). Positive-green в одном артефакте; движок честен на сильной модели. полный CI-набор (91) 91/91 PASS"
     fixed_v3_0_rc6_author_provider_resilience:
       - "finding живой квалификации kimi: author-парсер и провайдер устойчивее к сильным/флаки моделям. _parse_yaml_block перебирает всех кандидатов (все fenced-блоки + срез от schema_version:/kind: + сырой текст) и берёт первый dict — раньше брал только первый fenced-блок, прозо-обёрнутый YAML падал. orchestrator._openai_call РЕТРАИТ HTTP-200-с-пустым-content (перегруженный провайдер отдаёт 200 без текста — не 429, _http_post_json его не ловил) с бэкоффом + читает reasoning_content"
       - "живая квалификация rc5 на kimi (Moonshot, base https://api.moonshot.ai/v1/chat/completions): kimi ЗАМЕТНО сильнее DeepSeek — производит валидный plan+specification (openspec закрыт) и РЕАЛЬНЫЙ вердикт code_review (DeepSeek стабильно no-verdict). НО kimi-k3 сейчас server-overloaded (429 engine_overloaded), kimi-k2.7-code интермиттентно отдаёт пустой ответ -> author-вызовы флакают -> pre-authoring честно блокирует (0 implementation). Positive-green ENGINEERING НЕ достигнут из-за нестабильности провайдера, не движка. Движок укреплён (парсер+retry); нужен стабильный сильный провайдер ИЛИ больше ретраев"
