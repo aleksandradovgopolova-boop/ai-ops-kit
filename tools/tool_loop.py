@@ -87,8 +87,11 @@ def make_reviewer_proposer(provider, gate_id, checklist="", required_evidence=No
             '  {"op":"read","path":"..."}  — прочитать файл, чтобы удостовериться\n'
             '  {"kind":"reviewer-result","gate":"' + gate_id + '","status":"pass|warn|fail",'
             '"checks":[{"id":"...","status":"pass|warn|fail"}],"blockers":["..."]}  — ИТОГ\n'
-            "Правила: читай минимально; выноси вердикт по фактам из прочитанного. status=fail "
-            "требует непустой blockers. НЕ выдумывай — чего не подтвердил, то не pass. Только JSON.\n\n"
+            "Правила: читай минимально; выноси вердикт по фактам из прочитанного. status=fail И "
+            "status=warn требуют непустой blockers с КОНКРЕТНЫМИ проблемами (warn на блокирующем "
+            "гейте тоже блокирует). Честность симметрична: НЕ выдумывай pass (чего не подтвердил "
+            "чтением — не pass), но и НЕ выдумывай сомнения ради подстраховки — если прочитал "
+            "изменение и КОНКРЕТНОЙ проблемы нет, это pass, а не warn «на всякий случай». Только JSON.\n\n"
             "=== КОНТЕКСТ (изменение и журнал чтений) ===\n" + context)
         return parse_action(provider(prompt))
     return propose
