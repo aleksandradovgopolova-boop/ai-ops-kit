@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc5
+  package_version: 3.0.0-rc6
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc6_author_provider_resilience:
+      - "finding живой квалификации kimi: author-парсер и провайдер устойчивее к сильным/флаки моделям. _parse_yaml_block перебирает всех кандидатов (все fenced-блоки + срез от schema_version:/kind: + сырой текст) и берёт первый dict — раньше брал только первый fenced-блок, прозо-обёрнутый YAML падал. orchestrator._openai_call РЕТРАИТ HTTP-200-с-пустым-content (перегруженный провайдер отдаёт 200 без текста — не 429, _http_post_json его не ловил) с бэкоффом + читает reasoning_content"
+      - "живая квалификация rc5 на kimi (Moonshot, base https://api.moonshot.ai/v1/chat/completions): kimi ЗАМЕТНО сильнее DeepSeek — производит валидный plan+specification (openspec закрыт) и РЕАЛЬНЫЙ вердикт code_review (DeepSeek стабильно no-verdict). НО kimi-k3 сейчас server-overloaded (429 engine_overloaded), kimi-k2.7-code интермиттентно отдаёт пустой ответ -> author-вызовы флакают -> pre-authoring честно блокирует (0 implementation). Positive-green ENGINEERING НЕ достигнут из-за нестабильности провайдера, не движка. Движок укреплён (парсер+retry); нужен стабильный сильный провайдер ИЛИ больше ретраев"
+      - "проверки: +3 деттеста парсера (проза/мультиблок/мусор->None); полный CI-набор (91) локально 91/91 PASS. Движок честен: невалидная/пустая спека -> ноль кода (P0.1 держится и на сильной модели)"
     fixed_v3_0_rc5_semantic_dependency_approval:
       - "P1.2 semantic dependency approval: одобрение зависимости привязано к ОТПЕЧАТКУ пакета (manifest/package/version/operation), а не к пути файла. Раньше approval со scope=requirements.txt покрывал ЛЮБУЮ новую зависимость в этом файле; теперь новая зависимость из диффа требует ApprovalRecord dependencies с covers_packages, называющим ИМЕННО этот пакет (опц. name@version). security_scan.new_dependencies_detailed извлекает name+version+manifest; finding security_pack несёт fingerprint; approvals.covers_dependency/recheck_dependencies проверяют покрытие; execution_pipeline после диффа блокирует непокрытую новую зависимость. CLI: approvals record --package <name[@ver]> (повторяемо)"
       - "проверки: +6 деттестов covers_dependency/recheck_dependencies (path-only не покрывает; другой пакет не покрывает; имя/версия совпали; чужая зависимость в том же манифесте не покрыта старым approval); полный CI-набор (91) локально 91/91 PASS. Закрывает последний P1 аудита rc3"

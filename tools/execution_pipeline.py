@@ -174,23 +174,31 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
 
 
 def _parse_yaml_block(text):
-    """Достать YAML из ответа author-модели (терпимо к ```yaml-обрамлению/тексту вокруг)."""
+    """Достать YAML-артефакт из ответа author-модели. v3.0-rc5 (finding живого прогона kimi): терпимо к
+    РАЗНЫМ стилям вывода моделей — несколько ```-блоков, проза вокруг, YAML без ограды после текста.
+    Перебираем кандидатов (все fenced-блоки, срез от schema_version:/kind:, сырой текст) и берём ПЕРВЫЙ,
+    который парсится в dict. Раньше брали только первый fenced-блок -> прозо-обёрнутый YAML kimi падал."""
     import yaml
+    import re
     if isinstance(text, dict):
         return text
     s = text or ""
-    if "```" in s:                          # вырезать первый fenced-блок
-        parts = s.split("```")
-        if len(parts) >= 2:
-            block = parts[1]
-            if block.lstrip().lower().startswith("yaml"):
-                block = block.split("\n", 1)[1] if "\n" in block else ""
-            s = block
-    try:
-        data = yaml.safe_load(s)
-        return data if isinstance(data, dict) else None
-    except yaml.YAMLError:
-        return None
+    candidates = []
+    for m in re.finditer(r"```[ \t]*[A-Za-z0-9]*\n(.*?)```", s, re.S):   # все fenced-блоки
+        candidates.append(m.group(1))
+    for marker in ("schema_version:", "kind:"):                          # YAML без ограды / после прозы
+        i = s.find(marker)
+        if i >= 0:
+            candidates.append(s[i:])
+    candidates.append(s)                                                 # как есть
+    for c in candidates:
+        try:
+            data = yaml.safe_load(c)
+        except yaml.YAMLError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
 
 
 def _openspec_validate(work_root, change_id):
@@ -1953,6 +1961,15 @@ def selftest():
         expect("authoring: невалидный артефакт -> requirements остаётся блокирующим (нет фабрикации)",
                "requirements" in rep_ba["gates"]["unmet"]
                and any(not a["valid"] for a in (rep_ba["authored"] or [])))
+        # v3.0-rc5 (finding живого прогона kimi): парсер терпим к прозе/несколькими блокам
+        expect("v3.0-rc5 parse: YAML после прозы (без ограды) извлекается",
+               (_parse_yaml_block("Вот артефакт:\n\nschema_version: 1\nkind: requirements-artifact\n"
+                                  "requirements:\n  - id: R1\n") or {}).get("kind") == "requirements-artifact")
+        expect("v3.0-rc5 parse: несколько ```-блоков — берётся первый валидный dict",
+               (_parse_yaml_block("```text\nбла\n```\nтекст\n```yaml\nschema_version: 1\nkind: plan-artifact\n```")
+                or {}).get("kind") == "plan-artifact")
+        expect("v3.0-rc5 parse: мусор без YAML -> None (нет фабрикации)",
+               _parse_yaml_block("просто текст без артефакта") is None)
         # v2.123 (P0.1) НАСТОЯЩИЙ Spec-First: невалидная author-спека -> tool loop НЕ запущен (0 кода)
         expect("v2.123 (P0.1): невалидная спека -> tool loop НЕ запущен (spec-prestage-failed, 0 impl)",
                rep_ba["loop"]["stopped"] == "spec-prestage-failed"

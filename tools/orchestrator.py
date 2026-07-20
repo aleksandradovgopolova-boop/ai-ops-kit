@@ -111,12 +111,22 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
     if not key:
         raise SystemExit(f"{key_env} не задан — живой прогон невозможен. "
                          "Задайте ключ в окружении или используйте --provider mock (офлайн).")
-    data = _http_post_json(
-        base_url, {"authorization": f"Bearer {key}"},
-        {"model": model, "max_tokens": _MAX_TOKENS,
-         "messages": [{"role": "user", "content": prompt}]})
-    return (data.get("choices", [{}])[0].get("message", {}).get("content") or "").strip() \
-        or "(пустой ответ модели)"
+    import time
+    # v3.0-rc5 (finding живого прогона kimi): перегруженный провайдер отдаёт HTTP 200 с ПУСТЫМ content
+    # (не 429 — _http_post_json его не ловит). Для author/review это фатально (артефакт «не вернулся»).
+    # Ретраим пустой ответ с бэкоффом; часть моделей кладёт текст в reasoning_content — используем и его.
+    for attempt in range(3):
+        data = _http_post_json(
+            base_url, {"authorization": f"Bearer {key}"},
+            {"model": model, "max_tokens": _MAX_TOKENS,
+             "messages": [{"role": "user", "content": prompt}]})
+        msg = (data.get("choices", [{}])[0] or {}).get("message", {}) or {}
+        content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
+        if content:
+            return content
+        if attempt < 2:
+            time.sleep(2 ** attempt)
+    return "(пустой ответ модели)"
 
 
 def make_provider(name: str, model: str = None):
