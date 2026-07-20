@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc9
+  package_version: 3.0.0-rc10
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc10_reviewer_verdict_convergence:
+      - "finding живого прогона kimi-k3 (после rc9): контекст изменения теперь доставляется — ревьюер РЕАЛЬНО читает дифф (reads=7, было []). Но reasoning-модель на многофайловом диффе тратила весь read-бюджет на чтение и не успевала вынести вердикт: run_review молча возвращал no-verdict после max_reads+1 итераций -> code_review=fail 'нет заключения reviewer'. Честно (no-verdict -> fail), но ревьюер не получал шанса заключить по прочитанному"
+      - "фикс: (1) run_review даёт выделенный ФОРС-ХОД вердикта после исчерпания чтений — читать больше нельзя, принимается только reviewer-result (+нудж на последнем чтении); вердикт НЕ фабрикуется: если ревьюер и на форс-ходе не заключает — честный no-verdict. (2) _run_reviews max_reads 6->10 (многофайловый дифф требует больше чтений до вердикта). writer≠judge и честность сохранены — лишь ограничена фаза чтения и затребовано заключение по прочитанному"
+      - "проверки: +деттест (жадная модель читает до лимита, затем на форс-ходе выносит вердикт -> stopped=verdict, reads=max_reads; отдельный тест: вечно-читающий -> честный result=None). Полный CI-набор (94) 94/94 PASS локально"
     fixed_v3_0_rc9_reviewer_change_context:
       - "finding живого прогона kimi-k3 (полный ENGINEERING): все три author-артефакта (requirements+plan_readiness+specification) ВАЛИДНЫ, реализация реально отработала (3 write, discounts.py +51/-10, tests pass, реальный коммит) — но code_review=fail с блокерами 'контекст изменения пуст: не дан дифф/список изменённых файлов', reads=[]. Корень — ДВИЖОК, не модель/провайдер: _run_reviews вызывал tool_loop.run_review с ПУСТЫМ base_context, ревьюеру никогда не давали ни дифф, ни список изменённых файлов -> прилежная модель честно возвращала fail (нечего верифицировать) -> code_review структурно НЕпроходим независимо от качества модели (ложный блокер positive-green ENGINEERING)"
       - "фикс: _change_context(work_root, revision) детерминированно собирает контекст изменения — полный `git show --stat` (список файлов, целиком) + ограниченный (12k симв.) unified-дифф ревизии — и передаётся base_context в run_review для code_review/ux_review (_run_reviews) И security-reviewer (_review_security). Даём ровно то, что видит человек-ревьюер в PR (дифф+файлы), НЕ вердикт; ревьюер по-прежнему сам читает файлы (read-only) для верификации — writer≠judge сохранён (отдельный вызов, своя оценка)"

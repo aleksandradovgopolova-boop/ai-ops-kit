@@ -100,18 +100,33 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
 
     Ревьюер может читать файлы (write/shell брокер отклонит — capability-независимость от писателя),
     затем обязан вернуть терминальный reviewer-result. Возвращает {"result": <reviewer-result|None>,
-    "stopped": ..., "reads": [...], "denied": [...]}. Если ревьюер не вынес вердикт за max_reads —
-    result=None (гейт останется неподтверждённым, честный fail на уровне gate_executor)."""
+    "stopped": ..., "reads": [...], "denied": [...]}. Если ревьюер не вынес вердикт — result=None
+    (гейт останется неподтверждённым, честный fail на уровне gate_executor).
+
+    v3.0-rc10 (finding живого прогона kimi): reasoning-модель на многофайловом диффе тратила ВЕСЬ
+    read-бюджет на чтение и не успевала вынести вердикт -> тихий no-verdict. Теперь: (1) нудж, когда
+    осталось последнее чтение; (2) выделенный ФОРС-ХОД вердикта после исчерпания чтений — читать
+    больше нельзя, принимается только reviewer-result. Вердикт НЕ фабрикуется: если ревьюер и на
+    форс-ходе не заключает — честный no-verdict (fail). Мы лишь ограничиваем фазу чтения и требуем
+    заключить по прочитанному — ровно то, что обязан делать компетентный судья."""
     root = Path(root)
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     context = base_context
     reads, denied = [], []
     stopped = "no-verdict"
-    for _ in range(max_reads + 1):
+    for _ in range(max_reads + 2):                  # +1 нудж-запас, +1 форс-ход вердикта
         try:
             bud.charge_call()
         except _budget_mod.BudgetExceeded as e:
             stopped = f"budget: {e}"; break
+        force_verdict = len(reads) >= max_reads     # бюджет чтений исчерпан -> только вердикт
+        if force_verdict:
+            context += ("\n[ревью] ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН. Больше не читай. Верни СЛЕДУЮЩИМ РОВНО один "
+                        "reviewer-result по уже прочитанному (status=fail с конкретными blockers, если "
+                        "чего-то не хватило для pass). НЕ выдумывай.")
+        elif len(reads) == max_reads - 1:
+            context += ("\n[ревью] остаётся последнее чтение до лимита — прочти только самое нужное, "
+                        "затем верни reviewer-result.")
         action = reviewer(context)
         if not isinstance(action, dict) or action.get("error"):
             context += "\n[ревью] верни РОВНО один JSON: read-действие или reviewer-result."
@@ -124,6 +139,10 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             if reviewed_revision:
                 action.setdefault("reviewed_revision", reviewed_revision)
             return {"result": action, "stopped": "verdict", "reads": reads, "denied": denied}
+        # на форс-ходе чтения запрещены: не исполняем, повторно требуем вердикт
+        if force_verdict:
+            context += "\n[ревью] чтение отклонено: лимит исчерпан. Нужен reviewer-result, не read."
+            continue
         # иначе — действие через брокер (read-only Policy: write/shell -> DENIED)
         ev = tool_broker.execute(action, root, policy)
         if ev["allowed"] and ev.get("ok") and ev.get("op") == "read":
@@ -364,6 +383,18 @@ def selftest():
                               budget={"max_model_calls": 20}, max_reads=3)
         expect("reviewer: без вердикта за лимит -> result=None (честный не-pass)",
                rev_none["result"] is None)
+        # (e) rc10: жадная reasoning-модель читает до лимита, затем на ФОРС-ХОДЕ заключает вердикт
+        #     (раньше молча уходила в no-verdict). Форс-ход даёт заключить по прочитанному, НЕ фабрикуя.
+        def greedy_then_verdict(c):
+            if "ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН" in c:
+                return {"kind": "reviewer-result", "gate": "code_review", "status": "pass",
+                        "checks": [{"id": "ok", "status": "pass"}]}
+            return {"op": "read", "path": "f"}
+        rev_fv = run_review(greedy_then_verdict, root, ro, "code_review",
+                            budget={"max_model_calls": 20}, max_reads=3)
+        expect("reviewer rc10: форс-ход после исчерпания чтений -> вердикт вынесен (не тихий no-verdict)",
+               rev_fv["result"] is not None and rev_fv["stopped"] == "verdict"
+               and len(rev_fv["reads"]) == 3)
 
     print("tool_loop selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
