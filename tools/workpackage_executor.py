@@ -90,14 +90,165 @@ def _hard_stop(rep):
             _awaiting = ("нужен независимый security-reviewer" in _blk) and "ApprovalRecord" not in _blk
             if not _awaiting:
                 return "security-gate-fail"
-    if any((rv or {}).get("status") == "fail" for rv in (rep.get("reviews") or [])):
-        return "reviewer-fail"
+    # v3.0-rc13 (finding аудита P0): источник истины — ИТОГОВЫЙ блокирующий вердикт ревью, НЕ сырой
+    # status вызова. `warn` на БЛОКИРУЮЩЕМ гейте _run_reviews превращает в gate=fail и помечает
+    # entry.closed_as="blocked" (v2.85) — но старое условие ловило только status=="fail" -> живой rc11-
+    # результат (code_review=warn -> gate fail -> ready_for_pr=false) НЕ останавливал цепочку, и пакет
+    # N+1 мог строиться поверх изменения, которое независимый ревьюер ЗАБЛОКИРОВАЛ. Ловим оба.
+    for rv in (rep.get("reviews") or []):
+        if (rv or {}).get("status") == "fail" or (rv or {}).get("closed_as") == "blocked":
+            return "reviewer-blocked"
+    # belt-and-suspenders: итоговый review-owned гейт со статусом fail в gate_results (напр. code_review,
+    # ux_review) — блокирующий вердикт судьи, а не «awaiting evidence» (у awaiting нет вынесенного вердикта).
+    _review_gates = {"code_review", "ux_review", "ai_red_team", "architecture_review", "accessibility_review"}
+    for g in ((rep.get("gates") or {}).get("gate_results") or []):
+        if g.get("gate") in _review_gates and g.get("status") == "fail":
+            ev = " ".join(g.get("evidence") or [])
+            if "reviewer verdict" in ev:      # вердикт РЕАЛЬНО вынесен (не пустой artifact-гейт)
+                return "reviewer-blocked"
     # нарушение package scope: модель пыталась ПИСАТЬ вне write_scope пакета -> брокер отклонил.
     # Матчим именно scope-отказ (не любой denied — напр. блокировка git push НЕ является scope-violation).
     for reason in ((rep.get("loop") or {}).get("denied_reasons") or []):
         if "вне write_scope" in (reason or ""):
             return "scope-violation"
     return None
+
+
+def _classify_failure(exc):
+    """v3.0-rc13 (finding аудита P1): типизировать исключение пакета, а не звать всё «infra-error».
+    Иначе внутренний баг executor'а не отличить от нестабильности провайдера. -> envelope dict."""
+    import hashlib
+    import traceback
+    et = type(exc).__name__
+    msg = str(exc)
+    # сеть/провайдер — транзиентно, retryable; budget — не retryable без изменения лимита; парсер/валидация —
+    # проблема данных; прочее -> engine (вероятный дефект, НЕ маскировать под провайдер).
+    if isinstance(exc, (ConnectionError, TimeoutError)) or "Connection reset" in msg or "timed out" in msg:
+        fclass, retryable = ("network", True)
+    elif et in ("URLError", "HTTPError", "IncompleteRead", "RemoteDisconnected"):
+        fclass, retryable = ("provider", True)
+    elif "budget" in msg.lower() or et == "BudgetExceeded":
+        fclass, retryable = ("budget", False)
+    elif et in ("ValueError", "KeyError", "TypeError", "YAMLError", "JSONDecodeError"):
+        fclass, retryable = ("validation", False)
+    else:
+        fclass, retryable = ("engine", False)       # вероятный программный дефект — не «нестабильность»
+    tb = "".join(traceback.format_exception_only(type(exc), exc))
+    return {"failure_class": fclass, "exception_type": et, "message": msg[:400],
+            "retryable": retryable,
+            "traceback_hash": hashlib.sha256(tb.encode("utf-8")).hexdigest()[:12]}
+
+
+def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, reviewer_proposer, review):
+    """v3.0-rc13 (finding аудита P0): needs_review на AGGREGATE-диффе — не провал, а awaiting evidence.
+    Закрываем независимым security-reviewer (writer≠judge, read-only) по применимым доменам — тем же
+    путём, что per-package (_review_security). blocked/error/clear не трогаем (fail-closed). Без поданного
+    ревьюера needs_review остаётся needs_review (честный не-ready). -> (agg_sec', reviewer_result|None)."""
+    agg_sec = dict(agg_sec or {})
+    if agg_sec.get("overall") != "needs_review":
+        return agg_sec, None
+    if not (review and reviewer_proposer):
+        return agg_sec, None                        # ревьюер не подан -> awaiting (не clear -> не ready)
+    try:
+        import execution_pipeline as _ep
+        status, res = _ep._review_security(reviewer_proposer, vroot, agg_sec, final_sha,
+                                           {"max_model_calls": 12})
+        agg_sec["reviewer_status"] = status
+        if status == "pass":                        # судья закрыл применимые needs_review домены
+            agg_sec["overall"] = "clear"
+            agg_sec["closed_by"] = "aggregate-security-reviewer"
+        return agg_sec, res
+    except Exception as e:  # noqa: BLE001 — сбой ревью на aggregate = fail-closed (не clear)
+        agg_sec["overall"] = "error"
+        agg_sec["review_error"] = str(e)
+        return agg_sec, None
+
+
+def _aggregate_code_review(vroot, final_sha, signals, reviewer_proposer, review):
+    """v3.0-rc13 (finding аудита P0): независимый code_review ИНТЕГРИРОВАННОГО диффа на финальном SHA —
+    ловит проблемы, видимые только в комбинации пакетов (per-package ревью видит лишь свой пакет).
+    -> (ok, reviews|None). ok=False, если ревьюер ЗАБЛОКИРОВАЛ (fail / warn-на-блокирующем). Без ревью —
+    ok=True (не блокируем на этом уровне; per-package код-ревью уже прошло)."""
+    if not (review and reviewer_proposer):
+        return True, None
+    try:
+        import execution_pipeline as _ep
+        _gev, revs = _ep._run_reviews(reviewer_proposer, vroot, ["code_review"], {},
+                                      dict(signals or {}), final_sha, {"max_model_calls": 16})
+        blocked = any((r or {}).get("status") == "fail" or (r or {}).get("closed_as") == "blocked"
+                      for r in (revs or []))
+        cr = (_gev.get("code_review") or {})
+        if cr.get("status") == "fail":
+            blocked = True
+        return (not blocked), revs
+    except Exception:  # noqa: BLE001 — сбой aggregate-ревью = fail-closed
+        return False, None
+
+
+def retry_package(child_root, wid, pid, features_dir=None):
+    """v3.0-rc13 (finding аудита P1): ДОВЕРЕННЫЙ retry заблокированного/сбойного пакета — без ручного
+    git reset. (1) Архивирует проваленную попытку (work-packages/<pid> -> .../attempts/attempt-N,
+    история не теряется); (2) восстанавливает ветку ai-ops/<wid> ТОЧНО на checkpoint предшественника
+    (SHA пакета N-1 из его снимка, либо sequence_base_sha для первого пакета). После этого безопасно:
+    execute_sequence(..., resume_from=pid) — exact-checkpoint совпадёт. -> dict {ok|error, ...}."""
+    import shutil
+    import yaml
+    child_root = Path(child_root)
+    features_dir = Path(features_dir) if features_dir else child_root / "features"
+    fdir = features_dir / wid
+    sp = fdir / "sequence-plan.yaml"
+    if not sp.exists():
+        return {"ok": False, "error": f"нет sequence-plan.yaml для '{wid}' — нечего retry (сначала прогон)"}
+    try:
+        plan = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"sequence-plan.yaml нечитаем: {e}"}
+    ids = [p.get("id") for p in (plan.get("packages") or [])]
+    if pid not in ids:
+        return {"ok": False, "error": f"пакет '{pid}' не в плане последовательности {ids}"}
+    idx = ids.index(pid)
+    # checkpoint = коммит предшественника (его снимок) либо база последовательности для первого пакета
+    if idx == 0:
+        checkpoint = plan.get("sequence_base_sha")
+        predecessor = None
+    else:
+        predecessor = ids[idx - 1]
+        prep = fdir / "work-packages" / predecessor / "report.json"
+        checkpoint = None
+        if prep.is_file():
+            try:
+                checkpoint = ((json.loads(prep.read_text(encoding="utf-8")) or {}).get("commit") or {}).get("sha")
+            except Exception:  # noqa: BLE001
+                checkpoint = None
+    if not checkpoint:
+        return {"ok": False, "error": (f"не найден checkpoint предшественника для '{pid}' "
+                                       f"(предшественник={predecessor or 'база'}) — снимок отсутствует")}
+    # архивируем проваленную попытку пакета (не теряем историю)
+    pkg_dir = fdir / "work-packages" / pid
+    archived = None
+    if pkg_dir.is_dir():
+        attempts = pkg_dir / "attempts"
+        attempts.mkdir(parents=True, exist_ok=True)
+        n = 1 + len([d for d in attempts.iterdir() if d.is_dir() and d.name.startswith("attempt-")])
+        dest = attempts / f"attempt-{n}"
+        # переносим текущие артефакты попытки (report.json + lifecycle-снимки), attempts/ не трогаем
+        dest.mkdir(parents=True, exist_ok=True)
+        for f in pkg_dir.iterdir():
+            if f.name == "attempts":
+                continue
+            shutil.move(str(f), str(dest / f.name))
+        archived = str(dest.relative_to(child_root)) if str(dest).startswith(str(child_root)) else str(dest)
+    # восстанавливаем ветку worktree на checkpoint (доверенная операция, не ручной reset)
+    wt = child_root / ".ai" / "worktrees" / wid
+    vroot = wt if wt.is_dir() else child_root
+    branch = f"ai-ops/{wid}"
+    rc_co, _, err_co = _git(vroot, "checkout", "-q", branch)
+    rc, _, err = _git(vroot, "reset", "--hard", checkpoint)
+    if rc != 0:
+        return {"ok": False, "error": f"git reset на checkpoint {checkpoint[:8]} не удался: {err or err_co}",
+                "checkpoint": checkpoint}
+    return {"ok": True, "package": pid, "predecessor": predecessor, "checkpoint": checkpoint,
+            "archived_attempt": archived, "next": f"resume_from={pid}"}
 
 
 def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
@@ -161,6 +312,33 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         base_checks = _ec.collect(_pd.detect(child_root), child_root, _bpol)["checks"]
     except Exception:  # noqa: BLE001 — недоступность инфры не должна ронять последовательность
         base_checks = None
+
+    # v3.0-rc13 (finding аудита P0): SEQUENCE BASE — HEAD ДО пакета 1. Раньше aggregate security брал
+    # `git rev-list --max-parents=0 final_sha` (КОРНЕВОЙ коммит репо) -> анализировал практически всю
+    # историю проекта (root..final), поднимая старые зависимости/auth/конфиги, не связанные с задачей ->
+    # false blocks, структурно непроходимый happy path на зрелом репо. Фиксируем базу цепочки ОДИН раз
+    # (SHA ветки base) и весь aggregate-анализ гоним строго по sequence_base_sha..final_sha.
+    sequence_base_sha = None
+    try:
+        _rc, _bs, _ = _git(child_root, "rev-parse", base or "HEAD")
+        if _rc == 0 and _bs:
+            sequence_base_sha = _bs.strip()
+        else:
+            sequence_base_sha = (_git(child_root, "rev-parse", "HEAD")[1] or "").strip() or None
+    except Exception:  # noqa: BLE001
+        sequence_base_sha = None
+    # закрепляем базу в immutable SequencePlan (для resume/retry и воспроизводимости aggregate)
+    try:
+        if _sp.exists() and sequence_base_sha:
+            import yaml as _y2
+            _spd = _y2.safe_load(_sp.read_text(encoding="utf-8")) or {}
+            if not _spd.get("sequence_base_sha"):
+                _spd["sequence_base_sha"] = sequence_base_sha
+                _sp.write_text(_y2.safe_dump(_spd, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        elif saved_plan and saved_plan.get("sequence_base_sha"):
+            sequence_base_sha = saved_plan["sequence_base_sha"]   # resume: база из сохранённого плана
+    except Exception:  # noqa: BLE001
+        pass
 
     # v2.124: resume с КОНКРЕТНОГО пакета — пакеты до него считаются исполненными в прошлом прогоне
     # (их SHA/готовность восстанавливаются из снимков work-packages/<pid>/report.json).
@@ -270,15 +448,18 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         except (KeyboardInterrupt, SystemExit):
             raise                                       # намеренное прерывание/честный fail ключа — не глотаем
         except Exception as _e:  # noqa: BLE001 — сеть/провайдер/инфра не валит транзакцию
-            infra_error = f"{type(_e).__name__}: {_e}"
+            # v3.0-rc13 (P1): типизированный failure envelope — отличаем провайдер/сеть от дефекта движка.
+            infra_error = _classify_failure(_e)
             rep = {"schema_version": 1, "kind": "run-report", "status": "error",
-                   "error": infra_error, "commit": {}, "loop": {}, "gates": {}, "reviews": []}
+                   "error": f"{infra_error['exception_type']}: {infra_error['message']}",
+                   "failure": infra_error, "commit": {}, "loop": {}, "gates": {}, "reviews": []}
 
         sha = (rep.get("commit") or {}).get("sha")
         # v2.120 (P0.3): ОСТАНОВ цепочки на НАСТОЯЩЕМ блокере — нельзя строить зависимый пакет поверх.
         # Отличаем «awaiting evidence» (нет author/review -> исполнен, но не ready, цепочка идёт) от
         # deterministic/security/reviewer FAIL и регрессии (обязаны остановить).
-        stop_reason = f"infra-error: {infra_error}" if infra_error else _hard_stop(rep)
+        stop_reason = (f"{infra_error['failure_class']}-error: {infra_error['exception_type']}"
+                       if infra_error else _hard_stop(rep))
         # v2.123 (P0.3): ПОСТ-ДИФФ проверка write_scope — пакет не должен был изменить НИЧЕГО вне своего
         # каталога (belt-and-suspenders поверх брокера, который отклоняет out-of-scope записи в петле).
         # Escape = scope-violation -> останавливает последовательность (нельзя строить поверх «уехавшего»).
@@ -329,6 +510,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                         "gates_unmet": (rep.get("gates") or {}).get("unmet"),
                         "resume_point": sha,   # точка resume пакета
                         "handoff": (rep.get("handoff") or {}).get("next_action"),
+                        "failure": infra_error,   # v3.0-rc13 (P1): типизированный envelope (None если не исключение)
                         "status": status})
 
         if executed:
@@ -363,23 +545,36 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
             tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True
             agg_reg, _agg_fix = _ep._diff_checks(base_checks, final_checks) if base_checks else ([], [])
-            # v3.0-rc4 (P1.1): AGGREGATE SECURITY на ПОЛНОМ интегрированном диффе base..final_sha —
+            # v3.0-rc4 (P1.1): AGGREGATE SECURITY на ПОЛНОМ интегрированном диффе последовательности —
             # ловит риск, возникший ТОЛЬКО из комбинации пакетов (один добавил ввод, другой — sink).
-            # base_sha определяем как первый родитель первого пакета в цепочке.
+            # v3.0-rc13 (P0): база = sequence_base_sha (HEAD ДО пакета 1), НЕ корневой коммит репо.
+            # Анализируем строго sequence_base_sha..final_sha — только изменения цепочки.
             import security_pack as _sp2
-            _base_sha = _git(vroot, "rev-list", "--max-parents=0", final_sha)[1].split("\n")[0] \
-                if final_sha else None
+            _base_sha = sequence_base_sha
+            if not _base_sha and final_sha:      # деградация (база не зафиксирована): первый родитель финала
+                _fp = _git(vroot, "rev-list", "--max-parents=0", final_sha)[1].split("\n")[0]
+                _base_sha = _fp or None
             agg_sec = None
             try:
                 agg_sec = _sp2.run_pack(vroot, base=(_base_sha or None), signals=(signals or {}))
             except Exception:  # noqa: BLE001
                 agg_sec = {"overall": "error"}
+            # v3.0-rc13 (P0): needs_review НЕ равно провалу — это awaiting: закрываем независимым
+            # security-reviewer на aggregate-диффе (если подан), как в per-package пути (_review_security).
+            agg_sec, agg_sec_review = _aggregate_close_security(
+                agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
             agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
+            # v3.0-rc13 (P0): aggregate code_review интегрированного диффа (writer≠judge на final_sha)
+            agg_code_ok, agg_code_reviews = _aggregate_code_review(
+                vroot, final_sha, signals, reviewer_proposer, review)
             aggregate = {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
-                         "final_sha": final_sha, "revision_ok": revision_ok, "tree_clean": tree_clean,
+                         "final_sha": final_sha, "sequence_base_sha": _base_sha,
+                         "revision_ok": revision_ok, "tree_clean": tree_clean,
                          "evidence_revision": coll.get("revision"),
                          "evidence_revision_ok": (coll.get("revision") == final_sha),
                          "security_overall": (agg_sec or {}).get("overall"), "security_ok": agg_sec_ok,
+                         "security_reviewer_status": (agg_sec or {}).get("reviewer_status"),
+                         "code_review_ok": agg_code_ok, "code_reviews": agg_code_reviews,
                          "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
         except Exception as e:  # noqa: BLE001
             aggregate = {"verified": False, "error": str(e)}
@@ -388,7 +583,8 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # security clear на полном диффе. Сбой/недоступность -> НЕ ready.
     agg_ok = bool(aggregate.get("verified") and aggregate.get("no_regressions")
                   and aggregate.get("revision_ok") and aggregate.get("tree_clean")
-                  and aggregate.get("evidence_revision_ok") and aggregate.get("security_ok"))
+                  and aggregate.get("evidence_revision_ok") and aggregate.get("security_ok")
+                  and aggregate.get("code_review_ok", True))   # v3.0-rc13 (P0): + aggregate code_review
     aggregate_ready = ready_all and chain_ok and agg_ok
 
     # v2.124 (P0.4): доставка draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта, на финальном
@@ -559,8 +755,14 @@ def selftest():
             seq_x = execute_sequence("x", sig, rx, pkgs_x, prop_boom, feature="seqx",
                                      base=cur_x, author=True, author_proposer=boom_author, review=False)
             p0 = seq_x["packages"][0] if seq_x.get("packages") else {}
-            expect("v3.0-rc12: исключение провайдера -> НЕ traceback, пакет 1 stop_reason=infra-error",
-                   "infra-error" in (p0.get("stop_reason") or ""))
+            expect("v3.0-rc12: исключение провайдера -> НЕ traceback, пакет 1 честно остановлен",
+                   bool(p0.get("stop_reason")) and "error" in (p0.get("stop_reason") or ""))
+            # v3.0-rc13 (P1): типизированный failure envelope — ConnectionReset -> network, retryable
+            expect("v3.0-rc13: failure классифицирован (network/retryable), не blanket infra-error",
+                   (p0.get("failure") or {}).get("failure_class") == "network"
+                   and (p0.get("failure") or {}).get("retryable") is True
+                   and (p0.get("failure") or {}).get("exception_type") == "ConnectionResetError"
+                   and (p0.get("failure") or {}).get("traceback_hash"))
             expect("v3.0-rc12: цепочка стоп на пакете 1, пакеты 2/3 НЕ исполнены (durable stop)",
                    seq_x.get("stopped_at") == pkgs_x[0]["id"] and len(seq_x["packages"]) == 1
                    and seq_x["executed_all"] is False and seq_x["ready_all"] is False)
@@ -594,7 +796,19 @@ def selftest():
         expect("v2.120 _hard_stop: security fail -> stop",
                _hard_stop({"commit": {"sha": "a"}, "security_scan": {"overall": "fail"}}) == "security-fail")
         expect("v2.120 _hard_stop: reviewer fail -> stop",
-               _hard_stop({"commit": {"sha": "a"}, "reviews": [{"gate": "code_review", "status": "fail"}]}) == "reviewer-fail")
+               _hard_stop({"commit": {"sha": "a"}, "reviews": [{"gate": "code_review", "status": "fail"}]}) == "reviewer-blocked")
+        # v3.0-rc13 (P0): reviewer WARN на блокирующем гейте (closed_as=blocked) ТОЖЕ останавливает —
+        # это и был живой rc11-результат (warn -> gate fail -> ready_for_pr=false), раньше проскакивал.
+        expect("v3.0-rc13 _hard_stop: reviewer WARN-blocking (closed_as=blocked) -> stop",
+               _hard_stop({"commit": {"sha": "a"},
+                           "reviews": [{"gate": "code_review", "status": "warn", "closed_as": "blocked"}]}) == "reviewer-blocked")
+        expect("v3.0-rc13 _hard_stop: итоговый code_review-гейт fail с вынесенным вердиктом -> stop",
+               _hard_stop({"commit": {"sha": "a"}, "reviews": [],
+                           "gates": {"gate_results": [{"gate": "code_review", "status": "fail",
+                                     "evidence": ["independent reviewer verdict @ abc"]}]}}) == "reviewer-blocked")
+        expect("v3.0-rc13 _hard_stop: reviewer WARN на НЕблокирующем (closed_as!=blocked) -> НЕ стоп",
+               _hard_stop({"commit": {"sha": "a"},
+                           "reviews": [{"gate": "code_review", "status": "warn", "closed_as": "warn"}]}) is None)
         expect("v2.120 _hard_stop: scope-violation (write вне scope) -> stop",
                _hard_stop({"commit": {"sha": "a"}, "loop": {"denied_reasons": ["'x' вне write_scope ['src']"]}}) == "scope-violation")
         expect("v2.120 _hard_stop: awaiting evidence (гейты unmet, но коммит есть, без fail) -> НЕ стоп",
@@ -657,9 +871,59 @@ def selftest():
                                     base=cur, author=True, author_proposer=author,
                                     review=True, reviewer_proposer=fail_reviewer)
         ids_seen = [p["id"] for p in seqr["packages"]]
-        expect("v2.120 executor: reviewer FAIL на пакете 1 -> цепочка остановлена (stop_reason=reviewer-fail)",
+        expect("v2.120/rc13 executor: reviewer FAIL на пакете 1 -> цепочка остановлена (reviewer-blocked)",
                seqr["stopped_at"] == pkgs[0]["id"] and seqr["executed_all"] is False
-               and seqr["packages"][0]["stop_reason"] == "reviewer-fail" and pkgs[2]["id"] not in ids_seen)
+               and seqr["packages"][0]["stop_reason"] == "reviewer-blocked" and pkgs[2]["id"] not in ids_seen)
+
+    # v3.0-rc13 (P0): reviewer WARN-на-блокирующем (closed_as=blocked) тоже стоп — живой rc11-случай
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td); cur = mkrepo(td)
+        sig = {"task_type": "ENGINEERING", "size": "large", "risk": "low",
+               "affected_areas": ["catalog", "orders", "billing"]}
+        pkgs = atomic_planner.decompose(sig, wid="seqw", child_root=root)["work_packages"]
+        def prop_for(pkg):
+            it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
+            return lambda c: next(it)
+        warn_reviewer = lambda p: ('{"kind":"reviewer-result","status":"warn",'
+                                   '"checks":[{"id":"c","status":"warn"}],"blockers":["сомнение по API"]}')
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            seqw = execute_sequence("рефактор с warn-ревью", sig, root, pkgs, prop_for, feature="seqw",
+                                    base=cur, author=True, author_proposer=author,
+                                    review=True, reviewer_proposer=warn_reviewer)
+        ids_w = [p["id"] for p in seqw["packages"]]
+        expect("v3.0-rc13 executor: reviewer WARN-blocking на пакете 1 -> цепочка стоп, пакет 3 не стартует",
+               seqw["stopped_at"] == pkgs[0]["id"] and seqw["executed_all"] is False
+               and seqw["packages"][0]["stop_reason"] == "reviewer-blocked" and pkgs[2]["id"] not in ids_w)
+
+    # v3.0-rc13 (P1): доверенный retry_package — архив попытки + reset на checkpoint предшественника
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td); cur = mkrepo(td)
+        sig = {"task_type": "ENGINEERING", "size": "large", "risk": "low",
+               "affected_areas": ["catalog", "orders", "billing"]}
+        pkgs = atomic_planner.decompose(sig, wid="seqrt", child_root=root)["work_packages"]
+        def prop_for(pkg):
+            it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
+            return lambda c: next(it)
+        pass_reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            seqrt = execute_sequence("рефактор для retry", sig, root, pkgs, prop_for, feature="seqrt",
+                                     base=cur, author=True, author_proposer=author,
+                                     review=True, reviewer_proposer=pass_reviewer)
+        p1_sha = seqrt["packages"][0].get("sha")
+        wt = root / ".ai" / "worktrees" / "seqrt"
+        expect("v3.0-rc13 retry: предусловие — пакеты исполнены, снимок sequence-plan с базой",
+               p1_sha and (root / "features" / "seqrt" / "sequence-plan.yaml").is_file())
+        rt = retry_package(root, "seqrt", pkgs[1]["id"])
+        head_after = _git(wt if wt.is_dir() else root, "rev-parse", "HEAD")[1]
+        expect("v3.0-rc13 retry: reset ветки на checkpoint предшественника (пакет 1 SHA), без ручного git",
+               rt.get("ok") is True and rt.get("checkpoint") == p1_sha and head_after == p1_sha
+               and rt.get("predecessor") == pkgs[0]["id"])
+        expect("v3.0-rc13 retry: проваленная попытка пакета 2 заархивирована (история не потеряна)",
+               (root / "features" / "seqrt" / "work-packages" / pkgs[1]["id"] / "attempts" / "attempt-1" / "report.json").is_file())
+        expect("v3.0-rc13 retry: неизвестный пакет -> честная ошибка (не тихий reset)",
+               retry_package(root, "seqrt", "НЕТ-ТАКОГО").get("ok") is False)
 
     # v2.120 (P0.2): sandbox наследуется в per-package прогон (containment не теряется)
     with tempfile.TemporaryDirectory() as td:

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc12
+  package_version: 3.0.0-rc13
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc13_sequence_verdict_integrity:
+      - "P0 (аудит) блокирующий reviewer warn не останавливал sequence: _hard_stop проверял только review.status=='fail', а warn на БЛОКИРУЮЩЕМ гейте (_run_reviews -> gate fail + entry.closed_as='blocked', v2.85) проскакивал -> пакет N+1 мог строиться поверх изменения, которое независимый ревьюер ЗАБЛОКИРОВАЛ (ровно живой rc11-результат: code_review=warn, gate=fail, ready_for_pr=false). Фикс: источник истины — ИТОГОВЫЙ блокирующий вердикт: stop при status=='fail' ИЛИ closed_as=='blocked' ИЛИ review-owned гейт (code_review/ux_review/...) fail с вынесенным вердиктом. Продолжаем только при awaiting evidence (вердикт НЕ вынесен)"
+      - "P0 (аудит) aggregate security брал КОРНЕВОЙ коммит репо (git rev-list --max-parents=0 final_sha) как базу -> анализировал root..final (почти всю историю), поднимая старые зависимости/auth/конфиги -> false blocks, структурно непроходимый happy path на зрелом репо. Фикс: фиксируем sequence_base_sha (HEAD ДО пакета 1) в immutable SequencePlan; весь aggregate строго по sequence_base_sha..final_sha"
+      - "P0 (аудит) aggregate needs_review не имел пути закрытия -> diff, требующий legitimate review, навсегда not-ready. Фикс: aggregate-цикл достроен — независимый security-reviewer на aggregate-диффе закрывает needs_review (writer≠judge, как per-package _review_security); aggregate code_review интегрированного диффа (fail/warn-blocking -> not ready); всё fail-closed"
+      - "P1 (аудит) retry заблокированного пакета требовал ручного git reset. Фикс: retry_package(child_root, wid, pid) + CLI --retry-package — архивирует проваленную попытку (work-packages/<pid>/attempts/attempt-N), восстанавливает ветку ТОЧНО на checkpoint предшественника (SHA пакета N-1 из снимка, либо sequence_base_sha для первого), продолжает как resume_from. История не теряется, ручной reset не нужен"
+      - "P1 (аудит) исключения классифицировались слишком широко (всё -> infra-error). Фикс: _classify_failure -> типизированный envelope {failure_class: network|provider|budget|validation|engine, exception_type, retryable, traceback_hash}. ConnectionReset -> network/retryable; ValueError/KeyError -> validation; прочее -> engine (вероятный дефект, НЕ маскируем под нестабильность провайдера). stop_reason несёт класс"
+      - "проверки: +деттесты (_hard_stop warn-blocking/итоговый code_review-гейт стоп, warn-неблокирующий НЕ стоп; executor WARN-blocking на пакете 1 -> стоп + пакет 3 не стартует; failure классифицирован network/retryable; retry_package reset на checkpoint предшественника + архив попытки + честная ошибка на неизвестный пакет). Полный CI-набор (94) 94/94 PASS локально"
     fixed_v3_0_rc12_sequence_infra_containment:
       - "finding живого 3-пакетного sequential (kimi-k3): провайдер сбросил TCP-соединение (ConnectionResetError [Errno 54]) во время author-вызова пакета 1. _http_post_json ловит ConnectionError и ретраит (6×), но kimi сбрасывал на КАЖДОЙ попытке -> ретраи исчерпаны -> исключение легитимно проброшено. Выше execute_sequence его НИКТО не ловил -> traceback убил ВСЮ транзакцию до единого коммита: ни SEQUENCE-строки, ни work-packages/<pid>/report.json, ни sequence-report. Нарушение обещания транзакции (durable/resumable state)"
       - "фикс: execute_sequence оборачивает per-package ai_ops_run.run в try/except. Исключение провайдера/инфры -> пакет честно фейлится (stop_reason='infra-error: <тип>: <msg>'), цепочка hard-stop, ПРЕЖНИЕ пакеты/план/снимки сохранены, последующие НЕ исполняются. KeyboardInterrupt/SystemExit (намеренное прерывание, честный fail отсутствующего ключа) НЕ глотаем — пробрасываем"

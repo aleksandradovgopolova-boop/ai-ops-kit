@@ -2,6 +2,33 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc13] — 2026-07-20 — Sequence Verdict Integrity (аудит: 3×P0 + 2×P1)
+
+Фокусная сессия по аудиту sequential-транзакции. Все находки — из живого прогона S-SEQ.
+
+### Fixed
+- **P0 — блокирующий reviewer `warn` не останавливал sequence.** `_hard_stop` смотрел только на
+  `review.status=='fail'`; `warn` на блокирующем гейте (→ gate fail + `closed_as='blocked'`, v2.85)
+  проскакивал — пакет N+1 мог строиться поверх изменения, которое независимый ревьюер **заблокировал**
+  (ровно живой rc11-случай). Теперь источник истины — итоговый блокирующий вердикт: стоп при
+  `status=='fail'` **или** `closed_as=='blocked'` **или** review-owned гейт `fail` с вынесенным
+  вердиктом; продолжаем только при awaiting-evidence.
+- **P0 — aggregate security брал корневой коммит репо как базу** (`rev-list --max-parents=0`) →
+  анализировал `root..final` (почти всю историю) → false-blocks на зрелом репо. Теперь фиксируем
+  `sequence_base_sha` (HEAD до пакета 1) в immutable SequencePlan и весь aggregate гоним строго по
+  `sequence_base_sha..final_sha`.
+- **P0 — aggregate `needs_review` не имел пути закрытия** → diff, требующий review, навсегда
+  not-ready. Достроен aggregate-цикл: независимый security-reviewer закрывает `needs_review` на
+  интегрированном диффе (writer≠judge); aggregate `code_review` интегрированного диффа; всё fail-closed.
+- **P1 — retry заблокированного пакета требовал ручного `git reset`.** `retry_package()` + CLI
+  `--retry-package`: архивирует проваленную попытку (`work-packages/<pid>/attempts/attempt-N`),
+  восстанавливает ветку точно на checkpoint предшественника, продолжает как `resume_from`. История
+  не теряется.
+- **P1 — исключения классифицировались одинаково** (всё → `infra-error`). `_classify_failure` →
+  типизированный envelope `{failure_class, exception_type, retryable, traceback_hash}`: ConnectionReset
+  → network/retryable, ValueError/KeyError → validation, прочее → **engine** (вероятный дефект, не
+  маскируем под нестабильность провайдера).
+
 ## [3.0.0-rc12] — 2026-07-20 — Sequence infra containment: сбой провайдера не роняет транзакцию
 
 Живой 3-пакетный sequential на kimi-k3 (подготовленный сценарий S-SEQ) вскрыл дефект устойчивости.
