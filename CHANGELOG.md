@@ -2,6 +2,22 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc12] — 2026-07-20 — Sequence infra containment: сбой провайдера не роняет транзакцию
+
+Живой 3-пакетный sequential на kimi-k3 (подготовленный сценарий S-SEQ) вскрыл дефект устойчивости.
+
+### Fixed
+- **Исключение провайдера/инфры валило всю sequential-транзакцию traceback'ом.** kimi сбросил
+  TCP-соединение (`ConnectionResetError [Errno 54]`) во время author-вызова пакета 1. `_http_post_json`
+  ловит `ConnectionError` и ретраит (6×), но провайдер сбрасывал на **каждой** попытке → ретраи
+  исчерпаны → исключение легитимно проброшено. Выше `execute_sequence` его **никто не ловил** →
+  traceback убил всю транзакцию до единого коммита: ни `SEQUENCE`-строки, ни
+  `work-packages/<pid>/report.json`, ни sequence-report — нарушение обещания durable/resumable
+  state. Фикс: `execute_sequence` оборачивает per-package `ai_ops_run.run` в try/except →
+  исключение → пакет честно фейлится (`stop_reason='infra-error: …'`), цепочка hard-stop, **прежние
+  пакеты/план/снимки сохранены**, последующие не исполняются. `KeyboardInterrupt`/`SystemExit`
+  (намеренное прерывание, честный fail отсутствующего ключа) пробрасываем, не глотаем. +деттест.
+
 ## [3.0.0-rc11] — 2026-07-20 — Symmetric reviewer honesty: блокирующий warn требует причину
 
 Живой полный ENGINEERING на kimi-k3 (rc10-код) отработал **насквозь**: все 3 author-артефакта
