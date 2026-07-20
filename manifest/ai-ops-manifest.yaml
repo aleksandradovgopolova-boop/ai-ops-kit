@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc10
+  package_version: 3.0.0-rc11
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc11_symmetric_reviewer_honesty:
+      - "finding живого прогона kimi-k3 (полный ENGINEERING на rc10-коде): цепочка отработала end-to-end — все 3 author-артефакта валидны, реальная реализация (discounts.py: дублирующие ветки заменены таблицей DISCOUNT_RATES + единый calculate_discount, +92 строк тестов, tests pass, реальный коммит), security-reviewer -> PASS (rc9-контекст помог и ему), code_review вынес РЕАЛЬНЫЙ вердикт (reads=10, stopped=verdict). ready_for_pr=False держался ЧЕСТНО: code_review=warn, а warn на блокирующем гейте — не чистый pass (v2.85). НО вердикт warn пришёл с ПУСТЫМ blockers"
+      - "асимметрия честности: контракт требовал blockers только для fail (rule 4), а warn на блокирующем гейте БЛОКИРУЕТ так же — значит ревьюер мог заблокировать гейт бессодержательным warn «на всякий случай» (унфальсифицируемый блок без причины). Фикс симметрии: (1) validate_reviewer_result — status∈{fail,warn} обязан иметь непустой blockers (contentless warn невалиден); (2) промпт ревьюера (make_reviewer_proposer) — warn/fail требуют КОНКРЕТНЫХ blockers, и симметрично: не выдумывай pass, но и не выдумывай сомнения — прочитал и конкретной проблемы нет -> pass, не warn 'на всякий случай'"
+      - "инвариант writer≠judge усилён, не ослаблен: нельзя ни фабриковать pass, ни фабриковать блок; блокирующий вердикт обязан назвать причину. проверки: +деттесты (warn без blockers -> ошибка/невалиден и гейт остаётся unmet с errors; warn C blockers -> валиден и блокирует). Полный CI-набор (94) 94/94 PASS локально"
     fixed_v3_0_rc10_reviewer_verdict_convergence:
       - "finding живого прогона kimi-k3 (после rc9): контекст изменения теперь доставляется — ревьюер РЕАЛЬНО читает дифф (reads=7, было []). Но reasoning-модель на многофайловом диффе тратила весь read-бюджет на чтение и не успевала вынести вердикт: run_review молча возвращал no-verdict после max_reads+1 итераций -> code_review=fail 'нет заключения reviewer'. Честно (no-verdict -> fail), но ревьюер не получал шанса заключить по прочитанному"
       - "фикс: (1) run_review даёт выделенный ФОРС-ХОД вердикта после исчерпания чтений — читать больше нельзя, принимается только reviewer-result (+нудж на последнем чтении); вердикт НЕ фабрикуется: если ревьюер и на форс-ходе не заключает — честный no-verdict. (2) _run_reviews max_reads 6->10 (многофайловый дифф требует больше чтений до вердикта). writer≠judge и честность сохранены — лишь ограничена фаза чтения и затребовано заключение по прочитанному"

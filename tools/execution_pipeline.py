@@ -1936,15 +1936,32 @@ def selftest():
                "requirements" not in _reviewable_gates(["requirements", "specification", "ux_review"], sig_rv)
                and "ux_review" in _reviewable_gates(["requirements", "ux_review"], sig_rv))
 
-        # v2.85 (finding аудита): reviewer WARN на блокирующем гейте НЕ закрывает его тихо -> блок
-        warn_provider = lambda prompt: '{"kind":"reviewer-result","status":"warn","checks":[{"id":"x","status":"warn"}]}'
+        # v2.85 (finding аудита): reviewer WARN с blockers на блокирующем гейте НЕ закрывает его -> блок.
+        # rc11: warn ОБЯЗАН нести конкретные blockers (иначе вердикт невалиден — блок без причины).
+        warn_provider = lambda prompt: ('{"kind":"reviewer-result","status":"warn",'
+                                        '"checks":[{"id":"x","status":"warn"}],'
+                                        '"blockers":["состояние загрузки экрана не покрыто"]}')
         it_rw = iter([{"op": "write", "path": "src/rw.py", "content": "w=1\n"}, {"done": True}])
         rep_rw = run_pipeline("ui с ревью warn", sig_rv, root, lambda c: next(it_rw),
                               budget={"max_model_calls": 20}, feature="rw-fn",
                               commit=True, isolate=True, install_deps=False,
                               review=True, reviewer_proposer=warn_provider)
-        expect("review: reviewer WARN на блокирующем ux_review -> гейт блокирует (не тихий pass)",
-               "ux_review" in rep_rw["gates"]["unmet"])
+        expect("review: reviewer WARN(c blockers) на блокирующем ux_review -> гейт блокирует (не тихий pass)",
+               "ux_review" in rep_rw["gates"]["unmet"]
+               and any(r["gate"] == "ux_review" and r["status"] == "warn" for r in (rep_rw["reviews"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # rc11: contentless warn (без blockers) — НЕвалидный вердикт (блок без причины): гейт НЕ
+        # закрывается (остаётся unmet), а трейс помечается errors — вердикт отвергнут, не «тихий блок».
+        cwarn_provider = lambda prompt: '{"kind":"reviewer-result","status":"warn","checks":[{"id":"x","status":"warn"}]}'
+        it_cw = iter([{"op": "write", "path": "src/cw.py", "content": "c=1\n"}, {"done": True}])
+        rep_cw = run_pipeline("ui с ревью warn без причины", sig_rv, root, lambda c: next(it_cw),
+                              budget={"max_model_calls": 20}, feature="cw-fn",
+                              commit=True, isolate=True, install_deps=False,
+                              review=True, reviewer_proposer=cwarn_provider)
+        expect("review rc11: warn без blockers -> вердикт невалиден (errors) и ux_review остаётся unmet",
+               "ux_review" in rep_cw["gates"]["unmet"]
+               and any(r["gate"] == "ux_review" and r.get("errors") for r in (rep_cw["reviews"] or [])))
         _git(root, "checkout", "-q", orig_branch)
 
         # v3.0-rc9 (finding живого прогона kimi): ревьюеру ОБЯЗАН передаваться контекст изменения

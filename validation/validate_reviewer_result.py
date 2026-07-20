@@ -9,7 +9,9 @@ status/checks/blockers. Она — источник истины для гейт
   1. schema_version/kind/gate/status/checks на месте; status ∈ pass|warn|fail;
   2. gate резолвится в quality/gates.yaml;
   3. каждый check: id + status ∈ pass|warn|fail;
-  4. status=fail ОБЯЗАН иметь blockers (иначе «провалено без причины»);
+  4. status ∈ {fail, warn} ОБЯЗАН иметь blockers (иначе «заблокировано без причины»): warn на
+     блокирующем гейте блокирует так же, как fail (writer≠judge, v2.85) — значит и обязан назвать
+     конкретные сомнения. Честность симметрична: нельзя ни фабриковать pass, ни фабриковать блок;
   5. согласованность: если есть check со status=fail, общий status не может быть pass.
 
 Использование:  validate_reviewer_result.py <result.json> [--json]
@@ -60,8 +62,11 @@ def check(data: dict, gate_ids=None):
         if c["status"] == "fail":
             any_fail = True
 
-    if data.get("status") == "fail" and not (data.get("blockers")):
-        errors.append("status=fail требует непустой blockers")
+    # v3.0-rc11 (finding живого прогона kimi): warn на блокирующем гейте БЛОКИРУЕТ (v2.85) — значит
+    # это тоже блокирующий вердикт и обязан назвать конкретику. Contentless warn = «блок без причины»
+    # (унфальсифицируемый). Симметрия честности: fail и warn одинаково требуют непустой blockers.
+    if data.get("status") in ("fail", "warn") and not (data.get("blockers")):
+        errors.append(f"status={data.get('status')} требует непустой blockers (блокирующий вердикт без причины)")
     if any_fail and data.get("status") == "pass":
         errors.append("есть check со status=fail, но общий status=pass — несогласованно")
     return errors
@@ -86,6 +91,14 @@ def selftest():
 
     expect("fail без blockers -> ошибка",
            any("blockers" in e for e in check({**valid, "blockers": []}, gate_ids)))
+
+    # rc11: warn (блокирующий вердикт) тоже обязан нести blockers — contentless warn отвергается
+    warn_no_bl = {"schema_version": 1, "kind": "reviewer-result", "gate": "code_review",
+                  "status": "warn", "checks": [{"id": "c1", "status": "warn"}]}
+    expect("rc11: warn без blockers -> ошибка (блок без причины)",
+           any("blockers" in e for e in check(warn_no_bl, gate_ids)))
+    expect("rc11: warn C blockers -> валиден",
+           check({**warn_no_bl, "blockers": ["ярус 500 не покрыт тестом"]}, gate_ids) == [])
 
     incoherent = {**valid, "status": "pass"}
     expect("fail-check при status=pass -> ошибка",
