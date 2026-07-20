@@ -125,6 +125,21 @@ approval negative/positive (ApprovalRecord binding), dependency-без-signal (s
 сценарий не «зелёный»); живой 3-пакетный sequential до `ready_all` + намеренный fail на package 2
 (структура доказана детерминированно). Нужна более сильная модель / усиленные промпты + dogfood.
 
+## 6d. Живая ENGINEERING-квалификация на сильной модели (kimi, 2026-07-20)
+
+Прогон на **kimi/Moonshot** (base `https://api.moonshot.ai/v1/chat/completions` — ПОЛНЫЙ путь, как у
+DeepSeek; модели: `kimi-k3`, `kimi-k2.6`, `kimi-k2.7-code`). Вывод: **kimi заметно сильнее DeepSeek** —
+производит валидный `plan` + `specification` (openspec закрыт) и **реальный вердикт `code_review`**
+(DeepSeek стабильно no-verdict). Движок при этом честен: невалидная/пустая author-спека → 0
+implementation (P0.1 pre-authoring держится и на сильной модели).
+
+**Блокер positive-green — нестабильность провайдера, не движок:** `kimi-k3` был server-overloaded
+(`429 engine_overloaded`), `kimi-k2.7-code` интермиттентно отдаёт HTTP-200 с пустым content → author
+флакает. Движок укреплён (rc6: устойчивый `_parse_yaml_block` + retry пустого 200 в `_openai_call`),
+но при сильной перегрузке провайдера и ретраев мало. **Чтобы закрыть positive-green ENGINEERING:**
+повторить, когда kimi-k3 разгрузится, ИЛИ поднять число ретраев, ИЛИ стабильный сильный провайдер
+(Anthropic). Endpoint-config для OpenAI-совместимого провайдера — ПОЛНЫЙ URL до `/chat/completions`.
+
 ## 7. Готчи прогона (из живой обкатки)
 
 - **Фикстура обязана нести pytest-сигнал.** Детектор (`project_detector.py:119`) выводит `test=pytest`
