@@ -96,6 +96,36 @@ def _gate_checklist(gate):
     return "; ".join(parts)
 
 
+def _change_context(work_root, revision, max_chars=12000):
+    """v3.0-rc9 (finding живого прогона kimi): детерминированно собрать КОНТЕКСТ ИЗМЕНЕНИЯ для
+    независимого ревьюера — полный список изменённых файлов (`git show --stat`, всегда целиком) +
+    ограниченный по размеру unified-дифф ревизии.
+
+    Корень finding: `run_review` вызывался с пустым base_context — ревьюеру НЕ давали ни диффа, ни
+    списка изменённых файлов. Прилежная модель (kimi) честно возвращала fail: «контекст изменения
+    пуст — не могу подтвердить факт ревью именно этой ревизии», сделав 0 чтений. Это делало
+    code_review структурно НЕпроходимым независимо от качества модели (ложный блокер positive-green).
+
+    Даём ревьюеру ровно то, что видит человек-ревьюер в PR (дифф + список файлов) — НЕ вердикт.
+    Ревьюер всё равно сам читает файлы (read-only) для верификации; его reads и есть evidence.
+    writer≠judge сохранён: отдельный вызов, read-only Policy, собственный вердикт по фактам."""
+    if not revision:
+        return ""
+    rc, stat, _ = _git(work_root, "show", "--stat", "--format=", revision)
+    if rc != 0:
+        return ""                                   # не git / ревизия недоступна -> прежнее поведение
+    parts = [f"Изменённые файлы (git show --stat @ {revision[:12]}):",
+             (stat.strip() or "(список пуст)")]
+    rc2, diff, _ = _git(work_root, "show", "--format=", "--unified=3", revision)
+    if rc2 == 0 and (diff or "").strip():
+        body = diff.strip()
+        if len(body) > max_chars:
+            body = (body[:max_chars] + f"\n... [дифф усечён на {max_chars} симв.; полный список файлов "
+                    "выше — читай их целиком через {\"op\":\"read\"} для верификации]")
+        parts.append("\nUnified-дифф ревизии:\n" + body)
+    return "\n".join(parts) + "\n"
+
+
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
                  max_reads=6):
     """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence.
@@ -112,6 +142,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         valid_ids = set(gates)
     except Exception:
         valid_ids = None
+    change_ctx = _change_context(work_root, revision)   # rc9: seed reviewer с диффом изменения
     for gid in _reviewable_gates(gate_ids, signals):
         if gid in gate_ev:                     # evidence уже есть (напр. из reviewer-артефактов)
             continue
@@ -121,8 +152,8 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             reviewer_proposer, gid, checklist=_gate_checklist(g),
             required_evidence=req, reviewed_revision=revision)
         rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
-                                  max_reads=max_reads, required_evidence=req,
-                                  reviewed_revision=revision)
+                                  max_reads=max_reads, base_context=change_ctx,
+                                  required_evidence=req, reviewed_revision=revision)
         res = rv.get("result")
         errs = vrr.check(res, gate_ids=valid_ids) if isinstance(res, dict) else ["ревьюер не вынес вердикт"]
         entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
@@ -168,6 +199,7 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
     reviewer = tool_loop.make_reviewer_proposer(
         reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
     rv = tool_loop.run_review(reviewer, work_root, ro_policy, "security", budget=budget,
+                              base_context=_change_context(work_root, revision),
                               required_evidence=["security_reviewer"], reviewed_revision=revision)
     res = rv.get("result")
     return (res or {}).get("status"), res
@@ -1914,6 +1946,37 @@ def selftest():
         expect("review: reviewer WARN на блокирующем ux_review -> гейт блокирует (не тихий pass)",
                "ux_review" in rep_rw["gates"]["unmet"])
         _git(root, "checkout", "-q", orig_branch)
+
+        # v3.0-rc9 (finding живого прогона kimi): ревьюеру ОБЯЗАН передаваться контекст изменения
+        # (дифф + список файлов). Раньше base_context был пуст -> прилежная модель честно возвращала
+        # fail «нечего читать», делая ai-review структурно непроходимым. Ревьюер здесь ставит pass
+        # ТОЛЬКО если реально увидел изменённый путь в своём промпте — доказывает доставку диффа.
+        ctx_reviewer = (lambda prompt:
+            '{"kind":"reviewer-result","status":"pass","checks":[{"id":"seen","status":"pass"}]}'
+            if "src/cx.py" in prompt else
+            '{"kind":"reviewer-result","status":"fail","checks":[{"id":"seen","status":"fail"}],'
+            '"blockers":["контекст изменения пуст: не дан дифф/список файлов"]}')
+        it_cx = iter([{"op": "write", "path": "src/cx.py", "content": "cx=1\n"}, {"done": True}])
+        rep_cx = run_pipeline("ui с ревью, проверка доставки диффа", sig_rv, root, lambda c: next(it_cx),
+                              budget={"max_model_calls": 20}, feature="cx-fn",
+                              commit=True, isolate=True, install_deps=False,
+                              review=True, reviewer_proposer=ctx_reviewer)
+        expect("review rc9: ревьюер получает контекст изменения (дифф) -> видит src/cx.py и ставит pass",
+               "ux_review" not in rep_cx["gates"]["unmet"]
+               and any(r["gate"] == "ux_review" and r["status"] == "pass" for r in (rep_cx["reviews"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # _change_context напрямую: список изменённых файлов + unified-дифф на точной ревизии
+        _git(root, "checkout", "-q", "-B", "cx-direct")
+        (root / "src" / "cxd.py").write_text("def cxd():\n    return 42\n", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "cxd")
+        _, cxsha, _ = _git(root, "rev-parse", "HEAD")
+        cc = _change_context(root, cxsha.strip())
+        expect("_change_context: содержит изменённый путь и тело диффа",
+               "src/cxd.py" in cc and "return 42" in cc)
+        expect("_change_context: пустая ревизия -> пустой контекст (прежнее поведение)",
+               _change_context(root, None) == "" and _change_context(root, "") == "")
+        _git(root, "checkout", "-q", orig_branch); _git(root, "branch", "-D", "cx-direct")
 
         # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
         expect("no-self-review: security не в reviewable даже без спец-сигналов",
