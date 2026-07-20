@@ -72,7 +72,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
-        resume=False, force_resume=False, base="main", write_scope=None):
+        resume=False, force_resume=False, base="main", write_scope=None, replan=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -90,23 +90,46 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # max_steps) из сохранённого run-settings.yaml — иначе resume молча теряет политику и
         # переклассифицирует задачу. provider/model/base приходят от вызывающего (runtime-выбор);
         # изменение базы/состояния уже требует явной ревалидации (resume_preflight).
-        if resume and feature:
+        # v3.0-rc4 (P0.1): immutable-resume — ТОЛЬКО для пользовательского resume задачи. Внутренний
+        # per-package resume executor'а (каждый пакет — своя подсистема/affected_areas, поверх общей
+        # ветки) НЕ является сменой классификации: executor сам управляет policy пакета. Помечен
+        # _sequence_internal -> пропускаем drift-проверку и restore run-settings.
+        if resume and feature and not signals.get("_sequence_internal"):
             _sp = features_dir / feature / "run-settings.yaml"
             if _sp.is_file():
                 import yaml as _yr
                 _saved = _yr.safe_load(_sp.read_text(encoding="utf-8")) or {}
                 _ss, _pp = (_saved.get("signals") or {}), (_saved.get("policy") or {})
-                signals = {**_ss, **signals}
-                sandbox = sandbox or bool(_pp.get("sandbox"))
-                baseline_diff = baseline_diff or bool(_pp.get("baseline_diff"))
-                require_fix = require_fix or bool(_pp.get("require_fix"))
-                author = author or bool(_pp.get("author"))
-                review = review or bool(_pp.get("review"))
-                open_pr = open_pr or bool(_pp.get("open_pr"))
-                if write_scope is None:
-                    write_scope = _pp.get("write_scope")
-                if max_steps == 40 and _pp.get("max_steps"):
-                    max_steps = _pp["max_steps"]
+                # v3.0-rc4 (P0.1) IMMUTABLE resume: resume НЕ меняет классификацию/policy. Если новый
+                # вызов пытается переопределить routing-сигнал (task_type/risk/size/affected_areas) или
+                # write_scope значением, отличным от сохранённого — это НЕ resume, а replan: требуется
+                # явный replan=True (+ ревалидация). Иначе можно было бы тихо продолжить ENGINEERING как QUICK.
+                _POLICY_KEYS = ("task_type", "risk", "size", "affected_areas")
+                _drift = [k for k in _POLICY_KEYS
+                          if k in signals and k in _ss and signals[k] != _ss[k]]
+                if write_scope is not None and _pp.get("write_scope") is not None \
+                        and write_scope != _pp.get("write_scope"):
+                    _drift.append("write_scope")
+                if _drift and not replan:
+                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature,
+                            "status": "error", "ready_for_pr": False,
+                            "error": ("resume не меняет классификацию/policy исходного прогона "
+                                      f"(drift: {', '.join(_drift)}). Это replan — запусти с replan=True "
+                                      "(ревалидация + новый план), а не resume."),
+                            "resume": {"requested": True, "resumed": False, "drift": _drift}}
+                # восстанавливаем СОХРАНЁННУЮ policy как источник истины (не «or», а точное значение),
+                # кроме случая replan, где новый вызов осознанно задаёт новую policy.
+                if not replan:
+                    signals = {**signals, **_ss}          # saved policy побеждает
+                    sandbox = bool(_pp.get("sandbox", sandbox))
+                    baseline_diff = bool(_pp.get("baseline_diff", baseline_diff))
+                    require_fix = bool(_pp.get("require_fix", require_fix))
+                    author = bool(_pp.get("author", author))
+                    review = bool(_pp.get("review", review))
+                    open_pr = bool(_pp.get("open_pr", open_pr))
+                    write_scope = _pp.get("write_scope") if write_scope is None else write_scope
+                    if max_steps == 40 and _pp.get("max_steps"):
+                        max_steps = _pp["max_steps"]
         prop = proposer or tool_loop.make_model_proposer(
             orchestrator.make_provider(provider_name, model))
         # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),
@@ -158,13 +181,21 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v3.0-rc2 (P0.1): сохраняем ЭФФЕКТИВНУЮ политику прогона -> resume восстановит её, а не
         # переклассифицирует/деградирует до дефолтов. provider/model НЕ храним (runtime-выбор/секрет).
         if execute:
-            (features_dir / fid / "run-settings.yaml").write_text(yaml.safe_dump({
+            _settings = {
                 "schema_version": 1, "kind": "run-settings", "workitem_id": fid,
                 "signals": {k: v for k, v in signals.items() if k != "task_text"},
                 "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
                            "author": author, "review": review, "open_pr": open_pr,
                            "write_scope": write_scope, "max_steps": max_steps, "engine": engine},
-            }, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            }
+            _sdump = yaml.safe_dump(_settings, allow_unicode=True, sort_keys=False)
+            (features_dir / fid / "run-settings.yaml").write_text(_sdump, encoding="utf-8")  # latest -> restore
+            # v3.0-rc4 (P0.1): per-run СНИМОК для аудита (не только последнее состояние). Нумеруем по
+            # числу уже сохранённых снимков — детерминированно, без времени (совместимо с workflow-песочницей).
+            _hist = features_dir / fid / "run-history"
+            _hist.mkdir(parents=True, exist_ok=True)
+            _n = len(list(_hist.glob("run-*.yaml"))) + 1
+            (_hist / f"run-{_n:03d}.yaml").write_text(_sdump, encoding="utf-8")
         # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
         # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
         lifecycle_errors = []
@@ -536,6 +567,24 @@ def selftest():
         expect("треки VISUAL/ANALYTICS в отчёте", {"VISUAL", "ANALYTICS"} <= set(r["required_tracks"]))
         expect("гейты треков агрегированы (ux_review/analytics_readiness)",
                {"ux_review", "analytics_readiness"} <= set(r["gates"]))
+
+    # v3.0-rc4 (P0.1): immutable resume — смена классификации/policy при resume блокируется (нужен replan)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        fdir = root / "features" / "immx"
+        fdir.mkdir(parents=True)
+        (fdir / "run-settings.yaml").write_text(
+            "schema_version: 1\nkind: run-settings\nworkitem_id: immx\n"
+            "signals:\n  task_type: ENGINEERING\n  risk: high\npolicy:\n  sandbox: true\n", encoding="utf-8")
+        r_drift = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
+                      engine="pipeline", feature="immx", resume=True)
+        expect("v3.0-rc4 P0.1: resume со сменой task_type -> error (drift, нужен replan)",
+               r_drift.get("status") == "error" and "replan" in (r_drift.get("error") or "").lower()
+               and "task_type" in ((r_drift.get("resume") or {}).get("drift") or []))
+        r_replan = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
+                       engine="pipeline", feature="immx", resume=True, replan=True)
+        expect("v3.0-rc4 P0.1: replan=True -> проходит drift-проверку (ошибка уже не про replan)",
+               "replan" not in (r_replan.get("error") or "").lower())
         expect("planned: без --feature wid = wi-<hash>", fid.startswith("wi-"))
 
     # v2.51: привязка к ИМЕНОВАННОЙ фиче — срезы истории копятся на неё, не на wi-<hash>
@@ -773,6 +822,9 @@ def main(argv):
                          "осознанное решение человека")
     rs.add_argument("--provider", default="mock")
     rs.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat)")
+    rs.add_argument("--replan", action="store_true",
+                    help="осознанно сменить классификацию/policy при продолжении (не resume, а replan "
+                         "с ревалидацией) — иначе смена task_type/risk/write_scope блокируется")
     a = ap.parse_args(argv)
     if a.cmd == "resume":
         import run_handoff
@@ -797,7 +849,8 @@ def main(argv):
         task = a.task or (pf.get("next_action") if pf.get("can_resume") else None) or "продолжить работу"
         report = run(task, json.loads(a.signals), Path(a.child_root),
                      provider_name=a.provider, model=a.model, engine="pipeline",
-                     execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base)
+                     execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
+                     replan=a.replan)
         rinfo = report.get("resume") or {}
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2, default=str))

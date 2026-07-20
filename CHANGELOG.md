@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc4] — 2026-07-20 — Continuity Semantics: immutable resume, полный sequence hard-stop, SequencePlan binding, exact checkpoint
+
+Аудит rc3 нашёл 4 P0 в continuity/sequence + 1 P1 (aggregate). Все исправлены; полный CI-набор
+(91 проверка) локально 91/91 PASS. Semantic dependency approval (P1.2) вынесен отдельным шагом.
+
+### Fixed
+- **P0.1 immutable resume.** Resume НЕ меняет классификацию/policy: смена
+  `task_type/risk/size/affected_areas/write_scope` при resume → drift-ошибка (нужен явный `--replan`
+  с ревалидацией). Внутренний per-package resume executor'а освобождён (`_sequence_internal`).
+  `run-settings` хранятся **per-run** (`run-history/run-NNN.yaml`), не только последнее состояние.
+- **P0.2 complete sequence hard-stop.** Security-гейт fail останавливает цепочку в любом случае, кроме
+  awaiting (нужен reviewer/человек, не подан). Теперь ловятся: сбой сканера (fail-closed), блокирующая
+  находка, security-reviewer НЕ pass, отсутствующий approval (раньше — только по слову «approval»).
+- **P0.3 SequencePlan binding.** План и каждый пакет получили hash (в `sequence-plan.yaml`); отчёт
+  привязан к `pkg_hash`. Resume при **дрейфе плана** (planner перестроил пакеты: тот же id — другой
+  scope) → отказ (нужен replan), а не приём старого отчёта за выполненный.
+- **P0.4 exact checkpoint resume.** Перед исполнением `resume_from`-пакета HEAD sequence-ветки обязан
+  быть **ровно** на коммите предшественника. Ветка ушла вперёд → отказ. Раньше прогон строился поверх
+  текущего HEAD, а не гарантированно поверх checkpoint.
+- **P1.1 aggregate verdict полнее.** `agg_ok` теперь требует `evidence_revision==final_sha` и
+  **aggregate security** на полном диффе `base..final_sha` (ловит риск от комбинации пакетов) —
+  в дополнение к tests/baseline/HEAD/чистое дерево. Draft PR — только при полном aggregate green.
+- **doc:** ROADMAP — breaking changes «только в 2.0» актуализировано (3.x обратно совместим, breaking →
+  v3.2/v4.0); Context Engineering помечен выполненным (был «planned»).
+
+Осталось: **P1.2 semantic dependency approval** (binding к fingerprint package/version/manifest/operation,
+не только к пути файла) — следующий шаг. Живьём: positive ENGINEERING на сильной модели, 3-пакетный
+sequential с fail на package 2 → rc5.
+
 ## [3.0.0-rc3] — 2026-07-20 — CI parity: зелёный package-quality (был красным с v2.123)
 
 Аудит отметил, что зелёный CI независимо не подтверждён. Проверка показала: `package-quality` был

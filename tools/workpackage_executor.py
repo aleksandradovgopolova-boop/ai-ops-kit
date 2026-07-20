@@ -40,6 +40,22 @@ def _changed_files(root, sha):
     return [ln for ln in out.splitlines() if ln] if rc == 0 else []
 
 
+def _pkg_hash(pkg):
+    """v3.0-rc4 (P0.3): стабильный хэш ОПРЕДЕЛЕНИЯ WorkPackage (id/scope/deps/order/write_scope).
+    Отчёт пакета привязывается к нему; при дрейфе определения старый отчёт не принимается за выполненный."""
+    import hashlib, json as _j
+    payload = _j.dumps({"id": pkg.get("id"), "scope": pkg.get("scope"),
+                        "depends_on": sorted(pkg.get("depends_on") or []), "order": pkg.get("order"),
+                        "write_scope": pkg.get("write_scope")}, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _plan_hash(ordered):
+    """Хэш всего SequencePlan = хэш последовательности хэшей пакетов (порядко-зависимый)."""
+    import hashlib
+    return hashlib.sha256("".join(_pkg_hash(p) for p in ordered).encode("utf-8")).hexdigest()[:16]
+
+
 def _ordered(packages):
     return sorted(packages, key=lambda p: (p.get("order", 0), p.get("id", "")))
 
@@ -64,11 +80,16 @@ def _hard_stop(rep):
     # поданного ревьюера — это awaiting evidence (как артефакт-гейты без author), цепочка продолжается.
     if (rep.get("security_scan") or {}).get("overall") in ("blocked", "fail"):
         return "security-fail"
+    # v3.0-rc4 (P0.2): security-ГЕЙТ fail останавливает цепочку в ЛЮБОМ случае, КРОМE «awaiting» —
+    # когда нужен независимый security-reviewer/человек, а он НЕ подан (аналог артефакт-гейтов без
+    # author). Всё остальное = настоящий блокер: сбой сканера (fail-closed), блокирующая находка,
+    # security-reviewer вынес НЕ pass, отсутствующий ApprovalRecord.
     for g in ((rep.get("gates") or {}).get("gate_results") or []):
         if g.get("gate") == "security" and g.get("status") == "fail":
             _blk = " ".join(g.get("blockers") or [])
-            if "ApprovalRecord" in _blk or "approval" in _blk.lower() or "одобрен" in _blk.lower():
-                return "security-approval-missing"
+            _awaiting = ("нужен независимый security-reviewer" in _blk) and "ApprovalRecord" not in _blk
+            if not _awaiting:
+                return "security-gate-fail"
     if any((rv or {}).get("status") == "fail" for rv in (rep.get("reviews") or [])):
         return "reviewer-fail"
     # нарушение package scope: модель пыталась ПИСАТЬ вне write_scope пакета -> брокер отклонил.
@@ -98,22 +119,38 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     prev_sha = None
     chain_ok = True
 
-    # v2.124: IMMUTABLE parent SequencePlan — фиксируем порядок/зависимости пакетов ОДИН раз в начале.
-    # Родительский план не должен перетираться локальным планом последнего пакета (P1 аудита).
+    # v2.124/v3.0-rc4 (P0.3): IMMUTABLE parent SequencePlan С ХЭШАМИ. Фиксируем порядок/зависимости
+    # ОДИН раз; при повторном вызове план мог быть перестроен planner'ом (тот же id — другой scope).
+    # Если сохранённый план существует и его hash РАСХОДИТСЯ с текущим -> дрейф: resume запрещён
+    # (нужен явный replan). Не перетираем родительский план локальным планом последнего пакета.
+    cur_plan_hash = _plan_hash(ordered)
+    pdir = features_dir / wid
+    _sp = pdir / "sequence-plan.yaml"
+    saved_plan = None
     try:
-        pdir = features_dir / wid
+        import yaml as _y
         pdir.mkdir(parents=True, exist_ok=True)
-        _sp = pdir / "sequence-plan.yaml"
-        if not _sp.exists():
-            import yaml as _y
+        if _sp.exists():
+            saved_plan = _y.safe_load(_sp.read_text(encoding="utf-8")) or {}
+        else:
             _sp.write_text(_y.safe_dump(
                 {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": len(ordered),
+                 "plan_hash": cur_plan_hash,
                  "packages": [{"id": p.get("id"), "order": p.get("order"),
                                "depends_on": p.get("depends_on") or [], "scope": p.get("scope"),
-                               "write_scope": p.get("write_scope")} for p in ordered]},
+                               "write_scope": p.get("write_scope"), "pkg_hash": _pkg_hash(p)} for p in ordered]},
                 allow_unicode=True, sort_keys=False), encoding="utf-8")
     except Exception:  # noqa: BLE001
         pass
+    # дрейф плана при resume -> отказ (P0.3): сохранённый план — источник истины
+    if resume_from and saved_plan and saved_plan.get("plan_hash") and saved_plan["plan_hash"] != cur_plan_hash:
+        return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                "plan_hash": cur_plan_hash, "saved_plan_hash": saved_plan["plan_hash"],
+                "error": ("SequencePlan дрейфнул с прошлого прогона (planner перестроил пакеты) — "
+                          "resume по старым отчётам небезопасен. Нужен явный replan (пересобрать план "
+                          "и переисполнить с нуля), а не resume_from.")}
 
     # v2.124: снимок проверок БАЗЫ (до пакета 1) для АГРЕГАТНОЙ baseline-diff на финальном SHA.
     base_checks = None
@@ -180,6 +217,19 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             results.append({"id": pid, "sha": psha, "ready": bool(rep_ok.get("ready_for_pr")),
                             "executed": True, "status": "resumed-skip", "resume_point": psha})
             continue
+        # v3.0-rc4 (P0.4): ТОЧНЫЙ checkpoint — перед исполнением resume_from-пакета HEAD sequence-ветки
+        # обязан быть РОВНО на коммите предшественника (prev_sha), а не «где-то потомком». Иначе ветка
+        # могла уже содержать попытки package N+1, и новый прогон строился бы поверх чужого HEAD.
+        if start_index > 0 and i == start_index and prev_sha:
+            _head = _git(_rev_root, "rev-parse", _branch)[1]
+            if _head != prev_sha:
+                return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                        "packages": results, "completed": sorted(completed), "stopped_at": pid,
+                        "executed_all": False, "ready_all": False, "aggregate_ready": False,
+                        "total": len(ordered),
+                        "error": (f"resume: HEAD ветки {_branch} ({(_head or '?')[:8]}) НЕ на checkpoint "
+                                  f"предшественника ({prev_sha[:8]}) — ветка ушла вперёд (попытки "
+                                  f"последующих пакетов?). Сбрось worktree на {prev_sha[:8]} и повтори.")}
         unmet_deps = [d for d in (pkg.get("depends_on") or []) if d not in completed]
         if unmet_deps:
             results.append({"id": pid, "status": "blocked-dependency",
@@ -194,6 +244,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         # АВТОРИТЕТНЫЙ список id плана (preflight валидирует work_package_id против него — P0.4/P0.5).
         sig_pkg["work_package_id"] = pid
         sig_pkg["_sequence_plan_ids"] = [p.get("id") for p in ordered]
+        sig_pkg["_sequence_internal"] = True   # v3.0-rc4 (P0.1): внутренний per-package resume ≠ replan
         if signals_for:
             sig_pkg.update(signals_for(pkg) or {})
 
@@ -262,6 +313,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         status = (stop_reason if stop_reason else ("executed" if executed else "no-commit"))
         results.append({"id": pid, "sha": sha, "ready": ready, "executed": executed,
                         "blocked": blocked, "stop_reason": stop_reason,
+                        "pkg_hash": _pkg_hash(pkg),   # v3.0-rc4 (P0.3): отчёт привязан к хэшу определения
                         "gates_unmet": (rep.get("gates") or {}).get("unmet"),
                         "resume_point": sha,   # точка resume пакета
                         "handoff": (rep.get("handoff") or {}).get("next_action"),
@@ -299,17 +351,32 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
             tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True
             agg_reg, _agg_fix = _ep._diff_checks(base_checks, final_checks) if base_checks else ([], [])
+            # v3.0-rc4 (P1.1): AGGREGATE SECURITY на ПОЛНОМ интегрированном диффе base..final_sha —
+            # ловит риск, возникший ТОЛЬКО из комбинации пакетов (один добавил ввод, другой — sink).
+            # base_sha определяем как первый родитель первого пакета в цепочке.
+            import security_pack as _sp2
+            _base_sha = _git(vroot, "rev-list", "--max-parents=0", final_sha)[1].split("\n")[0] \
+                if final_sha else None
+            agg_sec = None
+            try:
+                agg_sec = _sp2.run_pack(vroot, base=(_base_sha or None), signals=(signals or {}))
+            except Exception:  # noqa: BLE001
+                agg_sec = {"overall": "error"}
+            agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
             aggregate = {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
                          "final_sha": final_sha, "revision_ok": revision_ok, "tree_clean": tree_clean,
                          "evidence_revision": coll.get("revision"),
+                         "evidence_revision_ok": (coll.get("revision") == final_sha),
+                         "security_overall": (agg_sec or {}).get("overall"), "security_ok": agg_sec_ok,
                          "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
         except Exception as e:  # noqa: BLE001
             aggregate = {"verified": False, "error": str(e)}
-    # v3.0-rc2 (P0.4): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена И чиста:
-    # verified=True, нет регрессий, HEAD==final_sha, дерево чистое. Сбой/недоступность верификации ->
-    # НЕ ready (раньше verified=False трактовался как ok -> PR мог открыться на непроверенной интеграции).
+    # v3.0-rc2/rc4 (P0.4/P1.1): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена
+    # И чиста: verified, нет регрессий, HEAD==final_sha, evidence на final_sha, дерево чистое, агрегатный
+    # security clear на полном диффе. Сбой/недоступность -> НЕ ready.
     agg_ok = bool(aggregate.get("verified") and aggregate.get("no_regressions")
-                  and aggregate.get("revision_ok") and aggregate.get("tree_clean"))
+                  and aggregate.get("revision_ok") and aggregate.get("tree_clean")
+                  and aggregate.get("evidence_revision_ok") and aggregate.get("security_ok"))
     aggregate_ready = ready_all and chain_ok and agg_ok
 
     # v2.124 (P0.4): доставка draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта, на финальном
@@ -426,8 +493,15 @@ def selftest():
                (seq.get("aggregate") or {}).get("verified") is True
                and (seq.get("aggregate") or {}).get("final_sha") == seq["final_sha"])
 
-        # v2.124: RESUME с конкретного пакета — пакеты до него восстановлены из снимков (resumed-skip),
-        # исполняется только целевой и последующие.
+        # v3.0-rc4 (P0.4): после полного прогона HEAD ветки на пакете 3 -> resume с пакета 2 запрещён
+        # (ветка ушла вперёд checkpoint предшественника).
+        seq_drift = execute_sequence("x", sig, root, pkgs, prop_for, feature="seq", base=cur,
+                                     author=True, author_proposer=author, review=True, reviewer_proposer=reviewer,
+                                     resume_from=pkgs[1]["id"])
+        expect("v3.0-rc4 resume (P0.4): HEAD не на checkpoint предшественника -> error",
+               "error" in seq_drift and "checkpoint" in (seq_drift.get("error") or "").lower())
+        # валидный resume: сбрасываем ветку на checkpoint пакета 1, затем resume с пакета 2
+        _git(root / ".ai" / "worktrees" / "seq", "reset", "--hard", seq["packages"][0]["sha"])
         buf2 = io.StringIO()
         with contextlib.redirect_stderr(buf2):
             seq_r = execute_sequence("большой рефактор", sig, root, pkgs, prop_for, feature="seq",
@@ -435,14 +509,21 @@ def selftest():
                                      review=True, reviewer_proposer=reviewer,
                                      resume_from=pkgs[1]["id"])
         skipped = [p for p in seq_r["packages"] if p.get("status") == "resumed-skip"]
-        expect("v2.124 resume: пакеты до resume_from помечены resumed-skip (восстановлены из снимков)",
-               seq_r.get("resumed_from") == pkgs[1]["id"] and len(skipped) == 1
+        expect("v2.124/rc4 resume: валидный checkpoint -> пакет 1 resumed-skip, дальше исполняется",
+               "error" not in seq_r and seq_r.get("resumed_from") == pkgs[1]["id"] and len(skipped) == 1
                and skipped[0]["id"] == pkgs[0]["id"] and skipped[0].get("sha"))
         # v3.0-rc2 (P0.3): неизвестный resume_from -> ОШИБКА, не тихий старт с нуля
         seq_bad = execute_sequence("x", sig, root, pkgs, prop_for, feature="seq", base=cur,
                                    resume_from="pkg-НЕТ-ТАКОГО")
         expect("v3.0-rc2 resume: неизвестный resume_from -> error (не старт с нуля)",
                "error" in seq_bad and seq_bad["executed_all"] is False and not seq_bad["packages"])
+        # v3.0-rc4 (P0.3): дрейф SequencePlan (planner перестроил пакеты) -> resume запрещён
+        pkgs_drift = [dict(p) for p in pkgs]
+        pkgs_drift[0] = {**pkgs_drift[0], "scope": ["ДРУГАЯ-ПОДСИСТЕМА"]}   # тот же id, другой scope -> др. hash
+        seq_pd = execute_sequence("x", sig, root, pkgs_drift, prop_for, feature="seq", base=cur,
+                                  resume_from=pkgs[1]["id"])
+        expect("v3.0-rc4 resume (P0.3): дрейф SequencePlan -> error (нужен replan)",
+               "error" in seq_pd and "дрейф" in (seq_pd.get("error") or "").lower())
         # v3.0-rc2 (P0.3): пакет до resume_from без подтверждённого снимка -> error (не добавляем в completed)
         import tempfile as _tf
         with _tf.TemporaryDirectory() as td_e:
@@ -491,11 +572,16 @@ def selftest():
         # а не по недостижимому overall=="fail". Иначе security-блок проходил как awaiting evidence.
         expect("v3.0-rc2 _hard_stop: security_scan blocked -> стоп",
                _hard_stop({"commit": {"sha": "a"}, "security_scan": {"overall": "blocked"}}) == "security-fail")
-        expect("v3.0-rc2 _hard_stop: security-гейт fail из-за нет ApprovalRecord -> стоп",
-               _hard_stop({"commit": {"sha": "a"}, "gates": {"gate_results": [
-                   {"gate": "security", "status": "fail", "blockers": ["dependencies: нет валидного ApprovalRecord"]}]}})
-               == "security-approval-missing")
-        expect("v3.0-rc2 _hard_stop: security needs_review без ревьюера (awaiting) -> НЕ стоп",
+        def _g(blk):
+            return {"commit": {"sha": "a"}, "gates": {"gate_results": [
+                {"gate": "security", "status": "fail", "blockers": [blk]}]}}
+        expect("v3.0-rc4 _hard_stop: security-гейт fail — нет ApprovalRecord -> стоп",
+               _hard_stop(_g("dependencies: нет валидного ApprovalRecord")) == "security-gate-fail")
+        expect("v3.0-rc4 _hard_stop: security-гейт fail — сбой сканера (fail-closed) -> стоп",
+               _hard_stop(_g("security scan упал (fail-closed): boom")) == "security-gate-fail")
+        expect("v3.0-rc4 _hard_stop: security-гейт fail — reviewer не вынес pass -> стоп",
+               _hard_stop(_g("security-reviewer не вынес pass")) == "security-gate-fail")
+        expect("v3.0-rc4 _hard_stop: needs_review без поданного ревьюера (awaiting) -> НЕ стоп",
                _hard_stop({"commit": {"sha": "a"}, "security_scan": {"overall": "needs_review"},
                            "gates": {"gate_results": [{"gate": "security", "status": "fail",
                            "blockers": ["нужен независимый security-reviewer/человек по доменам: input_validation"]}]}}) is None)
