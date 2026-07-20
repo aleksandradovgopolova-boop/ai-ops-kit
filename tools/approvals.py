@@ -152,6 +152,47 @@ def covers_paths(rec, changed_paths):
     return all(under(p) for p in paths)
 
 
+def dep_fingerprint(finding):
+    """v3.0-rc5 (P1.2): стабильный отпечаток находки новой зависимости (manifest:package@version:op)."""
+    return (f"{finding.get('manifest')}:{(finding.get('name') or '').lower()}"
+            f"@{finding.get('version') or '*'}:{finding.get('operation', 'add')}")
+
+
+def covers_dependency(rec, finding):
+    """v3.0-rc5 (P1.2): approval покрывает КОНКРЕТНУЮ зависимость? Нужен covers_packages, называющий имя
+    пакета (и версию, если approval её фиксирует '<name>@<ver>'). Path-only approval (без covers_packages)
+    supply-chain НЕ покрывает — иначе одобрение одной зависимости покрыло бы любую в том же манифесте."""
+    covers = rec.get("covers_packages") or []
+    if isinstance(covers, str):
+        covers = [c.strip() for c in covers.replace(",", " ").split() if c.strip()]
+    if not covers:
+        return False
+    nm = (finding.get("name") or "").lower()
+    ver = finding.get("version")
+    for c in covers:
+        cname, _, cver = str(c).strip().lower().partition("@")
+        if cname == nm and (not cver or cver == "*" or not ver or cver == str(ver).lower()):
+            return True
+    return False
+
+
+def recheck_dependencies(child_root, wid, dep_findings, now=None, plan_hash=None, domains=None):
+    """v3.0-rc5 (P1.2): КАЖДАЯ новая зависимость из диффа должна покрываться валидным ApprovalRecord
+    dependencies с covers_packages, называющим ИМЕННО этот пакет. -> {ok, uncovered[]}."""
+    recs = [r for r in load_approvals(child_root, wid) if r.get("approval") == "dependencies"]
+    now = now or _now_iso()
+    plan_hash = plan_hash if plan_hash is not None else plan_binding_hash(child_root, wid)
+    domains_list = domains if domains is not None else load_domains()
+    strict = _is_high_risk("dependencies", domains_list)
+    valid = [r for r in recs if _record_valid(r, now=now, plan_hash=plan_hash, strict=strict)]
+    uncovered = []
+    for f in (dep_findings or []):
+        if not any(covers_dependency(r, f) for r in valid):
+            uncovered.append({"domain": "dependencies", "fingerprint": dep_fingerprint(f), "name": f.get("name"),
+                              "reason": "нет ApprovalRecord dependencies с covers_packages для этого пакета"})
+    return {"ok": not uncovered, "uncovered": uncovered}
+
+
 def load_approvals(child_root, wid):
     """Прочитать все ApprovalRecord из features/<wid>/approvals/*.yaml. -> [record]."""
     import yaml
@@ -260,7 +301,8 @@ def recheck_after_diff(child_root, wid, changed_paths, signals=None, domains=Non
 
 
 def write_record(child_root, wid, approval, approved_by, scope, reason, revision="-", created_at=None,
-                 binds_to=None, expires_at=None, risk=None, bind_to_plan=False, source=None):
+                 binds_to=None, expires_at=None, risk=None, bind_to_plan=False, source=None,
+                 covers_packages=None):
     """Создать ApprovalRecord на диске (features/<wid>/approvals/<approval>.yaml). created_at обязателен
     в проде (передаётся вызывающим — детерминированность/отсутствие скрытого времени). v2.121: связать с
     планом (binds_to или bind_to_plan=True -> хэш с диска), сроком (expires_at) и типом риска (risk)."""
@@ -280,6 +322,8 @@ def write_record(child_root, wid, approval, approved_by, scope, reason, revision
         rec["risk"] = risk
     if source:                       # v2.123: доверенный источник identity (user|ci|human), не модель
         rec["source"] = source
+    if covers_packages:              # v3.0-rc5 (P1.2): какие пакеты покрывает (supply-chain fingerprint)
+        rec["covers_packages"] = list(covers_packages)
     p = d / f"{approval}.yaml"
     p.write_text(yaml.safe_dump(rec, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return p
@@ -316,6 +360,34 @@ def selftest():
     expect("v2.123: находка новой зависимости -> требуется одобрение dependencies (пост-дифф)",
            "dependencies" in {r["domain"] for r in required_approvals(dsig)})
     expect("v2.123: пустой pack -> нет производных сигналов", signals_from_findings({}) == {})
+
+    # v3.0-rc5 (P1.2): semantic dependency approval — покрытие по имени пакета, не по пути файла
+    _f = {"type": "new_dependency", "name": "requests", "version": "2.32.0", "manifest": "requirements.txt"}
+    expect("v3.0-rc5: covers_dependency — approval без covers_packages НЕ покрывает (path-only мало)",
+           covers_dependency({"scope": "requirements.txt"}, _f) is False)
+    expect("v3.0-rc5: covers_dependency — covers_packages с ДРУГИМ пакетом НЕ покрывает",
+           covers_dependency({"covers_packages": ["flask"]}, _f) is False)
+    expect("v3.0-rc5: covers_dependency — covers_packages называет пакет -> покрывает",
+           covers_dependency({"covers_packages": ["requests"]}, _f) is True)
+    expect("v3.0-rc5: covers_dependency — точная версия совпала -> покрывает",
+           covers_dependency({"covers_packages": ["requests@2.32.0"]}, _f) is True)
+    expect("v3.0-rc5: covers_dependency — иная зафиксированная версия НЕ покрывает",
+           covers_dependency({"covers_packages": ["requests@9.9.9"]}, _f) is False)
+    with tempfile.TemporaryDirectory() as _tdd:
+        _r = Path(_tdd)
+        rc_no = recheck_dependencies(_r, "wd", [_f])
+        expect("v3.0-rc5: recheck_dependencies — нет approval для пакета -> uncovered",
+               rc_no["ok"] is False and rc_no["uncovered"][0]["name"] == "requests")
+        write_record(_r, "wd", "dependencies", "u@x", "requirements.txt", "нужен http-клиент",
+                     created_at="2026-07-20T00:00:00Z", source="user", covers_packages=["requests"])
+        rc_yes = recheck_dependencies(_r, "wd", [_f])
+        expect("v3.0-rc5: recheck_dependencies — approval с covers_packages=[requests] -> covered",
+               rc_yes["ok"] is True)
+        # другая зависимость в том же манифесте НЕ покрыта старым approval (широкое переиспользование закрыто)
+        _f2 = {"type": "new_dependency", "name": "evil-pkg", "version": None, "manifest": "requirements.txt"}
+        rc_other = recheck_dependencies(_r, "wd", [_f2])
+        expect("v3.0-rc5: approval requests НЕ покрывает другую зависимость (evil-pkg) в том же манифесте",
+               rc_other["ok"] is False and rc_other["uncovered"][0]["name"] == "evil-pkg")
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -440,6 +512,9 @@ def main(argv):
     rc.add_argument("--expires-at", help="срок действия одобрения (ISO 8601); после — невалидно")
     rc.add_argument("--risk", help="тип риска, который покрывает одобрение (обязателен для high-risk)")
     rc.add_argument("--source", help="доверенный источник identity: user|ci|human (обязателен для high-risk)")
+    rc.add_argument("--package", action="append", default=None,
+                    help="dependencies: пакет(ы), которые покрывает одобрение (имя или name@version); "
+                         "повторяемо. Без него supply-chain approval не покроет конкретную зависимость")
     rc.add_argument("--bind-to-plan", action="store_true",
                     help="привязать к хэшу текущего run-plan.yaml+spec.yaml (при смене плана — невалидно)")
     a = ap.parse_args(argv)
@@ -468,7 +543,8 @@ def main(argv):
             return 2
         p = write_record(Path(a.child_root), a.wid, a.approval, a.by, a.scope, a.reason,
                          revision=a.revision, created_at=a.created_at,
-                         expires_at=a.expires_at, risk=a.risk, bind_to_plan=bind, source=a.source)
+                         expires_at=a.expires_at, risk=a.risk, bind_to_plan=bind, source=a.source,
+                         covers_packages=a.package)
         print(f"APPROVAL-RECORD: записан {p}")
         return 0
     return 1

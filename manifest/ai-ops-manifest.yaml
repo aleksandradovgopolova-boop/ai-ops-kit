@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc4
+  package_version: 3.0.0-rc5
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,9 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc5_semantic_dependency_approval:
+      - "P1.2 semantic dependency approval: одобрение зависимости привязано к ОТПЕЧАТКУ пакета (manifest/package/version/operation), а не к пути файла. Раньше approval со scope=requirements.txt покрывал ЛЮБУЮ новую зависимость в этом файле; теперь новая зависимость из диффа требует ApprovalRecord dependencies с covers_packages, называющим ИМЕННО этот пакет (опц. name@version). security_scan.new_dependencies_detailed извлекает name+version+manifest; finding security_pack несёт fingerprint; approvals.covers_dependency/recheck_dependencies проверяют покрытие; execution_pipeline после диффа блокирует непокрытую новую зависимость. CLI: approvals record --package <name[@ver]> (повторяемо)"
+      - "проверки: +6 деттестов covers_dependency/recheck_dependencies (path-only не покрывает; другой пакет не покрывает; имя/версия совпали; чужая зависимость в том же манифесте не покрыта старым approval); полный CI-набор (91) локально 91/91 PASS. Закрывает последний P1 аудита rc3"
     fixed_v3_0_rc4_continuity_semantics:
       - "P0.1 immutable resume: resume НЕ меняет классификацию/policy. Смена task_type/risk/size/affected_areas/write_scope при resume -> drift-ошибка (нужен явный --replan с ревалидацией). Внутренний per-package resume executor'а (_sequence_internal) освобождён (его affected_areas меняются легитимно). run-settings хранятся per-run (run-history/run-NNN.yaml), не только последнее состояние"
       - "P0.2 complete sequence hard-stop: security-гейт fail останавливает цепочку В ЛЮБОМ случае, КРОМE awaiting (нужен reviewer/человек, но не подан). Теперь ловятся: сбой сканера (fail-closed), блокирующая находка, security-reviewer НЕ pass, отсутствующий approval — раньше стоп был только когда blocker содержал слово approval"
