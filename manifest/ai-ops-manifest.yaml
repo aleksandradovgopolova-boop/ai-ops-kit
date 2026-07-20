@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc11
+  package_version: 3.0.0-rc12
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc12_sequence_infra_containment:
+      - "finding живого 3-пакетного sequential (kimi-k3): провайдер сбросил TCP-соединение (ConnectionResetError [Errno 54]) во время author-вызова пакета 1. _http_post_json ловит ConnectionError и ретраит (6×), но kimi сбрасывал на КАЖДОЙ попытке -> ретраи исчерпаны -> исключение легитимно проброшено. Выше execute_sequence его НИКТО не ловил -> traceback убил ВСЮ транзакцию до единого коммита: ни SEQUENCE-строки, ни work-packages/<pid>/report.json, ни sequence-report. Нарушение обещания транзакции (durable/resumable state)"
+      - "фикс: execute_sequence оборачивает per-package ai_ops_run.run в try/except. Исключение провайдера/инфры -> пакет честно фейлится (stop_reason='infra-error: <тип>: <msg>'), цепочка hard-stop, ПРЕЖНИЕ пакеты/план/снимки сохранены, последующие НЕ исполняются. KeyboardInterrupt/SystemExit (намеренное прерывание, честный fail отсутствующего ключа) НЕ глотаем — пробрасываем"
+      - "проверки: +деттест (author_proposer бросает ConnectionResetError -> НЕ traceback; пакет 1 stop_reason=infra-error; stopped_at=пакет-1, пакеты 2/3 не исполнены, executed_all/ready_all=False; снимок report.json пакета 1 на диске). Полный CI-набор (94) 94/94 PASS локально"
     fixed_v3_0_rc11_symmetric_reviewer_honesty:
       - "finding живого прогона kimi-k3 (полный ENGINEERING на rc10-коде): цепочка отработала end-to-end — все 3 author-артефакта валидны, реальная реализация (discounts.py: дублирующие ветки заменены таблицей DISCOUNT_RATES + единый calculate_discount, +92 строк тестов, tests pass, реальный коммит), security-reviewer -> PASS (rc9-контекст помог и ему), code_review вынес РЕАЛЬНЫЙ вердикт (reads=10, stopped=verdict). ready_for_pr=False держался ЧЕСТНО: code_review=warn, а warn на блокирующем гейте — не чистый pass (v2.85). НО вердикт warn пришёл с ПУСТЫМ blockers"
       - "асимметрия честности: контракт требовал blockers только для fail (rule 4), а warn на блокирующем гейте БЛОКИРУЕТ так же — значит ревьюер мог заблокировать гейт бессодержательным warn «на всякий случай» (унфальсифицируемый блок без причины). Фикс симметрии: (1) validate_reviewer_result — status∈{fail,warn} обязан иметь непустой blockers (contentless warn невалиден); (2) промпт ревьюера (make_reviewer_proposer) — warn/fail требуют КОНКРЕТНЫХ blockers, и симметрично: не выдумывай pass, но и не выдумывай сомнения — прочитал и конкретной проблемы нет -> pass, не warn 'на всякий случай'"

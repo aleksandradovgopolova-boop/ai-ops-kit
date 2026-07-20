@@ -250,23 +250,35 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
 
         is_last = (i == len(ordered) - 1)
         pkg_task = f"{task} — пакет {pid}: {pkg.get('title', '')}".strip()
-        rep = ai_ops_run.run(pkg_task, sig_pkg, child_root, features_dir=str(features_dir),
-                             engine="pipeline", proposer=proposer_for(pkg), execute=True,
-                             feature=wid, resume=(i > 0 or start_index > 0), base=base, provider_name=provider_name,
-                             model=model, author=author, author_proposer=author_proposer,
-                             review=review, reviewer_proposer=reviewer_proposer,
-                             baseline_diff=baseline_diff, install_deps=install_deps,
-                             # v2.124 (P0.4): пакеты НИКОГДА не открывают PR — доставка отдельным шагом
-                             # ПОСЛЕ агрегатного вердикта (ready_all). Иначе готовый финальный пакет открыл
-                             # бы PR, пока ранний пакет awaiting-evidence -> PR при ready_all=false.
-                             sandbox=sandbox, max_steps=max_steps, open_pr=False,
-                             write_scope=(write_scope_for(pkg) if write_scope_for else None))
+        # v3.0-rc12 (finding живого sequential): исключение провайдера/инфры (напр. ConnectionReset
+        # от kimi ПОСЛЕ исчерпания ретраев _http_post_json) НЕ должно ронять всю транзакцию traceback'ом
+        # и терять per-package lifecycle. Ловим -> пакет честно фейлится (infra-error) -> цепочка
+        # hard-stop с ясной причиной; прежние пакеты/план/снимки сохранены (durable/resumable).
+        infra_error = None
+        try:
+            rep = ai_ops_run.run(pkg_task, sig_pkg, child_root, features_dir=str(features_dir),
+                                 engine="pipeline", proposer=proposer_for(pkg), execute=True,
+                                 feature=wid, resume=(i > 0 or start_index > 0), base=base, provider_name=provider_name,
+                                 model=model, author=author, author_proposer=author_proposer,
+                                 review=review, reviewer_proposer=reviewer_proposer,
+                                 baseline_diff=baseline_diff, install_deps=install_deps,
+                                 # v2.124 (P0.4): пакеты НИКОГДА не открывают PR — доставка отдельным шагом
+                                 # ПОСЛЕ агрегатного вердикта (ready_all). Иначе готовый финальный пакет открыл
+                                 # бы PR, пока ранний пакет awaiting-evidence -> PR при ready_all=false.
+                                 sandbox=sandbox, max_steps=max_steps, open_pr=False,
+                                 write_scope=(write_scope_for(pkg) if write_scope_for else None))
+        except (KeyboardInterrupt, SystemExit):
+            raise                                       # намеренное прерывание/честный fail ключа — не глотаем
+        except Exception as _e:  # noqa: BLE001 — сеть/провайдер/инфра не валит транзакцию
+            infra_error = f"{type(_e).__name__}: {_e}"
+            rep = {"schema_version": 1, "kind": "run-report", "status": "error",
+                   "error": infra_error, "commit": {}, "loop": {}, "gates": {}, "reviews": []}
 
         sha = (rep.get("commit") or {}).get("sha")
         # v2.120 (P0.3): ОСТАНОВ цепочки на НАСТОЯЩЕМ блокере — нельзя строить зависимый пакет поверх.
         # Отличаем «awaiting evidence» (нет author/review -> исполнен, но не ready, цепочка идёт) от
         # deterministic/security/reviewer FAIL и регрессии (обязаны остановить).
-        stop_reason = _hard_stop(rep)
+        stop_reason = f"infra-error: {infra_error}" if infra_error else _hard_stop(rep)
         # v2.123 (P0.3): ПОСТ-ДИФФ проверка write_scope — пакет не должен был изменить НИЧЕГО вне своего
         # каталога (belt-and-suspenders поверх брокера, который отклоняет out-of-scope записи в петле).
         # Escape = scope-violation -> останавливает последовательность (нельзя строить поверх «уехавшего»).
@@ -533,6 +545,27 @@ def selftest():
                                      resume_from=pkgs_e[1]["id"])   # снимков нет — пакет 1 не подтверждён
             expect("v3.0-rc2 resume: неподтверждённый пропущенный пакет -> error (не в completed)",
                    "error" in seq_e and pkgs_e[0]["id"] not in seq_e.get("completed", []))
+
+        # v3.0-rc12 (finding живого sequential): исключение провайдера/инфры (ConnectionReset и т.п.)
+        # ПОСЛЕ исчерпания ретраев НЕ роняет всю транзакцию traceback'ом — пакет честно фейлится
+        # (infra-error), цепочка hard-stop, последующие пакеты НЕ исполняются, снимок пакета сохранён.
+        with _tf.TemporaryDirectory() as td_x:
+            rx = Path(td_x); cur_x = mkrepo(td_x)
+            pkgs_x = atomic_planner.decompose(sig, wid="seqx", child_root=rx)["work_packages"]
+            def prop_boom(pkg):
+                return lambda c: {"done": True}          # не достигается — author падает раньше
+            def boom_author(prompt):                     # воспроизводит живой сбой: ConnectionReset в author-вызове
+                raise ConnectionResetError("[Errno 54] Connection reset by peer")
+            seq_x = execute_sequence("x", sig, rx, pkgs_x, prop_boom, feature="seqx",
+                                     base=cur_x, author=True, author_proposer=boom_author, review=False)
+            p0 = seq_x["packages"][0] if seq_x.get("packages") else {}
+            expect("v3.0-rc12: исключение провайдера -> НЕ traceback, пакет 1 stop_reason=infra-error",
+                   "infra-error" in (p0.get("stop_reason") or ""))
+            expect("v3.0-rc12: цепочка стоп на пакете 1, пакеты 2/3 НЕ исполнены (durable stop)",
+                   seq_x.get("stopped_at") == pkgs_x[0]["id"] and len(seq_x["packages"]) == 1
+                   and seq_x["executed_all"] is False and seq_x["ready_all"] is False)
+            expect("v3.0-rc12: per-package снимок пакета 1 сохранён (транзакция не потеряла состояние)",
+                   (rx / "features" / "seqx" / "work-packages" / pkgs_x[0]["id"] / "report.json").is_file())
 
         # v2.124.1 (finding живого прогона): с write_scope_for + author артефакты движка (.ai/runplan,
         # openspec) НЕ должны ловиться как scope-violation — write_scope ограничивает КОД, не артефакты.
