@@ -125,6 +125,42 @@ def new_dependencies(before, after):
     return sorted(added)
 
 
+def _dep_specs(path, text):
+    """{name: version|None} из манифеста (версия best-effort: requirements '==', package.json значение)."""
+    name = Path(path).name
+    specs = {}
+    if name == "package.json":
+        try:
+            data = json.loads(text)
+            for key in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+                for k, v in (data.get(key) or {}).items():
+                    specs[k] = str(v)
+        except json.JSONDecodeError:
+            pass
+    elif name == "requirements.txt":
+        for ln in text.splitlines():
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                nm = re.split(r"[<>=!~\[ ]", ln, 1)[0].strip().lower()
+                mv = re.search(r"==\s*([0-9][\w.\-]*)", ln)
+                specs[nm] = mv.group(1) if mv else None
+    else:
+        for nm in _dep_names(path, text):
+            specs[nm] = None
+    return specs
+
+
+def new_dependencies_detailed(before, after):
+    """v3.0-rc5 (P1.2): НОВЫЕ зависимости с деталями для fingerprint approval.
+    -> [{name, version, manifest, operation:'add'}] (отсортировано по manifest, name)."""
+    out = []
+    for path in sorted(after):
+        b, a = _dep_specs(path, before.get(path, "")), _dep_specs(path, after[path])
+        for nm in sorted(set(a) - set(b)):
+            out.append({"name": nm, "version": a.get(nm), "manifest": Path(path).name, "operation": "add"})
+    return out
+
+
 def security_evidence(secrets, injections, new_deps):
     """Собрать gate_ev-совместимый вердикт по частям security. Детерминированно закрываем ТОЛЬКО
     no_secrets и deps_approved (факты). no_injection_surface оставляем судье (даём флаги как вход)."""

@@ -90,6 +90,7 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
     mani = {p: c for p, c in files_content.items() if Path(p).name in security_scan.DEP_MANIFESTS}
     before = {p: (security_scan._git_show(child_root, base, p) if (child_root and base) else "") for p in mani}
     new_deps = security_scan.new_dependencies(before, mani)
+    new_deps_detailed = security_scan.new_dependencies_detailed(before, mani)   # v3.0-rc5 (P1.2): fingerprint
 
     results, blocking, needs_review = [], [], []
     for d in domains:
@@ -103,7 +104,12 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         if "injection_scan" in checks:
             findings += [{"type": "injection", "path": i["path"], "line": i["line"], "id": i["id"]} for i in injections]
         if "dependency_diff" in checks:
-            findings += [{"type": "new_dependency", "name": n} for n in new_deps]
+            # v3.0-rc5 (P1.2): finding несёт fingerprint (manifest/package/version/operation) — approval
+            # supply-chain привязывается к нему, а не к пути файла (иначе одобрение одной зависимости
+            # покрыло бы любую другую в том же requirements.txt/package.json).
+            findings += [{"type": "new_dependency", "name": dd["name"], "version": dd.get("version"),
+                          "manifest": dd.get("manifest"), "operation": dd.get("operation", "add")}
+                         for dd in new_deps_detailed]
 
         req = set(d.get("required_evidence", []) or [])
         severity = (d.get("severity_policy", {}) or {}).get("default", "medium")

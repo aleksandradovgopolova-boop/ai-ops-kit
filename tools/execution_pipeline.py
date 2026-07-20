@@ -1085,6 +1085,16 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             # v3.0-rc2 (P0.5): recheck по ЭФФЕКТИВНЫМ сигналам (намерение + findings-derived), а не только
             # входным — иначе scope одобрения для НАЙДЕННОЙ зависимости/секрета не перепроверяется на дифф.
             approval_recheck = _appr.recheck_after_diff(child_root, wid, _changed, signals=effective_approval_signals)
+            # v3.0-rc5 (P1.2): SEMANTIC dependency approval — каждая НОВАЯ зависимость из диффа должна
+            # покрываться ApprovalRecord с covers_packages для ИМЕННО этого пакета (не только путём файла).
+            _dep_findings = [f for r in ((security_pack_result or {}).get("results") or [])
+                             for f in (r.get("findings") or []) if f.get("type") == "new_dependency"]
+            if _dep_findings:
+                _dep_rc = _appr.recheck_dependencies(child_root, wid, _dep_findings)
+                if not _dep_rc.get("ok"):
+                    approval_recheck = {"ok": False,
+                                        "uncovered": (approval_recheck.get("uncovered") or []) + _dep_rc["uncovered"],
+                                        "dependency_uncovered": _dep_rc["uncovered"]}
         except Exception as _e:  # noqa: BLE001 — v2.123 (P0.2b): approval FAIL-CLOSED. Сбой recheck НЕ
             # трактуется как «покрыто»: для одобрения безопаснее заблокировать, чем пропустить непроверенное.
             approval_recheck = {"ok": False, "uncovered": [{"domain": "*", "reason": f"recheck упал: {_e}"}],

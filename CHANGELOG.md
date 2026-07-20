@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc5] — 2026-07-20 — Semantic Dependency Approval (P1.2): fingerprint вместо пути
+
+Закрыт последний P1 аудита rc3. Полный CI-набор (91) локально 91/91 PASS.
+
+### Fixed
+- **P1.2 semantic dependency approval.** Одобрение зависимости привязано к **отпечатку пакета**
+  (`manifest/package/version/operation`), а не к пути файла. Раньше approval со `scope=requirements.txt`
+  покрывал ЛЮБУЮ новую зависимость в этом файле → модель могла добавить другую зависимость под старое
+  одобрение. Теперь каждая новая зависимость из диффа требует `ApprovalRecord dependencies` с
+  `covers_packages`, называющим именно этот пакет (опц. `name@version`). Реализация:
+  `security_scan.new_dependencies_detailed` (name+version+manifest) → finding с fingerprint →
+  `approvals.covers_dependency`/`recheck_dependencies` → `execution_pipeline` блокирует непокрытую
+  зависимость после диффа. CLI: `approvals record --package <name[@ver]>` (повторяемо).
+
+Следующее — живая квалификация rc5: positive ENGINEERING на сильной модели (kimi), 3-пакетный
+sequential с намеренным fail на package 2, resume/drift/downgrade-блок, aggregate security на комбинации.
+
 ## [3.0.0-rc4] — 2026-07-20 — Continuity Semantics: immutable resume, полный sequence hard-stop, SequencePlan binding, exact checkpoint
 
 Аудит rc3 нашёл 4 P0 в continuity/sequence + 1 P1 (aggregate). Все исправлены; полный CI-набор
