@@ -127,7 +127,7 @@ def _change_context(work_root, revision, max_chars=12000):
 
 
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
-                 max_reads=6):
+                 max_reads=10):   # rc10: многофайловый дифф требует больше чтений до вердикта
     """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence.
     Возвращает (обновлённый gate_ev, список трейсов ревью). Ревьюер гоняется под READ-ONLY
     политикой (capability-независимость от писателя). Вердикт валидируется по reviewer-result
