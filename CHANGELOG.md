@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc20] — 2026-07-21 — Final Verdict Truth (аудит: 5×P0 + 2×P1)
+
+Закрытие мест, где **отсутствие доказательства могло сойти за доказанный результат**. Оба финальных
+пользовательских пути закрыты живьём на claude-sonnet-5: single ENGINEERING → draft PR и 3-пакетный
+sequential → `aggregate_ready=true` → draft PR.
+
+### Fixed
+- **P0 — aggregate code_review был fail-OPEN.** `return (not blocked)`: no-verdict/невалидный/timeout/
+  budget → `ok=True`. Теперь ok только при явном валидном `pass` (`gate_ev['code_review'].status=='pass'`).
+- **P0 — high-risk изменение по путям проходило без human approval.** Security Pack эмитит только
+  secret/injection/new_dependency, а домены `deployment_config`/`authentication`/… применимы по
+  `file_patterns`. `_human_approval_domains_uncovered`: домены с `human_approval_conditions`, чьи
+  **специфичные** паттерны (не catch-all `.*`) совпали с реально изменёнными путями (Dockerfile/CI/auth),
+  требуют валидного ApprovalRecord — reviewer их не закрывает. Бранч-независимая форс-проверка.
+- **P0 — aggregate baseline мог деградировать в неверную базу.** `_collect_base_checks_at` теперь
+  проверяет `worktree add` + `HEAD==sequence_base_sha` (`baseline_proven`); **без fallback** на
+  child_root; не доказан → aggregate unavailable → нет PR.
+- **P0 — `base_drift` только писался.** `aggregate_ready` требует `base_drift is None`; delivery сверяет
+  remote base (`ls-remote`) с validated `sequence_base_sha` — разошлась → PR не открывается; PR получает
+  явную базу.
+- **P1 — ranged reviewer reads.** `op=read` поддерживает `start_line`/`end_line` (дочитать хвост файла
+  >20k; диапазон в `evidence.range`). **P1 — durable error report.** Contained-сбой (rc17) пишет свежий
+  `run-report.json` + failure-handoff (retryable + безопасный `next_action`).
+
 ## [3.0.0-rc19] — 2026-07-21 — Per-package scope prompt (writer не выходит за подсистему)
 
 Живой sequential на sonnet: single ENGINEERING→PR уже зелёный (PR #1), но 3-пакетный застревал.

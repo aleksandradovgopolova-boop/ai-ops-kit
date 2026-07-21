@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc19
+  package_version: 3.0.0-rc20
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,14 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc20_final_verdict_truth:
+      - "аудит (rc18-база): где отсутствие доказательства могло сойти за доказанный результат. ЗАКРЫТО ЖИВЬЁМ до реализации: single ENGINEERING -> настоящий draft PR (scratch PR #1) И 3-пакетный sequential -> aggregate_ready=true -> настоящий draft PR (seq-scratch PR #1) на claude-sonnet-5"
+      - "P0 aggregate code_review был fail-OPEN: `return (not blocked)` -> no-verdict/невалидный/timeout/budget оставляли ok=True. Теперь ТОЛЬКО явный валидный pass (gate_ev['code_review'].status=='pass') закрывает; всё остальное -> ok=False (как per-package)"
+      - "P0 security-reviewer мог дать невалидный pass по неполному покрытию + high-risk изменение по ПУТЯМ проходило без human approval: pack создаёт только secret/injection/new_dependency, а домены deployment_config/authentication/... применимы по file_patterns. Фикс: _human_approval_domains_uncovered — домены с human_approval_conditions, чьи СПЕЦИФИЧНЫЕ file_patterns (не catch-all '.*') совпали с реально изменёнными путями (Dockerfile/CI/auth), ОБЯЗАНЫ иметь валидный ApprovalRecord; reviewer их не закрывает. Бранч-независимая форс-проверка в security-гейте"
+      - "P0 aggregate baseline мог деградировать в неверную базу: _collect_base_checks_at не проверял результат `worktree add` и HEAD, вызывающий фолбэчил на child_root, отсутствие baseline -> regressions пусты (false green). Фикс: worktree add + HEAD==sequence_base_sha проверяются; baseline_proven; БЕЗ fallback; не доказан -> aggregate unavailable -> нет PR"
+      - "P0 base_drift только писался: aggregate_ready теперь требует base_drift is None; delivery — DELIVERY BASE BINDING: перед PR сверяем remote base (ls-remote origin HEAD) с validated sequence_base_sha, разошлась -> PR не открывается (нужна ревалидация), PR получает явную validated_base"
+      - "P1 ranged reviewer reads: op=read поддерживает start_line/end_line (файлы > _READ_MAX дочитываются точечно; диапазон в evidence.range). P1 durable error report: contained-сбой (rc17) теперь ПИШЕТ свежий run-report.json + failure-handoff (retryable + безопасный next_action), не оставляя старое evidence"
+      - "проверки: +деттесты по каждому (aggregate no-verdict->ok=False; approval-by-path Dockerfile->deployment_config, обычный src->нет over-block; baseline несуществующая база->None/валидная->proven; ranged read). Полный CI-набор (94) 94/94 PASS локально с PATH без openspec"
     fixed_v3_0_rc19_per_package_scope_prompt:
       - "finding живого sequential (sonnet): каждый пакет получал ПОЛНУЮ многочастную задачу с общим ярлыком -> writer лез в чужие подсистемы (в pkg-1 discounts пытался писать pricing/core.py) -> брокер отклонял (containment сработал), но _hard_stop справедливо стопал цепочку на попытке эскейпа scope-violation. Первопричина — не ограниченный рамками пакета промпт, а не containment. Живьём подтверждено: retry pkg-1 -> ready=True, code_review=pass (реализация чистая, в scope), но stop на попытке залезть в pricing"
       - "фикс: per-package задача теперь ЯВНО ограничивает writer'а его подсистемой — '=== ГРАНИЦЫ ПАКЕТА ===' с scope/write_scope путями и указанием НЕ трогать другие подсистемы (их делают отдельные пакеты). Это НЕ ослабляет containment (брокер отклоняет out-of-scope, post-diff ловит реальный эскейп, _hard_stop прежний) — убирает ПРИЧИНУ выхода за scope. Ревьюер по-прежнему судит независимо"

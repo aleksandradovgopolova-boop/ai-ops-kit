@@ -314,10 +314,29 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             except Exception:  # noqa: BLE001
                 _fail = {"failure_class": "engine", "exception_type": type(_e).__name__,
                          "message": str(_e)[:400], "retryable": False}
-            return {"schema_version": 1, "kind": "execution-pipeline", "status": "error",
-                    "workitem_id": fid, "error": f"{_fail['exception_type']}: {_fail['message']}",
-                    "failure": _fail, "ready_for_pr": False, "not_yet": [],
-                    "runtime": runtime, "engine": "pipeline", "provider": provider_name, "model": model}
+            err_rep = {"schema_version": 1, "kind": "execution-pipeline", "status": "error",
+                       "workitem_id": fid, "error": f"{_fail['exception_type']}: {_fail['message']}",
+                       "failure": _fail, "ready_for_pr": False, "not_yet": [],
+                       "runtime": runtime, "engine": "pipeline", "provider": provider_name, "model": model}
+            # v3.0-rc20 (finding аудита P1): DURABLE failure evidence — не только вернуть отчёт, но и
+            # ЗАПИСАТЬ свежий run-report.json + failure-handoff, иначе на диске остаётся старый отчёт/
+            # handoff прошлого прогона (пользователь думает, что evidence свежее). next_action — безопасный.
+            try:
+                _safe = ("retry прогон (сбой транзиентный: провайдер/сеть)"
+                         if _fail.get("retryable") else
+                         "разобрать сбой перед повтором (вероятен дефект/невалидный ввод — не транзиент)")
+                (features_dir / fid / "run-report.json").write_text(
+                    json.dumps(err_rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+                _hf = {"schema_version": 1, "kind": "run-handoff", "workitem_id": fid,
+                       "status": "error", "failure": _fail, "retryable": bool(_fail.get("retryable")),
+                       "next_action": _safe}
+                (features_dir / fid / "run-handoff.yaml").write_text(
+                    yaml.safe_dump(_hf, allow_unicode=True, sort_keys=False), encoding="utf-8")
+                err_rep["run_report"] = f"features/{fid}/run-report.json"
+                err_rep["handoff"] = {"next_action": _safe}
+            except Exception:  # noqa: BLE001 — запись evidence не должна маскировать исходный сбой
+                pass
+            return err_rep
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
