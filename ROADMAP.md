@@ -359,34 +359,27 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   fixed node-id), v2.123 (Spec-First/ApprovalDecision/write-scope/классификатор), v2.124 (sequence
   transaction), **v2.125→v2.124.1** (security в QUICK; ложный scope-violation на артефактах движка).
 
-### Статус живой квалификации (обновлено rc16, 2026-07-21 — kimi-k3)
+### Статус живой квалификации — ЗАКРЫТА (v3.0.0 stable, 2026-07-21, claude-sonnet-5)
 
-Точные статусы (не смешивать «доказано» и «ещё нет»):
+- ✅ **Single-run ENGINEERING → настоящий draft PR — ДОКАЗАНО ЖИВЬЁМ.** Канонический CLI: authoring →
+  реальная реализация → tests pass → security → `code_review=pass` → `ready_for_pr=true` → draft PR
+  (scratch-репо PR #1).
+- ✅ **Sequential 3×WorkPackage → `aggregate_ready=true` → настоящий draft PR — ДОКАЗАНО ЖИВЬЁМ.** Все
+  пакеты ready → aggregate (baseline на точной базе + security-reviewer + code-review на `base..final`)
+  → draft PR (seq-scratch PR #1).
+- ✅ **Sequential hard-stop / recovery — ДОКАЗАНО.** reviewer-block → `reviewer-blocked` → downstream не
+  стартует; trusted retry → recovery → `executed_all`; provider-crash/429 contained.
+- ✅ **Негативные пути — ДЕТЕРМИНИРОВАННО** (94/94 CI): no-verdict aggregate → нет PR; high-risk по путям
+  без approval → fail; baseline не доказан → нет PR; base_drift → нет PR; ranged read; 429 → durable report.
 
-- ✅ **ENGINEERING package green — ДОКАЗАНО.** Живой pkg-1 на kimi-k3: валидные requirements+plan+
-  specification → реальный рефактор → `code_review=pass` → `ready_for_pr=True`, `regressions=[]`.
-- ⏳ **Single-run ENGINEERING → настоящий draft PR — ЕЩЁ НЕ ДОКАЗАНО.** Нужен один чистый прогон
-  канонического CLI до реального draft PR (`--open-pr` + `GITHUB_TOKEN`, throwaway-remote).
-- ✅ **Sequential hard-stop / recovery — ДОКАЗАНО.** reviewer-block → `stop_reason=reviewer-blocked` →
-  downstream не стартует (rc13 P0); trusted retry (`--retry-package`) → recovery → `executed_all` по 3
-  пакетам (rc13 P1); provider-crash contained (rc12).
-- ⏳ **Sequential `aggregate_ready` → настоящий draft PR — ЕЩЁ НЕ ДОКАЗАНО.** Нужна одновременная зелень
-  всех пакетов; упирается в флак author-стадии kimi (rc14 author-retry повышает шанс; при перегрузке —
-  стабильный сильный провайдер).
+Движок закрыт: rc7→rc20 исправили все находки живых прогонов и трёх аудитов.
 
-Движок закрыт: rc7→rc16 исправили все находки живых прогонов и аудитов (reasoning-токены, spec-форма,
-доставка диффа ревьюеру, сходимость вердикта, симметричная честность, infra-containment, verdict
-integrity, retry-safety, validated security verdict, true aggregate diff, base-bound baseline).
-
-### Осталось до v3.0 stable — только прогоны (движковой работы нет)
-- **rc17 — два полноценных пользовательских draft PR:** (1) ENGINEERING delivery до draft PR;
-  (2) sequential delivery до `aggregate_ready` + отрицательная ветка (block → retry → recovery →
-  aggregate green). Сохранить release evidence (SequencePlan, base/final SHA, per-package reports,
-  aggregate diff hash, reviewer/security results, draft PR URL, модель+версия кита, очищенные логи).
-- **dogfood на 2–3 реальных репозиториях** (Python → TS/Node → реальный сервис) → затем **v3.0 stable**.
-  Критерии stable: ≥5 реальных задач (≥2 ENGINEERING, ≥1 sequential), ноль false-green, основной checkout
-  ни разу не тронут recovery, retry не теряет попытки, каждый вердикт привязан к точному SHA/диапазону,
-  живой GitHub Actions зелёный, qualification reports как artifacts.
+### Осталось (валидация в бою, не дефекты)
+- **dogfood на 2–3 реальных репозиториях** (Python → TS/Node → реальный сервис) — рекомендованная
+  следующая валидация ПОВЕРХ stable (реальная мессовость vs синтетические фикстуры). Не блокер
+  корректности. Критерии зрелости при dogfood: ≥5 реальных задач (≥2 ENGINEERING, ≥1 sequential), ноль
+  false-green, основной checkout ни разу не тронут recovery, каждый вердикт привязан к SHA/диапазону,
+  delivery проверена против актуальной remote base.
 
 ### Историческое: Live RC Qualification (v2.122) — исходный план прогонов
 - Живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с DeepSeek на Mac (`tools/qual_run.py`

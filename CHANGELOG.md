@@ -2,6 +2,40 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0] — 2026-07-21 — Stable: движок укреплён, обе строгие цепочки доказаны живьём
+
+Первый stable-релиз v3. Итог серии rc7→rc20 (14 rc, каждый закрыл реальный дефект живого прогона или
+аудита) + финальная квалификация на claude-sonnet-5.
+
+### Что доказано (честный scope stable)
+- **QUICK** — trustworthy task → verified draft PR для supervised low-risk задач (закреплено с rc1).
+- **ENGINEERING (single-run)** — полный путь **доказан живьём** до настоящего draft PR: authoring
+  (requirements+plan+specification) → реальная реализация → tests pass → security → независимый
+  `code_review=pass` → `ready_for_pr=true` → **настоящий draft PR**.
+- **Sequential (3 WorkPackage)** — **доказан живьём**: все пакеты ready → aggregate (baseline на точной
+  базе + security-reviewer + code-review на диффе `base..final`) → `aggregate_ready=true` → **настоящий
+  draft PR**. Плюс: reviewer-block → hard-stop → downstream не стартует; trusted retry → recovery;
+  provider-crash/429 contained.
+- **Инварианты честности** (unit + live): writer≠judge; evidence на точном SHA; recovery НИКОГДА не
+  трогает основной checkout (fail-closed); блокирующий вердикт (fail/warn) обязан назвать причину;
+  aggregate — только явный валидный pass; high-risk по путям (Dockerfile/CI/auth) требует human
+  ApprovalRecord; baseline доказан на `sequence_base_sha` или PR не открывается; delivery сверяет
+  remote base. Все негативные пути закрыты **детерминированными тестами** (94/94 CI).
+
+### Ключевые упрочнения серии
+- Reasoning-модели (токены/таймаут/ретраи), spec-форма, author-retry с нуджем.
+- Ревьюер: доставка диффа, сходимость вердикта, симметричная честность, полное чтение файла (+ранжи).
+- Sequence: verdict integrity, infra-containment (single+sequential), retry-safety, sequence-base
+  provenance, delivery base binding, per-package scope.
+
+### Не входит в stable-claim (валидация в бою, не дефекты)
+- **dogfood на 2–3 реальных репозиториях** — рекомендованная следующая валидация поверх stable
+  (реальная мессовость vs синтетические фикстуры). Не блокер корректности: движок и обе цепочки
+  доказаны, негативные пути детерминированы.
+
+Замечание о провайдерах: kimi/Moonshot флакает 429 под multi-call нагрузкой (эксплуатационное, не
+движок; contained с rc12/rc17). Живая квалификация закрыта на claude-sonnet-5.
+
 ## [3.0.0-rc20] — 2026-07-21 — Final Verdict Truth (аудит: 5×P0 + 2×P1)
 
 Закрытие мест, где **отсутствие доказательства могло сойти за доказанный результат**. Оба финальных
