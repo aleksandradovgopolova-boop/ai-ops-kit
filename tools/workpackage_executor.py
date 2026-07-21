@@ -178,15 +178,16 @@ def _aggregate_code_review(vroot, base_sha, final_sha, signals, reviewer_propose
     try:
         import execution_pipeline as _ep
         ctx = _ep._change_context_range(vroot, base_sha, final_sha)
-        _gev, revs = _ep._run_reviews(reviewer_proposer, vroot, ["code_review"], {},
-                                      dict(signals or {}), final_sha, {"max_model_calls": 16},
-                                      change_context=ctx)
-        blocked = any((r or {}).get("status") == "fail" or (r or {}).get("closed_as") == "blocked"
-                      for r in (revs or []))
-        cr = (_gev.get("code_review") or {})
-        if cr.get("status") == "fail":
-            blocked = True
-        return (not blocked), revs
+        gev, revs = _ep._run_reviews(reviewer_proposer, vroot, ["code_review"], {},
+                                     dict(signals or {}), final_sha, {"max_model_calls": 16},
+                                     change_context=ctx)
+        # v3.0-rc20 (finding аудита P0): ТОЛЬКО явный валидный pass закрывает aggregate code_review.
+        # Раньше `return (not blocked)` был fail-OPEN: no-verdict/невалидная структура/timeout/budget
+        # оставляли blocked=False -> ok=True -> aggregate_ready БЕЗ подтверждённого вердикта. Теперь
+        # source of truth — gate_ev['code_review'].status=='pass' (ставится _run_reviews только при
+        # валидном НЕ-fail вердикте); всё остальное -> ok=False (как per-package).
+        ok = (gev.get("code_review") or {}).get("status") == "pass"
+        return ok, revs
     except Exception:  # noqa: BLE001 — сбой aggregate-ревью = fail-closed
         return False, None
 
@@ -287,10 +288,11 @@ def retry_package(child_root, wid, pid, features_dir=None):
 
 
 def _collect_base_checks_at(child_root, base_sha, sandbox):
-    """v3.0-rc16 (finding аудита P0): baseline-проверки СТРОГО на sequence_base_sha в отдельном
-    read-only detached-worktree — НЕ на текущем состоянии основного checkout (тот может быть на другой
-    ветке, чем base цепочки -> несопоставимый baseline -> false green/block в aggregate baseline-diff).
-    -> checks|None (None -> недоступно, вызывающий деградирует)."""
+    """v3.0-rc16/rc20 (finding аудита P0): baseline-проверки СТРОГО на sequence_base_sha в отдельном
+    read-only detached-worktree. rc20: PROVENANCE — результат `worktree add` и HEAD ПРОВЕРЯЮТСЯ; baseline
+    считается доказанным ТОЛЬКО если worktree создан и его HEAD == base_sha. Иначе -> None (вызывающий
+    НЕ деградирует на другой checkout: нет доказанного baseline -> aggregate unavailable -> нет PR).
+    -> {"checks":..., "sha": base_sha, "proven": True} | None."""
     if not base_sha:
         return None
     import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
@@ -299,12 +301,16 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
         return None
     tmp = child_root / ".ai" / "worktrees" / f"_base-{base_sha[:12]}"
     try:
-        _git(child_root, "worktree", "add", "--detach", "-f", str(tmp), base_sha)
-        if not tmp.is_dir():
+        rc_add, _, _ = _git(child_root, "worktree", "add", "--detach", "-f", str(tmp), base_sha)
+        if rc_add != 0 or not tmp.is_dir():
+            return None                                   # worktree add не удался -> baseline НЕ доказан
+        rc_h, head, _ = _git(tmp, "rev-parse", "HEAD")
+        if rc_h != 0 or (head or "").strip() != base_sha:  # HEAD обязан быть РОВНО на base_sha
             return None
         pol = (_tb.sandbox_policy(child_root=str(tmp)) if sandbox
                else _tb.Policy(level="execution", child_root=str(tmp), block_push=True))
-        return _ec.collect(_pd.detect(tmp), tmp, pol)["checks"]
+        checks = _ec.collect(_pd.detect(tmp), tmp, pol)["checks"]
+        return {"checks": checks, "sha": base_sha, "proven": True}
     except Exception:  # noqa: BLE001
         return None
     finally:
@@ -395,18 +401,13 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         except Exception:  # noqa: BLE001
             pass
 
-    # v3.0-rc16 (finding аудита P0): baseline-проверки СТРОГО на sequence_base_sha (detached worktree),
-    # не на текущем состоянии основного checkout. Деградация (не git/worktree недоступен) -> прежнее
-    # поведение на child_root (лучше, чем ничего; aggregate всё равно fail-closed).
-    base_checks = _collect_base_checks_at(child_root, sequence_base_sha, sandbox)
-    if base_checks is None:
-        try:
-            import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
-            _bpol = (_tb.sandbox_policy(child_root=str(child_root)) if sandbox
-                     else _tb.Policy(level="execution", child_root=str(child_root), block_push=True))
-            base_checks = _ec.collect(_pd.detect(child_root), child_root, _bpol)["checks"]
-        except Exception:  # noqa: BLE001 — недоступность инфры не должна ронять последовательность
-            base_checks = None
+    # v3.0-rc16/rc20 (finding аудита P0): baseline СТРОГО на sequence_base_sha (detached worktree с
+    # проверкой HEAD). rc20: БЕЗ fallback на child_root — если baseline не доказан на точной базе,
+    # aggregate НЕДОСТУПЕН (baseline_proven=False) -> PR не открывается. Иначе sequence от develop мог
+    # сравниться с baseline от main -> false green.
+    _base_res = _collect_base_checks_at(child_root, sequence_base_sha, sandbox)
+    base_checks = (_base_res or {}).get("checks") if _base_res else None
+    baseline_proven = bool(_base_res and _base_res.get("proven"))
 
     # v2.124: resume с КОНКРЕТНОГО пакета — пакеты до него считаются исполненными в прошлом прогоне
     # (их SHA/готовность восстанавливаются из снимков work-packages/<pid>/report.json).
@@ -656,6 +657,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
             aggregate = {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
                          "final_sha": final_sha, "sequence_base_sha": _base_sha,
+                         "baseline_proven": baseline_proven,   # rc20 (P0): baseline доказан на точной базе
                          "revision_ok": revision_ok, "tree_clean": tree_clean,
                          "evidence_revision": coll.get("revision"),
                          "evidence_revision_ok": (coll.get("revision") == final_sha),
@@ -668,28 +670,51 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # v3.0-rc2/rc4 (P0.4/P1.1): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена
     # И чиста: verified, нет регрессий, HEAD==final_sha, evidence на final_sha, дерево чистое, агрегатный
     # security clear на полном диффе. Сбой/недоступность -> НЕ ready.
+    # v3.0-rc20 (finding аудита P0): + baseline ДОКАЗАН на точной sequence_base_sha (нет fallback-базы),
+    # + НЕТ base_drift (base-ветка не сдвинулась с начала цепочки) — иначе evidence против не той базы.
     agg_ok = bool(aggregate.get("verified") and aggregate.get("no_regressions")
+                  and aggregate.get("baseline_proven")
                   and aggregate.get("revision_ok") and aggregate.get("tree_clean")
                   and aggregate.get("evidence_revision_ok") and aggregate.get("security_ok")
-                  and aggregate.get("code_review_ok", True))   # v3.0-rc13 (P0): + aggregate code_review
-    aggregate_ready = ready_all and chain_ok and agg_ok
+                  and aggregate.get("code_review_ok", True))
+    aggregate_ready = ready_all and chain_ok and agg_ok and (base_drift is None)
 
     # v2.124 (P0.4): доставка draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта, на финальном
     # интегрированном SHA. PR открывается ТОЛЬКО при aggregate_ready — не по готовности отдельного пакета.
     pr, delivery = None, {"requested": bool(open_pr), "status": "not-requested" if not open_pr else None}
     if open_pr:
         if aggregate_ready and final_sha:
+            wt = child_root / ".ai" / "worktrees" / wid
+            _drt = wt if wt.is_dir() else child_root
+            # v3.0-rc20 (finding аудита P0): DELIVERY BASE BINDING — evidence собрано против
+            # sequence_base_sha; перед PR сверяем АКТУАЛЬНУЮ remote base с этой базой. Разошлась
+            # (remote main сдвинулся после старта цепочки) -> НЕ открываем PR (проверенное состояние
+            # != потенциальному merge-состоянию); нужна ревалидация. Иначе — «verified» PR был бы ложью.
+            remote_base = None
             try:
-                import pr_open
-                wt = child_root / ".ai" / "worktrees" / wid
-                pr = pr_open.open_draft_pr(wt if wt.is_dir() else child_root, f"ai-ops/{wid}",
-                                           title=f"ai-ops: {task[:60]}",
-                                           body=(f"Sequential WorkPackages: {len(ordered)} пакет(ов). "
-                                                 f"Финальный SHA {final_sha}. Агрегатный вердикт: ready_all."))
-                delivery["status"] = (pr or {}).get("status") or "failed"
-            except Exception as e:  # noqa: BLE001
-                delivery["status"] = "failed"
-                delivery["error"] = str(e)
+                rc_ls, out_ls, _ = _git(_drt, "ls-remote", "origin", "HEAD")
+                if rc_ls == 0 and out_ls.strip():
+                    remote_base = out_ls.split()[0].strip()
+            except Exception:  # noqa: BLE001
+                remote_base = None
+            if remote_base and sequence_base_sha and remote_base != sequence_base_sha:
+                delivery["status"] = "not-attempted"
+                delivery["base_moved"] = {"validated_base": sequence_base_sha, "remote_base": remote_base}
+                delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — открытие PR "
+                                      "против новой базы дало бы непроверенное merge-состояние; нужна ревалидация")
+            else:
+                try:
+                    import pr_open
+                    pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}",
+                                               title=f"ai-ops: {task[:60]}",
+                                               body=(f"Sequential WorkPackages: {len(ordered)} пакет(ов). "
+                                                     f"База {sequence_base_sha} → финал {final_sha}. "
+                                                     f"Агрегатный вердикт: aggregate_ready."))
+                    delivery["status"] = (pr or {}).get("status") or "failed"
+                    delivery["validated_base"] = sequence_base_sha
+                except Exception as e:  # noqa: BLE001
+                    delivery["status"] = "failed"
+                    delivery["error"] = str(e)
         else:
             delivery["status"] = "not-attempted"   # последовательность не готова -> PR НЕ открываем
 
@@ -1045,6 +1070,24 @@ def selftest():
                rt_unsafe.get("ok") is False and "fail-closed" in (rt_unsafe.get("error") or ""))
         expect("v3.0-rc16 retry-safety: основной checkout НЕ тронут (HEAD + рабочее дерево неизменны)",
                main_head_after == main_head_before and main_status_after == main_status_before)
+
+    # v3.0-rc20 (finding аудита P0): aggregate code_review — ТОЛЬКО явный валидный pass; no-verdict/invalid
+    # -> ok=False (раньше fail-OPEN). И _collect_base_checks_at: несуществующая база -> None (не доказан).
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td); cur = mkrepo(td)
+        # no-verdict reviewer (всегда невалидный текст) -> code_review не закрыт -> ok=False
+        nover = lambda p: "я не буду выносить структурный вердикт, просто текст"
+        ok_nv, _ = _aggregate_code_review(root, cur, cur, {"task_type": "ENGINEERING"}, nover, True)
+        expect("v3.0-rc20 aggregate-review: no-verdict/invalid -> ok=False (не fail-open)", ok_nv is False)
+        # без ревью (не запрошено) -> ok=True (per-package ревью уже было)
+        ok_nr, _ = _aggregate_code_review(root, cur, cur, {}, None, False)
+        expect("v3.0-rc20 aggregate-review: без ревью -> ok=True (не блокируем на этом уровне)", ok_nr is True)
+        # baseline provenance: несуществующий base_sha -> None (baseline НЕ доказан -> нет fallback)
+        expect("v3.0-rc20 baseline-provenance: несуществующая база -> None (не доказан)",
+               _collect_base_checks_at(root, "0" * 40, False) is None)
+        _res = _collect_base_checks_at(root, _git(root, "rev-parse", "HEAD")[1], False)
+        expect("v3.0-rc20 baseline-provenance: валидная база -> proven=True + HEAD==base",
+               isinstance(_res, dict) and _res.get("proven") is True)
 
     # v2.120 (P0.2): sandbox наследуется в per-package прогон (containment не теряется)
     with tempfile.TemporaryDirectory() as td:

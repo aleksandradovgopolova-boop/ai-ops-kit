@@ -364,15 +364,32 @@ def execute(action: dict, root, policy: Policy) -> dict:
         if op == "read":
             p = root / action["path"]
             text = p.read_text(encoding="utf-8", errors="ignore") if p.exists() else ""
-            # v3.0-rc18 (finding живого прогона sonnet): read отдавал ТОЛЬКО последние 400 символов
-            # (text[-400:]) -> независимый ревьюер, читая файл для ВЕРИФИКАЦИИ, видел обрезанный хвост
-            # и честно блокировал «показан частично, не могу подтвердить полноту». Для верификации нужен
-            # файл С НАЧАЛА и целиком (щедрый потолок; крупные файлы усекаются с явной пометкой).
-            shown = text if len(text) <= _READ_MAX else (
-                text[:_READ_MAX] + f"\n...[файл усечён на {_READ_MAX} симв. из {len(text)}; "
-                "читай нужный фрагмент точечно]")
+            # v3.0-rc18: read отдаёт файл С НАЧАЛА (не хвост 400) — ревьюер верифицирует полноту.
+            # v3.0-rc20 (finding аудита P1): ДИАПАЗОННОЕ чтение start_line/end_line (1-индекс, включительно)
+            # для файлов > _READ_MAX — ревьюер под read-only не может sed/tail, ему нужен способ дочитать
+            # хвост большого файла. Диапазон записывается в evidence (range).
+            _sl = action.get("start_line")
+            _el = action.get("end_line")
+            rng = None
+            if p.exists() and (_sl is not None or _el is not None):
+                lines = text.splitlines(keepends=True)
+                try:
+                    s = max(1, int(_sl)) if _sl is not None else 1
+                    e = int(_el) if _el is not None else len(lines)
+                except (ValueError, TypeError):
+                    s, e = 1, len(lines)
+                seg = "".join(lines[s - 1:e])
+                rng = {"start_line": s, "end_line": min(e, len(lines))}
+                shown = seg if len(seg) <= _READ_MAX else (
+                    seg[:_READ_MAX] + f"\n...[диапазон усечён на {_READ_MAX} симв.]")
+            else:
+                shown = text if len(text) <= _READ_MAX else (
+                    text[:_READ_MAX] + f"\n...[файл усечён на {_READ_MAX} симв. из {len(text)}; "
+                    "дочитай хвост через {\"op\":\"read\",\"start_line\":N,\"end_line\":M}]")
             ev.update({"ok": p.exists(), "bytes": len(text.encode("utf-8")),
                        "output_tail": shown})
+            if rng:
+                ev["range"] = rng
         elif op == "write":
             p = root / action["path"]
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -494,6 +511,14 @@ def selftest():
         expect("v3.0-rc18 read: виден НАЧАЛО файла (не только хвост 400 симв.)",
                "HEAD_MARKER" in ev_read.get("output_tail", "") and len(big) > 400
                and len(ev_read.get("output_tail", "")) > 400)
+        # v3.0-rc20 (finding аудита P1): диапазонное чтение start_line/end_line + range в evidence
+        ev_rng = execute({"op": "read", "path": "src/big.txt", "start_line": 1, "end_line": 1}, root, trav)
+        expect("v3.0-rc20 read-range: только запрошенные строки (HEAD, без TAIL) + range в evidence",
+               "HEAD_MARKER" in ev_rng.get("output_tail", "") and "TAIL_MARKER" not in ev_rng.get("output_tail", "")
+               and ev_rng.get("range", {}).get("start_line") == 1 and ev_rng.get("range", {}).get("end_line") == 1)
+        ev_tail = execute({"op": "read", "path": "src/big.txt", "start_line": 402}, root, trav)
+        expect("v3.0-rc20 read-range: хвост после N-й строки доступен (TAIL_MARKER виден)",
+               "TAIL_MARKER" in ev_tail.get("output_tail", ""))
 
         # SECURITY (finding аудита): секрет из env НЕ виден shell-команде, а PATH сохранён
         os.environ["MY_FAKE_TOKEN"] = "sk-super-secret-123"

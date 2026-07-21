@@ -267,6 +267,40 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
     return errs
 
 
+def _human_approval_domains_uncovered(work_root, wid, changed_files):
+    """v3.0-rc20 (finding аудита P0): домены с непустыми human_approval_conditions, чьи file_patterns
+    СОВПАЛИ с РЕАЛЬНО изменёнными путями (Dockerfile/CI/auth-конфиги, deploy, tenant-границы, tool-access),
+    ОБЯЗАНЫ иметь валидный человеческий ApprovalRecord. Security-REVIEWER их НЕ закрывает — иначе
+    неожиданное high-risk изменение по путям (не помеченное сигналом задачи) проходит без одобрения
+    человека. Триггер — именно СОВПАДЕНИЕ ПУТЕЙ (не «always-applicable» вроде secrets, который закрыт
+    детерминированным secret_scan). -> список НЕпокрытых доменов."""
+    import re as _re
+    try:
+        import security_pack
+        import approvals as _appr
+        _CATCH_ALL = {".*", ".+", "", "^.*$", "(?s).*"}
+        triggered = []
+        for d in security_pack.load_domains()[0]:
+            if not d.get("human_approval_conditions"):
+                continue
+            # ТОЛЬКО СПЕЦИФИЧНЫЕ паттерны = деятельная high-risk поверхность (dockerfile/auth/deploy...).
+            # Catch-all (secrets: '.*') — always-on сканер, закрыт детерминированно (secret_scan) при
+            # чистоте; человеко-одобрение для secrets форсируется НАХОДКОЙ (blocking), не любым файлом.
+            pats = [p for p in ((d.get("applicability", {}) or {}).get("file_patterns") or [])
+                    if p.strip() not in _CATCH_ALL]
+            if not pats:
+                continue
+            if any(_re.search(p, f) for p in pats for f in (changed_files or [])):
+                triggered.append(d["id"])
+        if not triggered:
+            return []
+        recs = _appr.load_approvals(work_root, wid)
+        covered = {r.get("approval") for r in recs if _appr._record_valid(r)}
+        return [d for d in triggered if d not in covered]
+    except Exception:  # noqa: BLE001 — доп. проверка поверх needs_review/blocking; сбой не ломает прогон
+        return []
+
+
 def _parse_yaml_block(text):
     """Достать YAML-артефакт из ответа author-модели. v3.0-rc5 (finding живого прогона kimi): терпимо к
     РАЗНЫМ стилям вывода моделей — несколько ```-блоков, проза вокруг, YAML без ограды после текста.
@@ -1131,6 +1165,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "blocking": security_pack_result["blocking"],
                                             "needs_review": security_pack_result["needs_review"]}}
+
+        # v3.0-rc20 (finding аудита P0): БРАНЧ-НЕЗАВИСИМАЯ проверка — high-risk домены, применимые ПО
+        # РЕАЛЬНО ИЗМЕНЁННЫМ ПУТЯМ (Dockerfile/CI/auth), требуют человеческого ApprovalRecord, даже если
+        # security-reviewer/детерминированные проверки дали pass. Неожиданное изменение прод-конфига без
+        # одобрения -> security=fail. Форсируется поверх любой ветки выше.
+        try:
+            import security_scan as _ss
+            _sec_changed = _ss._git_changed_files(work_root, committed_sha + "^") if committed_sha else []
+        except Exception:  # noqa: BLE001
+            _sec_changed = []
+        _hu = _human_approval_domains_uncovered(work_root, wid, _sec_changed)
+        if _hu and (gate_ev.get("security") or {}).get("status") != "fail":
+            gate_ev["security"] = {"status": "fail",
+                                   "blockers": ["high-risk изменение по путям без человеческого ApprovalRecord "
+                                                "(reviewer не закрывает): " + ", ".join(_hu)],
+                                   "human_approval_uncovered": _hu,
+                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
 
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
     #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.
@@ -2117,6 +2168,16 @@ def selftest():
         expect("v3.0-rc16 security-verdict: reviewed_revision != проверяемой -> невалиден",
                any("revision" in e for e in _security_verdict_errors(
                    {**good_pass, "reviewed_revision": "OTHER"}, "abc123", ["injection"], _vrr2)))
+
+        # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
+        # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
+        # secrets ('.*') НЕ форсирует human на любом файле.
+        expect("v3.0-rc20 approval-by-path: Dockerfile -> deployment_config требует ApprovalRecord",
+               "deployment_config" in _human_approval_domains_uncovered(str(root), "no-wi", ["Dockerfile", "src/x.py"]))
+        expect("v3.0-rc20 approval-by-path: .github/workflows -> deployment_config",
+               "deployment_config" in _human_approval_domains_uncovered(str(root), "no-wi", [".github/workflows/deploy.yml"]))
+        expect("v3.0-rc20 approval-by-path: обычный src -> human-approval НЕ требуется (нет over-block)",
+               _human_approval_domains_uncovered(str(root), "no-wi", ["src/app.py", "tests/t.py"]) == [])
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
