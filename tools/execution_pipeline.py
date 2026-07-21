@@ -96,6 +96,24 @@ def _gate_checklist(gate):
     return "; ".join(parts)
 
 
+def _resolve_base(root, base_ref):
+    """v3.0.2 (finding аудита P0): СТРОГОЕ разрешение base-ветки для контракта доставки. ТОЛЬКО ветка —
+    локальная refs/heads/<ref> ИЛИ origin/<ref>; tag/произвольный SHA НЕ принимаются как PR-base.
+    -> {base_ref, validated_sha, source, resolved, reason}. Не разрешилась -> resolved=False (вызывающий
+    решает: для delivery -> fail-closed; для не-delivery worktree -> честный fallback на HEAD, но с
+    пометкой resolved=False, НЕ молча). Никакого тихого превращения --base в текущий HEAD."""
+    if _git(root, "rev-parse", "--is-inside-work-tree")[0] != 0:
+        return {"base_ref": base_ref, "resolved": False, "reason": "не git-репозиторий"}
+    rc_l, sha_l, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{base_ref}")
+    if rc_l == 0 and (sha_l or "").strip():
+        return {"base_ref": base_ref, "validated_sha": sha_l.strip(), "source": "local-branch", "resolved": True}
+    rc_r, sha_r, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base_ref}")
+    if rc_r == 0 and (sha_r or "").strip():
+        return {"base_ref": base_ref, "validated_sha": sha_r.strip(), "source": "remote-branch", "resolved": True}
+    return {"base_ref": base_ref, "resolved": False,
+            "reason": f"ветка '{base_ref}' не найдена ни локально (refs/heads), ни в origin"}
+
+
 def _change_context(work_root, revision, max_chars=12000):
     """v3.0-rc9 (finding живого прогона kimi): детерминированно собрать КОНТЕКСТ ИЗМЕНЕНИЯ для
     независимого ревьюера — полный список изменённых файлов (`git show --stat`, всегда целиком) +
@@ -295,13 +313,14 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
     return errs
 
 
-def _human_approval_domains_uncovered(work_root, wid, changed_files):
-    """v3.0-rc20 (finding аудита P0): домены с непустыми human_approval_conditions, чьи file_patterns
-    СОВПАЛИ с РЕАЛЬНО изменёнными путями (Dockerfile/CI/auth-конфиги, deploy, tenant-границы, tool-access),
-    ОБЯЗАНЫ иметь валидный человеческий ApprovalRecord. Security-REVIEWER их НЕ закрывает — иначе
-    неожиданное high-risk изменение по путям (не помеченное сигналом задачи) проходит без одобрения
-    человека. Триггер — именно СОВПАДЕНИЕ ПУТЕЙ (не «always-applicable» вроде secrets, который закрыт
-    детерминированным secret_scan). -> список НЕпокрытых доменов."""
+def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_root=None):
+    """v3.0-rc20/rc3.0.2 (finding аудита P0/P1): домены с непустыми human_approval_conditions, чьи
+    file_patterns СОВПАЛИ с РЕАЛЬНО изменёнными путями (Dockerfile/CI/auth, deploy, tenant, tool-access),
+    ОБЯЗАНЫ иметь валидный человеческий ApprovalRecord. Security-REVIEWER их НЕ закрывает.
+    v3.0.2: РАЗДЕЛЕНИЕ КОРНЕЙ — ApprovalRecord'ы и plan-binding читаются из LIFECYCLE-корня (approval_root
+    = child_root/features), а изменённые файлы приходят из EXECUTION-корня (diff_root = worktree). Раньше
+    оба читались из одного root -> человеческое одобрение из lifecycle отсутствовало в worktree ->
+    ложный uncovered. Триггер — совпадение путей (не «always-applicable» secrets). -> список НЕпокрытых."""
     import re as _re
     import security_pack
     import approvals as _appr
@@ -329,9 +348,9 @@ def _human_approval_domains_uncovered(work_root, wid, changed_files):
     #     risk/source), привязанной к текущему plan_hash, не просроченной, и её scope обязан покрыть
     #     реально изменённые high-risk файлы. Любой сбой -> fail-closed (домен считается НЕпокрытым).
     try:
-        recs = _appr.load_approvals(work_root, wid)
+        recs = _appr.load_approvals(approval_root, wid)   # LIFECYCLE-корень (human input), не worktree
         now = _appr._now_iso()
-        plan_hash = _appr.plan_binding_hash(work_root, wid)
+        plan_hash = _appr.plan_binding_hash(approval_root, wid)
     except Exception:  # noqa: BLE001
         return sorted(triggered)   # не смогли прочитать одобрения -> ничего не покрыто
     uncovered = []
@@ -898,13 +917,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # а НЕ от текущего HEAD. Фиксируем base_ref+base_sha; worktree создаётся от base_sha; после — проверка;
     # delivery ревалидирует remote base. Раньше _wt.add шёл от HEAD -> `--base develop` игнорировался.
     base_ref = base or "main"
-    base_sha = None
-    _child_is_git = _git(child_root, "rev-parse", "--is-inside-work-tree")[0] == 0
-    if _child_is_git:
-        _rcb, _bs, _ = _git(child_root, "rev-parse", base_ref)
-        if _rcb == 0 and (_bs or "").strip():
-            base_sha = _bs.strip()
-    base_binding = {"base_ref": base_ref, "base_sha": base_sha}
+    _br = _resolve_base(child_root, base_ref)   # v3.0.2 (P0): строгий резолв, без тихого HEAD-fallback
+    base_sha = _br.get("validated_sha")
+    base_binding = {"base_ref": base_ref, "base_sha": base_sha,
+                    "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
+                    "reason": _br.get("reason")}
     if isolate:
         import worktree as _wt
         branch = f"ai-ops/{wid}"
@@ -1239,12 +1256,16 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # РЕАЛЬНО ИЗМЕНЁННЫМ ПУТЯМ (Dockerfile/CI/auth), требуют человеческого ApprovalRecord, даже если
         # security-reviewer/детерминированные проверки дали pass. Неожиданное изменение прод-конфига без
         # одобрения -> security=fail. Форсируется поверх любой ветки выше.
+        # v3.0.2 (finding аудита P1): изменённые файлы берём из EXECUTION-root (worktree), а
+        # ApprovalRecord'ы/plan-binding — из LIFECYCLE-root (child_root/features), где их создаёт человек
+        # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
+        # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
         try:
             import security_scan as _ss
             _sec_changed = _ss._git_changed_files(work_root, committed_sha + "^") if committed_sha else []
         except Exception:  # noqa: BLE001
             _sec_changed = []
-        _hu = _human_approval_domains_uncovered(work_root, wid, _sec_changed)
+        _hu = _human_approval_domains_uncovered(child_root, wid, _sec_changed, diff_root=work_root)
         if _hu and (gate_ev.get("security") or {}).get("status") != "fail":
             gate_ev["security"] = {"status": "fail",
                                    "blockers": ["high-risk изменение по путям без человеческого ApprovalRecord "
@@ -1382,34 +1403,44 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
     #    УСПЕХ прогона требует реально открытого PR; провал доставки не маскируется зелёным.
     pr = None
-    _base_moved = None
+    _delivery_block = None   # (status, reason) если доставка невозможна fail-closed
     if open_pr and ready and committed_sha and work_branch:
-        # v3.0.1 (finding аудита P0): DELIVERY REVALIDATION — evidence собрано на ветке от base_sha;
-        # перед PR сверяем АКТУАЛЬНУЮ remote base (refs/heads/<base_ref>, НЕ origin HEAD) с base_sha.
-        # Разошлась -> PR не открываем (проверенное != merge-состоянию). PR получает ЯВНЫЙ base_ref.
-        remote_base = None
-        try:
-            rc_ls, out_ls, _ = _git(work_root, "ls-remote", "origin", f"refs/heads/{base_ref}")
-            if rc_ls == 0 and out_ls.strip():
-                remote_base = out_ls.split()[0].strip()
-        except Exception:  # noqa: BLE001
-            remote_base = None
-        if remote_base and base_sha and remote_base != base_sha:
-            _base_moved = {"base_ref": base_ref, "validated_base": base_sha, "remote_base": remote_base}
+        # v3.0.2 (finding аудита P0): DELIVERY FAIL-CLOSED. verified draft PR = совпавшая remote base.
+        #   base не разрешилась (--base на несуществующую ветку) -> unavailable (нет тихого PR к HEAD);
+        #   remote base НЕ проверяема (нет origin/сеть/ветка/ошибка) -> unavailable (не «успех по умолчанию»);
+        #   remote base сдвинулась -> revalidation-required; совпала -> PR (в ЯВНЫЙ base_ref).
+        if not base_binding.get("resolved") or not base_sha:
+            _delivery_block = ("unavailable", f"base '{base_ref}' не разрешилась в ветку: "
+                               f"{base_binding.get('reason')} — PR к произвольному HEAD не открываем")
         else:
-            import pr_open
-            pr = pr_open.open_draft_pr(work_root, work_branch,
-                                       title=f"ai-ops: {task[:60]}", base=base_ref,
-                                       body=f"Автопрогон AI Ops. WorkItem: {wid}. "
-                                            f"База {base_ref} ({(base_sha or '?')[:12]}) → evidence на {committed_sha}.")
+            remote_base, _ls_ok = None, False
+            try:
+                rc_ls, out_ls, _ = _git(work_root, "ls-remote", "origin", f"refs/heads/{base_ref}")
+                if rc_ls == 0:
+                    _ls_ok = True
+                    if out_ls.strip():
+                        remote_base = out_ls.split()[0].strip()
+            except Exception:  # noqa: BLE001
+                _ls_ok = False
+            if not _ls_ok or not remote_base:
+                _delivery_block = ("unavailable", "remote-base-unverified: не удалось проверить "
+                                   f"origin refs/heads/{base_ref} (нет origin/сети/ветки) — доставка "
+                                   "невозможна fail-closed")
+            elif remote_base != base_sha:
+                _delivery_block = ("not-attempted", f"remote base сдвинулась (validated {base_sha[:12]} != "
+                                   f"remote {remote_base[:12]}) — нужна ревалидация; PR не открыт")
+            else:
+                import pr_open
+                pr = pr_open.open_draft_pr(work_root, work_branch,
+                                           title=f"ai-ops: {task[:60]}", base=base_ref,
+                                           body=f"Автопрогон AI Ops. WorkItem: {wid}. "
+                                                f"База {base_ref} ({base_sha[:12]}) → evidence на {committed_sha}.")
     delivery = {"requested": bool(open_pr), "base_binding": base_binding,
-                "status": ("not-attempted" if _base_moved else
+                "status": (_delivery_block[0] if _delivery_block else
                            (((pr or {}).get("status") if open_pr else "not-requested")
                             or ("not-attempted" if open_pr and not ready else None)))}
-    if _base_moved:
-        delivery["base_moved"] = _base_moved
-        delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — нужна ревалидация; "
-                              "PR не открыт (иначе непроверенное merge-состояние)")
+    if _delivery_block:
+        delivery["reason"] = _delivery_block[1]
     # v2.93: "updated" (PR для ветки уже был открыт, ветка обновлена push'ем) — тоже успех доставки
     delivery_ok = (not open_pr) or ((pr or {}).get("status") in ("opened", "updated"))
     overall_status = ("error" if not ready else ("delivered" if delivery_ok else "delivery-failed"))
@@ -1904,8 +1935,11 @@ def selftest():
             rep_pr = run_pipeline("с PR", sig, root, lambda c: next(it_pr),
                                   budget={"max_model_calls": 5}, feature="pr-fn",
                                   commit=True, isolate=True, open_pr=True, install_deps=False)
-            expect("open_pr без токена -> draft_pr unavailable (механизм готов, PR не имитируется)",
-                   rep_pr["draft_pr"] and rep_pr["draft_pr"]["status"] == "unavailable")
+            # v3.0.2: без origin/токена доставка честно unavailable (fail-closed: remote-base-unverified
+            # ловится раньше pr_open -> draft_pr может быть None; ИЛИ pr_open возвращает unavailable).
+            expect("open_pr без токена/origin -> доставка unavailable (PR не имитируется)",
+                   rep_pr["delivery"]["status"] == "unavailable"
+                   and (rep_pr.get("draft_pr") is None or rep_pr["draft_pr"]["status"] == "unavailable"))
             # P0.4 (аудит v2.79): --open-pr запрошен, но PR не открыт -> overall НЕ 'delivered'
             expect("P0.4: open_pr не открылся -> delivery.requested=True, overall=delivery-failed",
                    rep_pr["delivery"]["requested"] is True
@@ -2319,6 +2353,34 @@ def selftest():
         _appr3.write_record(str(root), "no-wi", "deployment_config", "u@x", ".", "ok")
         expect("v3.0.1 strict-approval: legacy рыхлый ApprovalRecord НЕ закрывает high-risk deployment_config",
                "deployment_config" in _human_approval_domains_uncovered(str(root), "no-wi", ["Dockerfile"]))
+
+        # v3.0.2 (finding аудита P0): _resolve_base — СТРОГО, без тихого HEAD-fallback.
+        expect("v3.0.2 resolve-base: локальная ветка -> resolved + source=local-branch + SHA",
+               (_rb := _resolve_base(root, orig_branch)).get("resolved") is True
+               and _rb.get("source") == "local-branch" and _rb.get("validated_sha"))
+        expect("v3.0.2 resolve-base: несуществующая ветка -> resolved=False (НЕ тихий HEAD)",
+               _resolve_base(root, "no-such-branch-xyz").get("resolved") is False)
+        # v3.0.2 (P0): single-run с --base на несуществующую ветку + open_pr -> доставка НЕ пытается PR
+        # к произвольному HEAD (base не разрешилась) -> delivery unavailable, base_binding.resolved=False.
+        _sv = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        try:
+            it_nb = iter([{"op": "write", "path": "src/nb.py", "content": "n=1\n"}, {"done": True}])
+            rep_nb = run_pipeline("несуществующая база", {"task_type": "QUICK", "size": "small",
+                                  "risk": "low", "affected_areas": ["core"]}, root, lambda c: next(it_nb),
+                                  budget={"max_model_calls": 8}, feature="nb-fn",
+                                  commit=True, isolate=True, open_pr=True, install_deps=False, base="no-such-branch-xyz")
+            expect("v3.0.2 base-unresolved+open_pr: base_binding.resolved=False + доставка НЕ delivered",
+                   (rep_nb.get("base_binding") or {}).get("resolved") is False
+                   and rep_nb["delivery"]["status"] != "opened"
+                   and rep_nb["overall_status"] != "delivered")
+        finally:
+            for _k, _v in _sv.items():
+                if _v is not None: os.environ[_k] = _v
+        _git(root, "checkout", "-q", orig_branch)
+        try:
+            _wt3 = __import__("worktree"); _wt3.remove(root, "nb-fn", force=True)
+        except Exception: pass
+        _git(root, "worktree", "prune"); _git(root, "branch", "-D", "ai-ops/nb-fn")
 
         # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
         expect("no-self-review: security не в reviewable даже без спец-сигналов",

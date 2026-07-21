@@ -371,6 +371,20 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 "error": ("SequencePlan дрейфнул с прошлого прогона (planner перестроил пакеты) — "
                           "resume по старым отчётам небезопасен. Нужен явный replan (пересобрать план "
                           "и переисполнить с нуля), а не resume_from.")}
+    # v3.0.2 (finding аудита P0): base_ref из СОХРАНЁННОГО плана — источник истины на resume/retry.
+    # Попытка продолжить последовательность с ДРУГОЙ base (--base release для цепочки от develop) —
+    # изменение контракта доставки -> base-contract-drift (нужен явный replan), не молчаливая подмена.
+    if resume_from and saved_plan and saved_plan.get("base_ref") \
+            and base and saved_plan["base_ref"] != base:
+        return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                "error": (f"base-contract-drift: последовательность зафиксирована на base_ref="
+                          f"'{saved_plan['base_ref']}', а передан --base '{base}'. Смена базы = другой "
+                          f"контракт доставки — нужен явный replan, не resume с новой базой.")}
+    # resume/retry: base_ref берём из сохранённого плана (не из текущего аргумента)
+    if saved_plan and saved_plan.get("base_ref"):
+        base = saved_plan["base_ref"]
 
     # v2.124: снимок проверок БАЗЫ (до пакета 1) для АГРЕГАТНОЙ baseline-diff на финальном SHA.
     # v3.0-rc13/rc16 (finding аудита P0): SEQUENCE BASE — HEAD ДО пакета 1. ИСТОЧНИК ИСТИНЫ = сохранённый
@@ -1055,6 +1069,14 @@ def selftest():
                (root / "features" / "seqrt" / "work-packages" / pkgs[1]["id"] / "attempts" / "attempt-1" / "report.json").is_file())
         expect("v3.0-rc13 retry: неизвестный пакет -> честная ошибка (не тихий reset)",
                retry_package(root, "seqrt", "НЕТ-ТАКОГО").get("ok") is False)
+        # v3.0.2 (finding аудита P0): resume/retry с ДРУГОЙ base (цепочка зафиксирована на base_ref) ->
+        # base-contract-drift, не молчаливая смена контракта доставки. SequencePlan seqrt.base_ref==cur.
+        seq_bd = execute_sequence("другая база", sig, root, pkgs, prop_for, feature="seqrt",
+                                  base="release-xyz", author=True, author_proposer=author,
+                                  review=True, reviewer_proposer=pass_reviewer,
+                                  resume_from=pkgs[1]["id"])
+        expect("v3.0.2 base-contract-drift: resume с другой base -> честная ошибка (нужен replan)",
+               "error" in seq_bd and "base-contract-drift" in (seq_bd.get("error") or ""))
 
     # v3.0-rc16 (finding аудита P0): retry БЕЗ выделенного worktree -> fail-closed; основной checkout
     # (HEAD + рабочее дерево) НЕ ТРОГАЕТСЯ. Раньше vroot фолбэчил на child_root и reset --hard мог

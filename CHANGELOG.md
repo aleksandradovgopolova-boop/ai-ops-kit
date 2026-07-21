@@ -2,6 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.2] — 2026-07-21 — Base Continuity & Evidence Roots (аудит: 4×P0 + P1)
+
+Последний внутренний trust-патч перед dogfood на реальных репозиториях.
+
+### Fixed
+- **P0 — несуществующая base тихо → HEAD.** `--base develop` при отсутствии develop давал
+  `base_sha=None` → worktree от HEAD, прогон продолжался. `_resolve_base` разрешает **строго** (только
+  ветка `refs/heads/<ref>` или `origin/<ref>`, не tag/SHA), `base_binding.resolved/source/reason`. Не
+  разрешилась + `open_pr` → PR к произвольному HEAD не открываем; для не-delivery — честный fallback
+  на HEAD с пометкой `resolved=False` (не молча).
+- **P0 — невозможность проверить remote base = разрешение на PR.** Теперь **fail-closed** (single +
+  sequential): remote base не проверяема (нет origin/сети/ветки/ошибка) → `delivery=unavailable`
+  (`reason=remote-base-unverified`); сдвинулась → `not-attempted`; совпала → PR. `ready_for_pr` не
+  меняется, но `delivery_ok=false`.
+- **P0 — сохранённый `base_ref` не был источником истины на sequence resume.** resume/retry берут base
+  из `saved_plan.base_ref`; другая `--base` → `base-contract-drift` (нужен replan).
+- **P0 — single-run resume не сохранял базу.** `base` теперь в immutable resume-policy (`run-settings`),
+  восстанавливается из saved (saved wins).
+- **P1 — approval читался из двух корней.** `ApprovalRecord`/plan-binding — из lifecycle-корня
+  (`child_root/features`); изменённые пути — из execution-корня (worktree). Раньше оба из `work_root`
+  → человеческое одобрение из lifecycle отсутствовало в worktree → ложный uncovered.
+
+### Отложено (не новые false-green; v2 domain-coverage из 3.0.1 держит)
+- SecurityVerdict v2.1 (per-domain evidence/checks/blockers сверх покрытия имён); явный fail-closed на
+  сбой записи SequencePlan/BaseBinding/run-settings/approval.
+
 ## [3.0.1] — 2026-07-21 — Base & Approval Integrity (аудит поверх stable: 4×P0 + P1)
 
 Trust-hotfix перед доверием stable для работы от произвольных base-веток и high-risk изменений.

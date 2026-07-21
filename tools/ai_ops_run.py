@@ -130,6 +130,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     write_scope = _pp.get("write_scope") if write_scope is None else write_scope
                     if max_steps == 40 and _pp.get("max_steps"):
                         max_steps = _pp["max_steps"]
+                    base = _pp.get("base", base)   # v3.0.2 (P0): base восстанавливается из saved (не надо re-pass --base)
         prop = proposer or tool_loop.make_model_proposer(
             orchestrator.make_provider(provider_name, model))
         # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),
@@ -186,7 +187,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 "signals": {k: v for k, v in signals.items() if k != "task_text"},
                 "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
                            "author": author, "review": review, "open_pr": open_pr,
-                           "write_scope": write_scope, "max_steps": max_steps, "engine": engine},
+                           "write_scope": write_scope, "max_steps": max_steps, "engine": engine,
+                           "base": base},   # v3.0.2 (P0): BaseBinding в immutable resume-policy
             }
             _sdump = yaml.safe_dump(_settings, allow_unicode=True, sort_keys=False)
             (features_dir / fid / "run-settings.yaml").write_text(_sdump, encoding="utf-8")  # latest -> restore
