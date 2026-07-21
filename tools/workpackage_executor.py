@@ -515,12 +515,15 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                                  write_scope=(write_scope_for(pkg) if write_scope_for else None))
         except (KeyboardInterrupt, SystemExit):
             raise                                       # намеренное прерывание/честный fail ключа — не глотаем
-        except Exception as _e:  # noqa: BLE001 — сеть/провайдер/инфра не валит транзакцию
-            # v3.0-rc13 (P1): типизированный failure envelope — отличаем провайдер/сеть от дефекта движка.
+        except Exception as _e:  # noqa: BLE001 — belt-and-suspenders: если run сам НЕ поймал (не должен)
             infra_error = _classify_failure(_e)
             rep = {"schema_version": 1, "kind": "run-report", "status": "error",
                    "error": f"{infra_error['exception_type']}: {infra_error['message']}",
                    "failure": infra_error, "commit": {}, "loop": {}, "gates": {}, "reviews": []}
+        # v3.0-rc17: ai_ops_run сам ловит и типизирует сбой провайдера/инфры (единая точка containment) —
+        # читаем failure-envelope из его error-отчёта, чтобы пакет честно фейлился с типом сбоя.
+        if infra_error is None and rep.get("status") == "error" and rep.get("failure"):
+            infra_error = rep.get("failure")
 
         sha = (rep.get("commit") or {}).get("sha")
         # v2.120 (P0.3): ОСТАНОВ цепочки на НАСТОЯЩЕМ блокере — нельзя строить зависимый пакет поверх.

@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc17] — 2026-07-21 — Single-run infra containment (kimi 429 не роняет CLI)
+
+Живой прогон ENGINEERING→draft PR упёрся в kimi HTTP 429 и вскрыл пробел: одиночный путь падал traceback'ом.
+
+### Fixed
+- **Одиночный (не sequential) прогон падал traceback'ом при сбое провайдера.** kimi отдал HTTP 429
+  в author-вызове после исчерпания ретраев → `HTTPError` пробросился `_run_authoring` → `run_pipeline`
+  → `ai_ops_run.run` (ловил только для закрытия active-work и **re-raise**) → CLI-traceback. Sequential
+  уже был укреплён (rc12/rc16), одиночный — нет. Фикс: `ai_ops_run.run` — **единая точка containment**:
+  исключение провайдера/инфры (кроме `KeyboardInterrupt`/`SystemExit`) → закрываем active-work +
+  возвращаем честный error-отчёт (`status=error`, `ready_for_pr=False`, типизированный failure envelope)
+  → `print_human` показывает ошибку, `exit_code=2`. Не traceback. `execute_sequence` читает failure из
+  этого отчёта (единый containment вместо двух). +деттест.
+
+Примечание: сам HTTP 429 — перегрузка kimi (провайдер), не движок. Прогон ENGINEERING→draft PR
+повторяется, когда kimi разгрузится.
+
 ## [3.0.0-rc16] — 2026-07-21 — Final Transaction Trust (аудит: 4×P0 + 2×P1)
 
 Последний обязательный code-релиз перед финальной квалификацией. Все находки — из аудита транзакции.
