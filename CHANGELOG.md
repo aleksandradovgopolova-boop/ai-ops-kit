@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc14] — 2026-07-21 — Author retry resilience + живая S-SEQ квалификация
+
+Единственное оставшееся движковое улучшение перед финальной живой квалификацией: устойчивость
+author-стадии к флаки-провайдеру. Живой S-SEQ подтвердил движок по всем половинам.
+
+### Added
+- **`_author_with_retry` — ретрай невалидного/пустого author-артефакта с нуджем.** author-стадия
+  делала один вызов на артефакт; флаки reasoning-провайдер (kimi) на части вызовов отдаёт пустой/битый
+  YAML → артефакт-гейт (`requirements`/`plan_readiness`/`specification`) ложно не закрывался, и на
+  multi-package sequential почти всегда какой-то пакет не доходил до `ready`, блокируя `aggregate_ready`.
+  Теперь до 3 попыток с корректирующим нуджем (показываем модели, что именно невалидно), каждая под
+  потолком бюджета. **Честность сохранена:** ретрай не фабрикует — форму судит валидатор, содержание —
+  ревьюер; вечный флак → гейт остаётся блокирующим. +деттесты.
+
+### Qualified (live, kimi-k3)
+- **positive-green pkg-1** — `ready_for_pr=True`, valid authoring → real refactor → `code_review=pass`.
+- **reviewer-block → hard-stop** (rc13 P0) — конкретный reviewer-вердикт → chain halt → downstream не стартует.
+- **trusted retry → recovery** (rc13 P1) — `--retry-package`: архив попытки + checkpoint-reset (без ручного
+  git) + resume → `executed_all` по 3 пакетам.
+- **provider crash contained** (rc12) — ConnectionReset → типизированный `network-error`, транзакция цела.
+- Runbook §6e обновлён живыми результатами + готча корневого `conftest.py` в фикстуре.
+
 ## [3.0.0-rc13] — 2026-07-20 — Sequence Verdict Integrity (аудит: 3×P0 + 2×P1)
 
 Фокусная сессия по аудиту sequential-транзакции. Все находки — из живого прогона S-SEQ.

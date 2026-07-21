@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc13
+  package_version: 3.0.0-rc14
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc14_author_retry_resilience:
+      - "finding живой квалификации kimi: author-стадия делала ОДИН вызов на артефакт — флаки reasoning-провайдер (kimi) на части вызовов отдаёт пустой/битый YAML -> артефакт-гейт (requirements/plan_readiness/specification) ложно не закрывался (нестабильность модели, не движковый дефект) -> на multi-package sequential почти всегда какой-то пакет не доходил до ready, блокируя aggregate_ready. Фикс: _author_with_retry ретраит невалидный/пустой вывод (до 3 попыток) с КОРРЕКТИРУЮЩИМ нуджем (показываем модели, что именно невалидно), каждая попытка под потолком бюджета. Используется в _run_authoring (requirements/plan) и _run_spec_authoring (specification)"
+      - "честность сохранена: ретрай НЕ фабрикует — форму по-прежнему судит детерминированный валидатор, содержание — независимый ревьюер/человек. Вечный флак -> гейт остаётся блокирующим после ретраев (честный не-ready). Живая квалификация подтвердила движок по всем половинам S-SEQ: positive-green pkg-1 (ready_for_pr=True, code_review pass), reviewer-block -> hard-stop (rc13 P0, pkg-2/3 не стартуют), trusted retry -> recovery (rc13 P1, executed_all по 3 пакетам), provider crash contained (rc12)"
+      - "проверки: +деттесты (флак на 1-й попытке -> ретрай восстанавливает валидный артефакт; вечный флак -> гейт блокирует честно). Runbook §6e обновлён живыми результатами + готча корневого conftest.py в фикстуре. Полный CI-набор (94) 94/94 PASS локально"
     fixed_v3_0_rc13_sequence_verdict_integrity:
       - "P0 (аудит) блокирующий reviewer warn не останавливал sequence: _hard_stop проверял только review.status=='fail', а warn на БЛОКИРУЮЩЕМ гейте (_run_reviews -> gate fail + entry.closed_as='blocked', v2.85) проскакивал -> пакет N+1 мог строиться поверх изменения, которое независимый ревьюер ЗАБЛОКИРОВАЛ (ровно живой rc11-результат: code_review=warn, gate=fail, ready_for_pr=false). Фикс: источник истины — ИТОГОВЫЙ блокирующий вердикт: stop при status=='fail' ИЛИ closed_as=='blocked' ИЛИ review-owned гейт (code_review/ux_review/...) fail с вынесенным вердиктом. Продолжаем только при awaiting evidence (вердикт НЕ вынесен)"
       - "P0 (аудит) aggregate security брал КОРНЕВОЙ коммит репо (git rev-list --max-parents=0 final_sha) как базу -> анализировал root..final (почти всю историю), поднимая старые зависимости/auth/конфиги -> false blocks, структурно непроходимый happy path на зрелом репо. Фикс: фиксируем sequence_base_sha (HEAD ДО пакета 1) в immutable SequencePlan; весь aggregate строго по sequence_base_sha..final_sha"
