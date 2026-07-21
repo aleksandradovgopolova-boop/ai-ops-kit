@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc14
+  package_version: 3.0.0-rc15
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,9 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc15_ci_parity_openspec_gotcha:
+      - "rc14 CI RED (quality/pipeline-e2e): деттест author-retry ассертил 'specification not in unmet', но закрытие specification-гейта зависит от openspec CLI — локально он есть, в CI НЕТ -> тест падал только в CI (та же готча local-vs-CI, что раньше). Фикс: тест проверяет requirements + валидность ФОРМЫ артефактов (что и восстанавливает ретрай), а не закрытие openspec-гейта. Подтверждено запуском selftest с PATH без openspec: 94/94 PASS (истинный CI-паритет)"
+      - "процессная заметка: перед релизом нового деттеста, зависящего от внешнего CLI, прогонять полный CI-набор с PATH без этого CLI (openspec отсутствует в CI-раннере) — иначе локальный ложный green"
     fixed_v3_0_rc14_author_retry_resilience:
       - "finding живой квалификации kimi: author-стадия делала ОДИН вызов на артефакт — флаки reasoning-провайдер (kimi) на части вызовов отдаёт пустой/битый YAML -> артефакт-гейт (requirements/plan_readiness/specification) ложно не закрывался (нестабильность модели, не движковый дефект) -> на multi-package sequential почти всегда какой-то пакет не доходил до ready, блокируя aggregate_ready. Фикс: _author_with_retry ретраит невалидный/пустой вывод (до 3 попыток) с КОРРЕКТИРУЮЩИМ нуджем (показываем модели, что именно невалидно), каждая попытка под потолком бюджета. Используется в _run_authoring (requirements/plan) и _run_spec_authoring (specification)"
       - "честность сохранена: ретрай НЕ фабрикует — форму по-прежнему судит детерминированный валидатор, содержание — независимый ревьюер/человек. Вечный флак -> гейт остаётся блокирующим после ретраев (честный не-ready). Живая квалификация подтвердила движок по всем половинам S-SEQ: positive-green pkg-1 (ready_for_pr=True, code_review pass), reviewer-block -> hard-stop (rc13 P0, pkg-2/3 не стартуют), trusted retry -> recovery (rc13 P1, executed_all по 3 пакетам), provider crash contained (rc12)"
