@@ -355,7 +355,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         else:
             _sp.write_text(_y.safe_dump(
                 {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": len(ordered),
-                 "plan_hash": cur_plan_hash,
+                 "plan_hash": cur_plan_hash, "base_ref": base,   # v3.0.1 (P0): базовая ветка фиксируется
                  "packages": [{"id": p.get("id"), "order": p.get("order"),
                                "depends_on": p.get("depends_on") or [], "scope": p.get("scope"),
                                "write_scope": p.get("write_scope"), "pkg_hash": _pkg_hash(p)} for p in ordered]},
@@ -690,28 +690,33 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             # sequence_base_sha; перед PR сверяем АКТУАЛЬНУЮ remote base с этой базой. Разошлась
             # (remote main сдвинулся после старта цепочки) -> НЕ открываем PR (проверенное состояние
             # != потенциальному merge-состоянию); нужна ревалидация. Иначе — «verified» PR был бы ложью.
+            # v3.0.1 (finding аудита P0): сверяем ВЫБРАННУЮ base-ветку (refs/heads/<base>), НЕ origin HEAD
+            # (default branch). PR открываем СТРОГО в base_ref. Иначе не-default base давал ложный блок/
+            # PR не туда.
             remote_base = None
             try:
-                rc_ls, out_ls, _ = _git(_drt, "ls-remote", "origin", "HEAD")
+                rc_ls, out_ls, _ = _git(_drt, "ls-remote", "origin", f"refs/heads/{base}")
                 if rc_ls == 0 and out_ls.strip():
                     remote_base = out_ls.split()[0].strip()
             except Exception:  # noqa: BLE001
                 remote_base = None
             if remote_base and sequence_base_sha and remote_base != sequence_base_sha:
                 delivery["status"] = "not-attempted"
-                delivery["base_moved"] = {"validated_base": sequence_base_sha, "remote_base": remote_base}
+                delivery["base_moved"] = {"base_ref": base, "validated_base": sequence_base_sha,
+                                          "remote_base": remote_base}
                 delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — открытие PR "
                                       "против новой базы дало бы непроверенное merge-состояние; нужна ревалидация")
             else:
                 try:
                     import pr_open
-                    pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}",
+                    pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}", base=base,
                                                title=f"ai-ops: {task[:60]}",
                                                body=(f"Sequential WorkPackages: {len(ordered)} пакет(ов). "
-                                                     f"База {sequence_base_sha} → финал {final_sha}. "
+                                                     f"База {base} ({(sequence_base_sha or '?')[:12]}) → финал {final_sha}. "
                                                      f"Агрегатный вердикт: aggregate_ready."))
                     delivery["status"] = (pr or {}).get("status") or "failed"
                     delivery["validated_base"] = sequence_base_sha
+                    delivery["base_ref"] = base
                 except Exception as e:  # noqa: BLE001
                     delivery["status"] = "failed"
                     delivery["error"] = str(e)
@@ -766,7 +771,20 @@ def selftest():
                     "      - {name: T, when: x, then: y}\n")
         return ("schema_version: 1\nkind: plan-artifact\nwork_packages:\n"
                 "  - id: WP1\n    summary: пакет\n    depends_on: []\nwrite_scope:\n  - .\n")
-    reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+
+    def _pass_reviewer(prompt):
+        # v3.0.1: mock-ревьюер pass. Для security-промпта (SecurityVerdict v2) парсит применимые
+        # домены из промпта и эмитит domain_results по каждому — иначе строгий контракт отклонит.
+        import re as _re
+        import json as _json
+        res = {"kind": "reviewer-result", "status": "pass", "checks": [{"id": "ok", "status": "pass"}]}
+        m = _re.search(r"применимым доменам:\s*([^\n(]+)", prompt or "")
+        if m:
+            doms = [d.strip() for d in m.group(1).split(",") if d.strip()]
+            if doms:
+                res["domain_results"] = [{"domain": d, "status": "pass"} for d in doms]
+        return _json.dumps(res, ensure_ascii=False)
+    reviewer = _pass_reviewer
 
     # ENGINEERING по 3 подсистемам -> 3 пакета с цепочкой зависимостей
     with tempfile.TemporaryDirectory() as td:
@@ -1018,7 +1036,7 @@ def selftest():
         def prop_for(pkg):
             it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
             return lambda c: next(it)
-        pass_reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        pass_reviewer = _pass_reviewer
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             seqrt = execute_sequence("рефактор для retry", sig, root, pkgs, prop_for, feature="seqrt",
@@ -1050,7 +1068,7 @@ def selftest():
         def prop_for(pkg):
             it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
             return lambda c: next(it)
-        pass_reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        pass_reviewer = _pass_reviewer
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             execute_sequence("рефактор safe-retry", sig, root, pkgs, prop_for, feature="seqsafe",
