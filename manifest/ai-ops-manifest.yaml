@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc15
+  package_version: 3.0.0-rc16
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc16_final_transaction_trust:
+      - "P0 (аудит) retry мог сбросить ОСНОВНОЙ checkout: retry_package фолбэчил vroot на child_root при отсутствии worktree, не проверял результат checkout и всё равно делал reset --hard -> при повреждённом/удалённом worktree сбрасывалась текущая ветка основного checkout (нарушение инварианта «recovery не трогает основной checkout»). Фикс: fail-closed preconditions ДО любой git-операции — worktree ОБЯЗАН существовать (нет fallback), vroot != основной checkout (проверка --show-toplevel), checkout ветки обязан пройти, HEAD реально на ai-ops/<wid>, checkpoint существует как commit И достижим из ветки; только тогда архив+reset. Любая ошибка -> git-состояние не меняется. Деттест: нет worktree -> ok=False + основной HEAD/дерево неизменны"
+      - "P0 (аудит) security-reviewer давал невалидный pass: _review_security брал result.status без валидации, а run_review принимает любой dict со status как терминал -> модель могла вернуть {status:pass} без checks/revision/обоснования -> false green (на aggregate needs_review->clear). Фикс: _security_verdict_errors прогоняет вердикт через validate_reviewer_result + security-специфику (gate==security, reviewed_revision==ревизия, непустые checks, warn/fail c blockers); невалидный -> status=None (гейт остаётся needs_review/fail). Та же логика per-package и aggregate. (Жёсткий id-substring матч доменов НЕ делаем — brittle-false-block; ядро false-green убивают структурные проверки)"
+      - "P0 (аудит) aggregate-ревьюер видел только последний коммит: _aggregate_code_review/_change_context передавали final_sha -> git show <final_sha> (только пакет 3), риск взаимодействия пакет1↔пакет3 не виден. Фикс: _change_context_range(base..head) — git diff --stat + список файлов + combined diff + коммиты диапазона; и code_review, и security-reviewer на aggregate получают range-контекст base..final"
+      - "P0 (аудит) aggregate baseline не на базе SequencePlan: base_checks собирались с текущего child_root (мог быть на иной ветке, чем base цепочки) -> несопоставимо -> возможен и false green. Фикс: _collect_base_checks_at собирает baseline СТРОГО на sequence_base_sha в отдельном read-only detached-worktree"
+      - "P1 (аудит) на resume сохранённый sequence_base_sha не был источником истины: executor каждый раз пересчитывал базу из текущей base-ветки, а ветка elif saved_plan не срабатывала (файл плана уже существует) -> после сдвига main aggregate мог взять новый main. Фикс: есть SequencePlan -> sequence_base_sha ТОЛЬКО из него; расхождение с текущей base -> base_drift в отчёте (не молчаливая замена). +ROADMAP обновлён под фактические статусы rc14-16"
+      - "проверки: +деттесты (retry без worktree -> fail-closed + основной checkout неизменен; _change_context_range видит все коммиты диапазона; security-verdict: голый {status:pass} невалиден, структурный валиден, чужая reviewed_revision невалидна). Полный CI-набор (94) 94/94 PASS локально с PATH без openspec (истинный CI-паритет)"
     fixed_v3_0_rc15_ci_parity_openspec_gotcha:
       - "rc14 CI RED (quality/pipeline-e2e): деттест author-retry ассертил 'specification not in unmet', но закрытие specification-гейта зависит от openspec CLI — локально он есть, в CI НЕТ -> тест падал только в CI (та же готча local-vs-CI, что раньше). Фикс: тест проверяет requirements + валидность ФОРМЫ артефактов (что и восстанавливает ретрай), а не закрытие openspec-гейта. Подтверждено запуском selftest с PATH без openspec: 94/94 PASS (истинный CI-паритет)"
       - "процессная заметка: перед релизом нового деттеста, зависящего от внешнего CLI, прогонять полный CI-набор с PATH без этого CLI (openspec отсутствует в CI-раннере) — иначе локальный ложный green"

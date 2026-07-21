@@ -151,12 +151,16 @@ def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, revi
         return agg_sec, None                        # ревьюер не подан -> awaiting (не clear -> не ready)
     try:
         import execution_pipeline as _ep
+        # rc16 (P0): ревьюер видит ВСЮ последовательность base..final, а не только последний коммит
+        ctx = _ep._change_context_range(vroot, base_sha, final_sha)
         status, res = _ep._review_security(reviewer_proposer, vroot, agg_sec, final_sha,
-                                           {"max_model_calls": 12})
+                                           {"max_model_calls": 12}, change_context=ctx)
         agg_sec["reviewer_status"] = status
-        if status == "pass":                        # судья закрыл применимые needs_review домены
+        if status == "pass":                        # судья закрыл применимые needs_review домены (валидно)
             agg_sec["overall"] = "clear"
             agg_sec["closed_by"] = "aggregate-security-reviewer"
+        elif isinstance(res, dict) and res.get("invalid"):
+            agg_sec["reviewer_invalid"] = res.get("invalid")   # rc16: false-green отклонён
         return agg_sec, res
     except Exception as e:  # noqa: BLE001 — сбой ревью на aggregate = fail-closed (не clear)
         agg_sec["overall"] = "error"
@@ -164,17 +168,19 @@ def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, revi
         return agg_sec, None
 
 
-def _aggregate_code_review(vroot, final_sha, signals, reviewer_proposer, review):
-    """v3.0-rc13 (finding аудита P0): независимый code_review ИНТЕГРИРОВАННОГО диффа на финальном SHA —
-    ловит проблемы, видимые только в комбинации пакетов (per-package ревью видит лишь свой пакет).
-    -> (ok, reviews|None). ok=False, если ревьюер ЗАБЛОКИРОВАЛ (fail / warn-на-блокирующем). Без ревью —
-    ok=True (не блокируем на этом уровне; per-package код-ревью уже прошло)."""
+def _aggregate_code_review(vroot, base_sha, final_sha, signals, reviewer_proposer, review):
+    """v3.0-rc13 (finding аудита P0): независимый code_review ИНТЕГРИРОВАННОГО диффа. rc16 (P0): ревьюер
+    получает контекст ВСЕЙ цепочки base..final (`_change_context_range`), а не только последний коммит —
+    иначе риск взаимодействия пакет1↔пакет3 не виден. -> (ok, reviews|None). ok=False, если ревьюер
+    ЗАБЛОКИРОВАЛ (fail / warn-на-блокирующем). Без ревью — ok=True (per-package код-ревью уже прошло)."""
     if not (review and reviewer_proposer):
         return True, None
     try:
         import execution_pipeline as _ep
+        ctx = _ep._change_context_range(vroot, base_sha, final_sha)
         _gev, revs = _ep._run_reviews(reviewer_proposer, vroot, ["code_review"], {},
-                                      dict(signals or {}), final_sha, {"max_model_calls": 16})
+                                      dict(signals or {}), final_sha, {"max_model_calls": 16},
+                                      change_context=ctx)
         blocked = any((r or {}).get("status") == "fail" or (r or {}).get("closed_as") == "blocked"
                       for r in (revs or []))
         cr = (_gev.get("code_review") or {})
@@ -223,7 +229,42 @@ def retry_package(child_root, wid, pid, features_dir=None):
     if not checkpoint:
         return {"ok": False, "error": (f"не найден checkpoint предшественника для '{pid}' "
                                        f"(предшественник={predecessor or 'база'}) — снимок отсутствует")}
-    # архивируем проваленную попытку пакета (не теряем историю)
+
+    # v3.0-rc16 (finding аудита P0): retry НИКОГДА не трогает основной checkout. Все preconditions
+    # проверяются ДО любой git-операции; любая ошибка -> fail-closed (git-состояние не меняется):
+    #   (1) выделенный worktree ОБЯЗАН существовать (нет fallback на child_root!);
+    #   (2) vroot — НЕ основной checkout (toplevel worktree совпадает с ним и != child_root);
+    #   (3) checkout ветки ai-ops/<wid> ОБЯЗАН пройти; после — HEAD реально на этой ветке;
+    #   (4) checkpoint существует как commit И достижим из ветки (принадлежит этой цепочке).
+    wt = child_root / ".ai" / "worktrees" / wid
+    branch = f"ai-ops/{wid}"
+    if not wt.is_dir():
+        return {"ok": False, "error": (f"retry отказан (fail-closed): выделенный worktree "
+                                       f".ai/worktrees/{wid} не существует — восстановление в основном "
+                                       f"checkout запрещено. Пересоберите worktree/прогон.")}
+    vroot = wt
+    # (2) vroot — не основной checkout
+    _rc_top, _top, _ = _git(vroot, "rev-parse", "--show-toplevel")
+    _rc_mtop, _mtop, _ = _git(child_root, "rev-parse", "--show-toplevel")
+    if _rc_top != 0 or Path((_top or "").strip() or ".").resolve() == Path((_mtop or "").strip() or "/x").resolve():
+        return {"ok": False, "error": "retry отказан (fail-closed): worktree резолвится в основной checkout"}
+    # (4) checkpoint — реальный commit
+    if _git(vroot, "cat-file", "-e", f"{checkpoint}^{{commit}}")[0] != 0:
+        return {"ok": False, "error": f"retry отказан (fail-closed): checkpoint {checkpoint[:8]} не найден в репозитории"}
+    # (3) checkout ветки цепочки ОБЯЗАН пройти; проверяем результат ЯВНО (не полагаемся на reset)
+    rc_co, _, err_co = _git(vroot, "checkout", "-q", branch)
+    if rc_co != 0:
+        return {"ok": False, "error": f"retry отказан (fail-closed): checkout {branch} не удался: {err_co}"}
+    _rc_hb, _hb, _ = _git(vroot, "rev-parse", "--abbrev-ref", "HEAD")
+    if _rc_hb != 0 or (_hb or "").strip() != branch:
+        return {"ok": False, "error": (f"retry отказан (fail-closed): HEAD worktree не на {branch} "
+                                       f"(факт: {(_hb or '?').strip()})")}
+    # (4b) checkpoint достижим из ветки (принадлежит этой цепочке, а не чужой ревизии)
+    if _git(vroot, "merge-base", "--is-ancestor", checkpoint, "HEAD")[0] != 0:
+        return {"ok": False, "error": (f"retry отказан (fail-closed): checkpoint {checkpoint[:8]} не "
+                                       f"является предком {branch} — не принадлежит этой цепочке")}
+
+    # ВСЕ preconditions пройдены -> архивируем попытку, затем reset (git-состояние меняем только теперь)
     pkg_dir = fdir / "work-packages" / pid
     archived = None
     if pkg_dir.is_dir():
@@ -231,24 +272,46 @@ def retry_package(child_root, wid, pid, features_dir=None):
         attempts.mkdir(parents=True, exist_ok=True)
         n = 1 + len([d for d in attempts.iterdir() if d.is_dir() and d.name.startswith("attempt-")])
         dest = attempts / f"attempt-{n}"
-        # переносим текущие артефакты попытки (report.json + lifecycle-снимки), attempts/ не трогаем
         dest.mkdir(parents=True, exist_ok=True)
         for f in pkg_dir.iterdir():
             if f.name == "attempts":
                 continue
             shutil.move(str(f), str(dest / f.name))
         archived = str(dest.relative_to(child_root)) if str(dest).startswith(str(child_root)) else str(dest)
-    # восстанавливаем ветку worktree на checkpoint (доверенная операция, не ручной reset)
-    wt = child_root / ".ai" / "worktrees" / wid
-    vroot = wt if wt.is_dir() else child_root
-    branch = f"ai-ops/{wid}"
-    rc_co, _, err_co = _git(vroot, "checkout", "-q", branch)
     rc, _, err = _git(vroot, "reset", "--hard", checkpoint)
     if rc != 0:
-        return {"ok": False, "error": f"git reset на checkpoint {checkpoint[:8]} не удался: {err or err_co}",
-                "checkpoint": checkpoint}
+        return {"ok": False, "error": f"git reset на checkpoint {checkpoint[:8]} не удался: {err}",
+                "checkpoint": checkpoint, "archived_attempt": archived}
     return {"ok": True, "package": pid, "predecessor": predecessor, "checkpoint": checkpoint,
-            "archived_attempt": archived, "next": f"resume_from={pid}"}
+            "worktree": str(vroot), "archived_attempt": archived, "next": f"resume_from={pid}"}
+
+
+def _collect_base_checks_at(child_root, base_sha, sandbox):
+    """v3.0-rc16 (finding аудита P0): baseline-проверки СТРОГО на sequence_base_sha в отдельном
+    read-only detached-worktree — НЕ на текущем состоянии основного checkout (тот может быть на другой
+    ветке, чем base цепочки -> несопоставимый baseline -> false green/block в aggregate baseline-diff).
+    -> checks|None (None -> недоступно, вызывающий деградирует)."""
+    if not base_sha:
+        return None
+    import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+    child_root = Path(child_root)
+    if _git(child_root, "rev-parse", "--is-inside-work-tree")[0] != 0:
+        return None
+    tmp = child_root / ".ai" / "worktrees" / f"_base-{base_sha[:12]}"
+    try:
+        _git(child_root, "worktree", "add", "--detach", "-f", str(tmp), base_sha)
+        if not tmp.is_dir():
+            return None
+        pol = (_tb.sandbox_policy(child_root=str(tmp)) if sandbox
+               else _tb.Policy(level="execution", child_root=str(tmp), block_push=True))
+        return _ec.collect(_pd.detect(tmp), tmp, pol)["checks"]
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        try:
+            _git(child_root, "worktree", "remove", "--force", str(tmp))
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
@@ -304,41 +367,46 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                           "и переисполнить с нуля), а не resume_from.")}
 
     # v2.124: снимок проверок БАЗЫ (до пакета 1) для АГРЕГАТНОЙ baseline-diff на финальном SHA.
-    base_checks = None
-    try:
-        import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
-        _bpol = (_tb.sandbox_policy(child_root=str(child_root)) if sandbox
-                 else _tb.Policy(level="execution", child_root=str(child_root), block_push=True))
-        base_checks = _ec.collect(_pd.detect(child_root), child_root, _bpol)["checks"]
-    except Exception:  # noqa: BLE001 — недоступность инфры не должна ронять последовательность
-        base_checks = None
-
-    # v3.0-rc13 (finding аудита P0): SEQUENCE BASE — HEAD ДО пакета 1. Раньше aggregate security брал
-    # `git rev-list --max-parents=0 final_sha` (КОРНЕВОЙ коммит репо) -> анализировал практически всю
-    # историю проекта (root..final), поднимая старые зависимости/auth/конфиги, не связанные с задачей ->
-    # false blocks, структурно непроходимый happy path на зрелом репо. Фиксируем базу цепочки ОДИН раз
-    # (SHA ветки base) и весь aggregate-анализ гоним строго по sequence_base_sha..final_sha.
-    sequence_base_sha = None
+    # v3.0-rc13/rc16 (finding аудита P0): SEQUENCE BASE — HEAD ДО пакета 1. ИСТОЧНИК ИСТИНЫ = сохранённый
+    # SequencePlan (resume/retry НЕ переопределяют базу текущим main; иначе aggregate сравнил бы ветку,
+    # построенную от старой базы, с новым сдвинувшимся main -> false green/block). Раньше aggregate брал
+    # корневой коммит репо; теперь весь aggregate строго по sequence_base_sha..final_sha.
+    _cur_base = None
     try:
         _rc, _bs, _ = _git(child_root, "rev-parse", base or "HEAD")
-        if _rc == 0 and _bs:
-            sequence_base_sha = _bs.strip()
-        else:
-            sequence_base_sha = (_git(child_root, "rev-parse", "HEAD")[1] or "").strip() or None
+        _cur_base = ((_bs or "").strip() if _rc == 0
+                     else (_git(child_root, "rev-parse", "HEAD")[1] or "").strip()) or None
     except Exception:  # noqa: BLE001
-        sequence_base_sha = None
-    # закрепляем базу в immutable SequencePlan (для resume/retry и воспроизводимости aggregate)
-    try:
-        if _sp.exists() and sequence_base_sha:
-            import yaml as _y2
-            _spd = _y2.safe_load(_sp.read_text(encoding="utf-8")) or {}
-            if not _spd.get("sequence_base_sha"):
-                _spd["sequence_base_sha"] = sequence_base_sha
-                _sp.write_text(_y2.safe_dump(_spd, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        elif saved_plan and saved_plan.get("sequence_base_sha"):
-            sequence_base_sha = saved_plan["sequence_base_sha"]   # resume: база из сохранённого плана
-    except Exception:  # noqa: BLE001
-        pass
+        _cur_base = None
+    base_drift = None
+    if saved_plan and saved_plan.get("sequence_base_sha"):
+        sequence_base_sha = saved_plan["sequence_base_sha"]          # ИСТОЧНИК ИСТИНЫ (resume/retry)
+        if _cur_base and _cur_base != sequence_base_sha:
+            base_drift = {"saved": sequence_base_sha, "current_base": _cur_base}   # main сдвинулся — не молча меняем
+    else:
+        sequence_base_sha = _cur_base
+        try:                                                        # закрепляем в immutable SequencePlan
+            if _sp.exists() and sequence_base_sha:
+                import yaml as _y2
+                _spd = _y2.safe_load(_sp.read_text(encoding="utf-8")) or {}
+                if not _spd.get("sequence_base_sha"):
+                    _spd["sequence_base_sha"] = sequence_base_sha
+                    _sp.write_text(_y2.safe_dump(_spd, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+
+    # v3.0-rc16 (finding аудита P0): baseline-проверки СТРОГО на sequence_base_sha (detached worktree),
+    # не на текущем состоянии основного checkout. Деградация (не git/worktree недоступен) -> прежнее
+    # поведение на child_root (лучше, чем ничего; aggregate всё равно fail-closed).
+    base_checks = _collect_base_checks_at(child_root, sequence_base_sha, sandbox)
+    if base_checks is None:
+        try:
+            import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+            _bpol = (_tb.sandbox_policy(child_root=str(child_root)) if sandbox
+                     else _tb.Policy(level="execution", child_root=str(child_root), block_push=True))
+            base_checks = _ec.collect(_pd.detect(child_root), child_root, _bpol)["checks"]
+        except Exception:  # noqa: BLE001 — недоступность инфры не должна ронять последовательность
+            base_checks = None
 
     # v2.124: resume с КОНКРЕТНОГО пакета — пакеты до него считаются исполненными в прошлом прогоне
     # (их SHA/готовность восстанавливаются из снимков work-packages/<pid>/report.json).
@@ -564,9 +632,9 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             agg_sec, agg_sec_review = _aggregate_close_security(
                 agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
             agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
-            # v3.0-rc13 (P0): aggregate code_review интегрированного диффа (writer≠judge на final_sha)
+            # v3.0-rc13/rc16 (P0): aggregate code_review — контекст ВСЕЙ цепочки base..final
             agg_code_ok, agg_code_reviews = _aggregate_code_review(
-                vroot, final_sha, signals, reviewer_proposer, review)
+                vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
             aggregate = {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
                          "final_sha": final_sha, "sequence_base_sha": _base_sha,
                          "revision_ok": revision_ok, "tree_clean": tree_clean,
@@ -610,6 +678,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
            "packages": results, "completed": sorted(completed), "stopped_at": stopped_at,
            "executed_all": executed_all, "ready_all": ready_all, "aggregate_ready": aggregate_ready,
            "final_sha": final_sha, "sequential_chain": chain_ok, "total": len(ordered),
+           "sequence_base_sha": sequence_base_sha, "base_drift": base_drift,   # rc16 (P0/P1)
            "aggregate": aggregate, "delivery": delivery, "draft_pr": pr,
            "resumed_from": resume_from}
     try:
@@ -924,6 +993,39 @@ def selftest():
                (root / "features" / "seqrt" / "work-packages" / pkgs[1]["id"] / "attempts" / "attempt-1" / "report.json").is_file())
         expect("v3.0-rc13 retry: неизвестный пакет -> честная ошибка (не тихий reset)",
                retry_package(root, "seqrt", "НЕТ-ТАКОГО").get("ok") is False)
+
+    # v3.0-rc16 (finding аудита P0): retry БЕЗ выделенного worktree -> fail-closed; основной checkout
+    # (HEAD + рабочее дерево) НЕ ТРОГАЕТСЯ. Раньше vroot фолбэчил на child_root и reset --hard мог
+    # сбросить основную ветку.
+    import shutil as _sh_test
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td); cur = mkrepo(td)
+        sig = {"task_type": "ENGINEERING", "size": "large", "risk": "low",
+               "affected_areas": ["catalog", "orders", "billing"]}
+        pkgs = atomic_planner.decompose(sig, wid="seqsafe", child_root=root)["work_packages"]
+        def prop_for(pkg):
+            it = iter([{"op": "write", "path": f"src/{pkg['id']}.py", "content": "x=1\n"}, {"done": True}])
+            return lambda c: next(it)
+        pass_reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            execute_sequence("рефактор safe-retry", sig, root, pkgs, prop_for, feature="seqsafe",
+                             base=cur, author=True, author_proposer=author,
+                             review=True, reviewer_proposer=pass_reviewer)
+        # снимок основного checkout ДО retry
+        main_head_before = _git(root, "rev-parse", "HEAD")[1]
+        main_status_before = _git(root, "status", "--porcelain")[1]
+        # УДАЛЯЕМ выделенный worktree (симулируем повреждение/отсутствие)
+        wt = root / ".ai" / "worktrees" / "seqsafe"
+        _git(root, "worktree", "remove", "--force", str(wt))
+        _sh_test.rmtree(wt, ignore_errors=True)
+        rt_unsafe = retry_package(root, "seqsafe", pkgs[1]["id"])
+        main_head_after = _git(root, "rev-parse", "HEAD")[1]
+        main_status_after = _git(root, "status", "--porcelain")[1]
+        expect("v3.0-rc16 retry-safety: нет worktree -> fail-closed (ok=False)",
+               rt_unsafe.get("ok") is False and "fail-closed" in (rt_unsafe.get("error") or ""))
+        expect("v3.0-rc16 retry-safety: основной checkout НЕ тронут (HEAD + рабочее дерево неизменны)",
+               main_head_after == main_head_before and main_status_after == main_status_before)
 
     # v2.120 (P0.2): sandbox наследуется в per-package прогон (containment не теряется)
     with tempfile.TemporaryDirectory() as td:
