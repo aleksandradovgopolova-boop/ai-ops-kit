@@ -495,7 +495,23 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             sig_pkg.update(signals_for(pkg) or {})
 
         is_last = (i == len(ordered) - 1)
-        pkg_task = f"{task} — пакет {pid}: {pkg.get('title', '')}".strip()
+        # v3.0-rc19 (finding живого sequential): каждый пакет получал ПОЛНУЮ многочастную задачу с
+        # общим ярлыком -> writer лез в чужие подсистемы (напр. в pkg-1 писал pricing/*) -> брокер
+        # отклонял, но _hard_stop справедливо стопал цепочку на попытке эскейпа. Явно ограничиваем
+        # writer'а рамками ЕГО подсистемы (остальные части делают отдельные пакеты) — это НЕ ослабляет
+        # containment (брокер/post-diff по-прежнему в силе), а убирает первопричину: writer не выходит
+        # за scope. Ревьюер по-прежнему судит независимо.
+        _pkg_scope = pkg.get("scope") or []
+        _pkg_ws = pkg.get("write_scope") or []
+        _scope_note = ""
+        if _pkg_scope:
+            _scope_note = (
+                f"\n\n=== ГРАНИЦЫ ЭТОГО ПАКЕТА ({pid}) ===\n"
+                f"Реализуй ТОЛЬКО часть, относящуюся к подсистеме: {', '.join(_pkg_scope)}. "
+                f"Пиши ИСКЛЮЧИТЕЛЬНО в пути: {', '.join(_pkg_ws) or _pkg_scope}. "
+                f"НЕ трогай файлы других подсистем — их реализуют отдельные пакеты последовательности. "
+                f"Если задача упоминает другие подсистемы — это контекст, не работа этого пакета.")
+        pkg_task = f"{task} — пакет {pid}: {pkg.get('title', '')}{_scope_note}".strip()
         # v3.0-rc12 (finding живого sequential): исключение провайдера/инфры (напр. ConnectionReset
         # от kimi ПОСЛЕ исчерпания ретраев _http_post_json) НЕ должно ронять всю транзакцию traceback'ом
         # и терять per-package lifecycle. Ловим -> пакет честно фейлится (infra-error) -> цепочка

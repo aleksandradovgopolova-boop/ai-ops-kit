@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc18
+  package_version: 3.0.0-rc19
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc19_per_package_scope_prompt:
+      - "finding живого sequential (sonnet): каждый пакет получал ПОЛНУЮ многочастную задачу с общим ярлыком -> writer лез в чужие подсистемы (в pkg-1 discounts пытался писать pricing/core.py) -> брокер отклонял (containment сработал), но _hard_stop справедливо стопал цепочку на попытке эскейпа scope-violation. Первопричина — не ограниченный рамками пакета промпт, а не containment. Живьём подтверждено: retry pkg-1 -> ready=True, code_review=pass (реализация чистая, в scope), но stop на попытке залезть в pricing"
+      - "фикс: per-package задача теперь ЯВНО ограничивает writer'а его подсистемой — '=== ГРАНИЦЫ ПАКЕТА ===' с scope/write_scope путями и указанием НЕ трогать другие подсистемы (их делают отдельные пакеты). Это НЕ ослабляет containment (брокер отклоняет out-of-scope, post-diff ловит реальный эскейп, _hard_stop прежний) — убирает ПРИЧИНУ выхода за scope. Ревьюер по-прежнему судит независимо"
+      - "проверки: workpackage_executor selftest зелёный; полный CI-набор (94) 94/94 PASS локально с PATH без openspec. Аддитивно — containment-инварианты не тронуты"
     fixed_v3_0_rc18_reviewer_read_full_file:
       - "finding живого прогона ENGINEERING->PR (sonnet-5): движок отработал чисто (валидные артефакты, реальный рефактор discounts в RATE_TABLE, +58 строк тестов, tests pass), но code_review дважды блокировал с вердиктом 'показан частично/обрезанным — не могу подтвердить полноту'. Корень — tool_broker.execute op=read отдавал ТОЛЬКО последние 400 символов файла (text[-400:]). Для писательской петли хвост ок, но независимый ревьюер, читая файл для ВЕРИФИКАЦИИ, видел обрезок начала -> честно не мог подтвердить покрытие/закрытие -> блок (не false-green, но структурно мешало positive-green). Тот же класс, что rc9 (ревьюер голодал по контексту)"
       - "фикс: read отдаёт файл С НАЧАЛА до щедрого потолка (_READ_MAX=20000 симв.; крупнее -> усечение с явной пометкой). Ревьюер видит полный файл и может верифицировать. Писателю тоже полезно. Изолировано: shell/git по-прежнему SHELL_OUTPUT_TAIL=4000"
