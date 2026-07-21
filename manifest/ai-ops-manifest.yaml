@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0-rc17
+  package_version: 3.0.0-rc18
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_rc18_reviewer_read_full_file:
+      - "finding живого прогона ENGINEERING->PR (sonnet-5): движок отработал чисто (валидные артефакты, реальный рефактор discounts в RATE_TABLE, +58 строк тестов, tests pass), но code_review дважды блокировал с вердиктом 'показан частично/обрезанным — не могу подтвердить полноту'. Корень — tool_broker.execute op=read отдавал ТОЛЬКО последние 400 символов файла (text[-400:]). Для писательской петли хвост ок, но независимый ревьюер, читая файл для ВЕРИФИКАЦИИ, видел обрезок начала -> честно не мог подтвердить покрытие/закрытие -> блок (не false-green, но структурно мешало positive-green). Тот же класс, что rc9 (ревьюер голодал по контексту)"
+      - "фикс: read отдаёт файл С НАЧАЛА до щедрого потолка (_READ_MAX=20000 симв.; крупнее -> усечение с явной пометкой). Ревьюер видит полный файл и может верифицировать. Писателю тоже полезно. Изолировано: shell/git по-прежнему SHELL_OUTPUT_TAIL=4000"
+      - "проверки: +деттест (read файла >400 симв. -> виден HEAD_MARKER начала, не только хвост); все потребители output_tail (tool_loop/execution_pipeline/workpackage_executor selftest) зелёные. Полный CI-набор (94) 94/94 PASS локально с PATH без openspec"
     fixed_v3_0_rc17_single_run_infra_containment:
       - "finding живого прогона ENGINEERING->draft PR (kimi 429): одиночный (не sequential) путь НЕ содержал исключение провайдера. kimi отдал HTTP 429 в author-вызове ПОСЛЕ исчерпания ретраев _http_post_json -> HTTPError пробросился из _run_authoring -> run_pipeline -> ai_ops_run.run (ловил только для закрытия active-work и RE-RAISE) -> CLI упал traceback'ом. Sequential уже был укреплён (rc12/rc16), а одиночный — нет"
       - "фикс: ai_ops_run.run — ЕДИНАЯ точка containment. Исключение провайдера/инфры (кроме KeyboardInterrupt/SystemExit) -> закрываем active-work + возвращаем ЧЕСТНЫЙ error-отчёт (kind=execution-pipeline, status=error, ready_for_pr=False, типизированный failure envelope) -> print_human показывает ОШИБКУ, exit_code=2. Не traceback. execute_sequence читает failure из этого отчёта (единый containment вместо двух)"
