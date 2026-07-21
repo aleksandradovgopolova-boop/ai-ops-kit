@@ -263,16 +263,39 @@ def _authoring_specs():
     }
 
 
+def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
+    """v3.0-rc14 (finding живой квалификации kimi): author-вызов ретраится при невалидном/пустом
+    артефакте. Флаки reasoning-провайдер (kimi) на части вызовов отдаёт пустой/битый YAML -> артефакт-
+    гейт ложно не закрывается (не движковый дефект, а нестабильность модели) -> на multi-package
+    прогоне почти всегда какой-то пакет не доходит до ready. Ретраим с корректирующим нуджем, каждая
+    попытка — под потолком бюджета. check_fn(data)->errs (МОЖЕТ мутировать data: нормализация). Берём
+    первый валидный; иначе последний (честный не-ready сохраняется, если модель так и не смогла).
+    -> (data, errs). НЕ маскирует качество: форму по-прежнему судит валидатор, содержание — ревьюер."""
+    import budget as _budget_mod
+    prompt = base_prompt
+    data, errs = None, ["author не вызван"]
+    for attempt in range(attempts):
+        try:
+            bud.charge_call()
+        except _budget_mod.BudgetExceeded as e:
+            return data, [f"budget: {e}"]
+        data = _parse_yaml_block(author_proposer(prompt))
+        errs = check_fn(data)
+        if not errs:
+            return data, errs
+        # корректирующий нудж: показать модели, ЧТО именно невалидно, и потребовать чистый YAML
+        prompt = base_prompt + (
+            f"\n\n[повтор {attempt + 1}/{attempts}] Твой предыдущий ответ НЕ прошёл валидацию: "
+            f"{'; '.join(str(e) for e in (errs or [])[:3])}. Верни ТОЛЬКО валидный YAML строго по схеме "
+            "выше — без прозы, без markdown-ограды, все обязательные поля заполнены.")
+    return data, errs
+
+
 def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
     """v2.89: произвести OpenSpec change для гейта specification. author даёт СТРУКТУРУ, движок
     рендерит точный OpenSpec-markdown и валидирует РЕАЛЬНЫМ openspec CLI. Закрывает гейт ТОЛЬКО
     если CLI доступен И strict-валидация прошла (иначе честный блок). -> (gate_ev, entry)."""
-    import budget as _budget_mod
     import validate_spec_artifact as vsa
-    try:
-        bud.charge_call()
-    except _budget_mod.BudgetExceeded as e:
-        return gate_ev, {"gate": "specification", "valid": False, "errors": [f"budget: {e}"]}
     prompt = (
         "Ты автор OpenSpec-изменения (spec-change) для задачи. Верни ТОЛЬКО YAML со схемой:\n"
         "  schema_version: 1\n  kind: spec-change\n  capability: <slug>\n  why: <зачем>\n"
@@ -280,19 +303,24 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
         "  requirements:\n    - name: <имя>\n      text: <нормативное требование со словом SHALL>\n"
         "      scenarios:\n        - {name: <имя>, when: <условие>, then: <результат>}\n"
         "Требования конкретные и проверяемые. Только JSON/YAML.\n\n=== ЗАДАЧА ===\n" + task)
-    data = _parse_yaml_block(author_proposer(prompt))
-    # v3.0-rc8 (finding живого прогона kimi): строки в tasks/what_changes часто содержат двоеточие
-    # («Написать unit-тесты: все ветвления...») -> YAML разбирает элемент списка как MAPPING {key: val},
-    # а не строку -> vsa.check «непустой список строк» падает. Нормализуем: одноключевой dict от
-    # случайного «k: v» -> строка «k: v». Модель имела в виду строку — восстанавливаем её.
-    if isinstance(data, dict):
+
+    def _spec_check(data):
+        # v3.0-rc8 (finding живого прогона kimi): строки в tasks/what_changes часто содержат двоеточие
+        # («Написать unit-тесты: все ветвления...») -> YAML разбирает элемент списка как MAPPING {key: val},
+        # а не строку -> vsa.check «непустой список строк» падает. Нормализуем: одноключевой dict от
+        # случайного «k: v» -> строка «k: v». Модель имела в виду строку — восстанавливаем её.
+        if not isinstance(data, dict):
+            return ["author не вернул валидный YAML spec-change"]
         for _k in ("tasks", "what_changes"):
             _v = data.get(_k)
             if isinstance(_v, list):
                 data[_k] = [(x if isinstance(x, str)
                              else "; ".join(f"{k}: {vv}" for k, vv in x.items()) if isinstance(x, dict)
                              else str(x)) for x in _v]
-    errs = vsa.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML spec-change"]
+        return vsa.check(data)
+
+    # v3.0-rc14: ретраим невалидный/пустой author-вывод (флаки reasoning-провайдер) с нуджем.
+    data, errs = _author_with_retry(author_proposer, prompt, _spec_check, bud)
     entry = {"gate": "specification", "artifact": f"openspec/changes/{wid}", "valid": not errs,
              "errors": errs or None}
     if errs:
@@ -328,18 +356,20 @@ def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, bud
     for gid, (fname, mod, kind, shape) in _authoring_specs().items():
         if gid not in gate_ids or gid in gate_ev:
             continue                        # гейта нет в плане, либо evidence уже есть
-        try:
-            bud.charge_call()
-        except _budget_mod.BudgetExceeded as e:
-            authored.append({"gate": gid, "valid": False, "errors": [f"budget: {e}"]})
-            break
         prompt = (
             f"Ты автор артефакта '{kind}' для задачи. Верни ТОЛЬКО YAML (без пояснений) со схемой:\n"
             f"  schema_version: 1\n  kind: {kind}\n  workitem_id: {wid}\n  {shape}\n"
             f"Артефакт должен точно отражать задачу ниже. Требования/пакеты — конкретные и "
             f"тестируемые, не общие слова.\n\n=== ЗАДАЧА ===\n{task}")
-        data = _parse_yaml_block(author_proposer(prompt))
-        errs = mod.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML артефакта"]
+
+        def _check(data):
+            return mod.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML артефакта"]
+
+        # v3.0-rc14: ретраим невалидный/пустой author-вывод (флаки reasoning-провайдер) с нуджем.
+        data, errs = _author_with_retry(author_proposer, prompt, _check, bud)
+        if errs and any("budget:" in str(e) for e in errs):
+            authored.append({"gate": gid, "valid": False, "errors": errs})
+            break
         entry = {"gate": gid, "artifact": fname, "valid": not errs, "errors": errs or None}
         if not errs:
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -2052,6 +2082,36 @@ def selftest():
         expect("authoring: невалидный артефакт -> requirements остаётся блокирующим (нет фабрикации)",
                "requirements" in rep_ba["gates"]["unmet"]
                and any(not a["valid"] for a in (rep_ba["authored"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v3.0-rc14 (finding живой квалификации kimi): author ФЛАКНУЛ на первой попытке (пустой/битый
+        # YAML) -> ретрай с нуджем -> валидный артефакт. Без ретрая флаки-провайдер ложно оставлял
+        # гейт незакрытым (не движковый дефект — но на multi-package прогоне почти всегда кто-то падал).
+        def flaky_author(prompt):
+            if "[повтор" not in prompt:          # первая попытка — битый вывод (как флаки-провайдер)
+                return "(пустой ответ модели)"
+            return author_provider(prompt)       # на ретрае с нуджем — валидный артефакт
+        it_fk = iter([{"op": "write", "path": "src/fk.py", "content": "f=1\n"}, {"done": True}])
+        rep_fk = run_pipeline("рефактор с флаки-автором", sig_eng, root, lambda c: next(it_fk),
+                              budget={"max_model_calls": 20}, feature="eng-fk",
+                              commit=True, isolate=True, install_deps=False,
+                              author=True, author_proposer=flaky_author)
+        expect("v3.0-rc14 authoring: флак на 1-й попытке -> ретрай восстанавливает валидный артефакт",
+               "requirements" not in rep_fk["gates"]["unmet"]
+               and "specification" not in rep_fk["gates"]["unmet"]
+               and rep_fk["authored"] and all(a["valid"] for a in rep_fk["authored"]))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v3.0-rc14: но если author флакает ВСЕГДА — гейт честно НЕ закрывается (ретрай не фабрикует)
+        always_bad = lambda prompt: "(пустой ответ модели)"
+        it_ab = iter([{"op": "write", "path": "src/ab.py", "content": "b=1\n"}, {"done": True}])
+        rep_ab = run_pipeline("рефактор с вечно-битым автором", sig_eng, root, lambda c: next(it_ab),
+                              budget={"max_model_calls": 20}, feature="eng-ab",
+                              commit=True, isolate=True, install_deps=False,
+                              author=True, author_proposer=always_bad)
+        expect("v3.0-rc14 authoring: вечный флак -> гейт остаётся блокирующим после ретраев (честно)",
+               "requirements" in rep_ab["gates"]["unmet"]
+               and any(not a["valid"] for a in (rep_ab["authored"] or [])))
         # v3.0-rc5 (finding живого прогона kimi): парсер терпим к прозе/несколькими блокам
         expect("v3.0-rc5 parse: YAML после прозы (без ограды) извлекается",
                (_parse_yaml_block("Вот артефакт:\n\nschema_version: 1\nkind: requirements-artifact\n"
