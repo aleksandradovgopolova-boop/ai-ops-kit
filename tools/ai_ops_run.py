@@ -297,10 +297,27 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
                 context_prelude=(payload or {}).get("text"),
                 resume=resume, resume_context=resume_ctx, write_scope=write_scope)
-        except BaseException:
+        except (KeyboardInterrupt, SystemExit):
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
             raise
+        except Exception as _e:  # noqa: BLE001
+            # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
+            # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16),
+            # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
+            # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
+            with contextlib.redirect_stdout(sys.stderr):
+                active_work.finish_cmd(aw_path, fid)
+            try:
+                from workpackage_executor import _classify_failure
+                _fail = _classify_failure(_e)
+            except Exception:  # noqa: BLE001
+                _fail = {"failure_class": "engine", "exception_type": type(_e).__name__,
+                         "message": str(_e)[:400], "retryable": False}
+            return {"schema_version": 1, "kind": "execution-pipeline", "status": "error",
+                    "workitem_id": fid, "error": f"{_fail['exception_type']}: {_fail['message']}",
+                    "failure": _fail, "ready_for_pr": False, "not_yet": [],
+                    "runtime": runtime, "engine": "pipeline", "provider": provider_name, "model": model}
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
@@ -628,6 +645,24 @@ def selftest():
                any(w.get("id") == pfid and w.get("status") == "done" for w in _awd.get("active", [])))
         expect("v2.94: единый план — движок НЕ строил второй (workitem_id совпал)",
                rp["workitem_id"] == pfid)
+
+        # v3.0-rc17 (finding живого прогона): исключение провайдера (напр. HTTP 429 kimi ПОСЛЕ исчерпания
+        # ретраев) НЕ роняет CLI traceback'ом — одиночный прогон возвращает ЧЕСТНЫЙ error-отчёт
+        # (status=error, ready_for_pr=False, exit 2) с типизированным failure, как sequential (rc12/rc16).
+        def _boom(c):
+            raise ConnectionResetError("[Errno 54] Connection reset by peer")
+        rep_boom = run("задача с падающим провайдером", {"task_type": "QUICK", "size": "small",
+                       "risk": "low", "affected_areas": ["core"]}, root, engine="pipeline",
+                       execute=True, proposer=_boom, feature="boomwi")
+        expect("v3.0-rc17: исключение провайдера -> честный error-отчёт (не traceback)",
+               rep_boom.get("status") == "error" and rep_boom.get("ready_for_pr") is False
+               and rep_boom.get("kind") == "execution-pipeline"
+               and (rep_boom.get("failure") or {}).get("failure_class") == "network"
+               and (rep_boom.get("failure") or {}).get("retryable") is True)
+        expect("v3.0-rc17: exit_code(provider-error)=2 (не 0)", exit_code(rep_boom) == 2)
+        expect("v3.0-rc17: active-work закрыта даже при падении провайдера",
+               not any(w.get("id") == "boomwi" and w.get("status") != "done"
+                       for w in active_work.load(root / ".ai" / "runtime" / "active-work.yaml").get("active", [])))
         # v2.97 Context Compiler: у прогона сохранён ContextBundle, размер измерен ДО модели
         expect("v2.97: ContextBundle сохранён рядом с планом",
                (root / "features" / pfid / "context-bundle.yaml").exists())
