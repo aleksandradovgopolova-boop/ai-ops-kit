@@ -232,6 +232,13 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
     checklist_items = []
     for did in applicable:
         checklist_items += (domains.get(did, {}).get("reviewer_checklist") or [])
+    # v3.0.1 (finding аудита P0): SecurityVerdict v2 — требуем ОТДЕЛЬНЫЙ вердикт по КАЖДОМУ применимому
+    # домену. Один общий check не доказывает 4 разных домена. Ревьюер обязан вернуть в reviewer-result
+    # поле domain_results:[{domain,status}], покрывающее РОВНО применимые домены.
+    checklist_items.append(
+        "ОБЯЗАТЕЛЬНО верни в reviewer-result поле domain_results — список "
+        "{domain:<id>, status:pass|warn|fail} РОВНО по этим применимым доменам: "
+        + ", ".join(applicable) + " (по одному на каждый, без пропусков/дублей/лишних)")
     checklist = "; ".join(checklist_items)
     reviewer = tool_loop.make_reviewer_proposer(
         reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
@@ -260,10 +267,31 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
     checks = res.get("checks") if isinstance(res.get("checks"), list) else []
     if not checks:
         errs.append("security-вердикт без checks — нечем подтвердить проверенные домены")
-    # Примечание (rc16): жёсткого id-substring матча «каждый домен в checks» НЕ делаем — это ловило бы
-    # легитимного ревьюера с иными id чек-пунктов (false-block). Ядро false-green («status:pass» без
-    # структуры) убивают структурные проверки выше + требование непустых checks. Покрытие доменов —
-    # ответственность checklist'а (домены переданы в промпт) и человека/аудита, не brittle-строкового матча.
+    # v3.0.1 (finding аудита P0): SecurityVerdict v2 — domain_results ОБЯЗАН покрыть РОВНО применимые
+    # домены (не brittle id-substring из rc16, а структурный контракт: отдельный статус на каждый домен).
+    if applicable_domains:
+        dr = res.get("domain_results")
+        if not isinstance(dr, list) or not dr:
+            errs.append("нет domain_results — один общий вердикт не доказывает каждый применимый домен")
+        else:
+            seen = [str((x or {}).get("domain")) for x in dr if isinstance(x, dict)]
+            got = set(seen)
+            need = set(applicable_domains)
+            if len(seen) != len(got):
+                errs.append("domain_results содержит дубли доменов")
+            if got != need:
+                missing = need - got
+                extra = got - need
+                if missing:
+                    errs.append(f"domain_results не покрывает домены: {', '.join(sorted(missing))}")
+                if extra:
+                    errs.append(f"domain_results содержит неизвестные/лишние домены: {', '.join(sorted(extra))}")
+            for x in dr:
+                st = (x or {}).get("status")
+                if st not in ("pass", "warn", "fail"):
+                    errs.append(f"domain_result '{(x or {}).get('domain')}' без валидного status")
+                elif st != "pass" and (res.get("status") == "pass"):
+                    errs.append(f"домен '{(x or {}).get('domain')}' = {st}, но общий status=pass — несогласованно")
     return errs
 
 
@@ -275,30 +303,49 @@ def _human_approval_domains_uncovered(work_root, wid, changed_files):
     человека. Триггер — именно СОВПАДЕНИЕ ПУТЕЙ (не «always-applicable» вроде secrets, который закрыт
     детерминированным secret_scan). -> список НЕпокрытых доменов."""
     import re as _re
+    import security_pack
+    import approvals as _appr
+    _CATCH_ALL = {".*", ".+", "", "^.*$", "(?s).*"}
+    # (1) какие high-risk домены сработали ПО ПУТЯМ + какие именно файлы их триггернули (для scope-проверки)
+    triggered = {}   # domain_id -> [matched changed files]
     try:
-        import security_pack
-        import approvals as _appr
-        _CATCH_ALL = {".*", ".+", "", "^.*$", "(?s).*"}
-        triggered = []
         for d in security_pack.load_domains()[0]:
             if not d.get("human_approval_conditions"):
                 continue
             # ТОЛЬКО СПЕЦИФИЧНЫЕ паттерны = деятельная high-risk поверхность (dockerfile/auth/deploy...).
-            # Catch-all (secrets: '.*') — always-on сканер, закрыт детерминированно (secret_scan) при
-            # чистоте; человеко-одобрение для secrets форсируется НАХОДКОЙ (blocking), не любым файлом.
+            # Catch-all (secrets: '.*') — always-on сканер, закрыт детерминированно; human форсируется НАХОДКОЙ.
             pats = [p for p in ((d.get("applicability", {}) or {}).get("file_patterns") or [])
                     if p.strip() not in _CATCH_ALL]
             if not pats:
                 continue
-            if any(_re.search(p, f) for p in pats for f in (changed_files or [])):
-                triggered.append(d["id"])
-        if not triggered:
-            return []
-        recs = _appr.load_approvals(work_root, wid)
-        covered = {r.get("approval") for r in recs if _appr._record_valid(r)}
-        return [d for d in triggered if d not in covered]
-    except Exception:  # noqa: BLE001 — доп. проверка поверх needs_review/blocking; сбой не ломает прогон
+            matched = [f for f in (changed_files or []) if any(_re.search(p, f) for p in pats)]
+            if matched:
+                triggered[d["id"]] = matched
+    except Exception:  # noqa: BLE001 — не смогли определить применимость -> fail-closed на весь набор
+        return sorted(set((changed_files and ["<security-domains-load-failed>"]) or []))
+    if not triggered:
         return []
+    # (2) СТРОГАЯ проверка покрытия: high-risk запись обязана быть strict-валидной (binds_to/expires_at/
+    #     risk/source), привязанной к текущему plan_hash, не просроченной, и её scope обязан покрыть
+    #     реально изменённые high-risk файлы. Любой сбой -> fail-closed (домен считается НЕпокрытым).
+    try:
+        recs = _appr.load_approvals(work_root, wid)
+        now = _appr._now_iso()
+        plan_hash = _appr.plan_binding_hash(work_root, wid)
+    except Exception:  # noqa: BLE001
+        return sorted(triggered)   # не смогли прочитать одобрения -> ничего не покрыто
+    uncovered = []
+    for dom, files in sorted(triggered.items()):
+        rec = next((r for r in recs if r.get("approval") == dom), None)
+        try:
+            ok = (rec is not None
+                  and _appr._record_valid(rec, now=now, plan_hash=plan_hash, strict=True)
+                  and _appr.covers_paths(rec, files))
+        except Exception:  # noqa: BLE001 — сомнение = не покрыто
+            ok = False
+        if not ok:
+            uncovered.append(dom)
+    return uncovered
 
 
 def _parse_yaml_block(text):
@@ -816,7 +863,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
-                 resume=False, resume_context=None, write_scope=None):
+                 resume=False, resume_context=None, write_scope=None, base="main"):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -847,6 +894,17 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     work_root, worktree_rel = child_root, None
     resume_info = {"requested": bool(resume), "resumed": False,
                    "reused_worktree": False, "reused_branch": False} if resume else None
+    # v3.0.1 (finding аудита P0): BASE BINDING — рабочая ветка форкается от РАЗРЕШЁННОГО base (--base),
+    # а НЕ от текущего HEAD. Фиксируем base_ref+base_sha; worktree создаётся от base_sha; после — проверка;
+    # delivery ревалидирует remote base. Раньше _wt.add шёл от HEAD -> `--base develop` игнорировался.
+    base_ref = base or "main"
+    base_sha = None
+    _child_is_git = _git(child_root, "rev-parse", "--is-inside-work-tree")[0] == 0
+    if _child_is_git:
+        _rcb, _bs, _ = _git(child_root, "rev-parse", base_ref)
+        if _rcb == 0 and (_bs or "").strip():
+            base_sha = _bs.strip()
+    base_binding = {"base_ref": base_ref, "base_sha": base_sha}
     if isolate:
         import worktree as _wt
         branch = f"ai-ops/{wid}"
@@ -901,10 +959,21 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 _wt.remove(child_root, wid, force=True)
                 _git(child_root, "worktree", "prune")
                 _git(child_root, "branch", "-D", branch)
-            rc = _wt.add(child_root, wid, branch)
+            rc = _wt.add(child_root, wid, branch, base=(base_sha or "HEAD"))   # v3.0.1: форк от base_sha
             if rc == 0:
                 work_root = wp
                 worktree_rel = wp.relative_to(child_root).as_posix()
+                # v3.0.1 (P0): свежая ветка обязана форкнуться РОВНО от base_sha (иначе `--base` — фикция)
+                if base_sha:
+                    _rc_h, _wh, _ = _git(wp, "rev-parse", "HEAD")
+                    if _rc_h != 0 or (_wh or "").strip() != base_sha:
+                        return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                                "status": "error", "base_binding": base_binding,
+                                "error": (f"base binding нарушен: ветка {branch} форкнулась от "
+                                          f"{(_wh or '?').strip()[:12]}, а заявлен base={base_ref}"
+                                          f" ({base_sha[:12]}) — прогон остановлен"),
+                                "loop": None, "isolation": {"worktree": None}, "gates": None,
+                                "ready_for_pr": False, "overall_status": "error"}
         if work_root is child_root:
             # finding adversarial-review: НЕ деградируем молча в основное дерево — это исполнило бы
             # правки и коммит в main вопреки isolate=True. Останавливаемся честной ошибкой.
@@ -1313,14 +1382,34 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
     #    УСПЕХ прогона требует реально открытого PR; провал доставки не маскируется зелёным.
     pr = None
+    _base_moved = None
     if open_pr and ready and committed_sha and work_branch:
-        import pr_open
-        pr = pr_open.open_draft_pr(work_root, work_branch,
-                                   title=f"ai-ops: {task[:60]}",
-                                   body=f"Автопрогон AI Ops. WorkItem: {wid}. Evidence на {committed_sha}.")
-    delivery = {"requested": bool(open_pr),
-                "status": ((pr or {}).get("status") if open_pr else "not-requested")
-                          or ("not-attempted" if open_pr and not ready else None)}
+        # v3.0.1 (finding аудита P0): DELIVERY REVALIDATION — evidence собрано на ветке от base_sha;
+        # перед PR сверяем АКТУАЛЬНУЮ remote base (refs/heads/<base_ref>, НЕ origin HEAD) с base_sha.
+        # Разошлась -> PR не открываем (проверенное != merge-состоянию). PR получает ЯВНЫЙ base_ref.
+        remote_base = None
+        try:
+            rc_ls, out_ls, _ = _git(work_root, "ls-remote", "origin", f"refs/heads/{base_ref}")
+            if rc_ls == 0 and out_ls.strip():
+                remote_base = out_ls.split()[0].strip()
+        except Exception:  # noqa: BLE001
+            remote_base = None
+        if remote_base and base_sha and remote_base != base_sha:
+            _base_moved = {"base_ref": base_ref, "validated_base": base_sha, "remote_base": remote_base}
+        else:
+            import pr_open
+            pr = pr_open.open_draft_pr(work_root, work_branch,
+                                       title=f"ai-ops: {task[:60]}", base=base_ref,
+                                       body=f"Автопрогон AI Ops. WorkItem: {wid}. "
+                                            f"База {base_ref} ({(base_sha or '?')[:12]}) → evidence на {committed_sha}.")
+    delivery = {"requested": bool(open_pr), "base_binding": base_binding,
+                "status": ("not-attempted" if _base_moved else
+                           (((pr or {}).get("status") if open_pr else "not-requested")
+                            or ("not-attempted" if open_pr and not ready else None)))}
+    if _base_moved:
+        delivery["base_moved"] = _base_moved
+        delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — нужна ревалидация; "
+                              "PR не открыт (иначе непроверенное merge-состояние)")
     # v2.93: "updated" (PR для ветки уже был открыт, ветка обновлена push'ем) — тоже успех доставки
     delivery_ok = (not open_pr) or ((pr or {}).get("status") in ("opened", "updated"))
     overall_status = ("error" if not ready else ("delivered" if delivery_ok else "delivery-failed"))
@@ -1369,6 +1458,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  "transcript": [{k: t.get(k) for k in ("step", "op", "allowed", "ok", "done", "reason")
                                  if k in t} for t in (loop.get("transcript") or [])][:40]},
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
+        "base_binding": base_binding,              # v3.0.1 (P0): base_ref + base_sha, от которого форкнута ветка
         "resume": resume_info,                     # v2.109: продолжение поверх подтверждённой работы (None если resume не запрошен)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
         "prepare_ok": prepare_ok,                  # install-команды стека прошли (для наблюдаемости)
@@ -2162,12 +2252,30 @@ def selftest():
                bool(_security_verdict_errors(bad_pass, "abc123", ["injection"], _vrr2)))
         good_pass = {"schema_version": 1, "kind": "reviewer-result", "gate": "security",
                      "status": "pass", "reviewed_revision": "abc123",
-                     "checks": [{"id": "injection", "status": "pass"}]}
-        expect("v3.0-rc16 security-verdict: структурный pass с checks/gate/revision -> валиден",
+                     "checks": [{"id": "injection", "status": "pass"}],
+                     "domain_results": [{"domain": "injection", "status": "pass"}]}
+        expect("v3.0-rc16 security-verdict: структурный pass c domain_results -> валиден",
                _security_verdict_errors(good_pass, "abc123", ["injection"], _vrr2) == [])
         expect("v3.0-rc16 security-verdict: reviewed_revision != проверяемой -> невалиден",
                any("revision" in e for e in _security_verdict_errors(
                    {**good_pass, "reviewed_revision": "OTHER"}, "abc123", ["injection"], _vrr2)))
+        # v3.0.1 (finding аудита P0): SecurityVerdict v2 — domain_results обязан покрыть КАЖДЫЙ применимый
+        # домен. Один общий check по 4 доменам -> невалиден; пропущенный/лишний домен -> невалиден.
+        four = ["authentication", "authorization_idol", "input_validation", "data_isolation"]
+        one_generic = {"schema_version": 1, "kind": "reviewer-result", "gate": "security",
+                       "status": "pass", "reviewed_revision": "abc123",
+                       "checks": [{"id": "security-ok", "status": "pass"}]}
+        expect("v3.0.1 SecVerdict-v2: 4 применимых домена + нет domain_results -> невалиден",
+               any("domain_results" in e for e in _security_verdict_errors(one_generic, "abc123", four, _vrr2)))
+        covered4 = {**one_generic, "domain_results": [{"domain": d, "status": "pass"} for d in four]}
+        expect("v3.0.1 SecVerdict-v2: domain_results покрывает все 4 -> валиден",
+               _security_verdict_errors(covered4, "abc123", four, _vrr2) == [])
+        three = {**one_generic, "domain_results": [{"domain": d, "status": "pass"} for d in four[:3]]}
+        expect("v3.0.1 SecVerdict-v2: покрыто 3 из 4 доменов -> невалиден (не закрыт)",
+               any("не покрывает" in e for e in _security_verdict_errors(three, "abc123", four, _vrr2)))
+        warn_dom = {**one_generic, "domain_results": [{"domain": d, "status": ("warn" if d == four[0] else "pass")} for d in four]}
+        expect("v3.0.1 SecVerdict-v2: warn в домене при общем pass -> несогласовано (невалиден)",
+               any("несогласованно" in e for e in _security_verdict_errors(warn_dom, "abc123", four, _vrr2)))
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
@@ -2179,6 +2287,38 @@ def selftest():
         expect("v3.0-rc20 approval-by-path: обычный src -> human-approval НЕ требуется (нет over-block)",
                _human_approval_domains_uncovered(str(root), "no-wi", ["src/app.py", "tests/t.py"]) == [])
         _git(root, "checkout", "-q", orig_branch)
+
+        # v3.0.1 (finding аудита P0): BASE BINDING — рабочая ветка форкается от --base, а НЕ от текущего
+        # HEAD. Делаем ветку feat-base с ДРУГИМ SHA, checkout остаётся на orig_branch, прогон с base=feat-base.
+        _git(root, "checkout", "-q", "-B", "feat-base")
+        (root / "src" / "on_feat.py").write_text("FEAT = 1\n", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "commit on feat-base")
+        _, feat_sha, _ = _git(root, "rev-parse", "HEAD"); feat_sha = feat_sha.strip()
+        _git(root, "checkout", "-q", orig_branch)   # текущий checkout НЕ на feat-base
+        it_bb = iter([{"op": "write", "path": "src/bb.py", "content": "b=1\n"}, {"done": True}])
+        rep_bb = run_pipeline("base binding", {"task_type": "QUICK", "size": "small", "risk": "low",
+                              "affected_areas": ["core"]}, root, lambda c: next(it_bb),
+                              budget={"max_model_calls": 8}, feature="bb-fn",
+                              commit=True, isolate=True, install_deps=False, base="feat-base")
+        # ветка ai-ops/bb-fn должна форкнуться от feat_sha (виден on_feat.py в worktree), не от orig
+        _wt_bb = root / ".ai" / "worktrees" / "bb-fn"
+        _forked_ok = (_wt_bb / "src" / "on_feat.py").exists() if _wt_bb.is_dir() else False
+        expect("v3.0.1 base-binding: worktree форкнут от --base (feat-base), а не от текущего HEAD",
+               rep_bb.get("status") != "error" and _forked_ok
+               and (rep_bb.get("base_binding") or {}).get("base_ref") == "feat-base")
+        _git(root, "checkout", "-q", orig_branch)
+        try:
+            _wt2 = __import__("worktree"); _wt2.remove(root, "bb-fn", force=True)
+        except Exception: pass
+        _git(root, "worktree", "prune"); _git(root, "branch", "-D", "ai-ops/bb-fn"); _git(root, "branch", "-D", "feat-base")
+
+        # v3.0.1 (P0): high-risk approval — legacy «рыхлая» запись (без binds_to/expires_at/risk/source)
+        # НЕ закрывает high-risk домен (strict). Кладём такую запись и всё равно uncovered.
+        import approvals as _appr3
+        # рыхлая запись: без binds_to/expires_at/risk/source -> для high-risk strict-невалидна
+        _appr3.write_record(str(root), "no-wi", "deployment_config", "u@x", ".", "ok")
+        expect("v3.0.1 strict-approval: legacy рыхлый ApprovalRecord НЕ закрывает high-risk deployment_config",
+               "deployment_config" in _human_approval_domains_uncovered(str(root), "no-wi", ["Dockerfile"]))
 
         # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
         expect("no-self-review: security не в reviewable даже без спец-сигналов",

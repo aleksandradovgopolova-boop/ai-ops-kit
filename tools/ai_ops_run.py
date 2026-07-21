@@ -296,7 +296,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
                 context_prelude=(payload or {}).get("text"),
-                resume=resume, resume_context=resume_ctx, write_scope=write_scope)
+                resume=resume, resume_context=resume_ctx, write_scope=write_scope,
+                base=(base or "main"))   # v3.0.1 (P0): base — сквозной контракт до worktree/PR
         except (KeyboardInterrupt, SystemExit):
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)

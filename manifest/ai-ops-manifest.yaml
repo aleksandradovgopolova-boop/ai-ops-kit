@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.0
+  package_version: 3.0.1
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_1_base_and_approval_integrity:
+      - "P0 (аудит поверх stable) base не был сквозным контрактом single-run: run_pipeline не имел параметра base, _wt.add создавал ветку от текущего HEAD -> `--base develop` принимался CLI/RunPlan, но фактически форкал от main. Фикс: run_pipeline(base=...); base_ref+base_sha резолвятся; worktree создаётся от base_sha; после — проверка HEAD==base_sha (иначе error); base сквозной ai_ops_run->run_pipeline. base_binding в отчёте"
+      - "P0 sequential сверял origin HEAD (default branch), а не выбранную base-ветку, и open_draft_pr(base=None) снова брал default. Фикс: ls-remote origin refs/heads/<base>; base_ref в SequencePlan; PR открывается СТРОГО в base_ref. Single-run delivery: перед PR ревалидация remote base (refs/heads/<base_ref>) vs validated base_sha, разошлась -> PR не открыт; open_draft_pr получает явный base"
+      - "P0 high-risk ApprovalRecord засчитывался нестрого: _human_approval_domains_uncovered звал _record_valid без strict/plan_hash/now/scope и except->[] (fail-open). Фикс: strict=True (binds_to/expires_at/risk/source), plan_binding_hash, _now_iso, covers_paths по реально изменённым high-risk файлам; fail-CLOSED (сбой -> домен непокрыт). Legacy рыхлая запись high-risk домен больше не закрывает"
+      - "P0 SecurityVerdict v2: security-reviewer не был обязан покрыть каждый применимый домен (один общий check проходил). Фикс: reviewer обязан вернуть domain_results:[{domain,status}] РОВНО по применимым доменам; set(domain_results.domain)==set(needs_review); пропуск/дубль/лишний/неизвестный домен или warn/fail в домене при общем pass -> security НЕ закрыт"
+      - "P1 ROADMAP-шапка обновлена (была v3.0.0-rc4 -> v3.0.0 stable)"
+      - "проверки: +деттесты (base-binding: worktree форкнут от --base не от HEAD; strict-approval: legacy рыхлый record не закрывает; SecVerdict-v2: нет domain_results/3-из-4/warn-в-домене -> невалиден). Полный CI-набор (94) 94/94 PASS локально с PATH без openspec. Аддитивно"
     fixed_v3_0_rc20_final_verdict_truth:
       - "аудит (rc18-база): где отсутствие доказательства могло сойти за доказанный результат. ЗАКРЫТО ЖИВЬЁМ до реализации: single ENGINEERING -> настоящий draft PR (scratch PR #1) И 3-пакетный sequential -> aggregate_ready=true -> настоящий draft PR (seq-scratch PR #1) на claude-sonnet-5"
       - "P0 aggregate code_review был fail-OPEN: `return (not blocked)` -> no-verdict/невалидный/timeout/budget оставляли ok=True. Теперь ТОЛЬКО явный валидный pass (gate_ev['code_review'].status=='pass') закрывает; всё остальное -> ok=False (как per-package)"

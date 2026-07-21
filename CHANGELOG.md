@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.1] — 2026-07-21 — Base & Approval Integrity (аудит поверх stable: 4×P0 + P1)
+
+Trust-hotfix перед доверием stable для работы от произвольных base-веток и high-risk изменений.
+
+### Fixed
+- **P0 — `base` не был сквозным контрактом (single-run).** `run_pipeline` не имел `base`; worktree
+  форкался от текущего HEAD → `--base develop` принимался, но ветка бралась от `main`. Теперь
+  `run_pipeline(base=...)`: `base_ref`+`base_sha` резолвятся, worktree создаётся от `base_sha`, после —
+  проверка `HEAD==base_sha` (иначе honest error). `base_binding` в отчёте.
+- **P0 — sequential сверял `origin HEAD`, а не выбранную base-ветку.** Теперь `ls-remote origin
+  refs/heads/<base>`; `base_ref` в SequencePlan; PR открывается **строго** в `base_ref`. Single-run
+  delivery: перед PR ревалидация remote base vs validated `base_sha` — разошлась → PR не открыт;
+  `open_draft_pr` получает явный `base`.
+- **P0 — high-risk ApprovalRecord засчитывался нестрого.** `_human_approval_domains_uncovered` теперь
+  `strict=True` (binds_to/expires_at/risk/source) + `plan_binding_hash` + `now` + `covers_paths` по
+  реально изменённым high-risk файлам; **fail-closed** (сбой → домен непокрыт). Legacy рыхлая запись
+  high-risk домен больше не закрывает.
+- **P0 — SecurityVerdict v2.** Security-reviewer обязан вернуть `domain_results:[{domain,status}]`
+  ровно по применимым доменам; `set(domain_results.domain)==set(needs_review)`; пропуск/дубль/лишний
+  домен или warn/fail в домене при общем pass → security не закрыт.
+- **P1** — ROADMAP-шапка обновлена (rc4 → stable).
+
 ## [3.0.0] — 2026-07-21 — Stable: движок укреплён, обе строгие цепочки доказаны живьём
 
 Первый stable-релиз v3. Итог серии rc7→rc20 (14 rc, каждый закрыл реальный дефект живого прогона или
