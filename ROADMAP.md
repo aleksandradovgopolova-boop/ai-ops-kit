@@ -359,15 +359,34 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   fixed node-id), v2.123 (Spec-First/ApprovalDecision/write-scope/классификатор), v2.124 (sequence
   transaction), **v2.125→v2.124.1** (security в QUICK; ложный scope-violation на артефактах движка).
 
-### Осталось до v3.0 stable (НЕ входит в rc1 QUICK-claim)
-- **Positive-green small/medium ENGINEERING на живой модели.** DeepSeek стабильно не доводит
-  needs_review-домены/independent review до pass и не всегда доделывает реализацию (finding S4,
-  подтверждён в v2.125). Нужна более сильная модель (Anthropic) ИЛИ усиленные author/review-промпты.
-  Движок при этом честен (блокирует плохой результат) — не соврать ≠ сценарий отработал.
-- **Живой 3-пакетный sequential до `ready_all` + намеренный fail на package 2 → стоп package 3.**
-  Структура транзакции доказана детерминированно (immutable plan / per-package lifecycle / aggregate
-  verify / стоп на блоке); живой green недостижим, пока пакеты не доходят до ready (та же слабость модели).
-- **dogfood на 2–3 реальных репозиториях** (после positive ENGINEERING) → затем **v3.0 stable**.
+### Статус живой квалификации (обновлено rc16, 2026-07-21 — kimi-k3)
+
+Точные статусы (не смешивать «доказано» и «ещё нет»):
+
+- ✅ **ENGINEERING package green — ДОКАЗАНО.** Живой pkg-1 на kimi-k3: валидные requirements+plan+
+  specification → реальный рефактор → `code_review=pass` → `ready_for_pr=True`, `regressions=[]`.
+- ⏳ **Single-run ENGINEERING → настоящий draft PR — ЕЩЁ НЕ ДОКАЗАНО.** Нужен один чистый прогон
+  канонического CLI до реального draft PR (`--open-pr` + `GITHUB_TOKEN`, throwaway-remote).
+- ✅ **Sequential hard-stop / recovery — ДОКАЗАНО.** reviewer-block → `stop_reason=reviewer-blocked` →
+  downstream не стартует (rc13 P0); trusted retry (`--retry-package`) → recovery → `executed_all` по 3
+  пакетам (rc13 P1); provider-crash contained (rc12).
+- ⏳ **Sequential `aggregate_ready` → настоящий draft PR — ЕЩЁ НЕ ДОКАЗАНО.** Нужна одновременная зелень
+  всех пакетов; упирается в флак author-стадии kimi (rc14 author-retry повышает шанс; при перегрузке —
+  стабильный сильный провайдер).
+
+Движок закрыт: rc7→rc16 исправили все находки живых прогонов и аудитов (reasoning-токены, spec-форма,
+доставка диффа ревьюеру, сходимость вердикта, симметричная честность, infra-containment, verdict
+integrity, retry-safety, validated security verdict, true aggregate diff, base-bound baseline).
+
+### Осталось до v3.0 stable — только прогоны (движковой работы нет)
+- **rc17 — два полноценных пользовательских draft PR:** (1) ENGINEERING delivery до draft PR;
+  (2) sequential delivery до `aggregate_ready` + отрицательная ветка (block → retry → recovery →
+  aggregate green). Сохранить release evidence (SequencePlan, base/final SHA, per-package reports,
+  aggregate diff hash, reviewer/security results, draft PR URL, модель+версия кита, очищенные логи).
+- **dogfood на 2–3 реальных репозиториях** (Python → TS/Node → реальный сервис) → затем **v3.0 stable**.
+  Критерии stable: ≥5 реальных задач (≥2 ENGINEERING, ≥1 sequential), ноль false-green, основной checkout
+  ни разу не тронут recovery, retry не теряет попытки, каждый вердикт привязан к точному SHA/диапазону,
+  живой GitHub Actions зелёный, qualification reports как artifacts.
 
 ### Историческое: Live RC Qualification (v2.122) — исходный план прогонов
 - Живые прогоны S1/S2/S4/S6/S7/S8/S9/S10 + live sequential с DeepSeek на Mac (`tools/qual_run.py`

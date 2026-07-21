@@ -126,8 +126,35 @@ def _change_context(work_root, revision, max_chars=12000):
     return "\n".join(parts) + "\n"
 
 
+def _change_context_range(work_root, base_revision, head_revision, max_chars=14000):
+    """v3.0-rc16 (finding аудита P0): контекст ВСЕЙ последовательности base..head для AGGREGATE-ревью.
+    `_change_context` показывает `git show <head>` — только ПОСЛЕДНИЙ коммит; для 3 пакетов aggregate-
+    судья видел лишь дифф пакета 3 (риск взаимодействия пакет1↔пакет3 пропускался). Здесь — интегрированный
+    дифф base..head: `git diff --stat`, полный список файлов, ограниченный combined diff, хэши коммитов
+    диапазона. Ревьюер получает всю транзакцию, вердикт связывается и с base, и с head."""
+    if not (base_revision and head_revision):
+        return _change_context(work_root, head_revision, max_chars=max_chars)   # деградация -> одиночная ревизия
+    rng = f"{base_revision}..{head_revision}"
+    rc, stat, _ = _git(work_root, "diff", "--stat", rng)
+    if rc != 0:
+        return _change_context(work_root, head_revision, max_chars=max_chars)
+    parts = [f"ИНТЕГРИРОВАННЫЙ дифф последовательности {base_revision[:12]}..{head_revision[:12]}:",
+             "git diff --stat:", (stat.strip() or "(пусто)")]
+    rc_l, commits, _ = _git(work_root, "log", "--oneline", "--no-decorate", rng)
+    if rc_l == 0 and commits.strip():
+        parts.append("\nКоммиты диапазона (по пакетам):\n" + commits.strip())
+    rc2, diff, _ = _git(work_root, "diff", "--unified=3", rng)
+    if rc2 == 0 and (diff or "").strip():
+        body = diff.strip()
+        if len(body) > max_chars:
+            body = (body[:max_chars] + f"\n... [combined-дифф усечён на {max_chars} симв.; полный список "
+                    "файлов выше — читай целиком через {\"op\":\"read\"} для верификации]")
+        parts.append("\nCombined unified-дифф base..head:\n" + body)
+    return "\n".join(parts) + "\n"
+
+
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
-                 max_reads=10):   # rc10: многофайловый дифф требует больше чтений до вердикта
+                 max_reads=10, change_context=None):   # rc10: многофайловый дифф; rc16: override контекста
     """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence.
     Возвращает (обновлённый gate_ev, список трейсов ревью). Ревьюер гоняется под READ-ONLY
     политикой (capability-независимость от писателя). Вердикт валидируется по reviewer-result
@@ -142,7 +169,8 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         valid_ids = set(gates)
     except Exception:
         valid_ids = None
-    change_ctx = _change_context(work_root, revision)   # rc9: seed reviewer с диффом изменения
+    # rc9: seed reviewer диффом; rc16: aggregate передаёт range-контекст base..final (вся цепочка)
+    change_ctx = change_context if change_context is not None else _change_context(work_root, revision)
     for gid in _reviewable_gates(gate_ids, signals):
         if gid in gate_ev:                     # evidence уже есть (напр. из reviewer-артефактов)
             continue
@@ -185,24 +213,58 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
     return gate_ev, reviews
 
 
-def _review_security(reviewer_proposer, work_root, pack_result, revision, budget):
+def _review_security(reviewer_proposer, work_root, pack_result, revision, budget, change_context=None):
     """v2.106: независимый security-reviewer выносит вердикт по needs_review доменам (writer≠judge,
     read-only, отдельный провайдер). -> (status|None, result). Закрывает то, что детерминированный
-    сканер не может (no_injection_surface и т.п.), НО только по чек-листам применимых доменов."""
+    сканер не может (no_injection_surface и т.п.), НО только по чек-листам применимых доменов.
+
+    v3.0-rc16 (finding аудита P0): вердикт ВАЛИДИРУЕТСЯ, как и обычные ревью-гейты — раньше брали
+    result.status «как есть», и модель могла вернуть {"status":"pass"} без checks/revision/обоснования
+    -> false green (особенно на aggregate: needs_review -> clear). Теперь: schema-валидатор
+    (validate_reviewer_result) + security-specific: gate==security, reviewed_revision==revision,
+    непустые checks, КАЖДЫЙ применимый домен отражён в checks. Невалидный «pass» -> status=None
+    (гейт остаётся needs_review/fail). change_context (rc16): aggregate передаёт range base..final."""
     import security_pack
+    import validate_reviewer_result as vrr
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     domains = {d["id"]: d for d in security_pack.load_domains()[0]}
+    applicable = list(pack_result.get("needs_review", []) or [])
     checklist_items = []
-    for did in pack_result.get("needs_review", []):
+    for did in applicable:
         checklist_items += (domains.get(did, {}).get("reviewer_checklist") or [])
     checklist = "; ".join(checklist_items)
     reviewer = tool_loop.make_reviewer_proposer(
         reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
-    rv = tool_loop.run_review(reviewer, work_root, ro_policy, "security", budget=budget,
-                              base_context=_change_context(work_root, revision),
-                              required_evidence=["security_reviewer"], reviewed_revision=revision)
+    rv = tool_loop.run_review(
+        reviewer, work_root, ro_policy, "security", budget=budget,
+        base_context=(change_context if change_context is not None else _change_context(work_root, revision)),
+        required_evidence=["security_reviewer"], reviewed_revision=revision)
     res = rv.get("result")
+    # rc16: валидируем вердикт — иначе принимаем false-green. Невалидный -> НЕ pass.
+    errs = _security_verdict_errors(res, revision, applicable, vrr)
+    if errs:
+        return None, {"status": (res or {}).get("status"), "invalid": errs, "raw": res}
     return (res or {}).get("status"), res
+
+
+def _security_verdict_errors(res, revision, applicable_domains, vrr):
+    """v3.0-rc16: строгая проверка security reviewer-result — та же дисциплина, что для обычных гейтов,
+    плюс security-специфика. -> список ошибок (пусто = валиден)."""
+    if not isinstance(res, dict):
+        return ["security-reviewer не вернул структурный вердикт"]
+    errs = list(vrr.check(res, gate_ids=None) or [])
+    if res.get("gate") not in (None, "security"):
+        errs.append(f"gate вердикта '{res.get('gate')}' != security")
+    if revision and res.get("reviewed_revision") not in (None, revision):
+        errs.append("reviewed_revision вердикта != проверяемой ревизии")
+    checks = res.get("checks") if isinstance(res.get("checks"), list) else []
+    if not checks:
+        errs.append("security-вердикт без checks — нечем подтвердить проверенные домены")
+    # Примечание (rc16): жёсткого id-substring матча «каждый домен в checks» НЕ делаем — это ловило бы
+    # легитимного ревьюера с иными id чек-пунктов (false-block). Ядро false-green («status:pass» без
+    # структуры) убивают структурные проверки выше + требование непустых checks. Покрытие доменов —
+    # ответственность checklist'а (домены переданы в промпт) и человека/аудита, не brittle-строкового матча.
+    return errs
 
 
 def _parse_yaml_block(text):
@@ -2023,7 +2085,39 @@ def selftest():
                "src/cxd.py" in cc and "return 42" in cc)
         expect("_change_context: пустая ревизия -> пустой контекст (прежнее поведение)",
                _change_context(root, None) == "" and _change_context(root, "") == "")
-        _git(root, "checkout", "-q", orig_branch); _git(root, "branch", "-D", "cx-direct")
+
+        # v3.0-rc16 (P0): _change_context_range — интегрированный дифф base..head (вся цепочка, не только
+        # последний коммит). Два коммита поверх базы -> оба файла в range-контексте.
+        _git(root, "checkout", "-q", "-B", "cx-range")
+        _, base_r, _ = _git(root, "rev-parse", "HEAD"); base_r = base_r.strip()
+        (root / "src" / "rA.py").write_text("A = 1\n", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "pkgA")
+        (root / "src" / "rB.py").write_text("B = 2\n", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "pkgB")
+        _, head_r, _ = _git(root, "rev-parse", "HEAD"); head_r = head_r.strip()
+        cr = _change_context_range(root, base_r, head_r)
+        expect("v3.0-rc16 _change_context_range: видит ВСЕ коммиты диапазона (pkgA И pkgB), не только последний",
+               "src/rA.py" in cr and "src/rB.py" in cr and "pkgA" in cr and "pkgB" in cr)
+        # деградация: без base -> одиночная ревизия (только последний коммит)
+        single = _change_context_range(root, None, head_r)
+        expect("v3.0-rc16 _change_context_range: без base -> деградация до одиночной ревизии (только rB)",
+               "src/rB.py" in single and "src/rA.py" not in single)
+        _git(root, "checkout", "-q", orig_branch); _git(root, "branch", "-D", "cx-range")
+
+        # v3.0-rc16 (P0): _security_verdict_errors — валидатор security-вердикта (убивает false-green)
+        import validate_reviewer_result as _vrr2
+        bad_pass = {"status": "pass"}          # НЕТ checks/gate/schema — раньше принимался как pass
+        expect("v3.0-rc16 security-verdict: голый {status:pass} -> невалиден (нет checks/структуры)",
+               bool(_security_verdict_errors(bad_pass, "abc123", ["injection"], _vrr2)))
+        good_pass = {"schema_version": 1, "kind": "reviewer-result", "gate": "security",
+                     "status": "pass", "reviewed_revision": "abc123",
+                     "checks": [{"id": "injection", "status": "pass"}]}
+        expect("v3.0-rc16 security-verdict: структурный pass с checks/gate/revision -> валиден",
+               _security_verdict_errors(good_pass, "abc123", ["injection"], _vrr2) == [])
+        expect("v3.0-rc16 security-verdict: reviewed_revision != проверяемой -> невалиден",
+               any("revision" in e for e in _security_verdict_errors(
+                   {**good_pass, "reviewed_revision": "OTHER"}, "abc123", ["injection"], _vrr2)))
+        _git(root, "checkout", "-q", orig_branch)
 
         # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
         expect("no-self-review: security не в reviewable даже без спец-сигналов",

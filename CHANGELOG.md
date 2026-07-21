@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.0-rc16] — 2026-07-21 — Final Transaction Trust (аудит: 4×P0 + 2×P1)
+
+Последний обязательный code-релиз перед финальной квалификацией. Все находки — из аудита транзакции.
+
+### Fixed
+- **P0 — trusted retry мог сбросить ОСНОВНОЙ checkout.** `retry_package` фолбэчил `vroot` на
+  `child_root` при отсутствии worktree, не проверял результат `checkout` и всё равно делал
+  `reset --hard` → при повреждённом worktree сбрасывалась текущая ветка основного checkout. Фикс:
+  **fail-closed preconditions до любой git-операции** — worktree обязан существовать (нет fallback),
+  `vroot` ≠ основной checkout, checkout обязан пройти, HEAD на `ai-ops/<wid>`, checkpoint существует и
+  достижим из ветки; только тогда архив+reset. Любая ошибка → git-состояние не меняется.
+- **P0 — security-reviewer давал невалидный pass.** `_review_security` брал `result.status` без
+  валидации → `{status:pass}` без checks/revision принимался (false-green, на aggregate needs_review→
+  clear). Фикс: `_security_verdict_errors` — schema-валидатор + security-специфика (gate, reviewed_revision,
+  непустые checks); невалидный → `status=None`.
+- **P0 — aggregate-ревьюер видел только последний коммит.** `_change_context_range(base..head)` —
+  интегрированный дифф всей цепочки; и code_review, и security-reviewer на aggregate получают его.
+- **P0 — aggregate baseline не на базе SequencePlan.** `_collect_base_checks_at` собирает baseline
+  строго на `sequence_base_sha` в отдельном detached-worktree, не на текущем состоянии основного checkout.
+- **P1 — на resume сохранённый `sequence_base_sha` не был источником истины.** Есть SequencePlan →
+  база только из него; расхождение с текущей base → `base_drift` в отчёте (не молчаливая замена).
+- **P1 — ROADMAP обновлён** под фактические статусы rc14–16 (что доказано / что ещё нет).
+
 ## [3.0.0-rc15] — 2026-07-21 — Fix: CI-паритет деттеста author-retry (openspec-готча)
 
 ### Fixed
