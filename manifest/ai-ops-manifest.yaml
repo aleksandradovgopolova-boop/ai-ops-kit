@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.1
+  package_version: 3.0.2
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,14 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_2_base_continuity_and_evidence_roots:
+      - "P0 (аудит) несуществующая base тихо превращалась в HEAD: base_sha=None -> worktree от `base_sha or HEAD`, --base develop игнорировался и прогон продолжался. Фикс: _resolve_base — СТРОГО (только ветка refs/heads/<ref> или origin/<ref>, НЕ tag/SHA); base_binding.resolved/source/reason. Не разрешилась + open_pr -> доставка НЕ пытается PR к произвольному HEAD; для не-delivery worktree честный fallback на HEAD с пометкой resolved=False (не молча)"
+      - "P0 невозможность проверить remote base считалась разрешением на PR: remote_base=None (нет origin/сети/ветки/ошибка) -> код всё равно шёл в open_draft_pr. Фикс FAIL-CLOSED (single+sequential): remote base не проверяема -> delivery status=unavailable (reason=remote-base-unverified); сдвинулась -> not-attempted (revalidation); совпала -> PR. ready_for_pr не меняется, но delivery_ok=false"
+      - "P0 сохранённый base_ref не был источником истины на sequence resume: исполнение брало новый аргумент base. Фикс: resume/retry берут base из saved_plan.base_ref; попытка --base другой -> base-contract-drift (нужен replan), не молчаливая смена. base_ref фиксируется в SequencePlan"
+      - "P0 single-run resume не сохранял базу в policy snapshot: run-settings.yaml не хранил base -> resume от develop требовал заново --base develop или упирался в fallback. Фикс: base в immutable resume-policy; восстанавливается из saved (saved wins), как остальная policy"
+      - "P1 approval проверялся в двух разных корнях: _human_approval_domains_uncovered грузил ApprovalRecord'ы из work_root (git-worktree кода), а человек создаёт их в child_root/features (lifecycle) -> ложный uncovered. Фикс: РАЗДЕЛЕНИЕ — approval_root (lifecycle, child_root) для записей/plan-binding; diff_root (worktree) для изменённых путей"
+      - "проверки: +деттесты (_resolve_base локальная->resolved/несуществующая->resolved=False; base-unresolved+open_pr->delivery не delivered + resolved=False; sequential resume с другой base -> base-contract-drift; strict-approval legacy не закрывает). Полный CI-набор (94) 94/94 PASS локально с PATH без openspec. Аддитивно"
+      - "НЕ вошло в 3.0.2 (запланировано отдельно, не новые false-green — v2 domain-coverage из 3.0.1 уже держит): SecurityVerdict v2.1 (per-domain evidence/checks/blockers сверх покрытия имён) и явный fail-closed на сбой записи SequencePlan/BaseBinding/run-settings/approval (сейчас часть write'ов best-effort)"
     fixed_v3_0_1_base_and_approval_integrity:
       - "P0 (аудит поверх stable) base не был сквозным контрактом single-run: run_pipeline не имел параметра base, _wt.add создавал ветку от текущего HEAD -> `--base develop` принимался CLI/RunPlan, но фактически форкал от main. Фикс: run_pipeline(base=...); base_ref+base_sha резолвятся; worktree создаётся от base_sha; после — проверка HEAD==base_sha (иначе error); base сквозной ai_ops_run->run_pipeline. base_binding в отчёте"
       - "P0 sequential сверял origin HEAD (default branch), а не выбранную base-ветку, и open_draft_pr(base=None) снова брал default. Фикс: ls-remote origin refs/heads/<base>; base_ref в SequencePlan; PR открывается СТРОГО в base_ref. Single-run delivery: перед PR ревалидация remote base (refs/heads/<base_ref>) vs validated base_sha, разошлась -> PR не открыт; open_draft_pr получает явный base"
