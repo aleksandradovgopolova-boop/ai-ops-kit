@@ -24,8 +24,8 @@ import worktree as _wt             # noqa: E402
 
 
 def _git(root, *a):
-    r = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    import gitio
+    return gitio.git(root, *a)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
 def _load_plan(child_root, wid):

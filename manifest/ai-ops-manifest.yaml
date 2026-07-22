@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.12
+  package_version: 3.0.13
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_13_hardening_batch_c_maintainability:
+      - "блок C самоаудита: снижение change-safety-долга, ВСЕ изменения поведение-сохраняющие (проверено полным self-test + CI-паритетом на обеих дефолт-ветках)"
+      - "НОВЫЙ tools/gitio.py: git(root,*args,timeout=90); 7 идентичных копий _git делегируют ему. ДОБАВЛЕН таймаут — прежде ни одна копия его не задавала, зависший git вешал весь прогон; теперь rc=124"
+      - "_seq_err в workpackage_executor: единый конструктор отказного WorkPackageSequence-отчёта (словарь ~11 ключей копировался 8 раз -> 1)"
+      - "_aggregate_verify: тело aggregate-верификации финального SHA вынесено из god-функции execute_sequence в чистый хелпер (вход->dict), поведение идентично"
+      - "закрытие тест-гэпов: _security_scan_error fail-closed (scan бросил -> security=fail, не ложный green — прежде без ассерта); concurrency убран тавтологичный ассерт + добавлен тест stale-skip (done-запись не даёт ложный overlap)"
+      - "ОТЛОЖЕНО (v3.1): извлечение сильно связанных блоков run_pipeline/run (мутируют общий gate_ev/ready-state) — высокий риск на доказанно fail-closed денежном пути при нулевой функциональной выгоде; заслуживает выделенного ревью, не патча. Полный CI-набор 96/96 на main И master, без openspec"
     fixed_v3_0_12_hardening_batch_b_durable_resume:
       - "блок B самоаудита: durability resume-критичных lifecycle-артефактов. Прежде writer_text/json.dump неатомарно/без fsync/без перечитывания, битые/пустые читались как absent -> тихая потеря policy и ложный 'resume безопасен'"
       - "НОВЫЙ tools/lifecycle_store.py: durable_write (tmp -> flush+fsync(файл) -> atomic os.replace -> fsync(КАТАЛОГ) -> перечитать+провалидировать) + load_guarded (absent/corrupt/ok — повреждён != отсутствует). workpackage_executor._durable_write_yaml делегирует ему (дедуп + fsync каталога добавлен и для SequencePlan)"

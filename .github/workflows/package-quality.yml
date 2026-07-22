@@ -41,6 +41,8 @@ jobs:
         run: python3 tools/budget.py --selftest
       - name: Tool-calling петля — механика (selftest)
         run: python3 tools/tool_loop.py --selftest
+      - name: Единый git-хелпер с таймаутом (selftest)
+        run: python3 tools/gitio.py --selftest
       - name: Durable lifecycle store — атомарная запись + fail-closed чтение (selftest)
         run: python3 tools/lifecycle_store.py --selftest
       - name: Единый execution-pipeline — сборка движка (selftest)

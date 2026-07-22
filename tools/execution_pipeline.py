@@ -736,8 +736,8 @@ def _authored_context(authored, work_root, wid):
 
 
 def _git(root, *args):
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    import gitio
+    return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
 def _committed_changed_files(root, sha):
@@ -2043,6 +2043,23 @@ def selftest():
                rep_sec.get("security_scan") and "secrets" in rep_sec["security_scan"]["blocking"])
         expect("v2.101: секрет -> security блокирует (в unmet, не ложный green)",
                "security" in rep_sec["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v3.0.13 (блок C, тест-гэп): _security_scan_error FAIL-CLOSED. Если security pack БРОСАЕТ
+        # (git-сбой/инфра), security-гейт обязан стать fail (не тихо пропасть -> ложный green). Прежде
+        # эта ветка не имела ассерта. Монкипатчим run_pack на raiser.
+        import security_pack as _sp_mod
+        _orig_rp = _sp_mod.run_pack
+        _sp_mod.run_pack = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("scan boom (git недоступен)"))
+        try:
+            it_se = iter([{"op": "write", "path": "src/se.py", "content": "s=1\n"}, {"done": True}])
+            rep_se = run_pipeline("скан падает", sig_eng, root, lambda c: next(it_se),
+                                  policy=pol, budget={"max_model_calls": 5}, feature="scanerr-fn",
+                                  commit=True, isolate=True, install_deps=False)
+        finally:
+            _sp_mod.run_pack = _orig_rp
+        expect("v3.0.13 тест-гэп: security scan бросил -> security=fail (fail-closed, не ложный green)",
+               "security" in rep_se["gates"]["unmet"] and not rep_se["ready_for_pr"])
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.125 (finding живого прогона): новая зависимость в QUICK-задаче — security pack ЗАПУСКАЕТСЯ

@@ -44,6 +44,7 @@ python3 tools/effect_metrics.py --selftest
 python3 tools/orchestrator.py --selftest
 python3 tools/budget.py --selftest
 python3 tools/tool_loop.py --selftest
+python3 tools/gitio.py --selftest
 python3 tools/lifecycle_store.py --selftest
 python3 tools/execution_pipeline.py --selftest
 python3 tools/pr_open.py --selftest

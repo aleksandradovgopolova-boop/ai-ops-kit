@@ -10,6 +10,7 @@ includes:
   - tools/ai_ops_run.py
   - tools/execution_pipeline.py
   - tools/lifecycle_store.py
+  - tools/gitio.py
   - tools/orchestrator.py
   - tools/run_plan.py
   - tools/tool_broker.py

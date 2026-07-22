@@ -37,8 +37,8 @@ def _pr_payload(branch, title, body, base):
 
 
 def _git(root, *args):
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    import gitio
+    return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
 def _api_base():
