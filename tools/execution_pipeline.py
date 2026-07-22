@@ -144,6 +144,30 @@ def _resolve_base(root, base_ref):
             "reason": "не удалось определить base автоматически (нет upstream/remote-default/HEAD)"}
 
 
+def _verify_remote_base(root, base_ref, validated_sha):
+    """v3.0.9 (finding аудита P0): ЕДИНЫЙ fail-closed верификатор remote base для доставки (single-run И
+    sequential — один контракт доверия). -> {verdict, remote_sha, reason}, где verdict:
+      'verified-equal'  — remote refs/heads/<base_ref> == validated_sha -> можно открывать PR;
+      'verified-moved'  — существует, но SHA разошёлся -> нужна ревалидация (PR не открывать);
+      'unverifiable'    — нет origin/сети/ветки/ошибка ls-remote -> доставка НЕДОСТУПНА (НЕ «успех
+                          по умолчанию»; отсутствие проверки != пройденная проверка)."""
+    if not (base_ref and validated_sha):
+        return {"verdict": "unverifiable", "reason": "нет base_ref/validated_sha для сверки"}
+    try:
+        rc, out, err = _git(root, "ls-remote", "origin", f"refs/heads/{base_ref}")
+    except Exception as e:  # noqa: BLE001
+        return {"verdict": "unverifiable", "reason": f"ls-remote исключение: {e}"}
+    if rc != 0:
+        return {"verdict": "unverifiable", "reason": f"ls-remote rc={rc}: {(err or '').strip()[:120]}"}
+    line = (out or "").strip()
+    if not line:
+        return {"verdict": "unverifiable", "reason": f"remote-ветка refs/heads/{base_ref} не найдена в origin"}
+    remote_sha = line.split()[0].strip()
+    if remote_sha == validated_sha:
+        return {"verdict": "verified-equal", "remote_sha": remote_sha}
+    return {"verdict": "verified-moved", "remote_sha": remote_sha}
+
+
 def _change_context(work_root, revision, max_chars=12000):
     """v3.0-rc9 (finding живого прогона kimi): детерминированно собрать КОНТЕКСТ ИЗМЕНЕНИЯ для
     независимого ревьюера — полный список изменённых файлов (`git show --stat`, всегда целиком) +
@@ -285,9 +309,10 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
     # поле domain_results:[{domain,status}], покрывающее РОВНО применимые домены.
     checklist_items.append(
         "ОБЯЗАТЕЛЬНО верни в reviewer-result поле domain_results — список "
-        "{domain:<id>, status:pass|warn|fail, checks:[{id,status}]} РОВНО по этим применимым доменам: "
-        + ", ".join(applicable) + " (по одному на каждый, без пропусков/дублей/лишних). У КАЖДОГО домена "
-        "СВОИ непустые checks (что именно проверено в этом домене) — общий абстрактный check недопустим")
+        "{domain:<id>, status:pass|warn|fail, checks:[{id,status}], evidence:[{type,path,lines|command}]} "
+        "РОВНО по этим применимым доменам: " + ", ".join(applicable) + " (по одному на каждый, без "
+        "пропусков/дублей/лишних). У КАЖДОГО домена СВОИ непустые checks; для pass — хотя бы одна КОНКРЕТНАЯ "
+        "evidence-ссылка (прочитанный файл+строки, команда теста, находка сканера); для warn/fail — blockers")
     checklist = "; ".join(checklist_items)
     reviewer = tool_loop.make_reviewer_proposer(
         reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
@@ -357,6 +382,15 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
                         errs.append(f"домен '{dom}' pass, но ни один его check не подтверждён (status=pass)")
                     if st in ("warn", "fail") and not (x or {}).get("blockers"):
                         errs.append(f"домен '{dom}' = {st} без blockers — блокирующий вердикт без причины")
+                    # v3.0.9 (finding аудита P1): SecurityVerdict v2.3 — pass-домен требует хотя бы одну
+                    # КОНКРЕТНУЮ evidence-ссылку (code-read path/lines, test command, scanner finding, read
+                    # path) — на уровне домена (evidence:[...]) ИЛИ в его check'ах. id+status без evidence
+                    # ещё не доказательство. warn/fail довольствуются blockers (причина названа выше).
+                    if st == "pass":
+                        _dom_ev = (x or {}).get("evidence")
+                        _chk_ev = any(isinstance(c, dict) and c.get("evidence") for c in dchecks)
+                        if not ((isinstance(_dom_ev, list) and _dom_ev) or _chk_ev):
+                            errs.append(f"домен '{dom}' pass без evidence-ссылки — id+status не доказательство")
     return errs
 
 
@@ -1471,22 +1505,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             _delivery_block = ("unavailable", f"base '{base_ref}' не разрешилась в ветку: "
                                f"{base_binding.get('reason')} — PR к произвольному HEAD не открываем")
         else:
-            remote_base, _ls_ok = None, False
-            try:
-                rc_ls, out_ls, _ = _git(work_root, "ls-remote", "origin", f"refs/heads/{base_ref}")
-                if rc_ls == 0:
-                    _ls_ok = True
-                    if out_ls.strip():
-                        remote_base = out_ls.split()[0].strip()
-            except Exception:  # noqa: BLE001
-                _ls_ok = False
-            if not _ls_ok or not remote_base:
-                _delivery_block = ("unavailable", "remote-base-unverified: не удалось проверить "
-                                   f"origin refs/heads/{base_ref} (нет origin/сети/ветки) — доставка "
-                                   "невозможна fail-closed")
-            elif remote_base != base_sha:
+            # v3.0.9: тот же fail-closed RemoteBaseVerifier, что и sequential
+            _rv = _verify_remote_base(work_root, base_ref, base_sha)
+            if _rv.get("verdict") == "unverifiable":
+                _delivery_block = ("unavailable", f"remote-base-unverified: {_rv.get('reason')} — "
+                                   "доставка невозможна fail-closed")
+            elif _rv.get("verdict") == "verified-moved":
                 _delivery_block = ("not-attempted", f"remote base сдвинулась (validated {base_sha[:12]} != "
-                                   f"remote {remote_base[:12]}) — нужна ревалидация; PR не открыт")
+                                   f"remote {(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
             else:
                 import pr_open
                 pr = pr_open.open_draft_pr(work_root, work_branch,
@@ -2347,7 +2373,8 @@ def selftest():
                      "status": "pass", "reviewed_revision": "abc123",
                      "checks": [{"id": "injection", "status": "pass"}],
                      "domain_results": [{"domain": "injection", "status": "pass",
-                                         "checks": [{"id": "no_injection_surface", "status": "pass"}]}]}
+                                         "checks": [{"id": "no_injection_surface", "status": "pass"}],
+                                         "evidence": [{"type": "code-read", "path": "a.py", "lines": "1-5"}]}]}
         expect("v3.0-rc16 security-verdict: структурный pass c domain_results -> валиден",
                _security_verdict_errors(good_pass, "abc123", ["injection"], _vrr2) == [])
         expect("v3.0-rc16 security-verdict: reviewed_revision != проверяемой -> невалиден",
@@ -2361,8 +2388,9 @@ def selftest():
                        "checks": [{"id": "security-ok", "status": "pass"}]}
         expect("v3.0.1 SecVerdict-v2: 4 применимых домена + нет domain_results -> невалиден",
                any("domain_results" in e for e in _security_verdict_errors(one_generic, "abc123", four, _vrr2)))
-        def _dr(doms, st="pass"):   # v3.0.7 v2.1: у каждого домена СВОИ checks
-            return [{"domain": d, "status": st, "checks": [{"id": f"{d}_ok", "status": st}]} for d in doms]
+        def _dr(doms, st="pass"):   # v3.0.7/v3.0.9 v2.1/v2.3: per-domain checks + evidence для pass
+            return [{"domain": d, "status": st, "checks": [{"id": f"{d}_ok", "status": st}],
+                     "evidence": [{"type": "code-read", "path": f"{d}.py", "lines": "1-9"}]} for d in doms]
         covered4 = {**one_generic, "domain_results": _dr(four)}
         expect("v3.0.1 SecVerdict-v2: domain_results покрывает все 4 (с per-domain checks) -> валиден",
                _security_verdict_errors(covered4, "abc123", four, _vrr2) == [])
@@ -2381,6 +2409,11 @@ def selftest():
         empty_ck = {**one_generic, "domain_results": [{"domain": d, "status": "pass", "checks": [{}]} for d in four]}
         expect("v3.0.8 SecVerdict-v2.2: nested-check без id/status (checks:[{}]) -> невалиден",
                any("nested-check без id" in e for e in _security_verdict_errors(empty_ck, "abc123", four, _vrr2)))
+        # v3.0.9 SecVerdict-v2.3: pass-домен с id+status, но БЕЗ evidence-ссылки -> невалиден
+        no_ref = {**one_generic, "domain_results": [{"domain": d, "status": "pass",
+                                                     "checks": [{"id": f"{d}_ok", "status": "pass"}]} for d in four]}
+        expect("v3.0.9 SecVerdict-v2.3: pass без evidence-ссылки -> невалиден (id+status не доказательство)",
+               any("без evidence" in e for e in _security_verdict_errors(no_ref, "abc123", four, _vrr2)))
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
@@ -2437,6 +2470,11 @@ def selftest():
         expect("v3.0.7 resolve-base: auto (base=None) -> resolved, mode=auto, реальная ветка (не 'main'-хардкод)",
                _ab.get("resolved") is True and _ab.get("mode") == "auto"
                and _ab.get("base_ref") == orig_branch and _ab.get("validated_sha"))
+        # v3.0.9 (finding аудита P0.1): единый RemoteBaseVerifier fail-closed — репо БЕЗ origin/ветки
+        # в origin -> unverifiable (доставка недоступна, НЕ «успех по умолчанию»); одинаково для обеих цепочек.
+        _rvb = _verify_remote_base(root, orig_branch, _resolve_base(root, orig_branch).get("validated_sha"))
+        expect("v3.0.9 verify-remote-base: нет origin -> unverifiable (fail-closed, не открыть PR)",
+               _rvb.get("verdict") == "unverifiable" and _rvb.get("reason"))
         # v3.0.7 (P0.2): ЯВНАЯ несуществующая --base -> preflight-БЛОК ДО модели (0 model calls),
         # НЕ выполнение от произвольного HEAD. Раньше только доставка блокировалась; теперь весь прогон.
         it_nb = iter([{"op": "write", "path": "src/nb.py", "content": "n=1\n"}, {"done": True}])

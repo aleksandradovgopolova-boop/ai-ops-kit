@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.9] — 2026-07-22 — Lifecycle Store & Delivery Integrity (аудит: 3×P0 + P1)
+
+### Fixed
+- **P0 — sequential delivery был fail-OPEN при непроверяемой remote base.** Проверял только
+  «remote_base существует и отличается»; при `None` (нет origin/сети/ветки) → открывал PR. Две цепочки
+  имели разные правила доверия. Единый **`_verify_remote_base`** (RemoteBaseVerifier) для single-run и
+  sequential: `verified-equal`→PR, `verified-moved`→revalidation, `unverifiable`→delivery **unavailable**.
+- **P0 — single-run хранил только имя base, не полный BaseBinding.** Теперь `BaseBinding`
+  (`base_ref`+`base_sha`+`mode`+`source`) сохраняется в run-settings и восстанавливается на resume —
+  точная база исходного запуска (ловит force-push/смену upstream/пересоздание ветки, не только fast-forward).
+- **P0 — проверка повреждённого SequencePlan была неполной** (валиден, если dict+kind). Теперь
+  `_validate_sequence_plan_schema` при **каждом чтении** (schema_version/workitem_id/plan_hash/base_ref/
+  sequence_base_sha/packages + id/pkg_hash/order/depends_on) — парсибельный, но неполный план →
+  lifecycle-corrupted до модели.
+- **P1 — SecurityVerdict v2.3.** pass-домен требует ≥1 конкретную **evidence-ссылку** (code-read
+  path/lines, test command, scanner finding); id+status без evidence — не доказательство.
+
+Отложено: общий атомарный LifecycleStore (journal+checksum) для RunPlan/run-settings/RunHandoff/
+ApprovalDecision/reports → v3.1 (критичнейший SequencePlan уже durable+schema-validated).
+
 ## [3.0.8] — 2026-07-22 — Resume & Lifecycle Truth (аудит: 3×P0 + 2×P1)
 
 ### Fixed
