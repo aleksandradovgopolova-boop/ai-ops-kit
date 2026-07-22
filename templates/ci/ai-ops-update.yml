@@ -4,9 +4,9 @@
 # при расхождении запускает `ai-ops update` и открывает PR с diff'ом и отчётом.
 # Обновление НЕ применяется в обход PR; drift managed-слоя блокирует обновление штатно.
 #
-# Флаг parent.auto_update в .ai-ops.yaml уважается: при auto_update: false ежедневный
-# запуск НЕ открывает PR сам (по умолчанию — тишина). Ручной запуск (workflow_dispatch)
-# работает всегда, независимо от флага. Чтобы включить ежедневные PR — auto_update: true.
+# Флаг parent.auto_update в .ai-ops.yaml уважается. ПО УМОЛЧАНИЮ ВКЛ (v3.0.5): ежедневный запуск сам
+# открывает update-PR, если ключ отсутствует ИЛИ auto_update: true. Чтобы ОТКЛЮЧИТЬ ежедневные PR —
+# поставьте auto_update: false (опт-аут). Ручной запуск (workflow_dispatch) работает всегда.
 #
 # Примечание: PR, созданный GITHUB_TOKEN, не запускает CI автоматически (ограничение GitHub).
 # Если нужен прогон CI на таком PR — закройте/откройте его или используйте PAT/GitHub App.
@@ -31,7 +31,7 @@ jobs:
         run: |
           PARENT=$(python3 -c "import yaml; s=yaml.safe_load(open('.ai-ops.yaml'))['parent']['source']; print(s[4:] if s.startswith('git+') else s)")
           INSTALLED=$(python3 -c "import yaml; print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
-          AUTO=$(python3 -c "import yaml; print(str(yaml.safe_load(open('.ai-ops.yaml'))['parent'].get('auto_update', False)).lower())")
+          AUTO=$(python3 -c "import yaml; print(str(yaml.safe_load(open('.ai-ops.yaml'))['parent'].get('auto_update', True)).lower())")
           git clone --depth 1 "$PARENT" /tmp/ai-ops-kit
           AVAILABLE=$(tr -d '[:space:]' < /tmp/ai-ops-kit/VERSION)
           echo "installed=$INSTALLED available=$AVAILABLE auto_update=$AUTO event=${{ github.event_name }}"
@@ -43,7 +43,7 @@ jobs:
           echo "proceed=$([ \"$INSTALLED\" != \"$AVAILABLE\" ] && { [ \"$AUTO\" = true ] || [ \"${{ github.event_name }}\" = workflow_dispatch ]; } && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Пропуск (auto_update:false, запуск по расписанию)
         if: steps.ver.outputs.needs_update == 'true' && steps.ver.outputs.proceed != 'true'
-        run: echo "Доступно обновление $INSTALLED -> $AVAILABLE, но parent.auto_update=false и запуск по расписанию — PR не открывается. Запустите workflow вручную (Run workflow) или включите auto_update."
+        run: echo "Доступно обновление $INSTALLED -> $AVAILABLE, но parent.auto_update=false (опт-аут) и запуск по расписанию — PR не открывается. Запустите workflow вручную (Run workflow) или включите auto_update."
       - name: Запустить ai-ops update
         if: steps.ver.outputs.proceed == 'true'
         run: python3 /tmp/ai-ops-kit/installer/ai_ops.py update

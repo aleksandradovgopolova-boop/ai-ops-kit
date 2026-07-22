@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.4
+  package_version: 3.0.5
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_5_auto_update_default_on:
+      - "запрос: включить авто-обновление в детях ПО УМОЛЧАНИЮ (опт-аут вместо опт-ин). Сделано: (1) examples/child-config.example.yaml parent.auto_update: false -> true (новые init получают авто-режим); (2) templates/ci/ai-ops-update.yml — .get('auto_update', False) -> True (существующие дети без явного ключа тоже авто, консистентно)"
+      - "безопасность сохранена: авто-режим ТОЛЬКО открывает update-PR (не авто-мерж), проходит PR-конвейер ребёнка (ревью/тесты/секрет-сканер), мажорный bump по-прежнему блокируется SemVer-гейтом. Опт-аут явным auto_update: false уважается. init подтверждён: пишет auto_update: true + ставит workflow"
+      - "проверки: installer selftest PASS; workflow YAML валиден; init -> .ai-ops.yaml с auto_update: true. Полный CI-набор (94) 94/94 PASS на дефолт-ветках main и master"
     fixed_v3_0_4_no_static_secret_fixtures:
       - "finding downstream-интеграции (Гермес): v3.0.3 установлен/проверен, но PR-конвейер потребителя блокировал публикацию — секрет-сканер (gitleaks/trufflehog-класс) ЛОЖНО флагует фикстуры-«секреты» в тестах САМОГО детектора кита (AKIAIOSFODNN7EXAMPLE, api_key hex, -----BEGIN RSA PRIVATE KEY-----, sk-super-secret-123, sk-ant-xyz). Правильный путь — НЕ обходить сканер, а адаптировать upstream"
       - "фикс: все фейковые секрет-фикстуры СОБИРАЮТСЯ в рантайме из фрагментов (напр. 'AKIA'+'IOSFODNN7EXAMPLE') -> в исходнике НЕТ статического секрет-подобного литерала -> НИ ОДИН секрет-сканер (scanner-agnostic, не только gitleaks) не флагует. Детектор кита получает полную собранную строку -> его тесты по-прежнему проверяют детекцию. Затронуто: security_scan/security_pack/execution_pipeline/tool_broker (selftest)"

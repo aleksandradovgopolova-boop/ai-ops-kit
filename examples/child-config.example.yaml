@@ -7,7 +7,8 @@ parent:
   allowed_version_range: ">=1.0.0 <2.0.0"
   update_channel: stable
   update_policy: pr
-  auto_update: false
+  auto_update: true   # по умолчанию ВКЛ: ежедневный workflow сам открывает update-PR (не авто-мерж;
+                      #   мажорный bump всё равно блокируется). Поставьте false, чтобы отключить (опт-аут).
 project:
   name: <project-name>
   documentation_language: ru
