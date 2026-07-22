@@ -756,8 +756,10 @@ def selftest():
                              capture_output=True, text=True).stdout.strip()
         sig_r = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
         s1 = iter([{"op": "write", "path": "src/phase1.py", "content": "p=1\n"}, {"done": True}])
+        # v3.0.2: base=cur (реальная ветка репо) — консистентно с resume-фазами; иначе на репо с
+        # дефолтом master (как CI) base=main из фазы 1 расходится с base=master в resume -> ложная ревалидация.
         r_p1 = run("фаза 1", sig_r, root, engine="pipeline", proposer=lambda c: next(s1),
-                   execute=True, feature="ctl-resume", install_deps=False)
+                   execute=True, feature="ctl-resume", install_deps=False, base=cur)
         expect("v2.109 ctl: фаза 1 закоммичена + handoff записан",
                bool((r_p1.get("commit") or {}).get("sha"))
                and (root / "features" / "ctl-resume" / "run-handoff.yaml").exists())

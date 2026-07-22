@@ -120,7 +120,7 @@ def run_scenarios():
         sig = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
         s1 = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
         r1 = ai_ops_run.run("фаза 1", sig, root, engine="pipeline", proposer=lambda c: next(s1),
-                            execute=True, feature="q3b", install_deps=False)
+                            execute=True, feature="q3b", install_deps=False, base=cur)  # v3.0.2: реальная ветка
         s2 = iter([{"op": "write", "path": "src/b.py", "content": "b=2\n"}, {"done": True}])
         r2 = ai_ops_run.run("фаза 2", sig, root, engine="pipeline", proposer=lambda c: next(s2),
                             execute=True, feature="q3b", install_deps=False, resume=True, base=cur)
