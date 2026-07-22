@@ -2,6 +2,35 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.12] — 2026-07-22 — Hardening Batch B: Durable Resume Artifacts
+
+Блок B самоаудита — durability resume-критичных lifecycle-артефактов. Прежде большинство писалось
+plain `write_text`/`json.dump` (неатомарно, без fsync, без перечитывания), а битые/пустые читались как
+«отсутствующие» → тихая потеря policy и ложный «resume безопасен».
+
+### Added
+- **`tools/lifecycle_store.py`** — единый durable-контракт: `durable_write` (tmp → flush+fsync(файл) →
+  atomic `os.replace` → **fsync(каталог)** → перечитать+провалидировать) и `load_guarded` (различает
+  **absent / corrupt / ok** — повреждённый ≠ отсутствующий). `workpackage_executor._durable_write_yaml`
+  делегирует ему (дедуп + добавляет fsync каталога к SequencePlan).
+
+### Fixed
+- **run-settings**: durable-запись; на resume — `load_guarded`, **битый/пустой → fail-closed отказ**
+  (не тихий откат к дефолтам вызова и НЕ перезапись контракта исходного прогона).
+- **run-handoff**: durable-запись; `resume_preflight` читает через `load_guarded` — битый/пустой →
+  `can_resume=False`+ревалидация (прежде `{}` → `sha=None` → все проверки устаревания пропускались →
+  ложный «resume безопасен»).
+- **active-work** (общий реестр координации): атомарная `save`, `load` fail-closed (повреждён → raise, не
+  тихая пустая карта, скрывающая чужую активную работу), и **межпроцессная блокировка (`flock`,
+  best-effort)** вокруг register/finish read-modify-write — конец last-writer-wins TOCTOU.
+- **Проглатываемые сбои записи больше не молчат**: sequential per-package `report.json` — чекпоинт
+  resume/retry — пишется атомарно, **сбой → hard-stop** цепочки (не «completed без чекпоинта»); сбой
+  durable-записи run-handoff/run-report фиксируется в `lifecycle_errors` и в отчёт.
+
+Каждый фикс — с деттестом (fail-closed чтение absent/corrupt, атомарность, hard-stop). Полный CI-набор
+95/95 на дефолт-ветках main и master, без openspec. Отложено (v3.1): рефакторинг god-функций/envelope/
+`_git`(timeout)/общий YAML-хелпер + закрытие тест-гэпов (блок C).
+
 ## [3.0.11] — 2026-07-22 — Hardening Batch A (сквозной самоаудит: 4×P1 + 4×P2)
 
 Сквозной ревизионный проход по всему киту (ядро, trust/безопасность, durability, здоровье кода).

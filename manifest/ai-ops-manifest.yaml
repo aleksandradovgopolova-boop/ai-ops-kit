@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.11
+  package_version: 3.0.12
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,15 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_12_hardening_batch_b_durable_resume:
+      - "блок B самоаудита: durability resume-критичных lifecycle-артефактов. Прежде writer_text/json.dump неатомарно/без fsync/без перечитывания, битые/пустые читались как absent -> тихая потеря policy и ложный 'resume безопасен'"
+      - "НОВЫЙ tools/lifecycle_store.py: durable_write (tmp -> flush+fsync(файл) -> atomic os.replace -> fsync(КАТАЛОГ) -> перечитать+провалидировать) + load_guarded (absent/corrupt/ok — повреждён != отсутствует). workpackage_executor._durable_write_yaml делегирует ему (дедуп + fsync каталога добавлен и для SequencePlan)"
+      - "run-settings: durable-запись; resume читает через load_guarded — битый/пустой -> fail-closed отказ (не тихий откат к дефолтам вызова, НЕ перезапись контракта исходного прогона)"
+      - "run-handoff: durable-запись; resume_preflight через load_guarded — битый/пустой -> can_resume=False + ревалидация (прежде {} -> sha=None -> все проверки устаревания пропускались -> ложный resume безопасен)"
+      - "active-work (общий реестр координации): атомарная save; load fail-closed (повреждён -> raise, не тихая пустая карта, скрывающая чужую активную работу); межпроцессная блокировка flock (best-effort) вокруг register/finish RMW — конец last-writer-wins TOCTOU"
+      - "проглатываемые сбои записи не молчат: sequential per-package report.json (чекпоинт resume/retry) пишется атомарно, сбой -> hard-stop цепочки (не 'completed без чекпоинта'); сбой durable-записи run-handoff/run-report -> lifecycle_errors + в отчёт"
+      - "проверки: деттест на каждый фикс (fail-closed чтение absent/corrupt, атомарность без остаточного .tmp, hard-stop чекпоинта, run-settings повреждён -> error и НЕ перезаписан). Полный CI-набор 95/95 на main И master, без openspec"
+      - "ОТЛОЖЕНО (v3.1, блок C): рефакторинг god-функций (run_pipeline/run/execute_sequence), единые envelope/_git(timeout)/YAML-хелперы, закрытие тест-гэпов"
     fixed_v3_0_11_hardening_batch_a:
       - "сквозной самоаудит всего кита (ядро/trust/durability/здоровье кода). Вывод: денежный путь (доставка PR + security-гейтинг) реально fail-closed, P0 false-green нет. Батч A — trust/корректностные упрочнения; durability resume-артефактов и рефакторинг отложены в v3.1"
       - "P1 op:'git' обходил sandbox: shell_mode/allow_network/allowlist применялись только под if op=='shell', а git шёл в subprocess(shell=True) мимо них (op контролирует модель). Фикс: тот же gauntlet для op in (shell, git) — bash -c/сеть под видом git денай, git в allowlist проходит, shell_mode=off запрещает и git"

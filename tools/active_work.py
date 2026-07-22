@@ -28,19 +28,33 @@
 """
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
 
 import yaml
 
+import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
+
 STATUS = {"in-progress", "review", "blocked", "done"}
 
 
+class ActiveWorkCorrupt(Exception):
+    """Реестр active-work недостоверен (повреждён/не сохранён) — координация сессий небезопасна."""
+
+
 def load(path: Path):
-    if not path.exists():
+    """v3.0.12 (finding аудита блок B): FAIL-CLOSED. Прежде safe_load(...) or {} на битом/пустом реестре
+    возвращал ПУСТУЮ карту -> concurrency forecast «пересечений нет» на потерянных записях (две сессии
+    сталкивались). Теперь: отсутствует -> fresh; повреждён -> raise (не тихая пустая карта)."""
+    g = _ls.load_guarded(Path(path), kind="active-work")
+    if g["state"] == "absent":
         return {"schema_version": 1, "kind": "active-work", "active": []}
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if g["state"] == "corrupt":
+        raise ActiveWorkCorrupt(f"active-work реестр повреждён ({g['reason']}) — координация "
+                                "параллельных сессий недостоверна; нужна явная recovery")
+    data = g["data"]
     data.setdefault("schema_version", 1)
     data.setdefault("kind", "active-work")
     data.setdefault("active", [])
@@ -48,8 +62,36 @@ def load(path: Path):
 
 
 def save(path: Path, data: dict):
+    """v3.0.12: АТОМАРНАЯ durable-запись общего реестра (tmp+fsync+rename+fsync-dir+перечитывание).
+    Сбой -> raise (registration потеряна — не молчим)."""
+    r = _ls.durable_write(Path(path), data, require_keys=("kind", "active"))
+    if not r.get("ok"):
+        raise ActiveWorkCorrupt(f"не удалось надёжно сохранить active-work: {r.get('error')}")
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """v3.0.12 (finding аудита блок B): межпроцессная блокировка вокруг read-modify-write общего реестра,
+    чтобы конкурентные register/finish не теряли записи друг друга (last-writer-wins TOCTOU). best-effort:
+    на платформах без fcntl (Windows) деградирует до no-op — не хуже прежнего поведения."""
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    f = open(lock_path, "w", encoding="utf-8")
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
 
 
 def _active_others(active, exclude_id):
@@ -132,26 +174,29 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
     if not areas:
         print("ОШИБКА: нужны affected_areas (основа conflict forecast).")
         return 1
-    data = load(path)
-    entry = {"id": wid, "branch": branch, "status": status,
-             "affected_areas": list(areas), "owner_session": session}
-    if workitem:
-        entry["workitem"] = workitem
-    if depends:
-        entry["depends_on"] = list(depends)
-    if contracts:
-        entry["shared_contracts"] = list(contracts)
-    if at:
-        entry["started_at"] = at
-    # цикл зависимостей — это ошибка, а не предупреждение
-    cycle = find_cycle(data["active"], entry)
-    if cycle:
-        print(f"ОШИБКА: циклическая зависимость задач: {' -> '.join(cycle)}. "
-              f"Разорвите цикл (одна задача не может транзитивно зависеть от себя).")
-        return 1
-    confs = classify(data["active"], entry)
-    data["active"] = [w for w in data["active"] if w.get("id") != wid] + [entry]
-    save(path, data)
+    # v3.0.12: весь read-modify-write под межпроцессной блокировкой (иначе конкурентная сессия могла
+    # перезаписать нашу регистрацию — last-writer-wins — и concurrency-forecast увидел бы неполную карту).
+    with _locked(path):
+        data = load(path)
+        entry = {"id": wid, "branch": branch, "status": status,
+                 "affected_areas": list(areas), "owner_session": session}
+        if workitem:
+            entry["workitem"] = workitem
+        if depends:
+            entry["depends_on"] = list(depends)
+        if contracts:
+            entry["shared_contracts"] = list(contracts)
+        if at:
+            entry["started_at"] = at
+        # цикл зависимостей — это ошибка, а не предупреждение
+        cycle = find_cycle(data["active"], entry)
+        if cycle:
+            print(f"ОШИБКА: циклическая зависимость задач: {' -> '.join(cycle)}. "
+                  f"Разорвите цикл (одна задача не может транзитивно зависеть от себя).")
+            return 1
+        confs = classify(data["active"], entry)
+        data["active"] = [w for w in data["active"] if w.get("id") != wid] + [entry]
+        save(path, data)
     print(f"ACTIVE-WORK: зарегистрирована работа '{wid}' (ветка {branch}, сессия {session}).")
     for line in _forecast_lines(confs):
         print(line)
@@ -198,16 +243,18 @@ def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_jso
 
 
 def finish_cmd(path, wid):
-    data = load(path)
-    found = False
-    for w in data["active"]:
-        if w.get("id") == wid:
-            w["status"] = "done"
-            found = True
-    if not found:
-        print(f"ACTIVE-WORK: работа '{wid}' не найдена.")
-        return 1
-    save(path, data)
+    # v3.0.12: read-modify-write под блокировкой (симметрично register — без гонки на общем реестре)
+    with _locked(path):
+        data = load(path)
+        found = False
+        for w in data["active"]:
+            if w.get("id") == wid:
+                w["status"] = "done"
+                found = True
+        if not found:
+            print(f"ACTIVE-WORK: работа '{wid}' не найдена.")
+            return 1
+        save(path, data)
     print(f"ACTIVE-WORK: работа '{wid}' помечена done.")
     return 0
 
@@ -262,6 +309,24 @@ def selftest():
         finish_cmd(p, "dashboard-editing")
         confs = classify(load(p)["active"], {"id": "new", "affected_areas": ["dashboard-editor"]})
         expect("done не даёт конфликт", all(c["id"] != "dashboard-editing" for c in confs))
+
+        # v3.0.12 (finding аудита блок B): durable + fail-closed чтение общего реестра.
+        expect("v3.0.12: save пишет атомарно (нет остаточного .tmp)",
+               p.is_file() and not p.with_suffix(p.suffix + ".tmp").exists())
+        p.write_text("", encoding="utf-8")   # оборванная запись
+        try:
+            load(p)
+            expect("v3.0.12: пустой реестр -> ActiveWorkCorrupt (не тихая пустая карта)", False)
+        except ActiveWorkCorrupt:
+            expect("v3.0.12: пустой реестр -> ActiveWorkCorrupt (не тихая пустая карта)", True)
+        p.write_text("kind: active-work\nactive: [ :::\n", encoding="utf-8")   # битый YAML
+        try:
+            load(p)
+            expect("v3.0.12: битый YAML реестр -> ActiveWorkCorrupt", False)
+        except ActiveWorkCorrupt:
+            expect("v3.0.12: битый YAML реестр -> ActiveWorkCorrupt", True)
+        p.unlink()
+        expect("v3.0.12: отсутствующий реестр -> fresh (не ошибка)", load(p)["active"] == [])
 
     print("active_work selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
