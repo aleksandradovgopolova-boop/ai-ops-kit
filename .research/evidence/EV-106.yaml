@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-106
+request_id: RR-001
+statement: "Оценка стоимости генерации одной книги (допущение: ~100K токенов выхода + ~200K токенов входа без учёта кэша): deepseek-v4-flash ≈ $0.06; deepseek-v4-pro ≈ $0.17; kimi-k2.6 ≈ $0.47; kimi-k3 ≈ $2.10. Разброс между дешёвым и качественным вариантом ~35x; кэширование промптов снижает входную часть у всех."
+evidence_type: inference
+derived_from: [EV-101, EV-103, EV-104]
+source:
+  title: "Расчёт на основе EV-101/EV-103/EV-104"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-22"
+  is_primary: true
+citation:
+  locator: "формула: 0.1M*output_price + 0.2M*input_price(cache-miss)"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-001)"
+freshness:
+  volatile: true
+  expires_at: "2026-09-22"
+reliability:
+  level: medium
+  rationale: "Арифметика от первичных цен верна, но размер книги — допущение; фактический профиль токенов пайплайна не измерялся."
+status: active
+superseded_by: null

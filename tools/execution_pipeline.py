@@ -266,6 +266,18 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         status = res.get("status")
         blocking = bool(g.get("blocking"))
         ev_ref = f"independent reviewer verdict @ {revision or 'HEAD'}"
+        # v3.0.11 (finding аудита P2): симметрия с security-путём — БЛОКИРУЮЩИЙ ai-review гейт нельзя
+        # закрыть pass-вердиктом БЕЗ единого чтения (рубер-стамп). Ревьюеру показан дифф в base_context,
+        # но «увидел в контексте» != «проверил»: для чистого pass на блокирующем гейте требуем ≥1 read.
+        # warn/fail пропускаем (они и так блокируют/не закрывают); неблокирующие — как раньше.
+        if status == "pass" and blocking and not (rv.get("reads")):
+            gate_ev[gid] = {"status": "fail",
+                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) — рубер-стамп "
+                                         f"не закрывает блокирующий гейт @ {gid}; требуется верификация чтением"],
+                            "checks": res.get("checks", []), "evidence": [ev_ref]}
+            entry["closed_as"] = "blocked"
+            entry["status"] = "fail"
+            continue
         if status == "fail" or (status == "warn" and blocking):
             # v2.85 (finding аудита): reviewer `warn` на БЛОКИРУЮЩЕМ гейте раньше тихо закрывал его
             # (evaluate требует required_evidence только для pass). warn — это «есть сомнения», НЕ
@@ -347,14 +359,14 @@ def _evidence_ref_errors(dom, ev_items, reviewer_reads=None):
     reads = reviewer_reads if isinstance(reviewer_reads, list) else None
 
     def _read_match(path):
+        # v3.0.11 (finding аудита P2): суффикс/точное совпадение пути, БЕЗ bare-basename — иначе прочитанный
+        # tests/config.py «закрывал» ссылку на src/prod/config.py (разные файлы, одно имя = не доказательство).
         p = str(path).strip().replace("\\", "/")
-        base = p.rsplit("/", 1)[-1]
         for r in reads:
             rr = str(r or "").strip().replace("\\", "/")
             if not rr:
                 continue
-            if rr == p or rr.endswith("/" + p) or p.endswith("/" + rr) \
-                    or (base and rr.rsplit("/", 1)[-1] == base):
+            if rr == p or rr.endswith("/" + p) or p.endswith("/" + rr):
                 return True
         return False
 
@@ -1366,9 +1378,17 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         _appr_missing = list(_appr.check(_merged_sig, child_root, wid).get("missing") or [])
         if _merged_sig.get("destructive"):
             _recs = _appr.load_approvals(child_root, wid)
-            if not any(r.get("approval") == "destructive" and _appr._record_valid(r) for r in _recs):
+            # v3.0.11 (finding аудита P1): destructive — high-risk, поэтому STRICT-валидация (expiry +
+            # plan-binding + trusted source), как для остальных high-risk доменов. Прежде вызывался
+            # _record_valid(r) с дефолтами -> просроченное/привязанное к другому плану/недоверенное
+            # одобрение проходило (слабее, чем approvals.check() для high-risk).
+            _dnow = _appr._now_iso()
+            _dph = _appr.plan_binding_hash(child_root, wid)
+            if not any(r.get("approval") == "destructive"
+                       and _appr._record_valid(r, now=_dnow, plan_hash=_dph, strict=True) for r in _recs):
                 _appr_missing.append({"domain": "destructive",
-                                      "reason": "нет валидного ApprovalRecord для деструктивного действия"})
+                                      "reason": "нет строго-валидного ApprovalRecord для деструктивного "
+                                                "действия (expiry/plan-binding/trusted source)"})
         human_ok = not _appr_missing
         if not human_ok:
             # человеко-одобрение требуется (по сигналам ИЛИ по находкам диффа) и его нет -> fail, независимо
@@ -1479,8 +1499,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         _cov = _sl.assess_from_artifacts(signals, child_root, wid, work_root=work_root)
         if _cov.get("spec_artifact") and _cov.get("blocking_missing"):
             spec_incomplete = list(_cov["blocking_missing"])
-    except Exception:  # noqa: BLE001
-        spec_incomplete = []
+    except Exception as _e:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение
+        # -> spec_incomplete=[] -> spec_complete_ok=True: реальный, но неоцениваемый spec.yaml проходил в
+        # реализацию. Теперь ошибка оценки спеки = блокирующий незакрытый пункт (не тихий пропуск).
+        spec_incomplete = [f"<spec-assess-failed: {type(_e).__name__}>"]
     spec_complete_ok = not spec_incomplete
 
     # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
@@ -1492,8 +1514,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         import context_compiler as _cc
         _bundle = _cc.compile_bundle(signals, work_root, plan=plan)
         context_overflow = bool(_bundle.get("overflow"))
-    except Exception:  # noqa: BLE001
-        context_overflow = False
+    except Exception:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение при
+        # сборке bundle -> context_overflow=False -> блокер «задача превышает context budget» тихо исчезал,
+        # и over-budget задача проходила в ready. Теперь ошибка = считаем overflow (блокируем, не молчим).
+        context_overflow = True
 
     # baseline-diff (finding живого прогона): что правка сломала/починила против базы
     regressions, fixed = _diff_checks(baseline_checks, coll["checks"]) if baseline_diff else ([], [])
@@ -2328,8 +2352,13 @@ def selftest():
                and rep_nr["reviews"] is None)
         _git(root, "checkout", "-q", orig_branch)
 
-        # с независимым ревьюером, который выносит pass -> ux_review закрыт легитимно (вердикт judge)
-        pass_provider = lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        # с независимым ревьюером, который выносит pass -> ux_review закрыт легитимно (вердикт judge).
+        # v3.0.11: ревьюер СНАЧАЛА читает изменённый файл (реальная верификация), затем pass — иначе
+        # блокирующий гейт не закрывается по рубер-стампу (0 reads).
+        def pass_provider(prompt):
+            if "--- src/rp.py ---" in prompt:
+                return '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+            return '{"op":"read","path":"src/rp.py"}'
         it_rp = iter([{"op": "write", "path": "src/rp.py", "content": "p=1\n"}, {"done": True}])
         rep_rp = run_pipeline("ui с ревью pass", sig_rv, root, lambda c: next(it_rp),
                               budget={"max_model_calls": 20}, feature="rp-fn",
@@ -2389,11 +2418,13 @@ def selftest():
         # (дифф + список файлов). Раньше base_context был пуст -> прилежная модель честно возвращала
         # fail «нечего читать», делая ai-review структурно непроходимым. Ревьюер здесь ставит pass
         # ТОЛЬКО если реально увидел изменённый путь в своём промпте — доказывает доставку диффа.
-        ctx_reviewer = (lambda prompt:
-            '{"kind":"reviewer-result","status":"pass","checks":[{"id":"seen","status":"pass"}]}'
-            if "src/cx.py" in prompt else
-            '{"kind":"reviewer-result","status":"fail","checks":[{"id":"seen","status":"fail"}],'
-            '"blockers":["контекст изменения пуст: не дан дифф/список файлов"]}')
+        def ctx_reviewer(prompt):
+            if "--- src/cx.py ---" in prompt:        # v3.0.11: уже прочитал реальный файл -> pass
+                return '{"kind":"reviewer-result","status":"pass","checks":[{"id":"seen","status":"pass"}]}'
+            if "src/cx.py" in prompt:                # дифф доставлен -> читаем изменённый путь
+                return '{"op":"read","path":"src/cx.py"}'
+            return ('{"kind":"reviewer-result","status":"fail","checks":[{"id":"seen","status":"fail"}],'
+                    '"blockers":["контекст изменения пуст: не дан дифф/список файлов"]}')
         it_cx = iter([{"op": "write", "path": "src/cx.py", "content": "cx=1\n"}, {"done": True}])
         rep_cx = run_pipeline("ui с ревью, проверка доставки диффа", sig_rv, root, lambda c: next(it_cx),
                               budget={"max_model_calls": 20}, feature="cx-fn",
@@ -2402,6 +2433,20 @@ def selftest():
         expect("review rc9: ревьюер получает контекст изменения (дифф) -> видит src/cx.py и ставит pass",
                "ux_review" not in rep_cx["gates"]["unmet"]
                and any(r["gate"] == "ux_review" and r["status"] == "pass" for r in (rep_cx["reviews"] or [])))
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v3.0.11 (finding аудита P2): рубер-стамп — pass БЕЗ единого чтения на БЛОКИРУЮЩЕМ гейте НЕ
+        # закрывает его (симметрия с security-путём: «увидел дифф в контексте» != «проверил чтением»).
+        rubber = lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        it_rs = iter([{"op": "write", "path": "src/rs.py", "content": "r=1\n"}, {"done": True}])
+        rep_rs = run_pipeline("ui рубер-стамп без чтений", sig_rv, root, lambda c: next(it_rs),
+                              budget={"max_model_calls": 20}, feature="rs-fn",
+                              commit=True, isolate=True, install_deps=False,
+                              review=True, reviewer_proposer=rubber)
+        expect("v3.0.11 A8: pass БЕЗ чтений (0 reads) на блокирующем ux_review -> НЕ закрыт (рубер-стамп)",
+               "ux_review" in rep_rs["gates"]["unmet"]
+               and any(r["gate"] == "ux_review" and r.get("closed_as") == "blocked"
+                       for r in (rep_rs["reviews"] or [])))
         _git(root, "checkout", "-q", orig_branch)
 
         # _change_context напрямую: список изменённых файлов + unified-дифф на точной ревизии
@@ -2520,6 +2565,19 @@ def selftest():
                any("без распознаваемого type" in e
                    for e in _security_verdict_errors(_dom_ev([{"type": "vibes", "note": "ok"}]),
                                                      "abc123", _one, _vrr2)))
+        # (g) v3.0.11: одинаковое имя, РАЗНЫЙ путь — basename-fallback убран -> невалиден (фабрикация)
+        expect("v3.0.11 EvidenceRef: same-basename другой путь (tests/config.py vs src/prod/config.py) -> невалиден",
+               any("которого нет среди реально прочитанных" in e
+                   for e in _security_verdict_errors(_dom_ev([{"type": "code-read", "path": "src/prod/config.py"}]),
+                                                     "abc123", _one, _vrr2, reviewer_reads=["tests/config.py"])))
+        # v3.0.11 (finding аудита P1): destructive-approval теперь валидируется STRICT (как в run_pipeline).
+        # Legacy-«рыхлая» запись (без binds_to/expires_at/risk/trusted source) проходила по дефолтам,
+        # но strict её отвергает — ровно та разница, на которую опирается фикс.
+        import approvals as _a4
+        _loose_destr = {"approval": "destructive", "approved_by": "u@x", "scope": ".", "reason": "ok"}
+        expect("v3.0.11 destructive-strict: legacy-запись non-strict-валидна, но STRICT-невалидна",
+               _a4._record_valid(_loose_destr) is True
+               and _a4._record_valid(_loose_destr, now=_a4._now_iso(), plan_hash="x", strict=True) is False)
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all

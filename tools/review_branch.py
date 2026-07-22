@@ -172,7 +172,12 @@ def selftest():
 
         # существующая ветка + reviewer pass -> verdict pass, БЕЗ нового коммита (read-only)
         _, sha_before, _ = _git(root / ".ai" / "worktrees" / "rv", "rev-parse", "HEAD")
-        passrev = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        # v3.0.11: ревьюер читает изменённый файл ПЕРЕД pass (иначе блокирующий code_review не закрывается
+        # по 0-read рубер-стампу).
+        def passrev(p):
+            if "--- src/rv.py ---" in p:
+                return '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+            return '{"op":"read","path":"src/rv.py"}'
         r_ok = review(root, "rv", reviewer_proposer=passrev, base=cur)
         _, sha_after, _ = _git(root / ".ai" / "worktrees" / "rv", "rev-parse", "HEAD")
         expect("review: reviewer pass -> verdict=pass, есть вердикт code_review",

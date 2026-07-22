@@ -2,6 +2,39 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.11] — 2026-07-22 — Hardening Batch A (сквозной самоаудит: 4×P1 + 4×P2)
+
+Сквозной ревизионный проход по всему киту (ядро, trust/безопасность, durability, здоровье кода).
+Главный вывод: «денежный путь» (доставка PR + security-гейтинг) реально fail-closed — P0-дыр
+false-green нет. Батч A закрывает найденные trust/корректностные упрочнения (durability resume-
+артефактов и рефакторинг — отдельно, v3.1).
+
+### Fixed
+- **P1 — `op:"git"` обходил sandbox-containment.** `shell_mode`/`allow_network`/allowlist применялись
+  только под `if op=="shell"`, а `op:"git"` шёл в `subprocess(shell=True)` мимо них (op контролирует
+  модель). Теперь тот же gauntlet для `op in (shell, git)`: `bash -c`/сеть под видом git — денай, `git`
+  в allowlist проходит, `shell_mode=off` запрещает и git. (Смягчалось контейнером, но политика обещала
+  enforcement, которого не было.) `tool_broker.py`.
+- **P1 — `exit_code`=0 при `delivery-failed`.** Завершённый прогон несёт `overall_status`, не top-level
+  `status`; `exit_code` читал только `status`→None→падал на `ready_for_pr`. `--open-pr`, не доставивший
+  PR (нет origin/unverifiable), давал код 0 (CI видел успех). Теперь `delivery-failed`→1, `error`→2.
+- **P1 — `security_pack` fails-OPEN при git-сбое.** `git ls-files` rc≠0 → `changed=[]` → нет находок →
+  `clear`. Теперь git-энумерация упала → **raise → fail-closed** (ловит `_security_scan_error`→security=fail).
+- **P1 — destructive-approval валидировался нестрого.** `_record_valid(r)` с дефолтами (без expiry/
+  plan-binding/trusted source). Теперь STRICT — как для остальных high-risk доменов.
+- **P2 — `context_overflow` и `spec_incomplete` fail-OPEN на исключении** → тихо роняли ready-блокер.
+  Теперь fail-CLOSED (исключение = блокируем, не молчим).
+- **P2 — anti-fabrication code-read сверялся по basename** (`tests/config.py` «закрывал» `src/prod/config.py`).
+  Убран bare-basename fallback — только суффикс/точное совпадение пути.
+- **P2 — `output_tail` (read/shell) клался в evidence без скраба секретов.** Теперь редактируется по
+  `SECRET_PATTERNS` до попадания в отчёт (env-скраб закрывал только окружение процесса).
+- **P2 — блокирующий ai-review (code/ux) закрывался pass-вердиктом с 0 чтений** (рубер-стамп; асимметрия
+  с security-путём). Теперь чистый pass на блокирующем гейте требует ≥1 реального чтения.
+
+Каждый фикс — с деттестом; полный CI-набор 94/94 на дефолт-ветках main и master, без openspec.
+Отложено (v3.1): durable LifecycleStore для resume-артефактов (run-settings/run-handoff/active-work
+атомарно + fail-closed на битом чтении) и рефакторинг god-функций/envelope/`_git`(timeout)/YAML-хелперов.
+
 ## [3.0.10] — 2026-07-22 — BaseBinding Truth & Evidence Integrity (аудит: 2×P0 + 2×P1)
 
 ### Fixed

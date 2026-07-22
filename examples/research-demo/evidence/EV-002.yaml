@@ -1,0 +1,25 @@
+# Валидируется против schemas/research-evidence.schema.json.
+schema_version: 1
+kind: research.evidence
+id: EV-002
+request_id: RR-001
+statement: "Стоимость выходных токенов deepseek-chat ниже, чем у kimi-k2, при сопоставимом размере контекста (демо-значение для примера)."
+evidence_type: documented_fact
+source:
+  title: "Сравнительная таблица цен API (демо)"
+  url: "https://example.com/pricing-comparison"
+  type: vendor_page
+  published_at: "2026-07-01"
+  is_primary: true
+citation:
+  locator: "раздел Pricing, строки deepseek-chat и kimi-k2"
+captured_at: "2026-07-22"
+captured_by: context-builder
+freshness:
+  volatile: true
+  expires_at: "2026-09-22"
+reliability:
+  level: medium
+  rationale: "Первичные страницы цен обоих вендоров; цены меняются часто, поэтому freshness короткий."
+status: active
+superseded_by: null

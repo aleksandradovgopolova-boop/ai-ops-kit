@@ -1,0 +1,25 @@
+# Валидируется против schemas/research-evidence.schema.json.
+schema_version: 1
+kind: research.evidence
+id: EV-001
+request_id: RR-001
+statement: "DeepSeek API поддерживает контекст 128K токенов в модели deepseek-chat."
+evidence_type: documented_fact
+source:
+  title: "DeepSeek API Docs — Models & Pricing"
+  url: "https://api-docs.deepseek.com/quick_start/pricing"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "таблица Models, строка deepseek-chat, колонка Context"
+captured_at: "2026-07-22"
+captured_by: context-builder
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: high
+  rationale: "Первичный источник: официальная документация вендора, проверена на дату capture."
+status: active
+superseded_by: null

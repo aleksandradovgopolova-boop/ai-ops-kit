@@ -1,0 +1,31 @@
+# Валидируется против schemas/decision-package.schema.json.
+# confidence=medium — стороннее review не обязательно (обязательно только для high, writer≠judge).
+schema_version: 1
+kind: research.decision-package
+id: DP-001
+request_id: RR-001
+decision:
+  question: "Какую модель использовать для генерации Personal Cosmic Book?"
+recommendation:
+  preferred_option: deepseek
+  confidence: medium
+  confidence_rationale: "Два первичных источника по стоимости и контексту; качество длинного русского текста не измерено собственным экспериментом."
+rationale:
+  - "Стоимость генерации книги заметно ниже при сопоставимом контексте (EV-001, EV-002)."
+alternatives:
+  - option: kimi
+    appropriate_when: "Если собственный eval покажет заметно лучшее качество длинной русской прозы."
+risks:
+  - "Цены API volatile: пересмотреть при истечении freshness EV-002."
+unknowns:
+  - "Качество художественного русского текста на 50K+ токенов не сравнивалось напрямую."
+proposed_validation:
+  experiment: "Сгенерировать 20 одинаковых глав обеими моделями, слепое ревью качества."
+evidence_ids:
+  - EV-001
+  - EV-002
+author: documentation-steward
+review: null
+status: draft
+outcome: null
+created_at: "2026-07-22"

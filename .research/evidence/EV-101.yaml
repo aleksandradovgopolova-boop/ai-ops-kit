@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-101
+request_id: RR-001
+statement: "Актуальные модели DeepSeek API: deepseek-v4-flash ($0.14 вход cache-miss / $0.28 выход за 1M токенов, cache-hit $0.0028) и deepseek-v4-pro ($0.435 / $0.87), обе с контекстом 1M токенов и максимальным выходом 384K токенов."
+evidence_type: documented_fact
+source:
+  title: "DeepSeek API Docs — Models & Pricing"
+  url: "https://api-docs.deepseek.com/quick_start/pricing"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "таблица Models & Pricing: строки deepseek-v4-flash и deepseek-v4-pro"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-001)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: high
+  rationale: "Первичный источник: официальная документация вендора, прочитана на дату capture."
+status: active
+superseded_by: null
