@@ -104,18 +104,18 @@ def _resolve_base(root, base_ref):
       ветка. auto ВСЕГДА разрешается (в пределе — текущая ветка), никакого хардкода 'main'.
     * base_ref задан -> EXPLICIT: обязана существовать (refs/heads/<ref> или origin/<ref>); иначе
       resolved=False (вызывающий обязан заблокировать прогон ДО модели — не выполнять от HEAD).
-    -> {base_ref, validated_sha, source, mode, resolved, reason}."""
+    -> {base_ref, base_sha, source, mode, resolved, reason}."""
     if _git(root, "rev-parse", "--is-inside-work-tree")[0] != 0:
         return {"base_ref": base_ref, "resolved": False, "mode": "explicit" if base_ref else "auto",
                 "reason": "не git-репозиторий"}
     if base_ref:   # EXPLICIT — строго ветка
         rc_l, sha_l, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{base_ref}")
         if rc_l == 0 and (sha_l or "").strip():
-            return {"base_ref": base_ref, "validated_sha": sha_l.strip(), "source": "explicit-local",
+            return {"base_ref": base_ref, "base_sha": sha_l.strip(), "source": "explicit-local",
                     "mode": "explicit", "resolved": True}
         rc_r, sha_r, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base_ref}")
         if rc_r == 0 and (sha_r or "").strip():
-            return {"base_ref": base_ref, "validated_sha": sha_r.strip(), "source": "explicit-remote",
+            return {"base_ref": base_ref, "base_sha": sha_r.strip(), "source": "explicit-remote",
                     "mode": "explicit", "resolved": True}
         return {"base_ref": base_ref, "resolved": False, "mode": "explicit",
                 "reason": f"явная base '{base_ref}' не найдена ни локально (refs/heads), ни в origin"}
@@ -126,33 +126,33 @@ def _resolve_base(root, base_ref):
         rc_s, sha, _ = _git(root, "rev-parse", "--verify", "--quiet", ref)
         if rc_s == 0 and (sha or "").strip():
             br = ref.split("origin/", 1)[1] if ref.startswith("origin/") else ref
-            return {"base_ref": br, "validated_sha": sha.strip(), "source": "upstream",
+            return {"base_ref": br, "base_sha": sha.strip(), "source": "upstream",
                     "mode": "auto", "resolved": True}
     rc_d, dref, _ = _git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
     if rc_d == 0 and (dref or "").strip():
         rc_s, sha, _ = _git(root, "rev-parse", "--verify", "--quiet", dref.strip())
         if rc_s == 0 and (sha or "").strip():
             br = dref.strip().split("refs/remotes/origin/", 1)[-1]
-            return {"base_ref": br, "validated_sha": sha.strip(), "source": "remote-default",
+            return {"base_ref": br, "base_sha": sha.strip(), "source": "remote-default",
                     "mode": "auto", "resolved": True}
     rc_c, cur, _ = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
     rc_h, head, _ = _git(root, "rev-parse", "--verify", "--quiet", "HEAD")
     if rc_c == 0 and (cur or "").strip() and rc_h == 0 and (head or "").strip():
-        return {"base_ref": cur.strip(), "validated_sha": head.strip(), "source": "current-branch",
+        return {"base_ref": cur.strip(), "base_sha": head.strip(), "source": "current-branch",
                 "mode": "auto", "resolved": True}
     return {"base_ref": None, "resolved": False, "mode": "auto",
             "reason": "не удалось определить base автоматически (нет upstream/remote-default/HEAD)"}
 
 
-def _verify_remote_base(root, base_ref, validated_sha):
+def _verify_remote_base(root, base_ref, base_sha):
     """v3.0.9 (finding аудита P0): ЕДИНЫЙ fail-closed верификатор remote base для доставки (single-run И
     sequential — один контракт доверия). -> {verdict, remote_sha, reason}, где verdict:
-      'verified-equal'  — remote refs/heads/<base_ref> == validated_sha -> можно открывать PR;
+      'verified-equal'  — remote refs/heads/<base_ref> == base_sha -> можно открывать PR;
       'verified-moved'  — существует, но SHA разошёлся -> нужна ревалидация (PR не открывать);
       'unverifiable'    — нет origin/сети/ветки/ошибка ls-remote -> доставка НЕДОСТУПНА (НЕ «успех
                           по умолчанию»; отсутствие проверки != пройденная проверка)."""
-    if not (base_ref and validated_sha):
-        return {"verdict": "unverifiable", "reason": "нет base_ref/validated_sha для сверки"}
+    if not (base_ref and base_sha):
+        return {"verdict": "unverifiable", "reason": "нет base_ref/base_sha для сверки"}
     try:
         rc, out, err = _git(root, "ls-remote", "origin", f"refs/heads/{base_ref}")
     except Exception as e:  # noqa: BLE001
@@ -163,7 +163,7 @@ def _verify_remote_base(root, base_ref, validated_sha):
     if not line:
         return {"verdict": "unverifiable", "reason": f"remote-ветка refs/heads/{base_ref} не найдена в origin"}
     remote_sha = line.split()[0].strip()
-    if remote_sha == validated_sha:
+    if remote_sha == base_sha:
         return {"verdict": "verified-equal", "remote_sha": remote_sha}
     return {"verdict": "verified-moved", "remote_sha": remote_sha}
 
@@ -322,15 +322,71 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
         required_evidence=["security_reviewer"], reviewed_revision=revision)
     res = rv.get("result")
     # rc16: валидируем вердикт — иначе принимаем false-green. Невалидный -> НЕ pass.
-    errs = _security_verdict_errors(res, revision, applicable, vrr)
+    # v3.0.10 (finding аудита P1): observable surface ревьюера = файлы, которые он РЕАЛЬНО читал (rv.reads)
+    # ∪ файлы, показанные ему в диффе ревизии. code-read evidence обязана ссылаться на файл из этой
+    # поверхности — ссылка на непрочитанный/непоказанный файл = фабрикация (не пройдёт).
+    observed = list(rv.get("reads") or [])
+    if revision:
+        _rc, _names, _ = _git(work_root, "show", "--name-only", "--format=", revision)
+        if _rc == 0:
+            observed += [ln.strip() for ln in _names.splitlines() if ln.strip()]
+    errs = _security_verdict_errors(res, revision, applicable, vrr, reviewer_reads=observed)
     if errs:
         return None, {"status": (res or {}).get("status"), "invalid": errs, "raw": res}
     return (res or {}).get("status"), res
 
 
-def _security_verdict_errors(res, revision, applicable_domains, vrr):
+def _evidence_ref_errors(dom, ev_items, reviewer_reads=None):
+    """v3.0.10 (finding аудита P1): evidence домена — СТРУКТУРНЫЕ ссылки (EvidenceRef), а не строка вроде
+    'checked'. Распознаём type: code-read (path[+lines]) | test (command) | finding/scanner (id|detail|path).
+    Если доступен РЕАЛЬНЫЙ trace ревьюера (reviewer_reads — список прочитанных путей), code-read ОБЯЗАН
+    ссылаться на файл, который ревьюер ДЕЙСТВИТЕЛЬНО читал (иначе ссылка сфабрикована). -> список ошибок."""
+    errs = []
+    if not (isinstance(ev_items, list) and ev_items):
+        return [f"домен '{dom}': пустой/неструктурный список evidence"]
+    reads = reviewer_reads if isinstance(reviewer_reads, list) else None
+
+    def _read_match(path):
+        p = str(path).strip().replace("\\", "/")
+        base = p.rsplit("/", 1)[-1]
+        for r in reads:
+            rr = str(r or "").strip().replace("\\", "/")
+            if not rr:
+                continue
+            if rr == p or rr.endswith("/" + p) or p.endswith("/" + rr) \
+                    or (base and rr.rsplit("/", 1)[-1] == base):
+                return True
+        return False
+
+    for ev in ev_items:
+        if not isinstance(ev, dict):
+            errs.append(f"домен '{dom}': evidence '{ev}' не структурная ссылка "
+                        "(нужен {type, path/command/...}, не строка)")
+            continue
+        et = ev.get("type")
+        if et in ("code-read", "read"):
+            path = ev.get("path")
+            if not path:
+                errs.append(f"домен '{dom}': code-read evidence без path")
+            elif reads is not None and not _read_match(path):
+                errs.append(f"домен '{dom}': code-read evidence ссылается на '{path}', которого нет среди "
+                            "реально прочитанных ревьюером файлов — сфабрикованная ссылка")
+        elif et == "test":
+            if not ev.get("command"):
+                errs.append(f"домен '{dom}': test evidence без command")
+        elif et in ("finding", "scanner"):
+            if not (ev.get("id") or ev.get("detail") or ev.get("path")):
+                errs.append(f"домен '{dom}': {et} evidence без id/detail/path")
+        else:
+            errs.append(f"домен '{dom}': evidence без распознаваемого type "
+                        f"(нужен code-read|test|finding, получено {et!r})")
+    return errs
+
+
+def _security_verdict_errors(res, revision, applicable_domains, vrr, reviewer_reads=None):
     """v3.0-rc16: строгая проверка security reviewer-result — та же дисциплина, что для обычных гейтов,
-    плюс security-специфика. -> список ошибок (пусто = валиден)."""
+    плюс security-специфика. reviewer_reads (v3.0.10) — реальный trace чтений ревьюера для сверки
+    code-read evidence. -> список ошибок (пусто = валиден)."""
     if not isinstance(res, dict):
         return ["security-reviewer не вернул структурный вердикт"]
     errs = list(vrr.check(res, gate_ids=None) or [])
@@ -387,10 +443,23 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
                     # path) — на уровне домена (evidence:[...]) ИЛИ в его check'ах. id+status без evidence
                     # ещё не доказательство. warn/fail довольствуются blockers (причина названа выше).
                     if st == "pass":
+                        # v3.0.10 (finding аудита P1): собираем ВСЕ evidence-ссылки домена (уровень домена +
+                        # уровень его check'ов) и валидируем их как СТРУКТУРНЫЕ EvidenceRef + сверяем code-read
+                        # с реальным trace ревьюера. Непустой список строк «checked» больше не проходит.
+                        _all_ev = []
                         _dom_ev = (x or {}).get("evidence")
-                        _chk_ev = any(isinstance(c, dict) and c.get("evidence") for c in dchecks)
-                        if not ((isinstance(_dom_ev, list) and _dom_ev) or _chk_ev):
+                        if isinstance(_dom_ev, list):
+                            _all_ev += _dom_ev
+                        for c in dchecks:
+                            _ce = c.get("evidence") if isinstance(c, dict) else None
+                            if isinstance(_ce, list):
+                                _all_ev += _ce
+                            elif _ce:
+                                _all_ev.append(_ce)
+                        if not _all_ev:
                             errs.append(f"домен '{dom}' pass без evidence-ссылки — id+status не доказательство")
+                        else:
+                            errs += _evidence_ref_errors(dom, _all_ev, reviewer_reads)
     return errs
 
 
@@ -1000,7 +1069,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # v3.0.7 (finding аудита P0): base=None -> AUTO-резолв (upstream/remote-default/текущая ветка), НЕ
     # хардкод 'main'. Явная base обязана существовать. base_sha берётся из резолвера; форк — от него.
     _br = _resolve_base(child_root, base)   # base может быть None (auto) или явной веткой
-    base_sha = _br.get("validated_sha")
+    base_sha = _br.get("base_sha")
     base_ref = _br.get("base_ref") or base or "HEAD"
     base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
                     "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
@@ -2414,6 +2483,43 @@ def selftest():
                                                      "checks": [{"id": f"{d}_ok", "status": "pass"}]} for d in four]}
         expect("v3.0.9 SecVerdict-v2.3: pass без evidence-ссылки -> невалиден (id+status не доказательство)",
                any("без evidence" in e for e in _security_verdict_errors(no_ref, "abc123", four, _vrr2)))
+        # v3.0.10 (finding аудита P1): EvidenceRef — структура + сверка с РЕАЛЬНЫМ trace ревьюера.
+        _one = ["injection"]
+
+        def _dom_ev(ev):   # один домен injection pass с заданным evidence
+            return {"schema_version": 1, "kind": "reviewer-result", "gate": "security", "status": "pass",
+                    "reviewed_revision": "abc123", "checks": [{"id": "c", "status": "pass"}],
+                    "domain_results": [{"domain": "injection", "status": "pass",
+                                        "checks": [{"id": "injection_ok", "status": "pass"}], "evidence": ev}]}
+        # (a) строка вместо структурной ссылки -> невалиден
+        expect("v3.0.10 EvidenceRef: строка 'checked' (не структура) -> невалиден",
+               any("не структурная ссылка" in e
+                   for e in _security_verdict_errors(_dom_ev(["checked"]), "abc123", _one, _vrr2)))
+        # (b) code-read без сверки (reviewer_reads=None) -> форма валидна (обратная совместимость)
+        expect("v3.0.10 EvidenceRef: code-read с path без trace -> валиден (форма)",
+               _security_verdict_errors(_dom_ev([{"type": "code-read", "path": "src/a.py", "lines": "1-9"}]),
+                                        "abc123", _one, _vrr2) == [])
+        # (c) code-read + trace, файл ДЕЙСТВИТЕЛЬНО прочитан -> валиден
+        expect("v3.0.10 EvidenceRef: code-read ссылается на реально прочитанный файл -> валиден",
+               _security_verdict_errors(_dom_ev([{"type": "code-read", "path": "src/a.py", "lines": "1-9"}]),
+                                        "abc123", _one, _vrr2, reviewer_reads=["src/a.py"]) == [])
+        # (d) code-read + trace, файл ревьюер НЕ читал -> невалиден (сфабрикованная ссылка)
+        expect("v3.0.10 EvidenceRef: code-read на непрочитанный файл при наличии trace -> невалиден (фабрикация)",
+               any("которого нет среди реально прочитанных" in e
+                   for e in _security_verdict_errors(_dom_ev([{"type": "code-read", "path": "src/ghost.py"}]),
+                                                     "abc123", _one, _vrr2, reviewer_reads=["src/a.py"])))
+        # (e) test evidence без command -> невалиден; с command -> валиден (reviewer trace не требуется)
+        expect("v3.0.10 EvidenceRef: test evidence без command -> невалиден",
+               any("test evidence без command" in e
+                   for e in _security_verdict_errors(_dom_ev([{"type": "test"}]), "abc123", _one, _vrr2)))
+        expect("v3.0.10 EvidenceRef: test evidence с command -> валиден",
+               _security_verdict_errors(_dom_ev([{"type": "test", "command": "pytest tests/"}]),
+                                        "abc123", _one, _vrr2) == [])
+        # (f) неизвестный type -> невалиден
+        expect("v3.0.10 EvidenceRef: неизвестный type -> невалиден",
+               any("без распознаваемого type" in e
+                   for e in _security_verdict_errors(_dom_ev([{"type": "vibes", "note": "ok"}]),
+                                                     "abc123", _one, _vrr2)))
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
@@ -2462,17 +2568,17 @@ def selftest():
         expect("v3.0.7 resolve-base: явная локальная ветка -> resolved + source=explicit-local + SHA",
                (_rb := _resolve_base(root, orig_branch)).get("resolved") is True
                and _rb.get("source") == "explicit-local" and _rb.get("mode") == "explicit"
-               and _rb.get("validated_sha"))
+               and _rb.get("base_sha"))
         expect("v3.0.2 resolve-base: явная несуществующая ветка -> resolved=False (НЕ тихий HEAD)",
                _resolve_base(root, "no-such-branch-xyz").get("resolved") is False)
         # v3.0.7 auto-режим: base=None -> ВСЕГДА резолвится (в пределе — текущая ветка), не хардкод main
         _ab = _resolve_base(root, None)
         expect("v3.0.7 resolve-base: auto (base=None) -> resolved, mode=auto, реальная ветка (не 'main'-хардкод)",
                _ab.get("resolved") is True and _ab.get("mode") == "auto"
-               and _ab.get("base_ref") == orig_branch and _ab.get("validated_sha"))
+               and _ab.get("base_ref") == orig_branch and _ab.get("base_sha"))
         # v3.0.9 (finding аудита P0.1): единый RemoteBaseVerifier fail-closed — репо БЕЗ origin/ветки
         # в origin -> unverifiable (доставка недоступна, НЕ «успех по умолчанию»); одинаково для обеих цепочек.
-        _rvb = _verify_remote_base(root, orig_branch, _resolve_base(root, orig_branch).get("validated_sha"))
+        _rvb = _verify_remote_base(root, orig_branch, _resolve_base(root, orig_branch).get("base_sha"))
         expect("v3.0.9 verify-remote-base: нет origin -> unverifiable (fail-closed, не открыть PR)",
                _rvb.get("verdict") == "unverifiable" and _rvb.get("reason"))
         # v3.0.7 (P0.2): ЯВНАЯ несуществующая --base -> preflight-БЛОК ДО модели (0 model calls),

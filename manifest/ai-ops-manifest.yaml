@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.9
+  package_version: 3.0.10
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_10_basebinding_truth_and_evidence_integrity:
+      - "P0 BaseBinding сохранялся БЕЗ base_sha (null): резолвер возвращал SHA под ключом validated_sha, а ai_ops_run читал base_sha -> полный BaseBinding был неполным. Фикс: канонизирован ОДИН ключ base_sha во всём резолвере/движке (никаких параллельных validated_sha/base_sha); base_sha реально попадает в run-settings/report/handoff"
+      - "P0 resume НЕ использовал сохранённый base_sha как иммутабельный контракт (заново разрешал ветку в текущий SHA). Фикс: RunHandoff несёт исходный BaseBinding; resume_preflight сверяет сохранённый base_sha с текущим HEAD базы и различает fast-forward (base_rewritten=False, снимается force_resume) от REWRITE (сохранённый SHA больше не предок текущего HEAD — force-push назад/пересоздание). REWRITE НЕ снимается force_resume — только явный replan/отмена. Опасный сценарий (форк от A -> base переписан на B -> старый worktree выдан за проверенный против B) закрыт"
+      - "P1 security evidence проверялась только на непустоту. Фикс: EvidenceRef — структурная ссылка (code-read path[+lines] | test command | finding/scanner id|detail|path); строка 'checked' не проходит. code-read СВЕРЯЕТСЯ с реальным trace ревьюера (прочитанные файлы ∪ показанные в диффе) — ссылка на непрочитанный/непоказанный файл = фабрикация, вердикт невалиден"
+      - "P1 SequencePlan проверялся на форму, но не на целостность. Фикс: _validate_sequence_plan_schema при каждом чтении также проверяет schema_version (поддерживаемая), workitem_id (совпадение — чужой план в каталоге -> ошибка), уникальность id и order, корректность depends_on (существующие пакеты, без самоссылок), отсутствие циклов, пересчёт каждого pkg_hash и общего plan_hash. Дрейф плана блокируется при ЛЮБОМ существующем плане (не только resume_from)"
+      - "проверки: +деттесты (base_sha канонизирован; resume force-push назад -> base_rewritten=True и НЕ снимается force_resume; EvidenceRef строка/непрочитанный файл/неизвестный type -> невалиден, реально прочитанный -> валиден; SequencePlan дубли id/order, битая depends_on, цикл, подменённый pkg_hash/plan_hash, чужой workitem_id -> ошибка; дрейф без resume_from -> error). Полный CI-набор 94/94 PASS на дефолт-ветках main И master"
+      - "ОТЛОЖЕНО: общий атомарный LifecycleStore (journal+checksum) для RunPlan/run-settings/RunHandoff/ApprovalDecision/reports -> v3.1. Критичные артефакты (SequencePlan, BaseBinding) уже durable + integrity-validated"
     fixed_v3_0_9_lifecycle_store_and_delivery_integrity:
       - "P0 sequential delivery был fail-OPEN при непроверяемой remote base: проверял только remote_base!=saved; при None (нет origin/сети/ветки/ошибка ls-remote) -> else -> всё равно открывал PR. Две цепочки имели РАЗНЫЕ правила доверия. Фикс: единый _verify_remote_base (RemoteBaseVerifier) для single-run И sequential: verified-equal->PR, verified-moved->revalidation, unverifiable->delivery unavailable (отсутствие проверки != пройденная проверка)"
       - "P0 single-run хранил только имя base, не полный BaseBinding. Фикс: BaseBinding {base_ref, base_sha, mode, source} сохраняется в run-settings и восстанавливается на resume (точная база исходного запуска — ловит force-push/смену upstream/пересоздание ветки, не только fast-forward); base разрешается в конкретную ветку до записи"

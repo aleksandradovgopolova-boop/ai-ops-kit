@@ -88,9 +88,16 @@ def _durable_write_yaml(path, data, require_keys=()):
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
-def _validate_sequence_plan_schema(doc):
-    """v3.0.9 (finding аудита P0): ПОЛНАЯ schema-валидация SequencePlan при КАЖДОМ чтении (не только
-    dict+kind). Парсибельный, но неполный план -> тоже lifecycle-corrupted. -> None (валиден) | причина."""
+_SUPPORTED_PLAN_SCHEMA = 1
+
+
+def _validate_sequence_plan_schema(doc, expected_wid=None):
+    """v3.0.9/v3.0.10 (finding аудита P0/P1): ПОЛНАЯ integrity-валидация SequencePlan при КАЖДОМ чтении.
+    Проверяем не только НАЛИЧИЕ полей, но и ЦЕЛОСТНОСТЬ: поддерживаемая schema_version, совпадение
+    workitem_id (если задан expected_wid — иначе чужой план в каталоге WorkItem прошёл бы), уникальность
+    package id и order, корректность depends_on (ссылки на существующие пакеты), отсутствие циклов,
+    пересчёт КАЖДОГО pkg_hash и общего plan_hash. Любое расхождение -> lifecycle-corrupted.
+    -> None (валиден) | причина."""
     if not isinstance(doc, dict):
         return "не dict"
     if doc.get("kind") != "SequencePlan":
@@ -98,9 +105,15 @@ def _validate_sequence_plan_schema(doc):
     for k in ("schema_version", "workitem_id", "plan_hash", "base_ref", "sequence_base_sha", "packages"):
         if doc.get(k) in (None, ""):
             return f"нет обязательного поля '{k}'"
+    if doc.get("schema_version") != _SUPPORTED_PLAN_SCHEMA:
+        return f"schema_version {doc.get('schema_version')} не поддерживается (нужна {_SUPPORTED_PLAN_SCHEMA})"
+    if expected_wid is not None and doc.get("workitem_id") != expected_wid:
+        return (f"workitem_id плана '{doc.get('workitem_id')}' != текущего WorkItem '{expected_wid}' "
+                "— чужой SequencePlan в каталоге")
     pkgs = doc.get("packages")
     if not isinstance(pkgs, list) or not pkgs:
         return "packages пуст/не список"
+    ids, orders = [], []
     for i, p in enumerate(pkgs):
         if not isinstance(p, dict):
             return f"packages[{i}] не dict"
@@ -109,6 +122,53 @@ def _validate_sequence_plan_schema(doc):
                 return f"packages[{i}] без '{k}'"
         if "depends_on" not in p:
             return f"packages[{i}] без depends_on"
+        deps = p.get("depends_on")
+        if not isinstance(deps, list):
+            return f"packages[{i}] depends_on не список"
+        ids.append(p["id"])
+        orders.append(p["order"])
+        # пересчёт pkg_hash из определения (id/scope/deps/order/write_scope) — дрейф определения ловится
+        if _pkg_hash(p) != p.get("pkg_hash"):
+            return f"packages[{i}] ('{p['id']}') pkg_hash не сходится с определением (подмена/дрейф)"
+    if len(set(ids)) != len(ids):
+        return f"дубли package id: {sorted({x for x in ids if ids.count(x) > 1})}"
+    if len(set(orders)) != len(orders):
+        return f"дубли order: {sorted({x for x in orders if orders.count(x) > 1})}"
+    idset = set(ids)
+    # depends_on обязаны ссылаться на существующие пакеты; самоссылка запрещена
+    dep_map = {}
+    for p in pkgs:
+        for d in (p.get("depends_on") or []):
+            if d == p["id"]:
+                return f"пакет '{p['id']}' зависит от себя"
+            if d not in idset:
+                return f"пакет '{p['id']}' зависит от несуществующего '{d}'"
+        dep_map[p["id"]] = list(p.get("depends_on") or [])
+    # отсутствие циклов (обход в глубину с тремя состояниями)
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {i: WHITE for i in idset}
+
+    def _has_cycle(node, stack):
+        color[node] = GRAY
+        for nxt in dep_map.get(node, []):
+            if color[nxt] == GRAY:
+                return stack + [nxt]
+            if color[nxt] == WHITE:
+                r = _has_cycle(nxt, stack + [nxt])
+                if r:
+                    return r
+        color[node] = BLACK
+        return None
+
+    for i in idset:
+        if color[i] == WHITE:
+            cyc = _has_cycle(i, [i])
+            if cyc:
+                return f"цикл зависимостей: {' -> '.join(cyc)}"
+    # пересчёт общего plan_hash из упорядоченных пакетов
+    recomputed = _plan_hash(_ordered(pkgs))
+    if recomputed != doc.get("plan_hash"):
+        return f"plan_hash не сходится с пакетами (сохранён {doc.get('plan_hash')}, пересчитан {recomputed})"
     return None
 
 
@@ -414,7 +474,8 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             _corrupt_reason = f"YAML не парсится: {_e}"
         else:
             _corrupt_reason = None
-        _schema_err = None if _corrupt_reason is not None else _validate_sequence_plan_schema(_loaded)
+        _schema_err = (None if _corrupt_reason is not None
+                       else _validate_sequence_plan_schema(_loaded, expected_wid=wid))
         if _corrupt_reason is not None or _schema_err is not None:
             import hashlib as _h
             _raw = b""
@@ -434,8 +495,10 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # NB: fresh SequencePlan пишется НИЖЕ, ПОСЛЕ разрешения base (иначе base_ref=None для auto) и
     # v3.0.7 (P0.3) — FAIL-CLOSED (atomic write + перечитывание): без immutable-плана нельзя доказать
     # base/порядок/hashes/checkpoint, поэтому сбой записи останавливает последовательность.
-    # дрейф плана при resume -> отказ (P0.3): сохранённый план — источник истины
-    if resume_from and saved_plan and saved_plan.get("plan_hash") and saved_plan["plan_hash"] != cur_plan_hash:
+    # дрейф плана -> отказ (P0.3/v3.0.10): сохранённый план — ИММУТАБЕЛЬНЫЙ источник истины. Проверяем при
+    # ЛЮБОМ существующем плане (не только resume_from): другой plan_hash от текущих пакетов = planner
+    # перестроил план, исполнять по нему поверх старых отчётов небезопасно. Нужен явный replan.
+    if saved_plan and saved_plan.get("plan_hash") and saved_plan["plan_hash"] != cur_plan_hash:
         return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
                 "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
                 "ready_all": False, "aggregate_ready": False, "total": len(ordered),
@@ -875,14 +938,19 @@ def selftest():
         import re as _re
         import json as _json
         res = {"kind": "reviewer-result", "status": "pass", "checks": [{"id": "ok", "status": "pass"}]}
-        m = _re.search(r"применимым доменам:\s*([^\n(]+)", prompt or "")
+        p = prompt or ""
+        m = _re.search(r"применимым доменам:\s*([^\n(]+)", p)
         if m:
             doms = [d.strip() for d in m.group(1).split(",") if d.strip()]
             if doms:
-                # v3.0.7/v3.0.9 v2.1/v2.3: per-domain checks + конкретная evidence-ссылка для pass
+                # v3.0.10 v2.4: evidence code-read обязана ссылаться на ФАЙЛ ИЗ ДИФФА (observable surface
+                # ревьюера) — иначе сверка с реальным trace отклонит фабрикацию. Берём реально изменённый
+                # файл из seeded-диффа в промпте (fallback — известный файл репо calc.py).
+                _cand = _re.search(r"\+\+\+ b/(\S+)", p)
+                _path = _cand.group(1) if _cand else "calc.py"
                 res["domain_results"] = [{"domain": d, "status": "pass",
                                           "checks": [{"id": f"{d}_ok", "status": "pass"}],
-                                          "evidence": [{"type": "code-read", "path": "src/x.py", "lines": "1-10"}]}
+                                          "evidence": [{"type": "code-read", "path": _path, "lines": "1-10"}]}
                                          for d in doms]
         return _json.dumps(res, ensure_ascii=False)
     reviewer = _pass_reviewer
@@ -983,6 +1051,50 @@ def selftest():
                                   resume_from=pkgs[1]["id"])
         expect("v3.0-rc4 resume (P0.3): дрейф SequencePlan -> error (нужен replan)",
                "error" in seq_pd and "дрейф" in (seq_pd.get("error") or "").lower())
+        # v3.0.10 (finding аудита P1): дрейф ловится и БЕЗ resume_from (сохранённый план — иммутабелен).
+        seq_pd2 = execute_sequence("x", sig, root, pkgs_drift, prop_for, feature="seq", base=cur)
+        expect("v3.0.10: дрейф SequencePlan БЕЗ resume_from -> error (план иммутабелен)",
+               "error" in seq_pd2 and "дрейф" in (seq_pd2.get("error") or "").lower())
+
+        # v3.0.10 (finding аудита P1): ПОЛНАЯ integrity-валидация SequencePlan (чистая функция).
+        def _valid_plan(wid="seq"):
+            _o = _ordered([{"id": "WP1", "order": 1, "depends_on": [], "scope": "a", "write_scope": ["."]},
+                           {"id": "WP2", "order": 2, "depends_on": ["WP1"], "scope": "b", "write_scope": ["."]}])
+            return {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": 2,
+                    "plan_hash": _plan_hash(_o), "base_ref": "main", "sequence_base_sha": "deadbeef",
+                    "packages": [{"id": p["id"], "order": p["order"], "depends_on": p["depends_on"],
+                                  "scope": p["scope"], "write_scope": p["write_scope"],
+                                  "pkg_hash": _pkg_hash(p)} for p in _o]}
+        expect("v3.0.10 plan-integrity: валидный план -> None",
+               _validate_sequence_plan_schema(_valid_plan(), expected_wid="seq") is None)
+        expect("v3.0.10 plan-integrity: чужой workitem_id -> ошибка",
+               "чужой" in (_validate_sequence_plan_schema(_valid_plan("OTHER"), expected_wid="seq") or ""))
+        expect("v3.0.10 plan-integrity: неподдерживаемая schema_version -> ошибка",
+               "schema_version" in (_validate_sequence_plan_schema({**_valid_plan(), "schema_version": 2},
+                                                                    expected_wid="seq") or ""))
+        def _reseal(plan):   # пересчитать pkg_hash каждого пакета + общий plan_hash (чтобы тест изолировал
+            for _p in plan["packages"]:                     # СТРУКТУРНОЕ нарушение, а не дрейф хэша)
+                _p["pkg_hash"] = _pkg_hash(_p)
+            plan["plan_hash"] = _plan_hash(_ordered(plan["packages"]))
+            return plan
+        _dup = _valid_plan(); _dup["packages"][1]["id"] = "WP1"; _reseal(_dup)
+        expect("v3.0.10 plan-integrity: дубль package id -> ошибка",
+               "дубли package id" in (_validate_sequence_plan_schema(_dup, expected_wid="seq") or ""))
+        _dupord = _valid_plan(); _dupord["packages"][1]["order"] = 1; _reseal(_dupord)
+        expect("v3.0.10 plan-integrity: дубль order -> ошибка",
+               "дубли order" in (_validate_sequence_plan_schema(_dupord, expected_wid="seq") or ""))
+        _baddep = _valid_plan(); _baddep["packages"][1]["depends_on"] = ["WP-NONE"]; _reseal(_baddep)
+        expect("v3.0.10 plan-integrity: depends_on на несуществующий пакет -> ошибка",
+               "несуществующего" in (_validate_sequence_plan_schema(_baddep, expected_wid="seq") or ""))
+        _cyc = _valid_plan(); _cyc["packages"][0]["depends_on"] = ["WP2"]; _reseal(_cyc)   # WP1<->WP2 цикл
+        expect("v3.0.10 plan-integrity: цикл зависимостей -> ошибка",
+               "цикл" in (_validate_sequence_plan_schema(_cyc, expected_wid="seq") or ""))
+        _badpk = _valid_plan(); _badpk["packages"][0]["pkg_hash"] = "0" * 16
+        expect("v3.0.10 plan-integrity: подменённый pkg_hash -> ошибка",
+               "pkg_hash не сходится" in (_validate_sequence_plan_schema(_badpk, expected_wid="seq") or ""))
+        _badph = _valid_plan(); _badph["plan_hash"] = "0" * 16
+        expect("v3.0.10 plan-integrity: подменённый plan_hash -> ошибка",
+               "plan_hash не сходится" in (_validate_sequence_plan_schema(_badph, expected_wid="seq") or ""))
         # v3.0-rc2 (P0.3): пакет до resume_from без подтверждённого снимка -> error (не добавляем в completed)
         import tempfile as _tf
         with _tf.TemporaryDirectory() as td_e:

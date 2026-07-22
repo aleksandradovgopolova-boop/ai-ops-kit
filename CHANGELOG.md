@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.10] — 2026-07-22 — BaseBinding Truth & Evidence Integrity (аудит: 2×P0 + 2×P1)
+
+### Fixed
+- **P0 — BaseBinding сохранялся БЕЗ base_sha (был `null`).** Резолвер возвращал SHA под ключом
+  `validated_sha`, а `ai_ops_run` читал `base_sha` → полный BaseBinding был неполным. Канонизирован
+  ОДИН ключ `base_sha` во всём резолвере/движке (никаких параллельных `validated_sha`/`base_sha`).
+- **P0 — resume НЕ использовал сохранённый base_sha как иммутабельный контракт** (заново разрешал ветку
+  в её текущий SHA). Теперь RunHandoff несёт исходный `BaseBinding`, а `resume_preflight` сверяет
+  сохранённый `base_sha` с текущим HEAD базы и различает **fast-forward** (`base_rewritten=False`,
+  снимается осознанным `force_resume`) от **REWRITE** (force-push назад / пересоздание ветки на
+  несвязанном коммите — сохранённый SHA больше не предок текущего HEAD). REWRITE **не снимается
+  `force_resume`** — старую работу нельзя выдать за проверенную против новой базы; нужен явный `replan`
+  или отмена. Опасный сценарий (форк от A → base переписан на B → старый worktree выдан за проверенный
+  против B) закрыт.
+- **P1 — Security evidence проверялась только на непустоту.** Теперь **EvidenceRef** — структурная
+  ссылка (`code-read` path[+lines] | `test` command | `finding`/`scanner` id|detail|path); строка
+  вроде `checked` не проходит. `code-read` **сверяется с реальным trace ревьюера** (файлы, которые он
+  читал ∪ показанные в диффе) — ссылка на непрочитанный/непоказанный файл = фабрикация, вердикт невалиден.
+- **P1 — SequencePlan проверялся на форму, но не на целостность.** `_validate_sequence_plan_schema`
+  теперь при каждом чтении также проверяет: поддерживаемую `schema_version`, совпадение `workitem_id`
+  (чужой план в каталоге WorkItem → ошибка), уникальность `id` и `order`, корректность `depends_on`
+  (ссылки на существующие пакеты, без самоссылок), **отсутствие циклов**, пересчёт каждого `pkg_hash`
+  и общего `plan_hash`. Дрейф плана блокируется при ЛЮБОМ существующем плане (не только при `resume_from`).
+
+Отложено (честно): общий атомарный LifecycleStore (journal+checksum) для RunPlan/run-settings/
+RunHandoff/ApprovalDecision/reports → v3.1. Критичные артефакты (SequencePlan, BaseBinding) уже
+durable + integrity-validated.
+
 ## [3.0.9] — 2026-07-22 — Lifecycle Store & Delivery Integrity (аудит: 3×P0 + P1)
 
 ### Fixed
