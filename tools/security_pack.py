@@ -170,7 +170,9 @@ def selftest():
            and "input_validation" in fe["blocking"])
 
     # секрет -> домен secrets fail + блок (critical), всегда применим
-    sec = run_pack(files_content={"config.py": 'API_KEY = "AKIAIOSFODNN7EXAMPLE"\n'}, signals={})
+    # v3.0.4: секрет-фикстура собрана в рантайме (без статического литерала — downstream-сканеры не флагуют)
+    _aws = "AKIA" + "IOSFODNN7EXAMPLE"
+    sec = run_pack(files_content={"config.py": f'API_KEY = "{_aws}"\n'}, signals={})
     expect("secrets всегда применим", "secrets" in sec["applicable_domains"])
     expect("секрет -> secrets fail + overall blocked",
            any(r["domain"] == "secrets" and r["status"] == "fail" for r in sec["results"])

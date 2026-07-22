@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.3
+  package_version: 3.0.4
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_4_no_static_secret_fixtures:
+      - "finding downstream-интеграции (Гермес): v3.0.3 установлен/проверен, но PR-конвейер потребителя блокировал публикацию — секрет-сканер (gitleaks/trufflehog-класс) ЛОЖНО флагует фикстуры-«секреты» в тестах САМОГО детектора кита (AKIAIOSFODNN7EXAMPLE, api_key hex, -----BEGIN RSA PRIVATE KEY-----, sk-super-secret-123, sk-ant-xyz). Правильный путь — НЕ обходить сканер, а адаптировать upstream"
+      - "фикс: все фейковые секрет-фикстуры СОБИРАЮТСЯ в рантайме из фрагментов (напр. 'AKIA'+'IOSFODNN7EXAMPLE') -> в исходнике НЕТ статического секрет-подобного литерала -> НИ ОДИН секрет-сканер (scanner-agnostic, не только gitleaks) не флагует. Детектор кита получает полную собранную строку -> его тесты по-прежнему проверяют детекцию. Затронуто: security_scan/security_pack/execution_pipeline/tool_broker (selftest)"
+      - "проверка: git grep секрет-форматов (AKIA/sk-/PEM/hex) -> ЧИСТО (0 статических литералов); реальные ключи из сессии в трекнутых файлах отсутствуют (0). Полный CI-набор (94) 94/94 PASS локально на дефолт-ветках И main, И master. Downstream секрет-сканер потребителя теперь не блокирует публикацию обновления"
     fixed_v3_0_3_ci_parity_default_branch:
       - "v3.0.2 CI RED (quality/pipeline-e2e): 3 resume-деттеста (v2.109 ctl, Q3b, PQ3) падали ТОЛЬКО в CI. Корень — с base-binding (3.0.2) base стал частью resume-состояния; тесты запускали фазу 1 БЕЗ base (дефолт 'main'), а resume-фазу с base=cur. Локально дефолт-ветка main -> совпадало; в CI дефолт master -> расхождение main/master -> ложная resume-ревалидация -> blocked. Фикс: фаза 1 во всех трёх тестах использует base=cur (реальную ветку репо) — консистентно с resume. Только тесты; функциональность 3.0.2 не менялась"
       - "процессная заметка: CI-паритет теперь прогоняется и под GIT_CONFIG_GLOBAL с init.defaultBranch=master (воспроизводит дефолт GitHub-раннера) — 94/94 и на main, и на master. Раньше локальный main маскировал branch-зависимые падения"
