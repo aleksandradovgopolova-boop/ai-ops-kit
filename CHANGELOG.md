@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.7] — 2026-07-22 — Default Branch & Durable State (аудит: 3×P0 + P1)
+
+Внутренний trust-патч перед полными dogfood-прогонами. (Аудит предлагал это как 3.0.5, но 3.0.5/3.0.6
+уже заняты авто-апдейтом и secret-scanning-гайдом — вышло как 3.0.7.)
+
+### Fixed
+- **P0 — `base` был захардкожен `main`.** На репо с default-веткой `master` обычный прогон без `--base`
+  шёл к несуществующему `main`. **BaseResolver v3:** `base=None` → **auto** (upstream текущей ветки →
+  remote default `origin/HEAD` → текущая ветка), без хардкода. Дефолты `base` → `None` во всех входах
+  (run_pipeline/execute_sequence/ai_ops_run.run/CLI); `base_binding` несёт `mode`+`source`.
+- **P0 — неразрешённая ЯВНАЯ base позволяла выполнять от HEAD.** Явная несуществующая `--base` теперь →
+  **preflight-блок до модели** (ноль model calls, worktree не создан) в single-run и sequential. auto
+  всегда разрешается, поэтому блок только на явной несуществующей ветке.
+- **P0 — критические lifecycle-записи были best-effort** (`try/except pass`). `_durable_write_yaml`
+  (atomic `temp→fsync→rename` + перечитывание/валидация ключей) для immutable **SequencePlan**; сбой
+  записи → последовательность не стартует (без источника истины нельзя доказать base/порядок/hashes/
+  checkpoint).
+- **P1 — SecurityVerdict v2.1.** Каждый применимый домен обязан нести **свои** per-domain `checks` (не
+  только `status`); `pass` домена без domain-specific checks не закрывает security.
+
+Отложено: durable-запись остальных lifecycle-артефактов (run-settings/report/approval) — SequencePlan
+закрыт как критичнейший.
+
 ## [3.0.6] — 2026-07-22 — Гайд downstream secret-scanning (лексика ≠ секрет)
 
 ### Added
