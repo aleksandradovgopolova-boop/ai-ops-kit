@@ -25,6 +25,8 @@ from pathlib import Path
 
 import yaml
 
+import lifecycle_store as _ls   # v3.0.12: fail-closed чтение RunHandoff (битый != «resume безопасен»)
+
 
 def _git(root, *args):
     r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
@@ -116,10 +118,21 @@ def resume_preflight(child_root, wid, base="main"):
     child_root = Path(child_root)
     reasons, revalidation, base_rewritten = [], False, False
     hp = child_root / "features" / wid / "run-handoff.yaml"
-    if not hp.is_file():
+    # v3.0.12 (finding аудита блок B): FAIL-CLOSED чтение. Прежде safe_load(...) or {} на битом/пустом
+    # handoff давал {} -> sha=None -> ВСЕ проверки устаревания (база ушла/переписана, ревизия пропала)
+    # пропускались -> preflight отвечал «can_resume=True, ревалидация не нужна» на пустом состоянии —
+    # ровно тот ложный «resume безопасен», который модуль обязан предотвращать. Теперь: битый -> отказ.
+    # require kind+workitem_id (структурная целостность); resume_from_revision МОЖЕТ быть null легитимно
+    # (прогон без коммита) — это не «повреждён», а «нет точки резюме», и обрабатывается ниже как sha=None.
+    _g = _ls.load_guarded(hp, required_keys=("kind", "workitem_id"))
+    if _g["state"] == "absent":
         return {"can_resume": False, "revalidation_needed": False, "base_rewritten": False,
                 "reasons": [f"нет RunHandoff для {wid} (features/{wid}/run-handoff.yaml) — нечего продолжать"]}
-    handoff = yaml.safe_load(hp.read_text(encoding="utf-8")) or {}
+    if _g["state"] == "corrupt":
+        return {"can_resume": False, "revalidation_needed": True, "base_rewritten": False,
+                "reasons": [f"RunHandoff повреждён ({_g['reason']}) — состояние resume недостоверно; "
+                            "нужна явная recovery/ревалидация, не тихое продолжение на пустом состоянии"]}
+    handoff = _g["data"]
     sha = handoff.get("resume_from_revision")
     saved_base_sha = ((handoff.get("base_binding") or {}).get("base_sha")) or None
     branch = f"ai-ops/{wid}"
@@ -315,6 +328,16 @@ def selftest():
         expect("v3.0.10 resume: base переписан (не предок) -> base_rewritten=True + причина",
                pf_rw.get("base_rewritten") is True
                and any("ПЕРЕПИСАН" in r for r in pf_rw["reasons"]))
+
+        # v3.0.12 (finding аудита блок B): битый/пустой RunHandoff -> НЕ «resume безопасен» (fail-closed).
+        (fdir / "run-handoff.yaml").write_text("", encoding="utf-8")   # оборванная запись
+        pf_empty = resume_preflight(root, "rw", base=cur)
+        expect("v3.0.12: пустой RunHandoff -> can_resume=False (не тихий 'актуально')",
+               pf_empty["can_resume"] is False and any("повреждён" in r for r in pf_empty["reasons"]))
+        (fdir / "run-handoff.yaml").write_text("kind: RunHandoff\n:::not yaml:::\n  - [", encoding="utf-8")
+        pf_bad = resume_preflight(root, "rw", base=cur)
+        expect("v3.0.12: битый YAML RunHandoff -> can_resume=False",
+               pf_bad["can_resume"] is False)
 
     print("run_handoff selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

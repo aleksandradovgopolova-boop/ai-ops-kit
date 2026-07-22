@@ -61,31 +61,12 @@ def _ordered(packages):
 
 
 def _durable_write_yaml(path, data, require_keys=()):
-    """v3.0.7 (finding аудита P0.3): АТОМАРНАЯ + FAIL-CLOSED запись критического lifecycle-артефакта.
-    temp-файл -> flush+fsync -> atomic rename -> ПЕРЕЧИТАТЬ и провалидировать (dict + обязательные ключи).
-    -> {ok: True} | {ok: False, error}. Вызывающий обязан остановиться при ok=False (нет источника истины)."""
-    import os
-    import yaml as _y
-    from pathlib import Path as _P
-    path = _P(path)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        text = _y.safe_dump(data, allow_unicode=True, sort_keys=False)
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)                      # atomic на том же ФС
-        back = _y.safe_load(path.read_text(encoding="utf-8"))   # перечитать и проверить
-        if not isinstance(back, dict):
-            return {"ok": False, "error": "перечитанный артефакт не dict"}
-        missing = [k for k in require_keys if k not in back]
-        if missing:
-            return {"ok": False, "error": f"после записи отсутствуют ключи: {', '.join(missing)}"}
-        return {"ok": True}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    """v3.0.7/v3.0.12 (finding аудита P0.3 / блок B): АТОМАРНАЯ + FAIL-CLOSED запись критического
+    lifecycle-артефакта. Делегирует ЕДИНОМУ durable-контракту lifecycle_store.durable_write (tmp ->
+    flush+fsync(файл) -> atomic rename -> fsync(КАТАЛОГ) -> перечитать+провалидировать). Прежде здесь была
+    отдельная копия БЕЗ fsync каталога — теперь один источник истины для всех durable-записей."""
+    import lifecycle_store
+    return lifecycle_store.durable_write(path, data, require_keys=require_keys)
 
 
 _SUPPORTED_PLAN_SCHEMA = 1
@@ -735,16 +716,33 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         # features/<wid>/{run-plan,run-handoff,...} перетираются следующим пакетом -> у каждого пакета
         # свой неизменный lifecycle-каталог work-packages/<pid>/ (P1 аудита).
         pkg_dir = features_dir / wid / "work-packages" / pid
+        # v3.0.12 (finding аудита блок B): report.json — ЧЕКПОИНТ resume/retry. Пишем АТОМАРНО (tmp+fsync+
+        # replace); сбой БОЛЬШЕ НЕ гаснет молча (иначе пакет помечен completed, следующий строится поверх
+        # коммита, но durable-чекпоинта нет) -> HARD-STOP цепочки. Снимки lifecycle — best-effort аудит-копии.
+        _persist_err = None
         try:
+            import os as _os
             pkg_dir.mkdir(parents=True, exist_ok=True)
-            (pkg_dir / "report.json").write_text(
-                json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-            for _art in ("run-plan.yaml", "run-handoff.yaml", "context-bundle.yaml", "spec-coverage.yaml"):
-                _src = features_dir / wid / _art
-                if _src.is_file():
-                    (pkg_dir / _art).write_text(_src.read_text(encoding="utf-8"), encoding="utf-8")
-        except OSError:
-            pass
+            _tmp = pkg_dir / "report.json.tmp"
+            with open(_tmp, "w", encoding="utf-8") as _f:
+                _f.write(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
+                _f.flush()
+                _os.fsync(_f.fileno())
+            _os.replace(_tmp, pkg_dir / "report.json")
+        except OSError as _e:
+            _persist_err = f"{type(_e).__name__}: {_e}"
+        if _persist_err is None:
+            try:
+                for _art in ("run-plan.yaml", "run-handoff.yaml", "context-bundle.yaml", "spec-coverage.yaml"):
+                    _src = features_dir / wid / _art
+                    if _src.is_file():
+                        (pkg_dir / _art).write_text(_src.read_text(encoding="utf-8"), encoding="utf-8")
+            except OSError:
+                pass
+        else:
+            blocked = True   # чекпоинт не сохранён durable -> нельзя строить следующий пакет поверх
+            if not stop_reason:
+                stop_reason = f"checkpoint-persist-failed: {_persist_err}"
 
         # последовательность: коммит пакета — потомок коммита предыдущего (строим поверх, не параллельно)
         if executed and prev_sha and sha:

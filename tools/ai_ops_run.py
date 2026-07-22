@@ -41,6 +41,7 @@ for _p in (PKG / "tools", PKG / "validation"):
 import run_plan          # noqa: E402
 import workitem          # noqa: E402
 import active_work       # noqa: E402
+import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
 def _resume_context_from_handoff(child_root, fid):
@@ -96,9 +97,20 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # _sequence_internal -> пропускаем drift-проверку и restore run-settings.
         if resume and feature and not signals.get("_sequence_internal"):
             _sp = features_dir / feature / "run-settings.yaml"
-            if _sp.is_file():
-                import yaml as _yr
-                _saved = _yr.safe_load(_sp.read_text(encoding="utf-8")) or {}
+            # v3.0.12 (finding аудита блок B): FAIL-CLOSED чтение. Прежде safe_load(...) or {} трактовал
+            # битый/пустой run-settings как «отсутствует» -> resume тихо откатывался к дефолтам вызова
+            # (терял классификацию/policy/BaseBinding) И перезаписывал файл дефолтами (контракт исходного
+            # прогона уничтожался навсегда). Теперь: повреждён -> явный отказ (не дефолт, не перезапись).
+            _g = _ls.load_guarded(_sp, required_keys=("kind", "policy"), kind="run-settings")
+            if _g["state"] == "corrupt":
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature,
+                        "status": "error", "ready_for_pr": False,
+                        "error": (f"run-settings повреждён ({_g['reason']}) — resume не может восстановить "
+                                  "policy/классификацию исходного прогона. Нужна явная recovery (не тихий "
+                                  "дефолт: иначе прогон переклассифицируется и перезапишет контракт)."),
+                        "resume": {"requested": True, "resumed": False}}
+            if _g["state"] == "ok":
+                _saved = _g["data"]
                 _ss, _pp = (_saved.get("signals") or {}), (_saved.get("policy") or {})
                 # v3.0-rc4 (P0.1) IMMUTABLE resume: resume НЕ меняет классификацию/policy. Если новый
                 # вызов пытается переопределить routing-сигнал (task_type/risk/size/affected_areas) или
@@ -226,8 +238,18 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                            "base": base,   # v3.0.2 (P0): резолвнутый base_ref (back-compat)
                            "base_binding": base_binding},   # v3.0.9 (P0.2): полный BaseBinding (ref+sha+mode+source)
             }
-            _sdump = yaml.safe_dump(_settings, allow_unicode=True, sort_keys=False)
-            (features_dir / fid / "run-settings.yaml").write_text(_sdump, encoding="utf-8")  # latest -> restore
+            # v3.0.12 (finding аудита блок B): run-settings — источник истины для resume, пишем DURABLE
+            # (атомарно + fsync + перечитывание). Сбой записи -> FAIL-CLOSED отказ (без надёжной policy
+            # resume восстановит мусор/дефолты). require_keys гарантируют, что перечитанный файл цел.
+            _ws = _ls.durable_write(features_dir / fid / "run-settings.yaml", _settings,
+                                    require_keys=("kind", "policy", "signals"))
+            if not _ws.get("ok"):
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                        "status": "error", "ready_for_pr": False,
+                        "error": (f"lifecycle fail-closed: не удалось надёжно сохранить run-settings "
+                                  f"({_ws.get('error')}) — без durable policy resume небезопасен; прогон "
+                                  "не начат")}
+            _sdump = yaml.safe_dump(_settings, allow_unicode=True, sort_keys=False)   # снимок истории (ниже)
             # v3.0-rc4 (P0.1): per-run СНИМОК для аудита (не только последнее состояние). Нумеруем по
             # числу уже сохранённых снимков — детерминированно, без времени (совместимо с workflow-песочницей).
             _hist = features_dir / fid / "run-history"
@@ -307,6 +329,16 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             return rep
 
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
+        # v3.0.12 (finding аудита блок B): общий реестр координации повреждён -> FAIL-CLOSED (не стартуем
+        # вслепую: пустая карта скрыла бы чужую активную работу и две сессии столкнулись бы). Проверяем
+        # ДО preflight/register, чтобы register не наткнулся на corrupt-raise без обработки.
+        _awg = _ls.load_guarded(aw_path, kind="active-work")
+        if _awg["state"] == "corrupt":
+            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                    "status": "error", "ready_for_pr": False,
+                    "error": (f"active-work реестр повреждён ({_awg['reason']}) — прогон не начат, чтобы не "
+                              "потерять координацию параллельных сессий (пустая карта скрыла бы коллизии). "
+                              "Нужна явная recovery .ai/runtime/active-work.yaml.")}
         areas = signals.get("affected_areas") or ["unspecified"]
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
         # активной работой (тихо, через classify — без печати и без себя). Advisory в отчёт.
@@ -321,8 +353,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
         # stdout оставался чистым для --json.
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
-                                 workitem=f"features/{fid}/workitem.yaml")
+            try:
+                active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
+                                     workitem=f"features/{fid}/workitem.yaml")
+            except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
+                lifecycle_errors.append(f"active-work register: {_e}")
 
         # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
         # останется in-progress навсегда) — гарантируем через except+re-raise.
@@ -369,8 +404,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _hf = {"schema_version": 1, "kind": "run-handoff", "workitem_id": fid,
                        "status": "error", "failure": _fail, "retryable": bool(_fail.get("retryable")),
                        "next_action": _safe}
-                (features_dir / fid / "run-handoff.yaml").write_text(
-                    yaml.safe_dump(_hf, allow_unicode=True, sort_keys=False), encoding="utf-8")
+                # v3.0.12: durable failure-handoff (атомарно) — чтобы не оставить наполовину записанный
+                # или устаревший handoff прошлого прогона, который resume принял бы за свежий.
+                _ls.durable_write(features_dir / fid / "run-handoff.yaml", _hf,
+                                  require_keys=("kind", "workitem_id"))
                 err_rep["run_report"] = f"features/{fid}/run-report.json"
                 err_rep["handoff"] = {"next_action": _safe}
             except Exception:  # noqa: BLE001 — запись evidence не должна маскировать исходный сбой
@@ -435,26 +472,34 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                    # v2.111: конкретные пакеты (id/scope/deps) + основная ось
                                    "primary_axis": work_pkg.get("primary_axis"),
                                    "work_packages": work_pkg.get("work_packages", [])}
-        if lifecycle_errors:
-            rep["lifecycle_errors"] = lifecycle_errors   # v2.107: сбои слоя контекста видны, не гаснут
-        try:
-            (features_dir / fid / "run-report.json").write_text(
-                json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        except OSError:
-            pass
-        # v2.99 Context Lifecycle: RunHandoff — состояние для продолжения в новой сессии (что сделано,
-        # проверки, следующий безопасный шаг, актуальный SHA). Не начинать заново -> resume читает его.
+        # v3.0.12 (finding аудита блок B): RunHandoff — состояние для resume, пишем DURABLE (атомарно +
+        # fsync + перечитывание). Сбой записи БОЛЬШЕ НЕ гаснет молча (иначе на диске остаётся handoff
+        # ПРОШЛОГО прогона, и resume продолжит с устаревшего состояния, думая, что оно свежее): фиксируем
+        # в lifecycle_errors и в отчёт. build_handoff строится ДО записи run-report, чтобы отразить его исход.
         import run_handoff
         try:
             wt = child_root / ".ai" / "worktrees" / fid
             handoff = run_handoff.build_handoff(rep, work_root=(wt if wt.is_dir() else child_root))
-            (features_dir / fid / "run-handoff.yaml").write_text(
-                yaml.safe_dump(handoff, allow_unicode=True, sort_keys=False), encoding="utf-8")
-            rep["handoff"] = {"next_action": handoff["next_action"],
-                              "resume_from_revision": handoff["resume_from_revision"],
-                              "open_questions": handoff["open_questions"]}
-        except Exception:  # noqa: BLE001
-            pass
+            _hw = _ls.durable_write(features_dir / fid / "run-handoff.yaml", handoff,
+                                    require_keys=("kind", "workitem_id"))
+            if _hw.get("ok"):
+                rep["handoff"] = {"next_action": handoff["next_action"],
+                                  "resume_from_revision": handoff["resume_from_revision"],
+                                  "open_questions": handoff["open_questions"]}
+            else:
+                lifecycle_errors.append(f"run-handoff durable-write: {_hw.get('error')} "
+                                        "(на диске мог остаться handoff прошлого прогона — resume опасен)")
+        except Exception as _e:  # noqa: BLE001 — сбой сборки/записи handoff виден, не гаснет
+            lifecycle_errors.append(f"run-handoff build/write: {type(_e).__name__}: {_e}")
+        if lifecycle_errors:
+            rep["lifecycle_errors"] = lifecycle_errors   # v2.107: сбои слоя lifecycle видны, не гаснут
+        try:
+            (features_dir / fid / "run-report.json").write_text(
+                json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        except OSError as _e:
+            # v3.0.12: сбой записи run-report больше не глотается молча (возвращаемый rep несёт пометку)
+            rep.setdefault("lifecycle_errors", lifecycle_errors)
+            rep["lifecycle_errors"].append(f"run-report write: {type(_e).__name__}: {_e}")
         # закрываем активную работу по завершении прогона (была in-progress -> done)
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid)
@@ -669,6 +714,18 @@ def selftest():
         expect("v3.0-rc4 P0.1: replan=True -> проходит drift-проверку (ошибка уже не про replan)",
                "replan" not in (r_replan.get("error") or "").lower())
         expect("planned: без --feature wid = wi-<hash>", fid.startswith("wi-"))
+
+        # v3.0.12 (finding аудита блок B): битый run-settings на resume -> FAIL-CLOSED (не тихий дефолт +
+        # перезапись контракта). Прежде safe_load(...) or {} -> {} -> молчаливая деградация до дефолтов.
+        _cf = root / "features" / "corr"; _cf.mkdir(parents=True)
+        (_cf / "run-settings.yaml").write_text("", encoding="utf-8")   # оборванная запись
+        _rc = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
+                  engine="pipeline", feature="corr", resume=True)
+        expect("v3.0.12: битый run-settings на resume -> status=error (не тихий дефолт)",
+               _rc.get("status") == "error" and "повреждён" in (_rc.get("error") or ""))
+        # и файл НЕ перезаписан дефолтами (остался пустым — контракт не уничтожен молча)
+        expect("v3.0.12: повреждённый run-settings НЕ перезаписан (recovery — явная операция)",
+               (_cf / "run-settings.yaml").read_text(encoding="utf-8") == "")
 
     # v3.0.10 (finding аудита P0): base ПЕРЕПИСАН -> resume заблокирован ДАЖЕ с force_resume=True
     # (старую работу нельзя выдать за проверенную против новой базы; снимается только replan).
