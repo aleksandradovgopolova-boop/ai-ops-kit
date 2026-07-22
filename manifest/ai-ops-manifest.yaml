@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.13
+  package_version: 3.0.14
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_14_qualification_readiness:
+      - "последний readiness-релиз перед квалификацией вне Garden; закрывает 3 перехода из вердикта аудита"
+      - "#1 fast-forward базы больше не отдаёт PR против непроверенной интеграции (вариант B, fail-closed). Прежде rewrite блокировал resume, а fast-forward разрешался force_resume -> старый worktree (форк от прежней базы A) переиспользовался, baseline на A, но отчёт нёс BaseBinding B -> PR против B без проверки интеграции. Теперь fast-forward трактуется как rewrite: resume_preflight -> base_moved, resume-путь блокируется, НИ force_resume НИ replan не снимают (обе реиспользуют устаревший worktree). Recourse — свежий прогон от новой базы (без --resume; --discard заменит ветку), пере-форкает worktree от новой базы. Авто-интеграция (rebase+повтор проверок) -> v3.1"
+      - "#2 LifecycleStore расширен на RunPlan/final-report/controller-report/run-history/ApprovalRecord/sequence-report (+durable_write_json для JSON). Весь источник истины пишется атомарно, не только resume-критичное подмножество"
+      - "#3 bounded event journal v0.1 (journal_append/journal_read): append-only JSONL с checksum-цепочкой (prev+self)+seq, обнаружение усечения/подмены, crash-boundary через fsync на запись. Эмитятся run_start/run_end (single-run/controller) и package_end с gates_unmet (sequential) — Run->Package->Gate реконструируемы"
+      - "docs: ROADMAP — post-stable hardening (v3.0.11-14) и Research v0.1 как ранний extractable bounded context (namespace research.*, .research/, собственный roadmap до v0.2)"
+      - "проверки: деттест на каждый пункт (fast-forward blocked + force не снимает; durable_write_json; journal checksum-цепочка/подмена/усечение; journal записан в живом прогоне). Полный CI-набор на main И master, без openspec"
     fixed_v3_0_13_hardening_batch_c_maintainability:
       - "блок C самоаудита: снижение change-safety-долга, ВСЕ изменения поведение-сохраняющие (проверено полным self-test + CI-паритетом на обеих дефолт-ветках)"
       - "НОВЫЙ tools/gitio.py: git(root,*args,timeout=90); 7 идентичных копий _git делегируют ему. ДОБАВЛЕН таймаут — прежде ни одна копия его не задавала, зависший git вешал весь прогон; теперь rc=124"

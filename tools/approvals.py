@@ -325,7 +325,12 @@ def write_record(child_root, wid, approval, approved_by, scope, reason, revision
     if covers_packages:              # v3.0-rc5 (P1.2): какие пакеты покрывает (supply-chain fingerprint)
         rec["covers_packages"] = list(covers_packages)
     p = d / f"{approval}.yaml"
-    p.write_text(yaml.safe_dump(rec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # v3.0.14 (finding аудита #2): ApprovalRecord — человеческий источник истины для high-risk; пишем
+    # DURABLE (атомарно+fsync+перечитывание), а не plain write_text (частичная запись = потеря одобрения).
+    import lifecycle_store as _ls
+    _r = _ls.durable_write(p, rec, require_keys=("approval", "approved_by", "scope"))
+    if not _r.get("ok"):
+        raise OSError(f"не удалось надёжно сохранить ApprovalRecord {p}: {_r.get('error')}")
     return p
 
 

@@ -2,6 +2,38 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.14] — 2026-07-23 — Qualification Readiness (переход на изменившуюся base + lifecycle-покрытие + journal)
+
+Последний readiness-релиз перед реальной квалификацией вне Garden. Закрывает три перехода из вердикта
+аудита.
+
+### Fixed
+- **#1 — fast-forward базы больше не отдаёт PR против непроверенной интеграции (вариант B, fail-closed).**
+  Прежде: base unchanged / fast-forward / rewritten; rewrite блокировал resume, а fast-forward
+  разрешался через `force_resume` — и старый worktree (форкнутый от прежней базы A) переиспользовался,
+  baseline считался на A, но отчёт нёс BaseBinding B → PR против B без проверки интеграции. Теперь
+  **fast-forward трактуется как rewrite**: `resume_preflight` даёт `base_moved`, и resume-путь блокируется
+  — **ни `force_resume`, ни `replan` не снимают** (обе модификации resume переиспользуют устаревший
+  worktree). Recourse — свежий прогон от новой базы (без `--resume`; `--discard` заменит устаревшую
+  ветку), который пере-форкает worktree от новой базы. Авто-интеграция (rebase + повтор проверок) — v3.1.
+
+### Added
+- **#2 — LifecycleStore расширен** на RunPlan, финальный run-report, controller-report, run-history,
+  ApprovalRecord, sequence-report (+ `durable_write_json` для JSON-артефактов). Теперь весь источник
+  истины пишется атомарно (не только resume-критичное подмножество).
+- **#3 — bounded event journal v0.1** (`journal_append`/`journal_read` в lifecycle_store): append-only
+  JSONL с **checksum-цепочкой** (prev+self), `seq`, обнаружением усечения/подмены (crash-boundary на
+  запись через fsync). Эмитятся `run_start`/`run_end` (single-run/controller) и `package_end` с
+  `gates_unmet` (sequential) — Run→Package→Gate реконструируемы.
+
+### Docs
+- ROADMAP: официально внесены post-stable hardening (v3.0.11–14) и **Research v0.1** как ранний
+  extractable bounded context (namespace `research.*`, `.research/`; собственный roadmap до v0.2).
+
+Каждый пункт — с деттестом (fast-forward blocked + force не снимает; durable_write_json; journal
+checksum-цепочка/подмена/усечение; journal записан в живом прогоне). Полный CI-набор на дефолт-ветках
+main и master, без openspec.
+
 ## [3.0.13] — 2026-07-23 — Hardening Batch C: Maintainability (без изменения поведения)
 
 Блок C самоаудита — снижение change-safety-долга. Все изменения поведение-сохраняющие, проверены

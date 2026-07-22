@@ -374,6 +374,43 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
 
 Движок закрыт: rc7→rc20 исправили все находки живых прогонов и трёх аудитов.
 
+### Post-stable hardening + Qualification Readiness (v3.0.11 → v3.0.14)
+
+Серия узких trust/lifecycle-патчей по итогам сквозного самоаудита (денежный путь — доставка PR +
+security-гейтинг — доказанно fail-closed, P0 false-green нет):
+
+- **v3.0.11 — Batch A (trust/корректность):** `op:git` больше не обходит sandbox; `exit_code≠0` при
+  `delivery-failed`; `security_pack` fail-closed при git-сбое; destructive-approval strict;
+  context/spec fail-closed на исключении; anti-fabrication code-read без basename-fallback; скраб
+  секретов в evidence; блокирующий ai-review не закрывается 0-read рубер-стампом.
+- **v3.0.12 — Batch B (durable resume):** `tools/lifecycle_store.py` (atomic+fsync-file+fsync-dir+
+  re-read) для run-settings/RunHandoff/active-work/SequencePlan/checkpoint; corrupt ≠ absent; flock на
+  RMW active-work.
+- **v3.0.13 — Batch C (maintainability):** единый `gitio.py` (+timeout от зависаний), дедуп envelope,
+  extract `_aggregate_verify`, закрытие тест-гэпов.
+- **v3.0.14 — Qualification Readiness:** (#1) **fast-forward базы** трактуется как rewrite —
+  `force_resume` больше НЕ отдаёт PR против сдвинувшейся базы (worktree форкнут от старой, интеграция
+  не проверена); нужен свежий прогон от новой базы. (#2) LifecycleStore расширен на RunPlan/final-report/
+  controller-report/run-history/ApprovalRecord/sequence-report (+`durable_write_json`). (#3) bounded
+  **event journal v0.1** (JSONL, checksum-цепочка, Run→Package→Gate, crash-boundary на запись).
+
+**Отложено в v3.1 (осознанно):** авто-интеграция fast-forward (rebase WorkItem-коммитов на новую базу +
+полный повтор проверок при `force_resume` — «настоящая ревалидация», а не блок); извлечение сильно
+связанных god-блоков `run_pipeline`/`run`; event journal v0.2 (полное покрытие событий, восстановление
+последовательности как первичный контракт).
+
+### Research v0.1 — ранний bounded context (контрактный прототип)
+
+В `main` появился отдельный research-контекст (namespace `research.*`, хранилище `.research/`):
+`ResearchRequest → Research execution → Evidence → DecisionPackage`, с versioned-схемами, provenance,
+freshness и первым живым DecisionPackage. Архитектура **extractable**: при втором независимом
+потребителе Research выносится в отдельный research-center.
+
+Статус: **v0.1 — контрактный прототип, НЕ законченный runtime.** По собственному roadmap модуля на
+**v0.2** назначены: валидатор + self-test, memory, source registry, повторное использование evidence.
+Это ранняя часть будущего Discovery/Product-Learning-фундамента — официально числится в общем roadmap
+как отдельный трек, развиваемый параллельно execution-ядру, а не как часть его qualification-релиза.
+
 ### Осталось (валидация в бою, не дефекты)
 - **dogfood на 2–3 реальных репозиториях** (Python → TS/Node → реальный сервис) — рекомендованная
   следующая валидация ПОВЕРХ stable (реальная мессовость vs синтетические фикстуры). Не блокер

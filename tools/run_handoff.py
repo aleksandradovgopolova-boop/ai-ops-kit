@@ -116,7 +116,7 @@ def resume_preflight(child_root, wid, base="main"):
         текущего HEAD базы): base_rewritten=True. Это НЕ снимается force_resume — старую работу нельзя
         переобозначить как проверенную против ДРУГОЙ базы; нужен явный replan/отмена."""
     child_root = Path(child_root)
-    reasons, revalidation, base_rewritten = [], False, False
+    reasons, revalidation, base_rewritten, base_moved = [], False, False, False
     hp = child_root / "features" / wid / "run-handoff.yaml"
     # v3.0.12 (finding аудита блок B): FAIL-CLOSED чтение. Прежде safe_load(...) or {} на битом/пустом
     # handoff давал {} -> sha=None -> ВСЕ проверки устаревания (база ушла/переписана, ревизия пропала)
@@ -190,6 +190,19 @@ def resume_preflight(child_root, wid, base="main"):
                                "нужен явный replan (пересобрать и переисполнить) или отмена")
                 revalidation = True
                 base_rewritten = True
+            else:
+                # v3.0.14 (finding аудита #1, вариант B): FAST-FORWARD — сохранённый base_sha ПРЕДОК текущего
+                # HEAD (база ушла вперёд A->B). Старый worktree/ветка WorkItem построены от A и НЕ
+                # интегрированы с B; baseline считался на A. Отдать PR против B нельзя — работа не проверена
+                # на интеграции с B. force_resume это НЕ снимает; нужен явный replan (свежий прогон от B).
+                # Авто-интеграция+ревалидация (rebase onto B + повтор проверок) — v3.1.
+                reasons.append(f"base '{base}' ушёл вперёд (fast-forward) с {saved_base_sha[:12]} до "
+                               f"{cur_base_sha[:12]}: работа построена от старой базы и НЕ интегрирована с "
+                               "новой. resume против сдвинувшейся базы запрещён — нужен явный replan "
+                               "(свежий прогон от новой базы); force его не снимает (иначе PR против "
+                               "непроверенной интеграции)")
+                revalidation = True
+                base_moved = True
 
     # устаревшие решения (ссылки на прошлую версию)
     for d in handoff.get("decisions") or []:
@@ -201,6 +214,7 @@ def resume_preflight(child_root, wid, base="main"):
         reasons.append("состояние актуально: ветка на месте, base не двигался — можно продолжить с "
                        "последнего подтверждённого шага")
     return {"can_resume": True, "revalidation_needed": revalidation, "base_rewritten": base_rewritten,
+            "base_moved": base_moved,
             "reasons": reasons,
             "handoff": {"next_action": handoff.get("next_action"),
                         "open_questions": handoff.get("open_questions"),
@@ -315,7 +329,15 @@ def selftest():
         _put_handoff(base_A)
         pf_ok = resume_preflight(root, "rw", base=cur)
         expect("v3.0.10 resume: base_sha == текущий HEAD -> base_rewritten=False",
-               pf_ok.get("base_rewritten") is False)
+               pf_ok.get("base_rewritten") is False and pf_ok.get("base_moved") is False)
+        # (1b) v3.0.14 (finding аудита #1, вариант B): FAST-FORWARD базы (A предок нового HEAD) -> base_moved
+        #      (не rewrite); resume против сдвинувшейся базы запрещён без replan.
+        (root / "b2").write_text("advance", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "base-B (ff)")
+        pf_ff = resume_preflight(root, "rw", base=cur)   # handoff всё ещё хранит base_sha=base_A
+        expect("v3.0.14 resume: fast-forward базы -> base_moved=True, base_rewritten=False",
+               pf_ff.get("base_moved") is True and pf_ff.get("base_rewritten") is False
+               and any("fast-forward" in r for r in pf_ff["reasons"]))
         # (2) base force-push НАЗАД на несвязанный коммит: пересоздаём ветку на orphan -> сохранённый
         #     base_sha больше НЕ предок нового HEAD -> REWRITE (не fast-forward)
         _git(root, "checkout", "-q", "--orphan", "reborn")
