@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-102
+request_id: RR-001
+statement: "Модели deepseek-chat и deepseek-reasoner объявлены устаревшими и отключаются 24 июля 2026 — им соответствуют non-thinking/thinking режимы V4-Flash. Пайплайн генерации должен целиться в имена моделей V4."
+evidence_type: documented_fact
+source:
+  title: "DeepSeek API Docs — Models & Pricing (deprecation notice)"
+  url: "https://api-docs.deepseek.com/quick_start/pricing"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "примечание Legacy Models (Deprecated July 24, 2026)"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-001)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичный источник; дата отключения указана вендором явно."
+status: active
+superseded_by: null

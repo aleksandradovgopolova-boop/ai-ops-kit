@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.10
+  package_version: 3.0.11
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,18 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_11_hardening_batch_a:
+      - "сквозной самоаудит всего кита (ядро/trust/durability/здоровье кода). Вывод: денежный путь (доставка PR + security-гейтинг) реально fail-closed, P0 false-green нет. Батч A — trust/корректностные упрочнения; durability resume-артефактов и рефакторинг отложены в v3.1"
+      - "P1 op:'git' обходил sandbox: shell_mode/allow_network/allowlist применялись только под if op=='shell', а git шёл в subprocess(shell=True) мимо них (op контролирует модель). Фикс: тот же gauntlet для op in (shell, git) — bash -c/сеть под видом git денай, git в allowlist проходит, shell_mode=off запрещает и git"
+      - "P1 exit_code=0 при delivery-failed: завершённый прогон несёт overall_status, не top-level status; exit_code читал только status->None->ready_for_pr=True->0. --open-pr без доставки PR давал успех для CI. Фикс: overall_status delivery-failed->1, error->2"
+      - "P1 security_pack fails-open при git-сбое: git ls-files rc!=0 -> changed=[] -> нет находок -> clear. Фикс: git-энумерация упала -> raise -> fail-closed (ловит _security_scan_error -> security=fail)"
+      - "P1 destructive-approval валидировался нестрого (_record_valid с дефолтами: без expiry/plan-binding/trusted source). Фикс: STRICT, как для остальных high-risk доменов"
+      - "P2 context_overflow и spec_incomplete fail-open на исключении (тихо роняли ready-блокер). Фикс: fail-closed"
+      - "P2 anti-fabrication code-read сверялся по basename (tests/config.py закрывал src/prod/config.py). Фикс: убран bare-basename fallback, только суффикс/точное совпадение"
+      - "P2 output_tail (read/shell) клался в evidence без скраба секретов. Фикс: редактирование по SECRET_PATTERNS до отчёта"
+      - "P2 блокирующий ai-review (code/ux) закрывался pass с 0 чтений (рубер-стамп, асимметрия с security). Фикс: чистый pass на блокирующем гейте требует >=1 реального чтения"
+      - "проверки: деттест на каждый фикс (git-gauntlet, exit_code delivery-failed, security_pack fail-closed, destructive strict, EvidenceRef basename, scrub-output, рубер-стамп). Полный CI-набор 94/94 на main И master, без openspec"
+      - "ОТЛОЖЕНО (v3.1): durable LifecycleStore для resume-артефактов (run-settings/run-handoff/active-work атомарно + fail-closed на битом чтении); рефакторинг god-функций (run_pipeline/run/execute_sequence), единые envelope/_git(timeout)/YAML-хелперы, закрытие тест-гэпов"
     fixed_v3_0_10_basebinding_truth_and_evidence_integrity:
       - "P0 BaseBinding сохранялся БЕЗ base_sha (null): резолвер возвращал SHA под ключом validated_sha, а ai_ops_run читал base_sha -> полный BaseBinding был неполным. Фикс: канонизирован ОДИН ключ base_sha во всём резолвере/движке (никаких параллельных validated_sha/base_sha); base_sha реально попадает в run-settings/report/handoff"
       - "P0 resume НЕ использовал сохранённый base_sha как иммутабельный контракт (заново разрешал ветку в текущий SHA). Фикс: RunHandoff несёт исходный BaseBinding; resume_preflight сверяет сохранённый base_sha с текущим HEAD базы и различает fast-forward (base_rewritten=False, снимается force_resume) от REWRITE (сохранённый SHA больше не предок текущего HEAD — force-push назад/пересоздание). REWRITE НЕ снимается force_resume — только явный replan/отмена. Опасный сценарий (форк от A -> base переписан на B -> старый worktree выдан за проверенный против B) закрыт"

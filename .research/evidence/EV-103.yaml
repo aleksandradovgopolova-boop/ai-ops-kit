@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-103
+request_id: RR-001
+statement: "Kimi K3 (флагман Moonshot): официальная цена $3.00 вход cache-miss / $0.30 cache-hit / $15.00 выход за 1M токенов; контекст 1,048,576 токенов."
+evidence_type: documented_fact
+source:
+  title: "Kimi API Platform — Pricing (K3)"
+  url: "https://platform.kimi.ai/docs/pricing/chat-k3"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел Kimi K3 pricing per 1M tokens"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-001)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: high
+  rationale: "Первичный источник: официальный прайсинг платформы (platform.moonshot.ai переехал на platform.kimi.ai, 301 redirect)."
+status: active
+superseded_by: null

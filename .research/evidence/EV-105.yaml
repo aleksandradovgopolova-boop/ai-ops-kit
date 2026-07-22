@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-105
+request_id: RR-001
+statement: "На EQ-Bench Creative Writing (LLM-judged, англоязычный) Kimi K3 — №1 с Elo 2377, впереди Claude Fable 5 (2091); DeepSeek V4 Pro — около 1556. Разрыв велик, но бенчмарк не измеряет русский язык и не заменяет собственный eval длинной русской прозы."
+evidence_type: measured_result
+source:
+  title: "EQ-Bench Creative Writing leaderboard (v3), июль 2026"
+  url: "https://eqbench.com/creative_writing.html"
+  type: benchmark
+  published_at: "2026-07-01"
+  is_primary: false
+citation:
+  locator: "верх таблицы leaderboard; позиции Kimi K3 и DeepSeek V4 Pro"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-001)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Независимый устоявшийся бенчмарк, но значения получены через поисковые выжимки (таблица рендерится JS и напрямую не прочитана), и метрика англоязычная."
+status: active
+superseded_by: null

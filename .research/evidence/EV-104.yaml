@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-104
+request_id: RR-001
+statement: "Kimi K2.6: $0.66 вход / $3.41 выход за 1M токенов у официального провайдера Moonshot (листинг OpenRouter); контекст 262K."
+conflicts_with:
+  - claim: "Kimi K2.6 на официальном API стоит $0.60 вход / $2.50 выход за 1M токенов."
+    source: "веб-обзор (secondtalent.com, июль 2026)"
+    status: unresolved
+    note: "Официальная страница платформы Kimi цену K2.6 не отдала; нужен первичный источник."
+  - claim: "Kimi K2.6 стоит $0.95 вход / $4.00 выход за 1M токенов."
+    source: "веб-обзор (deepinfra.com pricing guide)"
+    status: unresolved
+    note: "Возможно, цена стороннего провайдера, а не официального API."
+evidence_type: documented_fact
+source:
+  title: "OpenRouter — moonshotai/kimi-k2.6"
+  url: "https://openrouter.ai/moonshotai/kimi-k2.6"
+  type: vendor_page
+  published_at: null
+  is_primary: false
+citation:
+  locator: "карточка модели: pricing (Moonshot AI official provider), context window"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-001)"
+freshness:
+  volatile: true
+  expires_at: "2026-09-22"
+reliability:
+  level: medium
+  rationale: "Вторичный источник (агрегатор, но листинг официального провайдера); в независимых обзорах противоречивые цифры; первичная страница недоступна."
+status: active
+superseded_by: null

@@ -80,7 +80,14 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
             if changed is None:
                 import subprocess
                 r = subprocess.run(["git", "-C", str(child_root), "ls-files"], capture_output=True, text=True)
-                changed = [ln for ln in r.stdout.splitlines() if ln.strip()] if r.returncode == 0 else []
+                # v3.0.11 (finding аудита P1): git-энумерация упала -> FAIL-CLOSED (raise), НЕ changed=[].
+                # Прежде rc!=0 -> [] -> нет находок -> overall='clear': реальная правка при git-сбое
+                # признавалась чистой. Исключение ловит вызывающий (_security_scan_error -> security=fail).
+                if r.returncode != 0:
+                    raise RuntimeError(
+                        f"git ls-files rc={r.returncode} в {child_root}: не удалось определить файлы для "
+                        f"security-скана ({(r.stderr or '').strip()[:160]}) — fail-closed")
+                changed = [ln for ln in r.stdout.splitlines() if ln.strip()]
             files_content = security_scan._read_files(child_root, changed)
     changed_files = sorted(files_content)
 
@@ -217,6 +224,16 @@ def selftest():
     expect("finding несёт path+line; домен несёт remediation",
            all("path" in f for r in fe["results"] for f in r["findings"] if f["type"] != "new_dependency")
            and all(r["remediation"] for r in fe["results"]))
+
+    # v3.0.11 (finding аудита P1): git-энумерация файлов упала -> FAIL-CLOSED (raise), не тихий clear.
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as _td:            # НЕ git-репо -> git ls-files rc!=0
+        try:
+            run_pack(child_root=_td)
+            expect("v3.0.11 A3: git-энумерация упала -> raise (fail-closed, не clear)", False)
+        except RuntimeError as _e:
+            expect("v3.0.11 A3: git-энумерация упала -> raise (fail-closed, не clear)",
+                   "fail-closed" in str(_e))
 
     print("security_pack selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

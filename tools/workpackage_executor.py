@@ -937,17 +937,20 @@ def selftest():
         # домены из промпта и эмитит domain_results по каждому — иначе строгий контракт отклонит.
         import re as _re
         import json as _json
-        res = {"kind": "reviewer-result", "status": "pass", "checks": [{"id": "ok", "status": "pass"}]}
         p = prompt or ""
+        # v3.0.11: ревьюер СНАЧАЛА реально читает изменённый файл (реальный trace), затем выносит pass —
+        # иначе блокирующий гейт (code_review/ux_review) не закрывается по 0-read рубер-стампу, а security-
+        # evidence code-read не сойдётся с trace. Файл берём из seeded-диффа (fallback calc.py).
+        _cand = _re.search(r"\+\+\+ b/(\S+)", p)
+        _path = _cand.group(1) if _cand else "calc.py"
+        if f"--- {_path} ---" not in p:                      # ещё не читал -> читаем
+            return _json.dumps({"op": "read", "path": _path})
+        res = {"kind": "reviewer-result", "status": "pass", "checks": [{"id": "ok", "status": "pass"}]}
         m = _re.search(r"применимым доменам:\s*([^\n(]+)", p)
         if m:
             doms = [d.strip() for d in m.group(1).split(",") if d.strip()]
             if doms:
-                # v3.0.10 v2.4: evidence code-read обязана ссылаться на ФАЙЛ ИЗ ДИФФА (observable surface
-                # ревьюера) — иначе сверка с реальным trace отклонит фабрикацию. Берём реально изменённый
-                # файл из seeded-диффа в промпте (fallback — известный файл репо calc.py).
-                _cand = _re.search(r"\+\+\+ b/(\S+)", p)
-                _path = _cand.group(1) if _cand else "calc.py"
+                # evidence code-read ссылается на РЕАЛЬНО прочитанный файл (сверка с trace, без basename-fallback)
                 res["domain_results"] = [{"domain": d, "status": "pass",
                                           "checks": [{"id": f"{d}_ok", "status": "pass"}],
                                           "evidence": [{"type": "code-read", "path": _path, "lines": "1-10"}]}

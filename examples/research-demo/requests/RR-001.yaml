@@ -1,0 +1,30 @@
+# examples/research-demo — демо контура ResearchRequest → Evidence → DecisionPackage.
+# Валидируется против schemas/research-request.schema.json.
+schema_version: 1
+kind: research.request
+id: RR-001
+title: "Выбор моделей для генерации Personal Cosmic Book"
+requested_by:
+  system: ai_ops
+  layer: technology
+decision_to_support:
+  description: "Выбрать основную модель генерации длинного русскоязычного текста книги"
+  decision_maker: human
+questions:
+  - "Как DeepSeek и Kimi отличаются по качеству длинного русскоязычного текста?"
+  - "Какова стоимость генерации одной книги на каждой модели?"
+  - "Какие ограничения API критичны для пайплайна генерации?"
+constraints:
+  - low_cost
+  - russian_language
+  - long_context
+workflow_hint: comparison
+memory_check:
+  performed: true
+  related_requests: []
+  related_decisions: []
+  summary: "Память пуста: первый запрос модуля."
+required_confidence: medium
+deadline: "2026-08-01"
+status: answered
+created_at: "2026-07-22"
