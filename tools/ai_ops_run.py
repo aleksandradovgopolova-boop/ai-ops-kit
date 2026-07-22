@@ -72,7 +72,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
-        resume=False, force_resume=False, base="main", write_scope=None, replan=False):
+        resume=False, force_resume=False, base=None, write_scope=None, replan=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -299,7 +299,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
                 context_prelude=(payload or {}).get("text"),
                 resume=resume, resume_context=resume_ctx, write_scope=write_scope,
-                base=(base or "main"))   # v3.0.1 (P0): base — сквозной контракт до worktree/PR
+                base=base)   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
         except (KeyboardInterrupt, SystemExit):
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
@@ -870,7 +870,7 @@ def main(argv):
     # прогона (не рестарт); без --execute — только preflight (что продолжим, нужна ли ревалидация).
     rs = sub.add_parser("resume")
     rs.add_argument("child_root"); rs.add_argument("feature")
-    rs.add_argument("--base", default="main"); rs.add_argument("--json", action="store_true")
+    rs.add_argument("--base", default=None); rs.add_argument("--json", action="store_true")
     rs.add_argument("--task", help="задача-продолжение (по умолчанию — next_action из RunHandoff)")
     rs.add_argument("--signals", default="{}")
     rs.add_argument("--execute", action="store_true",

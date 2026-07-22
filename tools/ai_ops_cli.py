@@ -429,7 +429,7 @@ def main(argv):
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
-    ap.add_argument("--base", default="main", help="resume/review: base-ветка")
+    ap.add_argument("--base", default=None, help="resume/review: base-ветка (по умолчанию auto: upstream/remote-default/текущая)")
     ap.add_argument("--provider", default="mock", help="review: провайдер ревьюера (не mock -> живой вердикт)")
     ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--sequential", action="store_true",

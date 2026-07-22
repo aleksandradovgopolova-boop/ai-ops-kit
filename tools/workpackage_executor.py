@@ -60,6 +60,34 @@ def _ordered(packages):
     return sorted(packages, key=lambda p: (p.get("order", 0), p.get("id", "")))
 
 
+def _durable_write_yaml(path, data, require_keys=()):
+    """v3.0.7 (finding аудита P0.3): АТОМАРНАЯ + FAIL-CLOSED запись критического lifecycle-артефакта.
+    temp-файл -> flush+fsync -> atomic rename -> ПЕРЕЧИТАТЬ и провалидировать (dict + обязательные ключи).
+    -> {ok: True} | {ok: False, error}. Вызывающий обязан остановиться при ok=False (нет источника истины)."""
+    import os
+    import yaml as _y
+    from pathlib import Path as _P
+    path = _P(path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        text = _y.safe_dump(data, allow_unicode=True, sort_keys=False)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)                      # atomic на том же ФС
+        back = _y.safe_load(path.read_text(encoding="utf-8"))   # перечитать и проверить
+        if not isinstance(back, dict):
+            return {"ok": False, "error": "перечитанный артефакт не dict"}
+        missing = [k for k in require_keys if k not in back]
+        if missing:
+            return {"ok": False, "error": f"после записи отсутствуют ключи: {', '.join(missing)}"}
+        return {"ok": True}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
 def _hard_stop(rep):
     """v2.120 (P0.3): причина ОСТАНОВИТЬ цепочку (нельзя строить зависимый пакет поверх), либо None.
 
@@ -321,7 +349,7 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
 
 
 def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
-                     features_dir=None, base="main", provider_name="mock", model=None,
+                     features_dir=None, base=None, provider_name="mock", model=None,
                      author=False, author_proposer=None, review=False, reviewer_proposer=None,
                      baseline_diff=True, install_deps=False, signals_for=None,
                      sandbox=False, open_pr=False, max_steps=40, write_scope_for=None, resume_from=None):
@@ -347,21 +375,16 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     pdir = features_dir / wid
     _sp = pdir / "sequence-plan.yaml"
     saved_plan = None
-    try:
+    try:   # ЧТЕНИЕ сохранённого плана — толерантно (его может не быть на fresh)
         import yaml as _y
         pdir.mkdir(parents=True, exist_ok=True)
         if _sp.exists():
             saved_plan = _y.safe_load(_sp.read_text(encoding="utf-8")) or {}
-        else:
-            _sp.write_text(_y.safe_dump(
-                {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": len(ordered),
-                 "plan_hash": cur_plan_hash, "base_ref": base,   # v3.0.1 (P0): базовая ветка фиксируется
-                 "packages": [{"id": p.get("id"), "order": p.get("order"),
-                               "depends_on": p.get("depends_on") or [], "scope": p.get("scope"),
-                               "write_scope": p.get("write_scope"), "pkg_hash": _pkg_hash(p)} for p in ordered]},
-                allow_unicode=True, sort_keys=False), encoding="utf-8")
     except Exception:  # noqa: BLE001
-        pass
+        saved_plan = None
+    # NB: fresh SequencePlan пишется НИЖЕ, ПОСЛЕ разрешения base (иначе base_ref=None для auto) и
+    # v3.0.7 (P0.3) — FAIL-CLOSED (atomic write + перечитывание): без immutable-плана нельзя доказать
+    # base/порядок/hashes/checkpoint, поэтому сбой записи останавливает последовательность.
     # дрейф плана при resume -> отказ (P0.3): сохранённый план — источник истины
     if resume_from and saved_plan and saved_plan.get("plan_hash") and saved_plan["plan_hash"] != cur_plan_hash:
         return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
@@ -371,26 +394,49 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 "error": ("SequencePlan дрейфнул с прошлого прогона (planner перестроил пакеты) — "
                           "resume по старым отчётам небезопасен. Нужен явный replan (пересобрать план "
                           "и переисполнить с нуля), а не resume_from.")}
-    # v3.0.2 (finding аудита P0): base_ref из СОХРАНЁННОГО плана — источник истины на resume/retry.
-    # Попытка продолжить последовательность с ДРУГОЙ base (--base release для цепочки от develop) —
-    # изменение контракта доставки -> base-contract-drift (нужен явный replan), не молчаливая подмена.
-    if resume_from and saved_plan and saved_plan.get("base_ref") \
-            and base and saved_plan["base_ref"] != base:
-        return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                "error": (f"base-contract-drift: последовательность зафиксирована на base_ref="
-                          f"'{saved_plan['base_ref']}', а передан --base '{base}'. Смена базы = другой "
-                          f"контракт доставки — нужен явный replan, не resume с новой базой.")}
-    # resume/retry: base_ref берём из сохранённого плана (не из текущего аргумента)
+    # v3.0.2/v3.0.7 (finding аудита P0): base_ref из СОХРАНЁННОГО плана — источник истины на resume/retry;
+    # для fresh — строгий резолв (auto/explicit). Явная другая base на resume -> base-contract-drift.
+    import execution_pipeline as _ep
     if saved_plan and saved_plan.get("base_ref"):
-        base = saved_plan["base_ref"]
+        if resume_from and base and base != saved_plan["base_ref"]:
+            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                    "error": (f"base-contract-drift: последовательность зафиксирована на base_ref="
+                              f"'{saved_plan['base_ref']}', а передан --base '{base}'. Смена базы = другой "
+                              f"контракт доставки — нужен явный replan, не resume с новой базой.")}
+        base = saved_plan["base_ref"]   # auto или совпадение -> берём сохранённую
+    else:
+        _br = _ep._resolve_base(child_root, base)   # base=None -> auto; явная -> строго
+        if _br.get("mode") == "explicit" and not _br.get("resolved"):
+            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                    "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
+                              f"({_br.get('reason')}) — последовательность не запущена (ноль пакетов)")}
+        base = _br.get("base_ref") or base
+
+    # v3.0.7 (finding аудита P0.3): FAIL-CLOSED запись immutable SequencePlan (с разрешённым base_ref).
+    # atomic (temp -> rename) + перечитывание/валидация; сбой -> последовательность НЕ стартует.
+    if saved_plan is None:
+        _plan_doc = {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": len(ordered),
+                     "plan_hash": cur_plan_hash, "base_ref": base,
+                     "packages": [{"id": p.get("id"), "order": p.get("order"),
+                                   "depends_on": p.get("depends_on") or [], "scope": p.get("scope"),
+                                   "write_scope": p.get("write_scope"), "pkg_hash": _pkg_hash(p)} for p in ordered]}
+        _wr = _durable_write_yaml(_sp, _plan_doc, require_keys=("plan_hash", "base_ref", "packages"))
+        if not _wr.get("ok"):
+            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                    "error": (f"lifecycle fail-closed: не удалось надёжно сохранить SequencePlan "
+                              f"({_wr.get('error')}) — без immutable-плана нельзя доказать base/порядок/"
+                              f"hashes/checkpoint; последовательность не запущена")}
+        saved_plan = _plan_doc
 
     # v2.124: снимок проверок БАЗЫ (до пакета 1) для АГРЕГАТНОЙ baseline-diff на финальном SHA.
-    # v3.0-rc13/rc16 (finding аудита P0): SEQUENCE BASE — HEAD ДО пакета 1. ИСТОЧНИК ИСТИНЫ = сохранённый
-    # SequencePlan (resume/retry НЕ переопределяют базу текущим main; иначе aggregate сравнил бы ветку,
-    # построенную от старой базы, с новым сдвинувшимся main -> false green/block). Раньше aggregate брал
-    # корневой коммит репо; теперь весь aggregate строго по sequence_base_sha..final_sha.
+    # v3.0-rc13/rc16/rc3.0.7: SEQUENCE BASE — HEAD ДО пакета 1; источник истины — сохранённый SequencePlan
+    # (resume/retry не переопределяют базу); base теперь конкретная ветка (auto-резолв, не хардкод main).
     _cur_base = None
     try:
         _rc, _bs, _ = _git(child_root, "rev-parse", base or "HEAD")
@@ -796,7 +842,9 @@ def selftest():
         if m:
             doms = [d.strip() for d in m.group(1).split(",") if d.strip()]
             if doms:
-                res["domain_results"] = [{"domain": d, "status": "pass"} for d in doms]
+                # v3.0.7 v2.1: у каждого домена СВОИ per-domain checks
+                res["domain_results"] = [{"domain": d, "status": "pass",
+                                          "checks": [{"id": f"{d}_ok", "status": "pass"}]} for d in doms]
         return _json.dumps(res, ensure_ascii=False)
     reviewer = _pass_reviewer
 

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.6
+  package_version: 3.0.7
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,12 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_7_default_branch_durable_state:
+      - "(нумерация: аудит предлагал это как 3.0.5, но 3.0.5/3.0.6 уже заняты авто-апдейтом и secret-scanning-гайдом -> вышло как 3.0.7). P0 base был захардкожен 'main': на репо с master обычный прогон без --base шёл к несуществующему main. Фикс: BaseResolver v3 — base=None -> AUTO (upstream текущей ветки -> remote default origin/HEAD -> текущая ветка), никакого хардкода. Дефолты base изменены на None в run_pipeline/execute_sequence/ai_ops_run.run/CLI. base_binding несёт mode(auto|explicit)+source"
+      - "P0 неразрешённая ЯВНАЯ base позволяла выполнять от HEAD (worktree base_sha or HEAD; base_binding.resolved не влиял на ready). Фикс: явная несуществующая base -> preflight-БЛОК ДО модели (ноль model calls, worktree не создан) в single-run И sequential. auto всегда разрешается (в пределе текущая ветка), поэтому блокирует только явную несуществующую"
+      - "P0 критические lifecycle-записи были best-effort (try/except pass). Фикс: _durable_write_yaml (atomic temp->fsync->rename + перечитывание/валидация обязательных ключей) для immutable SequencePlan (base_ref+plan_hash+packages); сбой записи -> последовательность НЕ стартует (без источника истины нельзя доказать base/порядок/hashes/checkpoint)"
+      - "P1 SecurityVerdict v2.1: каждый применимый домен обязан нести СВОИ per-domain checks (не только status); pass домена без domain-specific checks не закрывает security (один абстрактный check больше не «прикрывает» все домены). Промпт security-reviewer требует per-domain checks"
+      - "проверки: +деттесты (resolve-base auto->текущая ветка не хардкод main; явная несуществующая->preflight-блок 0 model calls + нет worktree; sequential base-contract-drift; SecVerdict-v2.1 без per-domain checks->невалиден). Полный CI-набор (94) 94/94 PASS на дефолт-ветках main И master. Отложено: durable-запись остальных lifecycle-артефактов (run-settings/report/approval) — SequencePlan закрыт как критичнейший"
     fixed_v3_0_6_downstream_secret_scanning_guide:
       - "finding downstream (Гермес): после v3.0.4 (убраны псевдосекрет-литералы) сканер потребителя всё равно блокировал PR — теперь на ЛЕКСИКЕ security-документации (слова secret/token, имена GITHUB_TOKEN/OPENAI_API_KEY). Это keyword-правило слишком широкое (100% ложных на любой security-документации), не утечка. Убрать эту лексику из security-инструмента невозможно/неправильно"
       - "добавлен гайд docs/downstream-secret-scanning.md: .ai/managed/** — вендоренная зависимость (как node_modules/vendor), исключается из секрет-скана ребёнка; готовые сниппеты для gitleaks/trufflehog/detect-secrets/GitHub native; альтернатива — сузить правило до value/entropy/format-based (AKIA.., sk-.., PEM). Ссылки из README и runbook §7. Гарантия: в ките 0 реальных секретов и 0 статических литералов (проверено) -> исключение managed безопасно"

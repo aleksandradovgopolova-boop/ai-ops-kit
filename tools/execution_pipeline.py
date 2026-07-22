@@ -97,21 +97,51 @@ def _gate_checklist(gate):
 
 
 def _resolve_base(root, base_ref):
-    """v3.0.2 (finding аудита P0): СТРОГОЕ разрешение base-ветки для контракта доставки. ТОЛЬКО ветка —
-    локальная refs/heads/<ref> ИЛИ origin/<ref>; tag/произвольный SHA НЕ принимаются как PR-base.
-    -> {base_ref, validated_sha, source, resolved, reason}. Не разрешилась -> resolved=False (вызывающий
-    решает: для delivery -> fail-closed; для не-delivery worktree -> честный fallback на HEAD, но с
-    пометкой resolved=False, НЕ молча). Никакого тихого превращения --base в текущий HEAD."""
+    """v3.0.2/v3.0.7 (finding аудита P0): разрешение base-ветки. ТОЛЬКО ветка (локальная/origin), не tag/SHA.
+
+    v3.0.7 BaseResolver v3 — два режима:
+    * base_ref=None -> AUTO: upstream текущей ветки (@{u}) -> remote default (origin/HEAD) -> текущая
+      ветка. auto ВСЕГДА разрешается (в пределе — текущая ветка), никакого хардкода 'main'.
+    * base_ref задан -> EXPLICIT: обязана существовать (refs/heads/<ref> или origin/<ref>); иначе
+      resolved=False (вызывающий обязан заблокировать прогон ДО модели — не выполнять от HEAD).
+    -> {base_ref, validated_sha, source, mode, resolved, reason}."""
     if _git(root, "rev-parse", "--is-inside-work-tree")[0] != 0:
-        return {"base_ref": base_ref, "resolved": False, "reason": "не git-репозиторий"}
-    rc_l, sha_l, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{base_ref}")
-    if rc_l == 0 and (sha_l or "").strip():
-        return {"base_ref": base_ref, "validated_sha": sha_l.strip(), "source": "local-branch", "resolved": True}
-    rc_r, sha_r, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base_ref}")
-    if rc_r == 0 and (sha_r or "").strip():
-        return {"base_ref": base_ref, "validated_sha": sha_r.strip(), "source": "remote-branch", "resolved": True}
-    return {"base_ref": base_ref, "resolved": False,
-            "reason": f"ветка '{base_ref}' не найдена ни локально (refs/heads), ни в origin"}
+        return {"base_ref": base_ref, "resolved": False, "mode": "explicit" if base_ref else "auto",
+                "reason": "не git-репозиторий"}
+    if base_ref:   # EXPLICIT — строго ветка
+        rc_l, sha_l, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{base_ref}")
+        if rc_l == 0 and (sha_l or "").strip():
+            return {"base_ref": base_ref, "validated_sha": sha_l.strip(), "source": "explicit-local",
+                    "mode": "explicit", "resolved": True}
+        rc_r, sha_r, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base_ref}")
+        if rc_r == 0 and (sha_r or "").strip():
+            return {"base_ref": base_ref, "validated_sha": sha_r.strip(), "source": "explicit-remote",
+                    "mode": "explicit", "resolved": True}
+        return {"base_ref": base_ref, "resolved": False, "mode": "explicit",
+                "reason": f"явная base '{base_ref}' не найдена ни локально (refs/heads), ни в origin"}
+    # AUTO: upstream -> remote default -> текущая ветка
+    rc_u, up, _ = _git(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    if rc_u == 0 and (up or "").strip():
+        ref = up.strip()
+        rc_s, sha, _ = _git(root, "rev-parse", "--verify", "--quiet", ref)
+        if rc_s == 0 and (sha or "").strip():
+            br = ref.split("origin/", 1)[1] if ref.startswith("origin/") else ref
+            return {"base_ref": br, "validated_sha": sha.strip(), "source": "upstream",
+                    "mode": "auto", "resolved": True}
+    rc_d, dref, _ = _git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
+    if rc_d == 0 and (dref or "").strip():
+        rc_s, sha, _ = _git(root, "rev-parse", "--verify", "--quiet", dref.strip())
+        if rc_s == 0 and (sha or "").strip():
+            br = dref.strip().split("refs/remotes/origin/", 1)[-1]
+            return {"base_ref": br, "validated_sha": sha.strip(), "source": "remote-default",
+                    "mode": "auto", "resolved": True}
+    rc_c, cur, _ = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    rc_h, head, _ = _git(root, "rev-parse", "--verify", "--quiet", "HEAD")
+    if rc_c == 0 and (cur or "").strip() and rc_h == 0 and (head or "").strip():
+        return {"base_ref": cur.strip(), "validated_sha": head.strip(), "source": "current-branch",
+                "mode": "auto", "resolved": True}
+    return {"base_ref": None, "resolved": False, "mode": "auto",
+            "reason": "не удалось определить base автоматически (нет upstream/remote-default/HEAD)"}
 
 
 def _change_context(work_root, revision, max_chars=12000):
@@ -255,8 +285,9 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
     # поле domain_results:[{domain,status}], покрывающее РОВНО применимые домены.
     checklist_items.append(
         "ОБЯЗАТЕЛЬНО верни в reviewer-result поле domain_results — список "
-        "{domain:<id>, status:pass|warn|fail} РОВНО по этим применимым доменам: "
-        + ", ".join(applicable) + " (по одному на каждый, без пропусков/дублей/лишних)")
+        "{domain:<id>, status:pass|warn|fail, checks:[{id,status}]} РОВНО по этим применимым доменам: "
+        + ", ".join(applicable) + " (по одному на каждый, без пропусков/дублей/лишних). У КАЖДОГО домена "
+        "СВОИ непустые checks (что именно проверено в этом домене) — общий абстрактный check недопустим")
     checklist = "; ".join(checklist_items)
     reviewer = tool_loop.make_reviewer_proposer(
         reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
@@ -306,10 +337,17 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
                     errs.append(f"domain_results содержит неизвестные/лишние домены: {', '.join(sorted(extra))}")
             for x in dr:
                 st = (x or {}).get("status")
+                dom = (x or {}).get("domain")
                 if st not in ("pass", "warn", "fail"):
-                    errs.append(f"domain_result '{(x or {}).get('domain')}' без валидного status")
+                    errs.append(f"domain_result '{dom}' без валидного status")
                 elif st != "pass" and (res.get("status") == "pass"):
-                    errs.append(f"домен '{(x or {}).get('domain')}' = {st}, но общий status=pass — несогласованно")
+                    errs.append(f"домен '{dom}' = {st}, но общий status=pass — несогласованно")
+                # v3.0.7 (finding аудита P1): SecurityVerdict v2.1 — КАЖДЫЙ домен обязан нести СВОИ
+                # доказательства (непустой per-domain checks), иначе один абстрактный check «прикрывает»
+                # все домены. pass домена без domain-specific checks не закрывает security.
+                dchecks = (x or {}).get("checks")
+                if not (isinstance(dchecks, list) and dchecks):
+                    errs.append(f"домен '{dom}' без domain-specific checks — доказательства по домену отсутствуют")
     return errs
 
 
@@ -882,7 +920,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
-                 resume=False, resume_context=None, write_scope=None, base="main"):
+                 resume=False, resume_context=None, write_scope=None, base=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -916,12 +954,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # v3.0.1 (finding аудита P0): BASE BINDING — рабочая ветка форкается от РАЗРЕШЁННОГО base (--base),
     # а НЕ от текущего HEAD. Фиксируем base_ref+base_sha; worktree создаётся от base_sha; после — проверка;
     # delivery ревалидирует remote base. Раньше _wt.add шёл от HEAD -> `--base develop` игнорировался.
-    base_ref = base or "main"
-    _br = _resolve_base(child_root, base_ref)   # v3.0.2 (P0): строгий резолв, без тихого HEAD-fallback
+    # v3.0.7 (finding аудита P0): base=None -> AUTO-резолв (upstream/remote-default/текущая ветка), НЕ
+    # хардкод 'main'. Явная base обязана существовать. base_sha берётся из резолвера; форк — от него.
+    _br = _resolve_base(child_root, base)   # base может быть None (auto) или явной веткой
     base_sha = _br.get("validated_sha")
-    base_binding = {"base_ref": base_ref, "base_sha": base_sha,
+    base_ref = _br.get("base_ref") or base or "HEAD"
+    base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
                     "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
                     "reason": _br.get("reason")}
+    # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
+    # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
+    if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
+        return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                "status": "error", "ready_for_pr": False, "base_binding": base_binding,
+                "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
+                          f"({_br.get('reason')}) — прогон остановлен ДО вызова модели (не выполняем "
+                          f"от произвольного HEAD)"),
+                "loop": None, "isolation": {"worktree": None}, "gates": None, "overall_status": "error"}
     if isolate:
         import worktree as _wt
         branch = f"ai-ops/{wid}"
@@ -2288,7 +2337,8 @@ def selftest():
         good_pass = {"schema_version": 1, "kind": "reviewer-result", "gate": "security",
                      "status": "pass", "reviewed_revision": "abc123",
                      "checks": [{"id": "injection", "status": "pass"}],
-                     "domain_results": [{"domain": "injection", "status": "pass"}]}
+                     "domain_results": [{"domain": "injection", "status": "pass",
+                                         "checks": [{"id": "no_injection_surface", "status": "pass"}]}]}
         expect("v3.0-rc16 security-verdict: структурный pass c domain_results -> валиден",
                _security_verdict_errors(good_pass, "abc123", ["injection"], _vrr2) == [])
         expect("v3.0-rc16 security-verdict: reviewed_revision != проверяемой -> невалиден",
@@ -2302,15 +2352,22 @@ def selftest():
                        "checks": [{"id": "security-ok", "status": "pass"}]}
         expect("v3.0.1 SecVerdict-v2: 4 применимых домена + нет domain_results -> невалиден",
                any("domain_results" in e for e in _security_verdict_errors(one_generic, "abc123", four, _vrr2)))
-        covered4 = {**one_generic, "domain_results": [{"domain": d, "status": "pass"} for d in four]}
-        expect("v3.0.1 SecVerdict-v2: domain_results покрывает все 4 -> валиден",
+        def _dr(doms, st="pass"):   # v3.0.7 v2.1: у каждого домена СВОИ checks
+            return [{"domain": d, "status": st, "checks": [{"id": f"{d}_ok", "status": st}]} for d in doms]
+        covered4 = {**one_generic, "domain_results": _dr(four)}
+        expect("v3.0.1 SecVerdict-v2: domain_results покрывает все 4 (с per-domain checks) -> валиден",
                _security_verdict_errors(covered4, "abc123", four, _vrr2) == [])
-        three = {**one_generic, "domain_results": [{"domain": d, "status": "pass"} for d in four[:3]]}
+        three = {**one_generic, "domain_results": _dr(four[:3])}
         expect("v3.0.1 SecVerdict-v2: покрыто 3 из 4 доменов -> невалиден (не закрыт)",
                any("не покрывает" in e for e in _security_verdict_errors(three, "abc123", four, _vrr2)))
-        warn_dom = {**one_generic, "domain_results": [{"domain": d, "status": ("warn" if d == four[0] else "pass")} for d in four]}
+        warn_dom = {**one_generic, "domain_results": [{"domain": d, "status": ("warn" if d == four[0] else "pass"),
+                                                       "checks": [{"id": f"{d}_ok", "status": "pass"}]} for d in four]}
         expect("v3.0.1 SecVerdict-v2: warn в домене при общем pass -> несогласовано (невалиден)",
                any("несогласованно" in e for e in _security_verdict_errors(warn_dom, "abc123", four, _vrr2)))
+        # v3.0.7 (finding аудита P1): SecurityVerdict v2.1 — pass домена БЕЗ per-domain checks не закрывает
+        no_ev = {**one_generic, "domain_results": [{"domain": d, "status": "pass"} for d in four]}   # нет checks
+        expect("v3.0.7 SecVerdict-v2.1: домены без per-domain checks -> невалиден (нет доказательств по домену)",
+               any("domain-specific checks" in e for e in _security_verdict_errors(no_ev, "abc123", four, _vrr2)))
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
@@ -2355,33 +2412,36 @@ def selftest():
         expect("v3.0.1 strict-approval: legacy рыхлый ApprovalRecord НЕ закрывает high-risk deployment_config",
                "deployment_config" in _human_approval_domains_uncovered(str(root), "no-wi", ["Dockerfile"]))
 
-        # v3.0.2 (finding аудита P0): _resolve_base — СТРОГО, без тихого HEAD-fallback.
-        expect("v3.0.2 resolve-base: локальная ветка -> resolved + source=local-branch + SHA",
+        # v3.0.2/v3.0.7 (finding аудита P0): _resolve_base — explicit строго, auto без хардкода main.
+        expect("v3.0.7 resolve-base: явная локальная ветка -> resolved + source=explicit-local + SHA",
                (_rb := _resolve_base(root, orig_branch)).get("resolved") is True
-               and _rb.get("source") == "local-branch" and _rb.get("validated_sha"))
-        expect("v3.0.2 resolve-base: несуществующая ветка -> resolved=False (НЕ тихий HEAD)",
+               and _rb.get("source") == "explicit-local" and _rb.get("mode") == "explicit"
+               and _rb.get("validated_sha"))
+        expect("v3.0.2 resolve-base: явная несуществующая ветка -> resolved=False (НЕ тихий HEAD)",
                _resolve_base(root, "no-such-branch-xyz").get("resolved") is False)
-        # v3.0.2 (P0): single-run с --base на несуществующую ветку + open_pr -> доставка НЕ пытается PR
-        # к произвольному HEAD (base не разрешилась) -> delivery unavailable, base_binding.resolved=False.
-        _sv = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
-        try:
-            it_nb = iter([{"op": "write", "path": "src/nb.py", "content": "n=1\n"}, {"done": True}])
-            rep_nb = run_pipeline("несуществующая база", {"task_type": "QUICK", "size": "small",
-                                  "risk": "low", "affected_areas": ["core"]}, root, lambda c: next(it_nb),
-                                  budget={"max_model_calls": 8}, feature="nb-fn",
-                                  commit=True, isolate=True, open_pr=True, install_deps=False, base="no-such-branch-xyz")
-            expect("v3.0.2 base-unresolved+open_pr: base_binding.resolved=False + доставка НЕ delivered",
-                   (rep_nb.get("base_binding") or {}).get("resolved") is False
-                   and rep_nb["delivery"]["status"] != "opened"
-                   and rep_nb["overall_status"] != "delivered")
-        finally:
-            for _k, _v in _sv.items():
-                if _v is not None: os.environ[_k] = _v
+        # v3.0.7 auto-режим: base=None -> ВСЕГДА резолвится (в пределе — текущая ветка), не хардкод main
+        _ab = _resolve_base(root, None)
+        expect("v3.0.7 resolve-base: auto (base=None) -> resolved, mode=auto, реальная ветка (не 'main'-хардкод)",
+               _ab.get("resolved") is True and _ab.get("mode") == "auto"
+               and _ab.get("base_ref") == orig_branch and _ab.get("validated_sha"))
+        # v3.0.7 (P0.2): ЯВНАЯ несуществующая --base -> preflight-БЛОК ДО модели (0 model calls),
+        # НЕ выполнение от произвольного HEAD. Раньше только доставка блокировалась; теперь весь прогон.
+        it_nb = iter([{"op": "write", "path": "src/nb.py", "content": "n=1\n"}, {"done": True}])
+        _model_calls = {"n": 0}
+        def _counting_prop(c):
+            _model_calls["n"] += 1
+            return next(it_nb)
+        rep_nb = run_pipeline("несуществующая база", {"task_type": "QUICK", "size": "small",
+                              "risk": "low", "affected_areas": ["core"]}, root, _counting_prop,
+                              budget={"max_model_calls": 8}, feature="nb-fn",
+                              commit=True, isolate=True, open_pr=True, install_deps=False, base="no-such-branch-xyz")
+        expect("v3.0.7 base-preflight: явная несуществующая base -> status=error, ready=False, base_binding.resolved=False",
+               rep_nb.get("status") == "error" and rep_nb.get("ready_for_pr") is False
+               and (rep_nb.get("base_binding") or {}).get("resolved") is False
+               and "base-preflight" in (rep_nb.get("error") or ""))
+        expect("v3.0.7 base-preflight: НОЛЬ вызовов модели (блок до исполнения) + worktree не создан",
+               _model_calls["n"] == 0 and not (root / ".ai" / "worktrees" / "nb-fn").exists())
         _git(root, "checkout", "-q", orig_branch)
-        try:
-            _wt3 = __import__("worktree"); _wt3.remove(root, "nb-fn", force=True)
-        except Exception: pass
-        _git(root, "worktree", "prune"); _git(root, "branch", "-D", "ai-ops/nb-fn")
 
         # v2.85 (finding аудита): security НЕ отдаётся self-review той же модели даже без сигналов
         expect("no-self-review: security не в reviewable даже без спец-сигналов",
