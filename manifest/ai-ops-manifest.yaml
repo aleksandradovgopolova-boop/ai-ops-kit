@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.5
+  package_version: 3.0.6
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_6_downstream_secret_scanning_guide:
+      - "finding downstream (Гермес): после v3.0.4 (убраны псевдосекрет-литералы) сканер потребителя всё равно блокировал PR — теперь на ЛЕКСИКЕ security-документации (слова secret/token, имена GITHUB_TOKEN/OPENAI_API_KEY). Это keyword-правило слишком широкое (100% ложных на любой security-документации), не утечка. Убрать эту лексику из security-инструмента невозможно/неправильно"
+      - "добавлен гайд docs/downstream-secret-scanning.md: .ai/managed/** — вендоренная зависимость (как node_modules/vendor), исключается из секрет-скана ребёнка; готовые сниппеты для gitleaks/trufflehog/detect-secrets/GitHub native; альтернатива — сузить правило до value/entropy/format-based (AKIA.., sk-.., PEM). Ссылки из README и runbook §7. Гарантия: в ките 0 реальных секретов и 0 статических литералов (проверено) -> исключение managed безопасно"
+      - "гайд не содержит статических секрет-ЗНАЧЕНИЙ (только regex-паттерны детекции); docs не входят в managed_set (гайд остаётся kit-side для интеграторов, не вендорится в детей). refs/claims PASS; полный CI-набор (94) 94/94 PASS"
     fixed_v3_0_5_auto_update_default_on:
       - "запрос: включить авто-обновление в детях ПО УМОЛЧАНИЮ (опт-аут вместо опт-ин). Сделано: (1) examples/child-config.example.yaml parent.auto_update: false -> true (новые init получают авто-режим); (2) templates/ci/ai-ops-update.yml — .get('auto_update', False) -> True (существующие дети без явного ключа тоже авто, консистентно)"
       - "безопасность сохранена: авто-режим ТОЛЬКО открывает update-PR (не авто-мерж), проходит PR-конвейер ребёнка (ревью/тесты/секрет-сканер), мажорный bump по-прежнему блокируется SemVer-гейтом. Опт-аут явным auto_update: false уважается. init подтверждён: пишет auto_update: true + ставит workflow"
