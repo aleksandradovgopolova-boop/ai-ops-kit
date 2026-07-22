@@ -47,6 +47,99 @@ def durable_write(path, data, require_keys=()):
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
+def durable_write_json(path, data, require_keys=()):
+    """v3.0.14 (finding аудита #2): та же durable-гарантия, что durable_write, но для JSON-артефактов
+    (run-report/controller-report). tmp -> fsync(файл) -> atomic replace -> fsync(каталог) -> перечитать
+    через json.loads + провалидировать. -> {ok} | {ok: False, error}."""
+    import json as _json
+    path = Path(path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        text = _json.dumps(data, ensure_ascii=False, indent=2, default=str)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        _fsync_dir(path.parent)
+        back = _json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(back, dict):
+            return {"ok": False, "error": "перечитанный JSON не dict"}
+        missing = [k for k in require_keys if k not in back]
+        if missing:
+            return {"ok": False, "error": f"после записи отсутствуют ключи: {', '.join(missing)}"}
+        return {"ok": True}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
+def _event_checksum(payload_str):
+    import hashlib
+    return hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]
+
+
+def journal_append(journal_path, event):
+    """v3.0.14 (finding аудита #3): bounded event journal (v0.1) — append-only JSONL с checksum-цепочкой.
+    Каждое событие получает seq, prev-checksum (хэш предыдущей строки) и собственный checksum -> при
+    чтении видно усечение/подмену/разрыв. Одна строка = атомарный append (open('a')+flush+fsync) —
+    crash-boundary на уровне записи. event должен нести run/package/gate-связи (kind + ids). НЕ роняет
+    вызывающего при сбое (журнал — наблюдаемость, не источник истины). -> {ok} | {ok: False, error}."""
+    import json as _json
+    journal_path = Path(journal_path)
+    try:
+        journal_path.parent.mkdir(parents=True, exist_ok=True)
+        prev_checksum, seq = None, 0
+        if journal_path.exists():
+            lines = [ln for ln in journal_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            if lines:
+                try:
+                    last = _json.loads(lines[-1])
+                    prev_checksum = last.get("checksum")
+                    seq = int(last.get("seq", len(lines) - 1)) + 1
+                except (ValueError, TypeError):
+                    seq = len(lines)
+        rec = {**event, "seq": seq, "prev_checksum": prev_checksum}
+        # checksum считается по канонической форме события БЕЗ поля checksum (детерминированно)
+        rec["checksum"] = _event_checksum(_json.dumps(rec, sort_keys=True, ensure_ascii=False))
+        line = _json.dumps(rec, ensure_ascii=False)
+        with open(journal_path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        return {"ok": True, "seq": seq}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+
+def journal_read(journal_path):
+    """Прочитать event journal и ПРОВЕРИТЬ целостность checksum-цепочки. -> {events:[...], ok:bool,
+    broken_at?: seq}. ok=False -> усечение/подмена/разрыв цепочки (crash в середине записи, tamper)."""
+    import json as _json
+    journal_path = Path(journal_path)
+    if not journal_path.exists():
+        return {"events": [], "ok": True}
+    events, ok, broken_at, prev = [], True, None, None
+    for i, ln in enumerate(l for l in journal_path.read_text(encoding="utf-8").splitlines() if l.strip()):
+        try:
+            rec = _json.loads(ln)
+        except ValueError:
+            ok, broken_at = False, i
+            break
+        stored = rec.get("checksum")
+        recomputed = _event_checksum(_json.dumps({k: v for k, v in rec.items() if k != "checksum"},
+                                                 sort_keys=True, ensure_ascii=False))
+        if stored != recomputed or rec.get("prev_checksum") != prev:
+            ok, broken_at = False, rec.get("seq", i)
+            break
+        prev = stored
+        events.append(rec)
+    out = {"events": events, "ok": ok}
+    if broken_at is not None:
+        out["broken_at"] = broken_at
+    return out
+
+
 def _fsync_dir(directory):
     """fsync каталога — иначе питание сразу после os.replace могло потерять сам rename, хотя контент
     уже на диске. best-effort: не все ФС/платформы дают fsync каталога (Windows/некоторые сетевые ФС)."""
@@ -133,6 +226,39 @@ def selftest():
         # corrupt: нет обязательного ключа
         expect("load_guarded: нет обязательного ключа -> corrupt",
                load_guarded(p, required_keys=("kind", "zzz"))["state"] == "corrupt")
+
+        # v3.0.14 (#2): durable_write_json — round-trip + require_keys
+        jp = root / "r.json"
+        wj = durable_write_json(jp, {"kind": "run-report", "status": "ok"}, require_keys=("kind", "status"))
+        expect("durable_write_json: ok + файл создан", wj["ok"] and jp.is_file())
+        expect("durable_write_json: отсутствует required key -> ok=False",
+               not durable_write_json(root / "r2.json", {"kind": "x"}, require_keys=("kind", "miss"))["ok"])
+
+        # v3.0.14 (#3): event journal — append-only, checksum-цепочка, обнаружение подмены
+        jn = root / "journal.jsonl"
+        journal_append(jn, {"kind": "run_start", "run_id": "R1", "workitem_id": "w"})
+        journal_append(jn, {"kind": "package_start", "run_id": "R1", "package_id": "WP1"})
+        journal_append(jn, {"kind": "gate", "run_id": "R1", "package_id": "WP1", "gate": "security", "status": "pass"})
+        jr = journal_read(jn)
+        expect("journal: 3 события, цепочка цела (ok)", jr["ok"] and len(jr["events"]) == 3)
+        expect("journal: seq монотонный 0,1,2", [e["seq"] for e in jr["events"]] == [0, 1, 2])
+        expect("journal: Run->Package->Gate связи сохранены",
+               jr["events"][2]["run_id"] == "R1" and jr["events"][2]["package_id"] == "WP1"
+               and jr["events"][2]["gate"] == "security")
+        # подмена средней строки -> цепочка/checksum рвётся -> ok=False
+        _lines = jn.read_text(encoding="utf-8").splitlines()
+        import json as _js
+        _tamp = _js.loads(_lines[1]); _tamp["status"] = "HACKED"
+        _lines[1] = _js.dumps(_tamp, ensure_ascii=False)
+        jn.write_text("\n".join(_lines) + "\n", encoding="utf-8")
+        expect("journal: подмена строки -> обнаружено (ok=False, broken_at)",
+               journal_read(jn)["ok"] is False)
+        # усечение (crash в середине записи) -> оборванная строка -> ok=False
+        jn2 = root / "j2.jsonl"
+        journal_append(jn2, {"kind": "run_start", "run_id": "R2"})
+        with open(jn2, "a", encoding="utf-8") as _f:
+            _f.write('{"kind": "run_end", "run_i')   # оборванная запись без \n
+        expect("journal: усечённая последняя строка -> ok=False", journal_read(jn2)["ok"] is False)
 
     print("lifecycle_store selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

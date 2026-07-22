@@ -809,6 +809,16 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                         "handoff": (rep.get("handoff") or {}).get("next_action"),
                         "failure": infra_error,   # v3.0-rc13 (P1): типизированный envelope (None если не исключение)
                         "status": status})
+        # v3.0.14 (#3): event journal — package_end (Run->Package->Gate: gates_unmet + статус пакета)
+        try:
+            import lifecycle_store as _lsj
+            _lsj.journal_append(features_dir / wid / "lifecycle-journal.jsonl",
+                                {"kind": "package_end", "run_id": wid, "workitem_id": wid,
+                                 "package_id": pid, "pkg_hash": _pkg_hash(pkg), "sha": sha,
+                                 "ready": bool(ready), "status": status,
+                                 "gates_unmet": (rep.get("gates") or {}).get("unmet")})
+        except Exception:  # noqa: BLE001 — журнал не роняет исполнение
+            pass
 
         if executed:
             completed.add(pid)
@@ -891,13 +901,11 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
            "sequence_base_sha": sequence_base_sha, "base_drift": base_drift,   # rc16 (P0/P1)
            "aggregate": aggregate, "delivery": delivery, "draft_pr": pr,
            "resumed_from": resume_from}
-    try:
-        (features_dir / wid / "sequence-report.yaml").parent.mkdir(parents=True, exist_ok=True)
-        import yaml
-        (features_dir / wid / "sequence-report.yaml").write_text(
-            yaml.safe_dump(seq, allow_unicode=True, sort_keys=False), encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        pass
+    # v3.0.14 (finding аудита #2): sequence-report — durable (атомарно); сбой фиксируем в отчёте, не молчим
+    import lifecycle_store as _ls2
+    _sr = _ls2.durable_write(features_dir / wid / "sequence-report.yaml", seq)
+    if not _sr.get("ok"):
+        seq["report_persist_error"] = _sr.get("error")
     return seq
 
 

@@ -202,14 +202,27 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # fast-forward: продолжать старую работу против ДРУГОЙ базы и выдать её за проверенную нельзя.
             # force_resume этот случай НЕ снимает (иначе можно тихо переобозначить базу) — только явный
             # replan (пересобрать план + переисполнить с новой базы) либо отмена.
-            if pf.get("base_rewritten") and not replan:
+            # v3.0.14 (finding аудита #1, вариант B): base СДВИНУЛСЯ с прошлого прогона — переписан
+            # (rewrite) ИЛИ ушёл вперёд (fast-forward). В ОБОИХ случаях старая работа НЕ интегрирована с
+            # новой базой: resume ПЕРЕИСПОЛЬЗУЕТ worktree, форкнутый от старой базы (не пере-форкает), а
+            # baseline считался на старой — отдать PR против новой базы нельзя. Блок на resume-пути НЕ
+            # снимается ни force_resume, ни replan (обе модификации resume реиспользуют устаревший worktree).
+            # Recourse — СВЕЖИЙ прогон от новой базы (без --resume; --discard заменит устаревшую ветку):
+            # он пере-форкает worktree от новой базы. Авто-интеграция при resume (rebase onto B + повтор
+            # проверок) — запланирована на v3.1.
+            if pf.get("base_rewritten") or pf.get("base_moved"):
+                _kind = ("переписан (force-push/пересоздание)" if pf.get("base_rewritten")
+                         else "ушёл вперёд (fast-forward)")
                 return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
                         "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
-                        "error": ("resume заблокирован: base переписан с прошлого прогона (force-push/"
-                                  "пересоздание ветки) — старую работу нельзя выдать за проверенную против "
-                                  "новой базы. force_resume это НЕ снимает; нужен явный replan (--replan) "
-                                  "или отмена. " + "; ".join(pf["reasons"])),
-                        "resume": {"requested": True, "resumed": False, "base_rewritten": True,
+                        "error": (f"resume заблокирован: base {_kind} с прошлого прогона — старую работу "
+                                  "нельзя выдать за проверенную против новой базы (worktree форкнут от "
+                                  "старой базы и не интегрирован с новой). Ни force_resume, ни replan это "
+                                  "НЕ снимают. Нужен СВЕЖИЙ прогон от новой базы (без --resume; --discard "
+                                  "для замены устаревшей ветки). " + "; ".join(pf["reasons"])),
+                        "resume": {"requested": True, "resumed": False,
+                                   "base_rewritten": bool(pf.get("base_rewritten")),
+                                   "base_moved": bool(pf.get("base_moved")),
                                    "revalidation_needed": True, "reasons": pf["reasons"]}}
             # ЧЕСТНОСТЬ: база/состояние изменились -> НЕ продолжаем молча на устаревшем evidence.
             if pf["revalidation_needed"] and not force_resume:
@@ -224,8 +237,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
         workitem.start(str(features_dir), fid, task_text,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
-        (features_dir / fid / "run-plan.yaml").write_text(
-            yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        _ls.durable_write(features_dir / fid / "run-plan.yaml", plan)   # v3.0.14 (#2): атомарно
+        # v3.0.14 (#3): event journal — run_start (Run->Package->Gate реконструируемы). best-effort.
+        _jp = features_dir / fid / "lifecycle-journal.jsonl"
+        _ls.journal_append(_jp, {"kind": "run_start", "run_id": fid, "workitem_id": fid,
+                                 "task_type": signals.get("task_type"), "engine": engine, "base": base,
+                                 "resume": bool(resume)})
         # v3.0-rc2 (P0.1): сохраняем ЭФФЕКТИВНУЮ политику прогона -> resume восстановит её, а не
         # переклассифицирует/деградирует до дефолтов. provider/model НЕ храним (runtime-выбор/секрет).
         if execute:
@@ -255,7 +272,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _hist = features_dir / fid / "run-history"
             _hist.mkdir(parents=True, exist_ok=True)
             _n = len(list(_hist.glob("run-*.yaml"))) + 1
-            (_hist / f"run-{_n:03d}.yaml").write_text(_sdump, encoding="utf-8")
+            _ls.durable_write(_hist / f"run-{_n:03d}.yaml", _settings)   # v3.0.14 (#2): атомарно
         # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
         # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
         lifecycle_errors = []
@@ -321,11 +338,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                  "preflight": f"features/{fid}/preflight.yaml"}}
             if lifecycle_errors:
                 rep["lifecycle_errors"] = lifecycle_errors
-            try:
-                (features_dir / fid / "run-report.json").write_text(
-                    json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-            except OSError:
-                pass
+            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)   # v3.0.14 (#2): атомарно
             return rep
 
         aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
@@ -399,8 +412,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _safe = ("retry прогон (сбой транзиентный: провайдер/сеть)"
                          if _fail.get("retryable") else
                          "разобрать сбой перед повтором (вероятен дефект/невалидный ввод — не транзиент)")
-                (features_dir / fid / "run-report.json").write_text(
-                    json.dumps(err_rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+                _ls.durable_write_json(features_dir / fid / "run-report.json", err_rep)   # v3.0.14 (#2)
                 _hf = {"schema_version": 1, "kind": "run-handoff", "workitem_id": fid,
                        "status": "error", "failure": _fail, "retryable": bool(_fail.get("retryable")),
                        "next_action": _safe}
@@ -493,13 +505,18 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             lifecycle_errors.append(f"run-handoff build/write: {type(_e).__name__}: {_e}")
         if lifecycle_errors:
             rep["lifecycle_errors"] = lifecycle_errors   # v2.107: сбои слоя lifecycle видны, не гаснут
-        try:
-            (features_dir / fid / "run-report.json").write_text(
-                json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        except OSError as _e:
-            # v3.0.12: сбой записи run-report больше не глотается молча (возвращаемый rep несёт пометку)
-            rep.setdefault("lifecycle_errors", lifecycle_errors)
-            rep["lifecycle_errors"].append(f"run-report write: {type(_e).__name__}: {_e}")
+        # v3.0.14 (#2): финальный run-report пишется DURABLE (атомарно+fsync); сбой не молчит (в rep).
+        _rw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        if not _rw.get("ok"):
+            rep.setdefault("lifecycle_errors", [])
+            rep["lifecycle_errors"].append(f"run-report durable-write: {_rw.get('error')}")
+        # v3.0.14 (#3): event journal — run_end (исход прогона).
+        _ls.journal_append(features_dir / fid / "lifecycle-journal.jsonl",
+                           {"kind": "run_end", "run_id": fid, "workitem_id": fid,
+                            "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
+                                                                    else "not-ready"),
+                            "ready_for_pr": bool(rep.get("ready_for_pr")),
+                            "commit": (rep.get("commit") or {}).get("sha")})
         # закрываем активную работу по завершении прогона (была in-progress -> done)
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid)
@@ -516,9 +533,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     workitem.start(str(features_dir), fid, task_text,
                    task_type=signals.get("task_type"), risk=signals.get("risk"))
 
-    # 4. RunPlan на диск (рядом с WorkItem)
-    (features_dir / fid / "run-plan.yaml").write_text(
-        yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # 4. RunPlan на диск (рядом с WorkItem) — v3.0.14 (#2): атомарно
+    _ls.durable_write(features_dir / fid / "run-plan.yaml", plan)
 
     # 5. регистрация активной работы (координация параллельных сессий)
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
@@ -559,8 +575,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         "artifacts": {"workitem": f"features/{fid}/workitem.yaml",
                       "run_plan": f"features/{fid}/run-plan.yaml"},
     }
-    (features_dir / fid / "run-report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    _ls.durable_write_json(features_dir / fid / "run-report.json", report)   # v3.0.14 (#2): атомарно
     return report
 
 
@@ -759,15 +774,51 @@ def selftest():
             "next_action: продолжить\nopen_questions: []\n", encoding="utf-8")
         r_rw = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
                    engine="pipeline", feature="rwx", resume=True, force_resume=True)
-        expect("v3.0.10 P0: base переписан + force_resume=True -> ВСЁ РАВНО blocked (force не снимает)",
+        expect("v3.0.10/14 P0: base переписан + force_resume=True -> ВСЁ РАВНО blocked (force не снимает)",
                r_rw.get("status") == "blocked"
                and (r_rw.get("resume") or {}).get("base_rewritten") is True
-               and "replan" in (r_rw.get("error") or "").lower())
+               and "свежий" in (r_rw.get("error") or "").lower())
+        # v3.0.14: replan тоже НЕ снимает блок на resume-пути (reuse устаревшего worktree) — нужен fresh run
         r_rw2 = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
                     engine="pipeline", feature="rwx", resume=True, replan=True)
-        expect("v3.0.10 P0: тот же случай с replan=True -> не blocked по base_rewritten",
-               not (r_rw2.get("status") == "blocked"
-                    and (r_rw2.get("resume") or {}).get("base_rewritten") is True))
+        expect("v3.0.14 P0: base переписан + replan (всё ещё resume) -> ВСЁ РАВНО blocked (нужен fresh run)",
+               r_rw2.get("status") == "blocked"
+               and (r_rw2.get("resume") or {}).get("base_rewritten") is True)
+
+    # v3.0.14 (finding аудита #1, вариант B): FAST-FORWARD базы + force_resume -> ВСЁ РАВНО blocked
+    # (работа не интегрирована с новой базой; force не снимает, нужен --replan).
+    with tempfile.TemporaryDirectory() as td:
+        import subprocess as _sp2
+        root = Path(td)
+
+        def _g2(*a):
+            return _sp2.run(["git", "-C", td, *a], capture_output=True, text=True).stdout.strip()
+        for a in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t")):
+            _g2(*a)
+        (root / "f").write_text("x", encoding="utf-8"); _g2("add", "-A"); _g2("commit", "-q", "-m", "A")
+        base_A = _g2("rev-parse", "HEAD")
+        cur = _g2("rev-parse", "--abbrev-ref", "HEAD")
+        _g2("checkout", "-q", "-b", "ai-ops/ffx")
+        (root / "w").write_text("work", encoding="utf-8"); _g2("add", "-A"); _g2("commit", "-q", "-m", "W")
+        work_sha = _g2("rev-parse", "HEAD")
+        _g2("checkout", "-q", cur)
+        # база УШЛА ВПЕРЁД (fast-forward): новый коммит на cur; base_A остаётся предком
+        (root / "b2").write_text("advance", encoding="utf-8"); _g2("add", "-A"); _g2("commit", "-q", "-m", "B")
+        fdir = root / "features" / "ffx"; fdir.mkdir(parents=True)
+        (fdir / "run-settings.yaml").write_text(
+            "schema_version: 1\nkind: run-settings\nworkitem_id: ffx\n"
+            "signals:\n  task_type: QUICK\n  risk: low\npolicy:\n"
+            f"  base: {cur}\n  base_binding:\n    base_ref: {cur}\n    base_sha: {base_A}\n", encoding="utf-8")
+        (fdir / "run-handoff.yaml").write_text(
+            f"kind: RunHandoff\nworkitem_id: ffx\nresume_from_revision: {work_sha}\n"
+            f"base_binding:\n  kind: BaseBinding\n  base_ref: {cur}\n  base_sha: {base_A}\n"
+            "next_action: продолжить\nopen_questions: []\n", encoding="utf-8")
+        r_ff = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
+                   engine="pipeline", feature="ffx", resume=True, force_resume=True)
+        expect("v3.0.14 #1: fast-forward базы + force_resume -> blocked (force не снимает, нужен fresh run)",
+               r_ff.get("status") == "blocked"
+               and (r_ff.get("resume") or {}).get("base_moved") is True
+               and "свежий" in (r_ff.get("error") or "").lower())
 
     # v2.51: привязка к ИМЕНОВАННОЙ фиче — срезы истории копятся на неё, не на wi-<hash>
     with tempfile.TemporaryDirectory() as td:
@@ -801,6 +852,10 @@ def selftest():
         expect("v2.94: pipeline создал WorkItem", (root / "features" / pfid / "workitem.yaml").exists())
         expect("v2.94: pipeline записал RunPlan", (root / "features" / pfid / "run-plan.yaml").exists())
         expect("v2.94: pipeline записал run-report", (root / "features" / pfid / "run-report.json").exists())
+        # v3.0.14 (#3): event journal записан, цепочка цела, есть run_start+run_end
+        _jr = _ls.journal_read(root / "features" / pfid / "lifecycle-journal.jsonl")
+        expect("v3.0.14: lifecycle-journal записан + checksum-цепочка цела",
+               _jr["ok"] and {e["kind"] for e in _jr["events"]} >= {"run_start", "run_end"})
         expect("v2.94: pipeline зарегистрировал active-work",
                (root / ".ai" / "runtime" / "active-work.yaml").exists())
         expect("v2.94: lifecycle-артефакты в отчёте", isinstance(rp.get("lifecycle"), dict)
@@ -941,15 +996,17 @@ def selftest():
         expect("v2.109 ctl: устаревшая база -> resume блокируется без --force (честно, не молча)",
                r_block.get("status") == "blocked"
                and (r_block.get("resume") or {}).get("revalidation_needed") is True)
-        # с --force продолжает осознанно, и отчёт ЧЕСТНО помечает, что ревалидация переопределена
+        # v3.0.14 (finding аудита #1, вариант B): база УШЛА ВПЕРЁД (fast-forward) -> --force БОЛЬШЕ НЕ
+        # продолжает на устаревшем worktree (иначе PR против непроверенной интеграции с новой базой).
+        # Теперь это blocked (base_moved), recourse — свежий прогон от новой базы. Прежде здесь force
+        # «осознанно продолжал» — это и был закрытый trust-разрыв.
         s4 = iter([{"op": "write", "path": "src/phase4.py", "content": "p=4\n"}, {"done": True}])
         r_force = run("фаза 4", sig_r, root, engine="pipeline", proposer=lambda c: next(s4),
                       execute=True, feature="ctl-resume", install_deps=False, resume=True,
                       force_resume=True, base=cur)
-        expect("v2.109 ctl: --force продолжает + отчёт помечает revalidation_overridden=True (честно)",
-               r_force.get("status") != "error"
-               and (r_force.get("resume") or {}).get("resumed") is True
-               and (r_force.get("resume") or {}).get("revalidation_overridden") is True)
+        expect("v3.0.14 ctl: fast-forward базы + --force -> blocked (base_moved), не продолжает на устаревшем",
+               r_force.get("status") == "blocked"
+               and (r_force.get("resume") or {}).get("base_moved") is True)
 
     # orchestrated-путь (generic-orchestrator, mock без evidence -> blocked, но транзакция прошла)
     with tempfile.TemporaryDirectory() as td:
