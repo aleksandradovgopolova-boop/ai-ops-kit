@@ -87,6 +87,10 @@ def build_handoff(report, work_root=None):
         "schema_version": 1, "kind": "RunHandoff",
         "run_id": f"{wid}@{sha[:12]}" if sha else wid,
         "workitem_id": wid,
+        # v3.0.10 (finding аудита P0): RunHandoff несёт ИСХОДНЫЙ BaseBinding (base_ref+base_sha+mode+source)
+        # прогона. Это источник истины для resume: точная база, от которой форкнута работа, а не «текущий
+        # SHA той же ветки». Без него resume не мог отличить force-push/пересоздание базы от fast-forward.
+        "base_binding": rep.get("base_binding") or {},
         "completed": completed,
         "decisions": rep.get("decisions") or [],
         "changed_files": changed_files,
@@ -100,15 +104,24 @@ def build_handoff(report, work_root=None):
 
 def resume_preflight(child_root, wid, base="main"):
     """Проверить, безопасно ли продолжать WorkItem, и что требует ревалидации. Детерминированно.
-    -> {can_resume, revalidation_needed, reasons[], handoff?, next_action?, resume_from_revision?}."""
+    -> {can_resume, revalidation_needed, base_rewritten, reasons[], handoff?, next_action?,
+        resume_from_revision?}.
+
+    v3.0.10 (finding аудита P0): различаем ДВА класса изменения базы:
+      * FAST-FORWARD (сохранённый base_sha — предок текущего HEAD базы): база ушла вперёд —
+        revalidation_needed=True, снимается осознанным force_resume;
+      * REWRITE (base force-push назад / пересоздан на несвязанном SHA — сохранённый base_sha НЕ предок
+        текущего HEAD базы): base_rewritten=True. Это НЕ снимается force_resume — старую работу нельзя
+        переобозначить как проверенную против ДРУГОЙ базы; нужен явный replan/отмена."""
     child_root = Path(child_root)
-    reasons, revalidation = [], False
+    reasons, revalidation, base_rewritten = [], False, False
     hp = child_root / "features" / wid / "run-handoff.yaml"
     if not hp.is_file():
-        return {"can_resume": False, "revalidation_needed": False,
+        return {"can_resume": False, "revalidation_needed": False, "base_rewritten": False,
                 "reasons": [f"нет RunHandoff для {wid} (features/{wid}/run-handoff.yaml) — нечего продолжать"]}
     handoff = yaml.safe_load(hp.read_text(encoding="utf-8")) or {}
     sha = handoff.get("resume_from_revision")
+    saved_base_sha = ((handoff.get("base_binding") or {}).get("base_sha")) or None
     branch = f"ai-ops/{wid}"
 
     # ветка/worktree на месте?
@@ -142,6 +155,29 @@ def resume_preflight(child_root, wid, base="main"):
                                "нужна ревалидация (старый evidence НЕ действителен для нового состояния)")
                 revalidation = True
 
+    # v3.0.10 (finding аудита P0): сохранённый base_sha исходного прогона — ИММУТАБЕЛЬНЫЙ контракт. Сверяем
+    # его с ТЕКУЩИМ HEAD base-ветки. Если base переписан (сохранённый SHA больше НЕ предок текущего HEAD
+    # базы — force-push назад / ветку пересоздали на несвязанном коммите) — это НЕ fast-forward, а СМЕНА
+    # базы: старую работу нельзя выдать за проверенную против неё. base_rewritten не снимается force_resume.
+    if saved_base_sha and base_resolvable:
+        rc_cur, cur_base_sha, _ = _git(child_root, "rev-parse", "--verify", base)
+        cur_base_sha = (cur_base_sha or "").strip()
+        rc_saved, _, _ = _git(child_root, "rev-parse", "--verify", saved_base_sha)
+        if rc_saved != 0:
+            reasons.append(f"сохранённый base_sha {saved_base_sha[:12]} исходного прогона отсутствует в "
+                           "репозитории — base переписан/недостижим; resume против него невозможен")
+            revalidation = True
+            base_rewritten = True
+        elif rc_cur == 0 and cur_base_sha and cur_base_sha != saved_base_sha:
+            rc_anc, _, _ = _git(child_root, "merge-base", "--is-ancestor", saved_base_sha, cur_base_sha)
+            if rc_anc != 0:   # сохранённая база НЕ предок текущей -> переписана, а не ушла вперёд
+                reasons.append(f"base '{base}' ПЕРЕПИСАН: сохранённый base_sha {saved_base_sha[:12]} не "
+                               f"является предком текущего HEAD {cur_base_sha[:12]} (force-push/пересоздание). "
+                               "Это смена базы, не fast-forward — resume против новой базы запрещён; "
+                               "нужен явный replan (пересобрать и переисполнить) или отмена")
+                revalidation = True
+                base_rewritten = True
+
     # устаревшие решения (ссылки на прошлую версию)
     for d in handoff.get("decisions") or []:
         if isinstance(d, dict) and d.get("stale"):
@@ -151,7 +187,8 @@ def resume_preflight(child_root, wid, base="main"):
     if not reasons:
         reasons.append("состояние актуально: ветка на месте, base не двигался — можно продолжить с "
                        "последнего подтверждённого шага")
-    return {"can_resume": True, "revalidation_needed": revalidation, "reasons": reasons,
+    return {"can_resume": True, "revalidation_needed": revalidation, "base_rewritten": base_rewritten,
+            "reasons": reasons,
             "handoff": {"next_action": handoff.get("next_action"),
                         "open_questions": handoff.get("open_questions"),
                         "resume_from_revision": sha},
@@ -226,6 +263,58 @@ def selftest():
         pf3 = resume_preflight(root, "feat-z", base="no-such-branch-xyz")
         expect("resume: неразрешимая base -> revalidation + честная причина (не молча 'актуально')",
                pf3["revalidation_needed"] is True and any("не удалось разрешить" in r for r in pf3["reasons"]))
+        expect("resume: fast-forward base -> base_rewritten=False (не переписан, снимается force)",
+               pf2.get("base_rewritten") is False)
+
+    # v3.0.10 (finding аудита P0): build_handoff несёт исходный BaseBinding; resume_preflight отличает
+    # FAST-FORWARD (снимается force) от REWRITE базы (force-push/пересоздание — force НЕ снимает).
+    hbb = build_handoff({"workitem_id": "bb", "ready_for_pr": True,
+                         "commit": {"sha": "c" * 40, "branch": "ai-ops/bb", "evidence_on_exact_sha": True},
+                         "base_binding": {"kind": "BaseBinding", "base_ref": "main",
+                                          "base_sha": "d" * 40, "mode": "auto", "source": "upstream"},
+                         "loop": {"applied_writes": 1, "stopped": "done"}, "gates": {}, "checks": {}})
+    expect("v3.0.10 handoff: BaseBinding.base_sha сохранён в RunHandoff",
+           hbb.get("base_binding", {}).get("base_sha") == "d" * 40)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        for a in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t")):
+            _git(root, *a)
+        (root / "f").write_text("x", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "base-A")
+        base_A = _git(root, "rev-parse", "HEAD")[1]
+        cur = _git(root, "rev-parse", "--abbrev-ref", "HEAD")[1]
+        # рабочий коммит поверх base-A на ветке ai-ops/rw
+        _git(root, "checkout", "-q", "-b", "ai-ops/rw")
+        (root / "w").write_text("work", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "work")
+        work_sha = _git(root, "rev-parse", "HEAD")[1]
+        _git(root, "checkout", "-q", cur)
+        fdir = root / "features" / "rw"; fdir.mkdir(parents=True)
+
+        def _put_handoff(base_sha):
+            (fdir / "run-handoff.yaml").write_text(yaml.safe_dump(
+                {"kind": "RunHandoff", "workitem_id": "rw", "resume_from_revision": work_sha,
+                 "base_binding": {"kind": "BaseBinding", "base_ref": cur, "base_sha": base_sha,
+                                  "mode": "auto", "source": "upstream"},
+                 "next_action": "продолжить", "open_questions": []}), encoding="utf-8")
+        # (1) сохранённый base_sha == текущий HEAD базы -> НЕ переписан
+        _put_handoff(base_A)
+        pf_ok = resume_preflight(root, "rw", base=cur)
+        expect("v3.0.10 resume: base_sha == текущий HEAD -> base_rewritten=False",
+               pf_ok.get("base_rewritten") is False)
+        # (2) base force-push НАЗАД на несвязанный коммит: пересоздаём ветку на orphan -> сохранённый
+        #     base_sha больше НЕ предок нового HEAD -> REWRITE (не fast-forward)
+        _git(root, "checkout", "-q", "--orphan", "reborn")
+        (root / "z").write_text("reborn", encoding="utf-8")
+        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "unrelated")
+        reborn_sha = _git(root, "rev-parse", "HEAD")[1]
+        _git(root, "branch", "-f", cur, reborn_sha)
+        _git(root, "checkout", "-q", cur)
+        pf_rw = resume_preflight(root, "rw", base=cur)
+        expect("v3.0.10 resume: base переписан (не предок) -> base_rewritten=True + причина",
+               pf_rw.get("base_rewritten") is True
+               and any("ПЕРЕПИСАН" in r for r in pf_rw["reasons"]))
 
     print("run_handoff selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

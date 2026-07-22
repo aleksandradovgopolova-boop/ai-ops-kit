@@ -185,6 +185,20 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         "error": "resume невозможен: " + "; ".join(pf["reasons"]),
                         "resume": {"requested": True, "resumed": False, "can_resume": False,
                                    "reasons": pf["reasons"]}}
+            # v3.0.10 (finding аудита P0): base ПЕРЕПИСАН (force-push назад / пересоздан на несвязанном
+            # SHA — сохранённый base_sha исходного прогона больше не предок текущего HEAD базы). Это НЕ
+            # fast-forward: продолжать старую работу против ДРУГОЙ базы и выдать её за проверенную нельзя.
+            # force_resume этот случай НЕ снимает (иначе можно тихо переобозначить базу) — только явный
+            # replan (пересобрать план + переисполнить с новой базы) либо отмена.
+            if pf.get("base_rewritten") and not replan:
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                        "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
+                        "error": ("resume заблокирован: base переписан с прошлого прогона (force-push/"
+                                  "пересоздание ветки) — старую работу нельзя выдать за проверенную против "
+                                  "новой базы. force_resume это НЕ снимает; нужен явный replan (--replan) "
+                                  "или отмена. " + "; ".join(pf["reasons"])),
+                        "resume": {"requested": True, "resumed": False, "base_rewritten": True,
+                                   "revalidation_needed": True, "reasons": pf["reasons"]}}
             # ЧЕСТНОСТЬ: база/состояние изменились -> НЕ продолжаем молча на устаревшем evidence.
             if pf["revalidation_needed"] and not force_resume:
                 return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
@@ -647,6 +661,48 @@ def selftest():
         expect("v3.0-rc4 P0.1: replan=True -> проходит drift-проверку (ошибка уже не про replan)",
                "replan" not in (r_replan.get("error") or "").lower())
         expect("planned: без --feature wid = wi-<hash>", fid.startswith("wi-"))
+
+    # v3.0.10 (finding аудита P0): base ПЕРЕПИСАН -> resume заблокирован ДАЖЕ с force_resume=True
+    # (старую работу нельзя выдать за проверенную против новой базы; снимается только replan).
+    with tempfile.TemporaryDirectory() as td:
+        import subprocess as _sp
+        root = Path(td)
+
+        def _g(*a):
+            return _sp.run(["git", "-C", td, *a], capture_output=True, text=True).stdout.strip()
+        for a in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t")):
+            _g(*a)
+        (root / "f").write_text("x", encoding="utf-8"); _g("add", "-A"); _g("commit", "-q", "-m", "A")
+        base_A = _g("rev-parse", "HEAD")
+        cur = _g("rev-parse", "--abbrev-ref", "HEAD")
+        _g("checkout", "-q", "-b", "ai-ops/rwx")
+        (root / "w").write_text("work", encoding="utf-8"); _g("add", "-A"); _g("commit", "-q", "-m", "W")
+        work_sha = _g("rev-parse", "HEAD")
+        _g("checkout", "-q", cur)
+        # base переписан на несвязанный orphan-коммит (force-push назад/пересоздание)
+        _g("checkout", "-q", "--orphan", "reborn")
+        (root / "z").write_text("z", encoding="utf-8"); _g("add", "-A"); _g("commit", "-q", "-m", "R")
+        _g("branch", "-f", cur, _g("rev-parse", "HEAD")); _g("checkout", "-q", cur)
+        fdir = root / "features" / "rwx"; fdir.mkdir(parents=True)
+        (fdir / "run-settings.yaml").write_text(
+            "schema_version: 1\nkind: run-settings\nworkitem_id: rwx\n"
+            "signals:\n  task_type: QUICK\n  risk: low\npolicy:\n"
+            f"  base: {cur}\n  base_binding:\n    base_ref: {cur}\n    base_sha: {base_A}\n", encoding="utf-8")
+        (fdir / "run-handoff.yaml").write_text(
+            f"kind: RunHandoff\nworkitem_id: rwx\nresume_from_revision: {work_sha}\n"
+            f"base_binding:\n  kind: BaseBinding\n  base_ref: {cur}\n  base_sha: {base_A}\n"
+            "next_action: продолжить\nopen_questions: []\n", encoding="utf-8")
+        r_rw = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
+                   engine="pipeline", feature="rwx", resume=True, force_resume=True)
+        expect("v3.0.10 P0: base переписан + force_resume=True -> ВСЁ РАВНО blocked (force не снимает)",
+               r_rw.get("status") == "blocked"
+               and (r_rw.get("resume") or {}).get("base_rewritten") is True
+               and "replan" in (r_rw.get("error") or "").lower())
+        r_rw2 = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
+                    engine="pipeline", feature="rwx", resume=True, replan=True)
+        expect("v3.0.10 P0: тот же случай с replan=True -> не blocked по base_rewritten",
+               not (r_rw2.get("status") == "blocked"
+                    and (r_rw2.get("resume") or {}).get("base_rewritten") is True))
 
     # v2.51: привязка к ИМЕНОВАННОЙ фиче — срезы истории копятся на неё, не на wi-<hash>
     with tempfile.TemporaryDirectory() as td:
