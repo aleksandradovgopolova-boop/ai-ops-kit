@@ -88,6 +88,30 @@ def _durable_write_yaml(path, data, require_keys=()):
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
+def _validate_sequence_plan_schema(doc):
+    """v3.0.9 (finding аудита P0): ПОЛНАЯ schema-валидация SequencePlan при КАЖДОМ чтении (не только
+    dict+kind). Парсибельный, но неполный план -> тоже lifecycle-corrupted. -> None (валиден) | причина."""
+    if not isinstance(doc, dict):
+        return "не dict"
+    if doc.get("kind") != "SequencePlan":
+        return f"kind != SequencePlan ({doc.get('kind')})"
+    for k in ("schema_version", "workitem_id", "plan_hash", "base_ref", "sequence_base_sha", "packages"):
+        if doc.get(k) in (None, ""):
+            return f"нет обязательного поля '{k}'"
+    pkgs = doc.get("packages")
+    if not isinstance(pkgs, list) or not pkgs:
+        return "packages пуст/не список"
+    for i, p in enumerate(pkgs):
+        if not isinstance(p, dict):
+            return f"packages[{i}] не dict"
+        for k in ("id", "pkg_hash", "order"):
+            if p.get(k) in (None, ""):
+                return f"packages[{i}] без '{k}'"
+        if "depends_on" not in p:
+            return f"packages[{i}] без depends_on"
+    return None
+
+
 def _hard_stop(rep):
     """v2.120 (P0.3): причина ОСТАНОВИТЬ цепочку (нельзя строить зависимый пакет поверх), либо None.
 
@@ -390,7 +414,8 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             _corrupt_reason = f"YAML не парсится: {_e}"
         else:
             _corrupt_reason = None
-        if _corrupt_reason is not None or not isinstance(_loaded, dict) or _loaded.get("kind") != "SequencePlan":
+        _schema_err = None if _corrupt_reason is not None else _validate_sequence_plan_schema(_loaded)
+        if _corrupt_reason is not None or _schema_err is not None:
             import hashlib as _h
             _raw = b""
             try:
@@ -401,7 +426,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                     "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
                     "ready_all": False, "aggregate_ready": False, "total": len(ordered),
                     "error": (f"lifecycle-corrupted: {_sp} существует, но невалиден "
-                              f"({_corrupt_reason or 'не SequencePlan-dict'}) — выполнение запрещено "
+                              f"({_corrupt_reason or _schema_err}) — выполнение запрещено "
                               f"(повреждён источник истины). Нужна явная recovery, не автоперезапись."),
                     "corrupt_sha256": _h.sha256(_raw).hexdigest()[:16] if _raw else None,
                     "corrupt_path": str(_sp)}
@@ -764,23 +789,12 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             # sequence_base_sha; перед PR сверяем АКТУАЛЬНУЮ remote base с этой базой. Разошлась
             # (remote main сдвинулся после старта цепочки) -> НЕ открываем PR (проверенное состояние
             # != потенциальному merge-состоянию); нужна ревалидация. Иначе — «verified» PR был бы ложью.
-            # v3.0.1 (finding аудита P0): сверяем ВЫБРАННУЮ base-ветку (refs/heads/<base>), НЕ origin HEAD
-            # (default branch). PR открываем СТРОГО в base_ref. Иначе не-default base давал ложный блок/
-            # PR не туда.
-            remote_base = None
-            try:
-                rc_ls, out_ls, _ = _git(_drt, "ls-remote", "origin", f"refs/heads/{base}")
-                if rc_ls == 0 and out_ls.strip():
-                    remote_base = out_ls.split()[0].strip()
-            except Exception:  # noqa: BLE001
-                remote_base = None
-            if remote_base and sequence_base_sha and remote_base != sequence_base_sha:
-                delivery["status"] = "not-attempted"
-                delivery["base_moved"] = {"base_ref": base, "validated_base": sequence_base_sha,
-                                          "remote_base": remote_base}
-                delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — открытие PR "
-                                      "против новой базы дало бы непроверенное merge-состояние; нужна ревалидация")
-            else:
+            # v3.0.9 (finding аудита P0): ЕДИНЫЙ fail-closed RemoteBaseVerifier (как single-run). Раньше
+            # sequential был fail-OPEN: remote_base=None (нет origin/сети/ветки) -> else -> открывал PR.
+            # Теперь: verified-equal -> PR; verified-moved -> revalidation; unverifiable -> unavailable.
+            _rv = _ep._verify_remote_base(_drt, base, sequence_base_sha)
+            _vd = _rv.get("verdict")
+            if _vd == "verified-equal":
                 try:
                     import pr_open
                     pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}", base=base,
@@ -794,6 +808,15 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 except Exception as e:  # noqa: BLE001
                     delivery["status"] = "failed"
                     delivery["error"] = str(e)
+            elif _vd == "verified-moved":
+                delivery["status"] = "not-attempted"
+                delivery["base_moved"] = {"base_ref": base, "validated_base": sequence_base_sha,
+                                          "remote_base": _rv.get("remote_sha")}
+                delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — нужна ревалидация; "
+                                      "PR не открыт (иначе непроверенное merge-состояние)")
+            else:   # unverifiable -> доставка НЕДОСТУПНА (fail-closed), НЕ открываем PR
+                delivery["status"] = "unavailable"
+                delivery["reason"] = f"remote-base-unverified: {_rv.get('reason')} — доставка невозможна fail-closed"
         else:
             delivery["status"] = "not-attempted"   # последовательность не готова -> PR НЕ открываем
 
@@ -856,9 +879,11 @@ def selftest():
         if m:
             doms = [d.strip() for d in m.group(1).split(",") if d.strip()]
             if doms:
-                # v3.0.7 v2.1: у каждого домена СВОИ per-domain checks
+                # v3.0.7/v3.0.9 v2.1/v2.3: per-domain checks + конкретная evidence-ссылка для pass
                 res["domain_results"] = [{"domain": d, "status": "pass",
-                                          "checks": [{"id": f"{d}_ok", "status": "pass"}]} for d in doms]
+                                          "checks": [{"id": f"{d}_ok", "status": "pass"}],
+                                          "evidence": [{"type": "code-read", "path": "src/x.py", "lines": "1-10"}]}
+                                         for d in doms]
         return _json.dumps(res, ensure_ascii=False)
     reviewer = _pass_reviewer
 

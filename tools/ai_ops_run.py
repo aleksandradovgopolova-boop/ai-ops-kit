@@ -130,7 +130,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     write_scope = _pp.get("write_scope") if write_scope is None else write_scope
                     if max_steps == 40 and _pp.get("max_steps"):
                         max_steps = _pp["max_steps"]
-                    base = _pp.get("base", base)   # v3.0.2 (P0): base восстанавливается из saved (не надо re-pass --base)
+                    # v3.0.2/v3.0.9 (P0): base восстанавливается из saved BaseBinding (точная база исходного
+                    # запуска), с фолбэком на плоское поле base (совместимость со старыми run-settings).
+                    base = ((_pp.get("base_binding") or {}).get("base_ref")) or _pp.get("base", base)
         # v3.0.8 (finding аудита P0.1): base РАЗРЕШАЕТСЯ В КОНКРЕТНУЮ ВЕТКУ ОДИН РАЗ здесь (до resume_preflight
         # и до записи run-settings). Иначе fresh auto-run сохранял base=null -> resume передавал None в
         # git rev-parse -> TypeError. На resume уже восстановлен сохранённый base (выше); для fresh —
@@ -144,6 +146,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     "base_binding": {k: _brr.get(k) for k in ("base_ref", "base_sha", "mode", "source")}}
         if _brr.get("resolved"):
             base = _brr.get("base_ref")   # конкретная ветка -> в run-settings, resume_preflight, pipeline
+        # v3.0.9 (finding аудита P0.2): полный BaseBinding (ref+sha+mode+source) сохраняется/восстанавливается,
+        # а не только имя ветки — чтобы resume восстанавливал ТОЧНУЮ базу исходного запуска (ловит force-push/
+        # смену upstream/пересоздание ветки, не только fast-forward).
+        base_binding = {"kind": "BaseBinding",
+                        "base_ref": _brr.get("base_ref") or base, "base_sha": _brr.get("base_sha"),
+                        "mode": _brr.get("mode"), "source": _brr.get("source")}
         prop = proposer or tool_loop.make_model_proposer(
             orchestrator.make_provider(provider_name, model))
         # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),
@@ -201,7 +209,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
                            "author": author, "review": review, "open_pr": open_pr,
                            "write_scope": write_scope, "max_steps": max_steps, "engine": engine,
-                           "base": base},   # v3.0.2 (P0): BaseBinding в immutable resume-policy
+                           "base": base,   # v3.0.2 (P0): резолвнутый base_ref (back-compat)
+                           "base_binding": base_binding},   # v3.0.9 (P0.2): полный BaseBinding (ref+sha+mode+source)
             }
             _sdump = yaml.safe_dump(_settings, allow_unicode=True, sort_keys=False)
             (features_dir / fid / "run-settings.yaml").write_text(_sdump, encoding="utf-8")  # latest -> restore

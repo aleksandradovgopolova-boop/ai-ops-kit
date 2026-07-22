@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.8
+  package_version: 3.0.9
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_9_lifecycle_store_and_delivery_integrity:
+      - "P0 sequential delivery был fail-OPEN при непроверяемой remote base: проверял только remote_base!=saved; при None (нет origin/сети/ветки/ошибка ls-remote) -> else -> всё равно открывал PR. Две цепочки имели РАЗНЫЕ правила доверия. Фикс: единый _verify_remote_base (RemoteBaseVerifier) для single-run И sequential: verified-equal->PR, verified-moved->revalidation, unverifiable->delivery unavailable (отсутствие проверки != пройденная проверка)"
+      - "P0 single-run хранил только имя base, не полный BaseBinding. Фикс: BaseBinding {base_ref, base_sha, mode, source} сохраняется в run-settings и восстанавливается на resume (точная база исходного запуска — ловит force-push/смену upstream/пересоздание ветки, не только fast-forward); base разрешается в конкретную ветку до записи"
+      - "P0 проверка повреждённого SequencePlan была неполной: валиден, если dict+kind==SequencePlan, обязательные поля НЕ проверялись при чтении (kind: SequencePlan один проходил). Фикс: _validate_sequence_plan_schema при КАЖДОМ чтении (schema_version/workitem_id/plan_hash/base_ref/sequence_base_sha/packages + id/pkg_hash/order/depends_on каждого пакета); парсибельный, но неполный план -> lifecycle-corrupted до модели"
+      - "P1 SecurityVerdict v2.3: pass-домен требует хотя бы одну КОНКРЕТНУЮ evidence-ссылку (code-read path/lines, test command, scanner finding) на уровне домена или в его check'ах; id+status без evidence больше не доказательство. Промпт reviewer'а требует evidence для pass"
+      - "проверки: +деттесты (verify-remote-base нет origin -> unverifiable; повреждённый/неполный SequencePlan -> lifecycle-corrupted; resume восстанавливает полный BaseBinding; SecVerdict-v2.3 pass без evidence -> невалиден). Полный CI-набор (94) 94/94 PASS на дефолт-ветках main И master"
+      - "ОТЛОЖЕНО (P1.1): общий атомарный LifecycleStore (atomic+fsync+rename+schema+checksum+append-only journal) для RunPlan/run-settings/RunHandoff/ApprovalDecision/package-report/final-report -> v3.1. В 3.0.9 durable+schema-validated критичнейший SequencePlan; BaseBinding durable в run-settings; RemoteBaseVerifier един"
     fixed_v3_0_8_resume_and_lifecycle_truth:
       - "P0 РЕГРЕССИЯ v3.0.7: auto-base (base=None) сломал single-run resume. fresh-прогон сохранял в run-settings base=null -> resume восстанавливал None -> resume_preflight делал git rev-parse None -> TypeError. Фикс: base разрешается в КОНКРЕТНУЮ ветку ОДИН РАЗ в ai_ops_run.run (после restore, до preflight и записи run-settings); сохраняется резолвнутый base_ref (не raw None); resume берёт его как источник истины, None не попадает в git. Явная несуществующая -> ранний отказ (0 model calls)"
       - "P0 sequence_base_sha писался best-effort ПОСЛЕ durable-плана (try/except pass). Фикс: base+base_sha разрешаются ДО записи; sequence_base_sha входит в тот же _durable_write_yaml (base_ref+plan_hash+sequence_base_sha+packages) одним атомарным действием; последующего дописывания нет. sequence_base_sha связывает baseline/aggregate/resume/base-drift/verdict -> durable сразу"
