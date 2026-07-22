@@ -2,6 +2,30 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.8] — 2026-07-22 — Resume & Lifecycle Truth (аудит: 3×P0 + 2×P1)
+
+### Fixed
+- **P0 — регрессия v3.0.7: auto-base сломал single-run resume.** fresh-прогон сохранял `base: null` →
+  resume восстанавливал `None` → `resume_preflight` вызывал `git rev-parse None` → **TypeError**. Теперь
+  `base` разрешается в конкретную ветку **один раз** в `run()` (после restore, до preflight и записи
+  run-settings); сохраняется резолвнутый `base_ref` (не raw None); resume берёт его как источник истины.
+  Явная несуществующая base → ранний отказ (0 model calls). Проверено: resume после fresh auto-base
+  работает на `main` и `master`.
+- **P0 — `sequence_base_sha` писался best-effort после durable-плана.** Теперь `base`+`base_sha`
+  разрешаются до записи, и `sequence_base_sha` входит в тот же атомарный `_durable_write_yaml`
+  (`base_ref`+`plan_hash`+`sequence_base_sha`+`packages`) — без последующего дописывания.
+- **P0 — повреждённый SequencePlan трактовался как отсутствующий** (→ перезапись). Теперь: нет файла →
+  fresh; валиден → existing/resume; **невалиден → lifecycle-corrupted, остановка** (0 пакетов, файл не
+  перезаписан, `corrupt_sha256`+path в отчёте). Recovery — явная операция.
+- **P1 — SecurityVerdict v2.2.** Nested domain-check обязан иметь `id`+валидный `status` (`checks:[{}]`
+  больше не проходит); pass-домен требует хотя бы один `check` со `status=pass`; warn/fail-домен —
+  непустой `blockers`.
+- **P1 — documentation truth.** README-статус (был `v2.117`/«до v3.0-rc1») → `v3.0.x stable`, обе
+  цепочки квалифицированы живьём, идёт dogfood; ROADMAP-версия → «v3.0.x stable, точная версия в VERSION».
+
+Отложено: durable-запись остальных lifecycle-артефактов (RunPlan/run-settings/RunHandoff/ApprovalDecision/
+reports) и автосборка статуса из VERSION+manifest → v3.1 (критичнейший SequencePlan уже durable).
+
 ## [3.0.7] — 2026-07-22 — Default Branch & Durable State (аудит: 3×P0 + P1)
 
 Внутренний trust-патч перед полными dogfood-прогонами. (Аудит предлагал это как 3.0.5, но 3.0.5/3.0.6

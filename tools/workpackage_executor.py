@@ -375,13 +375,37 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     pdir = features_dir / wid
     _sp = pdir / "sequence-plan.yaml"
     saved_plan = None
-    try:   # ЧТЕНИЕ сохранённого плана — толерантно (его может не быть на fresh)
-        import yaml as _y
+    # v3.0.8 (finding аудита P0.3): ФАЙЛ ОТСУТСТВУЕТ -> fresh; ЕСТЬ и валиден -> resume/existing; ЕСТЬ, но
+    # НЕЧИТАЕМ/невалиден -> lifecycle-corrupted, ОСТАНОВКА (не молчаливая перезапись повреждённого источника).
+    import yaml as _y
+    try:
         pdir.mkdir(parents=True, exist_ok=True)
-        if _sp.exists():
-            saved_plan = _y.safe_load(_sp.read_text(encoding="utf-8")) or {}
     except Exception:  # noqa: BLE001
-        saved_plan = None
+        pass
+    if _sp.exists():
+        try:
+            _loaded = _y.safe_load(_sp.read_text(encoding="utf-8"))
+        except Exception as _e:  # noqa: BLE001
+            _loaded = _CORRUPT = object()   # маркер: файл есть, но не парсится
+            _corrupt_reason = f"YAML не парсится: {_e}"
+        else:
+            _corrupt_reason = None
+        if _corrupt_reason is not None or not isinstance(_loaded, dict) or _loaded.get("kind") != "SequencePlan":
+            import hashlib as _h
+            _raw = b""
+            try:
+                _raw = _sp.read_bytes()
+            except Exception:  # noqa: BLE001
+                pass
+            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                    "error": (f"lifecycle-corrupted: {_sp} существует, но невалиден "
+                              f"({_corrupt_reason or 'не SequencePlan-dict'}) — выполнение запрещено "
+                              f"(повреждён источник истины). Нужна явная recovery, не автоперезапись."),
+                    "corrupt_sha256": _h.sha256(_raw).hexdigest()[:16] if _raw else None,
+                    "corrupt_path": str(_sp)}
+        saved_plan = _loaded
     # NB: fresh SequencePlan пишется НИЖЕ, ПОСЛЕ разрешения base (иначе base_ref=None для auto) и
     # v3.0.7 (P0.3) — FAIL-CLOSED (atomic write + перечитывание): без immutable-плана нельзя доказать
     # base/порядок/hashes/checkpoint, поэтому сбой записи останавливает последовательность.
@@ -416,27 +440,9 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                               f"({_br.get('reason')}) — последовательность не запущена (ноль пакетов)")}
         base = _br.get("base_ref") or base
 
-    # v3.0.7 (finding аудита P0.3): FAIL-CLOSED запись immutable SequencePlan (с разрешённым base_ref).
-    # atomic (temp -> rename) + перечитывание/валидация; сбой -> последовательность НЕ стартует.
-    if saved_plan is None:
-        _plan_doc = {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": len(ordered),
-                     "plan_hash": cur_plan_hash, "base_ref": base,
-                     "packages": [{"id": p.get("id"), "order": p.get("order"),
-                                   "depends_on": p.get("depends_on") or [], "scope": p.get("scope"),
-                                   "write_scope": p.get("write_scope"), "pkg_hash": _pkg_hash(p)} for p in ordered]}
-        _wr = _durable_write_yaml(_sp, _plan_doc, require_keys=("plan_hash", "base_ref", "packages"))
-        if not _wr.get("ok"):
-            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                    "error": (f"lifecycle fail-closed: не удалось надёжно сохранить SequencePlan "
-                              f"({_wr.get('error')}) — без immutable-плана нельзя доказать base/порядок/"
-                              f"hashes/checkpoint; последовательность не запущена")}
-        saved_plan = _plan_doc
-
-    # v2.124: снимок проверок БАЗЫ (до пакета 1) для АГРЕГАТНОЙ baseline-diff на финальном SHA.
-    # v3.0-rc13/rc16/rc3.0.7: SEQUENCE BASE — HEAD ДО пакета 1; источник истины — сохранённый SequencePlan
-    # (resume/retry не переопределяют базу); base теперь конкретная ветка (auto-резолв, не хардкод main).
+    # v3.0.8 (finding аудита P0.2): SEQUENCE BASE SHA разрешается ДО записи плана и входит в тот же
+    # АТОМАРНЫЙ _durable_write_yaml — никакого последующего best-effort дописывания. sequence_base_sha
+    # связывает baseline/aggregate/resume/base-drift/verdict, поэтому обязан быть durable сразу.
     _cur_base = None
     try:
         _rc, _bs, _ = _git(child_root, "rev-parse", base or "HEAD")
@@ -445,21 +451,29 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     except Exception:  # noqa: BLE001
         _cur_base = None
     base_drift = None
-    if saved_plan and saved_plan.get("sequence_base_sha"):
-        sequence_base_sha = saved_plan["sequence_base_sha"]          # ИСТОЧНИК ИСТИНЫ (resume/retry)
-        if _cur_base and _cur_base != sequence_base_sha:
-            base_drift = {"saved": sequence_base_sha, "current_base": _cur_base}   # main сдвинулся — не молча меняем
+    if saved_plan is not None:
+        # existing/resume: base_sha из сохранённого плана — источник истины; дрейф не молчим
+        sequence_base_sha = saved_plan.get("sequence_base_sha")
+        if _cur_base and sequence_base_sha and _cur_base != sequence_base_sha:
+            base_drift = {"saved": sequence_base_sha, "current_base": _cur_base}
     else:
+        # fresh: пишем ПОЛНЫЙ immutable-план ОДНИМ атомарным действием (fail-closed)
         sequence_base_sha = _cur_base
-        try:                                                        # закрепляем в immutable SequencePlan
-            if _sp.exists() and sequence_base_sha:
-                import yaml as _y2
-                _spd = _y2.safe_load(_sp.read_text(encoding="utf-8")) or {}
-                if not _spd.get("sequence_base_sha"):
-                    _spd["sequence_base_sha"] = sequence_base_sha
-                    _sp.write_text(_y2.safe_dump(_spd, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception:  # noqa: BLE001
-            pass
+        _plan_doc = {"schema_version": 1, "kind": "SequencePlan", "workitem_id": wid, "total": len(ordered),
+                     "plan_hash": cur_plan_hash, "base_ref": base, "sequence_base_sha": sequence_base_sha,
+                     "packages": [{"id": p.get("id"), "order": p.get("order"),
+                                   "depends_on": p.get("depends_on") or [], "scope": p.get("scope"),
+                                   "write_scope": p.get("write_scope"), "pkg_hash": _pkg_hash(p)} for p in ordered]}
+        _wr = _durable_write_yaml(_sp, _plan_doc,
+                                  require_keys=("plan_hash", "base_ref", "sequence_base_sha", "packages"))
+        if not _wr.get("ok"):
+            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
+                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
+                    "error": (f"lifecycle fail-closed: не удалось надёжно сохранить SequencePlan "
+                              f"({_wr.get('error')}) — без immutable-плана нельзя доказать base/порядок/"
+                              f"hashes/checkpoint/sequence_base_sha; последовательность не запущена")}
+        saved_plan = _plan_doc
 
     # v3.0-rc16/rc20 (finding аудита P0): baseline СТРОГО на sequence_base_sha (detached worktree с
     # проверкой HEAD). rc20: БЕЗ fallback на child_root — если baseline не доказан на точной базе,
@@ -886,6 +900,25 @@ def selftest():
         # v2.124: immutable parent SequencePlan + per-package lifecycle-снимок + агрегатный вердикт
         expect("v2.124: immutable sequence-plan.yaml записан",
                (root / "features" / "seq" / "sequence-plan.yaml").is_file())
+        # v3.0.8 (finding аудита P0.2): sequence_base_sha записан durable СРАЗУ (в том же плане, не best-effort)
+        import yaml as _yy
+        _plan = _yy.safe_load((root / "features" / "seq" / "sequence-plan.yaml").read_text(encoding="utf-8"))
+        expect("v3.0.8: sequence_base_sha + base_ref в durable-плане сразу (не дописан позже)",
+               bool(_plan.get("sequence_base_sha")) and bool(_plan.get("base_ref")))
+        # v3.0.8 (finding аудита P0.3): ПОВРЕЖДЁННЫЙ SequencePlan -> lifecycle-corrupted (halt), НЕ перезапись
+        _corrupt_root = None
+        with tempfile.TemporaryDirectory() as _tdc:
+            _rc = Path(_tdc); cur_c = mkrepo(_tdc)
+            _pk = atomic_planner.decompose(sig, wid="seqc", child_root=_rc)["work_packages"]
+            (_rc / "features" / "seqc").mkdir(parents=True, exist_ok=True)
+            (_rc / "features" / "seqc" / "sequence-plan.yaml").write_text("{ это: [не, валидный, yaml", encoding="utf-8")
+            _before = (_rc / "features" / "seqc" / "sequence-plan.yaml").read_text(encoding="utf-8")
+            seq_c = execute_sequence("x", sig, _rc, _pk, prop_for, feature="seqc", base=cur_c,
+                                     author=True, author_proposer=author, review=True, reviewer_proposer=reviewer)
+            _after = (_rc / "features" / "seqc" / "sequence-plan.yaml").read_text(encoding="utf-8")
+            expect("v3.0.8 P0.3: повреждённый SequencePlan -> lifecycle-corrupted, 0 пакетов, файл НЕ перезаписан",
+                   "lifecycle-corrupted" in (seq_c.get("error") or "") and not seq_c.get("packages")
+                   and _after == _before and seq_c.get("corrupt_sha256"))
         expect("v2.124: у каждого пакета снимок lifecycle (run-plan.yaml в своём каталоге)",
                all((root / "features" / "seq" / "work-packages" / p["id"] / "run-plan.yaml").is_file()
                    for p in seq["packages"]))

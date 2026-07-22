@@ -342,12 +342,21 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr):
                     errs.append(f"domain_result '{dom}' без валидного status")
                 elif st != "pass" and (res.get("status") == "pass"):
                     errs.append(f"домен '{dom}' = {st}, но общий status=pass — несогласованно")
-                # v3.0.7 (finding аудита P1): SecurityVerdict v2.1 — КАЖДЫЙ домен обязан нести СВОИ
-                # доказательства (непустой per-domain checks), иначе один абстрактный check «прикрывает»
-                # все домены. pass домена без domain-specific checks не закрывает security.
+                # v3.0.7/v3.0.8 (finding аудита P1): SecurityVerdict v2.1/v2.2 — КАЖДЫЙ домен несёт СВОИ
+                # доказательства. v2.2: nested-check валиден (id+status), а не `checks:[{}]`; для pass-домена
+                # хотя бы один check со status=pass; для warn/fail — непустой blockers. Иначе абстрактный
+                # пустой check «прикрывает» домен.
                 dchecks = (x or {}).get("checks")
                 if not (isinstance(dchecks, list) and dchecks):
                     errs.append(f"домен '{dom}' без domain-specific checks — доказательства по домену отсутствуют")
+                else:
+                    for c in dchecks:
+                        if not isinstance(c, dict) or not c.get("id") or c.get("status") not in ("pass", "warn", "fail"):
+                            errs.append(f"домен '{dom}': nested-check без id/валидного status ({c})")
+                    if st == "pass" and not any(isinstance(c, dict) and c.get("status") == "pass" for c in dchecks):
+                        errs.append(f"домен '{dom}' pass, но ни один его check не подтверждён (status=pass)")
+                    if st in ("warn", "fail") and not (x or {}).get("blockers"):
+                        errs.append(f"домен '{dom}' = {st} без blockers — блокирующий вердикт без причины")
     return errs
 
 
@@ -2368,6 +2377,10 @@ def selftest():
         no_ev = {**one_generic, "domain_results": [{"domain": d, "status": "pass"} for d in four]}   # нет checks
         expect("v3.0.7 SecVerdict-v2.1: домены без per-domain checks -> невалиден (нет доказательств по домену)",
                any("domain-specific checks" in e for e in _security_verdict_errors(no_ev, "abc123", four, _vrr2)))
+        # v3.0.8 SecVerdict-v2.2: пустой nested-check `checks:[{}]` больше НЕ проходит (нужен id+status)
+        empty_ck = {**one_generic, "domain_results": [{"domain": d, "status": "pass", "checks": [{}]} for d in four]}
+        expect("v3.0.8 SecVerdict-v2.2: nested-check без id/status (checks:[{}]) -> невалиден",
+               any("nested-check без id" in e for e in _security_verdict_errors(empty_ck, "abc123", four, _vrr2)))
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
