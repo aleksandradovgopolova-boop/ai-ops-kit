@@ -131,6 +131,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     if max_steps == 40 and _pp.get("max_steps"):
                         max_steps = _pp["max_steps"]
                     base = _pp.get("base", base)   # v3.0.2 (P0): base восстанавливается из saved (не надо re-pass --base)
+        # v3.0.8 (finding аудита P0.1): base РАЗРЕШАЕТСЯ В КОНКРЕТНУЮ ВЕТКУ ОДИН РАЗ здесь (до resume_preflight
+        # и до записи run-settings). Иначе fresh auto-run сохранял base=null -> resume передавал None в
+        # git rev-parse -> TypeError. На resume уже восстановлен сохранённый base (выше); для fresh —
+        # auto-резолв. Явная несуществующая base -> ранний честный отказ (0 model calls).
+        _brr = execution_pipeline._resolve_base(child_root, base)
+        if _brr.get("mode") == "explicit" and not _brr.get("resolved"):
+            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature or "?",
+                    "status": "error", "ready_for_pr": False,
+                    "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
+                              f"({_brr.get('reason')}) — прогон не запущен (0 вызовов модели)"),
+                    "base_binding": {k: _brr.get(k) for k in ("base_ref", "base_sha", "mode", "source")}}
+        if _brr.get("resolved"):
+            base = _brr.get("base_ref")   # конкретная ветка -> в run-settings, resume_preflight, pipeline
         prop = proposer or tool_loop.make_model_proposer(
             orchestrator.make_provider(provider_name, model))
         # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.7
+  package_version: 3.0.8
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,14 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_8_resume_and_lifecycle_truth:
+      - "P0 РЕГРЕССИЯ v3.0.7: auto-base (base=None) сломал single-run resume. fresh-прогон сохранял в run-settings base=null -> resume восстанавливал None -> resume_preflight делал git rev-parse None -> TypeError. Фикс: base разрешается в КОНКРЕТНУЮ ветку ОДИН РАЗ в ai_ops_run.run (после restore, до preflight и записи run-settings); сохраняется резолвнутый base_ref (не raw None); resume берёт его как источник истины, None не попадает в git. Явная несуществующая -> ранний отказ (0 model calls)"
+      - "P0 sequence_base_sha писался best-effort ПОСЛЕ durable-плана (try/except pass). Фикс: base+base_sha разрешаются ДО записи; sequence_base_sha входит в тот же _durable_write_yaml (base_ref+plan_hash+sequence_base_sha+packages) одним атомарным действием; последующего дописывания нет. sequence_base_sha связывает baseline/aggregate/resume/base-drift/verdict -> durable сразу"
+      - "P0 повреждённый SequencePlan трактовался как отсутствующий (except->None->fresh->перезапись). Фикс: файла нет -> fresh; есть и валиден (dict, kind=SequencePlan) -> existing/resume; есть, но невалиден -> lifecycle-corrupted, ОСТАНОВКА (0 пакетов, файл НЕ перезаписан, corrupt_sha256+path в отчёте). Recovery — явная операция, не автоперезапись"
+      - "P1 SecurityVerdict v2.2: nested domain-check теперь обязан иметь id+валидный status (пустой checks:[{}] больше не проходит); pass-домен требует хотя бы один check со status=pass; warn/fail-домен — непустой blockers. Промпт security-reviewer требует per-domain checks"
+      - "P1 documentation truth: README-статус обновлён (был v2.117/'до v3.0-rc1' -> v3.0.x stable, обе цепочки квалифицированы живьём, идёт dogfood); ROADMAP-версия -> 'v3.0.x stable, точная версия в VERSION'. Точная версия — источник VERSION/CHANGELOG"
+      - "проверки: +деттесты (resume после fresh auto-base -> resumed=True на main И master, run-settings хранит конкретный base; sequence_base_sha в durable-плане сразу; повреждённый план -> lifecycle-corrupted + файл цел; SecVerdict-v2.2 checks:[{}] невалиден). Полный CI-набор (94) 94/94 PASS на дефолт-ветках main И master"
+      - "ОТЛОЖЕНО (P1.1 частично, не новый false-green): durable-запись остальных lifecycle-артефактов (RunPlan/run-settings/RunHandoff/ApprovalDecision/package-report/final-report) — критичнейший SequencePlan durable; общий lifecycle_store и автосборка статуса из VERSION+manifest -> v3.1 productization"
     fixed_v3_0_7_default_branch_durable_state:
       - "(нумерация: аудит предлагал это как 3.0.5, но 3.0.5/3.0.6 уже заняты авто-апдейтом и secret-scanning-гайдом -> вышло как 3.0.7). P0 base был захардкожен 'main': на репо с master обычный прогон без --base шёл к несуществующему main. Фикс: BaseResolver v3 — base=None -> AUTO (upstream текущей ветки -> remote default origin/HEAD -> текущая ветка), никакого хардкода. Дефолты base изменены на None в run_pipeline/execute_sequence/ai_ops_run.run/CLI. base_binding несёт mode(auto|explicit)+source"
       - "P0 неразрешённая ЯВНАЯ base позволяла выполнять от HEAD (worktree base_sha or HEAD; base_binding.resolved не влиял на ready). Фикс: явная несуществующая base -> preflight-БЛОК ДО модели (ноль model calls, worktree не создан) в single-run И sequential. auto всегда разрешается (в пределе текущая ветка), поэтому блокирует только явную несуществующую"
