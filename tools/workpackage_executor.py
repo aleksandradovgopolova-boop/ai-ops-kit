@@ -30,8 +30,8 @@ sys.path.insert(0, str(PKG / "tools"))
 
 
 def _git(root, *a):
-    r = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    import gitio
+    return gitio.git(root, *a)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
 def _changed_files(root, sha):
@@ -58,6 +58,19 @@ def _plan_hash(ordered):
 
 def _ordered(packages):
     return sorted(packages, key=lambda p: (p.get("order", 0), p.get("id", "")))
+
+
+def _seq_err(wid, ordered, error, *, packages=None, completed=None, stopped_at=None, **extra):
+    """v3.0.13 (блок C): единый конструктор отказного WorkPackageSequence-отчёта. Прежде этот словарь из
+    ~11 ключей копировался вручную 8 раз (добавление поля = 8 правок). Поведение идентично; extra —
+    дополнительные поля конкретного отказа (напр. plan_hash/saved_plan_hash при дрейфе)."""
+    d = {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+         "packages": packages if packages is not None else [],
+         "completed": completed if completed is not None else [],
+         "stopped_at": stopped_at, "executed_all": False, "ready_all": False,
+         "aggregate_ready": False, "total": len(ordered), "error": error}
+    d.update(extra)
+    return d
 
 
 def _durable_write_yaml(path, data, require_keys=()):
@@ -413,6 +426,58 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
             pass
 
 
+def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence_base_sha,
+                      signals, reviewer_proposer, review, baseline_proven):
+    """v3.0.13 (блок C): AGGREGATE-верификация финального интегрированного SHA — вынесена из
+    execute_sequence БЕЗ изменения поведения (чистый вход->aggregate-dict). Перепроверяет результат
+    ЦЕЛИКОМ на final_sha против sequence_base_sha: регрессии проверок, дерево чистое, HEAD==final_sha,
+    evidence на final_sha, агрегатный security (полный дифф base..final) и aggregate code_review."""
+    import project_detector as _pd2, evidence_collector as _ec2, tool_broker as _tb2
+    import execution_pipeline as _ep
+    import security_pack as _sp2
+    try:
+        wt = Path(child_root) / ".ai" / "worktrees" / wid
+        vroot = wt if wt.is_dir() else Path(child_root)
+        # v3.0-rc2 (P0.4): проверяем ИМЕННО финальный SHA — HEAD worktree обязан == final_sha.
+        head_sha = _git(vroot, "rev-parse", "HEAD")[1]
+        revision_ok = (head_sha == final_sha)
+        _vpol = (_tb2.sandbox_policy(child_root=str(vroot)) if sandbox
+                 else _tb2.Policy(level="execution", child_root=str(vroot), block_push=True))
+        coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol)
+        final_checks = coll["checks"]
+        _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
+        tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True
+        agg_reg, _agg_fix = _ep._diff_checks(base_checks, final_checks) if base_checks else ([], [])
+        # v3.0-rc13 (P0): база security = sequence_base_sha (HEAD ДО пакета 1); деградация -> первый родитель
+        _base_sha = sequence_base_sha
+        if not _base_sha and final_sha:
+            _fp = _git(vroot, "rev-list", "--max-parents=0", final_sha)[1].split("\n")[0]
+            _base_sha = _fp or None
+        agg_sec = None
+        try:
+            agg_sec = _sp2.run_pack(vroot, base=(_base_sha or None), signals=(signals or {}))
+        except Exception:  # noqa: BLE001
+            agg_sec = {"overall": "error"}
+        # needs_review != провал — awaiting: закрываем независимым security-reviewer на aggregate-диффе
+        agg_sec, agg_sec_review = _aggregate_close_security(
+            agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
+        agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
+        agg_code_ok, agg_code_reviews = _aggregate_code_review(
+            vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
+        return {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
+                "final_sha": final_sha, "sequence_base_sha": _base_sha,
+                "baseline_proven": baseline_proven,   # rc20 (P0): baseline доказан на точной базе
+                "revision_ok": revision_ok, "tree_clean": tree_clean,
+                "evidence_revision": coll.get("revision"),
+                "evidence_revision_ok": (coll.get("revision") == final_sha),
+                "security_overall": (agg_sec or {}).get("overall"), "security_ok": agg_sec_ok,
+                "security_reviewer_status": (agg_sec or {}).get("reviewer_status"),
+                "code_review_ok": agg_code_ok, "code_reviews": agg_code_reviews,
+                "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
+    except Exception as e:  # noqa: BLE001
+        return {"verified": False, "error": str(e)}
+
+
 def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                      features_dir=None, base=None, provider_name="mock", model=None,
                      author=False, author_proposer=None, review=False, reviewer_proposer=None,
@@ -464,14 +529,12 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 _raw = _sp.read_bytes()
             except Exception:  # noqa: BLE001
                 pass
-            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                    "error": (f"lifecycle-corrupted: {_sp} существует, но невалиден "
-                              f"({_corrupt_reason or _schema_err}) — выполнение запрещено "
-                              f"(повреждён источник истины). Нужна явная recovery, не автоперезапись."),
-                    "corrupt_sha256": _h.sha256(_raw).hexdigest()[:16] if _raw else None,
-                    "corrupt_path": str(_sp)}
+            return _seq_err(wid, ordered,
+                    (f"lifecycle-corrupted: {_sp} существует, но невалиден "
+                     f"({_corrupt_reason or _schema_err}) — выполнение запрещено "
+                     f"(повреждён источник истины). Нужна явная recovery, не автоперезапись."),
+                    corrupt_sha256=(_h.sha256(_raw).hexdigest()[:16] if _raw else None),
+                    corrupt_path=str(_sp))
         saved_plan = _loaded
     # NB: fresh SequencePlan пишется НИЖЕ, ПОСЛЕ разрешения base (иначе base_ref=None для auto) и
     # v3.0.7 (P0.3) — FAIL-CLOSED (atomic write + перечитывание): без immutable-плана нельзя доказать
@@ -480,33 +543,27 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # ЛЮБОМ существующем плане (не только resume_from): другой plan_hash от текущих пакетов = planner
     # перестроил план, исполнять по нему поверх старых отчётов небезопасно. Нужен явный replan.
     if saved_plan and saved_plan.get("plan_hash") and saved_plan["plan_hash"] != cur_plan_hash:
-        return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                "plan_hash": cur_plan_hash, "saved_plan_hash": saved_plan["plan_hash"],
-                "error": ("SequencePlan дрейфнул с прошлого прогона (planner перестроил пакеты) — "
-                          "resume по старым отчётам небезопасен. Нужен явный replan (пересобрать план "
-                          "и переисполнить с нуля), а не resume_from.")}
+        return _seq_err(wid, ordered,
+                ("SequencePlan дрейфнул с прошлого прогона (planner перестроил пакеты) — "
+                 "resume по старым отчётам небезопасен. Нужен явный replan (пересобрать план "
+                 "и переисполнить с нуля), а не resume_from."),
+                plan_hash=cur_plan_hash, saved_plan_hash=saved_plan["plan_hash"])
     # v3.0.2/v3.0.7 (finding аудита P0): base_ref из СОХРАНЁННОГО плана — источник истины на resume/retry;
     # для fresh — строгий резолв (auto/explicit). Явная другая base на resume -> base-contract-drift.
     import execution_pipeline as _ep
     if saved_plan and saved_plan.get("base_ref"):
         if resume_from and base and base != saved_plan["base_ref"]:
-            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                    "error": (f"base-contract-drift: последовательность зафиксирована на base_ref="
-                              f"'{saved_plan['base_ref']}', а передан --base '{base}'. Смена базы = другой "
-                              f"контракт доставки — нужен явный replan, не resume с новой базой.")}
+            return _seq_err(wid, ordered,
+                    (f"base-contract-drift: последовательность зафиксирована на base_ref="
+                     f"'{saved_plan['base_ref']}', а передан --base '{base}'. Смена базы = другой "
+                     f"контракт доставки — нужен явный replan, не resume с новой базой."))
         base = saved_plan["base_ref"]   # auto или совпадение -> берём сохранённую
     else:
         _br = _ep._resolve_base(child_root, base)   # base=None -> auto; явная -> строго
         if _br.get("mode") == "explicit" and not _br.get("resolved"):
-            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                    "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
-                              f"({_br.get('reason')}) — последовательность не запущена (ноль пакетов)")}
+            return _seq_err(wid, ordered,
+                    (f"base-preflight: явная база '{base}' не разрешается в ветку "
+                     f"({_br.get('reason')}) — последовательность не запущена (ноль пакетов)"))
         base = _br.get("base_ref") or base
 
     # v3.0.8 (finding аудита P0.2): SEQUENCE BASE SHA разрешается ДО записи плана и входит в тот же
@@ -536,12 +593,10 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         _wr = _durable_write_yaml(_sp, _plan_doc,
                                   require_keys=("plan_hash", "base_ref", "sequence_base_sha", "packages"))
         if not _wr.get("ok"):
-            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                    "error": (f"lifecycle fail-closed: не удалось надёжно сохранить SequencePlan "
-                              f"({_wr.get('error')}) — без immutable-плана нельзя доказать base/порядок/"
-                              f"hashes/checkpoint/sequence_base_sha; последовательность не запущена")}
+            return _seq_err(wid, ordered,
+                    (f"lifecycle fail-closed: не удалось надёжно сохранить SequencePlan "
+                     f"({_wr.get('error')}) — без immutable-плана нельзя доказать base/порядок/"
+                     f"hashes/checkpoint/sequence_base_sha; последовательность не запущена"))
         saved_plan = _plan_doc
 
     # v3.0-rc16/rc20 (finding аудита P0): baseline СТРОГО на sequence_base_sha (detached worktree с
@@ -559,10 +614,8 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         _ids = [p.get("id") for p in ordered]
         # v3.0-rc2 (P0.3): неизвестный resume_from -> ОШИБКА, а не тихий старт с нуля.
         if resume_from not in _ids:
-            return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                    "packages": [], "completed": [], "stopped_at": None, "executed_all": False,
-                    "ready_all": False, "aggregate_ready": False, "total": len(ordered),
-                    "error": f"resume_from='{resume_from}' нет в SequencePlan (пакеты: {_ids})"}
+            return _seq_err(wid, ordered,
+                    f"resume_from='{resume_from}' нет в SequencePlan (пакеты: {_ids})")
         start_index = _ids.index(resume_from)
 
     _branch = f"ai-ops/{wid}"
@@ -596,11 +649,9 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             rep_ok, why = _verify_skipped(pid)
             if rep_ok is None:
                 # неподтверждённый пропуск -> НЕ добавляем в completed, останавливаем resume честной ошибкой
-                return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                        "packages": results, "completed": sorted(completed), "stopped_at": pid,
-                        "executed_all": False, "ready_all": False, "aggregate_ready": False,
-                        "total": len(ordered),
-                        "error": f"resume: пакет '{pid}' до resume_from не подтверждён — {why}"}
+                return _seq_err(wid, ordered,
+                        f"resume: пакет '{pid}' до resume_from не подтверждён — {why}",
+                        packages=results, completed=sorted(completed), stopped_at=pid)
             psha = (rep_ok.get("commit") or {}).get("sha")
             completed.add(pid)
             prev_sha = final_sha = psha
@@ -613,13 +664,11 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         if start_index > 0 and i == start_index and prev_sha:
             _head = _git(_rev_root, "rev-parse", _branch)[1]
             if _head != prev_sha:
-                return {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-                        "packages": results, "completed": sorted(completed), "stopped_at": pid,
-                        "executed_all": False, "ready_all": False, "aggregate_ready": False,
-                        "total": len(ordered),
-                        "error": (f"resume: HEAD ветки {_branch} ({(_head or '?')[:8]}) НЕ на checkpoint "
-                                  f"предшественника ({prev_sha[:8]}) — ветка ушла вперёд (попытки "
-                                  f"последующих пакетов?). Сбрось worktree на {prev_sha[:8]} и повтори.")}
+                return _seq_err(wid, ordered,
+                        (f"resume: HEAD ветки {_branch} ({(_head or '?')[:8]}) НЕ на checkpoint "
+                         f"предшественника ({prev_sha[:8]}) — ветка ушла вперёд (попытки "
+                         f"последующих пакетов?). Сбрось worktree на {prev_sha[:8]} и повтори."),
+                        packages=results, completed=sorted(completed), stopped_at=pid)
         unmet_deps = [d for d in (pkg.get("depends_on") or []) if d not in completed]
         if unmet_deps:
             results.append({"id": pid, "status": "blocked-dependency",
@@ -775,58 +824,12 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # v2.124: AGGREGATE verification на ФИНАЛЬНОМ интегрированном SHA — перепроверяем результат ЦЕЛИКОМ
     # (не только конъюнкцию per-package вердиктов), чтобы поймать межпакетные взаимодействия (каждый
     # пакет зелен по отдельности, но интеграция сломана). Сравниваем финальные проверки с БАЗОЙ (до п.1).
+    # v3.0.13 (блок C): тело aggregate-верификации вынесено в _aggregate_verify (чистый вход->dict) —
+    # execute_sequence перестал быть god-функцией на этом участке, поведение идентично.
     aggregate = {"verified": False}
     if executed_all and final_sha:
-        try:
-            import project_detector as _pd2, evidence_collector as _ec2, tool_broker as _tb2
-            import execution_pipeline as _ep
-            wt = child_root / ".ai" / "worktrees" / wid
-            vroot = wt if wt.is_dir() else child_root
-            # v3.0-rc2 (P0.4): проверяем ИМЕННО финальный SHA — HEAD worktree обязан == final_sha.
-            head_sha = _git(vroot, "rev-parse", "HEAD")[1]
-            revision_ok = (head_sha == final_sha)
-            _vpol = (_tb2.sandbox_policy(child_root=str(vroot)) if sandbox
-                     else _tb2.Policy(level="execution", child_root=str(vroot), block_push=True))
-            coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol)
-            final_checks = coll["checks"]
-            # дерево чистое ПОСЛЕ проверок (терпимо к тул-кэшам) — иначе evidence не о финальном SHA
-            _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
-            tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True
-            agg_reg, _agg_fix = _ep._diff_checks(base_checks, final_checks) if base_checks else ([], [])
-            # v3.0-rc4 (P1.1): AGGREGATE SECURITY на ПОЛНОМ интегрированном диффе последовательности —
-            # ловит риск, возникший ТОЛЬКО из комбинации пакетов (один добавил ввод, другой — sink).
-            # v3.0-rc13 (P0): база = sequence_base_sha (HEAD ДО пакета 1), НЕ корневой коммит репо.
-            # Анализируем строго sequence_base_sha..final_sha — только изменения цепочки.
-            import security_pack as _sp2
-            _base_sha = sequence_base_sha
-            if not _base_sha and final_sha:      # деградация (база не зафиксирована): первый родитель финала
-                _fp = _git(vroot, "rev-list", "--max-parents=0", final_sha)[1].split("\n")[0]
-                _base_sha = _fp or None
-            agg_sec = None
-            try:
-                agg_sec = _sp2.run_pack(vroot, base=(_base_sha or None), signals=(signals or {}))
-            except Exception:  # noqa: BLE001
-                agg_sec = {"overall": "error"}
-            # v3.0-rc13 (P0): needs_review НЕ равно провалу — это awaiting: закрываем независимым
-            # security-reviewer на aggregate-диффе (если подан), как в per-package пути (_review_security).
-            agg_sec, agg_sec_review = _aggregate_close_security(
-                agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
-            agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
-            # v3.0-rc13/rc16 (P0): aggregate code_review — контекст ВСЕЙ цепочки base..final
-            agg_code_ok, agg_code_reviews = _aggregate_code_review(
-                vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
-            aggregate = {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
-                         "final_sha": final_sha, "sequence_base_sha": _base_sha,
-                         "baseline_proven": baseline_proven,   # rc20 (P0): baseline доказан на точной базе
-                         "revision_ok": revision_ok, "tree_clean": tree_clean,
-                         "evidence_revision": coll.get("revision"),
-                         "evidence_revision_ok": (coll.get("revision") == final_sha),
-                         "security_overall": (agg_sec or {}).get("overall"), "security_ok": agg_sec_ok,
-                         "security_reviewer_status": (agg_sec or {}).get("reviewer_status"),
-                         "code_review_ok": agg_code_ok, "code_reviews": agg_code_reviews,
-                         "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
-        except Exception as e:  # noqa: BLE001
-            aggregate = {"verified": False, "error": str(e)}
+        aggregate = _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks,
+                                      sequence_base_sha, signals, reviewer_proposer, review, baseline_proven)
     # v3.0-rc2/rc4 (P0.4/P1.1): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена
     # И чиста: verified, нет регрессий, HEAD==final_sha, evidence на final_sha, дерево чистое, агрегатный
     # security clear на полном диффе. Сбой/недоступность -> НЕ ready.

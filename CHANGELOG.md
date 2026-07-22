@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.13] — 2026-07-23 — Hardening Batch C: Maintainability (без изменения поведения)
+
+Блок C самоаудита — снижение change-safety-долга. Все изменения поведение-сохраняющие, проверены
+полным self-test-набором + CI-паритетом на обеих дефолт-ветках.
+
+### Changed
+- **Единый `tools/gitio.py`** — `git(root, *args, timeout=90)`; 7 идентичных копий `_git`
+  (execution_pipeline / workpackage_executor / review_branch / run_handoff / worktree / pr_open /
+  concurrency_preflight) делегируют ему. **Добавлен таймаут** — прежде ни одна копия его не задавала,
+  и зависший git-субпроцесс (сеть/lock/hook) вешал весь прогон навсегда; теперь rc=124, не блокировка.
+- **`_seq_err`** в workpackage_executor — единый конструктор отказного `WorkPackageSequence`-отчёта;
+  словарь из ~11 ключей, копировавшийся вручную 8 раз, сведён к одному (добавление поля = 1 правка).
+- **`_aggregate_verify`** — тело aggregate-верификации финального SHA вынесено из god-функции
+  `execute_sequence` в отдельный чистый (вход→dict) хелпер. Поведение идентично.
+
+### Tested (закрытие тест-гэпов)
+- `_security_scan_error` **fail-closed**: security pack бросил → security-гейт=fail (не ложный green) —
+  прежде ветка без ассерта.
+- concurrency: убран тавтологичный ассерт (`verdict in (clean, collision)`), добавлен тест **stale-skip**
+  (done-запись реестра в той же зоне не создаёт ложный overlap).
+
+Отложено в v3.1 (осознанно): извлечение сильно связанных блоков `run_pipeline`/`run` (мутируют общий
+gate_ev/ready-state) — высокий риск на доказанно fail-closed «денежном пути» при нулевой функциональной
+выгоде; заслуживает выделенного ревью, а не патча. Полный CI-набор 96/96 на main и master, без openspec.
+
 ## [3.0.12] — 2026-07-22 — Hardening Batch B: Durable Resume Artifacts
 
 Блок B самоаудита — durability resume-критичных lifecycle-артефактов. Прежде большинство писалось

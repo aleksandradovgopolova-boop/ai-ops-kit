@@ -29,8 +29,8 @@ import lifecycle_store as _ls   # v3.0.12: fail-closed чтение RunHandoff (
 
 
 def _git(root, *args):
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    import gitio
+    return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
 def build_handoff(report, work_root=None):

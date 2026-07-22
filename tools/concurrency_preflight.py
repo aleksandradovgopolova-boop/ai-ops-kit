@@ -42,8 +42,8 @@ from pathlib import Path
 
 
 def _git(repo, *args):
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    import gitio
+    return gitio.git(repo, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
 def _parse_owner_repo(remote_url):
@@ -257,7 +257,9 @@ def selftest():
 
         # preflight по нетронутому пути -> clean (gh недоступен -> не влияет на clean по base)
         r2 = preflight(repo, "main", ["other.txt"])
-        expect("clean: путь на базе не менялся", r2["verdict"] in ("clean", "collision"))
+        # v3.0.13 (блок C): было тавтологичное `verdict in (clean, collision)` (всегда истинно). Нетронутый
+        # путь без active-work и без открытых PR (gh unavailable != collision) -> детерминированно clean.
+        expect("clean: нетронутый путь -> verdict=clean (не ложная collision)", r2["verdict"] == "clean")
         expect("clean: base_changes пуст для нетронутого пути", r2["base_changes"] == [])
 
         # active-work overlap по зонам
@@ -268,6 +270,17 @@ def selftest():
         r3 = preflight(repo, "main", ["other.txt"], areas=["materials-page"], active_work_path=str(aw))
         expect("collision: пересечение по зоне с реестром",
                r3["verdict"] == "collision" and any(a["id"] == "x" for a in r3["active_work_overlap"]))
+
+        # v3.0.13 (блок C, тест-гэп): DONE-запись в той же зоне НЕ создаёт ложный overlap (stale-skip) —
+        # именно тот ложный сигнал, который этот инструмент обязан подавлять.
+        aw_done = repo / "aw_done.yaml"
+        aw_done.write_text("schema_version: 1\nkind: active-work\nactive:\n"
+                           "  - {id: olddone, branch: feature/old, status: done, "
+                           "affected_areas: [materials-page], owner_session: s}\n", encoding="utf-8")
+        r_done = preflight(repo, "main", ["other.txt"], areas=["materials-page"],
+                           active_work_path=str(aw_done))
+        expect("v3.0.13 stale-skip: done-запись в той же зоне НЕ даёт overlap (не ложный сигнал)",
+               all(a.get("id") != "olddone" for a in r_done["active_work_overlap"]))
 
         # база недоступна -> base_changes 'unknown', не выдаём за clean молча
         r4 = preflight(repo, "origin/nonexistent", ["f.txt"])
