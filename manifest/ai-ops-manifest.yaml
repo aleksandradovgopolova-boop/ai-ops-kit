@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.2
+  package_version: 3.0.3
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,9 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_3_ci_parity_default_branch:
+      - "v3.0.2 CI RED (quality/pipeline-e2e): 3 resume-деттеста (v2.109 ctl, Q3b, PQ3) падали ТОЛЬКО в CI. Корень — с base-binding (3.0.2) base стал частью resume-состояния; тесты запускали фазу 1 БЕЗ base (дефолт 'main'), а resume-фазу с base=cur. Локально дефолт-ветка main -> совпадало; в CI дефолт master -> расхождение main/master -> ложная resume-ревалидация -> blocked. Фикс: фаза 1 во всех трёх тестах использует base=cur (реальную ветку репо) — консистентно с resume. Только тесты; функциональность 3.0.2 не менялась"
+      - "процессная заметка: CI-паритет теперь прогоняется и под GIT_CONFIG_GLOBAL с init.defaultBranch=master (воспроизводит дефолт GitHub-раннера) — 94/94 и на main, и на master. Раньше локальный main маскировал branch-зависимые падения"
     fixed_v3_0_2_base_continuity_and_evidence_roots:
       - "P0 (аудит) несуществующая base тихо превращалась в HEAD: base_sha=None -> worktree от `base_sha or HEAD`, --base develop игнорировался и прогон продолжался. Фикс: _resolve_base — СТРОГО (только ветка refs/heads/<ref> или origin/<ref>, НЕ tag/SHA); base_binding.resolved/source/reason. Не разрешилась + open_pr -> доставка НЕ пытается PR к произвольному HEAD; для не-delivery worktree честный fallback на HEAD с пометкой resolved=False (не молча)"
       - "P0 невозможность проверить remote base считалась разрешением на PR: remote_base=None (нет origin/сети/ветки/ошибка) -> код всё равно шёл в open_draft_pr. Фикс FAIL-CLOSED (single+sequential): remote base не проверяема -> delivery status=unavailable (reason=remote-base-unverified); сдвинулась -> not-attempted (revalidation); совпала -> PR. ready_for_pr не меняется, но delivery_ok=false"

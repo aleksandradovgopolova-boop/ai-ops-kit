@@ -97,7 +97,7 @@ def run_scenarios():
     s3a = iter([{"op": "write", "path": "src/p1.py", "content": "p=1\n"}, {"done": True}])
     rep3a = _run("PQ3 фаза 1", {"task_type": "QUICK", "affected_areas": ["core"]}, root3,
                  engine="pipeline", proposer=lambda c: next(s3a), execute=True, feature="pq3",
-                 install_deps=False)
+                 install_deps=False, base=cur3)  # v3.0.2: реальная ветка (консистентно с resume-фазой)
     s3b = iter([{"op": "write", "path": "src/p2.py", "content": "p=2\n"}, {"done": True}])
     rep3b = _run("PQ3 фаза 2", {"task_type": "QUICK", "affected_areas": ["core"]}, root3,
                  engine="pipeline", proposer=lambda c: next(s3b), execute=True, feature="pq3",
