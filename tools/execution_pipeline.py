@@ -1856,8 +1856,9 @@ def selftest():
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями
         # (ENGINEERING-план содержит security). Не ложный green: секрет -> security в unmet.
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
+        _aws_fx = "AKIA" + "IOSFODNN7EXAMPLE"   # v3.0.4: собрано в рантайме (без статического секрет-литерала)
         it_sec = iter([{"op": "write", "path": "src/leak.py",
-                        "content": 'API_KEY = "AKIAIOSFODNN7EXAMPLE"\n'}, {"done": True}])
+                        "content": f'API_KEY = "{_aws_fx}"\n'}, {"done": True}])
         rep_sec = run_pipeline("добавить конфиг", sig_eng, root, lambda c: next(it_sec),
                                policy=pol, budget={"max_model_calls": 5}, feature="sec-fn",
                                commit=True, isolate=True, install_deps=False)
