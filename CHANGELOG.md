@@ -2,6 +2,17 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.2] — 2026-07-23 — CI hotfix: fix-loop selftest не зависит от pytest
+
+v3.1.1 дал CI-red (package-quality): интеграционный fix-loop-тест требовал pytest (сделать тест
+упавшим->починенным), а CI-набор ставит только pyyaml. Локальный parity это маскировал (pytest есть).
+
+### Fixed
+- Интеграционная часть fix-loop-selftest теперь под guard'ом `importlib.util.find_spec("pytest")` (как
+  PQ8 с openspec): без pytest — пропуск с честной пометкой; unit-проверки fix-context (конкретные
+  blockers; human-approval->None) остаются безусловными. Проверено с СКРЫТЫМ pytest (rc=0) и с pytest (PASS).
+- Дисциплина parity: CI-набор имеет ТОЛЬКО pyyaml — прогонять и без openspec, И без pytest.
+
 ## [3.1.1] — 2026-07-23 — Fix-loop (инкремент v3.1; по находке green-throughput из Phase B)
 
 Прямой ответ на находку Phase B: строгий independent-review блокировал легитимные правки однопроходно.

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.1.1
+  package_version: 3.1.2
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_1_2_ci_hotfix_fixloop_pytest:
+      - "v3.1.1 CI-red (package-quality): интеграционный fix-loop-тест требовал pytest (тест упавший->починенный), а CI ставит только pyyaml. Локальный parity маскировал (pytest есть)"
+      - "фикс: интеграционная часть под guard importlib.util.find_spec('pytest') (как PQ8 с openspec); без pytest пропуск, unit-проверки fix-context безусловны. Проверено со скрытым pytest (rc=0) и с pytest (PASS)"
+      - "дисциплина parity: CI имеет ТОЛЬКО pyyaml -> прогонять и без openspec, И без pytest"
     added_v3_1_1_fix_loop:
       - "инкремент v3.1 по находке green-throughput из Phase B: строгий independent-review блокировал легитимные правки однопроходно -> теперь блокеры возвращаются писателю на итерацию"
       - "fix-loop в транзакционном контроллере: не ready из-за модель-фиксируемых блокеров (провал test/build/lint + незакрытые code_review/ux_review/security) -> run_pipeline(resume=True, resume_context=<блокеры>) на той же ветке, писатель дорабатывает, ре-ревью. Бюджет --fix-attempts N (default 1; 0=как раньше)"
