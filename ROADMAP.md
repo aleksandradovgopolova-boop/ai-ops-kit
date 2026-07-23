@@ -490,10 +490,14 @@ freshness и первым живым DecisionPackage. Архитектура **e
   обязательные write-barriers на критические артефакты; LifecycleStore v1.1 (validate-before-replace,
   unique temp, backup); симметричный require_fix (перепроверено); честные ограничения journal v0.1.
 - **v3.0.16 — Real Execution Qualification** (две фазы):
-  - **Phase A — Delivery Outbox & Reconciliation** ✅ (эта версия, qualification-entry closure): прямой
+  - **Phase A — Delivery Outbox & Reconciliation** ✅ (v3.0.16, qualification-entry closure): прямой
     run_pipeline не может обойти lifecycle-барьер (доставка только в контроллере); DeliveryIntent →
     external → DeliveryReceipt; `outcome_unknown` + reconciliation при сбое после внешнего действия;
     идемпотентная доставка (без дубля PR); единые write-barriers. Это ВХОДНОЙ gate, ещё не «квалифицировано».
+  - **v3.0.17 — Delivery Outbox Integrity** ✅ (адресный патч по findings Phase A): per-`delivery_id`
+    immutable outbox; неразрешённый Intent блокирует новую доставку; reconciliation сверяет ТОЧНЫЙ
+    `head.sha`+`base.ref`+repository (не имя ветки); все записи outbox — барьеры; неоднозначный POST →
+    `outcome_unknown`; reconciliation ловит Intent-без-Receipt по факту; Research-контур подключён к CI.
   - **Phase B — Real Execution Qualification**: реальные прогоны на настоящих репо (Python + TS/Node +
     security-sensitive + реальный сервис): QUICK, ≥2 ENGINEERING, sequential, provider interruption,
     resume в новой сессии, base moved → safe block → fresh run, reviewer block → trusted retry, red base →
@@ -509,9 +513,11 @@ freshness и первым живым DecisionPackage. Архитектура **e
   fast-forward базы (вариант A: rebase на новую базу + повтор проверок).
 - **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
   architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
-- **v3.3 — Product Learning, Research & Solution Design**: Research v0.2; FeatureLearning; Evidence;
-  memory-first research; source registry; freshness; uncertainty routing; solution options; UX linkage;
-  DecisionPackage → product decision.
+- **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
+  (боевые RR/EV/DP, валидатор, grounding/freshness selftest, evaluation-harness). Будущий этап — НЕ
+  создание Research с нуля, а его **интеграция** с Product Learning и управлением решениями: Research v0.2
+  (source registry, uncertainty routing, memory-first, reuse evidence), FeatureLearning, solution options,
+  design history, DecisionPackage → продуктовое решение.
 - **v3.4 — Security & Economic Engineering**: data classification; capability permissions; provider
   policies; AI threat model; supply-chain security; budgets; model routing; caching; cost accounting.
 - **v3.5 — Product Analytics, Observability & Evolution**: продуктовые метрики и guardrails; logs/metrics/

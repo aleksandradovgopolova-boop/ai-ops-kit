@@ -79,11 +79,12 @@ def _find_open_pr(owner, name, branch, token):
     return None
 
 
-def open_draft_pr(root, branch, title, body="", base=None, push=True):
-    """Push ветки + создать/обновить draft PR через GitHub REST. Токен из env; иначе honest
-    unavailable. v2.93: base=None -> определяем дефолт-ветку репо (не хардкод 'main'); если PR для
-    ветки уже открыт -> обновляем ветку и возвращаем его (идемпотентно, без ошибки дубля).
-    Возврат: {status: opened|updated|unavailable|error, url?/number?/note?}."""
+def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_id=None):
+    """Push ветки + создать/обновить draft PR через GitHub REST. Токен из env; иначе honest unavailable.
+    v3.0.17 (finding аудита #2/P1): в body вшивается delivery_id-маркер (для сверки/реконсиляции);
+    возвращается head_sha (реальный remote SHA PR), repository, base. НЕОДНОЗНАЧНЫЙ POST (сеть/timeout
+    ПОСЛЕ отправки мутирующего запроса) -> status='outcome_unknown' (сервер мог создать PR), НЕ 'error'.
+    Возврат: {status: opened|updated|unavailable|error|outcome_unknown, url?/number?/head_sha?/base?/repository?/note?}."""
     root = Path(root)
     token = _cp._github_token()
     if not token:
@@ -95,36 +96,56 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True):
     if not owner_repo:
         return {"status": "unavailable", "note": "не удалось определить owner/repo из origin"}
     owner, name = owner_repo
-    # base: определяем дефолт-ветку репо, если не задана явно (v2.93: убран хардкод 'main')
+    repository = f"{owner}/{name}"
     if base is None:
         base = _default_branch(owner, name, token)
         if not base:
             return {"status": "error",
                     "note": "не удалось определить дефолт-ветку репо (GitHub API); задай base явно"}
+    if delivery_id:   # маркер для сверки/реконсиляции — вшит в тело PR
+        body = f"{body}\n\n<!-- ai-ops-delivery-id: {delivery_id} -->"
     if push:
-        # push -u обновляет ветку на remote И при первом, И при повторном прогоне (идемпотентно)
         prc, _, perr = _git(root, "push", "-u", "origin", branch)
         if prc != 0:
             return {"status": "error", "note": f"git push не удался (rc={prc}): {perr[:200]}"}
-    # идемпотентность: если PR для этой ветки уже открыт — не создаём дубль, возвращаем его
+    # идемпотентность: PR для ветки уже открыт -> не создаём дубль, возвращаем его (+head_sha/base)
     existing = _find_open_pr(owner, name, branch, token)
     if existing:
-        return {"status": "updated", "url": existing.get("html_url"),
-                "number": existing.get("number"), "draft": existing.get("draft", True),
+        return {"status": "updated", "url": existing.get("html_url"), "number": existing.get("number"),
+                "draft": existing.get("draft", True), "repository": repository,
+                "head_sha": (existing.get("head") or {}).get("sha"),
+                "base": (existing.get("base") or {}).get("ref") or base,
                 "note": "PR для ветки уже открыт — ветка обновлена push'ем (идемпотентно)"}
     data, err = _gh_request(f"{_api_base()}/repos/{owner}/{name}/pulls", token,
                             data=_pr_payload(branch, title, body, base), method="POST")
     if err:
-        return {"status": "error", "note": f"GitHub API ({err})"}
-    return {"status": "opened", "url": data.get("html_url"),
-            "number": data.get("number"), "draft": data.get("draft", True), "base": base}
+        # МУТИРУЮЩИЙ POST + ошибка транспорта/декода = ИСХОД НЕИЗВЕСТЕН (PR мог быть создан, ответ потерян).
+        # НЕ 'error' (иначе контроллер запишет подтверждённый Receipt и реконсиляция не запустится).
+        return {"status": "outcome_unknown", "repository": repository, "base": base,
+                "note": f"GitHub API POST дал неоднозначный результат ({err}) — исход доставки неизвестен, "
+                        "нужна сверка с remote (reconciliation)"}
+    return {"status": "opened", "url": data.get("html_url"), "number": data.get("number"),
+            "draft": data.get("draft", True), "base": base, "repository": repository,
+            "head_sha": (data.get("head") or {}).get("sha")}
+
+
+def _find_pr_for_branch(owner, name, branch, token, state="all"):
+    """v3.0.17 (finding аудита P0): PR для head-ветки в ЛЮБОМ состоянии (open/closed/merged), не только
+    open — иначе закрытый/смёрженный PR не отличить от 'absent'. -> dict PR (с head/base/state/merged_at)|None."""
+    data, _err = _gh_request(
+        f"{_api_base()}/repos/{owner}/{name}/pulls?head={owner}:{branch}&state={state}", token)
+    if isinstance(data, list) and data:
+        # предпочитаем самый свежий (первый) — GitHub отдаёт по убыванию created
+        return data[0]
+    return None
 
 
 def reconcile_delivery(root, branch):
-    """v3.0.16 Phase A (finding аудита #2): СВЕРКА фактического состояния доставки на remote для ветки —
-    существует ли открытый PR (URL/number/draft). Используется контроллером, когда локальный
-    DeliveryReceipt не записан (outcome_unknown после внешнего действия). Идемпотентно, ничего НЕ создаёт.
-    -> {status: found|absent|unavailable, url?, number?, note?}."""
+    """v3.0.16/v3.0.17 (finding аудита #2/P0): СВЕРКА фактического состояния доставки на remote для ветки.
+    Возвращает ФАКТЫ (repository, head_sha, base_ref, pr_state, merged, url, number) — строгую проверку
+    идентичности (head_sha==intent.commit_sha, base_ref, repository) делает контроллер, НЕ доверяя
+    имени ветки. Ищет PR во ВСЕХ состояниях (open/closed/merged/absent). Идемпотентно, ничего не создаёт.
+    -> {status: found|absent|unavailable, repository?, url?, number?, head_sha?, base_ref?, pr_state?, merged?}."""
     root = Path(root)
     token = _cp._github_token()
     if not token:
@@ -134,11 +155,14 @@ def reconcile_delivery(root, branch):
     if not owner_repo:
         return {"status": "unavailable", "note": "не удалось определить owner/repo из origin"}
     owner, name = owner_repo
-    existing = _find_open_pr(owner, name, branch, token)
-    if existing:
-        return {"status": "found", "url": existing.get("html_url"),
-                "number": existing.get("number"), "draft": existing.get("draft", True)}
-    return {"status": "absent"}
+    pr = _find_pr_for_branch(owner, name, branch, token, state="all")
+    if not pr:
+        return {"status": "absent", "repository": f"{owner}/{name}"}
+    return {"status": "found", "repository": f"{owner}/{name}",
+            "url": pr.get("html_url"), "number": pr.get("number"),
+            "head_sha": (pr.get("head") or {}).get("sha"),
+            "base_ref": (pr.get("base") or {}).get("ref"),
+            "pr_state": pr.get("state"), "merged": bool(pr.get("merged_at"))}
 
 
 def selftest():
@@ -215,6 +239,56 @@ def selftest():
     finally:
         _gh_request = real_gh
         _cp._github_token = real_token
+
+    # v3.0.17 (finding аудита P1): неоднозначный POST (сеть/timeout после отправки) -> outcome_unknown
+    real_gh2, real_token2 = _gh_request, _cp._github_token
+    _cap = {}
+    try:
+        _cp._github_token = lambda: "tok"  # noqa: E731
+
+        def fake_gh_ambiguous(url, token, data=None, method="GET"):
+            if "pulls?head=" in url:
+                return [], None                     # открытого PR нет
+            if method == "POST":
+                _cap["body"] = (data or {}).get("body")
+                return None, "URLError"             # ответ ПОСЛЕ POST потерян
+            return {"default_branch": "main"}, None
+        _gh_request = fake_gh_ambiguous
+        with _tf.TemporaryDirectory() as td:
+            subprocess.run(["git", "-C", td, "init", "-q"])
+            subprocess.run(["git", "-C", td, "remote", "add", "origin", "https://github.com/o/r.git"])
+            r = open_draft_pr(td, "ai-ops/z", "T", "B", base="main", push=False, delivery_id="deadbeef")
+            expect("v3.0.17 P1: неоднозначный POST -> outcome_unknown (не confirmed error)",
+                   r["status"] == "outcome_unknown" and r.get("repository") == "o/r")
+            expect("v3.0.17: delivery_id вшит маркером в body PR",
+                   "ai-ops-delivery-id: deadbeef" in (_cap.get("body") or ""))
+
+        # v3.0.17 (P0): reconcile_delivery возвращает ФАКТЫ remote (head_sha/base_ref/repo/state)
+        def fake_gh_reconcile(url, token, data=None, method="GET"):
+            if "pulls?head=" in url and "state=all" in url:
+                return [{"html_url": "https://x/pr/9", "number": 9, "state": "open",
+                         "head": {"sha": "abc1234"}, "base": {"ref": "main"}}], None
+            return {}, None
+        _gh_request = fake_gh_reconcile
+        with _tf.TemporaryDirectory() as td:
+            subprocess.run(["git", "-C", td, "init", "-q"])
+            subprocess.run(["git", "-C", td, "remote", "add", "origin", "https://github.com/o/r.git"])
+            rc = reconcile_delivery(td, "ai-ops/z")
+            expect("v3.0.17 P0: reconcile возвращает head_sha/base_ref/repository/state (не только имя ветки)",
+                   rc["status"] == "found" and rc["head_sha"] == "abc1234"
+                   and rc["base_ref"] == "main" and rc["repository"] == "o/r" and rc["pr_state"] == "open")
+
+        def fake_gh_absent(url, token, data=None, method="GET"):
+            return [], None
+        _gh_request = fake_gh_absent
+        with _tf.TemporaryDirectory() as td:
+            subprocess.run(["git", "-C", td, "init", "-q"])
+            subprocess.run(["git", "-C", td, "remote", "add", "origin", "https://github.com/o/r.git"])
+            expect("v3.0.17 P0: PR отсутствует -> absent + repository",
+                   reconcile_delivery(td, "ai-ops/z") == {"status": "absent", "repository": "o/r"})
+    finally:
+        _gh_request = real_gh2
+        _cp._github_token = real_token2
 
     print("pr_open selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

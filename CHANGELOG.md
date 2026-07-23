@@ -2,6 +2,41 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.17] — 2026-07-23 — Delivery Outbox Integrity (адресный патч по findings Phase A)
+
+Устранены конкретные дефекты delivery-outbox из Phase A. После этого — Real Execution Qualification на
+неизменяемом commit SHA.
+
+### Fixed
+- **P0 — reconciliation не доказывала точный commit SHA.** `reconcile_delivery` искал PR только по имени
+  ветки и не сверял `head.sha`/`base.ref`/repository; восстановленный Receipt брал `commit_sha` из старого
+  Intent. Теперь `reconcile_delivery` возвращает **факты remote** (`head_sha`, `base_ref`, `repository`,
+  `pr_state`, `merged`, во ВСЕХ состояниях open/closed/merged), а контроллер подтверждает доставку ТОЛЬКО
+  при **строгом совпадении** `repository + head.sha == commit_sha + base.ref`. PR той же ветки с другим
+  коммитом → `mismatch`, НЕ засчитывается за старую доставку.
+- **P0 — outbox был одним перезаписываемым файлом.** Теперь per-`delivery_id` immutable-записи
+  `features/<wid>/delivery-outbox/<id>.intent.yaml|.receipt.yaml`. `delivery_id` включает repository.
+  **Неразрешённый Intent (без Receipt) на ветке БЛОКИРУЕТ новую внешнюю доставку** до reconciliation —
+  чужой неизвестный исход не затирается.
+- **P0 — reconciliation рапортовала успех без проверки записи Receipt.** Все записи outbox — обязательные
+  **барьеры**: `reconciled` возвращается ТОЛЬКО если Receipt фактически сохранён (иначе `receipt-write-failed`).
+- **P1 — неоднозначный POST записывался как определённый error.** Транспортная ошибка/timeout ПОСЛЕ
+  мутирующего POST → `status='outcome_unknown'` (сервер мог создать PR), НЕ `error` — reconciliation
+  запустится. Раньше `error`-Receipt закрывал доставку и блокировал сверку.
+- **P1 — возможная потеря маркера `outcome_unknown`.** Reconciliation теперь триггерится по **ФАКТУ**
+  Intent-без-Receipt (а не по полю `status`) — даже если пост-действенное обновление Intent упало и на
+  диске остался `intended`, незавершённая доставка всё равно будет сверена.
+- **Идемпотентность**: `delivery_id`-маркер вшивается в тело PR; `pr_open` находит существующий PR ветки
+  (`updated`, без дубля); retry не создаёт второй PR.
+
+### CI
+- Research-контур подключён к CI (`validate_research_artifacts` + `verify_quotes/freshness_sweep/
+  ev_scaffold --selftest`) — раньше валидаторы существовали, но не запускались в workflow.
+
+Crash-матрица (детерминированно): PR совпал по SHA → reconciled+sha_verified; PR с другим SHA → mismatch;
+PR отсутствует → not-delivered; Intent 'intended' без Receipt → всё равно сверяется; неоднозначный POST →
+outcome_unknown; unavailable → Receipt не пишется; идемпотентность/маркер. Полный CI-набор на main и master.
+
 ## [3.0.16] — 2026-07-23 — Real Execution Qualification · Phase A: Delivery Outbox & Reconciliation
 
 Qualification-entry closure — три конкретных риска входа ДО первых реальных прогонов (это ещё entry
