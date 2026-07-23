@@ -212,7 +212,13 @@ def run_scenarios():
                     "    scenarios:\n      - {name: T, when: x>hi, then: возвращает hi}\n")
         return ("schema_version: 1\nkind: plan-artifact\nwork_packages:\n"
                 "  - id: WP1\n    summary: clamp\n    depends_on: []\nwrite_scope:\n  - .\n")
-    _reviewer = lambda p: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+    # v3.0.18 (finding аудита: PQ8 positive-green падал ТОЛЬКО с openspec — no-openspec parity маскировал).
+    # С v3.0.11 блокирующий ai-review не закрывается pass-вердиктом без единого чтения (рубер-стамп).
+    # Ревьюер СНАЧАЛА читает изменённый файл, затем pass — иначе code_review остаётся unmet и ready=False.
+    def _reviewer(p):
+        if "--- mathx.py ---" in p:
+            return '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        return '{"op":"read","path":"mathx.py"}'
     root8 = _mkrepo({"calc.py": "def add(a, b):\n    return a + b\n"})
     s8 = iter([{"op": "write", "path": "mathx.py", "content": "def clamp(x, lo, hi):\n    return max(lo, min(hi, x))\n"},
                {"op": "write", "path": "test_mathx.py",

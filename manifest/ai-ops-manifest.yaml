@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.17
+  package_version: 3.0.18
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_18_pq8_masked_failure_and_openspec_parity:
+      - "finding: расхождение 'PQ8 падал на чистом HEAD' vs 'CI green'. Оба правда — CI и parity-харнесс гоняли БЕЗ openspec, что маскировало реальный провал"
+      - "PQ8 positive-green ENGINEERING падал, когда openspec ПРИСУТСТВУЕТ (code_review gate blocked, ready_for_pr=False). Причина: mock-ревьюер PQ8 возвращал pass с 0 чтений, а с v3.0.11 блокирующий ai-review не закрывается 0-read рубер-стампом. Прочие моки переведены на read-first в v3.0.11, этот пропустили — без openspec PQ8 уходит в fail-closed ветку и code_review не проверялся. Фикс: ревьюер PQ8 читает изменённый файл ДО pass. PQ8 зелёный и с openspec (positive-green), и без (fail-closed)"
+      - "процесс: разрыв дисциплины parity (проверял только no-openspec). Проведён полный прогон И WITH-openspec, И no-openspec на main/master — 101/101 в обеих конфигурациях; PQ8 — единственный маскированный провал. Расхождение разрешено воспроизводимым прогоном, не декларацией"
     fixed_v3_0_17_delivery_outbox_integrity:
       - "адресный патч по findings Phase A. После — Real Execution Qualification на неизменяемом commit SHA"
       - "P0 reconciliation не доказывала точный commit SHA: reconcile_delivery искал PR по имени ветки, не сверял head.sha/base.ref/repository; Receipt брал commit_sha из старого Intent. Фикс: reconcile_delivery возвращает факты remote (head_sha/base_ref/repository/pr_state/merged, все состояния open/closed/merged); контроллер подтверждает ТОЛЬКО при строгом совпадении repository+head.sha==commit_sha+base.ref. PR ветки с другим коммитом -> mismatch, не засчитан"
