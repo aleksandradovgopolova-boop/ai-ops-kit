@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-663
+request_id: RR-008
+statement: "Независимый скан ЗА пределами выборки присланного анализа (лечение selection bias, по замечанию judge; запрос: coding agent governance + quality gates + delivery lifecycle + control plane, июль 2026): полного OSS-продукта с цепочкой execution→gates→evidence-on-SHA→delivery→governance не найдено, НО обнаружены жанровые соседи, отсутствовавшие в чужом анализе: (1) Microsoft Agent Governance Toolkit (MIT, апрель 2026) — runtime security governance агентов (OWASP Agentic Top 10, policy enforcement, plugin lifecycle с Ed25519) — security-срез, не product-delivery цепочка; (2) Galileo Agent Control — «open source control plane for AI agents» (наблюдаемость/контроль, не coding-delivery); (3) Agent Control Specification (ACS) — открытый стандарт governance; (4) Rel(AI)Build (arXiv 2606.26924, июнь 2026, Happiest Minds, один автор) — академический прототип детерминированного control plane ИМЕННО для coding agents: phase-gated lifecycle с инвариантами, SHA-256 content addressing, hash-chained audit — публичного репозитория НЕТ (только Zenodo-артефакты). Вывод: жанр control plane для агентов рождается на глазах с нескольких сторон — окно связной цепочки как дифференциации ограничено."
+evidence_type: documented_fact
+source:
+  title: "Независимый веб-скан (WebSearch 2026-07-24) + arXiv 2606.26924 (Rel(AI)Build)"
+  url: "https://arxiv.org/html/2606.26924"
+  type: other
+  published_at: "2026-06-01"
+  is_primary: false
+citation:
+  locator: "поисковая выдача по зафиксированному запросу + abstract/availability Rel(AI)Build; Microsoft AGT — opensource.microsoft.com blog 2026-04-02"
+captured_at: "2026-07-24"
+captured_by: "claude (дозабор RR-008 по judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-24"
+reliability:
+  level: medium
+  rationale: "Один зафиксированный поисковый запрос + чтение arXiv-статьи; соседи найдены, но их глубокая верификация не проводилась — этого достаточно для калибровки охвата EV-660, не для их оценки."
+status: active
+superseded_by: null

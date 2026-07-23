@@ -2,24 +2,34 @@ schema_version: 1
 kind: research.evidence
 id: EV-661
 request_id: RR-008
-statement: "Собственная сторона сравнения (self-evidence): цепочка кита, о которой говорит присланный анализ, существует как реализованные и провалидированные механизмы, а не декларации — CHANGELOG фиксирует v3.0.15 «Lifecycle Commit Barrier: delivery только после durable-фиксации доказательств+состояния», v3.0.17 «Delivery Outbox Integrity» с пометкой «CI для HEAD e93653e (v3.0.17) фактически зелёный (package-quality + release success)»; ранее валидированы: 28 gates/18 blocking, writer≠judge как правило валидатора, evidence на SHA (gate_executor/evidence_collector), research/product governance (EV-214 из RR-003). Оговорка: полнота цепочки — по документации/CI самого кита, независимого внешнего аудита не было."
+statement: 'Собственная сторона сравнения (self-evidence, переоперто по judge-ревью на сильнейшее место CHANGELOG):
+  цепочка кита подтверждена живым прогоном, а не только зелёным CI — CHANGELOG фиксирует «DeliveryReceipt sha_verified=True
+  против реального remote head SHA, PR #1 открыт» (строка ~277) и детерминированную crash-матрицу reconciliation
+  («PR совпал по SHA → reconciled+sha_verified; PR с другим SHA → mismatch», ~334). Честная оговорка: тот же CHANGELOG
+  документирует инцидент маскировки — ранее «зелёный CI» скрывал реальный провал PQ8 (исправлено в v3.0.18), т.е.
+  self-reported валидации кита уже ловились на ложной зелени; живой Phase B прогон сильнее CI-зелени, но независимого
+  внешнего аудита цепочки не было. Там же зафиксирована находка Phase B: engine_floor=0 — узкое место не движок,
+  а взаимодействие gate-policy с неопределённостью ревьюера (~стр. 107).'
 evidence_type: documented_fact
 source:
-  title: "ai-ops-kit — CHANGELOG.md v3.0.15…v3.0.17 (self-evidence)"
-  url: ""
+  title: ai-ops-kit — CHANGELOG.md v3.0.17…v3.1.x (self-evidence)
+  url: ''
   type: internal_data
   published_at: null
   is_primary: true
 citation:
-  locator: "CHANGELOG.md: строки ~301 (CI зелёный для HEAD v3.0.17), ~366-398 (v3.0.15 Lifecycle Commit Barrier, roadmap Phase A/B); registry/quality per EV-214"
-  quote: "а не декларацией. CI для HEAD e93653e (v3.0.17) фактически зелёный (package-quality + release success)."
-captured_at: "2026-07-24"
-captured_by: "claude (RR-008; self-evidence — пометка для спот-чека judge)"
+  locator: 'CHANGELOG.md ~277 (DeliveryReceipt sha_verified=True, PR #1), ~334 (crash-матрица), ~301+v3.0.18 (инцидент
+    маскировки PQ8); ~107 (engine_floor=0, находка Phase B)'
+  quote: DeliveryReceipt sha_verified=True
+captured_at: '2026-07-24'
+captured_by: 'claude (RR-008; self-evidence — спот-чек judge раунда 1 выполнен: цитаты и 28/18 гейтов пересчитаны
+  им независимо)'
 freshness:
   volatile: true
-  expires_at: "2027-01-24"
+  expires_at: '2027-01-24'
 reliability:
   level: medium
-  rationale: "Прямое чтение CHANGELOG в сессии; self-reported самим китом — судья выполняет спот-чек; внешнего аудита цепочки не было."
+  rationale: Прямое чтение CHANGELOG; self-reported с документированным прецедентом маскировки — потому medium,
+    не high.
 status: active
 superseded_by: null
