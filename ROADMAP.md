@@ -489,13 +489,20 @@ freshness и первым живым DecisionPackage. Архитектура **e
   durable-фиксации RunHandoff+report+journal (доставка вынесена из pipeline в транзакционный контроллер);
   обязательные write-barriers на критические артефакты; LifecycleStore v1.1 (validate-before-replace,
   unique temp, backup); симметричный require_fix (перепроверено); честные ограничения journal v0.1.
-- **v3.0.16 — Real Execution Qualification** — квалификация ФИНАЛЬНОЙ модели execution/lifecycle на
-  реальных репо (Python + TS/Node + реальный сервис): QUICK, ≥2 ENGINEERING, sequential, provider
-  interruption, resume в новой сессии, изменившаяся base → безопасный блок → свежий прогон, reviewer
-  block, trusted retry, красная база с частичным фиксом, настоящий draft PR, downstream CI, обновление
-  child-пакета. Критерии: ≥5 задач, 0 false-green, 0 повреждений основного checkout, 100% verdicts
-  привязаны к SHA, 100% доставок имеют durable final evidence. Результат — QualificationReport (PR/SHA/
-  journal/ограничения/стоимость/regression cases).
+- **v3.0.16 — Real Execution Qualification** (две фазы):
+  - **Phase A — Delivery Outbox & Reconciliation** ✅ (эта версия, qualification-entry closure): прямой
+    run_pipeline не может обойти lifecycle-барьер (доставка только в контроллере); DeliveryIntent →
+    external → DeliveryReceipt; `outcome_unknown` + reconciliation при сбое после внешнего действия;
+    идемпотентная доставка (без дубля PR); единые write-barriers. Это ВХОДНОЙ gate, ещё не «квалифицировано».
+  - **Phase B — Real Execution Qualification**: реальные прогоны на настоящих репо (Python + TS/Node +
+    security-sensitive + реальный сервис): QUICK, ≥2 ENGINEERING, sequential, provider interruption,
+    resume в новой сессии, base moved → safe block → fresh run, reviewer block → trusted retry, red base →
+    partial fix, настоящий draft PR, downstream CI, child update, **delivery crash → reconciliation**.
+    Критерии: ≥5 задач, 0 false-green, 0 повреждений основного checkout, **0 duplicate PR после retry**,
+    100% verdicts привязаны к SHA, 100% external deliveries имеют DeliveryIntent, 100% outcomes
+    подтверждены Receipt или помечены outcome_unknown. Результат — QualificationReport (PR/SHA/journal/
+    receipts/стоимость/latency/human interventions/regression cases/ограничения). После успеха —
+    **Execution Kernel Qualified**; findings рождают только адресные v3.0.x (не новый абстрактный аудит).
 - **v3.1 — Observability, Evaluation & Safe Self-Improvement**: event journal v0.2 (полная trace-схема,
   Run/Attempt/Package/Gate IDs, tokens/cost/latency); Bench Lite; golden tasks; regression corpus;
   failure taxonomy; model comparison; controlled ImprovementProposal; авто-интеграционная ревалидация

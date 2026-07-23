@@ -120,6 +120,27 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True):
             "number": data.get("number"), "draft": data.get("draft", True), "base": base}
 
 
+def reconcile_delivery(root, branch):
+    """v3.0.16 Phase A (finding аудита #2): СВЕРКА фактического состояния доставки на remote для ветки —
+    существует ли открытый PR (URL/number/draft). Используется контроллером, когда локальный
+    DeliveryReceipt не записан (outcome_unknown после внешнего действия). Идемпотентно, ничего НЕ создаёт.
+    -> {status: found|absent|unavailable, url?, number?, note?}."""
+    root = Path(root)
+    token = _cp._github_token()
+    if not token:
+        return {"status": "unavailable", "note": "нет GITHUB_TOKEN/GH_TOKEN — сверка недоступна"}
+    rc, url, _ = _git(root, "remote", "get-url", "origin")
+    owner_repo = _cp._parse_owner_repo(url) if rc == 0 else None
+    if not owner_repo:
+        return {"status": "unavailable", "note": "не удалось определить owner/repo из origin"}
+    owner, name = owner_repo
+    existing = _find_open_pr(owner, name, branch, token)
+    if existing:
+        return {"status": "found", "url": existing.get("html_url"),
+                "number": existing.get("number"), "draft": existing.get("draft", True)}
+    return {"status": "absent"}
+
+
 def selftest():
     ok = True
 
