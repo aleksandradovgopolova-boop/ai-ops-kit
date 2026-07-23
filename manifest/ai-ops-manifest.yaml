@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.1.3
+  package_version: 3.1.4
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,11 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    added_v3_1_4_reviewer_false_fail_rate:
+      - "ре-фрейм находки Phase B на цифрах: движок НЕ источник false-fail (engine floor=0 — полное добросовестное покрытие ревью -> ready); ложные блоки от строгости/покрытия РЕВЬЮ по конкретным гейтам"
+      - "Bench Lite: known-good корпус (kg_full_coverage / kg_strict_visual / kg_strict_designsys) — код корректен, варьируем покрытие/строгость ревьюера"
+      - "BenchReport.reviewer_false_fail: reviewer_false_fail_rate + engine_floor_ready + block_attribution (какие гейты режут корректный код). Замер: rate=0.667, attribution={visual_regression,design_system_usage}"
+      - "инвариант: измерение строгости НЕ порождает false_green (fail-closed сохранён на known-good)"
     added_v3_1_3_bench_lite:
       - "tools/bench_lite.py — оффлайн golden-корпус решений движка (провайдер test, read-first заглушки). TOOL-FREE: python-профиль без тулчейна -> проверки not_applicable, без pytest (урок v3.1.2)"
       - "BenchReport с метриками pass/false_green/false_fail/mismatch/error/review_blocked/fix_recovered; CLI --run/--out/--selftest"

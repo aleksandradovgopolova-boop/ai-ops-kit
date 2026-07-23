@@ -106,6 +106,37 @@ def _rubber_reviewer():
     return lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
 
 
+def _faithful_reviewer(path):
+    """Полнопокрытный ДОБРОСОВЕСТНЫЙ ревьюер: читает изменённый файл, затем pass ЛЮБОГО гейта.
+    Моделирует «идеального» ревьюера -> доказывает, что при полном покрытии движок доводит до ready
+    (пол ENGINE-false-fail = 0: движок не добавляет ложных блоков сверх решений ревьюера)."""
+    marker = f"--- {path} ---"
+
+    def rev(prompt):
+        if marker in prompt:
+            return '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        return json.dumps({"op": "read", "path": path})
+    return rev
+
+
+def _faithful_except(path, strict_gate, blockers):
+    """Читает и pass ВСЕ гейты, КРОМЕ strict_gate — на нём warn+blockers (строгость на одном гейте).
+    Моделирует реального ревьюера, придирчивого к одному аспекту корректного кода -> реальный
+    reviewer-false-fail, атрибутируемый к конкретному гейту. gate_id виден в промпте ('гейта <id>')."""
+    marker = f"--- {path} ---"
+    strict_tag = f"гейта '{strict_gate}'"
+
+    def rev(prompt):
+        if marker in prompt:
+            if strict_tag in prompt:
+                return json.dumps({"kind": "reviewer-result", "status": "warn",
+                                   "checks": [{"id": strict_gate, "status": "warn"}],
+                                   "blockers": blockers})
+            return '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        return json.dumps({"op": "read", "path": path})
+    return rev
+
+
 def _fixloop_reviewer(path):
     """Fail на 1-м раунде (blockers), pass после того, как писатель добавил маркер '# addressed'."""
     marker = f"--- {path} ---"
@@ -190,6 +221,54 @@ def _cases():
     cases.append({"id": "rubber_stamp_guard", "tags": ["review", "safety", "blocked"],
                   "build": _b_rubber, "expected": {"ready": False, "unmet_includes": ["ux_review"]}})
 
+    for c in cases:
+        c.setdefault("category", "capability")
+
+    # --- known-good корпус для reviewer false-fail rate --------------------------------------------
+    # Код заведомо КОРРЕКТЕН. Меняем только ПОКРЫТИЕ/строгость ревьюера. false-fail здесь = движок
+    # заблокировал корректный код из-за решения ревью. Пол ENGINE-false-fail доказываем полным покрытием.
+
+    # KG1: добросовестный полнопокрытный ревьюер закрывает ВСЕ применимые review-гейты -> ready.
+    # Доказывает: движок НЕ источник false-fail; при полном покрытии корректный код доходит до PR.
+    def _b_kg_full(root):
+        return dict(task_text="корректная ui правка", signals=_ui_sig(), child_root=root,
+                    engine="pipeline", provider_name="test", execute=True, feature="kgfull",
+                    install_deps=False, review=True, reviewer_proposer=_faithful_reviewer("src/kf.py"),
+                    proposer=_writer_script([
+                        {"op": "write", "path": "src/kf.py", "content": "kf = 1\n"}, {"done": True}]))
+    cases.append({"id": "kg_full_coverage", "category": "known_good",
+                  "tags": ["review", "known_good", "engine_floor"], "build": _b_kg_full,
+                  "expected": {"ready": True, "unmet_includes": []}})
+
+    # KG2: ревьюер придирчив к visual_regression (warn) на корректном коде -> REAL false-fail,
+    #      атрибутируется visual_regression. (Гейт низкой ценности для backend-подобной правки.)
+    def _b_kg_vis(root):
+        return dict(task_text="корректная ui правка (строгий visual)", signals=_ui_sig(),
+                    child_root=root, engine="pipeline", provider_name="test", execute=True,
+                    feature="kgvis", install_deps=False, review=True,
+                    reviewer_proposer=_faithful_except("src/kv.py", "visual_regression",
+                                                       ["нет визуального снапшота (для этой правки не нужен)"]),
+                    proposer=_writer_script([
+                        {"op": "write", "path": "src/kv.py", "content": "kv = 1\n"}, {"done": True}]))
+    cases.append({"id": "kg_strict_visual", "category": "known_good",
+                  "tags": ["review", "known_good", "false_fail"], "build": _b_kg_vis,
+                  "expected": {"ready": False, "unmet_includes": ["visual_regression"],
+                               "blocked_by": ["visual_regression"]}})
+
+    # KG3: ревьюер придирчив к design_system_usage на корректном коде -> REAL false-fail, атрибуция.
+    def _b_kg_ds(root):
+        return dict(task_text="корректная ui правка (строгий design-system)", signals=_ui_sig(),
+                    child_root=root, engine="pipeline", provider_name="test", execute=True,
+                    feature="kgds", install_deps=False, review=True,
+                    reviewer_proposer=_faithful_except("src/kd.py", "design_system_usage",
+                                                       ["не сослались на токены дизайн-системы"]),
+                    proposer=_writer_script([
+                        {"op": "write", "path": "src/kd.py", "content": "kd = 1\n"}, {"done": True}]))
+    cases.append({"id": "kg_strict_designsys", "category": "known_good",
+                  "tags": ["review", "known_good", "false_fail"], "build": _b_kg_ds,
+                  "expected": {"ready": False, "unmet_includes": ["design_system_usage"],
+                               "blocked_by": ["design_system_usage"]}})
+
     return cases
 
 
@@ -230,8 +309,8 @@ def run_bench():
                 err = repr(e)
             cls = "error" if err else _classify(case["expected"], actual)
             fix_recovered = bool(case["expected"].get("fix_recovered")) and cls == "ok"
-            report_cases.append({"id": case["id"], "tags": case["tags"],
-                                 "expected": case["expected"], "actual": actual,
+            report_cases.append({"id": case["id"], "category": case.get("category", "capability"),
+                                 "tags": case["tags"], "expected": case["expected"], "actual": actual,
                                  "classification": cls, "fix_recovered": fix_recovered})
 
     m = {"pass": 0, "false_green": 0, "false_fail": 0, "mismatch": 0, "error": 0,
@@ -247,9 +326,25 @@ def run_bench():
         if c["fix_recovered"]:
             m["fix_recovered"] += 1
 
+    # reviewer false-fail rate: доля known-good кейсов, где КОРРЕКТНЫЙ код заблокирован решением ревью.
+    # ENGINE-пол: known-good с полным покрытием (engine_floor) обязан быть ready -> движок не источник.
+    # Атрибуция: какие review-гейты режут корректный код (unmet каждого заблокированного known-good).
+    kg = [c for c in report_cases if c["category"] == "known_good"]
+    kg_blocked = [c for c in kg if c["actual"].get("ready_for_pr") is not True]
+    attribution = {}
+    for c in kg_blocked:
+        for g in c["actual"].get("unmet", []):
+            attribution[g] = attribution.get(g, 0) + 1
+    engine_floor_ok = all(c["actual"].get("ready_for_pr") is True
+                          for c in kg if "engine_floor" in c["tags"])
+    ffr = {"known_good_total": len(kg), "known_good_blocked": len(kg_blocked),
+           "reviewer_false_fail_rate": round(len(kg_blocked) / len(kg), 3) if kg else None,
+           "engine_floor_ready": engine_floor_ok, "block_attribution": attribution}
+
     return {"kind": "bench-report", "bench_version": BENCH_VERSION,
             "package_version": _read_package_version(), "provider": "test",
-            "total": len(report_cases), "metrics": m, "cases": report_cases}
+            "total": len(report_cases), "metrics": m, "reviewer_false_fail": ffr,
+            "cases": report_cases}
 
 
 def selftest():
@@ -277,6 +372,31 @@ def selftest():
     # схема отчёта пригодна к машинной обработке
     expect("bench: отчёт содержит per-case классификацию",
            all("classification" in c for c in rep["cases"]) and rep["total"] >= 4)
+
+    # --- reviewer false-fail rate (v3.1.4) ---
+    ff = rep["reviewer_false_fail"]
+    # ПОЛ движка: при полном добросовестном покрытии корректный код доходит до ready -> движок НЕ
+    # источник false-fail (весь false-fail идёт от строгости/покрытия РЕВЬЮ, не от движка).
+    expect("ffr: engine floor — known-good с полным покрытием ревью доходит до ready (движок не режет)",
+           ff["engine_floor_ready"] is True)
+    # rate измерен и в [0,1]; корпус нетривиален
+    expect("ffr: reviewer_false_fail_rate измерен в [0,1] на непустом known-good корпусе",
+           ff["known_good_total"] >= 3 and ff["reviewer_false_fail_rate"] is not None
+           and 0.0 <= ff["reviewer_false_fail_rate"] <= 1.0)
+    # атрибуция называет КОНКРЕТНЫЕ гейты, режущие корректный код (для тюнинга строгости)
+    expect("ffr: block_attribution называет гейты-источники false-fail (visual_regression, design_system_usage)",
+           ff["block_attribution"].get("visual_regression", 0) >= 1
+           and ff["block_attribution"].get("design_system_usage", 0) >= 1)
+    # каждый known-good с ожидаемым blocked_by действительно заблокирован ИМЕННО этим гейтом
+    for c in rep["cases"]:
+        exp_by = c["expected"].get("blocked_by")
+        if exp_by:
+            unmet = c["actual"].get("unmet", [])
+            expect(f"ffr: {c['id']} заблокирован именно {exp_by} (атрибуция точна)",
+                   all(g in unmet for g in exp_by))
+    # ИНВАРИАНТ безопасности сохранён и на known-good: измерение строгости НЕ создаёт false-green
+    expect("ffr: known-good измерение НЕ порождает false_green (безопасность не ослаблена)",
+           m["false_green"] == 0)
 
     print("bench_lite selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
