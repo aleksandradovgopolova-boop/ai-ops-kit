@@ -176,6 +176,15 @@ def selftest():
            any(r["domain"] == "input_validation" and r["status"] == "fail" for r in fe["results"])
            and "input_validation" in fe["blocking"])
 
+    # v3.0.19 (finding живой квалификации): 'acl' в 'dataclass' НЕ поднимает authorization_idol (word-boundary).
+    _da = run_pack(files_content={"pricing.py": "from dataclasses import dataclass\n@dataclass\nclass B:\n    x: int\n"},
+                   signals={})
+    expect("v3.0.19: 'dataclass' НЕ триггерит authorization_idol (нет ложного needs_review)",
+           "authorization_idol" not in _da["applicable_domains"])
+    _auth = run_pack(files_content={"auth.py": "def can_edit(user, role):\n    return user.is_admin\n"}, signals={})
+    expect("v3.0.19: реальный auth-код (can_edit/role/is_admin) -> authorization_idol применим (детект сохранён)",
+           "authorization_idol" in _auth["applicable_domains"])
+
     # секрет -> домен secrets fail + блок (critical), всегда применим
     # v3.0.4: секрет-фикстура собрана в рантайме (без статического литерала — downstream-сканеры не флагуют)
     _aws = "AKIA" + "IOSFODNN7EXAMPLE"

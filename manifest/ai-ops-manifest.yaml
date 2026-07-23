@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.18
+  package_version: 3.0.19
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,10 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_19_authorization_idol_false_positive:
+      - "ПЕРВАЯ находка из РЕАЛЬНЫХ прогонов (Phase B, DeepSeek): security-домен authorization_idol ложно срабатывал на безобидном коде -> блокировал легитимный ENGINEERING->PR через needs_review"
+      - "authorization_idol applicability матчила подстроку 'acl' в 'dataclass' (from dataclasses import dataclass / @dataclass): паттерн permission|role|acl|access|... без границ слова ловил acl внутри dataclass/oracle/miracle. Фикс: границы слова \\b(?:permission|role|acl|access|authoriz|owner|tenant|is_admin|can_)\\w* — сохраняет реальные auth-идентификаторы (role/roles, access/accessible, authorize/authorization, can_edit, is_admin), не матчит подстроки в неродственных словах. v2.104 anti-под-срабатывание сохранено. Регрессионный деттест"
+      - "Phase B live (DeepSeek deepseek-chat): QUICK GREEN (delivered); ENGINEERING->настоящий draft PR GREEN после фикса (authoring valid incl openspec, test pass, code_review pass, security clear, delivery opened, DeliveryReceipt sha_verified=True против реального remote SHA, PR #1). Delivery-outbox отработал end-to-end. До фикса движок КОРРЕКТНО блокировал (fail-closed, 0 false-green)"
     fixed_v3_0_18_pq8_masked_failure_and_openspec_parity:
       - "finding: расхождение 'PQ8 падал на чистом HEAD' vs 'CI green'. Оба правда — CI и parity-харнесс гоняли БЕЗ openspec, что маскировало реальный провал"
       - "PQ8 positive-green ENGINEERING падал, когда openspec ПРИСУТСТВУЕТ (code_review gate blocked, ready_for_pr=False). Причина: mock-ревьюер PQ8 возвращал pass с 0 чтений, а с v3.0.11 блокирующий ai-review не закрывается 0-read рубер-стампом. Прочие моки переведены на read-first в v3.0.11, этот пропустили — без openspec PQ8 уходит в fail-closed ветку и code_review не проверялся. Фикс: ревьюер PQ8 читает изменённый файл ДО pass. PQ8 зелёный и с openspec (positive-green), и без (fail-closed)"

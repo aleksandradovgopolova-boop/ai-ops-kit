@@ -32,7 +32,10 @@ domains:
   - id: authorization_idol
     applicability:
       signals: [auth_change, multi_tenant]
-      file_patterns: ["(?i)permission|role|acl|access|authorize|owner|tenant|can_|is_admin"]
+      # v3.0.19 (finding живой квалификации): БАРЬЕР слова \b — иначе 'acl' матчил подстроку в
+      # 'dataclass'/'oracle'/'miracle' -> ложный needs_review на безобидном коде. \b...\w* сохраняет
+      # реальные auth-идентификаторы (role/roles, access/accessible, authorize/authorization, can_edit).
+      file_patterns: ['(?i)\b(?:permission|role|acl|access|authoriz|owner|tenant|is_admin|can_)\w*']
     deterministic_checks: []
     reviewer_checklist: ["проверка владельца ресурса перед доступом (нет IDOR)",
                          "серверная проверка прав, не только UI", "default deny"]
