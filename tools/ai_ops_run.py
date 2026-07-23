@@ -1492,15 +1492,23 @@ def selftest():
                 return {"op": "write", "path": "test_g.py",
                         "content": "from m import g\n\ndef test_g():\n    assert g(1) == 2\n"}
             return {"done": True}
-        _sig_fl = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
-        _rfl = run("добавить g(x)=x+1 с тестом", dict(_sig_fl), root, engine="pipeline",
-                   provider_name="test", proposer=_fl_prop, execute=True, feature="fixloop",
-                   install_deps=False, base=_cur, review_fix_attempts=1)
-        expect("v3.1.1 fix-loop: провал теста -> итерация по блокерам -> ready_for_pr=True",
-               _rfl.get("ready_for_pr") is True and "test" not in (_rfl.get("gates") or {}).get("unmet", []))
-        _jfl = _ls.journal_read(root / "features" / "fixloop" / "lifecycle-journal.jsonl")
-        expect("v3.1.1 fix-loop: событие fix_attempt в журнале",
-               any(e.get("kind") == "fix_attempt" for e in _jfl["events"]))
+        # v3.1.1: полный прогон fix-loop требует pytest (чтобы тест реально упал->починился). CI-набор
+        # quality гоняет без pytest -> интеграционную часть выполняем ТОЛЬКО при наличии pytest (как PQ8 с
+        # openspec); логику fix-context покрывают unit-проверки ниже (без внешних инструментов).
+        import importlib.util as _ilu
+        if _ilu.find_spec("pytest") is not None:
+            _sig_fl = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+            _rfl = run("добавить g(x)=x+1 с тестом", dict(_sig_fl), root, engine="pipeline",
+                       provider_name="test", proposer=_fl_prop, execute=True, feature="fixloop",
+                       install_deps=False, base=_cur, review_fix_attempts=1)
+            expect("v3.1.1 fix-loop: провал теста -> итерация по блокерам -> ready_for_pr=True (pytest есть)",
+                   _rfl.get("ready_for_pr") is True and "test" not in (_rfl.get("gates") or {}).get("unmet", []))
+            _jfl = _ls.journal_read(root / "features" / "fixloop" / "lifecycle-journal.jsonl")
+            expect("v3.1.1 fix-loop: событие fix_attempt в журнале",
+                   any(e.get("kind") == "fix_attempt" for e in _jfl["events"]))
+        else:
+            expect("v3.1.1 fix-loop: pytest недоступен -> интеграционный прогон пропущен (unit покрывает логику)",
+                   True)
         # v3.1.1: fix-context feed'ит КОНКРЕТНЫЕ блокеры ревьюера (не общий текст), если они есть в трейсе
         _fx = _review_fix_context({"ready_for_pr": False, "gates": {"unmet": ["code_review"]},
                                    "reviews": [{"gate": "code_review", "status": "fail",
