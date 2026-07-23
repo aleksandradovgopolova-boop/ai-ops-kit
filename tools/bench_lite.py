@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ai_ops_run  # noqa: E402
 import gate_policy  # noqa: E402
 
-BENCH_VERSION = "0.2"
+BENCH_VERSION = "0.3"
 
 
 def _read_package_version() -> str:
@@ -211,8 +211,26 @@ def _fixloop_writer(path):
 
 # --- корпус ---------------------------------------------------------------------------------------
 
+def _calib_ready(impact, gate, ev_status="not_run"):
+    """Готов ли UI-гейт под КАЛИБРОВАННОЙ политикой при reviewer=warn (v3.1.8)."""
+    action, _ = gate_policy.effective_review_outcome(
+        gate, {"ui_changed": True, "ui_impact": impact}, "warn", ev_status)
+    return action == "advisory"
+
+
+def _evid(**gate_status):
+    """UI-evidence в форме evidence_for_gate: {gate: {'deterministic_status': 'pass'|'fail'|'not_run'}}."""
+    return {g: {"deterministic_status": st} for g, st in gate_status.items()}
+
+
+def _evid_all(status):
+    return _evid(**{g: status for g in gate_policy.UI_GATES})
+
+
 def _cases():
-    """Каждый кейс: id, tags, build(root)->kwargs для run(), expected(ready:bool, unmet_includes:list)."""
+    """Каждый кейс: id, tags, build(root)->kwargs для run(), expected (BASELINE, калибровка OFF).
+    Кейсы known_good/safety также несут calibrated_expected (+ опц. ui_evidence) — исход под ЖИВОЙ
+    калиброванной политикой (v3.1.8), измеряемый вторым прогоном (calibrated_enforcement=True)."""
     cases = []
 
     # 1) чистый QUICK без ревью -> движок доводит до ready (базовый green-путь)
@@ -286,7 +304,8 @@ def _cases():
                             {"op": "read", "path": path}, {"done": True}]))
         return {"id": cid, "category": "known_good",
                 "tags": ["review", "known_good", "engine_floor", impact], "build": _b,
-                "expected": {"ready": True, "unmet_includes": []}}
+                "expected": {"ready": True, "unmet_includes": []},
+                "calibrated_expected": {"ready": True, "unmet_includes": []}}
 
     # backend-control (impact=none): в плане нет UI-review-гейтов -> ready БЕЗ ревью. Доказывает
     # концентрацию false-fail в UI-гейтах (не размазано по всем задачам).
@@ -310,7 +329,7 @@ def _cases():
         "accessibility_review": "нет проверки контраста (для этой правки не требуется)",
     }
 
-    def _mk_strict(cid, impact, kind, gate):
+    def _mk_strict(cid, impact, kind, gate, ui_evidence=None):
         path = _fresh("s")
 
         def _b(root, path=path, impact=impact, kind=kind, gate=gate):
@@ -321,9 +340,15 @@ def _cases():
                         reviewer_proposer=_faithful_except(path, gate, [_GATE_BLOCKERS[gate]]),
                         proposer=_writer_script([
                             {"op": "write", "path": path, "content": "u = 1\n"}, {"done": True}]))
+        ev_status = (ui_evidence or {}).get(gate, {}).get("deterministic_status", "not_run")
+        cready = _calib_ready(impact, gate, ev_status)
         return {"id": cid, "category": "known_good",
-                "tags": ["review", "known_good", "false_fail", impact], "build": _b,
-                "expected": {"ready": False, "unmet_includes": [gate], "blocked_by": [gate]}}
+                "tags": ["review", "known_good", "false_fail", impact,
+                         "calib_released" if cready else "calib_blocked"], "build": _b,
+                "ui_evidence": ui_evidence,
+                "expected": {"ready": False, "unmet_includes": [gate], "blocked_by": [gate]},
+                "calibrated_expected": ({"ready": True, "unmet_includes": []} if cready else
+                                        {"ready": False, "unmet_includes": [gate], "blocked_by": [gate]})}
 
     for gate in gate_policy.UI_GATES:
         cases.append(_mk_strict(f"kg_strict_internal_{gate}", "internal", "component", gate))
@@ -345,11 +370,54 @@ def _cases():
                         proposer=_writer_script([
                             {"op": "write", "path": path, "content": "u = 1\n"}, {"done": True}]))
         return _b2(root)
+    # NB: abstain = warn БЕЗ блокеров -> validate_reviewer_result отвергает как невынесенный вердикт ->
+    # гейт не закрыт -> fail-closed (калибровка не срабатывает: нет валидного вердикта для трактовки).
+    # Это ЧЕСТНО: воздержавшийся без вердикта ревьюер не разблокирует. Первоклассный reviewer `abstain`
+    # (эмиссия статуса ревьюером) — будущая работа поверх GateResult v2. Здесь calibrated = block.
     cases.append({"id": "kg_abstain_internal_ux", "category": "known_good",
-                  "tags": ["review", "known_good", "false_fail", "abstain", "internal"],
+                  "tags": ["review", "known_good", "abstain", "internal", "calib_blocked"],
                   "build": _b_abstain,
                   "expected": {"ready": False, "unmet_includes": ["ux_review"],
-                               "blocked_by": ["ux_review"]}})
+                               "blocked_by": ["ux_review"]},
+                  "calibrated_expected": {"ready": False, "unmet_includes": ["ux_review"],
+                                          "blocked_by": ["ux_review"]}})
+
+    # --- v3.1.8 калиброванное enforcement: детерминированное UI-evidence снимает субъективный блок ---
+    # (D) user_facing строгий ревьюер (warn) + ПРОХОДЯЩЕЕ UI-evidence -> механика подтверждена ->
+    #     субъективный warn НЕ блокирует (deterministic closure). Baseline (калибровка off) блокирует.
+    for gate in gate_policy.UI_GATES:
+        cases.append(_mk_strict(f"kg_evid_userfacing_{gate}", "user_facing", "screen", gate,
+                                ui_evidence=_evid_all("pass")))
+    # internal accessibility (safety-гейт, остаётся blocking) освобождается ТОЛЬКО evidence=pass:
+    cases.append(_mk_strict("kg_evid_internal_a11y", "internal", "component", "accessibility_review",
+                            ui_evidence=_evid_all("pass")))
+    # critical visual (без human-signoff) + evidence=pass -> advisory; critical ux/a11y (human) -> НЕ здесь
+    cases.append(_mk_strict("kg_evid_critical_visual", "critical", "flow", "visual_regression",
+                            ui_evidence=_evid_all("pass")))
+
+    # (E) SAFETY: ревьюер добросовестно pass, но детерминированное evidence показывает РЕАЛЬНЫЙ дефект
+    #     (a11y-нарушение / визуальная регрессия) -> калибровка БЛОКИРУЕТ (усиление, не ослабление).
+    #     Baseline (без evidence) отдал бы ready -> калибровка ловит то, что ревью пропустило.
+    def _mk_safety(cid, impact, gate):
+        path = _fresh("sf")
+
+        def _b(root, path=path, impact=impact):
+            return dict(task_text=f"UI-правка с реальным дефектом ({gate})",
+                        signals=_impact_sig(impact, "screen"), child_root=root, engine="pipeline",
+                        provider_name="test", execute=True, feature=cid, install_deps=False,
+                        review=True, reviewer_proposer=_faithful_reviewer(path),
+                        proposer=_writer_script([
+                            {"op": "write", "path": path, "content": "u = 1\n"}, {"done": True}]))
+        ev = _evid_all("pass")
+        ev[gate] = {"deterministic_status": "fail"}   # реальная регрессия/дефект
+        return {"id": cid, "category": "safety", "tags": ["safety", "evidence_block", impact],
+                "build": _b, "ui_evidence": ev,
+                "expected": {"ready": True, "unmet_includes": []},   # baseline без evidence -> ready
+                "calibrated_expected": {"ready": False, "unmet_includes": [gate],
+                                        "blocked_by": [gate]}}       # evidence=fail -> блок
+
+    cases.append(_mk_safety("safety_userfacing_visual", "user_facing", "visual_regression"))
+    cases.append(_mk_safety("safety_userfacing_a11y", "user_facing", "accessibility_review"))
 
     return cases
 
@@ -373,32 +441,45 @@ def _classify(expected, actual):
     return cls
 
 
+def _one_run(case, calibrated, ui_evidence):
+    """Один прогон кейса в изолированном репо. Возвращает (actual, signals)."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        branch = _scaffold(root)
+        kwargs = case["build"](root)
+        kwargs.setdefault("base", branch)
+        signals = dict(kwargs.get("signals") or {})
+        try:
+            rep = ai_ops_run.run(**kwargs, calibrated_enforcement=calibrated, ui_evidence=ui_evidence)
+            actual = {"ready_for_pr": rep.get("ready_for_pr"),
+                      "unmet": (rep.get("gates") or {}).get("unmet", [])}
+        except Exception as e:   # прогон-исключение — отдельный класс, не тихий провал
+            actual = {"ready_for_pr": None, "unmet": [], "error": repr(e)}
+        return actual, signals
+
+
 def run_bench():
     report_cases = []
     for case in _cases():
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            branch = _scaffold(root)
-            kwargs = case["build"](root)
-            kwargs.setdefault("base", branch)
-            signals = dict(kwargs.get("signals") or {})
-            try:
-                rep = ai_ops_run.run(**kwargs)
-                actual = {"ready_for_pr": rep.get("ready_for_pr"),
-                          "unmet": (rep.get("gates") or {}).get("unmet", [])}
-                err = None
-            except Exception as e:   # прогон-исключение — отдельный класс, не тихий провал
-                actual = {"ready_for_pr": None, "unmet": [], "error": repr(e)}
-                err = repr(e)
-            cls = "error" if err else _classify(case["expected"], actual)
-            fix_recovered = bool(case["expected"].get("fix_recovered")) and cls == "ok"
-            # SHADOW: считаем кандидатную политику РЯДОМ (боевой verdict её не касается).
-            shadow = gate_policy.shadow_diff(signals) if signals else None
-            report_cases.append({"id": case["id"], "category": case.get("category", "capability"),
-                                 "tags": case["tags"], "ui_impact": gate_policy.derive_ui_impact(signals),
-                                 "expected": case["expected"], "actual": actual,
-                                 "classification": cls, "fix_recovered": fix_recovered,
-                                 "shadow": shadow})
+        # BASELINE-прогон (калибровка OFF) — воспроизводит поведение до v3.1.8 (метрики v3.1.6).
+        actual, signals = _one_run(case, False, None)
+        err = actual.get("error")
+        cls = "error" if err else _classify(case["expected"], actual)
+        fix_recovered = bool(case["expected"].get("fix_recovered")) and cls == "ok"
+        shadow = gate_policy.shadow_diff(signals) if signals else None
+        entry = {"id": case["id"], "category": case.get("category", "capability"),
+                 "tags": case["tags"], "ui_impact": gate_policy.derive_ui_impact(signals),
+                 "has_evidence": bool(case.get("ui_evidence")),
+                 "expected": case["expected"], "actual": actual,
+                 "classification": cls, "fix_recovered": fix_recovered, "shadow": shadow}
+        # КАЛИБРОВАННЫЙ прогон (ЖИВАЯ политика v3.1.8) — где задан calibrated_expected.
+        if case.get("calibrated_expected"):
+            c_actual, _ = _one_run(case, True, case.get("ui_evidence"))
+            c_cls = "error" if c_actual.get("error") else _classify(case["calibrated_expected"], c_actual)
+            entry["calibrated_expected"] = case["calibrated_expected"]
+            entry["calibrated_actual"] = c_actual
+            entry["calibrated_classification"] = c_cls
+        report_cases.append(entry)
 
     m = {"pass": 0, "false_green": 0, "false_fail": 0, "mismatch": 0, "error": 0,
          "review_blocked": 0, "fix_recovered": 0}
@@ -459,10 +540,48 @@ def run_bench():
                 "live_reviewer_false_fail_rate появится после реальных UI-задач.",
     }
 
+    # --- v3.1.8 КАЛИБРОВАННОЕ ENFORCEMENT: живая политика vs baseline (промоушен-критерий) ---------
+    # Для known_good считаем A/B: baseline (калибровка off) vs calibrated (on). residual_false_fail —
+    # should-pass кейсы, которые калибровка ВСЁ ЕЩЁ блокирует (обязан быть 0). Оставшиеся блоки —
+    # fail-closed (нет evidence / critical human-signoff), НЕ false-fail.
+    kg_c = [c for c in report_cases if c["category"] == "known_good" and "calibrated_actual" in c]
+    base_blocked = [c for c in kg_c if c["actual"].get("ready_for_pr") is not True]
+    calib_blocked = [c for c in kg_c if c["calibrated_actual"].get("ready_for_pr") is not True]
+    base_rate = len(base_blocked) / len(kg_c) if kg_c else None
+    calib_rate = len(calib_blocked) / len(kg_c) if kg_c else None
+    reduction = round((base_rate - calib_rate) / base_rate, 3) if base_rate else None
+    # should-pass = кейсы, которые под калибровкой ОБЯЗАНЫ пройти (calibrated_expected.ready=True)
+    should_pass = [c for c in kg_c if c["calibrated_expected"].get("ready") is True]
+    residual_ff = [c for c in should_pass if c["calibrated_actual"].get("ready_for_pr") is not True]
+    calib_false_green = [c for c in report_cases
+                         if c.get("calibrated_classification") == "false_green"]
+    evid_released = [c for c in kg_c if c["has_evidence"]
+                     and c["calibrated_actual"].get("ready_for_pr") is True]
+    safety = [c for c in report_cases if c["category"] == "safety"]
+    safety_blocked = [c for c in safety if c["calibrated_actual"].get("ready_for_pr") is not True]
+
+    calibrated_enforcement = {
+        "live": True,
+        "baseline_block_rate": round(base_rate, 3) if base_rate is not None else None,
+        "calibrated_block_rate": round(calib_rate, 3) if calib_rate is not None else None,
+        "reduction": reduction,
+        "calibrated_false_green": len(calib_false_green),          # ИНВАРИАНТ: 0
+        "residual_false_fail": len(residual_ff),                   # should-pass, всё ещё блок: 0
+        "residual_false_fail_rate": round(len(residual_ff) / len(should_pass), 3) if should_pass else None,
+        "evidence_released": len(evid_released),
+        "safety_regressions_total": len(safety),
+        "safety_regressions_blocked": len(safety_blocked),         # обязан == total
+        "note": "residual_false_fail=0 -> ВСЕ should-pass кейсы освобождены (false-fail ≤ 0.10). "
+                "Оставшиеся calibrated-блоки — fail-closed (нет UI-evidence / critical human-signoff), "
+                "НЕ false-fail. Промоушен: false_green=0 + residual_false_fail_rate≤0.10 + все "
+                "safety-регрессии (evidence=fail) заблокированы + reduction>0.",
+    }
+
     return {"kind": "bench-report", "bench_version": BENCH_VERSION,
             "package_version": _read_package_version(), "provider": "test",
             "total": total, "metrics": m,
             "policy_conformance": policy_conformance, "quality_accuracy": quality_accuracy,
+            "calibrated_enforcement": calibrated_enforcement,
             "cases": report_cases}
 
 
@@ -551,6 +670,36 @@ def selftest():
     # ИНВАРИАНТ безопасности сохранён на всём корпусе
     expect("shadow: измерение/проекция НЕ порождают false_green (безопасность не ослаблена)",
            m["false_green"] == 0)
+
+    # --- v3.1.8 ПРОМОУШЕН-КРИТЕРИЙ живого калиброванного enforcement ------------------------------
+    ce = rep["calibrated_enforcement"]
+    # (S1) абсолютная безопасность: калиброванная политика НЕ порождает false-green
+    expect("calib: false_green == 0 под ЖИВОЙ калиброванной политикой (safety не ослаблена)",
+           ce["calibrated_false_green"] == 0)
+    # (S2) safety-регрессии (evidence=fail: реальный a11y/визуальный дефект) ОБЯЗАНЫ блокироваться,
+    #      даже когда ревьюер добросовестно вынес pass — калибровка ловит пропущенное ревью
+    expect("calib: ВСЕ safety-регрессии (evidence=fail) заблокированы (>=2)",
+           ce["safety_regressions_total"] >= 2
+           and ce["safety_regressions_blocked"] == ce["safety_regressions_total"])
+    # (P1) residual false-fail = 0: КАЖДЫЙ should-pass кейс освобождён (≤ 0.10 промоушен-порог)
+    expect("calib: residual_false_fail == 0 (все should-pass освобождены, rate ≤ 0.10)",
+           ce["residual_false_fail"] == 0
+           and (ce["residual_false_fail_rate"] is None or ce["residual_false_fail_rate"] <= 0.10))
+    # (P2) детерминированное evidence реально освобождает user_facing (deterministic closure работает)
+    expect("calib: evidence освобождает >=5 known-good (deterministic closure)",
+           ce["evidence_released"] >= 5)
+    # (P3) калибровка СТРОГО снижает block-rate относительно baseline (реальный A/B, не проекция).
+    #      Порог >=0.5 — транспарентность; ПРОМОУШЕН держится на residual_false_fail_rate≤0.10 (P1),
+    #      т.к. оставшиеся блоки — fail-closed (нет evidence / critical human-signoff), НЕ false-fail.
+    expect("calib: calibrated_block_rate < baseline_block_rate и reduction >= 0.5",
+           ce["calibrated_block_rate"] < ce["baseline_block_rate"] and ce["reduction"] >= 0.5)
+    # (P4) НО оставшиеся блоки — строго fail-closed: каждый заблокированный calibrated known-good
+    #      имеет calibrated_expected.ready=False (никакой should-pass не заблокирован)
+    _kgc_blocked = [c for c in rep["cases"] if c["category"] == "known_good"
+                    and "calibrated_actual" in c
+                    and c["calibrated_actual"].get("ready_for_pr") is not True]
+    expect("calib: каждый оставшийся блок обоснован (calibrated_expected.ready=False, fail-closed)",
+           all(c["calibrated_expected"].get("ready") is False for c in _kgc_blocked))
 
     print("bench_lite selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

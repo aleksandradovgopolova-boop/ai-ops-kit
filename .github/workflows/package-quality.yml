@@ -71,6 +71,8 @@ jobs:
         run: python3 tools/bench_lite.py --selftest
       - name: Gate Policy — риск-калиброванная UI-политика + shadow-diff (selftest)
         run: python3 tools/gate_policy.py --selftest
+      - name: GateResult v2 — контракт + адаптер v2->v1 (selftest)
+        run: python3 tools/gate_result_v2.py --selftest
       - name: Storybook Evidence Adapter — UIEvidenceBundle из локальных артефактов (selftest)
         run: python3 tools/storybook_adapter.py --selftest
       - name: UIEvidenceBundle — контракт UI-evidence (selftest)
