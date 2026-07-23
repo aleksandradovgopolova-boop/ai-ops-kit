@@ -2,6 +2,47 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.6] — 2026-07-23 — UI Gate Applicability + Shadow Policy (риск-калибровка БЕЗ изменения боя)
+
+Точная формулировка находки Phase B: узкое место — НЕ движок (engine_floor=0) и НЕ «плохая модель»,
+а **взаимодействие грубой gate-policy с неопределённостью ревьюера**. Трек VISUAL вешает все 4
+UI-гейта разом по одному булеву `ui_changed`, и все четыре — blocking; любой `warn`/сомнение/молчание
+по одному гейту блокирует всю правку. Вводим контекстную политику в SHADOW-режиме: боевой fail-closed
+не меняется, кандидат считается рядом — чтобы измерить проектируемое снижение false-fail и доказать
+безопасность ДО смены enforcement.
+
+### Added
+- `tools/gate_policy.py` — таксономия `ui_impact` (none/internal/user_facing/critical) +
+  `ui_change_kind` (token/primitive/component/screen/flow), с обратной совместимостью
+  (`ui_changed=true` без уровня -> user_facing, тождественно текущему поведению).
+- `GatePolicyDecision`: `applicability` (applicable/not_applicable) + `enforcement`
+  (advisory/blocking) + `evidence_mode` (deterministic/ai_review/hybrid/human) + `human_signoff`.
+  `current_policy` / `candidate_policy` / `shadow_diff` (чистые функции, без побочек).
+- Bench Lite **v0.2**: корпус расширен до **25 кейсов** — матрица `ui_impact × ui_change_kind ×
+  строгий_гейт` + `abstain` (warn без блокеров). Метрики разведены на **две истины**:
+  `policy_conformance` (движок исполняет ТЕКУЩУЮ policy) и `quality_accuracy` (пропустила ли policy
+  корректный код). Добавлен per-case `shadow` и `projected_block_rate_after_calibration`.
+
+### Changed (честность метрик, по ревью владельца)
+- `reviewer_false_fail_rate` -> `quality_accuracy.synthetic_known_good_block_rate` с явными
+  `sample_size` / `sample_type: scripted_reviewer` / `live_reviewer_false_fail_rate: null`.
+  Прежнее имя вводило в заблуждение: это ЧУВСТВИТЕЛЬНОСТЬ механики на синтетике, а не production-rate.
+
+### Инвариант безопасности (жёстко в selftest)
+- candidate НИКОГДА не мягче current для `user_facing`/`critical`; ослабление ТОЛЬКО в `internal` и
+  ТОЛЬКО для не-safety гейтов (`ux_review`/`visual_regression`/`design_system_usage`);
+  `accessibility_review` остаётся blocking всегда. Боевой fail-closed не тронут; `false_green == 0`.
+
+### Замер (25 кейсов, все pass)
+- `policy_conformance.conformance_rate = 1.0`, `false_green = 0`.
+- `quality_accuracy`: synthetic_known_good_block_rate = **0.571** (12/21), engine_floor_ready = true,
+  block_attribution = все 4 UI-гейта; **projected_block_rate_after_calibration = 0.381** — кандидат
+  снял бы 4 internal-не-safety блока, сохранив ВСЕ user_facing/critical (safety не ослаблена).
+
+### Note
+- Схемы `gate-result`/`reviewer-result` v1 НЕ тронуты: `not_applicable`/`abstain` требуют `GateResult
+  v2` + миграционного адаптера — отдельный будущий инкремент (см. ROADMAP v3.1.7–v3.1.8).
+
 ## [3.1.5] — 2026-07-23 — Golden tasks: широкая выборка known-good + вывод про локализацию false-fail
 
 Расширили known-good корпус Bench Lite разными формами задач, чтобы reviewer-false-fail мерился на
