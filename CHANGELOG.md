@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.18] — 2026-07-23 — PQ8 masked-failure fix + openspec-present parity
+
+Адресный патч по finding: расхождение «PQ8 падал на чистом HEAD» vs «CI green». Оба были правдой —
+CI и мой parity-харнесс гоняли **без openspec**, что маскировало реальный провал.
+
+### Fixed
+- **PQ8 positive-green ENGINEERING падал, когда openspec ПРИСУТСТВУЕТ** (воспроизведено: `code_review`
+  gate `blocked`, `ready_for_pr=False`). Причина: mock-ревьюер PQ8 (`validate_product_qualification.py`)
+  возвращал pass с **0 чтений**, а с v3.0.11 блокирующий ai-review не закрывается 0-read рубер-стампом.
+  Остальные mock-ревьюеры были переведены на read-first ещё в v3.0.11, но ЭТОТ пропустили — потому что
+  без openspec PQ8 уходит в fail-closed ветку (спек-гейт блокирует первым) и code_review не проверялся.
+  Фикс: ревьюер PQ8 читает изменённый файл ДО pass. Теперь PQ8 зелёный **и** с openspec (positive-green),
+  **и** без него (fail-closed).
+
+### Process
+- **Разрыв дисциплины parity**: проверял только no-openspec (как в CI), из-за чего openspec-зависимый
+  провал не ловился. Проведён полный прогон **и WITH-openspec, и no-openspec** на обеих дефолт-ветках
+  (main/master) — 101/101 в обеих конфигурациях; PQ8 — единственный маскированный провал.
+- Расхождение разрешено **воспроизводимым прогоном** (`validate_product_qualification.py` с/без openspec),
+  а не декларацией. CI для HEAD e93653e (v3.0.17) фактически зелёный (package-quality + release success).
+
 ## [3.0.17] — 2026-07-23 — Delivery Outbox Integrity (адресный патч по findings Phase A)
 
 Устранены конкретные дефекты delivery-outbox из Phase A. После этого — Real Execution Qualification на
