@@ -99,17 +99,48 @@ def _http_post_json(url, headers, payload, timeout=120, retries=6):
     raise last if last else RuntimeError("http retry exhausted")
 
 
+# v3.1 (trace v0.2): аккумулятор статистики вызовов модели — tokens/latency/cost для трейса. Вызывающий
+# (ai_ops_run) дренирует после прогона и эмитит в journal + отчёт. Наблюдаемость, не источник истины.
+_CALL_STATS = []
+# Приблизительные цены $/1M токенов (только ОЦЕНКА cost; при отсутствии модели cost_usd_est=None).
+_PRICE_PER_MTOK = {
+    "claude-sonnet-5": {"in": 3.0, "out": 15.0},
+    "deepseek-chat": {"in": 0.27, "out": 1.10},
+}
+
+
+def drain_call_stats():
+    """Забрать и очистить накопленную статистику вызовов модели (per-call {model,in,out,latency_s,cost})."""
+    global _CALL_STATS
+    s, _CALL_STATS = _CALL_STATS, []
+    return s
+
+
+def _record_call(model, in_tok, out_tok, latency_s):
+    price = _PRICE_PER_MTOK.get(model)
+    cost = None
+    if price and in_tok is not None and out_tok is not None:
+        cost = round(in_tok / 1e6 * price["in"] + out_tok / 1e6 * price["out"], 6)
+    _CALL_STATS.append({"model": model, "input_tokens": in_tok, "output_tokens": out_tok,
+                        "latency_s": (round(latency_s, 3) if latency_s is not None else None),
+                        "cost_usd_est": cost})
+
+
 def _anthropic_call(prompt, model):
     import os
+    import time
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise SystemExit("ANTHROPIC_API_KEY не задан — живой прогон невозможен. "
                          "Задайте ключ в окружении или используйте --provider mock (офлайн).")
+    _t0 = time.monotonic()
     data = _http_post_json(
         "https://api.anthropic.com/v1/messages",
         {"x-api-key": key, "anthropic-version": "2023-06-01"},
         {"model": model, "max_tokens": _MAX_TOKENS,
          "messages": [{"role": "user", "content": prompt}]})
+    _u = data.get("usage") or {}
+    _record_call(model, _u.get("input_tokens"), _u.get("output_tokens"), time.monotonic() - _t0)
     parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
     return "\n".join(parts).strip() or "(пустой ответ модели)"
 
@@ -128,6 +159,7 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
     # (не 429 — _http_post_json его не ловит). Для author/review это фатально (артефакт «не вернулся»).
     # Ретраим пустой ответ с бэкоффом; часть моделей кладёт текст в reasoning_content — используем и его.
     for attempt in range(3):
+        _t0 = time.monotonic()
         data = _http_post_json(
             base_url, {"authorization": f"Bearer {key}"},
             {"model": model, "max_tokens": _MAX_TOKENS,
@@ -136,6 +168,8 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
         msg = (data.get("choices", [{}])[0] or {}).get("message", {}) or {}
         content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
         if content:
+            _u = data.get("usage") or {}   # v3.1 trace v0.2: OpenAI-совместимый usage
+            _record_call(model, _u.get("prompt_tokens"), _u.get("completion_tokens"), time.monotonic() - _t0)
             return content
         if attempt < 2:
             time.sleep(2 ** attempt)

@@ -344,11 +344,14 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     "status": "error", "ready_for_pr": False,
                     "error": f"lifecycle fail-closed: не удалось надёжно сохранить RunPlan ({_pw.get('error')}) "
                              "— прогон не начат (0 вызовов модели)"}
-        # v3.0.14 (#3): event journal — run_start (Run->Package->Gate реконструируемы). best-effort.
+        # v3.0.14/v3.1 (trace v0.2): event journal — run_start. attempt_id = попытка прогона WorkItem
+        # (resume/повтор -> новая попытка), детерминированно из числа снимков run-history.
         _jp = features_dir / fid / "lifecycle-journal.jsonl"
+        _att = len(list((features_dir / fid / "run-history").glob("run-*.yaml"))) + 1
+        _attempt_id = f"{fid}#a{_att}"
         _ls.journal_append(_jp, {"kind": "run_start", "run_id": fid, "workitem_id": fid,
-                                 "task_type": signals.get("task_type"), "engine": engine, "base": base,
-                                 "resume": bool(resume)})
+                                 "attempt_id": _attempt_id, "task_type": signals.get("task_type"),
+                                 "engine": engine, "base": base, "resume": bool(resume)})
         # v3.0-rc2 (P0.1): сохраняем ЭФФЕКТИВНУЮ политику прогона -> resume восстановит её, а не
         # переклассифицирует/деградирует до дефолтов. provider/model НЕ храним (runtime-выбор/секрет).
         if execute:
@@ -752,8 +755,25 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                          "запрещена до надёжной фиксации доказательств и состояния"}
             rep["overall_status"] = "delivery-failed"
             _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        # v3.1 (trace v0.2): run_cost — агрегат tokens/latency/cost из вызовов модели (наблюдаемость).
+        try:
+            _stats = orchestrator.drain_call_stats()
+        except Exception:  # noqa: BLE001
+            _stats = []
+        if _stats:
+            _in = sum(s.get("input_tokens") or 0 for s in _stats)
+            _out = sum(s.get("output_tokens") or 0 for s in _stats)
+            _lat = round(sum(s.get("latency_s") or 0 for s in _stats), 3)
+            _costs = [s.get("cost_usd_est") for s in _stats if s.get("cost_usd_est") is not None]
+            _cost = round(sum(_costs), 6) if _costs else None
+            _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
+                         "latency_s": _lat, "cost_usd_est": _cost, "model": model}
+            rep["cost"] = _cost_rep
+            _ls.journal_append(_jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
+                                        "attempt_id": _attempt_id, **_cost_rep})
         # run_end (исход прогона, включая итог доставки)
         _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
+                                    "attempt_id": _attempt_id,
                                     "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
                                                                             else "not-ready"),
                                     "ready_for_pr": bool(rep.get("ready_for_pr")),

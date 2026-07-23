@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.0] — 2026-07-23 — Observability: Trace v0.2 (первый инкремент фазы v3.1)
+
+Начало фазы **v3.1 — Observability, Evaluation & Safe Self-Improvement**. Первый инкремент —
+обсервабельность-субстрат, на котором дальше встанут Bench Lite / evaluation / model-comparison / fix-loop.
+
+### Added
+- **Event journal v0.2** — закрыты честные ограничения v0.1: (1) межпроцессный **лок** (`flock`,
+  best-effort) вокруг read-verify-append — нет гонки `seq`/`prev_checksum`; (2) **полная верификация
+  цепочки ПЕРЕД append** — на повреждённый журнал не дописываем; (3) **durable head-marker**
+  (`<journal>.head`) — детектит **усечение последней ЦЕЛОЙ строки**, которое v0.1 пропускал (валидный
+  префикс выглядел валидным).
+- **Trace-схема + валидатор** `validate_trace(events)` — проверяет обязательные ID связи Run/Attempt/
+  Package/Gate/Delivery по каждому kind (трейс реконструируем).
+- **`attempt_id`** на событиях прогона (resume/повтор → новая попытка, детерминированно из run-history).
+- **tokens / cost / latency**: аккумулятор вызовов модели в `orchestrator` (usage из ответа провайдера +
+  latency; приблизительная оценка cost по прайс-таблице) → событие **`run_cost`** + поле `cost` в отчёте.
+
+Проверено **вживую (DeepSeek)**: реальный `run_cost` (5 вызовов, 25.3k in / 337 out токенов, ~$0.0072,
+latency 8.5с), journal `ok` (цепочка + head-marker), `validate_trace` без ошибок. Деттесты: verify-before-
+append на битую цепочку, head-marker truncation, trace-схема. Полный CI-набор на main и master.
+
 ## [3.0.19] — 2026-07-23 — authorization_idol false-positive (finding живой квалификации Phase B)
 
 Первая находка из РЕАЛЬНЫХ прогонов (Phase B, DeepSeek): security-домен `authorization_idol` ложно

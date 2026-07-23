@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.19
+  package_version: 3.1.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,12 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    added_v3_1_0_trace_v0_2_observability:
+      - "начало фазы v3.1 Observability, Evaluation & Safe Self-Improvement. Первый инкремент — обсервабельность-субстрат под Bench/evaluation/model-comparison/fix-loop"
+      - "event journal v0.2: закрыты ограничения v0.1 — межпроцессный flock вокруг read-verify-append (нет гонки seq/prev_checksum); полная верификация цепочки ПЕРЕД append (на битый журнал не дописываем); durable head-marker (<journal>.head) детектит усечение последней ЦЕЛОЙ строки (v0.1 пропускал)"
+      - "trace-схема + validate_trace(events): обязательные ID связи Run/Attempt/Package/Gate/Delivery по kind; attempt_id на событиях прогона (resume -> новая попытка)"
+      - "tokens/cost/latency: аккумулятор вызовов модели в orchestrator (usage+latency, оценка cost по прайс-таблице) -> событие run_cost + поле cost в отчёте"
+      - "проверено вживую (DeepSeek): run_cost (5 вызовов, 25.3k/337 токенов, ~$0.0072), journal ok (цепочка+head-marker), validate_trace без ошибок. Деттесты (verify-before-append, head-marker truncation, trace-схема). Полный CI на main И master"
     fixed_v3_0_19_authorization_idol_false_positive:
       - "ПЕРВАЯ находка из РЕАЛЬНЫХ прогонов (Phase B, DeepSeek): security-домен authorization_idol ложно срабатывал на безобидном коде -> блокировал легитимный ENGINEERING->PR через needs_review"
       - "authorization_idol applicability матчила подстроку 'acl' в 'dataclass' (from dataclasses import dataclass / @dataclass): паттерн permission|role|acl|access|... без границ слова ловил acl внутри dataclass/oracle/miracle. Фикс: границы слова \\b(?:permission|role|acl|access|authoriz|owner|tenant|is_admin|can_)\\w* — сохраняет реальные auth-идентификаторы (role/roles, access/accessible, authorize/authorization, can_edit, is_admin), не матчит подстроки в неродственных словах. v2.104 anti-под-срабатывание сохранено. Регрессионный деттест"
