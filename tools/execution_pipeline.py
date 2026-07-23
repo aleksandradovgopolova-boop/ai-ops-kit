@@ -292,6 +292,9 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
                  "denied": rv.get("denied"), "valid": not errs,
                  "status": (res or {}).get("status") if not errs else None,
+                 # v3.1.1 (fix-loop): выносим blockers/checks ревьюера в трейс -> контроллер feed'ит
+                 # КОНКРЕТНЫЕ замечания писателю на итерацию (не общий «устрани замечания»).
+                 "blockers": (res or {}).get("blockers") if isinstance(res, dict) else None,
                  "errors": errs or None}
         reviews.append(entry)
         if errs:
