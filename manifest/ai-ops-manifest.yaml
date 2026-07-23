@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.16
+  package_version: 3.0.17
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,16 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_17_delivery_outbox_integrity:
+      - "адресный патч по findings Phase A. После — Real Execution Qualification на неизменяемом commit SHA"
+      - "P0 reconciliation не доказывала точный commit SHA: reconcile_delivery искал PR по имени ветки, не сверял head.sha/base.ref/repository; Receipt брал commit_sha из старого Intent. Фикс: reconcile_delivery возвращает факты remote (head_sha/base_ref/repository/pr_state/merged, все состояния open/closed/merged); контроллер подтверждает ТОЛЬКО при строгом совпадении repository+head.sha==commit_sha+base.ref. PR ветки с другим коммитом -> mismatch, не засчитан"
+      - "P0 outbox был одним перезаписываемым файлом. Фикс: per-delivery_id immutable delivery-outbox/<id>.intent.yaml|.receipt.yaml; delivery_id включает repository; неразрешённый Intent (без Receipt) на ветке БЛОКИРУЕТ новую доставку до reconciliation"
+      - "P0 reconciliation рапортовала успех без проверки записи Receipt. Фикс: все записи outbox — барьеры; reconciled только если Receipt фактически сохранён (иначе receipt-write-failed)"
+      - "P1 неоднозначный POST записывался как определённый error. Фикс: транспортная ошибка/timeout ПОСЛЕ мутирующего POST -> outcome_unknown (сервер мог создать PR), не error -> reconciliation запустится"
+      - "P1 возможная потеря маркера outcome_unknown. Фикс: reconciliation триггерится по ФАКТУ Intent-без-Receipt (не по полю status) — Intent 'intended' без Receipt всё равно сверяется"
+      - "идемпотентность: delivery_id-маркер в теле PR; pr_open находит существующий PR ветки (updated, без дубля); retry не создаёт второй PR"
+      - "CI: Research-контур подключён (validate_research_artifacts + verify_quotes/freshness_sweep/ev_scaffold --selftest) — раньше существовали, но не запускались в workflow"
+      - "проверки: crash-матрица (SHA match->reconciled+sha_verified; другой SHA->mismatch; absent->not-delivered; intended-без-Receipt->сверяется; ambiguous POST->outcome_unknown; unavailable->Receipt не пишется; идемпотентность/маркер). Полный CI-набор на main И master, без openspec"
     fixed_v3_0_16_phase_a_delivery_outbox_and_reconciliation:
       - "Qualification-entry closure (Phase A): 3 риска входа ДО первых реальных прогонов. Это entry gate, НЕ 'квалифицировано'. Phase B (реальные прогоны на настоящих репо) — следующий шаг"
       - "#1 прямой run_pipeline больше НЕ может обойти lifecycle-барьер: run_pipeline НИКОГДА не выполняет внешнюю доставку (только delivery_plan, status=planned, overall=ready-undelivered). Единственный вызывающий _deliver_pr — транзакционный контроллер. defer_delivery устарел/игнорируется. Прежде run_pipeline(open_pr=True) с defer_delivery=False (дефолт) открывал PR инлайн без барьера"

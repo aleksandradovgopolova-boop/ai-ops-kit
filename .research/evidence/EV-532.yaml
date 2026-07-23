@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-532
+request_id: RR-007
+statement: Цены Glean непубличны; по данным Vendr медианный контракт $98,890/год (174
+  сделки), диапазон $29,880-$208,897; отраслевые обзоры оценивают $45-75/пользователь/мес
+  с минимальным контрактом ~100 мест.
+evidence_type: documented_fact
+source:
+  title: Vendr — Glean Software Pricing & Plans 2026
+  url: https://www.vendr.com/marketplace/glean
+  type: news
+  published_at: null
+  is_primary: false
+citation:
+  locator: карточка Glean, блок Median buyer
+  quote: Median buyer pays $98,890 per year
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Агрегатор реальных контрактов, не первичный прайс вендора; per-user диапазон
+    — вторичные обзоры.
+status: active
+superseded_by: null

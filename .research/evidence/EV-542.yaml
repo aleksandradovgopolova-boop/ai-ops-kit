@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-542
+request_id: RR-007
+statement: "Среди проверенных кандидатов триада 'аналитическая справка с проверяемыми источниками → презентация → дашборд' как единый конвейер из одного запроса НЕ ОБНАРУЖЕНА ни у кого: 6 OSS-платформ — вариации чат+RAG без презентаций и дашбордов (EV-501…EV-506); у Microsoft триада разорвана на три Copilot с разными лицензиями (PowerPoint в базовой, Power BI — отдельная ёмкость Fabric, EV-534, EV-535); Glean генерирует деки и цитирует, но не строит дашборды и не self-hosted (EV-531); российские платформы продают конструктор агентов, не deliverables (EV-536, EV-538). Охват проверки: 8 OSS + 6 коммерческих продуктов (Glean, Microsoft, GigaChat, Yandex, Gamma, ThoughtSpot) на 2026-07-23; негативное утверждение — 'не обнаружено', не 'не существует'."
+evidence_type: inference
+derived_from: [EV-501, EV-502, EV-503, EV-504, EV-505, EV-506, EV-507, EV-508, EV-531, EV-534, EV-535, EV-536, EV-538, EV-539, EV-541]
+source:
+  title: "Синтез по EV-501…EV-541 (сканы двух разведчиков RR-007)"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-23"
+  is_primary: true
+citation:
+  locator: "перекрёстная сверка полей 'какие jobs закрывает' по всем кандидатам"
+captured_at: "2026-07-23"
+captured_by: "claude (синтез RR-007)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "Негативное утверждение с фиксированным охватом; рынок движется быстро — конкурент может собрать триаду в любой квартал."
+status: active
+superseded_by: null

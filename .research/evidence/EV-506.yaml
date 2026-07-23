@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-506
+request_id: RR-007
+statement: 'Dify (~150k звёзд) — НЕ чистый Apache-2.0: ''Dify Open Source License''
+  = Apache 2.0 + условия: запрет multi-tenant эксплуатации без письменного разрешения
+  и запрет убирать LOGO/копирайт из консоли и приложений; функционально платформа-конструктор
+  (visual workflow canvas, RAG-pipeline, агенты с 50+ инструментами, observability),
+  OpenAI-compatible модели поддержаны, русский явно не заявлен; для одной компании
+  self-hosted (single-tenant) допустимо, но брендинг-условие и отсутствие аудита/презентаций/дашбордов
+  ограничивают. Вердикт: КОМПОНЕНТ (workflow/оркестрация) или референс архитектуры;
+  как основа — лицензионные трения.'
+evidence_type: documented_fact
+source:
+  title: langgenius/dify — LICENSE (Dify Open Source License)
+  url: https://github.com/langgenius/dify/blob/main/LICENSE
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: LICENSE, Additional Conditions
+  quote: you may not use the Dify source code to operate a multi-tenant environment
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: high
+  rationale: Условия процитированы из первичного текста LICENSE в репозитории.
+status: active
+superseded_by: null

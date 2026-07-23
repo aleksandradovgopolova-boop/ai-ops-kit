@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-537
+request_id: RR-007
+statement: 'GigaChat API для юрлиц: pay-as-you-go 0,065 ₽/1K токенов (Lite), 0,5 ₽
+  (Pro), 0,65 ₽ (Max); пакеты от 19,500 ₽; минимальный платёж 600 ₽/мес; on-premise
+  — тариф CORP с индивидуальным ценообразованием. Российский рынок продаёт токены
+  и CAPEX-контракты, не per-user подписку.'
+evidence_type: documented_fact
+source:
+  title: developers.sber.ru — Тарифы GigaChat API для юрлиц
+  url: https://developers.sber.ru/docs/ru/gigachat/tariffs/legal-tariffs
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: таблицы pay-as-you-go и пакетов
+  quote: 600 рублей в месяц (включая НДС)
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: high
+  rationale: Официальная документация Сбера, цены сняты напрямую.
+status: active
+superseded_by: null

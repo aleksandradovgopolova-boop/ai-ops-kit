@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-504
+request_id: RR-007
+statement: 'LibreChat (~41k звёзд) — MIT целиком; из шести кандидатов ближе всех к
+  корпоративному чат-контуру: OAuth2/LDAP, admin panel для users/groups/roles, moderation
+  и token-spend инструменты, агенты + marketplace, code interpreter (sandbox, 9 языков),
+  Artifacts (React/HTML/Mermaid в чате — зачаток ''дашборда''), явная поддержка русского
+  (25+ языков), любой OpenAI-compatible API без прокси; но RAG вторичен (нет deep-parsing
+  документов уровня RAGFlow), презентаций нет, полноценного аудит-журнала нет. Вердикт:
+  кандидат в ОСНОВУ чат/оболочки при досборке RAG-слоя и генераторов артефактов, либо
+  компонент.'
+evidence_type: documented_fact
+source:
+  title: danny-avila/LibreChat — GitHub README
+  url: https://github.com/danny-avila/LibreChat
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README, разделы Features (Agents, Artifacts, Auth) / License
+  quote: Use any OpenAI-compatible API with LibreChat, no proxy required
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Первичный README; фичи Artifacts/Agents активно развиваются, снимок июль
+    2026.
+status: active
+superseded_by: null

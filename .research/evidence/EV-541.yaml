@@ -1,0 +1,26 @@
+schema_version: 1
+kind: research.evidence
+id: EV-541
+request_id: RR-007
+statement: 'ThoughtSpot (планка text-to-dashboard): Essentials $25/пользователь/мес,
+  Pro $50 с ИИ-аналитиком Spotter при лимите 25 AI-запросов/пользователь/мес (сверх
+  — доплата); Enterprise — кастом, средний контракт ~$137k/год; есть self-hosted вариант.'
+evidence_type: documented_fact
+source:
+  title: Luzmo — ThoughtSpot Pricing 2026
+  url: https://www.luzmo.com/blog/thoughtspot-pricing
+  type: news
+  published_at: null
+  is_primary: false
+citation:
+  locator: разбор тарифов 2026
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Вторичные обзоры, цифры согласованы между несколькими источниками.
+status: active
+superseded_by: null

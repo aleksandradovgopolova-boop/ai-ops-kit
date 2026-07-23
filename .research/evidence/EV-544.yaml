@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-544
+request_id: RR-007
+statement: "Полноценный корпоративный АУДИТ-ЖУРНАЛ (query/action history для комплаенса) среди 6 проверенных OSS-платформ в открытой части НЕ ОБНАРУЖЕН: у Onyx audit history вынесен в проприетарную EE (EV-501); у AnythingLLM permissioning workspace-уровня без аудита (EV-502); у LibreChat admin panel и moderation без полноценного аудит-журнала (EV-504); у RAGFlow RBAC/аудит не детализированы в доках (EV-505 — «не описано», не «отсутствует»); Open WebUI и Dify аудит не заявляют (EV-503, EV-506). ВАЖНО: RBAC как таковой в OSS ЕСТЬ (granular RBAC у Open WebUI — EV-503; roles у LibreChat — EV-504) — негативное утверждение касается только аудит-журнала. Охват: 6 платформ на 2026-07-23; «не обнаружено» ≠ «не существует»."
+evidence_type: inference
+derived_from: [EV-501, EV-502, EV-503, EV-504, EV-505, EV-506]
+source:
+  title: "Синтез по EV-501…EV-506 (скан OSS-платформ RR-007)"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-23"
+  is_primary: true
+citation:
+  locator: "сверка полей RBAC/аудит по шести кандидатам"
+captured_at: "2026-07-23"
+captured_by: "claude (синтез RR-007, оформлено по замечанию judge)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "Негативное утверждение по README/доке без развёртывания; для RAGFlow — отсутствие описания, не подтверждённое отсутствие функции."
+status: active
+superseded_by: null

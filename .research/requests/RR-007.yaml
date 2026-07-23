@@ -1,0 +1,31 @@
+# Первый продуктовый прогон модуля (domain: product/competitor). Оптимизированный конвейер:
+# EV-ready разведка -> скаффолдер -> writer-preflight -> 1 раунд ревью.
+schema_version: 1
+kind: research.request
+id: RR-007
+title: "ИИ-среда: build vs adopt против существующих self-hosted корпоративных AI-платформ"
+requested_by:
+  system: human
+  layer: product
+decision_to_support:
+  description: "Решить: строить backend ИИ-среды с нуля, взять открытую платформу как основу/компонент, или строить своё с явной дифференциацией — и что тогда обязано быть в MVP, чтобы своё имело смысл против готовых решений"
+  decision_maker: human
+questions:
+  - "Какие open-source self-hosted платформы (Onyx/Danswer, AnythingLLM, Open WebUI, LibreChat, RAGFlow, Dify и др.) закрывают jobs ИИ-среды: справка с проверяемыми источниками, презентация, дашборд, каталог, доступы/аудит, русский язык?"
+  - "Что стало рыночной планкой ожиданий (Glean, M365 Copilot, российские корпоративные ассистенты) — какие функции сотрудники уже считают самой собой разумеющимися?"
+  - "Где реальная дифференциация ИИ-среды (тройка артефактов? каталог? проверяемость?) и какие компоненты дешевле взять готовыми?"
+constraints:
+  - corporate_data_privacy
+  - russian_language
+  - license_compatible_commercial
+  - jtbd_grounded          # сравнение против jobs из ii-sreda-v2/docs/product/JTBD.md, не абстрактных фич
+workflow_hint: comparison
+memory_check:
+  performed: true
+  related_requests: [RR-006]
+  related_decisions: [DP-106]
+  summary: "DP-106 задал inference-слой (vLLM+TEI, T-lite/T-pro, FRIDA/bge-m3) — RR-007 решает слой ПРИЛОЖЕНИЯ над ним; часть кандидатов (Onyx, AnythingLLM) сами содержат RAG-стек — вопрос совместимости с уже принятым inference-решением входит в сравнение."
+required_confidence: medium
+deadline: "2026-08-10"
+status: answered
+created_at: "2026-07-23"

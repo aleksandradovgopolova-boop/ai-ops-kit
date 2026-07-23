@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-505
+request_id: RR-007
+statement: 'RAGFlow (InfiniFlow, ~86k звёзд) — Apache-2.0 без оговорок; лучший из
+  кандидатов именно под job ''справка с проверяемыми источниками'': deep document
+  understanding для сложных форматов, визуализация чанкинга с ручной правкой, traceable
+  citations для grounded answers, agentic workflows + MCP; есть README на русском,
+  LLM конфигурируемы (OpenAI-compatible, вкл. vLLM); тяжёлый (16GB RAM, Docker); корпоративный
+  RBAC/аудит не детализированы, презентаций/дашбордов нет. Вердикт: КОМПОНЕНТ — эталонный
+  RAG/evidence-слой под справки, не полная основа.'
+evidence_type: documented_fact
+source:
+  title: infiniflow/ragflow — GitHub README
+  url: https://github.com/infiniflow/ragflow
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README, разделы Key Features / License / Prerequisites
+  quote: traceable citations to support grounded answers
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Первичный README; Apache-2.0 подтверждён ссылкой на LICENSE, состав фич
+    быстро растёт.
+status: active
+superseded_by: null

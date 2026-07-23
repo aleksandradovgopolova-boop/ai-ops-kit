@@ -168,7 +168,8 @@ def _verify_remote_base(root, base_ref, base_sha):
     return {"verdict": "verified-moved", "remote_sha": remote_sha}
 
 
-def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, committed_sha, wid, task):
+def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, committed_sha, wid, task,
+                delivery_id=None):
     """v3.0.15/v3.0.16 (finding аудита P0/#1): доверенная доставка draft PR — единственная точка открытия
     PR. Fail-closed по remote base (verified-equal -> PR; unverifiable/moved -> НЕ открываем). Вызывается
     ИСКЛЮЧИТЕЛЬНО транзакционным контроллером (ai_ops_run) ПОСЛЕ durable-фиксации RunHandoff+final report+
@@ -194,7 +195,8 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
     import pr_open
     pr = pr_open.open_draft_pr(work_root, work_branch, title=f"ai-ops: {task[:60]}", base=base_ref,
                                body=f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
-                                    f"({base_sha[:12]}) → evidence на {committed_sha}.")
+                                    f"({base_sha[:12]}) → evidence на {committed_sha}.",
+                               delivery_id=delivery_id)
     delivery.update(status=(pr or {}).get("status"), pr=pr)
     return delivery
 

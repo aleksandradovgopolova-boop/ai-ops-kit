@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-536
+request_id: RR-007
+statement: 'GigaChat Enterprise (Сбер, представлен 03.03.2026): корпоративная платформа
+  ИИ-агентов с тремя форматами развертывания — локальный ПАК (для крупнейших компаний
+  и КИИ), облако SaaS, гибрид; агентские функции: поиск информации, аналоги оборудования,
+  перевод документов, формулы Excel. Продаётся конструктор агентов, а не готовые deliverables
+  ''справка/презентация/дашборд''.'
+evidence_type: documented_fact
+source:
+  title: CNews — Сбербанк представил GigaChat Enterprise
+  url: https://www.cnews.ru/news/line/2026-03-03_sberbank_predstavil_gigachat
+  type: news
+  published_at: null
+  is_primary: false
+citation:
+  locator: новость от 03.03.2026 (по пресс-релизу)
+  quote: ускоряет поиск информации, ищет аналоги оборудования в справочниках, помогает
+    в принятии решений, переводит документы на десятки языков
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Пресс-релизная новость; форматы развертывания подтверждены несколькими
+    изданиями.
+status: active
+superseded_by: null

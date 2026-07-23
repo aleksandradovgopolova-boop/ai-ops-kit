@@ -44,49 +44,95 @@ import active_work       # noqa: E402
 import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
-def _reconcile_pending_delivery(features_dir, fid, child_root):
-    """v3.0.16 Phase A (finding аудита #2): если прошлый прогон оставил DeliveryIntent в состоянии
-    outcome_unknown (внешнее действие выполнено, но DeliveryReceipt не записан durable — сбой ПОСЛЕ
-    внешнего действия), сверить фактическое состояние с remote и дописать DeliveryReceipt. Идемпотентно,
-    НИЧЕГО не создаёт на remote. -> dict исхода реконсиляции | None (нечего сверять)."""
+def _outbox_dir(features_dir, fid):
     from pathlib import Path as _P
-    ip = _P(features_dir) / fid / "delivery-intent.yaml"
-    g = _ls.load_guarded(ip, kind="DeliveryIntent")
-    if g["state"] != "ok":
+    return _P(features_dir) / fid / "delivery-outbox"
+
+
+def _unresolved_intents(features_dir, fid, branch=None):
+    """v3.0.17 (finding аудита P0): DeliveryIntent'ы БЕЗ парного DeliveryReceipt (незавершённая доставка).
+    Реконсиляция и блокировка новой доставки опираются на ФАКТ отсутствия Receipt — НЕ на поле status
+    интента (иначе потеря маркера outcome_unknown при двойном сбое записи скрыла бы незавершённость)."""
+    d = _outbox_dir(features_dir, fid)
+    out = []
+    if not d.is_dir():
+        return out
+    for ip in sorted(d.glob("*.intent.yaml")):
+        did = ip.name[:-len(".intent.yaml")]
+        g = _ls.load_guarded(ip, kind="DeliveryIntent")
+        if g["state"] != "ok":
+            continue
+        intent = g["data"]
+        if branch is not None and intent.get("branch") != branch:
+            continue
+        rp = d / f"{did}.receipt.yaml"
+        if _ls.load_guarded(rp, kind="DeliveryReceipt")["state"] != "ok":
+            out.append((did, intent))
+    return out
+
+
+def _reconcile_pending_delivery(features_dir, fid, child_root):
+    """v3.0.16/v3.0.17 (finding аудита #2/P0): сверить с remote КАЖДУЮ незавершённую доставку (Intent без
+    Receipt) и дописать DeliveryReceipt — но ТОЛЬКО при СТРОГОМ совпадении идентичности PR с Intent
+    (repository + head.sha == commit_sha + base.ref). PR той же ветки, но с ДРУГИМ коммитом НЕ
+    засчитывается за подтверждение старой доставки. Все записи — обязательные барьеры (реконсиляция НЕ
+    рапортует успех, если Receipt фактически не сохранился). Идемпотентно, ничего не создаёт на remote.
+    -> список исходов по delivery_id | None (нечего сверять)."""
+    from pathlib import Path as _P
+    pending = _unresolved_intents(features_dir, fid)
+    if not pending:
         return None
-    intent = g["data"]
-    if not (intent.get("reconciliation_required") or intent.get("status") == "outcome_unknown"):
-        return None
-    rp = _P(features_dir) / fid / "delivery-receipt.yaml"
-    if _ls.load_guarded(rp, kind="DeliveryReceipt")["state"] == "ok":
-        return None   # receipt уже есть — сверять нечего
-    branch = intent.get("branch")
-    try:
-        import pr_open
-        rc = pr_open.reconcile_delivery(child_root, branch)
-    except Exception as e:  # noqa: BLE001
-        return {"status": "unavailable", "reason": f"{type(e).__name__}: {e}"}
-    _base = {"schema_version": 1, "kind": "DeliveryReceipt", "delivery_id": intent.get("delivery_id"),
-             "workitem_id": fid, "branch": branch, "commit_sha": intent.get("commit_sha"),
-             "base_ref": intent.get("base_ref"), "reconciled": True}
-    if rc.get("status") == "found":
-        _ls.durable_write(rp, {**_base, "status": "reconciled", "pr_url": rc.get("url"),
-                               "pr_number": rc.get("number")},
-                          require_keys=("kind", "delivery_id", "status"), keep_backup=True)
-        intent.update(status="reconciled", reconciliation_required=False)
-        _ls.durable_write(ip, intent)
-        _ls.journal_append(_P(features_dir) / fid / "lifecycle-journal.jsonl",
-                           {"kind": "delivery_reconciled", "run_id": fid, "workitem_id": fid,
-                            "delivery_id": intent.get("delivery_id"), "pr_url": rc.get("url")})
-        return {"status": "reconciled", "pr_url": rc.get("url")}
-    if rc.get("status") == "absent":
-        # внешнее действие НЕ долетело (PR на remote нет) -> честно not-delivered
-        _ls.durable_write(rp, {**_base, "status": "not-delivered"},
-                          require_keys=("kind", "delivery_id", "status"))
-        intent.update(status="reconciled-absent", reconciliation_required=False)
-        _ls.durable_write(ip, intent)
-        return {"status": "reconciled-absent"}
-    return {"status": rc.get("status")}   # unavailable -> оставляем на следующий прогон
+    import pr_open
+    d = _outbox_dir(features_dir, fid)
+    jn = _P(features_dir) / fid / "lifecycle-journal.jsonl"
+    results = []
+    for did, intent in pending:
+        rp = d / f"{did}.receipt.yaml"
+        branch = intent.get("branch")
+        try:
+            rc = pr_open.reconcile_delivery(child_root, branch)
+        except Exception as e:  # noqa: BLE001
+            results.append({"delivery_id": did, "status": "unavailable", "reason": str(e)})
+            continue
+        _base = {"schema_version": 1, "kind": "DeliveryReceipt", "delivery_id": did, "workitem_id": fid,
+                 "repository": intent.get("repository"), "branch": branch,
+                 "commit_sha": intent.get("commit_sha"), "base_ref": intent.get("base_ref"),
+                 "reconciled": True}
+        if rc.get("status") == "unavailable":
+            results.append({"delivery_id": did, "status": "unavailable"})   # оставляем на следующий прогон
+            continue
+        if rc.get("status") == "absent":
+            _w = _ls.durable_write(rp, {**_base, "status": "not-delivered", "remote_sha": None},
+                                   require_keys=("kind", "delivery_id", "status"))
+            results.append({"delivery_id": did, "status": "reconciled-absent" if _w.get("ok")
+                            else "receipt-write-failed"})
+            continue
+        # rc.status == found: СТРОГАЯ сверка идентичности (не доверяем имени ветки)
+        _idn = (rc.get("repository") == intent.get("repository")
+                and rc.get("head_sha") == intent.get("commit_sha")
+                and rc.get("base_ref") == intent.get("base_ref"))
+        if not _idn:
+            # PR ветки есть, но это НЕ та доставка (другой SHA/base/repo) -> НЕ подтверждаем старую.
+            _w = _ls.durable_write(rp, {**_base, "status": "mismatch", "remote_sha": rc.get("head_sha"),
+                                        "remote_base_ref": rc.get("base_ref"),
+                                        "remote_repository": rc.get("repository"), "sha_verified": False,
+                                        "pr_url": rc.get("url"), "pr_number": rc.get("number")},
+                                   require_keys=("kind", "delivery_id", "status"), keep_backup=True)
+            results.append({"delivery_id": did, "status": "mismatch" if _w.get("ok")
+                            else "receipt-write-failed", "remote_sha": rc.get("head_sha")})
+            continue
+        _w = _ls.durable_write(rp, {**_base, "status": "reconciled", "remote_sha": rc.get("head_sha"),
+                                    "sha_verified": True, "pr_url": rc.get("url"),
+                                    "pr_number": rc.get("number"), "pr_state": rc.get("pr_state"),
+                                    "merged": rc.get("merged")},
+                               require_keys=("kind", "delivery_id", "status"), keep_backup=True)
+        if not _w.get("ok"):
+            results.append({"delivery_id": did, "status": "receipt-write-failed"})   # НЕ рапортуем успех
+            continue
+        _ls.journal_append(jn, {"kind": "delivery_reconciled", "run_id": fid, "workitem_id": fid,
+                                "delivery_id": did, "pr_url": rc.get("url"), "remote_sha": rc.get("head_sha")})
+        results.append({"delivery_id": did, "status": "reconciled", "pr_url": rc.get("url")})
+    return results
 
 
 def _resume_context_from_handoff(child_root, fid):
@@ -598,65 +644,107 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # и не создаёт дубль; delivery_id детерминирован по (wid, branch, commit) — повтор бьёт в ту же запись.
         if _plan and _handoff_ok and _report_ok:
             import hashlib as _hl
+            import concurrency_preflight as _cpp
             _branch = _plan["work_branch"]
             _csha = _plan["committed_sha"]
-            _did = _hl.sha256(f"{fid}:{_branch}:{_csha}".encode("utf-8")).hexdigest()[:16]
-            _intent = {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": _did,
-                       "workitem_id": fid, "branch": _branch, "base_ref": _plan["base_ref"],
-                       "base_sha": _plan["base_sha"], "commit_sha": _csha, "status": "intended"}
-            _iw = _ls.durable_write(features_dir / fid / "delivery-intent.yaml", _intent,
-                                    require_keys=("kind", "delivery_id", "commit_sha"), keep_backup=True)
-            if not _iw.get("ok"):
-                rep["delivery"] = {"requested": True, "status": "blocked-lifecycle",
-                                   "reason": f"DeliveryIntent не зафиксирован durable ({_iw.get('error')}) — "
-                                             "внешнее действие не выполняется"}
+            # repository identity (owner/name из origin) — часть СТРОГОЙ идентичности доставки
+            _ru = execution_pipeline._git(child_root, "remote", "get-url", "origin")
+            _orn = _cpp._parse_owner_repo(_ru[1]) if _ru[0] == 0 else None
+            _repo = f"{_orn[0]}/{_orn[1]}" if _orn else None
+            # delivery_id детерминирован по (repository, wid, branch, commit) — идемпотентный ключ
+            _did = _hl.sha256(f"{_repo}:{fid}:{_branch}:{_csha}".encode("utf-8")).hexdigest()[:16]
+            _obx = _outbox_dir(features_dir, fid)
+            _ip = _obx / f"{_did}.intent.yaml"
+            _rp = _obx / f"{_did}.receipt.yaml"
+            # v3.0.17 (P0): НЕразрешённая доставка (Intent без Receipt) на ЭТОЙ ветке (иной delivery_id)
+            # БЛОКИРУЕТ новую внешнюю доставку до reconciliation — не затираем неизвестный исход.
+            _blocking = [d for (d, _i) in _unresolved_intents(features_dir, fid, branch=_branch) if d != _did]
+            if _blocking:
+                rep["delivery"] = {"requested": True, "status": "blocked-unresolved-delivery",
+                                   "reason": f"есть неразрешённая доставка {_blocking[0]} на ветке {_branch} "
+                                             "(нет DeliveryReceipt) — новая доставка запрещена до reconciliation"}
                 rep["overall_status"] = "delivery-failed"
                 _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
             else:
-                _ls.journal_append(_jname, {"kind": "delivery_intent", "run_id": fid, "workitem_id": fid,
-                                            "delivery_id": _did, "branch": _branch, "commit": _csha})
-                # ВНЕШНЕЕ ДЕЙСТВИЕ (идемпотентно)
-                _dv = execution_pipeline._deliver_pr(
-                    _plan["work_root"], _branch, _plan["base_ref"], _plan["base_sha"],
-                    _plan["base_binding"], _csha, _plan["wid"], _plan["task"])
-                _delivered = _dv.get("status") in ("opened", "updated")
-                # durable DeliveryReceipt (подтверждение исхода внешнего действия)
-                _receipt = {"schema_version": 1, "kind": "DeliveryReceipt", "delivery_id": _did,
-                            "workitem_id": fid, "branch": _branch, "commit_sha": _csha,
-                            "base_ref": _plan["base_ref"], "status": _dv.get("status"),
-                            "pr_url": (_dv.get("pr") or {}).get("url"),
-                            "pr_number": (_dv.get("pr") or {}).get("number")}
-                _cw = _ls.durable_write(features_dir / fid / "delivery-receipt.yaml", _receipt,
-                                        require_keys=("kind", "delivery_id", "status"), keep_backup=True)
-                if _cw.get("ok"):
-                    rep["delivery"] = {**_dv, "delivery_id": _did,
-                                       "receipt": f"features/{fid}/delivery-receipt.yaml"}
-                    rep["overall_status"] = "delivered" if _delivered else "delivery-failed"
-                    _ls.journal_append(_jname, {"kind": "delivery_receipt", "run_id": fid, "workitem_id": fid,
-                                                "delivery_id": _did, "status": _dv.get("status"),
-                                                "delivered": _delivered, "pr_url": (_dv.get("pr") or {}).get("url")})
-                else:
-                    # ВНЕШНЕЕ ДЕЙСТВИЕ ВЫПОЛНЕНО, но Receipt НЕ зафиксирован durable -> outcome_unknown.
-                    # Помечаем Intent на реконсиляцию (best-effort) — следующий прогон сверит с remote.
-                    _intent.update(status="outcome_unknown", reconciliation_required=True,
-                                   observed={"status": _dv.get("status"),
-                                             "pr_url": (_dv.get("pr") or {}).get("url")})
-                    _ls.durable_write(features_dir / fid / "delivery-intent.yaml", _intent)
-                    rep["delivery"] = {**_dv, "delivery_id": _did, "status": "outcome_unknown",
-                                       "reconciliation_required": True,
-                                       "reason": f"внешнее действие выполнено, но DeliveryReceipt не "
-                                                 f"зафиксирован durable ({_cw.get('error')}) — исход будет "
-                                                 "сверен с remote при следующем прогоне (идемпотентно)"}
-                    rep["overall_status"] = "delivery-outcome-unknown"
+                # DeliveryIntent (BARRIER) со СТРОГОЙ идентичностью
+                _intent = {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": _did,
+                           "workitem_id": fid, "repository": _repo, "branch": _branch,
+                           "base_ref": _plan["base_ref"], "base_sha": _plan["base_sha"],
+                           "commit_sha": _csha, "status": "intended"}
+                _iw = _ls.durable_write(_ip, _intent,
+                                        require_keys=("kind", "delivery_id", "commit_sha", "repository"),
+                                        keep_backup=True)
+                if not _iw.get("ok"):
+                    rep["delivery"] = {"requested": True, "status": "blocked-lifecycle",
+                                       "reason": f"DeliveryIntent не зафиксирован durable ({_iw.get('error')}) "
+                                                 "— внешнее действие не выполняется"}
+                    rep["overall_status"] = "delivery-failed"
                     _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
-                    _ls.journal_append(_jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
-                                                "workitem_id": fid, "delivery_id": _did})
-                # финальная перезапись отчёта с исходом (когда receipt ok)
-                if _cw.get("ok"):
-                    _dw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep, keep_backup=True)
-                    if not _dw.get("ok"):
-                        rep.setdefault("lifecycle_errors", [])
-                        rep["lifecycle_errors"].append(f"delivery-report durable-write: {_dw.get('error')}")
+                else:
+                    _ls.journal_append(_jname, {"kind": "delivery_intent", "run_id": fid, "workitem_id": fid,
+                                                "delivery_id": _did, "branch": _branch, "commit": _csha,
+                                                "repository": _repo})
+                    # ВНЕШНЕЕ ДЕЙСТВИЕ (идемпотентно; delivery_id вшивается в тело PR)
+                    _dv = execution_pipeline._deliver_pr(
+                        _plan["work_root"], _branch, _plan["base_ref"], _plan["base_sha"],
+                        _plan["base_binding"], _csha, _plan["wid"], _plan["task"], delivery_id=_did)
+                    _st = _dv.get("status")
+                    _pr = _dv.get("pr") or {}
+                    if _st == "outcome_unknown":
+                        # неоднозначный POST -> НЕ пишем confirmed Receipt; помечаем Intent (BARRIER).
+                        _uw = _ls.durable_write(_ip, {**_intent, "status": "outcome_unknown",
+                                                      "reconciliation_required": True},
+                                                require_keys=("kind", "delivery_id", "status"))
+                        rep["delivery"] = {**_dv, "delivery_id": _did, "reconciliation_required": True,
+                                           "intent_marker_durable": bool(_uw.get("ok"))}
+                        rep["overall_status"] = "delivery-outcome-unknown"
+                        _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+                        _ls.journal_append(_jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
+                                                    "workitem_id": fid, "delivery_id": _did, "cause": "ambiguous-post"})
+                    else:
+                        _delivered = _st in ("opened", "updated")
+                        _remote_sha = _pr.get("head_sha")
+                        _sha_ok = (_remote_sha == _csha) if _remote_sha else None
+                        _receipt = {"schema_version": 1, "kind": "DeliveryReceipt", "delivery_id": _did,
+                                    "workitem_id": fid, "repository": _repo, "branch": _branch,
+                                    "commit_sha": _csha, "base_ref": _plan["base_ref"], "status": _st,
+                                    "remote_sha": _remote_sha, "sha_verified": _sha_ok,
+                                    "pr_url": _pr.get("url"), "pr_number": _pr.get("number")}
+                        _cw = _ls.durable_write(_rp, _receipt,
+                                                require_keys=("kind", "delivery_id", "status"), keep_backup=True)
+                        if _cw.get("ok"):
+                            _ls.durable_write(_ip, {**_intent, "status": "completed"})   # receipt авторитетен
+                            rep["delivery"] = {**_dv, "delivery_id": _did, "remote_sha": _remote_sha,
+                                               "sha_verified": _sha_ok,
+                                               "receipt": f"features/{fid}/delivery-outbox/{_did}.receipt.yaml"}
+                            rep["overall_status"] = "delivered" if _delivered else "delivery-failed"
+                            _ls.journal_append(_jname, {"kind": "delivery_receipt", "run_id": fid,
+                                                        "workitem_id": fid, "delivery_id": _did, "status": _st,
+                                                        "delivered": _delivered, "remote_sha": _remote_sha,
+                                                        "pr_url": _pr.get("url")})
+                            _dw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep,
+                                                         keep_backup=True)
+                            if not _dw.get("ok"):
+                                rep.setdefault("lifecycle_errors", [])
+                                rep["lifecycle_errors"].append(f"delivery-report durable-write: {_dw.get('error')}")
+                        else:
+                            # ВНЕШНЕЕ ДЕЙСТВИЕ ВЫПОЛНЕНО, Receipt НЕ сохранён -> outcome_unknown (Intent BARRIER).
+                            # Даже если и эта запись упадёт: reconciliation ловит Intent-БЕЗ-Receipt по факту.
+                            _uw = _ls.durable_write(_ip, {**_intent, "status": "outcome_unknown",
+                                                          "reconciliation_required": True,
+                                                          "observed": {"status": _st, "pr_url": _pr.get("url")}},
+                                                    require_keys=("kind", "delivery_id", "status"))
+                            rep["delivery"] = {**_dv, "delivery_id": _did, "status": "outcome_unknown",
+                                               "reconciliation_required": True,
+                                               "intent_marker_durable": bool(_uw.get("ok")),
+                                               "reason": f"внешнее действие выполнено, но DeliveryReceipt не "
+                                                         f"зафиксирован durable ({_cw.get('error')}) — исход "
+                                                         "сверится с remote при следующем прогоне (идемпотентно)"}
+                            rep["overall_status"] = "delivery-outcome-unknown"
+                            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+                            _ls.journal_append(_jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
+                                                        "workitem_id": fid, "delivery_id": _did,
+                                                        "cause": "receipt-write-failed"})
         elif _plan and not (_handoff_ok and _report_ok):
             # барьер не пройден -> доставку запрещаем fail-closed (не отдаём непрозафиксированное наружу)
             rep["delivery"] = {"requested": True, "status": "blocked-lifecycle",
@@ -1205,53 +1293,95 @@ def selftest():
         expect("P0.1: exit_code(blocked)=1", exit_code(r2) == (1 if r2["status"] == "blocked" else 0))
         expect("P0.1: exit_code(planned)=0", exit_code({"status": "planned"}) == 0)
 
-    # v3.0.16 Phase A (finding аудита #2): DELIVERY OUTBOX + RECONCILIATION (crash-recovery, детерминированно).
+    # v3.0.17 Delivery Outbox Integrity: per-delivery_id immutable outbox + СТРОГАЯ сверка идентичности +
+    # барьеры записи (crash-recovery, детерминированно).
     import pr_open as _pro
+    _orig_rec = _pro.reconcile_delivery
+
+    def _mk_intent(fdir, did, wid, branch, commit, repo="o/r", base_ref="main"):
+        obx = fdir / "delivery-outbox"
+        _ls.durable_write(obx / f"{did}.intent.yaml",
+                          {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": did,
+                           "workitem_id": wid, "repository": repo, "branch": branch, "base_ref": base_ref,
+                           "base_sha": "b" * 40, "commit_sha": commit, "status": "intended"})
+        return obx / f"{did}.receipt.yaml"
+
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        fdir = root / "features" / "dlv"; fdir.mkdir(parents=True)
-        # delivery_id детерминирован по (wid, branch, commit) — повтор бьёт в ту же запись (идемпотентность)
-        import hashlib as _h
-        _did = _h.sha256("dlv:ai-ops/dlv:cafe1234".encode("utf-8")).hexdigest()[:16]
-        _intent = {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": _did, "workitem_id": "dlv",
-                   "branch": "ai-ops/dlv", "base_ref": "main", "base_sha": "b" * 40, "commit_sha": "cafe1234",
-                   "status": "outcome_unknown", "reconciliation_required": True}
-        _ls.durable_write(fdir / "delivery-intent.yaml", _intent)
-        # (1) crash после внешнего действия: PR реально есть на remote -> reconciliation восстанавливает receipt
-        _orig_rec = _pro.reconcile_delivery
-        _pro.reconcile_delivery = lambda root, branch: {"status": "found", "url": "https://x/pr/7", "number": 7}
+        # (1) Intent без Receipt + PR на remote со СТРОГО совпавшей идентичностью -> reconciled + sha_verified
+        f1 = root / "features" / "dlv"; f1.mkdir(parents=True)
+        _rp1 = _mk_intent(f1, "did1", "dlv", "ai-ops/dlv", "cafe1234")
+        _pro.reconcile_delivery = lambda root, branch: {"status": "found", "url": "https://x/pr/7",
+                                                        "number": 7, "repository": "o/r",
+                                                        "head_sha": "cafe1234", "base_ref": "main",
+                                                        "pr_state": "open", "merged": False}
         try:
             _r = _reconcile_pending_delivery(root / "features", "dlv", root)
         finally:
             _pro.reconcile_delivery = _orig_rec
-        _rec_doc = _ls.load_guarded(fdir / "delivery-receipt.yaml", kind="DeliveryReceipt")
-        expect("v3.0.16 #2: outcome_unknown + PR найден на remote -> DeliveryReceipt восстановлен (URL/SHA/status)",
-               _r and _r.get("status") == "reconciled" and _rec_doc["state"] == "ok"
-               and _rec_doc["data"]["pr_url"] == "https://x/pr/7"
-               and _rec_doc["data"]["commit_sha"] == "cafe1234"
-               and _rec_doc["data"]["status"] == "reconciled")
-        # повторная реконсиляция -> receipt уже есть, второй раз не сверяем (идемпотентно)
-        expect("v3.0.16 #2: повторная реконсиляция -> None (receipt уже есть, дубля нет)",
+        _d1 = _ls.load_guarded(_rp1, kind="DeliveryReceipt")
+        expect("v3.0.17: Intent+PR строгая идентичность (head.sha==commit) -> reconciled + sha_verified",
+               _r and _r[0]["status"] == "reconciled" and _d1["state"] == "ok"
+               and _d1["data"]["remote_sha"] == "cafe1234" and _d1["data"]["sha_verified"] is True
+               and _d1["data"]["pr_url"] == "https://x/pr/7")
+        expect("v3.0.17: повторная реконсиляция -> None (Receipt есть, дубля нет)",
                _reconcile_pending_delivery(root / "features", "dlv", root) is None)
-        # (2) crash, но PR на remote НЕТ -> честный not-delivered (внешнее действие не долетело)
-        fdir2 = root / "features" / "dlv2"; fdir2.mkdir(parents=True)
-        _ls.durable_write(fdir2 / "delivery-intent.yaml",
-                          {**_intent, "workitem_id": "dlv2", "branch": "ai-ops/dlv2"})
-        _pro.reconcile_delivery = lambda root, branch: {"status": "absent"}
+
+        # (2) P0-1: PR той же ветки, но ДРУГОЙ commit -> НЕ подтверждаем старую доставку (mismatch)
+        f2 = root / "features" / "dlv2"; f2.mkdir(parents=True)
+        _rp2 = _mk_intent(f2, "did2", "dlv2", "ai-ops/dlv2", "cafe1234")
+        _pro.reconcile_delivery = lambda root, branch: {"status": "found", "url": "https://x/pr/8",
+                                                        "number": 8, "repository": "o/r",
+                                                        "head_sha": "9999DIFF", "base_ref": "main"}
         try:
             _r2 = _reconcile_pending_delivery(root / "features", "dlv2", root)
         finally:
             _pro.reconcile_delivery = _orig_rec
-        _rec2 = _ls.load_guarded(fdir2 / "delivery-receipt.yaml", kind="DeliveryReceipt")
-        expect("v3.0.16 #2: outcome_unknown + PR отсутствует на remote -> receipt not-delivered (честно)",
-               _r2 and _r2.get("status") == "reconciled-absent"
-               and _rec2["state"] == "ok" and _rec2["data"]["status"] == "not-delivered")
-        # (3) intent без outcome_unknown (штатно завершён) -> реконсиляция не трогает
-        fdir3 = root / "features" / "dlv3"; fdir3.mkdir(parents=True)
-        _ls.durable_write(fdir3 / "delivery-intent.yaml",
-                          {**_intent, "workitem_id": "dlv3", "status": "intended", "reconciliation_required": False})
-        expect("v3.0.16 #2: intent без reconciliation_required -> None (нечего сверять)",
-               _reconcile_pending_delivery(root / "features", "dlv3", root) is None)
+        _d2 = _ls.load_guarded(_rp2, kind="DeliveryReceipt")
+        expect("v3.0.17 P0: PR ветки с ДРУГИМ commit -> mismatch, НЕ засчитан как старая доставка",
+               _r2 and _r2[0]["status"] == "mismatch"
+               and _d2["state"] == "ok" and _d2["data"]["status"] == "mismatch"
+               and _d2["data"]["sha_verified"] is False and _d2["data"]["remote_sha"] == "9999DIFF")
+
+        # (3) PR отсутствует на remote -> not-delivered (внешнее действие не долетело)
+        f3 = root / "features" / "dlv3"; f3.mkdir(parents=True)
+        _rp3 = _mk_intent(f3, "did3", "dlv3", "ai-ops/dlv3", "cafe1234")
+        _pro.reconcile_delivery = lambda root, branch: {"status": "absent", "repository": "o/r"}
+        try:
+            _r3 = _reconcile_pending_delivery(root / "features", "dlv3", root)
+        finally:
+            _pro.reconcile_delivery = _orig_rec
+        _d3 = _ls.load_guarded(_rp3, kind="DeliveryReceipt")
+        expect("v3.0.17: PR отсутствует -> receipt not-delivered (честно)",
+               _r3 and _r3[0]["status"] == "reconciled-absent"
+               and _d3["state"] == "ok" and _d3["data"]["status"] == "not-delivered")
+
+        # (4) P1-2: Intent остался status='intended' (маркер outcome_unknown потерян) -> реконсиляция ВСЁ РАВНО
+        # ловит его ПО ФАКТУ отсутствия Receipt (не по полю status).
+        f4 = root / "features" / "dlv4"; f4.mkdir(parents=True)
+        _rp4 = _mk_intent(f4, "did4", "dlv4", "ai-ops/dlv4", "cafe1234")   # status=intended
+        _pro.reconcile_delivery = lambda root, branch: {"status": "found", "url": "https://x/pr/9",
+                                                        "number": 9, "repository": "o/r",
+                                                        "head_sha": "cafe1234", "base_ref": "main"}
+        try:
+            _r4 = _reconcile_pending_delivery(root / "features", "dlv4", root)
+        finally:
+            _pro.reconcile_delivery = _orig_rec
+        expect("v3.0.17 P1-2: Intent 'intended' без Receipt всё равно реконсилируется (по факту, не по status)",
+               _r4 and _r4[0]["status"] == "reconciled"
+               and _ls.load_guarded(_rp4, kind="DeliveryReceipt")["state"] == "ok")
+
+        # (5) unavailable (нет сети/токена) -> оставляем на следующий прогон, Receipt НЕ пишем
+        f5 = root / "features" / "dlv5"; f5.mkdir(parents=True)
+        _rp5 = _mk_intent(f5, "did5", "dlv5", "ai-ops/dlv5", "cafe1234")
+        _pro.reconcile_delivery = lambda root, branch: {"status": "unavailable"}
+        try:
+            _r5 = _reconcile_pending_delivery(root / "features", "dlv5", root)
+        finally:
+            _pro.reconcile_delivery = _orig_rec
+        expect("v3.0.17: unavailable -> Receipt НЕ пишется (остаётся на следующий прогон)",
+               _r5 and _r5[0]["status"] == "unavailable"
+               and _ls.load_guarded(_rp5, kind="DeliveryReceipt")["state"] == "absent")
 
     print("ai_ops_run selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

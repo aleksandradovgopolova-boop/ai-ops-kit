@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-508
+request_id: RR-007
+statement: 'WrenAI (Canner, ~16.6k звёзд, релиз v0.13.1 от 21.07.2026) — GenBI-движок
+  под job ''дашборд из данных'': natural language → governed SQL → interactive dashboard,
+  22+ источников (PostgreSQL, ClickHouse, BigQuery, DuckDB и др.); лицензирование
+  СМЕШАННОЕ — README заявляет Apache 2.0, но в репо присутствуют AGPL-3.0 компоненты,
+  требуется покомпонентная проверка перед коммерческим использованием; LLM — OpenAI/Vertex
+  явно, кастомные endpoints через SDK; self-hosted Docker. Вердикт: кандидат-КОМПОНЕНТ
+  под дашборды с обязательной юридической проверкой AGPL-границ.'
+evidence_type: documented_fact
+source:
+  title: Canner/WrenAI — GitHub README
+  url: https://github.com/Canner/WrenAI
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README, разделы описания GenBI / License
+  quote: from a SQL answer to a shareable dashboard, across 22+ data sources
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Первичный README; лицензионная картина неоднородна (Apache в README при
+    AGPL-3.0 файлах в репо) — верифицировать по дереву исходников.
+status: active
+superseded_by: null

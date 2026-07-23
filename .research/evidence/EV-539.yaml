@@ -1,0 +1,27 @@
+schema_version: 1
+kind: research.evidence
+id: EV-539
+request_id: RR-007
+statement: 'Gamma (планка качества job ''презентация''): Pro ~$20/пользователь/мес
+  (API, брендинг, до 60 карточек на промпт), платные планы от ~$10/мес — отдельный
+  инструмент слайдов стоит меньше трети M365 Copilot.'
+evidence_type: documented_fact
+source:
+  title: costbench — Gamma Pricing 2026 (официальный прайс отдаёт 403)
+  url: https://costbench.com/software/ai-presentations/gamma/
+  type: news
+  published_at: null
+  is_primary: false
+citation:
+  locator: сводка тарифов Gamma 2026
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Цифры сходятся по 3+ независимым обзорам; первичная страница недоступна
+    (403).
+status: active
+superseded_by: null

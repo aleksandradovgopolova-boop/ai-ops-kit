@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-501
+request_id: RR-007
+statement: 'Onyx (бывш. Danswer, ~31k звёзд) — open-core: Community Edition под MIT
+  покрывает ядро (Agentic RAG, 50+ коннекторов, кастомные агенты, sandbox code execution),
+  но именно корпоративные jobs ИИ-среды — RBAC, SSO/SAML/SCIM, query audit history,
+  whitelabel — вынесены в проприетарную Enterprise Edition; презентаций и дашбордов
+  нет; inference — все основные провайдеры вкл. self-hosted vLLM/Ollama/LiteLLM. Вердикт:
+  сильный референс/компонент для RAG-справок с цитатами, но как ОСНОВА проблематичен
+  — аудит и RBAC за пределами MIT-части.'
+evidence_type: documented_fact
+source:
+  title: onyx-dot-app/onyx — GitHub README
+  url: https://github.com/onyx-dot-app/onyx
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README, разделы License / Enterprise Edition / LLM support
+  quote: Onyx Community Edition (CE) is available freely under the MIT license
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Первичный README проекта; open-core граница (какие фичи в EE) может сдвигаться
+    между релизами, звёзды — снимок на июль 2026.
+status: active
+superseded_by: null
