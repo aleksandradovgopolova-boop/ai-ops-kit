@@ -105,72 +105,151 @@ def _event_checksum(payload_str):
     return hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]
 
 
-def journal_append(journal_path, event):
-    """v3.0.14 (finding аудита #3): bounded event journal (v0.1) — append-only JSONL с checksum-цепочкой.
-    Каждое событие получает seq, prev-checksum (хэш предыдущей строки) и собственный checksum -> при
-    чтении видно усечение/подмену/разрыв. Одна строка = атомарный append (open('a')+flush+fsync) —
-    crash-boundary на уровне записи. event должен нести run/package/gate-связи (kind + ids). НЕ роняет
-    вызывающего при сбое (журнал — наблюдаемость, не источник истины). -> {ok} | {ok: False, error}.
+import contextlib
 
-    ЧЕСТНЫЕ ОГРАНИЧЕНИЯ v0.1 (не полагаться на журнал для восстановления состояния или qualification-
-    вердикта — это делают durable-артефакты): append НЕ под отдельной блокировкой (два процесса могут
-    получить одинаковые seq/prev_checksum); удаление последней ЦЕЛОЙ строки оставляет валидный префикс и
-    НЕ детектится как усечение; перед append НЕ проверяется вся существующая цепочка; сбой журнала
-    сознательно НЕ блокирует прогон. Полный audit trail (лок, полная верификация цепочки, Run/Attempt/
-    Package/Gate как первичный контракт) — event journal v0.2 (v3.1)."""
+
+@contextlib.contextmanager
+def _journal_lock(journal_path):
+    """v3.1 (trace v0.2): межпроцессная блокировка вокруг append — конкурентные писатели не получают
+    одинаковые seq/prev_checksum (устранён v0.1-разрыв). best-effort: без fcntl (Windows) — no-op."""
+    lock_path = Path(str(journal_path) + ".lock")
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        import fcntl
+    except (ImportError, OSError):
+        yield
+        return
+    f = open(lock_path, "w", encoding="utf-8")
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
+
+
+def _journal_scan(journal_path):
+    """Чистое сканирование JSONL с проверкой checksum-цепочки. -> (events, ok, broken_at|None, reason|None)."""
+    import json as _json
+    events, prev = [], None
+    for i, ln in enumerate(l for l in Path(journal_path).read_text(encoding="utf-8").splitlines() if l.strip()):
+        try:
+            rec = _json.loads(ln)
+        except ValueError:
+            return events, False, i, "строка не парсится (оборванная запись)"
+        recomputed = _event_checksum(_json.dumps({k: v for k, v in rec.items() if k != "checksum"},
+                                                 sort_keys=True, ensure_ascii=False))
+        if rec.get("checksum") != recomputed:
+            return events, False, rec.get("seq", i), "checksum не сходится (подмена)"
+        if rec.get("prev_checksum") != prev:
+            return events, False, rec.get("seq", i), "разрыв prev_checksum-цепочки"
+        prev = rec.get("checksum")
+        events.append(rec)
+    return events, True, None, None
+
+
+def journal_append(journal_path, event):
+    """v3.0.14/v3.1 (trace v0.2): append-only JSONL event journal с checksum-цепочкой + head-marker.
+    Каждое событие: seq, prev_checksum, собственный checksum. v0.2 ЗАКРЫВАЕТ ограничения v0.1:
+      * межпроцессный ЛОК вокруг всей read-verify-append (нет гонки seq/prev_checksum);
+      * ПОЛНАЯ верификация цепочки ПЕРЕД append — на битый журнал не дописываем (ok=False);
+      * durable head-marker (<journal>.head {seq, checksum}) — позволяет ДЕТЕКТИТЬ усечение последней
+        целой строки при чтении (v0.1 не мог: валидный префикс выглядел валидным).
+    Одна строка = атомарный append (flush+fsync). Журнал — наблюдаемость, не источник истины; сбой НЕ
+    роняет прогон (вызывающий пусть логирует, но не падает). -> {ok, seq} | {ok: False, error}."""
     import json as _json
     journal_path = Path(journal_path)
     try:
-        journal_path.parent.mkdir(parents=True, exist_ok=True)
-        prev_checksum, seq = None, 0
-        if journal_path.exists():
-            lines = [ln for ln in journal_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-            if lines:
-                try:
-                    last = _json.loads(lines[-1])
-                    prev_checksum = last.get("checksum")
-                    seq = int(last.get("seq", len(lines) - 1)) + 1
-                except (ValueError, TypeError):
-                    seq = len(lines)
-        rec = {**event, "seq": seq, "prev_checksum": prev_checksum}
-        # checksum считается по канонической форме события БЕЗ поля checksum (детерминированно)
-        rec["checksum"] = _event_checksum(_json.dumps(rec, sort_keys=True, ensure_ascii=False))
-        line = _json.dumps(rec, ensure_ascii=False)
-        with open(journal_path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        return {"ok": True, "seq": seq}
+        with _journal_lock(journal_path):
+            journal_path.parent.mkdir(parents=True, exist_ok=True)
+            prev_checksum, seq = None, 0
+            if journal_path.exists():
+                evs, ok, _at, reason = _journal_scan(journal_path)
+                if not ok:
+                    return {"ok": False, "error": f"журнал повреждён ({reason}) — append запрещён "
+                                                  "(не расширяем битую цепочку)"}
+                if evs:
+                    prev_checksum = evs[-1].get("checksum")
+                    seq = int(evs[-1].get("seq", len(evs) - 1)) + 1
+            rec = {**event, "seq": seq, "prev_checksum": prev_checksum}
+            rec["checksum"] = _event_checksum(_json.dumps(rec, sort_keys=True, ensure_ascii=False))
+            with open(journal_path, "a", encoding="utf-8") as f:
+                f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            # head-marker (durable): фиксирует ожидаемый хвост -> усечение последней строки детектируемо
+            durable_write_json(Path(str(journal_path) + ".head"),
+                               {"kind": "journal-head", "seq": seq, "checksum": rec["checksum"]},
+                               require_keys=("seq", "checksum"))
+            return {"ok": True, "seq": seq}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 def journal_read(journal_path):
-    """Прочитать event journal и ПРОВЕРИТЬ целостность checksum-цепочки. -> {events:[...], ok:bool,
-    broken_at?: seq}. ok=False -> усечение/подмена/разрыв цепочки (crash в середине записи, tamper)."""
+    """Прочитать event journal + ПРОВЕРИТЬ целостность: checksum-цепочка И сверка с head-marker (v0.2 —
+    ловит усечение последней целой строки, которое v0.1 пропускал). -> {events, ok, broken_at?, reason?}."""
     import json as _json
     journal_path = Path(journal_path)
     if not journal_path.exists():
         return {"events": [], "ok": True}
-    events, ok, broken_at, prev = [], True, None, None
-    for i, ln in enumerate(l for l in journal_path.read_text(encoding="utf-8").splitlines() if l.strip()):
-        try:
-            rec = _json.loads(ln)
-        except ValueError:
-            ok, broken_at = False, i
-            break
-        stored = rec.get("checksum")
-        recomputed = _event_checksum(_json.dumps({k: v for k, v in rec.items() if k != "checksum"},
-                                                 sort_keys=True, ensure_ascii=False))
-        if stored != recomputed or rec.get("prev_checksum") != prev:
-            ok, broken_at = False, rec.get("seq", i)
-            break
-        prev = stored
-        events.append(rec)
+    events, ok, broken_at, reason = _journal_scan(journal_path)
     out = {"events": events, "ok": ok}
-    if broken_at is not None:
+    if not ok:
         out["broken_at"] = broken_at
+        out["reason"] = reason
+        return out
+    # v0.2: сверка с durable head-marker — если журнал КОРОЧЕ зафиксированного хвоста => усечение
+    hp = Path(str(journal_path) + ".head")
+    if hp.exists():
+        try:
+            head = _json.loads(hp.read_text(encoding="utf-8"))
+        except ValueError:
+            head = None
+        if isinstance(head, dict) and head.get("seq") is not None:
+            last_seq = events[-1].get("seq") if events else -1
+            if last_seq < head["seq"]:
+                out["ok"] = False
+                out["broken_at"] = head["seq"]
+                out["reason"] = (f"усечение: журнал обрывается на seq={last_seq}, а head-marker "
+                                 f"фиксировал seq={head['seq']} (удалена целая строка)")
     return out
+
+
+_TRACE_REQUIRED = {
+    "run_start": ("run_id", "workitem_id", "attempt_id"),
+    "run_end": ("run_id", "workitem_id", "attempt_id", "status"),
+    "run_cost": ("run_id", "attempt_id"),
+    "ready_for_delivery": ("run_id", "workitem_id"),
+    "package_end": ("run_id", "workitem_id", "package_id"),
+    "delivery_intent": ("run_id", "delivery_id"),
+    "delivery_receipt": ("run_id", "delivery_id"),
+    "delivery": ("run_id", "delivery_id"),
+    "delivery_outcome_unknown": ("run_id", "delivery_id"),
+    "delivery_reconciled": ("run_id", "delivery_id"),
+}
+
+
+def validate_trace(events):
+    """v3.1 (trace v0.2): проверить, что события трейса несут ОБЯЗАТЕЛЬНЫЕ id своей связи (Run/Attempt/
+    Package/Gate/Delivery) — чтобы трейс был реконструируем. Неизвестный kind допустим (требует лишь
+    run_id). -> список ошибок (пусто = валиден)."""
+    errs = []
+    for i, e in enumerate(events or []):
+        if not isinstance(e, dict):
+            errs.append(f"событие[{i}] не dict")
+            continue
+        kind = e.get("kind")
+        if not kind:
+            errs.append(f"событие[{i}] без kind")
+            continue
+        for k in _TRACE_REQUIRED.get(kind, ("run_id",)):
+            if e.get(k) in (None, ""):
+                errs.append(f"событие[{i}] kind={kind}: нет обязательного поля '{k}'")
+    return errs
 
 
 def _fsync_dir(directory):
@@ -311,6 +390,42 @@ def selftest():
         with open(jn2, "a", encoding="utf-8") as _f:
             _f.write('{"kind": "run_end", "run_i')   # оборванная запись без \n
         expect("journal: усечённая последняя строка -> ok=False", journal_read(jn2)["ok"] is False)
+
+        # v3.1 (trace v0.2): verify-before-append — на битый журнал не дописываем
+        jn3 = root / "j3.jsonl"
+        journal_append(jn3, {"kind": "run_start", "run_id": "R3"})
+        journal_append(jn3, {"kind": "package_end", "run_id": "R3", "package_id": "P1"})
+        _l3 = jn3.read_text(encoding="utf-8").splitlines()
+        _t = _js.loads(_l3[0]); _t["run_id"] = "TAMPER"; _l3[0] = _js.dumps(_t, ensure_ascii=False)
+        jn3.write_text("\n".join(_l3) + "\n", encoding="utf-8")   # подмена -> цепочка битая
+        _ap = journal_append(jn3, {"kind": "run_end", "run_id": "R3"})
+        expect("v3.1 journal v0.2: append на битую цепочку -> ok=False (не расширяем повреждённое)",
+               _ap["ok"] is False and "повреждён" in _ap.get("error", ""))
+
+        # v3.1 (trace v0.2): head-marker ловит усечение ЦЕЛОЙ последней строки (v0.1 не мог)
+        jn4 = root / "j4.jsonl"
+        journal_append(jn4, {"kind": "run_start", "run_id": "R4"})
+        journal_append(jn4, {"kind": "run_end", "run_id": "R4"})
+        expect("v3.1 journal v0.2: цела -> ok (head-marker есть)",
+               journal_read(jn4)["ok"] and (root / "j4.jsonl.head").exists())
+        _l4 = jn4.read_text(encoding="utf-8").splitlines()
+        jn4.write_text(_l4[0] + "\n", encoding="utf-8")   # удаляем последнюю ЦЕЛУЮ строку (валидный префикс)
+        _r4 = journal_read(jn4)
+        expect("v3.1 journal v0.2: удалена целая последняя строка -> ok=False (head-marker детектит усечение)",
+               _r4["ok"] is False and "усечение" in (_r4.get("reason") or ""))
+
+        # v3.1 (trace v0.2): validate_trace — обязательные ID своей связи
+        _good = [{"kind": "run_start", "run_id": "R", "workitem_id": "R", "attempt_id": "R#a1"},
+                 {"kind": "package_end", "run_id": "R", "workitem_id": "R", "package_id": "WP1"},
+                 {"kind": "delivery_receipt", "run_id": "R", "delivery_id": "d1"},
+                 {"kind": "run_end", "run_id": "R", "workitem_id": "R", "attempt_id": "R#a1", "status": "delivered"}]
+        expect("v3.1 trace-schema: полный валидный трейс -> нет ошибок", validate_trace(_good) == [])
+        expect("v3.1 trace-schema: package_end без package_id -> ошибка",
+               any("package_id" in e for e in validate_trace([{"kind": "package_end", "run_id": "R", "workitem_id": "R"}])))
+        expect("v3.1 trace-schema: delivery без delivery_id -> ошибка",
+               any("delivery_id" in e for e in validate_trace([{"kind": "delivery", "run_id": "R"}])))
+        expect("v3.1 trace-schema: run_start без attempt_id -> ошибка",
+               any("attempt_id" in e for e in validate_trace([{"kind": "run_start", "run_id": "R", "workitem_id": "R"}])))
 
     print("lifecycle_store selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

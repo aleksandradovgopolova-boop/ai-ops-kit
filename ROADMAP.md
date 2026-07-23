@@ -507,10 +507,13 @@ freshness и первым живым DecisionPackage. Архитектура **e
     подтверждены Receipt или помечены outcome_unknown. Результат — QualificationReport (PR/SHA/journal/
     receipts/стоимость/latency/human interventions/regression cases/ограничения). После успеха —
     **Execution Kernel Qualified**; findings рождают только адресные v3.0.x (не новый абстрактный аудит).
-- **v3.1 — Observability, Evaluation & Safe Self-Improvement**: event journal v0.2 (полная trace-схема,
-  Run/Attempt/Package/Gate IDs, tokens/cost/latency); Bench Lite; golden tasks; regression corpus;
-  failure taxonomy; model comparison; controlled ImprovementProposal; авто-интеграционная ревалидация
-  fast-forward базы (вариант A: rebase на новую базу + повтор проверок).
+- **v3.1 — Observability, Evaluation & Safe Self-Improvement** (в работе, аддитивными инкрементами):
+  - **v3.1.0 — Trace v0.2** ✅: event journal v0.2 (лок, verify-before-append, head-marker → детект
+    усечения; trace-схема + `validate_trace`; Run/Attempt/Package/Gate/Delivery IDs); tokens/cost/latency
+    (`run_cost` + `cost` в отчёте). Проверено вживую.
+  - Далее: Bench Lite; golden tasks; regression corpus; failure taxonomy; model comparison; **fix-loop**
+    (blockers ревьюера → писателю на итерацию — по находке Phase B); reviewer false-fail rate; controlled
+    ImprovementProposal + canary; авто-интеграционная ревалидация fast-forward базы (вариант A).
 - **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
   architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
 - **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
