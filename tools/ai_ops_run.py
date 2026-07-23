@@ -201,7 +201,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
-        review_fix_attempts=0):
+        review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -520,6 +520,18 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
         # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
         # останется in-progress навсегда) — гарантируем через except+re-raise.
+        # v3.1.8: калиброванное UI-enforcement (по умолчанию включено в контроллере). NO-OP без более
+        # богатых сигналов: легаси ui_changed -> user_facing + нет evidence -> fail-closed == сегодня.
+        # Ослабление возможно ТОЛЬКО при ui_impact=internal (не-safety гейты) или passing UI-evidence.
+        _calib = bool(calibrated_enforcement)
+        _ui_ev = ui_evidence
+        if _calib and _ui_ev is None:
+            try:
+                import storybook_adapter
+                _ui_ev = storybook_adapter.evidence_for_gate(storybook_adapter.build_bundle(child_root))
+            except Exception:  # noqa: BLE001 — сбор evidence не должен ронять прогон (нет UI -> not_run)
+                _ui_ev = None
+
         def _pipe(_resume, _rctx):
             return execution_pipeline.run_pipeline(
                 task_text, signals, child_root, prop, feature=feature, plan=plan,
@@ -530,7 +542,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 context_prelude=(payload or {}).get("text"),
                 resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
-                defer_delivery=True)   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
+                defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
+                calibrated_enforcement=_calib, ui_evidence=_ui_ev)
         try:
             rep = _pipe(resume, resume_ctx)
             # v3.1.1 (fix-loop, находка Phase B): блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх

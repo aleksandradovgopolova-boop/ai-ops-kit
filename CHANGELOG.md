@@ -2,6 +2,44 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.8] — 2026-07-24 — Calibrated UI Enforcement (ПЕРВОЕ изменение боевого fail-closed за v3.1)
+
+Калиброванная UI-политика (v3.1.6, shadow) + проверяемое evidence (v3.1.7) становятся ЖИВЫМИ:
+контроллер применяет их к боевому решению гейтов. Разрешено доказанным промоушен-критерием на
+Bench Lite; безопасность (`false_green==0`) — жёсткий инвариант, не тронуты safety-гейты.
+
+### Changed (боевое поведение)
+- `ai_ops_run.run(calibrated_enforcement=True)` — по умолчанию включено в контроллере. Хук в
+  `execution_pipeline._run_reviews`: субъективный reviewer `warn` по UI-гейту **не блокирует**, когда
+  гейт advisory (internal low-risk) ИЛИ механика подтверждена детерминированным evidence
+  (`evidence=pass`). `evidence=fail` (реальная регрессия/дефект) блокирует **всегда**, даже при
+  reviewer `pass` (усиление, не ослабление). Critical ux/a11y требуют human-signoff (evidence не
+  заменяет человека).
+- **NO-OP без богатых сигналов:** легаси `ui_changed`→`user_facing` + нет evidence → fail-closed ==
+  как раньше. Все прежние selftest/parity/live-квалификация целы. Ослабление возможно ТОЛЬКО при
+  `ui_impact=internal` (не-safety гейты) ИЛИ passing UI-evidence.
+
+### Added
+- `schemas/gate-result-v2.schema.json` + `tools/gate_result_v2.py` — `GateResult v2`
+  (`status` +`not_applicable`/`abstain`, `applicability`/`enforcement`/`evidence_mode`) + адаптер
+  v2→v1 для старых потребителей (`not_applicable`→опустить; `abstain`→`warn`, консервативно). Схема
+  v1 НЕ тронута (не breaking).
+- Bench Lite **v0.3**: реальный A/B (baseline `calibrated=off` vs `calibrated=on`) + safety-регрессии
+  (evidence=fail) + evidence-released кейсы; блок `calibrated_enforcement` в отчёте.
+
+### Промоушен-критерий (доказан, жёстко в selftest)
+- `false_green == 0` под живой политикой; **все** safety-регрессии (evidence=fail) блокируются;
+  `residual_false_fail_rate = 0.0` (≤0.10 — все should-pass освобождены); block-rate **0.667→0.333
+  (−50%)**; deterministic evidence освобождает 6 user_facing/critical кейсов. Оставшиеся блоки —
+  fail-closed (нет evidence / critical human-signoff), НЕ false-fail.
+
+### Note
+- Первоклассный reviewer `abstain` (эмиссия статуса ревьюером в reviewer-result) — будущая работа;
+  сейчас abstain (warn без blockers) остаётся невынесенным вердиктом → fail-closed.
+
+### CI
+- +1 selftest (`gate_result_v2`) в `package-quality.yml` + `AGENTS.md`. Parity 106/106 в 4 конфигурациях.
+
 ## [3.1.7] — 2026-07-23 — Storybook Evidence Adapter (проверяемое UI-evidence вместо субъективного ревью)
 
 Следующий шаг после v3.1.6: снижать reviewer-false-fail не «доверием модели», а заменой части

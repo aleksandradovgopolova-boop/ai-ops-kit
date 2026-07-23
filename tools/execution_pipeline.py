@@ -36,6 +36,7 @@ import tool_broker           # noqa: E402
 import evidence_collector    # noqa: E402
 import run_plan              # noqa: E402
 import gate_executor         # noqa: E402
+import gate_policy           # noqa: E402  (v3.1.8 калиброванное UI-enforcement)
 
 
 def _profile_summary(profile):
@@ -259,7 +260,8 @@ def _change_context_range(work_root, base_revision, head_revision, max_chars=140
 
 
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
-                 max_reads=10, change_context=None):   # rc10: многофайловый дифф; rc16: override контекста
+                 max_reads=10, change_context=None,   # rc10: многофайловый дифф; rc16: override контекста
+                 calibrated_enforcement=False, ui_evidence=None):   # v3.1.8 калиброванное UI-enforcement
     """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence.
     Возвращает (обновлённый gate_ev, список трейсов ревью). Ревьюер гоняется под READ-ONLY
     политикой (capability-независимость от писателя). Вердикт валидируется по reviewer-result
@@ -302,6 +304,11 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         status = res.get("status")
         blocking = bool(g.get("blocking"))
         ev_ref = f"independent reviewer verdict @ {revision or 'HEAD'}"
+        # v3.1.8: детерминированный статус UI-evidence для этого гейта (не_run, если evidence нет/выкл).
+        ev_status = "not_run"
+        calib_ui = calibrated_enforcement and gid in gate_policy.UI_GATES
+        if calib_ui and isinstance(ui_evidence, dict):
+            ev_status = (ui_evidence.get(gid) or {}).get("deterministic_status", "not_run")
         # v3.0.11 (finding аудита P2): симметрия с security-путём — БЛОКИРУЮЩИЙ ai-review гейт нельзя
         # закрыть pass-вердиктом БЕЗ единого чтения (рубер-стамп). Ревьюеру показан дифф в base_context,
         # но «увидел в контексте» != «проверил»: для чистого pass на блокирующем гейте требуем ≥1 read.
@@ -314,7 +321,32 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             entry["closed_as"] = "blocked"
             entry["status"] = "fail"
             continue
+        # v3.1.8 SAFETY: детерминированное evidence показывает РЕАЛЬНУЮ регрессию/дефект -> блок ВСЕГДА,
+        # даже если ревьюер вынес pass. Это УСИЛЕНИЕ (может только добавить блок), не ослабление.
+        if calib_ui and ev_status == "fail":
+            gate_ev[gid] = {"status": "fail",
+                            "blockers": [f"детерминированное UI-evidence: реальная регрессия/дефект @ {gid} "
+                                         f"(evidence=fail) — блокирует независимо от вердикта ревьюера"],
+                            "checks": res.get("checks", []), "evidence": [ev_ref]}
+            entry["closed_as"] = "blocked"
+            entry["status"] = "fail"
+            entry["calibrated"] = "evidence_block"
+            continue
         if status == "fail" or (status == "warn" and blocking):
+            # v3.1.8: КАЛИБРОВАННОЕ enforcement для UI-гейтов. Ревьюерский warn (субъективное сомнение)
+            # НЕ блокирует, когда гейт advisory (internal low-risk не-safety) ИЛИ механика подтверждена
+            # детерминированным evidence (evidence=pass). Жёсткий reviewer FAIL и evidence=fail -> block
+            # (effective_review_outcome вернёт 'block'). accessibility в internal остаётся blocking.
+            if calib_ui:
+                action, reason = gate_policy.effective_review_outcome(gid, signals, status, ev_status)
+                if action == "advisory":
+                    gate_ev[gid] = {"status": "warn",
+                                    "warnings": [f"калибровка v3.1.8: {reason} (reviewer {status})"],
+                                    "checks": res.get("checks", []), "evidence": [ev_ref]}
+                    entry["closed_as"] = "advisory"
+                    entry["status"] = "warn"
+                    entry["calibrated"] = reason
+                    continue
             # v2.85 (finding аудита): reviewer `warn` на БЛОКИРУЮЩЕМ гейте раньше тихо закрывал его
             # (evaluate требует required_evidence только для pass). warn — это «есть сомнения», НЕ
             # чистый pass -> для блокирующего гейта это блок, а не молчаливое прохождение.
@@ -1080,7 +1112,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
-                 resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False):
+                 resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False,
+                 calibrated_enforcement=False, ui_evidence=None):   # v3.1.8 калиброванное UI-enforcement
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -1373,7 +1406,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     reviews = None
     if review and reviewer_proposer is not None and committed_sha:
         gate_ev, reviews = _run_reviews(reviewer_proposer, work_root, plan["gates"], gate_ev,
-                                        signals, committed_sha, budget)
+                                        signals, committed_sha, budget,
+                                        calibrated_enforcement=calibrated_enforcement,
+                                        ui_evidence=ui_evidence)
 
     # 6e. v2.95 -> v2.101 Security Pack: доменный security-вердикт (security/security-domains.yaml).
     #     Проверяются только ПРИМЕНИМЫЕ к изменению домены; детерминированные (secrets/deps/injection)

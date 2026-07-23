@@ -64,11 +64,18 @@ a11y-нарушения по-прежнему блокируют (см. матр
 
 ## Статус и маршрут
 
-- **v3.1.7 (этот инкремент):** bundle только **собирается и валидируется** — shadow, enforcement нет.
-- **v3.1.8 — Calibrated UI Enforcement:** `GateResult v2` (+`not_applicable`, reviewer `abstain`) +
-  миграционный адаптер; часть UI-гейтов закрывается детерминированно по bundle. Промоушен-критерий:
-  `false_green==0`, `known_good_block_rate ≤ 0.10` (или −70%), 0 safety-регрессий, user-facing a11y и
-  реальные визуальные регрессии по-прежнему блокируют.
+- **v3.1.7:** bundle собирается и валидируется (shadow).
+- **v3.1.8 — Calibrated UI Enforcement (ЖИВОЕ):** калиброванная политика включена в контроллере
+  (`ai_ops_run.run(calibrated_enforcement=True)`). Хук в `execution_pipeline._run_reviews`:
+  субъективный reviewer `warn` по UI-гейту НЕ блокирует, когда гейт advisory (internal low-risk) ИЛИ
+  механика подтверждена детерминированным evidence (`evidence=pass`); `evidence=fail` (реальная
+  регрессия/дефект) блокирует ВСЕГДА, даже при reviewer `pass` (усиление). `GateResult v2`
+  (`tools/gate_result_v2.py`, +`not_applicable`/`abstain`) + адаптер v2→v1 для старых потребителей.
+  **NO-OP без богатых сигналов:** легаси `ui_changed`→`user_facing`+нет evidence→fail-closed == как
+  раньше. Доказано на Bench Lite v0.3 (реальный A/B): block-rate 0.667→0.333 (−50%),
+  `residual_false_fail_rate=0.0` (≤0.10), `false_green=0`, safety-регрессии (evidence=fail)
+  блокируются 2/2. Первоклассный reviewer `abstain` (эмиссия статуса ревьюером) — будущая работа
+  поверх reviewer-result v2.
 - Дальше: v3.6 Storybook MCP (интерфейс агентов), v3.7 Product Bootstrap (авто-установка Storybook/
   MSW/interaction·a11y CI), v3.8 Readiness Qualification (реальный UI-сценарий через Storybook).
 

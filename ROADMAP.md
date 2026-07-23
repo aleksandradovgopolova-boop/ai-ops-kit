@@ -542,11 +542,15 @@ freshness и первым живым DecisionPackage. Архитектура **e
     не выдаётся за «чисто»). Семантическая валидация (статус нельзя разойтись с цифрами).
     `evidence_for_gate()` — shadow-мост к `gate_policy.evidence_mode` (visual=deterministic;
     design_system/accessibility/ux=hybrid). SHADOW: только сбор+валидация, enforcement нет. В CI+AGENTS.md.
+  - **v3.1.8 — Calibrated UI Enforcement** ✅ (ПЕРВОЕ изменение боевого fail-closed за v3.1):
+    калиброванная политика ЖИВАЯ в контроллере (`calibrated_enforcement=True`); хук в
+    `execution_pipeline._run_reviews` — reviewer `warn` не блокирует при advisory-тире / `evidence=pass`;
+    `evidence=fail` блокирует всегда (усиление); critical ux/a11y требуют human-signoff. `GateResult v2`
+    (`gate_result_v2.py`, +not_applicable/abstain) + адаптер v2→v1. **NO-OP** без богатых сигналов
+    (легаси ui_changed→user_facing→fail-closed). Доказано на Bench Lite v0.3 (реальный A/B):
+    block-rate 0.667→0.333 (−50%), residual_false_fail_rate=0.0 (≤0.10), false_green=0, safety-регрессии
+    (evidence=fail) блокируются 2/2. Reviewer `abstain` (эмиссия) — future. В CI+AGENTS.md.
   - **Маршрут v3.1 (утверждён владельцем 2026-07-23):**
-    - **v3.1.8 — Calibrated UI Enforcement**: после shadow-замеров кандидатная политика становится
-      боевой; вводится `GateResult v2` + миграционный адаптер (`not_applicable` / reviewer `abstain`).
-      Промоушен-критерий: `false_green==0`, `known_good_block_rate ≤ 0.10` (или −70%), 0 safety-регрессий,
-      100% policy-diff имеют reason; user-facing a11y и реальные визуальные регрессии по-прежнему блокируют.
     - **v3.1.9 — Phase B QualificationReport**: один формальный `ExecutionQualificationReport` на
       зафиксированной версии; добить 2-ю ENGINEERING green, sequential `ready_all`, provider
       interruption + resume в новой сессии, base-moved safe-block, delivery `outcome_unknown`

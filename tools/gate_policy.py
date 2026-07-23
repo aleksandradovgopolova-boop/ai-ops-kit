@@ -172,6 +172,43 @@ def candidate_blocking_gates(signals: dict) -> set:
     return {d["gate"] for d in candidate_policy(signals) if _effective(d) == "blocks"}
 
 
+def effective_review_outcome(gate: str, signals: dict, reviewer_status: str,
+                             evidence_status: str = "not_run") -> tuple:
+    """КАЛИБРОВАННОЕ enforcement (v3.1.8): как политика трактует вердикт ревьюера по UI-гейту.
+
+    Возвращает (action, reason), action ∈ {'block', 'advisory'}. Вызывается ТОЛЬКО когда ревьюер
+    вынес не-чистый вердикт (fail или warn на блокирующем гейте) — то есть в ситуации, которая СЕЙЧАС
+    безусловно блокирует. Калибровка решает, блокировать ли по-прежнему.
+
+    Правила (порядок важен — safety вперёд):
+      1. evidence_status == 'fail'  -> BLOCK: детерминированное evidence показывает РЕАЛЬНУЮ регрессию/
+         дефект (визуальный дифф / a11y-нарушение). Никогда не ослабляем.
+      2. reviewer_status == 'fail'  -> BLOCK: жёсткий вердикт с конкретными blockers. Не трогаем.
+      3. enforcement == 'advisory'  -> ADVISORY: internal low-risk не-safety гейт — субъективный warn
+         не блокирует (accessibility в internal остаётся blocking -> сюда не попадёт).
+      4. evidence_status == 'pass'  -> ADVISORY: механика подтверждена детерминированным evidence ->
+         субъективный warn ревьюера не блокирует (evidence сильнее мнения).
+      5. иначе (blocking-тир, нет evidence) -> BLOCK: fail-closed. Текущее строгое поведение сохранено.
+
+    Не-UI гейты сюда не передаются (safety-гейты не трогаются). Легаси-путь: ui_changed без ui_impact
+    -> user_facing + evidence not_run -> правило 5 -> BLOCK == сегодняшнее поведение (no-op).
+    """
+    if gate not in UI_GATES:
+        return ("block", "не UI-гейт: калибровка не применяется")
+    if evidence_status == "fail":
+        return ("block", "детерминированное evidence: реальная регрессия/дефект")
+    if reviewer_status == "fail":
+        return ("block", "reviewer FAIL (жёсткий вердикт с blockers)")
+    dec = {d["gate"]: d for d in candidate_policy(signals)}[gate]
+    if dec.get("human_signoff"):
+        return ("block", "critical flow: обязателен human-signoff — evidence не заменяет человека")
+    if dec["enforcement"] == "advisory":
+        return ("advisory", f"internal low-risk: гейт {gate} advisory -> субъективный warn не блокирует")
+    if evidence_status == "pass":
+        return ("advisory", "детерминированное evidence pass -> субъективный warn ревьюера не блокирует")
+    return ("block", "blocking-тир без evidence -> fail-closed: warn блокирует")
+
+
 def selftest() -> int:
     ok = True
 
@@ -258,6 +295,46 @@ def selftest() -> int:
            candidate_blocking_gates(sig_i) == {"accessibility_review"})
     expect("blocking-set user_facing: все 4 остаются",
            candidate_blocking_gates({"ui_changed": True, "ui_impact": "user_facing"}) == set(UI_GATES))
+
+    # --- effective_review_outcome (v3.1.8 калиброванное enforcement) -----------------------------
+    uf = {"ui_changed": True, "ui_impact": "user_facing"}
+    intn = {"ui_changed": True, "ui_impact": "internal"}
+    # SAFETY: evidence fail всегда блокирует, даже если ревьюер молчал бы (warn)
+    expect("eff: evidence=fail -> block (реальная регрессия), даже на internal",
+           effective_review_outcome("visual_regression", intn, "warn", "fail")[0] == "block")
+    # reviewer fail всегда блокирует
+    expect("eff: reviewer=fail -> block (жёсткий вердикт)",
+           effective_review_outcome("ux_review", uf, "fail", "not_run")[0] == "block")
+    # internal не-safety + warn + нет evidence -> advisory (ослабление)
+    expect("eff: internal ux + warn + no-evidence -> advisory",
+           effective_review_outcome("ux_review", intn, "warn", "not_run")[0] == "advisory")
+    # internal accessibility остаётся blocking (safety) -> warn без evidence блокирует
+    expect("eff: internal accessibility + warn + no-evidence -> block (safety не ослаблен)",
+           effective_review_outcome("accessibility_review", intn, "warn", "not_run")[0] == "block")
+    # user_facing + warn + evidence pass -> advisory (механика подтверждена)
+    expect("eff: user_facing + warn + evidence=pass -> advisory (evidence сильнее мнения)",
+           effective_review_outcome("visual_regression", uf, "warn", "pass")[0] == "advisory")
+    # user_facing + warn + нет evidence -> block (fail-closed, == сегодня)
+    expect("eff: user_facing + warn + no-evidence -> block (fail-closed)",
+           effective_review_outcome("ux_review", uf, "warn", "not_run")[0] == "block")
+    # legacy: ui_changed без ui_impact -> user_facing -> block (no-op относительно сегодня)
+    expect("eff: legacy ui_changed + warn + no-evidence -> block (no-op)",
+           effective_review_outcome("ux_review", {"ui_changed": True}, "warn", "not_run")[0] == "block")
+    # accessibility user_facing + warn + evidence pass -> advisory (авто-часть подтверждена)
+    expect("eff: user_facing accessibility + warn + evidence=pass -> advisory",
+           effective_review_outcome("accessibility_review", uf, "warn", "pass")[0] == "advisory")
+    # но accessibility user_facing + warn + evidence=fail -> block (реальный дефект)
+    expect("eff: user_facing accessibility + evidence=fail -> block (реальный a11y-дефект)",
+           effective_review_outcome("accessibility_review", uf, "warn", "fail")[0] == "block")
+    # critical ux/accessibility требуют human-signoff -> даже evidence=pass НЕ снимает warn
+    crit = {"ui_changed": True, "ui_impact": "critical"}
+    expect("eff: critical ux + warn + evidence=pass -> block (human-signoff обязателен)",
+           effective_review_outcome("ux_review", crit, "warn", "pass")[0] == "block")
+    expect("eff: critical accessibility + warn + evidence=pass -> block (human-signoff)",
+           effective_review_outcome("accessibility_review", crit, "warn", "pass")[0] == "block")
+    # но critical visual (без human-signoff) + evidence=pass -> advisory (механика подтверждена)
+    expect("eff: critical visual + warn + evidence=pass -> advisory (нет human-signoff у visual)",
+           effective_review_outcome("visual_regression", crit, "warn", "pass")[0] == "advisory")
 
     print("gate_policy selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

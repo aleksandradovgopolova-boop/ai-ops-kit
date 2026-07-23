@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.1.7
+  package_version: 3.1.8
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,12 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    added_v3_1_8_calibrated_ui_enforcement:
+      - "ЖИВОЕ калиброванное UI-enforcement (первое изменение боевого fail-closed за v3.1): контроллер ai_ops_run.run(calibrated_enforcement=True по умолчанию). Хук в execution_pipeline._run_reviews"
+      - "правило (gate_policy.effective_review_outcome): reviewer warn по UI-гейту НЕ блокирует, если гейт advisory (internal low-risk) ИЛИ механика подтверждена deterministic evidence (evidence=pass); evidence=fail (реальная регрессия/дефект) блокирует ВСЕГДА даже при reviewer pass (усиление); critical ux/a11y требуют human-signoff (evidence не заменяет)"
+      - "NO-OP без богатых сигналов: легаси ui_changed -> user_facing + нет evidence -> fail-closed == как раньше (все прежние selftest/parity/live-квалификация целы). Ослабление ТОЛЬКО при ui_impact=internal (не-safety) или passing UI-evidence"
+      - "GateResult v2 — schemas/gate-result-v2.schema.json + tools/gate_result_v2.py : status +not_applicable/+abstain, applicability/enforcement/evidence_mode; адаптер v2->v1 not_applicable=опустить abstain=warn консервативно для старых потребителей. Схема v1 НЕ тронута"
+      - "Bench Lite v0.3 — реальный A/B (baseline calibrated=off vs calibrated=on): block-rate 0.667->0.333 (-50%), residual_false_fail_rate=0.0 (≤0.10 промоушен-порог), calibrated_false_green=0, safety-регрессии (evidence=fail) блокируются 2/2, evidence освобождает 6 user_facing/critical. Оставшиеся блоки — fail-closed (нет evidence / critical human-signoff), НЕ false-fail"
     added_v3_1_7_storybook_evidence_adapter:
       - "schemas/ui-evidence-bundle.schema.json — контракт UIEvidenceBundle (storybook/state_coverage/interaction/accessibility/visual/design_system с явным status, вкл. not_run/absent — 'нет данных' не выдаётся за 'чисто')"
       - "tools/storybook_adapter.py — оффлайн stdlib-адаптер: собирает UIEvidenceBundle из ЛОКАЛЬНЫХ артефактов child-репо (Storybook static index + vitest/axe/visual/design-system results). БЕЗ SaaS/MCP; kit НЕ становится React-app. evidence_for_gate() — shadow-мост к gate_policy.evidence_mode"
