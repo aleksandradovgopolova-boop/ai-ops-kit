@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.4] — 2026-07-23 — Reviewer false-fail rate: измеритель + атрибуция
+
+Прямой ответ на находку Phase B (green-throughput режет консервативный independent-review, не модель).
+Ре-фрейм на цифрах: движок НЕ источник false-fail — при полном добросовестном покрытии ревью
+корректный код доходит до ready (engine floor = 0). Ложные блоки идут от строгости/покрытия РЕВЬЮ по
+конкретным гейтам. Безопасность не тронута: fail-closed и `false_green == 0` сохранены.
+
+### Added
+- Bench Lite расширен known-good корпусом (код заведомо корректен; варьируем только покрытие/строгость
+  ревьюера): `kg_full_coverage` (полный добросовестный ревьюер -> ready: доказывает engine floor),
+  `kg_strict_visual` / `kg_strict_designsys` (ревьюер придирчив к ОДНОМУ гейту -> REAL false-fail).
+- BenchReport.reviewer_false_fail: `reviewer_false_fail_rate` (доля known-good, заблокированных ревью),
+  `engine_floor_ready` (полное покрытие -> ready), `block_attribution` (какие гейты режут корректный
+  код — для будущего риск-калиброванного тюнинга строгости). Текущий замер: rate=0.667,
+  attribution={visual_regression:1, design_system_usage:1}, engine_floor_ready=true.
+- Инварианты selftest: engine floor ready; rate в [0,1]; атрибуция называет конкретные гейты; каждый
+  known-good заблокирован ИМЕННО ожидаемым гейтом; `false_green == 0` и на known-good (тюнинг-измерение
+  не ослабляет безопасность).
+
 ## [3.1.3] — 2026-07-23 — Bench Lite: оффлайн golden-корпус решений движка
 
 Пилар Evaluation фазы v3.1. Находка Phase B: GREEN-throughput ограничен НЕ качеством модели, а

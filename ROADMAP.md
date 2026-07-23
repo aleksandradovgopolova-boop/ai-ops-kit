@@ -519,9 +519,13 @@ freshness и первым живым DecisionPackage. Архитектура **e
   - **v3.1.3 — Bench Lite** ✅: детерминированный ОФФЛАЙН, TOOL-FREE golden-корпус (`tools/bench_lite.py`)
     решений движка; BenchReport с метриками (pass/false_green/false_fail/review_blocked/fix_recovered);
     жёсткий инвариант `false_green == 0`; tool-free e2e fix-loop прогоняется в CI. В CI + AGENTS.md.
-  - Далее: golden tasks (расширить корпус реальными задачами); regression corpus; failure taxonomy;
-    model comparison; reviewer false-fail rate (тюнинг строгости по замеру Bench Lite); controlled
-    ImprovementProposal + canary; авто-интеграционная ревалидация fast-forward базы (вариант A).
+  - **v3.1.4 — Reviewer false-fail rate** ✅: known-good корпус в Bench Lite; `reviewer_false_fail_rate`
+    + `engine_floor_ready` (полное добросовестное покрытие -> ready: движок НЕ источник false-fail) +
+    `block_attribution` (какие гейты режут корректный код). Ре-фрейм находки Phase B на цифрах; безопасность
+    (`false_green==0`) сохранена. Замер: rate=0.667, attribution={visual_regression, design_system_usage}.
+  - Далее: риск-калиброванный advisory-тир для не-safety review-гейтов (по атрибуции; доказать снижение
+    false-fail БЕЗ false-green); golden tasks (реальные задачи); regression corpus; failure taxonomy;
+    model comparison; controlled ImprovementProposal + canary; авто-ревалидация fast-forward базы (A).
 - **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
   architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
 - **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
