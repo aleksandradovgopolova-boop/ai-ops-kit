@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.2.0-rc — Architecture, Product & UI Governance (groundwork)
+
+Начат следующий этаж системы: управленческий слой поверх исполнения. Первый инкремент — контракт
+архитектурных решений + UI Definition of Done, связанные с UI-таксономией (`gate_policy.ui_impact`)
+и Storybook-evidence. Технический адаптер (v3.1.7) не переписывается — над ним ставится governance.
+
+### Added
+- `schemas/architecture-decision.schema.json` — `ArchitectureDecision` (ADR): context/decision/
+  alternatives/consequences (обязательны И positive, И negative — издержки скрывать нельзя)/
+  quality_attributes (ISO-25010-класс)/`ui_impact` (согласован с `gate_policy`)/supersede-цепочка.
+  Отличается от `decisions/registry.yaml` (Decision Intelligence — принципы/эпизоды мышления).
+- `validation/validate_architecture_decision.py` — структура + семантика (negative-последствия
+  обязательны; `superseded` требует `superseded_by`; enum'ы; drift-guard против схемы). selftest в CI.
+- `templates/quality/DefinitionOfDone-UI.md` — риск-тир (`internal`/`user_facing`/`critical`) →
+  требования (states/interaction/a11y/visual/design-system/UX) → evidence на точном SHA. Правило
+  component-reuse. Связь ADR ↔ gate_policy ↔ StorybookPolicy ↔ UIEvidenceBundle.
+
+### Note
+- Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —
+  после закрытия живой Phase B квалификации (нужен сильный провайдер-ключ).
+
 ## [Unreleased] — v3.1.9-rc — Exact-SHA UI Evidence (trust-фикс перед живой UI-квалификацией)
 
 Закрыт реальный trust-разрыв калиброванного enforcement (v3.1.8): UI-evidence собиралось в
