@@ -269,6 +269,39 @@ def _cases():
                   "expected": {"ready": False, "unmet_includes": ["design_system_usage"],
                                "blocked_by": ["design_system_usage"]}})
 
+    # --- golden tasks (v3.1.5): расширяем known-good разными формами задач -> замер на широкой выборке.
+    # KG-control: backend/QUICK правка (НЕ ui) — в плане нет блокирующих review-гейтов -> ready БЕЗ ревью.
+    # Ключевой контроль: доказывает, что reviewer-false-fail СКОНЦЕНТРИРОВАН в UI-гейтах (ui_changed), а
+    # не размазан по всем задачам. Прямая опора для решения про advisory-тир.
+    def _b_kg_backend(root):
+        return dict(task_text="корректная backend-правка (без UI)", signals=_quick_sig(),
+                    child_root=root, engine="pipeline", provider_name="test", execute=True,
+                    feature="kgbk", install_deps=False, review=True,
+                    reviewer_proposer=_faithful_reviewer("src/kb.py"),
+                    proposer=_writer_script([
+                        {"op": "write", "path": "src/kb.py", "content": "def total(a, b):\n    return a + b\n"},
+                        {"op": "read", "path": "src/kb.py"}, {"done": True}]))
+    cases.append({"id": "kg_backend_control", "category": "known_good",
+                  "tags": ["known_good", "control", "backend"], "build": _b_kg_backend,
+                  "expected": {"ready": True, "unmet_includes": []}})
+
+    # KG: строгость на ux_review и accessibility_review -> покрываем ВСЕ 4 UI-гейта в атрибуции.
+    def _mk_strict_ui(cid, path, gate, blockers):
+        def _b(root):
+            return dict(task_text=f"корректная ui правка (строгий {gate})", signals=_ui_sig(),
+                        child_root=root, engine="pipeline", provider_name="test", execute=True,
+                        feature=cid, install_deps=False, review=True,
+                        reviewer_proposer=_faithful_except(path, gate, blockers),
+                        proposer=_writer_script([
+                            {"op": "write", "path": path, "content": "u = 1\n"}, {"done": True}]))
+        return {"id": cid, "category": "known_good", "tags": ["review", "known_good", "false_fail"],
+                "build": _b, "expected": {"ready": False, "unmet_includes": [gate], "blocked_by": [gate]}}
+
+    cases.append(_mk_strict_ui("kg_strict_ux", "src/ku.py", "ux_review",
+                               ["не описаны состояния экрана (для этой правки не требуется)"]))
+    cases.append(_mk_strict_ui("kg_strict_a11y", "src/ka.py", "accessibility_review",
+                               ["нет проверки контраста (для этой правки не требуется)"]))
+
     return cases
 
 
@@ -383,10 +416,14 @@ def selftest():
     expect("ffr: reviewer_false_fail_rate измерен в [0,1] на непустом known-good корпусе",
            ff["known_good_total"] >= 3 and ff["reviewer_false_fail_rate"] is not None
            and 0.0 <= ff["reviewer_false_fail_rate"] <= 1.0)
-    # атрибуция называет КОНКРЕТНЫЕ гейты, режущие корректный код (для тюнинга строгости)
-    expect("ffr: block_attribution называет гейты-источники false-fail (visual_regression, design_system_usage)",
-           ff["block_attribution"].get("visual_regression", 0) >= 1
-           and ff["block_attribution"].get("design_system_usage", 0) >= 1)
+    # атрибуция покрывает ВСЕ 4 UI review-гейта (широкая выборка golden tasks v3.1.5)
+    expect("ffr: block_attribution покрывает все 4 UI-гейта (ux/accessibility/visual/design_system)",
+           all(ff["block_attribution"].get(g, 0) >= 1 for g in
+               ("ux_review", "accessibility_review", "visual_regression", "design_system_usage")))
+    # КОНТРОЛЬ: backend/не-ui корректная правка доходит до ready -> false-fail сконцентрирован в UI-гейтах
+    _bk = next((c for c in rep["cases"] if c["id"] == "kg_backend_control"), None)
+    expect("ffr: backend-control (не-UI) доходит до ready -> false-fail сконцентрирован в UI-ревью",
+           _bk is not None and _bk["actual"].get("ready_for_pr") is True)
     # каждый known-good с ожидаемым blocked_by действительно заблокирован ИМЕННО этим гейтом
     for c in rep["cases"]:
         exp_by = c["expected"].get("blocked_by")

@@ -523,9 +523,13 @@ freshness и первым живым DecisionPackage. Архитектура **e
     + `engine_floor_ready` (полное добросовестное покрытие -> ready: движок НЕ источник false-fail) +
     `block_attribution` (какие гейты режут корректный код). Ре-фрейм находки Phase B на цифрах; безопасность
     (`false_green==0`) сохранена. Замер: rate=0.667, attribution={visual_regression, design_system_usage}.
-  - Далее: риск-калиброванный advisory-тир для не-safety review-гейтов (по атрибуции; доказать снижение
-    false-fail БЕЗ false-green); golden tasks (реальные задачи); regression corpus; failure taxonomy;
-    model comparison; controlled ImprovementProposal + canary; авто-ревалидация fast-forward базы (A).
+  - **v3.1.5 — Golden tasks** ✅: known-good корпус расширен (6 known-good, 10 кейсов); kg_backend_control
+    (backend/не-ui -> ready без ревью) + kg_strict_ux/a11y -> block_attribution покрывает все 4 UI-гейта.
+    Вывод: reviewer-false-fail ЛОКАЛИЗОВАН в UI review-гейтах (не размазан); ENGINEERING блокируется раньше
+    на артефакт-гейтах (не reviewer-false-fail). rate=0.667, engine_floor_ready=true, false_green=0.
+  - Далее: риск-калиброванный advisory-тир для не-safety UI review-гейтов (по атрибуции; доказать снижение
+    false-fail БЕЗ false-green) — ТРОГАЕТ fail-closed, требует решения владельца; regression corpus;
+    failure taxonomy; model comparison; controlled ImprovementProposal + canary; авто-ревалидация ff-базы (A).
 - **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
   architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
 - **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2

@@ -2,6 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.5] — 2026-07-23 — Golden tasks: широкая выборка known-good + вывод про локализацию false-fail
+
+Расширили known-good корпус Bench Lite разными формами задач, чтобы reviewer-false-fail мерился на
+широкой выборке (решение про advisory-тир — по данным, не по 3 точкам).
+
+### Added
+- KG-control `kg_backend_control`: корректная backend/QUICK правка (НЕ ui) — в плане НЕТ блокирующих
+  review-гейтов -> ready БЕЗ ревью. Доказывает: reviewer-false-fail СКОНЦЕНТРИРОВАН в UI-гейтах
+  (ui_changed), а не размазан по всем задачам.
+- `kg_strict_ux` / `kg_strict_a11y`: строгость ревьюера на ux_review и accessibility_review ->
+  block_attribution теперь покрывает ВСЕ 4 UI review-гейта (ux_review, accessibility_review,
+  visual_regression, design_system_usage).
+- Инварианты selftest: атрибуция покрывает все 4 UI-гейта; backend-control доходит до ready.
+
+### Вывод (замер на 6 known-good)
+- reviewer_false_fail_rate = 0.667; engine_floor_ready = true; block_attribution = все 4 UI-гейта по 1;
+  false_green = 0. Корпус: 10 кейсов, все pass. ENGINEERING-задачи блокируются РАНЬШЕ на детерминированных
+  артефакт-гейтах (нужен author) — это НЕ reviewer-false-fail. Итог: ложные блоки корректного кода
+  локализованы в UI review-гейтах — прямая опора для будущего риск-калиброванного advisory-тира.
+
 ## [3.1.4] — 2026-07-23 — Reviewer false-fail rate: измеритель + атрибуция
 
 Прямой ответ на находку Phase B (green-throughput режет консервативный independent-review, не модель).
