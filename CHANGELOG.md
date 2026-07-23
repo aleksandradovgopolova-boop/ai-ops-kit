@@ -18,6 +18,11 @@
 - `templates/quality/DefinitionOfDone-UI.md` — риск-тир (`internal`/`user_facing`/`critical`) →
   требования (states/interaction/a11y/visual/design-system/UX) → evidence на точном SHA. Правило
   component-reuse. Связь ADR ↔ gate_policy ↔ StorybookPolicy ↔ UIEvidenceBundle.
+- **ADR registry + fitness** (v3.2.1): `decisions/adr/*.yaml` — governed-набор реальных
+  архитектурных решений системы (ADR-001 control-plane; ADR-002 fail-closed gate-модель; ADR-003
+  калиброванное UI-enforcement на exact-SHA evidence). `validation/validate_adr_registry.py` —
+  кросс-целостность (уникальность id, имя файла==id, ДВУНАПРАВЛЕННАЯ supersede-цепочка, резолв
+  related) + fitness (`ui_impact ∈ gate_policy.UI_IMPACT`). selftest + прогон реального реестра в CI.
 
 ### Note
 - Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —

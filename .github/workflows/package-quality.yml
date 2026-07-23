@@ -79,6 +79,10 @@ jobs:
         run: python3 validation/validate_storybook_evidence.py --selftest
       - name: ArchitectureDecision (ADR) — контракт архитектурных решений (selftest)
         run: python3 validation/validate_architecture_decision.py --selftest
+      - name: ADR registry — целостность + fitness (selftest + реальный реестр)
+        run: |
+          python3 validation/validate_adr_registry.py --selftest
+          python3 validation/validate_adr_registry.py
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

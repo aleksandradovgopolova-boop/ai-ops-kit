@@ -1,0 +1,41 @@
+schema_version: 1
+kind: ArchitectureDecision
+id: ADR-002
+title: "Fail-closed gate-модель: writer≠judge, evidence на точном SHA, бездоказательного pass нет"
+status: accepted
+date: "2026-07-24"
+owner: architecture
+context: >-
+  Агент-писатель заинтересован объявить работу готовой. Если тот же агент и оценивает
+  результат, возникают rubber-stamp и ложные green. Нужны гарантии, что «готово» означает
+  проверяемый факт на конкретной ревизии, а не мнение.
+decision: >-
+  Гейты fail-closed: блокирующий гейт закрывается только подтверждённым evidence на точной
+  зафиксированной ревизии (committed_sha). Ревьюер — отдельный вызов под read-only политикой
+  (writer≠judge); pass без чтений (рубер-стамп) не закрывает блокирующий гейт; warn на
+  блокирующем гейте блокирует. Незакрытый гейт -> НЕ ready (никакого ложного green).
+alternatives:
+  - option: "Один агент пишет и сам подтверждает готовность"
+    rejected_because: "конфликт интересов -> rubber-stamp, ложные green"
+  - option: "Evidence по markdown-тексту ревьюера (regex)"
+    rejected_because: "текст не привязан к ревизии и подделываем; нужен структурный вердикт на SHA"
+consequences:
+  positive:
+    - "0 false-green доказан вживую (Phase B) и на Bench Lite"
+    - "готовность = проверяемый факт на точном SHA, а не мнение"
+    - "устойчивость к слабым/недобросовестным моделям (блок вместо ложного пропуска)"
+  negative:
+    - "ниже green-throughput: легитимная работа может блокироваться консервативным ревью"
+    - "нужен сильный провайдер для стабильного прохождения ENGINEERING"
+quality_attributes:
+  - attribute: reliability
+    effect: improves
+  - attribute: security
+    effect: improves
+  - attribute: usability
+    effect: tradeoff
+    note: "строгость снижает пропускную способность green-пути"
+ui_impact: null
+supersedes: null
+superseded_by: null
+related: [ADR-003]

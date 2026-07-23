@@ -77,6 +77,8 @@ python3 tools/gate_result_v2.py --selftest
 python3 tools/storybook_adapter.py --selftest
 python3 validation/validate_storybook_evidence.py --selftest
 python3 validation/validate_architecture_decision.py --selftest
+python3 validation/validate_adr_registry.py --selftest
+python3 validation/validate_adr_registry.py
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest
