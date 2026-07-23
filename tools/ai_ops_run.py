@@ -523,14 +523,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v3.1.8: калиброванное UI-enforcement (по умолчанию включено в контроллере). NO-OP без более
         # богатых сигналов: легаси ui_changed -> user_facing + нет evidence -> fail-closed == сегодня.
         # Ослабление возможно ТОЛЬКО при ui_impact=internal (не-safety гейты) или passing UI-evidence.
+        # v3.1.9 (trust-фикс): контроллер БОЛЬШЕ НЕ собирает evidence до реализации из основного
+        # checkout. Сбор перенесён В pipeline — ПОСЛЕ коммита, из рабочего worktree, на ТОЧНОМ SHA
+        # (см. execution_pipeline: build_bundle(work_root) + evidence_for_gate(expected_sha=committed)).
+        # ui_evidence прокидывается как есть (обычно None; bench инжектит синтетический dict напрямую).
         _calib = bool(calibrated_enforcement)
-        _ui_ev = ui_evidence
-        if _calib and _ui_ev is None:
-            try:
-                import storybook_adapter
-                _ui_ev = storybook_adapter.evidence_for_gate(storybook_adapter.build_bundle(child_root))
-            except Exception:  # noqa: BLE001 — сбор evidence не должен ронять прогон (нет UI -> not_run)
-                _ui_ev = None
 
         def _pipe(_resume, _rctx):
             return execution_pipeline.run_pipeline(
@@ -543,7 +540,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
-                calibrated_enforcement=_calib, ui_evidence=_ui_ev)
+                calibrated_enforcement=_calib, ui_evidence=ui_evidence)
         try:
             rep = _pipe(resume, resume_ctx)
             # v3.1.1 (fix-loop, находка Phase B): блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх

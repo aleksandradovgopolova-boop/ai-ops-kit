@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-661
+request_id: RR-008
+statement: "Собственная сторона сравнения (self-evidence): цепочка кита, о которой говорит присланный анализ, существует как реализованные и провалидированные механизмы, а не декларации — CHANGELOG фиксирует v3.0.15 «Lifecycle Commit Barrier: delivery только после durable-фиксации доказательств+состояния», v3.0.17 «Delivery Outbox Integrity» с пометкой «CI для HEAD e93653e (v3.0.17) фактически зелёный (package-quality + release success)»; ранее валидированы: 28 gates/18 blocking, writer≠judge как правило валидатора, evidence на SHA (gate_executor/evidence_collector), research/product governance (EV-214 из RR-003). Оговорка: полнота цепочки — по документации/CI самого кита, независимого внешнего аудита не было."
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — CHANGELOG.md v3.0.15…v3.0.17 (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "CHANGELOG.md: строки ~301 (CI зелёный для HEAD v3.0.17), ~366-398 (v3.0.15 Lifecycle Commit Barrier, roadmap Phase A/B); registry/quality per EV-214"
+  quote: "а не декларацией. CI для HEAD e93653e (v3.0.17) фактически зелёный (package-quality + release success)."
+captured_at: "2026-07-24"
+captured_by: "claude (RR-008; self-evidence — пометка для спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-24"
+reliability:
+  level: medium
+  rationale: "Прямое чтение CHANGELOG в сессии; self-reported самим китом — судья выполняет спот-чек; внешнего аудита цепочки не было."
+status: active
+superseded_by: null

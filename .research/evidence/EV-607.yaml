@@ -1,0 +1,30 @@
+schema_version: 1
+kind: research.evidence
+id: EV-607
+request_id: RR-008
+statement: 'OpenHands benchmark-инфраструктура ПОДТВЕРЖДЕНА и уточнена: отдельный
+  MIT-репозиторий OpenHands/benchmarks (SWE-Bench, SWE-Bench Pro, GAIA, Commit0, OpenAgentSafety,
+  ProgramBench); SDK подключается как submodule, версии связаны — харнесс заточен
+  под их SDK, не нейтрален.'
+evidence_type: documented_fact
+source:
+  title: GitHub — OpenHands/benchmarks
+  url: https://github.com/OpenHands/benchmarks
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'README: таблица бенчмарков + vendor/software-agent-sdk'
+  quote: not every version of the benchmarks is compatible with every version of the
+    SDK
+captured_at: '2026-07-24'
+captured_by: 'scout-agent (verify: Open SWE/OpenHands/SWE-ReX, RR-008)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-24'
+reliability:
+  level: medium
+  rationale: Первичный репозиторий; список бенчмарков пересказан фетч-моделью, идёт
+    миграция V0→V1.
+status: active
+superseded_by: null

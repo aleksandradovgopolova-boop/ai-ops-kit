@@ -2,6 +2,40 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.1.9-rc — Exact-SHA UI Evidence (trust-фикс перед живой UI-квалификацией)
+
+Закрыт реальный trust-разрыв калиброванного enforcement (v3.1.8): UI-evidence собиралось в
+контроллере ДО реализации, из основного checkout, без commit_sha и без changed_files. Из-за этого
+старое `pass`-evidence в основном дереве могло снять субъективный блок с новой правки. Это узкий
+обязательный фикс; НЕ раздуваем roadmap.
+
+### Fixed (безопасность)
+- Сбор UI-evidence перенесён из `ai_ops_run.run` (до pipeline) в `execution_pipeline` — **после**
+  коммита, из рабочего worktree WorkItem, на **точном** `committed_sha`, по файлам этого коммита
+  (`_committed_changed_files` = base..committed_sha).
+- **Exact-SHA binding:** `storybook_adapter.evidence_for_gate(bundle, expected_sha)` — если
+  `bundle.commit_sha != expected_sha` (устаревшее / не привязанное / чужое evidence), ВСЕ гейты →
+  `not_run` (fail-closed), evidence НЕ освобождает гейт.
+- `bundle.commit_sha` берётся из **провенанс-меты** артефактов (`.ai/ui-evidence/meta.json →
+  commit_sha`) — SHA, на котором evidence реально собрано, а не от вызывающего.
+- Убран loose stem-matching файлов: сопоставление changed↔importPath теперь по **суффиксу пути**
+  (`a/Card.tsx` ≠ `b/Card.tsx`), истории одного компонента больше не «покрывают» другой.
+- Пустой `affected_stories` при UI-правке больше не даёт вакуумного `state_coverage.complete=True`:
+  `ux` не закрывается детерминированно без затронутых историй.
+- `UIEvidenceBundle` (на точном SHA) выносится в отчёт pipeline как qualification evidence.
+
+### Added (три обязательных отрицательных теста, `storybook_adapter --selftest`)
+- старое `pass`-evidence + новый commit → не освобождает (все `not_run`);
+- `bundle.commit_sha != tested_revision` → не освобождает;
+- проходящие истории ДРУГОГО компонента → не закрывают изменённый компонент.
+
+### Известные ограничения (зафиксировано, не блокер)
+- `GateResult v2` реализован как контракт + compatibility-адаптер, но ещё НЕ стал каноническим
+  runtime-форматом всех gate-результатов: в `_run_reviews` калиброванный advisory сохраняется как
+  v1 `warn` (`calibrated_view()` пока не публикуется в отчёте). Планируется отдельно, не в v3.2.
+- Живая Phase B квалификация (5 сценариев + `QualificationReport`) — ОТКРЫТА, требует боевого
+  провайдер-ключа (ротация в консоли) и реальных PR. Не входит в этот оффлайн-фикс.
+
 ## [3.1.8] — 2026-07-24 — Calibrated UI Enforcement (ПЕРВОЕ изменение боевого fail-closed за v3.1)
 
 Калиброванная UI-политика (v3.1.6, shadow) + проверяемое evidence (v3.1.7) становятся ЖИВЫМИ:

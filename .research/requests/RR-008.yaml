@@ -1,0 +1,29 @@
+# Верификация внешнего анализа аналогов AI Ops + стратегия control-plane-vs-monolith.
+schema_version: 1
+kind: research.request
+id: RR-008
+title: "Аналоги AI Ops: верификация внешнего анализа и стратегия «control plane + adapters»"
+requested_by:
+  system: human
+  layer: product
+decision_to_support:
+  description: "Решить: (а) подтверждается ли стратегия «AI Ops = control plane доверенного исполнения + опциональные адаптеры к open-source runtime/sandbox/gates» против «монолитный coding agent»; (б) какие проекты брать в глубокое изучение/адаптацию и в каком порядке"
+  decision_maker: human
+questions:
+  - "Верны ли ключевые фактические утверждения присланного анализа (лицензии, capabilities, цитата про prompt-driven validation у Open SWE, пивот Continue в AI checks, статус SWE-ReX/Goose)?"
+  - "Выдерживает ли негативное утверждение «единого OSS-продукта с такой связкой нет» проверку с зафиксированным охватом — с учётом gstack и нашего прошлого ландшафта (DP-103)?"
+  - "Что из пяти référентов (Open SWE, OpenHands, SWE-ReX, Continue, Cline) реально адаптируемо в кит первым и по какой цене?"
+constraints:
+  - license_compatible_commercial
+  - fits_kit_declared_pattern    # адаптеры — декларации/контракты, не зависимости ядра
+  - evidence_over_reputation     # проверяем по первоисточникам, не по чужой таблице
+workflow_hint: deep
+memory_check:
+  performed: true
+  related_requests: [RR-002, RR-003]
+  related_decisions: [DP-102, DP-103]
+  summary: "DP-103: gstack — подтверждённый прямой аналог (в присланном анализе отсутствует — дыра охвата); DP-102: механизм деклараций внешних инструментов уже есть; RR-002 покрывал скиллы/каталоги, но не coding-agent платформы. Присланный анализ — вторичный источник (другой AI), его таблица — мнение автора."
+required_confidence: medium
+deadline: "2026-08-10"
+status: in_progress
+created_at: "2026-07-23"

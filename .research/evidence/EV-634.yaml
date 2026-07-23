@@ -1,0 +1,27 @@
+schema_version: 1
+kind: research.evidence
+id: EV-634
+request_id: RR-008
+statement: 'Cline как «SDK + IDE + CLI» ПОДТВЕРЖДЁН: VS Code extension, JetBrains
+  plugin, CLI и SDK; Apache-2.0 (© 2026 Cline Bot Inc.); активность высокая (6620+
+  коммитов). Не является системой quality gates или review-инструментом.'
+evidence_type: documented_fact
+source:
+  title: cline/cline — GitHub README
+  url: https://github.com/cline/cline
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'README: tagline + секция Applications + LICENSE'
+  quote: The open source coding agent in your IDE and terminal.
+captured_at: '2026-07-24'
+captured_by: 'scout-agent (verify: Continue/Cline/Aider/Goose, RR-008)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-24'
+reliability:
+  level: high
+  rationale: Первичный README, снято 2026-07-24.
+status: active
+superseded_by: null

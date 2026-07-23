@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-632
+request_id: RR-008
+statement: 'КРУПНОЕ РАСХОЖДЕНИЕ с чужим анализом: Continue как компания поглощена
+  Cursor (2026); сайт continue.dev — страница-объявление о сделке. Open-source кодовая
+  база остаётся доступной, но «пивот в checks» — состояние до поглощения; на развитие
+  проекта рассчитывать нельзя, формат — можно заимствовать.'
+evidence_type: documented_fact
+source:
+  title: Continue has joined Cursor — continue.dev
+  url: https://continue.dev
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: главная страница continue.dev (announcement)
+  quote: open-source codebase remains freely available as a foundation for others
+captured_at: '2026-07-24'
+captured_by: 'scout-agent (verify: Continue/Cline/Aider/Goose, RR-008)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-24'
+reliability:
+  level: high
+  rationale: Официальное заявление на домене компании.
+status: active
+superseded_by: null

@@ -43,6 +43,10 @@ ALL_STATES = REQUIRED_STATES + EXTRA_STATES
 _STORY_INDEX = ("storybook-static/index.json", "storybook-static/stories.json",
                 ".storybook-out/index.json")
 _EVIDENCE_DIRS = (".ai/ui-evidence", "test-results", ".ui-evidence")
+# v3.1.9: провенанс evidence — SHA, на котором артефакты РЕАЛЬНО собраны (кладёт UI-CI child-репо).
+# bundle.commit_sha берётся ОТСЮДА (не от вызывающего), чтобы устаревшее evidence нельзя было
+# выдать за свежее. Нет meta -> commit_sha=None -> unbound -> при проверке SHA гейт не освобождается.
+_META = (".ai/ui-evidence/meta.json", "test-results/ui-evidence-meta.json", ".ui-evidence/meta.json")
 _ARTIFACTS = {
     "interaction": ("interaction.json", "interaction-tests.json", "vitest.json"),
     "a11y": ("a11y.json", "axe.json", "accessibility.json"),
@@ -100,13 +104,27 @@ def _component_of(story: dict) -> str:
     return story.get("title") or story.get("importPath") or story.get("id", "")
 
 
+def _norm_path(p: str) -> str:
+    """Нормализация относительного пути: убрать ведущие ./ и / для сравнения по суффиксу компонент."""
+    return (p or "").lstrip("./").lstrip("/")
+
+
 def _matches_changed(import_path: str, changed: list[str]) -> bool:
-    if not import_path:
+    """Story затронута, если её importPath и изменённый файл — ОДИН путь по суффиксу компонент.
+    v3.1.9: убрано loose stem-matching (bare basename): `a/Card.tsx` и `b/Card.tsx` НЕ матчатся,
+    иначе истории одного компонента ложно «покрывали» бы другой изменённый компонент."""
+    ip = _norm_path(import_path)
+    if not ip:
         return False
-    ip = import_path.lstrip("./")
+    ip_parts = ip.split("/")
     for c in changed:
-        cc = c.lstrip("./")
-        if cc and (cc in ip or ip in cc or Path(cc).stem == Path(ip).stem):
+        cc = _norm_path(c)
+        if not cc:
+            continue
+        cc_parts = cc.split("/")
+        n = min(len(ip_parts), len(cc_parts))
+        # совпадение по суффиксу пути (полные компоненты пути с конца), НЕ по голому basename
+        if n >= 1 and ip_parts[-n:] == cc_parts[-n:]:
             return True
     return False
 
@@ -184,9 +202,27 @@ def _norm_design_system(data) -> dict:
 # --- сборка bundle --------------------------------------------------------------------------------
 
 def build_bundle(child_root, commit_sha=None, changed_files=None) -> dict:
+    """Собрать UIEvidenceBundle из локальных артефактов.
+
+    v3.1.9 (trust-фикс): bundle.commit_sha берётся из ПРОВЕНАНС-меты артефактов
+    (.ai/ui-evidence/meta.json -> commit_sha), т.е. из SHA, на котором evidence РЕАЛЬНО собрано, а не
+    от вызывающего. commit_sha-параметр — лишь fallback для CLI-диагностики, когда меты нет. Так
+    устаревшее evidence нельзя выдать за свежее: при связывании (evidence_for_gate(..., expected_sha))
+    несовпадение SHA -> гейт не освобождается.
+    """
     root = Path(child_root)
     changed = [c.strip() for c in (changed_files or []) if c.strip()]
     provenance = []
+
+    # 0) провенанс: SHA сборки evidence из меты артефактов (авторитетнее переданного commit_sha)
+    meta_path = _find(root, _META)
+    meta_sha = None
+    if meta_path:
+        meta = _load_json(meta_path)
+        if isinstance(meta, dict) and meta.get("commit_sha"):
+            meta_sha = str(meta["commit_sha"])
+            provenance.append(str(meta_path.relative_to(root)))
+    evidence_sha = meta_sha or commit_sha
 
     # 1) Storybook detection + story index
     idx_path = _find(root, _STORY_INDEX)
@@ -237,23 +273,39 @@ def build_bundle(child_root, commit_sha=None, changed_files=None) -> dict:
     design_system = _load_section("design_system", _norm_design_system)
 
     return {"schema_version": BUNDLE_SCHEMA_VERSION, "kind": "UIEvidenceBundle",
-            "commit_sha": commit_sha, "generated_from": provenance,
+            "commit_sha": evidence_sha, "generated_from": provenance,
             "affected_components": affected_components, "affected_stories": affected_stories,
             "storybook": storybook, "state_coverage": state_coverage,
             "interaction_tests": interaction, "accessibility": a11y,
             "visual_regression": visual, "design_system": design_system}
 
 
-# --- SHADOW-мост к gate_policy: какое ДЕТЕРМИНИРОВАННОЕ evidence bundle даёт по каждому UI-гейту ----
+# --- мост к gate_policy: какое ДЕТЕРМИНИРОВАННОЕ evidence bundle даёт по каждому UI-гейту ----------
 
-def evidence_for_gate(bundle: dict) -> dict:
-    """Диагностика (shadow): что из UIEvidenceBundle детерминированно закрывает часть UI-гейта, а что
-    остаётся за ревьюером. НЕ enforcement (это v3.1.8) — только маппинг evidence -> гейт."""
+def evidence_for_gate(bundle: dict, expected_sha=None) -> dict:
+    """Маппинг UIEvidenceBundle -> детерминированный статус по каждому UI-гейту.
+
+    v3.1.9 EXACT-SHA BINDING (trust-фикс): если задан expected_sha (проверяемая ревизия) и
+    bundle.commit_sha != expected_sha (evidence устарело / не привязано / чужой SHA) -> ВСЕ гейты
+    получают deterministic_status='not_run'. То есть устаревшее/непривязанное evidence НЕ освобождает
+    гейт (fail-closed), а не тихо разблокирует новый код старым pass'ом."""
+    bound = expected_sha is None or bundle.get("commit_sha") == expected_sha
+    if not bound:
+        reason = (f"evidence не привязано к проверяемой ревизии "
+                  f"(bundle.commit_sha={bundle.get('commit_sha')!r} != {expected_sha!r}) -> not_run")
+        return {g: {"deterministic_status": "not_run", "residual_review": True,
+                    "basis": ["exact_sha_binding_failed"], "unbound": True, "reason": reason}
+                for g in ("visual_regression", "design_system_usage",
+                          "accessibility_review", "ux_review")}
     vis = bundle.get("visual_regression", {})
     ds = bundle.get("design_system", {})
     a11y = bundle.get("accessibility", {})
     sc = bundle.get("state_coverage", {})
     inter = bundle.get("interaction_tests", {})
+    # v3.1.9: покрытие состояний доказано ТОЛЬКО если есть затронутые истории. Пустой affected при
+    # UI-правке = у изменённого компонента нет историй -> complete «вакуумно True» НЕ считается pass.
+    has_affected = bool(bundle.get("affected_stories"))
+    ux_pass = has_affected and sc.get("complete") and inter.get("status") == "pass"
     return {
         "visual_regression": {
             "deterministic_status": vis.get("status", "not_run"),
@@ -268,11 +320,11 @@ def evidence_for_gate(bundle: dict) -> dict:
             "residual_review": True,              # семантическая доступность — за ревьюером (hybrid)
             "basis": ["accessibility.blocking_violations"]},
         "ux_review": {
-            "deterministic_status": ("pass" if (sc.get("complete") and inter.get("status") == "pass")
+            "deterministic_status": ("pass" if ux_pass
                                      else ("fail" if (inter.get("status") == "fail" or sc.get("missing"))
                                            else "not_run")),
             "residual_review": True,              # flow/copy/tone — за ревьюером (hybrid)
-            "basis": ["state_coverage.complete", "interaction_tests.status"]},
+            "basis": ["affected_stories", "state_coverage.complete", "interaction_tests.status"]},
     }
 
 
@@ -378,6 +430,64 @@ def selftest() -> int:
         b = build_bundle(root)
         expect("design_system: новый компонент без обоснования -> fail",
                b["design_system"]["status"] == "fail")
+
+    # (F) v3.1.9 EXACT-SHA BINDING — три обязательных отрицательных теста (trust-фикс) --------------
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        # evidence собрано на СТАРОМ SHA (meta.commit_sha=OLD), всё pass
+        _write(root, ".ai/ui-evidence/meta.json", {"commit_sha": "OLDSHA"})
+        _write(root, "storybook-static/index.json", {"v": 5, "entries": {
+            "c--default": {"type": "story", "id": "c--default", "title": "C", "name": "Default",
+                           "importPath": "./src/Card.tsx"},
+            "c--loading": {"type": "story", "id": "c--loading", "title": "C", "name": "Loading",
+                           "importPath": "./src/Card.tsx"},
+            "c--empty": {"type": "story", "id": "c--empty", "title": "C", "name": "Empty",
+                         "importPath": "./src/Card.tsx"},
+            "c--error": {"type": "story", "id": "c--error", "title": "C", "name": "Error",
+                         "importPath": "./src/Card.tsx"}}})
+        _write(root, ".ai/ui-evidence/interaction.json", {"status": "pass", "total": 2, "passed": 2})
+        _write(root, ".ai/ui-evidence/a11y.json", {"blocking_violations": 0})
+        _write(root, ".ai/ui-evidence/visual.json", {"status": "pass", "changed": 0})
+        b_old = build_bundle(root, changed_files=["src/Card.tsx"])
+        expect("provenance: commit_sha берётся из меты (не от вызывающего)", b_old["commit_sha"] == "OLDSHA")
+
+        # T1: старое evidence pass + НОВЫЙ commit -> НЕ освобождает (все not_run)
+        eg_new = evidence_for_gate(b_old, expected_sha="NEWSHA")
+        expect("T1 exact-SHA: старое pass-evidence + новый commit -> все гейты not_run (не освобождает)",
+               all(v["deterministic_status"] == "not_run" and v.get("unbound") for v in eg_new.values()))
+        # T2: bundle.commit_sha == tested_revision -> evidence применяется (bound)
+        eg_ok = evidence_for_gate(b_old, expected_sha="OLDSHA")
+        expect("T2 exact-SHA: совпадение SHA -> evidence привязано (visual=pass применяется)",
+               eg_ok["visual_regression"]["deterministic_status"] == "pass")
+        # без expected_sha связывание не навязывается (диагностический режим)
+        expect("exact-SHA: без expected_sha связывание не требуется (диагностика)",
+               evidence_for_gate(b_old)["visual_regression"]["deterministic_status"] == "pass")
+
+    # T3: проходящие истории ДРУГОГО компонента НЕ закрывают изменённый компонент -------------------
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _write(root, ".ai/ui-evidence/meta.json", {"commit_sha": "SHA1"})
+        _write(root, "storybook-static/index.json", {"v": 5, "entries": {
+            # полностью покрытые истории у КОМПОНЕНТА A (Widget), но изменён КОМПОНЕНТ B (Panel)
+            "a--default": {"type": "story", "id": "a--default", "title": "A", "name": "Default",
+                           "importPath": "./src/features/Widget.tsx"},
+            "a--loading": {"type": "story", "id": "a--loading", "title": "A", "name": "Loading",
+                           "importPath": "./src/features/Widget.tsx"},
+            "a--empty": {"type": "story", "id": "a--empty", "title": "A", "name": "Empty",
+                         "importPath": "./src/features/Widget.tsx"},
+            "a--error": {"type": "story", "id": "a--error", "title": "A", "name": "Error",
+                         "importPath": "./src/features/Widget.tsx"}}})
+        _write(root, ".ai/ui-evidence/interaction.json", {"status": "pass", "total": 4, "passed": 4})
+        b3 = build_bundle(root, changed_files=["src/admin/Panel.tsx"])
+        expect("T3 scoping: истории чужого компонента (Widget) НЕ считаются затронутыми при правке Panel",
+               b3["affected_stories"] == [] and b3["affected_components"] == [])
+        eg3 = evidence_for_gate(b3, expected_sha="SHA1")
+        expect("T3 scoping: ux НЕ закрыт (нет затронутых историй -> покрытие состояний не доказано)",
+               eg3["ux_review"]["deterministic_status"] != "pass")
+        # и loose stem-match убран: Card.tsx в разных каталогах не матчатся между собой
+        expect("scoping: суффикс-матч, НЕ голый basename (a/Card.tsx ≠ b/Card.tsx)",
+               _matches_changed("./a/Card.tsx", ["b/Card.tsx"]) is False
+               and _matches_changed("./src/Card.tsx", ["src/Card.tsx"]) is True)
 
     print("storybook_adapter selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

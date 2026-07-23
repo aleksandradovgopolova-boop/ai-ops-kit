@@ -1,0 +1,30 @@
+schema_version: 1
+kind: research.evidence
+id: EV-636
+request_id: RR-008
+statement: 'Aider: repo map / авто-коммиты / lint-test с автофиксом ПОДТВЕРЖДЕНЫ дословно
+  (Apache-2.0), но активность УТОЧНЕНА: коммиты в 2026 редкие (последний 2026-05-22),
+  последний релиз v0.86.0 — август 2025, ~год без релизов — признаки maintenance-режима.
+  Заимствовать паттерн «lint/test после каждого изменения агента с автофиксом», на
+  развитие не рассчитывать.'
+evidence_type: documented_fact
+source:
+  title: aider-ai/aider — README + commits/releases
+  url: https://github.com/aider-ai/aider
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README (фичи); /commits/main; /releases (v0.86.0 Aug 2025)
+  quote: Aider makes a map of your entire codebase, which helps it work well in larger
+    projects.
+captured_at: '2026-07-24'
+captured_by: 'scout-agent (verify: Continue/Cline/Aider/Goose, RR-008)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-24'
+reliability:
+  level: medium
+  rationale: Факты первичны; вывод о maintenance-режиме — интерпретация паттерна активности.
+status: active
+superseded_by: null

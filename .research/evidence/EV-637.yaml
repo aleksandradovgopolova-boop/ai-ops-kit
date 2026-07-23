@@ -1,0 +1,29 @@
+schema_version: 1
+kind: research.evidence
+id: EV-637
+request_id: RR-008
+statement: 'Goose: передача в Agentic AI Foundation при Linux Foundation ПОДТВЕРЖДЕНА
+  первоисточником — AAIF сформирована 2025-12-09 с якорными проектами MCP (Anthropic),
+  goose (Block) и AGENTS.md (OpenAI); платиновые члены: AWS, Anthropic, Block, Bloomberg,
+  Cloudflare, Google, Microsoft, OpenAI.'
+evidence_type: documented_fact
+source:
+  title: Linux Foundation — Announces the Formation of the AAIF
+  url: https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: пресс-релиз LF от 2025-12-09, секция goose
+  quote: goose is an open source, local-first AI agent framework
+captured_at: '2026-07-24'
+captured_by: 'scout-agent (verify: Continue/Cline/Aider/Goose, RR-008)'
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Официальный пресс-релиз Linux Foundation — первоисточник организационного
+    события.
+status: active
+superseded_by: null

@@ -1,0 +1,22 @@
+# Inbox: внешний анализ аналогов AI Ops (прислал Sasha 2026-07-23, автор — другой AI).
+# Статус: unvetted — утверждения и таблица сравнения НЕ проверены; цитаты и лицензии
+# требуют верификации первоисточниками. Автор сам честно пометил таблицу как
+# «архитектурная оценка, не benchmark».
+schema_version: 1
+kind: research.source-inbox
+received_at: "2026-07-23"
+origin: "анализ другого AI (с URL-ссылками на GitHub), передан Sasha"
+scope: "ai-ops-kit: конкурентный ландшафт + стратегия 'control plane + adapters'"
+candidates:
+  - {name: Open SWE, url: "https://github.com/langchain-ai/open-swe", claim: "асинхронный coding agent (Slack/Linear/GitHub -> sandbox -> draft PR), MIT; validation prompt-driven; главный продуктовый референс/конкурент", category: product-analog, priority: high}
+  - {name: OpenHands, url: "https://github.com/OpenHands/OpenHands", claim: "agent runtime: SDK/CLI/GUI/REST, benchmark-инфраструктура; ядро MIT, enterprise source-available; кандидат в execution backend", category: runtime-reference, priority: high}
+  - {name: SWE-agent + mini-SWE-agent, url: "https://github.com/SWE-agent/SWE-agent", claim: "研究-ориентированный агент под SWE-Bench; сами рекомендуют mini-версию; референс qualification/Bench", category: eval-reference}
+  - {name: SWE-ReX, url: "https://github.com/SWE-agent/SWE-ReX", claim: "единый интерфейс к sandboxed shell environments (локально/облако, параллельно), MIT; кандидат в runtime adapter Tool Broker'а", category: sandbox-reference, priority: high}
+  - {name: Continue, url: "https://github.com/continuedev/continue", claim: "пивот в source-controlled AI checks (.continue/checks/*.md, статусы на PR), Apache-2.0; референс 'gates as code' и простоты DX", category: gates-reference, priority: high}
+  - {name: Cline, url: "https://github.com/cline/cline", claim: "IDE/CLI/SDK агент; Kanban-режим: worktrees, auto-commit, dependency chains; Apache-2.0; UX-референс WorkItems", category: ux-reference}
+  - {name: Aider, url: "https://github.com/aider-ai/aider", claim: "компактное исполнительное ядро: repo map, git UX, test-and-fix loop", category: loop-reference}
+  - {name: Goose, url: "https://github.com/aaif-goose/goose", claim: "CLI/desktop/API агент, перешёл в Agentic AI Foundation при Linux Foundation", category: runtime-reference}
+notes:
+  - "Ключевое негативное утверждение автора: «open-source продукта, объединяющего execution+governance+lifecycle+evidence+delivery+evaluation+Product Learning+UI quality, не нашла» — требует оформления по нашим правилам (EV с охватом и квалификаторами)."
+  - "Стратегический вывод автора: AI Ops = control plane / источник policy-lifecycle truth + адаптеры (OpenHands SDK, SWE-ReX, Continue checks) — кандидат в decision RR-008."
+  - "ДЫРА чужого скана: gstack (наш подтверждённый прямой аналог, DP-103, 123.7k звёзд) в анализе отсутствует вовсе — сверить категории."
