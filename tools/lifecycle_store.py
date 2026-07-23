@@ -21,57 +21,83 @@ from pathlib import Path
 import yaml
 
 
-def durable_write(path, data, require_keys=()):
-    """АТОМАРНАЯ + FAIL-CLOSED запись YAML-артефакта. tmp -> flush+fsync(файл) -> atomic os.replace ->
-    fsync(каталог, чтобы rename пережил потерю питания) -> ПЕРЕЧИТАТЬ и провалидировать (dict + ключи).
-    -> {ok: True} | {ok: False, error}. Вызывающий ОБЯЗАН остановиться при ok=False (нет источника истины)."""
+def _durable(path, data, serialize, parse, require_keys, keep_backup):
+    """v3.0.15 (LifecycleStore v1.1, finding аудита P1): АТОМАРНАЯ + FAIL-CLOSED запись с валидацией
+    ПРОСПЕКТИВНОГО документа ДО os.replace (иначе программная ошибка могла заменить валидный файл
+    невалидным, а потом вернуть ok=False — старый источник истины уже потерян). Порядок:
+    validate(data) -> serialize -> validate(проспективный reparse) -> UNIQUE temp -> fsync ->
+    [backup прежнего валидного] -> atomic replace -> fsync(dir) -> reread+validate -> cleanup temp.
+    -> {ok} | {ok: False, error}."""
+    import tempfile
     path = Path(path)
+    # 1. валидируем ВХОД до любого касания целевого файла
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "данные для записи не dict"}
+    missing = [k for k in require_keys if k not in data]
+    if missing:
+        return {"ok": False, "error": f"перед записью отсутствуют ключи: {', '.join(missing)}"}
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        text = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)                      # атомарно на том же ФС
-        _fsync_dir(path.parent)                     # durability самого rename
-        back = yaml.safe_load(path.read_text(encoding="utf-8"))   # перечитать и проверить
-        if not isinstance(back, dict):
-            return {"ok": False, "error": "перечитанный артефакт не dict"}
-        missing = [k for k in require_keys if k not in back]
-        if missing:
-            return {"ok": False, "error": f"после записи отсутствуют ключи: {', '.join(missing)}"}
-        return {"ok": True}
+        text = serialize(data)
     except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
-
-
-def durable_write_json(path, data, require_keys=()):
-    """v3.0.14 (finding аудита #2): та же durable-гарантия, что durable_write, но для JSON-артефактов
-    (run-report/controller-report). tmp -> fsync(файл) -> atomic replace -> fsync(каталог) -> перечитать
-    через json.loads + провалидировать. -> {ok} | {ok: False, error}."""
-    import json as _json
-    path = Path(path)
+        return {"ok": False, "error": f"сериализация не удалась: {type(e).__name__}: {e}"}
+    # 2. проспективная валидация: сериализованное перечитывается в валидный dict — ДО замены старого файла
+    try:
+        prospective = parse(text)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"проспективный документ не парсится: {type(e).__name__}: {e}"}
+    if not isinstance(prospective, dict) or [k for k in require_keys if k not in prospective]:
+        return {"ok": False, "error": "проспективный документ невалиден — старый файл НЕ тронут"}
+    tmp = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        text = _json.dumps(data, ensure_ascii=False, indent=2, default=str)
-        with open(tmp, "w", encoding="utf-8") as f:
+        # 3. УНИКАЛЬНЫЙ temp (mkstemp) — конкурентные писатели не бьются об общий .tmp
+        fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+        tmp = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        # 4. backup прежнего валидного состояния (opt-in, для критических артефактов)
+        if keep_backup and path.exists():
+            try:
+                path.with_suffix(path.suffix + ".bak").write_text(
+                    path.read_text(encoding="utf-8"), encoding="utf-8")
+            except OSError:
+                pass
+        # 5. атомарная замена + fsync каталога
+        os.replace(str(tmp), str(path))
+        tmp = None
         _fsync_dir(path.parent)
-        back = _json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(back, dict):
-            return {"ok": False, "error": "перечитанный JSON не dict"}
-        missing = [k for k in require_keys if k not in back]
-        if missing:
-            return {"ok": False, "error": f"после записи отсутствуют ключи: {', '.join(missing)}"}
+        # 6. повторная валидация ПОСЛЕ замены (defense-in-depth)
+        back = parse(path.read_text(encoding="utf-8"))
+        if not isinstance(back, dict) or [k for k in require_keys if k not in back]:
+            return {"ok": False, "error": "перечитанный после замены документ невалиден"}
         return {"ok": True}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        if tmp is not None and Path(tmp).exists():
+            try:
+                Path(tmp).unlink()
+            except OSError:
+                pass
+
+
+def durable_write(path, data, require_keys=(), keep_backup=False):
+    """АТОМАРНАЯ + FAIL-CLOSED запись YAML-артефакта (LifecycleStore v1.1: validate-before-replace,
+    unique temp, cleanup, opt-in backup). -> {ok} | {ok: False, error}. Вызывающий ОБЯЗАН остановиться
+    при ok=False (нет источника истины)."""
+    return _durable(path, data, lambda d: yaml.safe_dump(d, allow_unicode=True, sort_keys=False),
+                    yaml.safe_load, require_keys, keep_backup)
+
+
+def durable_write_json(path, data, require_keys=(), keep_backup=False):
+    """v3.0.14/v3.0.15 (finding аудита #2/P1): durable JSON-запись (run-report/controller-report) с той же
+    гарантией validate-before-replace, что durable_write. -> {ok} | {ok: False, error}."""
+    import json as _json
+    return _durable(path, data,
+                    lambda d: _json.dumps(d, ensure_ascii=False, indent=2, default=str),
+                    _json.loads, require_keys, keep_backup)
 
 
 def _event_checksum(payload_str):
@@ -84,7 +110,14 @@ def journal_append(journal_path, event):
     Каждое событие получает seq, prev-checksum (хэш предыдущей строки) и собственный checksum -> при
     чтении видно усечение/подмену/разрыв. Одна строка = атомарный append (open('a')+flush+fsync) —
     crash-boundary на уровне записи. event должен нести run/package/gate-связи (kind + ids). НЕ роняет
-    вызывающего при сбое (журнал — наблюдаемость, не источник истины). -> {ok} | {ok: False, error}."""
+    вызывающего при сбое (журнал — наблюдаемость, не источник истины). -> {ok} | {ok: False, error}.
+
+    ЧЕСТНЫЕ ОГРАНИЧЕНИЯ v0.1 (не полагаться на журнал для восстановления состояния или qualification-
+    вердикта — это делают durable-артефакты): append НЕ под отдельной блокировкой (два процесса могут
+    получить одинаковые seq/prev_checksum); удаление последней ЦЕЛОЙ строки оставляет валидный префикс и
+    НЕ детектится как усечение; перед append НЕ проверяется вся существующая цепочка; сбой журнала
+    сознательно НЕ блокирует прогон. Полный audit trail (лок, полная верификация цепочки, Run/Attempt/
+    Package/Gate как первичный контракт) — event journal v0.2 (v3.1)."""
     import json as _json
     journal_path = Path(journal_path)
     try:
@@ -233,6 +266,25 @@ def selftest():
         expect("durable_write_json: ok + файл создан", wj["ok"] and jp.is_file())
         expect("durable_write_json: отсутствует required key -> ok=False",
                not durable_write_json(root / "r2.json", {"kind": "x"}, require_keys=("kind", "miss"))["ok"])
+
+        # v3.0.15 (LifecycleStore v1.1, P1): validate-before-replace — невалидная запись НЕ затирает
+        # прежний валидный файл (валидация до os.replace), и не остаётся мусорных temp.
+        good = root / "src.yaml"
+        durable_write(good, {"kind": "t", "n": 1}, require_keys=("kind", "n"))
+        _before = good.read_text(encoding="utf-8")
+        _bad = durable_write(good, {"kind": "t"}, require_keys=("kind", "n"))   # нет required n
+        expect("v3.0.15: невалидная запись -> ok=False", not _bad["ok"])
+        expect("v3.0.15: прежний валидный файл НЕ затёрт невалидной записью",
+               good.read_text(encoding="utf-8") == _before)
+        expect("v3.0.15: не dict -> ok=False, файл цел",
+               not durable_write(good, "не dict")["ok"]
+               and good.read_text(encoding="utf-8") == _before)
+        expect("v3.0.15: нет остаточных .tmp после операций",
+               not any(x.name.endswith(".tmp") or ".tmp" in x.name for x in good.parent.iterdir()))
+        # keep_backup сохраняет ссылку на прежнее валидное состояние
+        durable_write(good, {"kind": "t", "n": 2}, require_keys=("kind", "n"), keep_backup=True)
+        expect("v3.0.15: keep_backup -> .bak с прежним валидным состоянием",
+               (good.with_suffix(good.suffix + ".bak")).is_file())
 
         # v3.0.14 (#3): event journal — append-only, checksum-цепочка, обнаружение подмены
         jn = root / "journal.jsonl"
