@@ -2,6 +2,39 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.15] — 2026-07-23 — Lifecycle Commit Barrier (последний внутренний trust-релиз)
+
+Транзакционная граница между доказательствами и delivery. После этого — реальная квалификация (v3.0.16).
+
+### Fixed
+- **P0 — доставка происходила ДО финальной фиксации lifecycle.** Раньше `run_pipeline` открывал PR сам,
+  и лишь ПОТОМ контроллер писал RunHandoff/final-report/run_end — наружу мог уйти результат при
+  неполном локальном источнике истины. Теперь **delivery вынесена из pipeline в транзакционный
+  контроллер**: `run_pipeline(defer_delivery=True)` возвращает доказанный результат + `delivery_plan`,
+  а PR открывает контроллер строго в порядке: verification → durable RunHandoff → durable final report →
+  journal checkpoint (`ready_for_delivery`) → **delivery** → durable delivery result → `run_end`. Единая
+  точка открытия PR — `_deliver_pr` (fail-closed по remote base).
+- **P1 — критические durable-записи стали обязательными БАРЬЕРАМИ.** Результат записи проверяется для
+  RunPlan (сбой → прогон не начат, 0 вызовов модели), RunHandoff и final report (сбой → **доставка НЕ
+  выполняется**, `blocked-lifecycle`), плюс ранее fail-closed run-settings/SequencePlan/ApprovalRecord.
+- **P1 — LifecycleStore v1.1: validate-before-replace.** Прежде `os.replace` шёл ДО проверки типа/ключей
+  — битый документ мог заменить валидный, а функция возвращала `ok=False`. Теперь: валидация входа →
+  сериализация → валидация проспективного reparse → **UNIQUE temp** (mkstemp, конкурентные писатели не
+  бьются) → fsync → [opt-in backup `.bak` прежнего валидного] → atomic replace → fsync(dir) → повторная
+  валидация → cleanup temp. Бракованная запись НЕ трогает старый файл.
+- **P1 — require_fix симметричный diff** (перепроверено): `{a:fail,b:fail}→{a:pass,b:fail}` даёт
+  `fixed=[test], regressions=[]` — красный чек не блокирует легитимный фикс узла. Закрыто ещё в v2.122;
+  добавлен явный тест-таблица; исправлена устаревшая пометка «открыто» в ROADMAP.
+
+### Docs
+- **Roadmap reset**: раздел «Current Forward Roadmap» (v3.0.15 → v3.0.16 → v3.1…v3.8); историческая
+  схема версий помечена как устаревшая. Честные ограничения **event journal v0.1** зафиксированы в коде
+  (не источник истины для восстановления/вердикта; полный audit trail — v3.1).
+
+Каждый пункт — с деттестом (delivery order: journal `ready_for_delivery` до `run_end`; write-barrier
+RunPlan; validate-before-replace не затирает валидный файл; require_fix таблица). Полный CI-набор на
+main и master, без openspec.
+
 ## [3.0.14] — 2026-07-23 — Qualification Readiness (переход на изменившуюся base + lifecycle-покрытие + journal)
 
 Последний readiness-релиз перед реальной квалификацией вне Garden. Закрывает три перехода из вердикта

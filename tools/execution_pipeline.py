@@ -168,6 +168,35 @@ def _verify_remote_base(root, base_ref, base_sha):
     return {"verdict": "verified-moved", "remote_sha": remote_sha}
 
 
+def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, committed_sha, wid, task):
+    """v3.0.15 (finding аудита P0): доверенная доставка draft PR — единственная точка открытия PR.
+    Fail-closed по remote base (verified-equal -> PR; unverifiable/moved -> НЕ открываем). Вызывается
+    контроллером ТОЛЬКО ПОСЛЕ durable-фиксации RunHandoff+final report+journal (транзакционный барьер),
+    либо инлайн из run_pipeline для прямых вызовов (defer_delivery=False). -> delivery dict."""
+    delivery = {"requested": True, "base_binding": base_binding}
+    if not base_binding.get("resolved") or not base_sha:
+        delivery.update(status="unavailable",
+                        reason=f"base '{base_ref}' не разрешилась в ветку: {base_binding.get('reason')} "
+                               "— PR к произвольному HEAD не открываем")
+        return delivery
+    _rv = _verify_remote_base(work_root, base_ref, base_sha)
+    if _rv.get("verdict") == "unverifiable":
+        delivery.update(status="unavailable",
+                        reason=f"remote-base-unverified: {_rv.get('reason')} — доставка невозможна fail-closed")
+        return delivery
+    if _rv.get("verdict") == "verified-moved":
+        delivery.update(status="not-attempted",
+                        reason=f"remote base сдвинулась (validated {base_sha[:12]} != remote "
+                               f"{(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
+        return delivery
+    import pr_open
+    pr = pr_open.open_draft_pr(work_root, work_branch, title=f"ai-ops: {task[:60]}", base=base_ref,
+                               body=f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
+                                    f"({base_sha[:12]}) → evidence на {committed_sha}.")
+    delivery.update(status=(pr or {}).get("status"), pr=pr)
+    return delivery
+
+
 def _change_context(work_root, revision, max_chars=12000):
     """v3.0-rc9 (finding живого прогона kimi): детерминированно собрать КОНТЕКСТ ИЗМЕНЕНИЯ для
     независимого ревьюера — полный список изменённых файлов (`git show --stat`, всегда целиком) +
@@ -1044,7 +1073,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  require_fix=False, discard_previous=False, sandbox=False,
                  review=False, reviewer_proposer=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
-                 resume=False, resume_context=None, write_scope=None, base=None):
+                 resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -1587,40 +1616,30 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
     #    УСПЕХ прогона требует реально открытого PR; провал доставки не маскируется зелёным.
-    pr = None
-    _delivery_block = None   # (status, reason) если доставка невозможна fail-closed
-    if open_pr and ready and committed_sha and work_branch:
-        # v3.0.2 (finding аудита P0): DELIVERY FAIL-CLOSED. verified draft PR = совпавшая remote base.
-        #   base не разрешилась (--base на несуществующую ветку) -> unavailable (нет тихого PR к HEAD);
-        #   remote base НЕ проверяема (нет origin/сеть/ветка/ошибка) -> unavailable (не «успех по умолчанию»);
-        #   remote base сдвинулась -> revalidation-required; совпала -> PR (в ЯВНЫЙ base_ref).
-        if not base_binding.get("resolved") or not base_sha:
-            _delivery_block = ("unavailable", f"base '{base_ref}' не разрешилась в ветку: "
-                               f"{base_binding.get('reason')} — PR к произвольному HEAD не открываем")
-        else:
-            # v3.0.9: тот же fail-closed RemoteBaseVerifier, что и sequential
-            _rv = _verify_remote_base(work_root, base_ref, base_sha)
-            if _rv.get("verdict") == "unverifiable":
-                _delivery_block = ("unavailable", f"remote-base-unverified: {_rv.get('reason')} — "
-                                   "доставка невозможна fail-closed")
-            elif _rv.get("verdict") == "verified-moved":
-                _delivery_block = ("not-attempted", f"remote base сдвинулась (validated {base_sha[:12]} != "
-                                   f"remote {(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
-            else:
-                import pr_open
-                pr = pr_open.open_draft_pr(work_root, work_branch,
-                                           title=f"ai-ops: {task[:60]}", base=base_ref,
-                                           body=f"Автопрогон AI Ops. WorkItem: {wid}. "
-                                                f"База {base_ref} ({base_sha[:12]}) → evidence на {committed_sha}.")
-    delivery = {"requested": bool(open_pr), "base_binding": base_binding,
-                "status": (_delivery_block[0] if _delivery_block else
-                           (((pr or {}).get("status") if open_pr else "not-requested")
-                            or ("not-attempted" if open_pr and not ready else None)))}
-    if _delivery_block:
-        delivery["reason"] = _delivery_block[1]
-    # v2.93: "updated" (PR для ветки уже был открыт, ветка обновлена push'ем) — тоже успех доставки
-    delivery_ok = (not open_pr) or ((pr or {}).get("status") in ("opened", "updated"))
-    overall_status = ("error" if not ready else ("delivered" if delivery_ok else "delivery-failed"))
+    # v3.0.15 (finding аудита P0): доставка — ОТДЕЛЬНЫЙ шаг, вынесена в _deliver_pr. Транзакционный
+    # порядок (delivery ТОЛЬКО после durable-фиксации RunHandoff+report+journal) обеспечивает контроллер:
+    # он вызывает run_pipeline с defer_delivery=True, получает доказанный результат + delivery_plan, и сам
+    # доставляет после барьеров. Прямые вызовы pipeline (selftest/CLI без контроллера) доставляют инлайн.
+    delivery_plan = None
+    can_deliver = bool(open_pr and ready and committed_sha and work_branch)
+    if can_deliver and defer_delivery:
+        delivery = {"requested": True, "base_binding": base_binding, "status": "deferred",
+                    "reason": "доставка выполняется контроллером ПОСЛЕ durable-фиксации lifecycle"}
+        delivery_plan = {"ready_for_delivery": True, "work_root": str(work_root), "work_branch": work_branch,
+                         "base_ref": base_ref, "base_sha": base_sha, "committed_sha": committed_sha,
+                         "wid": wid, "task": task, "base_binding": base_binding}
+    elif can_deliver:
+        delivery = _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding,
+                               committed_sha, wid, task)
+    else:
+        delivery = {"requested": bool(open_pr), "base_binding": base_binding,
+                    "status": ("not-requested" if not open_pr
+                               else ("not-attempted" if not ready else None))}
+    # v2.93: "updated" (PR для ветки уже открыт, ветка обновлена push'ем) — тоже успех доставки.
+    delivery_ok = (not open_pr) or (delivery.get("status") in ("opened", "updated"))
+    overall_status = ("error" if not ready else
+                      ("ready-undelivered" if (open_pr and defer_delivery and can_deliver)
+                       else ("delivered" if delivery_ok else "delivery-failed")))
 
     not_yet = ["живой предложитель (swap провайдера)"]
     if spec_prestage_bad:
@@ -1722,8 +1741,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # не-overflow + (all-green: гейты не блокируют | no-regressions: нет новых провалов И blocking-гейты пройдены)
         "ready_for_pr": ready,
         "delivery": delivery,                  # P0.4: статус доставки draft PR отдельно от ready
-        "overall_status": overall_status,      # error | delivery-failed | delivered
-        "draft_pr": pr,                        # результат открытия PR (None/unavailable offline/opened live)
+        "delivery_plan": delivery_plan,        # v3.0.15 (P0): план для контроллера при defer_delivery
+        "overall_status": overall_status,      # error | delivery-failed | delivered | ready-undelivered
+        "draft_pr": delivery.get("pr"),        # результат открытия PR (None если deferred/не открыт)
         "not_yet": not_yet,
     }
 
@@ -2210,6 +2230,15 @@ def selftest():
                      "FAILED test_legacy.py::test_old\n1 failed, 1 passed"}]}}
         expect("S10 red-base: профильный узел починен, пред-существующий остался = fixed непуст, regress пуст",
                _diff_checks(s10_base, s10_after) == ([], ["test"]))
+        # v3.0.15 (аудит P1, явная таблица): baseline test_a=fail,test_b=fail; after test_a=pass,test_b=fail
+        # -> fixed=[test], regressions=[] (симметричный diff по structural failure-ids; красный чек НЕ
+        # блокирует легитимный фикс одного узла при оставшемся старом падении). Закрыто ещё в v2.122.
+        _rb_base = {"test": {"status": "fail", "runs": [{"output_tail":
+                    "FAILED tests/t.py::test_a\nFAILED tests/t.py::test_b\n2 failed"}]}}
+        _rb_after = {"test": {"status": "fail", "runs": [{"output_tail":
+                     "FAILED tests/t.py::test_b\n1 failed, 1 passed"}]}}
+        expect("v3.0.15 require_fix: {a:fail,b:fail}->{a:pass,b:fail} = fixed=[test], regressions=[]",
+               _diff_checks(_rb_base, _rb_after) == ([], ["test"]))
         expect("S10 guard: непарсибельный after (build-fail без node-id) НЕ фабрикует fixed",
                _diff_checks(s10_base, {"test": {"status": "fail", "runs": [{"output_tail": "BUILD FAILED"}]}}) == ([], []))
         expect("S10 не ломает swap: починил один — сломал другой = регрессия, НЕ fixed",

@@ -237,7 +237,14 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
         workitem.start(str(features_dir), fid, task_text,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
-        _ls.durable_write(features_dir / fid / "run-plan.yaml", plan)   # v3.0.14 (#2): атомарно
+        # v3.0.15 (finding аудита P1): RunPlan — write BARRIER. Сбой durable-записи -> прогон НЕ начат
+        # (0 вызовов модели): без надёжного плана нельзя доказать routing/гейты/resume.
+        _pw = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan, require_keys=("workitem_id",))
+        if not _pw.get("ok"):
+            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                    "status": "error", "ready_for_pr": False,
+                    "error": f"lifecycle fail-closed: не удалось надёжно сохранить RunPlan ({_pw.get('error')}) "
+                             "— прогон не начат (0 вызовов модели)"}
         # v3.0.14 (#3): event journal — run_start (Run->Package->Gate реконструируемы). best-effort.
         _jp = features_dir / fid / "lifecycle-journal.jsonl"
         _ls.journal_append(_jp, {"kind": "run_start", "run_id": fid, "workitem_id": fid,
@@ -383,7 +390,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
                 context_prelude=(payload or {}).get("text"),
                 resume=resume, resume_context=resume_ctx, write_scope=write_scope,
-                base=base)   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
+                base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
+                defer_delivery=True)   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
         except (KeyboardInterrupt, SystemExit):
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
@@ -488,36 +496,76 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # fsync + перечитывание). Сбой записи БОЛЬШЕ НЕ гаснет молча (иначе на диске остаётся handoff
         # ПРОШЛОГО прогона, и resume продолжит с устаревшего состояния, думая, что оно свежее): фиксируем
         # в lifecycle_errors и в отчёт. build_handoff строится ДО записи run-report, чтобы отразить его исход.
+        # v3.0.15 (finding аудита P0): ТРАНЗАКЦИОННЫЙ COMMIT BARRIER. Доставка (PR) происходит ТОЛЬКО ПОСЛЕ
+        # надёжной фиксации доказательств и состояния прогона. Порядок:
+        #   verification -> durable RunHandoff -> durable final report -> journal checkpoint ->
+        #   delivery -> durable delivery result -> run_end.
+        # Pipeline вызван с defer_delivery=True: он вернул ДОКАЗАННЫЙ результат + delivery_plan, но PR НЕ
+        # открыл. Критические записи здесь — БАРЬЕРЫ: если RunHandoff или final report не зафиксированы
+        # durable, доставка НЕ выполняется (fail-closed) — наружу нельзя отдавать то, что локально не зафиксировано.
+        _jp = features_dir / fid / "lifecycle-journal.jsonl"
+        _jname = str(_jp)
+        _handoff_ok = False
         import run_handoff
         try:
             wt = child_root / ".ai" / "worktrees" / fid
             handoff = run_handoff.build_handoff(rep, work_root=(wt if wt.is_dir() else child_root))
             _hw = _ls.durable_write(features_dir / fid / "run-handoff.yaml", handoff,
-                                    require_keys=("kind", "workitem_id"))
+                                    require_keys=("kind", "workitem_id"), keep_backup=True)
             if _hw.get("ok"):
+                _handoff_ok = True
                 rep["handoff"] = {"next_action": handoff["next_action"],
                                   "resume_from_revision": handoff["resume_from_revision"],
                                   "open_questions": handoff["open_questions"]}
             else:
                 lifecycle_errors.append(f"run-handoff durable-write: {_hw.get('error')} "
-                                        "(на диске мог остаться handoff прошлого прогона — resume опасен)")
-        except Exception as _e:  # noqa: BLE001 — сбой сборки/записи handoff виден, не гаснет
+                                        "(доставка НЕ выполняется — lifecycle не зафиксирован)")
+        except Exception as _e:  # noqa: BLE001
             lifecycle_errors.append(f"run-handoff build/write: {type(_e).__name__}: {_e}")
         if lifecycle_errors:
-            rep["lifecycle_errors"] = lifecycle_errors   # v2.107: сбои слоя lifecycle видны, не гаснут
-        # v3.0.14 (#2): финальный run-report пишется DURABLE (атомарно+fsync); сбой не молчит (в rep).
-        _rw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
-        if not _rw.get("ok"):
+            rep["lifecycle_errors"] = lifecycle_errors
+        # durable final report (ДО доставки) — второй барьер
+        _rw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep, keep_backup=True)
+        _report_ok = _rw.get("ok")
+        if not _report_ok:
             rep.setdefault("lifecycle_errors", [])
-            rep["lifecycle_errors"].append(f"run-report durable-write: {_rw.get('error')}")
-        # v3.0.14 (#3): event journal — run_end (исход прогона).
-        _ls.journal_append(features_dir / fid / "lifecycle-journal.jsonl",
-                           {"kind": "run_end", "run_id": fid, "workitem_id": fid,
-                            "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
-                                                                    else "not-ready"),
-                            "ready_for_pr": bool(rep.get("ready_for_pr")),
-                            "commit": (rep.get("commit") or {}).get("sha")})
-        # закрываем активную работу по завершении прогона (была in-progress -> done)
+            rep["lifecycle_errors"].append(f"run-report durable-write: {_rw.get('error')} "
+                                           "(доставка НЕ выполняется)")
+        # journal checkpoint: готовность к доставке + прошли ли барьеры
+        _plan = rep.get("delivery_plan")
+        _ls.journal_append(_jname, {"kind": "ready_for_delivery", "run_id": fid, "workitem_id": fid,
+                                    "ready_for_delivery": bool(_plan),
+                                    "handoff_durable": _handoff_ok, "report_durable": bool(_report_ok),
+                                    "commit": (rep.get("commit") or {}).get("sha")})
+        # DELIVERY — только за барьером: план готов И обе критические записи durable
+        if _plan and _handoff_ok and _report_ok:
+            _dv = execution_pipeline._deliver_pr(
+                _plan["work_root"], _plan["work_branch"], _plan["base_ref"], _plan["base_sha"],
+                _plan["base_binding"], _plan["committed_sha"], _plan["wid"], _plan["task"])
+            rep["delivery"] = _dv
+            _delivered = _dv.get("status") in ("opened", "updated")
+            rep["overall_status"] = "delivered" if _delivered else "delivery-failed"
+            # durable РЕЗУЛЬТАТ доставки (перезапись отчёта с исходом)
+            _dw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep, keep_backup=True)
+            if not _dw.get("ok"):
+                rep.setdefault("lifecycle_errors", [])
+                rep["lifecycle_errors"].append(f"delivery-report durable-write: {_dw.get('error')}")
+            _ls.journal_append(_jname, {"kind": "delivery", "run_id": fid, "workitem_id": fid,
+                                        "status": _dv.get("status"), "delivered": _delivered,
+                                        "base_ref": _plan.get("base_ref")})
+        elif _plan and not (_handoff_ok and _report_ok):
+            # барьер не пройден -> доставку запрещаем fail-closed (не отдаём непрозафиксированное наружу)
+            rep["delivery"] = {"requested": True, "status": "blocked-lifecycle",
+                               "reason": "durable RunHandoff/final report не зафиксированы — доставка "
+                                         "запрещена до надёжной фиксации доказательств и состояния"}
+            rep["overall_status"] = "delivery-failed"
+            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        # run_end (исход прогона, включая итог доставки)
+        _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
+                                    "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
+                                                                            else "not-ready"),
+                                    "ready_for_pr": bool(rep.get("ready_for_pr")),
+                                    "commit": (rep.get("commit") or {}).get("sha")})
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid)
         return rep
@@ -815,6 +863,18 @@ def selftest():
             "next_action: продолжить\nopen_questions: []\n", encoding="utf-8")
         r_ff = run("продолжить", {"task_type": "QUICK", "risk": "low"}, root,
                    engine="pipeline", feature="ffx", resume=True, force_resume=True)
+        # v3.0.15 (finding аудита P1): write BARRIER — сбой durable-записи RunPlan -> прогон НЕ начат
+        # (0 вызовов модели). Монкипатчим durable_write на провал.
+        _orig_dw = _ls.durable_write
+        _ls.durable_write = lambda *a, **k: {"ok": False, "error": "smoke IO fail"}
+        try:
+            r_bar = run("барьер", {"task_type": "QUICK", "risk": "low", "affected_areas": ["core"]}, root,
+                        engine="pipeline", proposer=lambda c: {"done": True}, execute=True, feature="barx")
+        finally:
+            _ls.durable_write = _orig_dw
+        expect("v3.0.15 write-barrier: сбой durable RunPlan -> status=error (прогон не начат)",
+               r_bar.get("status") == "error" and "RunPlan" in (r_bar.get("error") or ""))
+
         expect("v3.0.14 #1: fast-forward базы + force_resume -> blocked (force не снимает, нужен fresh run)",
                r_ff.get("status") == "blocked"
                and (r_ff.get("resume") or {}).get("base_moved") is True
@@ -856,6 +916,12 @@ def selftest():
         _jr = _ls.journal_read(root / "features" / pfid / "lifecycle-journal.jsonl")
         expect("v3.0.14: lifecycle-journal записан + checksum-цепочка цела",
                _jr["ok"] and {e["kind"] for e in _jr["events"]} >= {"run_start", "run_end"})
+        # v3.0.15 (P0): commit barrier — checkpoint ready_for_delivery ПРЕДШЕСТВУЕТ run_end (доставка
+        # только после durable-фиксации). Порядок событий по seq: ready_for_delivery до run_end.
+        _seq_by_kind = {e["kind"]: e["seq"] for e in _jr["events"]}
+        expect("v3.0.15 commit-barrier: journal имеет ready_for_delivery ДО run_end",
+               "ready_for_delivery" in _seq_by_kind
+               and _seq_by_kind["ready_for_delivery"] < _seq_by_kind["run_end"])
         expect("v2.94: pipeline зарегистрировал active-work",
                (root / ".ai" / "runtime" / "active-work.yaml").exists())
         expect("v2.94: lifecycle-артефакты в отчёте", isinstance(rp.get("lifecycle"), dict)

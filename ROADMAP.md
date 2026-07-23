@@ -444,7 +444,12 @@ freshness и первым живым DecisionPackage. Архитектура **e
     обязана нести pytest-сигнал (`[tool.pytest.ini_options]` или каталог `tests/`), иначе детектор
     (`project_detector.py:119`) не находит test-команду → env не квалиф. (дефект фикстуры, не движка).
 
-- **Finding обкатки S10 (2026-07-18): `fixed` считается на уровне чек-агрегата, не structured node-id
+- **✅ ЗАКРЫТО в v2.122 (перепроверено в v3.0.15).** `_diff_checks` считает `fixed` симметрично
+  регрессиям на уровне structural failure-ids (`_failure_ids(baseline) − _failure_ids(after)`): красная
+  база с починенным профильным узлом и оставшимся старым падением даёт `fixed` непуст, `regressions`
+  пуст. Юнит-тесты: «S10 red-base …» и «v3.0.15 require_fix {a:fail,b:fail}→{a:pass,b:fail}» в
+  `execution_pipeline.selftest`. Историческое описание находки ниже — как было ДО фикса.
+- **Finding обкатки S10 (2026-07-18): `fixed` считался на уровне чек-агрегата, не structured node-id
   → false-negative на красной базе под `--require-fix`.** На red base модель корректно починила
   профильный тест (`apply_discount → x*0.9`, узел `test_discount10` red→green), непрофильный
   пред-существующий `test_legacy_report` остался красным (как задумано). Отчёт: `fixed=[]`,
@@ -466,6 +471,50 @@ freshness и первым живым DecisionPackage. Архитектура **e
 - **v3.0** — stable после positive-green ENGINEERING + dogfood.
 - **v3.1** — Sequential WorkPackages как веха (капабилити поставлена аддитивно в 2.117).
 - **v3.2 / v4.0** — физический разнос дерева по packages (breaking).
+
+> ⚠️ Схема версий ВЫШЕ — ИСТОРИЧЕСКАЯ (Sequential уже поставлен в 2.117; нумерация v3.1/v3.2 ниже
+> переопределена). Актуальный маршрут — в разделе «Current Forward Roadmap» ниже.
+
+## Current Forward Roadmap (актуально с v3.0.14)
+
+Ядро вышло из фазы бесконечного исправления execution-логики. Осталось закрыть транзакционную границу
+между доказательствами и delivery, затем квалифицировать систему на РЕАЛЬНЫХ задачах, и дальше —
+развитие вокруг ядра.
+
+Зафиксированный маршрут:
+
+- **v3.0.14** ✅ — Qualification Readiness (fast-forward база fail-closed / вариант B; LifecycleStore на
+  весь источник истины; event journal v0.1).
+- **v3.0.15 — Lifecycle Commit Barrier** (последний внутренний trust-релиз): delivery ТОЛЬКО после
+  durable-фиксации RunHandoff+report+journal (доставка вынесена из pipeline в транзакционный контроллер);
+  обязательные write-barriers на критические артефакты; LifecycleStore v1.1 (validate-before-replace,
+  unique temp, backup); симметричный require_fix (перепроверено); честные ограничения journal v0.1.
+- **v3.0.16 — Real Execution Qualification** — квалификация ФИНАЛЬНОЙ модели execution/lifecycle на
+  реальных репо (Python + TS/Node + реальный сервис): QUICK, ≥2 ENGINEERING, sequential, provider
+  interruption, resume в новой сессии, изменившаяся base → безопасный блок → свежий прогон, reviewer
+  block, trusted retry, красная база с частичным фиксом, настоящий draft PR, downstream CI, обновление
+  child-пакета. Критерии: ≥5 задач, 0 false-green, 0 повреждений основного checkout, 100% verdicts
+  привязаны к SHA, 100% доставок имеют durable final evidence. Результат — QualificationReport (PR/SHA/
+  journal/ограничения/стоимость/regression cases).
+- **v3.1 — Observability, Evaluation & Safe Self-Improvement**: event journal v0.2 (полная trace-схема,
+  Run/Attempt/Package/Gate IDs, tokens/cost/latency); Bench Lite; golden tasks; regression corpus;
+  failure taxonomy; model comparison; controlled ImprovementProposal; авто-интеграционная ревалидация
+  fast-forward базы (вариант A: rebase на новую базу + повтор проверок).
+- **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
+  architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
+- **v3.3 — Product Learning, Research & Solution Design**: Research v0.2; FeatureLearning; Evidence;
+  memory-first research; source registry; freshness; uncertainty routing; solution options; UX linkage;
+  DecisionPackage → product decision.
+- **v3.4 — Security & Economic Engineering**: data classification; capability permissions; provider
+  policies; AI threat model; supply-chain security; budgets; model routing; caching; cost accounting.
+- **v3.5 — Product Analytics, Observability & Evolution**: продуктовые метрики и guardrails; logs/metrics/
+  traces; SLI/SLO; telemetry verification; post-release readout; scale assumptions; evolution triggers.
+- **v3.6 — Semantic Context & Runtime Portability**: Repository Graph Lite (symbols/imports/routes/
+  entities/tests); impact analysis; automatic write scope; relevant test selection; Claude/Codex/generic
+  adapters; skills exporters.
+- **v3.7–v3.8 — Greenfield Bootstrap & Readiness**: создание нового продукта с нуля (стратегия/
+  исследование/архитектура/безопасность/экономика); repository bootstrap; первая вертикальная функция;
+  полный greenfield qualification cycle.
 
 - **Sequential WorkPackage Executor (веха v3.1; поставлен аддитивно в 2.117) ✅** — WorkPackages теперь РЕАЛЬНО исполняются по одному
   (`tools/workpackage_executor.py`): пакет→commit→evidence→gates→handoff→следующий, на общей ветке
