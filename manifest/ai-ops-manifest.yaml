@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.1.6
+  package_version: 3.1.7
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,12 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    added_v3_1_7_storybook_evidence_adapter:
+      - "schemas/ui-evidence-bundle.schema.json — контракт UIEvidenceBundle (storybook/state_coverage/interaction/accessibility/visual/design_system с явным status, вкл. not_run/absent — 'нет данных' не выдаётся за 'чисто')"
+      - "tools/storybook_adapter.py — оффлайн stdlib-адаптер: собирает UIEvidenceBundle из ЛОКАЛЬНЫХ артефактов child-репо (Storybook static index + vitest/axe/visual/design-system results). БЕЗ SaaS/MCP; kit НЕ становится React-app. evidence_for_gate() — shadow-мост к gate_policy.evidence_mode"
+      - "validation/validate_storybook_evidence.py — структура + СЕМАНТИКА (статус нельзя разойтись с цифрами: pass ⟺ 0 blocking a11y / passed=total / changed=0; новые компоненты без обоснования -> fail); drift-guard enum'ов против схемы"
+      - "templates/quality/StorybookPolicy.md — маппинг UIEvidenceBundle -> 4 UI-гейта -> evidence_mode (visual=deterministic; design_system/accessibility/ux=hybrid; not_run -> остаётся за ревьюером, fail-closed)"
+      - "SHADOW: только сбор+валидация, enforcement нет (это v3.1.8 + GateResult v2). Safety-гейты не трогаются. 2 selftest в CI+AGENTS.md"
     added_v3_1_6_ui_gate_applicability_shadow:
       - "tools/gate_policy.py — риск-калиброванная UI-политика БЕЗ изменения боевого fail-closed (SHADOW): таксономия ui_impact (none/internal/user_facing/critical) + ui_change_kind; current_policy/candidate_policy/shadow_diff"
       - "GatePolicyDecision: applicability (applicable/not_applicable) + enforcement (advisory/blocking) + evidence_mode (deterministic/ai_review/hybrid/human). Схемы gate-result/reviewer-result v1 НЕ тронуты (not_applicable/abstain -> будущий GateResult v2)"

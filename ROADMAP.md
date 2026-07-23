@@ -534,12 +534,15 @@ freshness и первым живым DecisionPackage. Архитектура **e
     (`synthetic_known_good_block_rate=0.571`, честно помечен синтетикой, `live=null`;
     `projected=0.381`). SHADOW: боевой fail-closed НЕ меняется; candidate не мягче current для
     user_facing/critical; accessibility не ослабляется никогда. В CI + AGENTS.md.
+  - **v3.1.7 — Storybook Evidence Adapter** ✅: `tools/storybook_adapter.py`,
+    `schemas/ui-evidence-bundle.schema.json`, `validation/validate_storybook_evidence.py`,
+    `templates/quality/StorybookPolicy.md`. `UIEvidenceBundle` из локальных артефактов child-репо
+    (Storybook static index + vitest/axe/visual/design-system results, сырые форматы нормализуются) —
+    БЕЗ SaaS/MCP; kit НЕ React-app. Каждая секция несёт явный status (not_run/absent — «нет данных»
+    не выдаётся за «чисто»). Семантическая валидация (статус нельзя разойтись с цифрами).
+    `evidence_for_gate()` — shadow-мост к `gate_policy.evidence_mode` (visual=deterministic;
+    design_system/accessibility/ux=hybrid). SHADOW: только сбор+валидация, enforcement нет. В CI+AGENTS.md.
   - **Маршрут v3.1 (утверждён владельцем 2026-07-23):**
-    - **v3.1.7 — Storybook Evidence Adapter**: `tools/storybook_adapter.py`,
-      `schemas/ui-evidence-bundle.schema.json`, `validation/validate_storybook_evidence.py`.
-      `UIEvidenceBundle` из локальных артефактов child-репо (static build + story index/manifests +
-      interaction/a11y/visual results) — БЕЗ внешнего SaaS/MCP. Часть UI-ревью заменяется
-      проверяемым evidence, а не «доверием модели». Сам kit НЕ становится React-приложением.
     - **v3.1.8 — Calibrated UI Enforcement**: после shadow-замеров кандидатная политика становится
       боевой; вводится `GateResult v2` + миграционный адаптер (`not_applicable` / reviewer `abstain`).
       Промоушен-критерий: `false_green==0`, `known_good_block_rate ≤ 0.10` (или −70%), 0 safety-регрессий,

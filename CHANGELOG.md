@@ -2,6 +2,34 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.7] — 2026-07-23 — Storybook Evidence Adapter (проверяемое UI-evidence вместо субъективного ревью)
+
+Следующий шаг после v3.1.6: снижать reviewer-false-fail не «доверием модели», а заменой части
+субъективного UI-ревью **проверяемым evidence** из локальных артефактов child-репо. В v3.1.7 bundle
+только собирается и валидируется (SHADOW) — enforcement идёт отдельно в v3.1.8 (+GateResult v2).
+
+### Added
+- `schemas/ui-evidence-bundle.schema.json` — контракт `UIEvidenceBundle`: секции `storybook`,
+  `state_coverage`, `interaction_tests`, `accessibility`, `visual_regression`, `design_system`,
+  каждая с явным `status` (вкл. `not_run`/`absent` — «нет артефакта» НЕ выдаётся за «чисто»).
+- `tools/storybook_adapter.py` — оффлайн stdlib-адаптер: детект Storybook, парс story index (v6/v7),
+  маппинг changed-файлов → затронутые компоненты/истории, покрытие UI-состояний, нормализация
+  vitest/axe/visual/design-system результатов (сырые форматы тоже). `evidence_for_gate()` — shadow-мост
+  к `gate_policy.evidence_mode`. БЕЗ внешнего SaaS/MCP; kit НЕ становится React-приложением.
+- `validation/validate_storybook_evidence.py` — структура + **семантика**: статус нельзя разойтись с
+  цифрами (a11y `pass`⟺0 blocking; interaction `pass`⟺passed=total; visual `pass`⟺changed=0; новые
+  компоненты без обоснования → `fail`); closed-ключи; drift-guard enum'ов против схемы.
+- `templates/quality/StorybookPolicy.md` — маппинг `UIEvidenceBundle` → 4 UI-гейта → `evidence_mode`
+  (`visual_regression`=deterministic; `design_system_usage`/`accessibility_review`/`ux_review`=hybrid).
+
+### Границы (решение владельца)
+- Источник истины — локальные manifests и test-artifacts, БЕЗ SaaS/MCP для enforcement (Storybook MCP —
+  позже, v3.6, как интерфейс агентов). Fail-closed сохранён: `not_run` → гейт закрывается ревью, не сам.
+- Safety-гейты (`security`/`code_review`/auth/секреты/данные) не трогаются.
+
+### CI
+- 2 selftest в `package-quality.yml` + `AGENTS.md` (CI ⊆ AGENTS.md). Parity 105/105 в 4 конфигурациях.
+
 ## [3.1.6] — 2026-07-23 — UI Gate Applicability + Shadow Policy (риск-калибровка БЕЗ изменения боя)
 
 Точная формулировка находки Phase B: узкое место — НЕ движок (engine_floor=0) и НЕ «плохая модель»,
