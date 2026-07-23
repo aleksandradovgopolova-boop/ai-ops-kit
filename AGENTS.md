@@ -126,6 +126,11 @@ python3 tools/approvals.py --selftest
 python3 tools/review_branch.py --selftest
 python3 tools/workpackage_executor.py --selftest
 python3 installer/ai_ops.py --selftest
+python3 validation/validate_research_artifacts.py --selftest
+python3 validation/validate_research_artifacts.py
+python3 .research/tools/verify_quotes.py --selftest
+python3 .research/tools/freshness_sweep.py --selftest
+python3 .research/tools/ev_scaffold.py --selftest
 ```
 
 ## Ключевые инварианты (валидаторы их проверяют, но знать заранее дешевле)

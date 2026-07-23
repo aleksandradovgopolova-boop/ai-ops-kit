@@ -102,13 +102,28 @@ ResearchRequest  →  Research execution  →  Evidence  →  DecisionPackage
 
 ## Roadmap
 
-- **v0.1** — контракты + пример; Research как capability кита: сравнение технологий
-  для развития самого кита (первый прогон — RR-001, выбор модели генерации книги).
-- **v0.2** — обслуживает Product/Technology Layer; появляются memory, sources-реестр,
-  переиспользование evidence; валидатор research-артефактов + selftest.
-- **v0.3** — установка `.research/` в несколько child-продуктов через installer.
-- **v1.0** — выделение в `research-center`, если появился второй независимый потребитель
-  и реальная боль общего релизного цикла; внутренний вызов заменяется адаптером/API.
+- **v0.1 — выполнен**: контракты + пример; первый боевой прогон (RR-001).
+- **v0.2 — выполнен и принят** (см. [ACCEPTANCE.md](ACCEPTANCE.md)): verification-pack
+  (quote-grounding, freshness lifecycle, судейский цикл с preflight), память с
+  переиспользованием EV, decision_brief/cost/constraints_addressed, валидатор
+  validate_research_artifacts.py в CI (связи RR→EV→DP, freshness, quote-конвенция),
+  первый Watch (freshness-sweep), обкатаны 2 домена на 7 прогонах.
+- **v0.3 — интеграция, не создание**: Research с нуля больше не строится — он работает;
+  следующий этап встраивает его в контуры кита:
+  - **Product Learning**: DP.outcome и research memory соединяются с memory/lessons-learned
+    и LearningPatch кита; workflow INSIGHTS становится двусторонним партнёром (инсайты
+    порождают ResearchRequest, research-выводы питают следующий Discovery); механика
+    промоушена learnings «3 применения → глобальный уровень» (перенята из gstack, DP-103) —
+    канал переноса знаний child → мать.
+  - **Управление решениями**: DecisionPackage — штатный вход workflow DECISION
+    (DP → recommendation-стадия → DecisionEpisode); decisions/registry.yaml кита ссылается
+    на DP-id; устаревание опорного evidence каскадно помечает решение needs_review
+    (freshness-sweep уже репортит задетые DP); калибровочный леджер confidence↔outcome
+    включается при ≥10 DP с заполненным outcome.
+  - Установка `.research/` в child-продукты через installer (первый кандидат — ИИ-среда).
+- **v1.0** — выделение в `research-center` по триггеру (второй независимый потребитель +
+  боль общего релизного цикла), не «потому что архитектурно красиво»; внутренний вызов
+  заменяется адаптером/API.
 
 Отдельно и осознанно отложено: watches/continuous monitoring, contradiction detection,
 цепочка Claim/Finding/Insight (v0.1 живёт на Evidence → DecisionPackage).

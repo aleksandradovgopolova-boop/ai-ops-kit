@@ -469,6 +469,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 Bounded context «Research» (extractable module): контракты ResearchRequest → Evidence → DecisionPackage, правила изоляции, layout `.research/` для child, roadmap выделения в research-center.
 
 - `research/README.md`
+- `research/ACCEPTANCE.md` — acceptance criteria Research v0.2 (12 критериев, все закрыты; зафиксировано 2026-07-23)
 - `research/writer-preflight.md` — чек-лист writer'а перед ревью (из накопленных judge-находок; цель — один раунд)
 
 ## security/
@@ -541,6 +542,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `validation/validate_duties.py` — обязанности постоянного агента Robin (v2.21)
 - `validation/validate_feature_blueprint.py`
 - `validation/validate_freshness.py`
+- `validation/validate_research_artifacts.py` — research-модуль: схемы + связи RR→EV→DP + freshness + quote-конвенция (CI)
 - `validation/validate_knowledge_graph.py`
 - `validation/validate_openspec_change.py`
 - `validation/validate_presets.py`
