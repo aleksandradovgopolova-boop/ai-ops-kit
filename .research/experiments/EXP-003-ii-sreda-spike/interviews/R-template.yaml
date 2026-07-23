@@ -1,0 +1,36 @@
+# Лист фиксации интервью EXP-003. Копировать в R1.yaml … R5.yaml.
+# Заполнять ВО ВРЕМЯ или сразу после разговора; цитаты — дословные, они и есть evidence.
+respondent:
+  id: R?
+  role: ""              # должность/функция, без имени
+  screened: null        # true если реально готовит материалы (часть 1); false -> заменить респондента
+  date: ""
+  duration_min: null
+
+current_way:            # часть 2 — по каждому релевантному артефакту
+  last_task: ""         # что готовил в последний раз
+  time_spent: ""
+  worst_part: ""        # самое муторное, цитатой
+  sources_handling: ""  # как показывает происхождение цифр/выводов
+  errors_found_story: "" # были ли случаи недостоверности; что произошло
+
+triada:                 # часть 3 — ценность словами респондента, цитатами
+  spravka: {valuable: null, quote: ""}
+  presentation: {valuable: null, quote: ""}
+  dashboard: {valuable: null, quote: ""}
+  chat_would_suffice: {answer: null, quote: ""}   # yes|no|partly — контроль-вопрос!
+
+verifiability:          # часть 4 — гипотеза DP-107
+  difference_matters: null    # yes|no|situational
+  when_matters: ""
+  quote: ""
+
+wtp:                    # часть 5
+  purchase_model: ""    # per-user|contract|unknown — как реально покупают
+  decision_maker: ""
+  quote: ""
+
+scoring:
+  valuable_artifacts: []      # [spravka, presentation, dashboard] где valuable=true
+  counted: null               # true если len(valuable_artifacts) >= 2
+interviewer_notes: ""
