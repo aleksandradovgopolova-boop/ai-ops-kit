@@ -2,6 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.19] — 2026-07-23 — authorization_idol false-positive (finding живой квалификации Phase B)
+
+Первая находка из РЕАЛЬНЫХ прогонов (Phase B, DeepSeek): security-домен `authorization_idol` ложно
+срабатывал на безобидном коде и блокировал легитимный ENGINEERING→PR через `needs_review`.
+
+### Fixed
+- **`authorization_idol` applicability матчила подстроку `acl` в `dataclass`** (`from dataclasses import
+  dataclass` / `@dataclass`) — паттерн `permission|role|acl|access|...` без границ слова ловил `acl`
+  внутри `datacl·ass`, `or·acl·e`, `mir·acl·e`. → ложный `needs_review` на pricing-функции, а строгий
+  SecurityVerdict слабая модель не закрывала → `ready_for_pr=False`, PR не открывался. Фикс: границы
+  слова `\b(?:permission|role|acl|access|authoriz|owner|tenant|is_admin|can_)\w*` — сохраняет реальные
+  auth-идентификаторы (`role`/`roles`, `access`/`accessible`, `authorize`/`authorization`, `can_edit`,
+  `is_admin`), но не матчит подстроки в неродственных словах. Не ослабляет детект реального auth-кода
+  (v2.104 anti-под-срабатывание сохранено). Регрессионный деттест: `dataclass` НЕ применим, реальный
+  auth — применим.
+
+### Qualification (Phase B, live, DeepSeek deepseek-chat)
+- **QUICK** — GREEN (delivered, ready_for_pr, все гейты, test pass).
+- **ENGINEERING → настоящий draft PR** — GREEN после фикса: authoring valid (incl openspec spec-change),
+  test pass, code_review pass (read-first reviewer live), security clear, delivery `opened`,
+  **DeliveryReceipt sha_verified=True** против реального remote head SHA, PR #1 открыт. Delivery-outbox
+  (Intent→PR→Receipt) отработал end-to-end вживую.
+- До фикса движок КОРРЕКТНО блокировал (fail-closed, 0 false-green): red-test → нет PR; needs_review →
+  нет PR.
+
 ## [3.0.18] — 2026-07-23 — PQ8 masked-failure fix + openspec-present parity
 
 Адресный патч по finding: расхождение «PQ8 падал на чистом HEAD» vs «CI green». Оба были правдой —
