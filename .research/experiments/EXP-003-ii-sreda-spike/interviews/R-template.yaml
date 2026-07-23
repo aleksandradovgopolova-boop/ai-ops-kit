@@ -1,36 +1,55 @@
-# Лист фиксации интервью EXP-003. Копировать в R1.yaml … R5.yaml.
-# Заполнять ВО ВРЕМЯ или сразу после разговора; цитаты — дословные, они и есть evidence.
+# Лист фиксации интервью EXP-003 (v2). Копировать в R1.yaml … R5.yaml.
+# Цитаты — дословные, они и есть evidence. Сомнение = false.
+# ПРАВИЛО valuable=true: (1) practice_confirmed по артефакту И (2) would_stop_doing заполнен
+# дословной цитатой И (3) ответ дан после проба «на какой вашей задаче?». Иначе false.
+# Восторг без эпизода -> enthusiasm_only: true (в подсчёт не входит).
 respondent:
   id: R?
-  role: ""              # должность/функция, без имени
-  screened: null        # true если реально готовит материалы (часть 1); false -> заменить респондента
+  role_title: ""            # должность/функция, без имени
+  role: null                # author|reviewer|both; reviewer-only -> НЕ проходит, заменить
+  screened: null            # true только если author/both И практика >=1 по >=2 типам за 3 мес
+  ab_order_shown: null      # A-first|B-first (чередовать: R1,R3,R5 = A-first)
   date: ""
   duration_min: null
 
-current_way:            # часть 2 — по каждому релевантному артефакту
-  last_task: ""         # что готовил в последний раз
-  time_spent: ""
-  worst_part: ""        # самое муторное, цитатой
-  sources_handling: ""  # как показывает происхождение цифр/выводов
-  errors_found_story: "" # были ли случаи недостоверности; что произошло
+ai_tried:                   # часть 1: прошлый опыт с ИИ-инструментами
+  what: ""
+  outcome: ""               # чем закончилось, цитатой
 
-triada:                 # часть 3 — ценность словами респондента, цитатами
-  spravka: {valuable: null, quote: ""}
-  presentation: {valuable: null, quote: ""}
-  dashboard: {valuable: null, quote: ""}
-  chat_would_suffice: {answer: null, quote: ""}   # yes|no|partly — контроль-вопрос!
+current_way:                # часть 2: список по артефактам с практикой
+  - artifact: ""            # spravka|presentation|dashboard
+    frequency_3mo: null     # сколько раз за последние 3 месяца
+    depth: ""               # deep (свежайший) | short
+    steps: ""
+    time_spent: ""
+    worst_part: ""          # цитатой — это анкор для части 3!
+    quantified_pain: ""     # сколько в месяц; что срывалось/страдало
+    sources_if_asked: ""    # «если спросят, откуда цифра — что происходит?»
 
-verifiability:          # часть 4 — гипотеза DP-107
-  difference_matters: null    # yes|no|situational
-  when_matters: ""
+triada:                     # часть 3 — только по артефактам с practice_confirmed
+  spravka:      {practice_confirmed: null, valuable: null, would_stop_doing: "", enthusiasm_only: null, quote: ""}
+  presentation: {practice_confirmed: null, valuable: null, would_stop_doing: "", enthusiasm_only: null, quote: ""}
+  dashboard:    {practice_confirmed: null, valuable: null, would_stop_doing: "", enthusiasm_only: null, quote: ""}
+  sacrifice_pick: ""        # «если останется одна возможность — какая?»
+  chat_control: {how_would_solve: "", suffice: null, quote: ""}   # yes|no|partly
+
+verifiability:              # часть 4
+  error_episode: ""         # собственный случай ошибки/доказательства цифры; пусто -> weak_signal
+  tradeoff_choice: null     # A|B (А: 2 мин + ссылки; Б: 10 мин + цитаты с локатором)
+  when_opposite: ""
+  weak_signal: null         # true если выбор Б без собственного эпизода
   quote: ""
 
-wtp:                    # часть 5
-  purchase_model: ""    # per-user|contract|unknown — как реально покупают
+procurement:                # часть 5
+  last_software_story: ""   # как появлялся последний купленный софт
+  ib_reaction: ""           # «что скажет ИБ про чтение внутренних документов?»
   decision_maker: ""
-  quote: ""
+  contact_suggestion: ""    # «с кем про это говорить» — выход на ЛПР
+  payment_model_past: ""    # только роли с бюджетом, через прошлую покупку
+  behavioral_commitment: null   # yes|no: готов принести реальную задачу на час теста
 
 scoring:
-  valuable_artifacts: []      # [spravka, presentation, dashboard] где valuable=true
-  counted: null               # true если len(valuable_artifacts) >= 2
+  valuable_artifacts: []    # только прошедшие правило кодирования
+  counted: null             # true если len(valuable_artifacts) >= 2
+  recoded_by_second_person: null   # true после пере-кодирования не-автором
 interviewer_notes: ""
