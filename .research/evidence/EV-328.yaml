@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-328
+request_id: RR-005
+statement: "agentevals (LangChain): MIT, активен; зависимости самого инструмента — langchain_openai по умолчанию (возможен голый openai sdk), т.е. в ядро кита он тоже не проходит. Ключевая ценность — ФОРМАТ 'траектория = список OpenAI-style messages с tool_calls' (JSON) и trajectory-матчеры (strict/unordered/subset/superset); формат используется без инструмента — это JSON-массив, hit-rate находок reviewer-агентов считается по таким записям stdlib-скриптом. Риск формата: привязан к OpenAI-style messages, который эволюционирует OpenAI, контроль — LangChain."
+evidence_type: documented_fact
+source:
+  title: "GitHub — langchain-ai/agentevals"
+  url: "https://github.com/langchain-ai/agentevals"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README: trajectory format, matchers; зависимости — pyproject/установочная секция README (langchain_openai default)"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом с первичных страниц."
+status: active
+superseded_by: null

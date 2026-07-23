@@ -12,6 +12,7 @@ source:
   is_primary: true
 citation:
   locator: "раздел Kimi K3 pricing per 1M tokens"
+  quote: "Prices exclude applicable taxes. Specific tax obligations are subject to local tax regulations and will be calculated at checkout based on your jurisdiction."
 captured_at: "2026-07-22"
 captured_by: "claude (research run RR-001)"
 freshness:

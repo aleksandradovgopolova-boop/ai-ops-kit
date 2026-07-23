@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-204
+request_id: RR-002
+statement: "awesome-codex-subagents (VoltAgent, ~5.8k звёзд, MIT, активен ~2 недели назад): 171 субагент в Codex-native TOML, контент переносим в markdown-агентов кита почти механически. Качество неровное (шаблонно-массовая генерация, мейнтейнеры явно не аудитируют корректность/безопасность), но есть точечно ценные роли: assumption-mapping, eval-engineer, prompt-regression-tester, ab-test-analysis; метапаттерн — декларативные sandbox_mode и model routing на роль."
+evidence_type: documented_fact
+source:
+  title: "GitHub — VoltAgent/awesome-codex-subagents"
+  url: "https://github.com/VoltAgent/awesome-codex-subagents"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "LICENSE (MIT), categories/08-business-product, categories/13-llmops-evals-observability, README disclaimer"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (skills scan, RR-002)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом-разведчиком с первичных страниц; каждый переносимый TOML вычитывать отдельно."
+status: active
+superseded_by: null

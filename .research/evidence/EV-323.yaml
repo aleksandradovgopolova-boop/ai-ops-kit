@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-323
+request_id: RR-005
+statement: "braintrustdata/autoevals: MIT, самый лёгкий Python-кандидат (зависимости: openai sdk + chevron-шаблоны), активен, полностью standalone без платформы Braintrust. Библиотека судейских scorer'ов (Battle, Factuality, ClosedQA, RAG faithfulness + эвристики Levenshtein/JSON diff); судейские промпты — переносимые YAML-шаблоны LLMClassifier с choice_scores, использовать можно и без библиотеки. Trajectory-оценки агентов нет."
+evidence_type: documented_fact
+source:
+  title: "GitHub — braintrustdata/autoevals"
+  url: "https://github.com/braintrustdata/autoevals"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README, templates/*.yaml (choice_scores), setup dependencies"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом с первичных страниц."
+status: active
+superseded_by: null

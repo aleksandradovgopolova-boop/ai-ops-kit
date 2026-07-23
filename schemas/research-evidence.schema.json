@@ -36,7 +36,8 @@
     "citation": {
       "type": "object",
       "properties": {
-        "locator": { "type": "string", "description": "Где именно в источнике: раздел, страница, anchor, строка таблицы." }
+        "locator": { "type": "string", "description": "Где именно в источнике: раздел, страница, anchor, строка таблицы." },
+        "quote": { "type": "string", "minLength": 10, "description": "Verbatim-цитата из источника, подтверждающая statement (механика quote-grounding, DP-104). Optional в v0.2, required с v0.3; для новых EV обязательна конвенцией промпта. Проверяется механически: verify_quotes.py (re-fetch + substring/difflib)." }
       },
       "required": ["locator"],
       "additionalProperties": false

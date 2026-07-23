@@ -1,0 +1,60 @@
+# DecisionPackage по RR-002 (reuse-scan внешнего agent-tooling для кита).
+# v2: переработан по итогам независимого judge-ревью (critical: лицензии dev-browser/agnix
+# отсутствовали в evidence — дособраны EV-208/EV-209; constraints адресованы явно).
+schema_version: 1
+kind: research.decision-package
+id: DP-102
+request_id: RR-002
+decision:
+  question: "Какие внешние скиллы/субагенты/MCP включить в реестры кита ближайшим minor-релизом, а что — в watch/reference?"
+recommendation:
+  preferred_option: "curated-additions: 13 деклараций двумя корзинами (9 в skills-catalog + 4 MCP) + reference-корзина; остальное в watch"
+  confidence: medium
+  confidence_rationale: "Лицензии всех 13 позиций подтверждены первичными источниками (EV-208/EV-209 дособраны после ревью); активность и содержание сняты с первичных страниц, но в бою ни один кандидат не запускался (status: declared по конвенции каталога); боевое качество проверит пилот."
+rationale:
+  - "Корзина 1 — 9 позиций в registry/skills-catalog.yaml (status: declared): webapp-testing, skill-creator, mcp-builder — официальные, Apache-2.0 подтверждён per-skill LICENSE.txt (EV-202, EV-209); dev-browser — MIT, активен, найден через каталог awesome-claude-code (EV-201, EV-208); agnix — Apache-2.0/MIT dual, активен, но ~361 звезда — молодой, декларировать с пометкой maturity: early (EV-208); scope-creep-detector — Apache-2.0 репозитория awesome-llm-apps (EV-206); конверсия 3 ролей из VoltAgent MIT: assumption-mapping, eval-engineer, prompt-regression-tester (EV-204)."
+  - "Корзина 2 — 4 официальных вендорских MCP как декларации для child-установок: playwright-mcp, github-mcp-server, posthog/mcp, sentry-mcp (EV-205). Ограничение «только официальные вендоры»: каталог-источник не курируется по качеству (EV-205), а сторонние MCP-серверы как класс — известный канал supply-chain/prompt-injection рисков (общее знание, не из EV); правило предлагается зафиксировать в source_policy кита."
+  - "Корзина 3 — reference-only, без переноса текста: приёмы из слитых промптов Claude Code/Devin/Cursor изучать и переписывать своими словами (правовой статус — EV-207); паттерны typed-RAG и failure-diagnostics из awesome-llm-apps (EV-206)."
+  - "Исключены: awesome-codex-skills Composio — нет лицензии, активность остановилась (EV-203); текст каталога awesome-claude-code — CC BY-NC-ND (EV-201). Лицензионный критерий по области применения: для позиций с адаптацией контента (корзина 1) лицензия в evidence обязательна; для MCP-деклараций (корзина 2) код в дистрибутив кита не попадает — достаточно подтверждённой официальности вендора (EV-205), лицензию сервера проверяет child при установке."
+  - "Constraint no_new_python_deps соблюдён на уровне ядра: декларация в каталоге не добавляет зависимостей в кит (установка — решение child, конвенция v2.12); runtime-зависимости кандидатов частично известны (dev-browser: Node+Playwright, без Python — EV-208), полная инвентаризация — в пилоте."
+assumptions:
+  - "skills-catalog (v2.12, status: declared, установка на уровне child) — правильная точка приземления; ядро кита остаётся агностичным."
+  - "Конверсия TOML→markdown-агент кита почти механическая (заявлено разведчиком; проверяется пилотом на одном файле)."
+  - "Команде хватит ресурса вычитать 13 позиций перед декларированием; декларация без вычитки хуже отсутствия."
+alternatives:
+  - option: "minimal — только 3 официальных скилла Anthropic + playwright-mcp"
+    appropriate_when: "Если ресурс на вычитку ограничен: максимум пользы на единицу проверки, нулевой правовой риск."
+  - option: "aggressive — широкий импорт включая конверсию 10+ ролей VoltAgent"
+    appropriate_when: "Если появится выделенный мейнтейнер каталога; сейчас качество VoltAgent неровное (171 шаблонный агент), массовый импорт разбавит кит."
+risks:
+  - "Сторонние скиллы/MCP — канал supply-chain атак и prompt injection; смягчение: только официальные вендоры или аудит кода, правило — в source_policy."
+  - "Декларация без пиннинга версии/коммита протухает молча — в конвенцию skills-catalog добавить поле pinned_version/commit (сейчас его нет)."
+  - "Поддержка каталога — постоянная нагрузка (проверка живости источников, обновление деклараций); без владельца каталог деградирует."
+  - "posthog/sentry MCP требуют внешних аккаунтов и потенциально платных тарифов на стороне child — декларация должна это указывать."
+  - "Anthropic-скиллы имеют дисклеймер 'for demonstration and educational purposes only' (EV-202) — перед продакшн-использованием обязателен собственный прогон."
+  - "Каталоги-источники нестабильны (awesome-claude-code пересобран, Composio затих) — повторный скан через квартал."
+  - "agnix молод (~361 звезда, EV-208) — может быть заброшен; декларировать с maturity: early и проверять при повторном скане."
+unknowns:
+  - "Боевое качество каждого кандидата — скан читал описания и структуру, не запускал."
+  - "Пересечение кандидатов с существующим 51 агентом кита — карту дублей строить при вычитке."
+  - "Полная инвентаризация runtime-зависимостей кандидатов при установке в child."
+proposed_validation:
+  experiment: "Пилот на одном child, три части: (1) задекларировать и установить webapp-testing, dev-browser, scope-creep-detector; прогнать каждый на одной реальной задаче; (2) сконвертировать один VoltAgent TOML (eval-engineer) в markdown-агента и замерить трудоёмкость — проверка assumption о механической конверсии; (3) задекларировать и поднять playwright-mcp в том же child. Go/no-go по итогам пилота распространяется только на корзины 1–2; reference-корзина решения не требует."
+evidence_ids:
+  - EV-201
+  - EV-202
+  - EV-203
+  - EV-204
+  - EV-205
+  - EV-206
+  - EV-207
+  - EV-208
+  - EV-209
+author: "claude (research run RR-002)"
+review:
+  reviewed_by: "recommendation-reviewer (независимый judge-агент, adversarial; два раунда)"
+  verdict: approved
+  notes: "Раунд 1 (v1): needs_work — critical по лицензиям dev-browser/agnix, major по неподтверждённому Apache-2.0 и неадресованному no_new_python_deps. Раунд 2 (v2, после EV-208/EV-209 и правок): approved — 'правки содержательные, не косметические: critical и все major закрыты по существу; остаточные замечания — гигиена, не препятствуют принятию с confidence: medium'. Остаточные minor учтены: область лицензионного критерия уточнена в rationale; разнос EV-208 на две записи — при следующей правке."
+status: reviewed
+outcome: null
+created_at: "2026-07-22"

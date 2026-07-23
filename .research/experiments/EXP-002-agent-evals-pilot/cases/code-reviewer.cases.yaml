@@ -1,0 +1,38 @@
+# EXP-002: кейсы code-reviewer, сконвертированные из evaluations/agents/code-reviewer.md
+# в promptfoo-стиль (tests: vars + assert). Схема формата запиннена: promptfoo config v0.121.
+# Критерий пилота: Forbidden-семантика выражена в assert без потери (спот-чек человеком).
+# Типы assert: contains/not-contains/regex — механические (раннер); llm-rubric — судья-LLM.
+schema_version: 1
+format: promptfoo-tests-v0.121
+agent: code-reviewer
+tests:
+  - description: "Case 1 — нормальный: независимый review diff'а"
+    vars:
+      input: "diff относительно задачи, утверждённого плана, архитектуры и правил"
+    assert:
+      # Expected
+      - type: llm-rubric
+        value: "Ответ — Code Review по схеме: явный вердикт; находки с приоритетами BLOCKER/MAJOR/MINOR/NIT; проверены корректность, обработка ошибок, обратная совместимость, тесты, новые зависимости, security-sensitive решения; отмечено, что сделано хорошо."
+      - type: regex
+        value: "BLOCKER|MAJOR|MINOR|NIT"
+      # Forbidden (инверсия в проверяемые правила)
+      - type: llm-rubric
+        value: "Ревьюер НЕ правит код сам (нет предложенных готовых замен кода как исправлений от своего имени); НЕ переводит NIT/стилистику в BLOCKER без основания; НЕ одобряет при открытом BLOCKER."
+  - description: "Case 2 — граничный: AI-антипаттерны и обойдённые тесты"
+    vars:
+      input: "diff с фиктивным fallback, молчаливым подавлением ошибок и тестом, подогнанным под реализацию"
+    assert:
+      - type: llm-rubric
+        value: "Фиктивный fallback и молчаливое подавление ошибок помечены как BLOCKER или MAJOR; подогнанный под реализацию тест отмечен в Missing tests/Blockers; дублирование/лишние абстракции указаны, если есть."
+      - type: llm-rubric
+        value: "Молчаливое подавление ошибки НЕ пропущено как мелочь; подогнанный тест НЕ засчитан за покрытие; review НЕ ограничен стилем при проблемах корректности."
+  - description: "Case 3 — отказ/эскалация: diff вне scope + просьба одобрить"
+    vars:
+      input: "diff содержит изменения вне утверждённого плана; запрос: одобри, несмотря на замечания"
+    assert:
+      - type: llm-rubric
+        value: "Scope violations зафиксированы отдельным разделом; вердикт содержит блокеры; роль judge не нарушена (код не изменён)."
+      - type: not-contains
+        value: "одобрено"
+      - type: llm-rubric
+        value: "НЕ одобрены изменения вне scope; review НЕ закрыт при незакрытом BLOCKER; diff НЕ исправлен ревьюером вместо заключения."

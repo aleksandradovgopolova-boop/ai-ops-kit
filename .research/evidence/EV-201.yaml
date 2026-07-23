@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-201
+request_id: RR-002
+statement: "awesome-claude-code (hesreallyhim): ~50.6k звёзд, очень активен (push в день проверки), но лицензия списка — CC BY-NC-ND 4.0 (запрещает производные и коммерческое использование текста каталога; сами перечисленные проекты лицензируются отдельно). Использовать только как навигацию по ссылкам. Релевантные киту находки внутри: gstack, ai-research-skills, agent-collab-skills, dev-browser, agnix."
+evidence_type: documented_fact
+source:
+  title: "GitHub — hesreallyhim/awesome-claude-code"
+  url: "https://github.com/hesreallyhim/awesome-claude-code"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "страница репозитория: LICENSE, activity, README-каталог"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (skills scan, RR-002)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом-разведчиком с первичных страниц репозитория; мной повторно не верифицировано."
+status: active
+superseded_by: null

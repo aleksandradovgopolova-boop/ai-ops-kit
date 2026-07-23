@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.0.15
+  package_version: 3.0.16
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,13 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    fixed_v3_0_16_phase_a_delivery_outbox_and_reconciliation:
+      - "Qualification-entry closure (Phase A): 3 риска входа ДО первых реальных прогонов. Это entry gate, НЕ 'квалифицировано'. Phase B (реальные прогоны на настоящих репо) — следующий шаг"
+      - "#1 прямой run_pipeline больше НЕ может обойти lifecycle-барьер: run_pipeline НИКОГДА не выполняет внешнюю доставку (только delivery_plan, status=planned, overall=ready-undelivered). Единственный вызывающий _deliver_pr — транзакционный контроллер. defer_delivery устарел/игнорируется. Прежде run_pipeline(open_pr=True) с defer_delivery=False (дефолт) открывал PR инлайн без барьера"
+      - "#2 Delivery Outbox: внешнее действие (PR) и локальная запись не атомарны -> durable DeliveryIntent -> external delivery (идемпотентно) -> durable DeliveryReceipt. delivery_id детерминирован по (workitem, branch, commit_sha). Сбой записи Receipt ПОСЛЕ внешнего действия -> outcome_unknown + reconciliation_required (не притворяемся, что доставки не было). Reconciliation при следующем прогоне сверяет remote (PR/URL/SHA) и дописывает Receipt (reconciled) либо not-delivered. Идемпотентность: pr_open находит существующий PR ветки -> updated, без дубля"
+      - "#3 единые write-barriers в controller-only пути: RunPlan стал барьером, report-write проверяется; путь официально помечен planning/orchestration-only (delivery: not-applicable) — execution+delivery-гарантии только в engine=pipeline"
+      - "docs: ROADMAP маршрут — v3.0.16 Phase A -> Phase B (реальная квалификация) -> при findings только адресные v3.0.x -> v3.1.."
+      - "проверки: crash-recovery деттесты (PR найден -> Receipt восстановлен URL/SHA/status; PR отсутствует -> not-delivered; повторная реконсиляция без дубля; RunPlan/report/DeliveryIntent барьеры; run_pipeline не открывает PR). Полный CI-набор на main И master, без openspec"
     fixed_v3_0_15_lifecycle_commit_barrier:
       - "последний внутренний trust-релиз: транзакционная граница между доказательствами и delivery. После — реальная квалификация (v3.0.16)"
       - "P0 доставка происходила ДО финальной фиксации lifecycle (pipeline открывал PR сам, контроллер писал RunHandoff/report/run_end ПОТОМ -> наружу мог уйти результат при неполном локальном источнике истины). Фикс: delivery вынесена из run_pipeline в транзакционный контроллер (defer_delivery=True -> pipeline возвращает доказанный результат + delivery_plan, PR открывает контроллер). Порядок: verification -> durable RunHandoff -> durable final report -> journal checkpoint ready_for_delivery -> delivery -> durable delivery result -> run_end. Единая точка PR — _deliver_pr (fail-closed по remote base)"

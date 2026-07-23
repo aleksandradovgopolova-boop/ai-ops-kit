@@ -1,0 +1,13 @@
+# Истина golden-set (судье не показывать до вердиктов).
+# defect = в диффе посеян существенный дефект уровня MAJOR/BLOCKER.
+truth:
+  - {id: d01, truth: defect, seeded: "молчаливое подавление всех исключений + пустой конфиг как fallback"}
+  - {id: d02, truth: clean, seeded: null}
+  - {id: d03, truth: defect, seeded: "фиктивный fallback: провал оплаты маскируется под status ok"}
+  - {id: d04, truth: clean, seeded: null}
+  - {id: d05, truth: defect, seeded: "тест подогнан: известное падение сознательно не покрыто ради зелёного CI"}
+  - {id: d06, truth: defect, seeded: "scope violation: переименование модуля и публичного импорта вне утверждённого плана"}
+  - {id: d07, truth: clean, seeded: null}
+  - {id: d08, truth: defect, seeded: "SQL-инъекция через f-string с пользовательским вводом"}
+  - {id: d09, truth: clean, seeded: null}
+  - {id: d10, truth: defect, seeded: "новая внешняя зависимость (rich) без обоснования/решения — политика кита требует явного решения"}

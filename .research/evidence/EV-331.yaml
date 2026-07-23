@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-331
+request_id: RR-005
+statement: "В документации восьми проверенных кандидатов (promptfoo, openai/evals, inspect-ai, autoevals, deepeval, langfuse, agentevals, phoenix) на дату проверки НЕ ОБНАРУЖЕНА встроенная мета-оценка калибровки судей против golden-меток (kappa/ECE/position-swap как функции продукта). Обнаружены смежные механизмы, не являющиеся такой калибровкой: LLM-jury у phoenix (ансамбль без калибровки), DAG-декомпозиция судейских шагов у deepeval, alignment-подходы в отдельных доках. Негативное утверждение: проверялась документация, не код; функции могли быть не найдены или появиться позже."
+evidence_type: documented_fact
+source:
+  title: "Сводный обзор документации 8 eval-инструментов (scout-agent, RR-005)"
+  url: "https://github.com/promptfoo/promptfoo"
+  type: other
+  published_at: null
+  is_primary: false
+citation:
+  locator: "доки judge/grading-разделов всех восьми кандидатов; перечень URL — в EV-320…EV-329"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005; оформлено отдельным EV после judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Негативное утверждение (не обнаружено ≠ отсутствует), проверка по докам без запуска; сужено до 'калибровка против golden-меток'."
+status: active
+superseded_by: null

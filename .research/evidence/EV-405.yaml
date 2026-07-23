@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-405
+request_id: RR-006
+statement: "Официальный HF MCP Server (MIT): hosted на https://huggingface.co/mcp и локально (npx/Docker), транспорты STDIO и Streamable HTTP; инструменты model_search/dataset_search/space_search/paper_search/hf_doc_fetch + вызов Gradio Spaces как MCP-инструментов. Для Claude Code-агентов — доступ ко всей экосистеме HF одной декларативной строкой (url), без кода."
+evidence_type: documented_fact
+source:
+  title: "GitHub — huggingface/hf-mcp-server"
+  url: "https://github.com/huggingface/hf-mcp-server"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README: описание + список tools"
+  quote: "Welcome to the official Hugging Face MCP Server"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Первичный репозиторий, прочитан агентом."
+status: active
+superseded_by: null

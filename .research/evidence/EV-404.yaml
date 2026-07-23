@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-404
+request_id: RR-006
+statement: "TEI (text-embeddings-inference) — живой Rust-сервер эмбеддингов и реранкеров (Apache-2.0, релиз v1.9.3 март 2026): BERT/XLM-RoBERTa/GTE/Qwen3-класс моделей, dynamic batching, Prometheus-метрики, Docker-образы CUDA/ROCm/Metal, OpenAI-совместимый /v1/embeddings. Каноничный self-hosted блок для RAG-эмбеддингов в приватном контуре."
+evidence_type: documented_fact
+source:
+  title: "GitHub — huggingface/text-embeddings-inference"
+  url: "https://github.com/huggingface/text-embeddings-inference"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README + LICENSE + releases"
+  quote: "A blazing fast inference solution for text embeddings models"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Первичный репозиторий, прочитан агентом."
+status: active
+superseded_by: null

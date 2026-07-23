@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-412
+request_id: RR-006
+statement: "Ландшафт лидербордов 2026: Open LLM Leaderboard закрыт 2025-03-13 (архив), единой замены нет — 200+ community-лидербордов. Для русского языка живой стандарт — MERA (mera.a-ai.ru, Альянс ИИ: Сбер/MTS AI/Сколтех/ВШЭ), активно расширяется (MERA Industrial 06.2025, MERA Code 07.2025, SWE-MERA 09.2025); дополнительный chat-сигнал — Vikhrmodels ru-arena-general (Arena-Hard-Auto на русском, LLM-judge). Урок: смерть центрального лидерборда — аргумент за собственные golden sets."
+evidence_type: documented_fact
+source:
+  title: "MERA — открытый бенчмарк для русского языка"
+  url: "https://mera.a-ai.ru/en"
+  type: benchmark
+  published_at: null
+  is_primary: true
+citation:
+  locator: "главная + анонсы треков"
+  quote: "MERA is a new open independent benchmark for the evaluation of fundamental models for the Russian language."
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF evals, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Первичный сайт бенчмарка; факт закрытия Open LLM Leaderboard — общеизвестный, дата из архивного снапшота."
+status: active
+superseded_by: null

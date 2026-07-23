@@ -1,0 +1,29 @@
+# Reuse-scan: внешний agent-tooling для самого кита (источник — inbox 2026-07-22).
+schema_version: 1
+kind: research.request
+id: RR-002
+title: "Что из внешнего agent-tooling переиспользовать в AI Ops Kit"
+requested_by:
+  system: human
+  layer: technology
+decision_to_support:
+  description: "Решить, какие внешние скиллы/субагенты/MCP-серверы/паттерны включить в registry/skills-catalog.yaml и реестры кита ближайшим minor-релизом, а что отправить в watch"
+  decision_maker: human
+questions:
+  - "Какие конкретные скиллы/субагенты из awesome-каталогов закрывают реальные пробелы кита, а не дублируют его 51 агента и 28 gates?"
+  - "Какие MCP-серверы усилили бы стадии verify/QA/analytics кита?"
+  - "Какие каталоги живые и качественные, а какие — красивые списки без поддержки?"
+constraints:
+  - license_compatible_mit
+  - no_new_python_deps
+  - additive_only
+workflow_hint: quick
+memory_check:
+  performed: true
+  related_requests: [RR-001]
+  related_decisions: [DP-101]
+  summary: "По теме agent-tooling память пуста; RR-001 не пересекается. В ките уже есть skills-catalog (v2.12) для внешних скиллов — точка приземления результата."
+required_confidence: medium
+deadline: "2026-07-29"
+status: answered
+created_at: "2026-07-22"

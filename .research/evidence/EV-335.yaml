@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-335
+request_id: RR-005
+statement: "Результаты пилота DP-105 (2026-07-23, EXP-002): (0) покупка promptfoo подтверждена первичным анонсом (EV-334); (1) минимальный stdlib-раннер написан (~120 строк с selftest) — трудоёмкость низкая; кейсы code-reviewer.md сконвертированы в vars+assert: Forbidden-семантика выrazima связкой llm-rubric (инверсия в проверяемые правила) + механические regex/not-contains, спот-чек человеком ожидается; (2) мета-оценка судьи на golden-set из 10 seeded-диффов (слепой прогон агентом): recall=0.83, precision=1.00, raw_agreement=0.90, cohens_kappa=0.80 — разрыв agreement/kappa воспроизводит вывод EV-332. Единственный промах судьи (d10, новая зависимость) — спорная разметка самой истины: политика 'новая зависимость без решения = дефект' не была дана судье в контексте; урок для golden-set дизайна — seeded-дефекты должны быть однозначны относительно выданной судье политики; (3) npx promptfoo — не прогнан (Node-инструмент, отложен до установки на dev-машине)."
+evidence_type: measured_result
+source:
+  title: "EXP-002: runner.py, kappa.py, golden.yaml (.research/experiments/EXP-002-agent-evals-pilot/)"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-23"
+  is_primary: true
+citation:
+  locator: "kappa.py golden.yaml -> n=10 recall=0.83 precision=1.00 agreement=0.90 kappa=0.80; вердикты судьи — в сессии"
+captured_at: "2026-07-23"
+captured_by: "claude (пилот DP-105; судья — независимый субагент, truth ему не показывался)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: high
+  rationale: "Детерминированные скрипты с selftest, воспроизводимо; n=10 — метрики судьи с широким доверительным интервалом, это pilot-сигнал, не бенчмарк."
+status: active
+superseded_by: null

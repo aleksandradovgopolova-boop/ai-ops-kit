@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-420
+request_id: RR-006
+statement: "Экономика приватности (расчёт для команды 50-200 сотрудников, ~100-500M токенов/мес): внешний API класса DeepSeek V4 (выход $0.28-0.87/M) стоил бы десятки—пару сотен долларов в месяц, тогда как dedicated GPU для self-hosting — $600-2500/мес. Self-hosting не даёт выигрыша ни в цене, ни в качестве — это осознанная премия исключительно за приватность корпоративных документов (~$500-2400/мес). Следствие: гибридная граница по данным экономически осмысленна."
+evidence_type: inference
+derived_from: [EV-101, EV-419]
+source:
+  title: "Расчёт на основе EV-101 (цены DeepSeek API) и EV-419 (цены GPU)"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-23"
+  is_primary: true
+citation:
+  locator: "формула: месячный объём токенов * цена API vs часы GPU * ставка; объём — допущение"
+captured_at: "2026-07-23"
+captured_by: "claude (синтез RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "Арифметика от первичных цен; объём токенов ИИ-среды — допущение (реальный профиль не измерен, приложение ещё без backend)."
+status: active
+superseded_by: null

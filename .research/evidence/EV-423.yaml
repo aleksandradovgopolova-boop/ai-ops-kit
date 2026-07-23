@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-423
+request_id: RR-006
+statement: "smolagents (HF, Apache-2.0, ~28.5k звёзд, v1.26.0 май 2026, активен): лёгкая агентная библиотека (~1000 строк ядра) — CodeAgent (действия как Python-код), ToolCallingAgent, MCP-клиент, sandbox-исполнение (Docker/E2B/Modal), model-agnostic (HF providers, OpenAI, Anthropic через LiteLLM)."
+evidence_type: documented_fact
+source:
+  title: "GitHub — huggingface/smolagents"
+  url: "https://github.com/huggingface/smolagents"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README + releases"
+  quote: "Agents that think in code!"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006; оформлено отдельным EV после judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Первичный репозиторий, прочитан агентом."
+status: active
+superseded_by: null

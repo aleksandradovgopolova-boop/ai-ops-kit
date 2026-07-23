@@ -1,0 +1,73 @@
+# Inbox источников: подборка awesome-репозиториев (прислал Sasha, 2026-07-22, из внешнего поста).
+# Статус: не проверены (unvetted) — это кандидаты в реестр, не evidence.
+# Назначение: будущий RR-002 «reuse-scan» — что переиспользовать в продуктах.
+schema_version: 1
+kind: research.source-inbox
+received_at: "2026-07-22"
+origin: "telegram/blog post (пересказ), звёзды и описания не проверены"
+scope: "ai-ops-kit только (указание Sasha 2026-07-22: про другие продукты пока не думать); potential_consumers других продуктов — на будущее"
+candidates:
+  - name: free-for-dev
+    url: https://github.com/ripienaar/free-for-dev
+    claim: "Сервисы с вечным free tier: хостинги, БД, почта, мониторинг, CI/CD; триалы не включают"
+    potential_consumers: [garden, niti, wowrepo]
+    category: infra-free-tier
+  - name: public-apis
+    url: https://github.com/public-apis/public-apis
+    claim: "~1500 бесплатных API по категориям (заявлено 446k+ звёзд)"
+    potential_consumers: [garden, niti, wowrepo]
+    category: data-apis
+  - name: awesome-selfhosted
+    url: https://github.com/awesome-selfhosted/awesome-selfhosted
+    claim: "Опенсорс-замены платным сервисам для self-hosting"
+    potential_consumers: [garden, niti, wowrepo, ai-ops-kit]
+    category: selfhosted-oss
+  - name: awesome-claude-code
+    url: https://github.com/hesreallyhim/awesome-claude-code
+    claim: "Скиллы, хуки, слэш-команды, оркестраторы и плагины для Claude Code (заявлено 46k+ звёзд)"
+    potential_consumers: [ai-ops-kit]
+    category: agent-tooling
+  - name: anthropics/skills
+    url: https://github.com/anthropics/skills
+    claim: "Официальный репозиторий скиллов Anthropic (заявлено 158k+ звёзд)"
+    potential_consumers: [ai-ops-kit]
+    category: agent-tooling
+  - name: awesome-mcp-servers
+    url: https://github.com/punkpeye/awesome-mcp-servers
+    claim: "Тысячи MCP-серверов для подключения агентов к внешним сервисам (заявлено 90k звёзд)"
+    potential_consumers: [ai-ops-kit, garden]
+    category: agent-tooling
+  - name: awesome-codex-skills
+    url: https://github.com/ComposioHQ/awesome-codex-skills
+    claim: "Курируемые скиллы: аналитика, коммуникация, тексты, продуктивность, разработка"
+    potential_consumers: [ai-ops-kit]
+    category: agent-tooling
+  - name: awesome-codex-subagents
+    url: https://github.com/VoltAgent/awesome-codex-subagents
+    claim: "130+ готовых субагентов с примерами использования"
+    potential_consumers: [ai-ops-kit]
+    category: agent-tooling
+  - name: awesome-llm-apps
+    url: https://github.com/Shubhamsaboo/awesome-llm-apps
+    claim: "100+ агентов и RAG-приложений с полным кодом (заявлено 116k+ звёзд)"
+    potential_consumers: [ai-ops-kit, garden]
+    category: reference-implementations
+  - name: system-prompts-and-models-of-ai-tools
+    url: https://github.com/x1xhlol/system-prompts-and-models-of-ai-tools
+    claim: "Слитые системные промпты Cursor, Devin, Lovable, v0, Claude Code и др. (заявлено 141k звёзд)"
+    potential_consumers: [ai-ops-kit]
+    category: reference-prompts
+    note: "Слитые промпты: использовать только как референс подходов, не копировать."
+  - name: gstack
+    url: https://github.com/garrytan/gstack
+    claim: "«Software factory» поверх Claude Code от Garry Tan (YC): 23 инструмента-роли (CEO/designer/EM/release/QA), цикл Think→Plan→Build→Review→Test→Ship→Reflect, скиллы /office-hours, /review, /qa (браузерное тестирование), /ship, кросс-модельное ревью /codex. MIT, TypeScript, заявлено 124k звёзд. Проверено: репозиторий прочитан 2026-07-22"
+    potential_consumers: [ai-ops-kit]
+    category: direct-analog
+    priority: high
+    note: "НЕ просто кандидат на переиспользование — прямой аналог кита. Три угла анализа: (1) конкурентный — чем берёт 124k звёзд, чего нет у кита; (2) переиспользование — отдельные скиллы/паттерны (browser-QA, cross-model review, office-hours); (3) позиционирование — чем кит отличается (registry как источник истины, quality gates, child-установки, evals, product-слой). Заслуживает отдельного RR."
+  - name: awesome (sindresorhus)
+    url: https://github.com/sindresorhus/awesome
+    claim: "Мета-список всех awesome-списков (заявлено 481k+ звёзд)"
+    potential_consumers: [research-module]
+    category: meta-index
+    note: "Кандидат в постоянный discovery-источник модуля (capability discover-sources)."

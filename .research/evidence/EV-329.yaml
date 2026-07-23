@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-329
+request_id: RR-005
+statement: "arize phoenix: лицензия ELv2 (Elastic License, не OSI-approved) + pandas/OpenTelemetry-стек — для включения в кит не проходит по лицензии и весу. Редкая ценность как идея: встроенная концепция LLM-jury (server-side ансамбль судей с агрегацией) — среди инструментов почти уникальна; паттерн переносим на reviewer-агентов кита без кода phoenix."
+evidence_type: documented_fact
+source:
+  title: "GitHub — Arize-ai/phoenix"
+  url: "https://github.com/Arize-ai/phoenix"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "LICENSE (ELv2), docs evals/LLM-jury, v16 release notes"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом с первичных страниц."
+status: active
+superseded_by: null

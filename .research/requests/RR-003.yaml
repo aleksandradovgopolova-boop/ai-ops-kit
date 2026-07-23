@@ -1,0 +1,29 @@
+# Deep-dive прямого аналога: gstack (Garry Tan). Источник — inbox 2026-07-22.
+schema_version: 1
+kind: research.request
+id: RR-003
+title: "gstack: конкурентный разбор, переиспользование, позиционирование кита"
+requested_by:
+  system: human
+  layer: product
+decision_to_support:
+  description: "Решить: (а) что из gstack адаптировать в кит (DX, скиллы); (б) как позиционировать кит относительно gstack в VISION/README/ROADMAP"
+  decision_maker: human
+questions:
+  - "За счёт чего gstack набрал массовость (онбординг, скиллы, методология) — и что из этого пробел кита?"
+  - "Какие конкретные части gstack (MIT) стоит адаптировать в кит?"
+  - "Где кит объективно глубже gstack — основа дифференциации?"
+constraints:
+  - license_compatible_mit
+  - additive_only
+  - positioning_honest   # дифференциация по фактам из исходников, не по маркетингу
+workflow_hint: deep
+memory_check:
+  performed: true
+  related_requests: [RR-002]
+  related_decisions: []
+  summary: "Первый конкурентный разбор в памяти модуля; пересечение с RR-002 — категория agent-tooling, но здесь угол 'аналог целиком', а не 'элементы для переиспользования'."
+required_confidence: medium
+deadline: "2026-07-29"
+status: answered
+created_at: "2026-07-22"

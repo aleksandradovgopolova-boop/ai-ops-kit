@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-306
+request_id: RR-004
+statement: "Коарсовые ординальные шкалы оценки надёжнее числовых: точность и Cohen's Kappa LLM-оценок падают с ростом гранулярности (binary 76% → 5-way 57%); шкалы с письменными критериями на каждый уровень консистентнее. Следствие: low/medium/high с рубрикой из проверяемых признаков (число независимых источников, первичность, свежесть) — правильный дизайн, прилагательные в рубрике — нет."
+evidence_type: measured_result
+source:
+  title: "Likert or Not (arXiv 2505.19334)"
+  url: "https://arxiv.org/html/2505.19334v1"
+  type: research_paper
+  published_at: "2025-05-01"
+  is_primary: true
+citation:
+  locator: "результаты по гранулярности шкал"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Препринт; вывод сходится с общей литературой по rubric-grading."
+status: active
+superseded_by: null

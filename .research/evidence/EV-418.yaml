@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-418
+request_id: RR-006
+statement: "HF Inference Endpoints — документированные приватные гарантии: payload'ы/токены клиентов не сохраняются; Private Endpoint доступен только через intra-region AWS/Azure PrivateLink и недоступен из интернета; SOC2 Type 2; GDPR DPA через Enterprise Hub подписку. Это легитимный средний ярус между собственным железом и публичным API для корпоративных данных."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — Inference Endpoints: Security"
+  url: "https://huggingface.co/docs/inference-endpoints/security"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "разделы data security / network security / compliance"
+  quote: "Hugging Face does not store any customer data in terms of payloads or tokens that are passed to the Inference Endpoint."
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Официальные доки; юридическую силу гарантий проверять в DPA при подписке."
+status: active
+superseded_by: null

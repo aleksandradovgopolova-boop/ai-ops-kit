@@ -1,6 +1,9 @@
 # models.yaml — Model capabilities & model classes (AI Ops Platform V2)
 # Model class — абстракция, на которую ссылается routing policy. Конкретные модели
 # НЕ зашиваются в workflow (принцип 17.decl). Реальные ID разрешаются через class -> model.
+# Конвенция pinned_revision (DP-106): для моделей с весами из внешних хабов (HF)
+# при верификации в бою фиксируется commit hash ревизии — воспроизводимость и защита
+# от ретроактивной смены лицензии/весов.
 schema_version: 1
 registry_type: models
 
@@ -107,6 +110,18 @@ models:
     verification_required: true
 
   # --- Local / fallback ---
+  - id: t-lite-it-2.1-local
+    provider: local
+    classes: [enterprise-russian, fast]
+    capabilities:
+      russian_language: {status: declared, value: true}
+      tool_calling: {status: declared, value: model-dependent}
+    confidentiality_class: on-premise
+    cost_class: low
+    pinned_revision: null   # заполняется commit hash при установке/верификации (DP-106)
+    verification_required: true
+    note: "t-tech/T-lite-it-2.1 с HF Hub (Apache-2.0, 8B, 1x24GB GPU); кандидат DP-106 для русскоязычного приватного контура; declared — в бою китом не верифицирован."
+    last_documented_at: "2026-07-23"
   - id: local-generic
     provider: local
     classes: [balanced, fast, enterprise-russian]

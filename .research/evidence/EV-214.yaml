@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-214
+request_id: RR-003
+statement: "Факты о самом ките (из его исходников, для честного сравнения с gstack): quality/gates.yaml содержит 28 gates, из них 18 blocking; writer≠judge — валидируемый инвариант workflow-контрактов (стадия review_mode: read-only не может быть writer, проверяется валидатором); registry/ — машиночитаемые реестры агентов/workflow/провайдеров как источник истины; installer/ai_ops.py + migrations/ — установка и управляемое обновление child-репозиториев; evaluations/ — eval-кейсы агентов (валидатор validate_agent_evals требует их для каждого агента); в манифесте зарегистрирован 51 агент. Всё это — проверяемые механизмы, а не декларации."
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — собственные исходники (quality/gates.yaml, AGENTS.md, registry/, installer/, evaluations/)"
+  url: ""
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "quality/gates.yaml (28 id, 18 blocking:true); AGENTS.md инварианты; registry/agents.yaml (agents: 51)"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-003, дозабор после judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-22"
+reliability:
+  level: high
+  rationale: "Прямая проверка по файлам репозитория (grep по gates.yaml, чтение AGENTS.md/манифеста) в этой же сессии."
+status: active
+superseded_by: null

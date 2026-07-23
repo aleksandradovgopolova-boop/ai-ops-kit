@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-403
+request_id: RR-006
+statement: "TGI (text-generation-inference) в maintenance mode, репозиторий заархивирован (read-only с 2026-03-21, последний релиз v3.3.7 в декабре 2025); HF рекомендует переходить на vLLM/SGLang/llama.cpp. Для новых внедрений LLM-serving брать vLLM (Apache-2.0, нативно поддержан и в HF Inference Endpoints). Прецедент по лицензиям: TGI в 2023 переводился на проприетарную HFOIL 1.0, в 2024 возвращён на Apache-2.0 — HF уже менял лицензию флагманского серверного продукта."
+evidence_type: documented_fact
+source:
+  title: "GitHub — huggingface/text-generation-inference (archived)"
+  url: "https://github.com/huggingface/text-generation-inference"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README maintenance notice + archive banner"
+  quote: "text-generation-inference is now in maintenance mode"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Статус архива — бинарный проверяемый факт с первичной страницы; цитата механически проверяема."
+status: active
+superseded_by: null

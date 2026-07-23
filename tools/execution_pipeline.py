@@ -169,10 +169,12 @@ def _verify_remote_base(root, base_ref, base_sha):
 
 
 def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, committed_sha, wid, task):
-    """v3.0.15 (finding аудита P0): доверенная доставка draft PR — единственная точка открытия PR.
-    Fail-closed по remote base (verified-equal -> PR; unverifiable/moved -> НЕ открываем). Вызывается
-    контроллером ТОЛЬКО ПОСЛЕ durable-фиксации RunHandoff+final report+journal (транзакционный барьер),
-    либо инлайн из run_pipeline для прямых вызовов (defer_delivery=False). -> delivery dict."""
+    """v3.0.15/v3.0.16 (finding аудита P0/#1): доверенная доставка draft PR — единственная точка открытия
+    PR. Fail-closed по remote base (verified-equal -> PR; unverifiable/moved -> НЕ открываем). Вызывается
+    ИСКЛЮЧИТЕЛЬНО транзакционным контроллером (ai_ops_run) ПОСЛЕ durable-фиксации RunHandoff+final report+
+    journal+DeliveryIntent. run_pipeline НИКОГДА не вызывает эту функцию (только возвращает DeliveryPlan) —
+    так прямой вызов pipeline не может обойти lifecycle-барьер. Идемпотентно (pr_open находит существующий
+    PR ветки и возвращает 'updated', не создавая дубль). -> delivery dict."""
     delivery = {"requested": True, "base_binding": base_binding}
     if not base_binding.get("resolved") or not base_sha:
         delivery.update(status="unavailable",
@@ -1616,30 +1618,29 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
     #    УСПЕХ прогона требует реально открытого PR; провал доставки не маскируется зелёным.
-    # v3.0.15 (finding аудита P0): доставка — ОТДЕЛЬНЫЙ шаг, вынесена в _deliver_pr. Транзакционный
-    # порядок (delivery ТОЛЬКО после durable-фиксации RunHandoff+report+journal) обеспечивает контроллер:
-    # он вызывает run_pipeline с defer_delivery=True, получает доказанный результат + delivery_plan, и сам
-    # доставляет после барьеров. Прямые вызовы pipeline (selftest/CLI без контроллера) доставляют инлайн.
+    # v3.0.16 Phase A (finding аудита #1): run_pipeline НИКОГДА не выполняет внешнюю доставку — только
+    # возвращает DeliveryPlan. Единственный разрешённый вызывающий _deliver_pr — транзакционный контроллер
+    # (ai_ops_run), который доставляет ТОЛЬКО после durable-фиксации RunHandoff+report+journal +
+    # DeliveryIntent. Так прямой вызов run_pipeline(..., open_pr=True) больше НЕ может обойти lifecycle-
+    # барьер (прежде defer_delivery=False давал inline-доставку). Параметр defer_delivery устарел и
+    # игнорируется (внешнее действие из pipeline запрещено архитектурно).
     delivery_plan = None
     can_deliver = bool(open_pr and ready and committed_sha and work_branch)
-    if can_deliver and defer_delivery:
-        delivery = {"requested": True, "base_binding": base_binding, "status": "deferred",
-                    "reason": "доставка выполняется контроллером ПОСЛЕ durable-фиксации lifecycle"}
+    if can_deliver:
+        delivery = {"requested": True, "base_binding": base_binding, "status": "planned",
+                    "reason": "доставку выполняет ТОЛЬКО транзакционный контроллер после durable-фиксации "
+                              "lifecycle (run_pipeline не открывает PR)"}
         delivery_plan = {"ready_for_delivery": True, "work_root": str(work_root), "work_branch": work_branch,
                          "base_ref": base_ref, "base_sha": base_sha, "committed_sha": committed_sha,
                          "wid": wid, "task": task, "base_binding": base_binding}
-    elif can_deliver:
-        delivery = _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding,
-                               committed_sha, wid, task)
     else:
         delivery = {"requested": bool(open_pr), "base_binding": base_binding,
                     "status": ("not-requested" if not open_pr
                                else ("not-attempted" if not ready else None))}
-    # v2.93: "updated" (PR для ветки уже открыт, ветка обновлена push'ем) — тоже успех доставки.
-    delivery_ok = (not open_pr) or (delivery.get("status") in ("opened", "updated"))
+    # ready есть, доставка НЕ выполнена в pipeline: overall — «готово к доставке» (контроллер финализирует).
     overall_status = ("error" if not ready else
-                      ("ready-undelivered" if (open_pr and defer_delivery and can_deliver)
-                       else ("delivered" if delivery_ok else "delivery-failed")))
+                      ("ready-undelivered" if can_deliver
+                       else ("delivered" if not open_pr else "delivery-failed")))
 
     not_yet = ["живой предложитель (swap провайдера)"]
     if spec_prestage_bad:
@@ -2150,15 +2151,17 @@ def selftest():
             rep_pr = run_pipeline("с PR", sig, root, lambda c: next(it_pr),
                                   budget={"max_model_calls": 5}, feature="pr-fn",
                                   commit=True, isolate=True, open_pr=True, install_deps=False)
-            # v3.0.2: без origin/токена доставка честно unavailable (fail-closed: remote-base-unverified
-            # ловится раньше pr_open -> draft_pr может быть None; ИЛИ pr_open возвращает unavailable).
-            expect("open_pr без токена/origin -> доставка unavailable (PR не имитируется)",
-                   rep_pr["delivery"]["status"] == "unavailable"
-                   and (rep_pr.get("draft_pr") is None or rep_pr["draft_pr"]["status"] == "unavailable"))
-            # P0.4 (аудит v2.79): --open-pr запрошен, но PR не открыт -> overall НЕ 'delivered'
-            expect("P0.4: open_pr не открылся -> delivery.requested=True, overall=delivery-failed",
+            # v3.0.16 Phase A (finding аудита #1): run_pipeline НЕ доставляет — только планирует. open_pr +
+            # ready -> delivery.status='planned', delivery_plan заполнен, overall='ready-undelivered' (PR НЕ
+            # открыт из pipeline). Фактическую доставку (и unavailable/delivered) выполняет контроллер.
+            expect("v3.0.16 #1: run_pipeline(open_pr) НЕ открывает PR — только delivery_plan + planned",
+                   rep_pr["delivery"]["status"] == "planned"
+                   and rep_pr.get("draft_pr") is None
+                   and isinstance(rep_pr.get("delivery_plan"), dict)
+                   and rep_pr["delivery_plan"].get("ready_for_delivery") is True)
+            expect("v3.0.16 #1: open_pr+ready в pipeline -> overall=ready-undelivered (доставку финализирует контроллер)",
                    rep_pr["delivery"]["requested"] is True
-                   and rep_pr["overall_status"] == "delivery-failed")
+                   and rep_pr["overall_status"] == "ready-undelivered")
         finally:
             for k, v in saved.items():
                 if v is not None:

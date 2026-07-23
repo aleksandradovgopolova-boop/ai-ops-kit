@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-209
+request_id: RR-002
+statement: "Per-skill лицензии в anthropics/skills подтверждены по raw LICENSE.txt: skills/skill-creator/LICENSE.txt — Apache License 2.0; skills/mcp-builder/LICENSE.txt — Apache License 2.0. Вместе с webapp-testing (Apache-2.0 по EV-202) все три рекомендуемые позиции из официального репозитория лицензионно чисты для адаптации."
+evidence_type: documented_fact
+source:
+  title: "anthropics/skills — per-skill LICENSE.txt (raw)"
+  url: "https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator/LICENSE.txt"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "skills/skill-creator/LICENSE.txt и skills/mcp-builder/LICENSE.txt, первые строки"
+  quote: "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-002, дозабор после judge-ревью)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Тексты лицензий прочитаны напрямую из raw-файлов репозитория."
+status: active
+superseded_by: null

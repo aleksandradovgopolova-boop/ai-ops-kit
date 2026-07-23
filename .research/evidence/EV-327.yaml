@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-327
+request_id: RR-005
+statement: "Position-swap протокол контроля позиционного байаса судей (MT-Bench, Zheng et al. 2023; работа также установила планку ~80%+ agreement GPT-4 с людьми): каждое парное сравнение прогоняется дважды с перестановкой кандидатов; неконсистентные вердикты = tie или исключение. Реализуемо в CI кита stdlib-арифметикой: автоматическое дублирование кейсов со swap, consistency rate как метрика."
+evidence_type: measured_result
+source:
+  title: "MT-Bench / Judging LLM-as-a-Judge (arXiv 2306.05685)"
+  url: "https://arxiv.org/abs/2306.05685"
+  type: research_paper
+  published_at: "2023-06-01"
+  is_primary: true
+citation:
+  locator: "position bias + swap protocol"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Широко цитируемая рецензированная работа, практики многократно воспроизведены."
+status: active
+superseded_by: null

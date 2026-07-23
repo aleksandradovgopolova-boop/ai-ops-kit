@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-210
+request_id: RR-003
+statement: "gstack (garrytan): MIT (Copyright 2026 Garry Tan), TypeScript 79.5%, создан 2026-03-11, ~123.7k звёзд / 18.5k форков (10k звёзд за 48 часов). Де-факто соло-проект: из 12 контрибьюторов у Тана 319 коммитов, у следующего — 17; при этом 775 открытых issues. Структура: ~50 плоских директорий «скилл = SKILL.md», hosts/-адаптеры под codex/opencode/cursor, проприетарная обвязка GStack Browser/GBrain, опциональная телеметрия в Supabase."
+evidence_type: documented_fact
+source:
+  title: "GitHub — garrytan/gstack (+ api.github.com/repos/garrytan/gstack)"
+  url: "https://github.com/garrytan/gstack"
+  type: source_repository
+  published_at: "2026-03-11"
+  is_primary: true
+citation:
+  locator: "api: stargazers/forks/created_at/contributors; LICENSE; дерево main"
+  quote: "MIT license"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (gstack deep-dive, RR-003)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: high
+  rationale: "Числа сняты агентом с GitHub API (первичный источник), лицензия — из raw LICENSE."
+status: active
+superseded_by: null

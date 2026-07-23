@@ -17,6 +17,22 @@
       "required": ["question"],
       "additionalProperties": false
     },
+    "decision_brief": {
+      "type": "string",
+      "minLength": 50,
+      "description": "5-7 строк человеческим языком для решателя: что рекомендуем / что это стоит / топ-риски / следующий шаг. Не заменяет rationale (тот — для проверки), а даёт однооконное чтение. Optional в v0.2, required конвенцией для новых DP."
+    },
+    "cost_of_recommendation": {
+      "type": "object",
+      "description": "Стоимость принятия рекомендации — системное слепое пятно writer'ов (judge ловил дважды в DP-106). Optional в v0.2, required конвенцией для новых DP.",
+      "properties": {
+        "one_time": { "type": "string", "description": "Разовые затраты: деньги, часы внедрения." },
+        "recurring": { "type": "string", "description": "Постоянные: подписки, аренда, эксплуатация (человеко-часы/мес)." },
+        "owner_required": { "type": "string", "description": "Чьё время/роль нужны, чтобы рекомендация жила." },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "recommendation": {
       "type": "object",
       "properties": {

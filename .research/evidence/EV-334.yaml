@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-334
+request_id: RR-005
+statement: "Покупка promptfoo компанией OpenAI подтверждена первичным анонсом (шаг 0 пилота DP-105): официальное объявление OpenAI от 2026-03-09 и пост в X: 'Promptfoo will remain open source under the current license, and we will continue to service and support current customers'; интеграция — в OpenAI Frontier. Риск смены лицензии/формата снижен публичным обещанием, но остаётся (обещания при поглощениях пересматриваются) — пиннинг версии формата в силе."
+evidence_type: documented_fact
+source:
+  title: "OpenAI — OpenAI to acquire Promptfoo (официальный анонс)"
+  url: "https://openai.com/index/openai-to-acquire-promptfoo/"
+  type: official_documentation
+  published_at: "2026-03-09"
+  is_primary: true
+citation:
+  locator: "анонс + X-пост OpenAI (status 2031052793835106753)"
+  quote: "Promptfoo will remain open source under the current license"
+captured_at: "2026-07-23"
+captured_by: "claude (пилот DP-105, шаг 0)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: high
+  rationale: "Первичный официальный анонс + подтверждение блогом promptfoo; quote проверяем механически."
+status: active
+superseded_by: null

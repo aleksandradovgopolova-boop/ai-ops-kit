@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-410
+request_id: RR-006
+statement: "Argilla (куплена HF, Apache-2.0, self-hosted через Docker/Spaces) — зрелый UI human-in-the-loop разметки: очереди записей, несколько аннотаторов, вопросы-рейтинги/лейблы — закрывает боль кита 'kappa требует human-меток'. КРИТИЧНО: проект официально заморожен по фичам (авторы ушли; только bug fixes/patches), последний релиз v2.8.0 (2025-03-11). Использовать только как opt-in декларацию с exit-стратегией: формат экспорта вердиктов кита не должен зависеть от Argilla-схемы."
+evidence_type: documented_fact
+source:
+  title: "GitHub — argilla-io/argilla"
+  url: "https://github.com/argilla-io/argilla"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README maintenance notice + releases"
+  quote: "While we won't be adding new features going forward, we're committed to solve bug fixes and publish patches as needed."
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF evals, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Первичный репозиторий; цитата о заморозке механически проверяема."
+status: active
+superseded_by: null

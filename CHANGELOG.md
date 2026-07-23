@@ -2,6 +2,41 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.0.16] — 2026-07-23 — Real Execution Qualification · Phase A: Delivery Outbox & Reconciliation
+
+Qualification-entry closure — три конкретных риска входа ДО первых реальных прогонов (это ещё entry
+gate, не «квалифицировано»). Phase B (реальные прогоны на настоящих репо) — следующий шаг.
+
+### Fixed
+- **#1 — прямой вызов `run_pipeline` больше не может обойти lifecycle-барьер.** `run_pipeline` теперь
+  **НИКОГДА** не выполняет внешнюю доставку — только возвращает `delivery_plan` (`delivery.status=planned`,
+  `overall_status=ready-undelivered`). Единственный разрешённый вызывающий `_deliver_pr` — транзакционный
+  контроллер. Параметр `defer_delivery` устарел и игнорируется (внешнее действие из pipeline запрещено
+  архитектурно). Раньше `run_pipeline(..., open_pr=True)` с дефолтным `defer_delivery=False` открывал PR
+  инлайн без RunHandoff/report-барьера.
+- **#3 — единые write-barriers в controller-only пути.** RunPlan там стал барьером (сбой → прогон не
+  начат); report-write проверяется; путь **официально помечен planning/orchestration-only** (`delivery:
+  not-applicable`) — execution+delivery-гарантии существуют ТОЛЬКО в `engine=pipeline`.
+
+### Added — #2 Delivery Outbox & Reconciliation (распределённая транзакция доставки)
+- Внешнее действие (PR) и локальная запись не атомарны, поэтому: durable **DeliveryIntent** → external
+  delivery (идемпотентно) → durable **DeliveryReceipt**. `delivery_id` детерминирован по
+  `(workitem, branch, commit_sha)`.
+- Если после внешнего действия запись Receipt упала → `delivery_status: outcome_unknown` +
+  `reconciliation_required` (не притворяемся, что доставки не было).
+- **Reconciliation** при следующем прогоне: сверяет remote (есть ли PR для ветки, URL/number/SHA) и
+  дописывает DeliveryReceipt (`reconciled`) либо `not-delivered`, если PR не долетел. Идемпотентно.
+- **Идемпотентность доставки**: `pr_open` находит существующий PR ветки и возвращает `updated`, не
+  создавая дубль (retry не плодит PR).
+
+### Docs
+- ROADMAP: маршрут уточнён — v3.0.16 Phase A (эта версия) → Phase B (реальная квалификация) → при
+  findings только адресные v3.0.x → v3.1…
+
+Crash-recovery деттесты: PR найден на remote → Receipt восстановлен (URL/SHA/status); PR отсутствует →
+`not-delivered`; повторная реконсиляция без дубля; RunPlan/report/DeliveryIntent — барьеры; run_pipeline
+не открывает PR. Полный CI-набор на main и master, без openspec.
+
 ## [3.0.15] — 2026-07-23 — Lifecycle Commit Barrier (последний внутренний trust-релиз)
 
 Транзакционная граница между доказательствами и delivery. После этого — реальная квалификация (v3.0.16).

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-302
+request_id: RR-004
+statement: "Эмпирика ненадёжности самоцитирования: инлайн-цитаты deep-research агентов массово неверифицируемы (недоступные URL, нерелевантные источники); в RAG-сеттинге до 57% цитат нефейтфульны (ICTIR 2025). Вывод: доверять цитированию, которое агент сам себе выписал, нельзя — нужна отдельная механическая verify-стадия (re-fetch источника + сверка цитаты)."
+evidence_type: measured_result
+source:
+  title: "Cited but Not Verified (arXiv 2605.06635)"
+  url: "https://arxiv.org/html/2605.06635v1"
+  type: research_paper
+  published_at: "2026-05-01"
+  is_primary: true
+citation:
+  locator: "основные результаты; смежный результат ICTIR 2025 о 57% упомянут в тексте"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "arXiv-препринт без рецензии: направление вывода надёжно (сходится с CiteGuard и ICTIR-статьёй), точные проценты брать осторожно."
+status: active
+superseded_by: null

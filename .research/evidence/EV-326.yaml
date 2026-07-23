@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-326
+request_id: RR-005
+statement: "JudgeBench-паттерн мета-оценки судей: вместо субъективных предпочтений — сет пар с объективно верным/неверным ответом (код, факты, математика); судья ранжируется по objective correctness. Для кита: seeded defects в артефактах для reviewer-агентов + recall/precision находок по golden-set — stdlib-арифметика."
+evidence_type: measured_result
+source:
+  title: "JudgeBench (arXiv 2410.12784)"
+  url: "https://arxiv.org/abs/2410.12784"
+  type: research_paper
+  published_at: "2024-10-01"
+  is_primary: true
+citation:
+  locator: "методология objective pairs"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Препринт; методологический вывод (объективная истина как основа мета-оценки) консервативен и дёшев в проверке."
+status: active
+superseded_by: null

@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-411
+request_id: RR-006
+statement: "Конвенции model governance на HF Hub, переносимые как формат (ноль зависимостей): (1) model card = README с YAML-frontmatter (license, base_model, datasets, pipeline_tag, model-index с eval-результатами) — машиночитаемые метаданные; (2) пиновка ревизии модели commit-hash'ем; (3) safetensors вместо pickle как безопасный формат весов (жив, v0.8.0 июнь 2026). Для кита: registry/models как markdown+frontmatter, обязательное поле pinned_revision в model-routing."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — Model Cards"
+  url: "https://huggingface.co/docs/hub/model-cards"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "структура model card + frontmatter поля"
+  quote: "Model cards are essential for discoverability, reproducibility, and sharing!"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF evals, RR-006)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Официальные доки, конвенции стабильны годами."
+status: active
+superseded_by: null

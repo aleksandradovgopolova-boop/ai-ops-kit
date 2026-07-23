@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-419
+request_id: RR-006
+statement: "Цены GPU (июль 2026): HF Inference Endpoints — L4 $0.80/ч, A10G $1.00/ч, L40S от $1.80/ч, A100 80GB $2.50/ч, H100 $4.50/ч (со scale-to-zero); RunPod заметно дешевле — L40S $0.99/ч, A100 80GB $1.39/ч, H100 $2.89/ч. Круглосуточный месяц: от ~$600-750 (L4/L40S у RunPod) до ~$1800-3300 (A100/H100 у HF); при офисном графике со scale-to-zero — в 2-3 раза ниже."
+evidence_type: documented_fact
+source:
+  title: "HF Pricing (+ RunPod через агрегатор gpuvec)"
+  url: "https://huggingface.co/pricing"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "таблица Inference Endpoints GPU; RunPod — gpuvec.com/providers/runpod (вторичный)"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "HF-цены с первичной страницы; RunPod — через агрегатор (вторичный), перепроверить при выборе провайдера."
+status: active
+superseded_by: null

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-312
+request_id: RR-004
+statement: "Результаты пилота DP-104 (2026-07-23): (1) quote-check: из 41 внешнего URL fetch_fail=0 — риск недоступности источников stdlib-фетчу на нашем корпусе не материализовался; из 4 EV с бэкфилл-цитатами 1 quote_mismatch (25%, порог полезности >=10% пройден) — пойман реальный дефект атрибуции: цитата EV-210 взята из raw LICENSE, а source.url указывал на HTML-страницу репозитория (исправлено); (3) memory grep-протокол: 5/5 known-items проб нашли целевые EV (порог recall >=4/5). Механики 1 и 5 подтверждены; механика 4 (пилот судьи против спот-чека человека) требует участия Sasha; механики 2/3б — отложены до следующего deep-прогона по плану."
+evidence_type: measured_result
+source:
+  title: "Пилот DP-104: verify_quotes.py + grep-пробы (.research/tools/, лог в сессии)"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-23"
+  is_primary: true
+citation:
+  locator: "verify_quotes.py вывод: skip_internal=3, fetch_fail=0, no_quote=38, match=3, mismatch=1; после фикса EV-210 — match=4"
+captured_at: "2026-07-23"
+captured_by: "claude (пилот DP-104; self-evidence — числа воспроизводимы повторным запуском скрипта)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: high
+  rationale: "Детерминированный скрипт, воспроизводимо одной командой; выборка цитат мала (4) — доля mismatch неточна, но сигнал полезности механики получен."
+status: active
+superseded_by: null

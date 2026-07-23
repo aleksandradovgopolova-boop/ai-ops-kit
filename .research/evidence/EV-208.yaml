@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-208
+request_id: RR-002
+statement: "dev-browser (SawyerHood): MIT, ~6.5k звёзд, активен (v0.2.9 от 2026-07-15); браузерная автоматизация для агентов — Playwright API в QuickJS WASM-сэндбоксе; Node.js (npm), Python-зависимостей нет, требует установки Playwright+Chromium командой 'dev-browser install'. agnix (agent-sh): двойная лицензия Apache-2.0/MIT, Rust, активен (v0.40.0 от 2026-07-16), 437 правил валидации CLAUDE.md/SKILL.md/MCP-конфигов с автофиксами; распространяется как npm/brew/cargo; НО всего ~361 звезда — проект молодой, зрелость ниже остальных кандидатов."
+evidence_type: documented_fact
+source:
+  title: "GitHub — SawyerHood/dev-browser; agent-sh/agnix"
+  url: "https://github.com/SawyerHood/dev-browser"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "страницы обоих репозиториев: LICENSE footer, releases, package listing; agnix — https://github.com/agent-sh/agnix"
+captured_at: "2026-07-22"
+captured_by: "claude (research run RR-002, дозабор после judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: high
+  rationale: "Прочитано мной напрямую со страниц репозиториев (первичные источники) в ответ на critical-замечание judge о недостающих лицензиях."
+status: active
+superseded_by: null
