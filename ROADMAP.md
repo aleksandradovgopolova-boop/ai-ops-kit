@@ -514,9 +514,14 @@ freshness и первым живым DecisionPackage. Архитектура **e
   - **v3.1.1 — Fix-loop** ✅: блокеры ревью/провалившихся проверок → писателю на итерацию поверх ветки
     (`resume`), бюджет `--fix-attempts`; fail-closed при исчерпании; конкретные blockers в fix-context;
     событие `fix_attempt`. По находке Phase B про green-throughput. Проверено live.
-  - Далее: Bench Lite; golden tasks; regression corpus; failure taxonomy; model comparison; reviewer
-    false-fail rate; controlled ImprovementProposal + canary; авто-интеграционная ревалидация
-    fast-forward базы (вариант A).
+  - **v3.1.2 — CI hotfix** ✅: интеграционная часть fix-loop-selftest под guard `find_spec("pytest")`
+    (CI имеет только pyyaml). Урок parity: прогонять и без openspec, И без pytest.
+  - **v3.1.3 — Bench Lite** ✅: детерминированный ОФФЛАЙН, TOOL-FREE golden-корпус (`tools/bench_lite.py`)
+    решений движка; BenchReport с метриками (pass/false_green/false_fail/review_blocked/fix_recovered);
+    жёсткий инвариант `false_green == 0`; tool-free e2e fix-loop прогоняется в CI. В CI + AGENTS.md.
+  - Далее: golden tasks (расширить корпус реальными задачами); regression corpus; failure taxonomy;
+    model comparison; reviewer false-fail rate (тюнинг строгости по замеру Bench Lite); controlled
+    ImprovementProposal + canary; авто-интеграционная ревалидация fast-forward базы (вариант A).
 - **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
   architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
 - **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
