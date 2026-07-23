@@ -1,0 +1,29 @@
+schema_version: 1
+kind: research.evidence
+id: EV-534
+request_id: RR-007
+statement: 'M365 Copilot закрывает jobs ''презентация'' (PowerPoint: генерация из
+  промпта/документа) и частично ''дашборд'' (Excel: анализ и визуализация данных);
+  job ''структурированная аналитическая справка с проверяемой цепочкой источников''
+  как родной deliverable отсутствует — цитирование на уровне ссылок на рабочие документы.'
+evidence_type: documented_fact
+source:
+  title: Microsoft 365 Copilot for Enterprise (features)
+  url: https://www.microsoft.com/en-us/microsoft-365/copilot/enterprise
+  type: vendor_page
+  published_at: null
+  is_primary: true
+citation:
+  locator: карточки Word/Excel/PowerPoint
+  quote: Turn your inspiration into stunning presentations
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Функции — дословно с вендорской страницы; оценка незакрытости job 'справка'
+    — интерпретация разведчика по отсутствию соответствующего deliverable в материалах.
+status: active
+superseded_by: null

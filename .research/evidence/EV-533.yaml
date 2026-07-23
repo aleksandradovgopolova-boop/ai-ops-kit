@@ -1,0 +1,27 @@
+schema_version: 1
+kind: research.evidence
+id: EV-533
+request_id: RR-007
+statement: 'Microsoft 365 Copilot Enterprise: $30/пользователь/мес при годовой оплате
+  поверх обязательной базовой подписки M365; Business-план (до 300 пользователей)
+  — $18/пользователь/мес.'
+evidence_type: documented_fact
+source:
+  title: Microsoft 365 Copilot for Enterprise (pricing)
+  url: https://www.microsoft.com/en-us/microsoft-365/copilot/enterprise
+  type: vendor_page
+  published_at: null
+  is_primary: true
+citation:
+  locator: pricing-блоки страниц Enterprise и Business
+  quote: $30.00 user/month, paid yearly
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: high
+  rationale: Официальные страницы Microsoft, цены дословно.
+status: active
+superseded_by: null

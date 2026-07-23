@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-503
+request_id: RR-007
+statement: 'Open WebUI (~146k звёзд, самый популярный) — лицензионный красный флаг
+  для white-label корпоративного продукта: BSD-3 с branding-клаузой, запрещающей убирать
+  бренд ''Open WebUI'' при >50 конечных пользователей за 30 дней без enterprise-лицензии;
+  функционально силён (granular RBAC и user groups, RAG на 9 векторных БД, i18n вкл.
+  русский, любой OpenAI-compatible API, pip/Docker/K8s), но jobs ''презентации'' и
+  ''дашборды'' не закрывает. Вердикт: НЕ основа для коммерческого продукта из-за branding-клаузы
+  (внутреннее развёртывание >50 юзеров тоже под клаузой); максимум референс UX.'
+evidence_type: documented_fact
+source:
+  title: open-webui/open-webui — LICENSE (Open WebUI License)
+  url: https://github.com/open-webui/open-webui/blob/main/LICENSE
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: LICENSE, branding preservation clause
+  quote: licensees are strictly prohibited from altering, removing, obscuring, or
+    replacing any "Open WebUI" branding
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: high
+  rationale: Цитата снята напрямую из текста LICENSE в репозитории — первичный юридический
+    документ.
+status: active
+superseded_by: null

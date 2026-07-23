@@ -61,6 +61,11 @@
         "additionalProperties": false
       }
     },
+    "constraints_addressed": {
+      "type": "object",
+      "description": "Явная строка по каждому constraint запроса: соблюдён/частично/unknown и чем (пункт 2 writer-preflight). Ключи — имена constraints из ResearchRequest. Optional в v0.2, required конвенцией для новых DP.",
+      "additionalProperties": { "type": "string", "minLength": 10 }
+    },
     "assumptions": {
       "type": "array",
       "items": { "type": "string", "minLength": 10 },

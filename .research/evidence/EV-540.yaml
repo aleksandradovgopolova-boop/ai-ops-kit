@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-540
+request_id: RR-007
+statement: 'Tome — генератор презентаций, прямой конкурент Gamma — закрыт 30.04.2025
+  (пивот анонсирован в октябре 2024): подписчики $10/мес не окупали продукт, команда
+  ушла в AI-CRM. Урок: standalone-генератор одного deliverable не выживает — ценность
+  дают корпоративный контекст (внутренние данные, права, аудит) и связка jobs.'
+evidence_type: documented_fact
+source:
+  title: Deckary — What Happened to Tome AI? Shutdown Timeline
+  url: https://deckary.com/blog/tome-review
+  type: news
+  published_at: null
+  is_primary: false
+citation:
+  locator: таймлайн шатдауна
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: Завершённое событие, подтверждено множеством независимых источников;
+    вывод-урок — интерпретация.
+status: active
+superseded_by: null

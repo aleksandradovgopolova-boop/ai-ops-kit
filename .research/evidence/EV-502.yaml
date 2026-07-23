@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-502
+request_id: RR-007
+statement: 'AnythingLLM (Mintplex Labs, ~64k звёзд) — целиком MIT без open-core оговорок;
+  закрывает чат+RAG со ссылками на источники (drag-and-drop документы, source citations),
+  multi-user с permissioning (только в Docker-версии), агенты; русский в README не
+  заявлен явно, презентаций/дашбордов/каталога шаблонов нет; inference — Ollama, LocalAI,
+  generic OpenAI-compatible (vLLM через это). Вердикт: коммерчески самая чистая база,
+  но permissioning примитивный (workspace-уровень, не корпоративный RBAC/аудит) —
+  КОМПОНЕНТ (RAG+чат слой) или референс.'
+evidence_type: documented_fact
+source:
+  title: Mintplex-Labs/anything-llm — GitHub README
+  url: https://github.com/Mintplex-Labs/anything-llm
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README, разделы Features / Supported LLMs / License
+  quote: Multi-user instance support and permissioning
+captured_at: '2026-07-23'
+captured_by: scout-agent (oss corp-AI platforms, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Первичный README; MIT-статус стабилен исторически, состав фич Docker-vs-desktop
+    версий меняется.
+status: active
+superseded_by: null

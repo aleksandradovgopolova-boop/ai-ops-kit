@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-543
+request_id: RR-007
+statement: "Собственная сторона сравнения (self-evidence): по docs/product/JTBD.md ИИ-среды главная работа — 'поставить задачу ИИ обычным языком, добавить источники и получить структурированный результат… не теряя контроль над качеством и источниками'; критерии успеха включают 'источники можно проверить' и 'выводы, ограничения и риски понятны'; основные работы — справка, презентация, дашборд, каталог, проверка результата ИИ, запрос доступа. MVP_SCOPE включает все три артефакта + каталог + журнал действий; SSO/авторизация отложены на этап 10. Т.е. верифицируемость — родное требование продукта, а не наша выдумка для дифференциации."
+evidence_type: documented_fact
+source:
+  title: "ii-sreda-v2/docs/product/JTBD.md + MVP_SCOPE.md (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "JTBD.md: главная работа + критерии успеха; MVP_SCOPE.md: входит/не входит, порядок реализации"
+  quote: "источники можно проверить"
+captured_at: "2026-07-23"
+captured_by: "claude (RR-007; self-evidence — пометка для спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: high
+  rationale: "Прямое чтение продуктовых документов в этой сессии; но сами JTBD не проверены интервью с пользователями (см. unknowns DP)."
+status: active
+superseded_by: null

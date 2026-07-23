@@ -1,0 +1,30 @@
+schema_version: 1
+kind: research.evidence
+id: EV-538
+request_id: RR-007
+statement: 'Yandex AI Studio доступна on-premises: К2 НейроТех (партнёрский статус,
+  май 2026) поставляет готовый ПАК-AI с предустановленной платформой (CAPEX-формат);
+  on-prem включает генеративные модели, файловый поиск (RAG), no-code конструкторы
+  агентов, работу с табличными данными. Для РФ-enterprise on-prem/гибрид — стандарт
+  предложения, не премия.'
+evidence_type: documented_fact
+source:
+  title: Хабр (блог К2Тех) — ПАК-AI на основе Yandex AI Studio
+  url: https://habr.com/ru/companies/k2tech/news/1042632/
+  type: news
+  published_at: null
+  is_primary: false
+citation:
+  locator: публикация мая 2026 (дублируется CNews 28.05.2026)
+  quote: работы с табличными данными и аналитикой, создания голосовых агентов
+captured_at: '2026-07-23'
+captured_by: scout-agent (market bar corp assistants, RR-007)
+freshness:
+  volatile: true
+  expires_at: '2026-10-23'
+reliability:
+  level: medium
+  rationale: Партнёрский пресс-материал; официальная страница on-premises закрыта
+    CAPTCHA, напрямую не прочитана.
+status: active
+superseded_by: null
