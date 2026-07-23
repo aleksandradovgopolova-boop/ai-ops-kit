@@ -73,6 +73,8 @@ python3 tools/run_plan.py validate
 python3 tools/ai_ops_run.py --selftest
 python3 tools/bench_lite.py --selftest
 python3 tools/gate_policy.py --selftest
+python3 tools/storybook_adapter.py --selftest
+python3 validation/validate_storybook_evidence.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest
