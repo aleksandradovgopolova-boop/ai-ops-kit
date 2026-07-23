@@ -469,6 +469,7 @@ JSON Schema публичных контрактов: gate-result, route-decision
 Bounded context «Research» (extractable module): контракты ResearchRequest → Evidence → DecisionPackage, правила изоляции, layout `.research/` для child, roadmap выделения в research-center.
 
 - `research/README.md`
+- `research/writer-preflight.md` — чек-лист writer'а перед ревью (из накопленных judge-находок; цель — один раунд)
 
 ## security/
 
