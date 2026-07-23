@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.3] — 2026-07-23 — Bench Lite: оффлайн golden-корпус решений движка
+
+Пилар Evaluation фазы v3.1. Находка Phase B: GREEN-throughput ограничен НЕ качеством модели, а
+консервативным independent-review — легитимный минимальный код блокируется несколькими UI-гейтами.
+Чтобы управлять строгостью осознанно, нужна воспроизводимая мера. Bench Lite её даёт.
+
+### Added
+- `tools/bench_lite.py` — детерминированный ОФФЛАЙН golden-корпус (провайдер `test`, заглушки
+  писателя/ревьюера read-first как в бою). TOOL-FREE: репо кейсов — python-профиль без тулчейна ->
+  проверки not_applicable, БЕЗ зависимости от pytest/линтеров (урок v3.1.2: CI имеет только pyyaml).
+- BenchReport (JSON) с метриками: pass / false_green / false_fail / mismatch / error /
+  review_blocked / fix_recovered. CLI `--run [--out f.json]` и `--selftest`.
+- 4 golden-кейса: quick_clean (green), review_blocks (консервативный review блокирует), fixloop_recovers
+  (fix-loop снимает блок ревью — TOOL-FREE e2e fix-loop, идёт в CI, чего pytest-guarded selftest не мог),
+  rubber_stamp_guard (ИНВАРИАНТ безопасности: pass-без-чтений НЕ закрывает гейт -> ready=False).
+- Жёсткие инварианты selftest: `false_green == 0` (движок никогда не отдаёт ready при обязательном
+  блоке), 0 error/mismatch/false_fail, fix_recovered>=1, review_blocked>=1.
+- Подключён в CI (package-quality) и AGENTS.md-чеклист (инвариант CI ⊆ AGENTS.md сохранён).
+
 ## [3.1.2] — 2026-07-23 — CI hotfix: fix-loop selftest не зависит от pytest
 
 v3.1.1 дал CI-red (package-quality): интеграционный fix-loop-тест требовал pytest (сделать тест

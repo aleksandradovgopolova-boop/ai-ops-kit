@@ -67,6 +67,8 @@ jobs:
           python3 tools/run_plan.py validate
       - name: ai-ops run — единый контроллер задачи (selftest)
         run: python3 tools/ai_ops_run.py --selftest
+      - name: Bench Lite — оффлайн golden-корпус решений движка (selftest)
+        run: python3 tools/bench_lite.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
