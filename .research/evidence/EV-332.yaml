@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-332
+request_id: RR-005
+statement: "Сырой % agreement судьи с человеком завышает discrimination на 33–41 п.п. ('kappa deflation') — нужна chance-corrected метрика (Cohen's kappa); ranking судей не переносится между бенчмарками (сдвиги до 14 позиций). Следствие: agreement rate без коррекции на случайность (в т.ч. механика agreement из gstack/DP-103) — недостаточная метрика, kappa её уточняет."
+evidence_type: measured_result
+source:
+  title: "Reliability without Validity (arXiv 2606.19544)"
+  url: "https://arxiv.org/html/2606.19544v1"
+  type: research_paper
+  published_at: "2026-06-01"
+  is_primary: true
+citation:
+  locator: "kappa deflation результаты; непереносимость рангов судей"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005; выделено в отдельный EV после judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: medium
+  rationale: "Свежий препринт (может не пройти рецензию, числа могут измениться): опора — на методологический вывод (kappa вместо сырого agreement, стандартная статистическая практика), не на конкретные проценты."
+status: active
+superseded_by: null

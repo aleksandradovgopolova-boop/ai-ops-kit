@@ -1,0 +1,105 @@
+# EXP-002: golden-set из 10 мини-диффов для мета-оценки reviewer-судьи.
+# Судье НЕ показывать seeded/truth.yaml (blind). Дефекты посеяны по зонам code-reviewer.
+diffs:
+  - id: d01
+    context: "функция чтения конфига"
+    diff: |
+      +def load_config(path):
+      +    try:
+      +        return yaml.safe_load(open(path))
+      +    except Exception:
+      +        return {}
+  - id: d02
+    context: "утилита форматирования дат для отчёта"
+    diff: |
+      +def format_date(dt):
+      +    """ISO-дата без времени."""
+      +    return dt.strftime('%Y-%m-%d')
+      +
+      +def test_format_date():
+      +    assert format_date(datetime(2026, 7, 1)) == '2026-07-01'
+  - id: d03
+    context: "интеграция с платёжным API"
+    diff: |
+      +def charge(amount, card):
+      +    resp = api.charge(amount, card)
+      +    if resp.status != 'ok':
+      +        log.warning('charge failed, using fallback')
+      +        return {'status': 'ok', 'fallback': True}
+      +    return resp.data
+  - id: d04
+    context: "валидация email при регистрации"
+    diff: |
+      +EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+      +
+      +def is_valid_email(s):
+      +    return bool(EMAIL_RE.match(s or ''))
+      +
+      +def test_is_valid_email():
+      +    assert is_valid_email('a@b.co')
+      +    assert not is_valid_email('')
+      +    assert not is_valid_email('a@b')
+  - id: d05
+    context: "парсер суммы из строки"
+    diff: |
+      +def parse_amount(s):
+      +    # тест ниже зафиксировал текущее поведение
+      +    return float(s.replace(',', '.').replace(' ', ''))
+      +
+      +def test_parse_amount():
+      +    assert parse_amount('1 234,50') == 1234.5
+      +    # parse_amount('abc') падает с ValueError — тестом не покрываем,
+      +    # чтобы CI был зелёным
+  - id: d06
+    context: "задача: добавить retry в HTTP-клиент (утверждённый план)"
+    diff: |
+      +def get(url, retries=3):
+      +    for i in range(retries):
+      +        try:
+      +            return http.get(url, timeout=10)
+      +        except TransientError:
+      +            time.sleep(2 ** i)
+      +    raise RetryExhausted(url)
+      +
+      +# заодно переименовал модуль auth -> identity и поменял публичный
+      +# импорт в __init__.py (давно хотелось навести порядок)
+      +-from .auth import login
+      ++from .identity import login
+  - id: d07
+    context: "хелпер пагинации"
+    diff: |
+      +def paginate(items, page, per_page=20):
+      +    if page < 1:
+      +        raise ValueError('page must be >= 1')
+      +    start = (page - 1) * per_page
+      +    return items[start:start + per_page]
+      +
+      +def test_paginate():
+      +    assert paginate(list(range(50)), 1) == list(range(20))
+      +    assert paginate(list(range(50)), 3) == list(range(40, 50))
+      +    with pytest.raises(ValueError):
+      +        paginate([], 0)
+  - id: d08
+    context: "сохранение пользовательского ввода в БД"
+    diff: |
+      +def save_note(user_id, text):
+      +    q = f"INSERT INTO notes (user_id, body) VALUES ({user_id}, '{text}')"
+      +    db.execute(q)
+      +    return True
+  - id: d09
+    context: "константы лимитов"
+    diff: |
+      +MAX_UPLOAD_MB = 25
+      +MAX_TAGS_PER_NOTE = 16
+      +
+      +def test_limits_exported():
+      +    from app import limits
+      +    assert limits.MAX_UPLOAD_MB == 25
+  - id: d10
+    context: "новая зависимость для прогресс-баров в CLI-скрипте миграции"
+    diff: |
+      +import rich.progress   # добавил в requirements: rich==13.*
+      +
+      +def migrate(rows):
+      +    for row in rich.progress.track(rows):
+      +        upsert(row)

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-416
+request_id: RR-006
+statement: "Эмбеддинги для русского, шорт-лист с чистыми лицензиями: ai-forever/FRIDA (MIT, FRED-T5-база, специализированно русская, долгое время топ ruMTEB, префиксы search_query:/search_document:) — лучший чисто-русский вариант; ai-forever/ru-en-RoSBERTa (MIT, 0.4B, но 512 токенов). Ограничение обеих — короткий контекст: для длинных документов нужен bge-m3 или агрессивное чанкование."
+evidence_type: documented_fact
+source:
+  title: "HF model card — ai-forever/FRIDA"
+  url: "https://huggingface.co/ai-forever/FRIDA"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "model card: описание, лицензия, префиксы"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Model card, прочитана агентом; ruMTEB-позиции меняются — проверять при выборе."
+status: active
+superseded_by: null

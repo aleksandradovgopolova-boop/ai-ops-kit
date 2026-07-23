@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-308
+request_id: RR-004
+statement: "Предел судейских панелей: панель из 9 фронтир-судей 7 семейств несёт ~2 независимых голоса — модели ошибаются на одних и тех же кейсах; фактическая точность на 8–22 п.п. ниже теоретической при независимости, лучший одиночный судья не хуже панели. Следствие: множить судей-персон одной модели почти бесполезно против общих слепых пятен; некоррелированный 'голос' дают механические проверки (quote-check), не ещё один LLM."
+evidence_type: measured_result
+source:
+  title: "Nine Judges, Two Effective Votes (arXiv 2605.29800)"
+  url: "https://arxiv.org/abs/2605.29800"
+  type: research_paper
+  published_at: "2026-05-01"
+  is_primary: true
+citation:
+  locator: "основные результаты по корреляции ошибок судей"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Свежий препринт без рецензии; направление вывода согласуется с self-preference литературой, точные п.п. осторожно."
+status: active
+superseded_by: null

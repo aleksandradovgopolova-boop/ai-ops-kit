@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-212
+request_id: RR-003
+statement: "Пять адаптируемых механик gstack (MIT позволяет): (1) fix-first ревью — pre-emit gate 'находка обязана цитировать строку кода', confidence 1–10, AUTO-FIX/ASK классификация, авто-отключение специалистов с нулевым hit-rate (кроме NEVER_GATE security); (2) /codex — кросс-модельный judge с filesystem boundary и agreement rate; (3) six forcing questions из /office-hours + обязательные 2–3 альтернативы как gate + анти-сикофантские правила; (4) learnings.jsonl — память с confidence/staleness и промоушеном в глобальный уровень после 3 применений; (5) /qa health score 0–100 по 8 категориям с baseline.json и цепочкой finding→fix→скриншоты→регрессионный тест."
+evidence_type: documented_fact
+source:
+  title: "gstack: review/, codex/, office-hours/, learn/, qa/ (SKILL.md)"
+  url: "https://github.com/garrytan/gstack/tree/main"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "review/SKILL.md, codex/, office-hours/, learn/, qa/"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (gstack deep-dive, RR-003)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-22"
+reliability:
+  level: medium
+  rationale: "Механики пересказаны агентом из SKILL.md файлов; перед адаптацией каждую читать в оригинале."
+status: active
+superseded_by: null

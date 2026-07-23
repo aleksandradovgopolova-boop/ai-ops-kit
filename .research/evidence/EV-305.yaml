@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-305
+request_id: RR-004
+statement: "Verbalized confidence RLHF-моделей калибрована лучше внутренних логитов, но систематически завышена (overconfidence); агрегация со self-consistency (совпадение выводов при k независимых прогонах) улучшает калибровку (Xiong et al.). Практическое следствие для ординальной шкалы: расхождение выводов двух независимых прогонов синтеза — сигнал автоматического даунгрейда confidence на ступень."
+evidence_type: measured_result
+source:
+  title: "Can LLMs Express Their Uncertainty? (arXiv 2306.13063)"
+  url: "https://arxiv.org/abs/2306.13063"
+  type: research_paper
+  published_at: "2023-06-01"
+  is_primary: true
+citation:
+  locator: "выводы по verbalized + self-consistency гибриду"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Рецензируемая широко цитируемая работа; следствие про 'два прогона' — наша адаптация, проверяется пилотом."
+status: active
+superseded_by: null

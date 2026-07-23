@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-322
+request_id: RR-005
+statement: "inspect-ai (UK AI Security Institute): MIT, ~2.4k звёзд, очень активен (248 релизов). Единственный кандидат с полноценными agentic-evals (мультишаговые траектории, sandboxing Docker/K8s) и bridge к Claude Code — агентов кита можно гонять как есть. Цена: pydantic/httpx/numpy/fastapi/boto3 и ещё ~40 пакетов — несовместимо с ядром stdlib+pyyaml, только opt-in dev-зависимость child. Кейсы — Python-код (@task), декларативного файлового формата нет."
+evidence_type: documented_fact
+source:
+  title: "GitHub — UKGovernmentBEIS/inspect_ai"
+  url: "https://github.com/UKGovernmentBEIS/inspect_ai"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "pyproject dependencies, docs agents/bridges, LICENSE"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом с первичных страниц репозитория и документации."
+status: active
+superseded_by: null

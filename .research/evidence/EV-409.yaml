@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-409
+request_id: RR-006
+statement: "HF datasets совершил formats-first разворот: Python loading scripts жёстко удалены (с datasets 4.x, лето 2025, ошибка 'Dataset scripts are no longer supported') — датасет теперь только данные-файлы (parquet/csv/json) + метаданные; версионирование через git-модель Hub (revision = tag/branch/commit hash). Конвенции для golden sets кита: чистые data-файлы без кода + явные splits + revision-pinning; сам parquet/pyarrow не тянуть (YAML достаточен для сотен кейсов)."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — datasets: loading"
+  url: "https://huggingface.co/docs/datasets/en/loading"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел revision + deprecation loading scripts"
+  quote: "Use the revision parameter to specify the dataset version you want to load"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF evals, RR-006)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Официальные доки; факт удаления scripts подтверждается ошибкой рантайма в 4.x."
+status: active
+superseded_by: null

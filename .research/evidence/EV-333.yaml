@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-333
+request_id: RR-005
+statement: "Контроль verbosity-байаса судей: length-controlled scoring (регрессия убирает вклад длины ответа) поднял корреляцию AlpacaEval 2.0 с Chatbot Arena до 0.98. Дешёвый перенос: печатать корреляцию score судьи с длиной вывода по golden-set; рост корреляции — сигнал деградации промпта судьи."
+evidence_type: measured_result
+source:
+  title: "Length-Controlled AlpacaEval (arXiv 2404.04475)"
+  url: "https://arxiv.org/abs/2404.04475"
+  type: research_paper
+  published_at: "2024-04-01"
+  is_primary: true
+citation:
+  locator: "length-controlled метод, корреляция 0.98 с Arena"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005; выделено в отдельный EV после judge-ревью)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Широко используемый метод; цифра из abstract, прочитано агентом."
+status: active
+superseded_by: null

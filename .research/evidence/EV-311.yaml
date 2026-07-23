@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-311
+request_id: RR-004
+statement: "Агентный итеративный retrieval (grep/просмотр/уточнение запроса по корпусу) обходит one-shot семантический поиск на агентных задачах ('Beyond Semantic Similarity'). Следствие для memory_check: оформлять как многошаговый протокол (индекс → 2-3 grep-запроса с синонимами → чтение кандидатов), а не один запрос; векторная БД для YAML-памяти не нужна, лексический стек с генерируемым индексом — подтверждённый бейзлайн."
+evidence_type: measured_result
+source:
+  title: "Beyond Semantic Similarity (arXiv 2605.05242)"
+  url: "https://arxiv.org/pdf/2605.05242"
+  type: research_paper
+  published_at: "2026-05-01"
+  is_primary: true
+citation:
+  locator: "сравнение agentic iterative retrieval vs one-shot semantic"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Препринт; согласуется с практикой grep-first в Claude Code."
+status: active
+superseded_by: null

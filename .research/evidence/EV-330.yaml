@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-330
+request_id: RR-005
+statement: "В ките УЖЕ существует политика eval-инструментов для AI-фич продукта: rules/ai/EvalTooling.md (принцип CLI-and-protocol, не импорт; выбор не навязан) и registry/tools.yaml с декларациями promptfoo (npm, MIT, offline evals + red team), deepeval (pip, pytest-style CI-тесты), ragas (RAG-метрики), langfuse (online-метрики), garak (red team) — все status: declared, permission_level: network. Правило 3 EvalTooling: 'автоматизация не заменяет судью; LLM-as-judge валидируется против человеческих меток — EvalPolicy'. Скоуп этой политики — evals AI-фич child-продуктов (gate ai_eval), НЕ evals собственных агентов кита (evaluations/agents/) — этот скоуп покрывается RR-005."
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — rules/ai/EvalTooling.md + registry/tools.yaml (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "rules/ai/EvalTooling.md таблица+правила 1,3,5; registry/tools.yaml id: promptfoo/deepeval/ragas (строки 90-115)"
+captured_at: "2026-07-23"
+captured_by: "claude (research run RR-005, дозабор после judge-ревью; self-evidence — судья DP-105 независимо верифицировал оба файла)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: high
+  rationale: "Прямое чтение файлов репозитория; независимый спот-чек judge-агентом выполнен в раунде 1 ревью DP-105."
+status: active
+superseded_by: null

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-415
+request_id: RR-006
+statement: "YandexGPT-5-Lite-8B: лицензия кастомная (НЕ open-source): при достижении 10 миллионов выходных токенов в месяц пользователь обязан связаться с Яндексом в течение 30 дней, иначе лицензия автоматически прекращается; сублицензирование запрещено. Для растущего корпоративного продукта — лицензионный риск, в шорт-лист не включать несмотря на заявленное качество русского."
+evidence_type: documented_fact
+source:
+  title: "HF — yandex/YandexGPT-5-Lite-8B-instruct LICENSE"
+  url: "https://huggingface.co/yandex/YandexGPT-5-Lite-8B-instruct/blob/main/LICENSE"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "LICENSE: пункт о пороге 10M токенов/мес"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Первичный LICENSE-файл, прочитан агентом; verbatim-цитата русского текста лицензии не снята — при использовании перечитать документ."
+status: active
+superseded_by: null

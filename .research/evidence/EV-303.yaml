@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-303
+request_id: RR-004
+statement: "Decompose-then-verify (SAFE, DeepMind): длинный вывод разбивается на утверждения, каждое проверяется отдельным LLM-шагом (поиск evidence → вердикт supported/not-supported); согласие с людьми 72%, в спорных случаях пайплайн чаще прав, чем аннотатор. Реализуется двумя промпт-шагами без ML-зависимостей."
+evidence_type: measured_result
+source:
+  title: "Long-form factuality in LLMs / SAFE (arXiv 2403.18802)"
+  url: "https://arxiv.org/abs/2403.18802"
+  type: research_paper
+  published_at: "2024-03-01"
+  is_primary: true
+citation:
+  locator: "abstract + результаты сравнения с аннотаторами"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Известная работа DeepMind (есть последующие цитирования), прочитана агентом; цифры из abstract."
+status: active
+superseded_by: null

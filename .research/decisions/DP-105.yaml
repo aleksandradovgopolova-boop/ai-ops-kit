@@ -1,0 +1,65 @@
+# DecisionPackage по RR-005 (eval-инструменты для eval-фреймворка кита).
+# v2: переработан по итогам judge-ревью (major: негативное утверждение без EV — добавлен EV-331;
+# несверенность с rules/ai/EvalTooling.md и registry/tools.yaml — добавлен EV-330 и скоуп-разграничение;
+# additive_only не был адресован; пилот ссылался на несуществующий раннер).
+schema_version: 1
+kind: research.decision-package
+id: DP-105
+request_id: RR-005
+decision:
+  question: "Что взять для усиления eval-фреймворка кита (evals собственных агентов): инструмент, формат кейсов или паттерны?"
+recommendation:
+  preferred_option: "formats-first: добавить (рядом со старым, additive) YAML-формат кейсов по двум внешним стандартам + построить мета-оценку судей stdlib-скриптами; инструменты — через уже существующий механизм registry/tools.yaml (status: declared)"
+  confidence: medium
+  confidence_rationale: "Лицензии/зависимости/форматы кандидатов сняты с первичных репозиториев (EV-320…EV-329), политика кита сверена по его файлам (EV-330, self-evidence со спот-чеком судьи); негативное утверждение о мета-оценке зафиксировано отдельным EV-331 с сужением ('калибровка против golden-меток не обнаружена в доках 8 кандидатов') и обычной оговоркой о слабости негатива. Ничего не запускалось — это делает пилот."
+rationale:
+  - "Скоуп-разграничение (EV-330): в ките уже есть политика eval-инструментов для AI-фич ПРОДУКТА — rules/ai/EvalTooling.md + registry/tools.yaml (promptfoo/deepeval/ragas/langfuse/garak, status: declared, принцип CLI-and-protocol). RR-005 покрывает ДРУГОЙ скоуп: evals собственных агентов кита (evaluations/agents/). Рекомендация не создаёт вторую политику, а переиспользует механизм: новые инструменты (autoevals, inspect-ai) декларируются в тот же registry/tools.yaml с пометкой скоупа agent-evals. Противоречие по deepeval снимается скоупом: для product-AI-фич он остаётся declared (политика EvalTooling не пересматривается этим DP); для agent-evals кита берём только паттерны G-Eval/DAG (EV-324) — тяжёлые зависимости с телеметрией не нужны там, где хватает YAML+скриптов."
+  - "Ни один инструмент не входит в ЯДРО по constraint no_new_python_deps: python-кандидаты тянут pydantic/httpx и тяжелее (deepeval — ещё и posthog/sentry, EV-324; agentevals — langchain_openai, EV-328), promptfoo — Node (EV-320), langfuse — сервер (EV-325), phoenix — ELv2 (EV-329). Ядро остаётся на stdlib json + разрешённом pyyaml."
+  - "Форматы устойчивее инструментов: рынок консолидировался (promptfoo куплен OpenAI и назначен заменой deprecated Evals-платформы — EV-320, требует перепроверки первичным анонсом, см. пилот шаг 0; openai/evals заморожен — EV-321). Два переносимых стандарта: promptfoo-стиль 'vars + assert[{type,value,threshold}]' для декларативных кейсов (EV-320) и agentevals-стиль 'траектория = messages с tool_calls' для записи прогонов judge/reviewer-агентов (EV-328). ВАЖНО (additive_only): новый YAML-формат добавляется РЯДОМ с существующими markdown-кейсами (51 файл evaluations/agents/*.md не удаляется и не переписывается), CI-гейт validate_agent_evals.py расширяется на новый формат, не заменяется; конвертируемость прозаической Forbidden-семантики в assert — ГИПОТЕЗА, проверяемая пилотом (потребует llm-rubric-судей), не данность."
+  - "Мета-оценка судей: калибровка против golden-меток не обнаружена ни у одного из 8 кандидатов (EV-331, негативное утверждение с оговорками) — строим свою stdlib-скриптами: seeded defects + recall/precision (JudgeBench-паттерн, EV-326), chance-corrected kappa вместо сырого agreement (EV-332 — это уточняет agreement-rate механику, принятую из gstack в DP-103: kappa дополняет её, не отменяет), position-swap (EV-327), length-bias контроль (EV-333), ECE по бакетам confidence; агрегация нескольких reviewer-агентов — паттерн LLM-jury (EV-329). Владельцы механики — роли eval-engineer и prompt-regression-tester, декларированные в DP-102."
+assumptions:
+  - "Форматы promptfoo/agentevals стабильны на горизонте года; оба под контролем крупных вендоров (OpenAI, LangChain) — пиннинг версии схемы обоих форматов обязателен."
+  - "Прозаическая Forbidden-семантика кейсов кита выразима в assert-формате через llm-rubric без потери содержания — гипотеза, критерий в пилоте."
+  - "Seeded defects реалистично сеять в артефакты кита по шаблонам дефектов зон ревьюеров."
+alternatives:
+  - option: "adopt-tool сразу — inspect-ai как стандартный раннер agent-evals"
+    appropriate_when: "Если появится задача регулярных sandboxed-прогонов полных траекторий (у inspect-ai единственного bridge к Claude Code, EV-322) и согласие тянуть ~40 пакетов в dev-окружение child."
+  - option: "status-quo — только markdown-кейсы и существующий структурный гейт"
+    appropriate_when: "Если переносимость и мета-оценка судей откладываются; кейсы остаются непрогоняемыми (гейт проверяет структуру, не исполняет), калибровка судей — неизмеренной."
+risks:
+  - "promptfoo под OpenAI может эволюционировать формат — пиннинг схемы; тот же риск у agentevals-формата (OpenAI-style messages эволюционирует OpenAI, контроль у LangChain) — пиннинг симметрично."
+  - "Мета-оценка требует golden-set с human-вердиктами — ручной труд Sasha; без него kappa/ECE не посчитать (jury-agreement — только прокси)."
+  - "Исполняемого раннера кейсов в ките сейчас НЕТ (validate_agent_evals.py проверяет структуру, не исполняет) — минимальный stdlib-раннер придётся написать, это часть стоимости рекомендации."
+  - "Негативный вывод EV-331 может устареть быстро — перепроверить при freshness-истечении (2026-10-22)."
+  - "Двойной формат кейсов (md + yaml) на переходный период — расхождение содержания; порядок обязателен: сначала шаг (4) пилота (расширение гейта до 'md ИЛИ yaml'), только затем заморозка md — иначе YAML-only кейсы нового агента красят CI. Явно признаём: md-требование для новых агентов при этом ослабляется до 'md или yaml' — осознанная ревизия действующей политики гейта."
+  - "Владельцы мета-оценки (eval-engineer, prompt-regression-tester) сами имеют status: declared — механика обретает владельца, только если пилот DP-102 (часть 2: конверсия eval-engineer) подтвердит роли."
+unknowns:
+  - "Боевое качество инструментов — читали доки и зависимости, не запускали."
+  - "Трудоёмкость минимального stdlib-раннера и правки validate_agent_evals.py."
+  - "Доля Forbidden-семантики, теряемой при конвертации (меряется пилотом на одном файле)."
+  - "Трудоёмкость seeded-defects сетов по 14 зонам ревьюеров."
+proposed_validation:
+  experiment: "Пилот на одном reviewer-агенте (code-reviewer), 5 шагов: (0) перепроверить статус promptfoo/OpenAI по первичным анонсам; (1) написать минимальный stdlib-раннер (замерить трудоёмкость — она же оценка стоимости рекомендации) и сконвертировать кейсы code-reviewer.md в vars+assert; критерий: Forbidden-семантика выражена в assert/llm-rubric без потери (спот-чек человеком); (2) собрать мини-golden-set из 10 кейсов с seeded defects, посчитать recall/precision/kappa скриптом; (3) прогнать те же кейсы через npx promptfoo (Node, dev-машина/child, вне core-CI — no_new_python_deps не задет) и сверить с нашим раннером; (4) расширить validate_agent_evals.py на новый формат (additive). Успех: раннер написан за приемлемое время, семантика не потеряна, метрики судьи считаются, расхождения раннеров объяснимы."
+evidence_ids:
+  - EV-320
+  - EV-321
+  - EV-322
+  - EV-323
+  - EV-324
+  - EV-325
+  - EV-326
+  - EV-327
+  - EV-328
+  - EV-329
+  - EV-330
+  - EV-331
+  - EV-332
+  - EV-333
+author: "claude (research run RR-005)"
+review:
+  reviewed_by: "recommendation-reviewer (независимый judge-агент, adversarial; два раунда; review-блок внесён координатором)"
+  verdict: approved
+  notes: "Раунд 1 (v1): needs_work — 4 major (негативное утверждение о мета-оценке без EV; несверенность с rules/ai/EvalTooling.md и registry/tools.yaml с прямым противоречием по deepeval; неадресованный additive_only при немеханической миграции кейсов; пилот ссылался на несуществующий раннер). Раунд 2 (v2): approved — дословно: 'все четыре major закрыты по существу, не косметически… confidence medium теперь откалиброван: каждое опорное утверждение имеет EV с адекватными оговорками, слабые места переведены в проверяемые шаги пилота'. Судья независимо верифицировал EvalTooling.md и registry/tools.yaml. Остаточные 5 minor (гигиена source.title/locator/freshness, явное признание ослабления md-гейта, зависимость от пилота DP-102) внесены координатором."
+status: reviewed
+outcome: null
+created_at: "2026-07-22"

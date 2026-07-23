@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-213
+request_id: RR-003
+statement: "Внешняя критика gstack: перегруз 35–40 командами (реально полезны ~6, по опыту европейской команды), SF-стартап-лексика чужда не-US командам, виральность частично от статуса YC-CEO ('a bunch of prompts in a text file'), кейс небезопасной автономии (агент вливал staging-URL в prod при зелёном exit code), ~25% команд зависят от проприетарных GBrain/GStack Browser, соло-мейнтейнер при 775 issues. Сильные стороны по тем же источникам: /qa с реальным браузером — самая ценная команда, /learn — рабочая межсессионная память, инструмент сформирован реальной практикой автора."
+evidence_type: user_report
+source:
+  title: "HN-тред + обзоры claude-codex.fr, mostpopularaitools.com"
+  url: "https://news.ycombinator.com/item?id=47355173"
+  type: forum
+  published_at: null
+  is_primary: false
+citation:
+  locator: "HN item 47355173; claude-codex.fr/en/content/garry-tan-stack-claude-code; mostpopularaitools.com why-garry-tan-s-gstack-is-loved-and-hated-equally"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (gstack deep-dive, RR-003)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Пользовательские отчёты и обзоры — вторичные источники с собственными байасами, но сходятся между собой по ключевым пунктам."
+status: active
+superseded_by: null

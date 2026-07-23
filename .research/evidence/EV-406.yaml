@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-406
+request_id: RR-006
+statement: "HF Inference Endpoints (dedicated managed-деплой): нативная поддержка vLLM, TGI, SGLang, llama.cpp и TEI, автоскейлинг и scale-to-zero, уровни доступа public/protected/private (AWS PrivateLink), регионы AWS/GCP/Azure; цены почасовые от CPU $0.033/час до 8x B200 $74/час. Важно для архитектуры: те же движки (vLLM/TEI), что и при self-hosting — один контракт 'OpenAI-compatible endpoint' покрывает managed и приватный пути."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — Inference Endpoints: About"
+  url: "https://huggingface.co/docs/inference-endpoints/about"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел engines + pricing"
+  quote: "Currently we have native support for: vLLM, Text-generation-inference (TGI), SGLang, llama.cpp, and Text-embeddings-inference (TEI)"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "Официальные доки; цены volatile."
+status: active
+superseded_by: null

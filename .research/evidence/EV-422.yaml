@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-422
+request_id: RR-006
+statement: "GigaChat (ai-sage/Сбер, MIT): GigaChat-20B-A3B — MoE с 3B активных, обучен на русском с нуля (не тюн), реалистичен на 1x 48GB / 2x 24GB; флагман GigaChat3.1-702B-A36B (MMLU RU 0.8267) требует мульти-нодовый кластер — вне досягаемости малой команды. 20B-A3B — легитимная альтернатива T-pro в шорт-листе, особенно если важно 'русский с нуля' против 'тюн Qwen'."
+evidence_type: documented_fact
+source:
+  title: "HF model card — ai-sage/GigaChat-20B-A3B-instruct"
+  url: "https://huggingface.co/ai-sage/GigaChat-20B-A3B-instruct"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "model card: архитектура MoE, лицензия, происхождение обучения"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Model card вендора; сравнение качества с T-pro не проводилось — вопрос пилота."
+status: active
+superseded_by: null

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-205
+request_id: RR-002
+statement: "awesome-mcp-servers (punkpeye, ~91.2k звёзд, MIT, push в день проверки): рабочая навигация, но без курирования качества — промо и однодневки рядом с официальными. Официальные вендорские MCP, закрывающие стадии кита: microsoft/playwright-mcp (QA/verify через accessibility snapshots), github/github-mcp-server (PR/CI как evidence для release-gate), posthog/mcp (analytics + feature flags), getsentry/sentry-mcp (monitoring). Reference-серверы Anthropic (puppeteer, git) перенесены в servers-archived — как основу не брать. Официального Linear в списке нет — у Linear свой hosted MCP (mcp.linear.app)."
+evidence_type: documented_fact
+source:
+  title: "GitHub — punkpeye/awesome-mcp-servers"
+  url: "https://github.com/punkpeye/awesome-mcp-servers"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README (~3600 строк, категории Browser/Developer Tools/Analytics/Monitoring)"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (MCP scan, RR-002)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Собрано агентом-разведчиком; конкретные MCP-серверы официальных вендоров — сигнал сильный, но каждый проверить перед включением."
+status: active
+superseded_by: null

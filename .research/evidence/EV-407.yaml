@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-407
+request_id: RR-006
+statement: "Gradio (Apache-2.0) — UI-фреймворк для ML-демо, работает self-hosted; Spaces (хостинг на Hub) для организаций больше не бесплатен: Gradio/Docker Spaces требуют платный план (PRO для личных, Team/Enterprise для организаций), GPU от $0.40/час (T4). Private Spaces полностью приватны (код и апп — только владельцу/коллабораторам), но хостинг — у HF, т.е. вне корпоративного контура."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — Spaces Overview"
+  url: "https://huggingface.co/docs/hub/spaces-overview"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "разделы visibility + billing"
+  quote: "Gradio and Docker Spaces run on compute and require a paid plan to create"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "Официальные доки, прочитаны агентом."
+status: active
+superseded_by: null

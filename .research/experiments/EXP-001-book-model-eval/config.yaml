@@ -1,0 +1,36 @@
+# EXP-001 — проверка DP-101: качество длинной русской прозы deepseek-v4-flash / v4-pro / kimi-k3.
+# Цены — из evidence RR-001 (EV-101, EV-103), USD за 1M токенов, для расчёта фактической стоимости.
+schema_version: 1
+experiment: EXP-001-book-model-eval
+request_id: RR-001
+decision_package: DP-101
+
+generation:
+  temperature: 0.75
+  max_tokens: 4500          # ~1 глава
+  timeout_s: 600
+  retries: 2
+
+models:
+  - id: deepseek-v4-flash
+    provider: deepseek
+    base_url: https://api.deepseek.com
+    model: deepseek-v4-flash
+    env_key: DEEPSEEK_API_KEY
+    price_in: 0.14
+    price_out: 0.28
+  - id: deepseek-v4-pro
+    provider: deepseek
+    base_url: https://api.deepseek.com
+    model: deepseek-v4-pro
+    env_key: DEEPSEEK_API_KEY
+    price_in: 0.435
+    price_out: 0.87
+  - id: kimi-k3
+    provider: moonshot
+    # платформа переехала на platform.kimi.ai; если endpoint не отвечает — проверить api.kimi.ai
+    base_url: https://api.moonshot.ai/v1
+    model: kimi-k3
+    env_key: MOONSHOT_API_KEY
+    price_in: 3.00
+    price_out: 15.00

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-325
+request_id: RR-005
+statement: "langfuse (MIT кроме /ee, ~31.7k звёзд, очень активен): eval-часть оперирует datasets/scores в БД (PostgreSQL+ClickHouse) с запущенным сервером, файлового формата кейсов нет — ортогонально git-модели кита (файлы в репо как источник истины, CI на stdlib); как offline-eval-раннер не подходит, ниша — продовая observability, если понадобится child-компании отдельно."
+evidence_type: documented_fact
+source:
+  title: "GitHub — langfuse/langfuse"
+  url: "https://github.com/langfuse/langfuse"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "архитектура self-hosted (Docker Compose, PostgreSQL, ClickHouse), LICENSE, docs datasets"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом с первичных страниц."
+status: active
+superseded_by: null

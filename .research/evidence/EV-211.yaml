@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-211
+request_id: RR-003
+statement: "Механика массовости gstack: онбординг одной командой ('30-second setup': git clone в ~/.claude/skills + ./setup, team mode — копия в .claude/ проекта) и opinionated sprint-цикл Think→Plan→Build→Review→Test→Ship→Reflect, снимающий паралич выбора. Чего в gstack НЕТ (пробелы относительно кита): governance/policy gates, writer≠judge как инвариант (та же модель пишет и ревьюит; /codex — опция), eval-фреймворк, YAML-реестры как source of truth, installer child-экземпляров, продуктовые артефакты глубже design doc, research/decision-контракты."
+evidence_type: documented_fact
+source:
+  title: "gstack README/ETHOS/ARCHITECTURE (raw)"
+  url: "https://raw.githubusercontent.com/garrytan/gstack/main/README.md"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README: setup, team mode; ETHOS.md; ARCHITECTURE.md; дерево скиллов"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (gstack deep-dive, RR-003)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Список отсутствующего — вывод агента из чтения репозитория; сильный, но негатив ('нет X') всегда проверяем слабее позитива."
+status: active
+superseded_by: null

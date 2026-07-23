@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-324
+request_id: RR-005
+statement: "deepeval (Apache-2.0, ~17k звёзд, активен): богатейшие agentic- и judge-метрики (G-Eval CoT-рубрики, DAG-декомпозиция судейских шагов, task completion, tool correctness), но кейсы — императивный Python без файлового формата, а зависимости включают телеметрию (posthog, sentry-sdk) и grpcio/opentelemetry — против духа кита. Пригоден только как источник паттернов: G-Eval-рубрика как markdown-агент, DAG судьи как YAML-пайплайн."
+evidence_type: documented_fact
+source:
+  title: "GitHub — confident-ai/deepeval"
+  url: "https://github.com/confident-ai/deepeval"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "pyproject dependencies, docs G-Eval/DAG"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (evals scan, RR-005)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом с первичных страниц."
+status: active
+superseded_by: null

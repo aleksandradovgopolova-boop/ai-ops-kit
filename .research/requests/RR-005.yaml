@@ -1,0 +1,29 @@
+# Улучшение кита: ландшафт eval-инструментов для агентных систем.
+schema_version: 1
+kind: research.request
+id: RR-005
+title: "Eval-инструменты агентных систем: чем усилить eval-фреймворк кита"
+requested_by:
+  system: ai_ops
+  layer: technology
+decision_to_support:
+  description: "Решить, что взять (инструмент, формат кейсов или только паттерны) для усиления eval-фреймворка кита: regression-тесты промптов агентов в CI, метрики качества ревьюеров, калибровка judge-агентов"
+  decision_maker: human
+questions:
+  - "Какие открытые eval-фреймворки для LLM/агентов существуют и живы (inspect-ai, promptfoo, deepeval и др.) — лицензии, зависимости, формат кейсов?"
+  - "Что из них совместимо с constraint кита (Python stdlib+pyyaml, никаких новых зависимостей) — целиком, форматом данных или только паттернами?"
+  - "Как другие меряют качество judge/reviewer-агентов (hit-rate, agreement rate, калибровка) — что переносимо в registry/evaluations кита?"
+constraints:
+  - no_new_python_deps
+  - additive_only
+  - ci_runnable
+workflow_hint: comparison
+memory_check:
+  performed: true
+  related_requests: [RR-002, RR-003]
+  related_decisions: [DP-102, DP-103]
+  summary: "DP-102 уже декларирует eval-engineer/prompt-regression-tester (роли, не инструменты) и mcp-builder с evaluation harness как образец; DP-103 даёт механики gstack (hit-rate специалистов, agreement rate кросс-модельного judge, health score с baseline) — кандидаты на метрики. Инструментальный ландшафт целиком не исследовался."
+required_confidence: medium
+deadline: "2026-08-05"
+status: answered
+created_at: "2026-07-22"

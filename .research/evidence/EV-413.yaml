@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-413
+request_id: RR-006
+statement: "T-pro-it-2.1 (t-tech/Т-Банк): 33B на базе Qwen3-32B, Apache-2.0, оптимизированный русский токенизатор; заявленные метрики: Ru Arena Hard 93.8 (против 87.3 у базовой Qwen3-32B), ruIFeval 80.7. Железо: BF16 ~66GB (1x A100/H100 80GB), в 4-bit — 1x 48GB; vLLM/SGLang поддержаны официально; контекст 32K."
+evidence_type: documented_fact
+source:
+  title: "HF model card — t-tech/T-pro-it-2.1"
+  url: "https://huggingface.co/t-tech/T-pro-it-2.1"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "model card: описание + таблица бенчмарков"
+  quote: "is an efficient russian model built upon the Qwen 3 model family"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Model card вендора: метрики self-reported (Ru Arena Hard — их прогон), независимая проверка — наш пилот."
+status: active
+superseded_by: null

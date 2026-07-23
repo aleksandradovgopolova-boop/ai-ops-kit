@@ -1,0 +1,30 @@
+# Self-improvement: методы качества для самого research-модуля (замкнутый контур).
+schema_version: 1
+kind: research.request
+id: RR-004
+title: "Методы верификации и калибровки для research-модуля v0.2"
+requested_by:
+  system: research-module
+  layer: technology
+decision_to_support:
+  description: "Выбрать 3-5 методов/механик качества исследований (верификация claims, citation grounding, калибровка confidence, adversarial review, retrieval памяти) для включения в research-модуль v0.2"
+  decision_maker: human
+questions:
+  - "Как современные deep-research системы и академические работы проверяют соответствие утверждений источникам (citation faithfulness / claim verification)?"
+  - "Какие практики калибровки confidence у LLM-выводов применимы к ординальной шкале модуля?"
+  - "Какие паттерны adversarial/multi-judge ревью дают прирост качества и по какой цене?"
+  - "Как устроен retrieval исследовательской памяти в существующих системах (чтобы memory_check был поиском, а не ритуалом)?"
+constraints:
+  - implementable_stdlib_pyyaml
+  - additive_to_v01_schemas
+  - low_cost_per_run
+workflow_hint: deep
+memory_check:
+  performed: true
+  related_requests: [RR-001, RR-002, RR-003]
+  related_decisions: [DP-101, DP-102, DP-103]
+  summary: "Боевые прогоны уже дали внутренние уроки (негативные claims слабее позитивных; review заполняет координатор; один источник = одна запись; спот-чек self-evidence); внешние методы ещё не исследовались. EV-206 упоминал typed-RAG с refusal и RAG failure diagnostics — нить для старта."
+required_confidence: medium
+deadline: "2026-08-05"
+status: answered
+created_at: "2026-07-22"

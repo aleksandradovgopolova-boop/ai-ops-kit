@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-408
+request_id: RR-006
+statement: "lighteval (MIT, активен, v0.13.0) — актуальный eval-фреймворк HF на 1000+ задач, но задачи определяются исполняемым Python-кодом (prompt_function + LightevalTaskConfig с импортами из внутренностей библиотеки), не декларативно — формат непереносим без инструмента (lock-in). Собственных agentic-evals нет: для них lighteval сам рекомендует inspect-ai как бэкенд. Библиотека evaluate при этом стагнирует (последний релиз 09.2025, README перенаправляет на lighteval)."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — lighteval"
+  url: "https://huggingface.co/docs/lighteval/en/index"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "index: eval backends; task definition docs"
+  quote: "Use inspect-ai as backend to evaluate and inspect your models ! (prefered way)"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF evals, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Официальные доки, прочитаны агентом; вывод о lock-in — из структуры формата задач."
+status: active
+superseded_by: null

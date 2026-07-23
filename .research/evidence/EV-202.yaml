@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-202
+request_id: RR-002
+statement: "anthropics/skills (официальный, ~163k звёзд, активен): единой лицензии нет — example-скиллы Apache-2.0 (vendoring разрешён), документные скиллы docx/pdf/pptx/xlsx source-available (только reference). Содержит спецификацию формата Agent Skills (spec/), мета-скилл skill-creator с eval-подходом, webapp-testing (Apache-2.0), mcp-builder с evaluation harness; репозиторий подключается как plugin marketplace Claude Code. Дисклеймер: скиллы 'for demonstration and educational purposes only'."
+evidence_type: documented_fact
+source:
+  title: "GitHub — anthropics/skills"
+  url: "https://github.com/anthropics/skills"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "README, spec/, skills/webapp-testing, skills/skill-creator, per-skill LICENSE"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (skills scan, RR-002)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом-разведчиком с первичных страниц; лицензии per-skill перед vendoring перепроверить руками."
+status: active
+superseded_by: null

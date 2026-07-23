@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-203
+request_id: RR-002
+statement: "awesome-codex-skills (ComposioHQ, ~15.2k звёзд): LICENSE-файла нет вообще (переиспользование содержимого юридически не разрешено), последняя активность 2026-05-15 (~2 месяца тишины), репозиторий — маркетинговый vehicle Composio (CTA, часть скиллов требует Composio CLI). Идеи внутри пригодны как паттерны (gh-fix-ci, gh-address-comments, sentry-triage, issue-triage), но код брать нельзя."
+evidence_type: documented_fact
+source:
+  title: "GitHub — ComposioHQ/awesome-codex-skills"
+  url: "https://github.com/ComposioHQ/awesome-codex-skills"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "страница репозитория: отсутствие LICENSE, commit history, README"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (skills scan, RR-002)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: "Прочитано агентом-разведчиком с первичных страниц; отсутствие лицензии — критичный факт, перепроверить руками перед любым заимствованием."
+status: active
+superseded_by: null

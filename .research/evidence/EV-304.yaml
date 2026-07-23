@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-304
+request_id: RR-004
+statement: "Предел декомпозиции claims: сверхатомарные утверждения без контекста становятся непроверяемыми или двусмысленными, и чрезмерная атомизация ухудшает точность верификатора (DnDScore; 'Decomposition Dilemmas', arXiv 2411.02400). Правило: claim должен быть самодостаточным 'молекулярным' (кто/когда/где внутри), верифицируемым по одному фрагменту источника, а не максимально мелким."
+evidence_type: measured_result
+source:
+  title: "DnDScore: Decontextualization and Decomposition (arXiv 2412.13175)"
+  url: "https://arxiv.org/pdf/2412.13175"
+  type: research_paper
+  published_at: "2024-12-01"
+  is_primary: true
+citation:
+  locator: "основной вывод о decontextualization; смежная работа 2411.02400"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Препринты, но два независимых источника сходятся в выводе; прочитано агентом."
+status: active
+superseded_by: null

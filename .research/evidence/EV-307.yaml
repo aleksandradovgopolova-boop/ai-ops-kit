@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-307
+request_id: RR-004
+statement: "Адверсариальные дебаты доказанно повышают качество суждений (Khan et al., ICML 2024 Best Paper): два эксперта аргументируют противоположные позиции перед неэкспертом-судьёй — точность судьи-LLM растёт 48%→76%, судьи-человека 60%→88%; единственный консультант без оппонента заметно хуже дебатов. Практический формат: пара 'защитник vs атакующий' + судья, три промпта."
+evidence_type: measured_result
+source:
+  title: "Debating with More Persuasive LLMs Leads to More Truthful Answers (arXiv 2402.06782, ICML 2024)"
+  url: "https://arxiv.org/abs/2402.06782"
+  type: research_paper
+  published_at: "2024-02-01"
+  is_primary: true
+citation:
+  locator: "abstract + основные результаты; ICML 2024 Best Paper"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Рецензированная работа с наградой ICML; цифры из abstract."
+status: active
+superseded_by: null

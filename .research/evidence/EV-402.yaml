@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-402
+request_id: RR-006
+statement: "HF Inference Providers — OpenAI-совместимый serverless-роутер (router.huggingface.co/v1) к ~17 провайдерам (Groq, Together, Fireworks, Cerebras, Novita и др.) с одним HF_TOKEN, политиками :fastest/:cheapest и биллингом на организацию (X-HF-Bill-To); наценки нет — HF передаёт цены провайдеров как есть. DeepSeek (V3/R1), Kimi K2, Qwen3 доступны. Ограничение приватности: данные уходят сторонним провайдерам разных юрисдикций — для корпоративных документов непригодно без DPA-проверки каждого провайдера."
+evidence_type: documented_fact
+source:
+  title: "HF Docs — Inference Providers pricing"
+  url: "https://huggingface.co/docs/inference-providers/pricing"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел Pricing / billing"
+  quote: "Hugging Face charges you the same rates as the provider, with no additional fees. We just pass through the provider costs directly."
+captured_at: "2026-07-23"
+captured_by: "scout-agent (HF core, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-23"
+reliability:
+  level: medium
+  rationale: "Официальные доки, прочитаны агентом; состав провайдеров и цены меняются."
+status: active
+superseded_by: null

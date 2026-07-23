@@ -131,6 +131,23 @@ tools:
     source: "pip: garak (Apache-2.0)"
     requires_credentials: true
     status: declared
+  # --- Hugging Face (DP-106, research-модуль): опции, не зависимости ---
+  - id: hf-mcp-server
+    protocol: mcp
+    purpose: "официальный MCP-сервер HF: поиск моделей/датасетов/Spaces/статей и fetch документации из агента; discovery-источник для выбора моделей и research-модуля"
+    permission_level: network
+    provides: [model_search, dataset_search, paper_search, doc_fetch]
+    source: "github: huggingface/hf-mcp-server (MIT); hosted: https://huggingface.co/mcp"
+    requires_credentials: true   # HF_TOKEN (для приватных ресурсов; публичный поиск может работать без)
+    status: declared
+  - id: hf-router
+    protocol: rest-api
+    purpose: "OpenAI-совместимый доступ к открытым моделям через HF Inference Providers (~17 провайдеров, цены без наценки); политика выбора провайдера фиксируется :cheapest. SCOPE: только маршруты confidentiality public/internal — конфиденциальные задачи идут по routing-policy (gigachat/local), данные через роутер уходят сторонним провайдерам разных юрисдикций (DP-106, EV-402)"
+    permission_level: network
+    provides: [open_models_chat, model_comparison]
+    source: "https://router.huggingface.co/v1 (HF_TOKEN)"
+    requires_credentials: true
+    status: declared
   # --- v2.12: мета-качество AI-конфигов ---
   - id: agnix
     protocol: cli

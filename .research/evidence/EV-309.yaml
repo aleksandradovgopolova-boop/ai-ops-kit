@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-309
+request_id: RR-004
+statement: "Self-preference bias: LLM-судьи систематически завышают оценки текстам своей же модели/семейства — судья той же модели склонен соглашаться с ошибками генератора. Митигаторы без смены модели: судья в чистом контексте без хода рассуждений автора; рубрика 'найди минимум N конкретных дефектов'; требование указать, какое evidence опровергло бы вывод."
+evidence_type: measured_result
+source:
+  title: "Self-Preference Bias in LLM-as-a-Judge (arXiv 2410.21819)"
+  url: "https://arxiv.org/abs/2410.21819"
+  type: research_paper
+  published_at: "2024-10-01"
+  is_primary: true
+citation:
+  locator: "abstract + перплексионный механизм байаса"
+captured_at: "2026-07-22"
+captured_by: "scout-agent (methods scan, RR-004)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Препринт, но эффект многократно воспроизведён в смежных работах; митигаторы — практики, проверяемые пилотом."
+status: active
+superseded_by: null

@@ -1,0 +1,11 @@
+# Свод: truth (seeded/truth.yaml) + вердикты слепого судьи (агент, 2026-07-23).
+- {id: d01, truth: defect, judge: defect}
+- {id: d02, truth: clean, judge: clean}
+- {id: d03, truth: defect, judge: defect}
+- {id: d04, truth: clean, judge: clean}
+- {id: d05, truth: defect, judge: defect}
+- {id: d06, truth: defect, judge: defect}
+- {id: d07, truth: clean, judge: clean}
+- {id: d08, truth: defect, judge: defect}
+- {id: d09, truth: clean, judge: clean}
+- {id: d10, truth: defect, judge: clean}

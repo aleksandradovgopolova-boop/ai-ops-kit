@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-417
+request_id: RR-006
+statement: "BAAI/bge-m3 (MIT): ~560M параметров, контекст 8192 токена, 100+ языков; уникальность — dense + sparse + ColBERT retrieval в одной модели, что даёт гибридный поиск по русским документам без отдельного BM25-слоя. Альтернатива при потребности в максимальном качестве — Qwen3-Embedding 0.6B/4B/8B (Apache-2.0, топ открытых на MTEB multilingual ~70.6 у 8B). Исключить: jina-embeddings v3/v4 — CC-BY-NC-4.0, коммерческое использование без договора запрещено."
+evidence_type: documented_fact
+source:
+  title: "HF model card — BAAI/bge-m3"
+  url: "https://huggingface.co/BAAI/bge-m3"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "model card: возможности, контекст, лицензия"
+  quote: "support more than 100 working languages"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Model card BAAI; факты о Qwen3-Embedding и jina — с их страниц (см. отчёт разведчика), при adopt перечитать их model cards отдельно."
+status: active
+superseded_by: null

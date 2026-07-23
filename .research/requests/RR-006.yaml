@@ -1,0 +1,30 @@
+# Hugging Face для ИИ-среды и AI Ops Kit (запрос Sasha 2026-07-24... фактическая дата 2026-07-23).
+schema_version: 1
+kind: research.request
+id: RR-006
+title: "Hugging Face: что из экосистемы использовать для ИИ-среды и AI Ops Kit"
+requested_by:
+  system: human
+  layer: technology
+decision_to_support:
+  description: "Решить, какие строительные блоки Hugging Face взять: (а) для backend ИИ-среды (внутрикорпоративное приложение: запросы+документы сотрудников -> справка/презентация/дашборд; приватность корпоративных данных, русский язык); (б) для AI Ops Kit (model routing/Technology Layer, eval-фреймворк, golden sets)"
+  decision_maker: human
+questions:
+  - "Какие блоки HF-экосистемы 2026 (Hub, Inference Providers/Endpoints, TGI/TEI, Spaces, MCP, smolagents, enterprise) релевантны построению корпоративной ИИ-среды и на каких условиях (лицензии, цены, self-hosted vs cloud)?"
+  - "Что HF даёт для AI-Ops практик: evals (lighteval/evaluate), датасеты и разметка golden sets (argilla/distilabel), версионирование/реестр моделей?"
+  - "Какой RAG/inference-стек для корпоративных документов на русском реалистичен: открытые модели 2026, эмбеддинги, стоимость и сложность self-hosting против API?"
+constraints:
+  - corporate_data_privacy      # документы сотрудников не должны уходить внешним провайдерам без решения
+  - russian_language
+  - license_compatible_commercial
+  - fits_kit_declared_pattern   # инструменты — декларации в registry/tools.yaml, не зависимости ядра
+workflow_hint: deep
+memory_check:
+  performed: true
+  related_requests: [RR-001, RR-002, RR-005]
+  related_decisions: [DP-101, DP-102, DP-105]
+  summary: "Пересечения: DP-101 — модели DeepSeek/Kimi для генерации (открытые веса — доступны и через HF); DP-102 — mcp-builder/официальные MCP (у HF есть свой MCP-сервер — проверить); DP-105 — formats-first для evals (сверить формат lighteval/datasets с нашим vars+assert). HF как экосистема целиком не исследовался."
+required_confidence: medium
+deadline: "2026-08-08"
+status: answered
+created_at: "2026-07-23"

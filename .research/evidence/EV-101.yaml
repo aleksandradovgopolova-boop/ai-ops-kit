@@ -12,6 +12,7 @@ source:
   is_primary: true
 citation:
   locator: "таблица Models & Pricing: строки deepseek-v4-flash и deepseek-v4-pro"
+  quote: "MAXIMUM: 384K"
 captured_at: "2026-07-22"
 captured_by: "claude (research run RR-001)"
 freshness:

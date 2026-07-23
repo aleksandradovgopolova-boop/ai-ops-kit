@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-421
+request_id: RR-006
+statement: "DeepSeek V4 открыл веса (MIT, релиз 2026-04-24, на HF): V4-Pro 1.6T total / 49B active, V4-Flash 284B total / 13B active, контекст 1M. Практическое следствие: 'открытость' дата-центрового масштаба — даже Flash требует мульти-GPU ноду 8x80GB+, для команды 50-200 человек self-hosting нереален; место DeepSeek в стеке ИИ-среды — только внешний API для неконфиденциальных задач (связка с DP-101, где v4-flash выбран для генерации книги)."
+evidence_type: documented_fact
+source:
+  title: "HF model card — deepseek-ai/DeepSeek-V4-Flash"
+  url: "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
+  type: official_documentation
+  published_at: "2026-04-24"
+  is_primary: true
+citation:
+  locator: "model card: параметры, лицензия MIT"
+captured_at: "2026-07-23"
+captured_by: "scout-agent (RAG-стек, RR-006)"
+freshness:
+  volatile: true
+  expires_at: "2027-01-23"
+reliability:
+  level: medium
+  rationale: "Model card, прочитана агентом."
+status: active
+superseded_by: null
