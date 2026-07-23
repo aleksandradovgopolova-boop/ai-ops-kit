@@ -527,11 +527,43 @@ freshness и первым живым DecisionPackage. Архитектура **e
     (backend/не-ui -> ready без ревью) + kg_strict_ux/a11y -> block_attribution покрывает все 4 UI-гейта.
     Вывод: reviewer-false-fail ЛОКАЛИЗОВАН в UI review-гейтах (не размазан); ENGINEERING блокируется раньше
     на артефакт-гейтах (не reviewer-false-fail). rate=0.667, engine_floor_ready=true, false_green=0.
-  - Далее: риск-калиброванный advisory-тир для не-safety UI review-гейтов (по атрибуции; доказать снижение
-    false-fail БЕЗ false-green) — ТРОГАЕТ fail-closed, требует решения владельца; regression corpus;
-    failure taxonomy; model comparison; controlled ImprovementProposal + canary; авто-ревалидация ff-базы (A).
-- **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
-  architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
+  - **v3.1.6 — UI Gate Applicability + Shadow Policy** ✅: `tools/gate_policy.py` — таксономия
+    `ui_impact`/`ui_change_kind`, `GatePolicyDecision` (applicability/enforcement/evidence_mode),
+    `current`/`candidate`/`shadow_diff`. Bench Lite v0.2 (25 кейсов, матрица impact×kind×gate + abstain);
+    метрики разведены: `policy_conformance` (движок исполняет policy: 100%) vs `quality_accuracy`
+    (`synthetic_known_good_block_rate=0.571`, честно помечен синтетикой, `live=null`;
+    `projected=0.381`). SHADOW: боевой fail-closed НЕ меняется; candidate не мягче current для
+    user_facing/critical; accessibility не ослабляется никогда. В CI + AGENTS.md.
+  - **Маршрут v3.1 (утверждён владельцем 2026-07-23):**
+    - **v3.1.7 — Storybook Evidence Adapter**: `tools/storybook_adapter.py`,
+      `schemas/ui-evidence-bundle.schema.json`, `validation/validate_storybook_evidence.py`.
+      `UIEvidenceBundle` из локальных артефактов child-репо (static build + story index/manifests +
+      interaction/a11y/visual results) — БЕЗ внешнего SaaS/MCP. Часть UI-ревью заменяется
+      проверяемым evidence, а не «доверием модели». Сам kit НЕ становится React-приложением.
+    - **v3.1.8 — Calibrated UI Enforcement**: после shadow-замеров кандидатная политика становится
+      боевой; вводится `GateResult v2` + миграционный адаптер (`not_applicable` / reviewer `abstain`).
+      Промоушен-критерий: `false_green==0`, `known_good_block_rate ≤ 0.10` (или −70%), 0 safety-регрессий,
+      100% policy-diff имеют reason; user-facing a11y и реальные визуальные регрессии по-прежнему блокируют.
+    - **v3.1.9 — Phase B QualificationReport**: один формальный `ExecutionQualificationReport` на
+      зафиксированной версии; добить 2-ю ENGINEERING green, sequential `ready_all`, provider
+      interruption + resume в новой сессии, base-moved safe-block, delivery `outcome_unknown`
+      reconciliation, одну реальную UI-задачу в child со Storybook. Scratch-репо + PR #1 сохраняются как evidence.
+    - **v3.1.10 — Regression Corpus & Failure Taxonomy**: находки → постоянный корпус (failure_id,
+      trigger, expected, regression_test, first_seen/fixed_version, affected_layer).
+    - **v3.1.11 — Model Comparison & Safe Self-Improvement**: сравнительный Bench (quality/false-green/
+      false-fail/fix-recovery/tokens/cost/latency); контролируемый цикл finding → ImprovementProposal →
+      regression case → sandbox → Bench → independent review → human approval → canary. Без авто-merge,
+      без авто-изменения security/lifecycle policy.
+    - **v3.1.12 — Fast-forward Revalidation + v3.1 Exit**: сдвинутая база → integration worktree,
+      перенос WorkItem-коммитов (конфликт=block), полный повтор checks/reviews/security, новый exact
+      SHA + BaseBinding. После — v3.1 закрывается.
+  - **Storybook по маршруту дальше**: v3.6 — Storybook MCP + manifests в Context Compiler; v3.7 —
+    Product Bootstrap (авто-установка Storybook/MSW/interaction·a11y CI); v3.8 — Readiness
+    Qualification через реальный UI-сценарий.
+- **v3.2 — Architecture, Product & UI Governance**: ArchitectureDecision; quality attributes;
+  C4/boundaries; architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution
+  triggers. **UI Governance**: StorybookPolicy; UI ArchitectureDecision; Definition of Done;
+  контролируемый JSON UI renderer.
 - **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
   (боевые RR/EV/DP, валидатор, grounding/freshness selftest, evaluation-harness). Будущий этап — НЕ
   создание Research с нуля, а его **интеграция** с Product Learning и управлением решениями: Research v0.2

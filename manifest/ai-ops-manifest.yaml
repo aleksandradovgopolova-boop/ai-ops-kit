@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.1.5
+  package_version: 3.1.6
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,12 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    added_v3_1_6_ui_gate_applicability_shadow:
+      - "tools/gate_policy.py — риск-калиброванная UI-политика БЕЗ изменения боевого fail-closed (SHADOW): таксономия ui_impact (none/internal/user_facing/critical) + ui_change_kind; current_policy/candidate_policy/shadow_diff"
+      - "GatePolicyDecision: applicability (applicable/not_applicable) + enforcement (advisory/blocking) + evidence_mode (deterministic/ai_review/hybrid/human). Схемы gate-result/reviewer-result v1 НЕ тронуты (not_applicable/abstain -> будущий GateResult v2)"
+      - "инвариант безопасности: candidate НИКОГДА не мягче current для user_facing/critical; ослабление ТОЛЬКО в internal и ТОЛЬКО для не-safety гейтов (ux/visual/design_system); accessibility остаётся blocking всегда"
+      - "Bench Lite v0.2: корпус 25 кейсов (матрица ui_impact × ui_change_kind × строгий_гейт + abstain); метрики разведены на policy_conformance (движок исполняет policy: 100%, false_green=0) и quality_accuracy (пропустила ли policy корректный код)"
+      - "честная метрика: synthetic_known_good_block_rate=0.571 помечен как ЧУВСТВИТЕЛЬНОСТЬ на синтетике (не production); live_reviewer_false_fail_rate=null; projected_block_rate_after_calibration=0.381 (кандидат снял бы internal-не-safety блоки, user_facing/critical сохранены)"
     added_v3_1_5_golden_tasks:
       - "known-good корпус Bench Lite расширен разными формами задач -> reviewer-false-fail мерится на широкой выборке (6 known-good, 10 кейсов всего)"
       - "kg_backend_control: backend/QUICK (не ui) -> ready БЕЗ ревью (нет блокирующих review-гейтов в плане) => false-fail СКОНЦЕНТРИРОВАН в UI-гейтах"
