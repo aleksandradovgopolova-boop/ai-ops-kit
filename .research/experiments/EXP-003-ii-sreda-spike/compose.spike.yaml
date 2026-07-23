@@ -1,0 +1,37 @@
+# EXP-003: спайк-стенд. Требования: >=16GB RAM для ragflow; LLM_BASE_URL/LLM_API_KEY — env.
+# Образы ПИНОВАТЬ перед прогоном (заменить latest на конкретные теги/дайджесты — конвенция
+# pinned_revision DP-106): docker pull + docker inspect --format '{{index .RepoDigests 0}}'.
+services:
+  ragflow:
+    image: infiniflow/ragflow:latest   # PIN перед прогоном
+    ports: ["9380:9380"]
+    volumes:
+      - ragflow-data:/opt/ragflow/data
+    environment:
+      - LLM_BASE_URL=${LLM_BASE_URL:?задай OpenAI-compatible endpoint (vLLM/T-lite по DP-106)}
+      - LLM_API_KEY=${LLM_API_KEY:-none}
+    # ВНИМАНИЕ: реальный деплой RAGFlow — их собственный docker/docker-compose.yml
+    # (elasticsearch+minio+redis внутри); этот сервис-стаб — точка входа, при прогоне
+    # заменить на их официальный compose и добавить сюда только network-ограничения.
+  presenton:
+    image: ghcr.io/presenton/presenton:latest   # PIN перед прогоном
+    ports: ["5000:5000"]
+    environment:
+      - LLM_PROVIDER=openai-compatible
+      - OPENAI_BASE_URL=${LLM_BASE_URL:?}
+      - OPENAI_API_KEY=${LLM_API_KEY:-none}
+    volumes:
+      - presenton-data:/app/data
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest   # PIN; часть adopt-замера (неделя 2)
+    profiles: ["adopt"]
+    ports: ["3080:3080"]
+    environment:
+      - OPENAI_REVERSE_PROXY=${LLM_BASE_URL:?}
+volumes:
+  ragflow-data:
+  presenton-data:
+# Сетевая изоляция (часть 5 README): для проверки создать egress-ограниченную сеть
+#   docker network create --internal spike-internal
+# и повесить сервисы на неё + отдельную сеть только до LLM-endpoint; всё, что сломается
+# от --internal, и есть список внешних вызовов компонента.
