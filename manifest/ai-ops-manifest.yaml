@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.1.4
+  package_version: 3.1.5
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -352,6 +352,11 @@ execution_engine:
                "3 Context Lifecycle+Resume ✅ v2.99", "4 Atomic Planning+Context Budget ✅ v2.100",
                "5 Security Pack ✅ v2.101", "6 Product UX ✅ v2.102", "7 Qualification ✅ v2.103"]
       note: "roadmap: ROADMAP.md; каждый этап — свой minor-релиз, аддитивно, со своими валидаторами/self-test"
+    added_v3_1_5_golden_tasks:
+      - "known-good корпус Bench Lite расширен разными формами задач -> reviewer-false-fail мерится на широкой выборке (6 known-good, 10 кейсов всего)"
+      - "kg_backend_control: backend/QUICK (не ui) -> ready БЕЗ ревью (нет блокирующих review-гейтов в плане) => false-fail СКОНЦЕНТРИРОВАН в UI-гейтах"
+      - "kg_strict_ux/kg_strict_a11y: block_attribution покрывает ВСЕ 4 UI review-гейта (ux_review/accessibility_review/visual_regression/design_system_usage)"
+      - "вывод: ложные блоки корректного кода локализованы в UI review-гейтах (ENGINEERING блокируется раньше на артефакт-гейтах — не reviewer-false-fail); опора для advisory-тира. false_green=0 сохранён"
     added_v3_1_4_reviewer_false_fail_rate:
       - "ре-фрейм находки Phase B на цифрах: движок НЕ источник false-fail (engine floor=0 — полное добросовестное покрытие ревью -> ready); ложные блоки от строгости/покрытия РЕВЬЮ по конкретным гейтам"
       - "Bench Lite: known-good корпус (kg_full_coverage / kg_strict_visual / kg_strict_designsys) — код корректен, варьируем покрытие/строгость ревьюера"
