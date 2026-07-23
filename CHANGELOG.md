@@ -2,6 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.1.1] — 2026-07-23 — Fix-loop (инкремент v3.1; по находке green-throughput из Phase B)
+
+Прямой ответ на находку Phase B: строгий independent-review блокировал легитимные правки однопроходно.
+Теперь блокеры возвращаются писателю на ИТЕРАЦИЮ.
+
+### Added
+- **Fix-loop** в транзакционном контроллере: если прогон не `ready_for_pr` из-за **модель-фиксируемых**
+  блокеров (провалившие проверки test/build/lint + незакрытые code_review/ux_review/security), контроллер
+  повторно зовёт `run_pipeline(resume=True, resume_context=<блокеры>)` на ТОЙ ЖЕ ветке — писатель
+  дорабатывает, идёт ре-ревью. Бюджет — `--fix-attempts N` (default 1; 0 = как раньше). CLI `run`.
+- **fail-closed сохранён**: бюджет исчерпан и всё ещё не ready → честный блок (ничего не форсируется в
+  green). Не-фиксируемые блоки (**human-approval / base-transition / lifecycle / preflight**) НЕ
+  зацикливаются (`_review_fix_context` → None). Не для `mock`.
+- Блокеры ревьюера вынесены в трейс (`reviews[].blockers`) → в fix-context попадают **КОНКРЕТНЫЕ**
+  замечания (не общий «устрани замечания»), плюс output_tail провалившихся проверок.
+- Событие журнала **`fix_attempt`** (наблюдаемость итераций).
+
+Деттесты: провал теста → итерация → `ready_for_pr=True` + событие `fix_attempt`; конкретные blockers в
+fix-context; human-approval → None (fail-closed). Проверено live (DeepSeek): fix-loop реально итерирует
+(2 попытки, `fix_attempt`×2, `test` перешёл в pass). Полный CI-набор на main и master.
+
 ## [3.1.0] — 2026-07-23 — Observability: Trace v0.2 (первый инкремент фазы v3.1)
 
 Начало фазы **v3.1 — Observability, Evaluation & Safe Self-Improvement**. Первый инкремент —

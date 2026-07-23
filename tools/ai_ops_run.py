@@ -135,6 +135,42 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
     return results
 
 
+def _review_fix_context(rep):
+    """v3.1.1 (fix-loop): собрать текст блокеров НЕ-ready прогона, которые ПИСАТЕЛЬ может устранить
+    итерацией — провалившие детерминированные проверки (test/build/lint c output_tail) + незакрытые
+    ai-review/security гейты. -> строка-контекст | None, если блок НЕ модель-фиксируемый (human-approval /
+    base / lifecycle / preflight — их итерация писателя не закроет, зацикливать нельзя => fail-closed)."""
+    if not isinstance(rep, dict) or rep.get("ready_for_pr"):
+        return None
+    ov, err = rep.get("overall_status"), (rep.get("error") or "").lower()
+    # НЕ-фиксируемые классы: не зацикливаем
+    if ov == "blocked-preflight" or any(w in err for w in
+            ("human", "approval", "переписан", "fast-forward", "lifecycle", "повреждён", "replan", "base-")):
+        return None
+    unmet = (rep.get("gates") or {}).get("unmet") or []
+    parts = []
+    for name, chk in (rep.get("checks") or {}).items():
+        if (chk or {}).get("status") == "fail":
+            tail = ""
+            for run in (chk.get("runs") or []):
+                tail = (run.get("output_tail") or "")[-700:]
+                if tail:
+                    break
+            parts.append(f"[проверка {name}] упала:\n{tail}".rstrip())
+    for rv in (rep.get("reviews") or []):
+        if rv.get("status") in ("fail", "warn"):
+            bl = "; ".join(rv.get("blockers") or []) if rv.get("blockers") else "устрани замечания ревью"
+            parts.append(f"[{rv.get('gate')}: {rv.get('status')}] {bl}")
+    if "security" in unmet:
+        ss = rep.get("security_scan") or {}
+        doms = ", ".join(ss.get("needs_review") or ss.get("blocking") or []) or "security"
+        parts.append(f"[security не закрыт] домены: {doms} — добавь валидацию входа/проверки по чек-листу")
+    if not parts:
+        return None
+    return ("Прошлая попытка НЕ прошла ревью/проверки. Устрани КОНКРЕТНО эти блокеры (и только их, не "
+            "ломая уже пройденное), затем заверши:\n\n" + "\n\n".join(parts))
+
+
 def _resume_context_from_handoff(child_root, fid):
     """v2.109 Real Resume: собрать из RunHandoff текст-состояние для prompt tool-loop, чтобы модель
     ПРОДОЛЖИЛА, а не переделала подтверждённое. Детерминированно, из features/<fid>/run-handoff.yaml."""
@@ -164,7 +200,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
-        resume=False, force_resume=False, base=None, write_scope=None, replan=False):
+        resume=False, force_resume=False, base=None, write_scope=None, replan=False,
+        review_fix_attempts=0):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -483,17 +520,36 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
         # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
         # останется in-progress навсегда) — гарантируем через except+re-raise.
-        try:
-            rep = execution_pipeline.run_pipeline(
+        def _pipe(_resume, _rctx):
+            return execution_pipeline.run_pipeline(
                 task_text, signals, child_root, prop, feature=feature, plan=plan,
                 commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
                 require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
                 context_prelude=(payload or {}).get("text"),
-                resume=resume, resume_context=resume_ctx, write_scope=write_scope,
+                resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True)   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
+        try:
+            rep = _pipe(resume, resume_ctx)
+            # v3.1.1 (fix-loop, находка Phase B): блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх
+            # той же ветки (resume=True), пока не pass ЛИБО не исчерпан бюджет. fail-closed сохранён:
+            # бюджет кончился и всё ещё не ready -> честный блок (ничего не форсируем в green). Не для mock.
+            _fix_left = int(review_fix_attempts or 0)
+            while (not rep.get("ready_for_pr")) and _fix_left > 0 and provider_name not in (None, "mock"):
+                _fx = _review_fix_context(rep)
+                if not _fx:
+                    break   # блок не модель-фиксируем (human/base/lifecycle) -> не зацикливаем
+                try:
+                    _ls.journal_append(features_dir / fid / "lifecycle-journal.jsonl",
+                                       {"kind": "fix_attempt", "run_id": fid, "workitem_id": fid,
+                                        "attempt_id": _attempt_id, "remaining": _fix_left,
+                                        "unmet": (rep.get("gates") or {}).get("unmet")})
+                except Exception:  # noqa: BLE001
+                    pass
+                rep = _pipe(True, _fx + (("\n\n" + resume_ctx) if resume_ctx else ""))
+                _fix_left -= 1
         except (KeyboardInterrupt, SystemExit):
             with contextlib.redirect_stdout(sys.stderr):
                 active_work.finish_cmd(aw_path, fid)
@@ -1403,6 +1459,58 @@ def selftest():
                _r5 and _r5[0]["status"] == "unavailable"
                and _ls.load_guarded(_rp5, kind="DeliveryReceipt")["state"] == "absent")
 
+    # v3.1.1 (fix-loop): провал проверки на 1-й попытке -> блокеры писателю -> фикс на итерации -> ready.
+    # fail-closed сохранён: без фикса и без бюджета остался бы блок (проверяем и это).
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        for _a in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t")):
+            subprocess.run(["git", "-C", td, *_a], capture_output=True)
+        (root / "m.py").write_text("def base():\n    return 1\n", encoding="utf-8")
+        (root / "test_base.py").write_text("from m import base\n\ndef test_base():\n    assert base() == 1\n",
+                                           encoding="utf-8")
+        (root / "pyproject.toml").write_text(
+            "[project]\nname='m'\nversion='0.1.0'\n[tool.setuptools]\npy-modules=['m']\n"
+            "[tool.pytest.ini_options]\npythonpath=['.']\n", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"], capture_output=True)
+        _cur = subprocess.run(["git", "-C", td, "rev-parse", "--abbrev-ref", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        _st = {"buggy": False, "test": False, "fixed": False}
+
+        def _fl_prop(context):
+            fix = ("упала" in context) or ("Устрани" in context)   # маркер fix-контекста
+            if fix:
+                if not _st["fixed"]:
+                    _st["fixed"] = True
+                    return {"op": "write", "path": "m.py", "content": "def base():\n    return 1\n\ndef g(x):\n    return x + 1\n"}
+                return {"done": True}
+            if not _st["buggy"]:
+                _st["buggy"] = True
+                return {"op": "write", "path": "m.py", "content": "def base():\n    return 1\n\ndef g(x):\n    return x\n"}
+            if not _st["test"]:
+                _st["test"] = True
+                return {"op": "write", "path": "test_g.py",
+                        "content": "from m import g\n\ndef test_g():\n    assert g(1) == 2\n"}
+            return {"done": True}
+        _sig_fl = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        _rfl = run("добавить g(x)=x+1 с тестом", dict(_sig_fl), root, engine="pipeline",
+                   provider_name="test", proposer=_fl_prop, execute=True, feature="fixloop",
+                   install_deps=False, base=_cur, review_fix_attempts=1)
+        expect("v3.1.1 fix-loop: провал теста -> итерация по блокерам -> ready_for_pr=True",
+               _rfl.get("ready_for_pr") is True and "test" not in (_rfl.get("gates") or {}).get("unmet", []))
+        _jfl = _ls.journal_read(root / "features" / "fixloop" / "lifecycle-journal.jsonl")
+        expect("v3.1.1 fix-loop: событие fix_attempt в журнале",
+               any(e.get("kind") == "fix_attempt" for e in _jfl["events"]))
+        # v3.1.1: fix-context feed'ит КОНКРЕТНЫЕ блокеры ревьюера (не общий текст), если они есть в трейсе
+        _fx = _review_fix_context({"ready_for_pr": False, "gates": {"unmet": ["code_review"]},
+                                   "reviews": [{"gate": "code_review", "status": "fail",
+                                                "blockers": ["нет докстринга у g", "нет проверки типа"]}]})
+        expect("v3.1.1 fix-loop: конкретные blockers ревьюера попадают в fix-context",
+               _fx and "нет докстринга у g" in _fx and "нет проверки типа" in _fx)
+        # fail-closed: не-фиксируемый блок (human-approval) -> fix-context None (не зацикливаем)
+        expect("v3.1.1 fix-loop: human-approval блок -> None (не зацикливаем)",
+               _review_fix_context({"ready_for_pr": False, "error": "нужно human approval деплоя"}) is None)
+
     print("ai_ops_run selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -1457,6 +1565,10 @@ def main(argv):
                          "закрывает артефакт-гейты requirements/plan_readiness. Качество судит "
                          "ревьюер (--review)/человек. specification (OpenSpec) не входит; нужна "
                          "живая модель (не mock)")
+    rp.add_argument("--fix-attempts", type=int, default=1,
+                    help="v3.1.1 fix-loop: сколько раз вернуть блокеры ревью/провалившихся проверок "
+                         "писателю на итерацию поверх той же ветки, пока не pass (0 = однопроходно, "
+                         "как раньше). fail-closed: бюджет исчерпан и не ready -> честный блок. Не для mock.")
     rp.add_argument("--json", action="store_true")
     # v2.99: resume — продолжить WorkItem по последнему RunHandoff (не начинать заново)
     # v2.109 Real Resume: с --execute РЕАЛЬНО продолжает tool-loop поверх ветки/worktree прошлого
@@ -1521,7 +1633,8 @@ def main(argv):
                      a.runtime, a.provider, a.session, a.execute, feature=a.feature,
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
-                     discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author)
+                     discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
+                     review_fix_attempts=a.fix_attempts)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

@@ -511,9 +511,12 @@ freshness и первым живым DecisionPackage. Архитектура **e
   - **v3.1.0 — Trace v0.2** ✅: event journal v0.2 (лок, verify-before-append, head-marker → детект
     усечения; trace-схема + `validate_trace`; Run/Attempt/Package/Gate/Delivery IDs); tokens/cost/latency
     (`run_cost` + `cost` в отчёте). Проверено вживую.
-  - Далее: Bench Lite; golden tasks; regression corpus; failure taxonomy; model comparison; **fix-loop**
-    (blockers ревьюера → писателю на итерацию — по находке Phase B); reviewer false-fail rate; controlled
-    ImprovementProposal + canary; авто-интеграционная ревалидация fast-forward базы (вариант A).
+  - **v3.1.1 — Fix-loop** ✅: блокеры ревью/провалившихся проверок → писателю на итерацию поверх ветки
+    (`resume`), бюджет `--fix-attempts`; fail-closed при исчерпании; конкретные blockers в fix-context;
+    событие `fix_attempt`. По находке Phase B про green-throughput. Проверено live.
+  - Далее: Bench Lite; golden tasks; regression corpus; failure taxonomy; model comparison; reviewer
+    false-fail rate; controlled ImprovementProposal + canary; авто-интеграционная ревалидация
+    fast-forward базы (вариант A).
 - **v3.2 — Architecture & Product Governance**: ArchitectureDecision; quality attributes; C4/boundaries;
   architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution triggers.
 - **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
