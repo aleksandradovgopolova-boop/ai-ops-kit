@@ -5,7 +5,7 @@
 schema_version: 1
 kind: research.source-inbox
 received_at: "2026-07-23"
-origin: "анализ другого AI (с URL-ссылками на GitHub), передан Sasha"
+origin: "ChatGPT, свежий запрос Sasha от 2026-07-24 (~за 20 минут до передачи) — т.е. расхождения с реальностью не от устаревания текста, а от генерации: модель отвечала по памяти/поверхностному поиску"
 scope: "ai-ops-kit: конкурентный ландшафт + стратегия 'control plane + adapters'"
 candidates:
   - {name: Open SWE, url: "https://github.com/langchain-ai/open-swe", claim: "асинхронный coding agent (Slack/Linear/GitHub -> sandbox -> draft PR), MIT; validation prompt-driven; главный продуктовый референс/конкурент", category: product-analog, priority: high}
