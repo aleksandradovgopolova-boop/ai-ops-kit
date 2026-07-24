@@ -25,9 +25,16 @@
   может быть `success` (loop застрял, не успех); success ⟺ последняя итерация success.
   `examples/loop-trace-demo/LT-001` (реальный fix-loop: 1 гейт → 0, converged). Делает loops измеримыми.
 
+### Added (v3.5.2 — WorkGraph/integration trace + parallel-vs-sequential)
+- `schemas/integration-trace.schema.json` + `validation/validate_integration_trace.py` —
+  `IntegrationTrace`: трейс fan-in (привязка к WorkGraph/IntegrationPlan). `analyze()`: speedup
+  (baseline/actual) + coordination_overhead (actual − max package). ПОДТВЕРЖДАЕТ инвариант v3.3.2:
+  completed=true → integration_sha ≠ любого package_sha (новый SHA) + new_sha + aggregate_checks_rerun
+  + 0 конфликтов; КОНФЛИКТ=BLOCK (fan_in_conflicts>0 → completed=false). Sanity: actual ≥ max(package),
+  baseline = сумма. `examples/integration-trace-demo/IT-001` (api||ui + wiring, speedup 1.47).
+
 ### Note
-- Без version-bump (rc). Дальше в v3.5: WorkGraph/integration trace, стоимость координации,
-  parallel-vs-sequential, post-release readout → закрыть v3.5.
+- Без version-bump (rc). Дальше в v3.5: post-release readout → закрыть v3.5 + version-bump (как v3.4.5).
 
 ## [3.4.5] — 2026-07-24 — Security, Permissions & Economics (v3.4 ЗАКРЫТ)
 

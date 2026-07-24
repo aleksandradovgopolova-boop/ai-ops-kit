@@ -1,0 +1,25 @@
+# Fan-in WG-001: api||ui параллельно + wiring; новый integration-SHA, проверки перепрогнаны.
+schema_version: 1
+kind: IntegrationTrace
+id: IT-001
+work_graph: WG-001
+integration_plan: IP-001
+execution_mode: hybrid
+packages:
+- id: api
+  package_sha: aaaaaaa
+  wall_seconds: 100
+- id: ui
+  package_sha: bbbbbbb
+  wall_seconds: 120
+- id: wiring
+  package_sha: ccccccc
+  wall_seconds: 60
+wall_seconds_actual: 190
+sequential_baseline_seconds: 280
+integration:
+  completed: true
+  integration_sha: ddddddd
+  new_sha: true
+  aggregate_checks_rerun: true
+  fan_in_conflicts: 0
