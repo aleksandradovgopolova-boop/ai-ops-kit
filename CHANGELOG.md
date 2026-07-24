@@ -23,6 +23,10 @@
   калиброванное UI-enforcement на exact-SHA evidence). `validation/validate_adr_registry.py` —
   кросс-целостность (уникальность id, имя файла==id, ДВУНАПРАВЛЕННАЯ supersede-цепочка, резолв
   related) + fitness (`ui_impact ∈ gate_policy.UI_IMPACT`). selftest + прогон реального реестра в CI.
+- **Quality-attributes fitness** (v3.2.2): `validation/validate_quality_attributes.py` — агрегирует
+  `quality_attributes` ADR-реестра в профиль и ловит governance-смеллы: `degrades` без обоснования
+  (`note`); неуправляемое противоречие (атрибут одновременно `improves` и `degrades` среди активных
+  ADR без `tradeoff`). Профиль — вход для будущих evolution-triggers. selftest + реальный прогон в CI.
 
 ### Note
 - Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —

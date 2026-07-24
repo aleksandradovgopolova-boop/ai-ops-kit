@@ -83,6 +83,10 @@ jobs:
         run: |
           python3 validation/validate_adr_registry.py --selftest
           python3 validation/validate_adr_registry.py
+      - name: Quality-attributes fitness — профиль + противоречия (selftest + реальный реестр)
+        run: |
+          python3 validation/validate_quality_attributes.py --selftest
+          python3 validation/validate_quality_attributes.py
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

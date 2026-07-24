@@ -79,6 +79,8 @@ python3 validation/validate_storybook_evidence.py --selftest
 python3 validation/validate_architecture_decision.py --selftest
 python3 validation/validate_adr_registry.py --selftest
 python3 validation/validate_adr_registry.py
+python3 validation/validate_quality_attributes.py --selftest
+python3 validation/validate_quality_attributes.py
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest
