@@ -1,0 +1,11 @@
+# Реальный замер: DeepSeek QUICK green (живой Phase B, эта сессия).
+schema_version: 1
+kind: ModelBenchResult
+id: MBR-001
+model: deepseek-chat
+provider: openai-compatible
+task_tier: QUICK
+quality: {total: 1, pass: 1, false_green: 0, false_fail: 0, fix_recovered: 0}
+economics: {tokens: null, cost_usd: 0.007, latency_s: null}
+measured_at: "2026-07-24"
+source: "живой Phase B QUICK (delivered, ready_for_pr=True)"

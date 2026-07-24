@@ -121,6 +121,10 @@ jobs:
           python3 validation/validate_provider_residency.py examples/residency-demo
       - name: Cost accounting — сверка run_cost с BudgetContract (selftest)
         run: python3 tools/cost_account.py --selftest
+      - name: Model comparison — safety-first ранжирование моделей (selftest + demo)
+        run: |
+          python3 tools/model_comparison.py --selftest
+          python3 tools/model_comparison.py examples/model-comparison-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

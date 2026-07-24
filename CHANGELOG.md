@@ -2,7 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.4.0-rc — Security, Permissions & Economics: Budget Contract
+## [3.4.5] — 2026-07-24 — Security, Permissions & Economics (v3.4 ЗАКРЫТ)
+
+Фаза v3.4 закрыта пятью аддитивными инкрементами. VERSION 3.3.3 → **3.4.5** (закрытие фазы —
+release-точка, как v3.3.3). Три инварианта безопасности/экономики + residency + учёт + сравнение
+моделей — всё контрактами/валидаторами, CI-зелёно.
+
+### Added (v3.4.5 — model comparison, замыкает фазу)
+- `schemas/model-bench-result.schema.json` + `tools/model_comparison.py` — `ModelBenchResult`
+  (per-model quality из Bench Lite/живых прогонов + economics из cost_account) и safety-first
+  сравнение по task-tier. **Главное правило: модель с `false_green>0` дисквалифицируется** (safety
+  over economy — дёшево+быстро+«качественно», но ложный green = не рекомендуется никогда); среди
+  безопасных ранжирование pass-rate↓/false_fail↑/cost↑/latency↑; все небезопасны → рекомендации нет.
+  `examples/model-comparison-demo/` — РЕАЛЬНЫЕ замеры DeepSeek (QUICK green; ENGINEERING fail-closed,
+  false_green=0) — данные для выбора модели, не фабрикация.
+
+### Итог фазы v3.4 (инварианты выражены контрактами)
+- v3.4.0 BudgetContract — никакой scope без бюджета;
+- v3.4.1 PackageCapabilityScope — никакой package без capability-scope (least-privilege);
+- v3.4.2 AccessFilterPolicy — никакой retrieval без access-filter (deny-by-default, секреты вне context);
+- v3.4.3 ProviderResidencyPolicy — секреты не в облако, confidential не в external-cloud;
+- v3.4.4 cost accounting — spent vs budget по scope, audit'уемо;
+- v3.4.5 model comparison — safety-first выбор модели.
+
+**v3.4 ЗАКРЫТ.** Дальше — v3.5 (Observability, Regression Corpus & Evolution Loops).
+
+## [3.4.0..3.4.4] — 2026-07-24 — Security, Permissions & Economics (инкременты фазы)
 
 Начата фаза v3.4. Первый инкремент — экономика: декларативный `BudgetContract` над существующим
 рантайм-энфорсером (`tools/budget.py`) и учётом расхода (trace `run_cost`). Активирует инвариант
