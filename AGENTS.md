@@ -96,6 +96,8 @@ python3 validation/validate_capability_scope.py --selftest
 python3 validation/validate_capability_scope.py examples/capability-demo
 python3 validation/validate_access_filter.py --selftest
 python3 validation/validate_access_filter.py examples/access-filter-demo
+python3 validation/validate_provider_residency.py --selftest
+python3 validation/validate_provider_residency.py examples/residency-demo
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest

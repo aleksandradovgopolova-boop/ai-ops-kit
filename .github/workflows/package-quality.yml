@@ -115,6 +115,10 @@ jobs:
         run: |
           python3 validation/validate_access_filter.py --selftest
           python3 validation/validate_access_filter.py examples/access-filter-demo
+      - name: ProviderResidencyPolicy — data-residency/retention (selftest + residency-demo)
+        run: |
+          python3 validation/validate_provider_residency.py --selftest
+          python3 validation/validate_provider_residency.py examples/residency-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
