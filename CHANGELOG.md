@@ -107,10 +107,18 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   conflict → block; base moved → revalidation; aggregate fail → PR не открывается. 16 сценарных тестов.
 - Реальный WG-001 → hybrid (api‖ui parallel, wiring последним, OrderContract contract-first).
 
+### Added (v3.6.6 часть 1 — минимальный read-only Storybook-адаптер)
+- `tools/storybook_query.py` — детерминированный read-only слой запросов поверх story-index (тот же
+  индекс, что парсит `storybook_adapter`): list_components / list_stories / component_stories /
+  **related_stories(changed_files)** / story_meta / catalog. БЕЗ внешнего MCP-сервера/SaaS
+  (полноценный MCP — не сейчас); это навигация по каталогу для контекста агентов. Нет Storybook →
+  пустой каталог (без падения). selftest 8/8.
+
 ### Note
-- Без version-bump (rc). v3.6.5 offline-часть (GateResult v2 runtime + parallel planner + fan-in
-  решения) готова — покрывает решения/сценарии. ЖИВОЙ parallel-run (реальные worktrees + модель + PR)
-  — квалификация v3.6.6/v3.8, нужен провайдер-ключ. Дальше v3.6.6 (Storybook MCP) → закрыть v3.6 + bump.
+- Без version-bump (rc). OFFLINE-scope v3.6 ЗАВЕРШЁН: retrieval-цепочка (v3.6.0–4) + GateResult v2
+  runtime + parallel planner (v3.6.5) + read-only Storybook-адаптер (v3.6.6). ЗАКРЫТИЕ v3.6 (+bump)
+  требует ЖИВОЙ квалификации — реальный parallel-run (worktrees+модель+PR) и TS/React child со
+  Storybook + один настоящий draft PR — внешний гейт (провайдер-ключ + Node/React-тулчейн).
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 

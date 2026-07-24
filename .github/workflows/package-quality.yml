@@ -159,6 +159,8 @@ jobs:
         run: |
           python3 tools/parallel_planner.py --selftest
           python3 tools/parallel_planner.py examples/work-graph-demo
+      - name: Storybook query — минимальный read-only адаптер каталога (selftest)
+        run: python3 tools/storybook_query.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
