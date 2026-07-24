@@ -45,9 +45,16 @@
   реального `registry/providers.yaml` (10 провайдеров: ни один не-on-premise не принимает secret;
   6 external-cloud отвергают confidential). `examples/residency-demo/PRP-001`.
 
+### Added (v3.4.4 — cost accounting)
+- `tools/cost_account.py` — сверка расхода (Trace v0.2 `run_cost`) с `BudgetContract` по scope.
+  Маппинг calls/tokens/cost_usd_est/latency_s → max_model_calls/max_tokens/max_cost_usd/
+  max_wall_seconds (+ iterations). verdict within_budget/exhausted/over по измерениям. Честность:
+  cost не измерен (cost_usd_est=None) → measured=false, не выносит over по стоимости. Делает бюджет
+  audit'уемым; готовит агрегацию для model-comparison. selftest против реальных budget-demo контрактов.
+
 ### Note
-- Без version-bump (rc). Дальше в v3.4: cost accounting, model comparison (перенос из старого
-  v3.1.11) → закрыть v3.4 + version-bump (как v3.3.3 на закрытии фазы).
+- Без version-bump (rc). Дальше в v3.4: model comparison (перенос из старого v3.1.11) → закрыть v3.4 +
+  version-bump (как v3.3.3 на закрытии фазы).
 
 ## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ
 
