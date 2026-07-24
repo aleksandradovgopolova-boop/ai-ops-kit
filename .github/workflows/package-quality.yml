@@ -143,8 +143,10 @@ jobs:
           python3 validation/validate_post_release_readout.py examples/readout-demo
       - name: Repository Graph Lite — детерминированный граф репо + impact (selftest, дог-фуд на ките)
         run: python3 tools/repo_graph.py --selftest
-      - name: Context retrieval — full-text + budgeted role view + access-filter (selftest)
+      - name: Context retrieval — full-text + budgeted role view + access-filter + cache (selftest)
         run: python3 tools/context_retrieval.py --selftest
+      - name: Retrieval Bench — precision/recall retrieval-стратегий (selftest)
+        run: python3 tools/retrieval_bench.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

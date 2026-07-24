@@ -98,6 +98,26 @@ def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int,
             "total_tokens": total, "budget_tokens": budget_tokens}
 
 
+class RetrievalCache:
+    """Детерминированный кэш context-view по cache_key (repo+sha+policy+view). Одинаковый ключ на
+    неизменной ревизии -> hit (без повторного retrieval). Инвалидация — сменой sha в ключе."""
+
+    def __init__(self):
+        self._store = {}
+        self.hits = 0
+        self.misses = 0
+
+    def get_or_build(self, root, query, role, allowed_classes, budget_tokens, sha=None):
+        probe = build_view(root, query, role, allowed_classes, budget_tokens, sha)
+        key = probe["cache_key"] + f"|q:{query}|b:{budget_tokens}"
+        if key in self._store:
+            self.hits += 1
+            return self._store[key], True
+        self.misses += 1
+        self._store[key] = probe
+        return probe, False
+
+
 def selftest():
     import tempfile
     ok = True
@@ -146,6 +166,15 @@ def selftest():
 
         expect("cache_key содержит repo+sha+policy+view",
                all(x in v["cache_key"] for x in ("repo:", "sha:", "policy:", "view:")))
+
+        # RetrievalCache: первый вызов miss, повтор того же ключа -> hit
+        cache = RetrievalCache()
+        _, hit1 = cache.get_or_build(root, "foo", "planner", {"public", "internal"}, 10000, sha="s1")
+        _, hit2 = cache.get_or_build(root, "foo", "planner", {"public", "internal"}, 10000, sha="s1")
+        expect("cache: 1-й miss, 2-й hit на том же ключе", hit1 is False and hit2 is True
+               and cache.hits == 1 and cache.misses == 1)
+        _, hit3 = cache.get_or_build(root, "foo", "planner", {"public", "internal"}, 10000, sha="s2")
+        expect("cache: смена sha -> инвалидация (miss)", hit3 is False and cache.misses == 2)
 
     # интеграция с реальным AFP-001 (v3.4.2): роли резолвятся
     afp_p = PKG / "examples" / "access-filter-demo" / "AFP-001.yaml"

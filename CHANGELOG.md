@@ -22,9 +22,18 @@
   не в view; `secret` — никогда), deny-by-default, бюджет (chars/4), provenance + cache_key
   (repo+sha+policy+view). Интеграция с реальным `AFP-001`. selftest 11/11. Всё ещё без vector-DB.
 
+### Added (v3.6.2 — retrieval cache + retrieval Bench)
+- `context_retrieval.RetrievalCache` — детерминированный кэш context-view по `cache_key`
+  (repo+sha+policy+view); одинаковый ключ → hit; смена sha → инвалидация.
+- `tools/retrieval_bench.py` — оффлайн golden-корпус precision/recall/F1 retrieval-стратегий:
+  `fulltext` vs `graph_augmented` (full-text + соседи по Repository Graph). Закрывает research-gap
+  FL-003/RR-009 первым замером: graph-augmentation находит релевантный-по-зависимости файл, у
+  которого нет ключевых слов (recall ↑), не тяня нерелевантное (precision держится) → best_by_f1=
+  graph_augmented. Честно: семантическая стратегия войдёт в тот же Bench позже (semantic fallback).
+
 ### Note
-- Без version-bump (rc). Дальше в v3.6: cache → retrieval Bench → semantic fallback → incremental
-  index; параллельное исполнение; Storybook MCP.
+- Без version-bump (rc). Дальше в v3.6: semantic fallback → incremental index; параллельное
+  исполнение; Storybook MCP → закрыть v3.6.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
