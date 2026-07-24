@@ -31,9 +31,17 @@
   которого нет ключевых слов (recall ↑), не тяня нерелевантное (precision держится) → best_by_f1=
   graph_augmented. Честно: семантическая стратегия войдёт в тот же Bench позже (semantic fallback).
 
+### Added (v3.6.3 — semantic-fallback-lite, БЕЗ vector-DB)
+- `tools/semantic_lite.py` — детерминированный semantic fallback на классическом sparse TF-IDF/cosine
+  (offline stdlib math; НЕ эмбеддинги/vector-DB — по границе владельца). Ценность над сырым full-text:
+  понижает частые токены, повышает редкие → лучше ранжирование (демо: 'return rebate' → relevant.py
+  первым, редкое `rebate` бьёт частое `return`). Дог-фуд на ките (106 docs). Добавлен третьей
+  стратегией в `retrieval_bench` (fulltext / graph_augmented / semantic_lite).
+
 ### Note
-- Без version-bump (rc). Дальше в v3.6: semantic fallback → incremental index; параллельное
-  исполнение; Storybook MCP → закрыть v3.6.
+- Без version-bump (rc). Детерминированная retrieval-цепочка v3.6 по сути готова (RepoGraph →
+  full-text/role-views → cache → Bench → semantic-lite). ОСТАВШИЕСЯ пункты v3.6 — parallel scheduler,
+  Storybook MCP, vector-DB — на явном «не сейчас»-списке владельца (не строятся автономно).
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 

@@ -22,10 +22,15 @@ PKG = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PKG / "tools"))
 import context_retrieval as cr   # noqa: E402
 import repo_graph as rg          # noqa: E402
+import semantic_lite as sl       # noqa: E402
 
 
 def _fulltext(root, query, subdirs, k=3):
     return [r["file"] for r in cr.full_text_search(root, query, subdirs)[:k]]
+
+
+def _semantic_lite(root, query, subdirs, k=3):
+    return [r["file"] for r in sl.search(sl.build_index(root, subdirs), query, k)]
 
 
 def _graph_augmented(root, query, subdirs, k=3):
@@ -48,7 +53,8 @@ def _metrics(retrieved, relevant):
 
 
 def run_bench(root, golden, subdirs):
-    strategies = {"fulltext": _fulltext, "graph_augmented": _graph_augmented}
+    strategies = {"fulltext": _fulltext, "graph_augmented": _graph_augmented,
+                  "semantic_lite": _semantic_lite}
     report = {}
     for name, fn in strategies.items():
         per_q, ps, rs, fs = [], [], [], []
@@ -99,6 +105,9 @@ def selftest():
                "repo/unrelated.py" not in ga["per_query"][0]["retrieved"] and ga["precision"] >= 0.5)
         expect("best_by_f1 = graph_augmented (recall выше при сохранённой precision)",
                rep["best_by_f1"] == "graph_augmented")
+        sm = rep["strategies"]["semantic_lite"]
+        expect("semantic_lite посчитан как третья стратегия, метрики в [0,1]",
+               0 <= sm["f1"] <= 1 and 0 <= sm["precision"] <= 1 and 0 <= sm["recall"] <= 1)
         expect("метрики в [0,1]", 0 <= ft["f1"] <= 1 and 0 <= ga["f1"] <= 1)
 
     print("retrieval_bench selftest:", "PASS" if ok else "FAIL")

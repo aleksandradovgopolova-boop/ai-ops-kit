@@ -145,7 +145,9 @@ jobs:
         run: python3 tools/repo_graph.py --selftest
       - name: Context retrieval — full-text + budgeted role view + access-filter + cache (selftest)
         run: python3 tools/context_retrieval.py --selftest
-      - name: Retrieval Bench — precision/recall retrieval-стратегий (selftest)
+      - name: Semantic-lite — TF-IDF fallback без vector-DB (selftest, дог-фуд на ките)
+        run: python3 tools/semantic_lite.py --selftest
+      - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
         run: python3 tools/retrieval_bench.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest

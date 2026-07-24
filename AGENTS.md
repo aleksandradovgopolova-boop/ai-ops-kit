@@ -111,6 +111,7 @@ python3 validation/validate_post_release_readout.py --selftest
 python3 validation/validate_post_release_readout.py examples/readout-demo
 python3 tools/repo_graph.py --selftest
 python3 tools/context_retrieval.py --selftest
+python3 tools/semantic_lite.py --selftest
 python3 tools/retrieval_bench.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
