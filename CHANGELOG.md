@@ -97,10 +97,20 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   not_applicable по политике (ui_impact=none). Валидирует вывод через `gate_result_v2.check`; адаптер
   v2→v1 (`abstain→warn`). Offline decision-слой (не трогает боевой `_run_reviews`; wiring — за флагом).
 
+### Added (v3.6.5 часть 2 — bounded parallel-2 planner + fan-in решения)
+- `tools/parallel_planner.py` — детерминированный планировщик исполнения WorkGraph (offline):
+  `plan()` → mode (single/sequential/parallel/hybrid), parallel-группы (bounded ≤2), contract_first
+  (общий контракт фиксируется первым), топологичный integration_order. `can_parallel()`:
+  непересекающиеся+независимые → parallel; пересечение write_scope / depends_on → serialize.
+  `integration_decision()` покрывает ВСЕ обязательные сценарии: один пакет fail → fan-in не
+  начинается; оба pass+нет конфликта+aggregate green → новый integration-SHA + один PR; merge
+  conflict → block; base moved → revalidation; aggregate fail → PR не открывается. 16 сценарных тестов.
+- Реальный WG-001 → hybrid (api‖ui parallel, wiring последним, OrderContract contract-first).
+
 ### Note
-- Без version-bump (rc). Дальше в v3.6.5: bounded parallel-2 planner (WorkGraph→ParallelSafety→
-  worktrees→fan-in→integration-SHA, сценарии conflict/serialize/one-fail/both-pass). Живой parallel
-  run (реальные worktrees+модель+PR) — квалификация v3.6.6/v3.8 (нужен ключ).
+- Без version-bump (rc). v3.6.5 offline-часть (GateResult v2 runtime + parallel planner + fan-in
+  решения) готова — покрывает решения/сценарии. ЖИВОЙ parallel-run (реальные worktrees + модель + PR)
+  — квалификация v3.6.6/v3.8, нужен провайдер-ключ. Дальше v3.6.6 (Storybook MCP) → закрыть v3.6 + bump.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
