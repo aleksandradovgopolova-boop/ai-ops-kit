@@ -77,6 +77,26 @@ jobs:
         run: python3 tools/storybook_adapter.py --selftest
       - name: UIEvidenceBundle — контракт UI-evidence (selftest)
         run: python3 validation/validate_storybook_evidence.py --selftest
+      - name: ArchitectureDecision (ADR) — контракт архитектурных решений (selftest)
+        run: python3 validation/validate_architecture_decision.py --selftest
+      - name: ADR registry — целостность + fitness (selftest + реальный реестр)
+        run: |
+          python3 validation/validate_adr_registry.py --selftest
+          python3 validation/validate_adr_registry.py
+      - name: Quality-attributes fitness — профиль + противоречия (selftest + реальный реестр)
+        run: |
+          python3 validation/validate_quality_attributes.py --selftest
+          python3 validation/validate_quality_attributes.py
+      - name: Evolution triggers — ADR ↔ Product Health governance-петля (selftest)
+        run: python3 tools/evolution_triggers.py --selftest
+      - name: FeatureLearning — мост research DecisionPackage -> продукт (selftest + реальный реестр)
+        run: |
+          python3 validation/validate_feature_learning.py --selftest
+          python3 validation/validate_feature_learning.py
+      - name: Learning-loop fitness — петля research->learning->architecture (selftest + реальная)
+        run: |
+          python3 validation/validate_learning_loop.py --selftest
+          python3 validation/validate_learning_loop.py
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

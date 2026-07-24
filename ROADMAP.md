@@ -507,7 +507,9 @@ freshness и первым живым DecisionPackage. Архитектура **e
     подтверждены Receipt или помечены outcome_unknown. Результат — QualificationReport (PR/SHA/journal/
     receipts/стоимость/latency/human interventions/regression cases/ограничения). После успеха —
     **Execution Kernel Qualified**; findings рождают только адресные v3.0.x (не новый абстрактный аудит).
-- **v3.1 — Observability, Evaluation & Safe Self-Improvement** (в работе, аддитивными инкрементами):
+- **v3.1 — Observability, Evaluation & Safe Self-Improvement** ✅ **ЗАКРЫТ** (Execution Kernel
+  qualified; известные ограничения перечислены; внешне-gated green-path сценарии — rolling evidence,
+  НЕ ворота roadmap). Поставлен аддитивными инкрементами:
   - **v3.1.0 — Trace v0.2** ✅: event journal v0.2 (лок, verify-before-append, head-marker → детект
     усечения; trace-схема + `validate_trace`; Run/Attempt/Package/Gate/Delivery IDs); tokens/cost/latency
     (`run_cost` + `cost` в отчёте). Проверено вживую.
@@ -550,42 +552,80 @@ freshness и первым живым DecisionPackage. Архитектура **e
     (легаси ui_changed→user_facing→fail-closed). Доказано на Bench Lite v0.3 (реальный A/B):
     block-rate 0.667→0.333 (−50%), residual_false_fail_rate=0.0 (≤0.10), false_green=0, safety-регрессии
     (evidence=fail) блокируются 2/2. Reviewer `abstain` (эмиссия) — future. В CI+AGENTS.md.
-  - **Маршрут v3.1 (утверждён владельцем 2026-07-23):**
-    - **v3.1.9 — Phase B QualificationReport**: один формальный `ExecutionQualificationReport` на
-      зафиксированной версии; добить 2-ю ENGINEERING green, sequential `ready_all`, provider
-      interruption + resume в новой сессии, base-moved safe-block, delivery `outcome_unknown`
-      reconciliation, одну реальную UI-задачу в child со Storybook. Scratch-репо + PR #1 сохраняются как evidence.
-    - **v3.1.10 — Regression Corpus & Failure Taxonomy**: находки → постоянный корпус (failure_id,
-      trigger, expected, regression_test, first_seen/fixed_version, affected_layer).
-    - **v3.1.11 — Model Comparison & Safe Self-Improvement**: сравнительный Bench (quality/false-green/
-      false-fail/fix-recovery/tokens/cost/latency); контролируемый цикл finding → ImprovementProposal →
-      regression case → sandbox → Bench → independent review → human approval → canary. Без авто-merge,
-      без авто-изменения security/lifecycle policy.
-    - **v3.1.12 — Fast-forward Revalidation + v3.1 Exit**: сдвинутая база → integration worktree,
-      перенос WorkItem-коммитов (конфликт=block), полный повтор checks/reviews/security, новый exact
-      SHA + BaseBinding. После — v3.1 закрывается.
-  - **Storybook по маршруту дальше**: v3.6 — Storybook MCP + manifests в Context Compiler; v3.7 —
-    Product Bootstrap (авто-установка Storybook/MSW/interaction·a11y CI); v3.8 — Readiness
-    Qualification через реальный UI-сценарий.
-- **v3.2 — Architecture, Product & UI Governance**: ArchitectureDecision; quality attributes;
-  C4/boundaries; architecture fitness checks; roadmap/dependencies/releases; Product Health; evolution
-  triggers. **UI Governance**: StorybookPolicy; UI ArchitectureDecision; Definition of Done;
-  контролируемый JSON UI renderer.
-- **v3.3 — Product Learning + интеграция Research**: Research-контур уже фактически между v0.1 и v0.2
-  (боевые RR/EV/DP, валидатор, grounding/freshness selftest, evaluation-harness). Будущий этап — НЕ
-  создание Research с нуля, а его **интеграция** с Product Learning и управлением решениями: Research v0.2
-  (source registry, uncertainty routing, memory-first, reuse evidence), FeatureLearning, solution options,
-  design history, DecisionPackage → продуктовое решение.
-- **v3.4 — Security & Economic Engineering**: data classification; capability permissions; provider
-  policies; AI threat model; supply-chain security; budgets; model routing; caching; cost accounting.
-- **v3.5 — Product Analytics, Observability & Evolution**: продуктовые метрики и guardrails; logs/metrics/
-  traces; SLI/SLO; telemetry verification; post-release readout; scale assumptions; evolution triggers.
-- **v3.6 — Semantic Context & Runtime Portability**: Repository Graph Lite (symbols/imports/routes/
-  entities/tests); impact analysis; automatic write scope; relevant test selection; Claude/Codex/generic
-  adapters; skills exporters.
-- **v3.7–v3.8 — Greenfield Bootstrap & Readiness**: создание нового продукта с нуля (стратегия/
-  исследование/архитектура/безопасность/экономика); repository bootstrap; первая вертикальная функция;
-  полный greenfield qualification cycle.
+  - **v3.1.9 — Phase B QualificationReport** ✅: `qualification/PHASE-B-QUALIFICATION-REPORT.md` —
+    честно разделяет ДВЕ вещи: гарантии ядра qualified live (QUICK green, ENGINEERING→PR #1
+    sha_verified, delivery reconciliation, fail-closed непробиваем, 0 false-green/0 duplicate PR); а
+    несколько положительных green-path сценариев (2-я ENGINEERING green, полный sequential
+    ready_all, реальная UI-задача) — **rolling evidence**, зависят от сильного провайдера и
+    React/Storybook-тулчейна и НЕ удерживают roadmap. Живьём подтверждён fail-closed под слабой
+    моделью (DeepSeek: ENGINEERING → блок, PR не открыт). **v3.1 закрыт.**
+  - Содержимое старой лестницы v3.1.10–v3.1.12 перенесено в крупные фазы: model comparison → **v3.4**;
+    regression corpus / failure taxonomy → **v3.5**; fast-forward integration revalidation → **v3.6**.
+- **v3.2 — Architecture, Product & UI Governance** ✅ **ПЕРВЫЙ ПРОХОД ВЫПОЛНЕН** (governance-слой
+  `ADR → quality attributes → health → evolution` замкнут):
+  - v3.2.0 `ArchitectureDecision`-контракт + UI Definition of Done;
+  - v3.2.1 ADR-реестр (`decisions/adr/`) + fitness (supersede-цепочки, ui_impact ∈ gate_policy);
+  - v3.2.2 quality-attributes fitness (профиль + детект необоснованного degrade и противоречий);
+  - v3.2.3 Storybook component-reuse enforcement (новый компонент, дублирующий каталог, = дефект);
+  - v3.2.4 evolution-triggers (ADR → обещанный quality attribute → Product Health → сигнал пересмотра).
+- **v3.3 — Product Learning + интеграция Research** ⟳ **ТЕКУЩАЯ ФАЗА** (строится НАД research-контуром,
+  слабой ссылкой на `DecisionPackage`, без касания `.research/`):
+  - v3.3.0 ✅ `FeatureLearning` (`DecisionPackage` → гипотеза → проверка → verdict → learnings →
+    follow_up); реальная цепочка `DP-108 → FL-001 → ADR-001`;
+  - v3.3.1 ✅ learning-loop fitness (`follow_up` ADR-ссылки резолвятся в реальный реестр);
+  - **v3.3.2 — Operational Architecture Backbone** (следующий, bounded, ТОЛЬКО контракты — см. раздел
+    ниже): `ContextArchitectureDecision`, `LoopPolicy`, `WorkGraph`, `ParallelSafetyDecision`,
+    `IntegrationPlan`; + доведение `GateResult v2` до канонического runtime (not_applicable/advisory/
+    blocking, reviewer `abstain`, targeted retry, честный human handoff);
+  - **v3.3.3 — Product Learning Completion** (финальный инкремент фазы): `delivery_complete`/
+    `learning_complete`/`outcome_achieved`, uncertainty routing, research sufficiency, solution
+    options, design/decision history, reuse evidence, явные решения continue/change/stop/investigate/
+    scale. После — **v3.3 закрывается**.
+
+### Post-v3.2 Operational Architecture Backbone (объединяющая операционная архитектура)
+
+Основание уже есть (Context Compiler v1 с payload/provenance/token-budget; последовательный
+WorkPackage Executor; `active-work` с affected-areas/shared-contracts/dependencies/conflict-forecast).
+Не хватает **объединяющих контрактов** — их вводит v3.3.2, БЕЗ второго executor'а/второй context-
+системы/scheduler'а/vector-DB/MCP:
+
+- **Context Architecture** (развитие Context Compiler, не отдельная «векторная память»): repository =
+  источник истины; retrieval `policy/metadata → Repository Graph → full-text → semantic fallback →
+  reranking → budgeted role view`. Инвариант: exact-revision binding, provenance, access-filter ДО
+  retrieval, stale detection, role-views (planner/executor/UI-reviewer/security/integration),
+  cache-key = repository + SHA + policy + view.
+- **Governed Loops** (`LoopPolicy`: trigger/budgets/success/stop/progress/on_stop/escalation). Типы
+  регистрируются (implementation/review-fix/UI-Storybook/research/product-learning/safe-improvement),
+  движки НЕ строятся; существующий fix-loop — первая реализация общего контракта.
+- **Parallel Architecture** (`WorkGraph` + `ParallelSafetyDecision` + `IntegrationPlan`): packages/
+  depends_on/write_scope/shared_contracts/execution_mode(single|sequential|parallel|hybrid)/
+  integration_order/aggregate_verification. **Инвариант: успешные package-SHA не доказывают
+  успешность всей работы — после fan-in нужен новый integration-SHA и полный повтор проверок.**
+
+Активация этих механизмов (не только контрактов) требует ограничений безопасности/экономики (v3.4)
+и наблюдаемости (v3.5); полная реализация — v3.6.
+
+- **v3.4 — Security, Permissions & Economics**: data classification; capability permissions; provider
+  retention policies; доступ к данным по WorkPackage; **Budget Contract для Run/Loop/Package**; model
+  routing; caching; cost accounting; supply-chain controls; лимиты параллельных задач; **model
+  comparison** (перенос из старого v3.1.11). Инвариант: никакой loop без бюджета; никакой package без
+  capability-scope; никакой retrieval без access-filter.
+- **v3.5 — Observability, Regression Corpus & Evolution Loops**: Loop/Iteration trace; WorkGraph и
+  integration trace; no-progress/repeated-failure detection; стоимость исправления/координации;
+  parallel-vs-sequential время; post-release readout; Product Health; evolution triggers; **regression
+  corpus + failure taxonomy** (перенос из старого v3.1.10).
+- **v3.6 — Semantic Context Engine + Governed Parallel Execution + Storybook MCP**: полная реализация.
+  Context Engine v2 строгой последовательностью (`metadata → Repository Graph Lite → full-text →
+  role/package views → cache → retrieval Bench → semantic fallback → incremental index` — НЕ начинаем
+  с vector-DB). Parallel execution (WorkGraph planner → safety classification → isolated package
+  worktrees → shared-contract-first → bounded scheduler → fan-in integration worktree → aggregate
+  checks/reviews → exact integration SHA → один DeliveryIntent → один draft PR). **fast-forward
+  integration revalidation** (перенос из старого v3.1.12). Storybook: manifests в Context Compiler +
+  Storybook MCP-адаптер + package-level UI context + новый UIEvidenceBundle на integration-SHA после
+  fan-in (текущий exact-SHA evidence и reuse-enforcement НЕ переписываются).
+- **v3.7–v3.8 — Bootstrap & Readiness Qualification**: greenfield (architecture → backend/frontend+
+  Storybook/data/CI/observability) → parallel fan-out → integration → первая вертикальная функция →
+  release → measurement → learning → readiness report.
 
 - **Sequential WorkPackage Executor (веха v3.1; поставлен аддитивно в 2.117) ✅** — WorkPackages теперь РЕАЛЬНО исполняются по одному
   (`tools/workpackage_executor.py`): пакет→commit→evidence→gates→handoff→следующий, на общей ветке

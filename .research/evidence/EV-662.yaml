@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-662
+request_id: RR-008
+statement: "Проверка фич OpenHands по документации (не по tagline, дособрано по замечанию judge): в docs.openhands.dev НЕ документированы (а) детерминированные/policy quality gates, (б) транзакционная доставка (delivery intent/receipt, SHA-верификация перед merge), (в) независимые reviewer-роли как инварианты. Документированы: multi-user, RBAC and permissions (Cloud), conversation sharing, usage reporting, budgeting enforcement, интеграции GitHub/GitLab/Slack/Jira/Linear. Негативное утверждение: «не документировано» на дату проверки ≠ «не существует» (Cloud/Enterprise-фичи могут быть недокументированы публично); roadmap не проверялся."
+evidence_type: documented_fact
+source:
+  title: "OpenHands docs — feature overview"
+  url: "https://docs.openhands.dev/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "вводные разделы: deployment options (Canvas/Cloud/Enterprise/SDK), Cloud features, integrations"
+  quote: "RBAC and permissions"
+captured_at: "2026-07-24"
+captured_by: "claude (дозабор RR-008 по judge-ревью)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-24"
+reliability:
+  level: medium
+  rationale: "Официальная документация прочитана напрямую; негативная часть — «не найдено в доках», с квалификаторами."
+status: active
+superseded_by: null

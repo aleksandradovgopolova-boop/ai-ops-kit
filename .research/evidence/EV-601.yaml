@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-601
+request_id: RR-008
+statement: 'Open SWE ПОДТВЕРЖДЁН как живой асинхронный coding agent (MIT, ~10.4k звёзд,
+  push 2026-07-23, создан 2025-05): запуск из Slack/Linear/GitHub, изолированный cloud
+  sandbox на задачу, subagents, draft PR. КЛЮЧЕВОЕ подтверждено дословно: README сам
+  озаглавливает раздел ''7. Validation — Prompt-Driven'' и предлагает достраивать
+  ''deterministic CI checks, visual verification, or review gates as additional middleware''
+  — дыра в gates признана самим проектом.'
+evidence_type: documented_fact
+source:
+  title: GitHub — langchain-ai/open-swe (README + API meta)
+  url: https://github.com/langchain-ai/open-swe
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'README section 7 ''Validation — Prompt-Driven''; api: license/pushed_at/stars'
+  quote: add deterministic CI checks, visual verification, or review gates as additional
+    middleware
+captured_at: '2026-07-24'
+captured_by: 'scout-agent (verify: Open SWE/OpenHands/SWE-ReX, RR-008)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-24'
+reliability:
+  level: high
+  rationale: Verbatim из README + машиночитаемые метаданные GitHub API, снято 2026-07-24.
+status: active
+superseded_by: null

@@ -2,6 +2,111 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.3.1] — 2026-07-24 — Product Learning (v3.3.0–3.3.1) + Release Alignment
+
+**Release Alignment** (служебный инкремент, без новых механизмов): источник истины синхронизирован —
+`VERSION` = `CHANGELOG` = `ROADMAP` = фактический HEAD. `VERSION` 3.1.8 → **3.3.1** (RC-канал ушёл
+вперёд кода, официальная версия отставала). v3.1 закрыт (Execution Kernel qualified; внешне-gated
+green-path сценарии — rolling evidence, не ворота roadmap). v3.2 первый проход отмечен выполненным.
+v3.3 зафиксирована как текущая фаза. Старая лестница v3.1.10–v3.1.12 удалена, содержимое перенесено:
+model comparison → v3.4; regression corpus/failure taxonomy → v3.5; fast-forward integration
+revalidation → v3.6. Добавлен раздел ROADMAP «Post-v3.2 Operational Architecture Backbone».
+Напоминание: засвеченный `ANTHROPIC_API_KEY` ротировать в консоли до следующих живых запусков.
+
+Следующий класс (Product Learning): связать research-решения с продуктовыми исходами. Строится НАД
+research-контуром (потребляет `DecisionPackage` по id, слабой ссылкой), не трогая его схемы/валидаторы/
+данные — research-контур управляется параллельно.
+
+### Added
+- `schemas/feature-learning.schema.json` + `validation/validate_feature_learning.py` —
+  `FeatureLearning`: мост research `DecisionPackage` → продуктовый/архитектурный исход (hypothesis →
+  validation → outcome/verdict → learnings → follow_up). Честность: вердикт нельзя вынести без
+  завершённой проверки (`verdict != pending` требует `validation.status=done` + `result`); `refuted`
+  требует `learnings`; `status=validated` требует done. Реестр `product-learning/*.yaml` (уникальность,
+  имя==id). selftest + реальный реестр в CI.
+- `product-learning/FL-001.yaml` — реальная цепочка дог-фудинга: research `DP-108` (стратегия
+  AI Ops = control-plane) → `FL-001` (confirmed) → `ADR-001`. Замыкает research → продукт → решение.
+- **Learning-loop fitness** (v3.3.1): `validation/validate_learning_loop.py` — целостность петли
+  research→learning→architecture: `FeatureLearning.follow_up` со ссылками `ADR-NNN` обязаны
+  резолвиться в реальный ADR-реестр (иначе «породили ADR-X», а его нет — петля разорвана).
+  `RR-`/`DP-`/`feature:`-ссылки — слабые (research/продукт управляются иначе), не резолвятся. При
+  поломке любого реестра — честно «почините сначала». selftest + реальный прогон в CI.
+
+## [3.2.4] — 2026-07-24 — Architecture, Product & UI Governance (первый проход выполнен)
+
+Начат следующий этаж системы: управленческий слой поверх исполнения. Первый инкремент — контракт
+архитектурных решений + UI Definition of Done, связанные с UI-таксономией (`gate_policy.ui_impact`)
+и Storybook-evidence. Технический адаптер (v3.1.7) не переписывается — над ним ставится governance.
+
+### Added
+- `schemas/architecture-decision.schema.json` — `ArchitectureDecision` (ADR): context/decision/
+  alternatives/consequences (обязательны И positive, И negative — издержки скрывать нельзя)/
+  quality_attributes (ISO-25010-класс)/`ui_impact` (согласован с `gate_policy`)/supersede-цепочка.
+  Отличается от `decisions/registry.yaml` (Decision Intelligence — принципы/эпизоды мышления).
+- `validation/validate_architecture_decision.py` — структура + семантика (negative-последствия
+  обязательны; `superseded` требует `superseded_by`; enum'ы; drift-guard против схемы). selftest в CI.
+- `templates/quality/DefinitionOfDone-UI.md` — риск-тир (`internal`/`user_facing`/`critical`) →
+  требования (states/interaction/a11y/visual/design-system/UX) → evidence на точном SHA. Правило
+  component-reuse. Связь ADR ↔ gate_policy ↔ StorybookPolicy ↔ UIEvidenceBundle.
+- **ADR registry + fitness** (v3.2.1): `decisions/adr/*.yaml` — governed-набор реальных
+  архитектурных решений системы (ADR-001 control-plane; ADR-002 fail-closed gate-модель; ADR-003
+  калиброванное UI-enforcement на exact-SHA evidence). `validation/validate_adr_registry.py` —
+  кросс-целостность (уникальность id, имя файла==id, ДВУНАПРАВЛЕННАЯ supersede-цепочка, резолв
+  related) + fitness (`ui_impact ∈ gate_policy.UI_IMPACT`). selftest + прогон реального реестра в CI.
+- **Quality-attributes fitness** (v3.2.2): `validation/validate_quality_attributes.py` — агрегирует
+  `quality_attributes` ADR-реестра в профиль и ловит governance-смеллы: `degrades` без обоснования
+  (`note`); неуправляемое противоречие (атрибут одновременно `improves` и `degrades` среди активных
+  ADR без `tradeoff`). Профиль — вход для будущих evolution-triggers. selftest + реальный прогон в CI.
+- **Component-reuse enforcement** (v3.2.3): `UIEvidenceBundle` получил `component_catalog` (все
+  компоненты Storybook-индекса). `validate_storybook_evidence` теперь ловит reuse-нарушение: «новый»
+  компонент, чьё имя уже в каталоге дизайн-системы, = дублирование существующего (надо
+  переиспользовать, а не создавать заново). `storybook_adapter.reuse_violations()` — helper.
+  Правило DoD стало проверяемым (без нового CI-шага — в существующем evidence-валидаторе).
+- **Evolution triggers** (v3.2.4): `tools/evolution_triggers.py` замыкает governance-петлю ADR ↔
+  Product Health. Когда метрика product_health деградирует (normalized<0.7) на атрибуте, который
+  активный ADR обещал `improve` → `promise_broken` (обещание не держится); если ADR принимал атрибут
+  как `tradeoff`/`degrades` → `cost_realized` (цена реализовалась). Сигнал пересмотреть ADR (advisory,
+  не gate). Маппинг метрик product_health на ISO-25010-атрибуты. selftest в CI (реальный реестр +
+  синтетический health). Завершает governance-слой v3.2 (ADR → quality-attributes → health → эволюция).
+
+### Note
+- Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —
+  после закрытия живой Phase B квалификации (нужен сильный провайдер-ключ).
+
+## [3.1.9] — 2026-07-24 — Exact-SHA UI Evidence + закрытие v3.1
+
+Закрыт реальный trust-разрыв калиброванного enforcement (v3.1.8): UI-evidence собиралось в
+контроллере ДО реализации, из основного checkout, без commit_sha и без changed_files. Из-за этого
+старое `pass`-evidence в основном дереве могло снять субъективный блок с новой правки. Это узкий
+обязательный фикс; НЕ раздуваем roadmap.
+
+### Fixed (безопасность)
+- Сбор UI-evidence перенесён из `ai_ops_run.run` (до pipeline) в `execution_pipeline` — **после**
+  коммита, из рабочего worktree WorkItem, на **точном** `committed_sha`, по файлам этого коммита
+  (`_committed_changed_files` = base..committed_sha).
+- **Exact-SHA binding:** `storybook_adapter.evidence_for_gate(bundle, expected_sha)` — если
+  `bundle.commit_sha != expected_sha` (устаревшее / не привязанное / чужое evidence), ВСЕ гейты →
+  `not_run` (fail-closed), evidence НЕ освобождает гейт.
+- `bundle.commit_sha` берётся из **провенанс-меты** артефактов (`.ai/ui-evidence/meta.json →
+  commit_sha`) — SHA, на котором evidence реально собрано, а не от вызывающего.
+- Убран loose stem-matching файлов: сопоставление changed↔importPath теперь по **суффиксу пути**
+  (`a/Card.tsx` ≠ `b/Card.tsx`), истории одного компонента больше не «покрывают» другой.
+- Пустой `affected_stories` при UI-правке больше не даёт вакуумного `state_coverage.complete=True`:
+  `ux` не закрывается детерминированно без затронутых историй.
+- `UIEvidenceBundle` (на точном SHA) выносится в отчёт pipeline как qualification evidence.
+
+### Added (три обязательных отрицательных теста, `storybook_adapter --selftest`)
+- старое `pass`-evidence + новый commit → не освобождает (все `not_run`);
+- `bundle.commit_sha != tested_revision` → не освобождает;
+- проходящие истории ДРУГОГО компонента → не закрывают изменённый компонент.
+
+### Известные ограничения (зафиксировано, не блокер)
+- `GateResult v2` реализован как контракт + compatibility-адаптер, но ещё НЕ стал каноническим
+  runtime-форматом всех gate-результатов: в `_run_reviews` калиброванный advisory сохраняется как
+  v1 `warn` (`calibrated_view()` пока не публикуется в отчёте). Планируется отдельно, не в v3.2.
+- Живая Phase B квалификация (5 сценариев + `QualificationReport`) — ОТКРЫТА, требует боевого
+  провайдер-ключа (ротация в консоли) и реальных PR. Не входит в этот оффлайн-фикс.
+
 ## [3.1.8] — 2026-07-24 — Calibrated UI Enforcement (ПЕРВОЕ изменение боевого fail-closed за v3.1)
 
 Калиброванная UI-политика (v3.1.6, shadow) + проверяемое evidence (v3.1.7) становятся ЖИВЫМИ:

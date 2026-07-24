@@ -1,0 +1,42 @@
+schema_version: 1
+kind: ArchitectureDecision
+id: ADR-003
+title: "Калиброванное UI-enforcement на проверяемом evidence (exact-SHA), не на доверии модели"
+status: accepted
+date: "2026-07-24"
+owner: architecture
+context: >-
+  Reviewer-false-fail сконцентрирован в 4 UI-review-гейтах, которые трек VISUAL вешает разом
+  по одному булеву ui_changed, все blocking. Любой субъективный warn блокирует всю правку.
+  Ослаблять «доверием модели» нельзя — это вернёт ложные green.
+decision: >-
+  Риск-калиброванная политика по ui_impact (none/internal/user_facing/critical): субъективный
+  warn НЕ блокирует, когда гейт advisory (internal low-risk не-safety) ИЛИ механика подтверждена
+  ДЕТЕРМИНИРОВАННЫМ UI-evidence (Storybook/vitest/axe/visual). evidence=fail блокирует всегда;
+  critical ux/a11y требуют human-signoff. Evidence привязано к точному committed_sha
+  (exact-SHA binding): устаревшее/чужое evidence не освобождает гейт.
+alternatives:
+  - option: "Просто снять blocking с 4 UI-гейтов"
+    rejected_because: "вернёт ложные green на реальных UI-регрессиях и a11y-дефектах"
+  - option: "Доверять вердикту модели без проверяемого evidence"
+    rejected_because: "субъективно, невоспроизводимо, ослабляет fail-closed"
+consequences:
+  positive:
+    - "false-fail снижается заменой субъективного ревью проверяемым evidence (Bench: block-rate 0.667->0.333)"
+    - "safety сохранена: false_green=0, реальные регрессии/дефекты (evidence=fail) блокируются"
+    - "evidence привязано к ревизии — устаревшее не разблокирует новый код"
+  negative:
+    - "требует UI-CI в child (Storybook build + interaction/a11y/visual тесты) для полного эффекта"
+    - "GateResult v2 пока не канонический runtime-формат (advisory хранится как v1 warn)"
+quality_attributes:
+  - attribute: usability
+    effect: improves
+    note: "меньше ложных блоков корректных UI-правок"
+  - attribute: accessibility
+    effect: improves
+  - attribute: reliability
+    effect: improves
+ui_impact: user_facing
+supersedes: null
+superseded_by: null
+related: [ADR-002]

@@ -1,0 +1,25 @@
+schema_version: 1
+kind: research.evidence
+id: EV-660
+request_id: RR-008
+statement: "Единый open-source продукт, объединяющий execution + детерминированные gates + независимое ревью + evidence на точном SHA + durable lifecycle + delivery-транзакцию + evaluation + product/research governance, НЕ ОБНАРУЖЕН в проверенном охвате: Open SWE — validation prompt-driven по собственному признанию (EV-601, EV-602); OpenHands — control center без калиброванных gates/delivery-транзакции как ядра (EV-605, EV-606); SWE-ReX/SWE-agent — sandbox и benchmark, не governance (EV-608, EV-609); Continue checks — gates as code для существующего PR, проект поглощён (EV-631…EV-633); Cline/Aider/Goose — исполнение и UX (EV-634…EV-638); gstack — opinionated-скиллы без инвариантов/evidence-контура (EV-210, EV-211 из RR-003, отсутствовал в чужом скане). Охват: 9 проектов верифицированы первоисточниками 2026-07-24 + gstack из RR-003; «не обнаружено» ≠ «не существует»; OpenHands движется в сторону control plane — охват протухает быстро."
+evidence_type: inference
+derived_from: [EV-601, EV-602, EV-605, EV-606, EV-608, EV-609, EV-631, EV-632, EV-633, EV-634, EV-635, EV-636, EV-637, EV-638, EV-210, EV-211]
+source:
+  title: "Синтез по верификационным EV RR-008 + EV-210/211 (RR-003)"
+  url: ""
+  type: internal_data
+  published_at: "2026-07-24"
+  is_primary: true
+citation:
+  locator: "перекрёстная сверка capability-полей по всем проверенным проектам"
+captured_at: "2026-07-24"
+captured_by: "claude (синтез RR-008)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-24"
+reliability:
+  level: medium
+  rationale: "Негативное утверждение с зафиксированным охватом; ландшафт сверхподвижен (чужой анализ устарел по 3 пунктам за недели)."
+status: active
+superseded_by: null

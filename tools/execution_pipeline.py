@@ -37,6 +37,7 @@ import evidence_collector    # noqa: E402
 import run_plan              # noqa: E402
 import gate_executor         # noqa: E402
 import gate_policy           # noqa: E402  (v3.1.8 калиброванное UI-enforcement)
+import storybook_adapter     # noqa: E402  (v3.1.9 exact-SHA UI evidence)
 
 
 def _profile_summary(profile):
@@ -1403,6 +1404,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #     Честно: детерминированные артефакт-гейты (requirements/specification/plan_readiness) и
     #     human-approval (security при privileged/destructive) ревьюер НЕ закрывает — остаются
     #     блокирующими. review только на зафиксированной ревизии (иначе судить нечего).
+    # v3.1.9 EXACT-SHA UI EVIDENCE (trust-фикс): собираем UI-evidence ПОСЛЕ реализации, из РАБОЧЕГО
+    # worktree, на ТОЧНОМ committed_sha, по файлам, изменённым этим коммитом; связываем с committed_sha.
+    # Устаревшее/непривязанное/чужое evidence (meta.commit_sha != committed_sha) -> not_run (fail-closed),
+    # НЕ освобождает гейт. Инжектированный ui_evidence (bench/синтетика) используется как есть (не строим).
+    ui_evidence_bundle = None
+    if calibrated_enforcement and ui_evidence is None and committed_sha:
+        try:
+            _changed = _committed_changed_files(work_root, committed_sha)
+            ui_evidence_bundle = storybook_adapter.build_bundle(work_root, changed_files=_changed)
+            ui_evidence = storybook_adapter.evidence_for_gate(ui_evidence_bundle,
+                                                              expected_sha=committed_sha)
+        except Exception:   # noqa: BLE001 — сбой сбора evidence не освобождает гейт (ui_evidence=None)
+            ui_evidence, ui_evidence_bundle = None, None
+
     reviews = None
     if review and reviewer_proposer is not None and committed_sha:
         gate_ev, reviews = _run_reviews(reviewer_proposer, work_root, plan["gates"], gate_ev,
@@ -1751,6 +1766,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v2.83 Full RunPlan: трейс независимых ревью (какие ai-review гейты судились, вердикт,
         # что читал судья, что отклонено). None -> ревью не запускалось (нет --review/reviewer).
         "reviews": reviews,
+        # v3.1.9: UIEvidenceBundle, собранный на ТОЧНОМ committed_sha (qualification evidence). None,
+        # если калибровка выкл / evidence инжектировано / нет коммита. commit_sha в bundle привязан.
+        "ui_evidence": ui_evidence_bundle,
         # v2.95: детерминированный security-скан (секреты/новые зависимости/injection-флаги). None,
         # если гейта security нет в плане или не коммитили. Закрывает no_secrets/deps_approved (факты);
         # no_injection_surface — судье. Находка -> security блокирует.
