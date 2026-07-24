@@ -17,8 +17,17 @@
 - `examples/budget-demo/` — реальные BudgetContract'ы (loop BUD-001 для fix-loop LP-001; run BUD-002;
   package BUD-003) c привязкой к `tools/budget.py`. Прогон в CI.
 
+### Added (v3.4.1 — capability permissions, package scope)
+- `schemas/package-capability-scope.schema.json` + `validation/validate_capability_scope.py` —
+  `PackageCapabilityScope`: пакет WorkGraph → allowed_permissions (уровни как `tools.yaml`
+  permission_level: read-only/local/controlled-write/network/execution). Least-privilege: network/
+  execution требуют `justification`. Инвариант «никакой package без capability-scope» — проверка
+  ПОКРЫТИЯ: каждый пакет WorkGraph имеет ровно один PCS.
+- `examples/capability-demo/` — PCS-001/002/003 (api/ui/wiring для WG-001), полное покрытие,
+  least-privilege (без network/execution). Прогон в CI.
+
 ### Note
-- Без version-bump (rc). Дальше в v3.4: capability permissions (package scope), access-filter,
+- Без version-bump (rc). Дальше в v3.4: access-filter (никакой retrieval без access-filter),
   provider retention, model routing, cost accounting, model comparison (перенос из старого v3.1.11).
 
 ## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ

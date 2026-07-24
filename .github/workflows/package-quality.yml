@@ -107,6 +107,10 @@ jobs:
         run: |
           python3 validation/validate_budget_contract.py --selftest
           python3 validation/validate_budget_contract.py examples/budget-demo
+      - name: PackageCapabilityScope — least-privilege пакетов (selftest + capability-demo)
+        run: |
+          python3 validation/validate_capability_scope.py --selftest
+          python3 validation/validate_capability_scope.py examples/capability-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
