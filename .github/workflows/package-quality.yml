@@ -87,6 +87,8 @@ jobs:
         run: |
           python3 validation/validate_quality_attributes.py --selftest
           python3 validation/validate_quality_attributes.py
+      - name: Evolution triggers — ADR ↔ Product Health governance-петля (selftest)
+        run: python3 tools/evolution_triggers.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

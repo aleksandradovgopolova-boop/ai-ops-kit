@@ -32,6 +32,12 @@
   компонент, чьё имя уже в каталоге дизайн-системы, = дублирование существующего (надо
   переиспользовать, а не создавать заново). `storybook_adapter.reuse_violations()` — helper.
   Правило DoD стало проверяемым (без нового CI-шага — в существующем evidence-валидаторе).
+- **Evolution triggers** (v3.2.4): `tools/evolution_triggers.py` замыкает governance-петлю ADR ↔
+  Product Health. Когда метрика product_health деградирует (normalized<0.7) на атрибуте, который
+  активный ADR обещал `improve` → `promise_broken` (обещание не держится); если ADR принимал атрибут
+  как `tradeoff`/`degrades` → `cost_realized` (цена реализовалась). Сигнал пересмотреть ADR (advisory,
+  не gate). Маппинг метрик product_health на ISO-25010-атрибуты. selftest в CI (реальный реестр +
+  синтетический health). Завершает governance-слой v3.2 (ADR → quality-attributes → health → эволюция).
 
 ### Note
 - Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —
