@@ -15,9 +15,16 @@
   relevant-test-selection в v3.6). Дог-фуд: реальный граф кита (103 файла, 454 символа);
   `impact(tools/gate_policy.py)` = 16 транзитивных зависимых. selftest (синтетика + реальные факты кита).
 
+### Added (v3.6.1 — full-text retrieval + budgeted role context view)
+- `tools/context_retrieval.py` — детерминированный full-text поиск (ранжирование по hits) + сборка
+  budgeted context view ПОД РОЛЬ с реальным применением `AccessFilterPolicy` (v3.4.2) и token-бюджета
+  (`BudgetContract` v3.4.0). Инварианты цепочки: access-filter ДО включения (класс вне allowed →
+  не в view; `secret` — никогда), deny-by-default, бюджет (chars/4), provenance + cache_key
+  (repo+sha+policy+view). Интеграция с реальным `AFP-001`. selftest 11/11. Всё ещё без vector-DB.
+
 ### Note
-- Без version-bump (rc). Дальше в v3.6: full-text retrieval → role/package context views → cache →
-  retrieval Bench → semantic fallback → incremental index; параллельное исполнение; Storybook MCP.
+- Без version-bump (rc). Дальше в v3.6: cache → retrieval Bench → semantic fallback → incremental
+  index; параллельное исполнение; Storybook MCP.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
