@@ -26,9 +26,19 @@
 - `examples/capability-demo/` — PCS-001/002/003 (api/ui/wiring для WG-001), полное покрытие,
   least-privilege (без network/execution). Прогон в CI.
 
+### Added (v3.4.2 — access-filter, замыкает 3 инварианта фазы)
+- `schemas/access-filter-policy.schema.json` + `validation/validate_access_filter.py` —
+  `AccessFilterPolicy`: фильтр доступа ДО retrieval (привязан к `CAD.access_filter_before_retrieval`).
+  Инварианты: `filter_stage=before_retrieval` (пост-фильтрация запрещена); `default_deny=true`
+  (allow-list); правило для КАЖДОЙ роли (никакой retrieval без access-filter); класс `secret` НЕ
+  допускается ни в одном allowed_classes (секреты не входят в context). `examples/access-filter-demo/AFP-001`.
+- **Три инварианта фазы v3.4 выражены контрактами:** никакой scope без бюджета (BudgetContract) ·
+  никакой package без capability-scope (PackageCapabilityScope) · никакой retrieval без access-filter
+  (AccessFilterPolicy). Естественная точка промежуточного релиза v3.4.
+
 ### Note
-- Без version-bump (rc). Дальше в v3.4: access-filter (никакой retrieval без access-filter),
-  provider retention, model routing, cost accounting, model comparison (перенос из старого v3.1.11).
+- Без version-bump (rc). Дальше в v3.4: provider retention, model routing, cost accounting, model
+  comparison (перенос из старого v3.1.11).
 
 ## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ
 
