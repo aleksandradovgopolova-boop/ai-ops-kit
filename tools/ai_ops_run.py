@@ -201,7 +201,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
-        review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None):
+        review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
+        context_shadow=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -636,6 +637,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                      "agents": bundle["included"]["agents"],
                                      "rules": bundle["included"]["rules"],
                                      "excluded_count": len(bundle["excluded"])}
+        # v3.6.4 SHADOW-wiring (по умолчанию OFF): Context Engine v2 shadow-view РЯДОМ с боевым v1.
+        # Execution по-прежнему на v1 (context_compiler); shadow — чистая наблюдаемость перед
+        # промоушеном retrieval в runtime. Полностью guarded: сбой shadow не влияет на прогон.
+        if context_shadow:
+            try:
+                import context_shadow as _cshadow
+                _afp_p = Path(__file__).resolve().parents[1] / "examples" / "access-filter-demo" / "AFP-001.yaml"
+                _afp = yaml.safe_load(_afp_p.read_text(encoding="utf-8")) if _afp_p.exists() else None
+                rep["context_shadow"] = _cshadow.build_shadow(
+                    child_root, task_text, role="executor",
+                    sha=rep.get("committed_sha"), afp=_afp)
+            except Exception:  # noqa: BLE001 — shadow не должен ронять прогон
+                rep["context_shadow"] = {"error": "shadow build failed (не влияет на execution=v1)"}
         if payload:
             rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
                                       "payload_budget": payload["payload_budget"],

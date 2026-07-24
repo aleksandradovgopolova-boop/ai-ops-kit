@@ -149,6 +149,8 @@ jobs:
         run: python3 tools/context_retrieval.py --selftest
       - name: Semantic-lite — TF-IDF fallback без vector-DB (selftest, дог-фуд на ките)
         run: python3 tools/semantic_lite.py --selftest
+      - name: Context shadow — v2 shadow-view рядом с боевым v1 (selftest)
+        run: python3 tools/context_shadow.py --selftest
       - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
         run: python3 tools/retrieval_bench.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)

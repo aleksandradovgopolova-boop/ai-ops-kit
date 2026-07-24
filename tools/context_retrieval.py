@@ -61,10 +61,13 @@ def full_text_search(root, query: str, subdirs=("tools", "validation")):
     kws = [k.lower() for k in query.split() if k.strip()]
     out = []
     for sd in subdirs:
-        d = root / sd
+        d = root / sd if sd else root   # sd="" -> сканировать весь root
         if not d.is_dir():
             continue
         for f in sorted(d.rglob("*.py")):
+            rel = f.relative_to(root)
+            if any(part.startswith(".") for part in rel.parts):   # пропускаем скрытые (.ai/.git/…)
+                continue
             try:
                 content = f.read_text(encoding="utf-8")
             except OSError:
@@ -73,7 +76,7 @@ def full_text_search(root, query: str, subdirs=("tools", "validation")):
             hits = {k: low.count(k) for k in kws}
             score = sum(hits.values())
             if score > 0:
-                out.append({"file": str(f.relative_to(root)), "score": score, "hits": hits})
+                out.append({"file": str(rel), "score": score, "hits": hits})
     out.sort(key=lambda r: (-r["score"], r["file"]))   # детерминированно
     return out
 
@@ -86,12 +89,12 @@ def role_allowed_classes(afp: dict, role: str):
 
 
 def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None,
-               repo_id=None, policy=None, strict=False):
+               repo_id=None, policy=None, strict=False, subdirs=("tools", "validation")):
     root = Path(root)
     allowed = set(allowed_classes)
     included, excl_access, excl_budget = [], [], []
     total = 0
-    for r in full_text_search(root, query):
+    for r in full_text_search(root, query, subdirs):
         f = root / r["file"]
         try:
             content = f.read_text(encoding="utf-8")

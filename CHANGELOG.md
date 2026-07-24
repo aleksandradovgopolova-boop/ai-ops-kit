@@ -61,11 +61,18 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   (deny), а не internal (strict побеждает default_class). `context_retrieval.classify` делегирует сюда
   (marker raise-only применяется в retrieval).
 
+### Added (v3.6.4 — runtime-wiring SHADOW-режим)
+- `tools/context_shadow.py` — Context Engine v2 shadow-view РЯДОМ с боевым v1 + сравнение источников
+  (overlap / v1_only / v2_only). Wired в `ai_ops_run.run(context_shadow=False)` — по умолчанию OFF
+  (no-op, все selftest/parity целы); при включении строит shadow (guarded: сбой не влияет на прогон),
+  execution по-прежнему на v1 `context_compiler`. Shadow не сканирует скрытые `.ai/`; cache_key
+  привязан к sha. Безопасный первый режим wiring перед промоушеном retrieval.
+
 ### Note
 - Без version-bump (rc). Нумерация: semantic-lite=v3.6.3; Retrieval Integrity=v3.6.4, Governed
   Parallel=v3.6.5, Storybook MCP=v3.6.6.
-- ОСТАЛОСЬ в v3.6.4: runtime-wiring в SHADOW-режиме (v1 обязателен, v2 рядом, сравнение), расширение
-  Bench до 15–20 кейсов. Затем v3.6.5/v3.6.6 → закрыть v3.6 + version-bump.
+- ОСТАЛОСЬ в v3.6.4: расширение Retrieval Bench до 15–20 кейсов (реальное качество, не smoke).
+  Затем v3.6.5 (GateResult v2 runtime + bounded parallel), v3.6.6 (Storybook MCP) → закрыть v3.6 + bump.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
