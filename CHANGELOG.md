@@ -43,6 +43,26 @@ shadow, execution на v1), но обязаны быть закрыты ДО б�
   заявляется сделанным сейчас (честная граница capability): decision-слой готов и оттестирован,
   wiring exercised только вживую.
 
+### Added (v3.6.7c — Context Engine orchestrator: ОДНА каноническая v2-цепочка + child-политики + TS/docs)
+- `tools/context_engine.py` — единый оркестратор Context Engine v2 (ревью: shadow подключал только
+  full-text `build_view()` на ДЕМО-политике без DCP, а не всю цепочку). Теперь один слой собирает:
+  обязательный контекст v1 (policy/spec/decisions) → full-text → **Repository Graph augmentation**
+  (соседи по импортам/обратным зависимостям) → **условный semantic-lite** (ТОЛЬКО при недостаточном
+  детерминированном recall) → **access-filter** (AFP роли + DataClassificationPolicy) → rerank →
+  budget → role view. Инварианты: без точного SHA view НЕ строится (ValueError); обязательный
+  контекст v1 не теряется на rerank/budget (только access-filter, secret никогда); graph/semantic
+  ТОЛЬКО добавляют кандидатов; у каждого источника reason + content-hash + SHA; политики берутся у
+  CHILD-репо (`load_child_policies`: `.ai/policies/*.yaml`), demo-политик в runtime нет
+  (deny-by-default при отсутствии). selftest 15/15 (граф-сосед без ключевого слова, semantic-условие,
+  секрет-исключение, mandatory-over-budget, no-demo-deny).
+- `tools/context_retrieval.py` — full-text и role-view больше **НЕ Python-only**: базовый охват
+  `.py/.ts/.tsx/.js/.jsx/.md/.yaml/.yml/.json` (`RETRIEVAL_EXTS`) под TS/React/docs child-репо. Граф
+  для TypeScript — отдельный адаптер позже (честная граница); здесь именно full-text + role-view.
+- `tools/context_shadow.py` — переписан на `context_engine.build_context`: shadow строит ПОЛНУЮ
+  v2-цепочку на политиках CHILD-репо (не демо), без точного SHA не строится; `ai_ops_run.run(
+  context_shadow=True)` больше не инжектит демо-AFP (грузит child-политики, execution по-прежнему v1,
+  default OFF, guarded). CI +1 шаг (context_engine selftest).
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

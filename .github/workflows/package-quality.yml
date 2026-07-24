@@ -149,7 +149,9 @@ jobs:
         run: python3 tools/context_retrieval.py --selftest
       - name: Semantic-lite — TF-IDF fallback без vector-DB (selftest, дог-фуд на ките)
         run: python3 tools/semantic_lite.py --selftest
-      - name: Context shadow — v2 shadow-view рядом с боевым v1 (selftest)
+      - name: Context Engine orchestrator — полная v2-цепочка (mandatory v1 + full-text + graph + semantic + access-filter) (selftest)
+        run: python3 tools/context_engine.py --selftest
+      - name: Context shadow — ПОЛНАЯ v2-цепочка рядом с боевым v1, child-политики (selftest)
         run: python3 tools/context_shadow.py --selftest
       - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
         run: python3 tools/retrieval_bench.py --selftest

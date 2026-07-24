@@ -56,7 +56,12 @@ def _tokens(content: str) -> int:
     return max(1, len(content) // 4)   # грубая оценка токенов
 
 
-def full_text_search(root, query: str, subdirs=("tools", "validation")):
+# v3.6.7: full-text и role-view больше НЕ Python-only. Базовый охват под TS/React/docs child-репо
+# (граф для TS — отдельный адаптер позже; здесь именно full-text + role-view поддержка).
+RETRIEVAL_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml", ".json")
+
+
+def full_text_search(root, query: str, subdirs=("tools", "validation"), exts=RETRIEVAL_EXTS):
     root = Path(root)
     kws = [k.lower() for k in query.split() if k.strip()]
     out = []
@@ -64,7 +69,10 @@ def full_text_search(root, query: str, subdirs=("tools", "validation")):
         d = root / sd if sd else root   # sd="" -> сканировать весь root
         if not d.is_dir():
             continue
-        for f in sorted(d.rglob("*.py")):
+        files = []
+        for ext in exts:
+            files.extend(d.rglob(f"*{ext}"))
+        for f in sorted(set(files)):
             rel = f.relative_to(root)
             if any(part.startswith(".") for part in rel.parts):   # пропускаем скрытые (.ai/.git/…)
                 continue
@@ -89,12 +97,13 @@ def role_allowed_classes(afp: dict, role: str):
 
 
 def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None,
-               repo_id=None, policy=None, strict=False, subdirs=("tools", "validation")):
+               repo_id=None, policy=None, strict=False, subdirs=("tools", "validation"),
+               exts=RETRIEVAL_EXTS):
     root = Path(root)
     allowed = set(allowed_classes)
     included, excl_access, excl_budget = [], [], []
     total = 0
-    for r in full_text_search(root, query, subdirs):
+    for r in full_text_search(root, query, subdirs, exts):
         f = root / r["file"]
         try:
             content = f.read_text(encoding="utf-8")
@@ -183,6 +192,14 @@ def selftest():
         res = full_text_search(root, "foo", ("tools",))
         expect("full-text: a.py ранжирован выше (больше hits), d.py не найден",
                res[0]["file"] == "tools/a.py" and all(r["file"] != "tools/d.py" for r in res))
+
+        # v3.6.7: full-text больше не Python-only — TS/React/docs/JSON тоже сканируются
+        (root / "ui").mkdir()
+        (root / "ui" / "Widget.tsx").write_text("// foo component\nexport const Widget = () => 'foo';\n", encoding="utf-8")
+        (root / "ui" / "notes.md").write_text("# foo doc\n", encoding="utf-8")
+        rts = full_text_search(root, "foo", ("ui",))
+        expect("full-text охватывает .tsx и .md (не только .py)",
+               {"ui/Widget.tsx", "ui/notes.md"} <= {r["file"] for r in rts})
 
         # planner: allowed {public, internal}
         v = build_view(root, "foo", "planner", {"public", "internal"}, budget_tokens=10000)

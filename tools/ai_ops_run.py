@@ -643,11 +643,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         if context_shadow:
             try:
                 import context_shadow as _cshadow
-                _afp_p = Path(__file__).resolve().parents[1] / "examples" / "access-filter-demo" / "AFP-001.yaml"
-                _afp = yaml.safe_load(_afp_p.read_text(encoding="utf-8")) if _afp_p.exists() else None
+                # v3.6.7: политики берутся у CHILD-репо (.ai/policies), НЕ демо кита; без committed_sha
+                # shadow не строится (exact-revision). afp=None -> build_shadow загрузит child-политики
+                # (нет -> deny-by-default). Полная v2-цепочка через context_engine.
                 rep["context_shadow"] = _cshadow.build_shadow(
-                    child_root, task_text, role="executor",
-                    sha=rep.get("committed_sha"), afp=_afp)
+                    child_root, task_text, role="executor", sha=rep.get("committed_sha"))
             except Exception:  # noqa: BLE001 — shadow не должен ронять прогон
                 rep["context_shadow"] = {"error": "shadow build failed (не влияет на execution=v1)"}
         if payload:
