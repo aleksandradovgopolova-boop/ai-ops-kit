@@ -1,0 +1,13 @@
+schema_version: 1
+kind: RegressionCase
+failure_id: RC-003
+title: "Exact-SHA UI evidence: устаревшее evidence могло разблокировать новый код"
+trigger: "контроллер собирал UI-evidence ДО реализации, из основного checkout, без commit_sha"
+expected_behavior: "evidence привязано к проверяемой ревизии; устаревшее/чужое -> not_run (fail-closed)"
+observed_behavior: "старое pass-evidence в основном дереве могло снять субъективный блок с новой правки"
+affected_layer: context
+status: fixed
+severity: critical
+first_seen_version: "3.1.8"
+fixed_version: "3.1.9-rc"
+regression_test: "storybook_adapter selftest T1/T2/T3 (старое evidence+новый commit; sha mismatch; чужой компонент)"

@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.5.0-rc — Observability: Regression Corpus & Failure Taxonomy
+
+Начата фаза v3.5. Первый инкремент — постоянный корпус находок с таксономией слоя, чтобы
+починенное не регрессировало, а известные ограничения были явны.
+
+### Added
+- `schemas/regression-case.schema.json` + `validation/validate_regression_corpus.py` —
+  `RegressionCase`: failure_id/trigger/expected/observed/affected_layer (engine/provider/model/
+  reviewer/policy/context/environment/security/delivery/fixture/process)/status/severity/
+  first_seen/fixed_version/regression_test. Честность: `status=fixed` требует fixed_version И
+  regression_test (починка без охраняющего теста — не починка). Реестр + `taxonomy()` (сводка по слоям).
+- `regression-corpus/` — реальные находки этой линии: RC-001 authorization_idol (security, fixed
+  3.0.19), RC-002 PQ8-masking без openspec (environment, fixed 3.0.18), RC-003 exact-SHA evidence gap
+  (context, fixed 3.1.9-rc), RC-004 git-add-A sweep (process, mitigated). Каждая — с regression-тестом/дисциплиной.
+
+### Note
+- Без version-bump (rc). Дальше в v3.5: Loop/Iteration + WorkGraph/integration trace, no-progress/
+  repeated-failure detection, стоимость координации, parallel-vs-sequential, post-release readout.
+
 ## [3.4.5] — 2026-07-24 — Security, Permissions & Economics (v3.4 ЗАКРЫТ)
 
 Фаза v3.4 закрыта пятью аддитивными инкрементами. VERSION 3.3.3 → **3.4.5** (закрытие фазы —

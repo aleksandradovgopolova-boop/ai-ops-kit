@@ -125,6 +125,10 @@ jobs:
         run: |
           python3 tools/model_comparison.py --selftest
           python3 tools/model_comparison.py examples/model-comparison-demo
+      - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
+        run: |
+          python3 validation/validate_regression_corpus.py --selftest
+          python3 validation/validate_regression_corpus.py
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
