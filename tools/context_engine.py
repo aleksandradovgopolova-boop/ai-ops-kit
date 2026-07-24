@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -41,6 +42,7 @@ import repo_graph                # noqa: E402
 import semantic_lite             # noqa: E402
 
 SEMANTIC_RECALL_FLOOR = 3        # < столько детерминированных кандидатов -> recall недостаточен
+DEFAULT_BUDGET_TOKENS = 20000
 
 
 def _hash(content: str) -> str:
@@ -49,6 +51,70 @@ def _hash(content: str) -> str:
 
 def _hidden(rel: str) -> bool:
     return any(part.startswith(".") for part in Path(rel).parts)
+
+
+def _git(root, *args):
+    try:
+        p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=20)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except (OSError, subprocess.SubprocessError):
+        return 1, "", "git unavailable"
+
+
+def verify_snapshot(root, sha):
+    """ДОКАЗАТЬ, что содержимое каталога == commit snapshot: HEAD == sha И рабочее дерево чистое.
+    Без этого exact-revision binding декларативен (можно подписать грязный worktree чужим SHA)."""
+    if not sha:
+        return False, "нет sha -> snapshot не доказуем"
+    rc, head, _ = _git(root, "rev-parse", "HEAD")
+    if rc != 0:
+        return False, "не git-репозиторий / git недоступен -> snapshot не доказан"
+    if head != sha:
+        return False, f"HEAD ({head[:12]}) != committed_sha ({str(sha)[:12]}) -> читается не тот snapshot"
+    rc2, porcelain, _ = _git(root, "status", "--porcelain")
+    if rc2 != 0:
+        return False, "git status недоступен -> snapshot не доказан"
+    if porcelain.strip():
+        return False, "рабочее дерево грязное (uncommitted changes) -> snapshot не доказан"
+    return True, "HEAD == committed_sha, дерево чистое"
+
+
+def budget_tokens_from(policy, scope="run", default=DEFAULT_BUDGET_TOKENS):
+    """Токен-лимит из настоящего child BudgetContract (по scope run/package/view). Раньше shadow
+    отбрасывал budget и жёстко ставил 20000."""
+    if not isinstance(policy, dict):
+        return default
+    for key in ("scopes", "budgets", "limits"):
+        for entry in policy.get(key, []) or []:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("scope") in (scope, None) or key == "limits":
+                for tk in ("token_budget", "tokens", "max_tokens", "context_tokens"):
+                    if isinstance(entry.get(tk), int):
+                        return entry[tk]
+    for tk in ("token_budget", "tokens", "max_tokens", "context_tokens"):
+        if isinstance(policy.get(tk), int):
+            return policy[tk]
+    return default
+
+
+def _gitignore_dirs(root):
+    """Простые каталог-паттерны из .gitignore child-репо (имена без wildcard/слэша в середине)."""
+    out = set()
+    p = Path(root) / ".gitignore"
+    if not p.exists():
+        return out
+    try:
+        for line in p.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or s.startswith("!"):
+                continue
+            s = s.rstrip("/").lstrip("/")
+            if s and "*" not in s and "/" not in s:
+                out.add(s)
+    except OSError:
+        pass
+    return out
 
 
 def load_child_policies(child_root):
@@ -65,21 +131,47 @@ def load_child_policies(child_root):
     return _load("access-filter.yaml"), _load("data-classification.yaml"), _load("budget.yaml")
 
 
-def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=20000,
-                  v1_mandatory=None, repo_id=None, semantic_recall_floor=SEMANTIC_RECALL_FLOOR):
-    """Собрать полный Context Engine v2 view. sha ОБЯЗАТЕЛЕН (иначе ValueError)."""
+def _invalid_view(role, query, sha, reasons, snapshot_verified):
+    return {"kind": "context-engine-view", "schema": "v2-orchestrated", "role": role, "query": query,
+            "repo": None, "sha": sha, "valid": False, "invalid_reasons": list(reasons),
+            "snapshot_verified": snapshot_verified,
+            "sources_used": {"mandatory_v1": 0, "fulltext": 0, "graph_added": 0,
+                             "semantic_used": False, "semantic_reason": "view invalid -> retrieval не выполнен"},
+            "included": [], "excluded_access": [], "excluded_budget": [], "mandatory_missing": [],
+            "total_tokens": 0, "budget_tokens": 0,
+            "cache": {"enabled": False, "reason": "view invalid"}, "cache_key": None}
+
+
+def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=DEFAULT_BUDGET_TOKENS,
+                  v1_mandatory=None, repo_id=None, semantic_recall_floor=SEMANTIC_RECALL_FLOOR,
+                  require_snapshot=False):
+    """Собрать полный Context Engine v2 view. sha ОБЯЗАТЕЛЕН (иначе ValueError).
+
+    v3.6.7d: require_snapshot=True ДОКАЗЫВАЕТ, что содержимое каталога == commit snapshot (HEAD==sha,
+    дерево чистое) — иначе view невалиден и execution НЕ получает контекст. Обязательный контекст v1,
+    потерянный (не найден / запрещён access) -> view невалиден (valid=false), нужен handoff/фикс policy."""
     if not sha:
         raise ValueError("context_engine: без точного SHA view не строится (exact-revision binding)")
     root = Path(child_root)
+
+    # --- ДОКАЗАТЕЛЬСТВО snapshot (перед любым чтением файлов) ---
+    snapshot_verified = False
+    if require_snapshot:
+        oks, sreason = verify_snapshot(root, sha)
+        snapshot_verified = oks
+        if not oks:
+            return _invalid_view(role, query, sha, [f"snapshot не доказан: {sreason}"], False)
+
     allowed = cr.role_allowed_classes(afp, role) if afp else set()   # deny-by-default
+    exclude = set(cr.SCAN_EXCLUDE_DIRS) | _gitignore_dirs(root)      # vendored/build + .gitignore-aware
 
     # --- источник 1: обязательный контекст v1 (policy/spec/decisions) — нельзя потерять ---
     cand = {}   # rel -> {"file","sources":set,"score","mandatory"}
     for rel in (v1_mandatory or []):
         cand[rel] = {"file": rel, "sources": {"mandatory-v1"}, "score": 10_000, "mandatory": True}
 
-    # --- источник 2: full-text (broad exts: TS/React/docs/JSON, не только Python) ---
-    ft = cr.full_text_search(root, query, subdirs=("",))
+    # --- источник 2: full-text (broad exts: TS/React/docs/JSON, не только Python; hard-excludes) ---
+    ft = cr.full_text_search(root, query, subdirs=("",), exclude_dirs=exclude)
     for r in ft:
         c = cand.setdefault(r["file"], {"file": r["file"], "sources": set(), "score": 0, "mandatory": False})
         c["sources"].add("fulltext")
@@ -163,19 +255,35 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
     dcp_id, dcp_hash = cr._policy_fingerprint(dcp)
     allowed_h = hashlib.sha256(",".join(sorted(allowed)).encode()).hexdigest()[:8]
     repo = cr._repo_identity(root, repo_id)
+
+    # v3.6.7d: обязательный контекст, потерянный -> view НЕВАЛИДЕН (execution не получает неполный
+    # контекст; особенно нельзя продолжать при утере spec/policy — нужен handoff/фикс policy).
+    mandatory_excluded_access = sorted(e["file"] for e in excl_access if e.get("mandatory"))
+    invalid_reasons = []
+    if mandatory_missing:
+        invalid_reasons.append(f"обязательный контекст v1 отсутствует в snapshot: {sorted(mandatory_missing)}")
+    if mandatory_excluded_access:
+        invalid_reasons.append(f"обязательный контекст v1 запрещён access-policy: {mandatory_excluded_access}")
+    cache_key = "|".join([f"repo:{repo}", f"sha:{sha}", f"afp:{afp_id}:{afp_hash}",
+                          f"dcp:{dcp_id}:{dcp_hash}", f"allowed:{allowed_h}", f"role:{role}",
+                          f"q:{query}", f"b:{budget_tokens}", f"idx:{cr.RETRIEVAL_INDEX_VERSION}"])
     return {
         "kind": "context-engine-view", "schema": "v2-orchestrated", "role": role, "query": query,
         "repo": repo, "sha": sha,
+        "valid": not invalid_reasons, "invalid_reasons": invalid_reasons,
+        "snapshot_verified": snapshot_verified,
         "sources_used": {"mandatory_v1": len(v1_mandatory or []), "fulltext": deterministic_count,
                          "graph_added": graph_added, "semantic_used": semantic_used,
                          "semantic_reason": semantic_reason},
         "included": included, "excluded_access": excl_access, "excluded_budget": excl_budget,
         "mandatory_missing": sorted(mandatory_missing),
+        "mandatory_excluded_access": mandatory_excluded_access,
         "total_tokens": total, "budget_tokens": budget_tokens,
-        "cache_key": "|".join([f"repo:{repo}", f"sha:{sha}", f"afp:{afp_id}:{afp_hash}",
-                               f"dcp:{dcp_id}:{dcp_hash}", f"allowed:{allowed_h}", f"role:{role}",
-                               f"q:{query}", f"b:{budget_tokens}",
-                               f"idx:{cr.RETRIEVAL_INDEX_VERSION}"]),
+        # v3.6.7d: orchestrated cache честно ВЫКЛЮЧЕН для полного view до live-квалификации (v3.6.8).
+        # cache_key считается (для shadow-сравнения/дедупа), но RetrievalCache к orchestrated view пока
+        # НЕ подключён — не заявляем возможность, которой нет в рантайме.
+        "cache": {"enabled": False, "reason": "orchestrated cache off до v3.6.8 live qualification"},
+        "cache_key": cache_key,
     }
 
 
@@ -282,6 +390,56 @@ def selftest():
         cmp = compare_v1(v, ["POLICY.md", "legacy/old.py"])
         expect("compare_v1: overlap/v1_only/v2_only",
                "POLICY.md" in cmp["overlap"] and "legacy/old.py" in cmp["v1_only"] and cmp["v2_only"])
+
+        # === v3.6.7d: обязательный контекст блокирует view ===
+        vmiss = build_context(root, "discount", "executor", sha="abc123", afp=afp, dcp=dcp,
+                              v1_mandatory=["does/not/exist.md"])
+        expect("обязательный v1 отсутствует в snapshot -> valid=false (execution не получит контекст)",
+               vmiss["valid"] is False and vmiss["mandatory_missing"] == ["does/not/exist.md"])
+        vexcl = build_context(root, "discount", "executor", sha="abc123", afp=afp, dcp=dcp,
+                              v1_mandatory=["secret.py"])
+        expect("обязательный v1 запрещён access-policy (secret) -> valid=false",
+               vexcl["valid"] is False and "secret.py" in vexcl["mandatory_excluded_access"])
+
+        # budget из настоящего BudgetContract
+        expect("budget_tokens_from читает scope run из контракта",
+               budget_tokens_from({"scopes": [{"scope": "run", "token_budget": 1234}]}, "run") == 1234)
+        expect("budget_tokens_from дефолт при отсутствии", budget_tokens_from(None) == DEFAULT_BUDGET_TOKENS)
+
+        # .gitignore-aware исключения
+        (root / ".gitignore").write_text("generated\n", encoding="utf-8")
+        (root / "generated").mkdir()
+        (root / "generated" / "big.py").write_text("# discount generated\n", encoding="utf-8")
+        vgi = build_context(root, "discount", "executor", sha="abc123", afp=afp, dcp=dcp)
+        expect(".gitignore-aware: каталог 'generated' исключён из retrieval",
+               all("generated/" not in i["file"] for i in vgi["included"]))
+
+    # === v3.6.7d: ДОКАЗАТЕЛЬСТВО snapshot через настоящий git ===
+    with tempfile.TemporaryDirectory() as gtd:
+        g = Path(gtd)
+        (g / "app.py").write_text("# discount logic here\n", encoding="utf-8")
+        pol = g / ".ai" / "policies"
+        pol.mkdir(parents=True)
+        (pol / "access-filter.yaml").write_text(yaml.safe_dump({
+            "id": "G-AFP", "kind": "AccessFilterPolicy",
+            "rules": [{"role": "executor", "allowed_classes": ["public", "internal"]}]}), encoding="utf-8")
+        (g / ".gitignore").write_text(".ai/\n", encoding="utf-8")   # .ai/ — engine state, вне git (как в реальном child)
+        _git(g, "init", "-q")
+        _git(g, "add", "app.py", ".gitignore")
+        rc, _, _ = _git(g, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "-m", "init")
+        _, head, _ = _git(g, "rev-parse", "HEAD")
+        if rc == 0 and head:
+            afpg, _, _ = load_child_policies(g)
+            vok = build_context(g, "discount", "executor", sha=head, afp=afpg, require_snapshot=True)
+            expect("git snapshot: HEAD==sha + чистое дерево -> valid + snapshot_verified",
+                   vok["valid"] is True and vok["snapshot_verified"] is True)
+            vwrong = build_context(g, "discount", "executor", sha="0" * 40, afp=afpg, require_snapshot=True)
+            expect("git snapshot: HEAD != sha -> valid=false (читается не тот snapshot)",
+                   vwrong["valid"] is False and vwrong["snapshot_verified"] is False)
+            (g / "app.py").write_text("# discount logic CHANGED (dirty)\n", encoding="utf-8")
+            vdirty = build_context(g, "discount", "executor", sha=head, afp=afpg, require_snapshot=True)
+            expect("git snapshot: грязное дерево -> valid=false (нельзя подписать dirty чужим SHA)",
+                   vdirty["valid"] is False)
 
     print("context_engine selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

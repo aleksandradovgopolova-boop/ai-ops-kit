@@ -63,6 +63,30 @@ shadow, execution на v1), но обязаны быть закрыты ДО б�
   context_shadow=True)` больше не инжектит демо-AFP (грузит child-политики, execution по-прежнему v1,
   default OFF, guarded). CI +1 шаг (context_engine selftest).
 
+### Fixed (v3.6.7d — Exact Snapshot & Promotion Contract: доказательная связность перед promotion)
+Ревью владельца по коду v3.6.7c: SHA передавался, но snapshot не ДОКАЗЫВАЛСЯ. Завершающая часть
+v3.6.7 (не новая фаза) — делает exact-revision binding git-доказательным и связывает evidence с SHA:
+- **Context Engine** (`tools/context_engine.py`): `verify_snapshot()` — `require_snapshot=True`
+  доказывает HEAD==committed_sha И чистое дерево ДО чтения файлов (иначе view невалиден: нельзя
+  подписать грязный worktree чужим SHA); обязательный контекст v1, потерянный (missing / запрещён
+  access-policy) -> `valid=false` (+`mandatory_excluded_access`), execution не получает неполный
+  контекст -> handoff/фикс policy; scan-границы (`SCAN_EXCLUDE_DIRS`: node_modules/dist/build/…,
+  max file size, max files) + `.gitignore`-aware исключения (иначе full-text в TS-репо заходит в
+  node_modules); orchestrated cache честно **выключен** до v3.6.8 (cache_key считается, но RetrievalCache
+  к полному view НЕ подключён — не заявляем несуществующую возможность).
+- **Runtime wiring** (`context_shadow`, `ai_ops_run`): содержимое читается из ТОЧНОГО
+  execution-worktree (`.ai/worktrees/<fid>`, HEAD==committed_sha), политики — из основного checkout;
+  реальный `v1_mandatory` (specifications+decisions) берётся из ContextBundle и передаётся в
+  orchestrator; токен-бюджет — из настоящего child `BudgetContract` (`budget_tokens_from`), а не жёсткие
+  20000; `require_snapshot=True`.
+- **Gate runtime** (`tools/gate_runtime.py`): результат несёт `tested_revision` (+реальный evidence);
+  `can_deliver(results, expected_revision)` НЕ разрешает доставку, если вердикт без tested_revision или
+  с расхождением по ревизии. (Боевое подключение к `_run_reviews` за feature-flag — по-прежнему v3.6.8.)
+- **Parallel planner** (`tools/parallel_planner.py`): duplicate package id -> `valid=false`; несловарный
+  пакет больше не роняет planner (даёт `valid=false`); `integration_gate` требует
+  `gate_report.tested_revision == package.sha` и `aggregate.tested_revision == integration_sha`; contract
+  SHA обязан быть ПОХОЖ на реальный commit/blob (hex ≥7), а не просто непустая строка.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

@@ -643,11 +643,20 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         if context_shadow:
             try:
                 import context_shadow as _cshadow
-                # v3.6.7: политики берутся у CHILD-репо (.ai/policies), НЕ демо кита; без committed_sha
-                # shadow не строится (exact-revision). afp=None -> build_shadow загрузит child-политики
-                # (нет -> deny-by-default). Полная v2-цепочка через context_engine.
+                # v3.6.7d: содержимое читаем из ТОЧНОГО execution-worktree (HEAD==committed_sha,
+                # require_snapshot доказывает это), политики — из основного checkout (.ai/policies).
+                # Обязательный контекст v1 (spec/decisions) берём из реального ContextBundle и передаём
+                # в orchestrator — иначе инвариант «mandatory не потерян» не проверяется. Демо-политик
+                # в runtime нет (afp=None -> child-политики / deny-by-default). Execution по-прежнему v1.
+                _wt = child_root / ".ai" / "worktrees" / fid
+                _content_root = _wt if _wt.is_dir() else child_root
+                _mandatory = None
+                if bundle:
+                    _inc = bundle.get("included", {})
+                    _mandatory = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
                 rep["context_shadow"] = _cshadow.build_shadow(
-                    child_root, task_text, role="executor", sha=rep.get("committed_sha"))
+                    _content_root, task_text, role="executor", sha=rep.get("committed_sha"),
+                    policy_root=child_root, v1_mandatory=_mandatory, require_snapshot=True)
             except Exception:  # noqa: BLE001 — shadow не должен ронять прогон
                 rep["context_shadow"] = {"error": "shadow build failed (не влияет на execution=v1)"}
         if payload:

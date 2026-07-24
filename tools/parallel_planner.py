@@ -66,8 +66,13 @@ def can_parallel(pa, pb):
 
 
 def plan(wg: dict) -> dict:
-    pkgs = wg.get("packages", []) or []
-    by_id = {p["id"]: p for p in pkgs if isinstance(p, dict) and p.get("id")}
+    raw = (wg or {}).get("packages", []) or []
+    # v3.6.7d: несловарный пакет НЕ должен ронять planner до формирования valid=false
+    non_dict = [p for p in raw if not isinstance(p, dict)]
+    pkgs = [p for p in raw if isinstance(p, dict)]
+    id_list = [p.get("id") for p in pkgs if p.get("id")]
+    dup_ids = sorted({i for i in id_list if id_list.count(i) > 1})
+    by_id = {p["id"]: p for p in pkgs if p.get("id")}
     ids = list(by_id)
     independent = [p for p in pkgs if not (p.get("depends_on"))]
     dependent = [p for p in pkgs if p.get("depends_on")]
@@ -120,7 +125,11 @@ def plan(wg: dict) -> dict:
 
     # v3.6.7: планировщик САМ блокирует невалидный WorkGraph (перед превращением в executor)
     errors = []
-    if any(not (isinstance(p, dict) and p.get("id")) for p in pkgs):
+    if non_dict:
+        errors.append(f"пакет(ы) не являются объектом: {len(non_dict)} шт -> WorkGraph невалиден")
+    if dup_ids:
+        errors.append(f"дубликаты package id: {dup_ids} -> WorkGraph невалиден")
+    if any(not p.get("id") for p in pkgs):
         errors.append("есть пакет без id")
     for p in pkgs:
         if not isinstance(p, dict):
@@ -164,17 +173,24 @@ def _block(errors, integration_sha_required=False):
             "errors": list(errors), "reason": "fail-closed: " + "; ".join(errors)}
 
 
+def _sha_like(s):
+    """Похоже ли на реальный git commit/blob SHA (hex, >= 7 симв) — не просто непустая строка."""
+    return isinstance(s, str) and len(s) >= 7 and all(c in "0123456789abcdefABCDEF" for c in s)
+
+
 def integration_gate(expected_packages, package_results, shared_contracts=None, contract_shas=None,
-                     conflicts=0, base_moved=False, aggregate=None):
+                     conflicts=0, base_moved=False, aggregate=None, integration_sha=None):
     """v3.6.7 РАНТАЙМ-СТРОГОЕ fan-in решение (перед живым parallel-executor).
 
     Отличия от `integration_decision` (fail-closed по всем краям, найденным ревью):
       - результаты обязаны ПОКРЫВАТЬ ТОЧНЫЙ набор пакетов WorkGraph (нет пропущенных/лишних);
       - пустой набор -> block;
-      - каждый результат ДОКАЗАТЕЛЬНЫЙ: dict со status + SHA пакета + gate_report(all_pass);
-        голая строка ('pass') НЕ принимается (нет доказательства);
-      - общий контракт обязан иметь ЗАФИКСИРОВАННЫЙ contract SHA (не просто «перечислен»);
-      - aggregate — РЕАЛЬНЫЙ GateReport (dict с all_pass), не голый bool от вызывающего.
+      - каждый результат ДОКАЗАТЕЛЬНЫЙ: dict со status + SHA пакета + gate_report(all_pass), и
+        (v3.6.7d) `gate_report.tested_revision == package.sha` (evidence привязан к ревизии пакета);
+      - общий контракт обязан иметь ЗАФИКСИРОВАННЫЙ contract SHA, ПОХОЖИЙ на реальный commit/blob
+        (v3.6.7d: не просто непустая строка);
+      - aggregate — РЕАЛЬНЫЙ GateReport (dict с all_pass), и (v3.6.7d) `aggregate.tested_revision ==
+        integration_sha` — иначе PR не открывается (evidence не относится к integration-SHA).
     """
     expected = set(expected_packages or [])
     got = dict(package_results or {})
@@ -187,7 +203,7 @@ def integration_gate(expected_packages, package_results, shared_contracts=None, 
         errors.append(f"неполный набор результатов: нет пакетов {sorted(missing)}")
     if extra:
         errors.append(f"лишние результаты вне WorkGraph: {sorted(extra)}")
-    # каждый результат должен быть доказательным (SHA + gate_report)
+    # каждый результат должен быть доказательным (SHA + gate_report, привязанный к ревизии пакета)
     for pid, r in got.items():
         if not isinstance(r, dict):
             errors.append(f"{pid}: результат не доказательный (нет SHA/gate_report, голое '{r}')")
@@ -197,12 +213,18 @@ def integration_gate(expected_packages, package_results, shared_contracts=None, 
         gr = r.get("gate_report")
         if not (isinstance(gr, dict) and "all_pass" in gr):
             errors.append(f"{pid}: нет gate_report(all_pass)")
-        elif r.get("status") == "pass" and gr.get("all_pass") is not True:
-            errors.append(f"{pid}: status=pass, но gate_report.all_pass != true")
-    # общий контракт обязан быть зафиксирован (contract SHA)
+        else:
+            if r.get("status") == "pass" and gr.get("all_pass") is not True:
+                errors.append(f"{pid}: status=pass, но gate_report.all_pass != true")
+            if r.get("sha") and gr.get("tested_revision") != r.get("sha"):
+                errors.append(f"{pid}: gate_report.tested_revision != package sha (evidence не на ревизии пакета)")
+    # общий контракт обязан быть зафиксирован реальным contract SHA
     for c in shared_contracts or []:
-        if not (contract_shas or {}).get(c):
+        cs = (contract_shas or {}).get(c)
+        if not cs:
             errors.append(f"общий контракт {c} НЕ зафиксирован (нет contract SHA)")
+        elif not _sha_like(cs):
+            errors.append(f"общий контракт {c}: contract SHA '{cs}' не похож на реальный commit/blob SHA")
     if errors:
         return _block(errors)
 
@@ -216,13 +238,18 @@ def integration_gate(expected_packages, package_results, shared_contracts=None, 
         return {"proceed": False, "integration_sha_required": True, "open_pr": False,
                 "revalidation_required": True, "errors": [],
                 "reason": "base сдвинулась -> integration revalidation (fresh run от новой базы)"}
-    agg_ok = isinstance(aggregate, dict) and aggregate.get("all_pass") is True
     if not isinstance(aggregate, dict):
         return {"proceed": True, "integration_sha_required": True, "open_pr": False, "errors": [],
                 "reason": "aggregate не РЕАЛЬНЫЙ GateReport (голый bool/None) -> integration-SHA есть, PR НЕ открывается"}
+    # aggregate evidence обязан относиться к integration-SHA
+    rev_ok = integration_sha is None or aggregate.get("tested_revision") == integration_sha
+    agg_ok = aggregate.get("all_pass") is True and rev_ok
+    if not rev_ok:
+        return {"proceed": True, "integration_sha_required": True, "open_pr": False, "errors": [],
+                "reason": "aggregate.tested_revision != integration_sha -> evidence не на integration-SHA, PR НЕ открывается"}
     return {"proceed": True, "integration_sha_required": True, "open_pr": bool(agg_ok), "errors": [],
-            "reason": ("aggregate GateReport green -> новый integration-SHA + один draft PR" if agg_ok
-                       else "aggregate GateReport НЕ green -> integration-SHA есть, PR НЕ открывается")}
+            "reason": ("aggregate GateReport green на integration-SHA -> новый integration-SHA + один draft PR"
+                       if agg_ok else "aggregate GateReport НЕ green -> integration-SHA есть, PR НЕ открывается")}
 
 
 def selftest():
@@ -309,53 +336,72 @@ def selftest():
     expect("integration_decision({}) -> block (fail-closed на пустоте)",
            integration_decision({})["proceed"] is False)
 
-    # integration_gate: доказательный happy-path
+    # integration_gate: доказательный happy-path (evidence привязан к SHA пакета и integration-SHA)
+    INT = "1234567abc"
+    CSHA = "c0ffee0abc"
     good_results = {
-        "api": {"status": "pass", "sha": "aaa111", "gate_report": {"all_pass": True}},
-        "ui": {"status": "pass", "sha": "bbb222", "gate_report": {"all_pass": True}}}
+        "api": {"status": "pass", "sha": "aaa1110", "gate_report": {"all_pass": True, "tested_revision": "aaa1110"}},
+        "ui": {"status": "pass", "sha": "bbb2220", "gate_report": {"all_pass": True, "tested_revision": "bbb2220"}}}
     g = integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
-                         contract_shas={"OrderContract": "c0ffee"},
-                         aggregate={"all_pass": True})
-    expect("integration_gate: полный доказательный набор + контракт зафиксирован + aggregate green -> PR",
+                         contract_shas={"OrderContract": CSHA},
+                         aggregate={"all_pass": True, "tested_revision": INT}, integration_sha=INT)
+    expect("integration_gate: доказательный набор + контракт-SHA + aggregate на integration-SHA -> PR",
            g["proceed"] and g["integration_sha_required"] and g["open_pr"])
-    # неполный набор -> block
+    # неполный / лишний набор -> block
     expect("integration_gate: пропущен пакет ui -> block",
-           integration_gate(["api", "ui"], {"api": good_results["api"]},
-                            aggregate={"all_pass": True})["proceed"] is False)
-    # лишний пакет -> block
+           integration_gate(["api", "ui"], {"api": good_results["api"]})["proceed"] is False)
     expect("integration_gate: лишний пакет вне WG -> block",
-           integration_gate(["api"], good_results, aggregate={"all_pass": True})["proceed"] is False)
-    # голая строка (не доказательный) -> block
-    expect("integration_gate: голая строка 'pass' (нет SHA/gate_report) -> block",
-           integration_gate(["api"], {"api": "pass"}, aggregate={"all_pass": True})["proceed"] is False)
-    # нет package SHA -> block
+           integration_gate(["api"], good_results)["proceed"] is False)
+    # голая строка / нет SHA / gate_report не green -> block
+    expect("integration_gate: голая строка 'pass' -> block",
+           integration_gate(["api"], {"api": "pass"})["proceed"] is False)
     expect("integration_gate: нет package SHA -> block",
-           integration_gate(["api"], {"api": {"status": "pass", "gate_report": {"all_pass": True}}},
-                            aggregate={"all_pass": True})["proceed"] is False)
-    # status=pass, но gate_report.all_pass != true -> block
+           integration_gate(["api"], {"api": {"status": "pass", "gate_report": {"all_pass": True}}})["proceed"] is False)
     expect("integration_gate: status=pass но gate_report не green -> block",
-           integration_gate(["api"], {"api": {"status": "pass", "sha": "x", "gate_report": {"all_pass": False}}},
-                            aggregate={"all_pass": True})["proceed"] is False)
-    # общий контракт не зафиксирован -> block
+           integration_gate(["api"], {"api": {"status": "pass", "sha": "aaa1110",
+                            "gate_report": {"all_pass": False, "tested_revision": "aaa1110"}}})["proceed"] is False)
+    # v3.6.7d: gate_report.tested_revision != package sha -> block
+    expect("integration_gate: gate_report.tested_revision != package sha -> block (evidence не на ревизии)",
+           integration_gate(["api"], {"api": {"status": "pass", "sha": "aaa1110",
+                            "gate_report": {"all_pass": True, "tested_revision": "WRONG99"}}})["proceed"] is False)
+    # общий контракт не зафиксирован / не sha-like -> block
     expect("integration_gate: общий контракт без contract SHA -> block",
            integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
-                            contract_shas={}, aggregate={"all_pass": True})["proceed"] is False)
-    # aggregate — голый bool (не GateReport) -> integration есть, PR НЕ открывается
+                            contract_shas={})["proceed"] is False)
+    expect("integration_gate: contract SHA не похож на реальный commit/blob -> block",
+           integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
+                            contract_shas={"OrderContract": "nope"})["proceed"] is False)
+    # aggregate голый bool -> proceed, PR НЕ открыт
     gbool = integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
-                             contract_shas={"OrderContract": "c0ffee"}, aggregate=True)
+                             contract_shas={"OrderContract": CSHA}, aggregate=True)
     expect("integration_gate: aggregate голый bool -> proceed, но PR НЕ открыт",
            gbool["proceed"] is True and gbool["open_pr"] is False)
-    # merge conflict / base moved на доказательном наборе
+    # v3.6.7d: aggregate.tested_revision != integration_sha -> PR НЕ открыт
+    gwrong = integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
+                              contract_shas={"OrderContract": CSHA},
+                              aggregate={"all_pass": True, "tested_revision": "OTHER99"}, integration_sha=INT)
+    expect("integration_gate: aggregate evidence на другом SHA -> proceed, PR НЕ открыт",
+           gwrong["proceed"] is True and gwrong["open_pr"] is False)
+    # merge conflict / base moved
     expect("integration_gate: merge conflict -> block",
            integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
-                            contract_shas={"OrderContract": "c"}, conflicts=1)["proceed"] is False)
+                            contract_shas={"OrderContract": CSHA}, conflicts=1)["proceed"] is False)
     gbm = integration_gate(["api", "ui"], good_results, shared_contracts=["OrderContract"],
-                           contract_shas={"OrderContract": "c"}, base_moved=True)
+                           contract_shas={"OrderContract": CSHA}, base_moved=True)
     expect("integration_gate: base moved -> revalidation, PR не открыт",
            gbm.get("revalidation_required") is True and gbm["open_pr"] is False)
-    # пустой ожидаемый набор -> block
     expect("integration_gate: пустой WorkGraph -> block",
-           integration_gate([], {}, aggregate={"all_pass": True})["proceed"] is False)
+           integration_gate([], {})["proceed"] is False)
+
+    # v3.6.7d: duplicate package id -> plan.valid=False (раньше молча дедуплицировалось)
+    dup = plan({"packages": [{"id": "a", "write_scope": ["a/**"]},
+                             {"id": "a", "write_scope": ["b/**"]}]})
+    expect("дубликат package id -> plan.valid=False", dup["valid"] is False
+           and any("дубликат" in e for e in dup["errors"]))
+    # v3.6.7d: несловарный пакет НЕ роняет planner, а даёт valid=False
+    nd = plan({"packages": ["not-a-dict", {"id": "a", "write_scope": ["a/**"]}]})
+    expect("несловарный пакет -> plan.valid=False (без исключения)",
+           nd["valid"] is False and any("не являются объектом" in e for e in nd["errors"]))
 
     print("parallel_planner selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

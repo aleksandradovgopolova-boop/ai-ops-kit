@@ -31,7 +31,20 @@ import gate_result_v2    # noqa: E402
 
 
 def decide(gate, signals, verdicts, evidence_status="not_run", max_retries=1,
-           blockers=None, owner="reviewer", review_mode="read-only"):
+           blockers=None, owner="reviewer", review_mode="read-only",
+           tested_revision=None, evidence=None):
+    """Вернуть (v2_result, meta). v3.6.7d: результат несёт tested_revision (ревизия, на которой
+    вынесен вердикт) и реальный evidence — иначе can_deliver не сможет привязать вердикт к SHA."""
+    r, meta = _decide_raw(gate, signals, verdicts, evidence_status, max_retries,
+                          blockers, owner, review_mode)
+    r["tested_revision"] = tested_revision
+    if evidence:
+        r["evidence"] = list(evidence)
+    return r, meta
+
+
+def _decide_raw(gate, signals, verdicts, evidence_status="not_run", max_retries=1,
+                blockers=None, owner="reviewer", review_mode="read-only"):
     """Вернуть (v2_result, meta) по последовательности вердиктов ревьюера."""
     ui = gate in gate_policy.UI_GATES
     dec = {d["gate"]: d for d in gate_policy.candidate_policy(signals)}.get(gate) if ui else None
@@ -96,14 +109,25 @@ def _blocking_abstain(gate, evidence_mode, owner, review_mode, reason):
                blockers=[f"human handoff required @ {gate}: {reason}"])
 
 
-def can_deliver(results):
+def can_deliver(results, expected_revision=None):
     """AND по всем гейтам: доставка разрешена, только если КАЖДЫЙ гейт delivery_allowed. Возвращает
-    (bool, blockers). Blocking-abstain(pending_human) и fail держат доставку закрытой."""
+    (bool, blockers). Blocking-abstain(pending_human) и fail держат доставку закрытой.
+
+    v3.6.7d: если задан expected_revision — вердикт без tested_revision или с РАСХОЖДЕНИЕМ по ревизии
+    НЕ разрешает доставку (нельзя принять вердикт, вынесенный на другом/неизвестном SHA)."""
     blockers = []
     for r in results or []:
         if not r.get("delivery_allowed", False):
             tag = "pending_human" if r.get("resolution") == "pending_human" else r.get("status")
             blockers.append(f"{r.get('gate')}: {tag}")
+            continue
+        if expected_revision is not None:
+            tr = r.get("tested_revision")
+            if not tr:
+                blockers.append(f"{r.get('gate')}: вердикт без tested_revision (не привязан к SHA)")
+            elif tr != expected_revision:
+                blockers.append(f"{r.get('gate')}: tested_revision {str(tr)[:12]} != ожидаемый "
+                                f"{str(expected_revision)[:12]} (вердикт на другом SHA)")
     return (len(blockers) == 0), blockers
 
 
@@ -187,6 +211,19 @@ def selftest():
     okd2, bl2 = can_deliver([p, ba])
     expect("can_deliver: blocking-abstain среди гейтов -> доставка ЗАПРЕЩЕНА",
            okd2 is False and any("pending_human" in b for b in bl2))
+
+    # v3.6.7d: tested_revision привязка
+    rr, _ = decide("ux_review", uf, ["pass"], tested_revision="sha1", evidence=["reviewed @ sha1"])
+    expect("decide стампит tested_revision + evidence",
+           rr["tested_revision"] == "sha1" and rr["evidence"] == ["reviewed @ sha1"])
+    okr, _ = can_deliver([rr], expected_revision="sha1")
+    expect("can_deliver: tested_revision совпадает с ожидаемым -> разрешено", okr is True)
+    okr2, blr = can_deliver([rr], expected_revision="sha2")
+    expect("can_deliver: tested_revision != ожидаемый -> ЗАПРЕЩЕНО (вердикт на другом SHA)",
+           okr2 is False and any("другом SHA" in b for b in blr))
+    okr3, blr3 = can_deliver([p], expected_revision="sha1")
+    expect("can_deliver: вердикт без tested_revision при заданном expected -> ЗАПРЕЩЕНО",
+           okr3 is False and any("не привязан к SHA" in b for b in blr3))
     # not_applicable по политике (ui_impact=none -> UI-гейт не применяется)
     r, m = decide("ux_review", {"ui_impact": "none"}, ["warn"])
     expect("ui_impact=none -> not_applicable, валиден",
