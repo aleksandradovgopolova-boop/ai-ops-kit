@@ -2,7 +2,27 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.6.0-rc — Semantic Context Engine: Repository Graph Lite
+## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
+
+Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана
+детерминированная реализация Context Engine + governance-runtime, БЕЗ vector-DB / scheduler /
+MCP-сервера (строго по границе владельца):
+- **retrieval-цепочка** (v3.6.0–3): RepoGraph Lite → full-text + role/package views → cache → Bench →
+  semantic-lite (sparse TF-IDF, не эмбеддинги);
+- **Retrieval Integrity** (v3.6.4): все 6 находок ревью закрыты — P0 cache access-leak (ключ несёт
+  идентичность AccessFilterPolicy), lookup-до-retrieval, exact-revision binding, data-classification
+  hardening (marker advisory-only), shadow-wiring default-OFF, Bench 16 кейсов;
+- **GateResult v2 runtime** (v3.6.5): abstain → targeted-retry → human-handoff;
+- **bounded parallel-2 planner** (v3.6.5): все обязательные fan-in сценарии (parallel/serialize/
+  contract-first/one-fail/both-pass/conflict/base-moved/aggregate-fail);
+- **read-only Storybook-адаптер** (v3.6.6): каталог / related-stories (не MCP-сервер).
+
+Execution по-прежнему на `context_compiler` v1 (новый retrieval в shadow, default OFF — утечек в проде
+нет). **ПОЛНОЕ закрытие v3.6** (живой parallel-run с worktrees+PR, реальный TS/React child со
+Storybook + один настоящий draft PR) — после ротации провайдер-ключа и Node/React-тулчейна (внешний
+гейт). Это веха, не полное закрытие фазы.
+
+## [3.6.0–3.6.4] — 2026-07-25 — Semantic Context Engine: Repository Graph Lite → Retrieval Integrity
 
 Начата фаза v3.6 — ПЕРВАЯ РЕАЛИЗАЦИЯ поверх контрактов (не декларация). Первый инкремент — первая
 НЕ-vector ступень retrieval-цепочки `ContextArchitectureDecision`: детерминированный граф репо.
@@ -87,7 +107,7 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   Дальше v3.6.5 (GateResult v2 runtime + bounded parallel-2 execution), v3.6.6 (Storybook MCP) →
   закрыть v3.6 + version-bump.
 
-## [Unreleased] — v3.6.5-rc — Governed Parallel Execution (GateResult v2 runtime + planner)
+## [3.6.5–3.6.6] — 2026-07-25 — Governed Parallel Execution + read-only Storybook
 
 ### Added (v3.6.5 часть 1 — GateResult v2 runtime decision-слой)
 - `tools/gate_runtime.py` — доводит `GateResult v2` до РАБОЧЕЙ логики: последовательность вердиктов

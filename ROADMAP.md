@@ -622,7 +622,16 @@ WorkPackage Executor; `active-work` с affected-areas/shared-contracts/dependenc
   - v3.5.1 ✅ Loop/Iteration trace + no-progress/repeated-failure detection (LoopTrace);
   - v3.5.2 ✅ WorkGraph/integration trace + parallel-vs-sequential (IntegrationTrace, integration-SHA инвариант);
   - v3.5.3 ✅ post-release readout (PostReleaseReadout: DeliveryReceipt→CI→Health→evolution→решение).
-- **v3.6 — Semantic Context Engine + Governed Parallel Execution + Storybook MCP**: полная реализация.
+- **v3.6 — Semantic Context Engine + Governed Parallel Execution + Storybook MCP** — **OFFLINE-веха
+  поставлена (v3.6.6, 2026-07-25)**; полное закрытие фазы — за живой квалификацией (внешний гейт).
+  OFFLINE-scope ✅: retrieval-цепочка (RepoGraph Lite → full-text/role-views → cache → Bench →
+  semantic-lite, v3.6.0–3) + Retrieval Integrity (6 находок ревью закрыты, v3.6.4) + GateResult v2
+  runtime (abstain/retry/handoff) + bounded parallel-2 planner (все fan-in сценарии, v3.6.5) +
+  read-only Storybook-адаптер (v3.6.6). Execution остаётся на `context_compiler` v1 (retrieval в
+  shadow, default OFF). ОСТАЁТСЯ до полного закрытия v3.6 (живой гейт): реальный parallel-run
+  (worktrees+модель+PR), TS/React child со Storybook + один настоящий draft PR, промоушен retrieval из
+  shadow в боевой путь — после ротации провайдер-ключа + Node/React-тулчейна.
+  Полная реализация (план фазы):
   Context Engine v2 строгой последовательностью (`metadata → Repository Graph Lite → full-text →
   role/package views → cache → retrieval Bench → semantic fallback → incremental index` — НЕ начинаем
   с vector-DB). Parallel execution (WorkGraph planner → safety classification → isolated package
