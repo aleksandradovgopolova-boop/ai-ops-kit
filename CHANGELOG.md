@@ -52,13 +52,20 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   идентичность репо — нормализованный путь / `repo_id`, не голое имя каталога (два репо с одинаковым
   именем не делят ключ). `build_view` несёт `repo`/`sha` + cache_key с hash(allowed_classes).
 
+### Fixed (v3.6.4 — data-classification hardening, trust-фикс #4)
+- `tools/data_classification.py` + `schemas/data-classification-policy.schema.json` +
+  `examples/data-classification-demo/DCP-001` — авторитетная классификация: приоритет
+  policy(path→class) → scanner(raise-only до secret) → inline marker (advisory, ТОЛЬКО повышает).
+  Недоверенный `data-class: public` в README больше НЕ понижает класс (marker проигрывает base в
+  max по строгости); longest-prefix policy wins; `strict_unknown` → неизвестный путь = confidential
+  (deny), а не internal (strict побеждает default_class). `context_retrieval.classify` делегирует сюда
+  (marker raise-only применяется в retrieval).
+
 ### Note
-- Без version-bump (rc). Нумерация: semantic-lite ушёл как v3.6.3; далее Retrieval Integrity=v3.6.4,
-  Governed Parallel=v3.6.5, Storybook MCP=v3.6.6 (сдвиг на +1 из-за semantic-инкремента).
-- ОСТАЛОСЬ в v3.6.4 (Retrieval Integrity, следующие шаги): authoritative data-classification (inline
-  marker — только advisory, не понижает класс; unknown → deny), runtime-wiring в SHADOW-режиме (v1
-  обязателен, v2 рядом), расширение Bench до 15–20 кейсов. Затем v3.6.5 (GateResult v2 runtime +
-  bounded parallel), v3.6.6 (Storybook MCP) → закрыть v3.6 + version-bump.
+- Без version-bump (rc). Нумерация: semantic-lite=v3.6.3; Retrieval Integrity=v3.6.4, Governed
+  Parallel=v3.6.5, Storybook MCP=v3.6.6.
+- ОСТАЛОСЬ в v3.6.4: runtime-wiring в SHADOW-режиме (v1 обязателен, v2 рядом, сравнение), расширение
+  Bench до 15–20 кейсов. Затем v3.6.5/v3.6.6 → закрыть v3.6 + version-bump.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 

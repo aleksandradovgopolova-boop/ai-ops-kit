@@ -26,6 +26,8 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import data_classification as _dc   # noqa: E402  (v3.6.4 авторитетная классификация)
 RETRIEVAL_INDEX_VERSION = "1"
 
 
@@ -44,12 +46,10 @@ _SECRET = re.compile(r"sk-ant-api03|sk-[A-Za-z0-9]{16,}|gho_[A-Za-z0-9]{20,}|AKI
 _DC_MARKER = re.compile(r"data-class:\s*(public|internal|confidential|secret)")
 
 
-def classify(content: str) -> str:
-    """Класс данных файла (lite): секрет по паттерну; явный маркер; иначе internal."""
-    if _SECRET.search(content):
-        return "secret"
-    m = _DC_MARKER.search(content)
-    return m.group(1) if m else "internal"
+def classify(content: str, path: str = None, policy: dict = None, strict: bool = False) -> str:
+    """v3.6.4: делегирует авторитетной классификации (policy -> scanner -> marker advisory raise-only).
+    Недоверенный inline-marker НЕ понижает класс; секрет всегда secret."""
+    return _dc.classify(content, path=path, policy=policy, strict=strict)
 
 
 def _tokens(content: str) -> int:
@@ -86,7 +86,7 @@ def role_allowed_classes(afp: dict, role: str):
 
 
 def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None,
-               repo_id=None):
+               repo_id=None, policy=None, strict=False):
     root = Path(root)
     allowed = set(allowed_classes)
     included, excl_access, excl_budget = [], [], []
@@ -97,7 +97,7 @@ def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int,
             content = f.read_text(encoding="utf-8")
         except OSError:
             continue
-        dc = classify(content)
+        dc = classify(content, path=r["file"], policy=policy, strict=strict)
         # access-filter ДО включения: секрет — никогда; класс вне allowed — исключить
         if dc == "secret" or dc not in allowed:
             excl_access.append({"file": r["file"], "data_class": dc})
