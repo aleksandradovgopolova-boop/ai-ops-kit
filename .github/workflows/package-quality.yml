@@ -129,6 +129,10 @@ jobs:
         run: |
           python3 validation/validate_regression_corpus.py --selftest
           python3 validation/validate_regression_corpus.py
+      - name: Loop trace — итерации governed-цикла + no-progress detection (selftest + demo)
+        run: |
+          python3 validation/validate_loop_trace.py --selftest
+          python3 validation/validate_loop_trace.py examples/loop-trace-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

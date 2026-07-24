@@ -17,9 +17,17 @@
   3.0.19), RC-002 PQ8-masking без openspec (environment, fixed 3.0.18), RC-003 exact-SHA evidence gap
   (context, fixed 3.1.9-rc), RC-004 git-add-A sweep (process, mitigated). Каждая — с regression-тестом/дисциплиной.
 
+### Added (v3.5.1 — Loop/Iteration trace + no-progress detection)
+- `schemas/loop-trace.schema.json` + `validation/validate_loop_trace.py` — `LoopTrace`: итерации
+  governed-цикла (привязка к `LoopPolicy` по id). `analyze()` детектит no_progress (≥2 подряд
+  итерации без улучшения `progress_value` по направлению) и repeated_failure (одна signature в ≥2
+  подряд blocked). Инвариант fail-closed: детектнут no_progress/repeated_failure → stopped_reason не
+  может быть `success` (loop застрял, не успех); success ⟺ последняя итерация success.
+  `examples/loop-trace-demo/LT-001` (реальный fix-loop: 1 гейт → 0, converged). Делает loops измеримыми.
+
 ### Note
-- Без version-bump (rc). Дальше в v3.5: Loop/Iteration + WorkGraph/integration trace, no-progress/
-  repeated-failure detection, стоимость координации, parallel-vs-sequential, post-release readout.
+- Без version-bump (rc). Дальше в v3.5: WorkGraph/integration trace, стоимость координации,
+  parallel-vs-sequential, post-release readout → закрыть v3.5.
 
 ## [3.4.5] — 2026-07-24 — Security, Permissions & Economics (v3.4 ЗАКРЫТ)
 

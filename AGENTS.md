@@ -103,6 +103,8 @@ python3 tools/model_comparison.py --selftest
 python3 tools/model_comparison.py examples/model-comparison-demo
 python3 validation/validate_regression_corpus.py --selftest
 python3 validation/validate_regression_corpus.py
+python3 validation/validate_loop_trace.py --selftest
+python3 validation/validate_loop_trace.py examples/loop-trace-demo
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest

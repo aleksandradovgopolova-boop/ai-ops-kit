@@ -1,0 +1,17 @@
+# Реальный fix-loop trace: 1 незакрытый гейт -> фикс -> 0 (converged).
+schema_version: 1
+kind: LoopTrace
+id: LT-001
+loop_policy: LP-001
+progress_direction: lower_is_better
+iterations:
+- n: 1
+  progress_value: 1
+  outcome: blocked
+  signature: ux_review warn
+- n: 2
+  progress_value: 0
+  outcome: success
+  signature: null
+stopped_reason: success
+escalated: false
