@@ -17,6 +17,7 @@ CLI:  context_retrieval.py <root> --query "kw1 kw2" --role planner [--budget N] 
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -25,6 +26,20 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
+RETRIEVAL_INDEX_VERSION = "1"
+
+
+def _repo_identity(root, repo_id=None) -> str:
+    """Устойчивая идентичность репо: явный repo_id (remote) ИЛИ нормализованный абсолютный путь —
+    НЕ голое имя каталога (два разных репо с одинаковым именем не должны делить cache-ключ)."""
+    return repo_id or str(Path(root).resolve())
+
+
+def _policy_fingerprint(afp: dict):
+    """(policy_id, content_hash) AccessFilterPolicy — смена ЛЮБОГО правила меняет hash -> инвалидация."""
+    pid = (afp or {}).get("id", "none")
+    canon = json.dumps(afp or {}, sort_keys=True, ensure_ascii=False)
+    return pid, hashlib.sha256(canon.encode("utf-8")).hexdigest()[:16]
 _SECRET = re.compile(r"sk-ant-api03|sk-[A-Za-z0-9]{16,}|gho_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY")
 _DC_MARKER = re.compile(r"data-class:\s*(public|internal|confidential|secret)")
 
@@ -70,7 +85,8 @@ def role_allowed_classes(afp: dict, role: str):
     return set()   # deny-by-default
 
 
-def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None):
+def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None,
+               repo_id=None):
     root = Path(root)
     allowed = set(allowed_classes)
     included, excl_access, excl_budget = [], [], []
@@ -92,30 +108,56 @@ def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int,
             included.append({"file": r["file"], "data_class": dc, "tokens": tk, "score": r["score"]})
         else:
             excl_budget.append({"file": r["file"], "tokens": tk})
+    allowed_h = hashlib.sha256(",".join(sorted(allowed)).encode("utf-8")).hexdigest()[:8]
     return {"kind": "context-view", "role": role, "query": query,
-            "cache_key": f"repo:{root.name}|sha:{sha or 'HEAD'}|policy:{role}|view:{role}",
+            "repo": _repo_identity(root, repo_id), "sha": sha,
+            "cache_key": (f"repo:{_repo_identity(root, repo_id)}|sha:{sha or 'DIRTY'}"
+                          f"|role:{role}|allowed:{allowed_h}|view:{role}"),
             "included": included, "excluded_access": excl_access, "excluded_budget": excl_budget,
             "total_tokens": total, "budget_tokens": budget_tokens}
 
 
 class RetrievalCache:
-    """Детерминированный кэш context-view по cache_key (repo+sha+policy+view). Одинаковый ключ на
-    неизменной ревизии -> hit (без повторного retrieval). Инвалидация — сменой sha в ключе."""
+    """Детерминированный кэш context-view (v3.6.3 trust-фикс).
+
+    ИНВАРИАНТЫ (P0 перед runtime-wiring):
+      - ключ включает ИДЕНТИЧНОСТЬ ACCESS-POLICY (id + content-hash + allowed_classes роли): смена
+        policy / ужесточение классов -> ДРУГОЙ ключ -> miss -> пере-retrieval (никогда не возвращаем
+        старый permissive view);
+      - lookup выполняется ДО retrieval: ключ считается из входов, build_view вызывается только на miss
+        (реальная экономия I/O);
+      - exact-revision binding: sha ОБЯЗАТЕЛЕН; без sha (dirty/unknown snapshot) — НЕ кэшируем;
+      - идентичность репо — нормализованный путь/repo_id, не голое имя.
+    """
 
     def __init__(self):
         self._store = {}
         self.hits = 0
         self.misses = 0
+        self.builds = 0
 
-    def get_or_build(self, root, query, role, allowed_classes, budget_tokens, sha=None):
-        probe = build_view(root, query, role, allowed_classes, budget_tokens, sha)
-        key = probe["cache_key"] + f"|q:{query}|b:{budget_tokens}"
-        if key in self._store:
+    def cache_key(self, root, query, role, afp, budget_tokens, sha, repo_id=None):
+        pid, phash = _policy_fingerprint(afp)
+        allowed = ",".join(sorted(role_allowed_classes(afp, role)))
+        return "|".join([f"repo:{_repo_identity(root, repo_id)}", f"sha:{sha}", f"policy:{pid}",
+                         f"phash:{phash}", f"allowed:{allowed}", f"role:{role}", f"q:{query}",
+                         f"b:{budget_tokens}", f"idx:{RETRIEVAL_INDEX_VERSION}"])
+
+    def get_or_build(self, root, query, role, afp, budget_tokens, sha=None, repo_id=None):
+        allowed = role_allowed_classes(afp, role)
+        if not sha:   # exact-revision binding обязателен: dirty/unknown snapshot НЕ кэшируем
+            self.misses += 1
+            self.builds += 1
+            return build_view(root, query, role, allowed, budget_tokens, sha=None, repo_id=repo_id), False
+        key = self.cache_key(root, query, role, afp, budget_tokens, sha, repo_id)
+        if key in self._store:              # lookup ДО retrieval
             self.hits += 1
             return self._store[key], True
         self.misses += 1
-        self._store[key] = probe
-        return probe, False
+        self.builds += 1
+        view = build_view(root, query, role, allowed, budget_tokens, sha=sha, repo_id=repo_id)
+        self._store[key] = view
+        return view, False
 
 
 def selftest():
@@ -164,17 +206,48 @@ def selftest():
         vd = build_view(root, "foo", "nobody", set(), 10000)
         expect("deny-by-default: allowed пуст -> included пуст", vd["included"] == [])
 
-        expect("cache_key содержит repo+sha+policy+view",
-               all(x in v["cache_key"] for x in ("repo:", "sha:", "policy:", "view:")))
+        expect("cache_key содержит repo+sha+role+view",
+               all(x in v["cache_key"] for x in ("repo:", "sha:", "role:", "view:")))
 
-        # RetrievalCache: первый вызов miss, повтор того же ключа -> hit
+        # --- v3.6.3 cache trust-fixes ---
+        def _afp(rules):
+            return {"id": "AFP-T", "kind": "AccessFilterPolicy", "rules": rules}
+        afp_wide = _afp([{"role": "executor", "allowed_classes": ["public", "internal", "confidential"]}])
+        afp_narrow = _afp([{"role": "executor", "allowed_classes": ["public", "internal"]}])
+
         cache = RetrievalCache()
-        _, hit1 = cache.get_or_build(root, "foo", "planner", {"public", "internal"}, 10000, sha="s1")
-        _, hit2 = cache.get_or_build(root, "foo", "planner", {"public", "internal"}, 10000, sha="s1")
-        expect("cache: 1-й miss, 2-й hit на том же ключе", hit1 is False and hit2 is True
-               and cache.hits == 1 and cache.misses == 1)
-        _, hit3 = cache.get_or_build(root, "foo", "planner", {"public", "internal"}, 10000, sha="s2")
-        expect("cache: смена sha -> инвалидация (miss)", hit3 is False and cache.misses == 2)
+        vw, hw = cache.get_or_build(root, "foo", "executor", afp_wide, 10000, sha="s1")
+        _, hw2 = cache.get_or_build(root, "foo", "executor", afp_wide, 10000, sha="s1")
+        expect("cache: повтор (repo+sha+policy) -> hit, retrieval не пере-строен",
+               hw is False and hw2 is True and cache.builds == 1)
+        expect("wide-policy: confidential b.py включён в view", "tools/b.py" in {i["file"] for i in vw["included"]})
+
+        # P0: ужесточение policy при тех же sha/query/budget -> НЕ старый permissive view
+        vn, hn = cache.get_or_build(root, "foo", "executor", afp_narrow, 10000, sha="s1")
+        expect("P0 access-leak: ужесточение policy -> cache MISS (не отдаёт старый view)", hn is False)
+        expect("P0: после ужесточения confidential b.py НЕ в view (нет утечки)",
+               "tools/b.py" not in {i["file"] for i in vn["included"]})
+
+        # lookup ДО retrieval: hit не пере-строит
+        builds_before = cache.builds
+        cache.get_or_build(root, "foo", "executor", afp_narrow, 10000, sha="s1")
+        expect("cache: hit НЕ пере-строит retrieval (builds не растёт)", cache.builds == builds_before)
+
+        # exact-revision binding: без sha не кэшируем
+        c2 = RetrievalCache()
+        c2.get_or_build(root, "foo", "executor", afp_wide, 10000, sha=None)
+        c2.get_or_build(root, "foo", "executor", afp_wide, 10000, sha=None)
+        expect("exact-revision: без sha НЕ кэшируем (2 miss/2 build, 0 hit)",
+               c2.misses == 2 and c2.builds == 2 and c2.hits == 0)
+
+        # repo identity: одинаковое имя каталога, разные пути -> разные ключи
+        expect("repo identity: одинаковое имя, разные пути -> разные ключи",
+               cache.cache_key("/x/proj", "foo", "executor", afp_wide, 10000, "s1")
+               != cache.cache_key("/y/proj", "foo", "executor", afp_wide, 10000, "s1"))
+        # смена sha -> другой ключ
+        expect("exact-revision: смена sha -> другой ключ",
+               cache.cache_key(root, "foo", "executor", afp_wide, 10000, "s1")
+               != cache.cache_key(root, "foo", "executor", afp_wide, 10000, "s2"))
 
     # интеграция с реальным AFP-001 (v3.4.2): роли резолвятся
     afp_p = PKG / "examples" / "access-filter-demo" / "AFP-001.yaml"

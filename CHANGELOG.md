@@ -38,10 +38,27 @@
   первым, редкое `rebate` бьёт частое `return`). Дог-фуд на ките (106 docs). Добавлен третьей
   стратегией в `retrieval_bench` (fulltext / graph_augmented / semantic_lite).
 
+### Fixed (v3.6.4 — Retrieval Integrity: cache trust-fix, P0 перед runtime-wiring)
+Найдено ревью владельца: до подключения нового retrieval к боевому runtime нужно укрепить
+identity / access-isolation / revision-binding. (Утечки в проде нет — retrieval пока НЕ управляет
+реальными прогонами: `ai_ops_run` по-прежнему зовёт старый `context_compiler`.)
+- **P0 access-leak устранён:** `RetrievalCache` ключ теперь включает идентичность AccessFilterPolicy
+  (`id` + content-hash + `allowed_classes` роли). Ужесточение политики (напр. executor теряет
+  `confidential`) при тех же sha/query/budget -> cache MISS -> пере-retrieval, а НЕ старый permissive
+  view с confidential-файлом. Доказано тестом.
+- **lookup ДО retrieval:** ключ считается из входов, `build_view()` вызывается только на miss
+  (реальная экономия I/O; hit не пере-строит — `builds`-счётчик).
+- **exact-revision binding:** `sha` обязателен; без sha (dirty/unknown snapshot) НЕ кэшируем;
+  идентичность репо — нормализованный путь / `repo_id`, не голое имя каталога (два репо с одинаковым
+  именем не делят ключ). `build_view` несёт `repo`/`sha` + cache_key с hash(allowed_classes).
+
 ### Note
-- Без version-bump (rc). Детерминированная retrieval-цепочка v3.6 по сути готова (RepoGraph →
-  full-text/role-views → cache → Bench → semantic-lite). ОСТАВШИЕСЯ пункты v3.6 — parallel scheduler,
-  Storybook MCP, vector-DB — на явном «не сейчас»-списке владельца (не строятся автономно).
+- Без version-bump (rc). Нумерация: semantic-lite ушёл как v3.6.3; далее Retrieval Integrity=v3.6.4,
+  Governed Parallel=v3.6.5, Storybook MCP=v3.6.6 (сдвиг на +1 из-за semantic-инкремента).
+- ОСТАЛОСЬ в v3.6.4 (Retrieval Integrity, следующие шаги): authoritative data-classification (inline
+  marker — только advisory, не понижает класс; unknown → deny), runtime-wiring в SHADOW-режиме (v1
+  обязателен, v2 рядом), расширение Bench до 15–20 кейсов. Затем v3.6.5 (GateResult v2 runtime +
+  bounded parallel), v3.6.6 (Storybook MCP) → закрыть v3.6 + version-bump.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
