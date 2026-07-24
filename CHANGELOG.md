@@ -2,11 +2,20 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.3.0-rc — Product Learning (интеграция с Research)
+## [3.3.1] — 2026-07-24 — Product Learning (v3.3.0–3.3.1) + Release Alignment
 
-Следующий класс: связать research-решения с продуктовыми исходами. Строится НАД research-контуром
-(потребляет `DecisionPackage` по id, слабой ссылкой), не трогая его схемы/валидаторы/данные —
-research-контур управляется параллельно.
+**Release Alignment** (служебный инкремент, без новых механизмов): источник истины синхронизирован —
+`VERSION` = `CHANGELOG` = `ROADMAP` = фактический HEAD. `VERSION` 3.1.8 → **3.3.1** (RC-канал ушёл
+вперёд кода, официальная версия отставала). v3.1 закрыт (Execution Kernel qualified; внешне-gated
+green-path сценарии — rolling evidence, не ворота roadmap). v3.2 первый проход отмечен выполненным.
+v3.3 зафиксирована как текущая фаза. Старая лестница v3.1.10–v3.1.12 удалена, содержимое перенесено:
+model comparison → v3.4; regression corpus/failure taxonomy → v3.5; fast-forward integration
+revalidation → v3.6. Добавлен раздел ROADMAP «Post-v3.2 Operational Architecture Backbone».
+Напоминание: засвеченный `ANTHROPIC_API_KEY` ротировать в консоли до следующих живых запусков.
+
+Следующий класс (Product Learning): связать research-решения с продуктовыми исходами. Строится НАД
+research-контуром (потребляет `DecisionPackage` по id, слабой ссылкой), не трогая его схемы/валидаторы/
+данные — research-контур управляется параллельно.
 
 ### Added
 - `schemas/feature-learning.schema.json` + `validation/validate_feature_learning.py` —
@@ -23,7 +32,7 @@ research-контур управляется параллельно.
   `RR-`/`DP-`/`feature:`-ссылки — слабые (research/продукт управляются иначе), не резолвятся. При
   поломке любого реестра — честно «почините сначала». selftest + реальный прогон в CI.
 
-## [Unreleased] — v3.2.0-rc — Architecture, Product & UI Governance (groundwork)
+## [3.2.4] — 2026-07-24 — Architecture, Product & UI Governance (первый проход выполнен)
 
 Начат следующий этаж системы: управленческий слой поверх исполнения. Первый инкремент — контракт
 архитектурных решений + UI Definition of Done, связанные с UI-таксономией (`gate_policy.ui_impact`)
@@ -64,7 +73,7 @@ research-контур управляется параллельно.
 - Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —
   после закрытия живой Phase B квалификации (нужен сильный провайдер-ключ).
 
-## [Unreleased] — v3.1.9-rc — Exact-SHA UI Evidence (trust-фикс перед живой UI-квалификацией)
+## [3.1.9] — 2026-07-24 — Exact-SHA UI Evidence + закрытие v3.1
 
 Закрыт реальный trust-разрыв калиброванного enforcement (v3.1.8): UI-evidence собиралось в
 контроллере ДО реализации, из основного checkout, без commit_sha и без changed_files. Из-за этого
