@@ -1,0 +1,34 @@
+# Data-residency: секреты не в облако, confidential не в external-cloud. Deny-by-default.
+schema_version: 1
+kind: ProviderResidencyPolicy
+id: PRP-001
+default_deny: true
+rules:
+- data_class: public
+  allowed_provider_classes:
+  - external-cloud
+  - ru-cloud
+  - on-premise
+  - configurable
+  max_retention: standard
+  human_approval: false
+- data_class: internal
+  allowed_provider_classes:
+  - external-cloud
+  - ru-cloud
+  - on-premise
+  - configurable
+  max_retention: ephemeral
+  human_approval: false
+- data_class: confidential
+  allowed_provider_classes:
+  - ru-cloud
+  - on-premise
+  - configurable
+  max_retention: ephemeral
+  human_approval: false
+- data_class: secret
+  allowed_provider_classes:
+  - on-premise
+  max_retention: zero
+  human_approval: true

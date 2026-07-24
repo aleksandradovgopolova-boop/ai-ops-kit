@@ -1,0 +1,8 @@
+# Capability-scope пакета api (WG-001): least-privilege, без network/execution.
+schema_version: 1
+kind: PackageCapabilityScope
+id: PCS-001
+work_graph: WG-001
+package: api
+allowed_permissions: [read-only, local, controlled-write]
+human_approval_for: []

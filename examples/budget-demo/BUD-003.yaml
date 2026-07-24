@@ -1,0 +1,16 @@
+# Package-бюджет (WorkGraph-пакет): исчерпание -> эскалация к человеку, а не тихий провал.
+schema_version: 1
+kind: BudgetContract
+id: BUD-003
+scope: package
+scope_ref: "api"
+limits:
+  max_model_calls: 20
+  max_iterations: null
+  max_tokens: 150000
+  max_cost_usd: null
+  max_wall_seconds: null
+on_exhaustion: escalate
+hard: true
+accounting: "per-package run_cost агрегат (v3.5 добавит package-trace)"
+enforced_by: "tools/budget.py Budget на пакет (workpackage_executor)"

@@ -2,6 +2,85 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.4.5] — 2026-07-24 — Security, Permissions & Economics (v3.4 ЗАКРЫТ)
+
+Фаза v3.4 закрыта пятью аддитивными инкрементами. VERSION 3.3.3 → **3.4.5** (закрытие фазы —
+release-точка, как v3.3.3). Три инварианта безопасности/экономики + residency + учёт + сравнение
+моделей — всё контрактами/валидаторами, CI-зелёно.
+
+### Added (v3.4.5 — model comparison, замыкает фазу)
+- `schemas/model-bench-result.schema.json` + `tools/model_comparison.py` — `ModelBenchResult`
+  (per-model quality из Bench Lite/живых прогонов + economics из cost_account) и safety-first
+  сравнение по task-tier. **Главное правило: модель с `false_green>0` дисквалифицируется** (safety
+  over economy — дёшево+быстро+«качественно», но ложный green = не рекомендуется никогда); среди
+  безопасных ранжирование pass-rate↓/false_fail↑/cost↑/latency↑; все небезопасны → рекомендации нет.
+  `examples/model-comparison-demo/` — РЕАЛЬНЫЕ замеры DeepSeek (QUICK green; ENGINEERING fail-closed,
+  false_green=0) — данные для выбора модели, не фабрикация.
+
+### Итог фазы v3.4 (инварианты выражены контрактами)
+- v3.4.0 BudgetContract — никакой scope без бюджета;
+- v3.4.1 PackageCapabilityScope — никакой package без capability-scope (least-privilege);
+- v3.4.2 AccessFilterPolicy — никакой retrieval без access-filter (deny-by-default, секреты вне context);
+- v3.4.3 ProviderResidencyPolicy — секреты не в облако, confidential не в external-cloud;
+- v3.4.4 cost accounting — spent vs budget по scope, audit'уемо;
+- v3.4.5 model comparison — safety-first выбор модели.
+
+**v3.4 ЗАКРЫТ.** Дальше — v3.5 (Observability, Regression Corpus & Evolution Loops).
+
+## [3.4.0..3.4.4] — 2026-07-24 — Security, Permissions & Economics (инкременты фазы)
+
+Начата фаза v3.4. Первый инкремент — экономика: декларативный `BudgetContract` над существующим
+рантайм-энфорсером (`tools/budget.py`) и учётом расхода (trace `run_cost`). Активирует инвариант
+«никакой scope без бюджета» для run/loop/package/work_graph.
+
+### Added
+- `schemas/budget-contract.schema.json` + `validation/validate_budget_contract.py` — `BudgetContract`:
+  scope (run/loop/package/work_graph) + scope_ref + limits (≥1 из max_model_calls/max_iterations/
+  max_tokens/max_cost_usd/max_wall_seconds) + on_exhaustion (fail_closed/escalate/degrade) + hard +
+  accounting + `enforced_by` (экономика ДОЛЖНА быть enforced, не только объявлена). Инварианты:
+  ≥1 граница; `hard=true` несовместим с `degrade`; scope_ref согласован (loop→LP-NNN, work_graph→WG-NNN).
+- `examples/budget-demo/` — реальные BudgetContract'ы (loop BUD-001 для fix-loop LP-001; run BUD-002;
+  package BUD-003) c привязкой к `tools/budget.py`. Прогон в CI.
+
+### Added (v3.4.1 — capability permissions, package scope)
+- `schemas/package-capability-scope.schema.json` + `validation/validate_capability_scope.py` —
+  `PackageCapabilityScope`: пакет WorkGraph → allowed_permissions (уровни как `tools.yaml`
+  permission_level: read-only/local/controlled-write/network/execution). Least-privilege: network/
+  execution требуют `justification`. Инвариант «никакой package без capability-scope» — проверка
+  ПОКРЫТИЯ: каждый пакет WorkGraph имеет ровно один PCS.
+- `examples/capability-demo/` — PCS-001/002/003 (api/ui/wiring для WG-001), полное покрытие,
+  least-privilege (без network/execution). Прогон в CI.
+
+### Added (v3.4.2 — access-filter, замыкает 3 инварианта фазы)
+- `schemas/access-filter-policy.schema.json` + `validation/validate_access_filter.py` —
+  `AccessFilterPolicy`: фильтр доступа ДО retrieval (привязан к `CAD.access_filter_before_retrieval`).
+  Инварианты: `filter_stage=before_retrieval` (пост-фильтрация запрещена); `default_deny=true`
+  (allow-list); правило для КАЖДОЙ роли (никакой retrieval без access-filter); класс `secret` НЕ
+  допускается ни в одном allowed_classes (секреты не входят в context). `examples/access-filter-demo/AFP-001`.
+- **Три инварианта фазы v3.4 выражены контрактами:** никакой scope без бюджета (BudgetContract) ·
+  никакой package без capability-scope (PackageCapabilityScope) · никакой retrieval без access-filter
+  (AccessFilterPolicy). Естественная точка промежуточного релиза v3.4.
+
+### Added (v3.4.3 — data-residency / provider retention)
+- `schemas/provider-residency-policy.schema.json` + `validation/validate_provider_residency.py` —
+  `ProviderResidencyPolicy`: enforceable data-residency поверх `providers.yaml confidentiality_class`.
+  Правило на класс данных → allowed_provider_classes + max_retention + human_approval. Жёсткие
+  инварианты: `secret` ⊆ {on-premise} + retention=zero (секреты не в облако); `confidential` не в
+  external-cloud + retention ∈ {zero,ephemeral}. `route_allowed()` кросс-проверяет маршрут против
+  реального `registry/providers.yaml` (10 провайдеров: ни один не-on-premise не принимает secret;
+  6 external-cloud отвергают confidential). `examples/residency-demo/PRP-001`.
+
+### Added (v3.4.4 — cost accounting)
+- `tools/cost_account.py` — сверка расхода (Trace v0.2 `run_cost`) с `BudgetContract` по scope.
+  Маппинг calls/tokens/cost_usd_est/latency_s → max_model_calls/max_tokens/max_cost_usd/
+  max_wall_seconds (+ iterations). verdict within_budget/exhausted/over по измерениям. Честность:
+  cost не измерен (cost_usd_est=None) → measured=false, не выносит over по стоимости. Делает бюджет
+  audit'уемым; готовит агрегацию для model-comparison. selftest против реальных budget-demo контрактов.
+
+### Note
+- Без version-bump (rc). Дальше в v3.4: model comparison (перенос из старого v3.1.11) → закрыть v3.4 +
+  version-bump (как v3.3.3 на закрытии фазы).
+
 ## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ
 
 Финальный инкремент фазы v3.3. `FeatureLearning` расширен completion-семантикой; фаза Product

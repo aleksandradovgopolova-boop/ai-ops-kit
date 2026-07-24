@@ -1,0 +1,38 @@
+# Access-filter для CAD-001: deny-by-default, per-role classes, секреты вне context.
+schema_version: 1
+kind: AccessFilterPolicy
+id: AFP-001
+context_architecture: CAD-001
+data_classes:
+- public
+- internal
+- confidential
+- secret
+filter_stage: before_retrieval
+default_deny: true
+rules:
+- role: planner
+  allowed_classes:
+  - public
+  - internal
+- role: executor
+  allowed_classes:
+  - public
+  - internal
+  - confidential
+- role: ui_reviewer
+  allowed_classes:
+  - public
+  - internal
+- role: security_reviewer
+  allowed_classes:
+  - public
+  - internal
+  - confidential
+- role: integration
+  allowed_classes:
+  - public
+  - internal
+  - confidential
+secret_handling: секреты маскируются security-scan'ом и НИКОГДА не входят в context
+  ни для одной роли

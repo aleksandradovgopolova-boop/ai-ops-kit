@@ -1,0 +1,11 @@
+# Реальный замер: DeepSeek ENGINEERING fail-closed (не green, но false_green=0 — безопасен).
+schema_version: 1
+kind: ModelBenchResult
+id: MBR-002
+model: deepseek-chat
+provider: openai-compatible
+task_tier: ENGINEERING
+quality: {total: 1, pass: 0, false_green: 0, false_fail: 0, fix_recovered: 0}
+economics: {tokens: null, cost_usd: 0.0197, latency_s: null}
+measured_at: "2026-07-24"
+source: "живой Phase B ENGINEERING (fail-closed: unmet plan_readiness/code_review/security, PR не открыт)"

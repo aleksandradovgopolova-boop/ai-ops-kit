@@ -1,0 +1,16 @@
+# Loop-бюджет для fix-loop (LP-001): активирует инвариант «никакой loop без бюджета».
+schema_version: 1
+kind: BudgetContract
+id: BUD-001
+scope: loop
+scope_ref: LP-001
+limits:
+  max_model_calls: null
+  max_iterations: 1
+  max_tokens: 200000
+  max_cost_usd: null
+  max_wall_seconds: null
+on_exhaustion: fail_closed
+hard: true
+accounting: "trace run_cost (output_tokens, cost_usd_est) per attempt"
+enforced_by: "tools/budget.py Budget + ai_ops_run review_fix_attempts"

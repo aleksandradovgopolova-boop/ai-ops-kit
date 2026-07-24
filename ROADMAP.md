@@ -583,7 +583,7 @@ freshness и первым живым DecisionPackage. Архитектура **e
   - **Отложено из v3.3.2 (runtime, не контракт):** доведение `GateResult v2` до канонического
     runtime-формата (not_applicable/advisory/blocking, reviewer `abstain`, targeted retry, human
     handoff) — отдельный runtime-инкремент, не удерживает закрытие v3.3.
-- **ТЕКУЩАЯ ФАЗА → v3.4 — Security, Permissions & Economics** (см. ниже).
+- **ТЕКУЩАЯ ФАЗА → v3.5 — Observability, Regression Corpus & Evolution Loops** (см. ниже).
 
 ### Post-v3.2 Operational Architecture Backbone (объединяющая операционная архитектура)
 
@@ -608,11 +608,14 @@ WorkPackage Executor; `active-work` с affected-areas/shared-contracts/dependenc
 Активация этих механизмов (не только контрактов) требует ограничений безопасности/экономики (v3.4)
 и наблюдаемости (v3.5); полная реализация — v3.6.
 
-- **v3.4 — Security, Permissions & Economics**: data classification; capability permissions; provider
-  retention policies; доступ к данным по WorkPackage; **Budget Contract для Run/Loop/Package**; model
-  routing; caching; cost accounting; supply-chain controls; лимиты параллельных задач; **model
-  comparison** (перенос из старого v3.1.11). Инвариант: никакой loop без бюджета; никакой package без
-  capability-scope; никакой retrieval без access-filter.
+- **v3.4 — Security, Permissions & Economics** ✅ **ЗАКРЫТ** (три инварианта + residency + учёт +
+  выбор модели — контрактами):
+  - v3.4.0 ✅ BudgetContract (никакой scope без бюджета; поверх tools/budget.py + run_cost);
+  - v3.4.1 ✅ PackageCapabilityScope (никакой package без capability-scope; least-privilege);
+  - v3.4.2 ✅ AccessFilterPolicy (никакой retrieval без access-filter; deny-by-default, секреты вне context);
+  - v3.4.3 ✅ ProviderResidencyPolicy (секреты не в облако, confidential не в external-cloud; кросс-проверка providers.yaml);
+  - v3.4.4 ✅ cost accounting (tools/cost_account.py: spent vs BudgetContract по scope);
+  - v3.4.5 ✅ model comparison (tools/model_comparison.py: safety-first, false_green>0 → дисквалификация).
 - **v3.5 — Observability, Regression Corpus & Evolution Loops**: Loop/Iteration trace; WorkGraph и
   integration trace; no-progress/repeated-failure detection; стоимость исправления/координации;
   parallel-vs-sequential время; post-release readout; Product Health; evolution triggers; **regression

@@ -1,0 +1,16 @@
+# Run-бюджет: жёсткий потолок одного прогона движка (детерминирован по вызовам модели).
+schema_version: 1
+kind: BudgetContract
+id: BUD-002
+scope: run
+scope_ref: "ai-ops-run"
+limits:
+  max_model_calls: 40
+  max_iterations: null
+  max_tokens: null
+  max_cost_usd: 1.0
+  max_wall_seconds: null
+on_exhaustion: fail_closed
+hard: true
+accounting: "budget.py charge_call() (max_model_calls детерминирован) + run_cost cost_usd_est"
+enforced_by: "tools/budget.py Budget (BudgetExceeded перед вызовом модели)"
