@@ -1,0 +1,31 @@
+schema_version: 1
+kind: FeatureLearning
+id: FL-003
+feature: "context:retrieval-strategy"
+decision_package: null
+hypothesis: >-
+  Repository-Graph-first retrieval даёт лучший precision под токен-бюджет, чем semantic-first
+  (обоснование порядка в ContextArchitectureDecision).
+validation:
+  method: "retrieval Bench (планируется в v3.6 Context Engine)"
+  status: planned
+  result: null
+outcome:
+  verdict: pending
+  expected: "graph-first precision > semantic-first при равном бюджете"
+  actual: null
+learnings: []
+follow_up:
+  - "RR-009 (research request: сравнение retrieval-стратегий под токен-бюджет)"
+status: open
+created_at: null
+completion:
+  delivery_complete: false
+  learning_complete: false
+  outcome_achieved: false
+decision: investigate
+research_gap: >-
+  нет измеренного precision/recall retrieval-стратегий под токен-бюджет; нужен retrieval Bench
+  (маршрутизируется в research как RR)
+reused_evidence: []
+supersedes: null

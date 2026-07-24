@@ -40,7 +40,40 @@
     "follow_up": { "type": "array", "items": { "type": "string" },
       "description": "порождённые артефакты: ADR-NNN / RR-NNN / feature:<name>" },
     "status": { "type": "string", "enum": ["open", "validated", "closed"] },
-    "created_at": { "type": ["string", "null"] }
+    "created_at": { "type": ["string", "null"] },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "v3.3.3 completion-сигналы фазы обучения",
+      "properties": {
+        "delivery_complete": { "type": "boolean" },
+        "learning_complete": { "type": "boolean" },
+        "outcome_achieved": { "type": "boolean" }
+      }
+    },
+    "decision": { "type": ["string", "null"],
+      "enum": ["continue", "change", "stop", "investigate", "scale", null],
+      "description": "v3.3.3 явное решение по исходу обучения" },
+    "solution_options": {
+      "type": "array",
+      "description": "v3.3.3 рассмотренные варианты решения (design/decision history)",
+      "items": {
+        "type": "object",
+        "required": ["option", "chosen", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "option": { "type": "string", "minLength": 1 },
+          "chosen": { "type": "boolean" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "reused_evidence": { "type": "array", "items": { "type": "string" },
+      "description": "v3.3.3 переиспользованное evidence (EV-/DP-/FL- — слабые ссылки)" },
+    "research_gap": { "type": ["string", "null"],
+      "description": "v3.3.3 неопределённость, маршрутизируемая в research (при decision=investigate)" },
+    "supersedes": { "type": ["string", "null"], "pattern": "^FL-[0-9]{3,}$",
+      "description": "v3.3.3 предыдущий FeatureLearning, который этот заменяет (design history)" }
   },
   "examples": [
     {

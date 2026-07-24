@@ -31,6 +31,7 @@ DEFAULT_DIR = PKG / "product-learning"
 VAL_STATUS = {"planned", "running", "done"}
 VERDICT = {"pending", "confirmed", "refuted", "inconclusive"}
 STATUS = {"open", "validated", "closed"}
+DECISION = {"continue", "change", "stop", "investigate", "scale"}
 _FL = re.compile(r"^FL-[0-9]{3,}$")
 _DP = re.compile(r"^DP-[0-9]{3,}$")
 
@@ -89,10 +90,54 @@ def check(data: dict):
     if status == "closed" and verdict == "pending":
         e.append("status=closed требует вынесенный verdict (не pending)")
 
-    for f in ("learnings", "follow_up"):
+    for f in ("learnings", "follow_up", "reused_evidence"):
         v = data.get(f)
         if v is not None and not (isinstance(v, list) and all(isinstance(x, str) for x in v)):
             e.append(f"{f} должен быть списком строк")
+
+    # --- v3.3.3 completion-семантика --------------------------------------------------------------
+    sup = data.get("supersedes")
+    if sup is not None and not (isinstance(sup, str) and _FL.match(sup)):
+        e.append("supersedes должен быть FL-NNN или null")
+
+    decision = data.get("decision")
+    if decision is not None and decision not in DECISION:
+        e.append(f"decision ∉ {sorted(DECISION)} (или null)")
+    # опровергнутая гипотеза обязана вести к смене/остановке/расследованию, не к «продолжаем как есть»
+    if verdict == "refuted" and decision not in ("change", "stop", "investigate"):
+        e.append("verdict=refuted требует decision ∈ {change, stop, investigate}")
+    # continue/scale допустимы только для подтверждённого исхода
+    if decision in ("continue", "scale") and verdict != "confirmed":
+        e.append(f"decision={decision} требует verdict=confirmed (нельзя продолжать/масштабировать неподтверждённое)")
+    # investigate маршрутизирует неопределённость в research -> нужен research_gap
+    if decision == "investigate" and not (data.get("research_gap") or "").strip():
+        e.append("decision=investigate требует research_gap (неопределённость, маршрутизируемая в research)")
+
+    comp = data.get("completion")
+    if comp is not None:
+        if not isinstance(comp, dict):
+            e.append("completion должен быть объектом")
+        else:
+            for k in ("delivery_complete", "learning_complete", "outcome_achieved"):
+                if k in comp and not isinstance(comp[k], bool):
+                    e.append(f"completion.{k} должен быть bool")
+            if comp.get("outcome_achieved") is True and verdict != "confirmed":
+                e.append("completion.outcome_achieved=true требует verdict=confirmed")
+    # закрытая запись обучения должна быть завершена и нести решение
+    if status == "closed":
+        if not (isinstance(comp, dict) and comp.get("learning_complete") is True):
+            e.append("status=closed требует completion.learning_complete=true")
+        if decision is None:
+            e.append("status=closed требует явного decision")
+
+    so = data.get("solution_options")
+    if so is not None:
+        if not isinstance(so, list):
+            e.append("solution_options должен быть списком")
+        else:
+            chosen = [o for o in so if isinstance(o, dict) and o.get("chosen") is True]
+            if so and len(chosen) != 1:
+                e.append("solution_options: ровно ОДИН вариант должен быть chosen=true")
     return e
 
 
@@ -160,6 +205,41 @@ def selftest():
         (Path(td) / "FL-050.yaml").write_text(yaml.safe_dump({**ex, "id": "FL-777"}), encoding="utf-8")
         e, _ = check_registry(Path(td))
         expect("реестр ловит имя файла != id", any("имя файла" in x for x in e))
+
+    # --- v3.3.3 completion-семантика ---
+    conf = {**ex, "outcome": {"verdict": "confirmed", "expected": "e", "actual": "a"}}
+    expect("verdict=refuted без decision change/stop/investigate -> ошибка",
+           any("refuted требует decision" in x for x in check({**ex,
+               "outcome": {"verdict": "refuted", "expected": "e", "actual": "a"},
+               "learnings": ["урок"], "decision": "continue"})))
+    expect("decision=scale при неподтверждённом -> ошибка",
+           any("verdict=confirmed" in x for x in check({**ex,
+               "outcome": {"verdict": "inconclusive", "expected": "e", "actual": "a"},
+               "decision": "scale"})))
+    expect("decision=investigate без research_gap -> ошибка",
+           any("research_gap" in x for x in check({**ex,
+               "outcome": {"verdict": "pending"},
+               "validation": {"method": "m", "status": "planned", "result": None},
+               "decision": "investigate", "status": "open"})))
+    expect("decision=investigate с research_gap -> валиден",
+           check({**ex, "outcome": {"verdict": "pending"},
+                  "validation": {"method": "m", "status": "planned", "result": None},
+                  "decision": "investigate", "research_gap": "нет измерения", "status": "open"}) == [])
+    expect("outcome_achieved=true при неподтверждённом -> ошибка",
+           any("outcome_achieved" in x for x in check({**conf,
+               "outcome": {"verdict": "inconclusive"}, "completion": {"outcome_achieved": True}})))
+    expect("status=closed без learning_complete -> ошибка",
+           any("learning_complete" in x for x in check({**conf, "status": "closed",
+               "decision": "scale", "completion": {"learning_complete": False}})))
+    expect("status=closed без decision -> ошибка",
+           any("decision" in x for x in check({**conf, "status": "closed",
+               "completion": {"learning_complete": True}})))
+    expect("solution_options без ровно одного chosen -> ошибка",
+           any("chosen=true" in x for x in check({**conf, "solution_options": [
+               {"option": "a", "chosen": True, "reason": "r"},
+               {"option": "b", "chosen": True, "reason": "r"}]})))
+    expect("битый supersedes -> ошибка",
+           any("supersedes" in x for x in check({**ex, "supersedes": "FL1"})))
 
     # drift-guard enum
     sch = json.loads(SCHEMA.read_text(encoding="utf-8"))

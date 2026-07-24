@@ -2,7 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.3.2-rc — Operational Architecture Backbone (только контракты)
+## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ
+
+Финальный инкремент фазы v3.3. `FeatureLearning` расширен completion-семантикой; фаза Product
+Learning закрыта живой приёмкой на реальных записях. VERSION 3.3.1 → **3.3.3** (закрытие фазы —
+release-точка; чтобы VERSION снова не отстал от rc-канала).
+
+### Added / Changed
+- `FeatureLearning` (аддитивно): `completion` (delivery_complete/learning_complete/outcome_achieved),
+  `decision` (continue/change/stop/investigate/scale), `solution_options` (design/decision history,
+  ровно один chosen), `reused_evidence`, `research_gap`, `supersedes` (FL-цепочка).
+- `validate_feature_learning` — completion-семантика: `refuted` ⟹ decision ∈ {change,stop,investigate};
+  continue/scale ⟹ verdict=confirmed; investigate ⟹ research_gap (маршрутизация неопределённости в
+  research); outcome_achieved ⟹ confirmed; closed ⟹ learning_complete + decision; solution_options —
+  ровно один chosen. Правило «нет verdict без evidence» сохранено.
+
+### Живая приёмка v3.3 (реальные записи)
+- подтверждённая гипотеза → решение: `FL-001` (control-plane confirmed → decision=scale → ADR-001);
+- опровергнутая гипотеза → смена решения: `FL-002` (DeepSeek достаточен для ENGINEERING → **refuted**
+  живым Phase B → decision=change: нужен sonnet-класс провайдер);
+- research gap → Research Request: `FL-003` (retrieval-стратегия не измерена → decision=investigate →
+  research_gap + follow_up RR-009);
+- ни один verdict без evidence; follow-up резолвятся (ADR-001) либо честные слабые ссылки (RR/rolling).
+
+**v3.3 Product Learning ЗАКРЫТ.** Дальше — v3.4 (Security, Permissions & Economics).
+
+## [3.3.2] — 2026-07-24 — Operational Architecture Backbone (только контракты)
 
 Объединяющая операционная архитектура на уровне КОНТРАКТОВ (без новых движков/scheduler/vector-DB/
 MCP; ссылается на существующие Context Compiler / WorkPackage Executor / active-work). 5 контрактов:
