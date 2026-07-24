@@ -68,11 +68,24 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   execution по-прежнему на v1 `context_compiler`. Shadow не сканирует скрытые `.ai/`; cache_key
   привязан к sha. Безопасный первый режим wiring перед промоушеном retrieval.
 
+### Added (v3.6.4 — Retrieval Bench расширен: 16 кейсов, не smoke)
+- `retrieval_bench` golden-корпус расширен до **16 кейсов**: keyword / зависимость-без-слова (граф) /
+  редкий термин (semantic) / RU-EN / multi-file / noise. Доказано на широком корпусе: graph_augmented
+  macro-recall ≥ fulltext; semantic_lite берёт редкие термины; RU-запрос находит файл; noise не даёт
+  ложных релевантных. TS/React и внешние доки — репо_graph/full-text Python-only, кросс-языковая
+  квалификация в v3.6.6 на реальных child-репо (честная граница).
+
+### v3.6.4 Retrieval Integrity — ГОТОВО
+- (1) cache trust-fix (P0 access-leak, lookup-до-retrieval, exact-revision binding);
+- (2) data-classification hardening (marker advisory-only, authoritative registry, strict-unknown);
+- (3) runtime-wiring SHADOW-режим (v2 рядом с v1, default OFF, execution на v1);
+- (4) Retrieval Bench расширен (16 кейсов). Conditional semantic fallback: semantic_lite — стратегия
+  Bench (сравнение), НЕ default retrieval (промоушен только если превзойдёт graph_augmented по F1).
+
 ### Note
-- Без version-bump (rc). Нумерация: semantic-lite=v3.6.3; Retrieval Integrity=v3.6.4, Governed
-  Parallel=v3.6.5, Storybook MCP=v3.6.6.
-- ОСТАЛОСЬ в v3.6.4: расширение Retrieval Bench до 15–20 кейсов (реальное качество, не smoke).
-  Затем v3.6.5 (GateResult v2 runtime + bounded parallel), v3.6.6 (Storybook MCP) → закрыть v3.6 + bump.
+- Без version-bump (rc). Нумерация: semantic-lite=v3.6.3; Retrieval Integrity=v3.6.4 (готово).
+  Дальше v3.6.5 (GateResult v2 runtime + bounded parallel-2 execution), v3.6.6 (Storybook MCP) →
+  закрыть v3.6 + version-bump.
 
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
