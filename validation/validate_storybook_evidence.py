@@ -40,8 +40,12 @@ _KEYS = {
     "design_system": {"status", "reused_components", "new_components", "new_components_justified"},
 }
 _TOP = {"schema_version", "kind", "commit_sha", "generated_from", "affected_components",
-        "affected_stories", "storybook", "state_coverage", "interaction_tests",
-        "accessibility", "visual_regression", "design_system"}
+        "affected_stories", "component_catalog", "storybook", "state_coverage",
+        "interaction_tests", "accessibility", "visual_regression", "design_system"}
+
+
+def _comp_base(name):
+    return (name or "").rstrip("/").split("/")[-1].strip().lower()
 
 
 def _is_int(x):
@@ -169,8 +173,15 @@ def check(data: dict):
         if isinstance(just, bool):
             if new and not just and st == "pass":
                 e.append("design_system: есть новые компоненты без обоснования, но status=pass")
-            if st == "pass" and new and not just:
-                pass  # уже покрыто выше
+        # v3.2.3 component-reuse enforcement: «новый» компонент, уже присутствующий в каталоге
+        # дизайн-системы, — дублирование (надо переиспользовать, а не создавать заново).
+        catalog = data.get("component_catalog")
+        if isinstance(catalog, list) and new:
+            cat = {_comp_base(c) for c in catalog}
+            dup = [n for n in new if _comp_base(n) in cat]
+            if dup:
+                e.append(f"design_system: новые компоненты дублируют существующие в каталоге "
+                         f"(reuse-нарушение): {dup}")
     return e
 
 
@@ -243,6 +254,19 @@ def selftest():
     bad_kind = json.loads(json.dumps(good))
     bad_kind["kind"] = "Nope"
     expect("неверный kind -> ошибка", any("kind" in x for x in check(bad_kind)))
+
+    # v3.2.3 component-reuse: новый компонент дублирует каталог -> ошибка
+    dup = json.loads(json.dumps(good))
+    dup["component_catalog"] = ["c", "button"]
+    dup["design_system"] = {"status": "pass", "reused_components": [],
+                            "new_components": ["Button"], "new_components_justified": True}
+    expect("новый компонент, дублирующий каталог -> reuse-ошибка",
+           any("reuse" in x for x in check(dup)))
+    # уникальный новый компонент при наличии каталога -> без reuse-ошибки
+    uniq = json.loads(json.dumps(dup))
+    uniq["design_system"]["new_components"] = ["BrandNewThing"]
+    expect("уникальный новый компонент -> без reuse-ошибки",
+           not any("reuse" in x for x in check(uniq)))
 
     # drift-guard: enum'ы валидатора совпадают со схемой
     try:

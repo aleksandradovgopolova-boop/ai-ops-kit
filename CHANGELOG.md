@@ -27,6 +27,11 @@
   `quality_attributes` ADR-реестра в профиль и ловит governance-смеллы: `degrades` без обоснования
   (`note`); неуправляемое противоречие (атрибут одновременно `improves` и `degrades` среди активных
   ADR без `tradeoff`). Профиль — вход для будущих evolution-triggers. selftest + реальный прогон в CI.
+- **Component-reuse enforcement** (v3.2.3): `UIEvidenceBundle` получил `component_catalog` (все
+  компоненты Storybook-индекса). `validate_storybook_evidence` теперь ловит reuse-нарушение: «новый»
+  компонент, чьё имя уже в каталоге дизайн-системы, = дублирование существующего (надо
+  переиспользовать, а не создавать заново). `storybook_adapter.reuse_violations()` — helper.
+  Правило DoD стало проверяемым (без нового CI-шага — в существующем evidence-валидаторе).
 
 ### Note
 - Без version-bump: v3.2 groundwork лежит аддитивно; формальный переход v3.1→v3.2 (bump VERSION) —

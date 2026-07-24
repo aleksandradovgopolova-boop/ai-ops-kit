@@ -15,6 +15,8 @@
       "description": "provenance: локальные пути артефактов, из которых собран bundle" },
     "affected_components": { "type": "array", "items": { "type": "string" } },
     "affected_stories": { "type": "array", "items": { "type": "string" } },
+    "component_catalog": { "type": "array", "items": { "type": "string" },
+      "description": "v3.2.3: нормализованные имена ВСЕХ компонентов Storybook (каталог дизайн-системы) — для проверки component-reuse: новый компонент, чьё имя уже в каталоге, = дублирование (дефект)" },
     "storybook": {
       "type": "object",
       "required": ["detected", "build_status"],

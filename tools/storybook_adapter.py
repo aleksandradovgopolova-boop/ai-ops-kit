@@ -104,6 +104,11 @@ def _component_of(story: dict) -> str:
     return story.get("title") or story.get("importPath") or story.get("id", "")
 
 
+def _component_base(name: str) -> str:
+    """Нормализованное имя компонента для сравнения каталога/новых: последний сегмент, lower."""
+    return (name or "").rstrip("/").split("/")[-1].strip().lower()
+
+
 def _norm_path(p: str) -> str:
     """Нормализация относительного пути: убрать ведущие ./ и / для сравнения по суффиксу компонент."""
     return (p or "").lstrip("./").lstrip("/")
@@ -247,6 +252,8 @@ def build_bundle(child_root, commit_sha=None, changed_files=None) -> dict:
         aff = stories
     affected_components = sorted({_component_of(s) for s in aff if _component_of(s)})
     affected_stories = sorted({s["id"] for s in aff if s.get("id")})
+    # v3.2.3: каталог дизайн-системы — нормализованные имена ВСЕХ компонентов индекса (для reuse-чека)
+    component_catalog = sorted({_component_base(_component_of(s)) for s in stories if _component_of(s)})
 
     # 3) state coverage (агрегат по затронутым историям: состояние покрыто, если его показывает
     #    хотя бы одна затронутая история — по ключевому слову в name/id)
@@ -275,9 +282,19 @@ def build_bundle(child_root, commit_sha=None, changed_files=None) -> dict:
     return {"schema_version": BUNDLE_SCHEMA_VERSION, "kind": "UIEvidenceBundle",
             "commit_sha": evidence_sha, "generated_from": provenance,
             "affected_components": affected_components, "affected_stories": affected_stories,
+            "component_catalog": component_catalog,
             "storybook": storybook, "state_coverage": state_coverage,
             "interaction_tests": interaction, "accessibility": a11y,
             "visual_regression": visual, "design_system": design_system}
+
+
+def reuse_violations(bundle: dict) -> list:
+    """v3.2.3 component-reuse enforcement: имена в design_system.new_components, которые УЖЕ есть в
+    каталоге дизайн-системы (component_catalog) -> дублирование существующего компонента (дефект):
+    надо переиспользовать, а не создавать заново. Возвращает список конфликтующих имён."""
+    catalog = {_component_base(c) for c in (bundle.get("component_catalog") or [])}
+    new = (bundle.get("design_system") or {}).get("new_components") or []
+    return [n for n in new if _component_base(n) in catalog]
 
 
 # --- мост к gate_policy: какое ДЕТЕРМИНИРОВАННОЕ evidence bundle даёт по каждому UI-гейту ----------
@@ -488,6 +505,29 @@ def selftest() -> int:
         expect("scoping: суффикс-матч, НЕ голый basename (a/Card.tsx ≠ b/Card.tsx)",
                _matches_changed("./a/Card.tsx", ["b/Card.tsx"]) is False
                and _matches_changed("./src/Card.tsx", ["src/Card.tsx"]) is True)
+
+    # (G) v3.2.3 component-reuse enforcement -----------------------------------------------------
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        _write(root, "storybook-static/index.json", {"v": 5, "entries": {
+            "components-metriccard--default": {"type": "story", "id": "components-metriccard--default",
+                "title": "Components/MetricCard", "name": "Default", "importPath": "./src/MetricCard.tsx"},
+            "components-button--default": {"type": "story", "id": "components-button--default",
+                "title": "Components/Button", "name": "Default", "importPath": "./src/Button.tsx"}}})
+        # новый компонент ДУБЛИРУЕТ существующий Button из каталога
+        _write(root, ".ai/ui-evidence/design-system.json",
+               {"reused_components": [], "new_components": ["Button"], "new_components_justified": True})
+        b = build_bundle(root)
+        expect("catalog собран из всех компонентов индекса",
+               set(b["component_catalog"]) == {"metriccard", "button"})
+        expect("reuse_violations ловит новый компонент, дублирующий каталог",
+               reuse_violations(b) == ["Button"])
+        # новый уникальный компонент — не нарушение
+        _write(root, ".ai/ui-evidence/design-system.json",
+               {"reused_components": ["Button"], "new_components": ["DashboardViewport"],
+                "new_components_justified": True})
+        b2 = build_bundle(root)
+        expect("уникальный новый компонент — не reuse-нарушение", reuse_violations(b2) == [])
 
     print("storybook_adapter selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
