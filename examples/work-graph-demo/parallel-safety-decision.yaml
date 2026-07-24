@@ -1,0 +1,14 @@
+# ParallelSafetyDecision для WG-001: api/ui параллельны (непересекающиеся зоны), wiring — после.
+schema_version: 1
+kind: ParallelSafetyDecision
+id: PSD-001
+work_graph: WG-001
+verdict: hybrid
+classifications:
+  - packages: [api, ui]
+    safe: true
+    reason: "непересекающиеся write_scope (src/api vs src/ui); общий OrderContract фиксируется первым"
+  - packages: [wiring]
+    safe: false
+    reason: "depends_on [api, ui] — стартует только после их интеграции"
+rationale: "api и ui параллельны; wiring последовательно после fan-in"

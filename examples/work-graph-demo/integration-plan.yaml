@@ -1,0 +1,10 @@
+# IntegrationPlan для WG-001: fan-in с новым integration-SHA и полным повтором проверок.
+schema_version: 1
+kind: IntegrationPlan
+id: IP-001
+work_graph: WG-001
+integration_order: [api, ui, wiring]
+fan_in: "integration worktree; shared-contract-first (OrderContract фиксируется до слияния UI/API)"
+aggregate_checks: [tests_passed, code_review, integration_smoke]
+requires_new_integration_sha: true
+new_base_binding: true

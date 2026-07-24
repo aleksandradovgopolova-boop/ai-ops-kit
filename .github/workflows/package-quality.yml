@@ -97,6 +97,12 @@ jobs:
         run: |
           python3 validation/validate_learning_loop.py --selftest
           python3 validation/validate_learning_loop.py
+      - name: Operational Architecture Backbone — контракты v3.3.2 (selftests + пример WorkGraph)
+        run: |
+          python3 validation/validate_context_architecture.py --selftest
+          python3 validation/validate_loop_policy.py --selftest
+          python3 validation/validate_work_graph.py --selftest
+          python3 validation/validate_work_graph.py examples/work-graph-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

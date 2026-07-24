@@ -86,6 +86,10 @@ python3 validation/validate_feature_learning.py --selftest
 python3 validation/validate_feature_learning.py
 python3 validation/validate_learning_loop.py --selftest
 python3 validation/validate_learning_loop.py
+python3 validation/validate_context_architecture.py --selftest
+python3 validation/validate_loop_policy.py --selftest
+python3 validation/validate_work_graph.py --selftest
+python3 validation/validate_work_graph.py examples/work-graph-demo
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest
