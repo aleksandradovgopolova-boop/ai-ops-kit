@@ -87,6 +87,21 @@ identity / access-isolation / revision-binding. (Утечки в проде не
   Дальше v3.6.5 (GateResult v2 runtime + bounded parallel-2 execution), v3.6.6 (Storybook MCP) →
   закрыть v3.6 + version-bump.
 
+## [Unreleased] — v3.6.5-rc — Governed Parallel Execution (GateResult v2 runtime + planner)
+
+### Added (v3.6.5 часть 1 — GateResult v2 runtime decision-слой)
+- `tools/gate_runtime.py` — доводит `GateResult v2` до РАБОЧЕЙ логики: последовательность вердиктов
+  ревьюера (вкл. `abstain`) → v2-результат (pass/fail/abstain/not_applicable) с targeted-retry на
+  abstain и честным **human-handoff после повторного abstain** (не авто-pass/fail — эскалация). Учёт
+  калибровки (warn на advisory-тире/evidence=pass → abstain(advisory); иначе blocking fail);
+  not_applicable по политике (ui_impact=none). Валидирует вывод через `gate_result_v2.check`; адаптер
+  v2→v1 (`abstain→warn`). Offline decision-слой (не трогает боевой `_run_reviews`; wiring — за флагом).
+
+### Note
+- Без version-bump (rc). Дальше в v3.6.5: bounded parallel-2 planner (WorkGraph→ParallelSafety→
+  worktrees→fan-in→integration-SHA, сценарии conflict/serialize/one-fail/both-pass). Живой parallel
+  run (реальные worktrees+модель+PR) — квалификация v3.6.6/v3.8 (нужен ключ).
+
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
 Фаза v3.5 закрыта. VERSION 3.4.5 → **3.5.3** (закрытие фазы — release-точка, как v3.3.3/v3.4.5).

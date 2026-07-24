@@ -153,6 +153,8 @@ jobs:
         run: python3 tools/context_shadow.py --selftest
       - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
         run: python3 tools/retrieval_bench.py --selftest
+      - name: GateResult v2 runtime — abstain/retry/human-handoff (selftest)
+        run: python3 tools/gate_runtime.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

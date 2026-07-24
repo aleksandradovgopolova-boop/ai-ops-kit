@@ -115,6 +115,7 @@ python3 tools/context_retrieval.py --selftest
 python3 tools/semantic_lite.py --selftest
 python3 tools/context_shadow.py --selftest
 python3 tools/retrieval_bench.py --selftest
+python3 tools/gate_runtime.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest
