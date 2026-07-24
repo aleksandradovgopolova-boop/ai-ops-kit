@@ -583,7 +583,7 @@ freshness и первым живым DecisionPackage. Архитектура **e
   - **Отложено из v3.3.2 (runtime, не контракт):** доведение `GateResult v2` до канонического
     runtime-формата (not_applicable/advisory/blocking, reviewer `abstain`, targeted retry, human
     handoff) — отдельный runtime-инкремент, не удерживает закрытие v3.3.
-- **ТЕКУЩАЯ ФАЗА → v3.5 — Observability, Regression Corpus & Evolution Loops** (см. ниже).
+- **ТЕКУЩАЯ ФАЗА → v3.6 — Semantic Context Engine + Governed Parallel Execution + Storybook MCP** (см. ниже).
 
 ### Post-v3.2 Operational Architecture Backbone (объединяющая операционная архитектура)
 
@@ -616,10 +616,12 @@ WorkPackage Executor; `active-work` с affected-areas/shared-contracts/dependenc
   - v3.4.3 ✅ ProviderResidencyPolicy (секреты не в облако, confidential не в external-cloud; кросс-проверка providers.yaml);
   - v3.4.4 ✅ cost accounting (tools/cost_account.py: spent vs BudgetContract по scope);
   - v3.4.5 ✅ model comparison (tools/model_comparison.py: safety-first, false_green>0 → дисквалификация).
-- **v3.5 — Observability, Regression Corpus & Evolution Loops**: Loop/Iteration trace; WorkGraph и
-  integration trace; no-progress/repeated-failure detection; стоимость исправления/координации;
-  parallel-vs-sequential время; post-release readout; Product Health; evolution triggers; **regression
-  corpus + failure taxonomy** (перенос из старого v3.1.10).
+- **v3.5 — Observability, Regression Corpus & Evolution Loops** ✅ **ЗАКРЫТ** (loops и параллель
+  измеримы; находки — постоянный корпус; петля доставили→измерили→узнали замкнута):
+  - v3.5.0 ✅ Regression Corpus + Failure Taxonomy (RegressionCase, RC-001..004 по слоям);
+  - v3.5.1 ✅ Loop/Iteration trace + no-progress/repeated-failure detection (LoopTrace);
+  - v3.5.2 ✅ WorkGraph/integration trace + parallel-vs-sequential (IntegrationTrace, integration-SHA инвариант);
+  - v3.5.3 ✅ post-release readout (PostReleaseReadout: DeliveryReceipt→CI→Health→evolution→решение).
 - **v3.6 — Semantic Context Engine + Governed Parallel Execution + Storybook MCP**: полная реализация.
   Context Engine v2 строгой последовательностью (`metadata → Repository Graph Lite → full-text →
   role/package views → cache → retrieval Bench → semantic fallback → incremental index` — НЕ начинаем

@@ -1,0 +1,13 @@
+schema_version: 1
+kind: RegressionCase
+failure_id: RC-002
+title: "PQ8 positive-green маскировался без установленного OpenSpec"
+trigger: "mock-ревьюер PQ8 давал 0-read pass; anti-рубер-стамп (с v3.0.11) его блокирует ТОЛЬКО с openspec"
+expected_behavior: "parity одинаков в обеих openspec-конфигурациях"
+observed_behavior: "прогон без openspec был зелёным и маскировал реальный провал (виден только с openspec)"
+affected_layer: environment
+status: fixed
+severity: high
+first_seen_version: "3.0.11"
+fixed_version: "3.0.18"
+regression_test: "дисциплина parity: полный прогон И WITH-openspec, И no-openspec на main/master"

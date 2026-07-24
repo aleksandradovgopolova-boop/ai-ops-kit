@@ -125,6 +125,22 @@ jobs:
         run: |
           python3 tools/model_comparison.py --selftest
           python3 tools/model_comparison.py examples/model-comparison-demo
+      - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
+        run: |
+          python3 validation/validate_regression_corpus.py --selftest
+          python3 validation/validate_regression_corpus.py
+      - name: Loop trace — итерации governed-цикла + no-progress detection (selftest + demo)
+        run: |
+          python3 validation/validate_loop_trace.py --selftest
+          python3 validation/validate_loop_trace.py examples/loop-trace-demo
+      - name: Integration trace — fan-in + parallel-vs-sequential (selftest + demo)
+        run: |
+          python3 validation/validate_integration_trace.py --selftest
+          python3 validation/validate_integration_trace.py examples/integration-trace-demo
+      - name: Post-release readout — доставили->измерили->узнали (selftest + demo)
+        run: |
+          python3 validation/validate_post_release_readout.py --selftest
+          python3 validation/validate_post_release_readout.py examples/readout-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

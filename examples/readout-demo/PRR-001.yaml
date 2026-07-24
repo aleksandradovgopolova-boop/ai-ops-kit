@@ -1,0 +1,18 @@
+# Readout PR #1 (Phase B): sha_verified, но downstream CI не прогонялся -> decision=watch (честно).
+schema_version: 1
+kind: PostReleaseReadout
+id: PRR-001
+delivery_receipt:
+  ref: aleksandradovgopolova-boop/ai-ops-dogfood-pricing#1
+  sha_verified: true
+downstream_ci:
+  status: not_run
+  ref: null
+product_health:
+  band: not_measured
+  score: null
+evolution:
+  promise_broken: 0
+  cost_realized: 0
+readout_decision: watch
+learning: null

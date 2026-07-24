@@ -1,0 +1,13 @@
+schema_version: 1
+kind: RegressionCase
+failure_id: RC-004
+title: "git add -A заметал незакоммиченные файлы параллельного .research-процесса"
+trigger: "git add -A при активном параллельном процессе, пишущем в .research/"
+expected_behavior: "коммит содержит только свои файлы"
+observed_behavior: "в коммит 90962a6 попали чужие in-flight .research-файлы (безвредно: валидаторы зелёные, секретов нет)"
+affected_layer: process
+status: mitigated
+severity: low
+first_seen_version: "3.1.9-rc"
+fixed_version: null
+regression_test: "дисциплина: коммитить свои файлы явными путями + git pull --rebase перед push"

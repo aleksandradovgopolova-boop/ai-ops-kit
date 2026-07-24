@@ -2,6 +2,64 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
+
+Фаза v3.5 закрыта. VERSION 3.4.5 → **3.5.3** (закрытие фазы — release-точка, как v3.3.3/v3.4.5).
+Loops и параллельное исполнение стали измеримыми; находки — постоянный корпус; петля
+доставили→измерили→узнали замкнута.
+
+### Added (v3.5.3 — post-release readout, замыкает фазу)
+- `schemas/post-release-readout.schema.json` + `validation/validate_post_release_readout.py` —
+  `PostReleaseReadout`: связывает `DeliveryReceipt` (sha_verified) → downstream CI → Product Health →
+  `evolution` (promise_broken/cost_realized) → явное решение (healthy_continue/watch/rollback/
+  investigate). Инварианты: readout только по верифицированной доставке; `healthy_continue` требует
+  downstream=pass + health≠critical + promise_broken=0; `rollback` обоснован сигналом; promise_broken>0
+  → не healthy_continue. `examples/readout-demo/PRR-001` (PR #1: sha_verified, downstream не прогонялся
+  → decision=watch — честно).
+
+### Итог фазы v3.5
+- v3.5.0 Regression Corpus + Failure Taxonomy (постоянные находки, RC-001..004);
+- v3.5.1 Loop/Iteration trace + no-progress/repeated-failure detection;
+- v3.5.2 WorkGraph/integration trace + parallel-vs-sequential (integration-SHA инвариант);
+- v3.5.3 post-release readout (доставили→измерили→узнали).
+
+**v3.5 ЗАКРЫТ.** Дальше — v3.6 (Semantic Context Engine + Governed Parallel Execution + Storybook MCP)
+— первая фаза, где строится полноценная РЕАЛИЗАЦИЯ поверх всех накопленных контрактов.
+
+## [3.5.0..3.5.2] — 2026-07-24 — Observability: Regression Corpus, Loop & Integration trace
+
+Начата фаза v3.5. Первый инкремент — постоянный корпус находок с таксономией слоя, чтобы
+починенное не регрессировало, а известные ограничения были явны.
+
+### Added
+- `schemas/regression-case.schema.json` + `validation/validate_regression_corpus.py` —
+  `RegressionCase`: failure_id/trigger/expected/observed/affected_layer (engine/provider/model/
+  reviewer/policy/context/environment/security/delivery/fixture/process)/status/severity/
+  first_seen/fixed_version/regression_test. Честность: `status=fixed` требует fixed_version И
+  regression_test (починка без охраняющего теста — не починка). Реестр + `taxonomy()` (сводка по слоям).
+- `regression-corpus/` — реальные находки этой линии: RC-001 authorization_idol (security, fixed
+  3.0.19), RC-002 PQ8-masking без openspec (environment, fixed 3.0.18), RC-003 exact-SHA evidence gap
+  (context, fixed 3.1.9-rc), RC-004 git-add-A sweep (process, mitigated). Каждая — с regression-тестом/дисциплиной.
+
+### Added (v3.5.1 — Loop/Iteration trace + no-progress detection)
+- `schemas/loop-trace.schema.json` + `validation/validate_loop_trace.py` — `LoopTrace`: итерации
+  governed-цикла (привязка к `LoopPolicy` по id). `analyze()` детектит no_progress (≥2 подряд
+  итерации без улучшения `progress_value` по направлению) и repeated_failure (одна signature в ≥2
+  подряд blocked). Инвариант fail-closed: детектнут no_progress/repeated_failure → stopped_reason не
+  может быть `success` (loop застрял, не успех); success ⟺ последняя итерация success.
+  `examples/loop-trace-demo/LT-001` (реальный fix-loop: 1 гейт → 0, converged). Делает loops измеримыми.
+
+### Added (v3.5.2 — WorkGraph/integration trace + parallel-vs-sequential)
+- `schemas/integration-trace.schema.json` + `validation/validate_integration_trace.py` —
+  `IntegrationTrace`: трейс fan-in (привязка к WorkGraph/IntegrationPlan). `analyze()`: speedup
+  (baseline/actual) + coordination_overhead (actual − max package). ПОДТВЕРЖДАЕТ инвариант v3.3.2:
+  completed=true → integration_sha ≠ любого package_sha (новый SHA) + new_sha + aggregate_checks_rerun
+  + 0 конфликтов; КОНФЛИКТ=BLOCK (fan_in_conflicts>0 → completed=false). Sanity: actual ≥ max(package),
+  baseline = сумма. `examples/integration-trace-demo/IT-001` (api||ui + wiring, speedup 1.47).
+
+### Note
+- Без version-bump (rc). Дальше в v3.5: post-release readout → закрыть v3.5 + version-bump (как v3.4.5).
+
 ## [3.4.5] — 2026-07-24 — Security, Permissions & Economics (v3.4 ЗАКРЫТ)
 
 Фаза v3.4 закрыта пятью аддитивными инкрементами. VERSION 3.3.3 → **3.4.5** (закрытие фазы —
