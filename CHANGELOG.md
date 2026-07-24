@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.6.7-rc — Runtime Promotion Readiness (укрепление перед боевым включением)
+
+Ревью владельца по коду v3.6.6: четыре края, которые НЕ создают риска для текущего runtime (retrieval в
+shadow, execution на v1), но обязаны быть закрыты ДО боевого включения. v3.6.7 — не новая фаза: только
+соединение и укрепление уже созданного (fail-closed по всем краям). БЕЗ version-bump (rc).
+
+### Fixed (v3.6.7a — parallel planner hardening: fail-closed перед превращением в executor)
+- `tools/parallel_planner.py` — закрыты опасные края планировщика (найдены ревью):
+  - **глобальный write_scope `**` больше не обходит overlap-проверку** — `_prefix('**')` давал пустой
+    префикс, а `'src/b/'.startswith('/')`==False -> `**` НЕ ловился как пересечение -> пакет,
+    пишущий во весь репо, мог уйти в parallel. Теперь пустой префикс = ГЛОБАЛЬНЫЙ scope, пересекается
+    с любым -> сериализация;
+  - **незадекларированный write_scope** -> сериализация (нельзя доказать непересечение -> fail-closed);
+  - **`plan()` сам блокирует невалидный WorkGraph**: цикл/битая зависимость (неполный
+    integration_order) и depends_on на несуществующий пакет -> `valid=false` + `errors`;
+  - **`integration_decision({})`** (пустой набор) больше НЕ проходит как «all pass» (`any([])==False`) —
+    пустой набор -> block;
+  - новый **`integration_gate()`** — рантайм-строгое fan-in решение: результаты обязаны ПОКРЫВАТЬ
+    точный набор пакетов WorkGraph (нет пропущенных/лишних); каждый результат ДОКАЗАТЕЛЬНЫЙ (dict со
+    status + package SHA + `gate_report(all_pass)`, голая строка не принимается); общий контракт обязан
+    иметь зафиксированный contract SHA; aggregate — РЕАЛЬНЫЙ GateReport (dict), не голый bool. 20 новых
+    сценарных проверок (33 всего в selftest).
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана
