@@ -2,6 +2,60 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ
+
+Финальный инкремент фазы v3.3. `FeatureLearning` расширен completion-семантикой; фаза Product
+Learning закрыта живой приёмкой на реальных записях. VERSION 3.3.1 → **3.3.3** (закрытие фазы —
+release-точка; чтобы VERSION снова не отстал от rc-канала).
+
+### Added / Changed
+- `FeatureLearning` (аддитивно): `completion` (delivery_complete/learning_complete/outcome_achieved),
+  `decision` (continue/change/stop/investigate/scale), `solution_options` (design/decision history,
+  ровно один chosen), `reused_evidence`, `research_gap`, `supersedes` (FL-цепочка).
+- `validate_feature_learning` — completion-семантика: `refuted` ⟹ decision ∈ {change,stop,investigate};
+  continue/scale ⟹ verdict=confirmed; investigate ⟹ research_gap (маршрутизация неопределённости в
+  research); outcome_achieved ⟹ confirmed; closed ⟹ learning_complete + decision; solution_options —
+  ровно один chosen. Правило «нет verdict без evidence» сохранено.
+
+### Живая приёмка v3.3 (реальные записи)
+- подтверждённая гипотеза → решение: `FL-001` (control-plane confirmed → decision=scale → ADR-001);
+- опровергнутая гипотеза → смена решения: `FL-002` (DeepSeek достаточен для ENGINEERING → **refuted**
+  живым Phase B → decision=change: нужен sonnet-класс провайдер);
+- research gap → Research Request: `FL-003` (retrieval-стратегия не измерена → decision=investigate →
+  research_gap + follow_up RR-009);
+- ни один verdict без evidence; follow-up резолвятся (ADR-001) либо честные слабые ссылки (RR/rolling).
+
+**v3.3 Product Learning ЗАКРЫТ.** Дальше — v3.4 (Security, Permissions & Economics).
+
+## [3.3.2] — 2026-07-24 — Operational Architecture Backbone (только контракты)
+
+Объединяющая операционная архитектура на уровне КОНТРАКТОВ (без новых движков/scheduler/vector-DB/
+MCP; ссылается на существующие Context Compiler / WorkPackage Executor / active-work). 5 контрактов:
+
+### Added
+- `schemas/context-architecture-decision.schema.json` + `validation/validate_context_architecture.py`
+  — `ContextArchitectureDecision`: retrieval-цепочка (repository-first: policy/metadata → RepoGraph →
+  full_text → semantic_fallback → reranking → budgeted_role_view), инварианты (exact-SHA binding,
+  provenance, access-filter ДО retrieval, stale detection), role-views (5), cache-key
+  (repository+sha+policy+view), `builds_on` context_compiler. Развитие Context Compiler, не векторная память.
+- `schemas/loop-policy.schema.json` + `validation/validate_loop_policy.py` — `LoopPolicy`:
+  trigger/budgets/success/stop/progress/on_stop/escalation; 6 типов циклов регистрируются, движки не
+  строятся; инвариант «никакой loop без бюджета» (готовит v3.4); fix-loop v3.1.1 = первая реализация.
+- `schemas/work-graph.schema.json` + `parallel-safety-decision.schema.json` +
+  `integration-plan.schema.json` + `validation/validate_work_graph.py` (покрывает триаду с
+  кросс-консистентностью) — `WorkGraph`/`ParallelSafetyDecision`/`IntegrationPlan`: packages/
+  depends_on/write_scope/shared_contracts/execution_mode(single|sequential|parallel|hybrid)/
+  integration_order/aggregate_verification. Проверки: топологичный integration_order (DAG),
+  parallel-safe пары ⟹ непересекающиеся write_scope + нет depends_on между ними. **ИНВАРИАНТ:
+  package-SHA не доказывают всю работу — IP.requires_new_integration_sha обязан быть true.**
+- `examples/work-graph-demo/` — реальный пример WorkGraph (parallel-safe `api`/`ui` + зависимый
+  `wiring`) + PSD + IP; прогоняется в CI.
+
+### Note
+- GateResult v2 → канонический runtime (not_applicable/advisory/blocking/reviewer abstain/targeted
+  retry/human handoff) — это RUNTIME-изменение, НЕ контракт; вынесено в отдельный следующий шаг,
+  чтобы v3.3.2 остался contract-only. Без version-bump (rc).
+
 ## [3.3.1] — 2026-07-24 — Product Learning (v3.3.0–3.3.1) + Release Alignment
 
 **Release Alignment** (служебный инкремент, без новых механизмов): источник истины синхронизирован —

@@ -1,0 +1,41 @@
+schema_version: 1
+kind: FeatureLearning
+id: FL-002
+feature: "execution:engineering-green-path"
+decision_package: null
+hypothesis: >-
+  DeepSeek достаточен как провайдер для стабильного ENGINEERING green-path
+  (доведение реальной правки с тестами до ready_for_pr).
+validation:
+  method: "живой Phase B прогон ENGINEERING на DeepSeek (2026-07-24)"
+  status: done
+  result: >-
+    ENGINEERING → fail-closed: unmet [plan_readiness, code_review, security],
+    delivery not-attempted, PR не открыт. Ядро держится (0 false-green).
+outcome:
+  verdict: refuted
+  expected: "ENGINEERING доходит до ready_for_pr на DeepSeek"
+  actual: "fail-closed; DeepSeek не выдаёт устойчиво plan_readiness/code_review/security"
+learnings:
+  - "DeepSeek недостаточен для ENGINEERING green-path (реконфирм прошлой Phase B на текущей версии)"
+  - "нужен sonnet-класс провайдер для положительных green-path сценариев"
+  - "fail-closed держится независимо от силы модели — это гарантия ядра, не модели"
+follow_up:
+  - "rolling-evidence: закрытие green-path сценариев требует сильного ключа (ротация ANTHROPIC_API_KEY)"
+status: closed
+created_at: null
+completion:
+  delivery_complete: false
+  learning_complete: true
+  outcome_achieved: false
+decision: change
+solution_options:
+  - option: "DeepSeek для ENGINEERING green-path"
+    chosen: false
+    reason: "живой прогон опроверг: не тянет multi-step авторинг + security/code_review вердикты"
+  - option: "sonnet-класс провайдер для green-path (DeepSeek остаётся для QUICK/дешёвых прогонов)"
+    chosen: true
+    reason: "green-path требует сильной модели; ядро fail-closed от модели не зависит"
+reused_evidence: []
+research_gap: null
+supersedes: null

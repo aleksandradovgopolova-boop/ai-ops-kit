@@ -1,0 +1,21 @@
+# Пример WorkGraph (v3.3.2): parallel-safe пакеты (api, ui) + зависимый (wiring). Проверяется в CI.
+schema_version: 1
+kind: WorkGraph
+id: WG-001
+feature: "feature:checkout"
+execution_mode: hybrid
+packages:
+  - id: api
+    depends_on: []
+    write_scope: ["src/api/**"]
+    shared_contracts: ["OrderContract"]
+  - id: ui
+    depends_on: []
+    write_scope: ["src/ui/**"]
+    shared_contracts: ["OrderContract"]
+  - id: wiring
+    depends_on: [api, ui]
+    write_scope: ["src/app/**"]
+    shared_contracts: []
+integration_order: [api, ui, wiring]
+aggregate_verification: [tests_passed, code_review, integration_smoke]

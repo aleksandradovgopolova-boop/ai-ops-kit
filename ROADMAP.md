@@ -568,19 +568,22 @@ freshness и первым живым DecisionPackage. Архитектура **e
   - v3.2.2 quality-attributes fitness (профиль + детект необоснованного degrade и противоречий);
   - v3.2.3 Storybook component-reuse enforcement (новый компонент, дублирующий каталог, = дефект);
   - v3.2.4 evolution-triggers (ADR → обещанный quality attribute → Product Health → сигнал пересмотра).
-- **v3.3 — Product Learning + интеграция Research** ⟳ **ТЕКУЩАЯ ФАЗА** (строится НАД research-контуром,
+- **v3.3 — Product Learning + интеграция Research** ✅ **ЗАКРЫТ** (строился НАД research-контуром,
   слабой ссылкой на `DecisionPackage`, без касания `.research/`):
   - v3.3.0 ✅ `FeatureLearning` (`DecisionPackage` → гипотеза → проверка → verdict → learnings →
     follow_up); реальная цепочка `DP-108 → FL-001 → ADR-001`;
   - v3.3.1 ✅ learning-loop fitness (`follow_up` ADR-ссылки резолвятся в реальный реестр);
-  - **v3.3.2 — Operational Architecture Backbone** (следующий, bounded, ТОЛЬКО контракты — см. раздел
-    ниже): `ContextArchitectureDecision`, `LoopPolicy`, `WorkGraph`, `ParallelSafetyDecision`,
-    `IntegrationPlan`; + доведение `GateResult v2` до канонического runtime (not_applicable/advisory/
-    blocking, reviewer `abstain`, targeted retry, честный human handoff);
-  - **v3.3.3 — Product Learning Completion** (финальный инкремент фазы): `delivery_complete`/
-    `learning_complete`/`outcome_achieved`, uncertainty routing, research sufficiency, solution
-    options, design/decision history, reuse evidence, явные решения continue/change/stop/investigate/
-    scale. После — **v3.3 закрывается**.
+  - v3.3.2 ✅ Operational Architecture Backbone (ТОЛЬКО контракты — см. раздел ниже):
+    `ContextArchitectureDecision`, `LoopPolicy`, `WorkGraph`, `ParallelSafetyDecision`,
+    `IntegrationPlan` + пример `examples/work-graph-demo`;
+  - v3.3.3 ✅ Product Learning Completion: `completion` (delivery/learning/outcome), явные решения
+    continue/change/stop/investigate/scale, solution_options, research_gap (uncertainty→research),
+    reuse evidence, supersede-цепочка. Живая приёмка: FL-001 confirmed→scale→ADR-001; FL-002
+    refuted→change (DeepSeek недостаточен для ENGINEERING); FL-003 research-gap→investigate→RR.
+  - **Отложено из v3.3.2 (runtime, не контракт):** доведение `GateResult v2` до канонического
+    runtime-формата (not_applicable/advisory/blocking, reviewer `abstain`, targeted retry, human
+    handoff) — отдельный runtime-инкремент, не удерживает закрытие v3.3.
+- **ТЕКУЩАЯ ФАЗА → v3.4 — Security, Permissions & Economics** (см. ниже).
 
 ### Post-v3.2 Operational Architecture Backbone (объединяющая операционная архитектура)
 

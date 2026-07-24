@@ -19,5 +19,21 @@ learnings:
   - "цена — дисциплина адаптеров и отслеживание версий внешних инструментов"
 follow_up:
   - ADR-001
-status: validated
+status: closed
 created_at: null
+completion:
+  delivery_complete: true
+  learning_complete: true
+  outcome_achieved: true
+decision: scale
+solution_options:
+  - option: "control plane + тонкие адаптеры к open-source"
+    chosen: true
+    reason: "переиспользование зрелых инструментов; тонкие заменяемые адаптеры"
+  - option: "монолитный движок со своей реализацией всего"
+    chosen: false
+    reason: "дублирование зрелых инструментов, высокая стоимость поддержки"
+reused_evidence:
+  - DP-108
+research_gap: null
+supersedes: null
