@@ -141,6 +141,8 @@ jobs:
         run: |
           python3 validation/validate_post_release_readout.py --selftest
           python3 validation/validate_post_release_readout.py examples/readout-demo
+      - name: Repository Graph Lite — детерминированный граф репо + impact (selftest, дог-фуд на ките)
+        run: python3 tools/repo_graph.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

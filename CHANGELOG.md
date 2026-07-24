@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.6.0-rc — Semantic Context Engine: Repository Graph Lite
+
+Начата фаза v3.6 — ПЕРВАЯ РЕАЛИЗАЦИЯ поверх контрактов (не декларация). Первый инкремент — первая
+НЕ-vector ступень retrieval-цепочки `ContextArchitectureDecision`: детерминированный граф репо.
+НЕ начинаем с vector-DB/семантики (строго по плану: metadata→RepoGraph→full-text→...→semantic).
+
+### Added
+- `tools/repo_graph.py` — Repository Graph Lite через stdlib `ast` (offline): symbols (топ-уровневые
+  функции/классы), imports → внутренние рёбра (файл→файл репо), tests, и `impact(changed)` —
+  обратный транзитивный обход (какие файлы зависят от изменённого; для automatic write-scope /
+  relevant-test-selection в v3.6). Дог-фуд: реальный граф кита (103 файла, 454 символа);
+  `impact(tools/gate_policy.py)` = 16 транзитивных зависимых. selftest (синтетика + реальные факты кита).
+
+### Note
+- Без version-bump (rc). Дальше в v3.6: full-text retrieval → role/package context views → cache →
+  retrieval Bench → semantic fallback → incremental index; параллельное исполнение; Storybook MCP.
+
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
 Фаза v3.5 закрыта. VERSION 3.4.5 → **3.5.3** (закрытие фазы — release-точка, как v3.3.3/v3.4.5).
