@@ -103,6 +103,10 @@ jobs:
           python3 validation/validate_loop_policy.py --selftest
           python3 validation/validate_work_graph.py --selftest
           python3 validation/validate_work_graph.py examples/work-graph-demo
+      - name: Budget Contract — экономика scope (selftest + пример budget-demo)
+        run: |
+          python3 validation/validate_budget_contract.py --selftest
+          python3 validation/validate_budget_contract.py examples/budget-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

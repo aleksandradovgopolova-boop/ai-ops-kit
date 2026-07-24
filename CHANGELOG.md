@@ -2,6 +2,25 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.4.0-rc — Security, Permissions & Economics: Budget Contract
+
+Начата фаза v3.4. Первый инкремент — экономика: декларативный `BudgetContract` над существующим
+рантайм-энфорсером (`tools/budget.py`) и учётом расхода (trace `run_cost`). Активирует инвариант
+«никакой scope без бюджета» для run/loop/package/work_graph.
+
+### Added
+- `schemas/budget-contract.schema.json` + `validation/validate_budget_contract.py` — `BudgetContract`:
+  scope (run/loop/package/work_graph) + scope_ref + limits (≥1 из max_model_calls/max_iterations/
+  max_tokens/max_cost_usd/max_wall_seconds) + on_exhaustion (fail_closed/escalate/degrade) + hard +
+  accounting + `enforced_by` (экономика ДОЛЖНА быть enforced, не только объявлена). Инварианты:
+  ≥1 граница; `hard=true` несовместим с `degrade`; scope_ref согласован (loop→LP-NNN, work_graph→WG-NNN).
+- `examples/budget-demo/` — реальные BudgetContract'ы (loop BUD-001 для fix-loop LP-001; run BUD-002;
+  package BUD-003) c привязкой к `tools/budget.py`. Прогон в CI.
+
+### Note
+- Без version-bump (rc). Дальше в v3.4: capability permissions (package scope), access-filter,
+  provider retention, model routing, cost accounting, model comparison (перенос из старого v3.1.11).
+
 ## [3.3.3] — 2026-07-24 — Product Learning Completion + v3.3 ЗАКРЫТ
 
 Финальный инкремент фазы v3.3. `FeatureLearning` расширен completion-семантикой; фаза Product
