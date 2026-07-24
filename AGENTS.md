@@ -107,6 +107,8 @@ python3 validation/validate_loop_trace.py --selftest
 python3 validation/validate_loop_trace.py examples/loop-trace-demo
 python3 validation/validate_integration_trace.py --selftest
 python3 validation/validate_integration_trace.py examples/integration-trace-demo
+python3 validation/validate_post_release_readout.py --selftest
+python3 validation/validate_post_release_readout.py examples/readout-demo
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest

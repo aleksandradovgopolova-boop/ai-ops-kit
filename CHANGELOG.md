@@ -2,7 +2,31 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.5.0-rc — Observability: Regression Corpus & Failure Taxonomy
+## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
+
+Фаза v3.5 закрыта. VERSION 3.4.5 → **3.5.3** (закрытие фазы — release-точка, как v3.3.3/v3.4.5).
+Loops и параллельное исполнение стали измеримыми; находки — постоянный корпус; петля
+доставили→измерили→узнали замкнута.
+
+### Added (v3.5.3 — post-release readout, замыкает фазу)
+- `schemas/post-release-readout.schema.json` + `validation/validate_post_release_readout.py` —
+  `PostReleaseReadout`: связывает `DeliveryReceipt` (sha_verified) → downstream CI → Product Health →
+  `evolution` (promise_broken/cost_realized) → явное решение (healthy_continue/watch/rollback/
+  investigate). Инварианты: readout только по верифицированной доставке; `healthy_continue` требует
+  downstream=pass + health≠critical + promise_broken=0; `rollback` обоснован сигналом; promise_broken>0
+  → не healthy_continue. `examples/readout-demo/PRR-001` (PR #1: sha_verified, downstream не прогонялся
+  → decision=watch — честно).
+
+### Итог фазы v3.5
+- v3.5.0 Regression Corpus + Failure Taxonomy (постоянные находки, RC-001..004);
+- v3.5.1 Loop/Iteration trace + no-progress/repeated-failure detection;
+- v3.5.2 WorkGraph/integration trace + parallel-vs-sequential (integration-SHA инвариант);
+- v3.5.3 post-release readout (доставили→измерили→узнали).
+
+**v3.5 ЗАКРЫТ.** Дальше — v3.6 (Semantic Context Engine + Governed Parallel Execution + Storybook MCP)
+— первая фаза, где строится полноценная РЕАЛИЗАЦИЯ поверх всех накопленных контрактов.
+
+## [3.5.0..3.5.2] — 2026-07-24 — Observability: Regression Corpus, Loop & Integration trace
 
 Начата фаза v3.5. Первый инкремент — постоянный корпус находок с таксономией слоя, чтобы
 починенное не регрессировало, а известные ограничения были явны.

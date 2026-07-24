@@ -137,6 +137,10 @@ jobs:
         run: |
           python3 validation/validate_integration_trace.py --selftest
           python3 validation/validate_integration_trace.py examples/integration-trace-demo
+      - name: Post-release readout — доставили->измерили->узнали (selftest + demo)
+        run: |
+          python3 validation/validate_post_release_readout.py --selftest
+          python3 validation/validate_post_release_readout.py examples/readout-demo
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
