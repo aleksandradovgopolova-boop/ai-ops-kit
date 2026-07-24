@@ -1,0 +1,11 @@
+# Авторитетная классификация по путям: secrets/ и .env -> secret; приватные модули -> confidential.
+schema_version: 1
+kind: DataClassificationPolicy
+id: DCP-001
+default_class: internal
+strict_unknown: false
+rules:
+  - {path_prefix: "secrets/", class: secret}
+  - {path_prefix: ".env", class: secret}
+  - {path_prefix: "src/private/", class: confidential}
+  - {path_prefix: "docs/public/", class: public}

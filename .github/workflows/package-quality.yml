@@ -141,6 +141,26 @@ jobs:
         run: |
           python3 validation/validate_post_release_readout.py --selftest
           python3 validation/validate_post_release_readout.py examples/readout-demo
+      - name: Repository Graph Lite — детерминированный граф репо + impact (selftest, дог-фуд на ките)
+        run: python3 tools/repo_graph.py --selftest
+      - name: Data classification — авторитетный класс (marker advisory-only) (selftest)
+        run: python3 tools/data_classification.py --selftest
+      - name: Context retrieval — full-text + budgeted role view + access-filter + cache (selftest)
+        run: python3 tools/context_retrieval.py --selftest
+      - name: Semantic-lite — TF-IDF fallback без vector-DB (selftest, дог-фуд на ките)
+        run: python3 tools/semantic_lite.py --selftest
+      - name: Context shadow — v2 shadow-view рядом с боевым v1 (selftest)
+        run: python3 tools/context_shadow.py --selftest
+      - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
+        run: python3 tools/retrieval_bench.py --selftest
+      - name: GateResult v2 runtime — abstain/retry/human-handoff (selftest)
+        run: python3 tools/gate_runtime.py --selftest
+      - name: Parallel planner — bounded parallel-2 + fan-in решения (selftest + WG-демо)
+        run: |
+          python3 tools/parallel_planner.py --selftest
+          python3 tools/parallel_planner.py examples/work-graph-demo
+      - name: Storybook query — минимальный read-only адаптер каталога (selftest)
+        run: python3 tools/storybook_query.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

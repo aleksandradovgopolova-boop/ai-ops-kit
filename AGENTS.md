@@ -109,6 +109,16 @@ python3 validation/validate_integration_trace.py --selftest
 python3 validation/validate_integration_trace.py examples/integration-trace-demo
 python3 validation/validate_post_release_readout.py --selftest
 python3 validation/validate_post_release_readout.py examples/readout-demo
+python3 tools/repo_graph.py --selftest
+python3 tools/data_classification.py --selftest
+python3 tools/context_retrieval.py --selftest
+python3 tools/semantic_lite.py --selftest
+python3 tools/context_shadow.py --selftest
+python3 tools/retrieval_bench.py --selftest
+python3 tools/gate_runtime.py --selftest
+python3 tools/parallel_planner.py --selftest
+python3 tools/parallel_planner.py examples/work-graph-demo
+python3 tools/storybook_query.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest

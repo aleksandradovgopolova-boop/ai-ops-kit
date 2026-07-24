@@ -2,6 +2,144 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
+
+Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана
+детерминированная реализация Context Engine + governance-runtime, БЕЗ vector-DB / scheduler /
+MCP-сервера (строго по границе владельца):
+- **retrieval-цепочка** (v3.6.0–3): RepoGraph Lite → full-text + role/package views → cache → Bench →
+  semantic-lite (sparse TF-IDF, не эмбеддинги);
+- **Retrieval Integrity** (v3.6.4): все 6 находок ревью закрыты — P0 cache access-leak (ключ несёт
+  идентичность AccessFilterPolicy), lookup-до-retrieval, exact-revision binding, data-classification
+  hardening (marker advisory-only), shadow-wiring default-OFF, Bench 16 кейсов;
+- **GateResult v2 runtime** (v3.6.5): abstain → targeted-retry → human-handoff;
+- **bounded parallel-2 planner** (v3.6.5): все обязательные fan-in сценарии (parallel/serialize/
+  contract-first/one-fail/both-pass/conflict/base-moved/aggregate-fail);
+- **read-only Storybook-адаптер** (v3.6.6): каталог / related-stories (не MCP-сервер).
+
+Execution по-прежнему на `context_compiler` v1 (новый retrieval в shadow, default OFF — утечек в проде
+нет). **ПОЛНОЕ закрытие v3.6** (живой parallel-run с worktrees+PR, реальный TS/React child со
+Storybook + один настоящий draft PR) — после ротации провайдер-ключа и Node/React-тулчейна (внешний
+гейт). Это веха, не полное закрытие фазы.
+
+## [3.6.0–3.6.4] — 2026-07-25 — Semantic Context Engine: Repository Graph Lite → Retrieval Integrity
+
+Начата фаза v3.6 — ПЕРВАЯ РЕАЛИЗАЦИЯ поверх контрактов (не декларация). Первый инкремент — первая
+НЕ-vector ступень retrieval-цепочки `ContextArchitectureDecision`: детерминированный граф репо.
+НЕ начинаем с vector-DB/семантики (строго по плану: metadata→RepoGraph→full-text→...→semantic).
+
+### Added
+- `tools/repo_graph.py` — Repository Graph Lite через stdlib `ast` (offline): symbols (топ-уровневые
+  функции/классы), imports → внутренние рёбра (файл→файл репо), tests, и `impact(changed)` —
+  обратный транзитивный обход (какие файлы зависят от изменённого; для automatic write-scope /
+  relevant-test-selection в v3.6). Дог-фуд: реальный граф кита (103 файла, 454 символа);
+  `impact(tools/gate_policy.py)` = 16 транзитивных зависимых. selftest (синтетика + реальные факты кита).
+
+### Added (v3.6.1 — full-text retrieval + budgeted role context view)
+- `tools/context_retrieval.py` — детерминированный full-text поиск (ранжирование по hits) + сборка
+  budgeted context view ПОД РОЛЬ с реальным применением `AccessFilterPolicy` (v3.4.2) и token-бюджета
+  (`BudgetContract` v3.4.0). Инварианты цепочки: access-filter ДО включения (класс вне allowed →
+  не в view; `secret` — никогда), deny-by-default, бюджет (chars/4), provenance + cache_key
+  (repo+sha+policy+view). Интеграция с реальным `AFP-001`. selftest 11/11. Всё ещё без vector-DB.
+
+### Added (v3.6.2 — retrieval cache + retrieval Bench)
+- `context_retrieval.RetrievalCache` — детерминированный кэш context-view по `cache_key`
+  (repo+sha+policy+view); одинаковый ключ → hit; смена sha → инвалидация.
+- `tools/retrieval_bench.py` — оффлайн golden-корпус precision/recall/F1 retrieval-стратегий:
+  `fulltext` vs `graph_augmented` (full-text + соседи по Repository Graph). Закрывает research-gap
+  FL-003/RR-009 первым замером: graph-augmentation находит релевантный-по-зависимости файл, у
+  которого нет ключевых слов (recall ↑), не тяня нерелевантное (precision держится) → best_by_f1=
+  graph_augmented. Честно: семантическая стратегия войдёт в тот же Bench позже (semantic fallback).
+
+### Added (v3.6.3 — semantic-fallback-lite, БЕЗ vector-DB)
+- `tools/semantic_lite.py` — детерминированный semantic fallback на классическом sparse TF-IDF/cosine
+  (offline stdlib math; НЕ эмбеддинги/vector-DB — по границе владельца). Ценность над сырым full-text:
+  понижает частые токены, повышает редкие → лучше ранжирование (демо: 'return rebate' → relevant.py
+  первым, редкое `rebate` бьёт частое `return`). Дог-фуд на ките (106 docs). Добавлен третьей
+  стратегией в `retrieval_bench` (fulltext / graph_augmented / semantic_lite).
+
+### Fixed (v3.6.4 — Retrieval Integrity: cache trust-fix, P0 перед runtime-wiring)
+Найдено ревью владельца: до подключения нового retrieval к боевому runtime нужно укрепить
+identity / access-isolation / revision-binding. (Утечки в проде нет — retrieval пока НЕ управляет
+реальными прогонами: `ai_ops_run` по-прежнему зовёт старый `context_compiler`.)
+- **P0 access-leak устранён:** `RetrievalCache` ключ теперь включает идентичность AccessFilterPolicy
+  (`id` + content-hash + `allowed_classes` роли). Ужесточение политики (напр. executor теряет
+  `confidential`) при тех же sha/query/budget -> cache MISS -> пере-retrieval, а НЕ старый permissive
+  view с confidential-файлом. Доказано тестом.
+- **lookup ДО retrieval:** ключ считается из входов, `build_view()` вызывается только на miss
+  (реальная экономия I/O; hit не пере-строит — `builds`-счётчик).
+- **exact-revision binding:** `sha` обязателен; без sha (dirty/unknown snapshot) НЕ кэшируем;
+  идентичность репо — нормализованный путь / `repo_id`, не голое имя каталога (два репо с одинаковым
+  именем не делят ключ). `build_view` несёт `repo`/`sha` + cache_key с hash(allowed_classes).
+
+### Fixed (v3.6.4 — data-classification hardening, trust-фикс #4)
+- `tools/data_classification.py` + `schemas/data-classification-policy.schema.json` +
+  `examples/data-classification-demo/DCP-001` — авторитетная классификация: приоритет
+  policy(path→class) → scanner(raise-only до secret) → inline marker (advisory, ТОЛЬКО повышает).
+  Недоверенный `data-class: public` в README больше НЕ понижает класс (marker проигрывает base в
+  max по строгости); longest-prefix policy wins; `strict_unknown` → неизвестный путь = confidential
+  (deny), а не internal (strict побеждает default_class). `context_retrieval.classify` делегирует сюда
+  (marker raise-only применяется в retrieval).
+
+### Added (v3.6.4 — runtime-wiring SHADOW-режим)
+- `tools/context_shadow.py` — Context Engine v2 shadow-view РЯДОМ с боевым v1 + сравнение источников
+  (overlap / v1_only / v2_only). Wired в `ai_ops_run.run(context_shadow=False)` — по умолчанию OFF
+  (no-op, все selftest/parity целы); при включении строит shadow (guarded: сбой не влияет на прогон),
+  execution по-прежнему на v1 `context_compiler`. Shadow не сканирует скрытые `.ai/`; cache_key
+  привязан к sha. Безопасный первый режим wiring перед промоушеном retrieval.
+
+### Added (v3.6.4 — Retrieval Bench расширен: 16 кейсов, не smoke)
+- `retrieval_bench` golden-корпус расширен до **16 кейсов**: keyword / зависимость-без-слова (граф) /
+  редкий термин (semantic) / RU-EN / multi-file / noise. Доказано на широком корпусе: graph_augmented
+  macro-recall ≥ fulltext; semantic_lite берёт редкие термины; RU-запрос находит файл; noise не даёт
+  ложных релевантных. TS/React и внешние доки — репо_graph/full-text Python-only, кросс-языковая
+  квалификация в v3.6.6 на реальных child-репо (честная граница).
+
+### v3.6.4 Retrieval Integrity — ГОТОВО
+- (1) cache trust-fix (P0 access-leak, lookup-до-retrieval, exact-revision binding);
+- (2) data-classification hardening (marker advisory-only, authoritative registry, strict-unknown);
+- (3) runtime-wiring SHADOW-режим (v2 рядом с v1, default OFF, execution на v1);
+- (4) Retrieval Bench расширен (16 кейсов). Conditional semantic fallback: semantic_lite — стратегия
+  Bench (сравнение), НЕ default retrieval (промоушен только если превзойдёт graph_augmented по F1).
+
+### Note
+- Без version-bump (rc). Нумерация: semantic-lite=v3.6.3; Retrieval Integrity=v3.6.4 (готово).
+  Дальше v3.6.5 (GateResult v2 runtime + bounded parallel-2 execution), v3.6.6 (Storybook MCP) →
+  закрыть v3.6 + version-bump.
+
+## [3.6.5–3.6.6] — 2026-07-25 — Governed Parallel Execution + read-only Storybook
+
+### Added (v3.6.5 часть 1 — GateResult v2 runtime decision-слой)
+- `tools/gate_runtime.py` — доводит `GateResult v2` до РАБОЧЕЙ логики: последовательность вердиктов
+  ревьюера (вкл. `abstain`) → v2-результат (pass/fail/abstain/not_applicable) с targeted-retry на
+  abstain и честным **human-handoff после повторного abstain** (не авто-pass/fail — эскалация). Учёт
+  калибровки (warn на advisory-тире/evidence=pass → abstain(advisory); иначе blocking fail);
+  not_applicable по политике (ui_impact=none). Валидирует вывод через `gate_result_v2.check`; адаптер
+  v2→v1 (`abstain→warn`). Offline decision-слой (не трогает боевой `_run_reviews`; wiring — за флагом).
+
+### Added (v3.6.5 часть 2 — bounded parallel-2 planner + fan-in решения)
+- `tools/parallel_planner.py` — детерминированный планировщик исполнения WorkGraph (offline):
+  `plan()` → mode (single/sequential/parallel/hybrid), parallel-группы (bounded ≤2), contract_first
+  (общий контракт фиксируется первым), топологичный integration_order. `can_parallel()`:
+  непересекающиеся+независимые → parallel; пересечение write_scope / depends_on → serialize.
+  `integration_decision()` покрывает ВСЕ обязательные сценарии: один пакет fail → fan-in не
+  начинается; оба pass+нет конфликта+aggregate green → новый integration-SHA + один PR; merge
+  conflict → block; base moved → revalidation; aggregate fail → PR не открывается. 16 сценарных тестов.
+- Реальный WG-001 → hybrid (api‖ui parallel, wiring последним, OrderContract contract-first).
+
+### Added (v3.6.6 часть 1 — минимальный read-only Storybook-адаптер)
+- `tools/storybook_query.py` — детерминированный read-only слой запросов поверх story-index (тот же
+  индекс, что парсит `storybook_adapter`): list_components / list_stories / component_stories /
+  **related_stories(changed_files)** / story_meta / catalog. БЕЗ внешнего MCP-сервера/SaaS
+  (полноценный MCP — не сейчас); это навигация по каталогу для контекста агентов. Нет Storybook →
+  пустой каталог (без падения). selftest 8/8.
+
+### Note
+- Без version-bump (rc). OFFLINE-scope v3.6 ЗАВЕРШЁН: retrieval-цепочка (v3.6.0–4) + GateResult v2
+  runtime + parallel planner (v3.6.5) + read-only Storybook-адаптер (v3.6.6). ЗАКРЫТИЕ v3.6 (+bump)
+  требует ЖИВОЙ квалификации — реальный parallel-run (worktrees+модель+PR) и TS/React child со
+  Storybook + один настоящий draft PR — внешний гейт (провайдер-ключ + Node/React-тулчейн).
+
 ## [3.5.3] — 2026-07-24 — Observability, Regression Corpus & Evolution Loops (v3.5 ЗАКРЫТ)
 
 Фаза v3.5 закрыта. VERSION 3.4.5 → **3.5.3** (закрытие фазы — release-точка, как v3.3.3/v3.4.5).
