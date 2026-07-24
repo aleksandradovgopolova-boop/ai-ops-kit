@@ -1,0 +1,23 @@
+schema_version: 1
+kind: FeatureLearning
+id: FL-001
+feature: "architecture:control-plane"
+decision_package: DP-108
+hypothesis: >-
+  AI Ops = control plane + тонкие адаптеры к open-source снижает стоимость поддержки
+  по сравнению с монолитным движком.
+validation:
+  method: "сравнительный анализ аналогов AI Ops (research RR-008/DP-108)"
+  status: done
+  result: "стратегия подтверждена внешним анализом аналогов; риски адаптеров названы"
+outcome:
+  verdict: confirmed
+  expected: "control-plane + адаптеры дешевле в поддержке, чем монолит"
+  actual: "подтверждено анализом; зафиксировано как ADR-001"
+learnings:
+  - "control-plane + тонкие адаптеры подтверждён как стратегия"
+  - "цена — дисциплина адаптеров и отслеживание версий внешних инструментов"
+follow_up:
+  - ADR-001
+status: validated
+created_at: null

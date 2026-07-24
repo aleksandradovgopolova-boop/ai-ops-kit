@@ -2,6 +2,22 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.3.0-rc — Product Learning (интеграция с Research)
+
+Следующий класс: связать research-решения с продуктовыми исходами. Строится НАД research-контуром
+(потребляет `DecisionPackage` по id, слабой ссылкой), не трогая его схемы/валидаторы/данные —
+research-контур управляется параллельно.
+
+### Added
+- `schemas/feature-learning.schema.json` + `validation/validate_feature_learning.py` —
+  `FeatureLearning`: мост research `DecisionPackage` → продуктовый/архитектурный исход (hypothesis →
+  validation → outcome/verdict → learnings → follow_up). Честность: вердикт нельзя вынести без
+  завершённой проверки (`verdict != pending` требует `validation.status=done` + `result`); `refuted`
+  требует `learnings`; `status=validated` требует done. Реестр `product-learning/*.yaml` (уникальность,
+  имя==id). selftest + реальный реестр в CI.
+- `product-learning/FL-001.yaml` — реальная цепочка дог-фудинга: research `DP-108` (стратегия
+  AI Ops = control-plane) → `FL-001` (confirmed) → `ADR-001`. Замыкает research → продукт → решение.
+
 ## [Unreleased] — v3.2.0-rc — Architecture, Product & UI Governance (groundwork)
 
 Начат следующий этаж системы: управленческий слой поверх исполнения. Первый инкремент — контракт
