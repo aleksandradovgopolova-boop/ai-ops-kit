@@ -25,6 +25,24 @@ shadow, execution на v1), но обязаны быть закрыты ДО б�
     иметь зафиксированный contract SHA; aggregate — РЕАЛЬНЫЙ GateReport (dict), не голый bool. 20 новых
     сценарных проверок (33 всего в selftest).
 
+### Fixed (v3.6.7b — GateResult v2 hardening: blocking abstain больше не выдаёт advisory за разрешение)
+- `schemas/gate-result-v2.schema.json` + `tools/gate_result_v2.py` + `tools/gate_runtime.py` —
+  ревьюер может воздержаться по БЛОКИРУЮЩЕМУ гейту; раньше это выражалось как `enforcement=advisory`
+  (а `human_handoff` жил только в runtime-meta вне результата) -> v2-осведомлённый потребитель
+  теоретически мог принять advisory за разрешение продолжать. Теперь:
+  - `reviewer_outcome` ОТДЕЛЁН от `enforcement` (сырой вердикт ≠ уровень принуждения);
+  - blocking-abstain -> `resolution=pending_human`, `delivery_allowed=false`, `human_handoff=true`
+    (решение НЕ принято -> доставка запрещена -> нужен человек); хранится в САМОМ результате;
+  - схема: `allOf/if-then` делает blocking-abstain well-formed ТОЛЬКО с pending_human-полями;
+    `check()` разводит advisory-abstain (resolved, доставка ОК) и blocking-abstain; `status=fail`
+    несовместим с `delivery_allowed=true`;
+  - `to_v1(blocking-abstain)` -> v1 **fail** с blockers (не мягкий warn — старый потребитель
+    остаётся fail-closed); advisory-abstain -> warn (как раньше);
+  - `gate_runtime.can_deliver()` — AND по гейтам: доставка только если КАЖДЫЙ `delivery_allowed`.
+  Боевое подключение к `_run_reviews` за feature-flag — ЧАСТЬ v3.6.8 (живая квалификация), НЕ
+  заявляется сделанным сейчас (честная граница capability): decision-слой готов и оттестирован,
+  wiring exercised только вживую.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

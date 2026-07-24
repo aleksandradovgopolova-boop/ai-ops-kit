@@ -42,17 +42,20 @@ def decide(gate, signals, verdicts, evidence_status="not_run", max_retries=1,
     if applicability == "not_applicable":
         return _v2(gate, "not_applicable", blocking=True, applicability="not_applicable",
                    enforcement="advisory", evidence_mode=evidence_mode, owner=owner,
-                   review_mode=review_mode, reason="гейт не применяется (ui_impact=none)"), \
+                   review_mode=review_mode, reason="гейт не применяется (ui_impact=none)",
+                   reviewer_outcome=None), \
             {"retries": 0, "human_handoff": False, "terminal": "not_applicable"}
 
     retries = 0
     for i, v in enumerate(verdicts or []):
         if v == "pass":
             return _v2(gate, "pass", True, "applicable", "blocking", evidence_mode, owner, review_mode,
-                       reason="чистый pass"), {"retries": retries, "human_handoff": False, "terminal": "pass"}
+                       reason="чистый pass", reviewer_outcome="pass"), \
+                {"retries": retries, "human_handoff": False, "terminal": "pass"}
         if v == "fail":
             return _v2(gate, "fail", True, "applicable", "blocking", evidence_mode, owner, review_mode,
-                       reason="reviewer FAIL", blockers=blockers or [f"reviewer FAIL @ {gate}"]), \
+                       reason="reviewer FAIL", blockers=blockers or [f"reviewer FAIL @ {gate}"],
+                       reviewer_outcome="fail"), \
                 {"retries": retries, "human_handoff": False, "terminal": "fail"}
         if v == "warn":
             if ui:
@@ -60,38 +63,69 @@ def decide(gate, signals, verdicts, evidence_status="not_run", max_retries=1,
             else:
                 action, reason = "block", "warn на блокирующем не-UI гейте"
             if action == "advisory":
+                # advisory-abstain: субъективный warn, калибровка сняла блок -> решение ПРИНЯТО, доставка ОК
                 return _v2(gate, "abstain", True, "applicable", "advisory", evidence_mode, owner,
-                           review_mode, reason=f"warn -> advisory: {reason}"), \
+                           review_mode, reason=f"warn -> advisory: {reason}", reviewer_outcome="warn"), \
                     {"retries": retries, "human_handoff": False, "terminal": "abstain-advisory"}
             return _v2(gate, "fail", True, "applicable", "blocking", evidence_mode, owner, review_mode,
-                       reason=reason, blockers=blockers or [f"warn(block) @ {gate}: {reason}"]), \
+                       reason=reason, blockers=blockers or [f"warn(block) @ {gate}: {reason}"],
+                       reviewer_outcome="warn"), \
                 {"retries": retries, "human_handoff": False, "terminal": "fail"}
         if v == "abstain":
             if retries < max_retries and i < len(verdicts) - 1:
                 retries += 1            # targeted retry: следующий вердикт из последовательности
                 continue
-            # ретраи исчерпаны и всё ещё abstain -> человек
-            return _v2(gate, "abstain", True, "applicable", "advisory", evidence_mode, owner, review_mode,
-                       reason="повторный abstain -> human handoff (не авто-pass/fail)"), \
+            # ретраи исчерпаны и всё ещё abstain по БЛОКИРУЮЩЕМУ гейту ->
+            # решение НЕ принято -> blocking-abstain(pending_human), доставка ЗАПРЕЩЕНА, нужен человек.
+            return _blocking_abstain(gate, evidence_mode, owner, review_mode,
+                                     "повторный abstain по блокирующему гейту -> pending_human (не авто-pass/fail)"), \
                 {"retries": retries, "human_handoff": True, "terminal": "abstain-handoff"}
     # пустая/незавершённая последовательность -> человек (fail-closed на неопределённости)
-    return _v2(gate, "abstain", True, "applicable", "advisory",
-               (dec or {}).get("evidence_mode", "ai_review"), owner, review_mode,
-               reason="нет вынесенного вердикта -> human handoff"), \
+    return _blocking_abstain(gate, (dec or {}).get("evidence_mode", "ai_review"), owner, review_mode,
+                             "нет вынесенного вердикта по блокирующему гейту -> pending_human"), \
         {"retries": retries, "human_handoff": True, "terminal": "no-verdict-handoff"}
 
 
+def _blocking_abstain(gate, evidence_mode, owner, review_mode, reason):
+    """Blocking-abstain: ревьюер воздержался по БЛОКИРУЮЩЕМУ гейту. reviewer_outcome=abstain,
+    enforcement=blocking, resolution=pending_human, delivery_allowed=false, human_handoff=true —
+    решение НЕ принято, доставка запрещена до человека (НЕ advisory)."""
+    return _v2(gate, "abstain", True, "applicable", "blocking", evidence_mode, owner, review_mode,
+               reason=reason, reviewer_outcome="abstain", resolution="pending_human",
+               delivery_allowed=False, human_handoff=True,
+               blockers=[f"human handoff required @ {gate}: {reason}"])
+
+
+def can_deliver(results):
+    """AND по всем гейтам: доставка разрешена, только если КАЖДЫЙ гейт delivery_allowed. Возвращает
+    (bool, blockers). Blocking-abstain(pending_human) и fail держат доставку закрытой."""
+    blockers = []
+    for r in results or []:
+        if not r.get("delivery_allowed", False):
+            tag = "pending_human" if r.get("resolution") == "pending_human" else r.get("status")
+            blockers.append(f"{r.get('gate')}: {tag}")
+    return (len(blockers) == 0), blockers
+
+
 def _v2(gate, status, blocking, applicability, enforcement, evidence_mode, owner, review_mode,
-        reason="", blockers=None):
+        reason="", blockers=None, reviewer_outcome=None, resolution=None,
+        delivery_allowed=None, human_handoff=False):
+    if resolution is None:
+        resolution = "pending_human" if (status == "abstain" and enforcement == "blocking") else "resolved"
+    if delivery_allowed is None:
+        delivery_allowed = (status in ("pass", "not_applicable")
+                            or (status == "abstain" and enforcement == "advisory"))
     r = {"schema_version": 2, "gate": gate, "status": status, "blocking": bool(blocking),
          "applicability": applicability, "enforcement": enforcement, "evidence_mode": evidence_mode,
-         "human_signoff": False, "calibration_reason": reason, "owner": owner,
-         "review_mode": review_mode, "tested_revision": None, "created_at": None, "expires_at": None,
+         "human_signoff": False, "reviewer_outcome": reviewer_outcome, "resolution": resolution,
+         "delivery_allowed": bool(delivery_allowed), "human_handoff": bool(human_handoff),
+         "calibration_reason": reason, "owner": owner, "review_mode": review_mode,
+         "tested_revision": None, "created_at": None, "expires_at": None,
          "override": None, "warnings": [], "evidence": []}
     if status == "fail":
         r["blockers"] = list(blockers or [f"fail @ {gate}"])
     else:
-        r["blockers"] = []
+        r["blockers"] = list(blockers or [])
         if status == "abstain":
             r["warnings"] = [reason]
     return r
@@ -130,14 +164,29 @@ def selftest():
     # abstain -> retry -> pass
     r, m = decide("ux_review", uf, ["abstain", "pass"], max_retries=1)
     expect("abstain->retry->pass: pass, retries=1", r["status"] == "pass" and m["retries"] == 1)
-    # abstain, abstain (retry исчерпан) -> human handoff
+    # abstain, abstain (retry исчерпан) -> BLOCKING human handoff (не advisory!)
     r, m = decide("ux_review", uf, ["abstain", "abstain"], max_retries=1)
-    expect("повторный abstain -> human_handoff, status=abstain (не авто-pass/fail)",
-           r["status"] == "abstain" and m["human_handoff"] is True and _valid(r))
-    # no verdict -> handoff
+    expect("повторный abstain -> blocking-abstain(pending_human), доставка ЗАПРЕЩЕНА, не advisory",
+           r["status"] == "abstain" and r["enforcement"] == "blocking"
+           and r["resolution"] == "pending_human" and r["delivery_allowed"] is False
+           and r["human_handoff"] is True and m["human_handoff"] is True and _valid(r))
+    # to_v1(blocking-abstain) -> fail (старый потребитель не примет advisory за разрешение)
+    expect("to_v1(blocking-abstain) -> v1 fail (не warn)",
+           gate_result_v2.to_v1(r)["status"] == "fail")
+    # no verdict -> blocking handoff
     r, m = decide("ux_review", uf, [])
-    expect("нет вердикта -> human_handoff (fail-closed на неопределённости)",
-           m["human_handoff"] is True and _valid(r))
+    expect("нет вердикта -> blocking-abstain(pending_human), доставка запрещена (fail-closed)",
+           m["human_handoff"] is True and r["enforcement"] == "blocking"
+           and r["delivery_allowed"] is False and _valid(r))
+    # can_deliver: пройденные + advisory-abstain разрешают; blocking-abstain держит закрытым
+    p, _ = decide("ux_review", uf, ["pass"])
+    adv, _ = decide("ux_review", intn, ["warn"])
+    ba, _ = decide("accessibility_review", uf, ["abstain", "abstain"])
+    okd, bl = can_deliver([p, adv])
+    expect("can_deliver: pass + advisory-abstain -> доставка разрешена", okd is True and bl == [])
+    okd2, bl2 = can_deliver([p, ba])
+    expect("can_deliver: blocking-abstain среди гейтов -> доставка ЗАПРЕЩЕНА",
+           okd2 is False and any("pending_human" in b for b in bl2))
     # not_applicable по политике (ui_impact=none -> UI-гейт не применяется)
     r, m = decide("ux_review", {"ui_impact": "none"}, ["warn"])
     expect("ui_impact=none -> not_applicable, валиден",
