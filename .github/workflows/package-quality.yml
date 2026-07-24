@@ -93,6 +93,10 @@ jobs:
         run: |
           python3 validation/validate_feature_learning.py --selftest
           python3 validation/validate_feature_learning.py
+      - name: Learning-loop fitness — петля research->learning->architecture (selftest + реальная)
+        run: |
+          python3 validation/validate_learning_loop.py --selftest
+          python3 validation/validate_learning_loop.py
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)

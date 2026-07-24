@@ -84,6 +84,8 @@ python3 validation/validate_quality_attributes.py
 python3 tools/evolution_triggers.py --selftest
 python3 validation/validate_feature_learning.py --selftest
 python3 validation/validate_feature_learning.py
+python3 validation/validate_learning_loop.py --selftest
+python3 validation/validate_learning_loop.py
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest

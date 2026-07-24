@@ -17,6 +17,11 @@ research-контур управляется параллельно.
   имя==id). selftest + реальный реестр в CI.
 - `product-learning/FL-001.yaml` — реальная цепочка дог-фудинга: research `DP-108` (стратегия
   AI Ops = control-plane) → `FL-001` (confirmed) → `ADR-001`. Замыкает research → продукт → решение.
+- **Learning-loop fitness** (v3.3.1): `validation/validate_learning_loop.py` — целостность петли
+  research→learning→architecture: `FeatureLearning.follow_up` со ссылками `ADR-NNN` обязаны
+  резолвиться в реальный ADR-реестр (иначе «породили ADR-X», а его нет — петля разорвана).
+  `RR-`/`DP-`/`feature:`-ссылки — слабые (research/продукт управляются иначе), не резолвятся. При
+  поломке любого реестра — честно «почините сначала». selftest + реальный прогон в CI.
 
 ## [Unreleased] — v3.2.0-rc — Architecture, Product & UI Governance (groundwork)
 
