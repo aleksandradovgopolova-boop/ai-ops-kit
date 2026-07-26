@@ -253,6 +253,10 @@ jobs:
         run: |
           python3 validation/validate_promotion_qualification.py --selftest
           python3 validation/validate_promotion_qualification.py
+      - name: "Promotion-harness: оффлайн-доказательство матрицы негативов (10/10) + selftest"
+        run: |
+          python3 tools/promotion_qual.py --selftest
+          python3 tools/promotion_qual.py --verify-negatives
       - name: "Стек-квалификация: детект+failure-id на реальных фикстурах python/go (golden+live)"
         run: python3 validation/validate_stack_qualification.py --selftest
       - name: "Product authoring: структурные валидаторы артефактов (selftest)"

@@ -101,6 +101,14 @@ Context Engine v2 закодирован как проверяемый конт�
   mandatory-retained-or-block / 100% snapshot-bound / 100% package-SHA-bound / 100% integration-SHA-bound)
   покрыты; ЧЕСТНОСТЬ — каждый `uses`-инструмент существует в tools/validation; `blocked_by` непуст
   (external-гейт: ротация ключа + Node/React-тулчейн). CI +1 шаг. Это ПЛАН, не выполнение v3.6.8.
+- `tools/promotion_qual.py` — драйвер (harness) исполнения PQP-001, честно НЕ фейкает живые прогоны:
+  (1) грузит+валидирует план; (2) **доказывает ВЕСЬ обязательный набор негативов ОФФЛАЙН (10/10)** —
+  они детерминированно решаемы уже сейчас (fail-closed parallel_planner / gate_runtime / context_engine),
+  так что матрица негативов ПРОВЕРЕНА, а не «запланирована»; (3) `preflight` готовности среды к трём
+  живым прогонам (provider key / git / node-react / scratch-repo, per-run); (4) `runbook` — точные
+  команды каждого прогона. `execute()` без готовности среды возвращает status=blocked с перечнем
+  недостающего и НИКОГДА не выдаёт фейковый pass. Живые прогоны (python-child / ts-react-storybook /
+  parallel-2) остаются за external-гейтом. CI +1 шаг (selftest + verify-negatives 10/10).
 
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 

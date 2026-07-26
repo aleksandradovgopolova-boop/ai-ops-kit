@@ -164,6 +164,8 @@ python3 validation/validate_qualification.py --selftest
 python3 validation/validate_qualification.py
 python3 validation/validate_promotion_qualification.py --selftest
 python3 validation/validate_promotion_qualification.py
+python3 tools/promotion_qual.py --selftest
+python3 tools/promotion_qual.py --verify-negatives
 python3 validation/validate_stack_qualification.py --selftest
 python3 validation/validate_pipeline_e2e.py --selftest
 python3 validation/validate_requirements_artifact.py --selftest
