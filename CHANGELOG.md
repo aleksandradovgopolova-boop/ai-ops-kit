@@ -87,6 +87,21 @@ v3.6.7 (не новая фаза) — делает exact-revision binding git-д
   `gate_report.tested_revision == package.sha` и `aggregate.tested_revision == integration_sha`; contract
   SHA обязан быть ПОХОЖ на реальный commit/blob (hex ≥7), а не просто непустая строка.
 
+### Added (v3.6.8 planning — PromotionQualificationPlan как ДАННЫЕ; сама live-квалификация за гейтом)
+Подготовка к v3.6.8 offline (не живой прогон): план живой квалификации и КОНТРОЛИРУЕМОГО promotion
+Context Engine v2 закодирован как проверяемый контракт, чтобы живая квалификация исполнялась против
+чек-листа и не срезала доверие.
+- `schemas/promotion-qualification-plan.schema.json` + `validation/validate_promotion_qualification.py`
+  + `qualification/promotion/v3.6.8-plan.yaml` (PQP-001). Инварианты валидатора: `promotion_sequence`
+  СТРОГО `shadow -> hybrid -> default` (никакого прямого v1->default flip); каждый run `exact_sha_bound`;
+  runs покрывают три обязательных вида (python-child / ts-react-storybook / parallel-2); все 10
+  обязательных негативов (write-scope overlap / package fail / contract-not-fixed / duplicate-id /
+  merge-conflict / base-moved / aggregate-wrong-sha / reviewer-abstain-x2 / mandatory-missing /
+  child-policy-changed) и все 8 exit-критериев (0 leaks / 0 stale / 0 false-green / 0 dup-PR / 100%
+  mandatory-retained-or-block / 100% snapshot-bound / 100% package-SHA-bound / 100% integration-SHA-bound)
+  покрыты; ЧЕСТНОСТЬ — каждый `uses`-инструмент существует в tools/validation; `blocked_by` непуст
+  (external-гейт: ротация ключа + Node/React-тулчейн). CI +1 шаг. Это ПЛАН, не выполнение v3.6.8.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

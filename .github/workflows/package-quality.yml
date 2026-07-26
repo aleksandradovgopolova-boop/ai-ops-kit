@@ -249,6 +249,10 @@ jobs:
         run: |
           python3 validation/validate_qualification.py --selftest
           python3 validation/validate_qualification.py
+      - name: "Promotion-квалификация: план v3.6.8 (shadow->hybrid->default, негативы, exit-критерии) (selftest + план)"
+        run: |
+          python3 validation/validate_promotion_qualification.py --selftest
+          python3 validation/validate_promotion_qualification.py
       - name: "Стек-квалификация: детект+failure-id на реальных фикстурах python/go (golden+live)"
         run: python3 validation/validate_stack_qualification.py --selftest
       - name: "Product authoring: структурные валидаторы артефактов (selftest)"
