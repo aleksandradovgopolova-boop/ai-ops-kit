@@ -1503,8 +1503,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                                 "note": "детерминированные домены чисты + независимый "
                                                         "security-reviewer вынес pass по needs_review"}}
             else:
+                # v3.6.8 (finding живой квалификации): раньше причина отказа вердикта была НЕМА
+                # («не вынес pass»). Теперь фиксируем ТОЧНЫЕ ошибки вердикта (_review_security кладёт их
+                # в res["invalid"]) + структурную диагностику — чтобы видеть, промпт/формат это или модель.
+                _inv = sec_res.get("invalid") if isinstance(sec_res, dict) else None
+                _raw = (sec_res.get("raw") if isinstance(sec_res, dict) and "raw" in sec_res else sec_res)
+                _diag = {}
+                if isinstance(_raw, dict):
+                    _dr = _raw.get("domain_results")
+                    _diag = {"raw_keys": sorted(_raw.keys()),
+                             "has_domain_results": isinstance(_dr, list) and bool(_dr),
+                             "domain_results_count": len(_dr) if isinstance(_dr, list) else 0}
                 gate_ev["security"] = {"status": "fail", "blockers": ["security-reviewer не вынес pass"],
                                        "reviewer": {"status": sec_status},
+                                       "verdict_errors": _inv, "verdict_diag": _diag,
                                        "pack": {"applicable": security_pack_result["applicable_domains"],
                                                 "needs_review": security_pack_result["needs_review"]}}
         else:

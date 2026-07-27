@@ -126,6 +126,11 @@ execution по-прежнему на v1.
   `OPENAI_COMPATIBLE_TIMEOUT` (default 300с). Флагман-reasoning kimi-k3 на тяжёлых ENGINEERING-вызовах
   бывает > 300с (первый живой ENGINEERING-прогон упал на провайдер-таймауте) — теперь поднимается без
   хардкода. Не меняет поведение по умолчанию.
+- `tools/execution_pipeline.py` — security-гейт при отказе вердикта теперь фиксирует ТОЧНЫЕ причины:
+  `gate_ev["security"].verdict_errors` (список из `_security_verdict_errors`) + `verdict_diag`
+  (`has_domain_results`, `domain_results_count`, `raw_keys`). Раньше был только немой «security-reviewer
+  не вынес pass» — по живым прогонам не было видно, промпт/формат это или неспособность модели выдать
+  строгий SecurityVerdict v2. Observability, поведение гейта не меняется.
 
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
