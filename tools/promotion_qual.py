@@ -40,6 +40,18 @@ import context_retrieval as cr         # noqa: E402
 import validate_promotion_qualification as vpq   # noqa: E402
 
 DEFAULT_PLAN = PKG / "qualification" / "promotion" / "v3.6.8-plan.yaml"
+# v3.6.8: провайдер по умолчанию — kimi (moonshot) через openai-compatible ветку make_provider.
+# Anthropic не обязателен; ядро provider-agnostic и fail-closed (слабая модель -> honest fail, не false-green).
+DEFAULT_PROVIDER = "openai-compatible"
+DEFAULT_MODEL_BY_PROVIDER = {"openai-compatible": "kimi-k2", "anthropic": "claude-sonnet-5"}
+
+
+def _resolve_provider(provider=None, model=None):
+    provider = provider or os.environ.get("AI_OPS_PROVIDER") or DEFAULT_PROVIDER
+    model = (model or os.environ.get("AI_OPS_MODEL")
+             or os.environ.get("OPENAI_COMPATIBLE_MODEL")
+             or DEFAULT_MODEL_BY_PROVIDER.get(provider, "kimi-k2"))
+    return provider, model
 
 
 # --- Оффлайн-доказательства негативов: каждый covers-тег -> детерминированная проверка fail-closed ---
@@ -163,9 +175,18 @@ def verify_negatives(plan):
     return {"total": len(out), "proven": sum(1 for r in out if r["proven"]), "results": out}
 
 
-def preflight(plan):
+def preflight(plan, provider=None, model=None):
     """Готовность среды к ЖИВЫМ прогонам (ничего не исполняет)."""
-    has_key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_COMPATIBLE_API_KEY"))
+    provider, model = _resolve_provider(provider, model)
+    # честно: для openai-compatible (kimi/moonshot) ключа мало — нужен ещё base_url,
+    # иначе make_provider не сможет вызвать endpoint.
+    if provider == "anthropic":
+        has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    elif provider == "openai":
+        has_key = bool(os.environ.get("OPENAI_API_KEY"))
+    else:  # openai-compatible (kimi/moonshot/deepseek): ключ И base_url
+        has_key = bool(os.environ.get("OPENAI_COMPATIBLE_API_KEY")
+                       and os.environ.get("OPENAI_COMPATIBLE_BASE_URL"))
     has_git = bool(shutil.which("git"))
     has_node = bool(shutil.which("node") and shutil.which("npx"))
     has_scratch = bool(os.environ.get("AI_OPS_SCRATCH_REPO"))
@@ -179,38 +200,50 @@ def preflight(plan):
         miss = [c for c in req if not checks.get(c)]
         per_run[r["id"]] = {"ready": not miss, "missing": miss}
     missing = sorted({c for c, ok in checks.items() if not ok})
-    return {"checks": checks, "ready": not missing, "missing": missing, "per_run": per_run}
+    hint = ("для openai-compatible нужны OPENAI_COMPATIBLE_API_KEY + OPENAI_COMPATIBLE_BASE_URL"
+            if provider not in ("anthropic", "openai") and not checks["provider_key"] else None)
+    return {"provider": provider, "model": model, "checks": checks, "ready": not missing,
+            "missing": missing, "provider_key_hint": hint, "per_run": per_run}
 
 
-def runbook(plan):
-    """Точные команды каждого прогона (dry). Плейсхолдеры <task>/<scratch> заполняет оператор."""
+def runbook(plan, provider=None, model=None):
+    """Точные команды каждого прогона (dry). Плейсхолдеры <task>/<scratch> заполняет оператор.
+    По умолчанию провайдер — kimi (moonshot) через openai-compatible; переопределяется provider/model
+    или env AI_OPS_PROVIDER / AI_OPS_MODEL."""
+    provider, model = _resolve_provider(provider, model)
     common = 'GITHUB_TOKEN=$(gh auth token) python3 tools/ai_ops_run.py run "<task>" <scratch>'
-    prov = "--engine pipeline --provider anthropic --model claude-sonnet-5 --execute --author --review --open-pr --context-shadow"
+    prov = (f"--engine pipeline --provider {provider} --model {model} "
+            "--execute --author --review --open-pr --context-shadow")
+    # для openai-compatible (kimi/moonshot) ключ+endpoint читаются из env make_provider'ом
+    env_note = ([] if provider in ("anthropic", "openai")
+                else ["# env: OPENAI_COMPATIBLE_BASE_URL=<moonshot .../v1/chat/completions> "
+                      "OPENAI_COMPATIBLE_API_KEY=<ключ> (секрет ТОЛЬКО в env, не в файлы/логи)"])
     steps = {
-        "python-child": [f"{common} {prov}",
+        "python-child": env_note + [f"{common} {prov}",
                          "проверить rep.context_shadow.valid + snapshot_verified + sources_used + mandatory сохранён"],
-        "ts-react-storybook": ["cd <scratch> && npm ci && npm run build-storybook   # storybook-static/index.json",
+        "ts-react-storybook": env_note + ["cd <scratch> && npm ci && npm run build-storybook   # storybook-static/index.json",
                                f"{common} {prov}",
                                "проверить UIEvidenceBundle на integration-SHA (stories/interaction/a11y/visual)"],
-        "parallel-2": ["python3 tools/parallel_planner.py <scratch>/work-graph.yaml --json   # plan.valid=true",
+        "parallel-2": env_note + ["python3 tools/parallel_planner.py <scratch>/work-graph.yaml --json   # plan.valid=true",
                        f"{common} {prov}   # bounded parallel-2 -> integration SHA -> один PR",
                        "integration_gate: полный доказательный набор package-результатов -> один draft PR"],
     }
-    return [{"run": r["id"], "kind": r["kind"], "commands": steps.get(r["kind"], [])} for r in plan.get("runs", [])]
+    return [{"run": r["id"], "kind": r["kind"], "provider": provider, "model": model,
+             "commands": steps.get(r["kind"], [])} for r in plan.get("runs", [])]
 
 
-def execute(plan, dry_run=True):
+def execute(plan, dry_run=True, provider=None, model=None):
     """Честный гейт: без готовности среды НЕ исполняет живые прогоны и НЕ выдаёт pass."""
-    pf = preflight(plan)
+    pf = preflight(plan, provider, model)
     negatives = verify_negatives(plan)
     if not pf["ready"] or dry_run:
         return {"status": ("dry-run" if dry_run else "blocked"),
                 "reason": ("dry-run (живые прогоны не запускались)" if dry_run
                            else f"среда не готова: не хватает {pf['missing']}"),
-                "negatives_offline": negatives, "preflight": pf, "runbook": runbook(plan),
+                "negatives_offline": negatives, "preflight": pf, "runbook": runbook(plan, provider, model),
                 "note": "живые прогоны не выполнены и НЕ засчитаны (никакого фейкового pass)"}
     # ready и не dry-run: здесь оператор/следующий live-инкремент исполняет runbook.
-    return {"status": "ready", "negatives_offline": negatives, "preflight": pf, "runbook": runbook(plan),
+    return {"status": "ready", "negatives_offline": negatives, "preflight": pf, "runbook": runbook(plan, provider, model),
             "note": "среда готова — исполнить runbook (живой прогон = отдельный live-инкремент v3.6.8)"}
 
 

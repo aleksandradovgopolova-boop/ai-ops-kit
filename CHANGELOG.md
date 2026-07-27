@@ -109,6 +109,9 @@ Context Engine v2 закодирован как проверяемый конт�
   команды каждого прогона. `execute()` без готовности среды возвращает status=blocked с перечнем
   недостающего и НИКОГДА не выдаёт фейковый pass. Живые прогоны (python-child / ts-react-storybook /
   parallel-2) остаются за external-гейтом. CI +1 шаг (selftest + verify-negatives 10/10).
+  runbook/preflight ПАРАМЕТРИЗОВАНЫ по провайдеру (default — **kimi/moonshot** через openai-compatible;
+  Anthropic не обязателен, ядро provider-agnostic+fail-closed); preflight для openai-compatible честно
+  требует и `OPENAI_COMPATIBLE_API_KEY`, И `OPENAI_COMPATIBLE_BASE_URL`.
 
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
