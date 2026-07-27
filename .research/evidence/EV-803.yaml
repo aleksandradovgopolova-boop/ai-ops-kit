@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-803
+request_id: RR-010
+statement: 'Официальные митигации (сжато, по разделам Prevention and Mitigation Guidelines):
+  сквозной паттерн — Least Agency (не давать автономию без нужды), HITL для high-impact
+  действий, short-lived scoped credentials, sandbox + egress-контроль, подписанные
+  артефакты/provenance; по рискам: ASI02 — per-tool профили + Intent Gate middleware;
+  ASI03 — task-scoped токены + per-agent identity + policy engine; ASI04 — подписанные
+  manifests + SBOM/AIBOM + pinning по content hash + kill switch; ASI06 — валидация
+  memory writes + сегментация + provenance/trust scores + expiry + запрет re-ingestion
+  собственных выводов; ASI08 — zero-trust + blast-radius guardrails (quotas, circuit
+  breakers); ASI10 — immutable signed audit + watchdog agents + kill-switches.'
+evidence_type: documented_fact
+source:
+  title: OWASP Top 10 For Agentic Applications 2026 — Mitigation Guidelines
+  url: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: PDF pp.10-38, разделы Prevention and Mitigation Guidelines
+  quote: actionable mitigations that teams can start implementing today
+captured_at: '2026-07-27'
+captured_by: scout-agent (OWASP agentic risks, RR-010)
+freshness:
+  volatile: true
+  expires_at: '2026-10-27'
+reliability:
+  level: high
+  rationale: Извлечено дословно из официального PDF, сжато без изменения смысла.
+status: active
+superseded_by: null

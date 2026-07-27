@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-708
+request_id: RR-009
+statement: 'Курация ECC неоднородна: по метаданным origin в SKILL.md — ~199-205 авторских (''ECC''), ~42-44 community
+  и ~10 сторонних нишевых (госпиталь Health1, homelab, visa-doc-translate); ядро (evals, gates, learning, context)
+  авторское и документированное, хвост из 279 скиллов — частично свалка; дубли с китом значительны по жанру агентов
+  (67 vs 51: reviewers/planner/architect/security) — агентов целиком не импортировать.'
+evidence_type: documented_fact
+source:
+  title: ECC — skills/*/SKILL.md metadata (repo-wide grep по клону)
+  url: https://github.com/affaan-m/ECC/tree/main/skills
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: grep 'origin:' skills/*/SKILL.md, commit abe185c6; цитаты не приводим — данные grep-производные по множеству
+    файлов
+captured_at: '2026-07-25'
+captured_by: scout-agent (everything-claude-code/ECC, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Подсчёт по полным исходникам клона; origin — явная авторская маркировка провенанса.
+status: active
+superseded_by: null

@@ -1,0 +1,29 @@
+schema_version: 1
+kind: research.evidence
+id: EV-732
+request_id: RR-009
+statement: 'Самоописание ruflo (README): 100+ агентов, swarm-координация, самообучающаяся
+  память, федерация между машинами, enterprise security guardrails; интеграция с Claude
+  Code одной командой MCP-регистрации, 27 хуков, ~210-314 MCP-инструментов, «после
+  init просто используй Claude Code как обычно». Это маркетинговые заявления первоисточника,
+  не верифицированные возможности.'
+evidence_type: documented_fact
+source:
+  title: ruvnet/ruflo — README.md
+  url: https://github.com/ruvnet/ruflo/blob/main/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: header + Background + CLI Install + Architecture
+  quote: An agent meta-harness for Claude Code and Codex.
+captured_at: '2026-07-25'
+captured_by: scout-agent (ruflo identification+scan, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Первоисточник самоописания; результативность заявлений не проверялась.
+status: active
+superseded_by: null

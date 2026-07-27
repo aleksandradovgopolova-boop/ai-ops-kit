@@ -1,0 +1,29 @@
+schema_version: 1
+kind: research.evidence
+id: EV-707
+request_id: RR-009
+statement: 'Мета-скиллы управления каталогом: skill-scout (обязательный поиск существующих
+  скиллов — локально/marketplace/GitHub/web — перед созданием нового) и skill-stocktake
+  (аудит качества каталога) — готовый процесс-прецедент для пополнения skills-catalog.yaml
+  кита; плюс context-budget (аудит токенов по агентам/скиллам/MCP) и strategic-compact.'
+evidence_type: documented_fact
+source:
+  title: ECC — skills/skill-scout/SKILL.md
+  url: https://github.com/affaan-m/ECC/blob/main/skills/skill-scout/SKILL.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: frontmatter; рядом skills/skill-stocktake, skills/context-budget
+  quote: Search existing local, marketplace, GitHub, and web skill sources before
+    creating a new skill.
+captured_at: '2026-07-25'
+captured_by: scout-agent (everything-claude-code/ECC, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Verbatim из SKILL.md.
+status: active
+superseded_by: null

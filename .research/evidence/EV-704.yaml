@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-704
+request_id: RR-009
+statement: 'GateGuard (skills/gateguard + scripts/hooks/pre-bash-dispatcher.js): fact-forcing
+  гейт уровня PreToolUse-хука — блокирует Edit/Write/Bash до предъявления конкретных
+  фактов расследования (importers, схемы данных, инструкция пользователя); заявлено
+  +2.25 балла качества против агентов без гейта (self-reported, методология в файле
+  не опубликована). Ключевое отличие от кита: enforcement исполняемым хуком, а не
+  декларацией.'
+evidence_type: documented_fact
+source:
+  title: ECC — skills/gateguard/SKILL.md
+  url: https://github.com/affaan-m/ECC/blob/main/skills/gateguard/SKILL.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: frontmatter description + scripts/hooks/pre-bash-dispatcher.js
+  quote: Fact-forcing gate that blocks Edit/Write/Bash (including MultiEdit) and demands
+    concrete investigation
+captured_at: '2026-07-25'
+captured_by: scout-agent (everything-claude-code/ECC, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: medium
+  rationale: Механизм — первоисточник; цифра +2.25 — self-reported без методологии.
+status: active
+superseded_by: null

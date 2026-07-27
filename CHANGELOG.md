@@ -2,6 +2,183 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
+
+Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
+(1) **Runtime Promotion Readiness** — укрепление уже созданного перед боевым включением (fail-closed по
+всем краям ревью владельца, v3.6.7a–d); (2) **Live Qualification (v3.6.8)** — реальные прогоны на
+провайдере moonshot/kimi, поймавшие и закрывшие 5 настоящих багов кита.
+
+Что живая квалификация ДОКАЗАЛА (вживую, 0 false-green во всех прогонах):
+- **Ядро safety-qualified**: каждый провал — честный fail-closed; code_review ловит отсутствие
+  кода/тестов; exact-SHA отвергает stale-ревью; security анти-rubber-stamp держит.
+- **Зелёный ENGINEERING draft PR** (`sha_verified=true`) — после фикса P1 security-evidence.
+- **Context Engine v2 SHADOW** — `valid`/`snapshot_verified` на точном SHA в каждом прогоне (полная
+  цепочка: mandatory v1 + full-text + graph + semantic + child-политики + budget из BudgetContract).
+- **UI-CI capability** (подтянута из v3.7): реальный `.ai/ui-evidence/*` на точном SHA (vitest
+  interaction + vitest-axe a11y + storybook test-runner pixel-visual + design-system) — все 4 сигнала
+  проходят; отдельные UI-гейты демонстрируемо зелёные (лучший прогон 11/13).
+- **parallel-2 decision-layer** (planner + `integration_gate`) + все 10 обязательных негативов.
+
+Найдено и исправлено живой квалификацией (все запушены, CI green): shadow-wiring читал не тот SHA-ключ;
+provider-таймаут не настраивался (kimi-k3 > 300с); причина отказа security-вердикта была нема; **P1**:
+security ложно блокировал корректный код из-за словаря evidence.type; UI-evidence коллектора не было.
+
+НЕ закрыто (осознанно, за пределами этого релиза): полный зелёный multi-gate UI/ENGINEERING PR за один
+прогон стабильно = нужен sonnet-класс (kimi — лотерея на строгий review); **живой parallel-executor**
+(concurrent worktrees + fan-in) и **hybrid/default промоушен Context Engine** — НЕ построены (по коду
+только sequential executor + shadow), это v3.7-объём (ранее «не сейчас»). VERSION-bump — по разделу ниже.
+
+### Fixed (v3.6.7a — parallel planner hardening: fail-closed перед превращением в executor)
+- `tools/parallel_planner.py` — закрыты опасные края планировщика (найдены ревью):
+  - **глобальный write_scope `**` больше не обходит overlap-проверку** — `_prefix('**')` давал пустой
+    префикс, а `'src/b/'.startswith('/')`==False -> `**` НЕ ловился как пересечение -> пакет,
+    пишущий во весь репо, мог уйти в parallel. Теперь пустой префикс = ГЛОБАЛЬНЫЙ scope, пересекается
+    с любым -> сериализация;
+  - **незадекларированный write_scope** -> сериализация (нельзя доказать непересечение -> fail-closed);
+  - **`plan()` сам блокирует невалидный WorkGraph**: цикл/битая зависимость (неполный
+    integration_order) и depends_on на несуществующий пакет -> `valid=false` + `errors`;
+  - **`integration_decision({})`** (пустой набор) больше НЕ проходит как «all pass» (`any([])==False`) —
+    пустой набор -> block;
+  - новый **`integration_gate()`** — рантайм-строгое fan-in решение: результаты обязаны ПОКРЫВАТЬ
+    точный набор пакетов WorkGraph (нет пропущенных/лишних); каждый результат ДОКАЗАТЕЛЬНЫЙ (dict со
+    status + package SHA + `gate_report(all_pass)`, голая строка не принимается); общий контракт обязан
+    иметь зафиксированный contract SHA; aggregate — РЕАЛЬНЫЙ GateReport (dict), не голый bool. 20 новых
+    сценарных проверок (33 всего в selftest).
+
+### Fixed (v3.6.7b — GateResult v2 hardening: blocking abstain больше не выдаёт advisory за разрешение)
+- `schemas/gate-result-v2.schema.json` + `tools/gate_result_v2.py` + `tools/gate_runtime.py` —
+  ревьюер может воздержаться по БЛОКИРУЮЩЕМУ гейту; раньше это выражалось как `enforcement=advisory`
+  (а `human_handoff` жил только в runtime-meta вне результата) -> v2-осведомлённый потребитель
+  теоретически мог принять advisory за разрешение продолжать. Теперь:
+  - `reviewer_outcome` ОТДЕЛЁН от `enforcement` (сырой вердикт ≠ уровень принуждения);
+  - blocking-abstain -> `resolution=pending_human`, `delivery_allowed=false`, `human_handoff=true`
+    (решение НЕ принято -> доставка запрещена -> нужен человек); хранится в САМОМ результате;
+  - схема: `allOf/if-then` делает blocking-abstain well-formed ТОЛЬКО с pending_human-полями;
+    `check()` разводит advisory-abstain (resolved, доставка ОК) и blocking-abstain; `status=fail`
+    несовместим с `delivery_allowed=true`;
+  - `to_v1(blocking-abstain)` -> v1 **fail** с blockers (не мягкий warn — старый потребитель
+    остаётся fail-closed); advisory-abstain -> warn (как раньше);
+  - `gate_runtime.can_deliver()` — AND по гейтам: доставка только если КАЖДЫЙ `delivery_allowed`.
+  Боевое подключение к `_run_reviews` за feature-flag — ЧАСТЬ v3.6.8 (живая квалификация), НЕ
+  заявляется сделанным сейчас (честная граница capability): decision-слой готов и оттестирован,
+  wiring exercised только вживую.
+
+### Added (v3.6.7c — Context Engine orchestrator: ОДНА каноническая v2-цепочка + child-политики + TS/docs)
+- `tools/context_engine.py` — единый оркестратор Context Engine v2 (ревью: shadow подключал только
+  full-text `build_view()` на ДЕМО-политике без DCP, а не всю цепочку). Теперь один слой собирает:
+  обязательный контекст v1 (policy/spec/decisions) → full-text → **Repository Graph augmentation**
+  (соседи по импортам/обратным зависимостям) → **условный semantic-lite** (ТОЛЬКО при недостаточном
+  детерминированном recall) → **access-filter** (AFP роли + DataClassificationPolicy) → rerank →
+  budget → role view. Инварианты: без точного SHA view НЕ строится (ValueError); обязательный
+  контекст v1 не теряется на rerank/budget (только access-filter, secret никогда); graph/semantic
+  ТОЛЬКО добавляют кандидатов; у каждого источника reason + content-hash + SHA; политики берутся у
+  CHILD-репо (`load_child_policies`: `.ai/policies/*.yaml`), demo-политик в runtime нет
+  (deny-by-default при отсутствии). selftest 15/15 (граф-сосед без ключевого слова, semantic-условие,
+  секрет-исключение, mandatory-over-budget, no-demo-deny).
+- `tools/context_retrieval.py` — full-text и role-view больше **НЕ Python-only**: базовый охват
+  `.py/.ts/.tsx/.js/.jsx/.md/.yaml/.yml/.json` (`RETRIEVAL_EXTS`) под TS/React/docs child-репо. Граф
+  для TypeScript — отдельный адаптер позже (честная граница); здесь именно full-text + role-view.
+- `tools/context_shadow.py` — переписан на `context_engine.build_context`: shadow строит ПОЛНУЮ
+  v2-цепочку на политиках CHILD-репо (не демо), без точного SHA не строится; `ai_ops_run.run(
+  context_shadow=True)` больше не инжектит демо-AFP (грузит child-политики, execution по-прежнему v1,
+  default OFF, guarded). CI +1 шаг (context_engine selftest).
+
+### Fixed (v3.6.7d — Exact Snapshot & Promotion Contract: доказательная связность перед promotion)
+Ревью владельца по коду v3.6.7c: SHA передавался, но snapshot не ДОКАЗЫВАЛСЯ. Завершающая часть
+v3.6.7 (не новая фаза) — делает exact-revision binding git-доказательным и связывает evidence с SHA:
+- **Context Engine** (`tools/context_engine.py`): `verify_snapshot()` — `require_snapshot=True`
+  доказывает HEAD==committed_sha И чистое дерево ДО чтения файлов (иначе view невалиден: нельзя
+  подписать грязный worktree чужим SHA); обязательный контекст v1, потерянный (missing / запрещён
+  access-policy) -> `valid=false` (+`mandatory_excluded_access`), execution не получает неполный
+  контекст -> handoff/фикс policy; scan-границы (`SCAN_EXCLUDE_DIRS`: node_modules/dist/build/…,
+  max file size, max files) + `.gitignore`-aware исключения (иначе full-text в TS-репо заходит в
+  node_modules); orchestrated cache честно **выключен** до v3.6.8 (cache_key считается, но RetrievalCache
+  к полному view НЕ подключён — не заявляем несуществующую возможность).
+- **Runtime wiring** (`context_shadow`, `ai_ops_run`): содержимое читается из ТОЧНОГО
+  execution-worktree (`.ai/worktrees/<fid>`, HEAD==committed_sha), политики — из основного checkout;
+  реальный `v1_mandatory` (specifications+decisions) берётся из ContextBundle и передаётся в
+  orchestrator; токен-бюджет — из настоящего child `BudgetContract` (`budget_tokens_from`), а не жёсткие
+  20000; `require_snapshot=True`.
+- **Gate runtime** (`tools/gate_runtime.py`): результат несёт `tested_revision` (+реальный evidence);
+  `can_deliver(results, expected_revision)` НЕ разрешает доставку, если вердикт без tested_revision или
+  с расхождением по ревизии. (Боевое подключение к `_run_reviews` за feature-flag — по-прежнему v3.6.8.)
+- **Parallel planner** (`tools/parallel_planner.py`): duplicate package id -> `valid=false`; несловарный
+  пакет больше не роняет planner (даёт `valid=false`); `integration_gate` требует
+  `gate_report.tested_revision == package.sha` и `aggregate.tested_revision == integration_sha`; contract
+  SHA обязан быть ПОХОЖ на реальный commit/blob (hex ≥7), а не просто непустая строка.
+
+### Added (v3.6.8 planning — PromotionQualificationPlan как ДАННЫЕ; сама live-квалификация за гейтом)
+Подготовка к v3.6.8 offline (не живой прогон): план живой квалификации и КОНТРОЛИРУЕМОГО promotion
+Context Engine v2 закодирован как проверяемый контракт, чтобы живая квалификация исполнялась против
+чек-листа и не срезала доверие.
+- `schemas/promotion-qualification-plan.schema.json` + `validation/validate_promotion_qualification.py`
+  + `qualification/promotion/v3.6.8-plan.yaml` (PQP-001). Инварианты валидатора: `promotion_sequence`
+  СТРОГО `shadow -> hybrid -> default` (никакого прямого v1->default flip); каждый run `exact_sha_bound`;
+  runs покрывают три обязательных вида (python-child / ts-react-storybook / parallel-2); все 10
+  обязательных негативов (write-scope overlap / package fail / contract-not-fixed / duplicate-id /
+  merge-conflict / base-moved / aggregate-wrong-sha / reviewer-abstain-x2 / mandatory-missing /
+  child-policy-changed) и все 8 exit-критериев (0 leaks / 0 stale / 0 false-green / 0 dup-PR / 100%
+  mandatory-retained-or-block / 100% snapshot-bound / 100% package-SHA-bound / 100% integration-SHA-bound)
+  покрыты; ЧЕСТНОСТЬ — каждый `uses`-инструмент существует в tools/validation; `blocked_by` непуст
+  (external-гейт: ротация ключа + Node/React-тулчейн). CI +1 шаг. Это ПЛАН, не выполнение v3.6.8.
+- `tools/promotion_qual.py` — драйвер (harness) исполнения PQP-001, честно НЕ фейкает живые прогоны:
+  (1) грузит+валидирует план; (2) **доказывает ВЕСЬ обязательный набор негативов ОФФЛАЙН (10/10)** —
+  они детерминированно решаемы уже сейчас (fail-closed parallel_planner / gate_runtime / context_engine),
+  так что матрица негативов ПРОВЕРЕНА, а не «запланирована»; (3) `preflight` готовности среды к трём
+  живым прогонам (provider key / git / node-react / scratch-repo, per-run); (4) `runbook` — точные
+  команды каждого прогона. `execute()` без готовности среды возвращает status=blocked с перечнем
+  недостающего и НИКОГДА не выдаёт фейковый pass. Живые прогоны (python-child / ts-react-storybook /
+  parallel-2) остаются за external-гейтом. CI +1 шаг (selftest + verify-negatives 10/10).
+  runbook/preflight ПАРАМЕТРИЗОВАНЫ по провайдеру (default — **kimi/moonshot** через openai-compatible;
+  Anthropic не обязателен, ядро provider-agnostic+fail-closed); preflight для openai-compatible честно
+  требует и `OPENAI_COMPATIBLE_API_KEY`, И `OPENAI_COMPATIBLE_BASE_URL`.
+
+### Fixed (v3.6.8 live-finding — shadow-wiring читал не тот SHA-ключ)
+Первый живой прогон v3.6.8 (kimi-k2.7-code) поймал реальный баг в wiring v3.6.7: `ai_ops_run`
+передавал в shadow `rep.get("committed_sha")`, а фактический SHA лежит в `rep["commit"]["sha"]` ->
+shadow всегда получал `None` и МОЛЧА падал (ошибка глоталась guard'ом). Оффлайн-selftest это не ловил
+(там sha передаётся явно). Исправлено: `sha = rep["commit"]["sha"]`; guard теперь фиксирует реальную
+причину (`type: message`), а не немой текст; добавлен CLI-флаг `--context-shadow` (был только параметр
+`run(context_shadow=…)`, недоступный из CLI). Живо подтверждено: полная v2-цепочка в shadow
+(snapshot_verified=true на exact commit SHA, child BudgetContract применён, fulltext+graph+semantic),
+execution по-прежнему на v1.
+- `tools/orchestrator.py` — HTTP-таймаут openai-compatible вызова теперь настраиваем через env
+  `OPENAI_COMPATIBLE_TIMEOUT` (default 300с). Флагман-reasoning kimi-k3 на тяжёлых ENGINEERING-вызовах
+  бывает > 300с (первый живой ENGINEERING-прогон упал на провайдер-таймауте) — теперь поднимается без
+  хардкода. Не меняет поведение по умолчанию.
+- `tools/execution_pipeline.py` — security-гейт при отказе вердикта теперь фиксирует ТОЧНЫЕ причины:
+  `gate_ev["security"].verdict_errors` (список из `_security_verdict_errors`) + `verdict_diag`
+  (`has_domain_results`, `domain_results_count`, `raw_keys`). Раньше был только немой «security-reviewer
+  не вынес pass» — по живым прогонам не было видно, промпт/формат это или неспособность модели выдать
+  строгий SecurityVerdict v2. Observability, поведение гейта не меняется.
+
+### Fixed (v3.6.8 live-finding P1 — security ложно блокировал корректный код из-за словаря evidence.type)
+Диагностика вживую (k3): security-reviewer выдавал СУБСТАНТИВНО ВЕРНЫЙ SecurityVerdict v2 (domain_results
+по input_validation, per-domain checks, evidence с path+lines реально прочитанного `pricing.py`), но
+помечал evidence `type:"file"`. `_evidence_ref_errors` принимал только `code-read`/`read` -> «evidence без
+распознаваемого type» -> весь вердикт отвергнут -> `security` fail на КОРРЕКТНОМ валидированном+покрытом
+тестами коде. Ровно это гасило зелёный ENGINEERING в Phase B.
+- `_evidence_ref_errors` теперь принимает `file`/`source`/`code`/`read` как `code-read`, а неизвестный
+  `type` С path тоже трактует как code-read. **Анти-false-green СОХРАНЁН**: path обязателен и (при наличии
+  trace) сверяется с реально прочитанными файлами — сфабрикованный путь по-прежнему отвергается (3 теста:
+  file+прочитанный -> ок; file+непрочитанный -> «сфабрикован»; без type и без path -> невалиден). Промпт
+  security-reviewer теперь явно называет словарь `code-read|test|finding`. parity 154/154.
+
+### Added (v3.7 UI-CI подтянут в v3.6.8 — реальный UI-evidence коллектор на точном SHA)
+Для живого UI-прогона (A1): раньше UI-evidence коллектора НЕ было (только `evidence_collector` для
+build/lint/test), а pipeline лишь ЧИТАЛ `.ai/ui-evidence/*.json`. Теперь есть сбор:
+- `tools/ui_evidence_collect.py` — оркестратор UI-CI child-репо: детект UI-стека (package.json со
+  `storybook`/`ui-evidence`), запуск `npm ci` + `npm run ui-evidence` в worktree, и АВТОРИТЕТНАЯ запись
+  `.ai/ui-evidence/meta.json{commit_sha}` (SHA-binding контролирует KIT). Не-UI child (python) -> skip
+  (no-op, существующие прогоны целы). Без фабрикации: сбой UI-CI -> evidence нет -> гейты `not_run`.
+  node-free selftest (детект стека + meta-binding).
+- Wired в `execution_pipeline.run_pipeline` post-commit ДО `build_bundle` (guarded, UI-stack-gated).
+- child-репо (ai-ops-dogfood-v368-ts) получил РЕАЛЬНЫЙ UI-CI: vitest (interaction) + vitest-axe (a11y,
+  jsdom) + `@storybook/test-runner` (visual smoke в headless chromium) + design-system reuse.
+  Проверено end-to-end: все 4 UI-сигнала (interaction/a11y/visual/design_system) -> pass на реальных
+  прогонах. CI +1 шаг (ui_evidence_collect selftest). parity 155/155.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

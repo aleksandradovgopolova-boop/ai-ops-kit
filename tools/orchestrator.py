@@ -160,11 +160,14 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
     # Ретраим пустой ответ с бэкоффом; часть моделей кладёт текст в reasoning_content — используем и его.
     for attempt in range(3):
         _t0 = time.monotonic()
+        # v3.0-rc7: reasoning-модели медленные (kimi-k3) — 120с не хватало -> 300с default.
+        # v3.6.8: таймаут настраиваем через env OPENAI_COMPATIBLE_TIMEOUT (флагман kimi-k3 бывает >300с).
+        _to = int(os.environ.get("OPENAI_COMPATIBLE_TIMEOUT", "300"))
         data = _http_post_json(
             base_url, {"authorization": f"Bearer {key}"},
             {"model": model, "max_tokens": _MAX_TOKENS,
              "messages": [{"role": "user", "content": prompt}]},
-            timeout=300)   # v3.0-rc7: reasoning-модели медленные (kimi-k3) — 120с не хватало
+            timeout=_to)
         msg = (data.get("choices", [{}])[0] or {}).get("message", {}) or {}
         content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
         if content:

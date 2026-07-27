@@ -113,12 +113,14 @@ python3 tools/repo_graph.py --selftest
 python3 tools/data_classification.py --selftest
 python3 tools/context_retrieval.py --selftest
 python3 tools/semantic_lite.py --selftest
+python3 tools/context_engine.py --selftest
 python3 tools/context_shadow.py --selftest
 python3 tools/retrieval_bench.py --selftest
 python3 tools/gate_runtime.py --selftest
 python3 tools/parallel_planner.py --selftest
 python3 tools/parallel_planner.py examples/work-graph-demo
 python3 tools/storybook_query.py --selftest
+python3 tools/ui_evidence_collect.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
 python3 tools/active_work.py --selftest
@@ -161,6 +163,10 @@ python3 validation/validate_package_boundaries.py
 python3 validation/validate_standalone_engine.py --selftest
 python3 validation/validate_qualification.py --selftest
 python3 validation/validate_qualification.py
+python3 validation/validate_promotion_qualification.py --selftest
+python3 validation/validate_promotion_qualification.py
+python3 tools/promotion_qual.py --selftest
+python3 tools/promotion_qual.py --verify-negatives
 python3 validation/validate_stack_qualification.py --selftest
 python3 validation/validate_pipeline_e2e.py --selftest
 python3 validation/validate_requirements_artifact.py --selftest

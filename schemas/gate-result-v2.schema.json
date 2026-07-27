@@ -50,8 +50,41 @@
       },
       "required": ["by", "reason"],
       "additionalProperties": false
-    }
+    },
+    "reviewer_outcome": {
+      "type": ["string", "null"],
+      "enum": ["pass", "warn", "fail", "abstain", null],
+      "description": "v3.6.7: СЫРОЙ вердикт ревьюера, ОТДЕЛЁННЫЙ от enforcement. Ревьюер может воздержаться (abstain) по блокирующему гейту — это не 'advisory', это 'решение не принято'. enforcement/resolution/delivery_allowed выводятся отдельно, чтобы v2-потребитель не принял advisory за разрешение продолжать." },
+    "resolution": {
+      "type": "string",
+      "enum": ["resolved", "pending_human"],
+      "description": "v3.6.7: принято ли решение по гейту. pending_human = ревьюер воздержался по блокирующему гейту после ретраев -> нужен человек, доставка запрещена." },
+    "delivery_allowed": {
+      "type": "boolean",
+      "description": "v3.6.7: разрешает ли ЭТОТ гейт доставку. false для fail и для blocking-abstain(pending_human). Итоговое решение о доставке — AND по всем гейтам." },
+    "human_handoff": {
+      "type": "boolean",
+      "description": "v3.6.7: требуется эскалация человеку (перенесён из runtime-meta в сам результат, чтобы сигнал не терялся)." }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "abstain" },
+          "enforcement": { "const": "blocking" }
+        },
+        "required": ["status", "enforcement"]
+      },
+      "then": {
+        "properties": {
+          "resolution": { "const": "pending_human" },
+          "delivery_allowed": { "const": false },
+          "human_handoff": { "const": true }
+        },
+        "required": ["resolution", "delivery_allowed", "human_handoff"]
+      }
+    }
+  ],
   "examples": [
     {
       "schema_version": 2,
@@ -69,6 +102,31 @@
       "calibration_reason": "internal low-risk: гейт visual_regression advisory -> субъективный warn не блокирует",
       "tested_revision": "abc1234",
       "owner": "design-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "schema_version": 2,
+      "gate": "accessibility_review",
+      "status": "abstain",
+      "blocking": true,
+      "applicability": "applicable",
+      "enforcement": "blocking",
+      "evidence_mode": "hybrid",
+      "human_signoff": false,
+      "reviewer_outcome": "abstain",
+      "resolution": "pending_human",
+      "delivery_allowed": false,
+      "human_handoff": true,
+      "checks": [],
+      "blockers": ["ревьюер воздержался по блокирующему accessibility_review после ретрая -> нужен человек"],
+      "warnings": [],
+      "evidence": ["independent reviewer abstain x2 @ abc1234"],
+      "calibration_reason": "повторный abstain по блокирующему гейту -> pending_human (НЕ advisory): решение не принято, доставка запрещена",
+      "tested_revision": "abc1234",
+      "owner": "accessibility-reviewer",
       "review_mode": "read-only",
       "created_at": null,
       "expires_at": null,

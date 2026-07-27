@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-802
+request_id: RR-010
+statement: 'Полный список ASI01–ASI10: ASI01 Agent Goal Hijack (манипуляция целями/задачами/decision
+  pathways); ASI02 Tool Misuse and Exploitation (небезопасное применение легитимных
+  инструментов в рамках полномочий); ASI03 Identity and Privilege Abuse (эксплуатация
+  делегирования/ролей/кэшированных кредов); ASI04 Agentic Supply Chain (скомпрометированные
+  компоненты, вкл. runtime MCP/A2A и реестры); ASI05 Unexpected Code Execution/RCE
+  (код-генерация → побег из sandbox); ASI06 Memory & Context Poisoning (отравление
+  памяти/embeddings/RAG между сессиями); ASI07 Insecure Inter-Agent Communication
+  (перехват/спуфинг межагентных сообщений); ASI08 Cascading Failures (единичный сбой
+  → системный ущерб по автономным агентам); ASI09 Human-Agent Trust Exploitation (эксплуатация
+  чрезмерного доверия человека агенту); ASI10 Rogue Agents (вредоносные/сошедшие со
+  скоупа агенты).'
+evidence_type: documented_fact
+source:
+  title: OWASP Top 10 For Agentic Applications 2026 — At A Glance
+  url: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: PDF p.8 At A Glance; полные разделы pp.9-38
+  quote: 'ASI01: Agent Goal Hijack'
+captured_at: '2026-07-27'
+captured_by: scout-agent (OWASP agentic risks, RR-010)
+freshness:
+  volatile: true
+  expires_at: '2026-10-27'
+reliability:
+  level: high
+  rationale: Verbatim из официального PDF.
+status: active
+superseded_by: null

@@ -56,18 +56,48 @@ def _tokens(content: str) -> int:
     return max(1, len(content) // 4)   # грубая оценка токенов
 
 
-def full_text_search(root, query: str, subdirs=("tools", "validation")):
+# v3.6.7: full-text и role-view больше НЕ Python-only. Базовый охват под TS/React/docs child-репо
+# (граф для TS — отдельный адаптер позже; здесь именно full-text + role-view поддержка).
+RETRIEVAL_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml", ".json")
+# v3.6.7d: hard-excludes — vendored/generated/build каталоги (в TS-репо иначе full-text зайдёт в
+# node_modules/dist/… -> стоимость и мусор). Плюс лимиты размера/числа файлов (надёжность/стоимость).
+SCAN_EXCLUDE_DIRS = frozenset({
+    "node_modules", "dist", "build", "out", ".next", "coverage", "vendor", "target",
+    "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache", ".turbo", "bower_components"})
+MAX_FILE_BYTES = 512 * 1024          # один файл > 512KB не читаем (сгенерированные бандлы)
+MAX_SCAN_FILES = 5000                # верхняя граница числа читаемых файлов
+
+
+def full_text_search(root, query: str, subdirs=("tools", "validation"), exts=RETRIEVAL_EXTS,
+                     exclude_dirs=SCAN_EXCLUDE_DIRS, max_file_bytes=MAX_FILE_BYTES,
+                     max_files=MAX_SCAN_FILES):
     root = Path(root)
+    exclude = set(exclude_dirs or ())
     kws = [k.lower() for k in query.split() if k.strip()]
     out = []
+    scanned = 0
     for sd in subdirs:
         d = root / sd if sd else root   # sd="" -> сканировать весь root
         if not d.is_dir():
             continue
-        for f in sorted(d.rglob("*.py")):
+        files = []
+        for ext in exts:
+            files.extend(d.rglob(f"*{ext}"))
+        for f in sorted(set(files)):
             rel = f.relative_to(root)
-            if any(part.startswith(".") for part in rel.parts):   # пропускаем скрытые (.ai/.git/…)
+            parts = rel.parts
+            if any(p.startswith(".") for p in parts):       # скрытые (.ai/.git/…)
                 continue
+            if any(p in exclude for p in parts[:-1]):        # vendored/generated/build каталоги
+                continue
+            try:
+                if f.stat().st_size > max_file_bytes:        # слишком большой файл -> пропуск
+                    continue
+            except OSError:
+                continue
+            if scanned >= max_files:                         # верхняя граница числа файлов
+                break
+            scanned += 1
             try:
                 content = f.read_text(encoding="utf-8")
             except OSError:
@@ -89,12 +119,13 @@ def role_allowed_classes(afp: dict, role: str):
 
 
 def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None,
-               repo_id=None, policy=None, strict=False, subdirs=("tools", "validation")):
+               repo_id=None, policy=None, strict=False, subdirs=("tools", "validation"),
+               exts=RETRIEVAL_EXTS):
     root = Path(root)
     allowed = set(allowed_classes)
     included, excl_access, excl_budget = [], [], []
     total = 0
-    for r in full_text_search(root, query, subdirs):
+    for r in full_text_search(root, query, subdirs, exts):
         f = root / r["file"]
         try:
             content = f.read_text(encoding="utf-8")
@@ -183,6 +214,21 @@ def selftest():
         res = full_text_search(root, "foo", ("tools",))
         expect("full-text: a.py ранжирован выше (больше hits), d.py не найден",
                res[0]["file"] == "tools/a.py" and all(r["file"] != "tools/d.py" for r in res))
+
+        # v3.6.7: full-text больше не Python-only — TS/React/docs/JSON тоже сканируются
+        (root / "ui").mkdir()
+        (root / "ui" / "Widget.tsx").write_text("// foo component\nexport const Widget = () => 'foo';\n", encoding="utf-8")
+        (root / "ui" / "notes.md").write_text("# foo doc\n", encoding="utf-8")
+        rts = full_text_search(root, "foo", ("ui",))
+        expect("full-text охватывает .tsx и .md (не только .py)",
+               {"ui/Widget.tsx", "ui/notes.md"} <= {r["file"] for r in rts})
+
+        # v3.6.7d: vendored/generated каталоги исключены (node_modules и т.п.)
+        (root / "node_modules" / "pkg").mkdir(parents=True)
+        (root / "node_modules" / "pkg" / "index.js").write_text("// foo vendored\n", encoding="utf-8")
+        rex = full_text_search(root, "foo", ("",))
+        expect("full-text НЕ заходит в node_modules (hard-exclude)",
+               all("node_modules" not in r["file"] for r in rex))
 
         # planner: allowed {public, internal}
         v = build_view(root, "foo", "planner", {"public", "internal"}, budget_tokens=10000)

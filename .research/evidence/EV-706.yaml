@@ -1,0 +1,29 @@
+schema_version: 1
+kind: research.evidence
+id: EV-706
+request_id: RR-009
+statement: 'Continuous Learning v2 (skills/continuous-learning-v2 + hooks/memory-persistence
+  + async observe-хук matcher ''*''): наблюдение за сессиями, атомарные «инстинкты»
+  с confidence scoring, эволюция в скиллы/команды/агентов, project-scoped изоляция
+  против кросс-проектного загрязнения — паттерн накопления знаний, релевантный памяти
+  research-модуля и Product Learning кита.'
+evidence_type: documented_fact
+source:
+  title: ECC — skills/continuous-learning-v2/SKILL.md
+  url: https://github.com/affaan-m/ECC/blob/main/skills/continuous-learning-v2/SKILL.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: frontmatter description; hooks/hooks.json
+  quote: creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents
+captured_at: '2026-07-25'
+captured_by: scout-agent (everything-claude-code/ECC, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Verbatim frontmatter; механизм подтверждён наличием хуков в hooks.json.
+status: active
+superseded_by: null
