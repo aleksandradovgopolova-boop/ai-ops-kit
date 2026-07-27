@@ -647,9 +647,25 @@ WorkPackage Executor; `active-work` с affected-areas/shared-contracts/dependenc
   integration revalidation** (перенос из старого v3.1.12). Storybook: manifests в Context Compiler +
   Storybook MCP-адаптер + package-level UI context + новый UIEvidenceBundle на integration-SHA после
   fan-in (текущий exact-SHA evidence и reuse-enforcement НЕ переписываются).
-- **v3.7–v3.8 — Bootstrap & Readiness Qualification**: greenfield (architecture → backend/frontend+
+- **v3.7 — Runtime Activation** (фактическая фаза; RC-слой собран offline, HEAD после 3.6.7).
+  Не новые концепции, а «заставить построенное реально управлять исполнением»:
+  - **Context Hybrid** (`context_hybrid` + `context_promotion_gate`): mandatory v1 + разрешённые
+    v2-additions, допуск только через 5 trust-контрактов; access **pre-filter ДО retrieval** (denied
+    путь не читается); mandatory = specs+decisions+rules+policy refs; child BudgetContract. ОСТАЁТСЯ
+    живое: hybrid строится ДО model-call и реально fed_to_model + GateResult v2 в `_run_reviews` за флагом.
+  - **Bounded parallel-2 executor** (`parallel_executor`): оркестрация plan→изолированные пакеты→package
+    SHA+GateReport→fan-in integration-SHA→aggregate→один PR; dependency-aware stop; изоляция сбоев;
+    инвариант «package SHA ≠ integrated result». ОСТАЁТСЯ живое: package_runner=ai_ops_run в worktrees +
+    реальный git fan-in + негативы.
+  - **Security foundations** (SupplyChainPin/MemoryGovernance/KeyLifecycle контракты готовы). ОСТАЁТСЯ
+    runtime enforcement (loader по hash, merge_memory-валидация, preflight TTL ключей) — до write-MCP.
+  Критерии stable 3.7: hybrid реально fed_to_model; parallel-2 реально открыл один PR; 0 access leaks;
+  0 false-green; dependency-fail не стартует downstream; evidence привязано к package/integration SHA;
+  security-политики реально enforce.
+- **v3.8 — Product Bootstrap & Readiness Qualification**: greenfield (architecture → backend/frontend+
   Storybook/data/CI/observability) → parallel fan-out → integration → первая вертикальная функция →
-  release → measurement → learning → readiness report.
+  release → measurement → learning → readiness report (single/sequential/parallel/resume/fix-loop/
+  release/post-release/product-learning на нескольких реальных child-репо).
 
 - **Sequential WorkPackage Executor (веха v3.1; поставлен аддитивно в 2.117) ✅** — WorkPackages теперь РЕАЛЬНО исполняются по одному
   (`tools/workpackage_executor.py`): пакет→commit→evidence→gates→handoff→следующий, на общей ветке
