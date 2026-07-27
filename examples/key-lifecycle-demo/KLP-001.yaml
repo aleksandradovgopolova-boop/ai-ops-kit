@@ -1,0 +1,22 @@
+schema_version: 1
+kind: KeyLifecyclePolicy
+policy_id: KLP-001
+# security-долг #3 (OWASP ASI): TTL ротации + честная фиксация отсутствия per-agent identity.
+# ЗНАЧЕНИЯ ключей здесь НЕ хранятся — только имена env.
+keys:
+  - name: anthropic
+    env_ref: ANTHROPIC_API_KEY
+    ttl_days: 90
+    rotation_owner: human
+    note: "ротация в console.anthropic.com; засвеченный ключ ротировать немедленно"
+  - name: moonshot
+    env_ref: OPENAI_COMPATIBLE_API_KEY
+    ttl_days: 90
+    rotation_owner: human
+  - name: github
+    env_ref: GITHUB_TOKEN
+    ttl_days: 30
+    rotation_owner: human
+per_agent_identity:
+  supported: false
+  note: "единый ключ провайдера на весь движок; полноценной per-agent identity (SPIFFE/mTLS на агента) пока НЕТ — фиксируем честно, не заявляем"

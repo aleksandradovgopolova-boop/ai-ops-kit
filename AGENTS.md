@@ -139,6 +139,10 @@ python3 validation/validate_security_posture.py --selftest
 python3 validation/validate_security_posture.py
 python3 validation/validate_supply_chain.py --selftest
 python3 validation/validate_supply_chain.py
+python3 validation/validate_memory_governance.py --selftest
+python3 validation/validate_memory_governance.py
+python3 validation/validate_key_lifecycle.py --selftest
+python3 validation/validate_key_lifecycle.py
 python3 validation/validate_duties.py --selftest
 python3 validation/validate_duties.py
 python3 validation/validate_presets.py

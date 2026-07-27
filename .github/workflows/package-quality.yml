@@ -271,6 +271,14 @@ jobs:
         run: |
           python3 validation/validate_supply_chain.py --selftest
           python3 validation/validate_supply_chain.py
+      - name: "MemoryGovernancePolicy — provenance/expiry/no-self-ingestion (OWASP ASI, selftest + demo)"
+        run: |
+          python3 validation/validate_memory_governance.py --selftest
+          python3 validation/validate_memory_governance.py
+      - name: "KeyLifecyclePolicy — TTL ротации + честная per-agent identity (OWASP ASI, selftest + demo)"
+        run: |
+          python3 validation/validate_key_lifecycle.py --selftest
+          python3 validation/validate_key_lifecycle.py
       - name: "Product authoring: структурные валидаторы артефактов (selftest)"
         run: |
           python3 validation/validate_requirements_artifact.py --selftest

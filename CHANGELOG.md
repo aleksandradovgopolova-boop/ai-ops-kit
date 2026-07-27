@@ -51,6 +51,19 @@
   самоизменение нельзя включать без этой политики. (Осталось в треке: memory provenance/expiry/
   no-self-ingestion; key TTL + честная фиксация отсутствия per-agent identity.)
 
+### Added (v3.7 security-долг #2+#3 — memory governance + key lifecycle; OWASP-ASI трек закрыт)
+- `schemas/memory-governance.schema.json` + `validation/validate_memory_governance.py` +
+  `examples/memory-governance-demo/MGP-001.yaml` — **#2**: каждая запись памяти несёт provenance
+  (origin + source_type), expiry (ttl_days>0 / review_date / permanent+justification) и запрет
+  self-ingestion (self_ingested=true только с human_confirmed); derived-память требует upstream.
+  selftest 7/7 + реальный MGP-001 (реальные записи: user-preference, provider-benchmark, kit-invariant).
+- `schemas/key-lifecycle.schema.json` + `validation/validate_key_lifecycle.py` +
+  `examples/key-lifecycle-demo/KLP-001.yaml` — **#3**: у каждого ключа TTL>0 + env_ref (значение только
+  из env, не в файле; эвристика ловит секрет-значение в политике); `per_agent_identity` объявлена ЧЕСТНО
+  (supported=true требует evidence — нельзя заявлять идентичность без доказательства). selftest 7/7 +
+  реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
+  Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
