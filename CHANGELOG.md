@@ -82,6 +82,24 @@
   `overall` (advisory до обкатки на child, затем blocking-гейт). Guarded: сбой детектора не роняет прогон.
   «Дефект шва» теперь виден в отчёте каждого живого прогона на точном SHA. execution_pipeline selftest цел.
 
+### Added (v3.7.5 — Model Routing Runtime: провайдер-независимость стала ИСПОЛНЯЕМОЙ)
+Ревью: ADR/registry/validator были, но не было runtime-router; матрица допуска class×role (грубо, не из
+Bench); Kimi в providers.yaml, но моделей в models.yaml нет. Закрыто (до live hybrid/parallel — чтобы
+сами тесты доказали отсутствие lock-in):
+- `registry/models.yaml` — добавлены КОНКРЕТНЫЕ модели Kimi из живой квалификации (kimi-k2.7-code,
+  kimi-k2.7-code-highspeed, kimi-k3) с `revision` и честными capability-нотами (structured_output unstable).
+- `registry/model-qualification.yaml` + `validation/validate_model_qualification.py` — допуск
+  **model×revision×role**, статус ВЫВОДИТСЯ ИЗ Bench-метрик (false_green/success_rate/schema_valid_rate),
+  валидатор ПРИНУЖДАЕТ status==derived (нельзя объявить qualified при false_green>0 или низком success —
+  safety-first). Засеяно из live v3.6.8: implementation qualified (kimi), code_review conditional,
+  security_review experimental (не qualified). Валидатор поймал мою же несогласованность status↔метрики.
+- `tools/model_router.py` — provider-neutral resolver: `resolve(role)` -> КОНКРЕТНАЯ самая дешёвая
+  КВАЛИФИЦИРОВАННАЯ модель в требуемом классе роли (+fallback, +qualification_evidence, +cost); нет
+  qualified -> resolved=false + escalation (НЕ берём неквалифицированную ради дешевизны). `escalation_
+  decision`: abstain/schema_invalid -> targeted retry -> эскалация ТОЛЬКО review/judge (не всей задачи).
+  Живо: implementation->kimi-k2.7-code-highspeed (cheapest, fallback k3); security_review->НЕ resolved
+  (нет qualified судьи — честно, safety). selftest 8/8. CI +2 шага.
+
 ### Added (v3.7.3 — Provider Independence & Cheapest Qualified Model, ADR-004)
 Закреплён фундаментальный инвариант: ни один провайдер/модель не обязателен; sonnet-класс — эталон
 квалификации, не двигатель. Связаны СУЩЕСТВУЮЩИЕ механизмы (model_classes / model_comparison /

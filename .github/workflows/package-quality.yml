@@ -129,6 +129,12 @@ jobs:
         run: |
           python3 validation/validate_model_roles.py --selftest
           python3 validation/validate_model_roles.py
+      - name: "Model-qualification — ДОКАЗАТЕЛЬНЫЙ допуск model×revision×role (status из Bench, ADR-004; selftest + real)"
+        run: |
+          python3 validation/validate_model_qualification.py --selftest
+          python3 validation/validate_model_qualification.py
+      - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"
+        run: python3 tools/model_router.py --selftest
       - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
         run: |
           python3 validation/validate_regression_corpus.py --selftest

@@ -132,6 +132,35 @@ models:
     confidentiality_class: on-premise
     note: Реальные возможности определяются загруженной моделью и self-test.
     last_documented_at: "2026-07-08"
+  # Конкретные модели Kimi (moonshot), реально использованные в живой квалификации v3.6.8.
+  # structured_output ЧЕСТНО unstable: строгий SecurityVerdict нестабилен (см. model-qualification).
+  - id: kimi-k2.7-code-highspeed
+    provider: kimi
+    revision: kimi-k2.7-code-highspeed
+    classes: [balanced, fast]
+    context_window: {status: documented, value: 256000}
+    capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
+    cost_class: low
+    note: "live v3.6.8: implementation зелёный (реальный draft PR), быстрый; строгий JSON-verdict нестабилен"
+    last_documented_at: "2026-07-27"
+  - id: kimi-k2.7-code
+    provider: kimi
+    revision: kimi-k2.7-code
+    classes: [balanced]
+    context_window: {status: documented, value: 256000}
+    capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
+    cost_class: low
+    note: "live v3.6.8: тщательнее highspeed, но медленнее -> провайдер-timeout на тяжёлых вызовах"
+    last_documented_at: "2026-07-27"
+  - id: kimi-k3
+    provider: kimi
+    revision: kimi-k3
+    classes: [high-reasoning, balanced]
+    context_window: {status: documented, value: 256000}
+    capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
+    cost_class: medium
+    note: "live v3.6.8: reasoning-флагман, медленный (нужен поднятый timeout); implementation зелёный вживую"
+    last_documented_at: "2026-07-27"
 
 # Правила: routing policy ссылается на model_classes; разрешение class->model
 # делает adapter на основании доступности провайдера и capability self-test.

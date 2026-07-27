@@ -1,0 +1,50 @@
+schema_version: 1
+registry_type: model-qualification
+# Provider Independence (ADR-004): допуск модели к РОЛИ выводится из Bench-метрик по КОНКРЕТНОЙ
+# ревизии (не class×role, не ручное мнение). safety-first: false_green>0 -> not_qualified. Статус ДОЛЖЕН
+# быть согласован с метриками (validate_model_qualification это принуждает). Пороги: qualified требует
+# false_green==0 И success_rate>=0.8 И schema_valid_rate>=0.9; conditional >=0.5; experimental >0.
+# Значения ниже — из живой квалификации v3.6.8 (moonshot/kimi). Сильный судья пока НЕ прогонялся ->
+# для security_review/integration_judge НЕТ qualified-модели (роутер честно блокирует, а не выдумывает).
+qualifications:
+  - model_id: kimi-k2.7-code-highspeed
+    provider: kimi
+    revision: kimi-k2.7-code-highspeed
+    role: implementation
+    corpus_version: live-v3.6.8
+    metrics: {false_green: 0, schema_valid_rate: 0.95, success_rate: 0.85, latency_s_p50: 30, cost_per_change: 0.9}
+    status: qualified
+    qualified_at: "2026-07-27"
+  - model_id: kimi-k2.7-code-highspeed
+    provider: kimi
+    revision: kimi-k2.7-code-highspeed
+    role: code_review
+    corpus_version: live-v3.6.8
+    metrics: {false_green: 0, schema_valid_rate: 0.8, success_rate: 0.6, latency_s_p50: 25, cost_per_change: 0.5}
+    status: conditional
+    qualified_at: "2026-07-27"
+  - model_id: kimi-k2.7-code-highspeed
+    provider: kimi
+    revision: kimi-k2.7-code-highspeed
+    role: security_review
+    corpus_version: live-v3.6.8
+    # success 0.2 -> derived 'experimental' (есть сигнал, но не доказано); НЕ qualified -> роутер не берёт
+    metrics: {false_green: 0, schema_valid_rate: 0.4, success_rate: 0.2, latency_s_p50: 30, cost_per_change: 1.5}
+    status: experimental
+    qualified_at: "2026-07-27"
+  - model_id: kimi-k3
+    provider: kimi
+    revision: kimi-k3
+    role: implementation
+    corpus_version: live-v3.6.8
+    metrics: {false_green: 0, schema_valid_rate: 0.95, success_rate: 0.85, latency_s_p50: 90, cost_per_change: 1.4}
+    status: qualified
+    qualified_at: "2026-07-27"
+  - model_id: kimi-k3
+    provider: kimi
+    revision: kimi-k3
+    role: security_review
+    corpus_version: live-v3.6.8
+    metrics: {false_green: 0, schema_valid_rate: 0.5, success_rate: 0.3, latency_s_p50: 120, cost_per_change: 2.0}
+    status: experimental
+    qualified_at: "2026-07-27"
