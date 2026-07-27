@@ -2,11 +2,32 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.6.7-rc — Runtime Promotion Readiness (укрепление перед боевым включением)
+## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
-Ревью владельца по коду v3.6.6: четыре края, которые НЕ создают риска для текущего runtime (retrieval в
-shadow, execution на v1), но обязаны быть закрыты ДО боевого включения. v3.6.7 — не новая фаза: только
-соединение и укрепление уже созданного (fail-closed по всем краям). БЕЗ version-bump (rc).
+Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
+(1) **Runtime Promotion Readiness** — укрепление уже созданного перед боевым включением (fail-closed по
+всем краям ревью владельца, v3.6.7a–d); (2) **Live Qualification (v3.6.8)** — реальные прогоны на
+провайдере moonshot/kimi, поймавшие и закрывшие 5 настоящих багов кита.
+
+Что живая квалификация ДОКАЗАЛА (вживую, 0 false-green во всех прогонах):
+- **Ядро safety-qualified**: каждый провал — честный fail-closed; code_review ловит отсутствие
+  кода/тестов; exact-SHA отвергает stale-ревью; security анти-rubber-stamp держит.
+- **Зелёный ENGINEERING draft PR** (`sha_verified=true`) — после фикса P1 security-evidence.
+- **Context Engine v2 SHADOW** — `valid`/`snapshot_verified` на точном SHA в каждом прогоне (полная
+  цепочка: mandatory v1 + full-text + graph + semantic + child-политики + budget из BudgetContract).
+- **UI-CI capability** (подтянута из v3.7): реальный `.ai/ui-evidence/*` на точном SHA (vitest
+  interaction + vitest-axe a11y + storybook test-runner pixel-visual + design-system) — все 4 сигнала
+  проходят; отдельные UI-гейты демонстрируемо зелёные (лучший прогон 11/13).
+- **parallel-2 decision-layer** (planner + `integration_gate`) + все 10 обязательных негативов.
+
+Найдено и исправлено живой квалификацией (все запушены, CI green): shadow-wiring читал не тот SHA-ключ;
+provider-таймаут не настраивался (kimi-k3 > 300с); причина отказа security-вердикта была нема; **P1**:
+security ложно блокировал корректный код из-за словаря evidence.type; UI-evidence коллектора не было.
+
+НЕ закрыто (осознанно, за пределами этого релиза): полный зелёный multi-gate UI/ENGINEERING PR за один
+прогон стабильно = нужен sonnet-класс (kimi — лотерея на строгий review); **живой parallel-executor**
+(concurrent worktrees + fan-in) и **hybrid/default промоушен Context Engine** — НЕ построены (по коду
+только sequential executor + shadow), это v3.7-объём (ранее «не сейчас»). VERSION-bump — по разделу ниже.
 
 ### Fixed (v3.6.7a — parallel planner hardening: fail-closed перед превращением в executor)
 - `tools/parallel_planner.py` — закрыты опасные края планировщика (найдены ревью):
