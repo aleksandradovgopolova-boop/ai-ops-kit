@@ -125,6 +125,10 @@ jobs:
         run: |
           python3 tools/model_comparison.py --selftest
           python3 tools/model_comparison.py examples/model-comparison-demo
+      - name: "Model-roles — Provider Independence: роли->model_class + escalation + qualification (ADR-004, selftest + real)"
+        run: |
+          python3 validation/validate_model_roles.py --selftest
+          python3 validation/validate_model_roles.py
       - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
         run: |
           python3 validation/validate_regression_corpus.py --selftest

@@ -64,6 +64,24 @@
   реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
   Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
 
+### Added (v3.7.3 — Provider Independence & Cheapest Qualified Model, ADR-004)
+Закреплён фундаментальный инвариант: ни один провайдер/модель не обязателен; sonnet-класс — эталон
+квалификации, не двигатель. Связаны СУЩЕСТВУЮЩИЕ механизмы (model_classes / model_comparison /
+BudgetContract / cost_account) с ролями рантайма — без параллельной системы.
+- `decisions/adr/ADR-004.yaml` — **Provider Independence & Cheapest Qualified Model**: роли → классы
+  возможностей (не вендоры); cheapest-qualified-first; эскалация только при доказанной нужде (abstain/
+  schema-fail → targeted retry → эскалируется ТОЛЬКО review/judge-вызов, не вся задача); допуск по роли
+  из Bench (safety-first: false_green → not_qualified); экономика = cost-per-successful-change; **снижение
+  стоимости НИКОГДА через ослабление gates**.
+- `registry/model-roles.yaml` + `validation/validate_model_roles.py` — роль→{preferred_class,
+  fallback_class} на существующих `model_classes`; `escalation_policy` (review_only, cost_never_by_
+  weakening_gates=true); `qualification_matrix` (model_class × роль → qualified/conditional/experimental/
+  not_qualified). Инварианты валидатора: классы существуют в models.yaml; cheapest-first (preferred не
+  дороже fallback); судьи (security/integration) — только `qualified` класс; матрица покрывает все роли.
+- `tools/cost_account.py` — `cost_per_successful_change` (вызовы+retry+reviewer+эскалация vs доставлено+
+  проверено; не доставлено → None, «дёшево»≠потери) + `compare_configs` (ранжирует ТОЛЬКО доставившие;
+  дешёвая-с-повторами может быть дороже сильной на успешное изменение). CI +1 шаг (model-roles).
+
 ### Added (v3.7.2 — security ENFORCEMENT: контракты подключены к runtime, не только схемы)
 Ревью: security-контракты пока schema+validator+demo, не enforce. Первый шаг runtime enforcement
 (не новые политики — реальные примитивы принуждения):

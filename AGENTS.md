@@ -101,6 +101,8 @@ python3 validation/validate_provider_residency.py examples/residency-demo
 python3 tools/cost_account.py --selftest
 python3 tools/model_comparison.py --selftest
 python3 tools/model_comparison.py examples/model-comparison-demo
+python3 validation/validate_model_roles.py --selftest
+python3 validation/validate_model_roles.py
 python3 validation/validate_regression_corpus.py --selftest
 python3 validation/validate_regression_corpus.py
 python3 validation/validate_loop_trace.py --selftest

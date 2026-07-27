@@ -70,6 +70,33 @@ def reconcile(budget: dict, run_cost: dict, iterations=None) -> dict:
             "on_exhaustion": budget.get("on_exhaustion"), "verdict": verdict, "dimensions": dims}
 
 
+def cost_per_successful_change(attempt: dict) -> dict:
+    """v3.7 (ADR-004): стоимость ОДНОГО успешно доставленного и ПРОВЕРЕННОГО изменения.
+    Дешёвая модель бывает дорогой: повторы, битый structured output, длинные fix-loop, эскалации,
+    ручное вмешательство. attempt: {calls_cost, retry_cost, reviewer_cost, escalation_cost, latency_s,
+    manual_interventions, delivered_verified: bool}. Не доставлено+проверено -> cost_per_change=None
+    (стоимость без результата = чистые потери, не «дёшево»)."""
+    total = round(sum(float(attempt.get(k, 0) or 0)
+                      for k in ("calls_cost", "retry_cost", "reviewer_cost", "escalation_cost")), 6)
+    delivered = bool(attempt.get("delivered_verified"))
+    return {"total_cost": total, "delivered_verified": delivered,
+            "cost_per_change": (total if delivered else None),
+            "latency_s": attempt.get("latency_s"), "manual_interventions": attempt.get("manual_interventions", 0),
+            "note": ("успешное проверенное изменение" if delivered
+                     else "нет успешного проверенного изменения -> стоимость = потери (не экономия)")}
+
+
+def compare_configs(configs) -> dict:
+    """Сравнить конфигурации (reference vs economical): ранжировать ТОЛЬКО доставившие+проверенные по
+    cost_per_change (безопасность важнее экономии — не-доставившие исключаются, не считаются «дешёвыми»).
+    configs: [{name, attempt}]. -> {ranking, cheapest_qualified, excluded}."""
+    rows = [{"name": c.get("name"), **cost_per_successful_change(c.get("attempt") or {})} for c in configs]
+    qualified = sorted((r for r in rows if r["delivered_verified"]), key=lambda r: r["cost_per_change"])
+    excluded = [r["name"] for r in rows if not r["delivered_verified"]]
+    return {"ranking": qualified, "cheapest_qualified": (qualified[0]["name"] if qualified else None),
+            "excluded_no_verified_change": excluded}
+
+
 def selftest():
     ok = True
 
@@ -113,6 +140,24 @@ def selftest():
     r = reconcile(bud, {"calls": 5})
     expect("null-лимиты (max_tokens/max_wall) не в dimensions",
            "max_tokens" not in r["dimensions"] and "max_wall_seconds" not in r["dimensions"])
+
+    # v3.7 (ADR-004): cost per successful change — «дёшево» бывает дорого
+    kimi = cost_per_successful_change({"calls_cost": 0.30, "retry_cost": 0.60, "reviewer_cost": 0.20,
+                                       "escalation_cost": 0.90, "manual_interventions": 1, "delivered_verified": True})
+    strong = cost_per_successful_change({"calls_cost": 1.20, "reviewer_cost": 0.30, "delivered_verified": True})
+    expect("cost_per_change: сумма всех издержек", kimi["cost_per_change"] == 2.0 and strong["cost_per_change"] == 1.5)
+    fail = cost_per_successful_change({"calls_cost": 0.30, "delivered_verified": False})
+    expect("не доставлено+проверено -> cost_per_change=None (не «дёшево», а потери)",
+           fail["cost_per_change"] is None)
+    cmp = compare_configs([{"name": "economical-kimi", "attempt": {"calls_cost": 0.30, "retry_cost": 0.60,
+                            "escalation_cost": 0.90, "reviewer_cost": 0.20, "delivered_verified": True}},
+                           {"name": "reference-strong", "attempt": {"calls_cost": 1.20, "reviewer_cost": 0.30,
+                            "delivered_verified": True}},
+                           {"name": "cheap-but-failed", "attempt": {"calls_cost": 0.10, "delivered_verified": False}}])
+    expect("compare_configs: сильная дешевле на успешное изменение (2.0 vs 1.5) -> cheapest_qualified=reference-strong",
+           cmp["cheapest_qualified"] == "reference-strong")
+    expect("compare_configs: не-доставившая исключена (не считается дешёвой)",
+           "cheap-but-failed" in cmp["excluded_no_verified_change"])
 
     print("cost_account selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

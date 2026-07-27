@@ -1,0 +1,53 @@
+schema_version: 1
+kind: ArchitectureDecision
+id: ADR-004
+title: "Provider Independence & Cheapest Qualified Model"
+status: accepted
+date: "2026-07-27"
+owner: architecture
+context: >-
+  Живая квалификация велась на moonshot/kimi с sonnet-классом как эталоном. Возник соблазн
+  зафиксировать конкретного вендора (Sonnet) как обязательный двигатель. Но стоимость и качество
+  моделей различаются ПО РОЛЯМ (одна модель отлично реализует код, но нестабильна в строгом
+  security-вердикте), а привязка к вендору — это lock-in и завышенная стоимость.
+decision: >-
+  Ни один провайдер/модель не является обязательной частью жизненного цикла AI Ops. Роли рантайма
+  (implementation / code_review / security_review / integration_judge) привязаны к КЛАССАМ
+  возможностей (registry model_classes), а не к именам моделей (resolution: bind_by model_class,
+  hardcode_model forbidden). Runtime выбирает САМУЮ ДЕШЁВУЮ КВАЛИФИЦИРОВАННУЮ модель для роли и
+  повышает класс только при ДОКАЗАННОЙ необходимости: reviewer abstain / невалидная схема -> один
+  targeted retry -> при сохранении неопределённости эскалируется ТОЛЬКО review/judge-вызов (не
+  пере-прогон всей задачи) на более сильный класс. Допуск модели к роли — из Bench (не ручное
+  мнение), safety-first: любой false_green по роли ДИСКВАЛИФИЦИРУЕТ модель для неё. Экономика
+  меряется как стоимость ОДНОГО успешно доставленного и проверенного изменения (вызовы + retry +
+  reviewer + эскалация + latency + ручное вмешательство), а не цена токена.
+alternatives:
+  - option: "AI Ops = один вендор (Anthropic Sonnet) как обязательный двигатель"
+    rejected_because: "vendor lock-in, завышенная стоимость, нет переносимости; sonnet нужен как эталон квалификации, не как обязательный двигатель"
+  - option: "Всё всегда делает самая дешёвая модель"
+    rejected_because: "небезопасно — слабый/нестабильный judge даёт false-green или бесконечные retry; экономия мнимая"
+  - option: "Снижать стоимость, ослабляя проверки/gates"
+    rejected_because: "прямое нарушение safety-инварианта; экономия только через routing/context/cache/targeted-retry, НИКОГДА через удаление проверок"
+consequences:
+  positive:
+    - "нет vendor lock-in: новый провайдер занимает роль автоматически при 0 false-green + пороге качества + дешевле/быстрее"
+    - "основной трафик обслуживают самые экономичные квалифицированные модели; сильные — только для критичных судейских решений"
+    - "квалификация по роли (матрица), а не грубое 'модель хорошая/плохая'"
+  negative:
+    - "нужен постоянный multi-provider Bench и матрица допуска по ролям (поддержка)"
+    - "маршрутизация сложнее: cheapest-qualified-first + targeted escalation"
+  neutral:
+    - "конкретные модели резолвятся в routing-time из реестра, а не зашиты в контрактах"
+quality_attributes:
+  - attribute: portability
+    effect: improves
+  - attribute: performance
+    effect: improves
+    note: "стоимость на успешное изменение снижается через дешёвых исполнителей + сильных судей точечно"
+  - attribute: security
+    effect: tradeoff
+    note: "дешёвая модель допускается к роли ТОЛЬКО при 0 false-green по этой роли (safety over economy)"
+ui_impact: null
+supersedes: null
+superseded_by: null
+related: ["ADR-001"]
