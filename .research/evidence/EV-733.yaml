@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-733
+request_id: RR-009
+statement: README ruflo содержит агрессивные self-reported бенчмарки с экстремальным
+  разбросом против LangGraph/AutoGen/CrewAI — «wins cold start, single turn, RSS by
+  1.3×–1953×» — диапазон в три порядка сам по себе маркер overclaiming; независимой
+  верификации нет.
+evidence_type: documented_fact
+source:
+  title: ruvnet/ruflo — README.md (Benchmarks)
+  url: https://github.com/ruvnet/ruflo/blob/main/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: раздел Benchmarks
+  quote: ruflo wins cold start, single turn, RSS by 1.3×–1953×
+captured_at: '2026-07-25'
+captured_by: scout-agent (ruflo identification+scan, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: medium
+  rationale: Цитата первична; само заявление — self-reported без независимой проверки.
+status: active
+superseded_by: null

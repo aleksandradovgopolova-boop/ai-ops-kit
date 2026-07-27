@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-735
+request_id: RR-009
+statement: 'Независимый аудит ruflo/claude-flow (roman-rr, апрель 2026, аудирована
+  v3.5.51): из 300+ MCP-инструментов реально работают ~10; swarm/hive-mind/neural
+  — заглушки (agentCount: 0, Math.random()-метрики, verifySignature() безусловно возвращает
+  true); реально работают HNSW-векторная память, AgentDB, embeddings (all-MiniLM-L6-v2,
+  SQLite); вместо экономии токенов — расход 15-25k токенов/сессию на обвязку. Оговорка:
+  аудирована v3.5.51, текущая v3.32.x могла измениться.'
+evidence_type: documented_fact
+source:
+  title: 'Ruflo/Claude-Flow Audit: 300+ MCP Tools — 99% Theater, 1% Real (gist roman-rr)'
+  url: https://gist.github.com/roman-rr/ed603b676af019b8740423d2bb8e4bf6
+  type: source_repository
+  published_at: null
+  is_primary: false
+citation:
+  locator: разделы Fake vs Real / Mock Implementations / Token Waste
+  quote: verifySignature() unconditionally returns true
+captured_at: '2026-07-25'
+captured_by: scout-agent (ruflo identification+scan, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: medium
+  rationale: Сторонний аудит одного автора, но с методологией (анализ исходников)
+    и конкретными указателями на код; версия аудита отстаёт от текущей; согласуется
+    с репутацией экосистемы.
+status: active
+superseded_by: null

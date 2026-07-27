@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-702
+request_id: RR-009
+statement: 'Состав и жанр ECC: 67 md-агентов, 279 скиллов, 94 command-шима, хуки (hooks.json
+  + Node.js-скрипты), rules (22 стека), 10 JSON-схем, install-манифесты, мульти-харнесс
+  конфиги (.codex/.cursor/.opencode/.zed и др.); распространяется как Claude Code
+  plugin — «install it directly or copy components manually»; при этом самоописание
+  — «Not just configs. A complete system» (10+ месяцев ежедневного использования).
+  Гибрид: MIT-каталог по факту, система-конкурент по амбиции.'
+evidence_type: documented_fact
+source:
+  title: ECC — .claude-plugin/plugin.json + README
+  url: https://github.com/affaan-m/ECC/blob/main/.claude-plugin/plugin.json
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: plugin.json description (числа сверены подсчётом в клоне); README ~50 и
+    ~600
+  quote: 67 agents, 279 skills, 94 legacy command shims, reusable hooks, rules, MCP
+    conventions
+captured_at: '2026-07-25'
+captured_by: scout-agent (everything-claude-code/ECC, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Машиночитаемый манифест + verbatim README на pinned commit; числа пересчитаны
+    в клоне.
+status: active
+superseded_by: null

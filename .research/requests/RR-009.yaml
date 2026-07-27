@@ -1,0 +1,29 @@
+# Reuse-scan двух реп по запросу Sasha: everything-claude-code + ruflo.
+schema_version: 1
+kind: research.request
+id: RR-009
+title: "everything-claude-code и ruflo: что взять в кит, где пересечение"
+requested_by:
+  system: human
+  layer: technology
+decision_to_support:
+  description: "Решить: что из репозиториев everything-claude-code и ruflo (идентифицировать точно) взять в кит — декларации в skills-catalog, паттерны, конфиги; и являются ли они пересечением/конкуренцией киту или дополнением"
+  decision_maker: human
+questions:
+  - "Что это за репозитории точно (автор, лицензия, зрелость, живость) — 'ruflo' идентифицировать по первоисточникам, не по догадке?"
+  - "Какие конкретные элементы (агенты, хуки, скиллы, конфиги, паттерны оркестрации) релевантны киту и лицензионно чисты?"
+  - "Пересекаются ли они с китом по жанру (как gstack/OpenHands) или это каталоги/инструменты для переиспользования?"
+constraints:
+  - license_compatible_commercial
+  - fits_kit_declared_pattern
+  - evidence_over_reputation
+workflow_hint: comparison
+memory_check:
+  performed: true
+  related_requests: [RR-002, RR-003, RR-008]
+  related_decisions: [DP-102, DP-103, DP-108]
+  summary: "RR-002 уже сканировал awesome-каталоги Claude Code (awesome-claude-code — навигация, CC BY-NC-ND); DP-102 задал корзины и лицензионный критерий; DP-103/108 — жанровые аналоги (gstack, OpenHands). everything-claude-code и ruflo в прошлых сканах не встречались."
+required_confidence: medium
+deadline: "2026-08-10"
+status: answered
+created_at: "2026-07-24"

@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-705
+request_id: RR-009
+statement: 'Eval-стек ECC: skills/eval-harness (eval-driven development, pass@k, регрессионные
+  сеты для промптов/агентов) + agents/agent-evaluator.md (5-осевая рубрика с обязательными
+  evidence-цитатами) + skills/agent-self-evaluation — прямые кандидаты в skills-catalog
+  кита, пересечение с eval-фреймворком концептуальное, не кодовое.'
+evidence_type: documented_fact
+source:
+  title: ECC — skills/eval-harness/SKILL.md
+  url: https://github.com/affaan-m/ECC/blob/main/skills/eval-harness/SKILL.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: '''When to Activate'' + agents/agent-evaluator.md frontmatter'
+  quote: Measuring agent reliability with pass@k metrics
+captured_at: '2026-07-25'
+captured_by: scout-agent (everything-claude-code/ECC, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Verbatim из SKILL.md в клоне.
+status: active
+superseded_by: null

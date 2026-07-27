@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-731
+request_id: RR-009
+statement: 'Идентификация ruflo однозначна: ruvnet/ruflo — переименованный claude-flow (Reuven Cohen ''rUv''; ребрендинг
+  на v3.5, февраль 2026; старые URL claude-flow редиректят); 65,827 звёзд, 7,822 форка, 828 открытых issues, MIT,
+  создан 2025-06-02, push 2026-07-24, homepage — коммерческий Cognitum.One. Позиционирование: «agent meta-harness»
+  поверх Claude Code и Codex.'
+evidence_type: documented_fact
+source:
+  title: GitHub API — repos/ruvnet/ruflo
+  url: https://api.github.com/repos/ruvnet/ruflo
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: JSON-поля repo metadata
+  quote: ruvnet/ruflo
+captured_at: '2026-07-25'
+captured_by: scout-agent (ruflo identification+scan, RR-009)
+freshness:
+  volatile: true
+  expires_at: '2026-10-25'
+reliability:
+  level: high
+  rationale: Машиночитаемые метаданные GitHub API + verbatim README «Claude Flow is now Ruflo».
+status: active
+superseded_by: null
