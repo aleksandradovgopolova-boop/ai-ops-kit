@@ -113,6 +113,16 @@ Context Engine v2 закодирован как проверяемый конт�
   Anthropic не обязателен, ядро provider-agnostic+fail-closed); preflight для openai-compatible честно
   требует и `OPENAI_COMPATIBLE_API_KEY`, И `OPENAI_COMPATIBLE_BASE_URL`.
 
+### Fixed (v3.6.8 live-finding — shadow-wiring читал не тот SHA-ключ)
+Первый живой прогон v3.6.8 (kimi-k2.7-code) поймал реальный баг в wiring v3.6.7: `ai_ops_run`
+передавал в shadow `rep.get("committed_sha")`, а фактический SHA лежит в `rep["commit"]["sha"]` ->
+shadow всегда получал `None` и МОЛЧА падал (ошибка глоталась guard'ом). Оффлайн-selftest это не ловил
+(там sha передаётся явно). Исправлено: `sha = rep["commit"]["sha"]`; guard теперь фиксирует реальную
+причину (`type: message`), а не немой текст; добавлен CLI-флаг `--context-shadow` (был только параметр
+`run(context_shadow=…)`, недоступный из CLI). Живо подтверждено: полная v2-цепочка в shadow
+(snapshot_verified=true на exact commit SHA, child BudgetContract применён, fulltext+graph+semantic),
+execution по-прежнему на v1.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

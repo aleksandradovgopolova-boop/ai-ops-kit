@@ -654,11 +654,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 if bundle:
                     _inc = bundle.get("included", {})
                     _mandatory = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
+                _csha = (rep.get("commit") or {}).get("sha")   # v3.6.7d-fix: SHA в rep["commit"]["sha"]
                 rep["context_shadow"] = _cshadow.build_shadow(
-                    _content_root, task_text, role="executor", sha=rep.get("committed_sha"),
+                    _content_root, task_text, role="executor", sha=_csha,
                     policy_root=child_root, v1_mandatory=_mandatory, require_snapshot=True)
-            except Exception:  # noqa: BLE001 — shadow не должен ронять прогон
-                rep["context_shadow"] = {"error": "shadow build failed (не влияет на execution=v1)"}
+            except Exception as _e:  # noqa: BLE001 — shadow не должен ронять прогон
+                # честно фиксируем реальную причину (не влияет на execution=v1) — иначе баг wiring немой
+                rep["context_shadow"] = {"error": f"shadow build failed: {type(_e).__name__}: {_e}"[:300]}
         if payload:
             rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
                                       "payload_budget": payload["payload_budget"],
@@ -1576,6 +1578,9 @@ def main(argv):
     rp.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat); engine=pipeline")
     rp.add_argument("--open-pr", action="store_true",
                     help="открыть draft PR по результату (нужен GITHUB_TOKEN); engine=pipeline")
+    rp.add_argument("--context-shadow", action="store_true",
+                    help="построить Context Engine v2 shadow-view рядом с боевым v1 (наблюдаемость "
+                         "перед промоушеном; execution по-прежнему на v1); engine=pipeline")
     rp.add_argument("--baseline-diff", action="store_true",
                     help="судить по 'нет новых провалов против базы' (пред-существующие красные "
                          "проверки репо не блокируют); engine=pipeline")
@@ -1675,7 +1680,7 @@ def main(argv):
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
                      discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
-                     review_fix_attempts=a.fix_attempts)
+                     review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
