@@ -202,7 +202,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
-        context_shadow=False):
+        context_shadow=False, context_hybrid=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -661,6 +661,27 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             except Exception as _e:  # noqa: BLE001 — shadow не должен ронять прогон
                 # честно фиксируем реальную причину (не влияет на execution=v1) — иначе баг wiring немой
                 rep["context_shadow"] = {"error": f"shadow build failed: {type(_e).__name__}: {_e}"[:300]}
+        # v3.7.0 HYBRID-запись (default OFF): mandatory v1 + разрешённые v2-additions, допускается ТОЛЬКО
+        # через context_promotion_gate (5 trust-контрактов). НЕ готов -> v1-only (fail-safe). Feeding
+        # hybrid-контекста МОДЕЛИ — живой шаг за этим же флагом (пока фиксируем сборку/решение в отчёте;
+        # execution по-прежнему на v1). Инвариант: v1 никогда не теряется, v2 только добавляет.
+        if context_hybrid:
+            try:
+                import context_hybrid as _chyb
+                import context_engine as _ce
+                _wt = child_root / ".ai" / "worktrees" / fid
+                _content_root = _wt if _wt.is_dir() else child_root
+                _mand = None
+                if bundle:
+                    _inc = bundle.get("included", {})
+                    _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
+                _csha = (rep.get("commit") or {}).get("sha")
+                _afp, _dcp, _bud = _ce.load_child_policies(child_root)
+                rep["context_hybrid"] = _chyb.build_hybrid_from_child(
+                    _content_root, task_text, "executor", sha=_csha, afp=_afp, dcp=_dcp,
+                    v1_mandatory=_mand, require_snapshot=True)
+            except Exception as _e:  # noqa: BLE001 — hybrid-запись не должна ронять прогон
+                rep["context_hybrid"] = {"error": f"hybrid build failed: {type(_e).__name__}: {_e}"[:300]}
         if payload:
             rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
                                       "payload_budget": payload["payload_budget"],
@@ -1581,6 +1602,9 @@ def main(argv):
     rp.add_argument("--context-shadow", action="store_true",
                     help="построить Context Engine v2 shadow-view рядом с боевым v1 (наблюдаемость "
                          "перед промоушеном; execution по-прежнему на v1); engine=pipeline")
+    rp.add_argument("--context-hybrid", action="store_true",
+                    help="собрать hybrid-контекст (mandatory v1 + разрешённые v2-additions) через "
+                         "context_promotion_gate; не готов -> v1-only; запись в отчёт; engine=pipeline")
     rp.add_argument("--baseline-diff", action="store_true",
                     help="судить по 'нет новых провалов против базы' (пред-существующие красные "
                          "проверки репо не блокируют); engine=pipeline")
@@ -1680,7 +1704,8 @@ def main(argv):
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
                      discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
-                     review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow)
+                     review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow,
+                     context_hybrid=a.context_hybrid)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

@@ -19,6 +19,16 @@
   не тихое усечение). selftest: реальный view из build_context (ready) + 6 негативов (каждый контракт
   ловится). CI +1 шаг. Это ПОДГОТОВКА к hybrid, сам hybrid НЕ включён.
 
+### Added (v3.7.0 — context_hybrid: mandatory v1 + разрешённые v2-additions за флагом)
+- `tools/context_hybrid.py` — сборка hybrid-контекста (промежуточная ступень promotion shadow→HYBRID→
+  default): `build_hybrid(v1_files, v2_view, allowed, window)` возвращает `mode=hybrid` (v1 ∪ additions)
+  ТОЛЬКО при `context_promotion_gate.ready`; иначе `mode=v1-only` (fail-safe, additions=[]). Инварианты:
+  v1 mandatory НИКОГДА не теряется; v2 ТОЛЬКО добавляет (additions = included_v2 \ v1); secret/denied из
+  v2 не протаскивается (gate ловит). `build_hybrid_from_child` композирует build_context + gate + hybrid.
+- `ai_ops_run.run(context_hybrid=False)` + CLI `--context-hybrid` (default OFF): пишет hybrid-запись в
+  отчёт (mandatory v1 + v2-additions + результат gate); **execution по-прежнему на v1** — feeding
+  hybrid-контекста МОДЕЛИ — живой шаг за флагом (v3.7). selftest 7/7. CI +1 шаг.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

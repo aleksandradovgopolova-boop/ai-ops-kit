@@ -153,6 +153,8 @@ jobs:
         run: python3 tools/context_engine.py --selftest
       - name: Context promotion gate — 5 trust-контрактов перед hybrid (v3.7.0, selftest)
         run: python3 tools/context_promotion_gate.py --selftest
+      - name: Context hybrid — mandatory v1 + gated v2-additions (v3.7.0, selftest)
+        run: python3 tools/context_hybrid.py --selftest
       - name: Context shadow — ПОЛНАЯ v2-цепочка рядом с боевым v1, child-политики (selftest)
         run: python3 tools/context_shadow.py --selftest
       - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
