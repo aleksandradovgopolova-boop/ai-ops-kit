@@ -42,6 +42,15 @@
   -> block/revalidation. selftest 10/10 (вкл. проверку конкурентности api‖ui + все fail-closed края).
   Живое подключение (package_runner=ai_ops_run в worktrees) — следующий шаг под сильную модель.
 
+### Added (v3.7 security-долг #1 — SupplyChainPinPolicy: pinned-revision install)
+- `schemas/supply-chain-pin.schema.json` + `validation/validate_supply_chain.py` +
+  `examples/supply-chain-demo/SCP-001.yaml` — первый из трёх OWASP-ASI контрактов «до расширения
+  автономности»: внешние модели/skills/MCP ставятся ТОЛЬКО по зафиксированному revision/hash;
+  плавающие ссылки (latest/main/HEAD/*) запрещены; исполняемый код (skill/mcp) требует install-верификации
+  (sha256/signature/sigstore). selftest 6/6 + реальный SCP-001. CI +1 шаг. Инвариант: write-capable MCP /
+  самоизменение нельзя включать без этой политики. (Осталось в треке: memory provenance/expiry/
+  no-self-ingestion; key TTL + честная фиксация отсутствия per-agent identity.)
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

@@ -1,0 +1,24 @@
+schema_version: 1
+kind: SupplyChainPinPolicy
+policy_id: SCP-001
+# security-долг (OWASP ASI): внешние зависимости движка — только по зафиксированному revision/hash.
+# Плавающие ссылки (latest/main/HEAD) запрещены; исполняемый код (skill/mcp) — с install-верификацией.
+dependencies:
+  - name: claude-sonnet
+    kind: model
+    source: anthropic
+    pinned: {type: revision, value: claude-sonnet-5-20260101}
+  - name: kimi-k3
+    kind: model
+    source: moonshot
+    pinned: {type: revision, value: kimi-k3-20260701}
+  - name: decision-support
+    kind: skill
+    source: internal/skills/decision-support
+    pinned: {type: hash, value: a1b2c3d4e5f60718}
+    install_verify: {method: sha256, value: 9f9f9f9f9f9f9f9f9f9f}
+  - name: figma-mcp
+    kind: mcp
+    source: github.com/example/figma-mcp
+    pinned: {type: hash, value: 0badf00d0badf00d}
+    install_verify: {method: signature, value: sigstore:example-bundle}
