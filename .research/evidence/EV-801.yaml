@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-801
+request_id: RR-010
+statement: Канонический OWASP-документ по агентным рискам на июль 2026 — «OWASP Top
+  10 for Agentic Applications 2026» (ASI01–ASI10), OWASP GenAI Security Project /
+  Agentic Security Initiative, Version 2026 (December 2025, релиз 2025-12-09), 100+
+  экспертов, peer review (NIST, EC, Alan Turing Institute), CC BY-SA 4.0. Это НЕ «Agentic
+  AI Threats and Mitigations» (тот остался базовой таксономией T1–T17 v1.1) и не LLM
+  Top 10 2025.
+evidence_type: documented_fact
+source:
+  title: OWASP Top 10 For Agentic Applications 2026 (официальный PDF)
+  url: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: титульная страница PDF + pp.6-7 (Letter from Leaders)
+  quote: OWASP Top 10 For Agentic Applications 2026
+captured_at: '2026-07-27'
+captured_by: scout-agent (OWASP agentic risks, RR-010)
+freshness:
+  volatile: true
+  expires_at: '2026-10-27'
+reliability:
+  level: high
+  rationale: Официальный PDF скачан и разобран; релиз подтверждён пресс-релизом OWASP
+    09.12.2025.
+status: active
+superseded_by: null

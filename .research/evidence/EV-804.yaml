@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-804
+request_id: RR-010
+statement: 'Microsoft Agent Governance Toolkit публикует маппинг контролей на ASI01–ASI10:
+  заявленное покрытие 7/10 Full + 3/10 Partial (partial: ASI04 — нет SBOM-сканирования;
+  ASI06 — нет memory sandbox; ASI09 — нет UI-подтверждений), с оговоркой «internal
+  self-assessment, не сертификация». Урок: маркетинговое «all 10 covered» при чтении
+  их же compliance-дока = 7+3. Таблица risk→control→coverage — референс-структура
+  для нашего гэп-чека.'
+evidence_type: documented_fact
+source:
+  title: Microsoft agent-governance-toolkit — OWASP ASI mapping
+  url: https://github.com/microsoft/agent-governance-toolkit/blob/main/docs/compliance/owasp-agentic-top10-architecture.md
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: таблица ASI01-ASI10 coverage
+  quote: 'Official ASI coverage: 7/10 Full, 3/10 Partial, 0 Gaps.'
+captured_at: '2026-07-27'
+captured_by: scout-agent (OWASP agentic risks, RR-010)
+freshness:
+  volatile: true
+  expires_at: '2026-10-27'
+reliability:
+  level: medium
+  rationale: Первоисточник для self-assessment Microsoft, независимой верификации
+    нет.
+status: active
+superseded_by: null

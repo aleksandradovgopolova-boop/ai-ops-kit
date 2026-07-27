@@ -1,0 +1,24 @@
+schema_version: 1
+kind: research.evidence
+id: EV-805
+request_id: RR-010
+statement: "Маппинг ASI01–ASI10 на security-контур кита (self-evidence по файлам репозитория, 2026-07-25): СИЛЬНОЕ ПОКРЫТИЕ — ASI02 Tool Misuse: tool_broker + policy engine, 6 уровней permission-levels с кумулятивными правами и human approval, PackageCapabilityScope least-privilege (v3.3); ASI05 RCE: containers/ P0.2 jail, уровень execution с запретом destructive, разделение генерации и исполнения через gates; ASI08 Cascading Failures: fail-closed gates, lifecycle commit barrier, budget contracts, loop policy с no-progress detection, concurrency preflight, fix-loop caps; ASI09 Human-Agent Trust: writer≠judge как валидируемый инвариант, правило «домен нельзя закрыть фразой модели», anti-rubber-stamp (v3.0.11), HITL conditions в доменах, честные capability-декларации. ЧАСТИЧНОЕ — ASI01 Goal Hijack: prompt-injection posture=implemented + контракты workflow, но нет intent-capsule/goal-integrity механизма; ASI06 Memory Poisoning: research-модуль имеет provenance/quote-verify/expiry/supersession и спот-чек self-evidence, но конвенции не перенесены на memory/lessons-learned кита, нет trust-scores; ASI10 Rogue Agents: registry как источник истины (агент без записи = ошибка) + обязательные evals, но audit-log=partial и incident-killswitch=partial, watchdog-агентов нет. СЛАБОЕ/GAP — ASI03 Identity & Privilege: permission-levels есть, но нет per-agent identity и short-lived scoped credentials (secrets=implemented относится к хранению, не к TTL/ротации per-task); ASI04 Supply Chain: skills-catalog declared + конвенция pinned_revision (DP-106), но пиновка НЕ enforced установкой, нет hash-verification и подписанных манифестов (posture: tool-mcp-connection=declared, supplier-control=partial); ASI07 Inter-Agent Comm: RunHandoff-контракты со схемами дают семантическую валидацию, но подписи/mTLS нет — смягчено локальной однохостовой моделью (применимость ограничена, станет актуальным при федерации)."
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — security/*, governance/security-posture.yaml, registry, tools (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "security/security-domains.yaml (12 доменов, allowed_evidence_sources); security/permission-levels.yaml (6 уровней); governance/security-posture.yaml (13 областей: 6 impl/4 partial/3 declared); containers/; tools/tool_broker.py, gate_executor.py, lifecycle_store.py; CHANGELOG v3.0.11 anti-rubber-stamp, v3.3 capability-scope/access-filter"
+captured_at: "2026-07-25"
+captured_by: "claude (маппинг RR-010; self-evidence — пометка для спот-чека judge при ревью перед accept)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-25"
+reliability:
+  level: medium
+  rationale: "Маппинг по чтению файлов и валидаторам кита (постура сама честная: partial/declared не завышены); интерпретация соответствия риск↔механизм — суждение writer'а, спот-чек судьи обязателен перед accept."
+status: active
+superseded_by: null
