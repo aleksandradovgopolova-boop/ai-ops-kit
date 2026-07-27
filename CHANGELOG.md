@@ -2,6 +2,23 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.7.0-rc — Runtime Activation: Context Promotion trust-контракты (перед hybrid)
+
+Начало фазы v3.7 (Runtime Activation). Первый шаг — НЕ включать hybrid, а закрыть trust-контракты
+готовности Context Engine v2 к promotion (офлайн, проверяемо). БЕЗ version-bump (rc).
+
+### Added (v3.7.0 — context_promotion_gate: 5 инвариантов доверия перед hybrid)
+- `tools/context_promotion_gate.py` — gate над результатом `context_engine.build_context`, держит 5
+  контрактов (все обязаны pass, иначе view НЕ допускается к promotion; execution НЕ трогается):
+  (1) `access_filter_before_retrieval` — included без secret и без класса вне allowed роли;
+  (2) `no_denied_filenames_in_payload` — included ∩ excluded_access = ∅ (запрещённый файл не в payload);
+  (3) `applicable_rules_in_mandatory` — обязательный контекст v1 не потерян (mandatory_missing и
+  mandatory_excluded_access пусты); (4) `policy_hash_pinned_per_run` — view привязан к зафиксированной
+  ревизии политик и коду (cache_key несёт afp/dcp fingerprint + точный sha); (5)
+  `hard_window_decompose_or_block` — total_tokens не превышает hard model-window (иначе декомпозиция/блок,
+  не тихое усечение). selftest: реальный view из build_context (ready) + 6 негативов (каждый контракт
+  ловится). CI +1 шаг. Это ПОДГОТОВКА к hybrid, сам hybrid НЕ включён.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
