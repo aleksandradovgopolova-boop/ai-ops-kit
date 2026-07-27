@@ -132,6 +132,18 @@ execution по-прежнему на v1.
   не вынес pass» — по живым прогонам не было видно, промпт/формат это или неспособность модели выдать
   строгий SecurityVerdict v2. Observability, поведение гейта не меняется.
 
+### Fixed (v3.6.8 live-finding P1 — security ложно блокировал корректный код из-за словаря evidence.type)
+Диагностика вживую (k3): security-reviewer выдавал СУБСТАНТИВНО ВЕРНЫЙ SecurityVerdict v2 (domain_results
+по input_validation, per-domain checks, evidence с path+lines реально прочитанного `pricing.py`), но
+помечал evidence `type:"file"`. `_evidence_ref_errors` принимал только `code-read`/`read` -> «evidence без
+распознаваемого type» -> весь вердикт отвергнут -> `security` fail на КОРРЕКТНОМ валидированном+покрытом
+тестами коде. Ровно это гасило зелёный ENGINEERING в Phase B.
+- `_evidence_ref_errors` теперь принимает `file`/`source`/`code`/`read` как `code-read`, а неизвестный
+  `type` С path тоже трактует как code-read. **Анти-false-green СОХРАНЁН**: path обязателен и (при наличии
+  trace) сверяется с реально прочитанными файлами — сфабрикованный путь по-прежнему отвергается (3 теста:
+  file+прочитанный -> ок; file+непрочитанный -> «сфабрикован»; без type и без path -> невалиден). Промпт
+  security-reviewer теперь явно называет словарь `code-read|test|finding`. parity 154/154.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

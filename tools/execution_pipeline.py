@@ -393,7 +393,9 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
         "{domain:<id>, status:pass|warn|fail, checks:[{id,status}], evidence:[{type,path,lines|command}]} "
         "РОВНО по этим применимым доменам: " + ", ".join(applicable) + " (по одному на каждый, без "
         "пропусков/дублей/лишних). У КАЖДОГО домена СВОИ непустые checks; для pass — хотя бы одна КОНКРЕТНАЯ "
-        "evidence-ссылка (прочитанный файл+строки, команда теста, находка сканера); для warn/fail — blockers")
+        "evidence-ссылка. ФОРМАТ evidence.type — СТРОГО одно из: 'code-read' (прочитанный файл: path + lines), "
+        "'test' (command), 'finding' (id/detail сканера). Для ссылки на код используй type:'code-read' "
+        "(НЕ 'file'/'source'). Для warn/fail — непустые blockers")
     checklist = "; ".join(checklist_items)
     reviewer = tool_loop.make_reviewer_proposer(
         reviewer_proposer, "security", checklist=checklist, required_evidence=["security_reviewer"])
@@ -445,7 +447,12 @@ def _evidence_ref_errors(dom, ev_items, reviewer_reads=None):
                         "(нужен {type, path/command/...}, не строка)")
             continue
         et = ev.get("type")
-        if et in ("code-read", "read"):
+        # v3.6.8 (finding живой квалификации): evidence с путём — это code-read, как бы модель его ни
+        # назвала (file/source/code/read). Раньше принимали ТОЛЬКО 'code-read'/'read' -> валидный вердикт
+        # k3 (evidence type='file' + path+lines) отвергался как «нераспознанный type» -> security ложно
+        # блокировал корректный код. Анти-false-green СОХРАНЁН: path обязателен И (если есть trace reads)
+        # сверяется с реально прочитанными файлами — сфабрикованный путь по-прежнему не пройдёт.
+        if et in ("code-read", "read", "file", "source", "code"):
             path = ev.get("path")
             if not path:
                 errs.append(f"домен '{dom}': code-read evidence без path")
@@ -458,9 +465,14 @@ def _evidence_ref_errors(dom, ev_items, reviewer_reads=None):
         elif et in ("finding", "scanner"):
             if not (ev.get("id") or ev.get("detail") or ev.get("path")):
                 errs.append(f"домен '{dom}': {et} evidence без id/detail/path")
+        elif ev.get("path"):
+            # неизвестный type, но есть path -> трактуем как code-read (та же анти-фабрикация)
+            if reads is not None and not _read_match(ev["path"]):
+                errs.append(f"домен '{dom}': evidence ссылается на '{ev['path']}', которого нет среди "
+                            "реально прочитанных ревьюером файлов — сфабрикованная ссылка")
         else:
-            errs.append(f"домен '{dom}': evidence без распознаваемого type "
-                        f"(нужен code-read|test|finding, получено {et!r})")
+            errs.append(f"домен '{dom}': evidence без распознаваемого type и без path "
+                        f"(нужен code-read|test|finding + path/command, получено {et!r})")
     return errs
 
 
@@ -2627,6 +2639,24 @@ def selftest():
         covered4 = {**one_generic, "domain_results": _dr(four)}
         expect("v3.0.1 SecVerdict-v2: domain_results покрывает все 4 (с per-domain checks) -> валиден",
                _security_verdict_errors(covered4, "abc123", four, _vrr2) == [])
+
+        # v3.6.8 (finding живой квалификации): evidence type='file' с path — это code-read, а не «нераспознанный
+        # type». Раньше валидный вердикт k3 (type='file'+path+lines) отвергался -> security ложно блокировал.
+        file_ev = {**one_generic, "domain_results": [{"domain": "input_validation", "status": "pass",
+                   "checks": [{"id": "iv_ok", "status": "pass"}],
+                   "evidence": [{"type": "file", "path": "pricing.py", "lines": "10-11"}]}]}
+        expect("v3.6.8 SecVerdict: evidence type='file'+path -> принимается как code-read (валиден)",
+               _security_verdict_errors(file_ev, "abc123", ["input_validation"], _vrr2) == [])
+        expect("v3.6.8 анти-false-green: type='file' на прочитанный путь -> валиден (reads-сверка ок)",
+               _security_verdict_errors(file_ev, "abc123", ["input_validation"], _vrr2,
+                                        reviewer_reads=["pricing.py"]) == [])
+        expect("v3.6.8 анти-false-green: type='file' на НЕпрочитанный путь -> сфабрикован (невалиден)",
+               any("сфабрикован" in e for e in _security_verdict_errors(
+                   file_ev, "abc123", ["input_validation"], _vrr2, reviewer_reads=["other.py"])))
+        noev = {**one_generic, "domain_results": [{"domain": "input_validation", "status": "pass",
+                "checks": [{"id": "x", "status": "pass"}], "evidence": [{"type": "vibes"}]}]}
+        expect("v3.6.8: evidence без распознаваемого type И без path -> невалиден (защита цела)",
+               bool(_security_verdict_errors(noev, "abc123", ["input_validation"], _vrr2)))
         three = {**one_generic, "domain_results": _dr(four[:3])}
         expect("v3.0.1 SecVerdict-v2: покрыто 3 из 4 доменов -> невалиден (не закрыт)",
                any("не покрывает" in e for e in _security_verdict_errors(three, "abc123", four, _vrr2)))
