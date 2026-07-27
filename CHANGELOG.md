@@ -77,6 +77,10 @@
 - `templates/quality/SeamDefectPolicy.md` — DoD-документ (корень, 5 признаков, что гейтится). Гейт
   вводится advisory до обкатки, затем blocking (дисциплина кита); экономия НИКОГДА не ослабляет проверку.
   CI +1 шаг.
+- Wired в `execution_pipeline` (ADVISORY, non-blocking): post-commit на дифе `base..committed` считается
+  seam-scan -> `rep["seam_scan"]` (`would_block`/`blockers`/`advisories`/`findings`). НЕ влияет на
+  `overall` (advisory до обкатки на child, затем blocking-гейт). Guarded: сбой детектора не роняет прогон.
+  «Дефект шва» теперь виден в отчёте каждого живого прогона на точном SHA. execution_pipeline selftest цел.
 
 ### Added (v3.7.3 — Provider Independence & Cheapest Qualified Model, ADR-004)
 Закреплён фундаментальный инвариант: ни один провайдер/модель не обязателен; sonnet-класс — эталон

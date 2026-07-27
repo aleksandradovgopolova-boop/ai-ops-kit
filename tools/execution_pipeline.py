@@ -1439,6 +1439,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         except Exception:   # noqa: BLE001 — сбой сбора evidence не освобождает гейт (ui_evidence=None)
             ui_evidence, ui_evidence_bundle = None, None
 
+    # v3.7.4 SEAM-SCAN (ADVISORY, non-blocking до обкатки): детектор «дефекта шва» по дифу base..committed.
+    # Surfaces тихие швы (запись без round-trip / catch без happy-path / stub без real-run / optional-поле
+    # в контракте / смена предусловия без аудита вызывающих). НЕ блокирует (advisory); станет gate после
+    # обкатки на child. Экономия/скорость НЕ ослабляют проверку (ADR-004).
+    seam_advisory = None
+    if committed_sha:
+        try:
+            import seam_scan
+            _diff = _change_context_range(work_root, base_sha, committed_sha, max_chars=20000)
+            _sc = seam_scan.scan_diff(_diff or "")
+            _dec = seam_scan.gate_decision(_sc)
+            seam_advisory = {"mode": "advisory", "would_block": _dec["block"],
+                             "blockers": _dec["blockers"], "advisories": _dec["advisories"],
+                             "findings": _sc["findings"]}
+        except Exception as _e:  # noqa: BLE001 — advisory-детектор не должен ронять прогон
+            seam_advisory = {"error": f"seam_scan failed: {type(_e).__name__}: {_e}"[:200]}
+
     reviews = None
     if review and reviewer_proposer is not None and committed_sha:
         gate_ev, reviews = _run_reviews(reviewer_proposer, work_root, plan["gates"], gate_ev,
@@ -1802,6 +1819,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v3.1.9: UIEvidenceBundle, собранный на ТОЧНОМ committed_sha (qualification evidence). None,
         # если калибровка выкл / evidence инжектировано / нет коммита. commit_sha в bundle привязан.
         "ui_evidence": ui_evidence_bundle,
+        # v3.7.4: seam-scan advisory (дефект шва по дифу base..committed). would_block=true -> шов без
+        # доказанного перехода; пока advisory (не влияет на overall), станет gate после обкатки.
+        "seam_scan": seam_advisory,
         # v2.95: детерминированный security-скан (секреты/новые зависимости/injection-флаги). None,
         # если гейта security нет в плане или не коммитили. Закрывает no_secrets/deps_approved (факты);
         # no_injection_surface — судье. Находка -> security блокирует.
