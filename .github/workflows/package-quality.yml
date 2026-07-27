@@ -173,6 +173,8 @@ jobs:
         run: python3 tools/parallel_executor.py --selftest
       - name: Storybook query — минимальный read-only адаптер каталога (selftest)
         run: python3 tools/storybook_query.py --selftest
+      - name: "Seam-scan — детектор дефекта шва по дифу (5 признаков, 3 гейт; selftest)"
+        run: python3 tools/seam_scan.py --selftest
       - name: UI-evidence collector — реальный UI-CI на точном SHA (v3.7, selftest)
         run: python3 tools/ui_evidence_collect.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)

@@ -125,6 +125,7 @@ python3 tools/parallel_planner.py --selftest
 python3 tools/parallel_planner.py examples/work-graph-demo
 python3 tools/parallel_executor.py --selftest
 python3 tools/storybook_query.py --selftest
+python3 tools/seam_scan.py --selftest
 python3 tools/ui_evidence_collect.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
