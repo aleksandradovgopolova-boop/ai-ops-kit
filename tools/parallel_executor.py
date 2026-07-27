@@ -33,27 +33,56 @@ import parallel_planner as pp   # noqa: E402
 WG_DEMO = PKG / "examples" / "work-graph-demo" / "work-graph.yaml"
 
 
+def _safe_run(package_runner, pkg):
+    """v3.7.1-fix (ревью #4): exception/timeout package_runner -> СТРУКТУРНЫЙ package failure,
+    а не падение всего executor'а (fail-closed)."""
+    try:
+        r = package_runner(pkg)
+    except BaseException as e:   # noqa: BLE001 — любой сбой пакета изолируем в структурный fail
+        return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
+                "error": f"{type(e).__name__}: {e}"[:200]}
+    if not isinstance(r, dict):
+        return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
+                "error": "package_runner вернул не-dict"}
+    return r
+
+
 def _run_packages(plan, by_id, package_runner, max_parallel=pp.MAX_PARALLEL):
-    """Прогнать пакеты: параллельные группы (bounded ≤2) конкурентно, зависимые — по integration_order."""
+    """Прогнать пакеты: независимые группы (bounded ≤2) конкурентно; зависимые — по topo-порядку, ТОЛЬКО
+    если ВСЕ depends_on уже дали доказательный pass (dependency-aware stop: провал зависимости не даёт
+    стартовать downstream). Сбой runner -> структурный package failure (не крэш executor)."""
     results, trace = {}, []
-    # 1) независимые параллельные группы — конкурентно (≤2 одновременно)
+
+    def deps_ok(pid):
+        for d in (by_id[pid].get("depends_on") or []):
+            if results.get(d, {}).get("status") != "pass":
+                return False, d
+        return True, None
+
+    # 1) независимые параллельные группы — конкурентно (≤2 одновременно), с изоляцией сбоев
     for group in plan["parallel_groups"]:
         if len(group) == 1:
             pid = group[0]
-            results[pid] = package_runner(by_id[pid]); trace.append({"pkg": pid, "mode": "single"})
+            results[pid] = _safe_run(package_runner, by_id[pid]); trace.append({"pkg": pid, "mode": "single"})
             continue
         with _cf.ThreadPoolExecutor(max_workers=max_parallel) as ex:
-            futs = {ex.submit(package_runner, by_id[pid]): pid for pid in group[:max_parallel]}
+            futs = {ex.submit(_safe_run, package_runner, by_id[pid]): pid for pid in group[:max_parallel]}
             for fut in _cf.as_completed(futs):
                 pid = futs[fut]
                 results[pid] = fut.result(); trace.append({"pkg": pid, "mode": "parallel"})
-        # хвост группы (если >2) — сериализуем (bounded)
-        for pid in group[max_parallel:]:
-            results[pid] = package_runner(by_id[pid]); trace.append({"pkg": pid, "mode": "serialized-tail"})
-    # 2) зависимые — строго по топо-порядку, после своих depends_on
+        for pid in group[max_parallel:]:   # хвост группы (если >2) — сериализуем (bounded)
+            results[pid] = _safe_run(package_runner, by_id[pid]); trace.append({"pkg": pid, "mode": "serialized-tail"})
+    # 2) зависимые — строго по топо-порядку; НЕ стартуем, пока все depends_on не pass
     for pid in plan["integration_order"]:
-        if pid not in results:
-            results[pid] = package_runner(by_id[pid]); trace.append({"pkg": pid, "mode": "dependent"})
+        if pid in results:
+            continue
+        ok, bad = deps_ok(pid)
+        if not ok:
+            results[pid] = {"status": "blocked-dependency", "sha": None,
+                            "gate_report": {"all_pass": False}, "blocked_by": bad}
+            trace.append({"pkg": pid, "mode": "blocked-dependency", "dep": bad})
+            continue
+        results[pid] = _safe_run(package_runner, by_id[pid]); trace.append({"pkg": pid, "mode": "dependent"})
     return results, trace
 
 
@@ -142,8 +171,11 @@ def selftest():
     expect("aggregate на другом SHA -> PR НЕ открыт (package SHA != integrated result)",
            r2["delivery"]["open_pr"] is False)
 
-    # один пакет fail -> fan-in НЕ начинается, integration НЕ запускается, 0 PR
+    # один пакет fail -> fan-in НЕ начинается, integration НЕ запускается, 0 PR;
+    # + dependency-aware stop: wiring (depends_on api,ui) НЕ запускается после провала ui
+    ran_ids = set()
     def ui_fails(pkg):
+        ran_ids.add(pkg["id"])
         if pkg["id"] == "ui":
             return {"status": "fail", "sha": "bbb2220", "gate_report": {"all_pass": False, "tested_revision": "bbb2220"}}
         return good_runner(pkg)
@@ -153,6 +185,19 @@ def selftest():
     r3 = execute_parallel(wg, ui_fails, counting_integration, contract_shas=CS)
     expect("один пакет fail -> pre-fan-in block, integration НЕ вызван, 0 PR",
            r3["stage"] == "pre-fan-in" and called["n"] == 0 and r3["delivery"]["intents"] == 0)
+    expect("dependency-aware stop: wiring НЕ запущен (dep ui провалилась) -> blocked-dependency",
+           "wiring" not in ran_ids and r3["package_results"]["wiring"]["status"] == "blocked-dependency")
+
+    # exception/timeout package_runner -> структурный package failure, executor НЕ крэшится
+    def boom(pkg):
+        if pkg["id"] == "api":
+            raise RuntimeError("provider timeout")
+        return good_runner(pkg)
+    r_boom = execute_parallel(wg, boom, good_integration, contract_shas=CS)
+    expect("exception в runner -> структурный error (не крэш executor), fan-in block",
+           r_boom["package_results"]["api"]["status"] == "error"
+           and "provider timeout" in r_boom["package_results"]["api"].get("error", "")
+           and r_boom["proceed"] is False and r_boom["delivery"]["intents"] == 0)
 
     # общий контракт не зафиксирован -> block ДО пакетов
     ran = {"n": 0}

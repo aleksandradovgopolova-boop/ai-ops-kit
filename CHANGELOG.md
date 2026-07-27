@@ -64,6 +64,13 @@
   реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
   Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
 
+### Fixed (v3.7.1 — ревью-разрыв #4: parallel executor — dependency-aware stop + изоляция сбоев)
+- `parallel_executor` — зависимый пакет больше НЕ стартует, пока ВСЕ его `depends_on` не дали
+  доказательный pass (dependency-aware stop): напр. `api FAIL` -> `wiring` (depends_on api,ui) получает
+  `status=blocked-dependency` и НЕ запускается (раньше запускался, блок был только на pre-fan-in).
+- `_safe_run` — exception/timeout `package_runner` превращается в СТРУКТУРНЫЙ package failure
+  (`status=error` + error-текст), а не роняет весь executor; `future.result()` изолирован. selftest 12/12.
+
 ### Fixed (v3.7.0 — ревью-разрыв #3: hybrid mandatory (rules+policy) + child BudgetContract)
 - `ai_ops_run` hybrid-блок: `_bud` (child BudgetContract) раньше загружался, но НЕ передавался -> hybrid
   использовал внутренний default. Теперь бюджет = `budget_tokens_from(_bud)` (реальный child-контракт).
