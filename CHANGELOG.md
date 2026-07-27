@@ -144,6 +144,20 @@ execution по-прежнему на v1.
   file+прочитанный -> ок; file+непрочитанный -> «сфабрикован»; без type и без path -> невалиден). Промпт
   security-reviewer теперь явно называет словарь `code-read|test|finding`. parity 154/154.
 
+### Added (v3.7 UI-CI подтянут в v3.6.8 — реальный UI-evidence коллектор на точном SHA)
+Для живого UI-прогона (A1): раньше UI-evidence коллектора НЕ было (только `evidence_collector` для
+build/lint/test), а pipeline лишь ЧИТАЛ `.ai/ui-evidence/*.json`. Теперь есть сбор:
+- `tools/ui_evidence_collect.py` — оркестратор UI-CI child-репо: детект UI-стека (package.json со
+  `storybook`/`ui-evidence`), запуск `npm ci` + `npm run ui-evidence` в worktree, и АВТОРИТЕТНАЯ запись
+  `.ai/ui-evidence/meta.json{commit_sha}` (SHA-binding контролирует KIT). Не-UI child (python) -> skip
+  (no-op, существующие прогоны целы). Без фабрикации: сбой UI-CI -> evidence нет -> гейты `not_run`.
+  node-free selftest (детект стека + meta-binding).
+- Wired в `execution_pipeline.run_pipeline` post-commit ДО `build_bundle` (guarded, UI-stack-gated).
+- child-репо (ai-ops-dogfood-v368-ts) получил РЕАЛЬНЫЙ UI-CI: vitest (interaction) + vitest-axe (a11y,
+  jsdom) + `@storybook/test-runner` (visual smoke в headless chromium) + design-system reuse.
+  Проверено end-to-end: все 4 UI-сигнала (interaction/a11y/visual/design_system) -> pass на реальных
+  прогонах. CI +1 шаг (ui_evidence_collect selftest). parity 155/155.
+
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
 Веха-релиз OFFLINE-scope фазы v3.6 (консолидирует v3.6.0–6.6-rc). VERSION 3.5.3 → **3.6.6**. Собрана

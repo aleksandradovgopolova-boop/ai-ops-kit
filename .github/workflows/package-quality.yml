@@ -163,6 +163,8 @@ jobs:
           python3 tools/parallel_planner.py examples/work-graph-demo
       - name: Storybook query — минимальный read-only адаптер каталога (selftest)
         run: python3 tools/storybook_query.py --selftest
+      - name: UI-evidence collector — реальный UI-CI на точном SHA (v3.7, selftest)
+        run: python3 tools/ui_evidence_collect.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
         run: python3 tools/project_detector.py --selftest
       - name: Stack-aware evidence collector (selftest)
