@@ -122,6 +122,10 @@ shadow всегда получал `None` и МОЛЧА падал (ошибка
 `run(context_shadow=…)`, недоступный из CLI). Живо подтверждено: полная v2-цепочка в shadow
 (snapshot_verified=true на exact commit SHA, child BudgetContract применён, fulltext+graph+semantic),
 execution по-прежнему на v1.
+- `tools/orchestrator.py` — HTTP-таймаут openai-compatible вызова теперь настраиваем через env
+  `OPENAI_COMPATIBLE_TIMEOUT` (default 300с). Флагман-reasoning kimi-k3 на тяжёлых ENGINEERING-вызовах
+  бывает > 300с (первый живой ENGINEERING-прогон упал на провайдер-таймауте) — теперь поднимается без
+  хардкода. Не меняет поведение по умолчанию.
 
 ## [3.6.6] — 2026-07-25 — Semantic Context Engine + Governed Parallel + Storybook (v3.6 OFFLINE-веха)
 
