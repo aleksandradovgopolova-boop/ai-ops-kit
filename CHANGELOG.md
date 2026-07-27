@@ -64,6 +64,15 @@
   реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
   Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
 
+### Fixed (v3.7.0 — ревью-разрыв #3: hybrid mandatory (rules+policy) + child BudgetContract)
+- `ai_ops_run` hybrid-блок: `_bud` (child BudgetContract) раньше загружался, но НЕ передавался -> hybrid
+  использовал внутренний default. Теперь бюджет = `budget_tokens_from(_bud)` (реальный child-контракт).
+- mandatory для hybrid раньше = только specs+decisions. Теперь дополнительно несёт **applicable rules**
+  (категории из ContextBundle) + **policy references** (id AFP/DCP) как ССЫЛКИ (rules — kit-side, не
+  читаемые child-файлы) -> `context_hybrid.build_hybrid(..., rule_refs, policy_refs)` пишет
+  `mandatory_references` (`rule:<cat>` / `policy:<id>`). Теперь `applicable_rules_in_mandatory` отражён
+  фактически. selftest +1.
+
 ### Fixed (v3.7.0 — ревью-разрыв #2: НАСТОЯЩИЙ access pre-filter до retrieval)
 Ревью: `access_filter_before_retrieval` доказывал только «denied не в финальном payload», а retrieval
 (full-text/graph/semantic) читал ВСЕ файлы, фильтруя постфактум — гарантия слабее названия.

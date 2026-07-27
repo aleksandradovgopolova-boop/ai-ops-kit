@@ -677,9 +677,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
                 _csha = (rep.get("commit") or {}).get("sha")
                 _afp, _dcp, _bud = _ce.load_child_policies(child_root)
+                # v3.7.0-fix (ревью #3): mandatory = specs+decisions (файлы) + applicable rules +
+                # policy references; бюджет — из НАСТОЯЩЕГО child BudgetContract (не default).
+                _rule_refs = list((bundle.get("included", {}) or {}).get("rules", [])) if bundle else []
+                _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
+                _budget = _ce.budget_tokens_from(_bud)
                 rep["context_hybrid"] = _chyb.build_hybrid_from_child(
                     _content_root, task_text, "executor", sha=_csha, afp=_afp, dcp=_dcp,
-                    v1_mandatory=_mand, require_snapshot=True)
+                    v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
+                    budget=_budget, require_snapshot=True)
             except Exception as _e:  # noqa: BLE001 — hybrid-запись не должна ронять прогон
                 rep["context_hybrid"] = {"error": f"hybrid build failed: {type(_e).__name__}: {_e}"[:300]}
         if payload:
