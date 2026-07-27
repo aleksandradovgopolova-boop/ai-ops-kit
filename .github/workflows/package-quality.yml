@@ -279,6 +279,10 @@ jobs:
         run: |
           python3 validation/validate_key_lifecycle.py --selftest
           python3 validation/validate_key_lifecycle.py
+      - name: "Security enforcement — runtime примитивы (verify_artifact/memory/key-preflight; OWASP ASI, selftest + preflight)"
+        run: |
+          python3 tools/security_enforcement.py --selftest
+          python3 tools/security_enforcement.py --key-preflight examples/key-lifecycle-demo/KLP-001.yaml
       - name: "Product authoring: структурные валидаторы артефактов (selftest)"
         run: |
           python3 validation/validate_requirements_artifact.py --selftest

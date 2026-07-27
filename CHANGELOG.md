@@ -64,6 +64,22 @@
   реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
   Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
 
+### Added (v3.7.2 — security ENFORCEMENT: контракты подключены к runtime, не только схемы)
+Ревью: security-контракты пока schema+validator+demo, не enforce. Первый шаг runtime enforcement
+(не новые политики — реальные примитивы принуждения):
+- `tools/security_enforcement.py`: `verify_artifact(data, entry)` — РЕАЛЬНО считает sha256 скачанных
+  байт и сверяет с pinned install_verify (signature/sigstore офлайн НЕ проверяемы -> block, fail-closed);
+  `enforce_memory_entry(entry, policy)` — валидирует ОДНУ memory-запись по MemoryGovernancePolicy перед
+  записью (provenance/expiry/no-self-ingestion); `key_preflight(klp, env, critical)` — наличие
+  объявленных ключей в env (critical -> BLOCK, иначе warn; сверяет env_ref, НЕ значения).
+- Реальные CLI-энтрипоинты (не только selftest): `--key-preflight <KLP> [--critical]` (runtime-preflight
+  ключей, exit 1 при block) и `--verify-artifact <file> --expect-sha256 <hex>` (проверка байт артефакта).
+  CI гоняет selftest 11/11 + non-critical key-preflight против KLP-001.
+- ОСТАЁТСЯ wiring в глубокий runtime (Step 3 хвост): verify_artifact в реальный install-loader;
+  enforce_memory_entry в `merge_memory.record` (нужно, чтобы record нёс provenance/expiry); key_preflight
+  в боевой startup critical-mode. Примитивы enforce реальны и runnable; интеграция в install/memory-путь —
+  следующий шаг. Честно: enforcement-примитивы готовы, глубокая интеграция ещё не везде.
+
 ### Fixed (v3.7.1 — ревью-разрыв #4: parallel executor — dependency-aware stop + изоляция сбоев)
 - `parallel_executor` — зависимый пакет больше НЕ стартует, пока ВСЕ его `depends_on` не дали
   доказательный pass (dependency-aware stop): напр. `api FAIL` -> `wiring` (depends_on api,ui) получает

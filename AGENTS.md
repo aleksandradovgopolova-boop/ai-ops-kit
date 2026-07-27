@@ -143,6 +143,8 @@ python3 validation/validate_memory_governance.py --selftest
 python3 validation/validate_memory_governance.py
 python3 validation/validate_key_lifecycle.py --selftest
 python3 validation/validate_key_lifecycle.py
+python3 tools/security_enforcement.py --selftest
+python3 tools/security_enforcement.py --key-preflight examples/key-lifecycle-demo/KLP-001.yaml
 python3 validation/validate_duties.py --selftest
 python3 validation/validate_duties.py
 python3 validation/validate_presets.py
