@@ -29,6 +29,19 @@
   отчёт (mandatory v1 + v2-additions + результат gate); **execution по-прежнему на v1** — feeding
   hybrid-контекста МОДЕЛИ — живой шаг за флагом (v3.7). selftest 7/7. CI +1 шаг.
 
+### Added (v3.7.1 — bounded parallel-2 executor: оркестрация поверх decision-слоя)
+- `tools/parallel_executor.py` — доводит planner + `integration_gate` до ИСПОЛНИТЕЛЯ: план ->
+  изолированный прогон каждого пакета (bounded ≤2 конкурентно) -> package SHA + GateReport -> fan-in в
+  НОВЫЙ integration-SHA -> ПОВТОР aggregate-проверок на нём -> ОДИН DeliveryIntent/PR. Живые per-package
+  прогоны и слияние worktrees — ТОЧКИ ИНЪЕКЦИИ (`package_runner`/`integration_runner`: в проде ai_ops_run
+  в изолированных worktrees, в тесте — детерминированные mock'и), поэтому оркестрация и safety-инварианты
+  проверяемы ОФФЛАЙН без живой модели. ГЛАВНЫЙ ИНВАРИАНТ: успех package SHA НЕ доказывает успех
+  интегрированного результата — PR открывается только при зелёном aggregate на integration-SHA. Fail-closed:
+  невалидный WG -> block; любой пакет не pass -> fan-in не начинается (integration НЕ вызывается); контракт
+  без реального SHA -> block ДО пакетов; aggregate не на integration-SHA -> PR не открыт; conflict/base-moved
+  -> block/revalidation. selftest 10/10 (вкл. проверку конкурентности api‖ui + все fail-closed края).
+  Живое подключение (package_runner=ai_ops_run в worktrees) — следующий шаг под сильную модель.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
