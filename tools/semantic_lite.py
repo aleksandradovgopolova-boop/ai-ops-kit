@@ -26,7 +26,7 @@ def _tokens(text: str):
     return [t.lower() for t in _TOK.findall(text)]
 
 
-def build_index(root=PKG, subdirs=("tools", "validation")) -> dict:
+def build_index(root=PKG, subdirs=("tools", "validation"), path_filter=None) -> dict:
     root = Path(root)
     docs = {}
     for sd in subdirs:
@@ -34,8 +34,12 @@ def build_index(root=PKG, subdirs=("tools", "validation")) -> dict:
         if not d.is_dir():
             continue
         for f in sorted(d.rglob("*.py")):
+            rel = str(f.relative_to(root))
+            # v3.7.0: access pre-filter — denied-путь НЕ индексируется/не читается
+            if path_filter is not None and not path_filter(rel):
+                continue
             try:
-                docs[str(f.relative_to(root))] = Counter(_tokens(f.read_text(encoding="utf-8")))
+                docs[rel] = Counter(_tokens(f.read_text(encoding="utf-8")))
             except OSError:
                 continue
     n = len(docs) or 1

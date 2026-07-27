@@ -64,6 +64,20 @@
   реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
   Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
 
+### Fixed (v3.7.0 — ревью-разрыв #2: НАСТОЯЩИЙ access pre-filter до retrieval)
+Ревью: `access_filter_before_retrieval` доказывал только «denied не в финальном payload», а retrieval
+(full-text/graph/semantic) читал ВСЕ файлы, фильтруя постфактум — гарантия слабее названия.
+- `context_engine.build_context` — access pre-filter ДО чтения: path-based классификация (без чтения
+  содержимого) -> роль получает ТОЛЬКО разрешённые пути; denied-путь НЕ передаётся в
+  full_text/graph/semantic (не читается, имя не раскрывается role-facing). Content-scanner может ТОЛЬКО
+  повысить класс (read-then-drop для allowed-по-пути). Privileged-audit: `pre_filtered_denied` (denied
+  пути, отсеянные до чтения) + `read_paths` в view.
+- `full_text_search` / `semantic_lite.build_index` / `repo_graph.build_graph` — новый `path_filter`
+  (denied путь не читается/не индексируется/не в графе).
+- `context_promotion_gate` контракт #1 теперь проверяет РЕАЛЬНУЮ гарантию: `pre_filtered_denied ∩
+  (read_paths ∪ included) = ∅` (denied путь не прочитан и не в payload), а не только «не в payload».
+  Селфтест context_engine: denied-по-пути secret.py pre-filtered (не в read_paths). parity 164/164.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

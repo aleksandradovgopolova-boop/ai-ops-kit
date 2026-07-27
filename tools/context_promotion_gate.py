@@ -31,11 +31,22 @@ def check_promotion_readiness(view, allowed_classes, model_window=None):
     allowed = set(allowed_classes or [])
     contracts = {}
 
-    # 1. access-filter ДО retrieval: included без secret и без класса вне allowed
+    # 1. access-filter ДО retrieval: (а) included без secret/класса вне allowed; (б) РЕАЛЬНЫЙ pre-filter —
+    # ни один pre_filtered_denied путь не попал в прочитанное (read_paths) или в payload (included).
     bad = [f"{i.get('file')}({i.get('data_class')})" for i in included
            if i.get("data_class") == "secret" or (allowed and i.get("data_class") not in allowed)]
-    contracts["access_filter_before_retrieval"] = {
-        "pass": not bad, "detail": (f"included вне allowed/secret: {bad}" if bad else "ok")}
+    denied = set(view.get("pre_filtered_denied") or [])
+    read = set(view.get("read_paths") or [])
+    inc_files = {i.get("file") for i in included}
+    leaked_read = sorted(denied & read)      # denied путь оказался прочитан
+    leaked_payload = sorted(denied & inc_files)
+    detail = "ok"
+    if bad:
+        detail = f"included вне allowed/secret: {bad}"
+    elif leaked_read or leaked_payload:
+        detail = f"denied путь прочитан/в payload: read={leaked_read} payload={leaked_payload}"
+    contracts["access_filter_before_retrieval"] = {"pass": not (bad or leaked_read or leaked_payload),
+                                                    "detail": detail}
 
     # 2. запрещённые имена не в payload: included ∩ denied = ∅
     denied = {e.get("file") for e in excl_access}
