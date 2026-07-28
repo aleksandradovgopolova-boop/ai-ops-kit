@@ -70,7 +70,7 @@ MAX_SCAN_FILES = 5000                # верхняя граница числа 
 
 def full_text_search(root, query: str, subdirs=("tools", "validation"), exts=RETRIEVAL_EXTS,
                      exclude_dirs=SCAN_EXCLUDE_DIRS, max_file_bytes=MAX_FILE_BYTES,
-                     max_files=MAX_SCAN_FILES):
+                     max_files=MAX_SCAN_FILES, path_filter=None):
     root = Path(root)
     exclude = set(exclude_dirs or ())
     kws = [k.lower() for k in query.split() if k.strip()]
@@ -89,6 +89,9 @@ def full_text_search(root, query: str, subdirs=("tools", "validation"), exts=RET
             if any(p.startswith(".") for p in parts):       # скрытые (.ai/.git/…)
                 continue
             if any(p in exclude for p in parts[:-1]):        # vendored/generated/build каталоги
+                continue
+            # v3.7.0: access pre-filter — denied-путь НЕ читается (проверка ДО read_text)
+            if path_filter is not None and not path_filter(str(rel)):
                 continue
             try:
                 if f.stat().st_size > max_file_bytes:        # слишком большой файл -> пропуск

@@ -2,6 +2,345 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [3.7.0] — 2026-07-28 — Runtime Activation: провайдер-независимость как ПОВЕДЕНИЕ продукта
+
+Фаза v3.7 ЗАКРЫТА. Провайдер-независимость перестала быть только реестром/резолвером и стала живым
+поведением рантайма. Критерии стабильности (все выполнены и ДОКАЗАНЫ живьём, БЕЗ Anthropic):
+- model router реально управляет рантаймом (без `--model` роль резолвится и диспатчится на endpoint
+  вендора) — v3.7.12/15, живой smoke;
+- цена считается в ДЕНЬГАХ, не токенах (money-mode) — v3.7.10/15; deepseek-v4-flash $0.0115 < qwen $0.072
+  < kimi $0.467; в токенах ответ был бы другим;
+- ≥1 дешёвая non-Anthropic модель допущена к implementation (3 вендора conditional, 0 false-green/18);
+- hybrid РЕАЛЬНО fed_to_model — v3.7.16 (живой прогон, mode=hybrid, additions поданы);
+- parallel-2 открыл ОДИН реальный PR с integration-SHA-инвариантом — v3.7.17 (dogfood-v368-py#2);
+- security preflight реально выполняется перед provider-вызовом — v3.7.13 (живой key_preflight.ready);
+- 0 false-green во всех живых прогонах; package-evidence↔package-SHA, aggregate↔integration-SHA.
+- Плюс 3 вывода «дефектов одной сессии» (scenario-evidence, surface_wiring, on_repeat) — advisory-гейты.
+
+ЧЕСТНАЯ ГРАНИЦА (не скрываю): строгих АВТОМАТИЧЕСКИХ судей (security/integration) нет — qualified-судья
+требует adversarial oracle-корпуса (Bench v2, post-3.7). Пока judge-роли идут в HUMAN-FALLBACK
+(router resolved=false -> fail-closed -> pending_human). «Нет vendor lock-in» выполнено по арму
+human-fallback: writer-роли не зависят ни от одного вендора (3 взаимозаменяемых), судьи -> человек.
+Полная АВТОМАТИЧЕСКАЯ независимость судей — за Bench v2.
+
+### Added (v3.7.0 — context_promotion_gate: 5 инвариантов доверия перед hybrid)
+- `tools/context_promotion_gate.py` — gate над результатом `context_engine.build_context`, держит 5
+  контрактов (все обязаны pass, иначе view НЕ допускается к promotion; execution НЕ трогается):
+  (1) `access_filter_before_retrieval` — included без secret и без класса вне allowed роли;
+  (2) `no_denied_filenames_in_payload` — included ∩ excluded_access = ∅ (запрещённый файл не в payload);
+  (3) `applicable_rules_in_mandatory` — обязательный контекст v1 не потерян (mandatory_missing и
+  mandatory_excluded_access пусты); (4) `policy_hash_pinned_per_run` — view привязан к зафиксированной
+  ревизии политик и коду (cache_key несёт afp/dcp fingerprint + точный sha); (5)
+  `hard_window_decompose_or_block` — total_tokens не превышает hard model-window (иначе декомпозиция/блок,
+  не тихое усечение). selftest: реальный view из build_context (ready) + 6 негативов (каждый контракт
+  ловится). CI +1 шаг. Это ПОДГОТОВКА к hybrid, сам hybrid НЕ включён.
+
+### Added (v3.7.0 — context_hybrid: mandatory v1 + разрешённые v2-additions за флагом)
+- `tools/context_hybrid.py` — сборка hybrid-контекста (промежуточная ступень promotion shadow→HYBRID→
+  default): `build_hybrid(v1_files, v2_view, allowed, window)` возвращает `mode=hybrid` (v1 ∪ additions)
+  ТОЛЬКО при `context_promotion_gate.ready`; иначе `mode=v1-only` (fail-safe, additions=[]). Инварианты:
+  v1 mandatory НИКОГДА не теряется; v2 ТОЛЬКО добавляет (additions = included_v2 \ v1); secret/denied из
+  v2 не протаскивается (gate ловит). `build_hybrid_from_child` композирует build_context + gate + hybrid.
+- `ai_ops_run.run(context_hybrid=False)` + CLI `--context-hybrid` (default OFF): пишет hybrid-запись в
+  отчёт (mandatory v1 + v2-additions + результат gate); **execution по-прежнему на v1** — feeding
+  hybrid-контекста МОДЕЛИ — живой шаг за флагом (v3.7). selftest 7/7. CI +1 шаг.
+
+### Added (v3.7.1 — bounded parallel-2 executor: оркестрация поверх decision-слоя)
+- `tools/parallel_executor.py` — доводит planner + `integration_gate` до ИСПОЛНИТЕЛЯ: план ->
+  изолированный прогон каждого пакета (bounded ≤2 конкурентно) -> package SHA + GateReport -> fan-in в
+  НОВЫЙ integration-SHA -> ПОВТОР aggregate-проверок на нём -> ОДИН DeliveryIntent/PR. Живые per-package
+  прогоны и слияние worktrees — ТОЧКИ ИНЪЕКЦИИ (`package_runner`/`integration_runner`: в проде ai_ops_run
+  в изолированных worktrees, в тесте — детерминированные mock'и), поэтому оркестрация и safety-инварианты
+  проверяемы ОФФЛАЙН без живой модели. ГЛАВНЫЙ ИНВАРИАНТ: успех package SHA НЕ доказывает успех
+  интегрированного результата — PR открывается только при зелёном aggregate на integration-SHA. Fail-closed:
+  невалидный WG -> block; любой пакет не pass -> fan-in не начинается (integration НЕ вызывается); контракт
+  без реального SHA -> block ДО пакетов; aggregate не на integration-SHA -> PR не открыт; conflict/base-moved
+  -> block/revalidation. selftest 10/10 (вкл. проверку конкурентности api‖ui + все fail-closed края).
+  Живое подключение (package_runner=ai_ops_run в worktrees) — следующий шаг под сильную модель.
+
+### Added (v3.7 security-долг #1 — SupplyChainPinPolicy: pinned-revision install)
+- `schemas/supply-chain-pin.schema.json` + `validation/validate_supply_chain.py` +
+  `examples/supply-chain-demo/SCP-001.yaml` — первый из трёх OWASP-ASI контрактов «до расширения
+  автономности»: внешние модели/skills/MCP ставятся ТОЛЬКО по зафиксированному revision/hash;
+  плавающие ссылки (latest/main/HEAD/*) запрещены; исполняемый код (skill/mcp) требует install-верификации
+  (sha256/signature/sigstore). selftest 6/6 + реальный SCP-001. CI +1 шаг. Инвариант: write-capable MCP /
+  самоизменение нельзя включать без этой политики. (Осталось в треке: memory provenance/expiry/
+  no-self-ingestion; key TTL + честная фиксация отсутствия per-agent identity.)
+
+### Added (v3.7 security-долг #2+#3 — memory governance + key lifecycle; OWASP-ASI трек закрыт)
+- `schemas/memory-governance.schema.json` + `validation/validate_memory_governance.py` +
+  `examples/memory-governance-demo/MGP-001.yaml` — **#2**: каждая запись памяти несёт provenance
+  (origin + source_type), expiry (ttl_days>0 / review_date / permanent+justification) и запрет
+  self-ingestion (self_ingested=true только с human_confirmed); derived-память требует upstream.
+  selftest 7/7 + реальный MGP-001 (реальные записи: user-preference, provider-benchmark, kit-invariant).
+- `schemas/key-lifecycle.schema.json` + `validation/validate_key_lifecycle.py` +
+  `examples/key-lifecycle-demo/KLP-001.yaml` — **#3**: у каждого ключа TTL>0 + env_ref (значение только
+  из env, не в файле; эвристика ловит секрет-значение в политике); `per_agent_identity` объявлена ЧЕСТНО
+  (supported=true требует evidence — нельзя заявлять идентичность без доказательства). selftest 7/7 +
+  реальный KLP-001 (anthropic/moonshot/github TTL, per-agent identity=false честно). CI +2 шага.
+  Все три OWASP-ASI контракта готовы ДО write-capable MCP / самоизменения.
+
+### Added (v3.7.4 — SeamDefectPolicy: детектор «дефекта шва» по дифу)
+Находка владельца: класс дефектов, где слой A пишет, B читает, юнит-тесты обоих зелёные, а контракт
+между ними сломан и отказ ТИХИЙ. Типы молчат (несогласие в условиях), ревью видит один PR (шов ломается
+между PR), юнит-тесты с подменённой базой дают ложное зелёное. Корень: автор проверяет слой, что сам
+написал, и подмену, что сам придумал — все тесты смотрят с одной стороны.
+- `tools/seam_scan.py` — детектор по унифицированному дифу (без предметной области): 5 признаков —
+  (1) write без round-trip, (2) смена предусловия эндпоинта без аудита вызывающих, (3) проглатывающий
+  catch/except без happy-path теста, (4) новое optional-поле в общем контракте, (5) подмена внешней
+  системы без прогона против настоящей. #3/#4/#5 — механический ГЕЙТ (`gate_decision`: шов затронут, но
+  ПЕРЕХОД не доказан контр-доказательством -> block); #1/#2 — advisory. selftest 11/11.
+- `templates/quality/SeamDefectPolicy.md` — DoD-документ (корень, 5 признаков, что гейтится). Гейт
+  вводится advisory до обкатки, затем blocking (дисциплина кита); экономия НИКОГДА не ослабляет проверку.
+  CI +1 шаг.
+- Wired в `execution_pipeline` (ADVISORY, non-blocking): post-commit на дифе `base..committed` считается
+  seam-scan -> `rep["seam_scan"]` (`would_block`/`blockers`/`advisories`/`findings`). НЕ влияет на
+  `overall` (advisory до обкатки на child, затем blocking-гейт). Guarded: сбой детектора не роняет прогон.
+  «Дефект шва» теперь виден в отчёте каждого живого прогона на точном SHA. execution_pipeline selftest цел.
+
+### Added (v3.7.5 — Model Routing Runtime: провайдер-независимость стала ИСПОЛНЯЕМОЙ)
+Ревью: ADR/registry/validator были, но не было runtime-router; матрица допуска class×role (грубо, не из
+Bench); Kimi в providers.yaml, но моделей в models.yaml нет. Закрыто (до live hybrid/parallel — чтобы
+сами тесты доказали отсутствие lock-in):
+- `registry/models.yaml` — добавлены КОНКРЕТНЫЕ модели Kimi из живой квалификации (kimi-k2.7-code,
+  kimi-k2.7-code-highspeed, kimi-k3) с `revision` и честными capability-нотами (structured_output unstable).
+- `registry/model-qualification.yaml` + `validation/validate_model_qualification.py` — допуск
+  **model×revision×role**, статус ВЫВОДИТСЯ ИЗ Bench-метрик (false_green/success_rate/schema_valid_rate),
+  валидатор ПРИНУЖДАЕТ status==derived (нельзя объявить qualified при false_green>0 или низком success —
+  safety-first). Засеяно из live v3.6.8: implementation qualified (kimi), code_review conditional,
+  security_review experimental (не qualified). Валидатор поймал мою же несогласованность status↔метрики.
+- `tools/model_router.py` — provider-neutral resolver: `resolve(role)` -> КОНКРЕТНАЯ самая дешёвая
+  КВАЛИФИЦИРОВАННАЯ модель в требуемом классе роли (+fallback, +qualification_evidence, +cost); нет
+  qualified -> resolved=false + escalation (НЕ берём неквалифицированную ради дешевизны). `escalation_
+  decision`: abstain/schema_invalid -> targeted retry -> эскалация ТОЛЬКО review/judge (не всей задачи).
+  Живо: implementation->kimi-k2.7-code-highspeed (cheapest, fallback k3); security_review->НЕ resolved
+  (нет qualified судьи — честно, safety). selftest 8/8. CI +2 шага.
+
+### Added (v3.7.3 — Provider Independence & Cheapest Qualified Model, ADR-004)
+Закреплён фундаментальный инвариант: ни один провайдер/модель не обязателен; sonnet-класс — эталон
+квалификации, не двигатель. Связаны СУЩЕСТВУЮЩИЕ механизмы (model_classes / model_comparison /
+BudgetContract / cost_account) с ролями рантайма — без параллельной системы.
+- `decisions/adr/ADR-004.yaml` — **Provider Independence & Cheapest Qualified Model**: роли → классы
+  возможностей (не вендоры); cheapest-qualified-first; эскалация только при доказанной нужде (abstain/
+  schema-fail → targeted retry → эскалируется ТОЛЬКО review/judge-вызов, не вся задача); допуск по роли
+  из Bench (safety-first: false_green → not_qualified); экономика = cost-per-successful-change; **снижение
+  стоимости НИКОГДА через ослабление gates**.
+- `registry/model-roles.yaml` + `validation/validate_model_roles.py` — роль→{preferred_class,
+  fallback_class} на существующих `model_classes`; `escalation_policy` (review_only, cost_never_by_
+  weakening_gates=true); `qualification_matrix` (model_class × роль → qualified/conditional/experimental/
+  not_qualified). Инварианты валидатора: классы существуют в models.yaml; cheapest-first (preferred не
+  дороже fallback); судьи (security/integration) — только `qualified` класс; матрица покрывает все роли.
+- `tools/cost_account.py` — `cost_per_successful_change` (вызовы+retry+reviewer+эскалация vs доставлено+
+  проверено; не доставлено → None, «дёшево»≠потери) + `compare_configs` (ранжирует ТОЛЬКО доставившие;
+  дешёвая-с-повторами может быть дороже сильной на успешное изменение). CI +1 шаг (model-roles).
+
+### Added (v3.7.2 — security ENFORCEMENT: контракты подключены к runtime, не только схемы)
+Ревью: security-контракты пока schema+validator+demo, не enforce. Первый шаг runtime enforcement
+(не новые политики — реальные примитивы принуждения):
+- `tools/security_enforcement.py`: `verify_artifact(data, entry)` — РЕАЛЬНО считает sha256 скачанных
+  байт и сверяет с pinned install_verify (signature/sigstore офлайн НЕ проверяемы -> block, fail-closed);
+  `enforce_memory_entry(entry, policy)` — валидирует ОДНУ memory-запись по MemoryGovernancePolicy перед
+  записью (provenance/expiry/no-self-ingestion); `key_preflight(klp, env, critical)` — наличие
+  объявленных ключей в env (critical -> BLOCK, иначе warn; сверяет env_ref, НЕ значения).
+- Реальные CLI-энтрипоинты (не только selftest): `--key-preflight <KLP> [--critical]` (runtime-preflight
+  ключей, exit 1 при block) и `--verify-artifact <file> --expect-sha256 <hex>` (проверка байт артефакта).
+  CI гоняет selftest 11/11 + non-critical key-preflight против KLP-001.
+- ОСТАЁТСЯ wiring в глубокий runtime (Step 3 хвост): verify_artifact в реальный install-loader;
+  enforce_memory_entry в `merge_memory.record` (нужно, чтобы record нёс provenance/expiry); key_preflight
+  в боевой startup critical-mode. Примитивы enforce реальны и runnable; интеграция в install/memory-путь —
+  следующий шаг. Честно: enforcement-примитивы готовы, глубокая интеграция ещё не везде.
+
+### Fixed (v3.7.1 — ревью-разрыв #4: parallel executor — dependency-aware stop + изоляция сбоев)
+- `parallel_executor` — зависимый пакет больше НЕ стартует, пока ВСЕ его `depends_on` не дали
+  доказательный pass (dependency-aware stop): напр. `api FAIL` -> `wiring` (depends_on api,ui) получает
+  `status=blocked-dependency` и НЕ запускается (раньше запускался, блок был только на pre-fan-in).
+- `_safe_run` — exception/timeout `package_runner` превращается в СТРУКТУРНЫЙ package failure
+  (`status=error` + error-текст), а не роняет весь executor; `future.result()` изолирован. selftest 12/12.
+
+### Fixed (v3.7.0 — ревью-разрыв #3: hybrid mandatory (rules+policy) + child BudgetContract)
+- `ai_ops_run` hybrid-блок: `_bud` (child BudgetContract) раньше загружался, но НЕ передавался -> hybrid
+  использовал внутренний default. Теперь бюджет = `budget_tokens_from(_bud)` (реальный child-контракт).
+- mandatory для hybrid раньше = только specs+decisions. Теперь дополнительно несёт **applicable rules**
+  (категории из ContextBundle) + **policy references** (id AFP/DCP) как ССЫЛКИ (rules — kit-side, не
+  читаемые child-файлы) -> `context_hybrid.build_hybrid(..., rule_refs, policy_refs)` пишет
+  `mandatory_references` (`rule:<cat>` / `policy:<id>`). Теперь `applicable_rules_in_mandatory` отражён
+  фактически. selftest +1.
+
+### Fixed (v3.7.0 — ревью-разрыв #2: НАСТОЯЩИЙ access pre-filter до retrieval)
+Ревью: `access_filter_before_retrieval` доказывал только «denied не в финальном payload», а retrieval
+(full-text/graph/semantic) читал ВСЕ файлы, фильтруя постфактум — гарантия слабее названия.
+- `context_engine.build_context` — access pre-filter ДО чтения: path-based классификация (без чтения
+  содержимого) -> роль получает ТОЛЬКО разрешённые пути; denied-путь НЕ передаётся в
+  full_text/graph/semantic (не читается, имя не раскрывается role-facing). Content-scanner может ТОЛЬКО
+  повысить класс (read-then-drop для allowed-по-пути). Privileged-audit: `pre_filtered_denied` (denied
+  пути, отсеянные до чтения) + `read_paths` в view.
+- `full_text_search` / `semantic_lite.build_index` / `repo_graph.build_graph` — новый `path_filter`
+  (denied путь не читается/не индексируется/не в графе).
+- `context_promotion_gate` контракт #1 теперь проверяет РЕАЛЬНУЮ гарантию: `pre_filtered_denied ∩
+  (read_paths ∪ included) = ∅` (denied путь не прочитан и не в payload), а не только «не в payload».
+  Селфтест context_engine: denied-по-пути secret.py pre-filtered (не в read_paths). parity 164/164.
+
+### Added (v3.7.6 — измеренная кросс-вендорная квалификация: провайдер-независимость ДОКАЗАНА живьём)
+- Живая квалификация 2026-07-28 на ТРЁХ вендорах (DeepSeek + Kimi + Qwen, БЕЗ Anthropic), фиксированный
+  корпус N=6 с ОБЪЕКТИВНОЙ приёмкой по точному контракту задачи = 18 прогонов. Результат: **false_green=0
+  во всех 18** (safety-инвариант держится независимо от вендора); у каждого вендора СВОИ провалы, но ни
+  одного фейкового зелёного. success/schema/latency/cost измерены, не seed.
+- `registry/models.yaml` — добавлены конкретные `deepseek-chat` (provider deepseek, openai-compatible) и
+  `qwen3-coder-plus` (provider qwen, DashScope compatible-mode) с честными capability (structured_output
+  unstable) и реальными классами.
+- `registry/model-qualification.yaml` — ПЕРЕПИСАН на ИЗМЕРЕННОЕ: 3 записи implementation (deepseek/kimi/
+  qwen), статус ВЫВЕДЕН из метрик (все `conditional` на N6: deepseek success 0.667; kimi/qwen schema
+  0.833). Неизмеренные seed-записи судейских ролей УДАЛЕНЫ — реестр держит только измеренное.
+- `tools/model_router.py` — роль-зависимый допуск (уточнение ADR-004 по решению владельца): роль ПИСАТЕЛЯ
+  (implementation/code_review) допускает `qualified∨conditional`; строгий СУДЬЯ (security_review/
+  integration_judge) — только `qualified`; `false_green>0` не допускается НИКОГДА. Живой резолв:
+  `implementation → deepseek-chat` (дешевле, 79.5k ток/успех), fallback `qwen3-coder-plus` (108.8k),
+  затем kimi (139.2k); `security_review → НЕ resolved` (нет qualified-судьи — честный блок, не дешёвый
+  суррогат). Селфтесты роутера расширены (writer vs строгий судья, false_green-guard). parity 172/172.
+
+### Added (v3.7.7 — scenario-как-evidence: «сценарий, а не слой» стало полем гейта, ADVISORY)
+- Вывод 1 «дефектов одной сессии»: пять дефектов сессии ВСЕ прошли сборку/линт/тесты — тесты смотрели
+  на слой/функцию, а не на пользовательский сценарий тем же путём, что продукт. `implementation_
+  verification` получил `advisory_evidence: [named_user_scenario, scenario_test]` +
+  `advisory_applicability: [ENGINEERING, PRODUCT, CRITICAL]`. Правило «сценарий, а не слой» из
+  SEAM_DEFECTS перестало быть чек-листом и стало полем гейта.
+- `tools/gate_executor.py` — ADVISORY-проводка: для applicable task_type при отсутствии сценарного
+  evidence добавляется WARNING, `status`/`blockers`/`blocked` НЕ меняются (не ломает зелёные пути;
+  доказано: ENGINEERING без сценария -> pass+warn, blocked=False; QUICK -> тихо; scenario present ->
+  warning гаснет). Graduation до blocking = перенос ключей в `required_evidence` после обкатки.
+- `validation/validate_scenario_evidence.py` — runnable `check`+`selftest` (позитив + негативы,
+  доказывающие СРАБАТЫВАНИЕ — «проверка, что гейт падает, часть гейта»). CI +1 шаг, AGENTS.md +1.
+- `templates/quality/ScenarioEvidencePolicy.md` — DoD: факты сессии, правило, graduation, Оговорка.
+- НЕ реализован в этом инкременте: Вывод 2 (сделан в v3.7.8) и Вывод 3. parity 173/173.
+
+### Added (v3.7.8 — surface_wiring_consistency: core↔wrapper↔client wiring drift, ADVISORY)
+- Вывод 2 «дефектов одной сессии»: дефект `/api/catalog` (путь умеет ядро, покрыт тестами ядра И
+  клиента, но не смонтирован ни в одной обёртке -> запрос молча падает) не ловит ни один гейт. Тот же
+  класс, что `event_contract_consistency` (naming drift), другая сущность — МАРШРУТ.
+- `tools/seam_scan.py` — 6-й сигнал `surface_wiring_drift` (advisory, diff-эвристика двух триггеров:
+  новый маршрут ядра / вызов клиента к пути; подсказка про core⊆обёртки⊆client, если реестр маршрутов
+  не менялся). Уже подключён advisory в пайплайн через существующую проводку seam_scan.
+- `validation/validate_surface_wiring.py` — механическая сверка по манифесту поверхности
+  `{core, wrappers, client}`: (1) core⊆каждая обёртка; (2) client⊆union(обёртки); (3)
+  смонтировано-но-невызвано -> advisory. `check`+`selftest` с негативами, включая точный кейс
+  `/api/catalog` (доказывает срабатывание).
+- `quality/gates.yaml` — гейт `surface_wiring_consistency` (advisory, `blocking:false`; клон
+  event_contract_consistency; работает на child-ПРОДУКТЕ — у кита нет обёрток). claims.yaml gate-count
+  28->29.
+- `templates/quality/SurfaceWiringPolicy.md` — DoD + graduation до blocking. CI +1, AGENTS.md +1.
+- Вывод 3 (`on_repeat→structural`) НЕ реализован (следующий, лёгкое поле на RegressionCase). parity 174/174.
+
+### Added (v3.7.9 — on_repeat→structural: повтор класса требует конструкцию, не повтор рекомендации)
+- Вывод 3 «дефектов одной сессии»: дефект с токеном случился ДВАЖДЫ; правило «аудит вызывающих при
+  смене предусловия» существовало и не сработало ни разу. Починка, которая держится, — не рекомендация,
+  а КОНСТРУКЦИЯ (единственная функция + запрет прямого вызова линтером). Правило поверх правил: повтор
+  класса ⇒ перевод рекомендации в конструкцию.
+- `schemas/regression-case.schema.json` — поля `occurrences` (default 1), `on_repeat`
+  (none|escalate_to_structural), `structural_fix`. Существующие RC без полей -> default 1, правило не
+  срабатывает (не ломается).
+- `validation/validate_regression_corpus.py` — правило: `occurrences>=2` обязывает
+  `on_repeat=escalate_to_structural` + непустой `structural_fix` (иначе «правило есть, но не сработало»).
+  `taxonomy()` +счётчики `repeated_classes` / `escalated_to_structural`. selftest +5 (правило СРАБАТЫВАЕТ
+  на повторе, тихо на одиночном). Реальный корпус (4 кейса) цел.
+- Три вывода «дефектов одной сессии» закрыты: Вывод 1 (scenario-как-evidence, v3.7.7), Вывод 2
+  (surface_wiring, v3.7.8), Вывод 3 (on_repeat, v3.7.9) — все ADVISORY/аддитивно, 0 регрессий. parity 174/174.
+
+### Added (v3.7.10 — Model Portfolio Truth + денежная экономика роутера)
+- Ревью владельца, «самая важная проблема»: роутер сортировал по token-прокси (`cost_per_change` = тыс.
+  токенов), что при разнице тарифов ВРЁТ. Пример из измерений: Qwen дешевле Kimi в токенах ~2.4×, а в
+  ДЕНЬГАХ ~6.5× ($0.072 vs $0.467/изменение).
+- `registry/model-qualification.yaml` — блок `economics` РАЗДЕЛЯЕТ измеренные токены (input/output/
+  tokens_per_verified_change, база delivered_verified) от ДЕКЛАРИРУЕМЫХ цен (input/output_price_per_mtok,
+  currency, price_snapshot_at, price_source) -> вычисляемый `total_cost_per_verified_change` (деньги).
+  Цены Kimi ($1.90/$8.00) и Qwen ($1.00/$5.00) — с официальных страниц (source+snapshot 2026-07-28).
+  DeepSeek V4: цена опубликована ТОЛЬКО картинкой -> null + verification_required (ждём тариф владельца).
+- `validation/validate_model_qualification.py` — `economics_errors`: деньги обязаны сходиться с
+  токены×цена (±2%); цены требуют currency+snapshot+source; без цены total_cost=null (не выдумываем).
+  selftest +5. derive_status (safety) НЕ тронут.
+- `tools/model_router.py` — money-first: если у ВСЕХ кандидатов роли есть total_cost -> сортировка по
+  ДЕНЬГАМ (cost_basis=money); иначе честный tokens-fallback + `cost_warning`. Результат несёт cost_basis/
+  cost_currency. Живой резолв implementation: DeepSeek без тарифа -> tokens-fallback; по корректной
+  delivered-базе `qwen3-coder-plus` (62.8k) дешевле deepseek (79.5k) -> preferred qwen, fallback deepseek
+  (прежний порядок был искажён завышенным qwen из-за false_fail t5). selftest +money-mode (деньги≠токены).
+- `registry/models.yaml` — PORTFOLIO TRUTH: поля `gateway`/`deployment_mode`/`processing_region`/
+  `confidentiality_class`/`exact_revision` на измеренных записях; эндпоинт DeepSeek теперь отдаёт ТОЛЬКО
+  `deepseek-v4-flash`/`deepseek-v4-pro` (добавлены, verification_required; 'deepseek-chat' помечен legacy-
+  алиасом); добавлены реальные `qwen3-coder-next`/`qwen3-coder-flash` ($0.30/$1.50), `kimi-k2.6`. Новые —
+  verification_required (квалификация в Bench v2, v3.7.11).
+- ПЕНДИНГ: тариф DeepSeek V4 (image-only) от владельца -> flip implementation в money-mode; Bench v2
+  (новое поколение + judge adversarial corpus); router→ai_ops_run (v3.7.12). parity 174/174.
+
+### Added (v3.7.12 — Router→ai_ops_run: провайдер-независимость стала ПОВЕДЕНИЕМ, не только резолвером)
+- Главный разрыв ревью владельца: resolver+Bench доказали независимость, но runtime брал provider/model
+  от вызывающего, а reviewer по умолчанию — тот же provider/model (writer=judge по модели).
+- `tools/provider_endpoints.py` — map provider->(base_url, key_env): делает per-vendor диспатч ФИЗИЧЕСКИ
+  исполнимым. Секрет только по ИМЕНИ env (значение не в коде/не передаётся). deepseek/kimi/qwen эндпоинты +
+  fallback-ключ. selftest.
+- `tools/orchestrator.py` — `make_openai_provider(model, base_url, key_env)`: провайдер с ЯВНЫМ endpoint
+  (разные модели/вендоры в одном прогоне).
+- `tools/model_router.py` — `plan_run()`: резолв всех 4 ролей одним вызовом -> bundle для отчёта +
+  `writer_ne_judge_by_model`.
+- `tools/ai_ops_run.py` — без `--model` роутер резолвит роль implementation и диспатчит writer на endpoint
+  вендора; reviewer — ДРУГАЯ модель/вендор если резолвится (полная независимость судьи), иначе self-model +
+  запись причины. `--model` = override. `rep["model_resolution"]` (per-role решение) + эффективная
+  `rep["model"]` в КАЖДОМ отчёте. Всё под fail-safe (нет ключа/резолва -> passthrough, не падение).
+- ЖИВОЙ smoke (без --model): роутер сам выбрал `qwen3-coder-plus`, задиспатчил на qwen-endpoint, задача
+  доставлена (ready_for_pr=true), model_resolution.applied=true записан. Провайдер-независимость —
+  поведение продукта. Открытый гап: нет отдельной qualified code_review-модели -> reviewer=writer (честно
+  записано); закроется, когда code_review будет квалифицирован (Bench v2). CI +1, AGENTS +1.
+
+### Added (v3.7.13 — Security enforcement wiring: primitives -> рантайм)
+- Ревью владельца: security-примитивы (verify_artifact/enforce_memory/key_preflight) работали, но не
+  подключены. Подключено безопасно:
+- `tools/security_enforcement.py` — `key_preflight` += TTL-ротация: `next_rotation_at` vs `now` (просрочка
+  -> block при critical); issued_at/rotated_at/next_rotation_at surfaced. selftest +3.
+- `tools/ai_ops_run.py` — в router-пути ПЕРЕД живым provider-вызовом строится KLP из резолвленных
+  провайдеров и запускается `key_preflight(critical=True)` -> `model_resolution.key_preflight` (честный
+  block вместо HTTP 401 позже). Только новый router-путь (fail-safe, legacy не тронут).
+- `tools/merge_memory.py` — `record()` прогоняет self-ingested авто-запись через `enforce_memory_entry`
+  (MemoryGovernancePolicy) и СЮРФЕЙСИТ вердикт в самой записи (ADVISORY: по анти-самоотравлению
+  self-ingested без human_confirmed не проходит hard -> graduation-цель; куратор подтверждает).
+- НЕ навязано: `verify_artifact`->pip (у кита нет sha-pinned загрузчика; pip/poetry держат хеши через
+  lockfile — искусственная связка была бы нечестной). ai_ops_run selftest PASS, parity 175/175.
+
+### Added (v3.7.15 — DeepSeek V4 Flash tariff -> роутер implementation в MONEY-MODE)
+- Владелец дал тариф DeepSeek V4 Flash: $0.14/$0.28 /1M (cache-miss; cache-hit $0.0028 НЕ база router).
+- `model-qualification.yaml` — implementation-запись deepseek переименована `deepseek-chat`->`deepseek-v4-
+  flash` (portfolio truth: эндпоинт отдаёт v4-flash/pro; метрики сняты через alias deepseek-chat, ревизию
+  переподтвердить в Bench v2); economics цены заполнены -> total_cost $0.0115/изменение.
+- ВСЕ три implementation-кандидата теперь priced -> роутер в MONEY-MODE. По деньгам: deepseek-v4-flash
+  $0.0115 < qwen3-coder-plus $0.072 < kimi-highspeed $0.467 -> preferred **deepseek-v4-flash**, fallback
+  qwen. Живой резолв: cost_basis=money, estimated_cost $0.0115, без cost_warning. (В токенах qwen был бы
+  дешевле — деньги дали ДРУГОЙ ответ, ровно тезис.)
+- `models.yaml` — deepseek-v4-flash: снят verification_required (измерена/conditional), цена в note.
+  router selftest обновлён (money-mode). parity 175/175.
+
+### Added (v3.7.16 — Live Context Hybrid FED_TO_MODEL: hybrid реально подаётся модели)
+- Разрыв ревью: hybrid безопасно собирался, но модели НЕ подавался (execution_uses=v1, hybrid фиксировался
+  post-hoc). Теперь `ai_ops_run` при `--context-hybrid` строит hybrid ДО прогона (base-sha), читает контент
+  разрешённых v2-additions и ДОПИСЫВАЕТ к payload -> реально в prompt писателя (`context_prelude`).
+- Инвариант: v1 НИКОГДА не теряется; promotion gate не готов -> v1-only (fail-safe, additions=[], поведение
+  как раньше). Служебные артефакты (features/, .ai/) отфильтрованы — кормим только код/доки.
+- `rep["context_hybrid"]` теперь несёт ЧТО было fed_to_model (mode/additions/mandatory_references/base_sha),
+  а не post-hoc пересборку.
+- ЖИВОЙ прогон (child с корректным AccessFilterPolicy, роутер money-mode): `mode=hybrid`,
+  `fed_to_model=true`, additions=[pricing.py, tests, README], доставлено на deepseek-v4-flash. Критерий
+  stable «hybrid реально fed_to_model» — ВЫПОЛНЕН. Требование: child объявляет `.ai/policies/access-filter`
+  (без него default-deny -> v2 пуст -> v1-only). ai_ops_run selftest PASS, parity 175/175.
+
+### Added (v3.7.17 — Live Parallel-2: реальные package-runner + git fan-in -> ОДИН реальный PR)
+- Разрыв ревью: parallel_executor имел точки инъекции, но живые package-runner (ai_ops_run в worktree) и
+  git fan-in не подключены. `tools/parallel_live.py` замыкает: package_runner = ai_ops_run на пакет в своей
+  ветке; integration_runner = git-слияние веток пакетов в integration-ветку -> НОВЫЙ integration-SHA ->
+  ПОВТОР aggregate (pytest) на нём; PR только при зелёном aggregate.
+- Инварианты держатся: package-SHA не доказывают всю работу (повтор на integration-SHA); PR при зелёном
+  aggregate; пакеты parallel-SAFE по write_scope (в адаптере СЕРИЙНО, max_parallel=1 — честная инфра-граница
+  против гонок git-worktree; настоящий concurrency = отдельные клоны). selftest (чистое отображение rep +
+  мок-оркестрация: green->PR, конфликт->нет PR, пакет-fail->pre-fan-in блок).
+- ЖИВОЙ прогон на scratch child: пакеты round+tax -> оба на deepseek-v4-flash (money-mode) pass -> fan-in
+  integration-SHA 4a3e06c8, aggregate pytest зелёный -> ОДИН draft PR (ai-ops-dogfood-v368-py#2). Критерий
+  stable «parallel-2 открыл один реальный PR» — ВЫПОЛНЕН. CI +1, AGENTS +1. parity 176/176.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

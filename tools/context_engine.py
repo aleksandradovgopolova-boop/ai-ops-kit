@@ -131,6 +131,26 @@ def load_child_policies(child_root):
     return _load("access-filter.yaml"), _load("data-classification.yaml"), _load("budget.yaml")
 
 
+def _list_rel_paths(root, exclude):
+    """Перечислить кандидат-ПУТИ (без чтения содержимого) для access pre-filter/audit: broad exts,
+    без скрытых/vendored/oversize. Только имена — не содержимое."""
+    root = Path(root)
+    out = []
+    for ext in cr.RETRIEVAL_EXTS:
+        for f in root.rglob(f"*{ext}"):
+            rel = f.relative_to(root)
+            parts = rel.parts
+            if any(p.startswith(".") for p in parts) or any(p in exclude for p in parts[:-1]):
+                continue
+            try:
+                if f.stat().st_size > cr.MAX_FILE_BYTES:
+                    continue
+            except OSError:
+                continue
+            out.append(str(rel))
+    return out
+
+
 def _invalid_view(role, query, sha, reasons, snapshot_verified):
     return {"kind": "context-engine-view", "schema": "v2-orchestrated", "role": role, "query": query,
             "repo": None, "sha": sha, "valid": False, "invalid_reasons": list(reasons),
@@ -165,23 +185,33 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
     allowed = cr.role_allowed_classes(afp, role) if afp else set()   # deny-by-default
     exclude = set(cr.SCAN_EXCLUDE_DIRS) | _gitignore_dirs(root)      # vendored/build + .gitignore-aware
 
-    # --- источник 1: обязательный контекст v1 (policy/spec/decisions) — нельзя потерять ---
+    # --- ACCESS PRE-FILTER (v3.7.0-fix): классификация ПО ПУТИ (без чтения содержимого) -> роль видит
+    # ТОЛЬКО разрешённые пути. Denied-путь НЕ передаётся в full-text/graph/semantic (не читается, имя не
+    # раскрывается role-facing). Content-scanner потом может ТОЛЬКО повысить класс. Privileged-audit ведёт
+    # список pre_filtered (знать denied-файлы можно только привилегированному слою, не role-facing).
+    def _allowed_path(rel):
+        pc = cr.classify("", path=rel, policy=dcp)   # path-based класс (content="" -> без scanner/marker)
+        return pc != "secret" and (bool(allowed) and pc in allowed)
+    pre_filtered_denied = sorted(p for p in _list_rel_paths(root, exclude) if not _allowed_path(p))
+
+    # --- источник 1: обязательный контекст v1 (policy/spec/decisions) — нельзя потерять (НЕ pre-filter'ится;
+    #     доступ проверяется при чтении: denied mandatory -> excluded_access -> view invalid) ---
     cand = {}   # rel -> {"file","sources":set,"score","mandatory"}
     for rel in (v1_mandatory or []):
         cand[rel] = {"file": rel, "sources": {"mandatory-v1"}, "score": 10_000, "mandatory": True}
 
-    # --- источник 2: full-text (broad exts: TS/React/docs/JSON, не только Python; hard-excludes) ---
-    ft = cr.full_text_search(root, query, subdirs=("",), exclude_dirs=exclude)
+    # --- источник 2: full-text ТОЛЬКО по разрешённым путям (denied не читается) ---
+    ft = cr.full_text_search(root, query, subdirs=("",), exclude_dirs=exclude, path_filter=_allowed_path)
     for r in ft:
         c = cand.setdefault(r["file"], {"file": r["file"], "sources": set(), "score": 0, "mandatory": False})
         c["sources"].add("fulltext")
         c["score"] = max(c["score"], r["score"]) if not c["mandatory"] else c["score"]
     deterministic_count = len([1 for r in ft])
 
-    # --- источник 3: Repository Graph augmentation (только ДОБАВЛЯЕТ соседей .py) ---
+    # --- источник 3: Repository Graph augmentation (граф строится ТОЛЬКО по разрешённым .py) ---
     graph_added = 0
     try:
-        graph = repo_graph.build_graph(root, subdirs=("",))
+        graph = repo_graph.build_graph(root, subdirs=("",), path_filter=_allowed_path)
     except Exception:
         graph = {"import_edges": {}}
     ft_files = [r["file"] for r in ft]
@@ -191,20 +221,20 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
         neighbors = set(graph.get("import_edges", {}).get(rel, []))   # forward: что импортит rel
         neighbors |= set(repo_graph.impact(graph, rel))               # reverse: кто зависит от rel
         for nb in neighbors:
-            if _hidden(nb) or nb in cand:
+            if _hidden(nb) or nb in cand or not _allowed_path(nb):     # denied-сосед не добавляется
                 continue
             cand[nb] = {"file": nb, "sources": {"graph"}, "score": 0, "mandatory": False}
             graph_added += 1
 
-    # --- источник 4: УСЛОВНЫЙ semantic-lite (только при недостаточном детерминированном recall) ---
+    # --- источник 4: УСЛОВНЫЙ semantic-lite (индекс ТОЛЬКО по разрешённым путям) ---
     semantic_used, semantic_reason = False, "детерминированный recall достаточен"
     if deterministic_count < semantic_recall_floor:
         semantic_used = True
         semantic_reason = f"детерминированных кандидатов {deterministic_count} < floor {semantic_recall_floor}"
         try:
-            idx = semantic_lite.build_index(root, subdirs=("",))
+            idx = semantic_lite.build_index(root, subdirs=("",), path_filter=_allowed_path)
             for r in semantic_lite.search(idx, query, k=5):
-                if _hidden(r["file"]):
+                if _hidden(r["file"]) or not _allowed_path(r["file"]):
                     continue
                 c = cand.setdefault(r["file"], {"file": r["file"], "sources": set(), "score": 0,
                                                 "mandatory": False})
@@ -278,6 +308,9 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
         "included": included, "excluded_access": excl_access, "excluded_budget": excl_budget,
         "mandatory_missing": sorted(mandatory_missing),
         "mandatory_excluded_access": mandatory_excluded_access,
+        # privileged-audit: denied-пути, отсеянные ДО чтения (role-facing их не видит; execution не читал)
+        "pre_filtered_denied": pre_filtered_denied,
+        "read_paths": sorted(i["file"] for i in included) + sorted(e["file"] for e in excl_access),
         "total_tokens": total, "budget_tokens": budget_tokens,
         # v3.6.7d: orchestrated cache честно ВЫКЛЮЧЕН для полного view до live-квалификации (v3.6.8).
         # cache_key считается (для shadow-сравнения/дедупа), но RetrievalCache к orchestrated view пока
@@ -354,7 +387,10 @@ def selftest():
                "src/order.py" in inc and v["sources_used"]["graph_added"] >= 1)
         expect("обязательный контекст v1 POLICY.md присутствует (source mandatory-v1, первым)",
                "POLICY.md" in inc and v["included"][0]["mandatory"] is True)
-        expect("секрет исключён access-filter ВСЕГДА (secret никогда в контекст)", "secret.py" in exa)
+        # v3.7.0: denied-по-пути secret.py PRE-FILTERED — НЕ читается, НЕ в payload, НЕ в read_paths
+        expect("denied-по-пути secret.py pre-filtered (не читается, имя не в role-facing payload)",
+               "secret.py" in v["pre_filtered_denied"] and "secret.py" not in inc
+               and "secret.py" not in exa and "secret.py" not in v["read_paths"])
         expect("каждый included несёт content_hash + sha + reason",
                all(i.get("content_hash") and i["sha"] == "abc123" and i.get("reason") for i in v["included"]))
         expect("cache_key привязан к sha + AFP + DCP child (не демо)",

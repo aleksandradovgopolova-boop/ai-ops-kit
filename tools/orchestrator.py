@@ -207,6 +207,13 @@ def make_provider(name: str, model: str = None):
     raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai, openai-compatible)")
 
 
+def make_openai_provider(model, base_url, key_env):
+    """openai-compatible провайдер с ЯВНЫМ endpoint+key_env — per-role/vendor маршрутизация (v3.7.12,
+    Router->ai_ops_run). Ключ читает _openai_call из env по имени key_env; значение не передаётся и не
+    логируется. Так writer/reviewer резолвятся в РАЗНЫЕ модели/вендоры в одном прогоне."""
+    return lambda prompt: _openai_call(prompt, model, base_url=base_url, key_env=key_env)
+
+
 # ---------------- state ----------------
 
 def load_state(run_dir: Path):

@@ -202,7 +202,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
-        context_shadow=False):
+        context_shadow=False, context_hybrid=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -293,19 +293,64 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         base_binding = {"kind": "BaseBinding",
                         "base_ref": _brr.get("base_ref") or base, "base_sha": _brr.get("base_sha"),
                         "mode": _brr.get("mode"), "source": _brr.get("source")}
+        # v3.7.12 Router->runtime: без явного --model резолвим модель ПО РОЛИ через model_router и физически
+        # диспатчим на endpoint вендора (provider_endpoints) -> writer≠judge по МОДЕЛИ становится поведением
+        # продукта, а не только резолвером. Явный --model = override (записывается). Всё под fail-safe:
+        # нет резолва/ключа/endpoint -> прежнее поведение (passthrough --model) + честная запись в отчёт.
+        _writer_model, _writer_prov, _rev_model, _rev_prov = model, None, model, None
+        try:
+            import model_router as _mr
+            import provider_endpoints as _pe
+            _plan = _mr.plan_run()
+            _model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
+                                 "mode": "explicit-override" if model else "router", "notes": []}
+            if model is None and provider_name == "openai-compatible":
+                impl, rev = _plan.get("implementation") or {}, _plan.get("code_review") or {}
+                if impl.get("resolved") and _pe.key_available(impl.get("provider")):
+                    ep = _pe.endpoint_for(impl["provider"])
+                    _writer_model = impl["model_id"]
+                    _writer_prov = orchestrator.make_openai_provider(impl["model_id"], ep["base_url"], ep["key_env"])
+                    _model_resolution["applied"] = True
+                    _model_resolution["writer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
+                                                   "cost_basis": impl.get("cost_basis")}
+                    if rev.get("resolved") and _pe.key_available(rev.get("provider")) and rev.get("model_id") != impl.get("model_id"):
+                        ep2 = _pe.endpoint_for(rev["provider"])
+                        _rev_model = rev["model_id"]
+                        _rev_prov = orchestrator.make_openai_provider(rev["model_id"], ep2["base_url"], ep2["key_env"])
+                        _model_resolution["reviewer"] = {"model_id": rev["model_id"], "provider": rev["provider"], "independent_by_model": True}
+                    else:
+                        _rev_model, _rev_prov = _writer_model, _writer_prov
+                        _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
+                                                         "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
+                        _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
+                    # v3.7.13 key preflight ПЕРЕД живым provider-вызовом (security_enforcement в рантайме):
+                    # резолвленные ключи обязаны быть в env; иначе честный block (а не HTTP 401 позже).
+                    try:
+                        import os as _os
+                        import security_enforcement as _se
+                        _kv = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
+                        if (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
+                            _kv.append({"name": rev.get("provider"), "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
+                        _model_resolution["key_preflight"] = _se.key_preflight({"keys": _kv}, dict(_os.environ), critical=True)
+                    except Exception:  # noqa: BLE001
+                        pass
+                else:
+                    _model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
+        except Exception as _e:  # noqa: BLE001
+            _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
+                                 "mode": "explicit-override" if model else "router"}
+
         prop = proposer or tool_loop.make_model_proposer(
-            orchestrator.make_provider(provider_name, model))
-        # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),
-        # petля даёт ему read-only-политику. Тот же класс модели — более слабая, но реальная
-        # независимость (отдельный вызов+роль); полностью независимый судья (другая модель/человек)
-        # — сильнее, это осознанная граница. Для mock-провайдера ревью не имеет смысла (нет вердикта).
+            _writer_prov or orchestrator.make_provider(provider_name, _writer_model))
+        # v2.83/v3.7.12: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова);
+        # при router-режиме — по возможности ДРУГАЯ модель/вендор (полная независимость судьи).
         rev_prop = reviewer_proposer
         if review and rev_prop is None and provider_name != "mock":
-            rev_prop = orchestrator.make_provider(provider_name, model)
+            rev_prop = _rev_prov or orchestrator.make_provider(provider_name, _rev_model)
         # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
         auth_prop = author_proposer
         if author and auth_prop is None and provider_name != "mock":
-            auth_prop = orchestrator.make_provider(provider_name, model)
+            auth_prop = _writer_prov or orchestrator.make_provider(provider_name, _writer_model)
 
         # v2.94 (One Run Transaction, аудит #2): pipeline БОЛЬШЕ НЕ обходит lifecycle. Один план
         # строится здесь и передаётся в движок (не второй раз внутри); WorkItem/RunPlan/active-work/
@@ -440,6 +485,48 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001
             payload = None; lifecycle_errors.append(f"context_payload: {type(e).__name__}: {e}")
+        # v3.7.16 Live Context Hybrid FED_TO_MODEL: при --context-hybrid собираем hybrid (mandatory v1 +
+        # разрешённые v2-additions через promotion gate) ДО прогона и РЕАЛЬНО подаём модели (читаем контент
+        # additions из base-состояния child и дописываем к payload). v1 НИКОГДА не теряется; gate не готов
+        # -> v1-only (fail-safe, additions=[]). Раньше hybrid только фиксировался в отчёте post-hoc.
+        _hybrid_prelude = (payload or {}).get("text")
+        _hybrid_fed = None
+        if context_hybrid and payload:
+            try:
+                import context_hybrid as _chyb
+                import context_engine as _ce
+                _mand = None
+                if bundle:
+                    _inc = bundle.get("included", {})
+                    _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
+                _afp, _dcp, _bud = _ce.load_child_policies(child_root)
+                _rule_refs = list((bundle.get("included", {}) or {}).get("rules", [])) if bundle else []
+                _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
+                _budget = _ce.budget_tokens_from(_bud)
+                _base_sha = base_binding.get("base_sha")
+                _hyb = _chyb.build_hybrid_from_child(
+                    child_root, task_text, "executor", sha=_base_sha, afp=_afp, dcp=_dcp,
+                    v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
+                    budget=_budget, require_snapshot=False)
+                _adds = _hyb.get("v2_additions") or []
+                # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
+                _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
+                if _hyb.get("mode") == "hybrid" and _adds:
+                    _extra = []
+                    for _f in _adds:
+                        _p = child_root / _f
+                        if _p.is_file():
+                            _extra.append(f"### {_f}\n{_p.read_text(encoding='utf-8', errors='replace')[:8000]}")
+                    if _extra:
+                        _hybrid_prelude = ((payload or {}).get("text") or "") + \
+                            "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
+                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"), "v2_additions": _adds,
+                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _adds),
+                               "mandatory_references": _hyb.get("mandatory_references"),
+                               "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
+            except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
+                _hybrid_fed = {"kind": "ContextHybrid", "error": f"hybrid feed failed: {type(_e).__name__}: {_e}"[:300],
+                               "fed_to_model": False}
         # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
         import spec_levels
         try:
@@ -537,7 +624,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
-                context_prelude=(payload or {}).get("text"),
+                context_prelude=_hybrid_prelude,   # v3.7.16: hybrid (v1 ∪ v2-additions) реально подаётся модели
                 resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
@@ -605,7 +692,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
-        rep["model"] = model
+        # v3.7.12: эффективная модель writer'а (router применён -> резолвленная; иначе переданная).
+        rep["model"] = _writer_model if (isinstance(_model_resolution, dict) and _model_resolution.get("applied")) else model
+        rep["model_resolution"] = _model_resolution   # per-role решение роутера (видимость в каждом отчёте)
         rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
         # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
         # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.
@@ -661,6 +750,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             except Exception as _e:  # noqa: BLE001 — shadow не должен ронять прогон
                 # честно фиксируем реальную причину (не влияет на execution=v1) — иначе баг wiring немой
                 rep["context_shadow"] = {"error": f"shadow build failed: {type(_e).__name__}: {_e}"[:300]}
+        # v3.7.16: hybrid собран ДО прогона и РЕАЛЬНО подан модели (см. _hybrid_fed выше). Записываем что
+        # именно было fed_to_model (mode/additions/references), а не пересобираем post-hoc. v1 не теряется.
+        if context_hybrid and _hybrid_fed is not None:
+            rep["context_hybrid"] = _hybrid_fed
         if payload:
             rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
                                       "payload_budget": payload["payload_budget"],
@@ -1581,6 +1674,9 @@ def main(argv):
     rp.add_argument("--context-shadow", action="store_true",
                     help="построить Context Engine v2 shadow-view рядом с боевым v1 (наблюдаемость "
                          "перед промоушеном; execution по-прежнему на v1); engine=pipeline")
+    rp.add_argument("--context-hybrid", action="store_true",
+                    help="собрать hybrid-контекст (mandatory v1 + разрешённые v2-additions) через "
+                         "context_promotion_gate; не готов -> v1-only; запись в отчёт; engine=pipeline")
     rp.add_argument("--baseline-diff", action="store_true",
                     help="судить по 'нет новых провалов против базы' (пред-существующие красные "
                          "проверки репо не блокируют); engine=pipeline")
@@ -1680,7 +1776,8 @@ def main(argv):
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
                      discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
-                     review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow)
+                     review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow,
+                     context_hybrid=a.context_hybrid)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

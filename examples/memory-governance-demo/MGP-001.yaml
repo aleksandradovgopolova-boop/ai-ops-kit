@@ -1,0 +1,17 @@
+schema_version: 1
+kind: MemoryGovernancePolicy
+policy_id: MGP-001
+# security-долг #2 (OWASP ASI): provenance + expiry + запрет self-ingestion.
+entries:
+  - id: user-preference-review-style
+    provenance: {origin: user (sasha@rox.one), source_type: human, created_at: "2026-07-24"}
+    expiry: {mode: review_date, value: "2027-01-01"}
+    self_ingested: false
+  - id: provider-benchmark-kimi
+    provenance: {origin: live-qualification-run, source_type: derived, upstream: [ModelBenchResult]}
+    expiry: {mode: ttl_days, value: 180}
+    self_ingested: false
+  - id: kit-invariant-registry-source-of-truth
+    provenance: {origin: AGENTS.md, source_type: system}
+    expiry: {mode: permanent, justification: "фундаментальный инвариант кита, пересмотр только при major"}
+    self_ingested: false

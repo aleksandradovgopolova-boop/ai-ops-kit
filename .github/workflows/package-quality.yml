@@ -59,6 +59,10 @@ jobs:
         run: |
           python3 validation/validate_workflow_gates.py --selftest
           python3 validation/validate_workflow_gates.py
+      - name: Scenario-как-evidence (Вывод 1 SEAM session — advisory, selftest)
+        run: python3 validation/validate_scenario_evidence.py --selftest
+      - name: Surface-wiring consistency (Вывод 2 SEAM session — advisory, selftest)
+        run: python3 validation/validate_surface_wiring.py --selftest
       - name: WorkItem — единая сущность и статус (selftest)
         run: python3 tools/workitem.py --selftest
       - name: RunPlan — base_workflow + tracks (selftest + tracks integrity)
@@ -125,6 +129,20 @@ jobs:
         run: |
           python3 tools/model_comparison.py --selftest
           python3 tools/model_comparison.py examples/model-comparison-demo
+      - name: "Model-roles — Provider Independence: роли->model_class + escalation + qualification (ADR-004, selftest + real)"
+        run: |
+          python3 validation/validate_model_roles.py --selftest
+          python3 validation/validate_model_roles.py
+      - name: "Model-qualification — ДОКАЗАТЕЛЬНЫЙ допуск model×revision×role (status из Bench, ADR-004; selftest + real)"
+        run: |
+          python3 validation/validate_model_qualification.py --selftest
+          python3 validation/validate_model_qualification.py
+      - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"
+        run: python3 tools/model_router.py --selftest
+      - name: "Provider endpoints — map provider->endpoint+key_env (v3.7.12 router->runtime; selftest)"
+        run: python3 tools/provider_endpoints.py --selftest
+      - name: "Parallel live adapters — package-runner + git fan-in -> один PR (v3.7.17; selftest)"
+        run: python3 tools/parallel_live.py --selftest
       - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
         run: |
           python3 validation/validate_regression_corpus.py --selftest
@@ -151,6 +169,10 @@ jobs:
         run: python3 tools/semantic_lite.py --selftest
       - name: Context Engine orchestrator — полная v2-цепочка (mandatory v1 + full-text + graph + semantic + access-filter) (selftest)
         run: python3 tools/context_engine.py --selftest
+      - name: Context promotion gate — 5 trust-контрактов перед hybrid (v3.7.0, selftest)
+        run: python3 tools/context_promotion_gate.py --selftest
+      - name: Context hybrid — mandatory v1 + gated v2-additions (v3.7.0, selftest)
+        run: python3 tools/context_hybrid.py --selftest
       - name: Context shadow — ПОЛНАЯ v2-цепочка рядом с боевым v1, child-политики (selftest)
         run: python3 tools/context_shadow.py --selftest
       - name: Retrieval Bench — precision/recall 3 стратегий (selftest)
@@ -161,8 +183,12 @@ jobs:
         run: |
           python3 tools/parallel_planner.py --selftest
           python3 tools/parallel_planner.py examples/work-graph-demo
+      - name: Parallel executor — bounded parallel-2 оркестрация + fan-in exact-SHA (v3.7.1, selftest)
+        run: python3 tools/parallel_executor.py --selftest
       - name: Storybook query — минимальный read-only адаптер каталога (selftest)
         run: python3 tools/storybook_query.py --selftest
+      - name: "Seam-scan — детектор дефекта шва по дифу (5 признаков, 3 гейт; selftest)"
+        run: python3 tools/seam_scan.py --selftest
       - name: UI-evidence collector — реальный UI-CI на точном SHA (v3.7, selftest)
         run: python3 tools/ui_evidence_collect.py --selftest
       - name: Project Detector -> RepositoryProfile (selftest)
@@ -261,6 +287,22 @@ jobs:
           python3 tools/promotion_qual.py --verify-negatives
       - name: "Стек-квалификация: детект+failure-id на реальных фикстурах python/go (golden+live)"
         run: python3 validation/validate_stack_qualification.py --selftest
+      - name: "SupplyChainPinPolicy — pinned revision/hash внешних моделей/skills/MCP (OWASP ASI, selftest + demo)"
+        run: |
+          python3 validation/validate_supply_chain.py --selftest
+          python3 validation/validate_supply_chain.py
+      - name: "MemoryGovernancePolicy — provenance/expiry/no-self-ingestion (OWASP ASI, selftest + demo)"
+        run: |
+          python3 validation/validate_memory_governance.py --selftest
+          python3 validation/validate_memory_governance.py
+      - name: "KeyLifecyclePolicy — TTL ротации + честная per-agent identity (OWASP ASI, selftest + demo)"
+        run: |
+          python3 validation/validate_key_lifecycle.py --selftest
+          python3 validation/validate_key_lifecycle.py
+      - name: "Security enforcement — runtime примитивы (verify_artifact/memory/key-preflight; OWASP ASI, selftest + preflight)"
+        run: |
+          python3 tools/security_enforcement.py --selftest
+          python3 tools/security_enforcement.py --key-preflight examples/key-lifecycle-demo/KLP-001.yaml
       - name: "Product authoring: структурные валидаторы артефактов (selftest)"
         run: |
           python3 validation/validate_requirements_artifact.py --selftest

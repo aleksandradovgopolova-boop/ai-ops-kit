@@ -53,6 +53,22 @@ def check(data: dict):
         e.append("status=fixed требует непустой fixed_version (починка без версии)")
     if status == "open" and fixed_v is not None:
         e.append("status=open требует fixed_version=null")
+    # Вывод 3 «дефектов одной сессии»: повтор класса (occurrences>=2) -> рекомендации мало, нужен
+    # перевод в КОНСТРУКЦИЮ. Правило поверх правил, вычислимо: occurrences>=2 обязывает
+    # on_repeat=escalate_to_structural + непустой structural_fix (иначе «правило есть, но не сработало»).
+    occ = data.get("occurrences", 1)
+    on_repeat = data.get("on_repeat")
+    if occ is not None and not (isinstance(occ, int) and occ >= 1):
+        e.append("occurrences должен быть целым >=1")
+    if on_repeat is not None and on_repeat not in ("none", "escalate_to_structural"):
+        e.append("on_repeat ∉ {none, escalate_to_structural}")
+    if isinstance(occ, int) and occ >= 2:
+        if on_repeat != "escalate_to_structural":
+            e.append("повтор класса (occurrences>=2) требует on_repeat=escalate_to_structural "
+                     "(рекомендацию мало — переведи в конструкцию)")
+        if not (isinstance(data.get("structural_fix"), str) and data["structural_fix"].strip()):
+            e.append("on_repeat=escalate_to_structural требует непустой structural_fix "
+                     "(какая КОНСТРУКЦИЯ заменила рекомендацию)")
     return e
 
 
@@ -79,6 +95,7 @@ def check_registry(d: Path):
 def taxonomy(d: Path):
     """Сводка по слоям/статусам (для observability)."""
     by_layer, by_status = {}, {}
+    repeated, structural = 0, 0
     for f in sorted(Path(d).glob("RC-*.yaml")) if Path(d).is_dir() else []:
         try:
             data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
@@ -86,7 +103,12 @@ def taxonomy(d: Path):
             continue
         by_layer[data.get("affected_layer")] = by_layer.get(data.get("affected_layer"), 0) + 1
         by_status[data.get("status")] = by_status.get(data.get("status"), 0) + 1
-    return {"by_layer": by_layer, "by_status": by_status}
+        if isinstance(data.get("occurrences"), int) and data["occurrences"] >= 2:
+            repeated += 1
+        if data.get("on_repeat") == "escalate_to_structural":
+            structural += 1
+    return {"by_layer": by_layer, "by_status": by_status,
+            "repeated_classes": repeated, "escalated_to_structural": structural}
 
 
 def selftest():
@@ -110,9 +132,22 @@ def selftest():
     expect("неизвестный layer -> ошибка",
            any("affected_layer" in x for x in check({**ex, "affected_layer": "vibes"})))
     expect("битый failure_id -> ошибка", any("failure_id" in x for x in check({**ex, "failure_id": "RC1"})))
-    # таксономия непуста на реальном корпусе
+    # Вывод 3: повтор класса требует конструкцию (правило СРАБАТЫВАЕТ)
+    expect("occurrences>=2 без on_repeat -> ошибка (рекомендации мало)",
+           any("occurrences>=2" in x for x in check({**ex, "occurrences": 2})))
+    expect("escalate_to_structural без structural_fix -> ошибка",
+           any("structural_fix" in x for x in check({**ex, "occurrences": 2, "on_repeat": "escalate_to_structural"})))
+    expect("повтор + escalate + конструкция -> валиден",
+           check({**ex, "occurrences": 2, "on_repeat": "escalate_to_structural",
+                  "structural_fix": "единственная функция apply_token + запрет прямого вызова линтером"}) == [])
+    expect("occurrences=1 без on_repeat -> валиден (правило не срабатывает на одиночном)",
+           check({**ex, "occurrences": 1}) == [])
+    expect("битый on_repeat -> ошибка", any("on_repeat" in x for x in check({**ex, "on_repeat": "maybe"})))
+    # таксономия непуста на реальном корпусе + несёт счётчики повторов
     tx = taxonomy(DEFAULT_DIR)
     expect("таксономия по слоям непуста", bool(tx["by_layer"]))
+    expect("таксономия несёт repeated/structural счётчики",
+           "repeated_classes" in tx and "escalated_to_structural" in tx)
 
     print("validate_regression_corpus selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

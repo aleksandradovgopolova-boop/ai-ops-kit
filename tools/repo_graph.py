@@ -22,12 +22,16 @@ PKG = Path(__file__).resolve().parents[1]
 DEFAULT_SUBDIRS = ("tools", "validation")
 
 
-def _py_files(root: Path, subdirs):
+def _py_files(root: Path, subdirs, path_filter=None):
     out = []
     for sd in subdirs:
         d = root / sd
         if d.is_dir():
-            out += [p for p in sorted(d.rglob("*.py"))]
+            for p in sorted(d.rglob("*.py")):
+                # v3.7.0: access pre-filter — denied-путь НЕ читается для графа
+                if path_filter is not None and not path_filter(str(p.relative_to(root))):
+                    continue
+                out.append(p)
     return out
 
 
@@ -50,9 +54,9 @@ def _analyze(path: Path):
     return symbols, mods
 
 
-def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS) -> dict:
+def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None) -> dict:
     root = Path(root)
-    files = _py_files(root, subdirs)
+    files = _py_files(root, subdirs, path_filter=path_filter)
     stem_to_rel = {}
     rels = []
     for f in files:

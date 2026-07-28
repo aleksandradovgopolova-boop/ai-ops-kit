@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""parallel_live.py (v3.7.17) — ЖИВЫЕ адаптеры для parallel_executor: реальные package-runner (ai_ops_run
+в отдельной ветке/worktree на пакет) + integration-runner (git fan-in -> НОВЫЙ integration-SHA -> ПОВТОР
+aggregate-проверок). Замыкает parallel-2 на живой путь: WorkGraph -> пакеты -> fan-in -> ОДИН draft PR.
+
+Инварианты (из parallel_planner/executor, не ослабляются):
+  - package-SHA НЕ доказывают всю работу -> после fan-in новый integration-SHA + повтор проверок;
+  - PR открывается ТОЛЬКО при зелёном aggregate на integration-SHA;
+  - пакеты parallel-SAFE по непересекающимся write_scope; в этом адаптере исполняются СЕРИЙНО
+    (max_parallel=1) — чтобы избежать гонок git-worktree в одном репо (честная инфра-граница; настоящий
+    concurrency потребует отдельных клонов на пакет).
+
+Только stdlib + существующие модули кита. CLI: parallel_live.py --selftest
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import parallel_executor as pe   # noqa: E402
+
+
+def _git(root, *args, check=True):
+    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()[:200]}")
+    return r
+
+
+def package_result_from_rep(rep):
+    """rep (ai_ops_run) -> package-result для integration_gate. ЧИСТАЯ функция (тестируема)."""
+    if not isinstance(rep, dict):
+        return {"status": "error", "sha": None, "gate_report": {"all_pass": False}, "error": "rep не dict"}
+    sha = (rep.get("commit") or {}).get("sha")
+    ok = bool(rep.get("ready_for_pr"))
+    return {"status": "pass" if ok else "fail", "sha": sha,
+            "gate_report": {"all_pass": ok, "tested_revision": sha},
+            "model_resolution": rep.get("model_resolution")}
+
+
+def make_package_runner(child_root, base_sha, task_map, signals, run_fn, features_dir=None):
+    """package_runner(pkg): прогнать ai_ops_run для задачи пакета в СВОЕЙ ветке (feature=pkg.id).
+    run_fn — ai_ops_run.run (инъекция для тестов). Возвращает package-result."""
+    def runner(pkg):
+        pid = pkg["id"]
+        task = task_map[pid]
+        # каждый пакет от общей базы, своя фича/ветка
+        _git(child_root, "checkout", "-q", "main", check=False)
+        _git(child_root, "reset", "--hard", "-q", base_sha)
+        _git(child_root, "clean", "-fdq", "-e", ".ai", check=False)
+        rep = run_fn(task, dict(signals), Path(child_root), engine="pipeline",
+                     provider_name="openai-compatible", feature=pid, execute=True,
+                     author=True, review=True, features_dir=features_dir)
+        return package_result_from_rep(rep)
+    return runner
+
+
+def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/integration"):
+    """integration_runner(results): создать integration-ветку от base, слить ветки пакетов (git fan-in),
+    ПОВТОРИТЬ aggregate (pytest) на НОВОМ integration-SHA. -> (integration_sha, aggregate, conflicts, base_moved)."""
+    def runner(results):
+        _git(child_root, "checkout", "-q", "main", check=False)
+        _git(child_root, "branch", "-D", integration_branch, check=False)
+        _git(child_root, "checkout", "-q", "-B", integration_branch, base_sha)
+        conflicts = 0
+        for pid in results:
+            br = f"ai-ops/{pid}"
+            m = _git(child_root, "merge", "--no-edit", "--no-ff", br, check=False)
+            if m.returncode != 0:
+                conflicts += 1
+                _git(child_root, "merge", "--abort", check=False)
+        integration_sha = _git(child_root, "rev-parse", "HEAD").stdout.strip()
+        # ПОВТОР проверок на integration-SHA (не доверяем package-SHA)
+        agg = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=str(child_root),
+                             capture_output=True, text=True)
+        all_pass = conflicts == 0 and agg.returncode == 0
+        aggregate = {"all_pass": all_pass, "tested_revision": integration_sha,
+                     "pytest_rc": agg.returncode, "tail": (agg.stdout or agg.stderr)[-300:]}
+        return integration_sha, aggregate, conflicts, False
+    return runner
+
+
+def run_live(wg, child_root, base_sha, task_map, signals, run_fn, open_pr=False,
+             repo_slug=None, features_dir=None, integration_branch="ai-ops/integration"):
+    """Полный живой parallel-2: пакеты -> fan-in -> (опц.) ОДИН draft PR. Возвращает запись execute_parallel
+    + pr. Пакеты СЕРИЙНО (max_parallel=1). PR только при delivery.open_pr (зелёный aggregate на integr-SHA)."""
+    pr = make_package_runner(child_root, base_sha, task_map, signals, run_fn, features_dir)
+    ir = make_integration_runner(child_root, base_sha, integration_branch)
+    rec = pe.execute_parallel(wg, pr, ir, contract_shas=None, max_parallel=1)
+    rec["pr"] = None
+    if open_pr and rec.get("delivery", {}).get("open_pr") and repo_slug:
+        _git(child_root, "push", "-f", "-q", "origin", integration_branch, check=False)
+        title = f"[parallel-2] {wg.get('id')} fan-in @ {rec['integration_sha'][:12]}"
+        body = (f"Автоматический parallel-2 fan-in (integration-SHA {rec['integration_sha'][:12]}).\n"
+                f"Пакеты: {', '.join(task_map)}. aggregate повторён на integration-SHA.\n\n"
+                "🤖 Generated with [Claude Code](https://claude.com/claude-code)")
+        p = subprocess.run(["gh", "pr", "create", "--repo", repo_slug, "--draft",
+                            "--head", integration_branch, "--base", "main",
+                            "--title", title, "--body", body], cwd=str(child_root),
+                           capture_output=True, text=True)
+        rec["pr"] = (p.stdout.strip() or p.stderr.strip())[:300]
+    return rec
+
+
+def selftest():
+    ok = True
+
+    def expect(name, cond):
+        nonlocal ok
+        ok = ok and cond
+        print(f"{'PASS' if cond else 'FAIL'} {name}")
+
+    # package_result_from_rep — чистое отображение
+    expect("rep ready -> pass + sha", package_result_from_rep(
+        {"ready_for_pr": True, "commit": {"sha": "a" * 40}})["status"] == "pass")
+    expect("rep not-ready -> fail", package_result_from_rep(
+        {"ready_for_pr": False, "commit": {"sha": "b" * 40}})["status"] == "fail")
+    expect("rep не dict -> error", package_result_from_rep(None)["status"] == "error")
+
+    # оркестрация с МОК-раннерами (без git/LLM): 2 parallel-safe пакета -> fan-in -> open_pr
+    wg = {"schema_version": 1, "kind": "WorkGraph", "id": "WG-T", "feature": "f", "execution_mode": "hybrid",
+          "packages": [{"id": "api", "depends_on": [], "write_scope": ["a/**"]},
+                       {"id": "ui", "depends_on": [], "write_scope": ["b/**"]}]}
+    good = {"api": None, "ui": None}
+
+    def fake_run(task, sig, root, **kw):
+        return {"ready_for_pr": True, "commit": {"sha": kw["feature"].ljust(40, "0")}}
+
+    # инъекция мок-integration_runner через прямой execute_parallel
+    def pr_runner(pkg):
+        return package_result_from_rep(fake_run(None, None, None, feature=pkg["id"]))
+
+    def ir_runner(results):
+        return ("c" * 40, {"all_pass": True, "tested_revision": "c" * 40}, 0, False)
+
+    rec = pe.execute_parallel(wg, pr_runner, ir_runner, contract_shas=None, max_parallel=1)
+    expect("2 parallel-safe пакета зелены -> fan-in proceed + open_pr",
+           rec["proceed"] and rec["delivery"]["open_pr"] and rec["integration_sha"] == "c" * 40)
+
+    def ir_conflict(results):
+        return ("d" * 40, {"all_pass": False, "tested_revision": "d" * 40}, 1, False)
+    rec2 = pe.execute_parallel(wg, pr_runner, ir_conflict, contract_shas=None, max_parallel=1)
+    expect("конфликт при fan-in -> НЕ open_pr (integration не зелёный)", rec2["delivery"]["open_pr"] is False)
+
+    def pr_fail(pkg):
+        return {"status": "fail", "sha": None, "gate_report": {"all_pass": False}}
+    rec3 = pe.execute_parallel(wg, pr_fail, ir_runner, contract_shas=None, max_parallel=1)
+    expect("пакет не pass -> fan-in НЕ начинается (pre-fan-in блок)",
+           rec3["delivery"]["open_pr"] is False and rec3["stage"] == "pre-fan-in")
+
+    print("parallel_live selftest:", "PASS" if ok else "FAIL")
+    return 0 if ok else 1
+
+
+def main(argv):
+    if "--selftest" in argv:
+        return selftest()
+    print(__doc__)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

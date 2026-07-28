@@ -67,6 +67,8 @@ python3 validation/validate_context_qualification.py
 python3 validation/validate_product_qualification.py
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
+python3 validation/validate_scenario_evidence.py --selftest
+python3 validation/validate_surface_wiring.py --selftest
 python3 tools/workitem.py --selftest
 python3 tools/run_plan.py --selftest
 python3 tools/run_plan.py validate
@@ -101,6 +103,13 @@ python3 validation/validate_provider_residency.py examples/residency-demo
 python3 tools/cost_account.py --selftest
 python3 tools/model_comparison.py --selftest
 python3 tools/model_comparison.py examples/model-comparison-demo
+python3 validation/validate_model_roles.py --selftest
+python3 validation/validate_model_roles.py
+python3 validation/validate_model_qualification.py --selftest
+python3 validation/validate_model_qualification.py
+python3 tools/model_router.py --selftest
+python3 tools/provider_endpoints.py --selftest
+python3 tools/parallel_live.py --selftest
 python3 validation/validate_regression_corpus.py --selftest
 python3 validation/validate_regression_corpus.py
 python3 validation/validate_loop_trace.py --selftest
@@ -114,12 +123,16 @@ python3 tools/data_classification.py --selftest
 python3 tools/context_retrieval.py --selftest
 python3 tools/semantic_lite.py --selftest
 python3 tools/context_engine.py --selftest
+python3 tools/context_promotion_gate.py --selftest
+python3 tools/context_hybrid.py --selftest
 python3 tools/context_shadow.py --selftest
 python3 tools/retrieval_bench.py --selftest
 python3 tools/gate_runtime.py --selftest
 python3 tools/parallel_planner.py --selftest
 python3 tools/parallel_planner.py examples/work-graph-demo
+python3 tools/parallel_executor.py --selftest
 python3 tools/storybook_query.py --selftest
+python3 tools/seam_scan.py --selftest
 python3 tools/ui_evidence_collect.py --selftest
 python3 tools/project_detector.py --selftest
 python3 tools/evidence_collector.py --selftest
@@ -134,6 +147,14 @@ python3 validation/validate_event_catalog.py --selftest
 python3 validation/validate_event_catalog.py examples/event-catalog-demo/events.yaml
 python3 validation/validate_security_posture.py --selftest
 python3 validation/validate_security_posture.py
+python3 validation/validate_supply_chain.py --selftest
+python3 validation/validate_supply_chain.py
+python3 validation/validate_memory_governance.py --selftest
+python3 validation/validate_memory_governance.py
+python3 validation/validate_key_lifecycle.py --selftest
+python3 validation/validate_key_lifecycle.py
+python3 tools/security_enforcement.py --selftest
+python3 tools/security_enforcement.py --key-preflight examples/key-lifecycle-demo/KLP-001.yaml
 python3 validation/validate_duties.py --selftest
 python3 validation/validate_duties.py
 python3 validation/validate_presets.py
