@@ -1529,13 +1529,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "note": "все применимые security-домены закрыты детерминированным evidence"}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and not strict_judge_qualified):
-            # v3.7.1 STRICT JUDGE (trust alignment): нет QUALIFIED security-судьи -> self-model писателя
-            # НЕ закрывает security needs_review. Автопасс невозможен -> pending_human (ApprovalRecord).
-            # Ровно заявленная граница: нет qualified security judge -> pending_human -> ready_for_pr=false.
+              and review and reviewer_proposer is not None and committed_sha and not strict_judge_qualified):
+            # v3.7.1 STRICT JUDGE (trust alignment): когда ревью ЗАПРОШЕНО, но судья — SELF-модель писателя
+            # (нет независимого), security needs_review НЕ закрывается self-моделью -> pending_human
+            # (ApprovalRecord). Точечно перехватывает reviewer-путь (writer не пишет+ревьюит+закрывает
+            # security одной моделью); режимы без ревью не трогаем (там security по прежнему пути).
             gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
-                                   "blockers": ["нет QUALIFIED security-судьи: needs_review домены не может "
-                                                "закрыть писательская модель (writer≠judge) -> человеко-одобрение "
+                                   "blockers": ["security needs_review не закрывает self-модель писателя "
+                                                "(нет независимого судьи) -> человеко-одобрение "
                                                 "(ApprovalRecord): " + ", ".join(security_pack_result["needs_review"])],
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "needs_review": security_pack_result["needs_review"]}}
@@ -2248,9 +2249,9 @@ def selftest():
 
         def _has(g, sub):
             return any(sub in b for b in (g.get("blockers") or []))
-        # strict=True -> идём в reviewer-ветку (writer≠judge на вызове): мой pending_human-guard НЕ берётся
-        expect("v3.7.1 A: qualified-путь НЕ берёт guard «нет QUALIFIED судьи» (идёт через reviewer)",
-               not _has(_sec_a, "нет QUALIFIED security-судьи"))
+        # strict=True (независимый судья) -> идём в reviewer-ветку: мой self-model pending_human-guard НЕ берётся
+        expect("v3.7.1 A: независимый судья НЕ берёт self-model guard (идёт через reviewer)",
+               not _has(_sec_a, "не закрывает self-модель"))
         _git(root, "checkout", "-q", orig_branch)
         it_strict = iter([{"op": "write", "path": "src/rl_b.py", "content": "def b():\n    return 1\n"}, {"done": True}])
         rep_strict = run_pipeline("api rate strict-off", sig_api, root, lambda c: next(it_strict),
@@ -2258,10 +2259,10 @@ def selftest():
                                   commit=True, isolate=True, install_deps=False,
                                   review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
         _sec_b = next((g for g in rep_strict["gates"].get("gate_results", []) if g.get("gate") == "security"), {})
-        # strict=False -> нет qualified судьи -> needs_review НЕ закрывается self-моделью -> pending_human
-        expect("v3.7.1 B: НЕТ qualified судьи -> security fail + блокер pending_human (self-model не закрывает)",
+        # strict=False (self-model) -> needs_review НЕ закрывается self-моделью -> pending_human
+        expect("v3.7.1 B: self-model -> security fail + блокер «не закрывает self-модель» (pending_human)",
                "security" in rep_strict["gates"]["unmet"] and _sec_b.get("status") == "fail"
-               and _has(_sec_b, "нет QUALIFIED security-судьи"))
+               and _has(_sec_b, "не закрывает self-модель"))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.106 #1 (fail-closed): secret_boundary требует человека даже при pass ревьюера

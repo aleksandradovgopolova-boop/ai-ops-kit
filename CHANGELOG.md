@@ -7,18 +7,20 @@
 Патч после ревью 3.7.0: закрыть 4 расхождения между release notes и рантаймом (без новой архитектуры и
 новых advisory-гейтов). БЕЗ version-bump до готовности всех 4 (тогда VERSION 3.7.0 -> 3.7.1).
 
-### Added (v3.7.1 #1 — strict judge enforcement: нет qualified судьи -> pending_human, self-model НЕ закрывает security)
-- Разрыв ревью: без qualified security-судьи runtime применял только implementation/code_review, а security
-  needs_review закрывался ОБЩИМ reviewer_proposer (та же модель, что писала код) -> расходилось с заявленным
-  «нет qualified security judge -> pending_human».
-- `execution_pipeline.run_pipeline` += `strict_judge_qualified` (default True — legacy/selftest не тронуты).
-  При False: security `overall=needs_review` НЕ закрывается self-моделью -> `security=fail` +
-  `pending_human` + human_handoff (ready_for_pr=false до ApprovalRecord). Строго ДО reviewer-ветки.
-- `ai_ops_run` вычисляет `strict_judge_qualified` из `model_router.plan_run().security_review.resolved`
-  (сейчас qualified судей нет -> в живом пути всегда строгий барьер). code_review self-model остаётся как
-  явно пониженный режим (записан), security/integration — нельзя.
-- selftest A/B: qualified-путь идёт через reviewer (guard не берётся); нет судьи -> security fail +
-  блокер «нет QUALIFIED security-судьи» (guard СРАБАТЫВАЕТ). ai_ops_run selftest PASS.
+### Added (v3.7.1 #1 — strict judge: SELF-модель писателя НЕ закрывает security needs_review -> pending_human)
+- Разрыв ревью: если отдельный reviewer не резолвился, runtime брал модель писателя (reviewer=writer), и
+  через тот же reviewer_proposer закрывались security needs_review -> одна модель писала+ревьюила+закрывала
+  security.
+- `execution_pipeline.run_pipeline` += `strict_judge_qualified` (default True — legacy/selftest целы). При
+  False (нет НЕЗАВИСИМОГО судьи): security `overall=needs_review` НЕ закрывается self-моделью -> `security=fail`
+  + `pending_human` + human_handoff (ready_for_pr=false до ApprovalRecord), строго ДО reviewer-ветки.
+- `ai_ops_run`: `strict_judge_qualified` = есть ли НЕЗАВИСИМЫЙ судья (явный reviewer_proposer ИЛИ router
+  резолвнул ДРУГУЮ модель на review, independent_by_model). Нет -> self-model -> security pending_human.
+  code_review self-model остаётся пониженным режимом; security/integration — нет. (Полное «qualified судья»
+  — Bench v2; здесь закрыт именно заявленный self-model-gap.)
+- selftest A/B: независимый судья -> reviewer-ветка (guard не берётся); self-model -> security fail + блокер
+  «не закрывает self-модель» (guard СРАБАТЫВАЕТ). ai_ops_run + workpackage_executor selftest целы (executor
+  передаёт distinct reviewer -> независим -> цепочка завершается).
 
 ### Added (v3.7.1 #4 — security preflight как ПОЛНЫЙ барьер + memory governance блокирует, не advisory)
 - Разрыв ревью: key_preflight результат сохранялся, но `ready` не проверялся отдельно -> продолжали
@@ -33,6 +35,24 @@
   подтверждения -> BLOCKED (файла нет); с --human-confirmed -> записано.
 - `verify_artifact`->installer НЕ подключён честно (у кита нет sha-pinned loader; pip/poetry держат хеши
   через lockfile) — зафиксировано как не-применимо, не имитируем.
+
+### Added (v3.7.1 #3 — hybrid exact-snapshot hardening + полный token budget)
+- Разрыв ревью: hybrid читал additions из текущего child_root при `require_snapshot=False` -> при грязном/
+  другом checkout мог подать контент не с base_sha; token budget не учитывал добавленный hybrid-текст.
+- `ai_ops_run` hybrid-feed: `require_snapshot=True` -> content читается ТОЛЬКО если child РОВНО на base_sha
+  и дерево чисто; иначе view invalid -> hybrid degrade в v1-only (не подаём несоответствующий контент).
+  Полный token budget: весь prompt (v1 + additions) считается против hard-window; не влезающие additions
+  ДРОПАЮТСЯ (dropped_over_budget), не раздувая окно. rep.context_hybrid += fed_additions/dropped_over_budget/
+  prompt_tokens_est/exact_snapshot. Проверено: на чистом base-child mode=hybrid сохраняется.
+
+### Changed (v3.7.1 #2 — честный статус concurrency: multi-package fan-in, НЕ настоящий parallel)
+- Разрыв ревью: `parallel-2` опережал реализацию — `max_parallel=1`, серийно, один checkout с reset --hard/
+  clean -fd (небезопасно в рабочем checkout).
+- `parallel_live` переименован по сути в «LIVE multi-package execution с governed fan-in»; запись несёт
+  честные поля `execution_concurrency: serial`, `parallel_safe: true`, `fan_in: live`, `concurrency_note`.
+- `preflight_disposable`: runner ЗАПРЕЩЁН на грязном checkout (уничтожил бы незакоммиченное) -> нужен
+  disposable/чистый checkout; настоящая конкурентность = отдельные клоны на пакет. selftest: чистый->ok,
+  грязный->отказ.
 
 ## [3.7.0] — 2026-07-28 — Runtime Activation: провайдер-независимость как ПОВЕДЕНИЕ продукта
 

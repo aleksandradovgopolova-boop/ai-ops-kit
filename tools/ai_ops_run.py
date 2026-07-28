@@ -350,9 +350,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         except Exception as _e:  # noqa: BLE001
             _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                  "mode": "explicit-override" if model else "router"}
-        # v3.7.1 strict judge: есть ли QUALIFIED security-судья? Нет -> security needs_review идёт в
-        # pending_human (writer-модель не закрывает security). Из plan_run (по умолчанию нет qualified судей).
-        _sec_qualified = bool(((_model_resolution.get("plan") or {}).get("security_review") or {}).get("resolved"))
+        # v3.7.1 strict judge: security НЕ закрывается SELF-моделью писателя. Разрешаем закрытие
+        # security needs_review ТОЛЬКО НЕЗАВИСИМЫМ судьёй: явно переданный reviewer_proposer (независим по
+        # построению) ИЛИ router резолвнул ДРУГУЮ модель на review (independent_by_model). Иначе
+        # reviewer=writer (self-model) -> security needs_review -> pending_human. (Полное требование
+        # «qualified судья» — Bench v2; здесь закрыт заявленный gap: одна модель не пишет+ревьюит+закрывает security.)
+        _sec_qualified = bool(reviewer_proposer is not None
+                              or (_model_resolution.get("reviewer") or {}).get("independent_by_model"))
 
         # v3.7.1 (#4) РЕАЛЬНЫЙ security-барьер: key preflight не пройден (ключ/ротация) -> блок ПРОГОНА
         # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
@@ -529,24 +533,40 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
                 _budget = _ce.budget_tokens_from(_bud)
                 _base_sha = base_binding.get("base_sha")
+                # v3.7.1 (#3) EXACT-SNAPSHOT: require_snapshot=True -> content читается ТОЛЬКО если child
+                # РОВНО на base_sha и дерево чисто; иначе view invalid -> hybrid v1-only (не подаём
+                # возможно-несоответствующий base_sha контент). Ровно exact-SHA дисциплина.
                 _hyb = _chyb.build_hybrid_from_child(
                     child_root, task_text, "executor", sha=_base_sha, afp=_afp, dcp=_dcp,
                     v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
-                    budget=_budget, require_snapshot=False)
+                    budget=_budget, require_snapshot=True)
                 _adds = _hyb.get("v2_additions") or []
                 # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
                 _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
+                _fed, _dropped = [], []
                 if _hyb.get("mode") == "hybrid" and _adds:
+                    # v3.7.1 (#3) ПОЛНЫЙ token budget: считаем весь prompt (v1 payload + additions) против
+                    # hard-window; additions, не влезающие в бюджет, ДРОПАЕМ (не раздуваем hard-window).
+                    _base_txt = (payload or {}).get("text") or ""
+                    _used = len(_base_txt) // 4
+                    _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
                     _extra = []
                     for _f in _adds:
                         _p = child_root / _f
-                        if _p.is_file():
-                            _extra.append(f"### {_f}\n{_p.read_text(encoding='utf-8', errors='replace')[:8000]}")
+                        if not _p.is_file():
+                            continue
+                        _c = _p.read_text(encoding="utf-8", errors="replace")[:8000]
+                        _t = len(_c) // 4
+                        if _used + _t > _hard:
+                            _dropped.append(_f); continue
+                        _used += _t; _fed.append(_f); _extra.append(f"### {_f}\n{_c}")
                     if _extra:
-                        _hybrid_prelude = ((payload or {}).get("text") or "") + \
-                            "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
-                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"), "v2_additions": _adds,
-                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _adds),
+                        _hybrid_prelude = _base_txt + "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
+                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"),
+                               "v2_additions": _adds, "fed_additions": _fed, "dropped_over_budget": _dropped,
+                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _fed),
+                               "prompt_tokens_est": (len(_hybrid_prelude or "") // 4), "hard_window": (_budget or 20000),
+                               "exact_snapshot": True,
                                "mandatory_references": _hyb.get("mandatory_references"),
                                "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
             except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
