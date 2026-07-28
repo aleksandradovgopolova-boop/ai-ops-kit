@@ -273,6 +273,20 @@ BudgetContract / cost_account) с ролями рантайма — без па�
   поведение продукта. Открытый гап: нет отдельной qualified code_review-модели -> reviewer=writer (честно
   записано); закроется, когда code_review будет квалифицирован (Bench v2). CI +1, AGENTS +1.
 
+### Added (v3.7.13 — Security enforcement wiring: primitives -> рантайм)
+- Ревью владельца: security-примитивы (verify_artifact/enforce_memory/key_preflight) работали, но не
+  подключены. Подключено безопасно:
+- `tools/security_enforcement.py` — `key_preflight` += TTL-ротация: `next_rotation_at` vs `now` (просрочка
+  -> block при critical); issued_at/rotated_at/next_rotation_at surfaced. selftest +3.
+- `tools/ai_ops_run.py` — в router-пути ПЕРЕД живым provider-вызовом строится KLP из резолвленных
+  провайдеров и запускается `key_preflight(critical=True)` -> `model_resolution.key_preflight` (честный
+  block вместо HTTP 401 позже). Только новый router-путь (fail-safe, legacy не тронут).
+- `tools/merge_memory.py` — `record()` прогоняет self-ingested авто-запись через `enforce_memory_entry`
+  (MemoryGovernancePolicy) и СЮРФЕЙСИТ вердикт в самой записи (ADVISORY: по анти-самоотравлению
+  self-ingested без human_confirmed не проходит hard -> graduation-цель; куратор подтверждает).
+- НЕ навязано: `verify_artifact`->pip (у кита нет sha-pinned загрузчика; pip/poetry держат хеши через
+  lockfile — искусственная связка была бы нечестной). ai_ops_run selftest PASS, parity 175/175.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

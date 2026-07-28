@@ -54,8 +54,11 @@ def enforce_memory_entry(entry: dict, policy_meta=None):
     return (not errs), errs
 
 
-def key_preflight(klp: dict, env: dict, critical=False):
-    """Preflight ключей: наличие в env объявленных ключей; critical -> block на отсутствии. -> отчёт."""
+def key_preflight(klp: dict, env: dict, critical=False, now=None):
+    """Preflight ключей ПЕРЕД provider-вызовом: (1) наличие в env объявленных ключей; critical -> block на
+    отсутствии; (2) v3.7.13 TTL-ротация: если у ключа задан next_rotation_at и now > next_rotation_at —
+    ротация просрочена (block при critical, иначе warning). now — ISO-дата 'YYYY-MM-DD' (детерминизм в
+    тестах); None -> ротация не проверяется (только наличие). issued_at/rotated_at surfaced в checked."""
     keys = (klp or {}).get("keys") or []
     warnings, blocks, checked = [], [], []
     for k in keys:
@@ -63,13 +66,18 @@ def key_preflight(klp: dict, env: dict, critical=False):
             continue
         name, ref, ttl = k.get("name"), k.get("env_ref"), k.get("ttl_days")
         present = bool(ref and env.get(ref))
-        checked.append({"name": name, "env_ref": ref, "present": present, "ttl_days": ttl})
+        nxt = k.get("next_rotation_at")
+        rec = {"name": name, "env_ref": ref, "present": present, "ttl_days": ttl,
+               "issued_at": k.get("issued_at"), "rotated_at": k.get("rotated_at"), "next_rotation_at": nxt}
+        checked.append(rec)
         if not present:
-            msg = f"ключ '{name}' (env {ref}) отсутствует в окружении"
+            (blocks if critical else warnings).append(f"ключ '{name}' (env {ref}) отсутствует в окружении")
+        elif now and isinstance(nxt, str) and nxt and now > nxt:
+            msg = f"ключ '{name}': ротация просрочена (next_rotation_at {nxt} < now {now})"
             (blocks if critical else warnings).append(msg)
     return {"ready": not blocks, "critical": critical, "checked": checked,
             "warnings": warnings, "blocks": blocks,
-            "ttl_note": "TTL-истечение требует rotation-timestamp (нет в KLP) — enforced наличие + surfaced ttl_days"}
+            "ttl_note": "наличие + (при now) просрочка next_rotation_at; issued_at/rotated_at surfaced"}
 
 
 def selftest():
@@ -114,6 +122,13 @@ def selftest():
     expect("key_preflight critical: отсутствие ключа -> BLOCK, ready=False", repc["ready"] is False and repc["blocks"])
     repok = key_preflight(klp, {"AKEY": "x", "BKEY": "y"}, critical=True)
     expect("key_preflight critical: все ключи есть -> ready=True", repok["ready"] is True)
+    # v3.7.13 TTL rotation timestamps
+    klp_ttl = {"keys": [{"name": "K", "env_ref": "AKEY", "next_rotation_at": "2026-01-01"}]}
+    r_over = key_preflight(klp_ttl, {"AKEY": "x"}, critical=True, now="2026-07-28")
+    expect("key_preflight TTL: ротация просрочена + critical -> BLOCK",
+           r_over["ready"] is False and any("ротация просрочена" in b for b in r_over["blocks"]))
+    expect("key_preflight TTL: до срока -> ready", key_preflight(klp_ttl, {"AKEY": "x"}, critical=True, now="2025-12-01")["ready"] is True)
+    expect("key_preflight TTL: без now ротация не проверяется", key_preflight(klp_ttl, {"AKEY": "x"}, critical=True)["ready"] is True)
 
     # интеграция с реальными demo-политиками
     kd = PKG / "examples" / "key-lifecycle-demo" / "KLP-001.yaml"

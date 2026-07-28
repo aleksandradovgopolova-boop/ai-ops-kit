@@ -60,6 +60,22 @@ def record(memory_dir, wid, summary, areas=None, decisions=None, lessons=None,
     if les:
         lines += ["## Уроки", ""] + [f"{i}. {l}" for i, l in enumerate(les, 1)] + [""]
 
+    # v3.7.13 governance (advisory): merge-memory — self-ingested авто-запись. Прогоняем через
+    # MemoryGovernancePolicy и СЮРФЕЙСИМ вердикт (не блокируем: по анти-самоотравлению self-ingested без
+    # human_confirmed не проходит hard -> graduation-цель; пока фиксируем предупреждение в самой записи).
+    try:
+        import security_enforcement as _se
+        _entry = {"id": str(wid), "provenance": f"merge WorkItem {wid}", "self_ingested": True,
+                  "human_confirmed": False, "expiry": "изменение затронутых зон следующей задачей"}
+        _ok, _viol = _se.enforce_memory_entry(_entry)
+        if not _ok:
+            lines += ["## Governance (advisory)", "",
+                      "> Запись self-ingested и НЕ подтверждена человеком — по MemoryGovernancePolicy требует "
+                      "human_confirmed (анти-самоотравление). Куратор памяти должен подтвердить.", ""]
+            lines += [f"- {v}" for v in _viol] + [""]
+    except Exception:  # noqa: BLE001
+        pass
+
     path.write_text("\n".join(lines), encoding="utf-8")
     print(f"MERGE-MEMORY: записано {path}")
     return 0

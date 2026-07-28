@@ -323,6 +323,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
                                                          "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
                         _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
+                    # v3.7.13 key preflight ПЕРЕД живым provider-вызовом (security_enforcement в рантайме):
+                    # резолвленные ключи обязаны быть в env; иначе честный block (а не HTTP 401 позже).
+                    try:
+                        import os as _os
+                        import security_enforcement as _se
+                        _kv = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
+                        if (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
+                            _kv.append({"name": rev.get("provider"), "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
+                        _model_resolution["key_preflight"] = _se.key_preflight({"keys": _kv}, dict(_os.environ), critical=True)
+                    except Exception:  # noqa: BLE001
+                        pass
                 else:
                     _model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
         except Exception as _e:  # noqa: BLE001
