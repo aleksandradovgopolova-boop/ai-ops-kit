@@ -2,10 +2,26 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.7.0-rc — Runtime Activation: Context Promotion trust-контракты (перед hybrid)
+## [3.7.0] — 2026-07-28 — Runtime Activation: провайдер-независимость как ПОВЕДЕНИЕ продукта
 
-Начало фазы v3.7 (Runtime Activation). Первый шаг — НЕ включать hybrid, а закрыть trust-контракты
-готовности Context Engine v2 к promotion (офлайн, проверяемо). БЕЗ version-bump (rc).
+Фаза v3.7 ЗАКРЫТА. Провайдер-независимость перестала быть только реестром/резолвером и стала живым
+поведением рантайма. Критерии стабильности (все выполнены и ДОКАЗАНЫ живьём, БЕЗ Anthropic):
+- model router реально управляет рантаймом (без `--model` роль резолвится и диспатчится на endpoint
+  вендора) — v3.7.12/15, живой smoke;
+- цена считается в ДЕНЬГАХ, не токенах (money-mode) — v3.7.10/15; deepseek-v4-flash $0.0115 < qwen $0.072
+  < kimi $0.467; в токенах ответ был бы другим;
+- ≥1 дешёвая non-Anthropic модель допущена к implementation (3 вендора conditional, 0 false-green/18);
+- hybrid РЕАЛЬНО fed_to_model — v3.7.16 (живой прогон, mode=hybrid, additions поданы);
+- parallel-2 открыл ОДИН реальный PR с integration-SHA-инвариантом — v3.7.17 (dogfood-v368-py#2);
+- security preflight реально выполняется перед provider-вызовом — v3.7.13 (живой key_preflight.ready);
+- 0 false-green во всех живых прогонах; package-evidence↔package-SHA, aggregate↔integration-SHA.
+- Плюс 3 вывода «дефектов одной сессии» (scenario-evidence, surface_wiring, on_repeat) — advisory-гейты.
+
+ЧЕСТНАЯ ГРАНИЦА (не скрываю): строгих АВТОМАТИЧЕСКИХ судей (security/integration) нет — qualified-судья
+требует adversarial oracle-корпуса (Bench v2, post-3.7). Пока judge-роли идут в HUMAN-FALLBACK
+(router resolved=false -> fail-closed -> pending_human). «Нет vendor lock-in» выполнено по арму
+human-fallback: writer-роли не зависят ни от одного вендора (3 взаимозаменяемых), судьи -> человек.
+Полная АВТОМАТИЧЕСКАЯ независимость судей — за Bench v2.
 
 ### Added (v3.7.0 — context_promotion_gate: 5 инвариантов доверия перед hybrid)
 - `tools/context_promotion_gate.py` — gate над результатом `context_engine.build_context`, держит 5
