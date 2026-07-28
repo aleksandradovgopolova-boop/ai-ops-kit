@@ -156,18 +156,17 @@ def selftest():
 
     roles_cfg, quals, models = _load()
 
-    # измеренный реестр (N6, 2026-07-28): три conditional вендора. DeepSeek V4 без тарифа (image-only)
-    # -> money-mode ВЫКЛ, честный tokens-fallback. По токенам (delivered basis): qwen 62.8k < deepseek
-    # 79.5k < kimi 150.7k -> preferred qwen, fallback deepseek. Как только придёт цена DeepSeek -> money-mode.
+    # измеренный реестр (N6, 2026-07-28): три conditional вендора, ВСЕ priced -> MONEY-MODE. По деньгам/
+    # изменение: deepseek-v4-flash $0.0115 < qwen $0.072 < kimi $0.467 -> preferred deepseek, fallback qwen.
     r_impl = resolve("implementation", roles_cfg, quals, models)
     expect("implementation -> resolved (writer допускает conditional)",
            r_impl["resolved"] and r_impl.get("model_id") and r_impl["reason"].startswith("cheapest-eligible"))
-    expect("implementation cost_basis=tokens-fallback + warning (deepseek без тарифа)",
-           r_impl["cost_basis"] == "tokens-fallback" and "cost_warning" in r_impl)
-    expect("implementation cheapest по токенам -> qwen3-coder-plus (62.8k < deepseek 79.5k)",
-           r_impl["model_id"] == "qwen3-coder-plus" and r_impl["provider"] == "qwen")
-    expect("implementation fallback -> deepseek-chat",
-           (r_impl.get("fallback") or {}).get("model_id") == "deepseek-chat")
+    expect("implementation cost_basis=money (все кандидаты с ценой) + без warning",
+           r_impl["cost_basis"] == "money" and "cost_warning" not in r_impl)
+    expect("implementation cheapest по ДЕНЬГАМ -> deepseek-v4-flash ($0.0115)",
+           r_impl["model_id"] == "deepseek-v4-flash" and r_impl["provider"] == "deepseek")
+    expect("implementation fallback -> qwen3-coder-plus (2-й по деньгам, $0.072)",
+           (r_impl.get("fallback") or {}).get("model_id") == "qwen3-coder-plus")
 
     # money-mode: у ВСЕХ кандидатов есть деньги -> сортировка по ДЕНЬГАМ, не токенам (доказ. тезиса)
     ms2 = {"a": {"classes": ["balanced"], "cost_class": "low"}, "b": {"classes": ["balanced"], "cost_class": "low"}}

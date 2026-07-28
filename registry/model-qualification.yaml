@@ -14,31 +14,31 @@ registry_type: model-qualification
 # token-прокси, что при разнице тарифов врёт. Теперь `economics` РАЗДЕЛЯЕТ измеренные токены и
 # ДЕКЛАРИРУЕМЫЕ цены -> вычисляемый total_cost_per_verified_change (деньги) — основной критерий роутера.
 # Токены — на базе delivered_verified (на УСПЕШНОЕ изменение; прежние all-impl_ok числа были историческими
-# и завышали qwen из-за false_fail t5). Цены Kimi/Qwen — с официальных страниц (source+snapshot). DeepSeek:
-# цена V4 опубликована ТОЛЬКО картинкой (v4-price-en.png) — не извлекается, оставлена null +
-# verification_required (роутер по роли с null-ценой честно откатывается на tokens-fallback). Роутер
-# допускает conditional к writer-ролям, строгих судей (security/integration) — нет (нет qualified).
+# и завышали qwen из-за false_fail t5). Цены Kimi/Qwen — с официальных страниц; DeepSeek V4 Flash — от
+# владельца ($0.14/$0.28 /1M cache-miss, 2026-07-28). ВСЕ три implementation-кандидата priced -> роутер в
+# MONEY-MODE. По деньгам/изменение: deepseek $0.0115 < qwen $0.072 < kimi $0.467 -> preferred
+# deepseek-v4-flash, fallback qwen. Роутер допускает conditional к writer-ролям, строгих судей
+# (security/integration) — нет (нет qualified).
 qualifications:
-  - model_id: deepseek-chat
+  - model_id: deepseek-v4-flash
     provider: deepseek
-    revision: deepseek-chat
+    revision: deepseek-v4-flash
     role: implementation
     corpus_version: live-qual-2026-07-28-N6
-    # ВНИМАНИЕ (portfolio truth): эндпоинт api.deepseek.com теперь рекламирует ТОЛЬКО deepseek-v4-flash/
-    # deepseek-v4-pro; 'deepseek-chat' принимается, но, вероятно, алиас на V4 -> точная ревизия под вопросом,
-    # переподтвердить в Bench v2 (v3.7.11).
+    # PORTFOLIO TRUTH: метрики сняты через alias 'deepseek-chat' (эндпоинт теперь отдаёт только v4-flash/
+    # v4-pro -> chat алиасится на v4-flash). Точную ревизию переподтвердить в Bench v2. Цена — владелец
+    # (DeepSeek V4 Flash cache-miss; cache-hit $0.0028/1M НЕ база router).
     metrics: {false_green: 0, schema_valid_rate: 1.0, success_rate: 0.667, latency_s_p50: 95.3}
     economics:
       input_tokens_per_change: 77162
       output_tokens_per_change: 2364
       tokens_per_verified_change: 79526
-      input_price_per_mtok: null
-      output_price_per_mtok: null
-      currency: null
-      price_snapshot_at: null
-      price_source: null
-      total_cost_per_verified_change: null    # цена V4 image-only -> ждём владельца; пока tokens-fallback
-      verification_required: true
+      input_price_per_mtok: 0.14
+      output_price_per_mtok: 0.28
+      currency: USD
+      price_snapshot_at: "2026-07-28"
+      price_source: "owner-provided (DeepSeek V4 Flash, cache-miss)"
+      total_cost_per_verified_change: 0.0115   # 0.077162*0.14 + 0.002364*0.28 = 0.01146
     status: conditional
     qualified_at: "2026-07-28"
   - model_id: kimi-k2.7-code-highspeed

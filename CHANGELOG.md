@@ -287,6 +287,18 @@ BudgetContract / cost_account) с ролями рантайма — без па�
 - НЕ навязано: `verify_artifact`->pip (у кита нет sha-pinned загрузчика; pip/poetry держат хеши через
   lockfile — искусственная связка была бы нечестной). ai_ops_run selftest PASS, parity 175/175.
 
+### Added (v3.7.15 — DeepSeek V4 Flash tariff -> роутер implementation в MONEY-MODE)
+- Владелец дал тариф DeepSeek V4 Flash: $0.14/$0.28 /1M (cache-miss; cache-hit $0.0028 НЕ база router).
+- `model-qualification.yaml` — implementation-запись deepseek переименована `deepseek-chat`->`deepseek-v4-
+  flash` (portfolio truth: эндпоинт отдаёт v4-flash/pro; метрики сняты через alias deepseek-chat, ревизию
+  переподтвердить в Bench v2); economics цены заполнены -> total_cost $0.0115/изменение.
+- ВСЕ три implementation-кандидата теперь priced -> роутер в MONEY-MODE. По деньгам: deepseek-v4-flash
+  $0.0115 < qwen3-coder-plus $0.072 < kimi-highspeed $0.467 -> preferred **deepseek-v4-flash**, fallback
+  qwen. Живой резолв: cost_basis=money, estimated_cost $0.0115, без cost_warning. (В токенах qwen был бы
+  дешевле — деньги дали ДРУГОЙ ответ, ровно тезис.)
+- `models.yaml` — deepseek-v4-flash: снят verification_required (измерена/conditional), цена в note.
+  router selftest обновлён (money-mode). parity 175/175.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

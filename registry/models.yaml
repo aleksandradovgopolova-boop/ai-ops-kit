@@ -201,10 +201,9 @@ models:
     deployment_mode: external
     confidentiality_class: external-cloud
     classes: [balanced, fast]
-    capabilities: {tool_calling: {status: declared, value: true}, structured_output: {status: unstable, value: partial}, streaming: {status: declared, value: true}}
+    capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
     cost_class: low
-    verification_required: true   # доступна у эндпоинта; НЕ квалифицирована (Bench v2 v3.7.11)
-    note: "реальная ревизия эндпоинта (2026-07); дешёвый быстрый исполнитель — кандидат в quick/standard implementation"
+    note: "implementation conditional (N6 via deepseek-chat alias, 4/6 верно, 0 false-green). Цена $0.14/$0.28 /1M cache-miss -> ~$0.0115/изменение = САМЫЙ дешёвый по ДЕНЬГАМ -> router preferred implementation"
     last_documented_at: "2026-07-28"
   - id: deepseek-v4-pro
     provider: deepseek
