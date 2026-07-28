@@ -323,38 +323,46 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
                                                          "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
                         _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
-                    # v3.7.13/v3.7.1(#4) key preflight — РЕАЛЬНЫЙ БАРЬЕР перед живым provider-вызовом:
-                    # ключи в env + (при KLP) TTL-ротация (now); not ready -> блок прогона (не HTTP 401 позже).
+                    # v3.7.13/v3.7.1/v3.7.2 key preflight — БАРЬЕР перед живым вызовом, FAIL-CLOSED:
+                    # ЛЮБАЯ ошибка чтения KLP/preflight -> blocked-preflight (НЕ молчаливый pass). KLP #3
+                    # ПРОЕЦИРУЕТСЯ на реально используемые провайдеры (impl + независимый reviewer); ключи
+                    # неиспользуемых провайдеров не относятся к прогону.
+                    import os as _os
+                    import datetime as _dt
                     try:
-                        import os as _os
-                        import datetime as _dt
                         import security_enforcement as _se
-                        _kv = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
+                        _used = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
                         if (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
-                            _kv.append({"name": rev.get("provider"), "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
-                        # реальный KLP child (TTL-ротация), если объявлен: .ai/policies/key-lifecycle.yaml
+                            _used.append({"name": rev.get("provider"),
+                                          "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
                         _klp_p = child_root / ".ai" / "policies" / "key-lifecycle.yaml"
+                        _klp_keys = _used
                         if _klp_p.is_file():
-                            _klp = yaml.safe_load(_klp_p.read_text(encoding="utf-8")) or {"keys": _kv}
-                        else:
-                            _klp = {"keys": _kv}
-                        _kpf = _se.key_preflight(_klp, dict(_os.environ), critical=True,
+                            _klp_all = yaml.safe_load(_klp_p.read_text(encoding="utf-8")) or {}
+                            _by_env = {k.get("env_ref"): k for k in (_klp_all.get("keys") or []) if isinstance(k, dict)}
+                            _klp_keys = []
+                            for _u in _used:  # только записи выбранных провайдеров + их TTL из KLP
+                                _ent = _by_env.get(_u["env_ref"]) or {}
+                                _klp_keys.append({**_u, **{_k: _ent[_k] for _k in
+                                                  ("ttl_days", "issued_at", "rotated_at", "next_rotation_at") if _k in _ent}})
+                        _kpf = _se.key_preflight({"keys": _klp_keys}, dict(_os.environ), critical=True,
                                                  now=_dt.date.today().isoformat())
                         _model_resolution["key_preflight"] = _kpf
                         if not _kpf.get("ready"):
-                            _model_resolution["preflight_blocked"] = True   # барьер: строим блок-отчёт ниже
-                    except Exception:  # noqa: BLE001
-                        pass
+                            _model_resolution["preflight_blocked"] = True
+                    except Exception as _pe_err:  # noqa: BLE001 — FAIL-CLOSED: ошибка барьера = блок, не pass
+                        _model_resolution["key_preflight"] = {"ready": False, "error": f"{type(_pe_err).__name__}: {_pe_err}"[:200]}
+                        _model_resolution["preflight_blocked"] = True
                 else:
                     _model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
         except Exception as _e:  # noqa: BLE001
             _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                  "mode": "explicit-override" if model else "router"}
-        # v3.7.1 strict judge: security НЕ закрывается SELF-моделью писателя. Разрешаем закрытие
-        # security needs_review ТОЛЬКО НЕЗАВИСИМЫМ судьёй: явно переданный reviewer_proposer (независим по
-        # построению) ИЛИ router резолвнул ДРУГУЮ модель на review (independent_by_model). Иначе
-        # reviewer=writer (self-model) -> security needs_review -> pending_human. (Полное требование
-        # «qualified судья» — Bench v2; здесь закрыт заявленный gap: одна модель не пишет+ревьюит+закрывает security.)
+        # v3.7.1 strict judge: security needs_review не закрывает SELF-модель писателя. Разрешаем закрытие
+        # НЕЗАВИСИМЫМ судьёй (явный reviewer_proposer / router-резолв другой модели). ПРИМЕЧАНИЕ (ревью
+        # 3.7.1): полное «только КВАЛИФИЦИРОВАННЫЙ для security судья либо человек» (#5) — сознательное
+        # product-wide изменение (ломает автономный security-путь executor'а до Bench v2) -> за отдельным
+        # решением владельца + разделением reviewer/security_reviewer/integration_judge proposer.
         _sec_qualified = bool(reviewer_proposer is not None
                               or (_model_resolution.get("reviewer") or {}).get("independent_by_model"))
 
