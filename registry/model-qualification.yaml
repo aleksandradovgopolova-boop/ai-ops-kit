@@ -4,47 +4,45 @@ registry_type: model-qualification
 # ревизии (не class×role, не ручное мнение). safety-first: false_green>0 -> not_qualified. Статус ДОЛЖЕН
 # быть согласован с метриками (validate_model_qualification это принуждает). Пороги: qualified требует
 # false_green==0 И success_rate>=0.8 И schema_valid_rate>=0.9; conditional >=0.5; experimental >0.
-# Значения ниже — из живой квалификации v3.6.8 (moonshot/kimi). Сильный судья пока НЕ прогонялся ->
-# для security_review/integration_judge НЕТ qualified-модели (роутер честно блокирует, а не выдумывает).
+#
+# ИЗМЕРЕНО в живой кросс-вендорной квалификации 2026-07-28 (N=6 фиксированный корпус, объективная
+# приёмка по точному контракту задачи; DeepSeek + Kimi + Qwen = 18 прогонов, БЕЗ Anthropic). Метрики:
+#   success_rate = доля КОРРЕКТНОЙ реализации (приёмка проходит на закоммиченном коде);
+#   false_green  = ready_for_pr при неверном коде — 0 у ВСЕХ ТРЁХ во всех 18 прогонах (safety держится);
+#   schema_valid_rate = доля прогонов, где structured-output автора валиден до применённого коммита;
+#   cost_per_change = токены (тыс., input+output) на один успешно доставленный change.
+# Ни один вендор НЕ дотянул до qualified на N=6 (DeepSeek — success 0.667; Kimi/Qwen — schema 0.833).
+# Все conditional -> роутер допускает их к РОЛИ ПИСАТЕЛЯ (implementation/code_review), но НЕ к строгим
+# судьям (security_review/integration_judge) — там нужен qualified, которого пока нет (роутер честно
+# блокирует). Неизмеренные seed-записи судейских ролей УДАЛЕНЫ: реестр держит только измеренное.
 qualifications:
-  - model_id: kimi-k2.7-code-highspeed
-    provider: kimi
-    revision: kimi-k2.7-code-highspeed
+  - model_id: deepseek-chat
+    provider: deepseek
+    revision: deepseek-chat
     role: implementation
-    corpus_version: live-v3.6.8
-    metrics: {false_green: 0, schema_valid_rate: 0.95, success_rate: 0.85, latency_s_p50: 30, cost_per_change: 0.9}
-    status: qualified
-    qualified_at: "2026-07-27"
-  - model_id: kimi-k2.7-code-highspeed
-    provider: kimi
-    revision: kimi-k2.7-code-highspeed
-    role: code_review
-    corpus_version: live-v3.6.8
-    metrics: {false_green: 0, schema_valid_rate: 0.8, success_rate: 0.6, latency_s_p50: 25, cost_per_change: 0.5}
+    corpus_version: live-qual-2026-07-28-N6
+    # 4/6 верно (t1/t2/t4/t6), 0 false-green; ~$0.023 и ~80k ток/успех — самый дешёвый исполнитель.
+    metrics: {false_green: 0, schema_valid_rate: 1.0, success_rate: 0.667, latency_s_p50: 95.3, cost_per_change: 79.5}
     status: conditional
-    qualified_at: "2026-07-27"
+    qualified_at: "2026-07-28"
   - model_id: kimi-k2.7-code-highspeed
     provider: kimi
     revision: kimi-k2.7-code-highspeed
-    role: security_review
-    corpus_version: live-v3.6.8
-    # success 0.2 -> derived 'experimental' (есть сигнал, но не доказано); НЕ qualified -> роутер не берёт
-    metrics: {false_green: 0, schema_valid_rate: 0.4, success_rate: 0.2, latency_s_p50: 30, cost_per_change: 1.5}
-    status: experimental
-    qualified_at: "2026-07-27"
-  - model_id: kimi-k3
-    provider: kimi
-    revision: kimi-k3
     role: implementation
-    corpus_version: live-v3.6.8
-    metrics: {false_green: 0, schema_valid_rate: 0.95, success_rate: 0.85, latency_s_p50: 90, cost_per_change: 1.4}
-    status: qualified
-    qualified_at: "2026-07-27"
-  - model_id: kimi-k3
-    provider: kimi
-    revision: kimi-k3
-    role: security_review
-    corpus_version: live-v3.6.8
-    metrics: {false_green: 0, schema_valid_rate: 0.5, success_rate: 0.3, latency_s_p50: 120, cost_per_change: 2.0}
-    status: experimental
-    qualified_at: "2026-07-27"
+    corpus_version: live-qual-2026-07-28-N6
+    # 6/6 верно (вкл. Decimal Money, который DeepSeek не смог), 0 false-green; дороже (~139k ток/успех).
+    # 1 false_fail (t6: верный код заблокирован консервативным ревью). status держит schema 0.833 (<0.9).
+    metrics: {false_green: 0, schema_valid_rate: 0.833, success_rate: 1.0, latency_s_p50: 160.3, cost_per_change: 139.2}
+    status: conditional
+    qualified_at: "2026-07-28"
+  - model_id: qwen3-coder-plus
+    provider: qwen
+    revision: qwen3-coder-plus
+    role: implementation
+    corpus_version: live-qual-2026-07-28-N6
+    # 5/6 верно, 0 false-green; быстрее kimi (~94s p50), ~109k ток/успех. 1 false_fail (t5 Money: верный
+    # Decimal-код заблокирован ревью), 1 не смог (t6 convert). success 0.833>=0.8 -> в qualified упирается
+    # ТОЛЬКО в schema 0.833 (<0.9): при чуть большем N мог бы стать qualified первым из трёх.
+    metrics: {false_green: 0, schema_valid_rate: 0.833, success_rate: 0.833, latency_s_p50: 93.7, cost_per_change: 108.8}
+    status: conditional
+    qualified_at: "2026-07-28"

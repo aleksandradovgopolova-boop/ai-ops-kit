@@ -162,6 +162,28 @@ models:
     note: "live v3.6.8: reasoning-флагман, медленный (нужен поднятый timeout); implementation зелёный вживую"
     last_documented_at: "2026-07-27"
 
+  # --- DeepSeek (openai-compatible), реально прогнан в живой квалификации ---
+  - id: deepseek-chat
+    provider: deepseek
+    revision: deepseek-chat
+    classes: [balanced, fast]
+    context_window: {status: documented, value: 64000}
+    capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
+    cost_class: low
+    note: "live-qual N6: implementation conditional (4/6 верно, 0 false-green, ~$0.023/успех, ~80k ток/успех); дешёвый исполнитель. Decimal-класс/coupon с requirements-гейтом не осилил -> эскалация на сильнее"
+    last_documented_at: "2026-07-28"
+
+  # --- Qwen (Alibaba DashScope, openai-compatible), прогнан в живой квалификации ---
+  - id: qwen3-coder-plus
+    provider: qwen
+    revision: qwen3-coder-plus
+    classes: [balanced, high-reasoning]
+    context_window: {status: documented, value: 128000}
+    capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
+    cost_class: medium
+    note: "DashScope compatible-mode (dashscope-intl .../compatible-mode/v1); кодовая модель. Статус допуска — из живой квалификации (см. model-qualification)"
+    last_documented_at: "2026-07-28"
+
 # Правила: routing policy ссылается на model_classes; разрешение class->model
 # делает adapter на основании доступности провайдера и capability self-test.
 resolution_policy:

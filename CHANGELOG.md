@@ -164,6 +164,24 @@ BudgetContract / cost_account) с ролями рантайма — без па�
   (read_paths ∪ included) = ∅` (denied путь не прочитан и не в payload), а не только «не в payload».
   Селфтест context_engine: denied-по-пути secret.py pre-filtered (не в read_paths). parity 164/164.
 
+### Added (v3.7.6 — измеренная кросс-вендорная квалификация: провайдер-независимость ДОКАЗАНА живьём)
+- Живая квалификация 2026-07-28 на ТРЁХ вендорах (DeepSeek + Kimi + Qwen, БЕЗ Anthropic), фиксированный
+  корпус N=6 с ОБЪЕКТИВНОЙ приёмкой по точному контракту задачи = 18 прогонов. Результат: **false_green=0
+  во всех 18** (safety-инвариант держится независимо от вендора); у каждого вендора СВОИ провалы, но ни
+  одного фейкового зелёного. success/schema/latency/cost измерены, не seed.
+- `registry/models.yaml` — добавлены конкретные `deepseek-chat` (provider deepseek, openai-compatible) и
+  `qwen3-coder-plus` (provider qwen, DashScope compatible-mode) с честными capability (structured_output
+  unstable) и реальными классами.
+- `registry/model-qualification.yaml` — ПЕРЕПИСАН на ИЗМЕРЕННОЕ: 3 записи implementation (deepseek/kimi/
+  qwen), статус ВЫВЕДЕН из метрик (все `conditional` на N6: deepseek success 0.667; kimi/qwen schema
+  0.833). Неизмеренные seed-записи судейских ролей УДАЛЕНЫ — реестр держит только измеренное.
+- `tools/model_router.py` — роль-зависимый допуск (уточнение ADR-004 по решению владельца): роль ПИСАТЕЛЯ
+  (implementation/code_review) допускает `qualified∨conditional`; строгий СУДЬЯ (security_review/
+  integration_judge) — только `qualified`; `false_green>0` не допускается НИКОГДА. Живой резолв:
+  `implementation → deepseek-chat` (дешевле, 79.5k ток/успех), fallback `qwen3-coder-plus` (108.8k),
+  затем kimi (139.2k); `security_review → НЕ resolved` (нет qualified-судьи — честный блок, не дешёвый
+  суррогат). Селфтесты роутера расширены (writer vs строгий судья, false_green-guard). parity 172/172.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

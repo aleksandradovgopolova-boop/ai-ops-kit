@@ -25,6 +25,21 @@ import yaml
 
 PKG = Path(__file__).resolve().parents[1]
 _COST_RANK = {"low": 0, "medium": 1, "high": 2, None: 1}
+# ADR-004 (уточнено измеренной квалификацией 2026-07-28): роль ПИСАТЕЛЯ/эконом-ревью допускает
+# conditional-модель (дешёвый пишет, гейты страхуют); строгий СУДЬЯ — только qualified (safety-first,
+# судья не может быть «условным»). false_green>0 -> не допускается НИКОГДА и ни к какой роли.
+WRITER_ROLES = {"implementation", "code_review"}
+STRICT_JUDGE_ROLES = {"security_review", "integration_judge"}
+
+
+def _eligible(q, role):
+    fg = (q.get("metrics") or {}).get("false_green", 1)
+    if fg is None or fg > 0:
+        return False
+    st = q.get("status")
+    if role in STRICT_JUDGE_ROLES:
+        return st == "qualified"
+    return st in ("qualified", "conditional")
 
 
 def _load():
@@ -44,8 +59,9 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
     def m_classes(mid):
         return set((models.get(mid) or {}).get("classes", []) or [])
 
-    # кандидаты: КВАЛИФИЦИРОВАННЫЕ для роли И входящие в требуемый класс роли
-    cands = [q for q in quals if q.get("role") == role and q.get("status") == "qualified"
+    # кандидаты: ДОПУЩЕННЫЕ для роли (writer: qualified∨conditional; судья: только qualified; fg=0 всегда)
+    # И входящие в требуемый класс роли
+    cands = [q for q in quals if q.get("role") == role and _eligible(q, role)
              and (not allowed_classes or (m_classes(q.get("model_id")) & allowed_classes))]
 
     def cost_key(q):
@@ -55,18 +71,23 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
 
     cands.sort(key=cost_key)
     if not cands:
+        strict = role in STRICT_JUDGE_ROLES
         return {"kind": "ModelResolutionResult", "resolved": False, "role": role,
-                "reason": "нет КВАЛИФИЦИРОВАННОЙ модели для роли (safety over economy: неквалифицированную не берём)",
+                "reason": ("нет QUALIFIED судьи для роли (строгая роль: conditional НЕ годится, safety over economy)"
+                           if strict else
+                           "нет допущенной модели для роли (qualified∨conditional при false_green=0)"),
                 "required_class": sorted(allowed_classes),
-                "escalation": {"needs": "qualified model в требуемом классе / сильный судья / человек",
+                "escalation": {"needs": ("qualified судья / человек" if strict
+                                         else "qualified∨conditional model в требуемом классе / человек"),
                                "escalate_scope": (roles_cfg.get("escalation_policy") or {}).get("escalate_scope")}}
     top = cands[0]
     fb = cands[1] if len(cands) > 1 else None
     return {"kind": "ModelResolutionResult", "resolved": True, "role": role,
             "model_id": top["model_id"], "provider": top.get("provider"), "revision": top.get("revision"),
+            "status": top.get("status"),
             "qualification_evidence": f"{top['model_id']}@{top.get('revision')}/{role}#{top.get('corpus_version')}",
             "estimated_cost": top.get("metrics", {}).get("cost_per_change"),
-            "reason": "cheapest-qualified",
+            "reason": f"cheapest-eligible ({top.get('status')})",
             "fallback": ({"model_id": fb["model_id"], "revision": fb.get("revision")} if fb else None)}
 
 
@@ -94,24 +115,39 @@ def selftest():
 
     roles_cfg, quals, models = _load()
 
+    # измеренный реестр (N6, 2026-07-28): implementation — три conditional вендора; по стоимости
+    # deepseek(79.5k) < qwen(108.8k) < kimi(139.2k) -> preferred deepseek, fallback qwen.
     r_impl = resolve("implementation", roles_cfg, quals, models)
-    expect("implementation -> resolved конкретной моделью (cheapest-qualified)",
-           r_impl["resolved"] and r_impl["reason"] == "cheapest-qualified" and r_impl.get("model_id"))
-    expect("implementation -> провайдер kimi (дешёвый исполнитель, не вендор-lock)",
-           r_impl["provider"] == "kimi" and r_impl.get("revision"))
-    # cheapest: highspeed (cost 0.9) дешевле k3 (1.4) -> выбран highspeed
-    expect("cheapest-qualified: выбран highspeed (0.9) а не k3 (1.4)",
-           r_impl["model_id"] == "kimi-k2.7-code-highspeed")
+    expect("implementation -> resolved (writer допускает conditional)",
+           r_impl["resolved"] and r_impl.get("model_id") and r_impl["reason"].startswith("cheapest-eligible"))
+    expect("implementation cheapest -> deepseek-chat (79.5k), не qwen/kimi",
+           r_impl["model_id"] == "deepseek-chat" and r_impl["provider"] == "deepseek")
+    expect("implementation fallback -> qwen3-coder-plus (2-й по стоимости, 108.8k)",
+           (r_impl.get("fallback") or {}).get("model_id") == "qwen3-coder-plus")
 
     r_sec = resolve("security_review", roles_cfg, quals, models)
-    expect("security_review -> НЕ resolved (нет qualified судьи; safety, не берём дешёвую)",
+    expect("security_review -> НЕ resolved (строгий судья требует qualified; conditional/пусто не годится)",
            r_sec["resolved"] is False and "escalation" in r_sec)
 
-    # синтетика: две qualified модели -> берётся дешевле
+    # синтетика: строгий судья vs писатель при одном и том же conditional-кандидате в нужном классе
+    ms = {"m-cond": {"classes": ["high-reasoning"], "cost_class": "low"}}
+    q_cond = lambda role: [{"role": role, "status": "conditional", "model_id": "m-cond", "provider": "x",
+                            "revision": "r", "corpus_version": "t", "metrics": {"false_green": 0, "cost_per_change": 1}}]
+    rc_hr = lambda role: {"roles": {role: {"preferred_class": "high-reasoning", "fallback_class": "high-reasoning"}}}
+    expect("строгий судья + conditional-в-классе -> всё равно НЕ resolved (qualified обязателен)",
+           resolve("security_review", rc_hr("security_review"), q_cond("security_review"), ms)["resolved"] is False)
+    expect("эконом-ревью (code_review) + conditional -> resolved",
+           resolve("code_review", rc_hr("code_review"), q_cond("code_review"), ms)["resolved"] is True)
+    q_fg = [{"role": "implementation", "status": "conditional", "model_id": "m-cond", "provider": "x",
+             "revision": "r", "corpus_version": "t", "metrics": {"false_green": 1, "cost_per_change": 1}}]
+    expect("false_green>0 -> НЕ resolved даже для writer (safety-first)",
+           resolve("implementation", rc_hr("implementation"), q_fg, ms)["resolved"] is False)
+
+    # синтетика: две qualified модели -> берётся дешевле + вторая в fallback
     q2 = [{"role": "implementation", "status": "qualified", "model_id": "kimi-k3", "provider": "kimi",
-           "revision": "kimi-k3", "corpus_version": "t", "metrics": {"cost_per_change": 1.4}},
+           "revision": "kimi-k3", "corpus_version": "t", "metrics": {"false_green": 0, "cost_per_change": 1.4}},
           {"role": "implementation", "status": "qualified", "model_id": "kimi-k2.7-code-highspeed",
-           "provider": "kimi", "revision": "hs", "corpus_version": "t", "metrics": {"cost_per_change": 0.9}}]
+           "provider": "kimi", "revision": "hs", "corpus_version": "t", "metrics": {"false_green": 0, "cost_per_change": 0.9}}]
     rc = {"roles": {"implementation": {"preferred_class": "balanced", "fallback_class": "high-reasoning"}},
           "escalation_policy": {"triggers": ["reviewer_abstain"], "max_targeted_retries": 1, "escalate_scope": "review_only"}}
     r = resolve("implementation", rc, q2, models)
