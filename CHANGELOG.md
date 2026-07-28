@@ -214,6 +214,21 @@ BudgetContract / cost_account) с ролями рантайма — без па�
 - `templates/quality/SurfaceWiringPolicy.md` — DoD + graduation до blocking. CI +1, AGENTS.md +1.
 - Вывод 3 (`on_repeat→structural`) НЕ реализован (следующий, лёгкое поле на RegressionCase). parity 174/174.
 
+### Added (v3.7.9 — on_repeat→structural: повтор класса требует конструкцию, не повтор рекомендации)
+- Вывод 3 «дефектов одной сессии»: дефект с токеном случился ДВАЖДЫ; правило «аудит вызывающих при
+  смене предусловия» существовало и не сработало ни разу. Починка, которая держится, — не рекомендация,
+  а КОНСТРУКЦИЯ (единственная функция + запрет прямого вызова линтером). Правило поверх правил: повтор
+  класса ⇒ перевод рекомендации в конструкцию.
+- `schemas/regression-case.schema.json` — поля `occurrences` (default 1), `on_repeat`
+  (none|escalate_to_structural), `structural_fix`. Существующие RC без полей -> default 1, правило не
+  срабатывает (не ломается).
+- `validation/validate_regression_corpus.py` — правило: `occurrences>=2` обязывает
+  `on_repeat=escalate_to_structural` + непустой `structural_fix` (иначе «правило есть, но не сработало»).
+  `taxonomy()` +счётчики `repeated_classes` / `escalated_to_structural`. selftest +5 (правило СРАБАТЫВАЕТ
+  на повторе, тихо на одиночном). Реальный корпус (4 кейса) цел.
+- Три вывода «дефектов одной сессии» закрыты: Вывод 1 (scenario-как-evidence, v3.7.7), Вывод 2
+  (surface_wiring, v3.7.8), Вывод 3 (on_repeat, v3.7.9) — все ADVISORY/аддитивно, 0 регрессий. parity 174/174.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

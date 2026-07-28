@@ -24,7 +24,13 @@
     "first_seen_version": { "type": "string", "minLength": 1 },
     "fixed_version": { "type": ["string", "null"] },
     "regression_test": { "type": "string", "minLength": 1,
-      "description": "чем охраняется (selftest/детест/дисциплина); для fixed обязан быть реальным тестом" }
+      "description": "чем охраняется (selftest/детест/дисциплина); для fixed обязан быть реальным тестом" },
+    "occurrences": { "type": "integer", "minimum": 1,
+      "description": "сколько раз класс проявлялся (default 1). >=2 -> повтор: рекомендацию мало (Вывод 3)" },
+    "on_repeat": { "type": "string", "enum": ["none", "escalate_to_structural"],
+      "description": "Вывод 3 «дефектов сессии»: при повторе класса вывод — не повтор рекомендации, а перевод в КОНСТРУКЦИЮ (единственный путь + запрет обхода линтером), которую забыть нельзя" },
+    "structural_fix": { "type": "string", "minLength": 1,
+      "description": "какая КОНСТРУКЦИЯ заменила рекомендацию (напр. единственная функция + запрет прямого вызова линтером). Обязателен при on_repeat=escalate_to_structural" }
   },
   "examples": [
     {
