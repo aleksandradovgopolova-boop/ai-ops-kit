@@ -485,6 +485,48 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:  # noqa: BLE001
             payload = None; lifecycle_errors.append(f"context_payload: {type(e).__name__}: {e}")
+        # v3.7.16 Live Context Hybrid FED_TO_MODEL: при --context-hybrid собираем hybrid (mandatory v1 +
+        # разрешённые v2-additions через promotion gate) ДО прогона и РЕАЛЬНО подаём модели (читаем контент
+        # additions из base-состояния child и дописываем к payload). v1 НИКОГДА не теряется; gate не готов
+        # -> v1-only (fail-safe, additions=[]). Раньше hybrid только фиксировался в отчёте post-hoc.
+        _hybrid_prelude = (payload or {}).get("text")
+        _hybrid_fed = None
+        if context_hybrid and payload:
+            try:
+                import context_hybrid as _chyb
+                import context_engine as _ce
+                _mand = None
+                if bundle:
+                    _inc = bundle.get("included", {})
+                    _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
+                _afp, _dcp, _bud = _ce.load_child_policies(child_root)
+                _rule_refs = list((bundle.get("included", {}) or {}).get("rules", [])) if bundle else []
+                _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
+                _budget = _ce.budget_tokens_from(_bud)
+                _base_sha = base_binding.get("base_sha")
+                _hyb = _chyb.build_hybrid_from_child(
+                    child_root, task_text, "executor", sha=_base_sha, afp=_afp, dcp=_dcp,
+                    v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
+                    budget=_budget, require_snapshot=False)
+                _adds = _hyb.get("v2_additions") or []
+                # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
+                _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
+                if _hyb.get("mode") == "hybrid" and _adds:
+                    _extra = []
+                    for _f in _adds:
+                        _p = child_root / _f
+                        if _p.is_file():
+                            _extra.append(f"### {_f}\n{_p.read_text(encoding='utf-8', errors='replace')[:8000]}")
+                    if _extra:
+                        _hybrid_prelude = ((payload or {}).get("text") or "") + \
+                            "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
+                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"), "v2_additions": _adds,
+                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _adds),
+                               "mandatory_references": _hyb.get("mandatory_references"),
+                               "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
+            except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
+                _hybrid_fed = {"kind": "ContextHybrid", "error": f"hybrid feed failed: {type(_e).__name__}: {_e}"[:300],
+                               "fed_to_model": False}
         # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
         import spec_levels
         try:
@@ -582,7 +624,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
                 sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
                 author=author, author_proposer=auth_prop, install_deps=install_deps,
-                context_prelude=(payload or {}).get("text"),
+                context_prelude=_hybrid_prelude,   # v3.7.16: hybrid (v1 ∪ v2-additions) реально подаётся модели
                 resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
@@ -708,33 +750,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             except Exception as _e:  # noqa: BLE001 — shadow не должен ронять прогон
                 # честно фиксируем реальную причину (не влияет на execution=v1) — иначе баг wiring немой
                 rep["context_shadow"] = {"error": f"shadow build failed: {type(_e).__name__}: {_e}"[:300]}
-        # v3.7.0 HYBRID-запись (default OFF): mandatory v1 + разрешённые v2-additions, допускается ТОЛЬКО
-        # через context_promotion_gate (5 trust-контрактов). НЕ готов -> v1-only (fail-safe). Feeding
-        # hybrid-контекста МОДЕЛИ — живой шаг за этим же флагом (пока фиксируем сборку/решение в отчёте;
-        # execution по-прежнему на v1). Инвариант: v1 никогда не теряется, v2 только добавляет.
-        if context_hybrid:
-            try:
-                import context_hybrid as _chyb
-                import context_engine as _ce
-                _wt = child_root / ".ai" / "worktrees" / fid
-                _content_root = _wt if _wt.is_dir() else child_root
-                _mand = None
-                if bundle:
-                    _inc = bundle.get("included", {})
-                    _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
-                _csha = (rep.get("commit") or {}).get("sha")
-                _afp, _dcp, _bud = _ce.load_child_policies(child_root)
-                # v3.7.0-fix (ревью #3): mandatory = specs+decisions (файлы) + applicable rules +
-                # policy references; бюджет — из НАСТОЯЩЕГО child BudgetContract (не default).
-                _rule_refs = list((bundle.get("included", {}) or {}).get("rules", [])) if bundle else []
-                _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
-                _budget = _ce.budget_tokens_from(_bud)
-                rep["context_hybrid"] = _chyb.build_hybrid_from_child(
-                    _content_root, task_text, "executor", sha=_csha, afp=_afp, dcp=_dcp,
-                    v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
-                    budget=_budget, require_snapshot=True)
-            except Exception as _e:  # noqa: BLE001 — hybrid-запись не должна ронять прогон
-                rep["context_hybrid"] = {"error": f"hybrid build failed: {type(_e).__name__}: {_e}"[:300]}
+        # v3.7.16: hybrid собран ДО прогона и РЕАЛЬНО подан модели (см. _hybrid_fed выше). Записываем что
+        # именно было fed_to_model (mode/additions/references), а не пересобираем post-hoc. v1 не теряется.
+        if context_hybrid and _hybrid_fed is not None:
+            rep["context_hybrid"] = _hybrid_fed
         if payload:
             rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
                                       "payload_budget": payload["payload_budget"],

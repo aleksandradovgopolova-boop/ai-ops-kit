@@ -299,6 +299,19 @@ BudgetContract / cost_account) с ролями рантайма — без па�
 - `models.yaml` — deepseek-v4-flash: снят verification_required (измерена/conditional), цена в note.
   router selftest обновлён (money-mode). parity 175/175.
 
+### Added (v3.7.16 — Live Context Hybrid FED_TO_MODEL: hybrid реально подаётся модели)
+- Разрыв ревью: hybrid безопасно собирался, но модели НЕ подавался (execution_uses=v1, hybrid фиксировался
+  post-hoc). Теперь `ai_ops_run` при `--context-hybrid` строит hybrid ДО прогона (base-sha), читает контент
+  разрешённых v2-additions и ДОПИСЫВАЕТ к payload -> реально в prompt писателя (`context_prelude`).
+- Инвариант: v1 НИКОГДА не теряется; promotion gate не готов -> v1-only (fail-safe, additions=[], поведение
+  как раньше). Служебные артефакты (features/, .ai/) отфильтрованы — кормим только код/доки.
+- `rep["context_hybrid"]` теперь несёт ЧТО было fed_to_model (mode/additions/mandatory_references/base_sha),
+  а не post-hoc пересборку.
+- ЖИВОЙ прогон (child с корректным AccessFilterPolicy, роутер money-mode): `mode=hybrid`,
+  `fed_to_model=true`, additions=[pricing.py, tests, README], доставлено на deepseek-v4-flash. Критерий
+  stable «hybrid реально fed_to_model» — ВЫПОЛНЕН. Требование: child объявляет `.ai/policies/access-filter`
+  (без него default-deny -> v2 пуст -> v1-only). ai_ops_run selftest PASS, parity 175/175.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
