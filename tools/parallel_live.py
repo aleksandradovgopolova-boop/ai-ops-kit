@@ -200,6 +200,10 @@ def selftest():
 
     # v3.8.2 STACK-AWARE integration runner: aggregate детектит стек и гоняет evidence_collector,
     # а НЕ хардкодит pytest. На python-репо -> stack_checks несёт 'test'; зелёный тест -> all_pass.
+    # ГАРД (урок: CI-quality имеет ТОЛЬКО pyyaml, без pytest): all_pass-часть только при наличии pytest;
+    # структурная часть (stack_aware, stack_checks) проверяется всегда.
+    import importlib.util as _ilu
+    _has_pytest = _ilu.find_spec("pytest") is not None
     with tempfile.TemporaryDirectory() as td2:
         _git(td2, "init", "-q", check=False)
         _git(td2, "config", "user.email", "t@t"); _git(td2, "config", "user.name", "t")
@@ -218,7 +222,10 @@ def selftest():
         _isha, _agg, _conf, _bm = ir({"p1": {"status": "pass"}})
         expect("v3.8.2: aggregate STACK-AWARE (не хардкод pytest)", _agg.get("stack_aware") is True)
         expect("v3.8.2: stack_checks несёт проверку 'test' детектированного стека", "test" in (_agg.get("stack_checks") or {}))
-        expect("v3.8.2: зелёный python-стек на integration-SHA -> all_pass", _agg.get("all_pass") is True and _conf == 0)
+        if _has_pytest:
+            expect("v3.8.2: зелёный python-стек на integration-SHA -> all_pass", _agg.get("all_pass") is True and _conf == 0)
+        else:
+            expect("v3.8.2: без pytest в env — структура stack-aware цела (all_pass не проверяем)", _conf == 0)
 
     print("parallel_live selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
