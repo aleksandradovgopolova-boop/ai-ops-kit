@@ -1127,7 +1127,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
                  resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False,
                  calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
-                 strict_judge_qualified=True):   # v3.7.1: есть ли QUALIFIED security/integration судья
+                 strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
+                 security_reviewer_proposer=None):   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -1529,22 +1530,41 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "note": "все применимые security-домены закрыты детерминированным evidence"}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and review and reviewer_proposer is not None and committed_sha and not strict_judge_qualified):
-            # v3.7.1 STRICT JUDGE (trust alignment): когда ревью ЗАПРОШЕНО, но судья — SELF-модель писателя
-            # (нет независимого), security needs_review НЕ закрывается self-моделью -> pending_human
-            # (ApprovalRecord). Точечно перехватывает reviewer-путь (writer не пишет+ревьюит+закрывает
-            # security одной моделью); режимы без ревью не трогаем (там security по прежнему пути).
-            gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
-                                   "blockers": ["security needs_review не закрывает self-модель писателя "
-                                                "(нет независимого судьи) -> человеко-одобрение "
-                                                "(ApprovalRecord): " + ", ".join(security_pack_result["needs_review"])],
-                                   "pack": {"applicable": security_pack_result["applicable_domains"],
-                                            "needs_review": security_pack_result["needs_review"]}}
+              and review and committed_sha and not strict_judge_qualified
+              and not (signals or {}).get("_sequence_internal")):
+            # v3.7.3 (#5) STRICT SECURITY JUDGE: security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ
+            # security-судья (strict_judge_qualified) ЛИБО ЧЕЛОВЕК (ApprovalRecord). Общий code reviewer НЕ
+            # закрывает security. Нет qualified судьи -> pending_human ДО валидного человеческого одобрения.
+            # ПОД-ПАКЕТ executor'а (_sequence_internal) НЕ хардстопим здесь: security судится на АГРЕГАТЕ
+            # (integration-SHA, _aggregate_close_security). Enforcement #5 на агрегате executor'а — следующий шаг.
+            import approvals as _appr_sec
+            _sec_recs = _appr_sec.load_approvals(child_root, wid)
+            _sec_now, _sec_ph = _appr_sec._now_iso(), _appr_sec.plan_binding_hash(child_root, wid)
+            _sec_domains = {"security", "security_review", *security_pack_result["needs_review"]}
+            _human_closed = any(r.get("approval") in _sec_domains
+                                and _appr_sec._record_valid(r, now=_sec_now, plan_hash=_sec_ph, strict=True)
+                                for r in _sec_recs)
+            if _human_closed:
+                gate_ev["security"] = {"status": "pass",
+                                       "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                       "human_approved": True,
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "note": "нет qualified security-судьи -> needs_review закрыт "
+                                                        "человеком (валидный ApprovalRecord)"}}
+            else:
+                gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
+                                       "blockers": ["нет QUALIFIED security-судьи: needs_review домены "
+                                                    "закрывает ТОЛЬКО квалифицированный судья или человек "
+                                                    "(ApprovalRecord); общий code reviewer НЕ закрывает "
+                                                    "security: " + ", ".join(security_pack_result["needs_review"])],
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "needs_review": security_pack_result["needs_review"]}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and review and reviewer_proposer is not None and committed_sha):
-            # v2.106: независимый security-reviewer закрывает needs_review домены (writer≠judge).
-            # Блокирующие детерминированные находки (secrets и т.п.) reviewer НЕ переопределяет.
-            sec_status, sec_res = _review_security(reviewer_proposer, work_root,
+              and review and committed_sha and (security_reviewer_proposer or reviewer_proposer) is not None):
+            # v2.106/v3.7.3: КВАЛИФИЦИРОВАННЫЙ security-судья (strict_judge_qualified) закрывает needs_review.
+            # Судья — ОТДЕЛЬНЫЙ security_reviewer_proposer (не общий code reviewer); fallback только если он
+            # не передан (совместимость). Блокирующие детерминированные находки судья НЕ переопределяет.
+            sec_status, sec_res = _review_security(security_reviewer_proposer or reviewer_proposer, work_root,
                                                    security_pack_result, committed_sha, budget)
             if sec_status == "pass":
                 gate_ev["security"] = {"status": "pass",
@@ -2249,9 +2269,9 @@ def selftest():
 
         def _has(g, sub):
             return any(sub in b for b in (g.get("blockers") or []))
-        # strict=True (независимый судья) -> идём в reviewer-ветку: мой self-model pending_human-guard НЕ берётся
-        expect("v3.7.1 A: независимый судья НЕ берёт self-model guard (идёт через reviewer)",
-               not _has(_sec_a, "не закрывает self-модель"))
+        # strict=True (qualified судья) -> reviewer-ветка: #5 pending_human-guard НЕ берётся
+        expect("v3.7.3 A: qualified судья НЕ берёт #5-guard (идёт через security-reviewer)",
+               not _has(_sec_a, "нет QUALIFIED security-судьи"))
         _git(root, "checkout", "-q", orig_branch)
         it_strict = iter([{"op": "write", "path": "src/rl_b.py", "content": "def b():\n    return 1\n"}, {"done": True}])
         rep_strict = run_pipeline("api rate strict-off", sig_api, root, lambda c: next(it_strict),
@@ -2259,10 +2279,12 @@ def selftest():
                                   commit=True, isolate=True, install_deps=False,
                                   review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
         _sec_b = next((g for g in rep_strict["gates"].get("gate_results", []) if g.get("gate") == "security"), {})
-        # strict=False (self-model) -> needs_review НЕ закрывается self-моделью -> pending_human
-        expect("v3.7.1 B: self-model -> security fail + блокер «не закрывает self-модель» (pending_human)",
+        # strict=False (нет qualified security-судьи), нет ApprovalRecord -> security pending_human
+        expect("v3.7.3 B: нет qualified судьи + нет ApprovalRecord -> security fail (pending_human)",
                "security" in rep_strict["gates"]["unmet"] and _sec_b.get("status") == "fail"
-               and _has(_sec_b, "не закрывает self-модель"))
+               and _has(_sec_b, "нет QUALIFIED security-судьи"))
+        expect("v3.7.3 C: #5-guard даёт человеку путь закрыть (блокер называет ApprovalRecord)",
+               _has(_sec_b, "ApprovalRecord"))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.106 #1 (fail-closed): secret_boundary требует человека даже при pass ревьюера

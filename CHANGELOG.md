@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.7.3 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
+
+По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.
+
+### Changed (v3.7.3 — #5 strict security judge)
+- `ai_ops_run`: `strict_judge_qualified` = ТОЛЬКО `security_review.resolved` (квалифицированный security-
+  судья), не «любой независимый ревьюер». Нет qualified судьи (до Bench v2) -> security needs_review ->
+  pending_human ДО валидного человеческого ApprovalRecord.
+- `execution_pipeline`: #5-guard — security needs_review закрывает qualified-судья (`strict_judge_qualified`)
+  ЛИБО человек (валидный strict ApprovalRecord на security/needs_review-домены). Общий `reviewer_proposer`
+  НЕ закрывает security. Добавлен ОТДЕЛЬНЫЙ `security_reviewer_proposer` (reviewer-ветка использует его,
+  не общий code reviewer). selftest A/B/C: qualified -> reviewer-ветка; нет судьи+нет одобрения -> fail
+  pending_human; блокер называет ApprovalRecord (путь человека).
+- ПОД-ПАКЕТ sequential-executor'а (`_sequence_internal`): per-package security needs_review НЕ хардстопит —
+  security судится на АГРЕГАТЕ (integration-SHA, `_aggregate_close_security`). ОТКРЫТО (следующий шаг):
+  enforcement #5 на самом агрегате executor'а (сейчас агрегат закрывает прежним путём) + разделение
+  integration_judge_proposer. parity 176/176.
+
 ## [3.7.2] — 2026-07-28 — Security Fail-Closed (два fail-open края закрыты перед Product Bootstrap)
 
 Узкий патч после runtime-code-review 3.7.1: security-барьеры 3.7.1 были обёрнуты в `try/except: pass` ->
