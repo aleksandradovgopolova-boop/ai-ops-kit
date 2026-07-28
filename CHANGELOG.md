@@ -2,10 +2,14 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.7.1 — Trust Alignment: выровнять заявления и рантайм (4 шва после code-review 3.7.0)
+## [3.7.1] — 2026-07-28 — Trust Alignment: заявления выровнены с рантаймом (4 шва после code-review 3.7.0)
 
-Патч после ревью 3.7.0: закрыть 4 расхождения между release notes и рантаймом (без новой архитектуры и
-новых advisory-гейтов). БЕЗ version-bump до готовности всех 4 (тогда VERSION 3.7.0 -> 3.7.1).
+Патч после ревью 3.7.0: закрыты 4 расхождения между release notes и рантаймом (без новой архитектуры и
+новых advisory-гейтов). Итог: (#1) self-модель писателя НЕ закрывает security needs_review при запрошенном
+ревью -> pending_human; (#2) parallel честно помечен serial (multi-package fan-in, не concurrency) +
+preflight против грязного checkout; (#3) hybrid exact-snapshot (require_snapshot=True) + полный token
+budget; (#4) key_preflight реальный барьер (TTL/now) + memory self-ingested без human_confirmed НЕ пишется.
+ROADMAP синхронизирован (v3.7 ВЫПУЩЕН, v3.8 текущая). parity 176/176.
 
 ### Added (v3.7.1 #1 — strict judge: SELF-модель писателя НЕ закрывает security needs_review -> pending_human)
 - Разрыв ревью: если отдельный reviewer не резолвился, runtime брал модель писателя (reviewer=writer), и
