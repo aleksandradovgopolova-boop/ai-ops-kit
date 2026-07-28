@@ -36,6 +36,17 @@
   deepseek-v4-flash, scenario-тест поймал сломанную вертикаль -> impl_verification fail, security
   pending_human #5, 0 false-green. Learning: greenfield-профиль должен gitignore рантайм-БД.)
 
+### Added (v3.8.3 — TRUE concurrent parallel-2: отдельные клоны на пакет + fan-in клоном)
+- Ревью: parallel_live был честно serial (max_parallel=1, один checkout). Теперь `run_live_concurrent`:
+  каждый пакет — в СВОЁМ disposable git-клоне на base_sha, прогон КОНКУРЕНТНО (execute_parallel,
+  max_parallel>=2 — гонок нет, т.к. отдельные клоны); integration-КЛОН fetch'ит ветки пакетов из их
+  клонов (по пути) + merge + stack-aware aggregate (v3.8.2) на новом integration-SHA -> ОДИН PR. Основной
+  checkout НЕ трогается. Честные поля: execution_concurrency=concurrent, isolation=per-package-clone.
+- selftest +4 (реальные клоны + мок-раннер, коммитящий в свой клон): concurrent+isolation; отдельные
+  клоны созданы; fan-in слил обе ветки (0 конфликтов, disjoint scope); зелёный -> proceed+open_pr.
+  Гард pytest (CI ⊆ pyyaml): all_pass только при pytest, структура — всегда.
+- serial `run_live` сохранён (backward-compat). Осталось в 3.8: 3.8.4 multi-repo readiness -> 3.8 stable.
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

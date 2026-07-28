@@ -139,6 +139,84 @@ def run_live(wg, child_root, base_sha, task_map, signals, run_fn, open_pr=False,
     return rec
 
 
+def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones):
+    """v3.8.3 TRUE CONCURRENT: каждый пакет — в СВОЁМ disposable-клоне (git clone) на base_sha -> безопасно
+    конкурентно (нет гонок git-worktree одного репо). Заполняет clones[pid]={path,branch}."""
+    def runner(pkg):
+        pid = pkg["id"]
+        cpath = Path(clones_dir) / pid
+        subprocess.run(["git", "clone", "-q", str(child_root), str(cpath)], capture_output=True, text=True)
+        _git(cpath, "checkout", "-q", base_sha, check=False)
+        rep = run_fn(task_map[pid], dict(signals), Path(cpath), engine="pipeline",
+                     provider_name="openai-compatible", feature=pid, execute=True, author=True, review=True)
+        clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}"}
+        res = package_result_from_rep(rep)
+        res["clone"] = str(cpath)
+        return res
+    return runner
+
+
+def make_isolated_integration_runner(child_root, base_sha, clones, integration_branch="ai-ops/integration"):
+    """v3.8.3: integration-КЛОН от base; fetch веток пакетов ИЗ их клонов (по пути) + merge; stack-aware
+    aggregate (project_detector+evidence_collector) на НОВОМ integration-SHA. fail-closed при сбое."""
+    def runner(results):
+        iroot = (clones.get("_integration") or {}).get("path")
+        _git(iroot, "checkout", "-q", "-B", integration_branch, base_sha, check=False)
+        conflicts = 0
+        for pid in results:
+            c = clones.get(pid)
+            if not c:
+                conflicts += 1; continue
+            _git(iroot, "fetch", "-q", c["path"], f"{c['branch']}:{c['branch']}", check=False)
+            m = _git(iroot, "merge", "--no-edit", "--no-ff", c["branch"], check=False)
+            if m.returncode != 0:
+                conflicts += 1; _git(iroot, "merge", "--abort", check=False)
+        integration_sha = _git(iroot, "rev-parse", "HEAD").stdout.strip()
+        try:
+            import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+            _coll = _ec.collect(_pd.detect(iroot), iroot, _tb.sandbox_policy(child_root=str(iroot)))
+            _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
+            stack_ok = _iv.get("status") == "pass"
+            stack_checks = {k: (v.get("status") if isinstance(v, dict) else v) for k, v in (_coll.get("checks") or {}).items()}
+        except Exception as _e:  # noqa: BLE001
+            stack_ok = False; stack_checks = {"error": f"{type(_e).__name__}: {_e}"[:160]}
+        all_pass = conflicts == 0 and stack_ok
+        return integration_sha, {"all_pass": all_pass, "tested_revision": integration_sha, "conflicts": conflicts,
+                                 "stack_aware": True, "stack_checks": stack_checks,
+                                 "isolation": "per-package-clone"}, conflicts, False
+    return runner
+
+
+def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clones_dir,
+                        open_pr=False, repo_slug=None, integration_branch="ai-ops/integration", max_parallel=None):
+    """v3.8.3 НАСТОЯЩИЙ concurrent parallel-2: отдельный disposable-клон+ветка+прогон на пакет, КОНКУРЕНТНО;
+    integration-клон -> fetch package-ветки -> merge -> stack-aware aggregate -> ОДИН PR. Честные поля:
+    execution_concurrency=concurrent, isolation=per-package-clone. Основной checkout НЕ трогается."""
+    clones = {}
+    iroot = Path(clones_dir) / "_integration"
+    subprocess.run(["git", "clone", "-q", str(child_root), str(iroot)], capture_output=True, text=True)
+    clones["_integration"] = {"path": str(iroot)}
+    pr = make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones)
+    ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
+    n = max_parallel or min(len(wg.get("packages", []) or [1]), getattr(pe.pp, "MAX_PARALLEL", 2))
+    rec = pe.execute_parallel(wg, pr, ir, contract_shas=None, max_parallel=max(2, n))
+    rec["execution_concurrency"] = "concurrent"
+    rec["isolation"] = "per-package-clone"
+    rec["parallel_safe"] = True
+    rec["fan_in"] = "live"
+    rec["pr"] = None
+    if open_pr and rec.get("delivery", {}).get("open_pr") and repo_slug:
+        _git(iroot, "push", "-f", "-q", "origin", integration_branch, check=False)
+        title = f"[parallel-2 concurrent] {wg.get('id')} fan-in @ {rec['integration_sha'][:12]}"
+        body = (f"Concurrent parallel-2 (per-package clones) fan-in @ {rec['integration_sha'][:12]}.\n"
+                f"Пакеты: {', '.join(task_map)}. stack-aware aggregate на integration-SHA.\n\n"
+                "🤖 Generated with [Claude Code](https://claude.com/claude-code)")
+        p = subprocess.run(["gh", "pr", "create", "--repo", repo_slug, "--draft", "--head", integration_branch,
+                            "--base", "main", "--title", title, "--body", body], cwd=str(iroot), capture_output=True, text=True)
+        rec["pr"] = (p.stdout.strip() or p.stderr.strip())[:300]
+    return rec
+
+
 def selftest():
     ok = True
 
@@ -226,6 +304,41 @@ def selftest():
             expect("v3.8.2: зелёный python-стек на integration-SHA -> all_pass", _agg.get("all_pass") is True and _conf == 0)
         else:
             expect("v3.8.2: без pytest в env — структура stack-aware цела (all_pass не проверяем)", _conf == 0)
+
+    # v3.8.3 TRUE CONCURRENT: отдельный клон+ветка на пакет (конкурентно) -> integration-клон fetch+merge.
+    with tempfile.TemporaryDirectory() as td3, tempfile.TemporaryDirectory() as cdir:
+        _git(td3, "init", "-q", check=False)
+        _git(td3, "config", "user.email", "t@t"); _git(td3, "config", "user.name", "t")
+        (Path(td3) / "pyproject.toml").write_text(
+            "[project]\nname='t'\nversion='0.1.0'\n[tool.pytest.ini_options]\npythonpath=['.']\n", encoding="utf-8")
+        Path(td3, "tests").mkdir()
+        (Path(td3) / "tests" / "test_ok.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+        _git(td3, "add", "-A"); _git(td3, "commit", "-qm", "seed", check=False)
+        base3 = _git(td3, "rev-parse", "HEAD").stdout.strip()
+
+        def commit_run(task, sig, root, **kw):  # мок вместо LLM: пишет файл + коммитит в СВОЙ клон
+            pid = kw["feature"]
+            _git(root, "checkout", "-q", "-B", f"ai-ops/{pid}", check=False)
+            (Path(root) / f"{pid}.py").write_text(f"def {pid}():\n    return 1\n", encoding="utf-8")
+            _git(root, "add", "-A"); _git(root, "commit", "-qm", f"pkg {pid}", check=False)
+            return {"ready_for_pr": True, "commit": {"sha": _git(root, "rev-parse", "HEAD").stdout.strip()}}
+
+        wg3 = {"schema_version": 1, "kind": "WorkGraph", "id": "WG-C", "feature": "f", "execution_mode": "hybrid",
+               "packages": [{"id": "aa", "depends_on": [], "write_scope": ["aa.py"]},
+                            {"id": "bb", "depends_on": [], "write_scope": ["bb.py"]}]}
+        rec_c = run_live_concurrent(wg3, td3, base3, {"aa": "t", "bb": "t"}, {"task_type": "QUICK"},
+                                    commit_run, cdir, open_pr=False)
+        expect("v3.8.3: execution_concurrency=concurrent + isolation=per-package-clone",
+               rec_c.get("execution_concurrency") == "concurrent" and rec_c.get("isolation") == "per-package-clone")
+        expect("v3.8.3: отдельные клоны на пакет созданы (aa, bb, _integration)",
+               all((Path(cdir) / p).is_dir() for p in ("aa", "bb", "_integration")))
+        agg_c = rec_c.get("aggregate") or {}
+        expect("v3.8.3: fan-in слил обе ветки без конфликта (disjoint scope)", agg_c.get("conflicts") == 0)
+        if _has_pytest:
+            expect("v3.8.3: concurrent fan-in зелёный -> proceed + open_pr",
+                   rec_c.get("proceed") is True and rec_c.get("delivery", {}).get("open_pr") is True)
+        else:
+            expect("v3.8.3: без pytest — структура concurrent fan-in цела", agg_c.get("stack_aware") is True)
 
     print("parallel_live selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
