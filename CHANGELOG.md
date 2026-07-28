@@ -2,6 +2,28 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.8.0-rc — Product Bootstrap: Bootstrap Qualification Contract (старт фазы v3.8)
+
+Старт фазы v3.8 (Product Bootstrap & Readiness Qualification). Характер работы меняется: фабрика (3.7.x
+закрыт) теперь должна ПРОИЗВЕСТИ продуктовый контур от намерения до измерения. Первый шаг — НЕ новая
+подсистема, а ОДИН исполнимый qualification-план ПОВЕРХ существующих контрактов. БЕЗ version-bump (rc).
+
+### Added (v3.8.0 — BootstrapQualificationPlan: контракт первого продуктового прогона)
+- `qualification/bootstrap/v3.8.0-plan.yaml` (BQP-001) — план ПОВЕРХ существующих контрактов
+  (`builds_over`: WorkItem/FeatureBlueprint/RunPlan/WorkGraph/ContextHybrid/DeliveryIntent-Receipt/
+  PostReleaseReadout/FeatureLearning — все ref реально существуют). Два reference-child: greenfield +
+  ИИ-Среда (real-brownfield). 10 стадий greenfield-bootstrap (repository_profile..delivery_pr,
+  последовательно), 11 live readiness-сценариев (single..product_learning), 13 exit-критериев 3.8;
+  vertical_feature_rule (сквозная функция через scenario_evidence + surface_wiring); модели
+  deepseek-v4-flash/qwen + security/integration-судья = ЧЕЛОВЕК до Bench v2; blocked_by (живые ключи,
+  Node/React тулчейн, human security, stack-aware collector, true parallel, агрегатный #5 + Bench v2).
+- `validation/validate_bootstrap_qualification.py` — check+selftest: форма; builds_over непуст И каждый
+  ref существует (НЕ фантомная новая подсистема); >=2 reference-child (greenfield+brownfield); полный
+  упорядоченный набор стадий; полные наборы сценариев и exit-критериев; security-судья=human до Bench v2;
+  blocked_by непуст. 7 selftest (валидный план + 6 негативов). CI +1, AGENTS +1.
+- ДАЛЬШЕ (живое, под ключи+тулчейн): v3.8.1 greenfield bootstrap (последовательно) -> v3.8.2 stack-aware
+  integration -> v3.8.3 true concurrent parallel -> v3.8.4 multi-repo readiness -> 3.8 stable; Bench v2 рядом.
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

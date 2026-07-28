@@ -1,0 +1,102 @@
+schema_version: 1
+kind: BootstrapQualificationPlan
+plan_id: BQP-001
+phase: v3.8
+title: Product Bootstrap & Readiness Qualification
+
+# ДАННЫЕ, не живой прогон. 3.8 меняет характер работы: до сих пор строили и квалифицировали ФАБРИКУ
+# (3.7.x закрыт: router money-mode, hybrid fed_to_model, governed fan-in, security fail-closed + strict
+# judge). Теперь фабрика должна ПРОИЗВЕСТИ целый продуктовый контур от намерения до измерения.
+# ПРИНЦИП: НЕ создавать новую подсистему — собрать ОДИН исполнимый qualification plan ПОВЕРХ уже
+# построенных контрактов. Живые прогоны исполняются против этого плана под провайдер-ключи + Node/React
+# тулчейн (см. blocked_by). Автосудьи security/integration ещё нет -> человек (см. models).
+
+# Строится НАД существующими контрактами (не новые сущности):
+builds_over:
+  - {name: WorkItem, ref: schemas/workitem.schema.json}
+  - {name: FeatureBlueprint, ref: schemas/feature-blueprint.schema.json}
+  - {name: RunPlan, ref: schemas/run-plan.schema.json}
+  - {name: WorkGraph, ref: schemas/work-graph.schema.json}
+  - {name: ContextHybrid, ref: tools/context_hybrid.py}
+  - {name: DeliveryIntentReceipt, ref: tools/pr_open.py}
+  - {name: PostReleaseReadout, ref: schemas/post-release-readout.schema.json}
+  - {name: FeatureLearning, ref: schemas/feature-learning.schema.json}
+
+# Два reference-child: greenfield докажет «строим с нуля», ИИ-Среда — «работаем в реальной неоднородной
+# системе с накопленным контекстом и настоящими швами».
+reference_children:
+  - id: greenfield-reference
+    kind: greenfield
+    stack: mixed        # backend + frontend + data
+    purpose: "построить небольшой, но полноценный продукт с нуля (architecture -> feature -> release)"
+  - id: ai-sreda
+    kind: real-brownfield
+    stack: mixed
+    purpose: "реальный сложный репозиторий (накопленный контекст, настоящие швы) — работа в неоднородной системе"
+
+# Правило вертикальной функции: сквозь слои, а не набор отдельно-зелёных слоёв.
+vertical_feature_rule: >
+  Функция обязана пройти от пользовательского действия в интерфейсе через API и данные до результата,
+  а не быть набором отдельно зелёных слоёв. Проверяется scenario_evidence (named_user_scenario +
+  scenario_test, v3.7.7) и surface_wiring_consistency (core<->wrapper<->client, v3.7.8).
+
+# Модели: провайдер-нейтрально, по деньгам; строгий судья security/integration — ЧЕЛОВЕК до Bench v2.
+models:
+  implementation_preferred: deepseek-v4-flash
+  implementation_fallback: qwen3-coder-plus
+  security_integration_judge: human   # автосудья — только после Bench v2 (false_green=0 + достаточный N)
+
+# Стадии greenfield-bootstrap (первый прогон — ПОСЛЕДОВАТЕЛЬНО, не доказывать всё сразу).
+bootstrap_stages:
+  - {id: repository_profile,  produces: RepositoryProfile}
+  - {id: problem_jtbd,        produces: "Problem Statement + JTBD",        workflow: PRODUCT}
+  - {id: architecture_adr,    produces: "системная архитектура + ADR",     uses: [decisions/adr]}
+  - {id: data_schema,         produces: "схема данных"}
+  - {id: backend,             produces: "backend-каркас"}
+  - {id: frontend_storybook,  produces: "frontend-каркас + Storybook",     uses: [tools/storybook_adapter.py]}
+  - {id: ci,                  produces: "CI"}
+  - {id: observability,       produces: "logs/metrics/error handling"}
+  - {id: vertical_feature,    produces: "первая вертикальная функция (сквозная)"}
+  - {id: delivery_pr,         produces: "один draft PR / release candidate", uses: [tools/pr_open.py]}
+
+# Обязательные live readiness-сценарии (минимум на 2, лучше 3 репо: Python / TS-Node / смешанный).
+readiness_scenarios:
+  - {id: single,                  proves: "базовый сквозной путь"}
+  - {id: sequential,              proves: "зависимости и handoff"}
+  - {id: concurrent_parallel,     proves: "отдельные исполнители и fan-in (настоящий concurrency)"}
+  - {id: resume,                  proves: "продолжение без потери решений"}
+  - {id: fix_loop,                proves: "устранение реального blocker"}
+  - {id: provider_fallback,       proves: "нет vendor lock-in (падение preferred -> fallback)"}
+  - {id: human_security_approval, proves: "корректный pending_human + закрытие человеком (ApprovalRecord)"}
+  - {id: base_moved,              proves: "безопасный отказ и свежий прогон"}
+  - {id: release,                 proves: "DeliveryIntent -> Receipt"}
+  - {id: post_release_readout,    proves: "измерение результата"}
+  - {id: product_learning,        proves: "вывод и следующее решение"}
+
+# Критерии выпуска 3.8 stable.
+exit_criteria:
+  - greenfield_zero_to_feature          # продукт с нуля прошёл путь до первой вертикальной функции
+  - feature_released_or_ready           # функция выпущена или доказанно готова к выпуску
+  - fullstack_integrated                # backend/frontend/data/CI/observability интегрированы
+  - single_sequential_parallel_proven   # single + sequential + НАСТОЯЩИЙ concurrent parallel доказаны
+  - stack_aware_integration             # integration checks по стеку (не только pytest)
+  - resume_and_fixloop_on_real_task     # resume и fix-loop на реальной задаче
+  - no_checkout_damage                  # ни один пакет не повредил основной checkout
+  - zero_false_green
+  - evidence_exact_sha_bound            # все доказательства привязаны к exact SHA
+  - external_delivery_intent_and_receipt
+  - cost_per_verified_change            # стоимость на успешный проверенный результат
+  - post_release_readout_created
+  - result_to_feature_learning          # результат -> FeatureLearning + следующее решение
+
+# Внешний гейт (объявлен явно, не спрятан): живые прогоны требуют ключей + тулчейна + человека на security.
+blocked_by:
+  - "живые провайдер-ключи (DeepSeek/Qwen/Kimi в env; sonnet-класс — опц. контроль)"
+  - "Node/React/Storybook тулчейн для frontend-стадии greenfield"
+  - "человеческий ApprovalRecord на security/integration (автосудьи нет до Bench v2)"
+  - "3.8.2: stack-aware integration collector (project_detector + evidence_collector на integration-SHA, не хардкод pytest)"
+  - "3.8.3: настоящий concurrent parallel — отдельные клоны на пакет"
+  - "enforcement #5 на агрегате executor'а + Bench v2 (qualified автосудьи)"
+
+# Последовательность фазы (данные, для наблюдаемости):
+phase_sequence: [v3.8.0-contract, v3.8.1-greenfield, v3.8.2-stack-aware-integration, v3.8.3-true-parallel, v3.8.4-readiness]

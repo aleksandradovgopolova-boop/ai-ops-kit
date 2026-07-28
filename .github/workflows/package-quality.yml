@@ -61,6 +61,10 @@ jobs:
           python3 validation/validate_workflow_gates.py
       - name: Scenario-как-evidence (Вывод 1 SEAM session — advisory, selftest)
         run: python3 validation/validate_scenario_evidence.py --selftest
+      - name: "Bootstrap Qualification Plan (v3.8.0 — план поверх существующих контрактов; selftest+реальный)"
+        run: |
+          python3 validation/validate_bootstrap_qualification.py --selftest
+          python3 validation/validate_bootstrap_qualification.py
       - name: Surface-wiring consistency (Вывод 2 SEAM session — advisory, selftest)
         run: python3 validation/validate_surface_wiring.py --selftest
       - name: WorkItem — единая сущность и статус (selftest)

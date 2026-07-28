@@ -68,6 +68,8 @@ python3 validation/validate_product_qualification.py
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 validation/validate_scenario_evidence.py --selftest
+python3 validation/validate_bootstrap_qualification.py --selftest
+python3 validation/validate_bootstrap_qualification.py
 python3 validation/validate_surface_wiring.py --selftest
 python3 tools/workitem.py --selftest
 python3 tools/run_plan.py --selftest
