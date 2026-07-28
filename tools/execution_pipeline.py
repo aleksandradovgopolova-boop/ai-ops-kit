@@ -1128,7 +1128,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False,
                  calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
                  strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
-                 security_reviewer_proposer=None):   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
+                 security_reviewer_proposer=None,   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
+                 reevaluate_only=False):   # v3.8.4: переоценить гейты существующего HEAD БЕЗ переавторинга
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -1157,8 +1158,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 1b. изоляция (finding аудита): весь прогон в отдельном git worktree на ветке ai-ops/<id>,
     #     основное рабочее дерево child не трогается. work_root = каталог worktree.
     work_root, worktree_rel = child_root, None
-    resume_info = {"requested": bool(resume), "resumed": False,
-                   "reused_worktree": False, "reused_branch": False} if resume else None
+    resume_info = ({"requested": bool(resume), "resumed": False,
+                    "reused_worktree": False, "reused_branch": False}
+                   if (resume or reevaluate_only) else None)
     # v3.0.1 (finding аудита P0): BASE BINDING — рабочая ветка форкается от РАЗРЕШЁННОГО base (--base),
     # а НЕ от текущего HEAD. Фиксируем base_ref+base_sha; worktree создаётся от base_sha; после — проверка;
     # delivery ревалидирует remote base. Раньше _wt.add шёл от HEAD -> `--base develop` игнорировался.
@@ -1186,7 +1188,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         branch_exists = _wt._branch_exists(child_root, branch)
         # v2.109 Real Resume: продолжаем ПОВЕРХ подтверждённой работы — ветку/коммиты НЕ удаляем.
         reused = False
-        if resume and (branch_exists or wp.is_dir()):
+        if (resume or reevaluate_only) and (branch_exists or wp.is_dir()):
             if not wp.is_dir() and branch_exists:
                 # worktree утерян, но ветка (коммиты) на месте -> пере-подключаем worktree к ветке
                 rc = _wt.add(child_root, wid, branch)
@@ -1340,7 +1342,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #     Spec-First). Теперь порядок: authoring -> валидация -> [tool loop только при валидной спеке].
     authored, authored_ev = None, {}
     spec_prestage_bad = []
-    if author and author_proposer is not None:
+    if author and author_proposer is not None and not reevaluate_only:
         authored_ev, authored, _wrote_art = _run_authoring(
             author_proposer, work_root, plan["gates"], {}, wid, task, budget)
         spec_prestage_bad = [e for e in (authored or []) if e.get("valid") is False]
@@ -1351,7 +1353,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 4b. tool-loop: реализация. Пропускается, если pre-authoring дал невалидную спецификацию
     #     (Spec-First: нет валидной спеки -> нет кода — ноль tool-loop вызовов).
-    if spec_prestage_bad:
+    if reevaluate_only:
+        # v3.8.4: НЕ авторим и НЕ гоняем tool-loop — переоцениваем существующий HEAD ветки как есть
+        # (после добавления человеко-одобрения). Ноль model-вызовов, ноль правок, план не меняется.
+        loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "reevaluate-only",
+                "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
+    elif spec_prestage_bad:
         loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "spec-prestage-failed",
                 "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
     else:
@@ -1370,7 +1377,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # v2.93: коммитим, если В ДЕРЕВЕ есть правки (git-diff/untracked) — включая правки через shell и
     # произведённые артефакты — а не только при непустом applied. Для не-git репо fallback на applied.
     have_work = (is_git and _has_changes(work_root)) or bool(applied) or bool(authored)
-    if commit and have_work:
+    if reevaluate_only:
+        # v3.8.4: существующий HEAD ветки — уже зафиксированная работа; НЕ создаём новый коммит,
+        # план/SHA не меняются -> plan-bound ApprovalRecords остаются валидны.
+        work_branch = f"ai-ops/{wid}"
+        _rc_h, _out_h, _ = _git(work_root, "rev-parse", "HEAD")
+        committed_sha = _out_h.strip() if _rc_h == 0 else None
+        tree_clean_before_checks = _tree_clean(work_root)
+    elif commit and have_work:
         work_branch = f"ai-ops/{wid}"
         committed_sha = _commit_on_branch(work_root, work_branch,
                                           f"ai-ops: {task[:60]}")
@@ -2285,6 +2299,33 @@ def selftest():
                and _has(_sec_b, "нет QUALIFIED security-судьи"))
         expect("v3.7.3 C: #5-guard даёт человеку путь закрыть (блокер называет ApprovalRecord)",
                _has(_sec_b, "ApprovalRecord"))
+
+        # v3.8.4 RE-EVALUATE-ONLY: green-except-security ветка (QUICK+api_change, без spec-гейтов) ->
+        # человек добавил ApprovalRecord -> переоценить гейты БЕЗ переавторинга (loop stopped=reevaluate-only,
+        # план/SHA не меняются -> plan-bound approval валиден) -> #5-блок security снят человеком. Закрывает
+        # gap: resume --execute переписывал код и инвалидировал plan-bound approvals.
+        import security_pack as _sp_re, approvals as _appr_re
+        sig_q = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["api"], "api_change": True}
+        it_q1 = iter([{"op": "write", "path": "rq.py", "content": "def rq():\n    return 1\n"}, {"done": True}])
+        run_pipeline("quick api sec", sig_q, root, lambda c: next(it_q1), policy=pol,
+                     budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
+                     install_deps=False, review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
+        _nrq = _sp_re.run_pack(str(root / ".ai" / "worktrees" / "reeval-fn"), base=None,
+                               signals=sig_q).get("needs_review") or ["rate_limiting"]
+        for _d in _nrq:
+            _appr_re.write_record(root, "reeval-fn", approval=_d, approved_by="human@owner",
+                                  scope=f"security {_d}", reason="человек одобрил (reeval тест)",
+                                  created_at="2026-07-29", binds_to="reeval-fn-plan", expires_at="2026-12-31",
+                                  risk="medium", source="human")
+        rep_re = run_pipeline("quick api sec", sig_q, root, lambda c: {"done": True}, policy=pol,
+                              budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
+                              install_deps=False, review=True, reviewer_proposer=sec_reviewer,
+                              strict_judge_qualified=False, reevaluate_only=True)
+        _sec_re = next((g for g in rep_re["gates"].get("gate_results", []) if g.get("gate") == "security"), {})
+        expect("v3.8.4 re-evaluate-only: путь БЕЗ переавторинга (loop stopped=reevaluate-only)",
+               (rep_re.get("loop") or {}).get("stopped") == "reevaluate-only")
+        expect("v3.8.4 re-evaluate-only: человеко-одобрение сняло #5-блок security (approval закрыл)",
+               not any("нет QUALIFIED security-судьи" in b for b in (_sec_re.get("blockers") or [])))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.106 #1 (fail-closed): secret_boundary требует человека даже при pass ревьюера
