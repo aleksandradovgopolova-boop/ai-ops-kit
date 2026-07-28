@@ -7,8 +7,10 @@
   - model-qualification.yaml — допуск model×revision×role (status ИЗ Bench, safety-first);
   - models.yaml             — конкретные модели, классы, cost_class, revision.
 
-resolve(role): среди моделей, КВАЛИФИЦИРОВАННЫХ для роли И входящих в требуемый класс роли — берёт
-самую дешёвую (cost_per_change, затем cost_class). Нет qualified -> resolved=false + escalation (НЕ
+resolve(role): среди допущенных для роли моделей в требуемом классе — берёт самую дешёвую. Экономика В
+ДЕНЬГАХ (v3.7.10): если у ВСЕХ кандидатов есть total_cost_per_verified_change -> сортировка по деньгам
+(cost_basis=money); иначе честный tokens-fallback + cost_warning (нет тарифа -> порядок может не совпасть
+с деньгами). Нет допущенной модели -> resolved=false + escalation (НЕ
 берём неквалифицированную ради дешевизны — safety over economy). Стоимость класса НЕ считается по
 неквалифицированной модели. escalation_decision(): abstain/schema_invalid -> targeted retry -> эскалация
 ТОЛЬКО review/judge-вызова (escalate_scope=review_only), не всей задачи.
@@ -64,9 +66,25 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
     cands = [q for q in quals if q.get("role") == role and _eligible(q, role)
              and (not allowed_classes or (m_classes(q.get("model_id")) & allowed_classes))]
 
+    # v3.7.10 экономика В ДЕНЬГАХ: если у ВСЕХ кандидатов роли есть total_cost_per_verified_change
+    # (деньги), сортируем по деньгам; иначе честный tokens-fallback + warning (ранжирование может не
+    # совпасть с деньгами). Токен-прокси врёт при разнице тарифов — деньги основной критерий.
+    def _money(q):
+        v = (q.get("economics") or {}).get("total_cost_per_verified_change")
+        return v if isinstance(v, (int, float)) else None
+
+    def _tokens(q):
+        t = (q.get("economics") or {}).get("tokens_per_verified_change")
+        if isinstance(t, (int, float)):
+            return t
+        cpc = q.get("metrics", {}).get("cost_per_change")   # legacy-поле (синтетика/старые записи)
+        return cpc if isinstance(cpc, (int, float)) else None
+
+    money_mode = bool(cands) and all(_money(q) is not None for q in cands)
+
     def cost_key(q):
-        cpc = q.get("metrics", {}).get("cost_per_change")
-        return (cpc if isinstance(cpc, (int, float)) else 99,
+        primary = _money(q) if money_mode else _tokens(q)
+        return (primary if isinstance(primary, (int, float)) else 1e18,
                 _COST_RANK.get((models.get(q.get("model_id")) or {}).get("cost_class"), 1))
 
     cands.sort(key=cost_key)
@@ -82,13 +100,19 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
                                "escalate_scope": (roles_cfg.get("escalation_policy") or {}).get("escalate_scope")}}
     top = cands[0]
     fb = cands[1] if len(cands) > 1 else None
-    return {"kind": "ModelResolutionResult", "resolved": True, "role": role,
-            "model_id": top["model_id"], "provider": top.get("provider"), "revision": top.get("revision"),
-            "status": top.get("status"),
-            "qualification_evidence": f"{top['model_id']}@{top.get('revision')}/{role}#{top.get('corpus_version')}",
-            "estimated_cost": top.get("metrics", {}).get("cost_per_change"),
-            "reason": f"cheapest-eligible ({top.get('status')})",
-            "fallback": ({"model_id": fb["model_id"], "revision": fb.get("revision")} if fb else None)}
+    cost_basis = "money" if money_mode else "tokens-fallback"
+    res = {"kind": "ModelResolutionResult", "resolved": True, "role": role,
+           "model_id": top["model_id"], "provider": top.get("provider"), "revision": top.get("revision"),
+           "status": top.get("status"), "cost_basis": cost_basis,
+           "qualification_evidence": f"{top['model_id']}@{top.get('revision')}/{role}#{top.get('corpus_version')}",
+           "estimated_cost": (_money(top) if money_mode else _tokens(top)),
+           "cost_currency": ((top.get("economics") or {}).get("currency") if money_mode else None),
+           "reason": f"cheapest-eligible ({top.get('status')}, {cost_basis})",
+           "fallback": ({"model_id": fb["model_id"], "revision": fb.get("revision")} if fb else None)}
+    if not money_mode:
+        res["cost_warning"] = ("ранжирование в ТОКЕНАХ, не деньгах: не у всех кандидатов роли задан "
+                               "total_cost_per_verified_change (нет тарифа) — порядок может не совпасть с деньгами")
+    return res
 
 
 def escalation_decision(role, attempt, signal, roles_cfg=None):
@@ -115,15 +139,31 @@ def selftest():
 
     roles_cfg, quals, models = _load()
 
-    # измеренный реестр (N6, 2026-07-28): implementation — три conditional вендора; по стоимости
-    # deepseek(79.5k) < qwen(108.8k) < kimi(139.2k) -> preferred deepseek, fallback qwen.
+    # измеренный реестр (N6, 2026-07-28): три conditional вендора. DeepSeek V4 без тарифа (image-only)
+    # -> money-mode ВЫКЛ, честный tokens-fallback. По токенам (delivered basis): qwen 62.8k < deepseek
+    # 79.5k < kimi 150.7k -> preferred qwen, fallback deepseek. Как только придёт цена DeepSeek -> money-mode.
     r_impl = resolve("implementation", roles_cfg, quals, models)
     expect("implementation -> resolved (writer допускает conditional)",
            r_impl["resolved"] and r_impl.get("model_id") and r_impl["reason"].startswith("cheapest-eligible"))
-    expect("implementation cheapest -> deepseek-chat (79.5k), не qwen/kimi",
-           r_impl["model_id"] == "deepseek-chat" and r_impl["provider"] == "deepseek")
-    expect("implementation fallback -> qwen3-coder-plus (2-й по стоимости, 108.8k)",
-           (r_impl.get("fallback") or {}).get("model_id") == "qwen3-coder-plus")
+    expect("implementation cost_basis=tokens-fallback + warning (deepseek без тарифа)",
+           r_impl["cost_basis"] == "tokens-fallback" and "cost_warning" in r_impl)
+    expect("implementation cheapest по токенам -> qwen3-coder-plus (62.8k < deepseek 79.5k)",
+           r_impl["model_id"] == "qwen3-coder-plus" and r_impl["provider"] == "qwen")
+    expect("implementation fallback -> deepseek-chat",
+           (r_impl.get("fallback") or {}).get("model_id") == "deepseek-chat")
+
+    # money-mode: у ВСЕХ кандидатов есть деньги -> сортировка по ДЕНЬГАМ, не токенам (доказ. тезиса)
+    ms2 = {"a": {"classes": ["balanced"], "cost_class": "low"}, "b": {"classes": ["balanced"], "cost_class": "low"}}
+    q_money = [
+        {"role": "implementation", "status": "conditional", "model_id": "a", "provider": "pa", "revision": "a",
+         "corpus_version": "t", "metrics": {"false_green": 0},
+         "economics": {"tokens_per_verified_change": 50000, "total_cost_per_verified_change": 0.90}},   # мало токенов, ДОРОГО
+        {"role": "implementation", "status": "conditional", "model_id": "b", "provider": "pb", "revision": "b",
+         "corpus_version": "t", "metrics": {"false_green": 0},
+         "economics": {"tokens_per_verified_change": 150000, "total_cost_per_verified_change": 0.07}}]  # много токенов, ДЁШЕВО
+    rm = resolve("implementation", {"roles": {"implementation": {"preferred_class": "balanced"}}}, q_money, ms2)
+    expect("money-mode: выбран дешёвый по ДЕНЬГАМ (b $0.07), а НЕ по токенам (a 50k)",
+           rm["cost_basis"] == "money" and rm["model_id"] == "b" and "cost_warning" not in rm)
 
     r_sec = resolve("security_review", roles_cfg, quals, models)
     expect("security_review -> НЕ resolved (строгий судья требует qualified; conditional/пусто не годится)",

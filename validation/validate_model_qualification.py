@@ -89,6 +89,43 @@ def check(data, pkg=PKG):
         if q["status"] != derived:
             e.append(f"{mid}/{role}: заявлен status='{q['status']}', но метрики дают '{derived}' "
                      f"(допуск не из Bench — safety нарушен)")
+        e += economics_errors(q.get("economics"), f"{mid}/{role}")
+    return e
+
+
+def economics_errors(ec, tag):
+    """v3.7.10: экономика РАЗДЕЛЯЕТ измеренные токены и ДЕКЛАРИРУЕМЫЕ цены. Деньги (total_cost) —
+    только когда есть обе цены, и обязаны быть согласованы с токенами×цена. Без цены total_cost=null
+    (нельзя посчитать деньги без тарифа — роутер по этой роли откатится на tokens)."""
+    if ec is None:
+        return []  # экономика необязательна (но у измеренных implementation-записей есть)
+    e = []
+    if not isinstance(ec, dict):
+        return [f"{tag}: economics не объект"]
+    for k in ("input_tokens_per_change", "output_tokens_per_change", "tokens_per_verified_change"):
+        v = ec.get(k)
+        if v is not None and not (isinstance(v, int) and v > 0):
+            e.append(f"{tag}: economics.{k} должен быть положительным целым (токены измеряются)")
+    ip, op = ec.get("input_price_per_mtok"), ec.get("output_price_per_mtok")
+    tc = ec.get("total_cost_per_verified_change")
+    priced = ip is not None and op is not None
+    if priced:
+        if not (isinstance(ip, (int, float)) and isinstance(op, (int, float)) and ip >= 0 and op >= 0):
+            e.append(f"{tag}: цены должны быть неотрицательными числами")
+        for k in ("currency", "price_snapshot_at", "price_source"):
+            if not (isinstance(ec.get(k), str) and ec[k].strip()):
+                e.append(f"{tag}: при заданных ценах обязателен economics.{k} (провенанс тарифа)")
+        it, ot = ec.get("input_tokens_per_change"), ec.get("output_tokens_per_change")
+        if isinstance(it, int) and isinstance(ot, int) and isinstance(ip, (int, float)) and isinstance(op, (int, float)):
+            expect = it / 1e6 * ip + ot / 1e6 * op
+            if not (isinstance(tc, (int, float)) and abs(tc - expect) <= max(0.001, expect * 0.02)):
+                e.append(f"{tag}: total_cost_per_verified_change={tc} != токены×цена≈{expect:.4f} "
+                         f"(деньги не сходятся с измерением)")
+    else:
+        # без полной пары цен деньги посчитать нельзя -> total_cost обязан быть null (не выдумываем)
+        if tc is not None:
+            e.append(f"{tag}: цены не заданы, но total_cost_per_verified_change={tc} — деньги без тарифа "
+                     f"(должно быть null; роутер откатится на tokens)")
     return e
 
 
@@ -120,6 +157,26 @@ def selftest():
            any("метрики дают" in x for x in check(lie2)))
     expect("несуществующий model_id -> ошибка",
            any("нет в models.yaml" in x for x in check({**base, "qualifications": [{**base["qualifications"][0], "model_id": "ghost-model"}]})))
+
+    # v3.7.10 economics: деньги согласованы с токенами×цена; цены требуют провенанс; без цены total_cost=null
+    good_ec = {"input_tokens_per_change": 100000, "output_tokens_per_change": 20000,
+               "tokens_per_verified_change": 120000, "input_price_per_mtok": 2.0, "output_price_per_mtok": 8.0,
+               "currency": "USD", "price_snapshot_at": "2026-07-28", "price_source": "http://x",
+               "total_cost_per_verified_change": 0.36}  # 0.1*2 + 0.02*8 = 0.36
+    expect("economics согласована (деньги=токены×цена) -> ok", economics_errors(good_ec, "t") == [])
+    expect("total_cost != токены×цена -> ошибка",
+           any("не сходятся" in x for x in economics_errors({**good_ec, "total_cost_per_verified_change": 9.9}, "t")))
+    expect("цена без snapshot/source -> ошибка",
+           any("провенанс" in x for x in economics_errors({**good_ec, "price_snapshot_at": None}, "t")))
+    expect("цена null, но total_cost задан -> ошибка (деньги без тарифа)",
+           any("деньги без тарифа" in x for x in economics_errors(
+               {"input_tokens_per_change": 1, "output_tokens_per_change": 1, "tokens_per_verified_change": 2,
+                "input_price_per_mtok": None, "output_price_per_mtok": None, "total_cost_per_verified_change": 0.5}, "t")))
+    expect("цена null + total_cost null -> ok (tokens-fallback честно)",
+           economics_errors({"input_tokens_per_change": 100, "output_tokens_per_change": 100,
+                             "tokens_per_verified_change": 200, "input_price_per_mtok": None,
+                             "output_price_per_mtok": None, "total_cost_per_verified_change": None,
+                             "verification_required": True}, "t") == [])
 
     if DEFAULT.exists():
         errs = check(yaml.safe_load(DEFAULT.read_text(encoding="utf-8")))

@@ -137,12 +137,27 @@ models:
   - id: kimi-k2.7-code-highspeed
     provider: kimi
     revision: kimi-k2.7-code-highspeed
+    gateway: api.moonshot.ai
+    deployment_mode: external
+    confidentiality_class: external-cloud
     classes: [balanced, fast]
     context_window: {status: documented, value: 256000}
     capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
+    cost_class: medium
+    note: "live-qual N6: implementation conditional (6/6 верно, вкл. Decimal Money), но дороже всех ($1.90/$8.00 /1M, 2026-07-28 -> ~$0.47/изменение)"
+    last_documented_at: "2026-07-28"
+  - id: kimi-k2.6
+    provider: kimi
+    revision: kimi-k2.6
+    gateway: api.moonshot.ai
+    deployment_mode: external
+    confidentiality_class: external-cloud
+    classes: [balanced]
+    capabilities: {tool_calling: {status: declared, value: true}, structured_output: {status: unstable, value: partial}, streaming: {status: declared, value: true}}
     cost_class: low
-    note: "live v3.6.8: implementation зелёный (реальный draft PR), быстрый; строгий JSON-verdict нестабилен"
-    last_documented_at: "2026-07-27"
+    verification_required: true   # доступна у эндпоинта; НЕ квалифицирована (Bench v2)
+    note: "реальная ревизия эндпоинта; предыдущее поколение — кандидат в сравнение по цене/качеству"
+    last_documented_at: "2026-07-28"
   - id: kimi-k2.7-code
     provider: kimi
     revision: kimi-k2.7-code
@@ -162,26 +177,87 @@ models:
     note: "live v3.6.8: reasoning-флагман, медленный (нужен поднятый timeout); implementation зелёный вживую"
     last_documented_at: "2026-07-27"
 
-  # --- DeepSeek (openai-compatible), реально прогнан в живой квалификации ---
+  # --- DeepSeek (openai-compatible через api.deepseek.com) ---
+  # PORTFOLIO TRUTH (v3.7.10): эндпоинт СЕЙЧАС рекламирует ТОЛЬКО deepseek-v4-flash/deepseek-v4-pro.
+  # 'deepseek-chat' ещё принимается (вероятно алиас на V4) — оставлен как measured-запись N6, но ревизия
+  # под вопросом (переподтвердить в Bench v2). Цена V4 опубликована ТОЛЬКО картинкой -> pending.
   - id: deepseek-chat
     provider: deepseek
     revision: deepseek-chat
+    gateway: api.deepseek.com
+    deployment_mode: external
+    processing_region: {status: unknown, verification_required: true}
+    confidentiality_class: external-cloud
     classes: [balanced, fast]
     context_window: {status: documented, value: 64000}
     capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
     cost_class: low
-    note: "live-qual N6: implementation conditional (4/6 верно, 0 false-green, ~$0.023/успех, ~80k ток/успех); дешёвый исполнитель. Decimal-класс/coupon с requirements-гейтом не осилил -> эскалация на сильнее"
+    note: "live-qual N6: implementation conditional (4/6 верно, 0 false-green). LEGACY-алиас: эндпоинт теперь отдаёт V4 -> ревизия под вопросом; цена V4 image-only -> tokens-fallback до тарифа владельца"
+    last_documented_at: "2026-07-28"
+  - id: deepseek-v4-flash
+    provider: deepseek
+    revision: deepseek-v4-flash
+    gateway: api.deepseek.com
+    deployment_mode: external
+    confidentiality_class: external-cloud
+    classes: [balanced, fast]
+    capabilities: {tool_calling: {status: declared, value: true}, structured_output: {status: unstable, value: partial}, streaming: {status: declared, value: true}}
+    cost_class: low
+    verification_required: true   # доступна у эндпоинта; НЕ квалифицирована (Bench v2 v3.7.11)
+    note: "реальная ревизия эндпоинта (2026-07); дешёвый быстрый исполнитель — кандидат в quick/standard implementation"
+    last_documented_at: "2026-07-28"
+  - id: deepseek-v4-pro
+    provider: deepseek
+    revision: deepseek-v4-pro
+    gateway: api.deepseek.com
+    deployment_mode: external
+    confidentiality_class: external-cloud
+    classes: [high-reasoning, balanced]
+    capabilities: {tool_calling: {status: declared, value: true}, structured_output: {status: unstable, value: partial}, streaming: {status: declared, value: true}}
+    cost_class: medium
+    verification_required: true   # доступна у эндпоинта; НЕ квалифицирована (Bench v2)
+    note: "реальная ревизия эндпоинта (2026-07); сильный кандидат — long-horizon implementation / возможный judge (проверить adversarial)"
     last_documented_at: "2026-07-28"
 
-  # --- Qwen (Alibaba DashScope, openai-compatible), прогнан в живой квалификации ---
+  # --- Qwen (Alibaba DashScope INTL, openai-compatible через dashscope-intl .../compatible-mode/v1) ---
   - id: qwen3-coder-plus
     provider: qwen
     revision: qwen3-coder-plus
+    gateway: dashscope-intl.aliyuncs.com
+    deployment_mode: external
+    processing_region: {status: documented, value: "International (Singapore)"}
+    confidentiality_class: external-cloud
     classes: [balanced, high-reasoning]
     context_window: {status: documented, value: 128000}
     capabilities: {tool_calling: true, structured_output: {status: unstable, value: partial}, streaming: true}
     cost_class: medium
-    note: "DashScope compatible-mode (dashscope-intl .../compatible-mode/v1); кодовая модель. Статус допуска — из живой квалификации (см. model-qualification)"
+    note: "live-qual N6: implementation conditional (5/6 верно, 0 false-green). Цена INTL $1.00/$5.00 /1M (2026-07-28)"
+    last_documented_at: "2026-07-28"
+  - id: qwen3-coder-next
+    provider: qwen
+    revision: qwen3-coder-next
+    gateway: dashscope-intl.aliyuncs.com
+    deployment_mode: external
+    processing_region: {status: documented, value: "International (Singapore)"}
+    confidentiality_class: external-cloud
+    classes: [balanced, fast]
+    capabilities: {tool_calling: {status: declared, value: true}, structured_output: {status: unstable, value: partial}, streaming: {status: declared, value: true}}
+    cost_class: low
+    verification_required: true   # доступна у эндпоинта; НЕ квалифицирована (Bench v2). Цена $0.30/$1.50 /1M
+    note: "реальная ревизия эндпоинта; дешевле coder-plus втрое — сильный кандидат в quick/standard implementation"
+    last_documented_at: "2026-07-28"
+  - id: qwen3-coder-flash
+    provider: qwen
+    revision: qwen3-coder-flash
+    gateway: dashscope-intl.aliyuncs.com
+    deployment_mode: external
+    processing_region: {status: documented, value: "International (Singapore)"}
+    confidentiality_class: external-cloud
+    classes: [fast, balanced]
+    capabilities: {tool_calling: {status: declared, value: true}, structured_output: {status: unstable, value: partial}, streaming: {status: declared, value: true}}
+    cost_class: low
+    verification_required: true   # доступна у эндпоинта; НЕ квалифицирована. Цена $0.30/$1.50 /1M
+    note: "реальная ревизия эндпоинта; самый дешёвый кодовый Qwen — кандидат в массовые quick-задачи"
     last_documented_at: "2026-07-28"
 
 # Правила: routing policy ссылается на model_classes; разрешение class->model

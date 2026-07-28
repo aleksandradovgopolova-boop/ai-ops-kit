@@ -6,23 +6,39 @@ registry_type: model-qualification
 # false_green==0 И success_rate>=0.8 И schema_valid_rate>=0.9; conditional >=0.5; experimental >0.
 #
 # ИЗМЕРЕНО в живой кросс-вендорной квалификации 2026-07-28 (N=6 фиксированный корпус, объективная
-# приёмка по точному контракту задачи; DeepSeek + Kimi + Qwen = 18 прогонов, БЕЗ Anthropic). Метрики:
-#   success_rate = доля КОРРЕКТНОЙ реализации (приёмка проходит на закоммиченном коде);
-#   false_green  = ready_for_pr при неверном коде — 0 у ВСЕХ ТРЁХ во всех 18 прогонах (safety держится);
-#   schema_valid_rate = доля прогонов, где structured-output автора валиден до применённого коммита;
-#   cost_per_change = токены (тыс., input+output) на один успешно доставленный change.
-# Ни один вендор НЕ дотянул до qualified на N=6 (DeepSeek — success 0.667; Kimi/Qwen — schema 0.833).
-# Все conditional -> роутер допускает их к РОЛИ ПИСАТЕЛЯ (implementation/code_review), но НЕ к строгим
-# судьям (security_review/integration_judge) — там нужен qualified, которого пока нет (роутер честно
-# блокирует). Неизмеренные seed-записи судейских ролей УДАЛЕНЫ: реестр держит только измеренное.
+# приёмка по точному контракту задачи; DeepSeek + Kimi + Qwen = 18 прогонов, БЕЗ Anthropic). Метрики
+# статуса: success_rate (доля КОРРЕКТНОЙ реализации); false_green (0 у всех 18 — safety держится);
+# schema_valid_rate; latency_s_p50. Ни один вендор НЕ дотянул до qualified на N=6 -> все conditional.
+#
+# v3.7.10 ЭКОНОМИКА В ДЕНЬГАХ (ревью владельца, «самая важная проблема»): раньше роутер сортировал по
+# token-прокси, что при разнице тарифов врёт. Теперь `economics` РАЗДЕЛЯЕТ измеренные токены и
+# ДЕКЛАРИРУЕМЫЕ цены -> вычисляемый total_cost_per_verified_change (деньги) — основной критерий роутера.
+# Токены — на базе delivered_verified (на УСПЕШНОЕ изменение; прежние all-impl_ok числа были историческими
+# и завышали qwen из-за false_fail t5). Цены Kimi/Qwen — с официальных страниц (source+snapshot). DeepSeek:
+# цена V4 опубликована ТОЛЬКО картинкой (v4-price-en.png) — не извлекается, оставлена null +
+# verification_required (роутер по роли с null-ценой честно откатывается на tokens-fallback). Роутер
+# допускает conditional к writer-ролям, строгих судей (security/integration) — нет (нет qualified).
 qualifications:
   - model_id: deepseek-chat
     provider: deepseek
     revision: deepseek-chat
     role: implementation
     corpus_version: live-qual-2026-07-28-N6
-    # 4/6 верно (t1/t2/t4/t6), 0 false-green; ~$0.023 и ~80k ток/успех — самый дешёвый исполнитель.
-    metrics: {false_green: 0, schema_valid_rate: 1.0, success_rate: 0.667, latency_s_p50: 95.3, cost_per_change: 79.5}
+    # ВНИМАНИЕ (portfolio truth): эндпоинт api.deepseek.com теперь рекламирует ТОЛЬКО deepseek-v4-flash/
+    # deepseek-v4-pro; 'deepseek-chat' принимается, но, вероятно, алиас на V4 -> точная ревизия под вопросом,
+    # переподтвердить в Bench v2 (v3.7.11).
+    metrics: {false_green: 0, schema_valid_rate: 1.0, success_rate: 0.667, latency_s_p50: 95.3}
+    economics:
+      input_tokens_per_change: 77162
+      output_tokens_per_change: 2364
+      tokens_per_verified_change: 79526
+      input_price_per_mtok: null
+      output_price_per_mtok: null
+      currency: null
+      price_snapshot_at: null
+      price_source: null
+      total_cost_per_verified_change: null    # цена V4 image-only -> ждём владельца; пока tokens-fallback
+      verification_required: true
     status: conditional
     qualified_at: "2026-07-28"
   - model_id: kimi-k2.7-code-highspeed
@@ -30,9 +46,17 @@ qualifications:
     revision: kimi-k2.7-code-highspeed
     role: implementation
     corpus_version: live-qual-2026-07-28-N6
-    # 6/6 верно (вкл. Decimal Money, который DeepSeek не смог), 0 false-green; дороже (~139k ток/успех).
-    # 1 false_fail (t6: верный код заблокирован консервативным ревью). status держит schema 0.833 (<0.9).
-    metrics: {false_green: 0, schema_valid_rate: 0.833, success_rate: 1.0, latency_s_p50: 160.3, cost_per_change: 139.2}
+    metrics: {false_green: 0, schema_valid_rate: 0.833, success_rate: 1.0, latency_s_p50: 160.3}
+    economics:
+      input_tokens_per_change: 121049
+      output_tokens_per_change: 29616
+      tokens_per_verified_change: 150665
+      input_price_per_mtok: 1.90
+      output_price_per_mtok: 8.00
+      currency: USD
+      price_snapshot_at: "2026-07-28"
+      price_source: "https://platform.kimi.ai/docs/pricing/chat-k27-code"
+      total_cost_per_verified_change: 0.4669   # 0.121049*1.90 + 0.029616*8.00
     status: conditional
     qualified_at: "2026-07-28"
   - model_id: qwen3-coder-plus
@@ -40,9 +64,16 @@ qualifications:
     revision: qwen3-coder-plus
     role: implementation
     corpus_version: live-qual-2026-07-28-N6
-    # 5/6 верно, 0 false-green; быстрее kimi (~94s p50), ~109k ток/успех. 1 false_fail (t5 Money: верный
-    # Decimal-код заблокирован ревью), 1 не смог (t6 convert). success 0.833>=0.8 -> в qualified упирается
-    # ТОЛЬКО в schema 0.833 (<0.9): при чуть большем N мог бы стать qualified первым из трёх.
-    metrics: {false_green: 0, schema_valid_rate: 0.833, success_rate: 0.833, latency_s_p50: 93.7, cost_per_change: 108.8}
+    metrics: {false_green: 0, schema_valid_rate: 0.833, success_rate: 0.833, latency_s_p50: 93.7}
+    economics:
+      input_tokens_per_change: 60522
+      output_tokens_per_change: 2294
+      tokens_per_verified_change: 62815
+      input_price_per_mtok: 1.00
+      output_price_per_mtok: 5.00
+      currency: USD
+      price_snapshot_at: "2026-07-28"
+      price_source: "https://www.alibabacloud.com/help/en/model-studio/model-pricing (International, 0-32K tier)"
+      total_cost_per_verified_change: 0.0720   # 0.060522*1.00 + 0.002294*5.00
     status: conditional
     qualified_at: "2026-07-28"

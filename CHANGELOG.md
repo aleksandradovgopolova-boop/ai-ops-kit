@@ -229,6 +229,31 @@ BudgetContract / cost_account) с ролями рантайма — без па�
 - Три вывода «дефектов одной сессии» закрыты: Вывод 1 (scenario-как-evidence, v3.7.7), Вывод 2
   (surface_wiring, v3.7.8), Вывод 3 (on_repeat, v3.7.9) — все ADVISORY/аддитивно, 0 регрессий. parity 174/174.
 
+### Added (v3.7.10 — Model Portfolio Truth + денежная экономика роутера)
+- Ревью владельца, «самая важная проблема»: роутер сортировал по token-прокси (`cost_per_change` = тыс.
+  токенов), что при разнице тарифов ВРЁТ. Пример из измерений: Qwen дешевле Kimi в токенах ~2.4×, а в
+  ДЕНЬГАХ ~6.5× ($0.072 vs $0.467/изменение).
+- `registry/model-qualification.yaml` — блок `economics` РАЗДЕЛЯЕТ измеренные токены (input/output/
+  tokens_per_verified_change, база delivered_verified) от ДЕКЛАРИРУЕМЫХ цен (input/output_price_per_mtok,
+  currency, price_snapshot_at, price_source) -> вычисляемый `total_cost_per_verified_change` (деньги).
+  Цены Kimi ($1.90/$8.00) и Qwen ($1.00/$5.00) — с официальных страниц (source+snapshot 2026-07-28).
+  DeepSeek V4: цена опубликована ТОЛЬКО картинкой -> null + verification_required (ждём тариф владельца).
+- `validation/validate_model_qualification.py` — `economics_errors`: деньги обязаны сходиться с
+  токены×цена (±2%); цены требуют currency+snapshot+source; без цены total_cost=null (не выдумываем).
+  selftest +5. derive_status (safety) НЕ тронут.
+- `tools/model_router.py` — money-first: если у ВСЕХ кандидатов роли есть total_cost -> сортировка по
+  ДЕНЬГАМ (cost_basis=money); иначе честный tokens-fallback + `cost_warning`. Результат несёт cost_basis/
+  cost_currency. Живой резолв implementation: DeepSeek без тарифа -> tokens-fallback; по корректной
+  delivered-базе `qwen3-coder-plus` (62.8k) дешевле deepseek (79.5k) -> preferred qwen, fallback deepseek
+  (прежний порядок был искажён завышенным qwen из-за false_fail t5). selftest +money-mode (деньги≠токены).
+- `registry/models.yaml` — PORTFOLIO TRUTH: поля `gateway`/`deployment_mode`/`processing_region`/
+  `confidentiality_class`/`exact_revision` на измеренных записях; эндпоинт DeepSeek теперь отдаёт ТОЛЬКО
+  `deepseek-v4-flash`/`deepseek-v4-pro` (добавлены, verification_required; 'deepseek-chat' помечен legacy-
+  алиасом); добавлены реальные `qwen3-coder-next`/`qwen3-coder-flash` ($0.30/$1.50), `kimi-k2.6`. Новые —
+  verification_required (квалификация в Bench v2, v3.7.11).
+- ПЕНДИНГ: тариф DeepSeek V4 (image-only) от владельца -> flip implementation в money-mode; Bench v2
+  (новое поколение + judge adversarial corpus); router→ai_ops_run (v3.7.12). parity 174/174.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
