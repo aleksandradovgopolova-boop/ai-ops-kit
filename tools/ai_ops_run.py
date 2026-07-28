@@ -194,6 +194,35 @@ def _resume_context_from_handoff(child_root, fid):
     return "\n\n".join(lines)
 
 
+def _with_provider_fallback(primary, secondary, on_switch=None):
+    """v3.8.3-rc2 (#6) PROVIDER FALLBACK: обёртка провайдера. На RETRYABLE infra-сбой (HTTP 429 / timeout /
+    provider unavailable — по _classify_failure) переключается на fallback-провайдера и остаётся на нём.
+    Не-retryable исключения (плохой код/тест/секьюрити НЕ бросают из провайдера) пробрасываются как есть —
+    fallback НЕ маскирует дефекты реализации. secondary=None -> возвращаем primary без обёртки."""
+    if secondary is None:
+        return primary
+    state = {"switched": False}
+
+    def prov(*a, **k):
+        if state["switched"]:
+            return secondary(*a, **k)
+        try:
+            return primary(*a, **k)
+        except Exception as e:  # noqa: BLE001
+            try:
+                from workpackage_executor import _classify_failure
+                _retryable = bool(_classify_failure(e).get("retryable"))
+            except Exception:  # noqa: BLE001
+                _retryable = False
+            if not _retryable:
+                raise                       # не-retryable -> НЕ fallback (fix-loop/блок разрулят)
+            state["switched"] = True
+            if on_switch:
+                on_switch(e)
+            return secondary(*a, **k)
+    return prov
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="controller", proposer=None, open_pr=False, model=None,
@@ -323,6 +352,26 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
                                                          "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
                         _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
+                    # v3.8.3-rc2 (#6) PROVIDER FALLBACK: writer переключается на СЛЕДУЮЩУЮ допущенную модель
+                    # (router-план fallback) ТОЛЬКО на retryable infra-сбое (429/timeout/unavailable). НЕ на
+                    # tests/security/плохом коде — те не бросают из провайдера, идут в fix-loop/блок. Иначе
+                    # fallback маскировал бы дефекты реализации.
+                    _fb = impl.get("fallback") or {}
+                    if _fb.get("model_id") and _fb.get("provider") and _pe.key_available(_fb.get("provider")):
+                        try:
+                            _fbep = _pe.endpoint_for(_fb["provider"])
+                            _fb_prov = orchestrator.make_openai_provider(_fb["model_id"], _fbep["base_url"], _fbep["key_env"])
+                            _sw = {"switched_to": None}
+                            _writer_prov = _with_provider_fallback(
+                                _writer_prov, _fb_prov,
+                                on_switch=lambda e, _s=_sw, _m=_fb["model_id"]: _s.update(switched_to=_m))
+                            _model_resolution["writer_fallback"] = {
+                                "model_id": _fb["model_id"], "provider": _fb["provider"],
+                                "trigger": "retryable-infra-failure-only", "switch_state": _sw}
+                            if not (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
+                                _rev_prov = _writer_prov      # reviewer=self-model -> та же обёрнутая модель
+                        except Exception as _fbe:  # noqa: BLE001 — сбой построения fallback не роняет прогон
+                            _model_resolution["writer_fallback"] = {"error": f"{type(_fbe).__name__}: {_fbe}"[:160]}
                     # v3.7.13/v3.7.1/v3.7.2 key preflight — БАРЬЕР перед живым вызовом, FAIL-CLOSED:
                     # ЛЮБАЯ ошибка чтения KLP/preflight -> blocked-preflight (НЕ молчаливый pass). KLP #3
                     # ПРОЕЦИРУЕТСЯ на реально используемые провайдеры (impl + независимый reviewer); ключи
@@ -1198,6 +1247,26 @@ def selftest():
         nonlocal ok
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
+
+    # v3.8.3-rc2 (#6) PROVIDER FALLBACK: retryable infra-сбой -> switch; не-retryable -> проброс; нет fb -> as-is
+    _sw = {"to": None}
+    _wrapped = _with_provider_fallback(
+        (lambda *a, **k: (_ for _ in ()).throw(TimeoutError("request timed out"))),  # retryable (network)
+        (lambda *a, **k: "FALLBACK-OK"), on_switch=lambda e: _sw.update(to="fb"))
+    expect("rc2 #6: retryable infra-сбой (timeout) -> переключение на fallback-провайдер",
+           _wrapped("m") == "FALLBACK-OK" and _sw["to"] == "fb")
+    expect("rc2 #6: после switch остаёмся на fallback (primary не зовём)", _wrapped("m2") == "FALLBACK-OK")
+    _raised = False
+    try:
+        _with_provider_fallback(
+            (lambda *a, **k: (_ for _ in ()).throw(ValueError("bad code"))),  # НЕ retryable
+            (lambda *a, **k: "X"))("m")
+    except ValueError:
+        _raised = True
+    expect("rc2 #6: не-retryable (плохой код/тест) -> НЕ fallback, исключение пробрасывается", _raised)
+    _p = lambda *a, **k: "P"
+    expect("rc2 #6: нет fallback-модели -> провайдер без обёртки (as-is)",
+           _with_provider_fallback(_p, None) is _p)
 
     sig = {"task_type": "PRODUCT", "risk": "medium",
            "available_providers": ["anthropic"], "available_runtimes": ["claude-code"],

@@ -93,10 +93,30 @@ exit_criteria:
 blocked_by:
   - "живые провайдер-ключи (DeepSeek/Qwen/Kimi в env; sonnet-класс — опц. контроль)"
   - "Node/React/Storybook тулчейн для frontend-стадии greenfield"
-  - "человеческий ApprovalRecord на security/integration (автосудьи нет до Bench v2)"
-  - "3.8.2: stack-aware integration collector (project_detector + evidence_collector на integration-SHA, не хардкод pytest)"
-  - "3.8.3: настоящий concurrent parallel — отдельные клоны на пакет"
-  - "enforcement #5 на агрегате executor'а + Bench v2 (qualified автосудьи)"
+  - "человеческий ApprovalRecord на security/integration (qualified автосудьи нет до Bench v2)"
+  - "успешный greenfield zero-to-feature повторить до зелёного (3.8.1 был failed_safe)"
+  - "живая квалификация concurrent parallel-2 на реальных провайдерах (3.8.3 component_ready, live_qualified=false)"
 
 # Последовательность фазы (данные, для наблюдаемости):
 phase_sequence: [v3.8.0-contract, v3.8.1-greenfield, v3.8.2-stack-aware-integration, v3.8.3-true-parallel, v3.8.4-readiness]
+
+# Состояние фаз с ДОКАЗАТЕЛЬСТВОМ (не только список блокеров). Обновляется по мере квалификации.
+# status: passed | failed_safe | component_ready | not_started
+phase_progress:
+  v3.8.0:
+    status: passed
+    evidence: "BQP-001 Bootstrap Qualification Contract поверх существующих контрактов + validate_bootstrap_qualification (7 selftest); commit 329ae5d, CI green"
+  v3.8.1:
+    status: failed_safe
+    rerun_required: true
+    evidence: "greenfield: deepseek построил вертикаль, scenario-тест поймал сквозной баг -> impl_verification fail, security pending_human, 0 false-green (СИЛЬНЫЙ негативный тест). Эскалация deepseek->kimi довела до зелёного (commit 9d6c9c9, draft PR #1) + 3 human ApprovalRecord. Нужен чистый zero-to-feature до зелёного одним проходом."
+  v3.8.2:
+    status: component_ready
+    evidence: "stack-aware governed fan-in (project_detector + evidence_collector на integration-SHA, не хардкод pytest); selftest; commit a473e1f"
+  v3.8.3:
+    status: component_ready
+    live_qualified: false
+    evidence: "TRUE concurrent per-package clones (b93a3ca) + rc2 Parallel Trust Wiring (592f172): write_scope enforcement post-commit, DeliveryPlan (не самовольная доставка), реальный github_remote, fail-closed git-ops, run-scoped cleanup. Не прогнан живьём на реальных провайдерах."
+  v3.8.4:
+    status: not_started
+    evidence: "multi-repo readiness: greenfield reference + ИИ-Среда brownfield + маленький Py/TS reference (provider fallback, red-base partial fix). BootstrapReadinessReport."

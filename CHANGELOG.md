@@ -47,6 +47,31 @@
   Гард pytest (CI ⊆ pyyaml): all_pass только при pytest, структура — всегда.
 - serial `run_live` сохранён (backward-compat). Осталось в 3.8: 3.8.4 multi-repo readiness -> 3.8 stable.
 
+### Added (v3.8.3-rc — reevaluate-only delivery path: переоценка гейтов после человеко-одобрения)
+- Greenfield-ревью нашло gap: `resume --execute` переписывал код -> новый план -> plan-bound ApprovalRecord
+  инвалидировался (binds_to mismatch) -> security снова pending_human. `run_pipeline(reevaluate_only=True)`:
+  loop `stopped="reevaluate-only"`, 0 model-вызовов (НЕ переавторинг), план/SHA стабильны -> plan-bound
+  approval валиден -> #5 security закрывается человеко-одобрением, доставка продолжается. selftest +1.
+
+### Added (v3.8.3-rc2 — Parallel Trust Wiring: 10 швов concurrent parallel-2 из owner-review)
+- #1 package-specific signals: `_pkg_signals` даёт каждому пакету свой write_scope/affected_areas/
+  shared_contracts/capability/budget (было: одинаковые signals всем, читался только pkg.id).
+- #2 post-commit scope: `changed_files ⊆ write_scope` на РЕАЛЬНОМ диффе клона -> нарушитель fail, НЕ в fan-in.
+- #3 `contract_shas` прокидывается в `execute_parallel` (было хардкод None) -> shared-contract-first работает.
+- #4/#4b enforcement #5 на АГРЕГАТЕ: `_aggregate_close_security` закрывает needs_review ТОЛЬКО qualified
+  security-судьёй (отдельный `security_reviewer_proposer`) ЛИБО человеко-ApprovalRecord, привязанным к
+  ИНТЕГРАЦИОННОМУ SHA (`binds_to==final_sha`). Общий code-reviewer больше НЕ закрывает security (был шов).
+- #5/#5b delivery: `run_live_concurrent` НЕ пушит сам -> возвращает `delivery_plan` (DeliveryPlan) для
+  канонического Intent/Receipt controller; DeliveryPlan несёт РЕАЛЬНЫЙ `github_remote` (integration-клон
+  имел origin=локальный child -> push уходил бы в клон, а PR — против GitHub).
+- #6 provider fallback: `_with_provider_fallback` переключает writer на fallback-модель (router-план) ТОЛЬКО
+  на retryable infra-сбое (429/timeout/unavailable); не-retryable (тест/секьюрити/плохой код) пробрасывается
+  -> fix-loop/блок, fallback не маскирует дефекты. router-план fallback теперь несёт provider.
+- #7 fail-closed: clone/checkout/fetch/merge в concurrent-пути проверяют returncode (было check=False -> тихо).
+- #8 run-scoped: `clones_dir=None` -> уникальный `tempfile.mkdtemp` + гарантированная очистка (finally).
+- #9 план 3.8.0: `phase_progress` с доказательствами (passed/failed_safe/component_ready/not_started);
+  выполненные 3.8.2/3.8.3 убраны из `blocked_by`. selftest: +8 (rc2a) +3 (#4/#4b) +4 (#6).
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

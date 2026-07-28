@@ -245,33 +245,67 @@ def _classify_failure(exc):
             "traceback_hash": hashlib.sha256(tb.encode("utf-8")).hexdigest()[:12]}
 
 
-def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, reviewer_proposer, review):
-    """v3.0-rc13 (finding аудита P0): needs_review на AGGREGATE-диффе — не провал, а awaiting evidence.
-    Закрываем независимым security-reviewer (writer≠judge, read-only) по применимым доменам — тем же
-    путём, что per-package (_review_security). blocked/error/clear не трогаем (fail-closed). Без поданного
-    ревьюера needs_review остаётся needs_review (честный не-ready). -> (agg_sec', reviewer_result|None)."""
+def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, reviewer_proposer, review,
+                              security_reviewer_proposer=None, strict_judge_qualified=True,
+                              wid=None, child_root=None):
+    """v3.8.3-rc2 (#4/#4b — enforcement #5 на АГРЕГАТЕ): needs_review на integration-диффе закрывается ТОЛЬКО:
+      (a) QUALIFIED security-судьёй — ОТДЕЛЬНЫЙ security_reviewer_proposer при strict_judge_qualified=True; ЛИБО
+      (b) человеко-ApprovalRecord, привязанным к ИНТЕГРАЦИОННОМУ SHA (binds_to=final_sha).
+    Общий code-reviewer (reviewer_proposer) БОЛЬШЕ НЕ закрывает aggregate security (раньше его pass -> clear —
+    это и был незакрытый шов #5). blocked/error/clear не трогаем (fail-closed). Без судьи И без человеко-
+    одобрения на integration-SHA needs_review остаётся needs_review (честный не-ready).
+    -> (agg_sec', judge_result|None)."""
     agg_sec = dict(agg_sec or {})
     if agg_sec.get("overall") != "needs_review":
         return agg_sec, None
-    if not (review and reviewer_proposer):
-        return agg_sec, None                        # ревьюер не подан -> awaiting (не clear -> не ready)
-    try:
-        import execution_pipeline as _ep
-        # rc16 (P0): ревьюер видит ВСЮ последовательность base..final, а не только последний коммит
-        ctx = _ep._change_context_range(vroot, base_sha, final_sha)
-        status, res = _ep._review_security(reviewer_proposer, vroot, agg_sec, final_sha,
-                                           {"max_model_calls": 12}, change_context=ctx)
-        agg_sec["reviewer_status"] = status
-        if status == "pass":                        # судья закрыл применимые needs_review домены (валидно)
-            agg_sec["overall"] = "clear"
-            agg_sec["closed_by"] = "aggregate-security-reviewer"
-        elif isinstance(res, dict) and res.get("invalid"):
-            agg_sec["reviewer_invalid"] = res.get("invalid")   # rc16: false-green отклонён
-        return agg_sec, res
-    except Exception as e:  # noqa: BLE001 — сбой ревью на aggregate = fail-closed (не clear)
-        agg_sec["overall"] = "error"
-        agg_sec["review_error"] = str(e)
-        return agg_sec, None
+
+    # (a) QUALIFIED security-судья (writer≠judge, read-only) — только он, не общий reviewer
+    if strict_judge_qualified and security_reviewer_proposer is not None:
+        try:
+            import execution_pipeline as _ep
+            ctx = _ep._change_context_range(vroot, base_sha, final_sha)  # вся цепочка base..final
+            status, res = _ep._review_security(security_reviewer_proposer, vroot, agg_sec, final_sha,
+                                               {"max_model_calls": 12}, change_context=ctx)
+            agg_sec["reviewer_status"] = status
+            if status == "pass":
+                agg_sec["overall"] = "clear"
+                agg_sec["closed_by"] = "aggregate-qualified-security-judge"
+            elif isinstance(res, dict) and res.get("invalid"):
+                agg_sec["reviewer_invalid"] = res.get("invalid")   # false-green отклонён
+            return agg_sec, res
+        except Exception as e:  # noqa: BLE001 — сбой судьи на aggregate = fail-closed (не clear)
+            agg_sec["overall"] = "error"
+            agg_sec["review_error"] = str(e)
+            return agg_sec, None
+
+    # (b) человеко-ApprovalRecord на ИНТЕГРАЦИОННОМ SHA (#4b): КАЖДЫЙ needs_review-домен обязан иметь валидную
+    # strict-запись, привязанную к integration-SHA (plan_hash=final_sha -> binds_to обязан == final_sha).
+    # Проверяем напрямую по доменам aggregate (не через signals — needs_review уже перечислен).
+    _root = child_root or vroot
+    _nr = list(agg_sec.get("needs_review") or [])
+    if wid and _root and _nr:
+        try:
+            import approvals as _appr
+            _recs = _appr.load_approvals(_root, wid)
+            _now = _appr._now_iso()
+            _closed = [d for d in _nr if any(
+                rc.get("approval") == d and _appr._record_valid(rc, now=_now, plan_hash=final_sha, strict=True)
+                for rc in _recs)]
+            _open = [d for d in _nr if d not in _closed]
+            agg_sec["human_check"] = {"closed": _closed, "open": _open, "records_seen": len(_recs),
+                                      "bound_to": "integration_sha"}
+            if not _open:                                   # ВСЕ needs_review закрыты человеком на integration-SHA
+                agg_sec["overall"] = "clear"
+                agg_sec["closed_by"] = "human-approval-integration-sha"
+            return agg_sec, None
+        except Exception as e:  # noqa: BLE001 — сбой проверки одобрения = fail-closed
+            agg_sec["overall"] = "error"
+            agg_sec["review_error"] = str(e)
+            return agg_sec, None
+
+    # ни qualified-судьи, ни человека на integration-SHA -> awaiting (общий reviewer НЕ закрывает security)
+    agg_sec.setdefault("closed_by", None)
+    return agg_sec, None
 
 
 def _aggregate_code_review(vroot, base_sha, final_sha, signals, reviewer_proposer, review):
@@ -427,7 +461,8 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
 
 
 def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence_base_sha,
-                      signals, reviewer_proposer, review, baseline_proven):
+                      signals, reviewer_proposer, review, baseline_proven,
+                      security_reviewer_proposer=None, strict_judge_qualified=True):
     """v3.0.13 (блок C): AGGREGATE-верификация финального интегрированного SHA — вынесена из
     execute_sequence БЕЗ изменения поведения (чистый вход->aggregate-dict). Перепроверяет результат
     ЦЕЛИКОМ на final_sha против sequence_base_sha: регрессии проверок, дерево чистое, HEAD==final_sha,
@@ -460,7 +495,9 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
             agg_sec = {"overall": "error"}
         # needs_review != провал — awaiting: закрываем независимым security-reviewer на aggregate-диффе
         agg_sec, agg_sec_review = _aggregate_close_security(
-            agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
+            agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review,
+            security_reviewer_proposer=security_reviewer_proposer,
+            strict_judge_qualified=strict_judge_qualified, wid=wid, child_root=child_root)
         agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
         agg_code_ok, agg_code_reviews = _aggregate_code_review(
             vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
@@ -482,7 +519,8 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                      features_dir=None, base=None, provider_name="mock", model=None,
                      author=False, author_proposer=None, review=False, reviewer_proposer=None,
                      baseline_diff=True, install_deps=False, signals_for=None,
-                     sandbox=False, open_pr=False, max_steps=40, write_scope_for=None, resume_from=None):
+                     sandbox=False, open_pr=False, max_steps=40, write_scope_for=None, resume_from=None,
+                     security_reviewer_proposer=None, strict_judge_qualified=True):
     """Исполнить список WorkPackages последовательно. proposer_for(pkg)->proposer; signals_for(pkg)->
     доп. сигналы пакета (опц.); write_scope_for(pkg)->список путей write-scope пакета (опц.).
     v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути (containment не теряется);
@@ -839,7 +877,9 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     aggregate = {"verified": False}
     if executed_all and final_sha:
         aggregate = _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks,
-                                      sequence_base_sha, signals, reviewer_proposer, review, baseline_proven)
+                                      sequence_base_sha, signals, reviewer_proposer, review, baseline_proven,
+                                      security_reviewer_proposer=security_reviewer_proposer,
+                                      strict_judge_qualified=strict_judge_qualified)
     # v3.0-rc2/rc4 (P0.4/P1.1): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена
     # И чиста: verified, нет регрессий, HEAD==final_sha, evidence на final_sha, дерево чистое, агрегатный
     # security clear на полном диффе. Сбой/недоступность -> НЕ ready.
@@ -1358,6 +1398,36 @@ def selftest():
         _res = _collect_base_checks_at(root, _git(root, "rev-parse", "HEAD")[1], False)
         expect("v3.0-rc20 baseline-provenance: валидная база -> proven=True + HEAD==base",
                isinstance(_res, dict) and _res.get("proven") is True)
+
+    # v3.8.3-rc2 (#4/#4b): enforcement #5 на АГРЕГАТЕ — общий reviewer НЕ закрывает; qualified-судья ИЛИ
+    # человеко-approval на ИНТЕГРАЦИОННОМ SHA закрывают. Прямой unit на _aggregate_close_security.
+    import approvals as _appr_t
+    _isha = "a" * 40
+    _agg_nr = {"overall": "needs_review", "needs_review": ["rate_limiting"], "results": []}
+    _gen_reviewer = lambda *a, **k: "VERDICT: pass"   # общий code-reviewer (не должен закрывать security)
+    # (i) общий reviewer_proposer + НЕТ qualified-судьи, НЕТ человека -> остаётся needs_review
+    _r_i, _ = _aggregate_close_security(dict(_agg_nr), Path("."), None, _isha, {}, _gen_reviewer, True,
+                                        security_reviewer_proposer=None, strict_judge_qualified=False,
+                                        wid=None, child_root=None)
+    expect("rc2 #4: общий code-reviewer НЕ закрывает aggregate security (остаётся needs_review)",
+           _r_i.get("overall") == "needs_review" and _r_i.get("closed_by") is None)
+    with tempfile.TemporaryDirectory() as _hd:
+        _appr_t.write_record(_hd, "seq-agg", approval="rate_limiting", approved_by="human@owner",
+                             scope="security rate_limiting", reason="человек одобрил integration-SHA",
+                             created_at="2026-07-29", binds_to=_isha, expires_at="2026-12-31",
+                             risk="high", source="human")
+        # (ii) человеко-approval, привязанный К ИНТЕГРАЦИОННОМУ SHA -> закрывает
+        _r_ii, _ = _aggregate_close_security(dict(_agg_nr), Path(_hd), None, _isha, {}, _gen_reviewer, True,
+                                             security_reviewer_proposer=None, strict_judge_qualified=False,
+                                             wid="seq-agg", child_root=_hd)
+        expect("rc2 #4b: человеко-approval на integration-SHA закрывает aggregate security",
+               _r_ii.get("overall") == "clear" and _r_ii.get("closed_by") == "human-approval-integration-sha")
+        # (iii) тот же approval, но проверяем на ДРУГОМ integration-SHA -> binds_to mismatch -> НЕ закрывает
+        _r_iii, _ = _aggregate_close_security(dict(_agg_nr), Path(_hd), None, "b" * 40, {}, _gen_reviewer, True,
+                                              security_reviewer_proposer=None, strict_judge_qualified=False,
+                                              wid="seq-agg", child_root=_hd)
+        expect("rc2 #4b: approval на ДРУГОМ SHA -> aggregate security НЕ закрыт (SHA-binding)",
+               _r_iii.get("overall") == "needs_review")
 
     # v2.120 (P0.2): sandbox наследуется в per-package прогон (containment не теряется)
     with tempfile.TemporaryDirectory() as td:

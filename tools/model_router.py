@@ -108,7 +108,8 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
            "estimated_cost": (_money(top) if money_mode else _tokens(top)),
            "cost_currency": ((top.get("economics") or {}).get("currency") if money_mode else None),
            "reason": f"cheapest-eligible ({top.get('status')}, {cost_basis})",
-           "fallback": ({"model_id": fb["model_id"], "revision": fb.get("revision")} if fb else None)}
+           "fallback": ({"model_id": fb["model_id"], "revision": fb.get("revision"),
+                         "provider": fb.get("provider"), "status": fb.get("status")} if fb else None)}
     if not money_mode:
         res["cost_warning"] = ("ранжирование в ТОКЕНАХ, не деньгах: не у всех кандидатов роли задан "
                                "total_cost_per_verified_change (нет тарифа) — порядок может не совпасть с деньгами")
