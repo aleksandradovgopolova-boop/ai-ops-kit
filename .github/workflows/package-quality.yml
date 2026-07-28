@@ -139,6 +139,8 @@ jobs:
           python3 validation/validate_model_qualification.py
       - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"
         run: python3 tools/model_router.py --selftest
+      - name: "Provider endpoints — map provider->endpoint+key_env (v3.7.12 router->runtime; selftest)"
+        run: python3 tools/provider_endpoints.py --selftest
       - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
         run: |
           python3 validation/validate_regression_corpus.py --selftest

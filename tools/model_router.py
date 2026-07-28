@@ -115,6 +115,23 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
     return res
 
 
+ALL_ROLES = ("implementation", "code_review", "security_review", "integration_judge")
+
+
+def plan_run(roles_cfg=None, quals=None, models=None):
+    """v3.7.12: резолв ВСЕХ рантайм-ролей одним вызовом -> bundle для RunReport.model_resolution.
+    Делает решение роутера ВИДИМЫМ в отчёте прогона (writer/reviewer/security/integration независимо).
+    writer≠judge по МОДЕЛИ: если code_review резолвится в модель != implementation — это разные identity."""
+    if roles_cfg is None:
+        roles_cfg, quals, models = _load()
+    plan = {role: resolve(role, roles_cfg, quals, models) for role in ALL_ROLES}
+    impl = plan["implementation"]
+    rev = plan["code_review"]
+    plan["writer_ne_judge_by_model"] = bool(impl.get("resolved") and rev.get("resolved")
+                                            and impl.get("model_id") != rev.get("model_id"))
+    return plan
+
+
 def escalation_decision(role, attempt, signal, roles_cfg=None):
     """signal ∈ {ok, reviewer_abstain, schema_invalid, reviewer_uncertain}. -> действие.
     Targeted retry до max; затем эскалация ТОЛЬКО review/judge-вызова (не всей задачи)."""
@@ -200,6 +217,12 @@ def selftest():
     expect("abstain после ретраев -> escalate review_only (не вся задача)",
            d["action"] == "escalate" and d["scope"] == "review_only")
     expect("ok -> proceed", escalation_decision("code_review", 0, "ok", roles_cfg)["action"] == "proceed")
+
+    # plan_run: bundle всех ролей для RunReport
+    plan = plan_run(roles_cfg, quals, models)
+    expect("plan_run несёт все 4 роли", all(r in plan for r in ALL_ROLES))
+    expect("plan_run: implementation resolved, security_review НЕ resolved",
+           plan["implementation"]["resolved"] is True and plan["security_review"]["resolved"] is False)
 
     print("model_router selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

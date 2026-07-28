@@ -293,19 +293,53 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         base_binding = {"kind": "BaseBinding",
                         "base_ref": _brr.get("base_ref") or base, "base_sha": _brr.get("base_sha"),
                         "mode": _brr.get("mode"), "source": _brr.get("source")}
+        # v3.7.12 Router->runtime: без явного --model резолвим модель ПО РОЛИ через model_router и физически
+        # диспатчим на endpoint вендора (provider_endpoints) -> writer≠judge по МОДЕЛИ становится поведением
+        # продукта, а не только резолвером. Явный --model = override (записывается). Всё под fail-safe:
+        # нет резолва/ключа/endpoint -> прежнее поведение (passthrough --model) + честная запись в отчёт.
+        _writer_model, _writer_prov, _rev_model, _rev_prov = model, None, model, None
+        try:
+            import model_router as _mr
+            import provider_endpoints as _pe
+            _plan = _mr.plan_run()
+            _model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
+                                 "mode": "explicit-override" if model else "router", "notes": []}
+            if model is None and provider_name == "openai-compatible":
+                impl, rev = _plan.get("implementation") or {}, _plan.get("code_review") or {}
+                if impl.get("resolved") and _pe.key_available(impl.get("provider")):
+                    ep = _pe.endpoint_for(impl["provider"])
+                    _writer_model = impl["model_id"]
+                    _writer_prov = orchestrator.make_openai_provider(impl["model_id"], ep["base_url"], ep["key_env"])
+                    _model_resolution["applied"] = True
+                    _model_resolution["writer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
+                                                   "cost_basis": impl.get("cost_basis")}
+                    if rev.get("resolved") and _pe.key_available(rev.get("provider")) and rev.get("model_id") != impl.get("model_id"):
+                        ep2 = _pe.endpoint_for(rev["provider"])
+                        _rev_model = rev["model_id"]
+                        _rev_prov = orchestrator.make_openai_provider(rev["model_id"], ep2["base_url"], ep2["key_env"])
+                        _model_resolution["reviewer"] = {"model_id": rev["model_id"], "provider": rev["provider"], "independent_by_model": True}
+                    else:
+                        _rev_model, _rev_prov = _writer_model, _writer_prov
+                        _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
+                                                         "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
+                        _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
+                else:
+                    _model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
+        except Exception as _e:  # noqa: BLE001
+            _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
+                                 "mode": "explicit-override" if model else "router"}
+
         prop = proposer or tool_loop.make_model_proposer(
-            orchestrator.make_provider(provider_name, model))
-        # v2.83: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова),
-        # petля даёт ему read-only-политику. Тот же класс модели — более слабая, но реальная
-        # независимость (отдельный вызов+роль); полностью независимый судья (другая модель/человек)
-        # — сильнее, это осознанная граница. Для mock-провайдера ревью не имеет смысла (нет вердикта).
+            _writer_prov or orchestrator.make_provider(provider_name, _writer_model))
+        # v2.83/v3.7.12: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова);
+        # при router-режиме — по возможности ДРУГАЯ модель/вендор (полная независимость судьи).
         rev_prop = reviewer_proposer
         if review and rev_prop is None and provider_name != "mock":
-            rev_prop = orchestrator.make_provider(provider_name, model)
+            rev_prop = _rev_prov or orchestrator.make_provider(provider_name, _rev_model)
         # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
         auth_prop = author_proposer
         if author and auth_prop is None and provider_name != "mock":
-            auth_prop = orchestrator.make_provider(provider_name, model)
+            auth_prop = _writer_prov or orchestrator.make_provider(provider_name, _writer_model)
 
         # v2.94 (One Run Transaction, аудит #2): pipeline БОЛЬШЕ НЕ обходит lifecycle. Один план
         # строится здесь и передаётся в движок (не второй раз внутри); WorkItem/RunPlan/active-work/
@@ -605,7 +639,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
-        rep["model"] = model
+        # v3.7.12: эффективная модель writer'а (router применён -> резолвленная; иначе переданная).
+        rep["model"] = _writer_model if (isinstance(_model_resolution, dict) and _model_resolution.get("applied")) else model
+        rep["model_resolution"] = _model_resolution   # per-role решение роутера (видимость в каждом отчёте)
         rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
         # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
         # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.

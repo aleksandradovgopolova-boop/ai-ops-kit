@@ -254,6 +254,25 @@ BudgetContract / cost_account) с ролями рантайма — без па�
 - ПЕНДИНГ: тариф DeepSeek V4 (image-only) от владельца -> flip implementation в money-mode; Bench v2
   (новое поколение + judge adversarial corpus); router→ai_ops_run (v3.7.12). parity 174/174.
 
+### Added (v3.7.12 — Router→ai_ops_run: провайдер-независимость стала ПОВЕДЕНИЕМ, не только резолвером)
+- Главный разрыв ревью владельца: resolver+Bench доказали независимость, но runtime брал provider/model
+  от вызывающего, а reviewer по умолчанию — тот же provider/model (writer=judge по модели).
+- `tools/provider_endpoints.py` — map provider->(base_url, key_env): делает per-vendor диспатч ФИЗИЧЕСКИ
+  исполнимым. Секрет только по ИМЕНИ env (значение не в коде/не передаётся). deepseek/kimi/qwen эндпоинты +
+  fallback-ключ. selftest.
+- `tools/orchestrator.py` — `make_openai_provider(model, base_url, key_env)`: провайдер с ЯВНЫМ endpoint
+  (разные модели/вендоры в одном прогоне).
+- `tools/model_router.py` — `plan_run()`: резолв всех 4 ролей одним вызовом -> bundle для отчёта +
+  `writer_ne_judge_by_model`.
+- `tools/ai_ops_run.py` — без `--model` роутер резолвит роль implementation и диспатчит writer на endpoint
+  вендора; reviewer — ДРУГАЯ модель/вендор если резолвится (полная независимость судьи), иначе self-model +
+  запись причины. `--model` = override. `rep["model_resolution"]` (per-role решение) + эффективная
+  `rep["model"]` в КАЖДОМ отчёте. Всё под fail-safe (нет ключа/резолва -> passthrough, не падение).
+- ЖИВОЙ smoke (без --model): роутер сам выбрал `qwen3-coder-plus`, задиспатчил на qwen-endpoint, задача
+  доставлена (ready_for_pr=true), model_resolution.applied=true записан. Провайдер-независимость —
+  поведение продукта. Открытый гап: нет отдельной qualified code_review-модели -> reviewer=writer (честно
+  записано); закроется, когда code_review будет квалифицирован (Bench v2). CI +1, AGENTS +1.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:
