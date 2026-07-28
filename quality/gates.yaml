@@ -118,6 +118,15 @@ gates:
     applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS, AI_FEATURE, CRITICAL]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [build_passed, lint_passed, typecheck_passed, tests_passed, tested_revision]
+    # Вывод 1 «дефектов одной сессии»: «сборка/линт/тесты» необходимо, но почти ничего не гарантирует —
+    # пять дефектов сессии ВСЕ его прошли, т.к. тесты смотрели на слой/функцию, а не на пользовательский
+    # сценарий тем же путём, что продукт. ADVISORY до обкатки (warn, НЕ блок): для applicable task_type
+    # evidence должен нести названный сценарий + покрывающий его тест. Graduation: перенос в
+    # required_evidence + сквозной тест (тогда станет blocking). Правило «сценарий, а не слой» из
+    # SEAM_DEFECTS перестаёт быть чек-листом и становится полем гейта.
+    advisory_evidence: [named_user_scenario, scenario_test]
+    advisory_applicability: [ENGINEERING, PRODUCT, CRITICAL]
+    advisory_validator: validate-scenario-evidence   # runnable: validation/validate_scenario_evidence.py
     # v2.33: детерминированный evidence-контракт — что должен вернуть исполняемый runner
     # (не «pass словом»). Enforcement формы — validate_evidence_schema.py; в gate_executor
     # применяется, когда evidence подан в структурной форме (иначе required_evidence-дисциплина).

@@ -182,6 +182,22 @@ BudgetContract / cost_account) с ролями рантайма — без па�
   затем kimi (139.2k); `security_review → НЕ resolved` (нет qualified-судьи — честный блок, не дешёвый
   суррогат). Селфтесты роутера расширены (writer vs строгий судья, false_green-guard). parity 172/172.
 
+### Added (v3.7.7 — scenario-как-evidence: «сценарий, а не слой» стало полем гейта, ADVISORY)
+- Вывод 1 «дефектов одной сессии»: пять дефектов сессии ВСЕ прошли сборку/линт/тесты — тесты смотрели
+  на слой/функцию, а не на пользовательский сценарий тем же путём, что продукт. `implementation_
+  verification` получил `advisory_evidence: [named_user_scenario, scenario_test]` +
+  `advisory_applicability: [ENGINEERING, PRODUCT, CRITICAL]`. Правило «сценарий, а не слой» из
+  SEAM_DEFECTS перестало быть чек-листом и стало полем гейта.
+- `tools/gate_executor.py` — ADVISORY-проводка: для applicable task_type при отсутствии сценарного
+  evidence добавляется WARNING, `status`/`blockers`/`blocked` НЕ меняются (не ломает зелёные пути;
+  доказано: ENGINEERING без сценария -> pass+warn, blocked=False; QUICK -> тихо; scenario present ->
+  warning гаснет). Graduation до blocking = перенос ключей в `required_evidence` после обкатки.
+- `validation/validate_scenario_evidence.py` — runnable `check`+`selftest` (позитив + негативы,
+  доказывающие СРАБАТЫВАНИЕ — «проверка, что гейт падает, часть гейта»). CI +1 шаг, AGENTS.md +1.
+- `templates/quality/ScenarioEvidencePolicy.md` — DoD: факты сессии, правило, graduation, Оговорка.
+- НЕ реализованы (по решению владельца): Вывод 2 `surface_wiring_consistency` (новый гейт) и Вывод 3
+  `on_repeat→structural`. parity 173/173.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

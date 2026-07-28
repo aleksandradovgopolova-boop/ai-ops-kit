@@ -59,6 +59,8 @@ jobs:
         run: |
           python3 validation/validate_workflow_gates.py --selftest
           python3 validation/validate_workflow_gates.py
+      - name: Scenario-как-evidence (Вывод 1 SEAM session — advisory, selftest)
+        run: python3 validation/validate_scenario_evidence.py --selftest
       - name: WorkItem — единая сущность и статус (selftest)
         run: python3 tools/workitem.py --selftest
       - name: RunPlan — base_workflow + tracks (selftest + tracks integrity)

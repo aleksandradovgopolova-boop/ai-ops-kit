@@ -326,6 +326,22 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
         evid = []
         override = None
 
+    # Вывод 1 «дефектов одной сессии»: scenario-как-evidence — ADVISORY, НИКОГДА не блок (не меняет
+    # status/blockers). «тесты есть» != «тест смотрит на пользовательский сценарий, а не на слой». Для
+    # applicable task_type (advisory_applicability) добавляем warning, если evidence не несёт
+    # advisory_evidence-ключей. Graduation: перенос ключей в required_evidence -> станет blocking.
+    adv = gate.get("advisory_evidence") or []
+    if adv:
+        _scope = gate.get("advisory_applicability") or gate.get("applicability") or []
+        _tt = (signals or {}).get("task_type")
+        if not _scope or _tt in _scope:
+            _prov = set(ev.get("provided", []) or [])
+            _adv_missing = [k for k in adv if not ev.get(k) and k not in _prov]
+            if _adv_missing:
+                warnings = warnings + [f"advisory (Вывод 1: сценарий, а не слой): не предъявлены "
+                                       f"{', '.join(_adv_missing)} — «тесты есть» != «тест проходит "
+                                       f"пользовательский сценарий тем же путём, что продукт»"]
+
     result = {
         "schema_version": 1,
         "gate": gate_id,
