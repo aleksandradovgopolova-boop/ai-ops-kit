@@ -312,6 +312,19 @@ BudgetContract / cost_account) с ролями рантайма — без па�
   stable «hybrid реально fed_to_model» — ВЫПОЛНЕН. Требование: child объявляет `.ai/policies/access-filter`
   (без него default-deny -> v2 пуст -> v1-only). ai_ops_run selftest PASS, parity 175/175.
 
+### Added (v3.7.17 — Live Parallel-2: реальные package-runner + git fan-in -> ОДИН реальный PR)
+- Разрыв ревью: parallel_executor имел точки инъекции, но живые package-runner (ai_ops_run в worktree) и
+  git fan-in не подключены. `tools/parallel_live.py` замыкает: package_runner = ai_ops_run на пакет в своей
+  ветке; integration_runner = git-слияние веток пакетов в integration-ветку -> НОВЫЙ integration-SHA ->
+  ПОВТОР aggregate (pytest) на нём; PR только при зелёном aggregate.
+- Инварианты держатся: package-SHA не доказывают всю работу (повтор на integration-SHA); PR при зелёном
+  aggregate; пакеты parallel-SAFE по write_scope (в адаптере СЕРИЙНО, max_parallel=1 — честная инфра-граница
+  против гонок git-worktree; настоящий concurrency = отдельные клоны). selftest (чистое отображение rep +
+  мок-оркестрация: green->PR, конфликт->нет PR, пакет-fail->pre-fan-in блок).
+- ЖИВОЙ прогон на scratch child: пакеты round+tax -> оба на deepseek-v4-flash (money-mode) pass -> fan-in
+  integration-SHA 4a3e06c8, aggregate pytest зелёный -> ОДИН draft PR (ai-ops-dogfood-v368-py#2). Критерий
+  stable «parallel-2 открыл один реальный PR» — ВЫПОЛНЕН. CI +1, AGENTS +1. parity 176/176.
+
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 
 Релиз накопленного между v3.6.6 и живой квалификацией. VERSION 3.6.6 → **3.6.7**. Две части:

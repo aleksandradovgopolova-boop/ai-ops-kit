@@ -141,6 +141,8 @@ jobs:
         run: python3 tools/model_router.py --selftest
       - name: "Provider endpoints — map provider->endpoint+key_env (v3.7.12 router->runtime; selftest)"
         run: python3 tools/provider_endpoints.py --selftest
+      - name: "Parallel live adapters — package-runner + git fan-in -> один PR (v3.7.17; selftest)"
+        run: python3 tools/parallel_live.py --selftest
       - name: Regression corpus — постоянные находки + failure taxonomy (selftest + реальный корпус)
         run: |
           python3 validation/validate_regression_corpus.py --selftest
