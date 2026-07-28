@@ -647,22 +647,22 @@ WorkPackage Executor; `active-work` с affected-areas/shared-contracts/dependenc
   integration revalidation** (перенос из старого v3.1.12). Storybook: manifests в Context Compiler +
   Storybook MCP-адаптер + package-level UI context + новый UIEvidenceBundle на integration-SHA после
   fan-in (текущий exact-SHA evidence и reuse-enforcement НЕ переписываются).
-- **v3.7 — Runtime Activation** (фактическая фаза; RC-слой собран offline, HEAD после 3.6.7).
-  Не новые концепции, а «заставить построенное реально управлять исполнением»:
-  - **Context Hybrid** (`context_hybrid` + `context_promotion_gate`): mandatory v1 + разрешённые
-    v2-additions, допуск только через 5 trust-контрактов; access **pre-filter ДО retrieval** (denied
-    путь не читается); mandatory = specs+decisions+rules+policy refs; child BudgetContract. ОСТАЁТСЯ
-    живое: hybrid строится ДО model-call и реально fed_to_model + GateResult v2 в `_run_reviews` за флагом.
-  - **Bounded parallel-2 executor** (`parallel_executor`): оркестрация plan→изолированные пакеты→package
-    SHA+GateReport→fan-in integration-SHA→aggregate→один PR; dependency-aware stop; изоляция сбоев;
-    инвариант «package SHA ≠ integrated result». ОСТАЁТСЯ живое: package_runner=ai_ops_run в worktrees +
-    реальный git fan-in + негативы.
-  - **Security foundations** (SupplyChainPin/MemoryGovernance/KeyLifecycle контракты готовы). ОСТАЁТСЯ
-    runtime enforcement (loader по hash, merge_memory-валидация, preflight TTL ключей) — до write-MCP.
-  Критерии stable 3.7: hybrid реально fed_to_model; parallel-2 реально открыл один PR; 0 access leaks;
-  0 false-green; dependency-fail не стартует downstream; evidence привязано к package/integration SHA;
-  security-политики реально enforce.
-- **v3.8 — Product Bootstrap & Readiness Qualification**: greenfield (architecture → backend/frontend+
+- **v3.7 — Runtime Activation ✅ ВЫПУЩЕН** (v3.7.0 stable 2026-07-28; v3.7.1 Trust Alignment). Провайдер-
+  независимость стала ПОВЕДЕНИЕМ рантайма (не только реестром/резолвером), доказана живьём БЕЗ Anthropic:
+  - **Money-based routing** (`model_router`+`provider_endpoints`): без `--model` роль резолвится в
+    конкретную модель по ДЕНЬГАМ (deepseek-v4-flash $0.0115 < qwen $0.072 < kimi $0.467) и диспатчится на
+    endpoint вендора; `rep.model_resolution` в каждом отчёте. ✅ (v3.7.10/12/15, live smoke).
+  - **Context Hybrid fed_to_model** ✅ (v3.7.16): hybrid строится ДО model-call, exact-snapshot
+    (require_snapshot=True), additions реально в prompt, полный token-budget (v3.7.1 #3).
+  - **Governed multi-package fan-in** ✅ (v3.7.17): пакеты → package-SHA → git fan-in → integration-SHA →
+    повтор aggregate → ОДИН реальный PR. Честно: execution_concurrency=serial (не настоящий concurrency;
+    отдельные клоны на пакет — позже), parallel_safe по write_scope (v3.7.1 #2).
+  - **Security enforcement** ✅: key_preflight РЕАЛЬНЫЙ барьер (TTL/now, ready=false->blocked-preflight);
+    merge_memory self-ingested без human_confirmed НЕ пишется (v3.7.1 #4); strict judge — нет qualified
+    security-судьи -> pending_human, self-model не закрывает security (v3.7.1 #1).
+  ОТКРЫТО (post-3.7, в v3.8/Bench v2): qualified АВТОсудьи (security/integration) — пока human-fallback;
+  настоящий concurrent parallel (отдельные клоны); точная ревизия DeepSeek V4 Flash; verify_artifact loader.
+- **v3.8 — Product Bootstrap & Readiness Qualification (ТЕКУЩАЯ ФАЗА)**: greenfield (architecture → backend/frontend+
   Storybook/data/CI/observability) → parallel fan-out → integration → первая вертикальная функция →
   release → measurement → learning → readiness report (single/sequential/parallel/resume/fix-loop/
   release/post-release/product-learning на нескольких реальных child-репо).

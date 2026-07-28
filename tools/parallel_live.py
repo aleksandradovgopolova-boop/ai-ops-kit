@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""parallel_live.py (v3.7.17) — ЖИВЫЕ адаптеры для parallel_executor: реальные package-runner (ai_ops_run
-в отдельной ветке/worktree на пакет) + integration-runner (git fan-in -> НОВЫЙ integration-SHA -> ПОВТОР
-aggregate-проверок). Замыкает parallel-2 на живой путь: WorkGraph -> пакеты -> fan-in -> ОДИН draft PR.
+"""parallel_live.py (v3.7.17/3.7.1) — LIVE MULTI-PACKAGE execution с governed fan-in (НЕ настоящий
+concurrency): реальные package-runner (ai_ops_run на пакет в своей ветке) + integration-runner (git
+fan-in -> НОВЫЙ integration-SHA -> ПОВТОР aggregate). WorkGraph -> пакеты (СЕРИЙНО) -> fan-in -> ОДИН PR.
+Честно: execution_concurrency=serial, parallel_safe=true (по write_scope), fan_in=live. Настоящий
+concurrency = отдельные клоны на пакет (не в одном репо). Требует disposable/чистый checkout.
 
 Инварианты (из parallel_planner/executor, не ослабляются):
   - package-SHA НЕ доказывают всю работу -> после fan-in новый integration-SHA + повтор проверок;
@@ -82,13 +84,36 @@ def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/int
     return runner
 
 
+def preflight_disposable(child_root):
+    """v3.7.1 (#2): runner делает reset --hard/clean -fd -> ЗАПРЕЩЕН в обычном рабочем checkout с
+    незакоммиченными файлами (уничтожил бы их). Требует чистый/disposable checkout. -> (ok, reason)."""
+    st = _git(child_root, "status", "--porcelain", check=False)
+    dirty = [ln for ln in (st.stdout or "").splitlines() if ln.strip() and not ln.strip().endswith(".ai")]
+    if dirty:
+        return False, ("грязный checkout: runner делает reset --hard/clean -fd и уничтожит "
+                       f"незакоммиченные файлы ({len(dirty)}). Нужен disposable-clone/чистый checkout.")
+    return True, "clean"
+
+
 def run_live(wg, child_root, base_sha, task_map, signals, run_fn, open_pr=False,
              repo_slug=None, features_dir=None, integration_branch="ai-ops/integration"):
-    """Полный живой parallel-2: пакеты -> fan-in -> (опц.) ОДИН draft PR. Возвращает запись execute_parallel
-    + pr. Пакеты СЕРИЙНО (max_parallel=1). PR только при delivery.open_pr (зелёный aggregate на integr-SHA)."""
+    """Live MULTI-PACKAGE execution с governed fan-in (НЕ настоящий concurrency — см. поля ниже): пакеты
+    -> fan-in -> (опц.) ОДИН draft PR. Пакеты СЕРИЙНО (max_parallel=1, против гонок git-worktree в одном
+    репо); parallel-SAFE по write_scope; настоящая конкурентность = отдельные клоны на пакет.
+    ТРЕБУЕТ disposable/чистый checkout (runner делает reset --hard/clean)."""
+    ok, reason = preflight_disposable(child_root)
+    if not ok:
+        return {"proceed": False, "stage": "preflight", "reason": reason,
+                "execution_concurrency": "serial", "parallel_safe": True, "fan_in": "live",
+                "delivery": {"intents": 0, "open_pr": False}, "pr": None}
     pr = make_package_runner(child_root, base_sha, task_map, signals, run_fn, features_dir)
     ir = make_integration_runner(child_root, base_sha, integration_branch)
     rec = pe.execute_parallel(wg, pr, ir, contract_shas=None, max_parallel=1)
+    # честные поля (не выдаём serial за parallel): governance/fan-in — живые, concurrency — серийный
+    rec["execution_concurrency"] = "serial"
+    rec["parallel_safe"] = True
+    rec["fan_in"] = "live"
+    rec["concurrency_note"] = "серийно (max_parallel=1); настоящая конкурентность требует отдельных клонов на пакет"
     rec["pr"] = None
     if open_pr and rec.get("delivery", {}).get("open_pr") and repo_slug:
         _git(child_root, "push", "-f", "-q", "origin", integration_branch, check=False)
@@ -149,6 +174,19 @@ def selftest():
     rec3 = pe.execute_parallel(wg, pr_fail, ir_runner, contract_shas=None, max_parallel=1)
     expect("пакет не pass -> fan-in НЕ начинается (pre-fan-in блок)",
            rec3["delivery"]["open_pr"] is False and rec3["stage"] == "pre-fan-in")
+
+    # v3.7.1 (#2) preflight disposable: грязный checkout -> отказ (runner уничтожил бы правки)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        _git(td, "init", "-q", check=False)
+        _git(td, "config", "user.email", "t@t"); _git(td, "config", "user.name", "t")
+        (Path(td) / "a.py").write_text("x=1\n", encoding="utf-8")
+        _git(td, "add", "-A"); _git(td, "commit", "-qm", "init", check=False)
+        okp, _ = preflight_disposable(td)
+        expect("preflight: чистый checkout -> ok", okp is True)
+        (Path(td) / "dirty.py").write_text("y=2\n", encoding="utf-8")
+        okp2, rsn = preflight_disposable(td)
+        expect("preflight: грязный checkout -> ОТКАЗ (защита незакоммиченных)", okp2 is False and "грязный" in rsn)
 
     print("parallel_live selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

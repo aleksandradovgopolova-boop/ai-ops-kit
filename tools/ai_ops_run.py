@@ -323,15 +323,26 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
                                                          "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
                         _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
-                    # v3.7.13 key preflight ПЕРЕД живым provider-вызовом (security_enforcement в рантайме):
-                    # резолвленные ключи обязаны быть в env; иначе честный block (а не HTTP 401 позже).
+                    # v3.7.13/v3.7.1(#4) key preflight — РЕАЛЬНЫЙ БАРЬЕР перед живым provider-вызовом:
+                    # ключи в env + (при KLP) TTL-ротация (now); not ready -> блок прогона (не HTTP 401 позже).
                     try:
                         import os as _os
+                        import datetime as _dt
                         import security_enforcement as _se
                         _kv = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
                         if (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
                             _kv.append({"name": rev.get("provider"), "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
-                        _model_resolution["key_preflight"] = _se.key_preflight({"keys": _kv}, dict(_os.environ), critical=True)
+                        # реальный KLP child (TTL-ротация), если объявлен: .ai/policies/key-lifecycle.yaml
+                        _klp_p = child_root / ".ai" / "policies" / "key-lifecycle.yaml"
+                        if _klp_p.is_file():
+                            _klp = yaml.safe_load(_klp_p.read_text(encoding="utf-8")) or {"keys": _kv}
+                        else:
+                            _klp = {"keys": _kv}
+                        _kpf = _se.key_preflight(_klp, dict(_os.environ), critical=True,
+                                                 now=_dt.date.today().isoformat())
+                        _model_resolution["key_preflight"] = _kpf
+                        if not _kpf.get("ready"):
+                            _model_resolution["preflight_blocked"] = True   # барьер: строим блок-отчёт ниже
                     except Exception:  # noqa: BLE001
                         pass
                 else:
@@ -339,6 +350,24 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         except Exception as _e:  # noqa: BLE001
             _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                  "mode": "explicit-override" if model else "router"}
+        # v3.7.1 strict judge: security НЕ закрывается SELF-моделью писателя. Разрешаем закрытие
+        # security needs_review ТОЛЬКО НЕЗАВИСИМЫМ судьёй: явно переданный reviewer_proposer (независим по
+        # построению) ИЛИ router резолвнул ДРУГУЮ модель на review (independent_by_model). Иначе
+        # reviewer=writer (self-model) -> security needs_review -> pending_human. (Полное требование
+        # «qualified судья» — Bench v2; здесь закрыт заявленный gap: одна модель не пишет+ревьюит+закрывает security.)
+        _sec_qualified = bool(reviewer_proposer is not None
+                              or (_model_resolution.get("reviewer") or {}).get("independent_by_model"))
+
+        # v3.7.1 (#4) РЕАЛЬНЫЙ security-барьер: key preflight не пройден (ключ/ротация) -> блок ПРОГОНА
+        # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
+        if isinstance(_model_resolution, dict) and _model_resolution.get("preflight_blocked"):
+            _kpf = _model_resolution.get("key_preflight", {})
+            return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked-preflight",
+                    "ready_for_pr": False, "provider": provider_name, "model": _writer_model,
+                    "model_resolution": _model_resolution, "key_preflight": _kpf,
+                    "blocked_reason": "key preflight не пройден до provider-вызова: "
+                                      + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация"]),
+                    "not_yet": ["security key preflight: " + "; ".join(_kpf.get("blocks", []) or ["ключ отсутствует/просрочен"])]}
 
         prop = proposer or tool_loop.make_model_proposer(
             _writer_prov or orchestrator.make_provider(provider_name, _writer_model))
@@ -504,24 +533,40 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
                 _budget = _ce.budget_tokens_from(_bud)
                 _base_sha = base_binding.get("base_sha")
+                # v3.7.1 (#3) EXACT-SNAPSHOT: require_snapshot=True -> content читается ТОЛЬКО если child
+                # РОВНО на base_sha и дерево чисто; иначе view invalid -> hybrid v1-only (не подаём
+                # возможно-несоответствующий base_sha контент). Ровно exact-SHA дисциплина.
                 _hyb = _chyb.build_hybrid_from_child(
                     child_root, task_text, "executor", sha=_base_sha, afp=_afp, dcp=_dcp,
                     v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
-                    budget=_budget, require_snapshot=False)
+                    budget=_budget, require_snapshot=True)
                 _adds = _hyb.get("v2_additions") or []
                 # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
                 _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
+                _fed, _dropped = [], []
                 if _hyb.get("mode") == "hybrid" and _adds:
+                    # v3.7.1 (#3) ПОЛНЫЙ token budget: считаем весь prompt (v1 payload + additions) против
+                    # hard-window; additions, не влезающие в бюджет, ДРОПАЕМ (не раздуваем hard-window).
+                    _base_txt = (payload or {}).get("text") or ""
+                    _used = len(_base_txt) // 4
+                    _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
                     _extra = []
                     for _f in _adds:
                         _p = child_root / _f
-                        if _p.is_file():
-                            _extra.append(f"### {_f}\n{_p.read_text(encoding='utf-8', errors='replace')[:8000]}")
+                        if not _p.is_file():
+                            continue
+                        _c = _p.read_text(encoding="utf-8", errors="replace")[:8000]
+                        _t = len(_c) // 4
+                        if _used + _t > _hard:
+                            _dropped.append(_f); continue
+                        _used += _t; _fed.append(_f); _extra.append(f"### {_f}\n{_c}")
                     if _extra:
-                        _hybrid_prelude = ((payload or {}).get("text") or "") + \
-                            "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
-                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"), "v2_additions": _adds,
-                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _adds),
+                        _hybrid_prelude = _base_txt + "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
+                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"),
+                               "v2_additions": _adds, "fed_additions": _fed, "dropped_over_budget": _dropped,
+                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _fed),
+                               "prompt_tokens_est": (len(_hybrid_prelude or "") // 4), "hard_window": (_budget or 20000),
+                               "exact_snapshot": True,
                                "mandatory_references": _hyb.get("mandatory_references"),
                                "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
             except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
@@ -628,7 +673,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
-                calibrated_enforcement=_calib, ui_evidence=ui_evidence)
+                calibrated_enforcement=_calib, ui_evidence=ui_evidence,
+                strict_judge_qualified=_sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
         try:
             rep = _pipe(resume, resume_ctx)
             # v3.1.1 (fix-loop, находка Phase B): блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх

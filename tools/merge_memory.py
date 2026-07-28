@@ -33,11 +33,27 @@ def _bullets(text):
 
 
 def record(memory_dir, wid, summary, areas=None, decisions=None, lessons=None,
-           owner="repository-memory-curator", at=None):
+           owner="repository-memory-curator", at=None, human_confirmed=False):
     if not summary:
         print("ОШИБКА: --summary обязателен (что изменилось за задачу).")
         return 1
     at = at or _today()
+    # v3.7.1 (#4) governance-БАРЬЕР: merge-memory запись self-ingested. Без подтверждения человека
+    # (human_confirmed) MemoryGovernancePolicy НЕ пропускает (анти-самоотравление) -> запись НЕ создаётся
+    # (было advisory). Куратор подтверждает через --human-confirmed. Ровно заявленная граница.
+    try:
+        import security_enforcement as _se
+        _entry = {"id": str(wid), "self_ingested": True, "human_confirmed": bool(human_confirmed),
+                  "provenance": {"origin": f"merge WorkItem {wid}", "source_type": "derived",
+                                 "upstream": [f"WorkItem:{wid}"]},
+                  "expiry": {"mode": "review_date", "value": at}}
+        _ok, _viol = _se.enforce_memory_entry(_entry)
+        if not _ok:
+            print("BLOCKED (memory governance): self-ingested запись не прошла MemoryGovernancePolicy "
+                  "(без --human-confirmed self-ingestion запрещена). Нарушения: " + "; ".join(_viol))
+            return 1
+    except Exception:  # noqa: BLE001
+        pass
     dst_dir = Path(memory_dir) / "lessons-learned"
     dst_dir.mkdir(parents=True, exist_ok=True)
     path = dst_dir / f"{at}-{wid}.md"
@@ -60,22 +76,6 @@ def record(memory_dir, wid, summary, areas=None, decisions=None, lessons=None,
     if les:
         lines += ["## Уроки", ""] + [f"{i}. {l}" for i, l in enumerate(les, 1)] + [""]
 
-    # v3.7.13 governance (advisory): merge-memory — self-ingested авто-запись. Прогоняем через
-    # MemoryGovernancePolicy и СЮРФЕЙСИМ вердикт (не блокируем: по анти-самоотравлению self-ingested без
-    # human_confirmed не проходит hard -> graduation-цель; пока фиксируем предупреждение в самой записи).
-    try:
-        import security_enforcement as _se
-        _entry = {"id": str(wid), "provenance": f"merge WorkItem {wid}", "self_ingested": True,
-                  "human_confirmed": False, "expiry": "изменение затронутых зон следующей задачей"}
-        _ok, _viol = _se.enforce_memory_entry(_entry)
-        if not _ok:
-            lines += ["## Governance (advisory)", "",
-                      "> Запись self-ingested и НЕ подтверждена человеком — по MemoryGovernancePolicy требует "
-                      "human_confirmed (анти-самоотравление). Куратор памяти должен подтвердить.", ""]
-            lines += [f"- {v}" for v in _viol] + [""]
-    except Exception:  # noqa: BLE001
-        pass
-
     path.write_text("\n".join(lines), encoding="utf-8")
     print(f"MERGE-MEMORY: записано {path}")
     return 0
@@ -93,13 +93,19 @@ def selftest():
     with tempfile.TemporaryDirectory() as td:
         expect("без summary -> ошибка", record(td, "wi-1", "") == 1)
 
+        # v3.7.1 (#4) governance-барьер: без human_confirmed self-ingested запись НЕ создаётся
+        rc_block = record(td, "wi-0", "Правка без подтверждения куратора.", at="2026-07-15")
+        f_block = Path(td) / "lessons-learned" / "2026-07-15-wi-0.md"
+        expect("без human_confirmed -> BLOCKED, файл НЕ создан (анти-самоотравление)",
+               rc_block == 1 and not f_block.exists())
+
         rc = record(td, "wi-1", "Добавлено редактирование дашборда после создания.",
                     areas=["dashboard-editor", "session-context"],
                     decisions="dashboard хранит source_session_id",
                     lessons="теряется связь artifact<->session; добавить версионирование",
-                    at="2026-07-15")
+                    at="2026-07-15", human_confirmed=True)
         f = Path(td) / "lessons-learned" / "2026-07-15-wi-1.md"
-        expect("record: файл создан", rc == 0 and f.exists())
+        expect("record c human_confirmed: файл создан", rc == 0 and f.exists())
         txt = f.read_text(encoding="utf-8")
         expect("содержит summary", "редактирование дашборда" in txt)
         expect("содержит зоны", "dashboard-editor" in txt)
@@ -121,11 +127,13 @@ def main(argv):
     r.add_argument("--summary", required=True)
     r.add_argument("--areas"); r.add_argument("--decisions"); r.add_argument("--lessons")
     r.add_argument("--owner", default="repository-memory-curator"); r.add_argument("--at")
+    r.add_argument("--human-confirmed", action="store_true",
+                   help="куратор подтвердил self-ingested запись (governance-барьер, v3.7.1)")
     ns = ap.parse_args(argv)
     if ns.cmd == "record":
         areas = [x.strip() for x in (ns.areas or "").split(",") if x.strip()]
         return record(ns.memory_dir, ns.id, ns.summary, areas, ns.decisions, ns.lessons,
-                      ns.owner, ns.at)
+                      ns.owner, ns.at, human_confirmed=ns.human_confirmed)
     return 1
 
 
