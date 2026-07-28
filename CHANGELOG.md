@@ -2,7 +2,7 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.7.3 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
+## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.
 
