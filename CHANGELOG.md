@@ -195,8 +195,24 @@ BudgetContract / cost_account) с ролями рантайма — без па�
 - `validation/validate_scenario_evidence.py` — runnable `check`+`selftest` (позитив + негативы,
   доказывающие СРАБАТЫВАНИЕ — «проверка, что гейт падает, часть гейта»). CI +1 шаг, AGENTS.md +1.
 - `templates/quality/ScenarioEvidencePolicy.md` — DoD: факты сессии, правило, graduation, Оговорка.
-- НЕ реализованы (по решению владельца): Вывод 2 `surface_wiring_consistency` (новый гейт) и Вывод 3
-  `on_repeat→structural`. parity 173/173.
+- НЕ реализован в этом инкременте: Вывод 2 (сделан в v3.7.8) и Вывод 3. parity 173/173.
+
+### Added (v3.7.8 — surface_wiring_consistency: core↔wrapper↔client wiring drift, ADVISORY)
+- Вывод 2 «дефектов одной сессии»: дефект `/api/catalog` (путь умеет ядро, покрыт тестами ядра И
+  клиента, но не смонтирован ни в одной обёртке -> запрос молча падает) не ловит ни один гейт. Тот же
+  класс, что `event_contract_consistency` (naming drift), другая сущность — МАРШРУТ.
+- `tools/seam_scan.py` — 6-й сигнал `surface_wiring_drift` (advisory, diff-эвристика двух триггеров:
+  новый маршрут ядра / вызов клиента к пути; подсказка про core⊆обёртки⊆client, если реестр маршрутов
+  не менялся). Уже подключён advisory в пайплайн через существующую проводку seam_scan.
+- `validation/validate_surface_wiring.py` — механическая сверка по манифесту поверхности
+  `{core, wrappers, client}`: (1) core⊆каждая обёртка; (2) client⊆union(обёртки); (3)
+  смонтировано-но-невызвано -> advisory. `check`+`selftest` с негативами, включая точный кейс
+  `/api/catalog` (доказывает срабатывание).
+- `quality/gates.yaml` — гейт `surface_wiring_consistency` (advisory, `blocking:false`; клон
+  event_contract_consistency; работает на child-ПРОДУКТЕ — у кита нет обёрток). claims.yaml gate-count
+  28->29.
+- `templates/quality/SurfaceWiringPolicy.md` — DoD + graduation до blocking. CI +1, AGENTS.md +1.
+- Вывод 3 (`on_repeat→structural`) НЕ реализован (следующий, лёгкое поле на RegressionCase). parity 174/174.
 
 ## [3.6.7] — 2026-07-27 — Runtime Promotion Readiness + Live Qualification (v3.6.8 findings)
 

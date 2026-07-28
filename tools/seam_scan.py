@@ -11,13 +11,16 @@
 КОРЕНЬ (без смягчения): автор проверяет тот слой, который сам только что написал, и подмену, которую
 сам же придумал. Это не про количество тестов — все они смотрят с ОДНОЙ стороны.
 
-Пять признаков, вычислимых прямо из дифа (без понимания предметной области):
+Шесть признаков, вычислимых прямо из дифа (без понимания предметной области):
   1. write_without_roundtrip           — запись без чтения-обратно/проверки round-trip;
   2. endpoint_precondition_change      — смена предусловия эндпоинта без аудита вызывающих;
   3. catch_without_happy_path          — новый проглатывающий catch/except без теста happy-path;  [ГЕЙТ]
   4. optional_field_in_shared_contract — новое необязательное поле в общем контракте;             [ГЕЙТ]
   5. external_stub_without_real_run    — новая подмена внешней системы без прогона против настоящей.[ГЕЙТ]
-Три из пяти (#3/#4/#5) проверяются почти механически -> gate. #1/#2 — advisory (эвристика).
+  6. surface_wiring_drift              — новый маршрут ядра / вызов клиента к пути (core<->wrapper<->
+                                         client wiring drift, «/api/x умеет ядро, но обёртка не знает»).
+Три из шести (#3/#4/#5) проверяются почти механически -> gate. #1/#2/#6 — advisory (эвристика диффа;
+полная сверка core⊆обёртки⊆client — в validate_surface_wiring по манифесту поверхности).
 
 Только stdlib. CLI: seam_scan.py <diff-file> [--json] | --selftest   (или diff из stdin: seam_scan.py -)
 """
@@ -49,6 +52,16 @@ _REALRUN = re.compile(r"(integration|live|e2e|@pytest\.mark\.(integration|live|e
 _TESTFILE = re.compile(r"(^|/)(tests?|__tests__|spec)/|(_test\.|\.test\.|\.spec\.|test_.*\.py$)", re.I)
 _HAPPY = re.compile(r"\b(def test_|it\(|test\(|describe\(|assert|expect\()", re.I)
 _SHARED_CONTRACT = re.compile(r"(schema.*\.json$|\.schema\.|contract|interface\s|\btypes?\.(ts|py)$|\.proto$|openapi|dto)", re.I)
+# #6 surface wiring: объявление маршрута в ядре и вызов клиента к пути. Полная сверка (core⊆обёртки,
+# client⊆обёртки) — в validate_surface_wiring; здесь diff-эвристика двух твоих триггеров.
+_ROUTE = re.compile(r"((@(app|router|blueprint|api)\.(get|post|put|delete|patch|route))\s*\(\s*['\"]/|"
+                    r"\b(app|router|api|server)\.(get|post|put|delete|patch|use|add_route)\s*\(\s*['\"]/|"
+                    r"\b(path|url|re_path|route)\s*\(\s*r?['\"]/|@(get|post|put|delete|patch)\s*\(\s*['\"]/)", re.I)
+_CLIENT_CALL = re.compile(r"(\bfetch\s*\(\s*['\"]/|axios\.(get|post|put|delete|patch|request)\s*\(\s*['\"]/|"
+                          r"requests\.(get|post|put|delete|patch)\s*\(\s*['\"][^'\"]*/|http\.(get|post)\s*\(\s*['\"]/|"
+                          r"\bapi(Client|Fetch)?\.(get|post|put|delete|request)\s*\(\s*['\"]/)", re.I)
+_ROUTES_REGISTRY = re.compile(r"(routes?\.(mjs|js|ts|py)$|endpoints?\.(mjs|js|ts|py)$|urls\.py$|"
+                              r"domain-(routes|endpoints)|(^|/)router\.)", re.I)
 
 
 def _added_lines(diff_text):
@@ -73,6 +86,7 @@ def scan_diff(diff_text):
         "realrun_added": any(_REALRUN.search(a) or _TESTFILE.search(f or "") and _REALRUN.search(a) for f, a in added)
                          or any(_REALRUN.search(a) for _, a in added),
         "nonprovider_caller_changed": len({f for f in files if f and not _SHARED_CONTRACT.search(f)}) > 1,
+        "routes_registry_changed": any(_ROUTES_REGISTRY.search(f or "") for f in files),
     }
     findings = []
 
@@ -91,6 +105,8 @@ def scan_diff(diff_text):
             add("optional_field_in_shared_contract", f, a)
         if _STUB.search(a):
             add("external_stub_without_real_run", f, a)
+        if _ROUTE.search(a) or _CLIENT_CALL.search(a):
+            add("surface_wiring_drift", f, a)
     return {"findings": findings, "evidence": ev, "files": sorted(files)}
 
 
@@ -113,6 +129,11 @@ def gate_decision(scan):
                 blockers.append(f"{sig}: шов без доказательства перехода ({fnd['file']})")
         else:
             advisories.append(f"{sig}: {fnd['file']}")
+    # #6 подсказка: новый маршрут/вызов клиента, а файл-реестр маршрутов НЕ менялся -> сильный признак
+    # wiring drift (ядро умеет, обёртка не знает). Триггер #1 из «дефектов одной сессии».
+    if any(f["signal"] == "surface_wiring_drift" for f in scan["findings"]) and not ev.get("routes_registry_changed"):
+        advisories.append("surface_wiring_drift: маршрут/вызов добавлен, но реестр маршрутов не менялся "
+                          "-> проверь core⊆обёртки⊆client (validate_surface_wiring)")
     return {"block": bool(blockers), "blockers": blockers, "advisories": sorted(set(advisories)),
             "reason": ("шов затронут, но переход не доказан -> block" if blockers
                        else "gateable-швы имеют доказательство перехода или отсутствуют")}
@@ -161,6 +182,22 @@ def selftest():
     sp = scan_diff(d_pre)
     expect("смена предусловия эндпоинта -> advisory (#2)",
            any(f["signal"] == "endpoint_precondition_change" for f in sp["findings"]))
+
+    # #6 surface wiring: новый маршрут ядра + вызов клиента -> advisory (не block), с подсказкой про реестр
+    d_route = ("+++ b/server/domain/handler.mjs\n+  app.get('/api/catalog', catalogHandler)\n"
+               "+++ b/src/shared/api/client.ts\n+  return fetch('/api/catalog')\n")
+    sr = scan_diff(d_route)
+    expect("#6 маршрут ядра найден (surface_wiring_drift)",
+           any(f["signal"] == "surface_wiring_drift" for f in sr["findings"]))
+    dr = gate_decision(sr)
+    expect("#6 surface drift -> advisory, НЕ block", dr["block"] is False
+           and any("surface_wiring_drift" in a for a in dr["advisories"]))
+    expect("#6 реестр маршрутов не менялся -> подсказка про core⊆обёртки⊆client",
+           any("реестр маршрутов не менялся" in a for a in dr["advisories"]))
+    # #6 если реестр маршрутов В дифе -> подсказки про «не менялся» нет
+    d_route_reg = d_route + "+++ b/server/domain/routes.mjs\n+  '/api/catalog',\n"
+    expect("#6 реестр маршрутов изменён -> без подсказки 'не менялся'",
+           not any("реестр маршрутов не менялся" in a for a in gate_decision(scan_diff(d_route_reg))["advisories"]))
 
     # чистый диф без швов -> нет блока
     expect("диф без швов -> нет находок, нет блока",

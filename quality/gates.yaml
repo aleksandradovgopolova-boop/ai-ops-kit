@@ -63,6 +63,25 @@ gates:
     applicability: [ENGINEERING, PRODUCT, ANALYTICS, AI_FEATURE]
     required_evidence: [catalog_valid, names_reconciled]
 
+  surface_wiring_consistency:
+    id: surface_wiring_consistency
+    purpose: >
+      Поверхность согласована во всех слоях: каждый путь, который умеет ядро, подключён в КАЖДОЙ
+      обёртке (прод/dev/serverless), и каждый путь, который вызывает клиент, кем-то обслуживается.
+      Класс core<->wrapper<->client wiring drift: эндпоинт написан и покрыт тестами (ядра и клиента),
+      но запрос до него не доходит — молча падает в раздачу статики. Тот же класс, что
+      event_contract_consistency (naming drift), другая сущность — МАРШРУТ. Вывод 2 «дефектов сессии».
+    stage: verify
+    blocking: false          # advisory до обкатки (как соседние consistency-гейты)
+    responsible_role: solution-architect
+    review_mode: writer
+    validator: validate-surface-wiring        # runnable: validation/validate_surface_wiring.py (по манифесту поверхности child)
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT, AI_FEATURE, CRITICAL]
+    required_evidence: [routes_declared, wrappers_matched, client_paths_matched]
+    # ПРИМЕЧАНИЕ: гейт работает на child-ПРОДУКТЕ (у кита нет обёрток/контуров). Live diff-эвристика
+    # двух триггеров (новый маршрут ядра / вызов клиента) — сигнал #6 seam_scan (уже подключён advisory).
+
   requirements:
     id: requirements
     purpose: Требования проверяемы, полны, тестируемы.
