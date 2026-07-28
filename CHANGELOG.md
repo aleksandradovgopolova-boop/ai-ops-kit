@@ -20,6 +20,20 @@
 - selftest A/B: qualified-путь идёт через reviewer (guard не берётся); нет судьи -> security fail +
   блокер «нет QUALIFIED security-судьи» (guard СРАБАТЫВАЕТ). ai_ops_run selftest PASS.
 
+### Added (v3.7.1 #4 — security preflight как ПОЛНЫЙ барьер + memory governance блокирует, не advisory)
+- Разрыв ревью: key_preflight результат сохранялся, но `ready` не проверялся отдельно -> продолжали
+  строить proposer; KLP с TTL не грузился; memory governance был advisory (невалидная self-ingested запись
+  всё равно создавалась).
+- `ai_ops_run` (router-путь): key_preflight теперь РЕАЛЬНЫЙ барьер — `now`=сегодня (TTL-ротация активна),
+  грузит child `.ai/policies/key-lifecycle.yaml` если есть; `ready=false` -> ранний `blocked-preflight`
+  отчёт (ready_for_pr=false), НЕ строим proposer / не зовём провайдера.
+- `merge_memory.record` += `human_confirmed` (CLI `--human-confirmed`): self-ingested запись БЕЗ
+  подтверждения куратора НЕ создаётся (MemoryGovernancePolicy, анти-самоотравление) -> return 1, файла нет.
+  Валидный MGP-entry (provenance.origin/source_type=derived/upstream, expiry.review_date). selftest: без
+  подтверждения -> BLOCKED (файла нет); с --human-confirmed -> записано.
+- `verify_artifact`->installer НЕ подключён честно (у кита нет sha-pinned loader; pip/poetry держат хеши
+  через lockfile) — зафиксировано как не-применимо, не имитируем.
+
 ## [3.7.0] — 2026-07-28 — Runtime Activation: провайдер-независимость как ПОВЕДЕНИЕ продукта
 
 Фаза v3.7 ЗАКРЫТА. Провайдер-независимость перестала быть только реестром/резолвером и стала живым

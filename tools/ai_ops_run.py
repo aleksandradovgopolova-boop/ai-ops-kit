@@ -323,15 +323,26 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
                                                          "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
                         _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
-                    # v3.7.13 key preflight ПЕРЕД живым provider-вызовом (security_enforcement в рантайме):
-                    # резолвленные ключи обязаны быть в env; иначе честный block (а не HTTP 401 позже).
+                    # v3.7.13/v3.7.1(#4) key preflight — РЕАЛЬНЫЙ БАРЬЕР перед живым provider-вызовом:
+                    # ключи в env + (при KLP) TTL-ротация (now); not ready -> блок прогона (не HTTP 401 позже).
                     try:
                         import os as _os
+                        import datetime as _dt
                         import security_enforcement as _se
                         _kv = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
                         if (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
                             _kv.append({"name": rev.get("provider"), "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
-                        _model_resolution["key_preflight"] = _se.key_preflight({"keys": _kv}, dict(_os.environ), critical=True)
+                        # реальный KLP child (TTL-ротация), если объявлен: .ai/policies/key-lifecycle.yaml
+                        _klp_p = child_root / ".ai" / "policies" / "key-lifecycle.yaml"
+                        if _klp_p.is_file():
+                            _klp = yaml.safe_load(_klp_p.read_text(encoding="utf-8")) or {"keys": _kv}
+                        else:
+                            _klp = {"keys": _kv}
+                        _kpf = _se.key_preflight(_klp, dict(_os.environ), critical=True,
+                                                 now=_dt.date.today().isoformat())
+                        _model_resolution["key_preflight"] = _kpf
+                        if not _kpf.get("ready"):
+                            _model_resolution["preflight_blocked"] = True   # барьер: строим блок-отчёт ниже
                     except Exception:  # noqa: BLE001
                         pass
                 else:
@@ -342,6 +353,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v3.7.1 strict judge: есть ли QUALIFIED security-судья? Нет -> security needs_review идёт в
         # pending_human (writer-модель не закрывает security). Из plan_run (по умолчанию нет qualified судей).
         _sec_qualified = bool(((_model_resolution.get("plan") or {}).get("security_review") or {}).get("resolved"))
+
+        # v3.7.1 (#4) РЕАЛЬНЫЙ security-барьер: key preflight не пройден (ключ/ротация) -> блок ПРОГОНА
+        # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
+        if isinstance(_model_resolution, dict) and _model_resolution.get("preflight_blocked"):
+            _kpf = _model_resolution.get("key_preflight", {})
+            return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked-preflight",
+                    "ready_for_pr": False, "provider": provider_name, "model": _writer_model,
+                    "model_resolution": _model_resolution, "key_preflight": _kpf,
+                    "blocked_reason": "key preflight не пройден до provider-вызова: "
+                                      + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация"]),
+                    "not_yet": ["security key preflight: " + "; ".join(_kpf.get("blocks", []) or ["ключ отсутствует/просрочен"])]}
 
         prop = proposer or tool_loop.make_model_proposer(
             _writer_prov or orchestrator.make_provider(provider_name, _writer_model))
