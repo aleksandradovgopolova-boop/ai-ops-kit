@@ -1,23 +1,33 @@
 #!/usr/bin/env python3
-"""parallel_live.py (v3.7.17/3.7.1) — LIVE MULTI-PACKAGE execution с governed fan-in (НЕ настоящий
-concurrency): реальные package-runner (ai_ops_run на пакет в своей ветке) + integration-runner (git
-fan-in -> НОВЫЙ integration-SHA -> ПОВТОР aggregate). WorkGraph -> пакеты (СЕРИЙНО) -> fan-in -> ОДИН PR.
-Честно: execution_concurrency=serial, parallel_safe=true (по write_scope), fan_in=live. Настоящий
-concurrency = отдельные клоны на пакет (не в одном репо). Требует disposable/чистый checkout.
+"""parallel_live.py (v3.8.3-rc2) — LIVE MULTI-PACKAGE execution с governed fan-in. Два пути:
+  - run_live (СЕРИЙНО, один репо): execution_concurrency=serial, parallel_safe=true, fan_in=live;
+  - run_live_concurrent (НАСТОЯЩАЯ конкурентность): отдельный disposable-клон+ветка+прогон на пакет,
+    integration-клон -> fetch package-ветки -> merge -> stack-aware aggregate на НОВОМ integration-SHA.
 
 Инварианты (из parallel_planner/executor, не ослабляются):
   - package-SHA НЕ доказывают всю работу -> после fan-in новый integration-SHA + повтор проверок;
-  - PR открывается ТОЛЬКО при зелёном aggregate на integration-SHA;
-  - пакеты parallel-SAFE по непересекающимся write_scope; в этом адаптере исполняются СЕРИЙНО
-    (max_parallel=1) — чтобы избежать гонок git-worktree в одном репо (честная инфра-граница; настоящий
-    concurrency потребует отдельных клонов на пакет).
+  - доставка открывается ТОЛЬКО при зелёном aggregate на integration-SHA;
+  - пакеты parallel-SAFE по непересекающимся write_scope.
+
+v3.8.3-rc2 Parallel Trust Wiring (concurrent path):
+  #1 package-specific signals (write_scope/affected_areas/shared_contracts/capability/budget), не одинаковые;
+  #2 post-commit changed_files ⊆ write_scope -> нарушитель НЕ проходит в fan-in;
+  #3 contract_shas прокидывается в executor (shared-contract-first, не хардкод None);
+  #5 parallel_live НЕ владеет доставкой -> возвращает DeliveryPlan для канонического Intent/Receipt controller;
+  #5b DeliveryPlan несёт РЕАЛЬНЫЙ github_remote (клон интеграции имеет origin = локальный путь);
+  #7 fail-closed на clone/checkout/fetch/merge (ошибка блокирует, не «тихо зелёный»);
+  #8 run-scoped уникальный каталог клонов + гарантированная очистка.
+Аггрегатный strict security (#4/#4b) и provider fallback (#6) — в ai_ops_run/workpackage_executor (rc2b).
 
 Только stdlib + существующие модули кита. CLI: parallel_live.py --selftest
 """
 from __future__ import annotations
 
+import fnmatch
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -29,6 +39,62 @@ def _git(root, *args, check=True):
     if check and r.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()[:200]}")
     return r
+
+
+# --- v3.8.3-rc2 Parallel Trust Wiring helpers ---
+_INFRA_PREFIXES = (".ai/", "openspec/", "features/")
+
+
+def _glob_match(path, pat):
+    """write_scope-глоб. 'api/**' -> префикс; 'aa.py' -> точное; иначе fnmatch."""
+    if pat.endswith("/**"):
+        base = pat[:-3]
+        return path == base or path.startswith(base + "/")
+    if pat.endswith("**"):
+        return path.startswith(pat[:-2])
+    return fnmatch.fnmatch(path, pat) or path == pat
+
+
+def _changed_files(root, base_sha):
+    """Файлы, изменённые пакетом относительно base_sha (для post-commit scope-проверки)."""
+    r = _git(root, "diff", "--name-only", f"{base_sha}...HEAD", check=False)
+    if r.returncode != 0:
+        r = _git(root, "diff", "--name-only", base_sha, "HEAD", check=False)
+    return [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()]
+
+
+def _scope_ok(changed, write_scope):
+    """#2 post-commit: changed_files ⊆ write_scope. Инфра-пути (.ai/openspec/features) разрешены.
+    write_scope пуст -> не форсим здесь (границу объявляет план). -> (ok, outside_files)."""
+    if not write_scope:
+        return True, []
+    outside = [f for f in changed
+               if not f.startswith(_INFRA_PREFIXES) and not any(_glob_match(f, p) for p in write_scope)]
+    return (not outside), outside
+
+
+def _github_remote(child_root):
+    """#5b: реальный GitHub-remote (origin) исходного child_root — чтобы доставка шла на GitHub,
+    а НЕ в локальный клон (клон интеграции имеет origin = локальный путь). None если origin не GitHub."""
+    r = _git(child_root, "remote", "get-url", "origin", check=False)
+    url = (r.stdout or "").strip()
+    return url if (r.returncode == 0 and ("github.com" in url or url.endswith(".git"))) else None
+
+
+def _pkg_signals(base_signals, pkg):
+    """#1: package-specific view сигналов — write_scope/affected_areas/shared_contracts/capability/budget
+    из объявления пакета WorkGraph. НЕ шлём одинаковые signals всем пакетам."""
+    sig = dict(base_signals or {})
+    ws = pkg.get("write_scope")
+    if ws:
+        sig["write_scope"] = ws
+        sig["affected_areas"] = pkg.get("affected_areas") or sorted({p.split("/")[0] for p in ws if "/" in p})
+    elif pkg.get("affected_areas"):
+        sig["affected_areas"] = pkg["affected_areas"]
+    for k in ("shared_contracts", "capability", "budget"):
+        if pkg.get(k):
+            sig[k if k != "budget" else "budget_contract"] = pkg[k]
+    return sig
 
 
 def package_result_from_rep(rep):
@@ -141,17 +207,38 @@ def run_live(wg, child_root, base_sha, task_map, signals, run_fn, open_pr=False,
 
 def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones):
     """v3.8.3 TRUE CONCURRENT: каждый пакет — в СВОЁМ disposable-клоне (git clone) на base_sha -> безопасно
-    конкурентно (нет гонок git-worktree одного репо). Заполняет clones[pid]={path,branch}."""
+    конкурентно (нет гонок git-worktree одного репо). Заполняет clones[pid]={path,branch}.
+    v3.8.3-rc2: (#1) package-specific signals; (#7) fail-closed clone/checkout; (#2) post-commit
+    changed_files ⊆ write_scope (нарушение -> пакет fail, не проходит в fan-in)."""
     def runner(pkg):
         pid = pkg["id"]
         cpath = Path(clones_dir) / pid
-        subprocess.run(["git", "clone", "-q", str(child_root), str(cpath)], capture_output=True, text=True)
-        _git(cpath, "checkout", "-q", base_sha, check=False)
-        rep = run_fn(task_map[pid], dict(signals), Path(cpath), engine="pipeline",
+        cl = subprocess.run(["git", "clone", "-q", str(child_root), str(cpath)], capture_output=True, text=True)
+        if cl.returncode != 0:  # #7 fail-closed
+            clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}", "error": "clone-failed"}
+            return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
+                    "error": f"clone: {cl.stderr.strip()[:160]}", "clone": str(cpath)}
+        co = _git(cpath, "checkout", "-q", base_sha, check=False)
+        if co.returncode != 0:  # #7 fail-closed
+            clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}", "error": "checkout-failed"}
+            return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
+                    "error": f"checkout {base_sha[:12]}: {co.stderr.strip()[:160]}", "clone": str(cpath)}
+        rep = run_fn(task_map[pid], _pkg_signals(signals, pkg), Path(cpath), engine="pipeline",
                      provider_name="openai-compatible", feature=pid, execute=True, author=True, review=True)
         clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}"}
         res = package_result_from_rep(rep)
         res["clone"] = str(cpath)
+        # #2 post-commit: заявленный write_scope принуждается на РЕАЛЬНОМ диффе (клон изолирует физически,
+        # но не запрещает модели тронуть лишний файл — принуждаем декларацию плана исполнением).
+        if res.get("sha") and pkg.get("write_scope"):
+            changed = _changed_files(cpath, base_sha)
+            sok, outside = _scope_ok(changed, pkg["write_scope"])
+            res["scope_check"] = {"write_scope": pkg["write_scope"], "changed": len(changed),
+                                  "outside": outside[:20], "ok": sok}
+            if not sok:
+                res["status"] = "fail"
+                res.setdefault("gate_report", {})["all_pass"] = False
+                res["scope_violation"] = outside[:20]
         return res
     return runner
 
@@ -161,13 +248,23 @@ def make_isolated_integration_runner(child_root, base_sha, clones, integration_b
     aggregate (project_detector+evidence_collector) на НОВОМ integration-SHA. fail-closed при сбое."""
     def runner(results):
         iroot = (clones.get("_integration") or {}).get("path")
-        _git(iroot, "checkout", "-q", "-B", integration_branch, base_sha, check=False)
+        if not iroot:  # #7 fail-closed: нет integration-клона -> блок (не «тихо зелёный»)
+            return None, {"all_pass": False, "conflicts": len(results), "stack_aware": True,
+                          "stack_checks": {"error": "integration-клон отсутствует"},
+                          "isolation": "per-package-clone"}, len(results) or 1, False
+        co = _git(iroot, "checkout", "-q", "-B", integration_branch, base_sha, check=False)
+        if co.returncode != 0:  # #7 fail-closed
+            return None, {"all_pass": False, "conflicts": len(results), "stack_aware": True,
+                          "stack_checks": {"error": f"integration checkout: {co.stderr.strip()[:120]}"},
+                          "isolation": "per-package-clone"}, len(results) or 1, False
         conflicts = 0
         for pid in results:
             c = clones.get(pid)
-            if not c:
+            if not c or c.get("error"):  # #7: битый/отсутствующий пакетный клон -> конфликт (блокирует)
                 conflicts += 1; continue
-            _git(iroot, "fetch", "-q", c["path"], f"{c['branch']}:{c['branch']}", check=False)
+            f = _git(iroot, "fetch", "-q", c["path"], f"{c['branch']}:{c['branch']}", check=False)
+            if f.returncode != 0:  # #7 fail-closed: не смогли забрать ветку пакета
+                conflicts += 1; continue
             m = _git(iroot, "merge", "--no-edit", "--no-ff", c["branch"], check=False)
             if m.returncode != 0:
                 conflicts += 1; _git(iroot, "merge", "--abort", check=False)
@@ -187,34 +284,60 @@ def make_isolated_integration_runner(child_root, base_sha, clones, integration_b
     return runner
 
 
-def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clones_dir,
-                        open_pr=False, repo_slug=None, integration_branch="ai-ops/integration", max_parallel=None):
+def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clones_dir=None,
+                        repo_slug=None, integration_branch="ai-ops/integration", max_parallel=None,
+                        contract_shas=None):
     """v3.8.3 НАСТОЯЩИЙ concurrent parallel-2: отдельный disposable-клон+ветка+прогон на пакет, КОНКУРЕНТНО;
-    integration-клон -> fetch package-ветки -> merge -> stack-aware aggregate -> ОДИН PR. Честные поля:
-    execution_concurrency=concurrent, isolation=per-package-clone. Основной checkout НЕ трогается."""
-    clones = {}
-    iroot = Path(clones_dir) / "_integration"
-    subprocess.run(["git", "clone", "-q", str(child_root), str(iroot)], capture_output=True, text=True)
-    clones["_integration"] = {"path": str(iroot)}
-    pr = make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones)
-    ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
-    n = max_parallel or min(len(wg.get("packages", []) or [1]), getattr(pe.pp, "MAX_PARALLEL", 2))
-    rec = pe.execute_parallel(wg, pr, ir, contract_shas=None, max_parallel=max(2, n))
-    rec["execution_concurrency"] = "concurrent"
-    rec["isolation"] = "per-package-clone"
-    rec["parallel_safe"] = True
-    rec["fan_in"] = "live"
-    rec["pr"] = None
-    if open_pr and rec.get("delivery", {}).get("open_pr") and repo_slug:
-        _git(iroot, "push", "-f", "-q", "origin", integration_branch, check=False)
-        title = f"[parallel-2 concurrent] {wg.get('id')} fan-in @ {rec['integration_sha'][:12]}"
-        body = (f"Concurrent parallel-2 (per-package clones) fan-in @ {rec['integration_sha'][:12]}.\n"
-                f"Пакеты: {', '.join(task_map)}. stack-aware aggregate на integration-SHA.\n\n"
-                "🤖 Generated with [Claude Code](https://claude.com/claude-code)")
-        p = subprocess.run(["gh", "pr", "create", "--repo", repo_slug, "--draft", "--head", integration_branch,
-                            "--base", "main", "--title", title, "--body", body], cwd=str(iroot), capture_output=True, text=True)
-        rec["pr"] = (p.stdout.strip() or p.stderr.strip())[:300]
-    return rec
+    integration-клон -> fetch package-ветки -> merge -> stack-aware aggregate. Честные поля:
+    execution_concurrency=concurrent, isolation=per-package-clone. Основной checkout НЕ трогается.
+
+    v3.8.3-rc2 Parallel Trust Wiring:
+      (#3) contract_shas прокидывается в executor (shared-contract-first, не хардкод None);
+      (#5) parallel_live НЕ владеет доставкой — возвращает rec["delivery_plan"] для канонического
+           controller'а (DeliveryIntent -> push -> DeliveryReceipt); прямого push/gh pr create тут НЕТ;
+      (#5b) delivery_plan несёт РЕАЛЬНЫЙ github_remote исходного репо (клон интеграции имеет origin =
+            локальный путь — доставка в него не попала бы на GitHub);
+      (#7) fail-closed при сбое клона интеграции;
+      (#8) run-scoped уникальный каталог клонов + гарантированная очистка (self-created)."""
+    _self_clones = clones_dir is None
+    if _self_clones:
+        clones_dir = tempfile.mkdtemp(prefix="ai-ops-parallel-")
+    try:
+        clones = {}
+        iroot = Path(clones_dir) / "_integration"
+        cl = subprocess.run(["git", "clone", "-q", str(child_root), str(iroot)], capture_output=True, text=True)
+        if cl.returncode != 0:  # #7 fail-closed
+            return {"proceed": False, "stage": "isolation", "execution_concurrency": "concurrent",
+                    "isolation": "per-package-clone", "reason": f"integration clone: {cl.stderr.strip()[:160]}",
+                    "delivery": {"open_pr": False}, "delivery_plan": None, "pr": None}
+        clones["_integration"] = {"path": str(iroot)}
+        pr = make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones)
+        ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
+        n = max_parallel or min(len(wg.get("packages", []) or [1]), getattr(pe.pp, "MAX_PARALLEL", 2))
+        rec = pe.execute_parallel(wg, pr, ir, contract_shas=contract_shas, max_parallel=max(2, n))
+        rec["execution_concurrency"] = "concurrent"
+        rec["isolation"] = "per-package-clone"
+        rec["parallel_safe"] = True
+        rec["fan_in"] = "live"
+        rec["pr"] = None
+        # #5/#5b DeliveryPlan (не доставляем сами): канонический controller зафиксирует Intent, запушит на
+        # РЕАЛЬНЫЙ github_remote, откроет PR, зафиксирует Receipt. Готово к доставке только при зелёном aggregate.
+        _ready = bool(rec.get("delivery", {}).get("open_pr") and rec.get("integration_sha"))
+        rec["delivery_plan"] = {
+            "kind": "DeliveryPlan", "ready": _ready,
+            "integration_sha": rec.get("integration_sha"),
+            "integration_branch": integration_branch,
+            "base_sha": base_sha,
+            "integration_clone": str(iroot),
+            "github_remote": _github_remote(child_root),   # #5b: реальный GitHub, не локальный клон
+            "repo_slug": repo_slug,
+            "packages": list(task_map),
+            "note": "доставка через канонический DeliveryIntent/Receipt controller; parallel_live не пушит сам",
+        }
+        return rec
+    finally:
+        if _self_clones:  # #8 гарантированная очистка self-created каталога
+            shutil.rmtree(clones_dir, ignore_errors=True)
 
 
 def selftest():
@@ -327,18 +450,61 @@ def selftest():
                "packages": [{"id": "aa", "depends_on": [], "write_scope": ["aa.py"]},
                             {"id": "bb", "depends_on": [], "write_scope": ["bb.py"]}]}
         rec_c = run_live_concurrent(wg3, td3, base3, {"aa": "t", "bb": "t"}, {"task_type": "QUICK"},
-                                    commit_run, cdir, open_pr=False)
+                                    commit_run, cdir)
         expect("v3.8.3: execution_concurrency=concurrent + isolation=per-package-clone",
                rec_c.get("execution_concurrency") == "concurrent" and rec_c.get("isolation") == "per-package-clone")
         expect("v3.8.3: отдельные клоны на пакет созданы (aa, bb, _integration)",
                all((Path(cdir) / p).is_dir() for p in ("aa", "bb", "_integration")))
         agg_c = rec_c.get("aggregate") or {}
         expect("v3.8.3: fan-in слил обе ветки без конфликта (disjoint scope)", agg_c.get("conflicts") == 0)
+        # v3.8.3-rc2 #5/#5b: parallel_live НЕ пушит сам -> DeliveryPlan для controller'а; несёт github_remote
+        dp = rec_c.get("delivery_plan") or {}
+        expect("rc2 #5: возвращён DeliveryPlan (parallel_live не владеет доставкой, нет прямого push)",
+               dp.get("kind") == "DeliveryPlan" and "github_remote" in dp and rec_c.get("pr") is None)
         if _has_pytest:
             expect("v3.8.3: concurrent fan-in зелёный -> proceed + open_pr",
                    rec_c.get("proceed") is True and rec_c.get("delivery", {}).get("open_pr") is True)
+            expect("rc2 #5: зелёный aggregate -> DeliveryPlan.ready=True с integration_sha",
+                   dp.get("ready") is True and bool(dp.get("integration_sha")))
         else:
             expect("v3.8.3: без pytest — структура concurrent fan-in цела", agg_c.get("stack_aware") is True)
+
+        # v3.8.3-rc2 #2 POST-COMMIT SCOPE: пакет пишет ФАЙЛ ВНЕ своего write_scope -> пакет FAIL (не в fan-in).
+        def rogue_run(task, sig, root, **kw):  # мок: коммитит файл вне заявленного write_scope
+            pid = kw["feature"]
+            _git(root, "checkout", "-q", "-B", f"ai-ops/{pid}", check=False)
+            (Path(root) / "OUTSIDE_scope.py").write_text("x=1\n", encoding="utf-8")  # не совпадает с cc.py
+            _git(root, "add", "-A"); _git(root, "commit", "-qm", f"rogue {pid}", check=False)
+            return {"ready_for_pr": True, "commit": {"sha": _git(root, "rev-parse", "HEAD").stdout.strip()}}
+        with tempfile.TemporaryDirectory() as cdir2:
+            _rrunner = make_isolated_package_runner(td3, base3, {"cc": "t"}, {"task_type": "QUICK"},
+                                                    rogue_run, cdir2, {})
+            _rres = _rrunner({"id": "cc", "write_scope": ["cc.py"]})
+            expect("rc2 #2: запись вне write_scope -> пакет FAIL (scope-violation)",
+                   _rres.get("status") == "fail" and "OUTSIDE_scope.py" in (_rres.get("scope_violation") or []))
+        with tempfile.TemporaryDirectory() as cdir3:
+            _grunner = make_isolated_package_runner(td3, base3, {"cc": "t"}, {"task_type": "QUICK"},
+                                                    commit_run, cdir3, {})
+            _gres = _grunner({"id": "cc", "write_scope": ["cc.py"]})
+            expect("rc2 #2: запись В пределах write_scope -> пакет проходит scope-check",
+                   (_gres.get("scope_check") or {}).get("ok") is True)
+
+    # v3.8.3-rc2 unit: helpers (#1 pkg signals, glob/scope, #8 self-clean каталог)
+    expect("rc2 #1: _pkg_signals прокидывает write_scope+выводит affected_areas",
+           _pkg_signals({"task_type": "X"}, {"id": "p", "write_scope": ["api/**", "db/x.py"]}).get("affected_areas") == ["api", "db"])
+    expect("rc2: _glob_match 'api/**' ловит вложенный путь", _glob_match("api/routes/x.py", "api/**") and not _glob_match("ui/x.py", "api/**"))
+    expect("rc2 #2: _scope_ok пропускает инфра-пути (.ai/…), ловит чужие",
+           _scope_ok([".ai/plan.yaml", "api/x.py", "ui/y.py"], ["api/**"]) == (False, ["ui/y.py"]))
+    with tempfile.TemporaryDirectory() as td4:  # #8: self-created clones_dir очищается (нет утечки)
+        _git(td4, "init", "-q", check=False); _git(td4, "config", "user.email", "t@t"); _git(td4, "config", "user.name", "t")
+        (Path(td4) / "s.py").write_text("x=1\n", encoding="utf-8"); _git(td4, "add", "-A"); _git(td4, "commit", "-qm", "s", check=False)
+        _b4 = _git(td4, "rev-parse", "HEAD").stdout.strip()
+        _pre = set(Path(tempfile.gettempdir()).glob("ai-ops-parallel-*"))
+        run_live_concurrent({"schema_version": 1, "kind": "WorkGraph", "id": "WG-X", "feature": "f",
+                             "execution_mode": "hybrid", "packages": [{"id": "z", "depends_on": [], "write_scope": ["z.py"]}]},
+                            td4, _b4, {"z": "t"}, {"task_type": "QUICK"}, commit_run)  # clones_dir=None -> self-created
+        _post = set(Path(tempfile.gettempdir()).glob("ai-ops-parallel-*"))
+        expect("rc2 #8: self-created каталог клонов очищен (нет утечки временных клонов)", _post == _pre)
 
     print("parallel_live selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
