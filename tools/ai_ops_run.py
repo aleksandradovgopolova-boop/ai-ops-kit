@@ -339,6 +339,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         except Exception as _e:  # noqa: BLE001
             _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                  "mode": "explicit-override" if model else "router"}
+        # v3.7.1 strict judge: есть ли QUALIFIED security-судья? Нет -> security needs_review идёт в
+        # pending_human (writer-модель не закрывает security). Из plan_run (по умолчанию нет qualified судей).
+        _sec_qualified = bool(((_model_resolution.get("plan") or {}).get("security_review") or {}).get("resolved"))
 
         prop = proposer or tool_loop.make_model_proposer(
             _writer_prov or orchestrator.make_provider(provider_name, _writer_model))
@@ -628,7 +631,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 resume=_resume, resume_context=_rctx, write_scope=write_scope,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
-                calibrated_enforcement=_calib, ui_evidence=ui_evidence)
+                calibrated_enforcement=_calib, ui_evidence=ui_evidence,
+                strict_judge_qualified=_sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
         try:
             rep = _pipe(resume, resume_ctx)
             # v3.1.1 (fix-loop, находка Phase B): блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх

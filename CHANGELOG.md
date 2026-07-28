@@ -2,6 +2,24 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.7.1 — Trust Alignment: выровнять заявления и рантайм (4 шва после code-review 3.7.0)
+
+Патч после ревью 3.7.0: закрыть 4 расхождения между release notes и рантаймом (без новой архитектуры и
+новых advisory-гейтов). БЕЗ version-bump до готовности всех 4 (тогда VERSION 3.7.0 -> 3.7.1).
+
+### Added (v3.7.1 #1 — strict judge enforcement: нет qualified судьи -> pending_human, self-model НЕ закрывает security)
+- Разрыв ревью: без qualified security-судьи runtime применял только implementation/code_review, а security
+  needs_review закрывался ОБЩИМ reviewer_proposer (та же модель, что писала код) -> расходилось с заявленным
+  «нет qualified security judge -> pending_human».
+- `execution_pipeline.run_pipeline` += `strict_judge_qualified` (default True — legacy/selftest не тронуты).
+  При False: security `overall=needs_review` НЕ закрывается self-моделью -> `security=fail` +
+  `pending_human` + human_handoff (ready_for_pr=false до ApprovalRecord). Строго ДО reviewer-ветки.
+- `ai_ops_run` вычисляет `strict_judge_qualified` из `model_router.plan_run().security_review.resolved`
+  (сейчас qualified судей нет -> в живом пути всегда строгий барьер). code_review self-model остаётся как
+  явно пониженный режим (записан), security/integration — нельзя.
+- selftest A/B: qualified-путь идёт через reviewer (guard не берётся); нет судьи -> security fail +
+  блокер «нет QUALIFIED security-судьи» (guard СРАБАТЫВАЕТ). ai_ops_run selftest PASS.
+
 ## [3.7.0] — 2026-07-28 — Runtime Activation: провайдер-независимость как ПОВЕДЕНИЕ продукта
 
 Фаза v3.7 ЗАКРЫТА. Провайдер-независимость перестала быть только реестром/резолвером и стала живым

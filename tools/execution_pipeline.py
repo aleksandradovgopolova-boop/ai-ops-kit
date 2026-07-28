@@ -1126,7 +1126,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  review=False, reviewer_proposer=None,
                  author=False, author_proposer=None, plan=None, context_prelude=None,
                  resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False,
-                 calibrated_enforcement=False, ui_evidence=None):   # v3.1.8 калиброванное UI-enforcement
+                 calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
+                 strict_judge_qualified=True):   # v3.7.1: есть ли QUALIFIED security/integration судья
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -1527,6 +1528,17 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                    "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
                                             "note": "все применимые security-домены закрыты детерминированным evidence"}}
+        elif (overall == "needs_review" and not security_pack_result["blocking"]
+              and not strict_judge_qualified):
+            # v3.7.1 STRICT JUDGE (trust alignment): нет QUALIFIED security-судьи -> self-model писателя
+            # НЕ закрывает security needs_review. Автопасс невозможен -> pending_human (ApprovalRecord).
+            # Ровно заявленная граница: нет qualified security judge -> pending_human -> ready_for_pr=false.
+            gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
+                                   "blockers": ["нет QUALIFIED security-судьи: needs_review домены не может "
+                                                "закрыть писательская модель (writer≠judge) -> человеко-одобрение "
+                                                "(ApprovalRecord): " + ", ".join(security_pack_result["needs_review"])],
+                                   "pack": {"applicable": security_pack_result["applicable_domains"],
+                                            "needs_review": security_pack_result["needs_review"]}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
               and review and reviewer_proposer is not None and committed_sha):
             # v2.106: независимый security-reviewer закрывает needs_review домены (writer≠judge).
@@ -2222,6 +2234,34 @@ def selftest():
                                   review=True, reviewer_proposer=sec_reviewer)
         expect("v2.106 #1: security-reviewer pass -> security закрыт (не в unmet)",
                "security" not in rep_secrev["gates"]["unmet"])
+        _git(root, "checkout", "-q", orig_branch)
+
+        # v3.7.1 STRICT JUDGE (trust alignment): needs_review-домен rate_limiting (только security_reviewer)
+        # через сигнал api_change. A/B: qualified-судья закрывает vs НЕТ судьи -> pending_human.
+        sig_api = dict(sig_eng, api_change=True)
+        it_q = iter([{"op": "write", "path": "src/rl_a.py", "content": "def a():\n    return 1\n"}, {"done": True}])
+        rep_q = run_pipeline("api rate strict-on", sig_api, root, lambda c: next(it_q),
+                             policy=pol, budget={"max_model_calls": 8}, feature="rl-q-fn",
+                             commit=True, isolate=True, install_deps=False,
+                             review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=True)
+        _sec_a = next((g for g in rep_q["gates"].get("gate_results", []) if g.get("gate") == "security"), {})
+
+        def _has(g, sub):
+            return any(sub in b for b in (g.get("blockers") or []))
+        # strict=True -> идём в reviewer-ветку (writer≠judge на вызове): мой pending_human-guard НЕ берётся
+        expect("v3.7.1 A: qualified-путь НЕ берёт guard «нет QUALIFIED судьи» (идёт через reviewer)",
+               not _has(_sec_a, "нет QUALIFIED security-судьи"))
+        _git(root, "checkout", "-q", orig_branch)
+        it_strict = iter([{"op": "write", "path": "src/rl_b.py", "content": "def b():\n    return 1\n"}, {"done": True}])
+        rep_strict = run_pipeline("api rate strict-off", sig_api, root, lambda c: next(it_strict),
+                                  policy=pol, budget={"max_model_calls": 8}, feature="rl-b-fn",
+                                  commit=True, isolate=True, install_deps=False,
+                                  review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
+        _sec_b = next((g for g in rep_strict["gates"].get("gate_results", []) if g.get("gate") == "security"), {})
+        # strict=False -> нет qualified судьи -> needs_review НЕ закрывается self-моделью -> pending_human
+        expect("v3.7.1 B: НЕТ qualified судьи -> security fail + блокер pending_human (self-model не закрывает)",
+               "security" in rep_strict["gates"]["unmet"] and _sec_b.get("status") == "fail"
+               and _has(_sec_b, "нет QUALIFIED security-судьи"))
         _git(root, "checkout", "-q", orig_branch)
 
         # v2.106 #1 (fail-closed): secret_boundary требует человека даже при pass ревьюера
