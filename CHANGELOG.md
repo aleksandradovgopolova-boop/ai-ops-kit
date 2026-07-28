@@ -2,7 +2,7 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.7.2 — Security Fail-Closed (два fail-open края перед Product Bootstrap)
+## [3.7.2] — 2026-07-28 — Security Fail-Closed (два fail-open края закрыты перед Product Bootstrap)
 
 Узкий патч после runtime-code-review 3.7.1: security-барьеры 3.7.1 были обёрнуты в `try/except: pass` ->
 повреждённая политика/сбой enforcement МОЛЧА снимали проверку (fail-open). Закрыто fail-closed.
