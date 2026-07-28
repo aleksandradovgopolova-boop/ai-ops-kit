@@ -2,6 +2,29 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased] — v3.7.2 — Security Fail-Closed (два fail-open края перед Product Bootstrap)
+
+Узкий патч после runtime-code-review 3.7.1: security-барьеры 3.7.1 были обёрнуты в `try/except: pass` ->
+повреждённая политика/сбой enforcement МОЛЧА снимали проверку (fail-open). Закрыто fail-closed.
+
+### Fixed (v3.7.2 — security-барьеры больше не fail-open)
+- **#1 key preflight FAIL-CLOSED**: ЛЮБАЯ ошибка чтения KLP / preflight -> `blocked-preflight` (0 model
+  calls), а не молчаливый `pass`. Было: `except Exception: pass` после сбоя строило proposer и продолжало.
+- **#2 memory governance FAIL-CLOSED**: сбой enforcement-кода -> запись НЕ создаётся (return 1). Было:
+  `except: pass` -> писала при сбое.
+- **#3 KLP проецируется на РЕАЛЬНО используемые провайдеры** (impl + независимый reviewer): TTL/presence
+  проверяются для выбранных key_env; ключи неиспользуемых провайдеров не блокируют и не игнорируются.
+- **#4 нет ключа router-selected модели** -> `blocked-preflight` (не тихий passthrough; critical=True +
+  fail-closed except это гарантируют).
+- **#6 негативные self-tests**: merge_memory — сбой governance-enforcement -> BLOCKED, файл НЕ создан
+  (монки-патч enforce_memory_entry -> RuntimeError). key_preflight TTL/presence негативы (v3.7.1) целы.
+- **#5 (strict security judge — только `security_review.resolved`/человек, разделение proposer'ов)** — НЕ
+  включён: строгая форма делает security needs_review ВСЕГДА pending_human до Bench v2 (нет qualified
+  security-судьи) и ломает автономный security-путь sequential-executor'а product-wide. Это сознательное
+  продуктовое решение (пара к Bench v2 + разделение reviewer/security_reviewer/integration_judge proposer),
+  оставлено под явное подтверждение. Пока действует v3.7.1-правило: self-model НЕ закрывает security,
+  независимый судья — может.
+
 ## [3.7.1] — 2026-07-28 — Trust Alignment: заявления выровнены с рантаймом (4 шва после code-review 3.7.0)
 
 Патч после ревью 3.7.0: закрыты 4 расхождения между release notes и рантаймом (без новой архитектуры и

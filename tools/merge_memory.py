@@ -41,19 +41,23 @@ def record(memory_dir, wid, summary, areas=None, decisions=None, lessons=None,
     # v3.7.1 (#4) governance-БАРЬЕР: merge-memory запись self-ingested. Без подтверждения человека
     # (human_confirmed) MemoryGovernancePolicy НЕ пропускает (анти-самоотравление) -> запись НЕ создаётся
     # (было advisory). Куратор подтверждает через --human-confirmed. Ровно заявленная граница.
+    # v3.7.2 FAIL-CLOSED: ошибка governance-кода/enforcement -> запись НЕ создаётся (было except: pass ->
+    # писала при сбое = fail-open). Барьер должен падать в блок, а не пропускать.
+    _entry = {"id": str(wid), "self_ingested": True, "human_confirmed": bool(human_confirmed),
+              "provenance": {"origin": f"merge WorkItem {wid}", "source_type": "derived",
+                             "upstream": [f"WorkItem:{wid}"]},
+              "expiry": {"mode": "review_date", "value": at}}
     try:
         import security_enforcement as _se
-        _entry = {"id": str(wid), "self_ingested": True, "human_confirmed": bool(human_confirmed),
-                  "provenance": {"origin": f"merge WorkItem {wid}", "source_type": "derived",
-                                 "upstream": [f"WorkItem:{wid}"]},
-                  "expiry": {"mode": "review_date", "value": at}}
         _ok, _viol = _se.enforce_memory_entry(_entry)
-        if not _ok:
-            print("BLOCKED (memory governance): self-ingested запись не прошла MemoryGovernancePolicy "
-                  "(без --human-confirmed self-ingestion запрещена). Нарушения: " + "; ".join(_viol))
-            return 1
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _ge:  # noqa: BLE001 — FAIL-CLOSED: сбой governance = не пишем
+        print(f"BLOCKED (memory governance FAIL-CLOSED): сбой enforcement -> запись НЕ создана "
+              f"({type(_ge).__name__}: {_ge})")
+        return 1
+    if not _ok:
+        print("BLOCKED (memory governance): self-ingested запись не прошла MemoryGovernancePolicy "
+              "(без --human-confirmed self-ingestion запрещена). Нарушения: " + "; ".join(_viol))
+        return 1
     dst_dir = Path(memory_dir) / "lessons-learned"
     dst_dir.mkdir(parents=True, exist_ok=True)
     path = dst_dir / f"{at}-{wid}.md"
@@ -106,6 +110,18 @@ def selftest():
                     at="2026-07-15", human_confirmed=True)
         f = Path(td) / "lessons-learned" / "2026-07-15-wi-1.md"
         expect("record c human_confirmed: файл создан", rc == 0 and f.exists())
+
+        # v3.7.2 FAIL-CLOSED (#6): сбой governance-enforcement -> запись НЕ создаётся (не fail-open)
+        import security_enforcement as _se
+        _orig = _se.enforce_memory_entry
+        _se.enforce_memory_entry = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        try:
+            rc_crash = record(td, "wi-crash", "правка", at="2026-07-15", human_confirmed=True)
+        finally:
+            _se.enforce_memory_entry = _orig
+        f_crash = Path(td) / "lessons-learned" / "2026-07-15-wi-crash.md"
+        expect("governance enforcement упал -> BLOCKED, файл НЕ создан (fail-closed)",
+               rc_crash == 1 and not f_crash.exists())
         txt = f.read_text(encoding="utf-8")
         expect("содержит summary", "редактирование дашборда" in txt)
         expect("содержит зоны", "dashboard-editor" in txt)
