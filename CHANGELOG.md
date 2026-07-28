@@ -24,6 +24,18 @@
 - ДАЛЬШЕ (живое, под ключи+тулчейн): v3.8.1 greenfield bootstrap (последовательно) -> v3.8.2 stack-aware
   integration -> v3.8.3 true concurrent parallel -> v3.8.4 multi-repo readiness -> 3.8 stable; Bench v2 рядом.
 
+### Changed (v3.8.2 — stack-aware governed fan-in: integration checks по СТЕКУ, не хардкод pytest)
+- Ревью 3.7.1: `parallel_live` integration-runner хардкодил `python -m pytest -q` -> для full-stack/
+  frontend недостаточно. Теперь aggregate на integration-SHA = `project_detector.detect` +
+  `evidence_collector.collect` (backend pytest/lint/typecheck; frontend build/lint/test; как у
+  sequential-executor `_aggregate_verify`). `all_pass` = нет проваленных проверок ДЕТЕКТИРОВАННОГО стека
+  (+ 0 конфликтов). Fail-closed при сбое коллектора. `aggregate.stack_aware=true` + `stack_checks`.
+- selftest +3: на python-репо integration-runner детектит стек, `stack_checks` несёт 'test', зелёный
+  стек на integration-SHA -> all_pass (доказывает: не хардкод pytest, а stack-aware evidence).
+- (3.8.1 живой greenfield-readout — в чате/памяти, не в ките по правилу «не коммить отчёты»: роутер выбрал
+  deepseek-v4-flash, scenario-тест поймал сломанную вертикаль -> impl_verification fail, security
+  pending_human #5, 0 false-green. Learning: greenfield-профиль должен gitignore рантайм-БД.)
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

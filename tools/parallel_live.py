@@ -74,12 +74,22 @@ def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/int
                 conflicts += 1
                 _git(child_root, "merge", "--abort", check=False)
         integration_sha = _git(child_root, "rev-parse", "HEAD").stdout.strip()
-        # ПОВТОР проверок на integration-SHA (не доверяем package-SHA)
-        agg = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=str(child_root),
-                             capture_output=True, text=True)
-        all_pass = conflicts == 0 and agg.returncode == 0
-        aggregate = {"all_pass": all_pass, "tested_revision": integration_sha,
-                     "pytest_rc": agg.returncode, "tail": (agg.stdout or agg.stderr)[-300:]}
+        # v3.8.2 STACK-AWARE aggregate на integration-SHA: детект стека (project_detector) + повтор
+        # evidence_collector (backend pytest/lint/typecheck; frontend build/lint/test; ...) — НЕ хардкод
+        # pytest. Как у sequential-executor'а (_aggregate_verify). Fail-closed при сбое коллектора.
+        try:
+            import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+            _pol = _tb.sandbox_policy(child_root=str(child_root))
+            _coll = _ec.collect(_pd.detect(child_root), child_root, _pol)
+            _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
+            stack_ok = _iv.get("status") == "pass"
+            stack_checks = {k: (v.get("status") if isinstance(v, dict) else v) for k, v in (_coll.get("checks") or {}).items()}
+        except Exception as _e:  # noqa: BLE001 — сбой коллектора -> fail-closed
+            stack_ok = False
+            stack_checks = {"error": f"{type(_e).__name__}: {_e}"[:160]}
+        all_pass = conflicts == 0 and stack_ok
+        aggregate = {"all_pass": all_pass, "tested_revision": integration_sha, "conflicts": conflicts,
+                     "stack_aware": True, "stack_checks": stack_checks}
         return integration_sha, aggregate, conflicts, False
     return runner
 
@@ -187,6 +197,28 @@ def selftest():
         (Path(td) / "dirty.py").write_text("y=2\n", encoding="utf-8")
         okp2, rsn = preflight_disposable(td)
         expect("preflight: грязный checkout -> ОТКАЗ (защита незакоммиченных)", okp2 is False and "грязный" in rsn)
+
+    # v3.8.2 STACK-AWARE integration runner: aggregate детектит стек и гоняет evidence_collector,
+    # а НЕ хардкодит pytest. На python-репо -> stack_checks несёт 'test'; зелёный тест -> all_pass.
+    with tempfile.TemporaryDirectory() as td2:
+        _git(td2, "init", "-q", check=False)
+        _git(td2, "config", "user.email", "t@t"); _git(td2, "config", "user.name", "t")
+        (Path(td2) / "pyproject.toml").write_text(
+            "[project]\nname='t'\nversion='0.1.0'\n[tool.pytest.ini_options]\npythonpath=['.']\n", encoding="utf-8")
+        Path(td2, "tests").mkdir()
+        (Path(td2) / "tests" / "test_ok.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+        _git(td2, "add", "-A"); _git(td2, "commit", "-qm", "seed", check=False)
+        base2 = _git(td2, "rev-parse", "HEAD").stdout.strip()
+        # пакет p1: добавляет файл на своей ветке
+        _git(td2, "checkout", "-q", "-b", "ai-ops/p1", check=False)
+        (Path(td2) / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+        _git(td2, "add", "-A"); _git(td2, "commit", "-qm", "p1", check=False)
+        _git(td2, "checkout", "-q", base2, check=False)
+        ir = make_integration_runner(td2, base2, integration_branch="ai-ops/it-test")
+        _isha, _agg, _conf, _bm = ir({"p1": {"status": "pass"}})
+        expect("v3.8.2: aggregate STACK-AWARE (не хардкод pytest)", _agg.get("stack_aware") is True)
+        expect("v3.8.2: stack_checks несёт проверку 'test' детектированного стека", "test" in (_agg.get("stack_checks") or {}))
+        expect("v3.8.2: зелёный python-стек на integration-SHA -> all_pass", _agg.get("all_pass") is True and _conf == 0)
 
     print("parallel_live selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
