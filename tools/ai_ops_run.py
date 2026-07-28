@@ -358,13 +358,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         except Exception as _e:  # noqa: BLE001
             _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                  "mode": "explicit-override" if model else "router"}
-        # v3.7.1 strict judge: security needs_review не закрывает SELF-модель писателя. Разрешаем закрытие
-        # НЕЗАВИСИМЫМ судьёй (явный reviewer_proposer / router-резолв другой модели). ПРИМЕЧАНИЕ (ревью
-        # 3.7.1): полное «только КВАЛИФИЦИРОВАННЫЙ для security судья либо человек» (#5) — сознательное
-        # product-wide изменение (ломает автономный security-путь executor'а до Bench v2) -> за отдельным
-        # решением владельца + разделением reviewer/security_reviewer/integration_judge proposer.
-        _sec_qualified = bool(reviewer_proposer is not None
-                              or (_model_resolution.get("reviewer") or {}).get("independent_by_model"))
+        # v3.7.3 (#5 flip): security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ security-судья
+        # (security_review.resolved в plan_run) ЛИБО человек (ApprovalRecord). Общий code reviewer — НЕТ.
+        # Пока qualified security-судьи нет (до Bench v2) -> security needs_review -> pending_human до
+        # человеческого ApprovalRecord (реальный human-fallback). Отдельный security_reviewer_proposer.
+        _sec_qualified = bool(((_model_resolution.get("plan") or {}).get("security_review") or {}).get("resolved"))
 
         # v3.7.1 (#4) РЕАЛЬНЫЙ security-барьер: key preflight не пройден (ключ/ротация) -> блок ПРОГОНА
         # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
