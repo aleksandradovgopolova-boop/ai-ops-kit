@@ -266,6 +266,15 @@ python3 .research/tools/ev_scaffold.py --selftest
 - **Стадии ссылаются только на существующие agent id и gate id.**
 - **Никаких новых зависимостей** без явного решения: Python-инструменты работают на stdlib + pyyaml.
 - **Язык документации — русский**, идентификаторы и ключи — английские.
+- **Три кольца (owner-review 2026-07-30, см. `qualification/bootstrap/v3.8.0-plan.yaml` → `architecture_rings`).**
+  Kernel (Task→Context→Execution→Evidence→Decision→Delivery) НЕ зависит от Intelligence (research/
+  product-learning/аналитика); Intelligence зависит от Kernel и ЧИТАЕТ его события. Governance подключается
+  ПО РИСКУ, не на каждой задаче. Изменение продукта не должно требовать заполнения исследовательской онтологии.
+- **Runtime через адаптер, не замена.** AI Ops управляет исполнителем (Claude Code/Codex/OpenHands SDK/…)
+  через адаптер; workflow/approvals/evidence не переписываются при смене runtime. Свой tool-loop не наращиваем,
+  если внешний runtime делает это надёжно.
+- **Заморозка возможностей до 3.8 stable:** новых концептуальных возможностей не добавлять (см. lean-цикл +
+  `capability_freeze` в плане). Только live qualification + измерение усилия владельца.
 
 ## Релизный процесс
 
