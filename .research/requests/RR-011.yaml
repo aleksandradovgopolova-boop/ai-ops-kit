@@ -1,0 +1,51 @@
+# Shortlist инженерных механик для мета-harness (входящее Sasha 2026-07-29,
+# источник — .research/sources/inbox-2026-07-29-aiops-mechanics-shortlist.yaml).
+# Особенность прогона: половина «предложенных к созданию» компонентов в ките уже есть —
+# поэтому первый вопрос не «что взять», а «чего реально нет».
+schema_version: 1
+kind: research.request
+id: RR-011
+title: "Механики для мета-harness: mini-swe-agent, Superpowers, RepoPrompt CE, Beads, OTel — что брать, чего в ките нет"
+requested_by:
+  system: human
+  layer: technology
+decision_to_support:
+  description: "Решить, какие из восьми предложенных компонентов (Task Contract, Context Pack Compiler, Minimal Runner, Skill Registry, Skill Evals, Verification Gates, Trajectory + Operational Learnings, Execution Environment API) в ките реально отсутствуют или слабы, какие конкретные механики каких источников под них заимствовать (формат/паттерн, не зависимость) и в каком порядке — вход в планирование следующей итерации кита"
+  decision_maker: human
+questions:
+  - "Честный маппинг: какие из восьми компонентов уже покрыты китом (implemented/partial/gap) — по файлам (tools/context_compiler.py, tools/tool_loop.py, validate_loop_trace.py, tools/run_handoff.py, gate_executor + quality/gates.yaml, registry/skills-catalog.yaml, evaluations/, memory/), а не по общим словам?"
+  - "mini-swe-agent: что именно в его цикле переносимо (разделение model/environment/loop, линейная история, независимое выполнение команд, формат траектории response→action→observation), лицензия, и чем это отличается от уже реализованной петли кита — есть ли вообще дельта?"
+  - "Superpowers: подтверждается ли первоисточником методика Skill TDD (навык без навыка → фиксация обхода → стресс-сценарии давления) и обязательность workflow-гейтов; что из неё применимо к evaluations/ и skills-catalog кита, где eval-кейсы агентов уже есть, но тестов навыков на обход — нет?"
+  - "RepoPrompt CE: алгоритмы отбора контекста, token budget, multi-root workspace, reviewable handoff — лицензия, зрелость, и какая конкретная дельта против детерминированной селекции ContextBundle кита (обоснование выбора, свежесть, конфликты источников, запрос агентом дополнительного контекста)?"
+  - "Beads, kubernetes-sigs/agent-sandbox, Anthropic Agent Skills + AGENTS.md, OTel GenAI semconv, OpenCode: статус, лицензии, зрелость каждого; что из них годится как ФОРМАТ (переносимость, совместимость наружу), а что потребовало бы зависимости или платформы?"
+  - "Что из шортлиста дублирует уже принятые решения (DP-103 gstack, DP-105 eval-инструменты и Langfuse, DP-108 аналоги и стратегия адаптеров, DP-110) и потому не требует повторного прогона — и наоборот, какие расхождения с этими DP входящее вносит?"
+  - "Итоговый порядок работ по соотношению «дельта к текущему киту / стоимость / риск зависимости»: что делать сейчас, что спроектировать под будущее (Execution Environment API, K8s-изоляция), что не трогать?"
+constraints:
+  - evidence_over_reputation          # утверждения входящего снимать с первоисточников, включая метрики и лицензии
+  - license_compatible_commercial     # критерий DP-102; применяется и к собственным кандидатам (урок RR-002)
+  - registry_is_single_source_of_truth # заимствованный формат компилируется в registry/gates, параллельных деклараций не создаём (урок DP-108, checks-формат)
+  - no_new_runtime_dependencies_without_need # адаптеры — по реальной потребности, не «на будущее»
+  - honest_statuses                   # маппинг покрытия: partial/declared не выдавать за implemented
+  - fits_kit_declared_pattern
+workflow_hint: deep
+memory_check:
+  performed: true
+  related_requests: [RR-002, RR-003, RR-005, RR-008, RR-009]
+  related_decisions: [DP-102, DP-103, DP-105, DP-108]
+  summary: >-
+    Треть шортлиста уже проходила через центр: gstack разобран в RR-003/DP-103 (MIT, прямой аналог;
+    механика промоушена learnings «3 применения → глобальный уровень» уже перенята — повторный разбор
+    нужен только по cross-model review и skill routing); OpenHands, SWE-agent/SWE-ReX и Goose
+    верифицированы в RR-008 (EV-604…EV-609, EV-637, EV-638) с решением DP-108 «адаптеры по потребности,
+    кит остаётся control plane»; Langfuse проверен как eval-инструмент в RR-005/DP-105 (EV-325, MIT
+    кроме /ee) — открыт не он, а формат событий OTel GenAI. НЕ встречались в прошлых сканах:
+    mini-swe-agent как отдельный объект (проверялся родительский SWE-agent), Superpowers, RepoPrompt CE,
+    Beads, kubernetes-sigs/agent-sandbox, спецификация Anthropic Agent Skills, OpenCode. Сторона кита:
+    ContextBundle (tools/context_compiler.py), петля model→policy→broker→evidence (tools/tool_loop.py),
+    траектории (validate_loop_trace.py + examples/loop-trace-demo), RunHandoff (tools/run_handoff.py),
+    28 гейтов (quality/gates.yaml), skills-catalog и evaluations — существуют; входящее предлагает их
+    как «создать», поэтому маппинг покрытия вынесен первым вопросом.
+required_confidence: medium
+deadline: "2026-08-12"
+status: planned
+created_at: "2026-07-29"
