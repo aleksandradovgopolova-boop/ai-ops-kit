@@ -441,6 +441,9 @@ def selftest():
 
         def commit_run(task, sig, root, **kw):  # мок вместо LLM: пишет файл + коммитит в СВОЙ клон
             pid = kw["feature"]
+            # git clone НЕ копирует локальный user.name/email -> в CI (без глобальной идентичности)
+            # коммит бы молча падал. Реальный путь (ai_ops_run) настраивает идентичность сам; мок — тоже.
+            _git(root, "config", "user.email", "t@t"); _git(root, "config", "user.name", "t")
             _git(root, "checkout", "-q", "-B", f"ai-ops/{pid}", check=False)
             (Path(root) / f"{pid}.py").write_text(f"def {pid}():\n    return 1\n", encoding="utf-8")
             _git(root, "add", "-A"); _git(root, "commit", "-qm", f"pkg {pid}", check=False)
@@ -472,6 +475,7 @@ def selftest():
         # v3.8.3-rc2 #2 POST-COMMIT SCOPE: пакет пишет ФАЙЛ ВНЕ своего write_scope -> пакет FAIL (не в fan-in).
         def rogue_run(task, sig, root, **kw):  # мок: коммитит файл вне заявленного write_scope
             pid = kw["feature"]
+            _git(root, "config", "user.email", "t@t"); _git(root, "config", "user.name", "t")  # см. commit_run
             _git(root, "checkout", "-q", "-B", f"ai-ops/{pid}", check=False)
             (Path(root) / "OUTSIDE_scope.py").write_text("x=1\n", encoding="utf-8")  # не совпадает с cc.py
             _git(root, "add", "-A"); _git(root, "commit", "-qm", f"rogue {pid}", check=False)
