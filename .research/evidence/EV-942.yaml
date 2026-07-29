@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-942
+request_id: RR-011
+statement: 'RepoPrompt CE — Apache-2.0 и ТОЛЬКО macOS 26+ (требует Xcode 26 / Command
+  Line Tools с macOS 26 SDK), то есть как исполняемая зависимость киту не подходит
+  в принципе. Механики подтверждены и совпадают с описанием входящего: сборка контекста
+  из дерева файлов, содержимого выбранных файлов, СРЕЗОВ СТРОК, CodeMaps и git-диффов;
+  multi-root workspaces для связанных репозиториев; курирование контекста в пределах
+  token budget; reviewable handoffs — предпросмотр и правка отобранного контекста
+  ДО отправки другой модели или агенту; интерфейс — MCP-сервер плюс CLI.'
+evidence_type: documented_fact
+source:
+  title: repoprompt/repoprompt-ce — README
+  url: https://github.com/repoprompt/repoprompt-ce
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'README: секции Platform, возможности Context Builder, Reviewable handoffs'
+  quote: 'Combine file trees, selected file contents, line slices, CodeMaps, and Git
+    diffs … Reviewable handoffs: Inspect and refine selected context before sending
+    it to another model or agent'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (доверификация первоисточников после обрыва двух разведчиков
+  по лимиту расходов)
+freshness:
+  volatile: true
+  expires_at: '2026-10-29'
+reliability:
+  level: medium
+  rationale: Дословные формулировки сняты с README первоисточника; клон не делался,
+    версия/зрелость не проверены — medium.
+status: active
+superseded_by: null

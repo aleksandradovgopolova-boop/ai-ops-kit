@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-944
+request_id: RR-011
+statement: 'kubernetes-sigs/agent-sandbox — Apache-2.0, API в статусе v1beta1 (не
+  stable). Абстракция Sandbox даёт ровно то, что перечисляло входящее: стабильную
+  сетевую идентичность и hostname, постоянное хранилище, переживающее рестарты, управление
+  жизненным циклом с паузой и возобновлением, SandboxWarmPool с преднагретыми окружениями
+  и делегирование изоляции в gVisor/Kata через RuntimeClass. Цена входа зафиксирована:
+  это CRD и контроллер Kubernetes, то есть требуется кластер — для кита сегодня это
+  исследовательский горизонт, а не внедрение.'
+evidence_type: documented_fact
+source:
+  title: kubernetes-sigs/agent-sandbox — README
+  url: https://github.com/kubernetes-sigs/agent-sandbox
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'README: описание Sandbox CRD, секции identity/storage/lifecycle, SandboxWarmPool,
+    Sandbox Runtimes'
+  quote: The Sandbox controller manages the lifecycle of the pod, including creation,
+    scheduled deletion, pausing and resuming
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (доверификация первоисточников после обрыва двух разведчиков
+  по лимиту расходов)
+freshness:
+  volatile: true
+  expires_at: '2026-10-29'
+reliability:
+  level: medium
+  rationale: README первоисточника прочитан, формулировки процитированы; версия API
+    (v1beta1) снята оттуда же. Без клона и без проверки релизов — medium.
+status: active
+superseded_by: null
