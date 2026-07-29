@@ -1,0 +1,37 @@
+schema_version: 1
+kind: research.evidence
+id: EV-926
+request_id: RR-011
+statement: 'РАСХОЖДЕНИЕ С ВХОДЯЩИМ по формату траектории: mini-swe-agent пишет НЕ
+  список шаговых записей {step, model_response, action, observation, cost, duration_ms},
+  а единый .traj.json — {info: {model_stats: {instance_cost, api_calls}, config, mini_version,
+  exit_status, submission}, messages: [...], trajectory_format: "mini-swe-agent-1.1"},
+  где messages — линейная история в OpenAI chat format. Пошаговые данные лежат в поле
+  extra конкретного сообщения: у assistant — actions, cost, timestamp, response; у
+  наблюдения — returncode, timestamp. Поля duration в записи шага нет.'
+evidence_type: documented_fact
+source:
+  title: mini-swe-agent docs — Output files (trajectory)
+  url: https://github.com/SWE-agent/mini-swe-agent/blob/main/docs/usage/output_files.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: docs/usage/output_files.md, секция «Trajectory files (.traj.json)» → Structure
+    и примеры сообщений
+  quote: '"extra": {"actions": [{"command": "ls -la"}], "cost": 0.003, "timestamp":
+    1706000000.0, "response": { ... }}'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: 'Позитив (состав полей) — high: официальная документация плюс независимое
+    подтверждение кодом serialize() и LitellmModel.query. Уровень снижен из-за негативного
+    компонента (отсутствие duration): grep по src/ и docs/ основной ветки на 2026-07-29,
+    сторонние подклассы вне охвата.'
+status: active
+superseded_by: null

@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-923
+request_id: RR-011
+statement: 'КАЛИБРОВКА заявления «агент в 100 строк»: README формулирует нестрого
+  («Just some 100 lines») и сам оговаривает, что окружение, модель и run-скрипт идут
+  сверх этого. Фактический замер на v2.4.6: класс DefaultAgent занимает строки 38-190,
+  т.е. 153 физических строки (142 непустых некомментарных), весь файл — 190 строк.
+  Порядок величины подтверждается (цикл умещается в один небольшой файл без фреймворка),
+  сама цифра — округление вниз примерно в 1,5 раза.'
+evidence_type: measured_result
+source:
+  title: mini-swe-agent — src/minisweagent/agents/default.py + README
+  url: https://raw.githubusercontent.com/SWE-agent/mini-swe-agent/main/src/minisweagent/agents/default.py
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README.md, буллет **Minimal**; default.py, строки 38-190 (подсчёт через
+    ast на commit a83fcae8)
+  quote: '- **Minimal**: Just some 100 lines of python for the [agent class] (and
+    a bit more for the [environment], [model], and [run script]) — no fancy dependencies!'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Цитата дословна, замер воспроизводим повторным подсчётом на том же коммите.
+status: active
+superseded_by: null
