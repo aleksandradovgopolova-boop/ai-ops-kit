@@ -530,10 +530,17 @@ def selftest():
         try:  # имитируем окружение БЕЗ глобальной идентичности (как CI-раннер)
             _os.environ["GIT_CONFIG_GLOBAL"] = _os.devnull
             _os.environ["GIT_CONFIG_SYSTEM"] = _os.devnull
-            expect("rc2c: клон без разрешимой идентичности -> поставлен fallback", _ensure_identity(cl) is True)
+            # Кросс-платформенно: на Linux-раннере без идентичности `git var GIT_COMMITTER_IDENT` падает ->
+            # ставится fallback; на macOS git СИНТЕЗИРУЕТ identity из OS (user@host) -> fallback не нужен.
+            # Инвариант _ensure_identity на ОБОИХ: fallback ровно тогда, когда identity неразрешима, и после
+            # вызова коммит в клоне проходит (это и снимает ложный конфликт fan-in).
+            _resolvable = subprocess.run(["git", "-C", str(cl), "var", "GIT_COMMITTER_IDENT"],
+                                         capture_output=True, text=True).returncode == 0
+            expect("rc2c: fallback ставится РОВНО когда идентичность неразрешима (кросс-платформенно)",
+                   _ensure_identity(cl) is (not _resolvable))
             (cl / "g.py").write_text("y=2\n", encoding="utf-8")
             _git(cl, "add", "-A")
-            expect("rc2c: после fallback коммит в клоне проходит (не ложный конфликт fan-in)",
+            expect("rc2c: после _ensure_identity коммит в клоне проходит (не ложный конфликт fan-in)",
                    _git(cl, "commit", "-qm", "c", check=False).returncode == 0)
             expect("rc2c: своя идентичность НЕ подменяется", _ensure_identity(src) is False
                    and _git(src, "config", "user.email").stdout.strip() == "own@t")
