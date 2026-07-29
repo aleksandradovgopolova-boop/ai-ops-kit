@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-905
+request_id: RR-011
+statement: 'Skill Registry в ките ЧАСТИЧНЫЙ и честно помечен как таковой: registry/skills-catalog.yaml
+  содержит 13 записей (4 stack_skills, 4 product_skills, 5 model_training), и почти
+  у всех внешних записей стоит status: declared с полем license: «проверить в репозитории»
+  — то есть это список кандидатов, а не установленные проверенные навыки. Собственные
+  навыки живут отдельно в skills/ (9 папок, среди них systematic-подобные: contradiction-resolution,
+  decision-support, repo-onboarding, e2e-browser-testing).'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — registry/skills-catalog.yaml + skills/ (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: registry/skills-catalog.yaml — записи stack_skills/product_skills; каталог
+    skills/
+  quote: 'license: проверить в репозитории'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Подсчёт по реестру и по дереву каталогов; статус declared процитирован.
+status: active
+superseded_by: null

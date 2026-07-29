@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-910
+request_id: RR-011
+statement: 'Execution Environment в ките реализован как КОНКРЕТНАЯ изоляция, но не
+  как абстрактный контракт: containers/run-sandboxed.sh запускает движок в контейнере
+  с read-only rootfs, tmpfs, cap-drop=ALL, no-new-privileges, non-root пользователем
+  и лимитами memory/cpus/pids, монтируя ОДНОРАЗОВЫЙ клон вместо основного репозитория;
+  tool_broker.sandbox_policy даёт shell по allowlist с block_push и сам называет себя
+  enforceable-подмножеством. Интерфейса вида create/execute/read_file/write_file/snapshot/restore/destroy
+  с более чем одной реализацией не обнаружено — именно сюда ложится предложение входящего
+  про Runtime API OpenHands.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — containers/run-sandboxed.sh + tools/tool_broker.py (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: containers/run-sandboxed.sh:11-17; tools/tool_broker.py:300
+  quote: 'ЧЕСТНО: это enforceable-подмножество; полная FS/сеть/ресурс-изоляция — контейнер
+    (v2.81 доп.).'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: 'Позитив снят дословно из скрипта и брокера. Негатив (нет абстрактного
+    контракта окружения) — охват: поиск по tools/ и schemas/ на дату проверки; medium.'
+status: active
+superseded_by: null
