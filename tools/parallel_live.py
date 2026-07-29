@@ -41,6 +41,25 @@ def _git(root, *args, check=True):
     return r
 
 
+def _ensure_identity(root):
+    """Гарантировать git-идентичность в СОЗДАННОМ НАМИ клоне. -> True, если поставили fallback.
+
+    `git clone` не наследует локальный user.name/email источника. В окружении без ГЛОБАЛЬНОЙ
+    идентичности (CI-раннер, чистый контейнер) любой коммит в таком клоне падает — и fan-in
+    считал бы это КОНФЛИКТОМ пакетов, хотя ветки сливаются чисто. Это ложный негатив, а по
+    инварианту кита статус обязан быть честным: конфликт — это конфликт, а не отсутствие
+    настроек. Fallback ставится ТОЛЬКО когда идентичность не разрешается — реальные окружения
+    (у пользователя/агента она есть) сохраняют свою и авторство коммитов не подменяется.
+    """
+    probe = subprocess.run(["git", "-C", str(root), "var", "GIT_COMMITTER_IDENT"],
+                           capture_output=True, text=True)
+    if probe.returncode == 0:
+        return False
+    _git(root, "config", "user.email", "ai-ops@local", check=False)
+    _git(root, "config", "user.name", "AI Ops", check=False)
+    return True
+
+
 # --- v3.8.3-rc2 Parallel Trust Wiring helpers ---
 _INFRA_PREFIXES = (".ai/", "openspec/", "features/")
 
@@ -218,6 +237,7 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
             clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}", "error": "clone-failed"}
             return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
                     "error": f"clone: {cl.stderr.strip()[:160]}", "clone": str(cpath)}
+        _ensure_identity(cpath)  # прогон пакета коммитит в этом клоне — идентичность не унаследована
         co = _git(cpath, "checkout", "-q", base_sha, check=False)
         if co.returncode != 0:  # #7 fail-closed
             clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}", "error": "checkout-failed"}
@@ -310,6 +330,7 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
             return {"proceed": False, "stage": "isolation", "execution_concurrency": "concurrent",
                     "isolation": "per-package-clone", "reason": f"integration clone: {cl.stderr.strip()[:160]}",
                     "delivery": {"open_pr": False}, "delivery_plan": None, "pr": None}
+        _ensure_identity(iroot)  # merge fan-in — это КОММИТ; клон не унаследовал идентичность
         clones["_integration"] = {"path": str(iroot)}
         pr = make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones)
         ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
@@ -492,6 +513,33 @@ def selftest():
             _gres = _grunner({"id": "cc", "write_scope": ["cc.py"]})
             expect("rc2 #2: запись В пределах write_scope -> пакет проходит scope-check",
                    (_gres.get("scope_check") or {}).get("ok") is True)
+
+    # v3.8.3-rc2c: КЛОН НЕ НАСЛЕДУЕТ ИДЕНТИЧНОСТЬ. Окружение без ГЛОБАЛЬНОЙ идентичности (CI-раннер,
+    # чистый контейнер) роняло merge-коммит fan-in, и он считался КОНФЛИКТОМ пакетов — ложный негатив.
+    # Проверяем оба края: нет идентичности -> fallback + коммит проходит; своя есть -> НЕ подменяем.
+    import os as _os
+    with tempfile.TemporaryDirectory() as tdi:
+        src = Path(tdi) / "src"; src.mkdir()
+        _git(src, "init", "-q", check=False)
+        _git(src, "config", "user.email", "own@t"); _git(src, "config", "user.name", "own")
+        (src / "f.py").write_text("x=1\n", encoding="utf-8")
+        _git(src, "add", "-A"); _git(src, "commit", "-qm", "seed", check=False)
+        cl = Path(tdi) / "clone"
+        subprocess.run(["git", "clone", "-q", str(src), str(cl)], capture_output=True, text=True)
+        _saved = {k: _os.environ.get(k) for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM")}
+        try:  # имитируем окружение БЕЗ глобальной идентичности (как CI-раннер)
+            _os.environ["GIT_CONFIG_GLOBAL"] = _os.devnull
+            _os.environ["GIT_CONFIG_SYSTEM"] = _os.devnull
+            expect("rc2c: клон без разрешимой идентичности -> поставлен fallback", _ensure_identity(cl) is True)
+            (cl / "g.py").write_text("y=2\n", encoding="utf-8")
+            _git(cl, "add", "-A")
+            expect("rc2c: после fallback коммит в клоне проходит (не ложный конфликт fan-in)",
+                   _git(cl, "commit", "-qm", "c", check=False).returncode == 0)
+            expect("rc2c: своя идентичность НЕ подменяется", _ensure_identity(src) is False
+                   and _git(src, "config", "user.email").stdout.strip() == "own@t")
+        finally:
+            for _k, _v in _saved.items():
+                _os.environ.pop(_k, None) if _v is None else _os.environ.__setitem__(_k, _v)
 
     # v3.8.3-rc2 unit: helpers (#1 pkg signals, glob/scope, #8 self-clean каталог)
     expect("rc2 #1: _pkg_signals прокидывает write_scope+выводит affected_areas",
