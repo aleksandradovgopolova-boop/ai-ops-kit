@@ -74,11 +74,14 @@ def _glob_match(path, pat):
     return fnmatch.fnmatch(path, pat) or path == pat
 
 
-def _changed_files(root, base_sha):
-    """Файлы, изменённые пакетом относительно base_sha (для post-commit scope-проверки)."""
-    r = _git(root, "diff", "--name-only", f"{base_sha}...HEAD", check=False)
+def _changed_files(root, base_sha, head="HEAD"):
+    """Файлы, изменённые между base_sha и head (для post-commit scope-проверки). head по умолчанию HEAD,
+    но concurrent-путь ОБЯЗАН передавать РЕАЛЬНЫЙ package-SHA: ai_ops_run коммитит в ВЛОЖЕННЫЙ
+    worktree-branch внутри клона, а HEAD самого клона остаётся на base -> diff base...HEAD был бы пуст
+    (scope-проверка no-op). Диффим base...<package_sha>."""
+    r = _git(root, "diff", "--name-only", f"{base_sha}...{head}", check=False)
     if r.returncode != 0:
-        r = _git(root, "diff", "--name-only", base_sha, "HEAD", check=False)
+        r = _git(root, "diff", "--name-only", base_sha, head, check=False)
     return [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()]
 
 
@@ -251,8 +254,8 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
         # #2 post-commit: заявленный write_scope принуждается на РЕАЛЬНОМ диффе (клон изолирует физически,
         # но не запрещает модели тронуть лишний файл — принуждаем декларацию плана исполнением).
         if res.get("sha") and pkg.get("write_scope"):
-            changed = _changed_files(cpath, base_sha)
-            sok, outside = _scope_ok(changed, pkg["write_scope"])
+            changed = _changed_files(cpath, base_sha, res["sha"])   # #2-fix: диффим РЕАЛЬНЫЙ package-SHA,
+            sok, outside = _scope_ok(changed, pkg["write_scope"])   # не HEAD клона (ai_ops_run — вложенный worktree)
             res["scope_check"] = {"write_scope": pkg["write_scope"], "changed": len(changed),
                                   "outside": outside[:20], "ok": sok}
             if not sok:
@@ -494,13 +497,15 @@ def selftest():
             expect("v3.8.3: без pytest — структура concurrent fan-in цела", agg_c.get("stack_aware") is True)
 
         # v3.8.3-rc2 #2 POST-COMMIT SCOPE: пакет пишет ФАЙЛ ВНЕ своего write_scope -> пакет FAIL (не в fan-in).
-        def rogue_run(task, sig, root, **kw):  # мок: коммитит файл вне заявленного write_scope
+        def rogue_run(task, sig, root, **kw):  # мок ai_ops_run: коммит в ВЛОЖЕННУЮ ветку, HEAD клона -> base
             pid = kw["feature"]
-            _git(root, "config", "user.email", "t@t"); _git(root, "config", "user.name", "t")  # см. commit_run
+            _git(root, "config", "user.email", "t@t"); _git(root, "config", "user.name", "t")
             _git(root, "checkout", "-q", "-B", f"ai-ops/{pid}", check=False)
             (Path(root) / "OUTSIDE_scope.py").write_text("x=1\n", encoding="utf-8")  # не совпадает с cc.py
             _git(root, "add", "-A"); _git(root, "commit", "-qm", f"rogue {pid}", check=False)
-            return {"ready_for_pr": True, "commit": {"sha": _git(root, "rev-parse", "HEAD").stdout.strip()}}
+            _sha = _git(root, "rev-parse", "HEAD").stdout.strip()
+            _git(root, "checkout", "-q", base3, check=False)   # клон HEAD обратно на base (как оставляет ai_ops_run)
+            return {"ready_for_pr": True, "commit": {"sha": _sha}}   # #2-fix guard: чек ОБЯЗАН читать этот sha, не HEAD
         with tempfile.TemporaryDirectory() as cdir2:
             _rrunner = make_isolated_package_runner(td3, base3, {"cc": "t"}, {"task_type": "QUICK"},
                                                     rogue_run, cdir2, {})
