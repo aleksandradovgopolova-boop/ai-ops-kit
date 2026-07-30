@@ -47,6 +47,20 @@
   Гард pytest (CI ⊆ pyyaml): all_pass только при pytest, структура — всегда.
 - serial `run_live` сохранён (backward-compat). Осталось в 3.8: 3.8.4 multi-repo readiness -> 3.8 stable.
 
+### Added (v3.8.3-rc3 — Dynamic Model Trust: JIT provider-preflight + честный model trace)
+- P1-шов (owner-review): fallback/escalation-модели создавались ВНЕ полного key-preflight — динамический
+  маршрут (deepseek прошёл preflight -> включился kimi/qwen) обходил security-инвариант KLP/TTL. Fix:
+  `_provider_trust(provider)` — JIT key presence + KLP/TTL перед первым вызовом КАЖДОЙ реально вызываемой
+  модели, кэш по provider. primary not ready -> blocked-preflight; необязательный fallback/escalation not
+  ready -> ИСКЛЮЧАЕТСЯ (не блокирует primary) + причина записана. Покрыты primary+reviewer+fallback+escalation.
+- Честный trace: `model_attempts` [{attempt, model, trigger(initial|quality_escalation|infrastructure_fallback),
+  outcome}] + `initial_model`/`effective_model` (реально завершившая модель, не только первоначальная) +
+  `escalation_error` (ошибка построения эскалации БОЛЬШЕ не глотается молча). В model_resolution + отчёте.
+- «Сильнейшая модель» -> честнее `higher_observed_success_rate` + `corpus_version` (наблюдаемая успешность
+  на малом корпусе N6, не универсальная сила; до Bench v2).
+- Тесты: model_router ладдер (observed_success_rate + corpus_version); ai_ops_run JIT-trust (present->ready;
+  expired KLP-ротация -> excluded; нет ключа -> not ready; кэш). Parity 177/177.
+
 ### Added (v3.8.3-rc — reevaluate-only delivery path: переоценка гейтов после человеко-одобрения)
 - Greenfield-ревью нашло gap: `resume --execute` переписывал код -> новый план -> plan-bound ApprovalRecord
   инвалидировался (binds_to mismatch) -> security снова pending_human. `run_pipeline(reevaluate_only=True)`:
