@@ -28,6 +28,14 @@ escalation_policy:
   # ЖЁСТКИЙ инвариант ADR-004: экономия НИКОГДА не через удаление/ослабление проверок
   cost_never_by_weakening_gates: true
 
+# v3.8.3 CONFLICT-AWARE writer≠judge: строгий судья НЕ должен судить собственное изменение, даже если он же
+# самый дешёвый writer. При конфликте судья фиксирован (qualified), writer перерезолвливается без модели судьи.
+role_constraints:
+  security_review:
+    must_differ_from: implementation
+  integration_judge:
+    must_differ_from: implementation
+
 # Матрица допуска: model_class × роль -> статус. ВЫВОДИТСЯ ИЗ Bench (не ручное мнение);
 # safety-first: любой false_green по роли -> not_qualified для неё (см. model_comparison).
 qualification_matrix:

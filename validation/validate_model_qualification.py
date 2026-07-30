@@ -43,6 +43,29 @@ def derive_status(m):
     return "not_qualified"
 
 
+# v3.8.3: JUDGE-роли квалифицируются по judge-метрикам (recall/precision/specificity + confusion_matrix +
+# размер корпуса), НЕ по success_rate. Порог qualified — held-out (owner-review): не пропустить дефект +
+# не парализовать переблоком. false_green=0, но порог недобран -> conditional (advisory, human сохраняется).
+JUDGE_ROLES = {"security_review", "code_review", "integration_judge"}
+J_THRESH = {"precision_min": 0.90, "specificity_min": 0.90, "schema_min": 0.95, "pos_min": 52, "neg_min": 28}
+
+
+def derive_judge_status(m, counts, th=None):
+    """Статус СУДЬИ из judge-метрик (safety-first). m: {false_green|false_negative, recall, precision,
+    specificity, schema_valid_rate}; counts: {positive, negative}. qualified — только полный held-out порог."""
+    th = th or J_THRESH
+    fg = m.get("false_green", m.get("false_negative", 1))
+    if fg is None or fg > 0:
+        return "not_qualified"           # пропустил дефект -> НИКОГДА qualified (safety-first)
+    rec = float(m.get("recall", 0) or 0); prec = float(m.get("precision", 0) or 0)
+    spec = float(m.get("specificity", 0) or 0); sv = float(m.get("schema_valid_rate", 0) or 0)
+    pos = int((counts or {}).get("positive", 0) or 0); neg = int((counts or {}).get("negative", 0) or 0)
+    if (rec >= 1.0 and prec >= th["precision_min"] and spec >= th["specificity_min"]
+            and sv >= th["schema_min"] and pos >= th["pos_min"] and neg >= th["neg_min"]):
+        return "qualified"
+    return "conditional"                 # fg=0, но не production-порог -> advisory/human сохраняется
+
+
 def _model_index(pkg=PKG):
     try:
         d = yaml.safe_load((pkg / "registry" / "models.yaml").read_text(encoding="utf-8"))
@@ -79,11 +102,31 @@ def check(data, pkg=PKG):
         if not q.get("corpus_version"):
             e.append(f"{mid}/{role}: нет corpus_version (из какого Bench)")
         m = q.get("metrics")
-        if not isinstance(m, dict) or "false_green" not in m or "success_rate" not in m:
-            e.append(f"{mid}/{role}: metrics обязаны нести хотя бы false_green + success_rate")
-            continue
+        if not isinstance(m, dict):
+            e.append(f"{mid}/{role}: metrics обязательны"); continue
         if q.get("status") not in STATUS:
-            e.append(f"{mid}/{role}: status ∉ {sorted(STATUS)}")
+            e.append(f"{mid}/{role}: status ∉ {sorted(STATUS)}"); continue
+        # v3.8.3: JUDGE-роль -> judge-метрики + confusion_matrix + sample_counts (не success_rate).
+        if role in JUDGE_ROLES:
+            _need = [k for k in ("false_green", "recall", "precision", "specificity", "schema_valid_rate") if k not in m]
+            if _need:
+                e.append(f"{mid}/{role}: judge-роль требует metrics{{false_green,recall,precision,specificity,schema_valid_rate}} — нет {_need}"); continue
+            counts = q.get("sample_counts")
+            if q["status"] in ("qualified", "conditional"):
+                if not isinstance(q.get("confusion_matrix"), dict) or not isinstance(counts, dict):
+                    e.append(f"{mid}/{role}: judge {q['status']} требует confusion_matrix + sample_counts{{positive,negative}}"); continue
+                for _h in ("corpus_version", "corpus_hash", "prompt_hash", "policy_hash"):
+                    if not q.get(_h):
+                        e.append(f"{mid}/{role}: judge {q['status']} требует {_h} (held-out провенанс, без подгонки)")
+            derived = derive_judge_status(m, counts)
+            if q["status"] != derived:
+                e.append(f"{mid}/{role}: заявлен status='{q['status']}', judge-метрики дают '{derived}' "
+                         f"(судья не из held-out Bench по порогу — safety/полезность нарушены)")
+            e += economics_errors(q.get("economics"), f"{mid}/{role}")
+            continue
+        # writer-роль: прежняя логика (success_rate)
+        if "false_green" not in m or "success_rate" not in m:
+            e.append(f"{mid}/{role}: metrics обязаны нести хотя бы false_green + success_rate")
             continue
         derived = derive_status(m)
         if q["status"] != derived:
@@ -141,6 +184,24 @@ def selftest():
     expect("derive: 0 fg + high -> qualified", derive_status({"false_green": 0, "success_rate": 0.85, "schema_valid_rate": 0.95}) == "qualified")
     expect("derive: 0 fg + средний -> conditional", derive_status({"false_green": 0, "success_rate": 0.6, "schema_valid_rate": 0.8}) == "conditional")
     expect("derive: 0 fg + низкий -> experimental", derive_status({"false_green": 0, "success_rate": 0.2, "schema_valid_rate": 0.4}) == "experimental")
+    # v3.8.3 JUDGE-derivation: safety + полезность (не только false_green)
+    _full = {"false_green": 0, "recall": 1.0, "precision": 0.93, "specificity": 0.92, "schema_valid_rate": 0.97}
+    expect("judge: полный held-out порог -> qualified",
+           derive_judge_status(_full, {"positive": 52, "negative": 28}) == "qualified")
+    expect("judge: пропустил дефект (fg>0) -> not_qualified (safety)",
+           derive_judge_status({**_full, "false_green": 1}, {"positive": 52, "negative": 28}) == "not_qualified")
+    expect("judge: fg=0 но specificity низкая (qwen-переблок) -> conditional, НЕ qualified",
+           derive_judge_status({**_full, "specificity": 0.125}, {"positive": 52, "negative": 28}) == "conditional")
+    expect("judge: fg=0 но корпус мал (21<52) -> conditional (сигнал, не production)",
+           derive_judge_status(_full, {"positive": 13, "negative": 8}) == "conditional")
+    # check(): judge qualified без confusion_matrix/hashes -> ошибка
+    _bad_judge = {"registry_type": "model-qualification", "qualifications": [
+        {"model_id": "deepseek-v4-flash", "revision": "r", "provider": "deepseek", "role": "security_review",
+         "corpus_version": "c", "status": "qualified",
+         "metrics": {"false_green": 0, "recall": 1.0, "precision": 0.93, "specificity": 0.92, "schema_valid_rate": 0.97}}]}
+    _err = check(_bad_judge, pkg=PKG)
+    expect("check: judge qualified без confusion_matrix/hashes -> ошибка",
+           any("confusion_matrix" in x or "prompt_hash" in x for x in _err))
 
     base = {"registry_type": "model-qualification", "qualifications": [
         {"model_id": "kimi-k3", "provider": "kimi", "revision": "kimi-k3", "role": "implementation",

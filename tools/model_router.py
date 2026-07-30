@@ -52,18 +52,20 @@ def _load():
     return r, q.get("qualifications", []), models
 
 
-def resolve(role, roles_cfg=None, quals=None, models=None):
+def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
     if roles_cfg is None:
         roles_cfg, quals, models = _load()
     req = (roles_cfg.get("roles") or {}).get(role, {})
     allowed_classes = {req.get("preferred_class"), req.get("fallback_class")} - {None}
+    exclude_models = set(exclude_models or ())
 
     def m_classes(mid):
         return set((models.get(mid) or {}).get("classes", []) or [])
 
     # кандидаты: ДОПУЩЕННЫЕ для роли (writer: qualified∨conditional; судья: только qualified; fg=0 всегда)
-    # И входящие в требуемый класс роли
+    # И входящие в требуемый класс роли; v3.8.3: exclude_models -> writer≠judge (исключаем модель судьи)
     cands = [q for q in quals if q.get("role") == role and _eligible(q, role)
+             and q.get("model_id") not in exclude_models
              and (not allowed_classes or (m_classes(q.get("model_id")) & allowed_classes))]
 
     # v3.7.10 экономика В ДЕНЬГАХ: если у ВСЕХ кандидатов роли есть total_cost_per_verified_change
@@ -141,6 +143,24 @@ def plan_run(roles_cfg=None, quals=None, models=None):
     if roles_cfg is None:
         roles_cfg, quals, models = _load()
     plan = {role: resolve(role, roles_cfg, quals, models) for role in ALL_ROLES}
+    # v3.8.3 CONFLICT-AWARE writer≠judge: role_constraints (model-roles.yaml) вида
+    # {security_review: {must_differ_from: implementation}} — если судья и writer сошлись в одной модели,
+    # СУДЬЯ фиксирован (qualified), а WRITER перерезолвливается, ИСКЛЮЧАЯ модель судьи (дешёвый из оставшихся).
+    # Так квалифицированный судья не судит собственное изменение, даже если он же — money-mode writer.
+    _constraints = (roles_cfg.get("role_constraints") or {})
+    plan["role_constraints_applied"] = []
+    for _judge_role, _c in _constraints.items():
+        _writer_role = (_c or {}).get("must_differ_from")
+        jr, wr = plan.get(_judge_role), plan.get(_writer_role)
+        if (_writer_role and jr and wr and jr.get("resolved") and wr.get("resolved")
+                and jr.get("model_id") == wr.get("model_id")):
+            _re = resolve(_writer_role, roles_cfg, quals, models, exclude_models={jr["model_id"]})
+            plan[_writer_role] = _re
+            plan["role_constraints_applied"].append(
+                {"constraint": f"{_judge_role}.must_differ_from={_writer_role}",
+                 "judge_fixed": jr["model_id"],
+                 "writer_reresolved_to": _re.get("model_id") if _re.get("resolved") else None,
+                 "writer_resolved": _re.get("resolved")})
     impl = plan["implementation"]
     rev = plan["code_review"]
     plan["writer_ne_judge_by_model"] = bool(impl.get("resolved") and rev.get("resolved")
@@ -250,6 +270,29 @@ def selftest():
     expect("plan_run несёт все 4 роли", all(r in plan for r in ALL_ROLES))
     expect("plan_run: implementation resolved, security_review НЕ resolved",
            plan["implementation"]["resolved"] is True and plan["security_review"]["resolved"] is False)
+
+    # v3.8.3 CONFLICT-AWARE writer≠judge: судья и writer сошлись -> writer перерезолвлен без модели судьи
+    _rc = {"roles": {"implementation": {"preferred_class": "balanced"}, "security_review": {"preferred_class": "balanced"}},
+           "role_constraints": {"security_review": {"must_differ_from": "implementation"}}}
+    _ms = {"J": {"classes": ["balanced"], "cost_class": "low"}, "W": {"classes": ["balanced"], "cost_class": "mid"}}
+    _ec = lambda c: {"input_tokens_per_change": 1, "output_tokens_per_change": 1, "tokens_per_verified_change": 1,
+                     "input_price_per_mtok": c, "output_price_per_mtok": c, "currency": "USD",
+                     "price_snapshot_at": "2026-07-30", "price_source": "test", "total_cost_per_verified_change": 2 * c / 1e6}
+    _q = [  # J дешевле и qualified и для security_review, и для implementation -> конфликт
+        {"role": "security_review", "status": "qualified", "model_id": "J", "provider": "p", "revision": "J",
+         "corpus_version": "c", "metrics": {"false_green": 0}, "economics": _ec(0.1)},
+        {"role": "implementation", "status": "qualified", "model_id": "J", "provider": "p", "revision": "J",
+         "corpus_version": "c", "metrics": {"false_green": 0, "success_rate": 0.9}, "economics": _ec(0.1)},
+        {"role": "implementation", "status": "conditional", "model_id": "W", "provider": "p", "revision": "W",
+         "corpus_version": "c", "metrics": {"false_green": 0, "success_rate": 0.6}, "economics": _ec(1.0)},
+    ]
+    _p2 = plan_run(_rc, _q, _ms)
+    expect("conflict-aware: security_review судья фиксирован = J",
+           _p2["security_review"]["resolved"] and _p2["security_review"]["model_id"] == "J")
+    expect("conflict-aware: implementation перерезолвлен НЕ в J (writer≠judge) -> W",
+           _p2["implementation"]["resolved"] and _p2["implementation"]["model_id"] == "W")
+    expect("conflict-aware: применение записано + writer_ne_judge",
+           bool(_p2.get("role_constraints_applied")) and _p2["implementation"]["model_id"] != _p2["security_review"]["model_id"])
 
     print("model_router selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
