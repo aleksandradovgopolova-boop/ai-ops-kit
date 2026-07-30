@@ -47,6 +47,19 @@
   Гард pytest (CI ⊆ pyyaml): all_pass только при pytest, структура — всегда.
 - serial `run_live` сохранён (backward-compat). Осталось в 3.8: 3.8.4 multi-repo readiness -> 3.8 stable.
 
+### Added (v3.8.3-rc — Judge Qualification Contract + Bench v2 held-out: DeepSeek advisory security-судья)
+- Bench v2 (judge-qualification, held-out 80 сэмплов = 52 деф×13 классов + 28 чист с near-miss): DeepSeek V4
+  Flash как security_review судья — false_green=0, recall=1.0 (поймал ВСЕ дефекты, 0 пропущенных классов), НО
+  specificity=0.68 (переблок 9/28 чистого) < порога 0.90 -> `conditional`/ADVISORY, НЕ qualified. Записан в
+  registry с confusion_matrix + corpus/prompt/policy_hash. Router НЕ авто-закрывает (strict-роль требует
+  qualified) — человеко-#5 сохранён; deepseek годен как обязательный security pre-review.
+- validate_model_qualification: judge-роли квалифицируются по judge-метрикам (recall/precision/specificity +
+  confusion_matrix + размер корпуса), qualified требует held-out провенанс (hashes). Закрыл дыру: qwen
+  (false_green=0 но specificity 0.125) больше НЕ qualified. model_router: conflict-aware writer≠judge
+  (role_constraints: security_review/integration_judge must_differ_from implementation).
+- Урок held-out дисциплины: dev-корпус (21) давал specificity 0.875, held-out (80) -> 0.68 — маленький корпус
+  завышал полезность. Правка prompt -> НОВЫЙ held-out (не подгонка).
+
 ### Added (v3.8.3-rc3 — Dynamic Model Trust: JIT provider-preflight + честный model trace)
 - P1-шов (owner-review): fallback/escalation-модели создавались ВНЕ полного key-preflight — динамический
   маршрут (deepseek прошёл preflight -> включился kimi/qwen) обходил security-инвариант KLP/TTL. Fix:
