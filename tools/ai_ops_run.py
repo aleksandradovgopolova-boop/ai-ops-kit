@@ -757,6 +757,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         if _pe2.key_available(_esc.get("provider")):
                             _eep = _pe2.endpoint_for(_esc["provider"])
                             _eprov = orchestrator.make_openai_provider(_esc["model_id"], _eep["base_url"], _eep["key_env"])
+                            # эскалированную модель тоже оборачиваем provider_fallback (#6): если она сама
+                            # жёстко 429-ится (напр. kimi rate-limit сверх retry-бюджета), падать не насмерть,
+                            # а на следующую модель ладдера с ключом (retryable-only, не маскирует дефекты).
+                            _nxt = next((n for n in _esc_ladder[_esc_idx:]
+                                         if _pe2.key_available(n.get("provider"))), None)
+                            if _nxt:
+                                _nep = _pe2.endpoint_for(_nxt["provider"])
+                                _nprov = orchestrator.make_openai_provider(_nxt["model_id"], _nep["base_url"], _nep["key_env"])
+                                _eprov = _with_provider_fallback(_eprov, _nprov)
                             prop = tool_loop.make_model_proposer(_eprov)      # writer -> сильнее
                             if author and author_proposer is None:
                                 auth_prop = _eprov
