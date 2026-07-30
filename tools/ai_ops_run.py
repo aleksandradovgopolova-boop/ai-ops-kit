@@ -737,10 +737,37 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # той же ветки (resume=True), пока не pass ЛИБО не исчерпан бюджет. fail-closed сохранён:
             # бюджет кончился и всё ещё не ready -> честный блок (ничего не форсируем в green). Не для mock.
             _fix_left = int(review_fix_attempts or 0)
+            # v3.8.3 WRITER QUALITY-ESCALATION: money-mode взял дешёвого writer'а; при КАЧЕСТВЕННОМ провале
+            # (impl_verification/code_review) эскалируем на СИЛЬНЕЙШУЮ допущенную модель (ладдер по success_rate),
+            # а не re-prompt того же слабого. Отличается от provider_fallback (#6 — только retryable infra).
+            _esc_ladder = (((_model_resolution or {}).get("plan") or {}).get("implementation") or {}).get("escalation_ladder") or []
+            _esc_idx = 0
+            _QUALITY_GATES = {"implementation_verification", "code_review"}
+            _rev_self = not ((_model_resolution.get("reviewer") or {}).get("independent_by_model")) if isinstance(_model_resolution, dict) else True
             while (not rep.get("ready_for_pr")) and _fix_left > 0 and provider_name not in (None, "mock"):
                 _fx = _review_fix_context(rep)
                 if not _fx:
                     break   # блок не модель-фиксируем (human/base/lifecycle) -> не зацикливаем
+                # эскалация writer'а, если провалены КАЧЕСТВЕННЫЕ гейты и ладдер не исчерпан (model=None -> router-путь)
+                _unmet = set((rep.get("gates") or {}).get("unmet") or [])
+                if model is None and (_unmet & _QUALITY_GATES) and _esc_idx < len(_esc_ladder):
+                    _esc = _esc_ladder[_esc_idx]; _esc_idx += 1
+                    try:
+                        import provider_endpoints as _pe2
+                        if _pe2.key_available(_esc.get("provider")):
+                            _eep = _pe2.endpoint_for(_esc["provider"])
+                            _eprov = orchestrator.make_openai_provider(_esc["model_id"], _eep["base_url"], _eep["key_env"])
+                            prop = tool_loop.make_model_proposer(_eprov)      # writer -> сильнее
+                            if author and author_proposer is None:
+                                auth_prop = _eprov
+                            if review and reviewer_proposer is None and _rev_self:
+                                rev_prop = _eprov                            # self-model reviewer следует за writer'ом
+                            _model_resolution.setdefault("escalations", []).append(
+                                {"to": _esc["model_id"], "provider": _esc.get("provider"),
+                                 "success_rate": _esc.get("success_rate"),
+                                 "reason": "quality-failure:" + ",".join(sorted(_unmet & _QUALITY_GATES))})
+                    except Exception:  # noqa: BLE001 — сбой эскалации не должен ронять прогон (останется прежняя модель)
+                        pass
                 try:
                     _ls.journal_append(features_dir / fid / "lifecycle-journal.jsonl",
                                        {"kind": "fix_attempt", "run_id": fid, "workitem_id": fid,

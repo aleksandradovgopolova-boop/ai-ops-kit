@@ -113,6 +113,18 @@ def resolve(role, roles_cfg=None, quals=None, models=None):
     if not money_mode:
         res["cost_warning"] = ("ранжирование в ТОКЕНАХ, не деньгах: не у всех кандидатов роли задан "
                                "total_cost_per_verified_change (нет тарифа) — порядок может не совпасть с деньгами")
+    # v3.8.3 WRITER QUALITY-ESCALATION: money-mode берёт дешёвого (top), но при КАЧЕСТВЕННОМ провале
+    # (impl_verification/code_review) fix-loop эскалирует writer'а на СИЛЬНЕЙШУЮ допущенную модель.
+    # Ладдер = кандидаты СИЛЬНЕЕ top по success_rate (сильнейший первым). Пусто -> эскалировать некуда.
+    def _succ(q):
+        v = (q.get("metrics") or {}).get("success_rate")
+        return v if isinstance(v, (int, float)) else 0.0
+    _top_succ = _succ(top)
+    _ladder = sorted([c for c in cands if c["model_id"] != top["model_id"] and _succ(c) > _top_succ],
+                     key=_succ, reverse=True)
+    res["escalation_ladder"] = [{"model_id": c["model_id"], "provider": c.get("provider"),
+                                 "revision": c.get("revision"), "status": c.get("status"),
+                                 "success_rate": _succ(c)} for c in _ladder]
     return res
 
 
@@ -168,6 +180,16 @@ def selftest():
            r_impl["model_id"] == "deepseek-v4-flash" and r_impl["provider"] == "deepseek")
     expect("implementation fallback -> qwen3-coder-plus (2-й по деньгам, $0.072)",
            (r_impl.get("fallback") or {}).get("model_id") == "qwen3-coder-plus")
+    # v3.8.3 quality-escalation ladder: сильнее top по success_rate, сильнейший первым. top=deepseek
+    # (success 0.667). Ладдер: kimi (1.0) > qwen (0.833). Оба сильнее -> оба в ладдере, kimi первым.
+    _lad = r_impl.get("escalation_ladder") or []
+    expect("escalation_ladder: сильнейший (kimi) первым",
+           bool(_lad) and _lad[0]["model_id"] == "kimi-k2.7-code-highspeed")
+    expect("escalation_ladder: отсортирован по success_rate DESC",
+           [x["success_rate"] for x in _lad] == sorted([x["success_rate"] for x in _lad], reverse=True))
+    expect("escalation_ladder: только СИЛЬНЕЕ top (deepseek 0.667 не в ладдере)",
+           all(x["model_id"] != "deepseek-v4-flash" for x in _lad)
+           and all(x["success_rate"] > 0.667 for x in _lad))
 
     # money-mode: у ВСЕХ кандидатов есть деньги -> сортировка по ДЕНЬГАМ, не токенам (доказ. тезиса)
     ms2 = {"a": {"classes": ["balanced"], "cost_class": "low"}, "b": {"classes": ["balanced"], "cost_class": "low"}}
