@@ -231,7 +231,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
-        context_shadow=False, context_hybrid=False):
+        context_shadow=False, context_hybrid=False, reevaluate_only=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -654,7 +654,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         import preflight as _pf
         pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
                               spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors,
-                              author=author)
+                              author=author, reevaluate_only=reevaluate_only)
         (features_dir / fid / "preflight.yaml").write_text(
             yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
         if pretruth["blocked"]:
@@ -729,6 +729,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
                 calibrated_enforcement=_calib, ui_evidence=ui_evidence,
+                reevaluate_only=reevaluate_only,   # v3.8.3-rc: переоценка гейтов после человеко-approval БЕЗ переавторинга
                 strict_judge_qualified=_sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
         try:
             rep = _pipe(resume, resume_ctx)
@@ -1549,6 +1550,26 @@ def selftest():
                exit_code({"kind": "execution-pipeline", "ready_for_pr": True,
                           "overall_status": "error"}) == 2)
 
+    # v3.8.3: reevaluate_only ПРОКИНУТ через run() -> run_pipeline (не orphan). Side-effect proof: после
+    # первого execute-прогона (создана ветка) повторный reevaluate_only НЕ переавторит -> loop
+    # stopped=reevaluate-only (путь без переавторинга реально взят через entrypoint, не только run_pipeline).
+    import inspect as _insp
+    expect("v3.8.3: run() принимает reevaluate_only", "reevaluate_only" in _insp.signature(run).parameters)
+    with tempfile.TemporaryDirectory() as td:
+        subprocess.run(["git", "-C", td, "init", "-q"])
+        subprocess.run(["git", "-C", td, "config", "user.email", "t@t"])
+        subprocess.run(["git", "-C", td, "config", "user.name", "t"])
+        _rr = Path(td); (_rr / "seed").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"])
+        _ps = iter([{"op": "write", "path": "rv.py", "content": "def f():\n    return 1\n"}, {"done": True}])
+        _sig_rv = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        run("add rv", _sig_rv, _rr, engine="pipeline", execute=True, feature="rev-x",
+            proposer=lambda c: next(_ps))
+        _r2 = run("reeval", _sig_rv, _rr, engine="pipeline", execute=True, feature="rev-x",
+                  reevaluate_only=True, proposer=lambda c: {"done": True})
+        expect("v3.8.3: run() прокидывает reevaluate_only -> run_pipeline (loop stopped=reevaluate-only)",
+               (_r2.get("loop") or {}).get("stopped") == "reevaluate-only")
+
     # v2.109 Real Resume (контроллер): первый прогон коммитит + пишет RunHandoff; resume ПРОДОЛЖАЕТ
     # поверх той же ветки (не рестарт, работа не потеряна), а не выдаёт ошибку про несохранённые коммиты.
     with tempfile.TemporaryDirectory() as td:
@@ -1832,6 +1853,10 @@ def main(argv):
                     help="v3.1.1 fix-loop: сколько раз вернуть блокеры ревью/провалившихся проверок "
                          "писателю на итерацию поверх той же ветки, пока не pass (0 = однопроходно, "
                          "как раньше). fail-closed: бюджет исчерпан и не ready -> честный блок. Не для mock.")
+    rp.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="v3.8.3: ПЕРЕОЦЕНИТЬ гейты существующей фичи БЕЗ переавторинга (0 model-вызовов, "
+                         "план/SHA стабильны) — для случая «человек добавил ApprovalRecord»: security "
+                         "закрывается человеком -> ready -> доставка. Нужен --execute + --feature. engine=pipeline")
     rp.add_argument("--json", action="store_true")
     # v2.99: resume — продолжить WorkItem по последнему RunHandoff (не начинать заново)
     # v2.109 Real Resume: с --execute РЕАЛЬНО продолжает tool-loop поверх ветки/worktree прошлого
@@ -1898,7 +1923,7 @@ def main(argv):
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
                      discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
                      review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow,
-                     context_hybrid=a.context_hybrid)
+                     context_hybrid=a.context_hybrid, reevaluate_only=a.reevaluate_only)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
