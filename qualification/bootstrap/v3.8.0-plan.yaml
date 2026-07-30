@@ -145,10 +145,21 @@ owner_effort_metrics:
   metrics:
     - owner_minutes_per_verified_change
     - clarification_rounds
-    - manual_actions                                # ручные технические действия владельца
+    # owner-review: manual_actions РАЗДЕЛЕНЫ — security-решение это ЗАПЛАНИРОВАННАЯ функция человека,
+    # а ручная починка git identity/SHA — ДЕФЕКТ UX; складывать в одно число нельзя.
+    - expected_human_decisions                      # плановые (security approval, выбор репо) — норма
+    - technical_recovery_actions                    # ручной git/SHA/восстановление — ДЕФЕКТ (цель: 0)
     - time_to_verified_pr
     - time_spent_explaining_blockers
     - percentage_of_tasks_completed_without_technical_intervention
+  measured_2026_07_30:                              # сессия live-квалификации (OEM-001)
+    runs_tracked: 6
+    expected_human_decisions: 2                     # 1 security #5 + 1 выбор brownfield-репо
+    technical_recovery_actions: 0                   # git/SHA/clone/token/deps/отладка багов — на агенте
+    time_spent_explaining_blockers: "~0"
+    percentage_without_technical_intervention: "100%"
+    per_quick_verified_delivery_usd: "~0.003-0.005"
+    note: "СИЛЬНЫЙ сигнал ценности: продакт-владелец, 0 технических действий восстановления"
   decision_after_3_8: >
     Решение не по красоте архитектуры, а по результатам: ускорил ли кит проверенное изменение и снизил ли
     участие владельца -> продолжаем; качество выросло, но каждое изменение дольше -> упрощаем обязательный
@@ -157,11 +168,23 @@ owner_effort_metrics:
 
 # Внешний гейт (объявлен явно, не спрятан): живые прогоны требуют ключей + тулчейна + человека на security.
 blocked_by:
-  - "живые провайдер-ключи (DeepSeek/Qwen/Kimi в env; sonnet-класс — опц. контроль)"
-  - "Node/React/Storybook тулчейн для frontend-стадии greenfield"
-  - "человеческий ApprovalRecord на security/integration (qualified автосудьи нет до Bench v2)"
-  - "успешный greenfield zero-to-feature повторить до зелёного (3.8.1 был failed_safe)"
-  - "живая квалификация concurrent parallel-2 на реальных провайдерах (3.8.3 component_ready, live_qualified=false)"
+  - "человеческий ApprovalRecord на security (qualified auto-close судьи НЕТ: deepseek = conditional/advisory, specificity 0.68<0.90)"
+  - "green ENGINEERING product-feature одним проходом (deepseek/kimi дают дефектный код; нужен writer сильнее kimi ИЛИ human-judge)"
+  - "fullstack_integrated: full-stack green vertical (та же граница качества writer'а)"
+  - "auto-close judge: specificity>=0.90 на НОВОМ held-out (улучшить judge-prompt, не править текущий held-out)"
+
+# ФИКСАЦИЯ ФАЗЫ 3.8 (2026-07-30, evidence-backed). Не финальный релиз — честное состояние по доказательствам.
+phase_status:
+  readiness: "12/14 exit_criteria доказаны live автономно (см. BootstrapReadinessReport)"
+  proven_live: [no_checkout_damage, zero_false_green, evidence_exact_sha_bound, stack_aware_integration,
+                cost_per_verified_change, feature_released_or_ready, external_delivery_intent_and_receipt,
+                post_release_readout_created, result_to_feature_learning, owner_effort_measured,
+                single_sequential_parallel_proven, resume_and_fixloop_on_real_task]
+  remaining: [greenfield_zero_to_feature-green-product, fullstack_integrated]
+  single_blocker: "качество writer'а (сильнее kimi) + auto-close judge (specificity>=0.90 на новом held-out); оба без sonnet достижимы"
+  runtime_frozen_until_stable: true    # capability_freeze: без новых концепт-возможностей до 3.8 stable
+  bugs_fixed_live: 8                    # reevaluate(3)/scope#2/git-identity/escalation-fallback/build-artifact/resume
+  key_finding: "модельный портфель по РОЛЯМ (deepseek слаб-writer/силён-судья), не одна 'сильнейшая' модель"
 
 # Последовательность фазы (данные, для наблюдаемости):
 phase_sequence: [v3.8.0-contract, v3.8.1-greenfield, v3.8.2-stack-aware-integration, v3.8.3-true-parallel, v3.8.4-readiness]
@@ -173,16 +196,35 @@ phase_progress:
     status: passed
     evidence: "BQP-001 Bootstrap Qualification Contract поверх существующих контрактов + validate_bootstrap_qualification (7 selftest); commit 329ae5d, CI green"
   v3.8.1:
-    status: failed_safe
+    status: partial
     rerun_required: true
-    evidence: "greenfield: deepseek построил вертикаль, scenario-тест поймал сквозной баг -> impl_verification fail, security pending_human, 0 false-green (СИЛЬНЫЙ негативный тест). Эскалация deepseek->kimi довела до зелёного (commit 9d6c9c9, draft PR #1) + 3 human ApprovalRecord. Нужен чистый zero-to-feature до зелёного одним проходом."
+    evidence: >
+      QUICK-фичи доставлены АВТОНОМНО green до verified PR: PR #2 (s4-health) + PR #3 (s5-version),
+      DeliveryReceipt sha_verified=True, репитабельно ~$0.003-0.005 (PRR-002 + FL-004 валидны). ENGINEERING
+      product-feature (Task API/notes) green одним проходом НЕ достигнут: deepseek строит дефектно, авто-
+      эскалация deepseek->kimi срабатывает (fs-esc2 model_attempts), но и kimi'ный код с дефектами (regex-
+      уязвимость) — кит ловит на гейтах (0 false-green). Нужен writer сильнее kimi ИЛИ human-judge.
   v3.8.2:
-    status: component_ready
-    evidence: "stack-aware governed fan-in (project_detector + evidence_collector на integration-SHA, не хардкод pytest); selftest; commit a473e1f"
+    status: passed
+    evidence: "stack-aware fan-in ДОКАЗАН LIVE на реальном TS/React brownfield (ИИ-Среда, 207 файлов): build/typecheck/vitest реально прогнаны на integration-SHA (не pytest); поймал typecheck-регрессию deepseek (0 false-green). commit a473e1f + live."
   v3.8.3:
-    status: component_ready
-    live_qualified: false
-    evidence: "TRUE concurrent per-package clones (b93a3ca) + rc2 Parallel Trust Wiring (592f172): write_scope enforcement post-commit, DeliveryPlan (не самовольная доставка), реальный github_remote, fail-closed git-ops, run-scoped cleanup. Не прогнан живьём на реальных провайдерах."
+    status: passed
+    live_qualified: true
+    evidence: >
+      GREEN concurrent fan-in ДОКАЗАН LIVE автономно (s3c): 2 disjoint-scope пакета конкурентно, оба
+      pass+scope_ok, integration_sha, aggregate all_pass conflicts=0, main checkout нетронут+чист,
+      DeliveryPlan.ready. rc2 Parallel Trust Wiring (592f172/441bd26) + rc3 Dynamic Model Trust (554c92d:
+      JIT provider key/KLP-preflight на fallback/escalation + model_attempts trace + writer quality-escalation)
+      + 3 фикса живыми прогонами (#2 scope b73a80d, git-identity rc2c, build-артефакты). CI green.
+  judge_qualification:
+    status: partial
+    evidence: >
+      Bench v2 (held-out 80 сэмплов = 52 деф×13 классов + 28 чист/near-miss, corpus_hash 623332e4):
+      deepseek-v4-flash как security_review судья — false_green=0, recall=1.0 (0 пропущенных классов), НО
+      specificity=0.68<0.90 -> conditional/ADVISORY (не auto-close; человеко-#5 сохранён). Registry-запись
+      5006d36 с confusion_matrix + hashes. Judge Qualification Contract (778f747): judge-роли первоклассны
+      в валидаторе + conflict-aware writer≠judge. Доказан ТЕЗИС ПОРТФЕЛЯ РОЛЕЙ (deepseek слаб-writer 0.667/
+      силён-судья). auto-close требует specificity>=0.90 на НОВОМ held-out (улучшить judge-prompt).
   v3.8.4:
     status: not_started
     evidence: "multi-repo readiness: greenfield reference + ИИ-Среда brownfield + маленький Py/TS reference (provider fallback, red-base partial fix). BootstrapReadinessReport."
