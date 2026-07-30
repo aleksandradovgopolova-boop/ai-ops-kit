@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-928
+request_id: RR-011
+statement: 'Метрика «>74% на SWE-bench verified» в mini-swe-agent — САМОДЕКЛАРАЦИЯ
+  без разбивки: одинаковая строка в README.md и docs/index.md, без указания модели,
+  даты прогона и конфигурации; таблицы результатов по моделям в репозитории не обнаружено
+  (проверены README.md, docs/index.md, docs/usage/swebench.md на 2026-07-29). Ближайшая
+  конкретизация — новостная строка со ссылкой на пост в X про Gemini 3 Pro.'
+evidence_type: vendor_claim
+source:
+  title: mini-swe-agent README — буллет Performant
+  url: https://raw.githubusercontent.com/SWE-agent/mini-swe-agent/main/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README.md строка 28; тот же текст docs/index.md строка 35
+  quote: '- **Performant:** Scores >74% on the [SWE-bench verified benchmark](https://www.swebench.com/);
+    starts much faster than Claude Code'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: true
+  expires_at: '2026-10-29'
+reliability:
+  level: medium
+  rationale: Факт декларации подтверждён дословно; сама цифра не воспроизведена и
+    не разложена по моделям — по правилам центра vendor_claim выше medium не поднимается.
+status: active
+superseded_by: null

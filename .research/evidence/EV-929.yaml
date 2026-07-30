@@ -1,0 +1,28 @@
+schema_version: 1
+kind: research.evidence
+id: EV-929
+request_id: RR-011
+statement: Superpowers — MIT, правообладатель Jesse Vincent, 2025; лицензия согласована
+  в трёх местах (LICENSE, .claude-plugin/plugin.json, секция README). Коммерческое
+  переиспользование механик допустимо.
+evidence_type: documented_fact
+source:
+  title: obra/superpowers — LICENSE
+  url: https://raw.githubusercontent.com/obra/superpowers/main/LICENSE
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: LICENSE, строки 1-3
+  quote: MIT License / Copyright (c) 2025 Jesse Vincent
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Прямое чтение файла; согласуется с plugin.json и README.
+status: active
+superseded_by: null

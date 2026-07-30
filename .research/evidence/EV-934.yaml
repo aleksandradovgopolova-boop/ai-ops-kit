@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-934
+request_id: RR-011
+statement: 'ГЛАВНАЯ переносимая механика — Skill TDD: файл skills/writing-skills/testing-skills-with-subagents.md
+  (385 строк) переносит RED-GREEN-REFACTOR на документацию процессов шестью фазами:
+  RED (прогон сценария БЕЗ навыка — наблюдать провал), Verify RED (зафиксировать рационализации
+  дословно), GREEN (написать навык под наблюдённые провалы), Verify GREEN (pressure
+  test с навыком), REFACTOR (закрыть новые лазейки), Stay GREEN (повторная верификация).
+  Базовый принцип: не видел провала без навыка — не знаешь, что навык предотвращает.'
+evidence_type: documented_fact
+source:
+  title: obra/superpowers — testing-skills-with-subagents.md
+  url: https://github.com/obra/superpowers/blob/main/skills/writing-skills/testing-skills-with-subagents.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: файл, секции «Overview» (строки 7-13) и «TDD Mapping for Skill Testing»
+    (строки 30-41)
+  quote: '**Core principle:** If you didn''t watch an agent fail without the skill,
+    you don''t know if the skill prevents the right failures.'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Дословные цитаты двух секций файла в клоне основной ветки.
+status: active
+superseded_by: null

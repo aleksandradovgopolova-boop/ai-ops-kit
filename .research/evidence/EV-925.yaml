@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-925
+request_id: RR-011
+statement: 'Адаптеров окружения в mini-swe-agent v2.4.6 семь файлов: local.py (subprocess),
+  docker.py (docker/podman), singularity.py (singularity/apptainer), extra/bubblewrap.py,
+  extra/contree.py, extra/swerex_docker.py, extra/swerex_modal.py. Документация каталога
+  перечисляет шесть — contree в environments/README.md отсутствует (описан отдельно
+  в docs/reference/environments/contree.md). Т.е. переносимость между local/контейнером/облаком
+  у них подтверждена практикой, а не декларацией.'
+evidence_type: documented_fact
+source:
+  title: mini-swe-agent — src/minisweagent/environments/README.md
+  url: https://raw.githubusercontent.com/SWE-agent/mini-swe-agent/main/src/minisweagent/environments/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: environments/README.md (полный текст); листинг каталога environments/ в
+    клоне основной ветки
+  quote: '* `local.py` - Execute code with `subprocess.run` / * `docker.py` - Execute
+    code in a docker or podman container / * `singularity.py` - Execute code in a
+    singularity or apptainer container / ## Extras / * `extra/swerex_docker.py` ...
+    * `extra/bubblewrap.py` - Execute environments with bubblewrap'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Цитата дословна; расхождение README с фактическим листингом (contree)
+    зафиксировано по клону.
+status: active
+superseded_by: null

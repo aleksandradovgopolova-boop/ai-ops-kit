@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-909
+request_id: RR-011
+statement: 'Единый формат событий наблюдаемости (OpenTelemetry) в ките НЕ используется:
+  в исполняемом коде (tools/, validation/, registry/, quality/) обращений к OpenTelemetry
+  не обнаружено; OTel упомянут только в VISION.md как внешний ориентир, а Langfuse
+  — в rules/ai/EvalTooling.md и registry/tools.yaml как инструмент для AI-фич ПРОДУКТА
+  (online-качество/стоимость/latency), а не как способ трассировать сам кит. Это подтверждает
+  наличие настоящей дыры по компоненту наблюдаемости, в отличие от остальных семи.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — VISION.md + rules/ai/EvalTooling.md + registry/tools.yaml (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: VISION.md:65; rules/ai/EvalTooling.md:14
+  quote: '| Online: качество/стоимость/latency на живом трафике | Langfuse (OSS, self-hosted)
+    | traces + cost + latency; экспорт -> вход product_health.py и workflow INSIGHTS
+    |'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: 'Негативное утверждение об отсутствии: охват — grep по коду и конфигам
+    кита на дату проверки, вне охвата CHANGELOG/ROADMAP; по правилу центра выше medium
+    не ставится.'
+status: active
+superseded_by: null

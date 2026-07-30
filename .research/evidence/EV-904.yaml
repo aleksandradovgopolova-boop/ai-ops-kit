@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-904
+request_id: RR-011
+statement: 'Verification Gates в ките СУЩЕСТВУЮТ как реестр: quality/gates.yaml содержит
+  29 гейтов, из них 18 blocking, 1 требует human_approval; у каждого — stage, responsible_role,
+  review_mode (20 read-only против 9 writer), validator, bypass_policy и applicability
+  по типам задач. Инвариант «проверяющий read-only относительно проверяемого артефакта»
+  зафиксирован в самом реестре.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — quality/gates.yaml (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: quality/gates.yaml:1-7 (шапка реестра); подсчёты по gates (29/18/1)
+  quote: responsible_role read-only относительно проверяемого артефакта (write_scope
+    ∩ reviewed = ∅).
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Числа получены подсчётом по самому реестру; шапка процитирована дословно.
+status: active
+superseded_by: null

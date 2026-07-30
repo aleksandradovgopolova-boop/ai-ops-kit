@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-908
+request_id: RR-011
+statement: 'Наблюдаемость прогона в ките есть, но крупнозернистая: lifecycle-journal.jsonl
+  пишет события run_start, run_cost, run_end, gate, package_start/package_end, delivery_intent/delivery_receipt/delivery_reconciled;
+  run_cost — АГРЕГАТ за прогон (calls, input_tokens, output_tokens, latency_s, cost_usd_est,
+  model), а не запись на шаг. Пошаговой стоимости и отдельных событий на вызов инструмента
+  в журнале не обнаружено.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — tools/ai_ops_run.py журнал жизненного цикла (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: tools/ai_ops_run.py:1043-1058
+  quote: '# v3.1 (trace v0.2): run_cost — агрегат tokens/latency/cost из вызовов модели
+    (наблюдаемость).'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: Позитив (перечень kind'ов и состав run_cost) снят прямым чтением кода;
+    негатив (нет пошаговой записи) ограничен охватом grep по tools/ — medium по правилу
+    центра о негативных утверждениях.
+status: active
+superseded_by: null

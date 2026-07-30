@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-927
+request_id: RR-011
+statement: 'LocalEnvironment выполняет каждое действие как НЕЗАВИСИМЫЙ bash-вызов
+  без сохранения состояния оболочки: subprocess.Popen(shell=True) со start_new_session
+  на posix, stderr сливается в stdout, по таймауту убивается вся группа процессов;
+  возвращается dict {output, returncode, exception_info}. Это подтверждает декларацию
+  «every action is completely independent» — свойство, которое и делает перенос цикла
+  между окружениями дешёвым.'
+evidence_type: documented_fact
+source:
+  title: mini-swe-agent — src/minisweagent/environments/local.py
+  url: https://raw.githubusercontent.com/SWE-agent/mini-swe-agent/main/src/minisweagent/environments/local.py
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: local.py, LocalEnvironment.execute и функция _run
+  quote: '"""Like subprocess.run, but kills the whole process group on timeout so
+    no children are orphaned."""'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Дословный исходник; согласуется с формулировкой README.
+status: active
+superseded_by: null
