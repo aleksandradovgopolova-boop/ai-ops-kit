@@ -85,13 +85,24 @@ def _changed_files(root, base_sha, head="HEAD"):
     return [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()]
 
 
+def _is_build_artifact(f):
+    """Инкрементальные build-артефакты (не код модели): setuptools egg-info, кэши, dist/build, lock-файлы,
+    node_modules. Создаются install/сборкой, не писателем -> НЕ считаются нарушением write_scope."""
+    return (".egg-info/" in f or "__pycache__/" in f or f.endswith((".pyc", ".pyo"))
+            or f.startswith(("dist/", "build/", "node_modules/", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/"))
+            or "/dist/" in f or "/build/" in f or "/node_modules/" in f
+            or f.endswith((".lock",)) or f == "package-lock.json" or f.endswith("/package-lock.json"))
+
+
 def _scope_ok(changed, write_scope):
-    """#2 post-commit: changed_files ⊆ write_scope. Инфра-пути (.ai/openspec/features) разрешены.
-    write_scope пуст -> не форсим здесь (границу объявляет план). -> (ok, outside_files)."""
+    """#2 post-commit: changed_files ⊆ write_scope. Инфра-пути (.ai/openspec/features) и инкрементальные
+    build-артефакты (egg-info/кэши/lock/node_modules) разрешены. write_scope пуст -> не форсим здесь
+    (границу объявляет план). -> (ok, outside_files)."""
     if not write_scope:
         return True, []
     outside = [f for f in changed
-               if not f.startswith(_INFRA_PREFIXES) and not any(_glob_match(f, p) for p in write_scope)]
+               if not f.startswith(_INFRA_PREFIXES) and not _is_build_artifact(f)
+               and not any(_glob_match(f, p) for p in write_scope)]
     return (not outside), outside
 
 
@@ -559,6 +570,10 @@ def selftest():
     expect("rc2: _glob_match 'api/**' ловит вложенный путь", _glob_match("api/routes/x.py", "api/**") and not _glob_match("ui/x.py", "api/**"))
     expect("rc2 #2: _scope_ok пропускает инфра-пути (.ai/…), ловит чужие",
            _scope_ok([".ai/plan.yaml", "api/x.py", "ui/y.py"], ["api/**"]) == (False, ["ui/y.py"]))
+    expect("rc3: _scope_ok освобождает build-артефакты (egg-info/кэш/lock), не считает нарушением",
+           _scope_ok(["calc.py", "tasks.egg-info/PKG-INFO", "__pycache__/x.pyc", "package-lock.json"],
+                     ["calc.py"]) == (True, [])
+           and _scope_ok(["calc.py", "tasks.egg-info/PKG-INFO", "rogue.py"], ["calc.py"]) == (False, ["rogue.py"]))
     with tempfile.TemporaryDirectory() as td4:  # #8: self-created clones_dir очищается (нет утечки)
         _git(td4, "init", "-q", check=False); _git(td4, "config", "user.email", "t@t"); _git(td4, "config", "user.name", "t")
         (Path(td4) / "s.py").write_text("x=1\n", encoding="utf-8"); _git(td4, "add", "-A"); _git(td4, "commit", "-qm", "s", check=False)
