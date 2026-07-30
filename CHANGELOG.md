@@ -99,6 +99,38 @@
 - #9 план 3.8.0: `phase_progress` с доказательствами (passed/failed_safe/component_ready/not_started);
   выполненные 3.8.2/3.8.3 убраны из `blocked_by`. selftest: +8 (rc2a) +3 (#4/#4b) +4 (#6).
 
+### Added (v3.8.4-rc — Security Review Cascade: асимметричный fail-closed судья без сильной модели)
+- КОНТЕКСТ: held-out v2/v3 доказали, что одиночный дешёвый security-судья НЕ даёт recall=1.0 И
+  specificity≥0.90 одновременно — prompt-тюнинг разменивает переблок на ПРОПУСКИ дефектов (v3-prompt поднял
+  specificity 0.68→0.96, но false_green 0→3). Для security пропуск — критический провал -> путь тупиковый.
+  Вывод owner-review: не «умнее prompt», а АСИММЕТРИЧНЫЙ каскад с fail-closed reducer.
+- `tools/security_review_cascade.py` — detector (high-recall, ошибается в fail) → verifier (per-finding
+  data-flow + counter-evidence) → ДЕТЕРМИНИРОВАННЫЙ reducer (обычный код, НЕ третий LLM). Асимметрия:
+  confirmed→fail; uncertain→pending_human; disproved→pass для finding ТОЛЬКО при РАСПОЗНАННОМ структурном
+  доказательстве безопасности (`proof_type ∈ RECOGNIZED_PROOFS` + `cited_lines`) И НЕ опровергнутой
+  детерминированной корроборации по коду (`_corroborate`: мнимая параметризация при f-string SQL,
+  «checksum» на пароле, safe_argv при shell=True — опровергаются -> pending_human, НЕ pass). «Не вижу
+  exploit» ≠ безопасно. Recall каскада ⩾ recall detector'а: verifier только даунгрейдит и только с
+  доказательством. Модель-нейтрально (detector/verifier инъектируются). 12 selftest (вкл. ключевой:
+  verifier врёт disproved на реальном дефекте -> корроборация опровергает -> pending_human, не false green).
+- `validation/validate_model_qualification.py` — (1) КАСКАДНЫЙ судья (`judge_mode: cascade`) квалифицируется
+  по fail-closed метрикам реальных действий: `derive_cascade_status` (0 unsafe_pass ∧ safe_handling_rate=1.0
+  ∧ clean_auto_pass≥0.90 ∧ auto_decision_coverage≥0.90 ∧ schema≥0.95 ∧ pos≥52 ∧ neg≥28 -> qualified; иначе
+  conditional/advisory). pending_human — НЕ false green, но снижает coverage -> нельзя «сделать безопасным»,
+  отправив всё человеку. (2) `cm_integrity_errors` — арифметическая целостность confusion matrix с abstain:
+  `TP+FN+positive_abstain=positive`, `TN+FP+negative_abstain=negative`, `unsafe_passes=FN` — нельзя
+  «квалифицировать» модель, исключив abstain из знаменателя (фикс: 51+0≠52 в прежней записи). CI +1, AGENTS +1.
+- Bench-харнес (job-tmp, НЕ в ките): каскад измерялся на СВЕЖЕМ held-out N=80, оценивался ВЕСЬ каскад.
+- РЕЗУЛЬТАТ held-out (DeepSeek оба прохода): НЕ qualified. TP=49 FN=1 TN=16 FP=10 pos_abstain=2 neg_abstain=2;
+  unsafe_passes=1, safe_handling=0.9808, clean_auto_pass=0.5714, coverage=0.95, schema=0.9875. Fail-closed
+  машинерия сработала как задумано (2 реальных дефекта уведены в pending_human; корроборация не пропустила
+  ни одного disproved на настоящем дефекте). Единственный unsafe_pass — sample с КАНОНИЧЕСКИМИ AWS-example-
+  ключами (verifier верно счёл их не-секретом; ошибка в oracle-разметке корпуса, не в каскаде). Низкая
+  specificity confounded: часть "clean" сэмплов содержала РЕАЛЬНЫЕ вторичные дефекты, найденные verifier'ом.
+- РЕШЕНИЕ (timebox, route step 7): прекращаем итерации. Human #5 сохраняется для strict security; DeepSeek
+  остаётся advisory (registry НЕ меняется); каскад НЕ подключается к strict security_review. Каскад-компонент
+  + abstain-integrity валидатор остаются как инфраструктура (green, CI-wired), без qualified-записи в реестре.
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

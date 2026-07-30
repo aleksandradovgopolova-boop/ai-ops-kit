@@ -156,6 +156,7 @@ python3 validation/validate_model_roles.py --selftest
 python3 validation/validate_model_roles.py
 python3 validation/validate_model_qualification.py --selftest
 python3 validation/validate_model_qualification.py
+python3 tools/security_review_cascade.py --selftest
 python3 tools/model_router.py --selftest
 python3 tools/provider_endpoints.py --selftest
 python3 tools/parallel_live.py --selftest
