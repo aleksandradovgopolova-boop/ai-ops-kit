@@ -1,0 +1,30 @@
+schema_version: 1
+kind: research.evidence
+id: EV-931
+request_id: RR-011
+statement: 'Superpowers действительно подаёт навыки как ОБЯЗАТЕЛЬНЫЙ процесс, а не
+  рекомендации: README завершает описание рабочего цикла прямой формулировкой «Mandatory
+  workflows, not suggestions», а проверка применимости навыка предписана перед любой
+  задачей.'
+evidence_type: documented_fact
+source:
+  title: obra/superpowers README — The Basic Workflow
+  url: https://raw.githubusercontent.com/obra/superpowers/main/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README.md, секция «The Basic Workflow», завершающая строка
+  quote: '**The agent checks for relevant skills before any task.** Mandatory workflows,
+    not suggestions.'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Дословная цитата README основной ветки.
+status: active
+superseded_by: null

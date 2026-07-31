@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-932
+request_id: RR-011
+statement: 'УТОЧНЕНИЕ порядка процесса против входящего: цепочка Superpowers — семь
+  шагов, и worktree идёт ТРЕТЬИМ по счёту, ДО написания плана: 1) brainstorming, 2)
+  using-git-worktrees, 3) writing-plans, 4) subagent-driven-development или executing-plans,
+  5) test-driven-development, 6) requesting-code-review, 7) finishing-a-development-branch.
+  Отдельного шага «verification» в цепочке нет — контроль несёт requesting-code-review;
+  навык verification-before-completion существует в библиотеке, но в семишаговый список
+  не входит.'
+evidence_type: documented_fact
+source:
+  title: obra/superpowers README — семь шагов
+  url: https://raw.githubusercontent.com/obra/superpowers/main/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README.md, секция «The Basic Workflow», пункты 1-7
+  quote: 2. **using-git-worktrees** - Activates after design approval. Creates isolated
+    workspace on new branch, runs project setup, verifies clean test baseline. / 3.
+    **writing-plans** - Activates with approved design.
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Дословная цитата секции; наличие verification-before-completion вне цепочки
+    подтверждено листингом skills/.
+status: active
+superseded_by: null

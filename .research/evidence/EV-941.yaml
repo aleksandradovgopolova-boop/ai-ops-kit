@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-941
+request_id: RR-011
+statement: 'Beads — MIT, но НЕ «git-ориентированный трекер» в смысле файлов в репозитории:
+  источник истины — база Dolt (версионируемая SQL-БД с cell-level merge и ветвлением),
+  а .beads/issues.jsonl объявлен экспортом для просмотра и обмена, не источником истины
+  и не бэкапом. Механики ledger подтверждены: атомарный захват задачи (bd update --claim
+  ставит assignee + in_progress), типы связей (relates-to, duplicates, supersedes,
+  replies-to), иерархические id (эпик → задача → подзадача), блокировки по зависимостям.
+  Отдельный демон не нужен во встроенном режиме, но встроенный Dolt всё равно тянется
+  как зависимость — это подтверждает опасение входящего про «движение в сторону платформы
+  хранения».'
+evidence_type: documented_fact
+source:
+  title: steveyegge/beads — README
+  url: https://github.com/steveyegge/beads
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'README: описание проекта, секции хранения (.beads/embeddeddolt) и команд
+    (bd dep add, bd update --claim)'
+  quote: Distributed graph issue tracker for AI agents, powered by Dolt … an export
+    for viewers and interchange, not the source of truth or a backup.
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (доверификация первоисточников после обрыва двух разведчиков
+  по лимиту расходов)
+freshness:
+  volatile: true
+  expires_at: '2026-10-29'
+reliability:
+  level: medium
+  rationale: Первоисточник прочитан, ключевые формулировки процитированы, но чтение
+    одностраничное (README) без клона репозитория — ниже стандарта разведчиков этого
+    прогона (клон + API), поэтому medium.
+status: active
+superseded_by: null

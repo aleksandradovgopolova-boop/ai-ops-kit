@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-911
+request_id: RR-011
+statement: 'Operational learnings в ките есть по форме, но без механики переиспользования,
+  которую входящее приписывает gstack: memory/lessons-learned содержит 2 записи и
+  README «только проверенные и повторно полезные знания», product-learning/ — 3 FeatureLearning-файла
+  (hypothesis/validation/outcome/learnings/follow_up), связанных с DP research-центра.
+  Полей операционного урока (ситуация, неудачный подход, урок, число успешных повторных
+  применений, срок актуальности) и автоматической подмешки в будущие сессии в этих
+  файлах не обнаружено — при том что в самом research-модуле freshness/expiry уже
+  реализованы.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — memory/lessons-learned + product-learning/FL-001.yaml (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: memory/lessons-learned/README.md:3; product-learning/FL-001.yaml (поля
+    записи)
+  quote: Добавляйте сюда только проверенные и повторно полезные знания.
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: Позитив — прямое чтение файлов. Негатив (нет счётчика применений/expiry/подмешивания)
+    — охват memory/ и product-learning/ на дату проверки; medium по правилу о негативных
+    утверждениях.
+status: active
+superseded_by: null

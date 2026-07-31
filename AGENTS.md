@@ -24,6 +24,53 @@ child-репозиториев. Здесь разрабатывается сам
 
 Полный аннотированный список файлов — в `FILE_INDEX.md`.
 
+## Быстрый инженерный цикл (lean, v3.8.3)
+
+Правило дня: инвариант формулируется ДО реализации, а не после. Проверок в CI уже десятки —
+проблема не в их количестве, а в том, что нужный шов иногда осознаётся постфактум (напр. rc2:
+scope-тест проходил вхолостую → фикс тронул только mock → предположение теста различалось
+Linux/macOS — три итерации одного класса ошибки). Цикл ниже ловит это в первом PR. Без новых
+подсистем/валидаторов — это процесс, не код.
+
+**1. Change Brief (8–10 строк) ДО кода** — обязательный блок в задаче/PR (шаблон:
+`templates/quality/ChangeBrief.md`). Не начинать писать код, пока не перечислены ВСЕ затронутые
+сквозные пути. Поля: Результат / Затрагиваемые пути / Инварианты / Failure modes (≤5) /
+Доказательство / Не входит.
+
+**2. Три обязательных теста на каждую значимую capability (до реализации):**
+- positive — механизм реально делает действие;
+- fail-closed — сбой НЕ превращается в зелёный результат;
+- **side-effect proof** — проверяемое действие ДЕЙСТВИТЕЛЬНО произошло, ПРЕЖДЕ чем проверять
+  реакцию гейта. Пример (scope): сперва доказать «коммит создан ∧ HEAD сменился ∧ diff непуст ∧
+  запрещённый файл реально изменён», и только потом — что gate заблокировал. Иначе тест зелёный
+  вхолостую.
+- Environment-тест (Git/FS/сеть/ОС/внешний CLI) добавляется ТОЛЬКО для такого кода, не на каждую
+  обычную функцию. Для Git/concurrency локально гонять и `GIT_CONFIG_GLOBAL=/dev/null` (CI-Linux
+  без идентичности), и нативный macOS smoke. Полная OS×Python-матрица сейчас НЕ нужна.
+
+**3. Один свежий review до merge** — одна AI-сессия БЕЗ авторского контекста, ≤5 находок, одна
+итерация исправлений. Проверяет: заявленный пользовательский результат, 5 failure modes,
+исполнение инвариантов, ОТСУТСТВИЕ пустых тестов, связность слоёв, соответствие заявлений runtime.
+Остался P0/P1 после итерации → PR блокируется и перепланируется; P2 → backlog.
+
+**4. Не гонять полный цикл после каждой правки:** во время разработки — целевой self-test
+изменяемого контура; перед PR — короткий core smoke; в PR — полный существующий CI ОДИН раз.
+
+**Рефакторинг — правило третьего изменения:** общий компонент выделяем, только когда один и тот же
+шов протягивается через несколько модулей В ТРЕТИЙ раз (кандидаты, когда/если дойдёт: provider
+fallback → `failure_policy.py`; strict security → `security_decision.py`; доставка single/parallel
+→ `delivery_controller.py`). Не рефакторить «на будущее», особенно перед RC/stable.
+
+**Минимальные метрики (следующие 5 значимых PR):** первый CI зелёный? · сколько fix-коммитов? ·
+сколько review-итераций? · найден ли дефект после merge? Если стабильно 2–3 фикса на класс — этот
+шов в общий helper/guard.
+
+**Отложено до 3.8 stable (потом ОДИН маленький PR):** `tools/dev_check.py` (`quality-fast`) —
+статические профили `--core/--parallel/--security` из 8–12 критичных self-test ядра (ai_ops_run,
+execution_pipeline, workpackage_executor, parallel_executor, parallel_live, lifecycle_store,
+pr_open, security_enforcement, model_router, provider_endpoints). Не заменяет CI — быстрый ответ
+в разработке. Без анализа изменённых файлов/dependency-graph сейчас.
+
 ## Перед коммитом — обязательно
 
 Прогнать полный набор проверок (тот же, что в CI `.github/workflows/package-quality.yml`);
@@ -68,6 +115,8 @@ python3 validation/validate_product_qualification.py
 python3 validation/validate_workflow_gates.py --selftest
 python3 validation/validate_workflow_gates.py
 python3 validation/validate_scenario_evidence.py --selftest
+python3 validation/validate_bootstrap_qualification.py --selftest
+python3 validation/validate_bootstrap_qualification.py
 python3 validation/validate_surface_wiring.py --selftest
 python3 tools/workitem.py --selftest
 python3 tools/run_plan.py --selftest
@@ -107,6 +156,7 @@ python3 validation/validate_model_roles.py --selftest
 python3 validation/validate_model_roles.py
 python3 validation/validate_model_qualification.py --selftest
 python3 validation/validate_model_qualification.py
+python3 tools/security_review_cascade.py --selftest
 python3 tools/model_router.py --selftest
 python3 tools/provider_endpoints.py --selftest
 python3 tools/parallel_live.py --selftest
@@ -217,6 +267,15 @@ python3 .research/tools/ev_scaffold.py --selftest
 - **Стадии ссылаются только на существующие agent id и gate id.**
 - **Никаких новых зависимостей** без явного решения: Python-инструменты работают на stdlib + pyyaml.
 - **Язык документации — русский**, идентификаторы и ключи — английские.
+- **Три кольца (owner-review 2026-07-30, см. `qualification/bootstrap/v3.8.0-plan.yaml` → `architecture_rings`).**
+  Kernel (Task→Context→Execution→Evidence→Decision→Delivery) НЕ зависит от Intelligence (research/
+  product-learning/аналитика); Intelligence зависит от Kernel и ЧИТАЕТ его события. Governance подключается
+  ПО РИСКУ, не на каждой задаче. Изменение продукта не должно требовать заполнения исследовательской онтологии.
+- **Runtime через адаптер, не замена.** AI Ops управляет исполнителем (Claude Code/Codex/OpenHands SDK/…)
+  через адаптер; workflow/approvals/evidence не переписываются при смене runtime. Свой tool-loop не наращиваем,
+  если внешний runtime делает это надёжно.
+- **Заморозка возможностей до 3.8 stable:** новых концептуальных возможностей не добавлять (см. lean-цикл +
+  `capability_freeze` в плане). Только live qualification + измерение усилия владельца.
 
 ## Релизный процесс
 

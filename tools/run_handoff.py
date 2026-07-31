@@ -135,6 +135,10 @@ def resume_preflight(child_root, wid, base="main"):
     handoff = _g["data"]
     sha = handoff.get("resume_from_revision")
     saved_base_sha = ((handoff.get("base_binding") or {}).get("base_sha")) or None
+    # v3.8.3 (finding живого resume): base не передан явно (--base опущен) -> резолвим из handoff
+    # (base_binding.base_sha) либо 'main'. Иначе `git rev-parse --verify None` роняет preflight (None не str).
+    if not base:
+        base = saved_base_sha or "main"
     branch = f"ai-ops/{wid}"
 
     # ветка/worktree на месте?

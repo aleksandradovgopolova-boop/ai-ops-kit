@@ -1,0 +1,36 @@
+# Inbox: внешний анализ «какие инженерные механики вытащить из чужих проектов в AI Ops»
+# (прислал Sasha 2026-07-29, автор — другой AI). Статус: unvetted — приоритеты, описания
+# механик, лицензии и метрики зрелости НЕ проверены первоисточниками.
+# Тезис автора: «нам не нужен ещё один агентный фреймворк — нужен независимый мета-harness»;
+# из него выведён shortlist из 10 источников и 8 целевых компонентов.
+schema_version: 1
+kind: research.source-inbox
+received_at: "2026-07-29"
+origin: "ChatGPT (запрос Sasha), передан в кит 2026-07-29 — текст свежий, расхождения с реальностью ожидаются от генерации, а не от устаревания"
+scope: "ai-ops-kit: механики (не фреймворки) для усиления кита как мета-harness — runner, context pack, skills+evals, learnings, ledger, observability, isolation"
+candidates:
+  - {name: mini-swe-agent, url: "https://github.com/SWE-agent/mini-swe-agent", claim: "агентный цикл ~100 строк: линейная история сообщений, независимое выполнение команд, разделение model/environment/loop; перенос local subprocess → Docker/Bubblewrap; эталон минимального Runner и траекторий response→action→observation", category: loop-reference, priority: max}
+  - {name: Superpowers, url: "https://github.com/obra/superpowers", claim: "навыки как ОБЯЗАТЕЛЬНЫЙ процесс (brainstorm → plan → worktree → TDD → requirements/code review → finish) + методика Skill TDD: тест навыка без навыка, фиксация обхода, стресс-сценарии давления", category: skill-testing, priority: max}
+  - {name: gstack, url: "https://github.com/garrytan/gstack", claim: "operational learnings в learnings.jsonl с подмешиванием в будущие сессии; cross-model review (Claude ↔ Codex); явная маршрутизация навыков (ошибка → investigate, архитектура → engineering review)", category: learning-and-routing, priority: max, known_to_kit: "DP-103 (прямой аналог, MIT); механика промоушена learnings уже перенята"}
+  - {name: RepoPrompt CE, url: "https://github.com/repoprompt/repoprompt-ce", claim: "компилятор контекста: дерево файлов, диапазоны строк, карты кода, git-изменения, multi-root; Context Builder с token budget и reviewable handoff перед отправкой модели; macOS-ориентирован", category: context-reference, priority: max}
+  - {name: "Anthropic Agent Skills + AGENTS.md", url: "https://github.com/anthropics/skills", claim: "SKILL.md как автономная папка (инструкции, ресурсы, скрипты) — переносимый формат навыка; AGENTS.md как общий формат проектных инструкций с иерархическим переопределением (docs Codex)", category: portable-format, priority: high}
+  - {name: OpenHands, url: "https://github.com/OpenHands/OpenHands", claim: "runtime создаёт изолированное Docker-окружение; отдельно управляются образы, рабочие каталоги, тома, порты, плагины; забрать границу агент↔окружение и lifecycle, не платформу", category: runtime-reference, priority: high, known_to_kit: "RR-008/DP-108 — верифицирован, адаптеры отложены до потребности"}
+  - {name: "kubernetes-sigs/agent-sandbox", url: "https://github.com/kubernetes-sigs/agent-sandbox", claim: "K8s-абстракция изолированных stateful-окружений: стабильная идентичность, постоянное хранилище, suspend/resume, warm pools, сетевые ограничения, gVisor/Kata", category: isolation-reference, priority: research-only}
+  - {name: Beads, url: "https://github.com/steveyegge/beads", claim: "git-ориентированный task ledger для агентов: состояния, зависимости, блокировки, session handoff, роли агентов, межрепозиторные связи, событийная история рядом с кодом", category: ledger-reference, priority: "high для механики, low для внедрения"}
+  - {name: "Langfuse + OpenTelemetry GenAI semconv", url: "https://github.com/open-telemetry/semantic-conventions-genai", claim: "единая модель наблюдаемости: трассировки model.call/tool.execute/agent.invoke, токены и кеш-хиты, latency/TTFT, датасеты и оценки; Langfuse — готовый UI, OTel — формат событий без вендор-привязки", category: observability, priority: high, known_to_kit: "RR-005/DP-105 — Langfuse проверен как eval-инструмент (MIT кроме /ee)"}
+  - {name: "OpenCode и Goose", url: "https://github.com/anomalyco/opencode", claim: "OpenCode: разделение plan/build, provider-agnostic слой, сессии, плагины, MCP; при этом сам проект признаёт отсутствие настоящего sandbox — «ограничение в промпте не есть безопасность». Goose: собственный дистрибутив с предустановленными провайдерами/MCP, ядро отдельно от CLI/desktop/API, recipes через git", category: shell-reference, priority: study-only, known_to_kit: "Goose — EV-637/EV-638 (передан в Agentic AI Foundation; канонический репозиторий уточнён)"}
+target_components:
+  - "Task Contract"
+  - "Context Pack Compiler"
+  - "Minimal Agent Runner"
+  - "Skill Registry"
+  - "Skill Evals"
+  - "Verification Gates"
+  - "Trajectory + Operational Learnings"
+  - "Execution Environment API"
+notes:
+  - "Сильная сторона входящего: сформулировано механиками, а не «поставить фреймворк» — совпадает с линией DP-102/DP-108 (заимствуем формат и паттерн, не зависимость)."
+  - "Главный риск входящего: восемь целевых компонентов предложены как ОТСУТСТВУЮЩИЕ, но у кита уже есть tools/context_compiler.py (ContextBundle), tools/tool_loop.py (петля model→policy→broker→evidence), validate_loop_trace.py (траектории), tools/run_handoff.py (передача между сессиями), gate_executor + quality/gates.yaml, registry/skills-catalog.yaml, evaluations/. Прежде чем заимствовать — честный маппинг «что уже есть / частично / нет»."
+  - "Явно отклонено автором (не тратить время): LangGraph как оркестратор, CrewAI/AutoGen, Letta/Mem0, Graphiti, Temporal, собственный K8s-кластер, полное внедрение OpenHands."
+  - "Приоритет автора для первых прогонов: mini-swe-agent → Superpowers → gstack → RepoPrompt CE."
+  - "Не проверено: метрики зрелости и живости всех 10 репозиториев, лицензии (особенно Superpowers, RepoPrompt CE, Beads, agent-sandbox), статус OTel GenAI agent-conventions (в тексте — «продолжают развиваться»), идентичность репозитория OpenCode (anomalyco/opencode)."

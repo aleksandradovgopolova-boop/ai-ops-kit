@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-906
+request_id: RR-011
+statement: 'Skill Evals в ките ЧАСТИЧНЫЕ, и разрыв ровно там, куда бьёт методика Superpowers:
+  evaluations/agents/ содержит 51 файл eval-кейсов по формату AgentEvaluationCase
+  (Inputs / Expected behaviour / Forbidden behaviour / Scoring rubric), то есть проверяется
+  поведение АГЕНТОВ и запрещённое поведение уже формализовано. Не обнаружено (в evaluations/,
+  validation/ и tools/ на дату проверки): исполняемого прогона «задача без навыка
+  → задача с навыком» и сценариев давления на обход правил как отдельного класса кейсов.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — evaluations/ (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: evaluations/AgentEvaluationCase.md (заголовки формата); подсчёт файлов
+    в evaluations/agents/
+  quote: '## Expected behaviour'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: Позитивная часть (51 кейс, формат) — прямое чтение, high. Негативная
+    часть (нет прогона «без навыка» и pressure-кейсов) — поиск по evaluations/validation/tools,
+    охват ограничен, поэтому запись в целом medium.
+status: active
+superseded_by: null

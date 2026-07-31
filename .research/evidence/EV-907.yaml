@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-907
+request_id: RR-011
+statement: 'Trajectory в ките НЕ покрывает то, что предлагает mini-swe-agent, и это
+  самая конкретная дыра маппинга: schemas/loop-trace.schema.json описывает итерацию
+  полями n, progress_value, outcome (continue/blocked/success) и signature — то есть
+  прогресс петли, а НЕ цепочку model_response → action → observation с ценой и длительностью
+  шага. Пошаговой записи действий и наблюдений в схеме нет.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — schemas/loop-trace.schema.json (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: schemas/loop-trace.schema.json:21 (items.required итерации)
+  quote: '"required": ["n", "progress_value", "outcome"],'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: 'Схема прочитана целиком: поля итерации перечислены исчерпывающе (additionalProperties:
+    false).'
+status: active
+superseded_by: null

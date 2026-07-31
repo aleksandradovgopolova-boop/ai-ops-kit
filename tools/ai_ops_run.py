@@ -194,6 +194,71 @@ def _resume_context_from_handoff(child_root, fid):
     return "\n\n".join(lines)
 
 
+def _with_provider_fallback(primary, secondary, on_switch=None):
+    """v3.8.3-rc2 (#6) PROVIDER FALLBACK: обёртка провайдера. На RETRYABLE infra-сбой (HTTP 429 / timeout /
+    provider unavailable — по _classify_failure) переключается на fallback-провайдера и остаётся на нём.
+    Не-retryable исключения (плохой код/тест/секьюрити НЕ бросают из провайдера) пробрасываются как есть —
+    fallback НЕ маскирует дефекты реализации. secondary=None -> возвращаем primary без обёртки."""
+    if secondary is None:
+        return primary
+    state = {"switched": False}
+
+    def prov(*a, **k):
+        if state["switched"]:
+            return secondary(*a, **k)
+        try:
+            return primary(*a, **k)
+        except Exception as e:  # noqa: BLE001
+            try:
+                from workpackage_executor import _classify_failure
+                _retryable = bool(_classify_failure(e).get("retryable"))
+            except Exception:  # noqa: BLE001
+                _retryable = False
+            if not _retryable:
+                raise                       # не-retryable -> НЕ fallback (fix-loop/блок разрулят)
+            state["switched"] = True
+            if on_switch:
+                on_switch(e)
+            return secondary(*a, **k)
+    return prov
+
+
+def _load_klp_by_env(child_root):
+    """v3.8.3-rc3: KLP-записи по env_ref из child .ai/policies/key-lifecycle.yaml (TTL/ротация). {} если нет."""
+    try:
+        import yaml as _y
+        p = child_root / ".ai" / "policies" / "key-lifecycle.yaml"
+        if not p.is_file():
+            return {}
+        allk = _y.safe_load(p.read_text(encoding="utf-8")) or {}
+        return {k.get("env_ref"): k for k in (allk.get("keys") or []) if isinstance(k, dict)}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _provider_trust(provider, key_env, klp_by_env, env, now, cache):
+    """v3.8.3-rc3 JIT PROVIDER TRUST: перед первым вызовом КОНКРЕТНОГО провайдера — key presence + KLP/TTL.
+    Кэшируется по provider (проверяем один раз на реально вызываемую модель). -> {ready, reason, preflight}.
+    primary not ready -> caller делает blocked-preflight; необязательный (fallback/escalation) not ready ->
+    caller ИСКЛЮЧАЕТ кандидата + пишет причину + пробует следующего. Ранее KLP покрывал только primary+reviewer
+    -> динамический fallback/escalation обходил security-инвариант (P1). Теперь покрыт каждый вызываемый."""
+    if provider in cache:
+        return cache[provider]
+    import security_enforcement as _se
+    ent = klp_by_env.get(key_env) or {}
+    keyspec = {"name": provider, "env_ref": key_env,
+               **{k: ent[k] for k in ("ttl_days", "issued_at", "rotated_at", "next_rotation_at") if k in ent}}
+    try:
+        kpf = _se.key_preflight({"keys": [keyspec]}, env, critical=True, now=now)
+        res = {"ready": bool(kpf.get("ready")),
+               "reason": (None if kpf.get("ready") else "; ".join(kpf.get("blocks") or ["ключ отсутствует/просрочен"])),
+               "preflight": kpf}
+    except Exception as e:  # noqa: BLE001 — FAIL-CLOSED: ошибка проверки = не доверяем
+        res = {"ready": False, "reason": f"{type(e).__name__}: {e}"[:160]}
+    cache[provider] = res
+    return res
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="controller", proposer=None, open_pr=False, model=None,
@@ -202,7 +267,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
-        context_shadow=False, context_hybrid=False):
+        context_shadow=False, context_hybrid=False, reevaluate_only=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -304,16 +369,40 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _plan = _mr.plan_run()
             _model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
                                  "mode": "explicit-override" if model else "router", "notes": []}
+            # v3.8.3-rc3 Dynamic Model Trust: JIT provider-preflight для КАЖДОЙ реально вызываемой модели
+            # (primary/reviewer/fallback/escalation), а не только primary+reviewer. Trust-переменные видны
+            # и в fix-loop (эскалация проверяет trust там).
+            import os as _os
+            import datetime as _dt
+            _trust_cache = {}
+            _klp_by_env = _load_klp_by_env(child_root)
+            _trust_now = _dt.date.today().isoformat()
+            _trust_env = dict(_os.environ)
             if model is None and provider_name == "openai-compatible":
                 impl, rev = _plan.get("implementation") or {}, _plan.get("code_review") or {}
                 if impl.get("resolved") and _pe.key_available(impl.get("provider")):
                     ep = _pe.endpoint_for(impl["provider"])
+                    # JIT trust PRIMARY: не готов -> blocked-preflight (fail-closed, как раньше)
+                    _pt = _provider_trust(impl["provider"], ep["key_env"], _klp_by_env, _trust_env, _trust_now, _trust_cache)
+                    _model_resolution["key_preflight"] = _pt.get("preflight") or {"ready": _pt["ready"], "blocks": ([] if _pt["ready"] else [_pt.get("reason")])}
+                    if not _pt["ready"]:
+                        _model_resolution["preflight_blocked"] = True
                     _writer_model = impl["model_id"]
                     _writer_prov = orchestrator.make_openai_provider(impl["model_id"], ep["base_url"], ep["key_env"])
                     _model_resolution["applied"] = True
+                    _model_resolution["initial_model"] = impl["model_id"]
+                    _model_resolution["effective_model"] = impl["model_id"]   # обновится при эскалации/fallback
                     _model_resolution["writer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
                                                    "cost_basis": impl.get("cost_basis")}
-                    if rev.get("resolved") and _pe.key_available(rev.get("provider")) and rev.get("model_id") != impl.get("model_id"):
+                    _model_resolution["model_attempts"] = [
+                        {"attempt": 1, "model": impl["model_id"], "provider": impl["provider"],
+                         "trigger": "initial", "outcome": "pending"}]
+                    # reviewer — JIT trust отдельного провайдера (writer≠judge по модели)
+                    _rev_trusted = (rev.get("resolved") and rev.get("model_id") != impl.get("model_id")
+                                    and _pe.key_available(rev.get("provider"))
+                                    and _provider_trust(rev["provider"], _pe.endpoint_for(rev["provider"])["key_env"],
+                                                        _klp_by_env, _trust_env, _trust_now, _trust_cache)["ready"])
+                    if _rev_trusted:
                         ep2 = _pe.endpoint_for(rev["provider"])
                         _rev_model = rev["model_id"]
                         _rev_prov = orchestrator.make_openai_provider(rev["model_id"], ep2["base_url"], ep2["key_env"])
@@ -321,38 +410,35 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     else:
                         _rev_model, _rev_prov = _writer_model, _writer_prov
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
-                                                         "reason": "code_review не резолвится/нет ключа -> self-model review (writer=judge по модели)"}
-                        _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной модели/ключа")
-                    # v3.7.13/v3.7.1/v3.7.2 key preflight — БАРЬЕР перед живым вызовом, FAIL-CLOSED:
-                    # ЛЮБАЯ ошибка чтения KLP/preflight -> blocked-preflight (НЕ молчаливый pass). KLP #3
-                    # ПРОЕЦИРУЕТСЯ на реально используемые провайдеры (impl + независимый reviewer); ключи
-                    # неиспользуемых провайдеров не относятся к прогону.
-                    import os as _os
-                    import datetime as _dt
-                    try:
-                        import security_enforcement as _se
-                        _used = [{"name": impl.get("provider"), "env_ref": ep["key_env"]}]
-                        if (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
-                            _used.append({"name": rev.get("provider"),
-                                          "env_ref": _pe.endpoint_for(rev["provider"])["key_env"]})
-                        _klp_p = child_root / ".ai" / "policies" / "key-lifecycle.yaml"
-                        _klp_keys = _used
-                        if _klp_p.is_file():
-                            _klp_all = yaml.safe_load(_klp_p.read_text(encoding="utf-8")) or {}
-                            _by_env = {k.get("env_ref"): k for k in (_klp_all.get("keys") or []) if isinstance(k, dict)}
-                            _klp_keys = []
-                            for _u in _used:  # только записи выбранных провайдеров + их TTL из KLP
-                                _ent = _by_env.get(_u["env_ref"]) or {}
-                                _klp_keys.append({**_u, **{_k: _ent[_k] for _k in
-                                                  ("ttl_days", "issued_at", "rotated_at", "next_rotation_at") if _k in _ent}})
-                        _kpf = _se.key_preflight({"keys": _klp_keys}, dict(_os.environ), critical=True,
-                                                 now=_dt.date.today().isoformat())
-                        _model_resolution["key_preflight"] = _kpf
-                        if not _kpf.get("ready"):
-                            _model_resolution["preflight_blocked"] = True
-                    except Exception as _pe_err:  # noqa: BLE001 — FAIL-CLOSED: ошибка барьера = блок, не pass
-                        _model_resolution["key_preflight"] = {"ready": False, "error": f"{type(_pe_err).__name__}: {_pe_err}"[:200]}
-                        _model_resolution["preflight_blocked"] = True
+                                                         "reason": "code_review не резолвится/нет ключа/trust -> self-model review (writer=judge по модели)"}
+                        _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной+trusted модели")
+                    # v3.8.3-rc2 (#6) PROVIDER FALLBACK на RETRYABLE infra-сбое. rc3: fallback — НЕОБЯЗАТЕЛЬНЫЙ
+                    # кандидат: JIT trust; НЕ готов -> ИСКЛЮЧАЕМ (не блокируем primary) + пишем причину.
+                    _fb = impl.get("fallback") or {}
+                    if _fb.get("model_id") and _fb.get("provider"):
+                        _fpt = (_provider_trust(_fb["provider"], _pe.endpoint_for(_fb["provider"])["key_env"],
+                                                _klp_by_env, _trust_env, _trust_now, _trust_cache)
+                                if _pe.key_available(_fb.get("provider")) else {"ready": False, "reason": "ключ отсутствует в env"})
+                        if _fpt["ready"]:
+                            try:
+                                _fbep = _pe.endpoint_for(_fb["provider"])
+                                _fb_prov = orchestrator.make_openai_provider(_fb["model_id"], _fbep["base_url"], _fbep["key_env"])
+                                _sw = {"switched_to": None}
+                                _writer_prov = _with_provider_fallback(
+                                    _writer_prov, _fb_prov,
+                                    on_switch=lambda e, _s=_sw, _m=_fb["model_id"]: _s.update(switched_to=_m))
+                                _model_resolution["writer_fallback"] = {
+                                    "model_id": _fb["model_id"], "provider": _fb["provider"],
+                                    "trigger": "retryable-infra-failure-only", "switch_state": _sw}
+                                if not (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
+                                    _rev_prov = _writer_prov
+                            except Exception as _fbe:  # noqa: BLE001 — сбой построения fallback не роняет прогон
+                                _model_resolution["writer_fallback"] = {"error": f"{type(_fbe).__name__}: {_fbe}"[:160]}
+                        else:
+                            _model_resolution["writer_fallback"] = {
+                                "excluded_model": _fb["model_id"], "provider": _fb.get("provider"),
+                                "reason": _fpt.get("reason"),
+                                "note": "необязательный fallback ИСКЛЮЧЁН по JIT-trust (не блокирует primary)"}
                 else:
                     _model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
         except Exception as _e:  # noqa: BLE001
@@ -605,7 +691,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         import preflight as _pf
         pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
                               spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors,
-                              author=author)
+                              author=author, reevaluate_only=reevaluate_only)
         (features_dir / fid / "preflight.yaml").write_text(
             yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
         if pretruth["blocked"]:
@@ -680,6 +766,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
                 defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
                 calibrated_enforcement=_calib, ui_evidence=ui_evidence,
+                reevaluate_only=reevaluate_only,   # v3.8.3-rc: переоценка гейтов после человеко-approval БЕЗ переавторинга
                 strict_judge_qualified=_sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
         try:
             rep = _pipe(resume, resume_ctx)
@@ -687,10 +774,71 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # той же ветки (resume=True), пока не pass ЛИБО не исчерпан бюджет. fail-closed сохранён:
             # бюджет кончился и всё ещё не ready -> честный блок (ничего не форсируем в green). Не для mock.
             _fix_left = int(review_fix_attempts or 0)
+            # v3.8.3 WRITER QUALITY-ESCALATION: money-mode взял дешёвого writer'а; при КАЧЕСТВЕННОМ провале
+            # (impl_verification/code_review) эскалируем на СИЛЬНЕЙШУЮ допущенную модель (ладдер по success_rate),
+            # а не re-prompt того же слабого. Отличается от provider_fallback (#6 — только retryable infra).
+            _esc_ladder = (((_model_resolution or {}).get("plan") or {}).get("implementation") or {}).get("escalation_ladder") or []
+            _esc_idx = 0
+            _QUALITY_GATES = {"implementation_verification", "code_review"}
+            _rev_self = not ((_model_resolution.get("reviewer") or {}).get("independent_by_model")) if isinstance(_model_resolution, dict) else True
             while (not rep.get("ready_for_pr")) and _fix_left > 0 and provider_name not in (None, "mock"):
                 _fx = _review_fix_context(rep)
                 if not _fx:
                     break   # блок не модель-фиксируем (human/base/lifecycle) -> не зацикливаем
+                # эскалация writer'а, если провалены КАЧЕСТВЕННЫЕ гейты и ладдер не исчерпан (model=None -> router-путь)
+                _unmet = set((rep.get("gates") or {}).get("unmet") or [])
+                if model is None and (_unmet & _QUALITY_GATES) and _esc_idx < len(_esc_ladder):
+                    if _model_resolution.get("model_attempts"):
+                        _model_resolution["model_attempts"][-1]["outcome"] = "quality_failed"
+                    import provider_endpoints as _pe2
+
+                    def _cand_trusted(c):  # rc3: JIT trust кандидата эскалации (ключ + KLP/TTL)
+                        if not _pe2.key_available(c.get("provider")):
+                            return False, "ключ отсутствует в env"
+                        _ct = _provider_trust(c["provider"], _pe2.endpoint_for(c["provider"])["key_env"],
+                                              _klp_by_env, _trust_env, _trust_now, _trust_cache)
+                        return _ct["ready"], _ct.get("reason")
+                    # найти СЛЕДУЮЩЕГО кандидата ладдера, прошедшего JIT-trust; не готов -> исключить+записать
+                    _esc = None
+                    while _esc_idx < len(_esc_ladder):
+                        _cand = _esc_ladder[_esc_idx]; _esc_idx += 1
+                        try:
+                            _ok, _why = _cand_trusted(_cand)
+                        except Exception as _ce:  # noqa: BLE001 — сбой trust-проверки -> исключаем честно
+                            _ok, _why = False, f"trust-check упал: {type(_ce).__name__}"
+                        if _ok:
+                            _esc = _cand; break
+                        _model_resolution.setdefault("escalation_excluded", []).append(
+                            {"model": _cand.get("model_id"), "provider": _cand.get("provider"), "reason": _why})
+                    if _esc is not None:
+                        try:
+                            _eep = _pe2.endpoint_for(_esc["provider"])
+                            _eprov = orchestrator.make_openai_provider(_esc["model_id"], _eep["base_url"], _eep["key_env"])
+                            # #6-fallback на СЛЕДУЮЩЕГО TRUSTED кандидата (если эскалированный сам жёстко 429-ится)
+                            _nxt = next((n for n in _esc_ladder[_esc_idx:] if _cand_trusted(n)[0]), None)
+                            if _nxt:
+                                _nep = _pe2.endpoint_for(_nxt["provider"])
+                                _eprov = _with_provider_fallback(
+                                    _eprov, orchestrator.make_openai_provider(_nxt["model_id"], _nep["base_url"], _nep["key_env"]))
+                            prop = tool_loop.make_model_proposer(_eprov)      # writer -> выше observed success
+                            if author and author_proposer is None:
+                                auth_prop = _eprov
+                            if review and reviewer_proposer is None and _rev_self:
+                                rev_prop = _eprov                            # self-model reviewer следует за writer'ом
+                            _model_resolution["effective_model"] = _esc["model_id"]
+                            _model_resolution.setdefault("model_attempts", []).append(
+                                {"attempt": len(_model_resolution.get("model_attempts") or []) + 1,
+                                 "model": _esc["model_id"], "provider": _esc.get("provider"),
+                                 "trigger": "quality_escalation", "outcome": "pending",
+                                 "observed_success_rate": _esc.get("observed_success_rate"),
+                                 "corpus_version": _esc.get("corpus_version")})
+                            _model_resolution.setdefault("escalations", []).append(
+                                {"to": _esc["model_id"], "provider": _esc.get("provider"),
+                                 "observed_success_rate": _esc.get("observed_success_rate"),
+                                 "corpus_version": _esc.get("corpus_version"),
+                                 "reason": "quality-failure:" + ",".join(sorted(_unmet & _QUALITY_GATES))})
+                        except Exception as _ee:  # noqa: BLE001 — rc3: НЕ глотаем молча -> честный escalation_error
+                            _model_resolution["escalation_error"] = f"{type(_ee).__name__}: {_ee}"[:200]
                 try:
                     _ls.journal_append(features_dir / fid / "lifecycle-journal.jsonl",
                                        {"kind": "fix_attempt", "run_id": fid, "workitem_id": fid,
@@ -717,10 +865,21 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             except Exception:  # noqa: BLE001
                 _fail = {"failure_class": "engine", "exception_type": type(_e).__name__,
                          "message": str(_e)[:400], "retryable": False}
+            # v3.8.3-rc3: пометить исход текущей попытки в trace (провайдерный сбой) — видно на 429 и т.п.
+            if isinstance(_model_resolution, dict) and _model_resolution.get("model_attempts"):
+                _la = _model_resolution["model_attempts"][-1]
+                if _la.get("outcome") == "pending":
+                    _la["outcome"] = ("provider_%s" % _fail.get("failure_class")
+                                      if _fail.get("retryable") else "error:" + str(_fail.get("failure_class")))
+            _eff_e = _model_resolution.get("effective_model") if isinstance(_model_resolution, dict) else None
             err_rep = {"schema_version": 1, "kind": "execution-pipeline", "status": "error",
                        "workitem_id": fid, "error": f"{_fail['exception_type']}: {_fail['message']}",
                        "failure": _fail, "ready_for_pr": False, "not_yet": [],
-                       "runtime": runtime, "engine": "pipeline", "provider": provider_name, "model": model}
+                       "runtime": runtime, "engine": "pipeline", "provider": provider_name,
+                       "model": _eff_e or model,
+                       "initial_model": (_model_resolution.get("initial_model") if isinstance(_model_resolution, dict) else None),
+                       "effective_model": _eff_e,
+                       "model_resolution": _model_resolution if isinstance(_model_resolution, dict) else None}
             # v3.0-rc20 (finding аудита P1): DURABLE failure evidence — не только вернуть отчёт, но и
             # ЗАПИСАТЬ свежий run-report.json + failure-handoff, иначе на диске остаётся старый отчёт/
             # handoff прошлого прогона (пользователь думает, что evidence свежее). next_action — безопасный.
@@ -744,8 +903,20 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
-        # v3.7.12: эффективная модель writer'а (router применён -> резолвленная; иначе переданная).
-        rep["model"] = _writer_model if (isinstance(_model_resolution, dict) and _model_resolution.get("applied")) else model
+        # v3.8.3-rc3: финализировать model_attempts (исход последней попытки) + честные initial/effective_model.
+        if isinstance(_model_resolution, dict) and _model_resolution.get("model_attempts"):
+            _last = _model_resolution["model_attempts"][-1]
+            if _last.get("outcome") == "pending":
+                _last["outcome"] = ("verified" if rep.get("ready_for_pr")
+                                    else "not_ready:" + ",".join((rep.get("gates") or {}).get("unmet") or []))
+        _eff = _model_resolution.get("effective_model") if isinstance(_model_resolution, dict) else None
+        # v3.7.12/rc3: model = РЕАЛЬНО завершившая модель (effective), не только первоначальная.
+        rep["model"] = _eff or (_writer_model if (isinstance(_model_resolution, dict) and _model_resolution.get("applied")) else model)
+        if isinstance(_model_resolution, dict) and _model_resolution.get("applied"):
+            rep["initial_model"] = _model_resolution.get("initial_model")
+            rep["effective_model"] = _model_resolution.get("effective_model")
+            if _model_resolution.get("escalation_error"):
+                rep["escalation_error"] = _model_resolution["escalation_error"]
         rep["model_resolution"] = _model_resolution   # per-role решение роутера (видимость в каждом отчёте)
         rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
         # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
@@ -1199,6 +1370,43 @@ def selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
+    # v3.8.3-rc2 (#6) PROVIDER FALLBACK: retryable infra-сбой -> switch; не-retryable -> проброс; нет fb -> as-is
+    _sw = {"to": None}
+    _wrapped = _with_provider_fallback(
+        (lambda *a, **k: (_ for _ in ()).throw(TimeoutError("request timed out"))),  # retryable (network)
+        (lambda *a, **k: "FALLBACK-OK"), on_switch=lambda e: _sw.update(to="fb"))
+    expect("rc2 #6: retryable infra-сбой (timeout) -> переключение на fallback-провайдер",
+           _wrapped("m") == "FALLBACK-OK" and _sw["to"] == "fb")
+    expect("rc2 #6: после switch остаёмся на fallback (primary не зовём)", _wrapped("m2") == "FALLBACK-OK")
+    _raised = False
+    try:
+        _with_provider_fallback(
+            (lambda *a, **k: (_ for _ in ()).throw(ValueError("bad code"))),  # НЕ retryable
+            (lambda *a, **k: "X"))("m")
+    except ValueError:
+        _raised = True
+    expect("rc2 #6: не-retryable (плохой код/тест) -> НЕ fallback, исключение пробрасывается", _raised)
+    _p = lambda *a, **k: "P"
+    expect("rc2 #6: нет fallback-модели -> провайдер без обёртки (as-is)",
+           _with_provider_fallback(_p, None) is _p)
+
+    # v3.8.3-rc3 JIT PROVIDER TRUST: каждая реально вызываемая модель (primary/fallback/escalation)
+    # проходит key presence + KLP/TTL. primary not ready -> block; необязательный not ready -> исключить.
+    import datetime as _dtt
+    _now3 = _dtt.date.today().isoformat()
+    _r1 = _provider_trust("deepseek", "K1", {}, {"K1": "x"}, _now3, {})
+    expect("rc3 trust: ключ есть, KLP нет -> ready", _r1["ready"] is True)
+    _klp_exp = {"K2": {"env_ref": "K2", "next_rotation_at": "2000-01-01"}}
+    _r2 = _provider_trust("kimi", "K2", _klp_exp, {"K2": "x"}, _now3, {})
+    expect("rc3 trust: ключ есть, но KLP-ротация просрочена -> НЕ ready (кандидат исключается, primary не блокируется)",
+           _r2["ready"] is False and "ротация" in (_r2.get("reason") or ""))
+    _r3 = _provider_trust("qwen", "K3", {}, {}, _now3, {})
+    expect("rc3 trust: ключа нет в env -> НЕ ready", _r3["ready"] is False and _r3.get("reason"))
+    _cc = {}
+    _a3 = _provider_trust("p", "K1", {}, {"K1": "x"}, _now3, _cc)
+    _b3 = _provider_trust("p", "K1", {}, {"K1": "x"}, _now3, _cc)
+    expect("rc3 trust: результат кэшируется по provider (1 проверка на реально вызываемую модель)", _a3 is _b3)
+
     sig = {"task_type": "PRODUCT", "risk": "medium",
            "available_providers": ["anthropic"], "available_runtimes": ["claude-code"],
            "ui_changed": True, "measurable_behavior": True, "user_facing_change": True,
@@ -1479,6 +1687,26 @@ def selftest():
         expect("v3.0.11 exit_code: overall_status=error -> 2",
                exit_code({"kind": "execution-pipeline", "ready_for_pr": True,
                           "overall_status": "error"}) == 2)
+
+    # v3.8.3: reevaluate_only ПРОКИНУТ через run() -> run_pipeline (не orphan). Side-effect proof: после
+    # первого execute-прогона (создана ветка) повторный reevaluate_only НЕ переавторит -> loop
+    # stopped=reevaluate-only (путь без переавторинга реально взят через entrypoint, не только run_pipeline).
+    import inspect as _insp
+    expect("v3.8.3: run() принимает reevaluate_only", "reevaluate_only" in _insp.signature(run).parameters)
+    with tempfile.TemporaryDirectory() as td:
+        subprocess.run(["git", "-C", td, "init", "-q"])
+        subprocess.run(["git", "-C", td, "config", "user.email", "t@t"])
+        subprocess.run(["git", "-C", td, "config", "user.name", "t"])
+        _rr = Path(td); (_rr / "seed").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", td, "add", "-A"]); subprocess.run(["git", "-C", td, "commit", "-q", "-m", "i"])
+        _ps = iter([{"op": "write", "path": "rv.py", "content": "def f():\n    return 1\n"}, {"done": True}])
+        _sig_rv = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+        run("add rv", _sig_rv, _rr, engine="pipeline", execute=True, feature="rev-x",
+            proposer=lambda c: next(_ps))
+        _r2 = run("reeval", _sig_rv, _rr, engine="pipeline", execute=True, feature="rev-x",
+                  reevaluate_only=True, proposer=lambda c: {"done": True})
+        expect("v3.8.3: run() прокидывает reevaluate_only -> run_pipeline (loop stopped=reevaluate-only)",
+               (_r2.get("loop") or {}).get("stopped") == "reevaluate-only")
 
     # v2.109 Real Resume (контроллер): первый прогон коммитит + пишет RunHandoff; resume ПРОДОЛЖАЕТ
     # поверх той же ветки (не рестарт, работа не потеряна), а не выдаёт ошибку про несохранённые коммиты.
@@ -1763,6 +1991,10 @@ def main(argv):
                     help="v3.1.1 fix-loop: сколько раз вернуть блокеры ревью/провалившихся проверок "
                          "писателю на итерацию поверх той же ветки, пока не pass (0 = однопроходно, "
                          "как раньше). fail-closed: бюджет исчерпан и не ready -> честный блок. Не для mock.")
+    rp.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="v3.8.3: ПЕРЕОЦЕНИТЬ гейты существующей фичи БЕЗ переавторинга (0 model-вызовов, "
+                         "план/SHA стабильны) — для случая «человек добавил ApprovalRecord»: security "
+                         "закрывается человеком -> ready -> доставка. Нужен --execute + --feature. engine=pipeline")
     rp.add_argument("--json", action="store_true")
     # v2.99: resume — продолжить WorkItem по последнему RunHandoff (не начинать заново)
     # v2.109 Real Resume: с --execute РЕАЛЬНО продолжает tool-loop поверх ветки/worktree прошлого
@@ -1829,7 +2061,7 @@ def main(argv):
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
                      discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
                      review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow,
-                     context_hybrid=a.context_hybrid)
+                     context_hybrid=a.context_hybrid, reevaluate_only=a.reevaluate_only)
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

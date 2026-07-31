@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-903
+request_id: RR-011
+statement: 'Minimal Agent Runner в ките СУЩЕСТВУЕТ: tools/tool_loop.py реализует петлю
+  «модель предлагает действие → Policy решает → Broker исполняет → Evidence в контекст»
+  с потолками budget/max_steps, а запрещённое действие возвращается модели как DENIED.
+  Ключевое отличие от эталона mini-swe-agent — не наличие петли, а то, что решение
+  о допустимости действия принимает не модель.'
+evidence_type: documented_fact
+source:
+  title: ai-ops-kit — tools/tool_loop.py (self-evidence)
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: tools/tool_loop.py:4-8 (docstring)
+  quote: 'Замыкает «task → controlled execution»: модель ПРЕДЛАГАЕТ действие (JSON),
+    Policy решает (tool_broker), Broker исполняет и собирает Evidence, результат идёт
+    обратно в контекст — и так до «done» / потолка budget / max_steps.'
+captured_at: '2026-07-29'
+captured_by: координатор RR-011 (self-evidence по файлам кита на HEAD 041a5ff; требует
+  спот-чека судьи)
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Прямое чтение исполняемого модуля; покрыт селфтестом в CI.
+status: active
+superseded_by: null

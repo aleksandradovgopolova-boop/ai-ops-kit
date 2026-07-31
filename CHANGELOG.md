@@ -2,6 +2,171 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
+## [Unreleased]
+
+## [3.8.0] — 2026-07-31 — Product Bootstrap & Readiness Qualification (фаза v3.8 завершена)
+
+ИТОГ ФАЗЫ v3.8: продуктовый контур ПРОИЗВЕДЁН и доказан live end-to-end — от намерения до доставки.
+Полная цепочка (full-stack): сильный writer (локальный `claude -p`, без API-ключа) + независимый дешёвый
+ревьюер (deepseek, writer≠judge) + детерминированные проверки (build/typecheck/test по стеку) + baseline-diff
++ ЧЕЛОВЕК на strict security #5 -> reevaluate-only -> ready_for_pr -> draft PR + DeliveryReceipt. 14/14
+exit_criteria доказаны live, 0 false-green. ЦЕЛЕВЫЕ границы портфеля (не дефекты): human #5 на strict
+security; сильный writer на СЛОЖНОМ full-stack (дешёвый портфель не тянет — доказано). Sonnet НЕ требуется.
+Дешёвый auto-close security-судья недостижим (prompt v2/v3 + каскад) -> future_opportunities; human #5 остаётся.
+
+Старт фазы v3.8 (Product Bootstrap & Readiness Qualification). Характер работы меняется: фабрика (3.7.x
+закрыт) теперь должна ПРОИЗВЕСТИ продуктовый контур от намерения до измерения. Первый шаг — НЕ новая
+подсистема, а ОДИН исполнимый qualification-план ПОВЕРХ существующих контрактов. БЕЗ version-bump (rc).
+
+### Added (v3.8.0 — BootstrapQualificationPlan: контракт первого продуктового прогона)
+- `qualification/bootstrap/v3.8.0-plan.yaml` (BQP-001) — план ПОВЕРХ существующих контрактов
+  (`builds_over`: WorkItem/FeatureBlueprint/RunPlan/WorkGraph/ContextHybrid/DeliveryIntent-Receipt/
+  PostReleaseReadout/FeatureLearning — все ref реально существуют). Два reference-child: greenfield +
+  ИИ-Среда (real-brownfield). 10 стадий greenfield-bootstrap (repository_profile..delivery_pr,
+  последовательно), 11 live readiness-сценариев (single..product_learning), 13 exit-критериев 3.8;
+  vertical_feature_rule (сквозная функция через scenario_evidence + surface_wiring); модели
+  deepseek-v4-flash/qwen + security/integration-судья = ЧЕЛОВЕК до Bench v2; blocked_by (живые ключи,
+  Node/React тулчейн, human security, stack-aware collector, true parallel, агрегатный #5 + Bench v2).
+- `validation/validate_bootstrap_qualification.py` — check+selftest: форма; builds_over непуст И каждый
+  ref существует (НЕ фантомная новая подсистема); >=2 reference-child (greenfield+brownfield); полный
+  упорядоченный набор стадий; полные наборы сценариев и exit-критериев; security-судья=human до Bench v2;
+  blocked_by непуст. 7 selftest (валидный план + 6 негативов). CI +1, AGENTS +1.
+- ДАЛЬШЕ (живое, под ключи+тулчейн): v3.8.1 greenfield bootstrap (последовательно) -> v3.8.2 stack-aware
+  integration -> v3.8.3 true concurrent parallel -> v3.8.4 multi-repo readiness -> 3.8 stable; Bench v2 рядом.
+
+### Changed (v3.8.2 — stack-aware governed fan-in: integration checks по СТЕКУ, не хардкод pytest)
+- Ревью 3.7.1: `parallel_live` integration-runner хардкодил `python -m pytest -q` -> для full-stack/
+  frontend недостаточно. Теперь aggregate на integration-SHA = `project_detector.detect` +
+  `evidence_collector.collect` (backend pytest/lint/typecheck; frontend build/lint/test; как у
+  sequential-executor `_aggregate_verify`). `all_pass` = нет проваленных проверок ДЕТЕКТИРОВАННОГО стека
+  (+ 0 конфликтов). Fail-closed при сбое коллектора. `aggregate.stack_aware=true` + `stack_checks`.
+- selftest +3: на python-репо integration-runner детектит стек, `stack_checks` несёт 'test', зелёный
+  стек на integration-SHA -> all_pass (доказывает: не хардкод pytest, а stack-aware evidence).
+- (3.8.1 живой greenfield-readout — в чате/памяти, не в ките по правилу «не коммить отчёты»: роутер выбрал
+  deepseek-v4-flash, scenario-тест поймал сломанную вертикаль -> impl_verification fail, security
+  pending_human #5, 0 false-green. Learning: greenfield-профиль должен gitignore рантайм-БД.)
+
+### Added (v3.8.3 — TRUE concurrent parallel-2: отдельные клоны на пакет + fan-in клоном)
+- Ревью: parallel_live был честно serial (max_parallel=1, один checkout). Теперь `run_live_concurrent`:
+  каждый пакет — в СВОЁМ disposable git-клоне на base_sha, прогон КОНКУРЕНТНО (execute_parallel,
+  max_parallel>=2 — гонок нет, т.к. отдельные клоны); integration-КЛОН fetch'ит ветки пакетов из их
+  клонов (по пути) + merge + stack-aware aggregate (v3.8.2) на новом integration-SHA -> ОДИН PR. Основной
+  checkout НЕ трогается. Честные поля: execution_concurrency=concurrent, isolation=per-package-clone.
+- selftest +4 (реальные клоны + мок-раннер, коммитящий в свой клон): concurrent+isolation; отдельные
+  клоны созданы; fan-in слил обе ветки (0 конфликтов, disjoint scope); зелёный -> proceed+open_pr.
+  Гард pytest (CI ⊆ pyyaml): all_pass только при pytest, структура — всегда.
+- serial `run_live` сохранён (backward-compat). Осталось в 3.8: 3.8.4 multi-repo readiness -> 3.8 stable.
+
+### Added (v3.8.3-rc — Judge Qualification Contract + Bench v2 held-out: DeepSeek advisory security-судья)
+- Bench v2 (judge-qualification, held-out 80 сэмплов = 52 деф×13 классов + 28 чист с near-miss): DeepSeek V4
+  Flash как security_review судья — false_green=0, recall=1.0 (поймал ВСЕ дефекты, 0 пропущенных классов), НО
+  specificity=0.68 (переблок 9/28 чистого) < порога 0.90 -> `conditional`/ADVISORY, НЕ qualified. Записан в
+  registry с confusion_matrix + corpus/prompt/policy_hash. Router НЕ авто-закрывает (strict-роль требует
+  qualified) — человеко-#5 сохранён; deepseek годен как обязательный security pre-review.
+- validate_model_qualification: judge-роли квалифицируются по judge-метрикам (recall/precision/specificity +
+  confusion_matrix + размер корпуса), qualified требует held-out провенанс (hashes). Закрыл дыру: qwen
+  (false_green=0 но specificity 0.125) больше НЕ qualified. model_router: conflict-aware writer≠judge
+  (role_constraints: security_review/integration_judge must_differ_from implementation).
+- Урок held-out дисциплины: dev-корпус (21) давал specificity 0.875, held-out (80) -> 0.68 — маленький корпус
+  завышал полезность. Правка prompt -> НОВЫЙ held-out (не подгонка).
+
+### Added (v3.8.3-rc3 — Dynamic Model Trust: JIT provider-preflight + честный model trace)
+- P1-шов (owner-review): fallback/escalation-модели создавались ВНЕ полного key-preflight — динамический
+  маршрут (deepseek прошёл preflight -> включился kimi/qwen) обходил security-инвариант KLP/TTL. Fix:
+  `_provider_trust(provider)` — JIT key presence + KLP/TTL перед первым вызовом КАЖДОЙ реально вызываемой
+  модели, кэш по provider. primary not ready -> blocked-preflight; необязательный fallback/escalation not
+  ready -> ИСКЛЮЧАЕТСЯ (не блокирует primary) + причина записана. Покрыты primary+reviewer+fallback+escalation.
+- Честный trace: `model_attempts` [{attempt, model, trigger(initial|quality_escalation|infrastructure_fallback),
+  outcome}] + `initial_model`/`effective_model` (реально завершившая модель, не только первоначальная) +
+  `escalation_error` (ошибка построения эскалации БОЛЬШЕ не глотается молча). В model_resolution + отчёте.
+- «Сильнейшая модель» -> честнее `higher_observed_success_rate` + `corpus_version` (наблюдаемая успешность
+  на малом корпусе N6, не универсальная сила; до Bench v2).
+- Тесты: model_router ладдер (observed_success_rate + corpus_version); ai_ops_run JIT-trust (present->ready;
+  expired KLP-ротация -> excluded; нет ключа -> not ready; кэш). Parity 177/177.
+
+### Added (v3.8.3-rc — reevaluate-only delivery path: переоценка гейтов после человеко-одобрения)
+- Greenfield-ревью нашло gap: `resume --execute` переписывал код -> новый план -> plan-bound ApprovalRecord
+  инвалидировался (binds_to mismatch) -> security снова pending_human. `run_pipeline(reevaluate_only=True)`:
+  loop `stopped="reevaluate-only"`, 0 model-вызовов (НЕ переавторинг), план/SHA стабильны -> plan-bound
+  approval валиден -> #5 security закрывается человеко-одобрением, доставка продолжается. selftest +1.
+
+### Added (v3.8.3-rc2 — Parallel Trust Wiring: 10 швов concurrent parallel-2 из owner-review)
+- #1 package-specific signals: `_pkg_signals` даёт каждому пакету свой write_scope/affected_areas/
+  shared_contracts/capability/budget (было: одинаковые signals всем, читался только pkg.id).
+- #2 post-commit scope: `changed_files ⊆ write_scope` на РЕАЛЬНОМ диффе клона -> нарушитель fail, НЕ в fan-in.
+- #3 `contract_shas` прокидывается в `execute_parallel` (было хардкод None) -> shared-contract-first работает.
+- #4/#4b enforcement #5 на АГРЕГАТЕ: `_aggregate_close_security` закрывает needs_review ТОЛЬКО qualified
+  security-судьёй (отдельный `security_reviewer_proposer`) ЛИБО человеко-ApprovalRecord, привязанным к
+  ИНТЕГРАЦИОННОМУ SHA (`binds_to==final_sha`). Общий code-reviewer больше НЕ закрывает security (был шов).
+- #5/#5b delivery: `run_live_concurrent` НЕ пушит сам -> возвращает `delivery_plan` (DeliveryPlan) для
+  канонического Intent/Receipt controller; DeliveryPlan несёт РЕАЛЬНЫЙ `github_remote` (integration-клон
+  имел origin=локальный child -> push уходил бы в клон, а PR — против GitHub).
+- #6 provider fallback: `_with_provider_fallback` переключает writer на fallback-модель (router-план) ТОЛЬКО
+  на retryable infra-сбое (429/timeout/unavailable); не-retryable (тест/секьюрити/плохой код) пробрасывается
+  -> fix-loop/блок, fallback не маскирует дефекты. router-план fallback теперь несёт provider.
+- #7 fail-closed: clone/checkout/fetch/merge в concurrent-пути проверяют returncode (было check=False -> тихо).
+- #8 run-scoped: `clones_dir=None` -> уникальный `tempfile.mkdtemp` + гарантированная очистка (finally).
+- #9 план 3.8.0: `phase_progress` с доказательствами (passed/failed_safe/component_ready/not_started);
+  выполненные 3.8.2/3.8.3 убраны из `blocked_by`. selftest: +8 (rc2a) +3 (#4/#4b) +4 (#6).
+
+### Added (v3.8.4-rc — Security Review Cascade: асимметричный fail-closed судья без сильной модели)
+- КОНТЕКСТ: held-out v2/v3 доказали, что одиночный дешёвый security-судья НЕ даёт recall=1.0 И
+  specificity≥0.90 одновременно — prompt-тюнинг разменивает переблок на ПРОПУСКИ дефектов (v3-prompt поднял
+  specificity 0.68→0.96, но false_green 0→3). Для security пропуск — критический провал -> путь тупиковый.
+  Вывод owner-review: не «умнее prompt», а АСИММЕТРИЧНЫЙ каскад с fail-closed reducer.
+- `tools/security_review_cascade.py` — detector (high-recall, ошибается в fail) → verifier (per-finding
+  data-flow + counter-evidence) → ДЕТЕРМИНИРОВАННЫЙ reducer (обычный код, НЕ третий LLM). Асимметрия:
+  confirmed→fail; uncertain→pending_human; disproved→pass для finding ТОЛЬКО при РАСПОЗНАННОМ структурном
+  доказательстве безопасности (`proof_type ∈ RECOGNIZED_PROOFS` + `cited_lines`) И НЕ опровергнутой
+  детерминированной корроборации по коду (`_corroborate`: мнимая параметризация при f-string SQL,
+  «checksum» на пароле, safe_argv при shell=True — опровергаются -> pending_human, НЕ pass). «Не вижу
+  exploit» ≠ безопасно. Recall каскада ⩾ recall detector'а: verifier только даунгрейдит и только с
+  доказательством. Модель-нейтрально (detector/verifier инъектируются). 12 selftest (вкл. ключевой:
+  verifier врёт disproved на реальном дефекте -> корроборация опровергает -> pending_human, не false green).
+- `validation/validate_model_qualification.py` — (1) КАСКАДНЫЙ судья (`judge_mode: cascade`) квалифицируется
+  по fail-closed метрикам реальных действий: `derive_cascade_status` (0 unsafe_pass ∧ safe_handling_rate=1.0
+  ∧ clean_auto_pass≥0.90 ∧ auto_decision_coverage≥0.90 ∧ schema≥0.95 ∧ pos≥52 ∧ neg≥28 -> qualified; иначе
+  conditional/advisory). pending_human — НЕ false green, но снижает coverage -> нельзя «сделать безопасным»,
+  отправив всё человеку. (2) `cm_integrity_errors` — арифметическая целостность confusion matrix с abstain:
+  `TP+FN+positive_abstain=positive`, `TN+FP+negative_abstain=negative`, `unsafe_passes=FN` — нельзя
+  «квалифицировать» модель, исключив abstain из знаменателя (фикс: 51+0≠52 в прежней записи). CI +1, AGENTS +1.
+- Bench-харнес (job-tmp, НЕ в ките): каскад измерялся на СВЕЖЕМ held-out N=80, оценивался ВЕСЬ каскад.
+- РЕЗУЛЬТАТ held-out (DeepSeek оба прохода): НЕ qualified. TP=49 FN=1 TN=16 FP=10 pos_abstain=2 neg_abstain=2;
+  unsafe_passes=1, safe_handling=0.9808, clean_auto_pass=0.5714, coverage=0.95, schema=0.9875. Fail-closed
+  машинерия сработала как задумано (2 реальных дефекта уведены в pending_human; корроборация не пропустила
+  ни одного disproved на настоящем дефекте). Единственный unsafe_pass — sample с КАНОНИЧЕСКИМИ AWS-example-
+  ключами (verifier верно счёл их не-секретом; ошибка в oracle-разметке корпуса, не в каскаде). Низкая
+  specificity confounded: часть "clean" сэмплов содержала РЕАЛЬНЫЕ вторичные дефекты, найденные verifier'ом.
+- РЕШЕНИЕ (timebox, route step 7): прекращаем итерации. Human #5 сохраняется для strict security; DeepSeek
+  остаётся advisory (registry НЕ меняется); каскад НЕ подключается к strict security_review. Каскад-компонент
+  + abstain-integrity валидатор остаются как инфраструктура (green, CI-wired), без qualified-записи в реестре.
+
+### Fixed (v3.8.4 — delivery-path багфиксы, найдены живой full-stack квалификацией)
+- `validation/validate_plan_artifact.py`: краш `unhashable type: dict` (author вернул `depends_on`/`id`
+  как dict) -> теперь ЧЕСТНАЯ ошибка валидации (guard хешируемости в 3 местах) + 2 регрессионных теста.
+  Валидатор ОБЯЗАН отклонять кривой артефакт, а не ронять прогон.
+- `tools/execution_pipeline.py` (1) `spec_depth` стал baseline-осведомлённым: `verification_strategy`
+  маппится на `implementation_verification`; раньше spec_depth брал СЫРОЙ `_unmet` -> предсуществующий
+  красный базы (flaky-тест) блокировал ready в обход baseline-diff. Теперь `_iv_baseline_exempt` — нет НОВЫХ
+  регрессий -> impl_verification не считается незакрытым и для spec_depth (реальная регрессия правки блокирует).
+- `tools/execution_pipeline.py` (2) `base_ok` принимает `loop.stopped ∈ {done, reevaluate-only}`: раньше
+  требовал только `done`, поэтому **весь reevaluate delivery-after-approval путь был НЕДОСТИЖИМ**
+  (reevaluate НИКОГДА не давал ready_for_pr — старый selftest ловил только `stopped==reevaluate-only`).
+  Остальные условия base_ok (committed_sha/revision/tree/env/approvals) по-прежнему строги.
+- ИЗВЕСТНЫЙ GAP (не блокер): транзакционная доставка не следует GitHub 301-redirect перенесённого репо
+  (org transfer) -> `outcome_unknown` (честный fail-closed, НЕ ложный успех); PR дозавершается прямым API.
+- execution_pipeline --selftest green.
+
+### Proven (v3.8.4 — FULL-STACK GREEN доказан live: сильный writer + дешёвый ревьюер + человек #5)
+- Тезис портфеля ДОКАЗАН ПОЛНОСТЬЮ: дешёвые (deepseek→kimi→qwen, полная эскалация) full-stack green НЕ тянут;
+  **сильный writer (локальный `claude -p`, БЕЗ API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
+  + человек на #5** — тянут. 0 false-green. Фича: full-stack health-эндпоинт на ИИ-Среде (server/health-core +
+  api/health + client + test + спека), всё в write_scope. build✓/typecheck✓/scenario-test 5/5✓/code_review✓/
+  baseline no_regressions✓ -> security #5 закрыт ЧЕЛОВЕКОМ (ApprovalRecord binds_to committed_sha) ->
+  reevaluate-only (0 model-вызовов) -> **ready_for_pr=True -> draft PR** (base@sha ← feature@sha, 1 commit).
+- Вывод для 3.8: **human #5 — ЦЕЛЕВАЯ граница продукта (не дефект)**; sonnet НЕ нужен (сильный writer = claude -p);
+  автономный green сложного full-stack дешёвым writer'ом -> future_opportunities.
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

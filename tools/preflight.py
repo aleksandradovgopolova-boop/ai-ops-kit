@@ -35,8 +35,12 @@ _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
 
 
 def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
-           spec_cov=None, work_pkg=None, lifecycle_errors=None, domains=None, author=False):
-    """-> {kind, ok, blocked, checks{...}, reasons[]}. Детерминированно, без модели и без правок."""
+           spec_cov=None, work_pkg=None, lifecycle_errors=None, domains=None, author=False,
+           reevaluate_only=False):
+    """-> {kind, ok, blocked, checks{...}, reasons[]}. Детерминированно, без модели и без правок.
+    v3.8.3: reevaluate_only=True — переоценка гейтов УЖЕ построенной фичи (после человеко-approval),
+    БЕЗ переавторинга. Build-preconditions (spec-first/atomic/context-budget) НЕ применяются (реализация
+    уже была); classification/approvals/lifecycle проверяются (approval — именно то, ради чего переоценка)."""
     signals = dict(signals or {})
     child_root = Path(child_root)
     tt = (signals.get("task_type") or (plan or {}).get("base_workflow") or "QUICK").upper()
@@ -71,7 +75,9 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     spec_ok = not (spec_incomplete or spec_absent_heavy)
     checks["spec"] = {"ok": spec_ok, "artifact_present": spec_artifact, "missing": spec_missing,
                       "required_for_heavy": heavy, "author_stage": bool(author)}
-    if spec_incomplete:
+    if reevaluate_only:
+        checks["spec"]["skipped_reevaluate"] = True   # build-precondition неприменим к переоценке
+    elif spec_incomplete:
         block(f"spec-first: спека features/{wid}/spec.yaml существует, но неполна "
               f"(не заполнено: {', '.join(spec_missing)}) — реализация не начинается")
     elif spec_absent_heavy:
@@ -88,7 +94,7 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     plan_ids = set(signals.get("_sequence_plan_ids") or [])
     plan_ids |= {p.get("id") for p in ((work_pkg or {}).get("work_packages") or [])}
     selected_valid = bool(selected) and selected in plan_ids
-    atomic_ok = (not should_decompose) or selected_valid
+    atomic_ok = (not should_decompose) or selected_valid or reevaluate_only
     checks["atomic"] = {"ok": atomic_ok, "should_decompose": should_decompose,
                         "selected_package": selected, "selected_valid": selected_valid}
     if not atomic_ok:
@@ -102,8 +108,8 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
 
     # 5. context budget не превышен -> блок ДО исполнения
     overflow = bool((bundle or {}).get("overflow"))
-    checks["context_budget"] = {"ok": not overflow, "overflow": overflow}
-    if overflow:
+    checks["context_budget"] = {"ok": (not overflow) or reevaluate_only, "overflow": overflow}
+    if overflow and not reevaluate_only:
         block("context-budget: контекст задачи превышает бюджет — декомпозируй до исполнения")
 
     # 6. human approvals: доменные условия через ApprovalRecord (+ destructive)
@@ -199,6 +205,19 @@ def selftest():
                        spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=atomic_wp)
         expect("v2.121 preflight: heavy без спеки, но с --author -> spec-гейт пройден",
                pf_h2["checks"]["spec"]["ok"] and not any("spec-first" in r for r in pf_h2["reasons"]))
+        # v3.8.3: reevaluate_only обходит build-preconditions (spec-first/atomic), НО НЕ approvals
+        pf_re = assess({"task_type": "ENGINEERING", "size": "small", "affected_areas": ["core"]},
+                       root, "w", payload=good_payload,
+                       spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=atomic_wp,
+                       reevaluate_only=True)
+        expect("v3.8.3 preflight: reevaluate_only -> spec-first НЕ блокирует (build-precondition неприменим)",
+               not any("spec-first" in r for r in pf_re["reasons"])
+               and pf_re["checks"]["spec"].get("skipped_reevaluate") is True)
+        pf_re2 = assess({"task_type": "ENGINEERING", "destructive": True}, root, "w", payload=good_payload,
+                        spec_cov={"spec_artifact": False, "blocking_missing": []}, work_pkg=atomic_wp,
+                        reevaluate_only=True)
+        expect("v3.8.3 preflight: reevaluate_only НЕ обходит approvals (destructive без записи -> blocked)",
+               pf_re2["blocked"] and any("human-approval" in r for r in pf_re2["reasons"]))
         # QUICK без спеки -> НЕ требует спеку (light)
         pf_q = assess({"task_type": "QUICK", "size": "small", "affected_areas": ["core"]},
                       root, "w", payload=good_payload,

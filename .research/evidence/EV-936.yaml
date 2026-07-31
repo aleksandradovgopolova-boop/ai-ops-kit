@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-936
+request_id: RR-011
+statement: 'Закрытие лазеек у Superpowers — процедура, а не призыв: каждая новая рационализация
+  фиксируется дословно (перечислены семь типовых, включая «I''m following the spirit
+  not the letter» и «I already manually tested it»), и на каждую добавляются четыре
+  элемента — явное отрицание в правилах, строка в таблице рационализаций, запись в
+  Red Flags и обновление description симптомами «вот-вот нарушу». Отдельно описано
+  мета-тестирование: если агент прочитал навык и всё равно нарушил, ответ «навык был
+  ясен, я решил его проигнорировать» трактуется НЕ как дефект документации, а как
+  нехватку фундаментального принципа.'
+evidence_type: documented_fact
+source:
+  title: obra/superpowers — testing-skills-with-subagents.md, REFACTOR + Meta-Testing
+  url: https://github.com/obra/superpowers/blob/main/skills/writing-skills/testing-skills-with-subagents.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'секции «REFACTOR Phase: Close Loopholes» (строки 163-225) и «Meta-Testing»
+    (строки 240-265)'
+  quote: '**Document every excuse.** These become your rationalization table. … 1.
+    **"The skill WAS clear, I chose to ignore it"** - Not documentation problem -
+    Need stronger foundational principle'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Дословные цитаты двух секций.
+status: active
+superseded_by: null

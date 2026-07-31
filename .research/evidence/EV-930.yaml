@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-930
+request_id: RR-011
+statement: 'Масштаб Superpowers на 2026-07-29: владелец — частное лицо obra (тип User),
+  создан 2025-10-09, последний push 2026-07-28, 262 918 звёзд (262.9k на странице
+  репозитория), 23 483 форка, 992 наблюдателя, 328 открытых issue, MIT, основной язык
+  Shell. По звёздам это вдвое крупнее gstack (123.7k, EV-210) — самый массовый объект
+  из всех, что центр разбирал.'
+evidence_type: documented_fact
+source:
+  title: GitHub REST API + страница репозитория obra/superpowers
+  url: https://github.com/obra/superpowers
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: JSON репозитория (stargazers_count, forks_count, created_at, pushed_at);
+    страница репозитория — счётчик звёзд
+  quote: '"created_at":"2025-10-09T19:45:18Z","pushed_at":"2026-07-28T19:25:36Z","forks_count":23483,"stargazers_count":262918'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: true
+  expires_at: '2026-10-29'
+reliability:
+  level: high
+  rationale: 'Аномальный порядок величины перепроверен вторым независимым чтением
+    (страница репозитория: «262.9k stars», 23.5k форков) — цифры сходятся. Метрики
+    активности volatile.'
+status: active
+superseded_by: null

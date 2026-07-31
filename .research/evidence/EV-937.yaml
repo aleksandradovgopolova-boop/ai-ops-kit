@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-937
+request_id: RR-011
+statement: 'Заявленный эффект методики — САМООТЧЁТ авторов, не независимая репликация:
+  применение Skill TDD к самому TDD-навыку (дата в источнике 2025-10-03) дало 6 итераций
+  RED-GREEN-REFACTOR до «пуленепробиваемости», 10+ уникальных рационализаций на baseline
+  и «100% compliance under maximum pressure» на финальной верификации. Сырые данные
+  прогонов в источнике не опубликованы.'
+evidence_type: vendor_claim
+source:
+  title: obra/superpowers — testing-skills-with-subagents.md, Real-World Impact
+  url: https://github.com/obra/superpowers/blob/main/skills/writing-skills/testing-skills-with-subagents.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: секция «Real-World Impact», строки 377-385
+  quote: '- 6 RED-GREEN-REFACTOR iterations to bulletproof - Baseline testing revealed
+    10+ unique rationalizations - Final VERIFY GREEN: 100% compliance under maximum
+    pressure'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: Факт декларации подтверждён дословно; истинность цифры 100% из источника
+    не верифицируема — самоотчёт без сырых данных.
+status: active
+superseded_by: null

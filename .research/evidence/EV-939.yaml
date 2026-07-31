@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-939
+request_id: RR-011
+statement: 'Переносимость навыков Superpowers обеспечена не единым форматом, а установкой
+  ПОД КАЖДЫЙ харнесс отдельно: README перечисляет 11 поддерживаемых (Claude Code,
+  Antigravity, Codex App, Codex CLI, Cursor, Factory Droid, Gemini CLI, GitHub Copilot
+  CLI, Kimi Code, OpenCode, Pi) и прямо предупреждает, что при использовании нескольких
+  надо ставить отдельно для каждого. Версионирование — на уровне всего плагина (6.2.0
+  на 2026-07-29 в package.json, plugin.json и RELEASE-NOTES), собственных версий у
+  отдельных навыков нет.'
+evidence_type: documented_fact
+source:
+  title: obra/superpowers README — Installation + .claude-plugin/plugin.json
+  url: https://raw.githubusercontent.com/obra/superpowers/main/README.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: README.md секции «Quickstart»/«Installation»; .claude-plugin/plugin.json
+    поле version
+  quote: Installation differs by harness. If you use more than one, install Superpowers
+    separately for each one.
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: true
+  expires_at: '2026-10-29'
+reliability:
+  level: high
+  rationale: Дословная цитата README; версия сверена в трёх файлах клона. Список харнессов
+    и номер версии volatile (RELEASE-NOTES фиксируют удаление и возврат поддержки
+    Gemini CLI между 6.1.0 и 6.2.0).
+status: active
+superseded_by: null

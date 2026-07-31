@@ -61,6 +61,10 @@ jobs:
           python3 validation/validate_workflow_gates.py
       - name: Scenario-как-evidence (Вывод 1 SEAM session — advisory, selftest)
         run: python3 validation/validate_scenario_evidence.py --selftest
+      - name: "Bootstrap Qualification Plan (v3.8.0 — план поверх существующих контрактов; selftest+реальный)"
+        run: |
+          python3 validation/validate_bootstrap_qualification.py --selftest
+          python3 validation/validate_bootstrap_qualification.py
       - name: Surface-wiring consistency (Вывод 2 SEAM session — advisory, selftest)
         run: python3 validation/validate_surface_wiring.py --selftest
       - name: WorkItem — единая сущность и статус (selftest)
@@ -137,6 +141,8 @@ jobs:
         run: |
           python3 validation/validate_model_qualification.py --selftest
           python3 validation/validate_model_qualification.py
+      - name: "Security Review Cascade — асимметричный fail-closed судья (detector->verifier->reducer; selftest)"
+        run: python3 tools/security_review_cascade.py --selftest
       - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"
         run: python3 tools/model_router.py --selftest
       - name: "Provider endpoints — map provider->endpoint+key_env (v3.7.12 router->runtime; selftest)"

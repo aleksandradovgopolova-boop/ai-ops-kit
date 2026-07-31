@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-924
+request_id: RR-011
+statement: 'Разделение model / environment / agent в mini-swe-agent сделано через
+  три Python-Protocol в src/minisweagent/__init__.py, а не через наследование: Model
+  (query, format_message, format_observation_messages, get_template_vars, serialize),
+  Environment (execute, get_template_vars, serialize), Agent (run, save). Агент принимает
+  model и env в конструкторе и не знает их конкретных типов. Это ровно тот контракт,
+  который входящее предлагает завести киту как EnvironmentAdapter/ModelAdapter — и
+  он минимален: у окружения ВСЕГО ТРИ метода, без snapshot/restore.'
+evidence_type: documented_fact
+source:
+  title: mini-swe-agent — src/minisweagent/__init__.py
+  url: https://raw.githubusercontent.com/SWE-agent/mini-swe-agent/main/src/minisweagent/__init__.py
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: __init__.py, секция «=== Protocols ===», классы Model и Environment
+  quote: 'class Environment(Protocol): / def execute(self, action: dict, cwd: str
+    = "") -> dict[str, Any]: ... / def get_template_vars(self, **kwargs) -> dict[str,
+    Any]: ... / def serialize(self) -> dict: ...'
+captured_at: '2026-07-29'
+captured_by: scout-agent (mini-swe-agent + Superpowers, RR-011); клоны основных веток
+  + GitHub API
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Дословный исходник основного пакета; архитектурный факт.
+status: active
+superseded_by: null
