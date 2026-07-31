@@ -9,12 +9,16 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 (`ai-ops run --engine pipeline`: worktree-изоляция → детектор стека → tool-loop → commit →
 evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
-> **Честный статус движка (v3.0.x stable):** единый движок «задача → draft PR» **квалифицирован
-> вживую** на claude-sonnet-5 — доказаны настоящий single-run ENGINEERING → draft PR и 3-пакетный
-> sequential → `aggregate_ready` → draft PR (reviewer-block hard-stop, trusted retry recovery,
-> contained provider-сбои). Механика по-прежнему **проверяется ДЕТЕРМИНИРОВАННО в CI** (91+ проверок,
-> PQ1–PQ9). Идёт dogfood на реальных репозиториях; находки выходят патчами `3.0.x`. Точная текущая
-> версия — в `VERSION`/CHANGELOG. Ключевые свойства (без живой модели):
+> **Честный статус (v3.8.1 stable; фаза v3.8 — Product Bootstrap & Readiness Qualification — завершена в 3.8.0):** единый движок
+> «задача → draft PR» доказан вживую end-to-end на РЕАЛЬНОМ full-stack (ИИ-Среда, React/TS): сильный
+> writer (локальный `claude -p`, без API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
+> + детерминированные проверки по стеку (build/typecheck/test) + baseline-diff + **ЧЕЛОВЕК на strict
+> security #5** → reevaluate-only → `ready_for_pr` → draft PR + DeliveryReceipt. **14/14 exit_criteria
+> доказаны live, 0 false-green.** Механика проверяется ДЕТЕРМИНИРОВАННО в CI (**179 проверок**). Точная
+> версия — в `VERSION`/CHANGELOG. Ключевые свойства:
+> - **Portfolio по РОЛЯМ (доказано):** дешёвые модели (deepseek→kimi→qwen, полная эскалация) сложный
+>   full-stack green НЕ тянут; сильный writer (`claude -p`) тянет. **Sonnet НЕ требуется.** money-mode
+>   роутер берёт cheapest-qualified, writer эскалируется на качественном провале, judge≠writer по модели.
 > - **Preflight Truth (v2.115):** проверки идут ДО запуска модели (classification → ContextPayload →
 >   spec достаточна → атомарна/декомпозиция подтверждена → context budget → human approvals). Неполная
 >   спека → **модель не запускается, правок/коммита нет** (Spec-First блокирует реализацию, а не только
@@ -30,9 +34,13 @@ evidence на точном SHA → RunPlan-гейты → draft PR) и упра�
 > - **Изоляция (v2.90/2.113):** контейнерный jail (read-only root, worktree-only, cap-drop); доставка
 >   забирает ТОЛЬКО ветку текущего прогона.
 >
-> **v3.0 stable квалифицирован (2026-07-21):** обе строгие цепочки (single ENGINEERING и sequential)
-> доведены живьём до настоящего draft PR; негативные пути закрыты детерминированными тестами. Дальше —
-> dogfood на 2–3 реальных репо (Python → TS/Node → sequential). См. `docs/qualification-runbook.md`.
+> **v3.8.0 stable — фаза v3.8 (Product Bootstrap & Readiness Qualification) завершена (2026-07-31):**
+> продуктовый контур ПРОИЗВЕДЁН и доказан live от намерения до доставки на greenfield + реальном
+> brownfield (ИИ-Среда). Concurrent parallel-2 + governed fan-in (`tools/parallel_live.py`) доказаны
+> live (no_checkout_damage); resume и fix-loop на реальной задаче доказаны; stack-aware integration
+> (build/typecheck/vitest, не только pytest). ЦЕЛЕВЫЕ границы портфеля (не дефекты): человек на strict
+> security #5; сильный writer на сложном full-stack. Дешёвый auto-close security-судья недостижим
+> (prompt v2/v3 + fail-closed каскад) → future_opportunities; human #5 остаётся. См. CHANGELOG [3.8.0].
 >
 > Границы честности: shell не полностью песочница (полная FS/сеть-изоляция = контейнер,
 > `docs/container-isolation.md`); прогон с пустым репо освобождает build/lint/test умным ослаблением.

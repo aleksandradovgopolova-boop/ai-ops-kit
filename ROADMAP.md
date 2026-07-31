@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — v3.0.x stable, точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.8.1 stable**, фаза v3.8 Product Bootstrap & Readiness Qualification завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -129,7 +129,8 @@
   `validation/validate_duties.py` и шаблон привязки `templates/runtime/runtime-binding.example.yaml`.
   Честно: конкретный рантайм (Hermes, свой сервис, cron+CLI) — привязка на уровне child, не
   в ядре; `verified_against_deploy: false` (из среды разработки деплой не проверялся);
-  постоянного runtime у кита по-прежнему нет, оркестратор sequential-only. Не строим: Robin
+  постоянного runtime у кита по-прежнему нет. (v3.8: concurrent parallel-2 + governed fan-in доказаны
+  live через `tools/parallel_live.py` — `tools/orchestrator.py` остаётся sequential.) Не строим: Robin
   как готовый бот.
 
 Отклонено осознанно: reorg `.ai/` целиком, `capabilities/`/`adapters/` как новые
