@@ -204,7 +204,39 @@ def make_provider(name: str, model: str = None):
             raise SystemExit("--model обязателен для openai-compatible (напр. deepseek-chat).")
         return lambda prompt: _openai_call(prompt, model, base_url=base,
                                            key_env="OPENAI_COMPATIBLE_API_KEY")
-    raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai, openai-compatible)")
+    if name in ("claude-cli", "claude-code-local"):
+        # v3.9.0 First-class Claude Code Adapter: локальный `claude -p` как СИЛЬНЫЙ writer.
+        return make_claude_cli_provider(model)
+    raise SystemExit(f"неизвестный провайдер '{name}' "
+                     f"(есть: mock, anthropic, openai, openai-compatible, claude-cli)")
+
+
+def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
+    """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
+    БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
+
+    БЕЗОПАСНОСТЬ (executing-adapter контракт): `--tools ""` ОТКЛЮЧАЕТ все инструменты Claude -> модель только
+    ПРЕДЛАГАЕТ действия ТЕКСТОМ (JSON tool-loop); применяет их КИТ через свой sandbox/broker (scope-enforced,
+    exact-SHA, gates, delivery). Claude НЕ трогает FS/git/сеть напрямую, НЕ пушит, НЕ создаёт PR, НЕ владеет
+    исполнением/lifecycle — AI Ops остаётся control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ исполнитель.
+
+    runner инъектируется (офлайн-selftest без вызова CLI); по умолчанию subprocess. Ключ не требуется."""
+    cmd = ["claude", "-p", prompt, "--output-format", "text", "--tools", ""]
+    if model:
+        cmd += ["--model", model]
+    if runner is not None:
+        return runner(cmd)
+    import subprocess
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if r.returncode != 0:
+        raise RuntimeError("claude -p rc=%d: %s" % (r.returncode, (r.stderr or "")[:200]))
+    return r.stdout
+
+
+def make_claude_cli_provider(model=None, runner=None):
+    """callable(prompt)->text через локальный `claude -p` (tool-less). См. _claude_cli_call: executing-adapter
+    контракт — Claude предлагает, кит исполняет и блокирует по гейтам."""
+    return lambda prompt: _claude_cli_call(prompt, model=model, runner=runner)
 
 
 def make_openai_provider(model, base_url, key_env):
@@ -582,6 +614,26 @@ def selftest():
             _os.environ.pop("OPENAI_COMPATIBLE_BASE_URL", None)
         else:
             _os.environ["OPENAI_COMPATIBLE_BASE_URL"] = _b
+    # v3.9.0 First-class Claude Code Adapter: claude-cli провайдер, tool-less, runner инъектируется (офлайн)
+    _seen = {}
+    def _fake_runner(cmd):
+        _seen["cmd"] = cmd
+        return "PROPOSED-ACTIONS-JSON"
+    _prov = make_claude_cli_provider(model="claude-opus", runner=_fake_runner)
+    _out = _prov("сгенерируй tool-loop действия")
+    if _out == "PROPOSED-ACTIONS-JSON":
+        print("PASS claude-cli: возвращает текст-предложение модели (кит исполняет)")
+    else:
+        ok = False; print("FAIL claude-cli: не вернул текст провайдера")
+    _c = _seen.get("cmd") or []
+    if "--tools" in _c and _c[_c.index("--tools") + 1] == "" and "-p" in _c:
+        print("PASS claude-cli: tool-less (--tools \"\") -> Claude не исполняет, только предлагает")
+    else:
+        ok = False; print("FAIL claude-cli: инструменты НЕ отключены (риск прямого действия Claude в обход кита)")
+    if callable(make_provider("claude-cli")):
+        print("PASS claude-cli: зарегистрирован как first-class провайдер")
+    else:
+        ok = False; print("FAIL claude-cli: не резолвится через make_provider")
         if _kb is not None:
             _os.environ["OPENAI_COMPATIBLE_API_KEY"] = _kb
 

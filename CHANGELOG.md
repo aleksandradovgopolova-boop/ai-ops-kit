@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+### Added (v3.9.0-rc1 — First-class Claude Code Adapter: локальный claude -p как СИЛЬНЫЙ writer)
+- `orchestrator.make_claude_cli_provider` / `make_provider("claude-cli")` — first-class текст-провайдер
+  через локальный `claude -p` БЕЗ API-ключа (локальная аутентифицированная сессия). Промотирует
+  доказанный в job-tmp путь (monkeypatch) в shipped-адаптер.
+- БЕЗОПАСНОСТЬ (executing-adapter контракт): `--tools ""` ОТКЛЮЧАЕТ все инструменты Claude -> модель только
+  ПРЕДЛАГАЕТ действия текстом (JSON tool-loop); применяет их КИТ через sandbox/broker (scope-enforced,
+  exact-SHA, gates, delivery). Claude НЕ трогает FS/git/сеть, НЕ пушит, НЕ создаёт PR, НЕ меняет основной
+  checkout, НЕ закрывает свой review|security, НЕ владеет lifecycle. AI Ops = control plane.
+- `registry/runtimes.yaml`: claude-code получил `kit_driven_executing` (status: rc) — честная декларация
+  KIT-driven executing пути (в отличие от generated-commands). runner инъектируется -> офлайн-selftest
+  (проверяет tool-less + текст-предложение) без вызова CLI. 3 selftest в orchestrator.
+- ДАЛЬШЕ (rc2): complexity-aware routing — QUICK->дешёвый API writer; ENGINEERING/PRODUCT многослойный->
+  Claude Code adapter СРАЗУ (не тратить fix-loop на дешёвого); review->deepseek; strict security->человек.
+
 ## [3.8.1] — 2026-07-31 — Release Truth Alignment (источники правды догоняют runtime)
 
 Runtime обогнал публичную поверхность. Патч приводит README/ROADMAP/registry в соответствие с 3.8 БЕЗ

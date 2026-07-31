@@ -24,6 +24,15 @@ runtimes:
       при install. Стадии, handoff и enforcement гейтов исполняет сам Claude Code,
       следуя командам; код кита их в этом раннтайме не оркестрирует. Полное
       исполнение контракта с блокировкой гейтов — через generic-orchestrator.
+    # v3.9.0 (rc, in progress): KIT-DRIVEN executing путь — кит сам оркестрирует Claude Code как
+    # СИЛЬНОГО writer'а через локальный `claude -p --tools ""` (orchestrator.make_claude_cli_provider,
+    # provider=claude-cli). Claude только ПРЕДЛАГАЕТ действия текстом; кит владеет worktree/diff/evidence/
+    # gates/delivery (Claude не пушит/не создаёт PR/не меняет основной checkout/не закрывает свой review|
+    # security/не владеет lifecycle). Доказано live (full-stack -> draft PR). Codex-адаптер — позже.
+    kit_driven_executing:
+      status: rc
+      via: "provider=claude-cli (orchestrator.make_claude_cli_provider), tool-less"
+      contract: "AI Ops = control plane; Claude Code = сильный заменяемый исполнитель"
     default_provider: anthropic
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: native
