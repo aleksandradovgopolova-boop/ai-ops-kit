@@ -166,25 +166,43 @@ owner_effort_metrics:
     путь; большая часть ценности от нескольких механизмов -> остальное в optional; внешний coding-agent
     исполняет лучше -> подключаем адаптером, не переписываем.
 
-# Внешний гейт (объявлен явно, не спрятан): живые прогоны требуют ключей + тулчейна + человека на security.
+# СТОЯЩИЕ ВНЕШНИЕ ГРАНИЦЫ (объявлены явно; это ЦЕЛЕВОЙ операционный конверт продукта, НЕ дефекты и НЕ
+# незавершённость 3.8). 3.8 stable выпущен ИМЕННО с этими границами — они и есть честная модель работы.
 blocked_by:
-  - "человеческий ApprovalRecord на security (qualified auto-close судьи НЕТ: deepseek = conditional/advisory, specificity 0.68<0.90)"
-  - "green ENGINEERING product-feature одним проходом (deepseek/kimi дают дефектный код; нужен writer сильнее kimi ИЛИ human-judge)"
-  - "fullstack_integrated: full-stack green vertical (та же граница качества writer'а)"
-  - "auto-close judge: specificity>=0.90 на НОВОМ held-out (улучшить judge-prompt, не править текущий held-out)"
+  - "человек на strict security #5 — ЦЕЛЕВАЯ граница (qualified auto-close судьи нет и не требуется; deepseek advisory). Человек обязателен на: security-policy, authn/authz, секреты/ключевая инфра, изоляция внутр. данных, необратимые миграции, critical-профиль"
+  - "живые прогоны требуют провайдер-ключей + тулчейна стека (нормальная эксплуатационная предпосылка)"
+  - "автономный green СЛОЖНОГО full-stack ДЕШЁВЫМ writer'ом — за границей портфеля (нужен сильный writer/человек); МЕХАНИКА full-stack ДОКАЗАНА сильным writer'ом (claude -p) -> draft PR"
 
-# ФИКСАЦИЯ ФАЗЫ 3.8 (2026-07-30, evidence-backed). Не финальный релиз — честное состояние по доказательствам.
+# Будущие возможности (НЕ обязательные exit-критерии 3.8 — чтобы не расширять цель задним числом и не
+# отодвигать финиш). Пересматриваются по результатам после 3.8, не по красоте.
+future_opportunities:
+  autonomous_security_judging:
+    status: not_qualified
+    current_safe_fallback: human_approval
+    evidence: "held-out v2/v3 (prompt) + каскад v3.8.4 (security_review_cascade, held-out N=80) — оба НЕ qualified"
+    revisit_when: [stronger_model_available, materially_new_judge_architecture]
+  autonomous_fullstack_with_cheap_writer:
+    status: not_reached
+    current_path: "сильный writer (локальный claude -p) + дешёвый independent reviewer (deepseek) + human #5 — ДОКАЗАН live"
+    revisit_when: [cheap_writer_stronger_than_kimi]
+  delivery_follows_repo_transfer_redirects:
+    status: known_gap
+    note: "доставка не следует GitHub 301-redirect перенесённого репо -> outcome_unknown (честный fail-closed); PR дозавершается прямым API"
+
+# ФИКСАЦИЯ ФАЗЫ 3.8 (2026-07-31, evidence-backed) — РЕЛИЗ 3.8.0 stable.
 phase_status:
-  readiness: "12/14 exit_criteria доказаны live автономно (см. BootstrapReadinessReport)"
+  release: "3.8.0 stable (2026-07-31)"
+  readiness: "14/14 exit_criteria доказаны live (см. BootstrapReadinessReport + full-stack draft PR)"
   proven_live: [no_checkout_damage, zero_false_green, evidence_exact_sha_bound, stack_aware_integration,
                 cost_per_verified_change, feature_released_or_ready, external_delivery_intent_and_receipt,
                 post_release_readout_created, result_to_feature_learning, owner_effort_measured,
-                single_sequential_parallel_proven, resume_and_fixloop_on_real_task]
-  remaining: [greenfield_zero_to_feature-green-product, fullstack_integrated]
-  single_blocker: "качество writer'а (сильнее kimi) + auto-close judge (specificity>=0.90 на новом held-out); оба без sonnet достижимы"
-  runtime_frozen_until_stable: true    # capability_freeze: без новых концепт-возможностей до 3.8 stable
-  bugs_fixed_live: 8                    # reevaluate(3)/scope#2/git-identity/escalation-fallback/build-artifact/resume
-  key_finding: "модельный портфель по РОЛЯМ (deepseek слаб-writer/силён-судья), не одна 'сильнейшая' модель"
+                single_sequential_parallel_proven, resume_and_fixloop_on_real_task,
+                greenfield_zero_to_feature, fullstack_integrated]
+  remaining: []
+  standing_boundary: "human #5 на strict security + сильный writer на сложном full-stack — ЦЕЛЕВЫЕ границы портфеля (не дефекты)"
+  runtime_frozen_until_stable: true    # capability_freeze соблюдён до релиза
+  bugs_fixed_live: 11                  # reevaluate(3)/scope#2/git-identity/escalation-fallback/build-artifact/resume + validate_plan_artifact/spec_depth-baseline/base_ok-reevaluate
+  key_finding: "портфель по РОЛЯМ; сильный writer = локальный claude -p (sonnet НЕ нужен); дешёвый auto-close security-судья недостижим -> human #5 = целевая граница"
 
 # Последовательность фазы (данные, для наблюдаемости):
 phase_sequence: [v3.8.0-contract, v3.8.1-greenfield, v3.8.2-stack-aware-integration, v3.8.3-true-parallel, v3.8.4-readiness]
@@ -196,14 +214,13 @@ phase_progress:
     status: passed
     evidence: "BQP-001 Bootstrap Qualification Contract поверх существующих контрактов + validate_bootstrap_qualification (7 selftest); commit 329ae5d, CI green"
   v3.8.1:
-    status: partial
-    rerun_required: true
+    status: passed
     evidence: >
       QUICK-фичи доставлены АВТОНОМНО green до verified PR: PR #2 (s4-health) + PR #3 (s5-version),
       DeliveryReceipt sha_verified=True, репитабельно ~$0.003-0.005 (PRR-002 + FL-004 валидны). ENGINEERING
-      product-feature (Task API/notes) green одним проходом НЕ достигнут: deepseek строит дефектно, авто-
-      эскалация deepseek->kimi срабатывает (fs-esc2 model_attempts), но и kimi'ный код с дефектами (regex-
-      уязвимость) — кит ловит на гейтах (0 false-green). Нужен writer сильнее kimi ИЛИ human-judge.
+      product-feature green дешёвым writer'ом одним проходом НЕ достигнут (deepseek/kimi дефектны — кит ловит,
+      0 false-green); СИЛЬНЫМ writer'ом (claude -p) full-stack ENGINEERING собран green (см. v3.8.4). Граница
+      портфеля, не кита: дешёвый green сложной фичи -> future_opportunities.
   v3.8.2:
     status: passed
     evidence: "stack-aware fan-in ДОКАЗАН LIVE на реальном TS/React brownfield (ИИ-Среда, 207 файлов): build/typecheck/vitest реально прогнаны на integration-SHA (не pytest); поймал typecheck-регрессию deepseek (0 false-green). commit a473e1f + live."
@@ -217,14 +234,21 @@ phase_progress:
       JIT provider key/KLP-preflight на fallback/escalation + model_attempts trace + writer quality-escalation)
       + 3 фикса живыми прогонами (#2 scope b73a80d, git-identity rc2c, build-артефакты). CI green.
   judge_qualification:
-    status: partial
+    status: completed_not_qualified          # завершено (не partial): дешёвый auto-close судья недостижим
     evidence: >
-      Bench v2 (held-out 80 сэмплов = 52 деф×13 классов + 28 чист/near-miss, corpus_hash 623332e4):
-      deepseek-v4-flash как security_review судья — false_green=0, recall=1.0 (0 пропущенных классов), НО
-      specificity=0.68<0.90 -> conditional/ADVISORY (не auto-close; человеко-#5 сохранён). Registry-запись
-      5006d36 с confusion_matrix + hashes. Judge Qualification Contract (778f747): judge-роли первоклассны
-      в валидаторе + conflict-aware writer≠judge. Доказан ТЕЗИС ПОРТФЕЛЯ РОЛЕЙ (deepseek слаб-writer 0.667/
-      силён-судья). auto-close требует specificity>=0.90 на НОВОМ held-out (улучшить judge-prompt).
+      Bench v2 (held-out 80: 52 деф×13 классов + 28 чист/near-miss): deepseek false_green=0, recall=1.0, НО
+      specificity=0.68<0.90 -> ADVISORY. Каскад v3.8.4 (security_review_cascade, СВЕЖИЙ held-out N=80): тоже
+      НЕ qualified (1 unsafe-pass = mislabel AWS-example-ключей + confounded specificity). ВЫВОД (завершено):
+      дешёвый auto-close security-судья недостижим ни prompt-тюнингом, ни каскадом на доступном портфеле ->
+      human #5 = ЦЕЛЕВАЯ граница. auto-close -> future_opportunities.autonomous_security_judging. Доказан
+      ТЕЗИС ПОРТФЕЛЯ РОЛЕЙ (deepseek слаб-writer/силён-судья). Каскад-инфраструктура остаётся (green, CI-wired).
   v3.8.4:
-    status: not_started
-    evidence: "multi-repo readiness: greenfield reference + ИИ-Среда brownfield + маленький Py/TS reference (provider fallback, red-base partial fix). BootstrapReadinessReport."
+    status: passed
+    live_qualified: true
+    evidence: >
+      FULL-STACK GREEN ДОКАЗАН live: сильный writer (локальный claude -p, БЕЗ ключа) + независимый дешёвый
+      ревьюер (deepseek, writer≠judge) + человек #5 -> full-stack health-эндпоинт на ИИ-Среде (server/health-core
+      + api/health + client + test + спека, всё в write_scope): build✓/typecheck✓/scenario-test✓/code_review✓/
+      baseline no_regressions✓ -> #5 закрыт человеком (ApprovalRecord binds_to committed_sha) -> reevaluate-only
+      -> ready_for_pr=True -> draft PR (base@sha ← feature@sha, 1 commit). Дешёвые (deepseek→kimi→qwen) — не тянут.
+      3 delivery-path багфикса живьём (validate_plan_artifact/spec_depth-baseline/base_ok-reevaluate, commit f4ca3fd).

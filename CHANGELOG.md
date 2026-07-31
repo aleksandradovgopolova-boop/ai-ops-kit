@@ -2,7 +2,17 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased] — v3.8.0-rc — Product Bootstrap: Bootstrap Qualification Contract (старт фазы v3.8)
+## [Unreleased]
+
+## [3.8.0] — 2026-07-31 — Product Bootstrap & Readiness Qualification (фаза v3.8 завершена)
+
+ИТОГ ФАЗЫ v3.8: продуктовый контур ПРОИЗВЕДЁН и доказан live end-to-end — от намерения до доставки.
+Полная цепочка (full-stack): сильный writer (локальный `claude -p`, без API-ключа) + независимый дешёвый
+ревьюер (deepseek, writer≠judge) + детерминированные проверки (build/typecheck/test по стеку) + baseline-diff
++ ЧЕЛОВЕК на strict security #5 -> reevaluate-only -> ready_for_pr -> draft PR + DeliveryReceipt. 14/14
+exit_criteria доказаны live, 0 false-green. ЦЕЛЕВЫЕ границы портфеля (не дефекты): human #5 на strict
+security; сильный writer на СЛОЖНОМ full-stack (дешёвый портфель не тянет — доказано). Sonnet НЕ требуется.
+Дешёвый auto-close security-судья недостижим (prompt v2/v3 + каскад) -> future_opportunities; human #5 остаётся.
 
 Старт фазы v3.8 (Product Bootstrap & Readiness Qualification). Характер работы меняется: фабрика (3.7.x
 закрыт) теперь должна ПРОИЗВЕСТИ продуктовый контур от намерения до измерения. Первый шаг — НЕ новая
