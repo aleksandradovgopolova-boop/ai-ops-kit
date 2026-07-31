@@ -1,0 +1,38 @@
+# release-claims.yaml — machine-readable claims о ТЕКУЩЕМ релизе + runtime-статусах (v3.8.1 Release Truth
+# Alignment). ЕДИНСТВЕННЫЙ источник публичных чисел/статусов; validate_release_claims.py (в CI) ловит дрейф
+# между этим файлом и фактическим состоянием (VERSION, python3-проверки в AGENTS.md, registry/agents.yaml,
+# registry/runtimes.yaml) И требует, чтобы README/ROADMAP ссылались на текущую версию. ОБНОВЛЯТЬ при релизе.
+schema_version: 1
+registry_type: release-claims
+
+version: 3.8.1
+phase: "v3.8 — Product Bootstrap & Readiness Qualification (фаза завершена в 3.8.0, 2026-07-31)"
+channel: stable
+patch_note: "3.8.1 — Release Truth Alignment: README/ROADMAP/runtimes.yaml приведены в соответствие с 3.8; claims-механизм ловит дрейф в CI"
+
+# Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
+# agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
+checks_count: 181
+agents_count: 51
+
+qualified_on: >
+  provider-neutral портфель по РОЛЯМ: дешёвый API-writer (money-mode) + СИЛЬНЫЙ writer (локальный
+  claude -p, без ключа) на сложном full-stack + независимый дешёвый ревьюер (deepseek, writer≠judge)
+  + ЧЕЛОВЕК на strict security #5. Sonnet НЕ требуется. Доказано live end-to-end (draft PR на ИИ-Среде).
+
+# Публичная поверхность обязана ссылаться на текущую версию (иначе рассказывает о прошлом продукте).
+docs_must_reference_version: [README.md, ROADMAP.md]
+
+# Каждый claim == фактический status в registry/runtimes.yaml (CI ловит расхождение заявленных
+# возможностей адаптеров/оркестратора). Обновлено под 3.8: concurrent + fan-in + resume доказаны live.
+runtime_capabilities:
+  - {runtime: generic-orchestrator, capability: parallel_execution, status: verified}
+  - {runtime: generic-orchestrator, capability: resumability,      status: verified}
+  # claude-code остаётся generated-commands (first-class executing adapter — цель v3.9.0):
+  - {runtime: claude-code, capability: parallel_execution, status: documented}
+
+# ЦЕЛЕВЫЕ границы (не дефекты, объявлены явно): human на strict security #5; сильный writer на сложном
+# full-stack. Автономный дешёвый auto-close security-судья недостижим -> future_opportunities (см. BQP).
+standing_boundaries:
+  - human_strict_security_5
+  - strong_writer_for_complex_fullstack

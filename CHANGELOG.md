@@ -4,7 +4,21 @@
 
 ## [Unreleased]
 
-## [3.8.0] — 2026-07-31 — Product Bootstrap & Readiness Qualification (фаза v3.8 завершена)
+## [3.8.1] — 2026-07-31 — Release Truth Alignment (источники правды догоняют runtime)
+
+Runtime обогнал публичную поверхность. Патч приводит README/ROADMAP/registry в соответствие с 3.8 БЕЗ
+изменения runtime, и добавляет machine-readable claims, чтобы такой дрейф ловился CI впредь.
+- README: статус-блок переписан с v3.0.x/claude-sonnet-5/«91+ проверок» на v3.8.1/portfolio-по-ролям/179+
+  (сильный writer=claude -p, sonnet не нужен; full-stack доказан; concurrent+fan-in+resume; human #5 = граница).
+- ROADMAP: текущий канал v3.0.x -> v3.8.1 (фаза v3.8 завершена); снята устаревшая пометка «оркестратор
+  sequential-only» (v3.8: concurrent parallel-2 + governed fan-in via tools/parallel_live.py).
+- `registry/runtimes.yaml`: generic-orchestrator — `parallel_execution` unsupported->**verified** (parallel_live,
+  доказан live s3c), `resumability` documented->**verified** (resume+fix-loop live), execution_modes += orchestrated.
+- НОВОЕ `registry/release-claims.yaml` + `validation/validate_release_claims.py` (CI+AGENTS): единый источник
+  публичных чисел/статусов; валидатор ДЕРИВИТ и сверяет — version==VERSION, checks_count==python3-команды в
+  AGENTS.md, agents_count==registry/agents.yaml, README/ROADMAP ссылаются на текущую версию, runtime-claims==
+  runtimes.yaml. Дрейф (устаревшая версия/числа/возможности) теперь падает в CI. 6 selftest.
+- claude-code остаётся `generated-commands` (честно): first-class executing-adapter — цель v3.9.0.
 
 ИТОГ ФАЗЫ v3.8: продуктовый контур ПРОИЗВЕДЁН и доказан live end-to-end — от намерения до доставки.
 Полная цепочка (full-stack): сильный writer (локальный `claude -p`, без API-ключа) + независимый дешёвый

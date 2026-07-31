@@ -162,12 +162,12 @@ runtimes:
       opt_in: "--provider (default: mock, офлайн, детерминированный для CI)"
       no_secrets: true             # ключ только из env, в репо/логи не попадает
     default_provider: mock          # офлайн по умолчанию; живой — opt-in через --provider
-    execution_modes: [sequential]                # orchestrated (parallel scheduler) — planned, в коде не реализован
+    execution_modes: [sequential, orchestrated]  # v3.8: concurrent parallel-2 + governed fan-in (tools/parallel_live.py)
     preferred_mode: sequential
     minimum_mode: sequential
     capabilities:
       native_subagents: {status: unsupported, value: false, note: emulated-via-role-isolation}
-      parallel_execution: {status: unsupported, value: false, note: "planned; tools/orchestrator.py — sequential-only"}
+      parallel_execution: {status: verified, value: true, note: "v3.8: concurrent parallel-2 (отдельный клон на пакет) + governed fan-in через tools/parallel_live.py (run_live_concurrent), доказан live s3c (no_checkout_damage, disjoint-scope, aggregate conflicts=0). tools/orchestrator.py остаётся sequential."}
       tools: {status: documented, value: "via tool gateway"}
       mcp: {status: degraded, value: optional}
       function_calling: {status: degraded, value: provider-dependent}
@@ -176,7 +176,7 @@ runtimes:
       file_write: {status: documented, value: true}
       shell: {status: documented, value: true}
       session_state: {status: documented, value: "TaskState.yaml on disk"}
-      resumability: {status: documented, value: "file-based, our contract"}
+      resumability: {status: verified, value: "file-based (RunHandoff); resume+fix-loop доказаны live на реальной задаче"}
     role_isolation: {status: documented, value: true, note: "reviewer видит только опубликованные артефакты"}
     machine_readable_gate_result: supported
     last_documented_at: "2026-07-08"

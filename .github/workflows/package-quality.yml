@@ -143,6 +143,10 @@ jobs:
           python3 validation/validate_model_qualification.py
       - name: "Security Review Cascade — асимметричный fail-closed судья (detector->verifier->reducer; selftest)"
         run: python3 tools/security_review_cascade.py --selftest
+      - name: "Release Truth Alignment — machine-readable claims ловят дрейф README/ROADMAP/registry vs код (selftest + real)"
+        run: |
+          python3 validation/validate_release_claims.py --selftest
+          python3 validation/validate_release_claims.py
       - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"
         run: python3 tools/model_router.py --selftest
       - name: "Provider endpoints — map provider->endpoint+key_env (v3.7.12 router->runtime; selftest)"
