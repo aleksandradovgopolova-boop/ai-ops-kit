@@ -15,8 +15,15 @@
 - `registry/runtimes.yaml`: claude-code получил `kit_driven_executing` (status: rc) — честная декларация
   KIT-driven executing пути (в отличие от generated-commands). runner инъектируется -> офлайн-selftest
   (проверяет tool-less + текст-предложение) без вызова CLI. 3 selftest в orchestrator.
-- ДАЛЬШЕ (rc2): complexity-aware routing — QUICK->дешёвый API writer; ENGINEERING/PRODUCT многослойный->
-  Claude Code adapter СРАЗУ (не тратить fix-loop на дешёвого); review->deepseek; strict security->человек.
+### Added (v3.9.0-rc2 — complexity-aware routing: тир writer'а по КЛАССУ задачи)
+- `model_router.writer_tier(signals)` — тир writer'а по task_type/risk, НЕ только по среднему success_rate:
+  QUICK -> cheap-api (money-mode дешёвый); ENGINEERING/PRODUCT/AI_FEATURE/CRITICAL/RESEARCH или risk
+  high/critical -> strong-executor (Claude Code adapter, provider=claude-cli) СРАЗУ (не cheap-then-fix-loop
+  на доказанно сложном). review->deepseek и strict-security->человек остаются как есть.
+- `model_router.plan_run(signals=...)` аннотирует план `preferred_writer_tier` -> видно в RunReport.
+  model_resolution. 5 selftest.
+- ДАЛЬШЕ (rc3): ai_ops_run КОНСУМИРУЕТ preferred_writer_tier (strong-executor -> writer=claude-cli, иначе
+  честный fallback на money-mode) + ЖИВОЕ доказательство full-stack через first-class adapter (не monkeypatch).
 
 ## [3.8.1] — 2026-07-31 — Release Truth Alignment (источники правды догоняют runtime)
 

@@ -136,13 +136,36 @@ def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
 ALL_ROLES = ("implementation", "code_review", "security_review", "integration_judge")
 
 
-def plan_run(roles_cfg=None, quals=None, models=None):
+# v3.9.0 complexity-aware routing: классы задач, где дешёвый writer доказанно не тянет green одним проходом
+# -> сразу сильный executor (Claude Code adapter), НЕ cheap-then-fix-loop.
+_HEAVY_CLASSES = {"ENGINEERING", "PRODUCT", "AI_FEATURE", "CRITICAL", "RESEARCH"}
+
+
+def writer_tier(signals=None):
+    """v3.9.0: тир writer'а ПО КЛАССУ ЗАДАЧИ (не только по среднему success_rate модели). QUICK -> cheap-api
+    (дешёвый qualified writer, money-mode). ENGINEERING/PRODUCT/AI_FEATURE/CRITICAL/RESEARCH или risk
+    high/critical -> strong-executor (Claude Code adapter, provider=claude-cli) СРАЗУ: на доказанно сложном
+    не тратим fix-loop на дешёвого. -> {tier, provider_hint, reason}. review->deepseek и strict-security->
+    человек остаются как есть (это про WRITER-тир)."""
+    s = dict(signals or {})
+    tt = str(s.get("task_type") or "").upper()
+    risk = str(s.get("risk") or "").lower()
+    if tt in _HEAVY_CLASSES or risk in ("high", "critical"):
+        return {"tier": "strong-executor", "provider_hint": "claude-cli",
+                "reason": f"task_type={tt or '?'}/risk={risk or '?'} -> сильный writer сразу (без cheap-then-fix-loop)"}
+    return {"tier": "cheap-api", "provider_hint": "money-mode",
+            "reason": f"task_type={tt or 'QUICK'} -> дешёвый qualified writer (money-mode)"}
+
+
+def plan_run(roles_cfg=None, quals=None, models=None, signals=None):
     """v3.7.12: резолв ВСЕХ рантайм-ролей одним вызовом -> bundle для RunReport.model_resolution.
     Делает решение роутера ВИДИМЫМ в отчёте прогона (writer/reviewer/security/integration независимо).
-    writer≠judge по МОДЕЛИ: если code_review резолвится в модель != implementation — это разные identity."""
+    writer≠judge по МОДЕЛИ: если code_review резолвится в модель != implementation — это разные identity.
+    v3.9.0: + preferred_writer_tier (complexity-aware) — по классу задачи, если переданы signals."""
     if roles_cfg is None:
         roles_cfg, quals, models = _load()
     plan = {role: resolve(role, roles_cfg, quals, models) for role in ALL_ROLES}
+    plan["preferred_writer_tier"] = writer_tier(signals)
     # v3.8.3 CONFLICT-AWARE writer≠judge: role_constraints (model-roles.yaml) вида
     # {security_review: {must_differ_from: implementation}} — если судья и writer сошлись в одной модели,
     # СУДЬЯ фиксирован (qualified), а WRITER перерезолвливается, ИСКЛЮЧАЯ модель судьи (дешёвый из оставшихся).
@@ -294,6 +317,19 @@ def selftest():
     expect("conflict-aware: применение записано + writer_ne_judge",
            bool(_p2.get("role_constraints_applied")) and _p2["implementation"]["model_id"] != _p2["security_review"]["model_id"])
 
+    # v3.9.0 complexity-aware routing: тир writer'а по классу задачи
+    expect("writer_tier QUICK -> cheap-api (money-mode)",
+           writer_tier({"task_type": "QUICK"})["tier"] == "cheap-api")
+    expect("writer_tier ENGINEERING -> strong-executor (claude-cli) сразу",
+           writer_tier({"task_type": "ENGINEERING"})["tier"] == "strong-executor"
+           and writer_tier({"task_type": "ENGINEERING"})["provider_hint"] == "claude-cli")
+    expect("writer_tier PRODUCT -> strong-executor",
+           writer_tier({"task_type": "PRODUCT"})["tier"] == "strong-executor")
+    expect("writer_tier QUICK+risk critical -> strong-executor (risk override)",
+           writer_tier({"task_type": "QUICK", "risk": "critical"})["tier"] == "strong-executor")
+    expect("plan_run со signals несёт preferred_writer_tier",
+           isinstance(plan_run(roles_cfg, quals, models, signals={"task_type": "ENGINEERING"}).get("preferred_writer_tier"), dict)
+           and plan_run(roles_cfg, quals, models, signals={"task_type": "ENGINEERING"})["preferred_writer_tier"]["tier"] == "strong-executor")
     print("model_router selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
