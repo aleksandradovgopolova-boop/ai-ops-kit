@@ -131,6 +131,32 @@
   остаётся advisory (registry НЕ меняется); каскад НЕ подключается к strict security_review. Каскад-компонент
   + abstain-integrity валидатор остаются как инфраструктура (green, CI-wired), без qualified-записи в реестре.
 
+### Fixed (v3.8.4 — delivery-path багфиксы, найдены живой full-stack квалификацией)
+- `validation/validate_plan_artifact.py`: краш `unhashable type: dict` (author вернул `depends_on`/`id`
+  как dict) -> теперь ЧЕСТНАЯ ошибка валидации (guard хешируемости в 3 местах) + 2 регрессионных теста.
+  Валидатор ОБЯЗАН отклонять кривой артефакт, а не ронять прогон.
+- `tools/execution_pipeline.py` (1) `spec_depth` стал baseline-осведомлённым: `verification_strategy`
+  маппится на `implementation_verification`; раньше spec_depth брал СЫРОЙ `_unmet` -> предсуществующий
+  красный базы (flaky-тест) блокировал ready в обход baseline-diff. Теперь `_iv_baseline_exempt` — нет НОВЫХ
+  регрессий -> impl_verification не считается незакрытым и для spec_depth (реальная регрессия правки блокирует).
+- `tools/execution_pipeline.py` (2) `base_ok` принимает `loop.stopped ∈ {done, reevaluate-only}`: раньше
+  требовал только `done`, поэтому **весь reevaluate delivery-after-approval путь был НЕДОСТИЖИМ**
+  (reevaluate НИКОГДА не давал ready_for_pr — старый selftest ловил только `stopped==reevaluate-only`).
+  Остальные условия base_ok (committed_sha/revision/tree/env/approvals) по-прежнему строги.
+- ИЗВЕСТНЫЙ GAP (не блокер): транзакционная доставка не следует GitHub 301-redirect перенесённого репо
+  (org transfer) -> `outcome_unknown` (честный fail-closed, НЕ ложный успех); PR дозавершается прямым API.
+- execution_pipeline --selftest green.
+
+### Proven (v3.8.4 — FULL-STACK GREEN доказан live: сильный writer + дешёвый ревьюер + человек #5)
+- Тезис портфеля ДОКАЗАН ПОЛНОСТЬЮ: дешёвые (deepseek→kimi→qwen, полная эскалация) full-stack green НЕ тянут;
+  **сильный writer (локальный `claude -p`, БЕЗ API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
+  + человек на #5** — тянут. 0 false-green. Фича: full-stack health-эндпоинт на ИИ-Среде (server/health-core +
+  api/health + client + test + спека), всё в write_scope. build✓/typecheck✓/scenario-test 5/5✓/code_review✓/
+  baseline no_regressions✓ -> security #5 закрыт ЧЕЛОВЕКОМ (ApprovalRecord binds_to committed_sha) ->
+  reevaluate-only (0 model-вызовов) -> **ready_for_pr=True -> draft PR** (base@sha ← feature@sha, 1 commit).
+- Вывод для 3.8: **human #5 — ЦЕЛЕВАЯ граница продукта (не дефект)**; sonnet НЕ нужен (сильный writer = claude -p);
+  автономный green сложного full-stack дешёвым writer'ом -> future_opportunities.
+
 ## [3.7.3] — 2026-07-28 — Strict Security Judge (#5): security закрывает qualified-судья ИЛИ человек
 
 По решению владельца («флипни 5»): общий code reviewer БОЛЬШЕ не закрывает security needs_review.

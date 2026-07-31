@@ -50,11 +50,16 @@ def check(data):
         if not isinstance(wp, dict):
             errors.append(f"work_package[{i}] должен быть объектом"); continue
         wid = wp.get("id", f"#{i}")
-        if not wp.get("id"):
+        _wid = wp.get("id")
+        if not _wid:
             errors.append(f"work_package[{i}]: нет id")
-        elif wp["id"] in seen:
-            errors.append(f"дублирующийся id work_package: {wp['id']}")
-        seen.add(wp.get("id"))
+        elif not isinstance(_wid, str):
+            # author вернул id не-строкой (напр. dict) -> ЧЕСТНАЯ ошибка валидации, не краш set-membership
+            errors.append(f"work_package[{i}]: id должен быть строкой, получено {type(_wid).__name__}")
+        elif _wid in seen:
+            errors.append(f"дублирующийся id work_package: {_wid}")
+        else:
+            seen.add(_wid)
         if not (isinstance(wp.get("summary"), str) and wp["summary"].strip()):
             errors.append(f"{wid}: пустой/отсутствующий summary")
         # dependencies: поле depends_on обязано присутствовать и быть списком (может быть пустым);
@@ -62,12 +67,15 @@ def check(data):
         dep = wp.get("depends_on")
         if not isinstance(dep, list):
             errors.append(f"{wid}: depends_on должен быть списком (может быть пустым)")
-    # проверка ссылочной целостности зависимостей (после сбора всех id)
-    ids = {wp.get("id") for wp in wps if isinstance(wp, dict)}
+    # проверка ссылочной целостности зависимостей (после сбора всех id) — только строковые id хешируемы
+    ids = {wp.get("id") for wp in wps if isinstance(wp, dict) and isinstance(wp.get("id"), str)}
     for wp in wps:
         if isinstance(wp, dict):
             for d in wp.get("depends_on", []) or []:
-                if d not in ids:
+                if not isinstance(d, str):
+                    # author вернул зависимость не-строкой (напр. dict) -> ошибка валидации, не краш `in set`
+                    errors.append(f"{wp.get('id')}: элемент depends_on должен быть строкой-id, получено {type(d).__name__}")
+                elif d not in ids:
                     errors.append(f"{wp.get('id')}: depends_on ссылается на несуществующий work_package '{d}'")
     ws = data.get("write_scope")
     if not (isinstance(ws, list) and ws and all(isinstance(p, str) and p.strip() for p in ws)):
@@ -114,6 +122,27 @@ def selftest():
                "write_scope": ["src/"]})))
     expect("невалидный -> evidence пуст",
            provided_evidence({"kind": "plan-artifact", "work_packages": []}) == [])
+    # регрессия (live full-stack прогон): author вернул depends_on как список DICT'ов -> раньше краш
+    # `d not in set` (unhashable type: dict). Теперь — ЧЕСТНАЯ ошибка валидации, не исключение.
+    _dep_dict = {"schema_version": 1, "kind": "plan-artifact",
+                 "work_packages": [{"id": "WP1", "summary": "x", "depends_on": [{"id": "WP0"}]}],
+                 "write_scope": ["src/"]}
+    try:
+        _e_dep = check(_dep_dict)
+        expect("depends_on содержит dict -> ошибка (не краш unhashable)",
+               any("строкой-id" in e for e in _e_dep))
+    except TypeError:
+        expect("depends_on содержит dict -> ошибка (не краш unhashable)", False)
+    # регрессия: id work_package не строка (dict) -> раньше краш `in set`; теперь ошибка
+    _id_dict = {"schema_version": 1, "kind": "plan-artifact",
+                "work_packages": [{"id": {"nested": 1}, "summary": "x", "depends_on": []}],
+                "write_scope": ["src/"]}
+    try:
+        _e_id = check(_id_dict)
+        expect("id work_package не строка -> ошибка (не краш unhashable)",
+               any("id должен быть строкой" in e for e in _e_id))
+    except TypeError:
+        expect("id work_package не строка -> ошибка (не краш unhashable)", False)
     print("validate_plan_artifact selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

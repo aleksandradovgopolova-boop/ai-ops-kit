@@ -1743,10 +1743,19 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "value": "discovery_completeness", "success_metrics": "analytics_readiness",
     }
     _unmet = set(gates["unmet_gates"])
+    # v3.8.4 (finding живой full-stack квалификации): spec_depth ДОЛЖЕН быть baseline-осведомлён.
+    # verification_strategy маппится на implementation_verification; в baseline-diff режиме этот гейт
+    # baseline-освобождён (красная база не блокирует — см. other_blocking_unmet ниже). Раньше spec_depth
+    # брал СЫРОЙ _unmet -> предсуществующий провал базы (напр. flaky date-тест) блокировал ready через
+    # verification_strategy, ОБХОДЯ baseline-diff. Теперь: если правка НЕ внесла новых регрессий, гейт
+    # implementation_verification не считается незакрытым и для spec_depth (реальная регрессия ПРАВКИ —
+    # по-прежнему блокирует, т.к. тогда _diff_checks вернёт непустые regressions).
+    _iv_baseline_exempt = bool(baseline_diff) and not _diff_checks(baseline_checks, coll["checks"])[0]
+    _unmet_for_spec = (_unmet - {"implementation_verification"}) if _iv_baseline_exempt else _unmet
     _level = _sl.classify(signals)["level"]
     _req_sections = set(_sl.required_sections(_level))
     spec_depth_missing = sorted({s for s, g in _SECTION_GATE.items()
-                                 if s in _req_sections and g in plan["gates"] and g in _unmet})
+                                 if s in _req_sections and g in plan["gates"] and g in _unmet_for_spec})
     spec_depth_ok = not spec_depth_missing
 
     # v2.110 Real Spec-First enforcement: если для этого WorkItem СУЩЕСТВУЕТ явный spec-артефакт
@@ -1829,7 +1838,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                 "error": str(_e)}
     approvals_cover_ok = bool(approval_recheck.get("ok"))
 
-    base_ok = (loop["stopped"] == "done") and (committed_sha is not None) \
+    # v3.8.4 (finding живой квалификации): reevaluate-only — легитимно завершённый прогон (0 шагов,
+    # переоценка существующего committed HEAD после человеко-одобрения). Раньше base_ok требовал
+    # stopped=="done" -> reevaluate НИКОГДА не мог достичь ready_for_pr (delivery-after-approval путь был
+    # недостижим). Остальные условия base_ok (committed_sha/revision/tree/env/approvals) по-прежнему строги.
+    base_ok = (loop["stopped"] in ("done", "reevaluate-only")) and (committed_sha is not None) \
         and revision_matches and tree_ok and env_qualified and approvals_cover_ok
     if baseline_diff:
         # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
