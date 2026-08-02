@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [3.9.1] — 2026-08-02 — Release Truth Alignment (продолжение): убран дрейф ROADMAP
+
+Дрейф источников правды глубже верхушки: ROADMAP нёс раздел «Current Forward Roadmap (актуально с v3.0.14)»
+и заголовок «Статус живой квалификации — ЗАКРЫТА … claude-sonnet-5» — оба рассказывали о прошлом продукте.
+- ROADMAP: «Current Forward Roadmap» переписан на актуальный маршрут (v3.9.0 → v3.9.1 → v3.10 Real-Product
+  Qualification 10 задач → точечные DX/устойчивость/рефакторинг по данным → Codex adapter → multi-product
+  control plane); старый v3.0.14→v3.1 маршрут помечен ИСТОРИЧЕСКИМ. Заголовок sonnet-квалификации помечен
+  ИСТОРИЧЕСКИМ + явно «sonnet НЕ требуется» (см. v3.8/v3.9).
+- `validation/validate_release_claims.py` + `registry/release-claims.yaml`: НОВЫЙ `forbidden_stale_markers` —
+  стейл-маркеры «текущего статуса», которых не должно быть в README/ROADMAP; CI ловит ПОВТОРНОЕ появление
+  дрейфа. Заполнен убранными заголовками. release-claims/README/ROADMAP → v3.9.1. 8 selftest.
+- Не изменяет runtime.
+
 ## [3.9.0] — 2026-08-02 — First-class Claude Code Adapter + complexity-aware routing
 
 Claude Code становится first-class ИСПОЛНЯЮЩИМ writer'ом, которым владеет кит (не только generated-commands).

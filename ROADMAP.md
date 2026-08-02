@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.9.0 stable**: First-class Claude Code Adapter + complexity-aware routing; фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.9.1 stable**; First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -360,7 +360,11 @@ audit backlog → trust/integrity → unified lifecycle → full ENGINEERING/PRO
   fixed node-id), v2.123 (Spec-First/ApprovalDecision/write-scope/классификатор), v2.124 (sequence
   transaction), **v2.125→v2.124.1** (security в QUICK; ложный scope-violation на артефактах движка).
 
-### Статус живой квалификации — ЗАКРЫТА (v3.0.0 stable, 2026-07-21, claude-sonnet-5)
+### Статус живой квалификации v3.0 (ИСТОРИЧЕСКОЕ, 2026-07-21) — ПЕРЕКРЫТО фазой v3.8/v3.9
+
+> ⚠️ ИСТОРИЧЕСКОЕ. Первая живая квалификация ядра шла на claude-sonnet-5. Позже (v3.8/v3.9) доказано:
+> **sonnet НЕ требуется** — сильный writer = локальный `claude -p` (first-class adapter), дешёвый портфель
+> закрывает остальное, человек — strict security #5. Актуальный статус — в «Current Forward Roadmap».
 
 - ✅ **Single-run ENGINEERING → настоящий draft PR — ДОКАЗАНО ЖИВЬЁМ.** Канонический CLI: authoring →
   реальная реализация → tests pass → security → `code_review=pass` → `ready_for_pr=true` → draft PR
@@ -476,13 +480,26 @@ freshness и первым живым DecisionPackage. Архитектура **e
 > ⚠️ Схема версий ВЫШЕ — ИСТОРИЧЕСКАЯ (Sequential уже поставлен в 2.117; нумерация v3.1/v3.2 ниже
 > переопределена). Актуальный маршрут — в разделе «Current Forward Roadmap» ниже.
 
-## Current Forward Roadmap (актуально с v3.0.14)
+## Current Forward Roadmap (актуально с v3.9.0)
 
-Ядро вышло из фазы бесконечного исправления execution-логики. Осталось закрыть транзакционную границу
-между доказательствами и delivery, затем квалифицировать систему на РЕАЛЬНЫХ задачах, и дальше —
-развитие вокруг ядра.
+**AI Ops 3.9.0 — квалифицированная фабрика изменений + first-class Claude Code executing adapter.**
+Дальше данные с РЕАЛЬНЫХ продуктов определяют точечное развитие, а не наоборот.
 
-Зафиксированный маршрут:
+- **v3.9.0** ✅ — First-class Claude Code Adapter (кит оркестрирует локальный `claude -p` read-only как
+  СИЛЬНОГО writer'а; Claude предлагает, кит владеет worktree/diff/evidence/gates/delivery) +
+  complexity-aware routing (сложный класс → сильный writer СРАЗУ; QUICK → дешёвый API; review → deepseek;
+  strict security → человек). Доказано live end-to-end (writer≠judge, независимый deepseek поймал дефект
+  claude, 0 false-green).
+- **v3.9.1 — Release Truth Alignment (продолжение):** убрать ОСТАВШИЙСЯ дрейф источников правды
+  (ROADMAP/README/registries) + расширить claims-drift-детектор (`forbidden_stale_markers`).
+- **v3.10 — Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца (не синтетика).
+  Собрать данные: owner_effort, где кит ускоряет/страхует, где мешает, регрессии, стоимость/latency.
+- **После данных (точечно, ПО ФАКТАМ, не по красоте):** DX для продакта-владельца; устойчивость runtime;
+  адресный рефакторинг ядра.
+- **Затем:** Codex executing adapter (второй executing-runtime, после того как первый прошёл живой путь);
+  multi-product control plane.
+
+### Историческая дорожная карта ядра (v3.0.14 → v3.1, ЗАКРЫТА — путь к Execution Kernel Qualified)
 
 - **v3.0.14** ✅ — Qualification Readiness (fast-forward база fail-closed / вариант B; LifecycleStore на
   весь источник истины; event journal v0.1).

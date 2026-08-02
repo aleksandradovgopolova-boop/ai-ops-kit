@@ -9,7 +9,7 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 (`ai-ops run --engine pipeline`: worktree-изоляция → детектор стека → tool-loop → commit →
 evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
-> **Честный статус (v3.9.0 stable — First-class Claude Code Adapter + complexity-aware routing):** единый движок
+> **Честный статус (v3.9.1 stable; First-class Claude Code Adapter + complexity-aware routing — v3.9.0):** единый движок
 > «задача → draft PR» доказан вживую end-to-end на РЕАЛЬНОМ full-stack (ИИ-Среда, React/TS): сильный
 > writer (локальный `claude -p`, без API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
 > + детерминированные проверки по стеку (build/typecheck/test) + baseline-diff + **ЧЕЛОВЕК на strict

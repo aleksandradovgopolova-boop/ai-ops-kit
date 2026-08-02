@@ -77,6 +77,15 @@ def check(data, pkg=PKG):
         actual = _runtime_status(pkg, r, cap)
         if actual != st:
             e.append(f"runtime_capabilities {r}.{cap}: claim '{st}' != runtimes.yaml '{actual}' (дрейф заявленных возможностей)")
+    # v3.9.1: устаревшие маркеры «текущего статуса» НЕ должны присутствовать в публичной поверхности
+    # (напр. «Current Forward Roadmap (актуально с v3.0.14)») — ловим повторное появление стейла.
+    _docs = list(data.get("docs_must_reference_version") or [])
+    for marker in (data.get("forbidden_stale_markers") or []):
+        for name in _docs:
+            p = pkg / name
+            if p.exists() and marker in p.read_text(encoding="utf-8"):
+                e.append(f"{name}: устаревший маркер текущего статуса '{marker}' — дрейф источника правды "
+                         f"(удалить или пометить ИСТОРИЧЕСКИМ)")
     return e
 
 
@@ -106,6 +115,11 @@ def selftest():
     expect("runtime capability дрейф -> ошибка",
            any("дрейф" in x for x in check({**base, "runtime_capabilities": [
                {"runtime": "generic-orchestrator", "capability": "parallel_execution", "status": "unsupported"}]})))
+    # v3.9.1: forbidden_stale_markers — стейл-маркер, реально присутствующий в README -> ошибка
+    expect("forbidden_stale_markers: присутствующий в README -> ошибка",
+           any("устаревший маркер" in x for x in check({**base, "forbidden_stale_markers": ["Открытая"]})))
+    expect("forbidden_stale_markers: отсутствующий -> без ошибки",
+           not any("устаревший маркер" in x for x in check({**base, "forbidden_stale_markers": ["NONEXISTENT-STALE-XYZ-9999"]})))
     _bad_doc = {**base, "version": "vNONEXISTENT-9.9.9", "checks_count": checks, "agents_count": agents}
     # version mismatch И doc-reference оба сработают; проверяем doc-reference-ветку отдельно на фейковой версии,
     # подложив её и в VERSION-независимую проверку: используем несуществующую строку -> README её не содержит
