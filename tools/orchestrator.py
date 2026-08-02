@@ -215,22 +215,31 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
 
-    БЕЗОПАСНОСТЬ (executing-adapter контракт): `--tools ""` ОТКЛЮЧАЕТ все инструменты Claude -> модель только
-    ПРЕДЛАГАЕТ действия ТЕКСТОМ (JSON tool-loop); применяет их КИТ через свой sandbox/broker (scope-enforced,
-    exact-SHA, gates, delivery). Claude НЕ трогает FS/git/сеть напрямую, НЕ пушит, НЕ создаёт PR, НЕ владеет
-    исполнением/lifecycle — AI Ops остаётся control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ исполнитель.
+    БЕЗОПАСНОСТЬ (executing-adapter контракт): `--allowedTools Read Grep Glob` — ТОЛЬКО read-only инструменты.
+    Claude ЧИТАЕТ репо (информированное предложение), но НЕ может писать/исполнять (нет Write/Edit/Bash/git) ->
+    НЕ трогает FS/git/сеть, НЕ пушит, НЕ создаёт PR, НЕ меняет checkout, НЕ владеет исполнением/lifecycle.
+    Модель ПРЕДЛАГАЕТ действия ТЕКСТОМ (JSON tool-loop); применяет их КИТ через свой sandbox/broker
+    (scope-enforced, exact-SHA, gates, delivery). AI Ops = control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ
+    исполнитель. (Полный tool-less `--tools ""` авторит вслепую -> невалидная спека; read-only даёт контекст
+    без права действия — доказано fs-rc3.)
 
     runner инъектируется (офлайн-selftest без вызова CLI); по умолчанию subprocess. Ключ не требуется."""
-    cmd = ["claude", "-p", prompt, "--output-format", "text", "--tools", ""]
+    cmd = ["claude", "-p", prompt, "--output-format", "text",
+           "--allowedTools", "Read", "Grep", "Glob"]
     if model:
         cmd += ["--model", model]
     if runner is not None:
         return runner(cmd)
     import subprocess
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    if r.returncode != 0:
-        raise RuntimeError("claude -p rc=%d: %s" % (r.returncode, (r.stderr or "")[:200]))
-    return r.stdout
+    import time as _t
+    last = ""
+    for _attempt in range(3):   # транзиентный rc!=0 (сеть/оверлоад локальной сессии) -> ретрай, не крах прогона
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if r.returncode == 0:
+            return r.stdout
+        last = (r.stderr or r.stdout or "")[:200]
+        _t.sleep(3 * (_attempt + 1))
+    raise RuntimeError("claude -p rc!=0 после 3 попыток: %s" % last)
 
 
 def make_claude_cli_provider(model=None, runner=None):
@@ -626,10 +635,17 @@ def selftest():
     else:
         ok = False; print("FAIL claude-cli: не вернул текст провайдера")
     _c = _seen.get("cmd") or []
-    if "--tools" in _c and _c[_c.index("--tools") + 1] == "" and "-p" in _c:
-        print("PASS claude-cli: tool-less (--tools \"\") -> Claude не исполняет, только предлагает")
+    _allowed = []
+    if "--allowedTools" in _c:
+        _i = _c.index("--allowedTools") + 1
+        while _i < len(_c) and not _c[_i].startswith("--"):
+            _allowed.append(_c[_i]); _i += 1
+    _read_only = bool(_allowed) and set(_allowed) <= {"Read", "Grep", "Glob"} and "Read" in _allowed
+    _no_mutate = not any(t in _c for t in ("Write", "Edit", "Bash"))
+    if "-p" in _c and _read_only and _no_mutate:
+        print("PASS claude-cli: read-only (Read/Grep/Glob) -> Claude читает, но НЕ мутирует/не исполняет")
     else:
-        ok = False; print("FAIL claude-cli: инструменты НЕ отключены (риск прямого действия Claude в обход кита)")
+        ok = False; print("FAIL claude-cli: инструменты не ограничены read-only (риск прямого действия Claude в обход кита)")
     if callable(make_provider("claude-cli")):
         print("PASS claude-cli: зарегистрирован как first-class провайдер")
     else:

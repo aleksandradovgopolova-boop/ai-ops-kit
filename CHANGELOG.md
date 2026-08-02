@@ -22,8 +22,19 @@
   на доказанно сложном). review->deepseek и strict-security->человек остаются как есть.
 - `model_router.plan_run(signals=...)` аннотирует план `preferred_writer_tier` -> видно в RunReport.
   model_resolution. 5 selftest.
-- ДАЛЬШЕ (rc3): ai_ops_run КОНСУМИРУЕТ preferred_writer_tier (strong-executor -> writer=claude-cli, иначе
-  честный fallback на money-mode) + ЖИВОЕ доказательство full-stack через first-class adapter (не monkeypatch).
+### Added (v3.9.0-rc3 — wiring: ai_ops_run консумирует complexity-routing + adapter refinements)
+- `ai_ops_run` строит `plan_run(signals=)` и КОНСУМИРУЕТ `preferred_writer_tier`: strong-executor ->
+  writer=`claude-cli` (make_claude_cli_provider) СРАЗУ, escalation-ladder чистится (не даунгрейдить сильного
+  на kimi/qwen), честный fallback на money-mode если локальный `claude` CLI недоступен.
+- reviewer при writer=claude-cli -> ДЕШЁВЫЙ независимый deepseek (owner-план review->deepseek): сравнение
+  независимости идёт с ЭФФЕКТИВНЫМ writer'ом, и при нерезолве отдельной code_review-роли берётся qualified
+  impl-судья (deepseek), независимый от claude-cli. Раньше ложно откатывался в self-model -> no-verdict.
+- `orchestrator._claude_cli_call`: `--tools ""` (слепой авторинг) -> **read-only** `Read/Grep/Glob` (Claude
+  ЧИТАЕТ репо для валидного предложения, НЕ мутирует/исполняет); + ретрай транзиентного `claude -p` rc!=0.
+- ДОКАЗАНО LIVE покомпонентно через SHIPPED-путь (не monkeypatch): complexity-routing -> writer=claude-cli
+  (fs-rc3/4/5/7); read-only claude авторит GREEN full-stack — spec/build/typecheck/test все pass, no_regressions
+  (fs-rc4); reviewer=deepseek независимый (fs-rc7). Единый чистый прогон до #5 упирался в РАЗНЫЕ транзиентные
+  env-сбои (claude -p rc=1 / том-переполнение / сетевой reset) — среда, не код; кит fail-closed на каждом.
 
 ## [3.8.1] — 2026-07-31 — Release Truth Alignment (источники правды догоняют runtime)
 

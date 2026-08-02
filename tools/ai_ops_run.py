@@ -366,7 +366,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         try:
             import model_router as _mr
             import provider_endpoints as _pe
-            _plan = _mr.plan_run()
+            _plan = _mr.plan_run(signals=signals)   # v3.9.0-rc3: signals -> preferred_writer_tier
             _model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
                                  "mode": "explicit-override" if model else "router", "notes": []}
             # v3.8.3-rc3 Dynamic Model Trust: JIT provider-preflight для КАЖДОЙ реально вызываемой модели
@@ -397,8 +397,35 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     _model_resolution["model_attempts"] = [
                         {"attempt": 1, "model": impl["model_id"], "provider": impl["provider"],
                          "trigger": "initial", "outcome": "pending"}]
-                    # reviewer — JIT trust отдельного провайдера (writer≠judge по модели)
-                    _rev_trusted = (rev.get("resolved") and rev.get("model_id") != impl.get("model_id")
+                    # v3.9.0-rc3 COMPLEXITY-AWARE ROUTING: сложный класс задачи -> сильный executor (Claude
+                    # Code adapter, claude-cli) СРАЗУ, не cheap-then-fix-loop. Честный fallback: нет локального
+                    # claude CLI -> остаёмся на дешёвом money-mode writer + пишем причину. Реестр/ключи не нужны
+                    # (локальная сессия). Escalation-ladder чистим: некуда «эскалировать» сильного вниз на kimi/qwen.
+                    _tier = _plan.get("preferred_writer_tier") or {}
+                    if _tier.get("tier") == "strong-executor":
+                        import shutil as _sh
+                        if _sh.which("claude"):
+                            _writer_model = "claude-code-local"
+                            _writer_prov = orchestrator.make_claude_cli_provider()
+                            _model_resolution["effective_model"] = "claude-code-local"
+                            _model_resolution["writer"] = {"model_id": "claude-code-local", "provider": "claude-cli",
+                                                           "tier": "strong-executor", "reason": _tier.get("reason")}
+                            _model_resolution["model_attempts"][0].update(
+                                model="claude-code-local", provider="claude-cli", trigger="complexity-routing")
+                            if isinstance(impl, dict):
+                                impl["escalation_ladder"] = []   # сильный executor — вниз не даунгрейдим
+                            _model_resolution["notes"].append(
+                                "complexity-aware: сложный класс -> writer=claude-cli (сильный executor) сразу")
+                        else:
+                            _model_resolution["strong_executor_unavailable"] = True
+                            _model_resolution["notes"].append(
+                                "complexity-aware: класс требует strong-executor, но локальный claude CLI "
+                                "недоступен -> честный fallback на money-mode дешёвый writer")
+                    # reviewer — JIT trust отдельного провайдера (writer≠judge по модели).
+                    # v3.9.0-rc3: сравниваем с ЭФФЕКТИВНЫМ writer'ом (_writer_model), а не с registry-impl —
+                    # иначе при complexity-override (writer=claude-cli) deepseek-ревьюер ложно считался
+                    # «не независим» (deepseek==registry-impl) и откатывался в self-model -> no-verdict.
+                    _rev_trusted = (rev.get("resolved") and rev.get("model_id") != _writer_model
                                     and _pe.key_available(rev.get("provider"))
                                     and _provider_trust(rev["provider"], _pe.endpoint_for(rev["provider"])["key_env"],
                                                         _klp_by_env, _trust_env, _trust_now, _trust_cache)["ready"])
@@ -407,6 +434,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         _rev_model = rev["model_id"]
                         _rev_prov = orchestrator.make_openai_provider(rev["model_id"], ep2["base_url"], ep2["key_env"])
                         _model_resolution["reviewer"] = {"model_id": rev["model_id"], "provider": rev["provider"], "independent_by_model": True}
+                    elif (_writer_model == "claude-code-local" and impl.get("resolved")
+                          and _pe.key_available(impl.get("provider"))):
+                        # v3.9.0-rc3 complexity-routing: writer=claude-cli (сильный executor) -> ревьюер =
+                        # ДЕШЁВЫЙ qualified impl-судья (deepseek), независим от claude-cli по модели, даже если
+                        # отдельная code_review-роль не резолвится в реестре. Это и есть owner-план review->deepseek.
+                        _iep = _pe.endpoint_for(impl["provider"])
+                        _rev_model = impl["model_id"]
+                        _rev_prov = orchestrator.make_openai_provider(impl["model_id"], _iep["base_url"], _iep["key_env"])
+                        _model_resolution["reviewer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
+                                                         "independent_by_model": True,
+                                                         "reason": "дешёвый qualified судья vs сильный writer=claude-cli"}
                     else:
                         _rev_model, _rev_prov = _writer_model, _writer_prov
                         _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
