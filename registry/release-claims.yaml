@@ -5,10 +5,10 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.9.1
+version: 3.9.2
 phase: "v3.9 — First-class Claude Code Adapter + complexity-aware routing"
 channel: stable
-patch_note: "3.9.1 — Release Truth Alignment (продолжение): убран дрейф ROADMAP (Current Forward Roadmap -> v3.9.0; sonnet-статус помечен историческим) + forbidden_stale_markers drift-детектор ловит повторный стейл"
+patch_note: "3.9.2 — Docs Truth Alignment: убран стейл 'sequential-only' в docs/parallel-sessions.md + NOTICE.md (кит умеет concurrent parallel-2 с 3.8); drift-детектор расширен на docs/ (stale_marker_files)"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
@@ -42,3 +42,17 @@ standing_boundaries:
 forbidden_stale_markers:
   - "Current Forward Roadmap (актуально с v3.0.14)"
   - "ЗАКРЫТА (v3.0.0 stable, 2026-07-21, claude-sonnet-5)"
+  - "sequential-only"                        # кит умеет concurrent parallel-2 (parallel_live.py) с 3.8
+  - "не запускает параллельных агентов"
+
+# v3.9.2: файлы, сканируемые на forbidden_stale_markers (шире docs_must_reference_version — вся публичная
+# поверхность, включая docs/ и NOTICE). Добавлять сюда доки при выявлении в них дрейфа.
+stale_marker_files:
+  - README.md
+  - ROADMAP.md
+  - NOTICE.md
+  - docs/parallel-sessions.md
+  - docs/QUICKSTART.md
+  - docs/adoption-guide.md
+  - VISION.md
+  - AGENTS.md

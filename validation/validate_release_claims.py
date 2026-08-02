@@ -77,11 +77,12 @@ def check(data, pkg=PKG):
         actual = _runtime_status(pkg, r, cap)
         if actual != st:
             e.append(f"runtime_capabilities {r}.{cap}: claim '{st}' != runtimes.yaml '{actual}' (дрейф заявленных возможностей)")
-    # v3.9.1: устаревшие маркеры «текущего статуса» НЕ должны присутствовать в публичной поверхности
-    # (напр. «Current Forward Roadmap (актуально с v3.0.14)») — ловим повторное появление стейла.
-    _docs = list(data.get("docs_must_reference_version") or [])
+    # v3.9.1/v3.9.2: устаревшие маркеры «текущего статуса» НЕ должны присутствовать в публичной поверхности.
+    # Сканируем НАСТРАИВАЕМЫЙ набор файлов (stale_marker_files — README/ROADMAP/NOTICE/docs/*), а не только
+    # docs_must_reference_version. Так дрейф вроде «sequential-only» ловится и в docs/, не только вверху.
+    _scan = list(data.get("stale_marker_files") or data.get("docs_must_reference_version") or [])
     for marker in (data.get("forbidden_stale_markers") or []):
-        for name in _docs:
+        for name in _scan:
             p = pkg / name
             if p.exists() and marker in p.read_text(encoding="utf-8"):
                 e.append(f"{name}: устаревший маркер текущего статуса '{marker}' — дрейф источника правды "

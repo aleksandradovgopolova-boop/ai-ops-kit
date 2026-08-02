@@ -1,4 +1,10 @@
-# Qualification Runbook (v2.84)
+# Qualification Runbook
+
+> ⚠️ **СТАТУС ОБНОВЛЁН (3.9.x).** Разделы §6b–§6e ниже — ИСТОРИЧЕСКИЙ лог находок: они описывали
+> positive-green ENGINEERING / полный full-stack / «нужен сильный провайдер (Anthropic)» как ОТКРЫТЫЕ гэпы.
+> Эти гэпы **ЗАКРЫТЫ**: v3.9.0 даёт first-class локального `claude -p` как сильного writer'а (`claude-cli`),
+> full-stack ENGINEERING-доставка доказана live end-to-end (ready_for_pr → draft PR + DeliveryReceipt),
+> sonnet НЕ требуется. Оставлено как история квалификации, не текущий список задач.
 
 Как прогнать живую квалификацию движка на **реальном** child-репозитории с тулчейном и живой
 моделью. Харнесс (`tools/qual_run.py`) и пакет сценариев (`qualification/scenarios.yaml`) готовы;
