@@ -4,6 +4,49 @@
 
 ## [Unreleased]
 
+## [3.9.0] — 2026-08-02 — First-class Claude Code Adapter + complexity-aware routing
+
+Claude Code становится first-class ИСПОЛНЯЮЩИМ writer'ом, которым владеет кит (не только generated-commands).
+Кит сам оркестрирует локальный `claude -p` (read-only, без API-ключа) как СИЛЬНОГО writer'а: Claude только
+ПРЕДЛАГАЕТ действия текстом, кит владеет worktree/diff/evidence/gates/delivery (Claude не пушит/не создаёт PR/
+не меняет checkout/не закрывает свой review|security/не владеет lifecycle). + complexity-aware routing:
+сложный класс задачи -> сильный writer СРАЗУ (не cheap-then-fix-loop); QUICK -> дешёвый API; review -> deepseek;
+strict security -> человек. Доказано LIVE end-to-end через shipped-путь (не monkeypatch): writer=claude-cli +
+независимый deepseek-ревьюер поймал реальный дефект claude (writer≠judge, 0 false-green) -> security #5.
+AI Ops остаётся control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ исполнитель. Codex-адаптер — позже.
+
+### Added (v3.9.0-rc1 — First-class Claude Code Adapter: локальный claude -p как СИЛЬНЫЙ writer)
+- `orchestrator.make_claude_cli_provider` / `make_provider("claude-cli")` — first-class текст-провайдер
+  через локальный `claude -p` БЕЗ API-ключа (локальная аутентифицированная сессия). Промотирует
+  доказанный в job-tmp путь (monkeypatch) в shipped-адаптер.
+- БЕЗОПАСНОСТЬ (executing-adapter контракт): `--tools ""` ОТКЛЮЧАЕТ все инструменты Claude -> модель только
+  ПРЕДЛАГАЕТ действия текстом (JSON tool-loop); применяет их КИТ через sandbox/broker (scope-enforced,
+  exact-SHA, gates, delivery). Claude НЕ трогает FS/git/сеть, НЕ пушит, НЕ создаёт PR, НЕ меняет основной
+  checkout, НЕ закрывает свой review|security, НЕ владеет lifecycle. AI Ops = control plane.
+- `registry/runtimes.yaml`: claude-code получил `kit_driven_executing` (status: rc) — честная декларация
+  KIT-driven executing пути (в отличие от generated-commands). runner инъектируется -> офлайн-selftest
+  (проверяет tool-less + текст-предложение) без вызова CLI. 3 selftest в orchestrator.
+### Added (v3.9.0-rc2 — complexity-aware routing: тир writer'а по КЛАССУ задачи)
+- `model_router.writer_tier(signals)` — тир writer'а по task_type/risk, НЕ только по среднему success_rate:
+  QUICK -> cheap-api (money-mode дешёвый); ENGINEERING/PRODUCT/AI_FEATURE/CRITICAL/RESEARCH или risk
+  high/critical -> strong-executor (Claude Code adapter, provider=claude-cli) СРАЗУ (не cheap-then-fix-loop
+  на доказанно сложном). review->deepseek и strict-security->человек остаются как есть.
+- `model_router.plan_run(signals=...)` аннотирует план `preferred_writer_tier` -> видно в RunReport.
+  model_resolution. 5 selftest.
+### Added (v3.9.0-rc3 — wiring: ai_ops_run консумирует complexity-routing + adapter refinements)
+- `ai_ops_run` строит `plan_run(signals=)` и КОНСУМИРУЕТ `preferred_writer_tier`: strong-executor ->
+  writer=`claude-cli` (make_claude_cli_provider) СРАЗУ, escalation-ladder чистится (не даунгрейдить сильного
+  на kimi/qwen), честный fallback на money-mode если локальный `claude` CLI недоступен.
+- reviewer при writer=claude-cli -> ДЕШЁВЫЙ независимый deepseek (owner-план review->deepseek): сравнение
+  независимости идёт с ЭФФЕКТИВНЫМ writer'ом, и при нерезолве отдельной code_review-роли берётся qualified
+  impl-судья (deepseek), независимый от claude-cli. Раньше ложно откатывался в self-model -> no-verdict.
+- `orchestrator._claude_cli_call`: `--tools ""` (слепой авторинг) -> **read-only** `Read/Grep/Glob` (Claude
+  ЧИТАЕТ репо для валидного предложения, НЕ мутирует/исполняет); + ретрай транзиентного `claude -p` rc!=0.
+- ДОКАЗАНО LIVE покомпонентно через SHIPPED-путь (не monkeypatch): complexity-routing -> writer=claude-cli
+  (fs-rc3/4/5/7); read-only claude авторит GREEN full-stack — spec/build/typecheck/test все pass, no_regressions
+  (fs-rc4); reviewer=deepseek независимый (fs-rc7). Единый чистый прогон до #5 упирался в РАЗНЫЕ транзиентные
+  env-сбои (claude -p rc=1 / том-переполнение / сетевой reset) — среда, не код; кит fail-closed на каждом.
+
 ## [3.8.1] — 2026-07-31 — Release Truth Alignment (источники правды догоняют runtime)
 
 Runtime обогнал публичную поверхность. Патч приводит README/ROADMAP/registry в соответствие с 3.8 БЕЗ

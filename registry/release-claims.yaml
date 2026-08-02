@@ -5,10 +5,10 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.8.1
-phase: "v3.8 — Product Bootstrap & Readiness Qualification (фаза завершена в 3.8.0, 2026-07-31)"
+version: 3.9.0
+phase: "v3.9 — First-class Claude Code Adapter + complexity-aware routing"
 channel: stable
-patch_note: "3.8.1 — Release Truth Alignment: README/ROADMAP/runtimes.yaml приведены в соответствие с 3.8; claims-механизм ловит дрейф в CI"
+patch_note: "3.9.0 — Claude Code как first-class executing writer (локальный claude -p, read-only) + complexity-aware routing (сложный класс -> сильный writer сразу); доказано live end-to-end (writer=claude-cli + reviewer=deepseek независимый ловит дефект claude)"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
