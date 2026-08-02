@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [3.9.0] — 2026-08-02 — First-class Claude Code Adapter + complexity-aware routing
+
+Claude Code становится first-class ИСПОЛНЯЮЩИМ writer'ом, которым владеет кит (не только generated-commands).
+Кит сам оркестрирует локальный `claude -p` (read-only, без API-ключа) как СИЛЬНОГО writer'а: Claude только
+ПРЕДЛАГАЕТ действия текстом, кит владеет worktree/diff/evidence/gates/delivery (Claude не пушит/не создаёт PR/
+не меняет checkout/не закрывает свой review|security/не владеет lifecycle). + complexity-aware routing:
+сложный класс задачи -> сильный writer СРАЗУ (не cheap-then-fix-loop); QUICK -> дешёвый API; review -> deepseek;
+strict security -> человек. Доказано LIVE end-to-end через shipped-путь (не monkeypatch): writer=claude-cli +
+независимый deepseek-ревьюер поймал реальный дефект claude (writer≠judge, 0 false-green) -> security #5.
+AI Ops остаётся control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ исполнитель. Codex-адаптер — позже.
+
 ### Added (v3.9.0-rc1 — First-class Claude Code Adapter: локальный claude -p как СИЛЬНЫЙ writer)
 - `orchestrator.make_claude_cli_provider` / `make_provider("claude-cli")` — first-class текст-провайдер
   через локальный `claude -p` БЕЗ API-ключа (локальная аутентифицированная сессия). Промотирует

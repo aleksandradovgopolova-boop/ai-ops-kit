@@ -30,9 +30,11 @@ runtimes:
     # gates/delivery (Claude не пушит/не создаёт PR/не меняет основной checkout/не закрывает свой review|
     # security/не владеет lifecycle). Доказано live (full-stack -> draft PR). Codex-адаптер — позже.
     kit_driven_executing:
-      status: rc
-      via: "provider=claude-cli (orchestrator.make_claude_cli_provider), tool-less"
+      status: verified          # v3.9.0: доказан live end-to-end через shipped-путь (не monkeypatch)
+      via: "provider=claude-cli (orchestrator.make_claude_cli_provider), read-only Read/Grep/Glob"
       contract: "AI Ops = control plane; Claude Code = сильный заменяемый исполнитель"
+      proven_live: "complexity-routing->writer=claude-cli; green build/typecheck/test; независимый deepseek-ревьюер поймал реальный дефект claude (writer≠judge, 0 false-green); security->human #5"
+      routing: "complexity-aware: ENGINEERING/PRODUCT/AI_FEATURE/CRITICAL/RESEARCH или risk high/critical -> strong-executor сразу; QUICK -> дешёвый API writer"
     default_provider: anthropic
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: native

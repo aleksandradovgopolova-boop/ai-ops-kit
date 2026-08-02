@@ -9,7 +9,7 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 (`ai-ops run --engine pipeline`: worktree-изоляция → детектор стека → tool-loop → commit →
 evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
-> **Честный статус (v3.8.1 stable; фаза v3.8 — Product Bootstrap & Readiness Qualification — завершена в 3.8.0):** единый движок
+> **Честный статус (v3.9.0 stable — First-class Claude Code Adapter + complexity-aware routing):** единый движок
 > «задача → draft PR» доказан вживую end-to-end на РЕАЛЬНОМ full-stack (ИИ-Среда, React/TS): сильный
 > writer (локальный `claude -p`, без API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
 > + детерминированные проверки по стеку (build/typecheck/test) + baseline-diff + **ЧЕЛОВЕК на strict
@@ -19,6 +19,11 @@ evidence на точном SHA → RunPlan-гейты → draft PR) и упра�
 > - **Portfolio по РОЛЯМ (доказано):** дешёвые модели (deepseek→kimi→qwen, полная эскалация) сложный
 >   full-stack green НЕ тянут; сильный writer (`claude -p`) тянет. **Sonnet НЕ требуется.** money-mode
 >   роутер берёт cheapest-qualified, writer эскалируется на качественном провале, judge≠writer по модели.
+> - **First-class Claude Code Adapter (v3.9.0):** кит сам оркестрирует локальный `claude -p` (read-only,
+>   без ключа) как СИЛЬНОГО writer'а — Claude только ПРЕДЛАГАЕТ, кит владеет worktree/diff/evidence/gates/
+>   delivery (Claude не пушит/не создаёт PR/не меняет checkout/не закрывает свой review|security). +
+>   **complexity-aware routing:** сложный класс задачи → сильный writer СРАЗУ (не cheap-then-fix-loop);
+>   QUICK → дешёвый API; review → deepseek; strict security → человек. AI Ops = control plane.
 > - **Preflight Truth (v2.115):** проверки идут ДО запуска модели (classification → ContextPayload →
 >   spec достаточна → атомарна/декомпозиция подтверждена → context budget → human approvals). Неполная
 >   спека → **модель не запускается, правок/коммита нет** (Spec-First блокирует реализацию, а не только
