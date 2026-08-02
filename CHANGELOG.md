@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+## [3.9.2] — 2026-08-02 — Docs Truth Alignment: стейл в docs/ + расширенный drift-детектор
+
+Глубокий аудит всей документации (delegated) нашёл стейл ГЛУБЖЕ README/ROADMAP. Починено:
+- **docs/parallel-sessions.md + NOTICE.md**: убран «оркестратор sequential-only / кит не запускает
+  параллельных агентов» — противоречит 3.8 (concurrent parallel-2 + governed fan-in via parallel_live.py,
+  доказано live). Теперь: bounded concurrent parallel-2 под гейтами.
+- **docs/qualification-runbook.md**: баннер СТАТУС ОБНОВЛЁН — §6b–§6e (positive-green ENGINEERING /
+  full-stack / «нужен сильный провайдер Anthropic») помечены ЗАКРЫТЫМИ (v3.9.0 claude-cli + full-stack live);
+  снят v2.84-штамп заголовка.
+- **AGENTS.md**: `capability_freeze до 3.8 stable` СНЯТ (3.8 достигнут, 3.9 аддитивно добавил claude-cli
+  adapter + complexity-routing); deferral dev_check.py и lean-заголовок разштампованы от 3.8.
+- **docs/3.0-design.md**: баннер ИСТОРИЧЕСКОЕ (3.0 выпущен/превзойдён; `ai-run` уже канонический вход).
+- **docs/WALKTHROUGH.md**: `ai-run` — канонический вход, `/ai-start-task` — алиас (было наоборот).
+- **README.md**: убран внутренний ярлык PQ7/PQ8 из статус-блока.
+- **FILE_INDEX.md**: добавлены parallel_live/parallel_executor/parallel_planner/model_router/
+  provider_endpoints/security_review_cascade + claude-cli в orchestrator (были пропущены).
+- **Drift-детектор расширен** (`validate_release_claims.py` + release-claims.yaml): `forbidden_stale_markers`
+  теперь сканирует НАСТРАИВАЕМЫЙ набор `stale_marker_files` (README/ROADMAP/NOTICE/docs/*), не только верхушку;
+  добавлены маркеры `sequential-only` / `не запускает параллельных агентов`. Повторный дрейф в docs/ ловится в CI.
+- Аудит подтвердил OK: QUICKSTART/adoption-guide/ONBOARDING/dogfooding-metrics/container-isolation/VISION/
+  APPLY/CLAUDE.md. Не изменяет runtime.
+
 ## [3.9.1] — 2026-08-02 — Release Truth Alignment (продолжение): убран дрейф ROADMAP
 
 Дрейф источников правды глубже верхушки: ROADMAP нёс раздел «Current Forward Roadmap (актуально с v3.0.14)»

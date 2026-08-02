@@ -560,11 +560,17 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `tools/gate_executor.py`
 - `tools/generate_artifacts.py`
 - `tools/generate_runtime.py`
-- `tools/orchestrator.py`
+- `tools/orchestrator.py` — провайдеры (mock/anthropic/openai-compatible) + **first-class `claude-cli`** (`make_claude_cli_provider`: локальный `claude -p` read-only как сильный writer, без ключа, v3.9.0)
 - `tools/product_health.py`
 - `tools/run_plan.py` — построение RunPlan (base_workflow + tracks -> gates), validate (v2.32)
 - `tools/run_report.py`
-- `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34)
+- `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34); complexity-routing консумирует writer_tier -> strong-executor=claude-cli (v3.9.0)
+- `tools/model_router.py` — provider-neutral resolver роль->cheapest-qualified + **complexity-aware `writer_tier`** (класс задачи -> сильный/дешёвый writer, v3.9.0)
+- `tools/provider_endpoints.py` — map провайдер->endpoint+key_env для openai-compatible (v3.7.12)
+- `tools/parallel_live.py` — **concurrent parallel-2**: отдельный клон на пакет + governed fan-in (`run_live_concurrent`; доказан live, v3.8)
+- `tools/parallel_executor.py` — bounded parallel-2 executor поверх decision-слоя (v3.7.1)
+- `tools/parallel_planner.py` — планирование параллельных пакетов (disjoint-scope)
+- `tools/security_review_cascade.py` — асимметричный fail-closed security-судья (detector->verifier->reducer); experimental/qualification-only, НЕ в strict-path (v3.8.4)
 - `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
 - `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
 - `tools/evidence_collector.py` — stack-aware сбор evidence: гоняет команды профиля через Broker -> gate implementation_verification (v2.44)

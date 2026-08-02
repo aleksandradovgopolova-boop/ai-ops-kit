@@ -25,7 +25,8 @@
   код не копировался.
 - **obra/superpowers** (https://github.com/obra/superpowers) — адаптирован этикет
   код-ревью (requesting/receiving) в `rules/quality/code-review-etiquette.yaml`; код не
-  копировался. Multi-agent-скиллы не брались (у кита оркестратор sequential-only).
+  копировался. Multi-agent-скиллы не брались: кит использует bounded concurrent parallel-2 под
+  гейтами (`tools/parallel_live.py`), а не произвольный multi-agent рой.
 - **agnix** (https://github.com/avifenesh/agnix) — задекларирован как опциональный
   линтер AI-конфигов (`registry/tools.yaml`, status: declared); не вендорился.
 - **rendergit** (https://github.com/karpathy/rendergit, BSD0) — задекларирован как

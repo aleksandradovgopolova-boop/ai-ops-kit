@@ -24,7 +24,7 @@ child-репозиториев. Здесь разрабатывается сам
 
 Полный аннотированный список файлов — в `FILE_INDEX.md`.
 
-## Быстрый инженерный цикл (lean, v3.8.3)
+## Быстрый инженерный цикл (lean)
 
 Правило дня: инвариант формулируется ДО реализации, а не после. Проверок в CI уже десятки —
 проблема не в их количестве, а в том, что нужный шов иногда осознаётся постфактум (напр. rc2:
@@ -65,7 +65,7 @@ fallback → `failure_policy.py`; strict security → `security_decision.py`; д
 сколько review-итераций? · найден ли дефект после merge? Если стабильно 2–3 фикса на класс — этот
 шов в общий helper/guard.
 
-**Отложено до 3.8 stable (потом ОДИН маленький PR):** `tools/dev_check.py` (`quality-fast`) —
+**Отложено (кандидат в отдельный PR; 3.8 stable пройден):** `tools/dev_check.py` (`quality-fast`) —
 статические профили `--core/--parallel/--security` из 8–12 критичных self-test ядра (ai_ops_run,
 execution_pipeline, workpackage_executor, parallel_executor, parallel_live, lifecycle_store,
 pr_open, security_enforcement, model_router, provider_endpoints). Не заменяет CI — быстрый ответ
@@ -276,8 +276,9 @@ python3 .research/tools/ev_scaffold.py --selftest
 - **Runtime через адаптер, не замена.** AI Ops управляет исполнителем (Claude Code/Codex/OpenHands SDK/…)
   через адаптер; workflow/approvals/evidence не переписываются при смене runtime. Свой tool-loop не наращиваем,
   если внешний runtime делает это надёжно.
-- **Заморозка возможностей до 3.8 stable:** новых концептуальных возможностей не добавлять (см. lean-цикл +
-  `capability_freeze` в плане). Только live qualification + измерение усилия владельца.
+- **Capability_freeze (3.8): СНЯТ — 3.8 stable достигнут.** В 3.9 аддитивно добавлены first-class Claude Code
+  executing adapter + complexity-aware routing (доказаны live). Новые концепт-возможности — ПО ДАННЫМ реальных
+  прогонов (3.10 Real-Product Qualification), а не по красоте; точечно и аддитивно.
 
 ## Релизный процесс
 
