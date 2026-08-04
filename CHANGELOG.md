@@ -4,6 +4,29 @@
 
 ## [Unreleased]
 
+## [3.15.0] — 2026-08-04 — Architecture Baseline: read-only снимок архитектуры + обязательный architecture-судья
+
+Даёт репозиторию дешёвую, честную и воспроизводимую картину архитектуры на точном SHA — и делает
+независимую архитектурную проверку ОБЯЗАТЕЛЬНОЙ на архитектурно значимых изменениях (judge != writer).
+- **`ai-ops audit architecture`** (installer + `tools/architecture_baseline.py`, НОВОЕ): read-only
+  ДЕТЕРМИНИРОВАННЫЙ снимок (без модели) на текущем SHA по 12 осям — module_map, boundaries, dependencies,
+  api_surface, data_and_migrations, integrations, failure_modes, deployment, observability,
+  security_boundaries, adr_and_drift, risks. ЧЕСТНОСТЬ: чего эвристика не увидела — `not_detected`, не
+  выдумка; интеграции — только ИМЕНА env-переменных (значения секретов не читаются/не утекают). Производные
+  `risks` — сигналы «посмотреть», не вердикты. Это baseline для сравнения во времени и вход для reviewer'а,
+  НЕ полный обзор. 14 selftest.
+- **architecture-reviewer — обязательный независимый судья на сигналах.** Новый гейт `architecture_review`
+  (read-only, blocking, `responsible_role: architecture-reviewer`, checklist `rules/quality/architecture-review.yaml`
+  с 11 пунктами по осям) с `required_when: [architecture_change, new_service, cross_boundary_change,
+  breaking_api, data_migration, new_integration, deployment_change]`. Добавлен в ENGINEERING и AI_FEATURE.
+- **`required_when` — механизм условной применимости гейта** (`gate_executor.evaluate_gate`): гейт с
+  `required_when` активен ТОЛЬКО когда есть хотя бы один объявленный сигнал; иначе честный non-blocking skip
+  (`scope: not_applicable`, записан в warnings — не тихий pass и не блок). При активном сигнале и без вердикта
+  судьи — гейт fail (бездоказательного pass не существует), т.е. architecture-reviewer действительно обязателен.
+- Полный AI-review остаётся ОТДЕЛЬНЫМ от дешёвого детерминированного baseline (baseline на onboard/по запросу,
+  глубокая оценка — на гейте при сигналах).
+- CI +1, AGENTS +1 (187). VERSION 3.14.0 -> 3.15.0.
+
 ## [3.14.0] — 2026-08-04 — Startup Context Budget (срез 3): управляемая стоимость самой поверхности кита
 
 Финальный срез: сам кит перестаёт быть неотключаемой дорогой поверхностью на старте. Закрывает всю спеку
