@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+## [3.10.0] — 2026-08-03 — Usage Truth: честный учёт всех модельных расходов
+
+Каждый модельный/runtime-вызов пишет UsageRecord; неизвестное использование — честно `unavailable`, а не 0.
+- `tools/usage_ledger.py` (НОВОЕ): UsageRecord (run_id/workitem_id/package_id/role/provider/model/runtime/
+  input_tokens/output_tokens/usage_status[measured|estimated|unavailable]/cost/cost_status/latency/trigger
+  [initial|retry|review|escalation|fallback|reevaluate]); persist `features/<wid>/usage-ledger.jsonl` +
+  `.ai/usage/product-ledger.jsonl`; ЧЕСТНЫЙ агрегат (unavailable считается отдельно, не топит суммы; флаг
+  `cost_complete`); валидатор ЧЕСТНОСТИ (unavailable -> токены None, НЕ 0). 14 selftest.
+- `orchestrator._record_call` расширен до полной схемы + `set_call_context/clear_call_context` (role/trigger/
+  provider/runtime/run_id per-вызов). cost measured (провайдер) vs estimated (прайс) vs unavailable.
+- **Claude CLI usage больше НЕ исчезает:** `_claude_cli_call` -> `--output-format json` -> реальные
+  input/output_tokens + total_cost_usd (measured).
+- `ai_ops_run`: обёртки провайдеров ставят role/trigger (writer→implementation/initial, reviewer→code_review/
+  review, author, **escalation**→escalation, **fallback** через #6) -> drain -> `usage_ledger.append`. Учтены
+  writer/reviewer/fix-loop/fallback/escalation.
+- **`ai-ops usage`** (installer): стоимость/токены ЗАДАЧИ + агрегат ПРОДУКТА, с честной пометкой НЕПОЛНОЙ
+  стоимости и разбивкой по role/trigger/provider. usage_ledger.py в managed_set (дочки получают при update).
+- ЧАСТИЧНО (follow-up 3.10.1): parallel-пакеты — usage пишется в ledger КАЖДОГО клона, но кросс-клон агрегат
+  на fan-in ещё не сведён в родительский product-ledger. Single/sequential-путь (основной, через `ai-run`) —
+  покрыт полностью. Заявлено честно, не как «всё готово».
+- CI +1, AGENTS +1. VERSION 3.9.2 -> 3.10.0.
+
 ## [3.9.2] — 2026-08-02 — Docs Truth Alignment: стейл в docs/ + расширенный drift-детектор
 
 Глубокий аудит всей документации (delegated) нашёл стейл ГЛУБЖЕ README/ROADMAP. Починено:

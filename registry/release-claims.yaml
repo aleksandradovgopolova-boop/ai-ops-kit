@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.9.2
-phase: "v3.9 — First-class Claude Code Adapter + complexity-aware routing"
+version: 3.10.0
+phase: "v3.10 — Usage Truth: честный учёт всех модельных расходов"
 channel: stable
-patch_note: "3.9.2 — Docs Truth Alignment: убран стейл 'sequential-only' в docs/parallel-sessions.md + NOTICE.md (кит умеет concurrent parallel-2 с 3.8); drift-детектор расширен на docs/ (stale_marker_files)"
+patch_note: "3.10.0 — Usage Truth: UsageRecord на каждый вызов (writer/reviewer/fix-loop/fallback/escalation), честный usage_status (unavailable != 0), claude-cli usage измеряется (json), ledger задача+продукт, команда ai-ops usage"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 181
+checks_count: 182
 agents_count: 51
 
 qualified_on: >

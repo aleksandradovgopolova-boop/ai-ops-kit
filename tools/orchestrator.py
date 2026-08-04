@@ -116,14 +116,40 @@ def drain_call_stats():
     return s
 
 
-def _record_call(model, in_tok, out_tok, latency_s):
-    price = _PRICE_PER_MTOK.get(model)
-    cost = None
-    if price and in_tok is not None and out_tok is not None:
-        cost = round(in_tok / 1e6 * price["in"] + out_tok / 1e6 * price["out"], 6)
-    _CALL_STATS.append({"model": model, "input_tokens": in_tok, "output_tokens": out_tok,
-                        "latency_s": (round(latency_s, 3) if latency_s is not None else None),
-                        "cost_usd_est": cost})
+# v3.10.0 Usage Truth: контекст вызова (role/trigger/provider/runtime/run_id/workitem_id/package_id).
+# ai_ops_run ставит его через provider-обёртку ПЕРЕД вызовом; _record_call вмерживает в каждую запись.
+_CALL_CONTEXT = {}
+
+
+def set_call_context(**ctx):
+    _CALL_CONTEXT.update({k: v for k, v in ctx.items() if v is not None})
+
+
+def clear_call_context():
+    _CALL_CONTEXT.clear()
+
+
+def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, cost_status=None):
+    # v3.10.0 Usage Truth. cost: ИЗМЕРЕННАЯ стоимость (напр. claude -p total_cost_usd). Иначе оценка по
+    # прайс-таблице, если есть токены+цена (cost_status=estimated); иначе None (unavailable).
+    if cost is not None:
+        cost_status = cost_status or "measured"
+    else:
+        price = _PRICE_PER_MTOK.get(model)
+        if price and in_tok is not None and out_tok is not None:
+            cost = round(in_tok / 1e6 * price["in"] + out_tok / 1e6 * price["out"], 6)
+            cost_status = "estimated"
+        else:
+            cost_status = "unavailable"
+    # ЧЕСТНО: неизвестное использование -> unavailable, НЕ 0. measured, если провайдер вернул токены.
+    usage_status = "measured" if (in_tok is not None or out_tok is not None) else "unavailable"
+    rec = {"model": model, "provider": provider, "runtime": None,
+           "input_tokens": in_tok, "output_tokens": out_tok, "usage_status": usage_status,
+           "cost": cost, "cost_status": cost_status,
+           "latency": (round(latency_s, 3) if latency_s is not None else None),
+           "cost_usd_est": cost}   # cost_usd_est — назад-совместимо (budget/cost_account/trace)
+    rec.update(_CALL_CONTEXT)      # role/trigger/run_id/workitem_id/package_id/runtime/provider
+    _CALL_STATS.append(rec)
 
 
 def _anthropic_call(prompt, model):
@@ -223,20 +249,34 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
     исполнитель. (Полный tool-less `--tools ""` авторит вслепую -> невалидная спека; read-only даёт контекст
     без права действия — доказано fs-rc3.)
 
+    v3.10.0 Usage Truth: `--output-format json` -> claude usage (input/output_tokens) + total_cost_usd
+    ИЗМЕРЯЮТСЯ и пишутся в _record_call (provider=claude-cli). Claude CLI usage больше НЕ исчезает.
+
     runner инъектируется (офлайн-selftest без вызова CLI); по умолчанию subprocess. Ключ не требуется."""
-    cmd = ["claude", "-p", prompt, "--output-format", "text",
+    cmd = ["claude", "-p", prompt, "--output-format", "json",
            "--allowedTools", "Read", "Grep", "Glob"]
     if model:
         cmd += ["--model", model]
     if runner is not None:
         return runner(cmd)
     import subprocess
+    import json as _json
     import time as _t
     last = ""
     for _attempt in range(3):   # транзиентный rc!=0 (сеть/оверлоад локальной сессии) -> ретрай, не крах прогона
+        _t0 = time.monotonic()
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if r.returncode == 0:
-            return r.stdout
+            try:
+                d = _json.loads(r.stdout)
+                u = d.get("usage") or {}
+                _record_call(d.get("model") or model or "claude-code-local",
+                             u.get("input_tokens"), u.get("output_tokens"), time.monotonic() - _t0,
+                             provider="claude-cli", cost=d.get("total_cost_usd"))
+                return d.get("result") or ""
+            except Exception:   # json не распарсился -> usage unavailable (НЕ теряем факт вызова)
+                _record_call(model or "claude-code-local", None, None, time.monotonic() - _t0, provider="claude-cli")
+                return r.stdout
         last = (r.stderr or r.stdout or "")[:200]
         _t.sleep(3 * (_attempt + 1))
     raise RuntimeError("claude -p rc!=0 после 3 попыток: %s" % last)

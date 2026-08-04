@@ -10,6 +10,7 @@
   doctor               — быстрая диагностика (версии, зоны, целостность, node/openspec)
   migrate              — применить цепочку миграций манифеста (сейчас пустая, механизм готов)
   verify-capabilities  — offline capability self-test
+  usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -673,6 +674,18 @@ def cmd_doctor():
     return 0 if ok else 1
 
 
+def cmd_usage(argv):
+    """v3.10.0 Usage Truth: показать ЧЕСТНУЮ стоимость задачи и продукта из usage-ledger.
+    ai-ops usage [--workitem <wid>] [--json] — стоимость/токены по задаче + агрегат по продукту."""
+    # движок/тулы в child — .ai/managed/tools; в kit — tools/. Пробуем оба.
+    for _cand in (Path(".") / ".ai" / "managed" / "tools", PKG / "tools"):
+        if (_cand / "usage_ledger.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    import usage_ledger
+    rest = [a for a in argv[2:]]                 # флаги после 'usage'
+    return usage_ledger.main(["."] + rest)
+
+
 def cmd_migrate():
     chain = manifest().get("package_migrations", {}).get("chain", []) or []
     if not chain:
@@ -877,6 +890,8 @@ def main(argv):
         return cmd_migrate()
     if cmd == "verify-capabilities":
         return cmd_verify_capabilities()
+    if cmd == "usage":
+        return cmd_usage(argv)
     print(f"неизвестная команда '{cmd}'"); print(__doc__)
     return 2
 
