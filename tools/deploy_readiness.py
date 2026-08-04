@@ -44,10 +44,11 @@ MATURITY = ("absent", "configured", "runnable", "verified")
 _CONFIG_MARKERS = ("Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yaml",
                    "vercel.json", "netlify.toml", "fly.toml", "render.yaml", "Procfile",
                    "app.yaml", "railway.json", "captain-definition")
-# Конфиги платформ, которые деплоят САМИ по git-push: путь поставки существует, но он ВНЕ
-# репозитория и здесь непроверяем. Это не «задеплоить нечем» — это «нечем проверить и откатить».
-_PLATFORM_MARKERS = ("vercel.json", "netlify.toml", "fly.toml", "render.yaml", "railway.json",
-                     "app.yaml", "captain-definition")
+# Конфиги, которые ЧАСТО (но не обязательно) связаны с внешней платформой поставки. Их наличие —
+# ПОДСКАЗКА, а НЕ доказательство: файл может быть наследием или использоваться не для деплоя.
+# Инструмент не вправе заявлять, что поставку ведёт эта платформа — он этого не знает.
+_PLATFORM_HINT_MARKERS = ("vercel.json", "netlify.toml", "fly.toml", "render.yaml", "railway.json",
+                          "app.yaml", "captain-definition")
 _CONFIG_DIRS = ("k8s", "kubernetes", "helm", "charts", "terraform", "deploy", "infra", "infrastructure")
 
 # Файлы, изменение которых означает «поставка меняется» -> гейт применим.
@@ -210,19 +211,22 @@ def assess(child_root):
     else:
         maturity = "absent"
 
-    platform_markers = [m for m in markers if m in _PLATFORM_MARKERS]
-    platform_managed = bool(platform_markers) and not runnable_paths
+    platform_hints = [m for m in markers if m in _PLATFORM_HINT_MARKERS]
+    # ЧТО ИМЕННО МЫ ЗНАЕМ: исполняемого пути поставки в репозитории нет. Происходит ли поставка вне
+    # репозитория и чем именно — НЕИЗВЕСТНО. Не выдаём подсказку за вывод.
+    deploy_path_unknown = not runnable_paths and bool(markers)
 
     reason = {
         "absent": "Ни объявленных окружений, ни признаков поставки. Для библиотеки/CLI это НОРМА — "
                   "не маскируем и не требуем. Объявите окружения, если поставка есть (declaration_template).",
         "configured": (
-            f"Поставку ведёт внешняя платформа ({', '.join(platform_markers)}): путь существует, но он "
-            f"ВНЕ репозитория — здесь его нельзя ни проверить, ни откатить. Объявите deploy_command и "
-            f"rollback в .ai-ops.yaml, чтобы поставка стала воспроизводимой."
-            if platform_managed else
-            "Замысел поставки есть, а исполняемого пути нет — задеплоить нечем. Нужен CI-job "
-            "с environment и шагами, либо deploy-скрипт, либо deploy_command в конфиге."),
+            "Исполняемого пути поставки в репозитории НЕТ. Значит одно из двух, и различить это по коду "
+            "нельзя: поставки нет вовсе, либо она производится вне репозитория."
+            + (f" Найдены конфиги, которые ИНОГДА связаны с внешней поставкой: "
+               f"{', '.join(platform_hints)} — но из кода НЕ следует, что деплой идёт через них "
+               f"(файл может быть наследием)." if platform_hints else "")
+            + " Объявите deploy_command и rollback в .ai-ops.yaml — тогда поставка станет описанной "
+              "и воспроизводимой."),
         "runnable": "Поставку можно произвести. До verified не хватает: "
                     + ("evidence фактической поставки (.ai/runtime/deploy/*.json)" if not records else "")
                     + ("; " if not records and not rollback_declared else "")
@@ -231,11 +235,12 @@ def assess(child_root):
     }[maturity]
 
     findings = list(env_map["findings"])
-    if platform_managed:
-        findings.append({"rule": "platform_managed_deploy",
-                         "detail": f"поставка управляется платформой ({', '.join(platform_markers)}) "
-                                   f"и не описана в репозитории: как именно и когда она происходит и "
-                                   f"чем откатывается — неизвестно из кода"})
+    if deploy_path_unknown:
+        findings.append({"rule": "deploy_path_unknown",
+                         "detail": "чем и как производится поставка — из репозитория НЕ следует"
+                                   + (f" (найдено: {', '.join(platform_hints)} — это лишь подсказка, "
+                                      f"не доказательство)" if platform_hints else "")
+                                   + "; значит нельзя ни воспроизвести её, ни откатить"})
     if runnable_paths and not rollback_declared:
         findings.append({"rule": "no_rollback_declared",
                          "detail": "поставка исполнима, но откат не объявлен — поставка, которую нельзя "
@@ -252,7 +257,8 @@ def assess(child_root):
         "environments_status": env_map["environments_status"],
         "environments": [e["name"] for e in env_map["environments"]],
         "config_markers": markers,
-        "platform_managed": platform_managed,
+        "deploy_path_unknown": deploy_path_unknown,
+        "platform_hints": platform_hints,
         "runnable_paths": sorted(set(runnable_paths)),
         "rollback_declared": rollback_declared,
         "rollback_sources": sorted(set(rollback_sources)),
@@ -364,9 +370,9 @@ def selftest():
         expect("Dockerfile без исполняемого пути -> configured",
                rep["deploy_maturity"] == "configured" and rep["config_markers"] == ["Dockerfile"])
         expect("configured -> гейт FAIL (задеплоить нечем)", gate_status("configured")[0] == "fail")
-        expect("Dockerfile — не платформенный деплой",
-               not rep["platform_managed"]
-               and "задеплоить нечем" in rep["reason"])
+        expect("Dockerfile без пути -> путь неизвестен, платформенных подсказок нет",
+               rep["deploy_path_unknown"] and rep["platform_hints"] == []
+               and "НЕ следует" not in rep["reason"] and "НЕТ" in rep["reason"])
 
         # появляется исполняемый путь
         (root / "deploy.sh").write_text("#!/bin/sh\necho ship\n", encoding="utf-8")
@@ -443,24 +449,33 @@ def selftest():
         (root / ".ai-ops.yaml").write_text("{{ битый", encoding="utf-8")
         expect("битый конфиг не роняет снимок", assess(root)["deploy_maturity"] in MATURITY)
 
-    # --- платформенная поставка: путь есть, но вне репозитория (реальный случай ii-sreda) ----------
+    # --- конфиг платформы = ПОДСКАЗКА, а не вывод (регрессия 3.20.1: инструмент заявлял, что поставку
+    # ведёт vercel, лишь потому что нашёл vercel.json; на живом продукте это оказалось неправдой) -----
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "vercel.json").write_text('{"framework": "vite"}', encoding="utf-8")
         rep = assess(root)
-        expect("платформенный конфиг -> configured + platform_managed",
-               rep["deploy_maturity"] == "configured" and rep["platform_managed"] is True)
-        expect("формулировка НЕ врёт «задеплоить нечем» — путь вне репозитория",
-               "ВНЕ репозитория" in rep["reason"] and "задеплоить нечем" not in rep["reason"])
-        expect("платформенная поставка -> находка platform_managed_deploy",
-               any(f["rule"] == "platform_managed_deploy" for f in rep["findings"]))
-        # объявили команду и откат -> путь стал воспроизводимым
+        expect("конфиг платформы -> configured + путь поставки неизвестен",
+               rep["deploy_maturity"] == "configured" and rep["deploy_path_unknown"] is True
+               and rep["platform_hints"] == ["vercel.json"])
+        expect("инструмент НЕ утверждает, что поставку ведёт найденная платформа",
+               "ведёт" not in rep["reason"] and "путь существует" not in rep["reason"])
+        expect("подсказка названа подсказкой, а не доказательством",
+               "НЕ следует, что деплой идёт через них" in rep["reason"]
+               and "наследием" in rep["reason"])
+        expect("честная развилка: либо поставки нет, либо она вне репозитория",
+               "поставки нет вовсе, либо она производится вне репозитория" in rep["reason"])
+        f = [x for x in rep["findings"] if x["rule"] == "deploy_path_unknown"]
+        expect("находка deploy_path_unknown с пометкой «не доказательство»",
+               len(f) == 1 and "не доказательство" in f[0]["detail"])
+        # объявили команду и откат -> поставка описана, незнание снято
         (root / ".ai-ops.yaml").write_text(
             "engineering_operating_model:\n  deploy: {deploy_command: vercel deploy --prod, "
             "rollback: vercel rollback}\n", encoding="utf-8")
         rep = assess(root)
-        expect("объявленные deploy_command+rollback снимают platform_managed",
-               rep["deploy_maturity"] == "runnable" and rep["platform_managed"] is False)
+        expect("объявленные deploy_command+rollback снимают незнание пути",
+               rep["deploy_maturity"] == "runnable" and rep["deploy_path_unknown"] is False
+               and not any(x["rule"] == "deploy_path_unknown" for x in rep["findings"]))
 
     expect("шаблон декларации содержит rollback и НЕ содержит чужого deploy-скрипта",
            "rollback:" in declaration_template() and "#!/bin/sh" not in declaration_template())
