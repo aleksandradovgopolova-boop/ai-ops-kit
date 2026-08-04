@@ -15,8 +15,9 @@
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
   method               — экономичный способ работы: советы по приоритетам (гигиена/делегирование/runtime; v3.18.0)
-  engops [branch|commit|env|deploy] — операционная гигиена: актуальность ветки vs база, вердикт по
-                         коммиту (v3.19.0), карта окружений и ЧЕСТНАЯ зрелость поставки (v3.20.0)
+  engops [branch|commit|env|deploy|cost] — операционная гигиена: актуальность ветки vs база, вердикт
+                         по коммиту (v3.19.0), карта окружений и зрелость поставки (v3.20.0),
+                         оценка стоимости ДО прогона (v3.21.0)
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -839,6 +840,12 @@ def cmd_doctor():
         print(deploy_readiness.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         print(f"поставка (deploy): недоступно ({_e})")
+    # v3.21.0 EngOps срез 3: экономическая граница ДО траты. unavailable НЕ выдаём за ноль.
+    try:
+        import economic_preflight
+        print(economic_preflight.summary_line("."))
+    except Exception as _e:  # noqa: BLE001
+        print(f"экономика (оценка до прогона): недоступно ({_e})")
     print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
     return 0 if ok else 1
 
@@ -898,8 +905,11 @@ def cmd_engops(argv):
     if sub == "deploy":
         import deploy_readiness
         return deploy_readiness.main(["."] + rest)
+    if sub == "cost":
+        import economic_preflight
+        return economic_preflight.main(["."] + rest)
     if sub:
-        print("usage: ai-ops engops [branch|commit|env|deploy] ..."); return 2
+        print("usage: ai-ops engops [branch|commit|env|deploy|cost] ..."); return 2
     import branch_policy
     import commit_policy
     import deploy_readiness
@@ -908,6 +918,8 @@ def cmd_engops(argv):
     print(branch_policy.summary_line("."))
     print(environment_map.summary_line("."))
     print(deploy_readiness.summary_line("."))
+    import economic_preflight
+    print(economic_preflight.summary_line("."))
     return 0
 
 

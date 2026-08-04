@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.20.1 stable**: Engineering Operating Model срезы 1–2 (дисциплина коммита и ветки с детектом отставания базы; карта окружений и честная зрелость поставки + гейт `deploy_readiness`; `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.21.0 stable**: Engineering Operating Model ЗАВЕРШЁН, срезы 1–3 (дисциплина коммита и ветки с детектом отставания базы; карта окружений и честная зрелость поставки + гейт `deploy_readiness`; экономическая граница ДО траты в preflight; `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -544,9 +544,16 @@ freshness и первым живым DecisionPackage. Архитектура **e
   [deployment_change, new_service, infrastructure_change], чек-лист `rules/quality/deploy-readiness.yaml`,
   исполнение в `gate_executor` (недоступность инструмента → `warn`, не `pass`) + ключи
   `environments`/`deploy` в схеме + `ai-ops engops env|deploy` + 2 строки doctor. gate-count 30 → 31.
-- **Затем — Engineering Operating Model срез 3 / Autonomous Operation** (прежние 3.13/3.15 из спеки
-  владельца, сдвинуты): срез 3 — экономический preflight (BudgetContract проверяется ДО tool loop,
-  а не сверяется после); затем worker, `ai-ops do`, ask-once, blocker resolver.
+- **v3.21.0 — Engineering Operating Model, срез 3** ✅ (WP7): EconomicPreflight (`economic_preflight`) —
+  граница расхода ДО первого вызова модели. Прежде деньги узнавались ПОСЛЕ траты (контекстный бюджет их
+  не касался, `Budget.charge_call` рвался на N-м вызове, `cost_account` сверял после). Оценка по истории
+  `usage_ledger` против `RunPlan.execution_budget`, встроена в `preflight.py` шагом 7. Решение по ХУДШЕМУ
+  сравнимому прогону; нет истории → `unavailable`, НИКОГДА 0, и НЕ блок; частично неизвестная стоимость →
+  честная НИЖНЯЯ ГРАНИЦА с предупреждением; никаких выдуманных коэффициентов по writer_tier.
+  Ключ `economics` в схеме, `ai-ops engops cost`, строка doctor.
+  **ВСЯ ФИЧА ENGINEERING OPERATING MODEL ЗАКРЫТА (3.19 → 3.21).**
+- **Затем — Autonomous Operation** (прежний 3.15 из спеки владельца): worker, `ai-ops do`, ask-once,
+  blocker resolver.
 - **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
   (owner_effort, где кит ускоряет/страхует/мешает, регрессии, стоимость/latency из Usage Truth) решают дальнейшее.
 - **После данных (точечно, ПО ФАКТАМ):** DX; устойчивость runtime; адресный рефакторинг. **Дальше:** Codex

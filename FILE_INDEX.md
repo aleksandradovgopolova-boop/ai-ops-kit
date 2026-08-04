@@ -197,7 +197,7 @@
 - `rules/core/ContextManagement.md`
 - `rules/core/DefinitionOfDone.md`
 - `rules/core/DelegationPolicy.md` — культура делегирования разведки сабагенту (v3.17.0)
-- `rules/core/EngineeringOperatingModel.md` — операционная гигиена: коммит (зоны/секреты/approvals), ветка (защищённые refs, **отставание базы**), окружения и зрелость поставки (v3.19.0–3.20.0)
+- `rules/core/EngineeringOperatingModel.md` — операционная гигиена: коммит, ветка (**отставание базы**), окружения, зрелость поставки, **экономическая граница до траты** (v3.19.0–3.21.0, фича закрыта)
 - `rules/core/EvidencePolicy.md`
 - `rules/core/FreshnessPolicy.md`
 - `rules/core/HumanApproval.md`
@@ -575,6 +575,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `tools/branch_policy.py` — BranchContract: защищённые ветки (доставка только PR), имя ветки прогона, **отставание базы** и рассинхрон базы с upstream; unavailable != 0 (v3.19.0)
 - `tools/environment_map.py` — read-only карта окружений: объявлено vs обнаружено (CI environment, .env.<name>); detected_not_declared/declared_not_detected; секреты ТОЛЬКО именами (v3.20.0)
 - `tools/deploy_readiness.py` — честная зрелость поставки absent/configured/runnable/verified; без объявленного отката verified недостижим; платформенная поставка = путь вне репозитория (v3.20.0)
+- `tools/economic_preflight.py` — граница расхода ДО tool loop: оценка по истории usage_ledger против лимитов RunPlan; решение по худшему прогону; нет истории = unavailable, не ноль (v3.21.0)
 - `tools/provider_endpoints.py` — map провайдер->endpoint+key_env для openai-compatible (v3.7.12)
 - `tools/parallel_live.py` — **concurrent parallel-2**: отдельный клон на пакет + governed fan-in (`run_live_concurrent`; доказан live, v3.8)
 - `tools/parallel_executor.py` — bounded parallel-2 executor поверх decision-слоя (v3.7.1)

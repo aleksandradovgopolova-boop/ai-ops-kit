@@ -122,6 +122,37 @@ def _check_deploy(deploy):
     return errs
 
 
+def _check_economics(eco):
+    """v3.21.0 срез 3: экономическая политика (пороги + осознанность require_estimate)."""
+    if eco is None:
+        return []
+    if not isinstance(eco, dict):
+        return ["engineering_operating_model.economics: ожидался объект"]
+    errs = []
+    bad = set(eco) - {"enforce", "require_estimate", "confirm_over_cost_usd", "min_history_tasks"}
+    if bad:
+        errs.append(f"engineering_operating_model.economics: неизвестные ключи {sorted(bad)}")
+    enf = eco.get("enforce")
+    if enf is not None and enf not in _ENFORCE_VALUES:
+        errs.append(f"economics.enforce='{enf}' вне {list(_ENFORCE_VALUES)}")
+    req = eco.get("require_estimate")
+    if req is not None and not isinstance(req, bool):
+        errs.append("economics.require_estimate: ожидался boolean")
+    thr = eco.get("confirm_over_cost_usd")
+    if thr is not None and (isinstance(thr, bool) or not isinstance(thr, (int, float)) or thr < 0):
+        errs.append(f"economics.confirm_over_cost_usd={thr!r}: ожидалось неотрицательное число или null")
+    mh = eco.get("min_history_tasks")
+    if mh is not None and (isinstance(mh, bool) or not isinstance(mh, int) or mh < 1):
+        errs.append(f"economics.min_history_tasks={mh!r}: ожидалось целое ≥ 1")
+    # require_estimate блокирует ЛЮБОЙ первый прогон в репозитории (истории ещё нет). Это законный
+    # выбор, но он должен быть осознанным: молча включённым он выглядит как «строгость», а работает
+    # как «здесь нельзя запустить ничего».
+    if req is True and enf != "block":
+        errs.append("economics.require_estimate=true при enforce != block: отсутствие истории будет "
+                    "блокировать первый прогон, хотя политика заявлена как советующая — противоречие")
+    return errs
+
+
 def check_policy(policy):
     """Связность объявленной политики. -> список нарушений (строк). policy может быть {} / None."""
     errs = []
@@ -129,12 +160,13 @@ def check_policy(policy):
     if not isinstance(pol, dict):
         return ["engineering_operating_model: ожидался объект"]
 
-    unknown = set(pol) - {"commit", "branch", "environments", "deploy"}
+    unknown = set(pol) - {"commit", "branch", "environments", "deploy", "economics"}
     if unknown:
         errs.append(f"engineering_operating_model: неизвестные ключи {sorted(unknown)} "
-                    f"(допустимы commit, branch, environments, deploy)")
+                    f"(допустимы commit, branch, environments, deploy, economics)")
     errs += _check_environments(pol.get("environments"))
     errs += _check_deploy(pol.get("deploy"))
+    errs += _check_economics(pol.get("economics"))
 
     commit = pol.get("commit") or {}
     branch = pol.get("branch") or {}
@@ -324,6 +356,28 @@ def selftest():
            any("литеральный секрет" in e for e in check_policy(
                {"deploy": {"deploy_command": "deploy --token ghp_abcdefghijklmnopqrstuvwxyz012345",
                            "rollback": "undo"}})))
+
+    # --- v3.21.0 срез 3: экономика -----------------------------------------------------------------
+    expect("economics отсутствует -> связно", check_policy({"economics": None}) == [])
+    expect("корректная экономика связна",
+           check_policy({"economics": {"enforce": "advise", "confirm_over_cost_usd": 5,
+                                       "min_history_tasks": 3}}) == [])
+    expect("confirm_over_cost_usd: null допустим (подтверждение не требуется)",
+           check_policy({"economics": {"confirm_over_cost_usd": None}}) == [])
+    expect("economics не объект -> отклоняется", check_policy({"economics": []}) != [])
+    expect("неизвестный ключ economics -> отклоняется",
+           check_policy({"economics": {"max_cost": 5}}) != [])
+    expect("отрицательный порог подтверждения -> отклоняется",
+           check_policy({"economics": {"confirm_over_cost_usd": -1}}) != [])
+    expect("min_history_tasks=0 -> отклоняется",
+           check_policy({"economics": {"min_history_tasks": 0}}) != [])
+    expect("require_estimate не boolean -> отклоняется",
+           check_policy({"economics": {"require_estimate": "да"}}) != [])
+    expect("require_estimate=true при enforce=advise -> противоречие (заблокирует первый прогон)",
+           any("противоречие" in e for e in check_policy(
+               {"economics": {"require_estimate": True, "enforce": "advise"}})))
+    expect("require_estimate=true при enforce=block -> осознанный выбор, связно",
+           check_policy({"economics": {"require_estimate": True, "enforce": "block"}}) == [])
 
     expect("паритет правила и кода соблюдён (реальные файлы)", check_parity() == [])
 
