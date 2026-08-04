@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.18.0
-phase: "v3.18 — Development Culture & Resource Guardrails (срез 3): cost-aware work method. Фича завершена."
+version: 3.19.0
+phase: "v3.19 — Engineering Operating Model (срез 1): дисциплина коммита и ветки. Окружения/деплой — срез 2, экономический preflight — срез 3."
 channel: stable
-patch_note: "3.18.0 — Development Culture Guardrails (срез 3, WP6): cost_method — единый советник экономичного способа работы в ФИКСИРОВАННОМ порядке приоритетов (1 гигиена сессии > 2 делегирование > 3 итерации/тесты > 4 runtime > 5 effort), собирает session_guardrails + delegation_advisor + model_router; советы affected-tests/не-читать-весь-репо/переиспользование; команда `ai-ops method`. Вся фича Development Culture Guardrails (3.16→3.18) закрыта."
+patch_note: "3.19.0 — Engineering Operating Model (срез 1, WP1+WP2+WP3): commit_policy (CommitContract — жёстко блокирует смешение зон кит/продукт в одном коммите, артефакты прогонов, .env/приватные ключи, литеральный секрет в сообщении, protected_paths без ApprovalRecord, сообщение-заглушку; мягко советует по размеру/scope/WorkItem/evidence) + branch_policy (BranchContract — защищённые ветки: доставка движка только через PR; имя ветки прогона; ОТСТАВАНИЕ БАЗЫ и рассинхрон базы с upstream, unavailable != 0) + rules/core/EngineeringOperatingModel.md + ключ engineering_operating_model в child-config.schema + validate_engops_policy (связность порогов + паритет правило↔код) + команда `ai-ops engops` + две строки в doctor. Мотив из живого случая: ветка дочки отстала от main на 234 коммита и это не было ничьей ответственностью."
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 192
+checks_count: 196
 agents_count: 51
 
 qualified_on: >

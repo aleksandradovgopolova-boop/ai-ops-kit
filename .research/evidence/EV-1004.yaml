@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1004
+request_id: RR-012
+statement: 'MCP принял формальную политику жизненного цикла фич (SEP-2596) — три состояния
+  Active/Deprecated/Removed с окном не менее двенадцати месяцев, отсчитываемым ОТ ВЫПУСКА
+  ревизии, в которой фича впервые помечена Deprecated (не от даты Final самого SEP);
+  eligible for removal — первая ревизия, выпущенная как Current после истечения окна.
+  Сокращение окна возможно только при активном security-риске (опубликованный advisory
+  или документированная эксплуатация) и не короче девяноста дней. Два факта, снижающих
+  давление на потребителя: (1) «Removal from the specification does not oblige an SDK
+  to drop the feature from releases» — срок жизни фичи в SDK определяет политика самого
+  SDK; (2) фичи МОГУТ оставаться Deprecated много дольше минимального окна. Ожидание
+  от реализаций Deprecated-фич сформулировано как SHOULD, не MUST: новым реализациям
+  не внедрять, существующим — миграция до earliest removal.'
+evidence_type: documented_fact
+source:
+  title: MCP — Feature Lifecycle and Deprecation Policy
+  url: https://modelcontextprotocol.io/community/feature-lifecycle
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'разделы Feature States, Deprecating a Feature (п.4), SDKs, Expedited Removal,
+    Removing a Feature'
+  quote: the number of months, at least twelve, that the feature must remain Deprecated
+    before it is eligible for removal
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: Первоисточник политики, принятой через SEP-2596; политика меняется только
+    новым SEP — не volatile.
+status: active
+superseded_by: null

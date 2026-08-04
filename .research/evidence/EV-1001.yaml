@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1001
+request_id: RR-012
+statement: 'Ревизия MCP 2026-07-28 ломающая на уровне протокола: (1) удалены протокольные
+  сессии и заголовок Mcp-Session-Id из Streamable HTTP, списочные эндпоинты (tools/list,
+  resources/list, prompts/list) больше не варьируются по соединению, состояние переезжает
+  в server-minted handles, передаваемые как обычные аргументы инструментов; (2) удалён
+  handshake initialize/notifications-initialized, версия протокола и capabilities клиента
+  переезжают в _meta каждого запроса; (3) добавлен обязательный для сервера RPC server/discover;
+  (5) удалены ping, logging/setLevel, notifications/roots/list_changed; (8) во всех результатах
+  обязательное поле resultType; (9) убрана resumability SSE-потока (Last-Event-ID) — оборванный
+  поток теряет запрос, клиент ОБЯЗАН пересоздать его с новым request ID.'
+evidence_type: documented_fact
+source:
+  title: MCP — Key Changes (спецификация 2026-07-28, changelog против 2025-11-25)
+  url: https://modelcontextprotocol.io/specification/2026-07-28/changelog
+  type: official_documentation
+  published_at: '2026-07-28'
+  is_primary: true
+citation:
+  locator: 'раздел Major changes, пункты 1, 2, 3, 5, 8, 9'
+  quote: 'Make MCP stateless: remove the `initialize`/`notifications/initialized` handshake.'
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2027-01-30'
+reliability:
+  level: high
+  rationale: Первоисточник спецификации; каждый пункт снабжён ссылкой на SEP-PR. Ревизия
+    Current — по политике версионирования может получать обратно совместимые правки,
+    поэтому не вечная.
+status: active
+superseded_by: null

@@ -15,6 +15,7 @@
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
   method               — экономичный способ работы: советы по приоритетам (гигиена/делегирование/runtime; v3.18.0)
+  engops [branch|commit] — операционная гигиена: актуальность ветки vs база, вердикт по коммиту (v3.19.0)
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -809,6 +810,22 @@ def cmd_doctor():
         print(context_cost.summary_line("."))
     except Exception as _e:  # noqa: BLE001 — оценка стоимости не роняет doctor
         print(f"стоимость старта: недоступно ({_e})")
+    # v3.19.0 Engineering Operating Model: операционная гигиена. doctor только СООБЩАЕТ (политика
+    # коммитов + актуальность ветки против базы). Отставание базы — самый частый молчаливый дефект:
+    # диф ветки все смотрят, её актуальность — никто. Не роняем doctor (это темп владельца, не поломка).
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "branch_policy.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    try:
+        import commit_policy
+        print(commit_policy.summary_line("."))
+    except Exception as _e:  # noqa: BLE001
+        print(f"политика коммитов: недоступно ({_e})")
+    try:
+        import branch_policy
+        print(branch_policy.summary_line("."))
+    except Exception as _e:  # noqa: BLE001
+        print(f"актуальность ветки: недоступно ({_e})")
     print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
     return 0 if ok else 1
 
@@ -844,6 +861,31 @@ def cmd_session(argv):
             sys.path.insert(0, str(_cand))
     import session_guardrails
     return session_guardrails.main(["."] + [a for a in argv[2:]])
+
+
+def cmd_engops(argv):
+    """v3.19.0 Engineering Operating Model (срез 1): операционная гигиена коммита и ветки.
+    `ai-ops engops` — политика + актуальность текущей ветки; `engops branch [--base X]` — вердикт
+    по ветке; `engops commit --files ... --message "..."` — вердикт по предполагаемому коммиту.
+    Жёсткие инварианты блокируют (rc=1), мягкие по умолчанию советуют."""
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "branch_policy.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    sub = argv[2] if len(argv) > 2 and not argv[2].startswith("--") else ""
+    rest = [a for a in argv[(3 if sub else 2):]]
+    if sub == "commit":
+        import commit_policy
+        return commit_policy.main(["."] + rest)
+    if sub == "branch":
+        import branch_policy
+        return branch_policy.main(["."] + rest)
+    if sub:
+        print("usage: ai-ops engops [branch|commit] ..."); return 2
+    import branch_policy
+    import commit_policy
+    print(commit_policy.summary_line("."))
+    print(branch_policy.summary_line("."))
+    return 0
 
 
 def cmd_audit(argv):
@@ -1091,6 +1133,8 @@ def main(argv):
         return cmd_session(argv)
     if cmd == "method":
         return cmd_method(argv)
+    if cmd == "engops":
+        return cmd_engops(argv)
     print(f"неизвестная команда '{cmd}'"); print(__doc__)
     return 2
 

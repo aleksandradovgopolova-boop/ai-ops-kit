@@ -163,6 +163,14 @@ jobs:
         run: python3 tools/delegation_advisor.py --selftest
       - name: "Cost-aware Work Method — советы по приоритетам гигиена/делегирование/runtime (v3.18.0; selftest)"
         run: python3 tools/cost_method.py --selftest
+      - name: "CommitContract — что вправе стать одним коммитом (зоны/секреты/approvals; v3.19.0; selftest)"
+        run: python3 tools/commit_policy.py --selftest
+      - name: "BranchContract — защищённые ветки + ОТСТАВАНИЕ БАЗЫ (v3.19.0; selftest)"
+        run: python3 tools/branch_policy.py --selftest
+      - name: "EngOps policy — связность порогов + паритет правило↔код (v3.19.0; selftest)"
+        run: python3 validation/validate_engops_policy.py --selftest
+      - name: "EngOps policy — паритет на реальных файлах пакета (v3.19.0)"
+        run: python3 validation/validate_engops_policy.py
       - name: "UI Evidence Readiness — зрелость Storybook + gating UI-CI (v3.11.0; selftest)"
         run: python3 tools/ui_readiness.py --selftest
       - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"

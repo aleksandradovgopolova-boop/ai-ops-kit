@@ -196,10 +196,13 @@
 - `rules/core/AIWorkingAgreement.md`
 - `rules/core/ContextManagement.md`
 - `rules/core/DefinitionOfDone.md`
+- `rules/core/DelegationPolicy.md` — культура делегирования разведки сабагенту (v3.17.0)
+- `rules/core/EngineeringOperatingModel.md` — операционная гигиена коммита и ветки: зоны/секреты/approvals, защищённые ветки, **отставание базы** (v3.19.0)
 - `rules/core/EvidencePolicy.md`
 - `rules/core/FreshnessPolicy.md`
 - `rules/core/HumanApproval.md`
 - `rules/core/ScopeControl.md`
+- `rules/core/SessionEconomyPolicy.md` — пороги гигиены контекста сессии + Task Completion Ritual (v3.16.0)
 - `rules/core/ProductStatusPolicy.md` — живой статус продукта, читать первым/обновлять на PR (v2.27)
 - `rules/core/SourceOfTruth.md`
 - `rules/design/accessibility-checklist.yaml`
@@ -538,6 +541,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `validation/validate_claims.py`
 - `validation/validate_cross_artifacts.py`
 - `validation/validate_decisions.py`
+- `validation/validate_engops_policy.py` — связность порогов EngOps + паритет «правило ↔ DEFAULTS кода» (v3.19.0)
 - `validation/validate_event_catalog.py` — согласованность имён событий, drift-скан (v2.29)
 - `validation/validate_duties.py` — обязанности постоянного агента Robin (v2.21)
 - `validation/validate_feature_blueprint.py`
@@ -566,6 +570,8 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `tools/run_report.py`
 - `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34); complexity-routing консумирует writer_tier -> strong-executor=claude-cli (v3.9.0)
 - `tools/model_router.py` — provider-neutral resolver роль->cheapest-qualified + **complexity-aware `writer_tier`** (класс задачи -> сильный/дешёвый writer, v3.9.0)
+- `tools/commit_policy.py` — CommitContract: смешение зон кит/продукт, артефакты прогонов, запрещённые файлы, секрет в сообщении, protected_paths без approval (v3.19.0)
+- `tools/branch_policy.py` — BranchContract: защищённые ветки (доставка только PR), имя ветки прогона, **отставание базы** и рассинхрон базы с upstream; unavailable != 0 (v3.19.0)
 - `tools/provider_endpoints.py` — map провайдер->endpoint+key_env для openai-compatible (v3.7.12)
 - `tools/parallel_live.py` — **concurrent parallel-2**: отдельный клон на пакет + governed fan-in (`run_live_concurrent`; доказан live, v3.8)
 - `tools/parallel_executor.py` — bounded parallel-2 executor поверх decision-слоя (v3.7.1)
