@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.17.0 stable**: Development Culture Guardrails срезы 1–2 (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.18.0 stable**: Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -522,8 +522,10 @@ freshness и первым живым DecisionPackage. Архитектура **e
   (same_task/continuation/adjacent_subtask/new_independent_task/new_product, вшит в `ai-ops session`) +
   Delegation Culture (`delegation_advisor` + `DelegationPolicy.md`: разведка/логи/сравнение/research/review/
   mechanical → сабагент; в основной контекст только сводка, не сырьё).
-- **v3.18.0 — Development Culture Guardrails, срез 3** (WP6): Cost-aware Work Method (runtime/effort/сабагент/
-  affected-tests/fix-loop-лимит) с приоритетом гигиена>делегирование>итерации>runtime>effort; калибровка порогов.
+- **v3.18.0 — Development Culture Guardrails, срез 3** ✅ (WP6): Cost-aware Work Method (`cost_method` +
+  `ai-ops method`) — советы в порядке гигиена>делегирование>итерации>runtime>effort; собирает session_guardrails
+  + delegation_advisor + model_router; affected-tests/не-читать-весь-репо/переиспользование.
+  **Вся фича Development Culture & Resource Guardrails закрыта (3.16→3.18).**
 - **Затем — Engineering Operating Model / Autonomous Operation** (прежние 3.13/3.15 из спеки владельца,
   сдвинуты): commit/branch/environments/deploy/economic preflight; worker, `ai-ops do`, ask-once, blocker resolver.
 - **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
