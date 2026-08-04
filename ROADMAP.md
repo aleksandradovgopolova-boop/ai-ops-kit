@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.16.0 stable**: Development Culture Guardrails срез 1 (гигиена сессий/контекста: телеметрия, пороги бюджета контекста, Task Completion Ritual + `ai-ops session`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.17.0 stable**: Development Culture Guardrails срезы 1–2 (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -518,9 +518,10 @@ freshness и первым живым DecisionPackage. Архитектура **e
   `session_telemetry` (честный снимок, unknown НЕ как 0), `SessionEconomyPolicy` (пороги 150/250/400k,
   one-task-per-session, advise-not-block), Task Completion Ritual с `SessionRecommendation`
   (continue/compact/clear/new_session) + точной командой; `ai-ops session`; интеграция в каждый прогон.
-- **v3.17.0 — Development Culture Guardrails, срез 2** (WP2+WP4): Session Boundary Classifier
-  (same_task/continuation/adjacent_subtask/new_independent_task/new_product) + Delegation Culture (разведка/
-  большие логи/сравнение файлов → сабагент; в основной контекст только сводка/пути/evidence).
+- **v3.17.0 — Development Culture Guardrails, срез 2** ✅ (WP2+WP4): Session Boundary Classifier
+  (same_task/continuation/adjacent_subtask/new_independent_task/new_product, вшит в `ai-ops session`) +
+  Delegation Culture (`delegation_advisor` + `DelegationPolicy.md`: разведка/логи/сравнение/research/review/
+  mechanical → сабагент; в основной контекст только сводка, не сырьё).
 - **v3.18.0 — Development Culture Guardrails, срез 3** (WP6): Cost-aware Work Method (runtime/effort/сабагент/
   affected-tests/fix-loop-лимит) с приоритетом гигиена>делегирование>итерации>runtime>effort; калибровка порогов.
 - **Затем — Engineering Operating Model / Autonomous Operation** (прежние 3.13/3.15 из спеки владельца,

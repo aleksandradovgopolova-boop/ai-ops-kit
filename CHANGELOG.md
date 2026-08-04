@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [3.17.0] — 2026-08-04 — Development Culture Guardrails (срез 2): boundary classifier + культура делегирования
+
+Срез 2 (WP2+WP4) делает рекомендации среза 1 точнее (по реальному отношению задачи, не дефолту) и добавляет
+культуру делегирования разведки, чтобы тяжёлые для контекста работы не оседали в основной сессии.
+- **WP2 Session Boundary Classifier** (`tools/session_boundary.py`, НОВОЕ): классифицирует отношение НОВОЙ
+  задачи к сессии/WorkItem — `same_task | continuation | adjacent_subtask | new_independent_task | new_product`
+  (по id/лексическим маркерам продолжения/пересечению scope/смене репозитория). При неоднозначности НЕ угадывает
+  «удобно», а склоняется к безопасному для гигиены исходу (новая задача → отдельная сессия). Вшит в
+  `session_guardrails`: `ai-ops session --next "<текст>"` теперь рекомендует по РЕАЛЬНОМУ отношению, не дефолту.
+  9 selftest.
+- **WP4 Delegation Culture** (`tools/delegation_advisor.py` + `rules/core/DelegationPolicy.md`, НОВОЕ): советует
+  вынести в отдельный краткоживущий контекст (сабагент) repository_wide_exploration / large_log_analysis /
+  many_file_comparison / external_research / independent_review / mass_mechanical_inspection (пороги: разведка
+  ≥8 файлов, сравнение ≥5, лог ≥500 строк — калибруются). В основной контекст возвращается ТОЛЬКО сводка
+  (вывод/пути/evidence/вопросы/следующий шаг); НЕ возвращаются transcript/все файлы/сырые логи/промежуточные
+  рассуждения (валидатор `check` ловит возврат сырья). 10 selftest.
+- Кит СОВЕТУЕТ, не форсит; связка с гигиеной сессий — приоритет гигиена > делегирование > итерации > runtime > effort.
+- Следующий срез: 3.18.0 WP6 Cost-aware Work Method + калибровка порогов.
+- CI +2, AGENTS +2 (191). VERSION 3.16.0 -> 3.17.0.
+
 ## [3.16.0] — 2026-08-04 — Development Culture & Resource Guardrails (срез 1): гигиена сессий и контекста
 
 P0 по аудиту владельца: главная неэффективность — не «модель много пишет», а недели работы в одной
