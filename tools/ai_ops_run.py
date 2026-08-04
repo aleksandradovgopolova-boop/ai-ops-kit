@@ -499,17 +499,28 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                       + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация"]),
                     "not_yet": ["security key preflight: " + "; ".join(_kpf.get("blocks", []) or ["ключ отсутствует/просрочен"])]}
 
+        # v3.10.0 Usage Truth: обёртка провайдера ставит call-context (role/trigger/provider/runtime) перед
+        # вызовом -> _record_call пишет их в UsageRecord. run_id/workitem_id заполнит usage_ledger.append.
+        def _uctx(_prov, _role, _trigger, _prov_name):
+            if _prov is None:
+                return None
+            def _w(_prompt):
+                orchestrator.set_call_context(role=_role, trigger=_trigger, provider=_prov_name, runtime=runtime)
+                return _prov(_prompt)
+            return _w
+        _wname = ((_model_resolution or {}).get("writer") or {}).get("provider") or provider_name
+        _rname = ((_model_resolution or {}).get("reviewer") or {}).get("provider") or provider_name
         prop = proposer or tool_loop.make_model_proposer(
-            _writer_prov or orchestrator.make_provider(provider_name, _writer_model))
+            _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname))
         # v2.83/v3.7.12: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова);
         # при router-режиме — по возможности ДРУГАЯ модель/вендор (полная независимость судьи).
         rev_prop = reviewer_proposer
         if review and rev_prop is None and provider_name != "mock":
-            rev_prop = _rev_prov or orchestrator.make_provider(provider_name, _rev_model)
+            rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model), "code_review", "review", _rname)
         # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
         auth_prop = author_proposer
         if author and auth_prop is None and provider_name != "mock":
-            auth_prop = _writer_prov or orchestrator.make_provider(provider_name, _writer_model)
+            auth_prop = _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname)
 
         # v2.94 (One Run Transaction, аудит #2): pipeline БОЛЬШЕ НЕ обходит lifecycle. Один план
         # строится здесь и передаётся в движок (не второй раз внутри); WorkItem/RunPlan/active-work/
@@ -858,11 +869,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                 _nep = _pe2.endpoint_for(_nxt["provider"])
                                 _eprov = _with_provider_fallback(
                                     _eprov, orchestrator.make_openai_provider(_nxt["model_id"], _nep["base_url"], _nep["key_env"]))
-                            prop = tool_loop.make_model_proposer(_eprov)      # writer -> выше observed success
+                            _eprov_ctx = _uctx(_eprov, "implementation", "escalation", _esc.get("provider"))  # v3.10.0 Usage Truth
+                            prop = tool_loop.make_model_proposer(_eprov_ctx)  # writer -> выше observed success
                             if author and author_proposer is None:
-                                auth_prop = _eprov
+                                auth_prop = _eprov_ctx
                             if review and reviewer_proposer is None and _rev_self:
-                                rev_prop = _eprov                            # self-model reviewer следует за writer'ом
+                                rev_prop = _eprov_ctx                        # self-model reviewer следует за writer'ом
                             _model_resolution["effective_model"] = _esc["model_id"]
                             _model_resolution.setdefault("model_attempts", []).append(
                                 {"attempt": len(_model_resolution.get("model_attempts") or []) + 1,
@@ -1216,6 +1228,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             rep["cost"] = _cost_rep
             _ls.journal_append(_jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
                                         "attempt_id": _attempt_id, **_cost_rep})
+            # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)
+            # в ledger задачи + продукта. Честный usage_status; неизвестное -> unavailable, не 0.
+            try:
+                import usage_ledger as _ul
+                _ul.append(child_root, fid, _stats, run_id=fid)
+            except Exception:  # noqa: BLE001 — учёт usage не должен ронять прогон
+                pass
+        try:
+            orchestrator.clear_call_context()
+        except Exception:  # noqa: BLE001
+            pass
         # run_end (исход прогона, включая итог доставки)
         _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
                                     "attempt_id": _attempt_id,

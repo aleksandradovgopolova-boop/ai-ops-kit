@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.9.2 stable**; First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.10.0 stable**: Usage Truth (честный учёт модельных расходов); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -490,14 +490,20 @@ freshness и первым живым DecisionPackage. Архитектура **e
   complexity-aware routing (сложный класс → сильный writer СРАЗУ; QUICK → дешёвый API; review → deepseek;
   strict security → человек). Доказано live end-to-end (writer≠judge, независимый deepseek поймал дефект
   claude, 0 false-green).
-- **v3.9.1 — Release Truth Alignment (продолжение):** убрать ОСТАВШИЙСЯ дрейф источников правды
-  (ROADMAP/README/registries) + расширить claims-drift-детектор (`forbidden_stale_markers`).
-- **v3.10 — Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца (не синтетика).
-  Собрать данные: owner_effort, где кит ускоряет/страхует, где мешает, регрессии, стоимость/latency.
-- **После данных (точечно, ПО ФАКТАМ, не по красоте):** DX для продакта-владельца; устойчивость runtime;
-  адресный рефакторинг ядра.
-- **Затем:** Codex executing adapter (второй executing-runtime, после того как первый прошёл живой путь);
-  multi-product control plane.
+- **v3.9.1 / v3.9.2 — Release/Docs Truth Alignment** ✅: убран дрейф источников правды + claims-drift-детектор
+  (расширен на docs/, `forbidden_stale_markers`).
+- **v3.10.0 — Usage Truth** ✅: честный учёт ВСЕХ модельных вызовов (UsageRecord на writer/reviewer/fix-loop/
+  fallback/escalation; usage_status measured|estimated|unavailable — неизвестное != 0; claude-cli usage
+  измеряется; ledger задача+продукт; `ai-ops usage`).
+- **v3.11.0 — UI Evidence Readiness:** Storybook onboarding maturity (absent/configured/runnable/verified);
+  doctor проверяет ui-evidence; UI-CI только на UI-изменениях; build/interaction/axe/visual — честные статусы.
+- **v3.12.0 — Architecture Baseline:** read-only `ai-ops audit architecture` (карта модулей/границ/зависимостей/
+  API/данные/интеграции/failure-modes/deployment/observability/security/ADR-дрейф/риски); дешёвый baseline на
+  onboard, полный AI-review отдельно; architecture-reviewer — обязательный судья при architecture-сигналах.
+- **Затем — Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
+  (owner_effort, где кит ускоряет/страхует/мешает, регрессии, стоимость/latency из Usage Truth) решают дальнейшее.
+- **После данных (точечно, ПО ФАКТАМ):** DX; устойчивость runtime; адресный рефакторинг. **Дальше:** Codex
+  executing adapter; multi-product control plane.
 
 ### Историческая дорожная карта ядра (v3.0.14 → v3.1, ЗАКРЫТА — путь к Execution Kernel Qualified)
 
