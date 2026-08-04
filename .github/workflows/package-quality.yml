@@ -175,6 +175,8 @@ jobs:
         run: python3 tools/environment_map.py --selftest
       - name: "DeployReadiness — честная зрелость поставки absent/configured/runnable/verified (v3.20.0; selftest)"
         run: python3 tools/deploy_readiness.py --selftest
+      - name: "EconomicPreflight — граница расхода ДО tool loop, unavailable != 0 (v3.21.0; selftest)"
+        run: python3 tools/economic_preflight.py --selftest
       - name: "UI Evidence Readiness — зрелость Storybook + gating UI-CI (v3.11.0; selftest)"
         run: python3 tools/ui_readiness.py --selftest
       - name: "Model router — provider-neutral resolver роль->cheapest-qualified (ADR-004; selftest)"
