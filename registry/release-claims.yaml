@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.10.0
-phase: "v3.10 — Usage Truth: честный учёт всех модельных расходов"
+version: 3.11.0
+phase: "v3.11 — UI Evidence Readiness: честная зрелость UI-evidence (Storybook) + gating UI-CI"
 channel: stable
-patch_note: "3.10.0 — Usage Truth: UsageRecord на каждый вызов (writer/reviewer/fix-loop/fallback/escalation), честный usage_status (unavailable != 0), claude-cli usage измеряется (json), ledger задача+продукт, команда ai-ops usage"
+patch_note: "3.11.0 — UI Evidence Readiness: onboarding-лестница absent/configured/runnable/verified (ai-ops onboard), UI-CI только на UI-изменениях/VISUAL-задаче, отдельные честные статусы build/interaction/axe/visual, отсутствие Storybook НЕ маскируется, кит предлагает шаблон скрипта но не ставит зависимости"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 182
+checks_count: 183
 agents_count: 51
 
 qualified_on: >

@@ -1495,19 +1495,24 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     ui_evidence_bundle = None
     if calibrated_enforcement and ui_evidence is None and committed_sha:
         try:
-            # v3.7 UI-CI (подтянуто в v3.6.8): если UI-стек — СНАЧАЛА собрать РЕАЛЬНЫЙ UI-evidence на
-            # committed_sha (child UI-CI: vitest interaction + vitest-axe a11y + storybook test-runner
-            # visual + design-system; meta.commit_sha пишет kit). Не-UI child -> skip (no-op, python цел).
-            # Сбой сбора НЕ фабрикует: build_bundle просто не найдёт evidence -> гейты not_run.
-            try:
-                import ui_evidence_collect
-                ui_evidence_collect.collect(work_root, committed_sha)
-            except Exception:   # noqa: BLE001 — сбор evidence не должен ронять прогон
-                pass
             _changed = _committed_changed_files(work_root, committed_sha)
-            ui_evidence_bundle = storybook_adapter.build_bundle(work_root, changed_files=_changed)
-            ui_evidence = storybook_adapter.evidence_for_gate(ui_evidence_bundle,
-                                                              expected_sha=committed_sha)
+            # v3.11.0 UI Evidence Readiness: UI-CI ТОЛЬКО при изменении UI-файлов ИЛИ VISUAL-задаче.
+            # Иначе — skip (не применимо; НЕ маскируем — просто не гоняем UI-CI зря на не-UI изменении).
+            import ui_readiness as _uir
+            _ui_run, _ui_reason = _uir.should_run_ui_evidence(_changed, signals)
+            if not _ui_run:
+                ui_evidence, ui_evidence_bundle = None, None
+            else:
+                # v3.7 UI-CI: собрать РЕАЛЬНЫЙ UI-evidence на committed_sha (vitest interaction + axe a11y +
+                # storybook visual). Не-UI child / нет артефактов -> build_bundle честно вернёт not_run/absent.
+                try:
+                    import ui_evidence_collect
+                    ui_evidence_collect.collect(work_root, committed_sha)
+                except Exception:   # noqa: BLE001 — сбор evidence не должен ронять прогон
+                    pass
+                ui_evidence_bundle = storybook_adapter.build_bundle(work_root, changed_files=_changed)
+                ui_evidence = storybook_adapter.evidence_for_gate(ui_evidence_bundle,
+                                                                  expected_sha=committed_sha)
         except Exception:   # noqa: BLE001 — сбой сбора evidence не освобождает гейт (ui_evidence=None)
             ui_evidence, ui_evidence_bundle = None, None
 
