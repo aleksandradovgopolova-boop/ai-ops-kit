@@ -60,6 +60,15 @@
       "description": "v3.13.0 Startup Context Budget: наблюдаемый бюджет стоимости стартового набора (tools/context_cost.py).",
       "properties": { "session_start_tokens": { "type": "integer", "minimum": 1 } },
       "additionalProperties": false
+    },
+    "runtime_surface": {
+      "type": "object",
+      "description": "v3.14.0 Startup Context Budget: что репозиторий экспортирует в .claude/skills и .claude/commands (управляемая стоимость поверхности). Отсутствие/‘all’ = экспортировать всё.",
+      "properties": {
+        "skills": { "type": "object", "properties": { "enabled": { "oneOf": [ { "const": "all" }, { "type": "array", "items": { "type": "string" } } ] } }, "additionalProperties": false },
+        "commands": { "type": "object", "properties": { "enabled": { "oneOf": [ { "const": "all" }, { "type": "array", "items": { "type": "string" } } ] } }, "additionalProperties": false }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["schema_version", "kind", "parent", "presets", "adapters", "providers"],

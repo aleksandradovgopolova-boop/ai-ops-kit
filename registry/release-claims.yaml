@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.13.0
-phase: "v3.13 — Startup Context Budget (срез 2): ярусы чтения + измеримая стоимость старта"
+version: 3.14.0
+phase: "v3.14 — Startup Context Budget (срез 3): управляемая стоимость самой поверхности кита"
 channel: stable
-patch_note: "3.13.0 — Startup Context Budget (срез 2, части 4/6): read_tier 1|2|3 во frontmatter всех шаблонов контекста + переписанный ai-session-start (ярус 1 всегда / 2 по теме / 3 по нужде); новый tools/context_cost.py — оценка стоимости стартового набора (ярус 1 + CLAUDE.md + описания поверхности) с поправкой на кириллицу, разбивка по файлам, вердикт против бюджета context_budget.session_start_tokens; строка в doctor; ProductStatus ≤~2КБ токенов"
+patch_note: "3.14.0 — Startup Context Budget (срез 3, часть 5): бюджет описаний скиллов ≤300 символов (все 9 поставляемых скиллов сокращены до триггеров+границ; сумма 3893→2498) + валидатор validate_runtime_surface; runtime_surface{skills,commands: enabled} в .ai-ops.yaml — репозиторий выбирает что экспортировать; адаптеры генерируются только для настроенных рантаймов (не эмитим codex, если не включён)"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 185
+checks_count: 186
 agents_count: 51
 
 qualified_on: >

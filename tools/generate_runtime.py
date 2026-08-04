@@ -221,29 +221,50 @@ def render_ai_ops_init(runtime):
 """
 
 
-def generate(child_root: Path, verbose=True):
+def _active_runtimes(runtimes):
+    """v3.14.0 Startup Context Budget: адаптеры генерируются ТОЛЬКО для настроенных рантаймов
+    (не эмитим codex/prompts, если codex не включён). None/пусто -> все известные (back-compat)."""
+    if not runtimes:
+        return RUNTIMES
+    active = tuple(r for r in runtimes if r in RUNTIMES)
+    return active or RUNTIMES
+
+
+def _keep_command(name, command_filter):
+    """command_filter=None -> экспортировать всё; иначе только имена из набора (выбор репозитория)."""
+    return command_filter is None or name in command_filter
+
+
+def generate(child_root: Path, verbose=True, runtimes=None, command_filter=None):
     workflows, agents = load_sources()
     out_files = []
-    for runtime in RUNTIMES:
+    active = _active_runtimes(runtimes)
+    for runtime in active:
         sub = "commands" if runtime == "claude-code" else "prompts"
         base = child_root / ".ai" / "generated" / runtime / sub
         base.mkdir(parents=True, exist_ok=True)
         for wid, w in workflows.items():
-            p = base / f"ai-{wid.lower()}.md"
+            name = f"ai-{wid.lower()}"
+            if not _keep_command(name, command_filter):
+                continue
+            p = base / f"{name}.md"
             p.write_text(render_command(wid, w, agents, runtime), encoding="utf-8")
             out_files.append(p)
         # канонический вход (3.0-срез 1) — контроллер задача->исполнение->отчёт
-        rn = base / "ai-run.md"
-        rn.write_text(render_ai_run(runtime, workflows), encoding="utf-8")
-        out_files.append(rn)
+        if _keep_command("ai-run", command_filter):
+            rn = base / "ai-run.md"
+            rn.write_text(render_ai_run(runtime, workflows), encoding="utf-8")
+            out_files.append(rn)
         # ai-start-task — совместимый алиас той же спины (сохраняется, снятие не раньше 4.0)
-        st = base / "ai-start-task.md"
-        st.write_text(render_start_task(runtime, workflows), encoding="utf-8")
-        out_files.append(st)
+        if _keep_command("ai-start-task", command_filter):
+            st = base / "ai-start-task.md"
+            st.write_text(render_start_task(runtime, workflows), encoding="utf-8")
+            out_files.append(st)
         # разговорная установка/онбординг (один на runtime)
-        it = base / "ai-ops-init.md"
-        it.write_text(render_ai_ops_init(runtime), encoding="utf-8")
-        out_files.append(it)
+        if _keep_command("ai-ops-init", command_filter):
+            it = base / "ai-ops-init.md"
+            it.write_text(render_ai_ops_init(runtime), encoding="utf-8")
+            out_files.append(it)
     meta = {
         "schema_version": 1,
         "package_version": (PKG / "VERSION").read_text(encoding="utf-8").strip(),
@@ -257,7 +278,7 @@ def generate(child_root: Path, verbose=True):
     (child_root / ".ai" / "generated" / ".generation.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if verbose:
-        print(f"OK: сгенерировано {len(out_files)} файлов для {len(RUNTIMES)} runtime "
+        print(f"OK: сгенерировано {len(out_files)} файлов для {len(active)} runtime "
               f"-> {child_root / '.ai' / 'generated'}")
     return out_files
 
@@ -339,8 +360,28 @@ def selftest():
             ok = False; print("FAIL свежая генерация помечена как drift")
         else:
             print("PASS drift-детект: свежая генерация актуальна")
-        print("generate_runtime selftest:", "PASS" if ok else "FAIL")
-        return 0 if ok else 1
+
+    # v3.14.0 срез 3: адаптеры только для настроенных рантаймов + фильтр поверхности команд
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        only_claude = generate(root, verbose=False, runtimes=["claude-code"])
+        has_codex = any("codex" in str(p) for p in only_claude)
+        if not has_codex and all("claude-code" in str(p) for p in only_claude):
+            print("PASS runtimes=[claude-code] -> НЕ генерируются файлы codex-адаптера")
+        else:
+            ok = False; print("FAIL при одном рантайме всё равно созданы чужие адаптеры")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        filtered = generate(root, verbose=False, runtimes=["claude-code"],
+                            command_filter={"ai-run", "ai-quick"})
+        names = {p.stem for p in filtered}
+        if names == {"ai-run", "ai-quick"}:
+            print("PASS command_filter экспортирует только выбранные команды")
+        else:
+            ok = False; print(f"FAIL command_filter: ожидалось {{ai-run,ai-quick}}, получено {sorted(names)}")
+
+    print("generate_runtime selftest:", "PASS" if ok else "FAIL")
+    return 0 if ok else 1
 
 
 def main(argv):
