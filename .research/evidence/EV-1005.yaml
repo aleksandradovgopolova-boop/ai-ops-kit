@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1005
+request_id: RR-012
+statement: 'Первый из двух задекларированных китом MCP-серверов уже на новой ревизии
+  и опередил нас: github/github-mcp-server (MIT, 31.9k звёзд, push 2026-07-30, не архивирован)
+  в релизе v1.7.0 от 2026-07-23 — то есть ДО публикации финальной ревизии — заявил включение
+  изменений спеки 2026-07-28 через обновление go-sdk до 1.7.0-pre.3; предыдущий v1.6.0
+  (2026-06-27) содержал «upgrade go-sdk to v1.7.0-pre.1 (new MCP spec)». В release notes
+  v1.5.0-v1.8.0 упоминаний sampling/roots/logging нет. Вывод для кита: по записи github-mcp
+  в registry/tools.yaml миграционного действия не требуется — поставщик несёт протокол
+  сам.'
+evidence_type: documented_fact
+source:
+  title: GitHub API — repos/github/github-mcp-server (метаданные + releases v1.5.0-v1.8.0)
+  url: https://api.github.com/repos/github/github-mcp-server/releases
+  type: source_repository
+  published_at: '2026-07-23'
+  is_primary: true
+citation:
+  locator: 'release v1.7.0 (published_at 2026-07-23), тело релиза'
+  quote: The latest changes for the MCP 2026-07-28 spec are included via `go-sdk to
+    1.7.0-pre.3`
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-30'
+reliability:
+  level: high
+  rationale: 'Машиночитаемые метаданные + дословная строка из тела релиза. Оговорка:
+    «заявлено в release notes» — фактическая полнота реализации ревизии по коду не проверялась.'
+status: active
+superseded_by: null

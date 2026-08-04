@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1008
+request_id: RR-012
+statement: 'Подтверждение того же пробела по второму источнику: в CHANGELOG Claude Code
+  (проверен целиком на 2026-07-30) нет ни одного упоминания ревизии протокола MCP —
+  ни 2026-07-28, ни 2025-11-25, ни «protocol version», ни «stateless», ни «server/discover»,
+  ни «Mcp-Session-Id». При этом MCP-изменения в релизах недели есть и они операционные,
+  не протокольные: в 2.1.219 добавлены HTTP-статус и текст ошибки в claude mcp list
+  и /mcp при неудачном подключении сервера плюс предупреждение о скрытых пробелах в
+  значениях MCP-конфига, а в headless-событие init добавлен mcp_server_errors со списком
+  записей --mcp-config, отброшенных валидацией. Вывод: раннтайм версионирование протокола
+  наружу не публикует — значит декларация кита о MCP не может быть проверена по документации
+  поставщика.'
+evidence_type: documented_fact
+source:
+  title: anthropics/claude-code — CHANGELOG.md (версии 2.1.217-2.1.220)
+  url: https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'сквозной поиск по файлу на строки ревизий — совпадений нет; запись 2.1.219,
+    пункты про MCP'
+  quote: Added HTTP status and error text to `claude mcp list` and `/mcp` when a server
+    fails to connect
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-30'
+reliability:
+  level: medium
+  rationale: Первоисточник, но ключевое утверждение негативное (отсутствие упоминаний);
+    CHANGELOG — не спецификация клиента, отсутствие строки там слабее прямого заявления
+    о версии.
+status: active
+superseded_by: null

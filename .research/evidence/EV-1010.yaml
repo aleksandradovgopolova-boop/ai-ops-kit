@@ -1,0 +1,41 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1010
+request_id: RR-012
+statement: 'SELF-EVIDENCE (требует спот-чека judge). Два места кита, где MCP уже несёт
+  инвариант, и оба не знают о версии протокола: (1) schemas/supply-chain-pin.schema.json
+  — SupplyChainPinPolicy требует, чтобы любая внешняя зависимость движка (model/skill/mcp)
+  ставилась только по зафиксированному revision/hash, для исполняемого кода (skill/mcp)
+  обязательна install-верификация hash или signature; но pinned.type ограничен enum
+  [revision, hash, digest, tag-immutable], поля для ревизии ПРОТОКОЛА нет, а сама схема
+  объявлена additionalProperties: false — то есть добавление такого измерения = правка
+  схемы (аддитивная, но всё же правка), а не запись в данных. (2) governance/security-posture.yaml,
+  область tool-mcp-connection «Безопасное подключение внешних инструментов и MCP» —
+  status declared, severity high, evidence [governance/security-policies.md, registry/tools.yaml],
+  note прямо говорит: политика подключения есть, enforcement — roadmap. Следствие: пиновка
+  MCP-серверов по хешу артефакта и честно declared-постура вместе означают, что смена
+  ревизии протокола у сервера, установленного по зафиксированному хешу, китом не отслеживается
+  ни данными, ни enforcement-ом.'
+evidence_type: documented_fact
+source:
+  title: 'ai-ops-kit — schemas/supply-chain-pin.schema.json + governance/security-posture.yaml
+    (self-evidence)'
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'supply-chain-pin.schema.json: description, dependencies.items.properties.kind/pinned/install_verify,
+    additionalProperties; security-posture.yaml: область tool-mcp-connection'
+  quote: 'Любая внешняя зависимость движка (модель, skill, MCP-сервер) устанавливается
+    ТОЛЬКО по зафиксированному revision/hash — никаких плавающих ссылок (latest/main/HEAD/*).'
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-30'
+reliability:
+  level: high
+  rationale: Прямое чтение схемы и постуры кита. Self-evidence — спот-чек judge обязателен.
+status: active
+superseded_by: null

@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1006
+request_id: RR-012
+statement: 'Второй задекларированный сервер — huggingface/hf-mcp-server (MIT, 269 звёзд,
+  создан 2025-05-06, push 2026-07-30, 13 открытых issues) — активно шевелился ровно
+  вокруг даты ревизии: v0.4.0 и v0.4.1 (2026-07-27), v0.4.2 (2026-07-28), v0.4.3 и v0.4.4
+  (2026-07-30), причём формулировки согласуются с новой моделью подписок и метрик протокола
+  («align MCP settings and improve protocol metrics», «chart exact MCP protocol adoption»,
+  «reject persistent subscription listeners», «align progress handling with modern SDK»).
+  НЕГАТИВНОЕ УТВЕРЖДЕНИЕ с квалификатором: в release notes v0.4.0-v0.4.4 целевая ревизия
+  протокола ЯВНО НЕ НАЗВАНА — «не заявлено в release notes» не значит «не поддерживается»;
+  проверялись только тела релизов, не код, не CHANGELOG-файл и не capability-ответы сервера.'
+evidence_type: documented_fact
+source:
+  title: GitHub API — repos/huggingface/hf-mcp-server (метаданные + releases v0.4.0-v0.4.4)
+  url: https://api.github.com/repos/huggingface/hf-mcp-server/releases
+  type: source_repository
+  published_at: '2026-07-30'
+  is_primary: true
+citation:
+  locator: 'releases v0.4.2 (2026-07-28) и v0.4.4 (2026-07-30), заголовки изменений'
+  quote: align MCP settings and improve protocol metrics
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-30'
+reliability:
+  level: medium
+  rationale: Позитивная часть (даты, активность, дословные формулировки релизов) снята
+    с первоисточника; ключевая часть — негативная («ревизия не названа»), а негатив проверяем
+    слабее позитива и по конвенции не получает уровень выше medium.
+status: active
+superseded_by: null

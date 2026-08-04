@@ -1,0 +1,25 @@
+# Novelty-Watch — журнал еженедельной разведки
+
+Формат: один блок на прогон. Только проверяемые факты с URL. «Пусто» — валидный результат.
+Кандидаты уходят в `.research/sources/inbox-novelty.yaml` (unvetted).
+
+---
+
+## 2026-07-30 (первый прогон; окно — неделя 2026-07-23…30)
+
+**Топ-находка недели.** Финальная ревизия спеки MCP `2026-07-28` вышла — с ломающими изменениями: протокол становится stateless (убраны `initialize`/`notifications/initialized` и `Mcp-Session-Id`), добавлен обязательный `server/discover`, удалены `ping`/`logging/setLevel`, убрана resumability SSE-потока, введён обязательный `resultType`; features Roots/Sampling/Logging и OAuth DCR переведены в Deprecated, принята политика жизненного цикла с окном депрекации не менее 12 месяцев ([changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog), контекст — [AAIF blog](https://aaif.io/blog)). Затрагивает MCP-декларации в `registry/tools.yaml` (hf-mcp-server и др.) и любые наши предположения о сессионности MCP.
+
+**Харнесс под китом (Claude Code 2.1.217→2.1.220, эта неделя).** Изменения, задевающие инварианты и sandbox-политику: вложенные субагенты теперь по умолчанию до глубины 3 (было 1, флаг `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); появилась настройка `sandbox.network.strictAllowlist` (запрет неразрешённых хостов без промпта); новый хук `DirectoryAdded`; хуки из frontmatter агента теперь требуют workspace-trust папки самого файла агента; скиллы с `context: fork` по умолчанию уходят в фон ([CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)). Первые два пункта — потенциальный дрейф относительно EV-910 (sandbox как конкретная изоляция) и writer≠judge/оркестрации.
+
+**Пополнение охвата (не новинки недели, но пропуски прошлого скана).** Найдены два жанровых соседа, отсутствовавших в EV-660/EV-663: [controlkeel](https://github.com/aryaminus/controlkeel) — Apache-2.0, Elixir, push 2026-07-29, самоописание почти дословно повторяет тезис кита («enforce policy gates, track findings, proofs, and evals»), но масштаб крошечный (11 звёзд); [ai-devkit](https://github.com/codeaholicguy/ai-devkit) — «The control plane for AI coding agents», 1568 звёзд, push 2026-07-26, **лицензия не указана** (переиспользование закрыто). Плюс governance-рамка [CAGE-1](https://arxiv.org/abs/2607.03510) (2026-07-03, один автор, кода нет), чьи оси оценки почти покрывают тезис кита.
+
+**Проверка прошлых evidence — расхождений не найдено, три подтверждены заново:**
+- EV-662 (OpenHands: gates/транзакционная доставка не документированы) — **в силе**: релизы 1.6.1…1.7.2 (28-30 июля) — LLM-селектор, память, WebSocket-auth, багфиксы; ни policy gates, ни delivery-транзакции ([releases](https://github.com/OpenHands/OpenHands/releases)). Побочно: `OpenHands/agent-canvas` **заархивирован**, а функция ушла под SaaS-аутентификацию (cloud-1.47.0).
+- EV-663 (Rel(AI)Build — публичного репозитория нет) — **в силе**: поиск по GitHub даёт `total_count: 0`; Galileo Agent Control без новостей с марта (Apache-2.0).
+- EV-804 (Microsoft Agent Governance Toolkit: 7/10 Full + 3/10 Partial) — **в силе**: описание репозитория заявляет «Covers 10/10 OWASP Agentic Top 10», их же compliance-док по-прежнему говорит дословно «Official ASI coverage: 7/10 Full, 3/10 Partial, 0 Gaps» ([док](https://github.com/microsoft/agent-governance-toolkit/blob/main/docs/compliance/owasp-agentic-top10-architecture.md)).
+
+**Спокойные направления.** AGENTS.md — ломающих изменений нет: канонический репозиторий [agentsmd/agents.md](https://github.com/agentsmd/agents.md) последний push 2026-03-12, страница проекта на aaif.io пуста; конвенция кита в безопасности. ECC — жив (MIT в корне, 236k звёзд, push 2026-07-29), граница MIT/Pro не двигалась с марта 2026 ($19/seat: приватные репозитории, pooled usage, AgentShield-проверки глубже); осторожность: счётчики каталога расходятся между сайтом (261 скилл/64 агента) и README (281/67) — числа EV-702 использовать нельзя. ruflo — прежний churn: 5+ релизов за неделю до v3.32.39 (2026-07-30), лицензия MIT без изменений, из содержательного — фильтрация MCP-инструментов и совместимость PreToolUse-вердиктов с Codex. Quality gates/evals — нового инструмента за неделю не вышло; только заявки на стандарты (индивидуальный IETF-драфт по security-бенчмарку агентов, 55 метрик, рабочей группой не принят).
+
+**Постскриптум (тот же день).** RR по MCP заведён и прогнан: RR-012 → EV-1001…EV-1011 → DP-112 (status draft, независимого judge не было). Вывод прогона: протокольная ломка на кит не падает (кит MCP не реализует), срочности нет до 2027-07-28, но реестр Deprecated (https://modelcontextprotocol.io/specification/2026-07-28/deprecated) ставится на квартальный watch — у транспорта HTTP+SSE срок наступает раньше всех.
+
+**Рекомендация.** Один узкий RR стоит: «влияние MCP 2026-07-28 на MCP-контур кита» — датированное, ломающее, спеко-уровневое изменение с 12-месячным окном миграции. controlkeel и ai-devkit — не отдельный RR, а довесок к следующему конкурентному скану (EV-660/EV-663 пора обновлять: они пропустили двух соседей). Остальное — наблюдать.

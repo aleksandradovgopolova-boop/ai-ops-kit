@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1003
+request_id: RR-012
+statement: 'Реестр Deprecated-фич даёт точные даты, а не «когда-нибудь»: Roots, Sampling,
+  Logging и OAuth Dynamic Client Registration помечены Deprecated в ревизии 2026-07-28,
+  и у всех четырёх earliest removal — «первая ревизия, выпущенная 2027-07-28 или позже»;
+  значения includeContext thisServer/allServers следуют за Sampling; транспорт HTTP+SSE
+  (Deprecated с 2025-03-26) получает earliest removal «через три месяца после того,
+  как SEP-2596 достигнет Final» — то есть это самый ранний из сроков. Раздел Removed
+  пуст: ни одна фича по этой политике ещё не удалена. Миграционные пути документированы
+  для каждой: вместо Roots — передача файлов/каталогов через параметры инструментов,
+  resource URI или конфигурацию сервера; вместо Sampling — прямая интеграция с API
+  LLM-провайдера; вместо Logging — stderr (stdio) или OpenTelemetry; вместо DCR — Client
+  ID Metadata Documents.'
+evidence_type: documented_fact
+source:
+  title: MCP — Deprecated Features (реестр Deprecated/Removed, ревизия 2026-07-28)
+  url: https://modelcontextprotocol.io/specification/2026-07-28/deprecated
+  type: official_documentation
+  published_at: '2026-07-28'
+  is_primary: true
+citation:
+  locator: 'таблица Deprecated, колонка Earliest removal (строки Roots/Sampling/Logging/DCR);
+    раздел Removed'
+  quote: First revision released on or after 2027-07-28
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-30'
+reliability:
+  level: high
+  rationale: 'Первоисточник. Оговорка самой страницы: реестр — производное представление
+    («derived view»), нормативны per-feature notices и changelog; состав таблицы меняется
+    при каждом переходе фичи — отсюда короткий срок свежести.'
+status: active
+superseded_by: null

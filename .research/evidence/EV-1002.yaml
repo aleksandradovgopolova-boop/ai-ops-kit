@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1002
+request_id: RR-012
+statement: 'КЛЮЧЕВОЙ ФАКТ для оценки срочности: новая модель согласования версий НЕ
+  требует одномоментной миграции экосистемы. Версия объявляется в каждом запросе (ключ
+  io.modelcontextprotocol/protocolVersion в _meta, на Streamable HTTP дублируется заголовком
+  MCP-Protocol-Version), сервер принимает или отклоняет каждый запрос независимо; клиенты
+  и серверы МОГУТ поддерживать несколько версий протокола одновременно; при неподдерживаемой
+  версии сервер отвечает UnsupportedProtocolVersionError со списком поддерживаемых, и
+  клиент повторяет запрос совместимой версией. Вызов server/discover для клиента ОПЦИОНАЛЕН
+  (обязателен он для сервера — как реализация RPC). Для ревизий 2025-11-25 и ранее спека
+  отдельно документирует обратную совместимость с handshake-моделью. Версии — строки YYYY-MM-DD,
+  инкрементируются только при обратно НЕсовместимых изменениях; текущая Current — 2026-07-28.'
+evidence_type: documented_fact
+source:
+  title: MCP — Versioning (Revisions, Feature States, Negotiation)
+  url: https://modelcontextprotocol.io/docs/learn/versioning
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: разделы Revisions и Negotiation
+  quote: Clients and servers MAY support multiple protocol versions simultaneously.
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2027-01-30'
+reliability:
+  level: high
+  rationale: Первоисточник; нормативные формулировки MAY/MUST взяты дословно (звёздочки
+    markdown-выделения в цитате опущены).
+status: active
+superseded_by: null

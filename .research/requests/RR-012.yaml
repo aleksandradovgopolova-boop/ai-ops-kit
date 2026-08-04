@@ -1,0 +1,47 @@
+# Влияние финальной ревизии спеки MCP 2026-07-28 на MCP-контур кита.
+# Повод: novelty-Watch 2026-07-30 (.research/watches/novelty-log.md) — топ-находка недели:
+# ревизия ломающая (stateless-протокол, удалённые методы, депрекация Roots/Sampling/Logging)
+# и датированная (окно депрекации не менее 12 месяцев).
+schema_version: 1
+kind: research.request
+id: RR-012
+title: "MCP 2026-07-28: что ломается в MCP-контуре кита и что менять сейчас"
+requested_by:
+  system: human
+  layer: technology
+decision_to_support:
+  description: "Решить, какие правки в MCP-контур кита (registry/tools.yaml, registry/runtimes.yaml, registry/providers.yaml, security/permission-levels.yaml, schemas/supply-chain-pin.schema.json, governance/security-posture.yaml) нужны сейчас, какие отложить до конца окна депрекации, и нужна ли киту версия протокола как отдельное измерение декларации"
+  decision_maker: human
+questions:
+  - "Что именно изменилось в ревизии 2026-07-28 против 2025-11-25 и какая часть изменений ломающая ИМЕННО для потребителя MCP-серверов (роль кита: декларации и подключение), а не для их автора?"
+  - "Какие артефакты кита кодируют утверждения, которые ревизия делает неверными или неполными — в частности булев capability `mcp: {status: documented, value: true}` в registry/runtimes.yaml (7 раннтаймов), `tool_protocols.mcp` без поля версии протокола, `mcp_tools` в security/permission-levels.yaml, capability `mcp_native` в registry/providers.yaml и обход GigaChat через tool gateway?"
+  - "Задевают ли депрекации (Roots, Sampling, Logging, HTTP+SSE-транспорт, OAuth Dynamic Client Registration) два задекларированных MCP-инструмента — github-mcp (status: documented) и hf-mcp-server (status: declared) — и заявляют ли их авторы поддержку новой ревизии?"
+  - "Нужно ли SupplyChainPinPolicy расширять пиновкой ревизии протокола рядом с revision/hash для kind: mcp — и меняет ли stateless-модель (состояние переезжает в server-minted handles как обычные аргументы инструментов) то, что видит и логирует tool broker?"
+  - "Что из этого стоит делать в ближайшем релизе, а что ждёт: даёт ли принятая политика жизненного цикла (Active/Deprecated/Removed, окно не менее 12 месяцев) право отложить, и какова цена отсрочки?"
+constraints:
+  - evidence_over_reputation           # только первоисточник спеки и SEP-ы, не обзоры и не блог-пересказы
+  - registry_is_single_source_of_truth # версия протокола, если нужна, появляется в registry, а не параллельной декларацией
+  - fits_kit_declared_pattern          # MCP-серверы остаются декларациями/контрактами, не зависимостями ядра
+  - honest_statuses                    # status: documented/declared по MCP не завышать; tool-mcp-connection в постуре честно declared
+  - additive_only                      # правки схем/реестров — аддитивные; ломающее только major (правило изоляции research и кита)
+workflow_hint: quick
+memory_check:
+  performed: true
+  related_requests: [RR-008, RR-010]
+  related_decisions: [DP-102, DP-106, DP-108]
+  summary: >
+    Факт-основание уже зафиксирован разведкой 2026-07-30 (novelty-log): ревизия 2026-07-28 убирает
+    протокольные сессии и Mcp-Session-Id, убирает handshake initialize/notifications-initialized
+    (версия и capabilities переезжают в _meta каждого запроса), вводит обязательный server/discover,
+    удаляет ping/logging-setLevel, убирает resumability SSE-потока, делает resultType обязательным,
+    переводит Roots/Sampling/Logging, HTTP+SSE и OAuth DCR в Deprecated и принимает политику
+    жизненного цикла с окном не менее 12 месяцев (https://modelcontextprotocol.io/specification/2026-07-28/changelog).
+    Контур кита известен по исходникам: DP-102 — механизм деклараций внешних инструментов
+    (MCP-серверы = декларации, не зависимости); DP-106 — hf-mcp-server задекларирован как опция
+    research-модуля (status: declared); RR-010/DP-108 — security-постура, где tool-mcp-connection
+    честно declared с enforcement в roadmap. Скоуп RR — только MCP-контур; sandbox/permission
+    целиком не переоткрываем (EV-910).
+required_confidence: medium
+deadline: "2026-08-14"
+status: answered
+created_at: "2026-07-30"

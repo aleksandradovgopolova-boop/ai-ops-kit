@@ -1,0 +1,45 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1009
+request_id: RR-012
+statement: 'SELF-EVIDENCE (требует спот-чека judge — writer заинтересован в фактах о
+  себе). Инвентаризация MCP-поверхности кита по исходникам на 2026-07-30: (1) registry/tools.yaml,
+  tool_protocols.mcp — display_name «Model Context Protocol», status documented, supported_runtimes
+  [claude-code, codex, cursor, gemini-cli, opencode], provider_native {gigachat: false,
+  anthropic: true, openai: true}, note про обход GigaChat через tool gateway; ПОЛЯ ВЕРСИИ/РЕВИЗИИ
+  ПРОТОКОЛА В ЗАПИСИ НЕТ. (2) Из 16 записей tools ровно две имеют protocol: mcp — github-mcp
+  (status documented, permission_level network) и hf-mcp-server (status declared, permission_level
+  network, requires_credentials true). (3) registry/runtimes.yaml: из 9 раннтаймов capability
+  mcp объявлена у шести — пять как {status: documented, value: true} (claude-code, codex,
+  cursor, gemini-cli, opencode) и generic-orchestrator как {status: degraded, value: optional};
+  форма записи — булева, измерения «какая ревизия» в ней нет. (4) security/permission-levels.yaml:
+  уровень network наследует execution и разрешает [outbound_http_allowlisted, provider_api_calls,
+  mcp_tools] — mcp_tools как неделимое разрешение, без различения read/write-операций
+  и без привязки к транспорту. (5) registry/providers.yaml: capability mcp_native, у
+  gigachat {status: unsupported, value: false, fallback: wrap-behind-tool-gateway}. (6)
+  degradation_rule в runtimes.yaml гарантирует исполнимость MVP-workflow минимум в sequential
+  mode, а общий контракт прямо требует: workflow не должен ломаться при отсутствии native_subagents/mcp/structured_output.'
+evidence_type: documented_fact
+source:
+  title: 'ai-ops-kit — registry/tools.yaml, registry/runtimes.yaml, registry/providers.yaml,
+    security/permission-levels.yaml (self-evidence)'
+  url: ''
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: 'tools.yaml: tool_protocols.mcp + записи github-mcp/hf-mcp-server; runtimes.yaml:
+    capabilities.mcp по 9 раннтаймам + degradation_rule; permission-levels.yaml: уровень
+    network; providers.yaml: capability mcp_native'
+  quote: 'Общий контракт: workflow не должен ломаться при отсутствии native_subagents/mcp/structured_output.'
+captured_at: '2026-07-30'
+captured_by: 'novelty-watch → RR-012 (прогон 2026-07-30, inline, без субагентов)'
+freshness:
+  volatile: true
+  expires_at: '2026-10-30'
+reliability:
+  level: high
+  rationale: Прямое чтение исходников кита, счётчики получены разбором YAML, а не глазами.
+    Оговорка процессная — self-evidence, спот-чек judge обязателен по конвенции research-модуля.
+status: active
+superseded_by: null
