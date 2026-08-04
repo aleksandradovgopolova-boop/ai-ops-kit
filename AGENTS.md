@@ -164,6 +164,8 @@ python3 validation/validate_release_claims.py
 python3 tools/usage_ledger.py --selftest
 python3 tools/session_telemetry.py --selftest
 python3 tools/session_guardrails.py --selftest
+python3 tools/session_boundary.py --selftest
+python3 tools/delegation_advisor.py --selftest
 python3 tools/ui_readiness.py --selftest
 python3 tools/model_router.py --selftest
 python3 tools/provider_endpoints.py --selftest

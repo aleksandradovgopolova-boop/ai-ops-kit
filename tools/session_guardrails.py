@@ -295,6 +295,13 @@ def main(argv):
     root = args[0] if args else "."
     pol = load_policy(root)
     snap = session_telemetry.snapshot(root, workitem_id=wid, context_current=ctx)
+    # v3.17.0 WP2: если отношение не задано явно, но есть текст следующей задачи — классифицируем.
+    if not nrel and nxt:
+        try:
+            import session_boundary
+            nrel, _ = session_boundary.classify(current_workitem=wid, new_task=nxt)
+        except Exception:  # noqa: BLE001
+            nrel = None
     rit = completion_ritual(snap, pol, workitem_id=wid, pr=pr, checks=checks,
                             next_relation=nrel or "new_independent_task", next_task=nxt,
                             at_safe_boundary=not unsafe, repo_path=str(Path(root).resolve()))

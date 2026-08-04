@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.16.0
-phase: "v3.16 — Development Culture & Resource Guardrails (срез 1): гигиена сессий, бюджет контекста, ритуал завершения"
+version: 3.17.0
+phase: "v3.17 — Development Culture & Resource Guardrails (срез 2): boundary classifier + культура делегирования"
 channel: stable
-patch_note: "3.16.0 — Development Culture Guardrails (срез 1, WP1+WP3+WP5): session_telemetry (честный снимок сессии — объём/стоимость/контекст, usage_status measured|estimated|unavailable, unknown НЕ как 0); SessionEconomyPolicy (пороги 150/250/400k, one-task-per-session, advise-not-block); Task Completion Ritual — каждый прогон/WorkItem завершается SessionRecommendation (continue/compact/clear/new_session) с ТОЧНОЙ командой; команда `ai-ops session`; ключ session_economy в .ai-ops.yaml"
+patch_note: "3.17.0 — Development Culture Guardrails (срез 2, WP2+WP4): session_boundary — классификатор отношения новой задачи к сессии (same_task/continuation/adjacent_subtask/new_independent_task/new_product), при неоднозначности склоняется к безопасному для гигиены исходу; вшит в session_guardrails (рекомендация по реальному отношению, не дефолту); delegation_advisor — культура делегирования (разведка/большие логи/сравнение файлов/research/review/mechanical → сабагент, в основной контекст только сводка, не сырьё); DelegationPolicy.md"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 189
+checks_count: 191
 agents_count: 51
 
 qualified_on: >
