@@ -12,6 +12,10 @@ Advisory: возврат 0 всегда (протухший документ —
 
 Использование:  validate_freshness.py [dir] [--now YYYY-MM-DD] [--strict] [--json]
                 validate_freshness.py --selftest
+
+v3.12.0 Startup Context Budget: БЕЗ аргумента дефолт — контекст РЕПОЗИТОРИЯ
+(.ai/project/context, при отсутствии .ai/custom/context), а НЕ шаблоны кита. Шаблоны кита
+(template: true во frontmatter) исключены из проверки (протухает копия в репо, не шаблон).
 """
 
 import json
@@ -45,6 +49,10 @@ def parse_date(s):
 
 def assess(fm: dict, today: date):
     """Вернуть (status, detail) для документа с frontmatter."""
+    # v3.12.0 Startup Context Budget: шаблоны кита (template: true) НЕ проверяются на свежесть —
+    # у них зашита дата-заглушка, они не «протухают» (протухает копия в репозитории, а не шаблон).
+    if fm.get("template") is True:
+        return None
     stab = fm.get("stability")
     if stab not in DEFAULT_EXPIRY:
         return None
@@ -59,6 +67,18 @@ def assess(fm: dict, today: date):
         overdue = (today - expires).days
         return "stale", f"{stab}: протух {overdue}д назад (проверен {reviewed}, срок {days}д)"
     return "ok", f"{stab}: свеж до {expires}"
+
+
+def _default_child_context(base: Path = None):
+    """Дефолт БЕЗ аргумента — контекст РЕПОЗИТОРИЯ (не шаблоны кита): .ai/project/context, при
+    отсутствии — .ai/custom/context. Если ни того ни другого нет (напр. чистый клон кита) — вернуть
+    project/context как есть (rglob по несуществующему -> пусто -> честно «нет документов»)."""
+    b = base or Path.cwd()
+    for rel in (".ai/project/context", ".ai/custom/context"):
+        p = b / rel
+        if p.is_dir():
+            return p.resolve()
+    return (b / ".ai/project/context").resolve()
 
 
 def build(root: Path, today: date):
@@ -114,6 +134,21 @@ def selftest():
     expect("кастомный expires_after_days уважается",
            assess({"stability": "evolving", "reviewed_at": "2026-07-01",
                    "expires_after_days": 5}, today)[0] == "stale")
+    # v3.12.0: шаблон кита (template: true) не проверяется, даже с протухшей датой
+    expect("template: true — не проверяется (протух шаблон != протух репо)",
+           assess({"template": True, "stability": "volatile", "reviewed_at": "2020-01-01"}, today) is None)
+    # v3.12.0: дефолтный путь — контекст РЕПОЗИТОРИЯ, не шаблоны кита
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / ".ai/project/context").mkdir(parents=True)
+        expect("дефолт -> .ai/project/context репозитория",
+               _default_child_context(base) == (base / ".ai/project/context").resolve())
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        (base / ".ai/custom/context").mkdir(parents=True)
+        expect("дефолт -> .ai/custom/context при отсутствии project",
+               _default_child_context(base) == (base / ".ai/custom/context").resolve())
     print("validate_freshness selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -132,7 +167,7 @@ def main(argv):
     today = parse_date(now_arg) if now_arg else date.today()
     if today is None:
         print("неверный --now (ожидается YYYY-MM-DD)"); return 1
-    root = Path(args[0]).resolve() if args else (PKG / "context")
+    root = Path(args[0]).resolve() if args else _default_child_context()
     return run(root, today, strict="--strict" in argv, as_json="--json" in argv)
 
 

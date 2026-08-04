@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.11.0
-phase: "v3.11 — UI Evidence Readiness: честная зрелость UI-evidence (Storybook) + gating UI-CI"
+version: 3.12.0
+phase: "v3.12 — Startup Context Budget (срез 1): механизм контекста доезжает до репо и проверяется"
 channel: stable
-patch_note: "3.11.0 — UI Evidence Readiness: onboarding-лестница absent/configured/runnable/verified (ai-ops onboard), UI-CI только на UI-изменениях/VISUAL-задаче, отдельные честные статусы build/interaction/axe/visual, отсутствие Storybook НЕ маскируется, кит предлагает шаблон скрипта но не ставит зависимости"
+patch_note: "3.12.0 — Startup Context Budget (срез 1, части 1→2→3): update back-fill'ит обязательные документы контекста (ProductStatus.md/now.md) черновиками из шаблонов; doctor сообщает пробел; freshness-гейт проверяет контекст РЕПОЗИТОРИЯ (не селфтест кита); дефолт validate_freshness — контекст репо, шаблоны кита (template:true) исключены; новый validate_context_completeness"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 183
+checks_count: 184
 agents_count: 51
 
 qualified_on: >

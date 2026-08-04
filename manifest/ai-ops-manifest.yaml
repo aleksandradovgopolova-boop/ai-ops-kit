@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 3.11.0
+  package_version: 3.12.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -876,6 +876,12 @@ session_orchestration:
     read_first_in: commands/task/ai-session-start.md
     updated_in: commands/task/ai-finish-task.md
     anti_pattern: "CLAUDE.md держит только вечные правила; снимок статуса — ссылкой на ProductStatus"
+    required_context_docs:                     # v3.12.0 Startup Context Budget: обязательные документы
+      # контекста репозитория (ярус 1). update back-fill'ит отсутствующие из шаблонов (status: draft),
+      # doctor сообщает пробел, validate_context_completeness проверяет полноту project/custom-оверлея.
+      # Пути относительно context/ (в репо: .ai/project/context/<путь>).
+      - product/ProductStatus.md               # что реально готово/живёт (ярус 1)
+      - now.md                                 # снимок на дату (ярус 1)
   concurrency_preflight:                      # v2.28: коллизии параллельной работы до старта
     gate: concurrency_preflight                # quality/gates.yaml, stage intake, advisory
     tool: tools/concurrency_preflight.py       # base_changes (git) + open PRs (gh -> REST) + active-work

@@ -165,10 +165,39 @@ def deterministic_run(validator):
         status = "pass" if refs and claims else "fail"
         return status, checks, [c["id"] for c in checks if c["status"] == "pass"]
     if validator == "validate-freshness":
-        ok = _run_validator("validate_freshness.py", "--selftest")
-        checks = [{"id": "no_stale_volatile_docs", "status": "pass" if ok else "warn"}]
-        return ("pass" if ok else "warn"), checks, [c["id"] for c in checks if c["status"] == "pass"]
+        return _freshness_run()
     return None
+
+
+def _freshness_run(base=None):
+    """v3.12.0 Startup Context Budget: freshness-гейт проверяет контекст РЕПОЗИТОРИЯ
+    (.ai/project/context, + .ai/custom/context), а НЕ --selftest самого кита (тот остаётся отдельной
+    проверкой в CI кита). Протухший volatile / нет reviewed_at у размеченного документа -> WARN с
+    именами файлов и сроками (имена вшиты в id проверки, чтобы попасть в machine-readable отчёт).
+    Отсутствие контекста репозитория -> WARN (пробел виден, не молчаливый pass)."""
+    b = Path(base) if base else Path.cwd()
+    roots = [b / rel for rel in (".ai/project/context", ".ai/custom/context")]
+    roots = [r for r in roots if r.is_dir()]
+    if not roots:
+        checks = [{"id": "repo_context_present:.ai/project/context отсутствует", "status": "warn"}]
+        return "warn", checks, []
+    checks = []
+    for r in roots:
+        proc = subprocess.run([sys.executable, str(PKG / "validation" / "validate_freshness.py"),
+                               str(r), "--json"], capture_output=True, text=True)
+        try:
+            rep = json.loads(proc.stdout)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        for item in rep.get("results", []):
+            if item["status"] == "stale":
+                checks.append({"id": f"stale:{item['path']} — {item['detail']}", "status": "warn"})
+            elif item["status"] == "no-review-date":
+                checks.append({"id": f"no_review_date:{item['path']} — {item['detail']}", "status": "warn"})
+    if not checks:
+        checks = [{"id": "no_stale_volatile_docs", "status": "pass"}]
+    status = "warn" if any(c["status"] == "warn" for c in checks) else "pass"
+    return status, checks, [c["id"] for c in checks if c["status"] == "pass"]
 
 # ключи, разрешённые схемой gate-result (additionalProperties: false)
 _ALLOWED_KEYS = {
@@ -483,6 +512,28 @@ def selftest():
            run is not None and run[0] == "pass")
     expect("символический валидатор не выдумывает вердикт (нужен evidence)",
            deterministic_run("validate-intake") is None)
+
+    # 3d. v3.12.0: freshness-гейт проверяет контекст РЕПОЗИТОРИЯ (не селфтест кита)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        ctx = Path(td) / ".ai/project/context"
+        ctx.mkdir(parents=True)
+        (ctx / "ProductStatus.md").write_text(
+            "---\nstability: volatile\nreviewed_at: 2020-01-01\n---\n# stale\n", encoding="utf-8")
+        st, checks, _ = _freshness_run(td)
+        expect("freshness: протухший ProductStatus.md репо -> warn + имя файла",
+               st == "warn" and any("stale:ProductStatus.md" in c["id"] for c in checks))
+    with tempfile.TemporaryDirectory() as td:
+        ctx = Path(td) / ".ai/project/context"
+        ctx.mkdir(parents=True)
+        (ctx / "ProductStatus.md").write_text(
+            "---\nstability: volatile\nreviewed_at: 2999-01-01\n---\n# fresh\n", encoding="utf-8")
+        st, _, _ = _freshness_run(td)
+        expect("freshness: свежий контекст репо -> pass", st == "pass")
+    with tempfile.TemporaryDirectory() as td:
+        st, checks, _ = _freshness_run(td)
+        expect("freshness: нет контекста репо -> warn (пробел виден)",
+               st == "warn" and any("repo_context_present" in c["id"] for c in checks))
 
     # 4. частичный evidence -> всё ещё blocked по недостающему гейту
     r2 = evaluate("QUICK", {"intake_completeness": {"status": "pass",

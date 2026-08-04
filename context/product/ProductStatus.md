@@ -1,4 +1,6 @@
 ---
+template: true          # шаблон кита: НЕ проверяется на свежесть (протухает копия в репо, не шаблон)
+read_tier: 1            # ярус 1: читать всегда при старте сессии
 stability: volatile
 reviewed_at: 2026-07-15
 owner: product-team
