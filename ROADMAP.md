@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.18.0 stable**: Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.19.0 stable**: Engineering Operating Model начат (срез 1 — дисциплина коммита и ветки, детект отставания базы, `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -526,8 +526,19 @@ freshness и первым живым DecisionPackage. Архитектура **e
   `ai-ops method`) — советы в порядке гигиена>делегирование>итерации>runtime>effort; собирает session_guardrails
   + delegation_advisor + model_router; affected-tests/не-читать-весь-репо/переиспользование.
   **Вся фича Development Culture & Resource Guardrails закрыта (3.16→3.18).**
-- **Затем — Engineering Operating Model / Autonomous Operation** (прежние 3.13/3.15 из спеки владельца,
-  сдвинуты): commit/branch/environments/deploy/economic preflight; worker, `ai-ops do`, ask-once, blocker resolver.
+- **v3.19.0 — Engineering Operating Model, срез 1** ✅ (WP1+WP2+WP3): CommitContract (`commit_policy` —
+  жёстко: смешение зон кит/продукт, артефакты прогонов, `.env`/ключи, секрет в сообщении, protected_paths
+  без approval, сообщение-заглушка; мягко: размер/scope/WorkItem/evidence) + BranchContract
+  (`branch_policy` — жёстко: доставка движка только через PR, имя ветки прогона; мягко: **отставание базы**,
+  рассинхрон базы с upstream, несколько WorkItem, возраст; `unavailable != 0`) + `EngineeringOperatingModel.md`
+  + ключ `engineering_operating_model` в схеме + `validate_engops_policy` (связность порогов + паритет
+  правило↔код) + `ai-ops engops` + 2 строки doctor. Мотив: ветка дочки отстала от main на 234 коммита,
+  и это не было ничьей ответственностью.
+- **Затем — Engineering Operating Model срезы 2–3 / Autonomous Operation** (прежние 3.13/3.15 из спеки
+  владельца, сдвинуты): срез 2 — окружения и deploy readiness (лестница absent/configured/runnable/verified
+  + гейт `deploy_readiness` по сигналу `deployment_change`; кит не деплоит, а не даёт врать о готовности);
+  срез 3 — экономический preflight (BudgetContract проверяется ДО tool loop, а не сверяется после);
+  затем worker, `ai-ops do`, ask-once, blocker resolver.
 - **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
   (owner_effort, где кит ускоряет/страхует/мешает, регрессии, стоимость/latency из Usage Truth) решают дальнейшее.
 - **После данных (точечно, ПО ФАКТАМ):** DX; устойчивость runtime; адресный рефакторинг. **Дальше:** Codex
