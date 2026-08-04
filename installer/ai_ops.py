@@ -108,16 +108,47 @@ def parent_source():
     return f"git+{url}"
 
 
+def _child_cfg_data():
+    if not CHILD_CONFIG.exists():
+        return {}
+    try:
+        return yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return {}
+
+
+def _configured_runtimes():
+    """v3.14.0 срез 3: какие рантаймы репозиторий настроил (адаптеры только для них).
+    runtimes.configured (список) > [runtimes.default] > None (=все известные, back-compat)."""
+    rt = (_child_cfg_data().get("runtimes") or {})
+    conf = rt.get("configured")
+    if isinstance(conf, list) and conf:
+        return [str(x) for x in conf]
+    d = rt.get("default")
+    return [str(d)] if isinstance(d, str) and d else None
+
+
+def _surface_filter(kind):
+    """runtime_surface.<kind>.enabled -> set имён или None (=экспортировать всё). kind: skills|commands."""
+    rs = (_child_cfg_data().get("runtime_surface") or {}).get(kind) or {}
+    en = rs.get("enabled")
+    if isinstance(en, list):
+        return set(str(x) for x in en)
+    return None                                      # 'all' или отсутствие -> всё
+
+
 def materialize_runtime(child_root: Path):
     """Сгенерировать runtime-команды и УСТАНОВИТЬ их туда, где их находит раннер.
     generate_runtime пишет source of truth в .ai/generated/<runtime>/…; здесь мы
     ставим команды claude-code в .claude/commands/ (command_loading из runtimes.yaml),
     иначе после установки среда не видит сгенерированные точки входа. Возвращает число
-    установленных команд."""
+    установленных команд. v3.14.0: адаптеры только для настроенных рантаймов + фильтр поверхности."""
     import os
     sys.path.insert(0, str(PKG / "tools"))
     import generate_runtime
-    generate_runtime.generate(child_root, verbose=False)
+    generate_runtime.generate(child_root, verbose=False,
+                              runtimes=_configured_runtimes(),
+                              command_filter=_surface_filter("commands"))
     # claude-code -> .claude/commands/ (command_loading из runtimes.yaml)
     src = child_root / ".ai" / "generated" / "claude-code" / "commands"
     dst = child_root / ".claude" / "commands"
@@ -222,12 +253,15 @@ def sync_skills(child_root: Path):
     .ai/runtime/backups/skills/<id>/ и предупреждаем (кастомные скиллы — в .ai/custom/).
     Возвращает список синхронизированных id."""
     synced = []
+    skills_filter = _surface_filter("skills")   # v3.14.0: репозиторий выбирает, что экспортировать
     for sk in (manifest().get("skills", {}) or {}).get("shipped", []) or []:
         sid = sk.get("id")
         src_path = PKG / sk.get("path", "")
         src_dir = src_path.parent
         if not sid or not src_dir.is_dir():
             continue
+        if skills_filter is not None and sid not in skills_filter:
+            continue                                # не в выбранной поверхности — не экспортируем
         dst_dir = child_root / ".claude" / "skills" / sid
         if dst_dir.exists():
             if _dir_signature(dst_dir) != _dir_signature(src_dir):

@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.13.0 stable**: Startup Context Budget срез 2 (ярусы чтения read_tier + измеримая стоимость старта); срез 1 (back-fill контекста + freshness-гейт) v3.12.0; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.14.0 stable**: Startup Context Budget ЗАВЕРШЁН (срез 3: управляемая стоимость поверхности кита); срезы 1–2 (back-fill контекста + freshness-гейт + ярусы чтения + измеримая стоимость старта) v3.12–3.13; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -506,9 +506,10 @@ freshness и первым живым DecisionPackage. Архитектура **e
   всех шаблонов + переписанный `ai-session-start` (ярус 1 всегда / 2 по теме / 3 по нужде); `tools/context_cost.py`
   (оценка стоимости старта с поправкой на кириллицу, разбивка, вердикт против `context_budget.session_start_tokens`)
   + строка в doctor + `--strict` как advisory-гейт; ProductStatus ≤~2КБ токенов.
-- **v3.14.0 — Startup Context Budget, срез 3** (часть 5): управляемая стоимость самого кита —
-  `runtime_surface` (skills/commands: enabled) в `.ai-ops.yaml`, адаптеры только для `runtimes.configured`,
-  бюджет длины `description` скилла/команды (≤300) с валидатором. Цель: сумма описаний поверхности −≥2×.
+- **v3.14.0 — Startup Context Budget, срез 3** ✅ (часть 5): управляемая стоимость самого кита —
+  бюджет `description` скилла ≤300 символов (все 9 сокращены, сумма 3893→2498; валидатор
+  `validate_runtime_surface`); `runtime_surface` (skills/commands: enabled) в `.ai-ops.yaml`; адаптеры только
+  для `runtimes.configured` (не эмитим codex, если не включён). **Вся фича Startup Context Budget закрыта.**
 - **v3.15.0 — Architecture Baseline:** read-only `ai-ops audit architecture` (карта модулей/границ/зависимостей/
   API/данные/интеграции/failure-modes/deployment/observability/security/ADR-дрейф/риски); дешёвый baseline на
   onboard, полный AI-review отдельно; architecture-reviewer — обязательный судья при architecture-сигналах.
