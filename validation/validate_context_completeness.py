@@ -114,6 +114,26 @@ def selftest():
         expect("managed-only -> оверлей пуст -> всё ещё missing (managed != заполнено репо)",
                r["missing"] == req)
 
+    # v3.13.0 Startup Context Budget: ВСЕ шаблоны контекста кита размечены read_tier (ярусы чтения)
+    missing_tier = []
+    ctx = PKG / "context"
+    if ctx.is_dir():
+        for p in sorted(ctx.rglob("*.md")):
+            txt = p.read_text(encoding="utf-8", errors="replace")
+            fm = {}
+            if txt.startswith("---"):
+                seg = txt.split("---", 2)
+                if len(seg) >= 3:
+                    try:
+                        fm = yaml.safe_load(seg[1]) or {}
+                    except yaml.YAMLError:
+                        fm = {}
+            if fm.get("read_tier") not in (1, 2, 3):
+                missing_tier.append(p.relative_to(ctx).as_posix())
+    expect("все шаблоны context/ кита размечены read_tier 1|2|3 (v3.13.0)", not missing_tier)
+    if missing_tier:
+        print("  без read_tier:", ", ".join(missing_tier))
+
     print("validate_context_completeness selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

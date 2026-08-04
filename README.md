@@ -9,7 +9,7 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 (`ai-ops run --engine pipeline`: worktree-изоляция → детектор стека → tool-loop → commit →
 evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
-> **Честный статус (v3.12.0 stable; Startup Context Budget срез 1 — обязательный контекст доезжает до репо (back-fill на update) и проверяется гейтом; UI Evidence Readiness — v3.11.0; Usage Truth — честный учёт модельных расходов v3.10.0; First-class Claude Code Adapter + complexity-aware routing — v3.9.0):** единый движок
+> **Честный статус (v3.13.0 stable; Startup Context Budget срез 2 — ярусы чтения read_tier + измеримая стоимость старта (context_cost); срез 1 (back-fill контекста + freshness-гейт) — v3.12.0; UI Evidence Readiness — v3.11.0; Usage Truth — честный учёт модельных расходов v3.10.0; First-class Claude Code Adapter + complexity-aware routing — v3.9.0):** единый движок
 > «задача → draft PR» доказан вживую end-to-end на РЕАЛЬНОМ full-stack (ИИ-Среда, React/TS): сильный
 > writer (локальный `claude -p`, без API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
 > + детерминированные проверки по стеку (build/typecheck/test) + baseline-diff + **ЧЕЛОВЕК на strict
