@@ -45,6 +45,83 @@ def _load_tool_defaults():
     return dict(commit_policy.DEFAULTS), dict(branch_policy.DEFAULTS)
 
 
+_ENV_KINDS = ("local", "ci", "preview", "staging", "production", "unknown")
+_SECRET_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# Литеральные секреты: в конфиге допустимы только ИМЕНА и ссылки env:/secret:, никогда значения.
+_SECRET_VALUE_HINTS = (re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}"),
+                       re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}"),
+                       re.compile(r"\bAKIA[0-9A-Z]{16}\b"))
+
+
+def _check_environments(envs):
+    """v3.20.0 срез 2: объявленные окружения (well-formedness + запрет значений секретов)."""
+    if envs is None:
+        return []
+    if not isinstance(envs, list):
+        return ["engineering_operating_model.environments: ожидался список"]
+    errs, seen = [], set()
+    for i, e in enumerate(envs):
+        if isinstance(e, str):
+            name, decl = e, {}
+        elif isinstance(e, dict):
+            name, decl = str(e.get("name") or ""), e
+        else:
+            errs.append(f"environments[{i}]: ожидалась строка или объект с name")
+            continue
+        if not name.strip():
+            errs.append(f"environments[{i}]: пустое name")
+            continue
+        if name in seen:
+            errs.append(f"environments: окружение '{name}' объявлено дважды")
+        seen.add(name)
+        bad = set(decl) - {"name", "kind", "approvers", "deploy_ref", "secret_names"}
+        if bad:
+            errs.append(f"environments['{name}']: неизвестные ключи {sorted(bad)}")
+        kind = decl.get("kind")
+        if kind is not None and kind not in _ENV_KINDS:
+            errs.append(f"environments['{name}'].kind='{kind}' вне {list(_ENV_KINDS)}")
+        appr = decl.get("approvers")
+        if appr is not None and (not isinstance(appr, list)
+                                 or not all(isinstance(a, str) and a.strip() for a in appr)):
+            errs.append(f"environments['{name}'].approvers: ожидался список непустых строк")
+        secrets = decl.get("secret_names")
+        if secrets is not None:
+            if not isinstance(secrets, list):
+                errs.append(f"environments['{name}'].secret_names: ожидался список ИМЁН")
+            else:
+                for s in secrets:
+                    if not isinstance(s, str) or not _SECRET_NAME_RE.match(s):
+                        errs.append(f"environments['{name}'].secret_names: '{s}' не похоже на ИМЯ "
+                                    f"переменной — здесь только имена, значения запрещены")
+                    elif any(p.search(s) for p in _SECRET_VALUE_HINTS):
+                        errs.append(f"environments['{name}'].secret_names: '{s[:12]}…' выглядит как "
+                                    f"ЗНАЧЕНИЕ секрета — немедленно отзовите ключ")
+    return errs
+
+
+def _check_deploy(deploy):
+    """v3.20.0 срез 2: блок deploy (чем поставка производится и чем отменяется)."""
+    if deploy is None:
+        return []
+    if not isinstance(deploy, dict):
+        return ["engineering_operating_model.deploy: ожидался объект"]
+    errs = []
+    bad = set(deploy) - {"deploy_command", "rollback"}
+    if bad:
+        errs.append(f"engineering_operating_model.deploy: неизвестные ключи {sorted(bad)}")
+    for key in ("deploy_command", "rollback"):
+        val = deploy.get(key)
+        if val is not None and (not isinstance(val, str) or not val.strip()):
+            errs.append(f"engineering_operating_model.deploy.{key}: ожидалась непустая строка")
+        if isinstance(val, str) and any(p.search(val) for p in _SECRET_VALUE_HINTS):
+            errs.append(f"engineering_operating_model.deploy.{key}: содержит литеральный секрет — "
+                        f"передавайте через env:/secret:, ключ отзовите")
+    if deploy.get("deploy_command") and not deploy.get("rollback"):
+        errs.append("deploy_command объявлен без rollback: поставка, которую нельзя отменить, "
+                    "не является готовностью (зрелость verified недостижима)")
+    return errs
+
+
 def check_policy(policy):
     """Связность объявленной политики. -> список нарушений (строк). policy может быть {} / None."""
     errs = []
@@ -52,10 +129,12 @@ def check_policy(policy):
     if not isinstance(pol, dict):
         return ["engineering_operating_model: ожидался объект"]
 
-    unknown = set(pol) - {"commit", "branch"}
+    unknown = set(pol) - {"commit", "branch", "environments", "deploy"}
     if unknown:
         errs.append(f"engineering_operating_model: неизвестные ключи {sorted(unknown)} "
-                    f"(допустимы commit, branch)")
+                    f"(допустимы commit, branch, environments, deploy)")
+    errs += _check_environments(pol.get("environments"))
+    errs += _check_deploy(pol.get("deploy"))
 
     commit = pol.get("commit") or {}
     branch = pol.get("branch") or {}
@@ -190,7 +269,7 @@ def selftest():
     expect("enforce вне перечисления отклоняется",
            any("enforce" in e for e in check_policy({"commit": {"enforce": "force"}})))
     expect("неизвестный ключ верхнего уровня отклоняется",
-           any("неизвестные ключи" in e for e in check_policy({"deploy": {}})))
+           any("неизвестные ключи" in e for e in check_policy({"observability": {}})))
     expect("неизвестный ключ в commit отклоняется",
            any("неизвестные ключи" in e for e in check_policy({"commit": {"max_lines": 5}})))
     expect("нулевой/отрицательный порог отклоняется",
@@ -206,6 +285,45 @@ def selftest():
                {"branch": {"branch_prefix": "main/", "protected_refs": ["main"]}})))
     expect("пустой branch_prefix отклоняется",
            check_policy({"branch": {"branch_prefix": "  "}}) != [])
+
+    # --- v3.20.0 срез 2: окружения и deploy -------------------------------------------------------
+    expect("environments отсутствуют -> связно", check_policy({"environments": None}) == [])
+    expect("окружения строками связны", check_policy({"environments": ["staging", "production"]}) == [])
+    ok_envs = {"environments": [{"name": "production", "kind": "production", "approvers": ["owner"],
+                                 "secret_names": ["DEPLOY_TOKEN"]}]}
+    expect("полное объявление окружения связно", check_policy(ok_envs) == [])
+    expect("environments не список -> отклоняется", check_policy({"environments": {}}) != [])
+    expect("окружение без name -> отклоняется",
+           check_policy({"environments": [{"kind": "staging"}]}) != [])
+    expect("дубль окружения -> отклоняется",
+           any("дважды" in e for e in check_policy({"environments": ["prod", "prod"]})))
+    expect("неизвестный kind окружения -> отклоняется",
+           check_policy({"environments": [{"name": "x", "kind": "чепуха"}]}) != [])
+    expect("неизвестный ключ окружения -> отклоняется",
+           check_policy({"environments": [{"name": "x", "url": "https://x"}]}) != [])
+    expect("approvers не список строк -> отклоняется",
+           check_policy({"environments": [{"name": "x", "approvers": "owner"}]}) != [])
+    expect("secret_names как ЗНАЧЕНИЕ секрета -> отклоняется",
+           any("значения запрещены" in e or "ЗНАЧЕНИЕ" in e for e in check_policy(
+               {"environments": [{"name": "x", "secret_names": ["sk-abcdefghijklmnopqrstuvwx"]}]})))
+    expect("secret_names с пробелом/дефисом -> отклоняется (не имя переменной)",
+           check_policy({"environments": [{"name": "x", "secret_names": ["MY KEY"]}]}) != [])
+
+    expect("deploy отсутствует -> связно", check_policy({"deploy": None}) == [])
+    expect("deploy_command + rollback связны",
+           check_policy({"deploy": {"deploy_command": "make deploy", "rollback": "make rollback"}}) == [])
+    expect("deploy_command БЕЗ rollback -> отклоняется (нельзя отменить = не готовность)",
+           any("нельзя отменить" in e for e in check_policy({"deploy": {"deploy_command": "make deploy"}})))
+    expect("rollback без deploy_command допустим", check_policy({"deploy": {"rollback": "make undo"}}) == [])
+    expect("deploy не объект -> отклоняется", check_policy({"deploy": []}) != [])
+    expect("неизвестный ключ deploy -> отклоняется",
+           check_policy({"deploy": {"strategy": "canary"}}) != [])
+    expect("пустая строка в deploy_command -> отклоняется",
+           check_policy({"deploy": {"deploy_command": "  ", "rollback": "x"}}) != [])
+    expect("литеральный секрет в deploy_command -> отклоняется",
+           any("литеральный секрет" in e for e in check_policy(
+               {"deploy": {"deploy_command": "deploy --token ghp_abcdefghijklmnopqrstuvwxyz012345",
+                           "rollback": "undo"}})))
 
     expect("паритет правила и кода соблюдён (реальные файлы)", check_parity() == [])
 

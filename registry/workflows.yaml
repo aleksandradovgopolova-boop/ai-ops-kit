@@ -56,7 +56,7 @@ workflows:
       # memory-capture: опубликовать запись в memory/ (decision/pattern/lesson) ИЛИ явно
       # отказаться с причиной в TaskState — молчаливый пропуск не является выполнением стадии.
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
-    quality_gates: [intake_completeness, concurrency_preflight, requirements, specification, event_contract_consistency, plan_readiness, implementation_verification, code_review, security, architecture_review]
+    quality_gates: [intake_completeness, concurrency_preflight, requirements, specification, event_contract_consistency, plan_readiness, implementation_verification, code_review, security, architecture_review, deploy_readiness]
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: orchestrated
     minimum_execution_mode: sequential
@@ -300,7 +300,7 @@ workflows:
       - {id: red-team, owner: ai-red-teamer, review_mode: read-only}
       - {id: verify, owner: final-verifier, review_mode: read-only}
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
-    quality_gates: [intake_completeness, concurrency_preflight, ai_eval, ai_red_team, event_contract_consistency, implementation_verification, architecture_review]
+    quality_gates: [intake_completeness, concurrency_preflight, ai_eval, ai_red_team, event_contract_consistency, implementation_verification, architecture_review, deploy_readiness]
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: native
     minimum_execution_mode: sequential

@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.19.0
-phase: "v3.19 — Engineering Operating Model (срез 1): дисциплина коммита и ветки. Окружения/деплой — срез 2, экономический preflight — срез 3."
+version: 3.20.0
+phase: "v3.20 — Engineering Operating Model (срез 2): окружения и честная зрелость поставки. Экономический preflight — срез 3."
 channel: stable
-patch_note: "3.19.0 — Engineering Operating Model (срез 1, WP1+WP2+WP3): commit_policy (CommitContract — жёстко блокирует смешение зон кит/продукт в одном коммите, артефакты прогонов, .env/приватные ключи, литеральный секрет в сообщении, protected_paths без ApprovalRecord, сообщение-заглушку; мягко советует по размеру/scope/WorkItem/evidence) + branch_policy (BranchContract — защищённые ветки: доставка движка только через PR; имя ветки прогона; ОТСТАВАНИЕ БАЗЫ и рассинхрон базы с upstream, unavailable != 0) + rules/core/EngineeringOperatingModel.md + ключ engineering_operating_model в child-config.schema + validate_engops_policy (связность порогов + паритет правило↔код) + команда `ai-ops engops` + две строки в doctor. Мотив из живого случая: ветка дочки отстала от main на 234 коммита и это не было ничьей ответственностью."
+patch_note: "3.20.0 — Engineering Operating Model (срез 2, WP4+WP5+WP6): environment_map — read-only карта окружений (объявлено vs обнаружено в CI environment/.env.<name>), главные находки detected_not_declared (CI деплоит туда, где нет владельца и правил доступа) и declared_not_detected; СЕКРЕТЫ ТОЛЬКО ИМЕНАМИ, значения не читаются и не попадают в отчёт. deploy_readiness — честная лестница absent/configured/runnable/verified; без объявленного отката verified недостижим; платформенная поставка (vercel/netlify/fly) отмечается отдельно как путь ВНЕ репозитория, а не «задеплоить нечем». Детерминированный blocking-гейт deploy_readiness с required_when [deployment_change, new_service, infrastructure_change] + чек-лист rules/quality/deploy-readiness.yaml + исполнение в gate_executor (недоступность инструмента -> warn, не pass). Ключи environments/deploy в child-config.schema, `ai-ops engops env|deploy`, 2 новые строки doctor. gate-count 30->31."
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 196
+checks_count: 198
 agents_count: 51
 
 qualified_on: >

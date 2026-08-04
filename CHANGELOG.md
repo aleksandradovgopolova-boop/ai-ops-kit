@@ -4,6 +4,43 @@
 
 ## [Unreleased]
 
+## [3.20.0] — 2026-08-04 — Engineering Operating Model (срез 2): окружения и честная зрелость поставки
+
+Второй срез. Закрывает дефект, который срез 1 не трогал: **у кита не было понятия «окружение» вообще** —
+гейты рассуждали о коде и ревью, а вопросы «куда это поедет», «кто вправе туда деплоить», «какие секреты
+там нужны» не задавал никто, при том что именно на этом шве живут самые дорогие ошибки.
+- **WP4 EnvironmentMap** (`tools/environment_map.py`, НОВОЕ, 27 selftest): read-only детерминированный
+  снимок окружений — что **объявлено** в `engineering_operating_model.environments` против того, что реально
+  **видно** в репозитории (CI `environment:` в GitHub Actions с точностью до `workflow:job`, файлы
+  `.env.<name>`; шаблоны `.env.example` окружением не считаются). Ценность — расхождения:
+  `detected_not_declared` (CI деплоит в окружение, которого никто не объявлял — у поставки туда нет ни
+  владельца, ни правил доступа), `declared_not_detected` (документация о продукте, которого нет),
+  `production_without_approvers`. **СЕКРЕТЫ — ТОЛЬКО ИМЕНА** (`ANTHROPIC_API_KEY`): значения не читаются,
+  не логируются и не попадают в отчёт ни при каких условиях — проверяется отдельным selftest'ом. Поиск
+  утечек в содержимом остаётся за `tools/security_scan.py`, дублирования нет. `kind` выводится из имени
+  детерминированно; неузнанное имя даёт `unknown`, а не угаданный `production`.
+- **WP5 DeployReadiness** (`tools/deploy_readiness.py`, НОВОЕ, 40 selftest): лестница по образцу
+  UI-evidence — `absent` (ни окружений, ни признаков поставки) → `configured` (замысел есть, исполняемого
+  пути нет) → `runnable` (CI-job с environment и НЕПУСТЫМИ шагами, deploy-скрипт, npm-скрипт или
+  `deploy_command`) → `verified` (runnable + evidence фактических поставок в `.ai/runtime/deploy/*.json`
+  + **объявленный откат**). Без отката `verified` недостижим: поставка, которую нельзя отменить, — риск,
+  а не готовность. Отдельно и честно помечается **платформенная поставка** (vercel/netlify/fly/render):
+  путь существует, но он ВНЕ репозитория и здесь непроверяем — это не «задеплоить нечем». `absent`
+  не маскируется: для библиотеки/CLI это норма. Шаблон кит даёт только ДЕКЛАРАТИВНЫЙ (`--template`) —
+  чужой deploy-скрипт писать не вправе, последствия несёт владелец.
+- **WP6 гейт и поверхность**: детерминированный blocking-гейт `deploy_readiness` (`quality/gates.yaml`,
+  stage `verify`, `required_when: [deployment_change, new_service, infrastructure_change]`, чек-лист
+  `rules/quality/deploy-readiness.yaml`) + его РЕАЛЬНОЕ исполнение в `tools/gate_executor.py`
+  (`_deploy_readiness_run`: недоступность инструмента → `warn`, а НЕ `pass` — бездоказательного pass не
+  существует); подключён в ENGINEERING и AI_FEATURE (`registry/workflows.yaml`); ключи `environments`
+  и `deploy` в `schemas/child-config.schema.json`; `validate_engops_policy` расширен (well-formedness
+  окружений, запрет ЗНАЧЕНИЙ секретов в конфиге, `deploy_command` без `rollback` — ошибка), 44 selftest;
+  команды `ai-ops engops env|deploy`; две новые строки в `doctor`.
+- **Найдено догфудингом на живом продукте:** формулировка «задеплоить нечем» врала для репозитория
+  с `vercel.json` — деплой там ведёт платформа. Отсюда отдельный статус `platform_managed` с честным
+  объяснением вместо неверного диагноза.
+- gate-count claim 30 → 31. CI +2, AGENTS +2 (198). VERSION 3.19.0 -> 3.20.0.
+
 ## [3.19.0] — 2026-08-04 — Engineering Operating Model (срез 1): дисциплина коммита и ветки
 
 Первый срез операционной модели. Гейты кита проверяли СОДЕРЖАНИЕ изменения (спека/план/ревью/security)
