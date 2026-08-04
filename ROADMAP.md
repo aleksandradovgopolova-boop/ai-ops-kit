@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.15.0 stable**: Architecture Baseline (read-only `ai-ops audit architecture` + architecture-reviewer обязательный судья на архитектурных сигналах); Startup Context Budget завершён v3.12–3.14 (back-fill контекста, freshness-гейт, ярусы чтения, измеримая стоимость старта, управляемая поверхность); UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.16.0 stable**: Development Culture Guardrails срез 1 (гигиена сессий/контекста: телеметрия, пороги бюджета контекста, Task Completion Ritual + `ai-ops session`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -514,7 +514,18 @@ freshness и первым живым DecisionPackage. Архитектура **e
   зависимости/API/данные+миграции/интеграции/failure-modes/deployment/observability/security/ADR-дрейф/риски,
   детерминированно, честный not_detected); дешёвый baseline отдельно от полного AI-review; architecture-reviewer —
   обязательный независимый судья на architecture-сигналах (гейт architecture_review + механизм required_when).
-- **Затем — Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
+- **v3.16.0 — Development Culture & Resource Guardrails, срез 1** ✅ (WP1+WP3+WP5): гигиена сессий/контекста —
+  `session_telemetry` (честный снимок, unknown НЕ как 0), `SessionEconomyPolicy` (пороги 150/250/400k,
+  one-task-per-session, advise-not-block), Task Completion Ritual с `SessionRecommendation`
+  (continue/compact/clear/new_session) + точной командой; `ai-ops session`; интеграция в каждый прогон.
+- **v3.17.0 — Development Culture Guardrails, срез 2** (WP2+WP4): Session Boundary Classifier
+  (same_task/continuation/adjacent_subtask/new_independent_task/new_product) + Delegation Culture (разведка/
+  большие логи/сравнение файлов → сабагент; в основной контекст только сводка/пути/evidence).
+- **v3.18.0 — Development Culture Guardrails, срез 3** (WP6): Cost-aware Work Method (runtime/effort/сабагент/
+  affected-tests/fix-loop-лимит) с приоритетом гигиена>делегирование>итерации>runtime>effort; калибровка порогов.
+- **Затем — Engineering Operating Model / Autonomous Operation** (прежние 3.13/3.15 из спеки владельца,
+  сдвинуты): commit/branch/environments/deploy/economic preflight; worker, `ai-ops do`, ask-once, blocker resolver.
+- **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
   (owner_effort, где кит ускоряет/страхует/мешает, регрессии, стоимость/latency из Usage Truth) решают дальнейшее.
 - **После данных (точечно, ПО ФАКТАМ):** DX; устойчивость runtime; адресный рефакторинг. **Дальше:** Codex
   executing adapter; multi-product control plane.

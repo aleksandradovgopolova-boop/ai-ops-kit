@@ -13,6 +13,7 @@
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
+  session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -823,6 +824,17 @@ def cmd_usage(argv):
     return usage_ledger.main(["."] + rest)
 
 
+def cmd_session(argv):
+    """v3.16.0 Development Culture Guardrails: гигиена сессии. `ai-ops session` — снимок телеметрии
+    + SessionRecommendation (continue/compact/clear/new_session) с ТОЧНОЙ командой. Передайте
+    `--context N` (из /context рантайма) для measured-оценки; иначе контекст оценивается по ledger."""
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "session_guardrails.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    import session_guardrails
+    return session_guardrails.main(["."] + [a for a in argv[2:]])
+
+
 def cmd_audit(argv):
     """v3.15.0 Architecture Baseline: read-only аудит. `ai-ops audit architecture` — дешёвый
     ДЕТЕРМИНИРОВАННЫЙ снимок архитектуры на текущем SHA (12 осей); полный AI-review — отдельно
@@ -1064,6 +1076,8 @@ def main(argv):
         return cmd_onboard(argv)
     if cmd == "audit":
         return cmd_audit(argv)
+    if cmd == "session":
+        return cmd_session(argv)
     print(f"неизвестная команда '{cmd}'"); print(__doc__)
     return 2
 
