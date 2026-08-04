@@ -135,6 +135,35 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
         block("lifecycle: сбой слоя контекста (Compiler/Spec/Planner) для heavy-задачи -> "
               "fail-closed: " + "; ".join(lifecycle_errors))
 
+    # 7. v3.21.0 EngOps срез 3: ЭКОНОМИЧЕСКАЯ граница ДО tool loop. Прежде деньги узнавались ПОСЛЕ
+    #    траты: контекстный бюджет (шаг 5) денег не касается, Budget.charge_call рвётся на N-м вызове
+    #    (когда N-1 уже оплачены), cost_account сверяет расход после прогона. Здесь — оценка по истории
+    #    ЭТОГО репозитория против лимитов RunPlan.execution_budget ДО первого вызова.
+    #    Блокирует только ПЕССИМИСТИЧНАЯ оценка против жёсткого лимита (единственный знаемый случай);
+    #    нет истории -> НЕ блок (иначе первый прогон в репозитории невозможен), а честный proceed_unknown.
+    #    reevaluate_only — переоценка уже построенной фичи, новой существенной траты нет: не применяем.
+    if not reevaluate_only:
+        try:
+            import economic_preflight as _ep
+            _est = _ep.estimate(child_root)
+            _ev = _ep.check_economics(_est, (plan or {}).get("execution_budget") or {},
+                                      _ep.policy_from_config(child_root))
+        except Exception as e:  # noqa: BLE001 — недоступность оценщика не выдаём за «бесплатно»
+            checks["economic_budget"] = {"ok": True, "verdict": "proceed_unknown",
+                                         "estimate_status": "unavailable",
+                                         "error": f"{type(e).__name__}: {e}"}
+        else:
+            checks["economic_budget"] = {
+                "ok": _ev["allowed"], "verdict": _ev["verdict"],
+                "estimate_status": _est["status"],
+                "cost_median": _est["cost_median"], "cost_max": _est["cost_max"],
+                "sample_tasks": _est["sample_tasks"],
+                "advisories": [a["rule"] for a in _ev["advisories"]],
+            }
+            if not _ev["allowed"]:
+                block("economic-preflight: " + "; ".join(x["detail"] for x in _ev["violations"])
+                      or "economic-preflight: прогон не разрешён политикой экономики")
+
     ok = not reasons
     return {"schema_version": 1, "kind": "PreflightTruth", "ok": ok, "blocked": not ok,
             "task_type": tt, "checks": checks, "reasons": reasons}
@@ -278,6 +307,64 @@ def selftest():
                       work_pkg={"should_decompose": False})
         expect("preflight: destructive без ApprovalRecord -> blocked",
                pf_d["blocked"] and any(m["domain"] == "destructive" for m in pf_d["checks"]["approvals"]["missing"]))
+
+    # --- v3.21.0 EngOps срез 3: экономическая граница ДО tool loop ---------------------------------
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        # author=True снимает spec-first, чтобы единственной переменной осталась ЭКОНОМИКА:
+        # иначе блок приходил бы от отсутствия спеки, и тест был бы зелёным вхолостую.
+        base_kw = dict(payload=good_payload, author=True,
+                       spec_cov={"spec_artifact": False, "blocking_missing": []},
+                       work_pkg={"should_decompose": False})
+
+        # positive: истории нет -> прогон НЕ блокируется, но статус честно unavailable (не «бесплатно»)
+        pf_e0 = assess({"task_type": "ENGINEERING"}, root, "we", **base_kw)
+        eco = pf_e0["checks"].get("economic_budget") or {}
+        expect("preflight: экономическая проверка присутствует в checks", bool(eco))
+        expect("preflight: без экономических данных прогон в целом не блокируется "
+               "(переменная изолирована — spec-first снят author=True)", not pf_e0["blocked"])
+        expect("preflight: нет истории -> не блок, статус unavailable (не выдаём за ноль)",
+               eco.get("ok") and eco.get("verdict") == "proceed_unknown"
+               and eco.get("estimate_status") == "unavailable"
+               and eco.get("cost_median") is None)
+
+        # side-effect proof: ledger действительно записан и читается -> только потом проверяем реакцию
+        import usage_ledger as _ul
+        for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
+            _ul.append(root, wid, [{"role": "writer", "cost": cost, "cost_status": "measured",
+                                    "usage_status": "measured", "input_tokens": 10,
+                                    "output_tokens": 10}])
+        import economic_preflight as _ep
+        _est = _ep.estimate(root)
+        expect("preflight: ledger реально записан (side-effect proof до проверки гейта)",
+               _est["status"] == "measured_history" and _est["sample_tasks"] == 2
+               and _est["cost_max"] == 9.0)
+
+        # fail-closed: худший прогон (9.0) дороже лимита RunPlan (5) -> БЛОК до tool loop
+        pf_e1 = assess({"task_type": "ENGINEERING"}, root, "we",
+                       plan={"execution_budget": {"max_cost": 5}}, **base_kw)
+        expect("preflight: худший сравнимый прогон дороже лимита -> blocked ДО запуска модели",
+               pf_e1["blocked"] and not pf_e1["checks"]["economic_budget"]["ok"]
+               and any("economic-preflight" in r for r in pf_e1["reasons"]))
+        expect("preflight: блокирует ИМЕННО экономика (других причин в reasons нет)",
+               len(pf_e1["reasons"]) == 1)
+
+        # в пределах лимита -> проходит
+        pf_e2 = assess({"task_type": "ENGINEERING"}, root, "we",
+                       plan={"execution_budget": {"max_cost": 20}}, **base_kw)
+        expect("preflight: в пределах лимита -> экономика не блокирует",
+               pf_e2["checks"]["economic_budget"]["ok"] and not pf_e2["blocked"])
+
+        # лимита нет вовсе -> не выдумываем и не блокируем
+        expect("preflight: без execution_budget экономика не блокирует",
+               assess({"task_type": "ENGINEERING"}, root, "we", **base_kw)
+               ["checks"]["economic_budget"]["ok"])
+
+        # reevaluate_only: переоценка уже построенной фичи — build-precondition не применяется
+        pf_e3 = assess({"task_type": "ENGINEERING"}, root, "we",
+                       plan={"execution_budget": {"max_cost": 5}}, reevaluate_only=True, **base_kw)
+        expect("preflight: reevaluate_only -> экономическая проверка НЕ применяется",
+               "economic_budget" not in pf_e3["checks"] and not pf_e3["blocked"])
 
     print("preflight selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

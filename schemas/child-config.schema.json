@@ -120,6 +120,17 @@
             ]
           }
         },
+        "economics": {
+          "type": "object",
+          "description": "v3.21.0 EngOps срез 3: экономическая граница ДО tool loop (tools/economic_preflight.py). Оценка по истории usage_ledger против лимитов RunPlan.execution_budget; отсутствие истории = unavailable, не ноль.",
+          "properties": {
+            "enforce": { "type": "string", "enum": ["advise", "block"] },
+            "require_estimate": { "type": "boolean" },
+            "confirm_over_cost_usd": { "type": ["number", "null"], "minimum": 0 },
+            "min_history_tasks": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
         "deploy": {
           "type": "object",
           "description": "v3.20.0 EngOps срез 2: чем поставка производится и чем ОТМЕНЯЕТСЯ (tools/deploy_readiness.py). Без rollback зрелость verified недостижима.",
