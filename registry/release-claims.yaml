@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.14.0
-phase: "v3.14 — Startup Context Budget (срез 3): управляемая стоимость самой поверхности кита"
+version: 3.15.0
+phase: "v3.15 — Architecture Baseline: read-only снимок архитектуры + architecture-reviewer как обязательный судья"
 channel: stable
-patch_note: "3.14.0 — Startup Context Budget (срез 3, часть 5): бюджет описаний скиллов ≤300 символов (все 9 поставляемых скиллов сокращены до триггеров+границ; сумма 3893→2498) + валидатор validate_runtime_surface; runtime_surface{skills,commands: enabled} в .ai-ops.yaml — репозиторий выбирает что экспортировать; адаптеры генерируются только для настроенных рантаймов (не эмитим codex, если не включён)"
+patch_note: "3.15.0 — Architecture Baseline: команда `ai-ops audit architecture` — дешёвый детерминированный read-only снимок архитектуры на точном SHA (12 осей: модули/границы/зависимости/API/данные+миграции/интеграции/режимы отказа/деплой/наблюдаемость/security-границы/ADR-дрейф/риски, честный not_detected); architecture-reviewer становится ОБЯЗАТЕЛЬНЫМ независимым судьёй на архитектурных сигналах (гейт architecture_review, required_when: architecture_change/new_service/cross_boundary_change/breaking_api/data_migration/new_integration/deployment_change)"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 186
+checks_count: 187
 agents_count: 51
 
 qualified_on: >

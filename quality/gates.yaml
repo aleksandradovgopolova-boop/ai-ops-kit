@@ -180,6 +180,24 @@ gates:
     stale_detection: {bind_to: tested_revision}
     required_evidence: [no_secrets, no_injection_surface, deps_approved]
 
+  architecture_review:
+    id: architecture_review
+    purpose: >
+      Независимая архитектурная проверка (judge != writer) при архитектурно значимых изменениях:
+      границы модулей, совместимость API, модель данных/миграции, интеграции, режимы отказа, деплой,
+      ADR-дрейф. Обязательный судья ТОЛЬКО при архитектурных сигналах (required_when); иначе гейт
+      неприменим (честный non-blocking skip). Вход — детерминированный снимок ai-ops audit architecture.
+    stage: review
+    blocking: true
+    responsible_role: architecture-reviewer
+    review_mode: read-only
+    human_approval: false
+    required_when: [architecture_change, new_service, cross_boundary_change, breaking_api, data_migration, new_integration, deployment_change]
+    applicability: [ENGINEERING, AI_FEATURE]   # членство в workflow; фактическое срабатывание — по required_when
+    checklist: rules/quality/architecture-review.yaml
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [reviewed_revision, architecture_boundaries_ok]
+
   spec_synchronization:
     id: spec_synchronization
     purpose: Delta specs синхронизированы с main specs (детерминированный CLI).

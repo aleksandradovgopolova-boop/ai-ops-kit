@@ -31,6 +31,8 @@ jobs:
         run: python3 tools/generate_runtime.py --selftest
       - name: "Бюджет поверхности кита — описания скиллов ≤300 + runtime_surface (v3.14.0; selftest)"
         run: python3 validation/validate_runtime_surface.py --selftest
+      - name: "Architecture Baseline — детерминированный снимок архитектуры на SHA (v3.15.0; selftest)"
+        run: python3 tools/architecture_baseline.py --selftest
       - name: Генератор артефактов по blueprint (selftest)
         run: python3 tools/generate_artifacts.py --selftest
       - name: Отчёт-оценка прогона фичи (selftest)

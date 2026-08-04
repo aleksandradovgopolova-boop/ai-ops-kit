@@ -12,6 +12,7 @@
   verify-capabilities  — offline capability self-test
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
+  audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -822,6 +823,20 @@ def cmd_usage(argv):
     return usage_ledger.main(["."] + rest)
 
 
+def cmd_audit(argv):
+    """v3.15.0 Architecture Baseline: read-only аудит. `ai-ops audit architecture` — дешёвый
+    ДЕТЕРМИНИРОВАННЫЙ снимок архитектуры на текущем SHA (12 осей); полный AI-review — отдельно
+    (гейт architecture_review при архитектурных сигналах). НИЧЕГО не меняет."""
+    sub = argv[2] if len(argv) > 2 else ""
+    if sub != "architecture":
+        print("usage: ai-ops audit architecture [--json] [--sha SHA]"); return 2
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "architecture_baseline.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    import architecture_baseline
+    return architecture_baseline.main(["."] + [a for a in argv[3:]])
+
+
 def cmd_onboard(argv):
     """v3.11.0 UI Evidence Readiness: онбординг-сводка + ЧЕСТНАЯ зрелость UI-evidence (Storybook):
     absent | configured | runnable | verified. Кит предлагает шаблон скрипта, НЕ ставит зависимости."""
@@ -1047,6 +1062,8 @@ def main(argv):
         return cmd_usage(argv)
     if cmd == "onboard":
         return cmd_onboard(argv)
+    if cmd == "audit":
+        return cmd_audit(argv)
     print(f"неизвестная команда '{cmd}'"); print(__doc__)
     return 2
 

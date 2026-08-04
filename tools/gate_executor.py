@@ -310,6 +310,21 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     required = gate.get("required_evidence", []) or []
     ev = dict((evidence or {}).get(gate_id) or {})
 
+    # v3.15.0 Architecture Baseline: гейт с `required_when` применим ТОЛЬКО когда активен хотя бы один
+    # объявленный сигнал (напр. architecture_review — на architecture_change/new_service/…). Иначе —
+    # ЧЕСТНЫЙ non-blocking skip (scope=not_applicable, записан в warnings), не тихий pass и не блок.
+    rw = gate.get("required_when") or []
+    if rw and not any((signals or {}).get(s) for s in rw):
+        return {
+            "schema_version": 1, "gate": gate_id, "status": "pass", "blocking": False,
+            "scope": ["not_applicable"], "checks": [], "blockers": [],
+            "warnings": [f"гейт неприменим: нет ни одного сигнала {rw} — не оценивался (honest skip)"],
+            "evidence": [], "tested_revision": tested_revision,
+            "owner": gate.get("responsible_role", "unknown"),
+            "review_mode": gate.get("review_mode", "read-only"),
+            "created_at": None, "expires_at": None, "override": None,
+        }
+
     # авто-исполнение детерминированного валидатора, если evidence не подан
     if not ev.get("status") and kind == "deterministic":
         run = deterministic_run(gate.get("validator"))
@@ -512,6 +527,17 @@ def selftest():
            run is not None and run[0] == "pass")
     expect("символический валидатор не выдумывает вердикт (нужен evidence)",
            deterministic_run("validate-intake") is None)
+
+    # 3d2. v3.15.0: гейт с required_when применим только при архитектурном сигнале
+    _arch_gate = {"id": "architecture_review", "blocking": True, "review_mode": "read-only",
+                  "responsible_role": "architecture-reviewer",
+                  "required_when": ["architecture_change", "data_migration"]}
+    r_na = evaluate_gate("architecture_review", _arch_gate, {}, signals={})
+    expect("architecture_review без сигнала -> not_applicable, не блок",
+           r_na["status"] == "pass" and r_na["blocking"] is False and "not_applicable" in r_na.get("scope", []))
+    r_active = evaluate_gate("architecture_review", _arch_gate, {}, signals={"data_migration": True})
+    expect("architecture_review при сигнале + без evidence -> fail (обязательный судья)",
+           r_active["status"] == "fail" and r_active["blocking"] is True)
 
     # 3d. v3.12.0: freshness-гейт проверяет контекст РЕПОЗИТОРИЯ (не селфтест кита)
     import tempfile
