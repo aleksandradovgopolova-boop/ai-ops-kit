@@ -69,6 +69,18 @@
         "commands": { "type": "object", "properties": { "enabled": { "oneOf": [ { "const": "all" }, { "type": "array", "items": { "type": "string" } } ] } }, "additionalProperties": false }
       },
       "additionalProperties": false
+    },
+    "session_economy": {
+      "type": "object",
+      "description": "v3.16.0 Development Culture Guardrails: пороги гигиены контекста сессии (tools/session_guardrails.py). Стартовая политика, калибруется на реальных данных.",
+      "properties": {
+        "target_context_tokens": { "type": "integer", "minimum": 1 },
+        "compact_recommended_at": { "type": "integer", "minimum": 1 },
+        "new_session_recommended_at": { "type": "integer", "minimum": 1 },
+        "one_task_per_session": { "type": "boolean" },
+        "allow_cross_task_session": { "type": "boolean" }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["schema_version", "kind", "parent", "presets", "adapters", "providers"],

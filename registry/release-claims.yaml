@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.15.0
-phase: "v3.15 — Architecture Baseline: read-only снимок архитектуры + architecture-reviewer как обязательный судья"
+version: 3.16.0
+phase: "v3.16 — Development Culture & Resource Guardrails (срез 1): гигиена сессий, бюджет контекста, ритуал завершения"
 channel: stable
-patch_note: "3.15.0 — Architecture Baseline: команда `ai-ops audit architecture` — дешёвый детерминированный read-only снимок архитектуры на точном SHA (12 осей: модули/границы/зависимости/API/данные+миграции/интеграции/режимы отказа/деплой/наблюдаемость/security-границы/ADR-дрейф/риски, честный not_detected); architecture-reviewer становится ОБЯЗАТЕЛЬНЫМ независимым судьёй на архитектурных сигналах (гейт architecture_review, required_when: architecture_change/new_service/cross_boundary_change/breaking_api/data_migration/new_integration/deployment_change)"
+patch_note: "3.16.0 — Development Culture Guardrails (срез 1, WP1+WP3+WP5): session_telemetry (честный снимок сессии — объём/стоимость/контекст, usage_status measured|estimated|unavailable, unknown НЕ как 0); SessionEconomyPolicy (пороги 150/250/400k, one-task-per-session, advise-not-block); Task Completion Ritual — каждый прогон/WorkItem завершается SessionRecommendation (continue/compact/clear/new_session) с ТОЧНОЙ командой; команда `ai-ops session`; ключ session_economy в .ai-ops.yaml"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 187
+checks_count: 189
 agents_count: 51
 
 qualified_on: >

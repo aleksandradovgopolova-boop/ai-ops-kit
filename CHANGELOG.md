@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [3.16.0] — 2026-08-04 — Development Culture & Resource Guardrails (срез 1): гигиена сессий и контекста
+
+P0 по аудиту владельца: главная неэффективность — не «модель много пишет», а недели работы в одной
+огромной сессии с повторным перечитыванием истории. Кит должен ВОВРЕМЯ остановить плохой паттерн и дать
+ТОЧНУЮ команду. Срез 1 (WP1+WP3+WP5) — ядро цикла «измерить → порог → рекомендовать». Enforcement: СИЛЬНЫЙ
+СОВЕТ, не блок (решение владельца — кит не управляет рантаймом Claude Code, не форсит /clear|/compact).
+- **WP1 Session Telemetry** (`tools/session_telemetry.py`, НОВОЕ): машинный снимок сессии из usage-ledger
+  (+ usage Claude CLI) — turns/input/output-tokens/стоимость/контекст. ЧЕСТНЫЕ ГРАНИЦЫ: контекст
+  оценивается по input-токенам вызовов (вход ≈ прочитанный контекст) и помечен `estimated`, либо `measured`
+  при передаче `--context N` из рантайма `/context`; cache/started_at/last_compaction — `unavailable` (НЕ 0);
+  unknown usage считается отдельно, никогда как 0. 11 selftest.
+- **WP3 SessionEconomyPolicy** (`tools/session_guardrails.py` + `rules/core/SessionEconomyPolicy.md`): пороги
+  гигиены контекста normal/attention(150k)/compact_recommended(250k)/new_session_recommended(400k),
+  `one_task_per_session`, конфигурируемо через `session_economy` в `.ai-ops.yaml` (первоклассный ключ схемы).
+- **WP5 Task Completion Ritual**: каждый завершённый WorkItem/прогон получает `SessionRecommendation` —
+  ровно 4 исхода (continue / compact / clear / new_session) + `defer` на небезопасной границе (миграция/
+  незавершённый commit не прерываем), каждый (кроме continue) несёт ТОЧНУЮ команду (`/compact …`, `/clear …`
+  + `ai-ops do`, `/exit`+`claude`). Приоритет: гигиена сессии/контекста > новизна задачи. Обязательный
+  пользовательский блок (PR/проверки/стоимость/контекст/что сохранено/рекомендация/команда). 16 selftest.
+- **Интеграция в прогон:** `ai_ops_run` в конце КАЖДОГО прогона добавляет `session_recommendation` в отчёт
+  (advise-only, не блокирует доставку). Новая команда **`ai-ops session`** — снимок + рекомендация.
+- Следующие срезы: 3.17.0 WP2 Session Boundary Classifier + WP4 Delegation Culture; 3.18.0 WP6 Cost-aware
+  Work Method. (Порядок роадмапа: сначала кит учится советовать по сессиям, потом автономка.)
+- CI +2, AGENTS +2 (189). VERSION 3.15.0 -> 3.16.0.
+
 ## [3.15.0] — 2026-08-04 — Architecture Baseline: read-only снимок архитектуры + обязательный architecture-судья
 
 Даёт репозиторию дешёвую, честную и воспроизводимую картину архитектуры на точном SHA — и делает
