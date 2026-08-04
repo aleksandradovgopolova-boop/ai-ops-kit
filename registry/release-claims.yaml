@@ -5,10 +5,10 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.20.0
-phase: "v3.20 — Engineering Operating Model (срез 2): окружения и честная зрелость поставки. Экономический preflight — срез 3."
+version: 3.20.1
+phase: "v3.20.1 — Engineering Operating Model (срез 2, патч честности): инструмент больше не выводит механизм поставки из наличия конфига. Экономический preflight — срез 3."
 channel: stable
-patch_note: "3.20.0 — Engineering Operating Model (срез 2, WP4+WP5+WP6): environment_map — read-only карта окружений (объявлено vs обнаружено в CI environment/.env.<name>), главные находки detected_not_declared (CI деплоит туда, где нет владельца и правил доступа) и declared_not_detected; СЕКРЕТЫ ТОЛЬКО ИМЕНАМИ, значения не читаются и не попадают в отчёт. deploy_readiness — честная лестница absent/configured/runnable/verified; без объявленного отката verified недостижим; платформенная поставка (vercel/netlify/fly) отмечается отдельно как путь ВНЕ репозитория, а не «задеплоить нечем». Детерминированный blocking-гейт deploy_readiness с required_when [deployment_change, new_service, infrastructure_change] + чек-лист rules/quality/deploy-readiness.yaml + исполнение в gate_executor (недоступность инструмента -> warn, не pass). Ключи environments/deploy в child-config.schema, `ai-ops engops env|deploy`, 2 новые строки doctor. gate-count 30->31."
+patch_note: "3.20.1 — патч ЧЕСТНОСТИ deploy_readiness (нашлось на живом продукте владельца): инструмент заявлял «поставку ведёт внешняя платформа (vercel.json): путь существует», выводя механизм поставки из НАЛИЧИЯ конфига — на реальном репозитории это оказалось неправдой. Два необоснованных утверждения убраны. Теперь при configured говорится только проверяемое: «исполняемого пути поставки В РЕПОЗИТОРИИ нет», далее честная развилка (поставки нет вовсе / она вне репозитория — по коду не различить), а найденные конфиги платформ названы ПОДСКАЗКОЙ, не доказательством (могут быть наследием). Поле platform_managed -> deploy_path_unknown + platform_hints; находка platform_managed_deploy -> deploy_path_unknown. Регрессия закрыта 5 новыми assertions (42 selftest). Сам вердикт лестницы не изменился — врала причина, не ступень."
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
