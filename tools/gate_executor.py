@@ -166,7 +166,39 @@ def deterministic_run(validator):
         return status, checks, [c["id"] for c in checks if c["status"] == "pass"]
     if validator == "validate-freshness":
         return _freshness_run()
+    if validator == "validate-deploy-readiness":
+        return _deploy_readiness_run()
     return None
+
+
+def _deploy_readiness_run(base=None):
+    """v3.20.0 EngOps срез 2: детерминированная зрелость поставки текущего репозитория.
+
+    Сюда попадаем ТОЛЬКО когда гейт применим (required_when уже отфильтровал неприменимость в
+    evaluate_gate), поэтому `configured`/`absent` здесь — честный fail: изменение поставки заявлено,
+    а исполняемого пути нет. Недоступность инструмента -> warn, а НЕ pass (бездоказательного pass
+    не существует)."""
+    b = Path(base) if base else Path.cwd()
+    for cand in (b / ".ai" / "managed" / "tools", PKG / "tools"):
+        if (cand / "deploy_readiness.py").is_file() and str(cand) not in sys.path:
+            sys.path.insert(0, str(cand))
+    try:
+        import deploy_readiness
+    except Exception as e:  # noqa: BLE001 — нет инструмента -> warn с причиной, не тихий pass
+        return "warn", [{"id": f"deploy_readiness_tool_unavailable:{e}", "status": "warn"}], []
+    rep = deploy_readiness.assess(b)
+    status, note = deploy_readiness.gate_status(rep["deploy_maturity"])
+    checks = [{"id": f"deploy_maturity:{rep['deploy_maturity']}", "status": status},
+              {"id": "rollback_declared", "status": "pass" if rep["rollback_declared"] else "fail"}]
+    for f in rep["findings"]:
+        if f["rule"] in ("detected_not_declared", "no_rollback_declared", "records_without_path"):
+            checks.append({"id": f"{f['rule']}:{f.get('environment', '')}".rstrip(":"),
+                           "status": "fail"})
+    if any(c["status"] == "fail" for c in checks):
+        status = "fail"
+    provided = ([c["id"].split(":")[0] for c in checks if c["status"] == "pass"]
+                + (["deploy_maturity"] if status == "pass" else []))
+    return status, checks, sorted(set(provided))
 
 
 def _freshness_run(base=None):

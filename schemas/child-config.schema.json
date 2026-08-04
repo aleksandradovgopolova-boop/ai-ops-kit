@@ -98,6 +98,36 @@
             "one_workitem_per_branch": { "type": "boolean" }
           },
           "additionalProperties": false
+        },
+        "environments": {
+          "type": "array",
+          "description": "v3.20.0 EngOps срез 2: объявленные окружения поставки (tools/environment_map.py). Секреты — только ИМЕНА/ссылки, никогда значения.",
+          "items": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "kind": { "type": "string", "enum": ["local", "ci", "preview", "staging", "production", "unknown"] },
+                  "approvers": { "type": "array", "items": { "type": "string" } },
+                  "deploy_ref": { "type": "string" },
+                  "secret_names": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "deploy": {
+          "type": "object",
+          "description": "v3.20.0 EngOps срез 2: чем поставка производится и чем ОТМЕНЯЕТСЯ (tools/deploy_readiness.py). Без rollback зрелость verified недостижима.",
+          "properties": {
+            "deploy_command": { "type": "string", "minLength": 1 },
+            "rollback": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

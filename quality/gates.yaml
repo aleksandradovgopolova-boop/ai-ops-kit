@@ -198,6 +198,26 @@ gates:
     stale_detection: {bind_to: tested_revision}
     required_evidence: [reviewed_revision, architecture_boundaries_ok]
 
+  deploy_readiness:
+    id: deploy_readiness
+    purpose: >
+      ЧЕСТНАЯ зрелость поставки при изменении деплоя: лестница absent/configured/runnable/verified
+      (tools/deploy_readiness.py). Кит НЕ деплоит — он не даёт врать о готовности. Обязателен ТОЛЬКО
+      при сигналах изменения поставки (required_when); иначе честный non-blocking skip. Провал =
+      поставка заявлена как изменяемая, а исполняемого пути в репозитории нет (configured/absent).
+      Вердикт детерминированный: его даёт инструмент на текущем SHA, не судья.
+    stage: verify
+    blocking: true
+    responsible_role: devops-engineer
+    review_mode: writer                        # детерминированный гейт: вердикт инструмента, не ревью
+    validator: validate-deploy-readiness       # runnable: tools/deploy_readiness.py
+    human_approval: false
+    required_when: [deployment_change, new_service, infrastructure_change]
+    applicability: [ENGINEERING, AI_FEATURE]   # членство; фактическое срабатывание — по required_when
+    checklist: rules/quality/deploy-readiness.yaml
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [deploy_maturity, rollback_declared]
+
   spec_synchronization:
     id: spec_synchronization
     purpose: Delta specs синхронизированы с main specs (детерминированный CLI).
