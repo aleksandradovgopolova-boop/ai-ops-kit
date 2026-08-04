@@ -229,6 +229,7 @@ python3 validation/validate_claims.py --selftest
 python3 validation/validate_claims.py
 python3 validation/validate_freshness.py --selftest
 python3 validation/validate_freshness.py context
+python3 validation/validate_context_completeness.py --selftest
 python3 validation/validate_decisions.py --selftest
 python3 validation/validate_decisions.py
 python3 validation/validate_agents_checklist.py --selftest

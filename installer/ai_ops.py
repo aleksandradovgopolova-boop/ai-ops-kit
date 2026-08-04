@@ -423,6 +423,63 @@ def cmd_diff():
     return 0
 
 
+def _required_context_docs():
+    """v3.12.0 Startup Context Budget: обязательные документы контекста из манифеста (не хардкод)."""
+    ls = ((manifest().get("session_orchestration") or {}).get("living_status") or {})
+    return list(ls.get("required_context_docs") or [])
+
+
+def _draftify(text, today):
+    """Шаблон кита -> черновик репозитория: снять template:true (копия ДОЛЖНА проверяться на свежесть),
+    поставить status: draft + reviewed_at=today. Сохраняем прочий frontmatter (read_tier/stability/owner)."""
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                fm = yaml.safe_load(parts[1]) or {}
+            except yaml.YAMLError:
+                fm = {}
+            fm.pop("template", None)
+            fm["status"] = "draft"
+            fm["reviewed_at"] = today
+            new_fm = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip()
+            return f"---\n{new_fm}\n---{parts[2]}"
+    return f"---\nstatus: draft\nreviewed_at: {today}\n---\n\n{text}"
+
+
+def _backfill_required_context(today=None, dry=False):
+    """Создать ОТСУТСТВУЮЩИЕ обязательные документы контекста репозитория из шаблонов
+    (managed/context, при отсутствии — из шаблонов кита PKG/context). Пишет в .ai/project/context/
+    как черновик (status: draft). НЕ трогает уже существующие документы. -> список {doc, action}."""
+    import datetime as _dt
+    today = today or _dt.date.today().isoformat()
+    proj_ctx = AI_DIR / "project" / "context"
+    out = []
+    for doc in _required_context_docs():
+        dst = proj_ctx / doc
+        if dst.exists() or (AI_DIR / "custom" / "context" / doc).exists():
+            continue                                   # уже заполнено репозиторием — не трогаем
+        src = MANAGED / "context" / doc
+        if not src.is_file():
+            src = PKG / "context" / doc                # fallback: свежий шаблон кита
+        if not src.is_file():
+            out.append({"doc": doc, "action": "skipped-no-template"}); continue
+        if not dry:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(_draftify(src.read_text(encoding="utf-8"), today), encoding="utf-8")
+        out.append({"doc": doc, "action": "created-draft"})
+    return out
+
+
+def _context_gaps():
+    """(required, missing) — обязательные документы контекста, отсутствующие в project/custom-оверлее."""
+    req = _required_context_docs()
+    missing = [d for d in req
+               if not (AI_DIR / "project" / "context" / d).exists()
+               and not (AI_DIR / "custom" / "context" / d).exists()]
+    return req, missing
+
+
 def cmd_update(force=False, smoke_checks=None):
     inst, target = installed_version(), pkg_version()
     report = {"schema_version": 1, "command": "update", "from_version": inst,
@@ -457,10 +514,21 @@ def cmd_update(force=False, smoke_checks=None):
         print(report["report"]); print(f"отчёт: {out}")
         return 1
 
+    # v3.12.0 Startup Context Budget: back-fill обязательных документов контекста ДО раннего выхода —
+    # репозиторий, подключённый до появления required_context_docs, получает недостающие черновики
+    # даже когда версия кита уже актуальна (иначе пробел в оверлее закрывать нечем).
+    backfilled = _backfill_required_context()
+    report["context_backfilled"] = backfilled
+    created = [b["doc"] for b in backfilled if b["action"] == "created-draft"]
+
     changes = build_diff()
     if not changes and inst == target:
-        report.update(report="Обновление не требуется."); write_report(report)
-        print("уже актуально."); return 0
+        msg = "Обновление не требуется."
+        if created:
+            msg += (" Back-fill контекста: созданы черновики (status: draft) — "
+                    + ", ".join(created) + " (проверьте и заполните, затем commit).")
+        report.update(report=msg); write_report(report)
+        print(msg); return 0
 
     # backup: снимок ВСЕГО install footprint (managed + .claude/skills + .claude/commands
     # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
@@ -524,7 +592,10 @@ def cmd_update(force=False, smoke_checks=None):
         print(report["report"]); print(f"отчёт: {out}")
         return 1
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
-                        f"{n} файлов под контролем. Создайте PR с этим diff — silent update запрещён.")
+                        f"{n} файлов под контролем."
+                        + (f" Back-fill контекста (черновики status: draft): {', '.join(created)}."
+                           if created else "")
+                        + " Создайте PR с этим diff — silent update запрещён.")
     out = write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
     return 0 if report["status"] == "ok" else 1
@@ -684,6 +755,14 @@ def cmd_doctor():
               + ("   → `ai-ops onboard` для деталей" if _m != "verified" else ""))
     except Exception as _e:  # noqa: BLE001 — недоступность readiness не роняет doctor
         print(f"ui-evidence (Storybook): недоступно ({_e})")
+    # v3.12.0 Startup Context Budget: полнота обязательных документов контекста репозитория.
+    # Пробел -> сообщаем + подсказываем `ai-ops update` (он back-fill'ит черновики). Не роняем doctor
+    # (advisory: контекст — ответственность репозитория, кит его лишь заполняет черновиком).
+    _req, _gaps = _context_gaps()
+    if _req:
+        print(f"контекст (обязательные документы): "
+              + ("✓ все на месте" if not _gaps
+                 else f"✗ нет в оверлее: {', '.join(_gaps)} → `ai-ops update` создаст черновики"))
     print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
     return 0 if ok else 1
 
