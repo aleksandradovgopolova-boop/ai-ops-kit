@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [3.11.0] — 2026-08-04 — UI Evidence Readiness: честная зрелость UI-evidence + gating UI-CI
+
+Превращает «адаптер умеет прочитать UI-артефакты» в честный onboarding: отсутствие Storybook НЕ маскируется,
+UI-CI не гоняется зря на не-UI изменениях, кит предлагает шаблон — но зависимости ставит ВЛАДЕЛЕЦ.
+- `tools/ui_readiness.py` (НОВОЕ): дешёвый ДЕТЕРМИНИРОВАННЫЙ baseline зрелости — лестница
+  `absent | configured | runnable | verified` (по .storybook/ + storybook-зависимости + build-скрипту +
+  статик-билду storybook-static/index.json + наличию ≥1 evidence-артефакта). `should_run_ui_evidence`
+  (gating: UI-файл .tsx/.jsx/.vue/.svelte/.css/.scss или VISUAL-задача -> ON, иначе skip как «не применимо»).
+  `script_template` (npm-скрипты БЕЗ установки зависимостей, с явным предупреждением). `check` (честность:
+  `installs_dependencies` обязан быть False). 10 selftest.
+- **`ai-ops onboard`** (installer): онбординг-сводка + лестница зрелости UI-evidence + шаблон скрипта для
+  absent/configured. `doctor` +строка `ui-evidence (Storybook): <maturity>` (absent для не-UI child — норма,
+  НЕ маскируем как проблему; только сообщаем).
+- `execution_pipeline`: сбор UI-evidence теперь ГЕЙТИТСЯ `should_run_ui_evidence(changed_files, signals)` —
+  UI-CI только на UI-изменениях / VISUAL-задаче. build/interaction/axe/visual сохраняют ОТДЕЛЬНЫЕ честные
+  статусы (pass|fail|not_run|absent) через `storybook_adapter`. Отсутствие Storybook -> not_run/absent, не «ok».
+- CI +1, AGENTS +1. VERSION 3.10.0 -> 3.11.0.
+
 ## [3.10.0] — 2026-08-03 — Usage Truth: честный учёт всех модельных расходов
 
 Каждый модельный/runtime-вызов пишет UsageRecord; неизвестное использование — честно `unavailable`, а не 0.

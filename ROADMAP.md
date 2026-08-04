@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.10.0 stable**: Usage Truth (честный учёт модельных расходов); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.11.0 stable**: UI Evidence Readiness (честная зрелость UI-evidence + gating UI-CI); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -495,8 +495,9 @@ freshness и первым живым DecisionPackage. Архитектура **e
 - **v3.10.0 — Usage Truth** ✅: честный учёт ВСЕХ модельных вызовов (UsageRecord на writer/reviewer/fix-loop/
   fallback/escalation; usage_status measured|estimated|unavailable — неизвестное != 0; claude-cli usage
   измеряется; ledger задача+продукт; `ai-ops usage`).
-- **v3.11.0 — UI Evidence Readiness:** Storybook onboarding maturity (absent/configured/runnable/verified);
-  doctor проверяет ui-evidence; UI-CI только на UI-изменениях; build/interaction/axe/visual — честные статусы.
+- **v3.11.0 — UI Evidence Readiness** ✅: Storybook onboarding maturity (absent/configured/runnable/verified,
+  `ai-ops onboard`); doctor сообщает ui-evidence; UI-CI только на UI-изменениях/VISUAL; build/interaction/axe/
+  visual — отдельные честные статусы; отсутствие Storybook НЕ маскируется; кит не ставит зависимости за владельца.
 - **v3.12.0 — Architecture Baseline:** read-only `ai-ops audit architecture` (карта модулей/границ/зависимостей/
   API/данные/интеграции/failure-modes/deployment/observability/security/ADR-дрейф/риски); дешёвый baseline на
   onboard, полный AI-review отдельно; architecture-reviewer — обязательный судья при architecture-сигналах.

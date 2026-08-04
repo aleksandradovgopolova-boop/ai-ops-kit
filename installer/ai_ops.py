@@ -11,6 +11,7 @@
   migrate              — применить цепочку миграций манифеста (сейчас пустая, механизм готов)
   verify-capabilities  — offline capability self-test
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
+  onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -670,6 +671,19 @@ def cmd_doctor():
                 "@fission-ai/openspec или выключите openspec.enabled)")
     print(f"node: {'✓' if node else '— (нужен для OpenSpec — включён по умолчанию)'}")
     print(f"openspec CLI: {'✓' if osp else osp_hint}")
+    # v3.11.0 UI Evidence Readiness: честная зрелость UI-evidence (absent НЕ маскируем как проблему —
+    # это применимо только к UI-продуктам; absent для не-UI child — норма). doctor только СООБЩАЕТ.
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "ui_readiness.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    try:
+        import ui_readiness
+        _m = ui_readiness.assess(".")["storybook_maturity"]
+        print(f"ui-evidence (Storybook): {_m}"
+              + ("  — не UI-продукт? тогда норма (не маскируем)" if _m == "absent" else "")
+              + ("   → `ai-ops onboard` для деталей" if _m != "verified" else ""))
+    except Exception as _e:  # noqa: BLE001 — недоступность readiness не роняет doctor
+        print(f"ui-evidence (Storybook): недоступно ({_e})")
     print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
     return 0 if ok else 1
 
@@ -684,6 +698,23 @@ def cmd_usage(argv):
     import usage_ledger
     rest = [a for a in argv[2:]]                 # флаги после 'usage'
     return usage_ledger.main(["."] + rest)
+
+
+def cmd_onboard(argv):
+    """v3.11.0 UI Evidence Readiness: онбординг-сводка + ЧЕСТНАЯ зрелость UI-evidence (Storybook):
+    absent | configured | runnable | verified. Кит предлагает шаблон скрипта, НЕ ставит зависимости."""
+    ob = Path(".") / "AI-OPS-ONBOARDING.md"
+    print(_onboarding_summary(ob if ob.exists() else None))
+    print()
+    for _cand in (Path(".") / ".ai" / "managed" / "tools", PKG / "tools"):
+        if (_cand / "ui_readiness.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    try:
+        import ui_readiness
+        print(ui_readiness._fmt(ui_readiness.assess(".")))
+    except Exception as _e:  # noqa: BLE001 — недоступность readiness не должна ронять onboard
+        print(f"UI readiness: недоступно ({_e})")
+    return 0
 
 
 def cmd_migrate():
@@ -892,6 +923,8 @@ def main(argv):
         return cmd_verify_capabilities()
     if cmd == "usage":
         return cmd_usage(argv)
+    if cmd == "onboard":
+        return cmd_onboard(argv)
     print(f"неизвестная команда '{cmd}'"); print(__doc__)
     return 2
 
