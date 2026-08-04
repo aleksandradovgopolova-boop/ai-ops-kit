@@ -14,6 +14,7 @@
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
+  method               — экономичный способ работы: советы по приоритетам (гигиена/делегирование/runtime; v3.18.0)
 
 Алгоритм update (Section 27 целевой архитектуры):
   1) читать installed_version; 2) читать версию пакета; 3) проверить совместимость;
@@ -824,6 +825,16 @@ def cmd_usage(argv):
     return usage_ledger.main(["."] + rest)
 
 
+def cmd_method(argv):
+    """v3.18.0 Development Culture Guardrails (WP6): экономичный способ работы — советы в порядке
+    приоритетов (гигиена сессии > делегирование > итерации > runtime > effort). Только советует."""
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "cost_method.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    import cost_method
+    return cost_method.main(["."] + [a for a in argv[2:]])
+
+
 def cmd_session(argv):
     """v3.16.0 Development Culture Guardrails: гигиена сессии. `ai-ops session` — снимок телеметрии
     + SessionRecommendation (continue/compact/clear/new_session) с ТОЧНОЙ командой. Передайте
@@ -1078,6 +1089,8 @@ def main(argv):
         return cmd_audit(argv)
     if cmd == "session":
         return cmd_session(argv)
+    if cmd == "method":
+        return cmd_method(argv)
     print(f"неизвестная команда '{cmd}'"); print(__doc__)
     return 2
 

@@ -9,7 +9,7 @@ Measurement → Insights → снова Discovery. Агенты (включая 
 (`ai-ops run --engine pipeline`: worktree-изоляция → детектор стека → tool-loop → commit →
 evidence на точном SHA → RunPlan-гейты → draft PR) и управляемые обновления дочерних репозиториев.
 
-> **Честный статус (v3.17.0 stable; Development Culture Guardrails срезы 1–2 — гигиена сессий/контекста: телеметрия, пороги бюджета контекста, Task Completion Ritual + рекомендация continue/compact/clear/new с точной командой (`ai-ops session`); boundary classifier + культура делегирования разведки; Architecture Baseline — v3.15.0; Startup Context Budget ЗАВЕРШЁН v3.12–3.14; UI Evidence Readiness — v3.11.0; Usage Truth — v3.10.0; First-class Claude Code Adapter + complexity-aware routing — v3.9.0):** единый движок
+> **Честный статус (v3.18.0 stable; Development Culture & Resource Guardrails ЗАВЕРШЁН — гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + рекомендация continue/compact/clear/new (`ai-ops session`), boundary classifier, культура делегирования, cost-aware work method по приоритетам (`ai-ops method`); Architecture Baseline — v3.15.0; Startup Context Budget ЗАВЕРШЁН v3.12–3.14; UI Evidence Readiness — v3.11.0; Usage Truth — v3.10.0; First-class Claude Code Adapter + complexity-aware routing — v3.9.0):** единый движок
 > «задача → draft PR» доказан вживую end-to-end на РЕАЛЬНОМ full-stack (ИИ-Среда, React/TS): сильный
 > writer (локальный `claude -p`, без API-ключа) + независимый дешёвый ревьюер (deepseek, writer≠judge)
 > + детерминированные проверки по стеку (build/typecheck/test) + baseline-diff + **ЧЕЛОВЕК на strict
