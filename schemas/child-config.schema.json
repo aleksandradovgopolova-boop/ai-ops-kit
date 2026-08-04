@@ -54,7 +54,13 @@
     "approval_policy": { "type": "object", "additionalProperties": true },
     "overlays": { "type": "object", "additionalProperties": true },
     "protected_paths": { "type": "array", "items": { "type": "string" } },
-    "confidentiality_policy": { "type": "object", "additionalProperties": true }
+    "confidentiality_policy": { "type": "object", "additionalProperties": true },
+    "context_budget": {
+      "type": "object",
+      "description": "v3.13.0 Startup Context Budget: наблюдаемый бюджет стоимости стартового набора (tools/context_cost.py).",
+      "properties": { "session_start_tokens": { "type": "integer", "minimum": 1 } },
+      "additionalProperties": false
+    }
   },
   "required": ["schema_version", "kind", "parent", "presets", "adapters", "providers"],
   "additionalProperties": true,

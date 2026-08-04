@@ -275,6 +275,8 @@ jobs:
           python3 validation/validate_freshness.py context > /dev/null
       - name: "Полнота контекста репозитория — обязательные документы в оверлее (v3.12.0; selftest)"
         run: python3 validation/validate_context_completeness.py --selftest
+      - name: "Стоимость стартового контекста — ярусы чтения + бюджет старта (v3.13.0; selftest)"
+        run: python3 tools/context_cost.py --selftest
       - name: Реестр решений (selftest + реестр кита)
         run: |
           python3 validation/validate_decisions.py --selftest

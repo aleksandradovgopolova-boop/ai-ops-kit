@@ -15,10 +15,26 @@ stability: volatile        # stable | evolving | volatile
 reviewed_at: 2026-07-13    # дата последней проверки человеком (YYYY-MM-DD)
 expires_after_days: 14     # опционально; по умолчанию — из класса ниже
 owner: product-team        # опционально
+read_tier: 1               # v3.13.0: ярус стартового чтения (см. ниже)
 sources:                   # опционально: где живой источник истины
   - src/product/types.ts
 ---
 ```
+
+## Ярусы стартового чтения (`read_tier`, v3.13.0)
+
+Отдельная от `stability` ось: `stability` — «как быстро протухает», `read_tier` — «читать ли
+это при старте сессии». Введено, чтобы стартовый контекст не раздувался чтением `context/*`
+целиком (см. `commands/task/ai-session-start.md`, `tools/context_cost.py`).
+
+| `read_tier` | Когда читать | Примеры |
+|---|---|---|
+| `1` | **Всегда** при старте сессии (анкер «сейчас») | `product/ProductStatus.md`, `now.md` |
+| `2` | **По теме** текущей задачи | `product/DesignSystem.md`, `system/*`, `product/BusinessRules.md` |
+| `3` | Только по **явной необходимости** (крупные контракты, архивы) | `product/MetricCatalog.md` |
+
+Документ без `read_tier` трактуется как ярус 2. Ярус 1 обязан быть компактным: снимок статуса —
+≤ ~2 КБ токенов, детали выносятся в документ яруса 3 (`rules/core/ProductStatusPolicy.md`).
 
 ## Классы и сроки по умолчанию
 

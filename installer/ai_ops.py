@@ -763,6 +763,15 @@ def cmd_doctor():
         print(f"контекст (обязательные документы): "
               + ("✓ все на месте" if not _gaps
                  else f"✗ нет в оверлее: {', '.join(_gaps)} → `ai-ops update` создаст черновики"))
+    # v3.13.0 Startup Context Budget: наблюдаемая стоимость стартового набора vs бюджет (advisory).
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "context_cost.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    try:
+        import context_cost
+        print(context_cost.summary_line("."))
+    except Exception as _e:  # noqa: BLE001 — оценка стоимости не роняет doctor
+        print(f"стоимость старта: недоступно ({_e})")
     print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
     return 0 if ok else 1
 

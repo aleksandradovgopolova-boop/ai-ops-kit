@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.12.0 stable**: Startup Context Budget срез 1 (обязательный контекст доезжает до репо и проверяется); UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.13.0 stable**: Startup Context Budget срез 2 (ярусы чтения read_tier + измеримая стоимость старта); срез 1 (back-fill контекста + freshness-гейт) v3.12.0; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -502,9 +502,10 @@ freshness и первым живым DecisionPackage. Архитектура **e
   (ProductStatus.md/now.md) доезжают до подключённых репозиториев — `ai-ops update` back-fill'ит черновики,
   doctor сообщает пробел, freshness-гейт проверяет контекст РЕПОЗИТОРИЯ (не селфтест кита), дефолт валидатора —
   контекст репо, шаблоны кита исключены. Аудит/референс: Proektnyy-ofis/ii-sreda.
-- **v3.13.0 — Startup Context Budget, срез 2** (части 4/6): ярусы чтения `read_tier: 1|2|3` во frontmatter +
-  переписанный `ai-session-start` (ярус 1 всегда, ярус 2 по теме, ярус 3 по необходимости); измерение стоимости
-  старта `tools/context_cost.py` + строка в doctor + advisory-гейт `context_budget` против `session_start_tokens`.
+- **v3.13.0 — Startup Context Budget, срез 2** ✅ (части 4/6): ярусы чтения `read_tier: 1|2|3` во frontmatter
+  всех шаблонов + переписанный `ai-session-start` (ярус 1 всегда / 2 по теме / 3 по нужде); `tools/context_cost.py`
+  (оценка стоимости старта с поправкой на кириллицу, разбивка, вердикт против `context_budget.session_start_tokens`)
+  + строка в doctor + `--strict` как advisory-гейт; ProductStatus ≤~2КБ токенов.
 - **v3.14.0 — Startup Context Budget, срез 3** (часть 5): управляемая стоимость самого кита —
   `runtime_surface` (skills/commands: enabled) в `.ai-ops.yaml`, адаптеры только для `runtimes.configured`,
   бюджет длины `description` скилла/команды (≤300) с валидатором. Цель: сумма описаний поверхности −≥2×.

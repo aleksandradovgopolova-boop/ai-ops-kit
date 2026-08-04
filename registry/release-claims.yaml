@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.12.0
-phase: "v3.12 — Startup Context Budget (срез 1): механизм контекста доезжает до репо и проверяется"
+version: 3.13.0
+phase: "v3.13 — Startup Context Budget (срез 2): ярусы чтения + измеримая стоимость старта"
 channel: stable
-patch_note: "3.12.0 — Startup Context Budget (срез 1, части 1→2→3): update back-fill'ит обязательные документы контекста (ProductStatus.md/now.md) черновиками из шаблонов; doctor сообщает пробел; freshness-гейт проверяет контекст РЕПОЗИТОРИЯ (не селфтест кита); дефолт validate_freshness — контекст репо, шаблоны кита (template:true) исключены; новый validate_context_completeness"
+patch_note: "3.13.0 — Startup Context Budget (срез 2, части 4/6): read_tier 1|2|3 во frontmatter всех шаблонов контекста + переписанный ai-session-start (ярус 1 всегда / 2 по теме / 3 по нужде); новый tools/context_cost.py — оценка стоимости стартового набора (ярус 1 + CLAUDE.md + описания поверхности) с поправкой на кириллицу, разбивка по файлам, вердикт против бюджета context_budget.session_start_tokens; строка в doctor; ProductStatus ≤~2КБ токенов"
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 184
+checks_count: 185
 agents_count: 51
 
 qualified_on: >
