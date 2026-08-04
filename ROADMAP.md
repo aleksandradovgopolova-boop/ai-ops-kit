@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.19.0 stable**: Engineering Operating Model начат (срез 1 — дисциплина коммита и ветки, детект отставания базы, `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.20.0 stable**: Engineering Operating Model срезы 1–2 (дисциплина коммита и ветки с детектом отставания базы; карта окружений и честная зрелость поставки + гейт `deploy_readiness`; `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -534,11 +534,19 @@ freshness и первым живым DecisionPackage. Архитектура **e
   + ключ `engineering_operating_model` в схеме + `validate_engops_policy` (связность порогов + паритет
   правило↔код) + `ai-ops engops` + 2 строки doctor. Мотив: ветка дочки отстала от main на 234 коммита,
   и это не было ничьей ответственностью.
-- **Затем — Engineering Operating Model срезы 2–3 / Autonomous Operation** (прежние 3.13/3.15 из спеки
-  владельца, сдвинуты): срез 2 — окружения и deploy readiness (лестница absent/configured/runnable/verified
-  + гейт `deploy_readiness` по сигналу `deployment_change`; кит не деплоит, а не даёт врать о готовности);
-  срез 3 — экономический preflight (BudgetContract проверяется ДО tool loop, а не сверяется после);
-  затем worker, `ai-ops do`, ask-once, blocker resolver.
+- **v3.20.0 — Engineering Operating Model, срез 2** ✅ (WP4+WP5+WP6): EnvironmentMap (`environment_map` —
+  окружения объявлено vs обнаружено в CI `environment`/`.env.<name>`; находки `detected_not_declared`
+  (CI деплоит туда, где нет владельца и правил доступа), `declared_not_detected`,
+  `production_without_approvers`; **секреты только ИМЕНАМИ**, значения не читаются и в отчёт не попадают)
+  + DeployReadiness (`deploy_readiness` — лестница absent/configured/runnable/verified; **без объявленного
+  отката verified недостижим**; платформенная поставка отмечается как путь ВНЕ репозитория, а не
+  «задеплоить нечем») + детерминированный blocking-гейт `deploy_readiness` с `required_when`
+  [deployment_change, new_service, infrastructure_change], чек-лист `rules/quality/deploy-readiness.yaml`,
+  исполнение в `gate_executor` (недоступность инструмента → `warn`, не `pass`) + ключи
+  `environments`/`deploy` в схеме + `ai-ops engops env|deploy` + 2 строки doctor. gate-count 30 → 31.
+- **Затем — Engineering Operating Model срез 3 / Autonomous Operation** (прежние 3.13/3.15 из спеки
+  владельца, сдвинуты): срез 3 — экономический preflight (BudgetContract проверяется ДО tool loop,
+  а не сверяется после); затем worker, `ai-ops do`, ask-once, blocker resolver.
 - **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
   (owner_effort, где кит ускоряет/страхует/мешает, регрессии, стоимость/latency из Usage Truth) решают дальнейшее.
 - **После данных (точечно, ПО ФАКТАМ):** DX; устойчивость runtime; адресный рефакторинг. **Дальше:** Codex
