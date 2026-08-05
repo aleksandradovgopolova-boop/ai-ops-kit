@@ -1521,8 +1521,11 @@ def selftest():
         expect("planned: active-work зарегистрирована",
                (root / ".ai" / "runtime" / "active-work.yaml").exists())
         expect("треки VISUAL/ANALYTICS в отчёте", {"VISUAL", "ANALYTICS"} <= set(r["required_tracks"]))
-        expect("гейты треков агрегированы (ux_review/analytics_readiness)",
-               {"ux_review", "analytics_readiness"} <= set(r["gates"]))
+        expect("гейты треков агрегированы (ux_review/analytics_design_readiness)",
+               {"ux_review", "analytics_design_readiness"} <= set(r["gates"]))
+        # v3.27.6: analytics_runtime_verification НЕ входит в дорелизный RunPlan (только после release)
+        expect("analytics_runtime_verification НЕ в дорелизном RunPlan",
+               "analytics_runtime_verification" not in set(r["gates"]))
 
     # v3.0-rc4 (P0.1): immutable resume — смена классификации/policy при resume блокируется (нужен replan)
     with tempfile.TemporaryDirectory() as td:

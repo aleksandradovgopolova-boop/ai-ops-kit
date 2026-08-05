@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [3.27.6] — 2026-08-05 — Corrective Release: восстановление release truth
+
+Корректирующий релиз без новой функциональности. Исправляет дрейфы после 3.27.x и
+восстанавливает доверие к CI/CD.
+
+Исправления:
+- gate-count claim: 31 → 32 (analytics_readiness → analytics_design_readiness + analytics_runtime_verification)
+- ai_ops_run.py selftest: analytics_readiness → analytics_design_readiness + проверка что
+  analytics_runtime_verification НЕ входит в дорелизный RunPlan
+- package-quality.yml: добавлен pytest tests/contracts/ (20 process contract tests)
+- release.yml: stable Release создаётся ТОЛЬКО после успешного package-quality на том же SHA
+  (workflow_run trigger вместо push trigger)
+
 ## [3.27.5] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP6): Process Contract Tests
 
 20 contract tests, доказывающих инварианты процессов.
