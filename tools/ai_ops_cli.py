@@ -34,6 +34,7 @@ INTENTS = {
     "plan":    ("построить RunPlan + контекст + оценку пакета (без правок)", "plan", True),
     "run":     ("выполнить задачу движком (авто-подбор стадий)", "run", True),
     "do":      ("автономный прогон: run --execute + авторазрешение блокировщиков", "do", True),
+    "advise":  ("инженерный совет: окружения, delivery plan, альтернативы (без исполнения)", "advise", True),
     "resume":  ("продолжить прерванную работу по фиче", "resume", False),
     "review":  ("независимый ревью произведённого", "review", True),
     "status":  ("статус активной работы", "status", False),
@@ -125,8 +126,8 @@ def selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("11 intent-команд", len(INTENTS) == 11
-           and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "resume", "review",
+    expect("12 intent-команд", len(INTENTS) == 12
+           and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "advise", "resume", "review",
                 "status", "health"} == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
@@ -416,6 +417,24 @@ def _run_intent(intent, task, child_root, signals, a):
             print("  заполни разделы, затем: ai-ops specify …")
         return 0
 
+    if intent == "advise":
+        import engineering_advisor
+        result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
+        if js:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"ENGINEERING ADVISOR: {result['summary']}")
+            print(f"Repository: {result['repository']}")
+            if result.get("task_type"):
+                print(f"Task type: {result['task_type']}")
+            print()
+            for r in result["recommendations"]:
+                p = r.get("priority", 3)
+                marker = "⚠" if p == 1 else "·" if p == 2 else " "
+                print(f"  {marker} [{r.get('category')}] {r['advice']}")
+                print(f"    (source: {r.get('source')})")
+        return 0
+
     return None
 
 
@@ -544,7 +563,7 @@ def main(argv):
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
-    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss", "review"):
+    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise"):
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc

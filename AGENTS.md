@@ -175,6 +175,7 @@ python3 validation/validate_engops_policy.py
 python3 tools/environment_map.py --selftest
 python3 tools/deploy_readiness.py --selftest
 python3 tools/economic_preflight.py --selftest
+python3 tools/engineering_advisor.py --selftest
 python3 tools/ui_readiness.py --selftest
 python3 tools/model_router.py --selftest
 python3 tools/provider_endpoints.py --selftest

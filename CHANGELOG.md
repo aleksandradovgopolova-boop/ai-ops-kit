@@ -4,6 +4,29 @@
 
 ## [Unreleased]
 
+## [3.23.0] — 2026-08-05 — Engineering Advisor: слой «как лучше сделать»
+
+Не добавляем новых проверок — добавляем слой рекомендаций, который отвечает на вопрос
+«как лучше сделать эту задачу», а не только «прошла ли она гейты».
+
+- **`ai-ops advise` — новый intent.** Инженерный совет без исполнения: `ai-ops advise "задача"`
+  показывает рекомендации по трём осям. Read-only, не меняет код, не запускает движок.
+- **Environment Recommendation.** На основе `environment_map` + `deploy_readiness`: какие окружения
+  обнаружены, какая зрелость доставки (absent/configured/runnable/verified), какие пробелы
+  (preview/staging отсутствуют, production без approvers, rollback не объявлен). Конкретные
+  рекомендации: «добавьте PR-based preview», «объявите approvers для production».
+- **Delivery Plan per Task.** На основе `project_detector` + `commit_policy` + `branch_policy` +
+  `deploy_readiness`: branch strategy (`ai-ops/<wid>` от свежей main), commit boundaries (один
+  коммит = один revertible шаг, не смешивать зоны), affected tests (какие команды запускать),
+  deploy/rollback readiness, feature flag для PRODUCT/CRITICAL.
+- **Economic Alternatives.** На основе `economic_preflight`: оценка стоимости из истории репозитория
+  (медиана/худший/нижняя граница). Перед написанием кода — проверка альтернатив: (1) не делать
+  сейчас; (2) настройка вместо кода; (3) переиспользование компонента; (4) меньший scope.
+  Если `confirm_required` или `block` — явные рекомендации по снижению стоимости.
+- **Композиция.** `tools/engineering_advisor.py` следует паттерну `cost_method.py`: собирает
+  `{priority, category, advice, source}` tuples из существующих модулей, сортирует по приоритету.
+  Advise, не block — рекомендации, а не требования.
+
 ## [3.22.0] — 2026-08-05 — Culture Runtime Integration: подключение культуры к реальной работе
 
 Шаг 1 плана восстановления доверия. Не добавляем новые правила — подключаем уже существующие
