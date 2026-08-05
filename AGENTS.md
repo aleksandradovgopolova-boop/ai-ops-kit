@@ -163,6 +163,7 @@ python3 validation/validate_release_claims.py --selftest
 python3 validation/validate_release_claims.py
 python3 tools/usage_ledger.py --selftest
 python3 tools/session_telemetry.py --selftest
+python3 tools/session_telemetry_provider.py --selftest
 python3 tools/session_guardrails.py --selftest
 python3 tools/session_boundary.py --selftest
 python3 tools/delegation_advisor.py --selftest

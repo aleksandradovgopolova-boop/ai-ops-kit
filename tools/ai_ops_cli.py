@@ -33,6 +33,7 @@ INTENTS = {
     "specify": ("построить спецификацию нужной глубины", "specify", True),
     "plan":    ("построить RunPlan + контекст + оценку пакета (без правок)", "plan", True),
     "run":     ("выполнить задачу движком (авто-подбор стадий)", "run", True),
+    "do":      ("автономный прогон: run --execute + авторазрешение блокировщиков", "do", True),
     "resume":  ("продолжить прерванную работу по фиче", "resume", False),
     "review":  ("независимый ревью произведённого", "review", True),
     "status":  ("статус активной работы", "status", False),
@@ -124,8 +125,8 @@ def selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("10 intent-команд", len(INTENTS) == 10
-           and {"new", "onboard", "discuss", "specify", "plan", "run", "resume", "review",
+    expect("11 intent-команд", len(INTENTS) == 11
+           and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "resume", "review",
                 "status", "health"} == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
@@ -418,6 +419,46 @@ def _run_intent(intent, task, child_root, signals, a):
     return None
 
 
+def _session_guard_before_start(child_root, task, signals, feature=None):
+    """v3.22 Culture Runtime Integration: session guard ДО старта задачи.
+    1. snapshot — текущее состояние сессии
+    2. relation по факту — session_boundary.classify (не жёсткое значение)
+    3. recommend — если new_session/compact, предупредить (advise, не block)
+    4. delegation — если большая разведка, рекомендовать сабагент
+    Выводит рекомендации пользователю, не блокирует прогон."""
+    try:
+        import session_telemetry
+        import session_guardrails
+        import session_boundary
+        import delegation_advisor
+        # 1. snapshot
+        snap = session_telemetry.snapshot(str(child_root), workitem_id=feature)
+        ctx = snap.get("context_current")
+        ctx_txt = f"{ctx/1000:.0f}k" if ctx else "н/д"
+        # 2. relation по факту
+        current_wid = snap.get("workitem_id")
+        relation_cls, reason = session_boundary.classify(
+            current_workitem=current_wid, new_task=task or "", new_workitem=feature)
+        relation = session_boundary.to_relation(relation_cls)
+        # 3. recommend
+        rec = session_guardrails.recommend(snap, next_relation=relation, next_task=task, task_done=False)
+        outcome = rec.get("outcome")
+        if outcome in ("new_session", "compact"):
+            print(f"⚠ SESSION GUARD: {outcome} — {rec.get('reason', '')}")
+            print(f"  контекст: {ctx_txt} [{snap.get('context_status')}]")
+            print(f"  команда: {rec.get('command', '')}")
+        # 4. delegation
+        del_signals = {"task_text": task or "", "files_count": 0}
+        del_recs = delegation_advisor.advise(del_signals)
+        if del_recs:
+            print(f"⚠ DELEGATION: {len(del_recs)} рекомендация(ий)")
+            for r in del_recs[:2]:
+                print(f"  · {r.get('trigger')}: {r.get('reason', '')[:80]}")
+    except Exception as e:  # noqa: BLE001
+        # session guard — advise, не block; если что-то сломалось, продолжаем
+        print(f"⚠ session guard: {e}")
+
+
 def main(argv):
     if "--selftest" in argv:
         return selftest()
@@ -514,10 +555,16 @@ def main(argv):
     else:
         _print_preview(pv)
 
-    # только `run --execute` реально запускает движок; остальное — превью/делегация
-    if intent == "run" and a.execute:
+    # только `run --execute` и `do` реально запускают движок; остальное — превью/делегация
+    # v3.22: `do` — alias для `run --execute` с авторазрешением блокировщиков (review_fix_attempts, author, open_pr)
+    if (intent == "run" and a.execute) or intent == "do":
         import ai_ops_run
         flags = pv["will_do"]["auto_flags"]
+        # v3.22: `do` форсирует флаги автономного прогона
+        if intent == "do":
+            flags["author"] = True
+            flags["review"] = True
+            a.open_pr = True
         # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом).
         # v2.120: sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget обычного
         # пути — иначе тихая потеря containment и live-провайдера (дефект аудита P0.2).
@@ -569,14 +616,19 @@ def main(argv):
                 return 1 if seq["executed_all"] else 2
             print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
         print("— запускаю —")
+        # v3.22: session guard ДО старта — snapshot + relation по факту + delegation
+        _session_guard_before_start(Path(child_root), task, signals, a.feature)
         # v2.120: канонический вход ПРОВОДИТ провайдера/модель/base/open-pr/max-steps/require-fix в движок
         # (дефект аудита P0.1: раньше уходило в mock и без пути до draft PR).
+        # v3.22: `do` добавляет review_fix_attempts=2 (авторазрешение блокировщиков)
+        review_fix = 2 if intent == "do" else getattr(a, "review_fix_attempts", 0)
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
                              author=flags["author"], provider_name=a.provider, model=a.model,
                              base=a.base, open_pr=a.open_pr, max_steps=a.max_steps,
-                             require_fix=flags.get("require_fix", False))
+                             require_fix=flags.get("require_fix", False),
+                             review_fix_attempts=review_fix)
         ai_ops_run.print_human(rep)
         return ai_ops_run.exit_code(rep)
     return 0

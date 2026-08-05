@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+## [3.22.0] — 2026-08-05 — Culture Runtime Integration: подключение культуры к реальной работе
+
+Шаг 1 плана восстановления доверия. Не добавляем новые правила — подключаем уже существующие
+к реальной работе сессии.
+
+- **`ai-ops do` — автономный прогон.** Новый intent = `run --execute` с предустановленными флагами:
+  `author=True`, `review=True`, `open_pr=True`, `review_fix_attempts=2` (авторазрешение блокировщиков).
+  Команда, которую `session_guardrails` рекомендовала в Task Completion Ritual, теперь реально
+  исполнима. `ai-ops do "задача"` — одна команда от намерения до draft PR.
+- **Session guard ДО старта.** Перед запуском задачи `_session_guard_before_start()`:
+  (1) `session_telemetry.snapshot()` — снимок текущего состояния сессии;
+  (2) `session_boundary.classify()` — отношение новой задачи к текущей (не жёсткое
+  `new_independent_task`, а по факту: same_task/continuation/adjacent/new_independent/new_product);
+  (3) `session_guardrails.recommend()` — если контекст >250k или новая независимая задача в дорогой
+  сессии, предупредить с точной командой (`/compact` или `/clear`); advise, не block.
+  (4) `delegation_advisor.advise()` — если задача требует большой разведки (>8 файлов, >500 строк
+  логов), рекомендовать сабагент.
+- **Session Telemetry Provider (opt-in).** `tools/session_telemetry_provider.py` — контракт для
+  чтения реальной Claude session metadata из `~/.claude/projects/*/sessions/*.jsonl`. Если данные
+  есть — `started_at`, `session_id`, `message_count`, `input_tokens`, `output_tokens` становятся
+  `measured`. Если нет (или структура изменилась) — честно `unavailable` (не 0, не partial).
+  Интегрирован в `session_telemetry.snapshot()`.
+- **Relation по факту.** `session_guardrails.recommend()` больше не получает жёсткое
+  `next_relation="new_independent_task"` — вместо этого `session_boundary.classify()` определяет
+  отношение по тексту задачи, WorkItem ID, пересечению scope. Рекомендация основана на реальных
+  данных, а не на предположении.
+
 ## [3.21.1] — 2026-08-05 — Runtime Trust Recovery: claude-cli production-path regression
 
 Шаг 0 плана восстановления доверия к флагманскому runtime. Находка живого прогона: любой вызов

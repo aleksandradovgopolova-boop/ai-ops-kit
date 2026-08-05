@@ -35,7 +35,8 @@ def _context_estimate(records):
 
 
 def snapshot(child_root, workitem_id=None, session_id=None, context_current=None):
-    """Машинный снимок сессии. context_current (из рантайма /context) -> measured; иначе estimated."""
+    """Машинный снимок сессии. context_current (из рантайма /context) -> measured; иначе estimated.
+    v3.22: opt-in чтение реальной Claude session metadata через session_telemetry_provider."""
     records = (usage_ledger.load_task(child_root, workitem_id) if workitem_id
                else usage_ledger.load_product(child_root))
     agg = usage_ledger.aggregate(records)
@@ -48,14 +49,26 @@ def snapshot(child_root, workitem_id=None, session_id=None, context_current=None
     else:
         ctx_cur, ctx_status = None, "unavailable"
 
+    # v3.22: opt-in provider — попытаться прочитать реальную Claude session metadata
+    provider_data = None
+    try:
+        import session_telemetry_provider
+        provider_data = session_telemetry_provider.read_session_metadata(session_id=session_id)
+    except Exception:  # noqa: BLE001
+        pass  # provider unavailable — честно продолжаем без него
+
     wids = sorted({r.get("workitem_id") for r in records if r.get("workitem_id")})
+    # started_at: из provider (measured) или unavailable
+    started_at = provider_data.get("started_at") if provider_data else None
+    started_at_status = "measured" if started_at else "unavailable"
+
     return {
         "kind": "SessionTelemetry", "schema_version": 1,
-        "session_id": session_id or "unlabelled",
+        "session_id": session_id or (provider_data.get("session_id") if provider_data else None) or "unlabelled",
         "repository": str(Path(child_root).resolve().name),
         "workitem_id": workitem_id or (wids[0] if len(wids) == 1 else None),
-        "started_at": None,                 # ledger не хранит время — честно unavailable
-        "started_at_status": "unavailable",
+        "started_at": started_at,
+        "started_at_status": started_at_status,
         "turns": agg["calls"],              # прокси: число модельных вызовов
         "input_tokens": agg["input_tokens"],
         "output_tokens": agg["output_tokens"],
