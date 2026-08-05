@@ -115,6 +115,8 @@ def validate_dir(feature_dir: Path):
     # finding обкатки 6: released ⇒ должно быть доказательство поставки. Кит не видит код
     # в произвольном репо, но честный прокси — released при НУЛЕ done-артефактов = дрейф
     # «reality/blueprint разошлись» (фича помечена выпущенной, а сделанного нет).
+    # v3.27.4 WP5: feature.status=released требует SHA-verified DeliveryReceipt, а не просто done-артефакт.
+    # Done-артефакт может быть problem statement из discovery — это не доказательство поставки.
     if feature.get("status") == "released":
         any_done = any(e.get("status") == "done"
                        for entries in artifacts.values() if isinstance(entries, list)
@@ -122,6 +124,28 @@ def validate_dir(feature_dir: Path):
         if not any_done:
             fail("feature.status=released, но ни один артефакт не 'done' — нет доказательства "
                  "поставки (reality/blueprint дрейф; пометьте реальные артефакты done или снимите released)")
+
+        # v3.27.4 WP5: проверяем наличие SHA-verified DeliveryReceipt
+        # DeliveryReceipt находится в features/<feature_id>/delivery-receipt.yaml
+        # или в .ai/runtime/delivery/<workitem_id>/receipt.yaml
+        receipt_paths = [
+            feature_dir / "delivery-receipt.yaml",
+            feature_dir.parent.parent / ".ai" / "runtime" / "delivery" / feature.get("id", "") / "receipt.yaml",
+        ]
+        receipt_found = False
+        for rp in receipt_paths:
+            if rp.exists():
+                try:
+                    receipt = yaml.safe_load(rp.read_text(encoding="utf-8"))
+                    if receipt and receipt.get("kind") == "DeliveryReceipt" and receipt.get("sha_verified") is True:
+                        receipt_found = True
+                        break
+                except Exception:
+                    pass
+        if not receipt_found:
+            fail("feature.status=released, но нет SHA-verified DeliveryReceipt — "
+                 "done-артефакт недостаточно для доказательства поставки. "
+                 "Требуется DeliveryReceipt с sha_verified=true (PR смержён, SHA совпадает с remote).")
 
     return errors
 
@@ -186,11 +210,22 @@ def selftest():
                 e["status"] = "draft"   # ничего не done
         (rel / "blueprint.yaml").write_text(yaml.safe_dump(bpr, allow_unicode=True), encoding="utf-8")
         expect("released без done-артефактов -> fail (finding 6)", validate_dir(rel), True)
-        # released с done-артефактом -> ок (по этому правилу)
+        # v3.27.4 WP5: released с done-артефактом, но без DeliveryReceipt -> fail
         bpr["artifacts"]["discovery"][0]["status"] = "done"
         (rel / "blueprint.yaml").write_text(yaml.safe_dump(bpr, allow_unicode=True), encoding="utf-8")
         errs_rel = [e for e in validate_dir(rel) if "released" in e]
-        expect("released с done-артефактом -> нет ошибки released-дрейфа", errs_rel, False)
+        expect("released с done-артефактом, но без DeliveryReceipt -> fail (WP5)", errs_rel, True)
+        # v3.27.4 WP5: released с done-артефактом И SHA-verified DeliveryReceipt -> ок
+        receipt = {"schema_version": 1, "kind": "DeliveryReceipt", "delivery_id": "d1",
+                   "workitem_id": "demo-feature", "sha_verified": True, "remote_sha": "abc123"}
+        (rel / "delivery-receipt.yaml").write_text(yaml.safe_dump(receipt, allow_unicode=True), encoding="utf-8")
+        errs_rel2 = [e for e in validate_dir(rel) if "released" in e]
+        expect("released с done-артефактом И SHA-verified DeliveryReceipt -> ок (WP5)", errs_rel2, False)
+        # v3.27.4 WP5: released с done-артефактом И DeliveryReceipt, но sha_verified=false -> fail
+        receipt["sha_verified"] = False
+        (rel / "delivery-receipt.yaml").write_text(yaml.safe_dump(receipt, allow_unicode=True), encoding="utf-8")
+        errs_rel3 = [e for e in validate_dir(rel) if "released" in e]
+        expect("released с DeliveryReceipt, но sha_verified=false -> fail (WP5)", errs_rel3, True)
     print("feature-blueprint selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
