@@ -374,6 +374,7 @@ gates:
     applicability: [PRODUCT, ANALYTICS, ADOPTION]
     stale_detection: {bind_to: release_sha}
     required_evidence: [events_verified_live, no_pii_in_events, cohort_identification_works, dashboard_receives_data]
+    enforced_by: post-release-readout  # v3.27.6: связан с PostReleaseReadout (PRR), который проверяет delivery_receipt.sha_verified
 
   documentation_updated:
     id: documentation_updated

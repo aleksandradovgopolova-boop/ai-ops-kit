@@ -438,6 +438,8 @@ jobs:
         run: python3 tools/review_branch.py --selftest
       - name: "Sequential WorkPackage Executor: пакет->commit->gates->handoff->следующий (selftest)"
         run: python3 tools/workpackage_executor.py --selftest
+      - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
+        run: python3 -m pytest tests/contracts/ -v --tb=short
       - name: "Research-модуль: схемы, связи RR->EV->DP, freshness, quote-конвенция"
         run: |
           python3 validation/validate_research_artifacts.py --selftest
@@ -445,5 +447,3 @@ jobs:
           python3 .research/tools/verify_quotes.py --selftest
           python3 .research/tools/freshness_sweep.py --selftest
           python3 .research/tools/ev_scaffold.py --selftest
-      - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
-        run: python3 -m pytest tests/contracts/ -v --tb=short

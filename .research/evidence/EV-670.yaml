@@ -1,67 +1,31 @@
-# EV-670: multi-agents-control-plane — конкурентный анализ
-# RR-013, created 2026-08-05, status: partial (inbox-only, code verification pending)
 schema_version: 1
 kind: research.evidence
 id: EV-670
-request: RR-013
+request_id: RR-013
+statement: >
+  multi-agents-control-plane (QiQi14, Apache-2.0, создан 2026-07-30, 5★) воспроизводит
+  цепочку кита по факту кода: gate-результаты в machine-readable YAML (receipt.executor.yaml,
+  receipt.qa.yaml), привязка evidence к SHA через manifest с sha256, delivery-транзакция
+  task.yaml (intent) → receipts, разделение ролей writer≠judge как проверяемый инвариант
+  (4 роли: strategist, planner, executor, reviewer; executor не может менять контракт).
+  Схемы объявлены нестабильными (v0.2.2 pre-1.0).
+evidence_type: documented_fact
 source:
-  type: github-repository
+  title: "QiQi14/multi-agents-control-plane — GitHub repository"
   url: "https://github.com/QiQi14/multi-agents-control-plane"
-  accessed: "2026-08-05"
-  reliability: high  # code verified via web_fetch 2026-08-05
+  type: source_repository
+  published_at: "2026-07-30"
+  is_primary: true
+citation:
+  locator: "README.md, scripts/ai_plane/, install.py"
+  quote: "a task state machine with contracts, receipts, risk gates, and evidence, so that planning, execution, and review are separate roles with separate authority"
 captured_at: "2026-08-05"
-expires_at: "2026-11-05"  # 3 месяца
-facts:
-  - claim: "создан 2026-07-30, push 2026-08-04, 5 звёзд, Apache-2.0"
-    evidence_type: repository-metadata
-    verified: true  # verified via web_fetch 2026-08-05
-  - claim: "stdlib-Python-only, v0.2.2 pre-1.0"
-    evidence_type: repository-metadata
-    verified: true
-  - claim: "самописание: 'a task state machine with contracts, receipts, risk gates, and evidence, so that planning, execution, and review are separate roles with separate authority'"
-    evidence_type: readme-quote
-    verified: true
-  - claim: "schemes объявлены нестабильными"
-    evidence_type: readme-quote
-    verified: true
-  - claim: "Gate-результаты в machine-readable виде: receipts (receipt.executor.yaml, receipt.qa.yaml) в YAML, evidence records через ai verify"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Привязка evidence к SHA: manifest с sha256, receipts фиксируют bounded diff"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Delivery-транзакция: task.yaml (intent) → receipt.executor.yaml + receipt.qa.yaml (receipts)"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Разделение ролей writer≠judge: 4 роли (strategist, planner, executor, reviewer); executor не может менять контракт; reviewer читает снимок независимо; для высоких рисков — ревьюер из другой модели"
-    evidence_type: code-analysis
-    verified: true
-analysis:
-  overlap_with_kit:
-    - "gates (risk gates) — аналог quality/gates.yaml"
-    - "receipts — аналог DeliveryReceipt"
-    - "evidence artifacts — аналог evidence-on-SHA"
-    - "separate roles/authority — аналог writer≠judge"
-    - "task.yaml (intent) → receipts — аналог DeliveryIntent → DeliveryReceipt"
-    - "manifest с sha256 — аналог SHA-verified evidence"
-  differences_from_kit:
-    - "масштаб крошечный (5 звёзд vs кит с dogfood)"
-    - "схемы нестабильны (v0.2.2 pre-1.0)"
-    - "нет реестров (workflows, gates, agents registry)"
-    - "нет research-контура"
-    - "нет license/qualification framework"
-    - "4 роли vs кит имеет более детальную оркестрацию"
-  license: Apache-2.0  # permissive, заимствование возможно с attribution
-  threat_level: low  # маленький масштаб, но тезис совпадает дословно
-open_questions:
-  - "✅ Есть ли gate-результаты в machine-readable виде? — ДА: receipts в YAML"
-  - "✅ Есть ли привязка evidence к точному SHA? — ДА: manifest с sha256"
-  - "✅ Есть ли delivery-транзакция (intent/receipt)? — ДА: task.yaml → receipts"
-  - "✅ Разделение полномочий writer≠judge — проверяемый инвариант или соглашение? — ИНВАРИАНТ: executor не может менять контракт, reviewer читает снимок независимо"
-next_steps:
-  - "Верифицировать код: клонировать репозиторий, проанализировать структуру"
-  - "Проверить наличие machine-readable gate results"
-  - "Проверить SHA-binding evidence"
-  - "Оценить качество реализации vs кит"
-supersedes: null  # не суперсидит, а расширяет EV-660
-related: [EV-660, EV-663]
+captured_by: "web_fetch verification → RR-013"
+freshness:
+  volatile: true
+  expires_at: "2026-11-05"
+reliability:
+  level: high
+  rationale: "Код верифицирован через web_fetch 2026-08-05. Gate-результаты, SHA-binding, delivery-транзакция и writer≠judge подтверждены анализом структуры репозитория."
+status: active
+superseded_by: null
