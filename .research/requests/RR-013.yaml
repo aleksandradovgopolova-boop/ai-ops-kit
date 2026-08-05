@@ -1,0 +1,53 @@
+# Обновление конкурентного охвата: три новых соседа против негативного вывода EV-660.
+# Повод: novelty-Watch 2026-08-05 (.research/watches/novelty-log.md). За окно 07-30…08-05
+# вышло три проекта, воспроизводящих части цепочки кита, все под permissive-лицензией;
+# один (multi-agents-control-plane) формулирует тезис почти дословно. EV-660 — негативное
+# утверждение «связной цепочки не обнаружено» с зафиксированным охватом на 2026-07-24;
+# охват протух по трём записям за одиннадцать дней.
+schema_version: 1
+kind: research.request
+id: RR-013
+title: "Соседи по жанру, август 2026: жив ли ещё вывод EV-660 о ненайденной связной цепочке"
+requested_by:
+  system: human
+  layer: product
+decision_to_support:
+  description: >
+    Решить, остаётся ли «связная цепочка execution→gates→evidence-on-SHA→delivery→governance»
+    работающей дифференциацией кита, или её надо переформулировать: что именно теперь
+    отличает кит от появившихся соседей, какие их механизмы стоит заимствовать (лицензии
+    позволяют), и надо ли обновлять/суперсидить EV-660 и EV-663 вместо продления freshness
+  decision_maker: human
+questions:
+  - "Воспроизводит ли QiQi14/multi-agents-control-plane (Apache-2.0, создан 2026-07-30) цепочку кита ПО ФАКТУ кода и артефактов, а не по формулировке README — есть ли у него gate-результаты в machine-readable виде, привязка evidence к точному SHA, delivery-транзакция (intent/receipt) и разделение полномочий writer≠judge как проверяемый инвариант, а не как соглашение?"
+  - "Что именно из super-simple-software-factory (MIT, 371★) пересекается с китом, а что — нет: типизированные envelope на стыках фаз, SQLite-трейс событий, 'gates as definition of done' — это подмножество наших гейтов или другая ось (детерминированный граф вместо реестров)? Его аудитория и канал распространения (один Claude Code skill + видео) — угроза позиционированию или доказательство спроса на жанр?"
+  - "Механизм ratchet (MIT, 430★) — хук PostToolUse, измеряющий каждую правку и возвращающий вердикт в живую сессию — закрывает ли реальный разрыв в наших гейтах: у нас проверка привязана к фазам и валидаторам (quality/gates.yaml), то есть срабатывает на границе стадии, а не в момент правки? Стоит ли киту in-session-гейт как отдельный класс, и что он ломает в stale_detection/bind_to?"
+  - "Как переформулировать EV-660 честно: суперсидить новым evidence с расширенным охватом (плюс fluidbox, controlkeel, ai-devkit из inbox), сузить утверждение до конкретных отличающих элементов, или признать, что негативное утверждение о ландшафте больше не несёт информации и заменить его позитивным перечнем наших отличий?"
+  - "Лицензионный вопрос перед любым заимствованием: Apache-2.0 (multi-agents-control-plane, fluidbox под MIT, ratchet под MIT) — что требуется в NOTICE.md и как это ложится на правило honest_statuses, если механизм заимствован, а не написан?"
+constraints:
+  - evidence_over_reputation           # читаем код и артефакты соседей, не README и не звёзды
+  - one_source_one_evidence            # каждый сосед — отдельная запись EV, иначе ломается supersession
+  - negative_claims_qualified          # «у них нет X» — с квалификаторами и reliability не выше medium
+  - self_evidence_flagged              # evidence о собственных отличиях кита помечается и идёт на спот-чек judge
+  - same_criterion_applies_to_us       # если сосед отклонён за отсутствие лицензии/инварианта, тот же критерий к себе
+  - registry_is_single_source_of_truth # заимствованный механизм появляется в registry, не параллельной декларацией
+memory_check:
+  performed: true
+  related_requests: [RR-003, RR-008, RR-009, RR-010]
+  related_decisions: [DP-107, DP-109]
+  summary: >
+    EV-660 (RR-008, captured 2026-07-24, expires 2026-10-24, reliability medium) — негативный
+    синтез: связного продукта не обнаружено в охвате девяти проектов, с честной оговоркой
+    «охват протухает быстро». EV-663 — жанровые соседи из независимого скана (Microsoft AGT,
+    Galileo Agent Control, ACS, Rel(AI)Build без публичного кода). EV-662 — по докам OpenHands
+    gates/delivery-транзакция не документированы; подтверждено заново 2026-08-05 на релизах
+    v1.8.0/v1.9.0. Разведка 2026-07-30 уже добавила в охват controlkeel и ai-devkit (второй —
+    без лицензии, заимствование закрыто). Разведка 2026-08-05 добавила multi-agents-control-plane,
+    super-simple-software-factory, ratchet, fluidbox — все в
+    .research/sources/inbox-novelty.yaml со статусом unvetted (лицензионный и boundary-анализ
+    не проводился, это работа данного RR). Скоуп: конкурентный охват и заимствуемые механизмы;
+    MCP-контур (RR-012) и sandbox/permission (EV-910) не переоткрываем.
+required_confidence: medium
+deadline: "2026-08-21"
+status: draft
+created_at: "2026-08-05"
