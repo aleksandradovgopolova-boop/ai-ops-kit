@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [3.25.0] — 2026-08-05 — Verification Foundation: pytest, test harness, CI layers
+
+Фундамент тестовой инфраструктуры. Не переписываем 199 selftest'ов — добавляем pytest как
+агрегатор, contract tests для critical path, и разделяем CI на слои.
+
+- **tests/ структура.** Создана иерархия: `unit/`, `contracts/`, `integration/`, `live/`,
+  `regression/`. Каждый слой — для своего типа тестов и CI-триггера.
+- **conftest.py с selftest wrappers.** 142 существующих selftest'а из `tools/` и `validation/`
+  обёрнуты в pytest-совместимые функции. Старые `--selftest` продолжают работать, новые
+  contract tests живут в `tests/contracts/`. Постепенная миграция без массового переписывания.
+- **Contract tests для critical path.** `tests/contracts/test_critical_path.py` — 11 тестов,
+  проверяющих контракты критических модулей (orchestrator, execution_pipeline, usage_ledger,
+  lifecycle_store). Включая регрессию на claude-cli NameError (v3.21.1).
+- **CI layers.** Создан `.github/workflows/pr-smoke.yml` — быстрый слой для PR (~2 мин):
+  contract tests + critical path selftests + key validators. Полный CI остаётся на main/release.
+- **pytest.ini.** Конфигурация pytest с маркерами (critical_path, unit, contract, integration,
+  live, regression, slow) для разделения тестов по слоям CI.
+- **Fixtures.** `temp_repo`, `child_root`, `mock_provider` — переиспользуемые фикстуры для
+  тестов, требующих временной структуры репозитория.
+
 ## [3.24.0] — 2026-08-05 — Cost & Architecture Accuracy: технические хвосты
 
 Закрываем технические хвосты, которые мешают точной экономической оценке и архитектурному контролю.

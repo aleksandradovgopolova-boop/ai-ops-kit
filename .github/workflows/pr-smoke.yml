@@ -1,0 +1,31 @@
+# PR Smoke — быстрый CI для pull requests (v3.25.0 Verification Foundation)
+# Запускается на каждый PR, проверяет критический путь (~2 мин).
+# Полные проверки — в package-quality.yml на main/release.
+
+name: pr-smoke
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml pytest
+
+      - name: Pytest — critical path + contracts
+        run: |
+          python3 -m pytest tests/contracts/ -v -m critical_path --tb=short
+
+      - name: Pytest — selftest wrappers (critical modules)
+        run: |
+          python3 -m pytest tests/conftest.py -v -k "orchestrator or execution_pipeline or preflight or tool_broker or gate_executor or ai_ops_run or ai_ops_cli" --tb=short
+
+      - name: Key validators
+        run: |
+          python3 validation/validate_ai_first_registry.py
+          python3 validation/validate_ai_first_workflows.py
+          python3 validation/validate_release_claims.py
