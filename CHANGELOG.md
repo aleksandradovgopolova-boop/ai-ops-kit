@@ -4,6 +4,27 @@
 
 ## [Unreleased]
 
+## [3.27.4] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP5): Release Evidence
+
+feature.status=released теперь требует SHA-verified DeliveryReceipt, а не просто done-артефакт.
+
+Проблема: ранее feature.status=released доказывался наличием любого done-артефакта. Это мог
+быть problem statement из discovery — не доказательство поставки.
+
+Решение: feature.status=released требует:
+1. Хотя бы один done-артефакт (как раньше)
+2. SHA-verified DeliveryReceipt (PR смержён, SHA совпадает с remote)
+
+DeliveryReceipt ищется в:
+- features/<feature_id>/delivery-receipt.yaml
+- .ai/runtime/delivery/<workitem_id>/receipt.yaml
+
+validate_feature_blueprint.py обновлён:
+- 9 selftest'ов (добавлены 3 теста для WP5)
+- released без DeliveryReceipt -> fail
+- released с SHA-verified DeliveryReceipt -> ok
+- released с DeliveryReceipt, но sha_verified=false -> fail
+
 ## [3.27.3] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP4): Progressive Verification Truth
 
 Исправление проблем Progressive Verification для честной и быстрой верификации.
