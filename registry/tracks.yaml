@@ -22,7 +22,7 @@ tracks:
   ANALYTICS:
     signal: measurable_behavior
     kind: required
-    gates: [analytics_readiness]
+    gates: [analytics_design_readiness]  # v3.27.2 WP3: design до merge; runtime verification — после deploy
     reason: "появилось измеримое поведение — нужны события и метрики"
     skip_reason: "нет нового измеримого поведения — аналитика не нужна"
 

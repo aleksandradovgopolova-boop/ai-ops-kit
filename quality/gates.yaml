@@ -345,9 +345,12 @@ gates:
     stale_detection: {bind_to: artifact_hashes}
     required_evidence: [components_from_design_system, new_components_justified]
 
-  analytics_readiness:
-    id: analytics_readiness
-    purpose: Аналитика описана — tracking plan, event schema, метрики и dashboard-спецификация.
+  analytics_design_readiness:
+    id: analytics_design_readiness
+    purpose: >
+      Аналитика спроектирована ДО merge: tracking plan, event schema, product metrics,
+      dashboard spec. v3.27.2 WP3: разделён из analytics_readiness — design-часть применяется
+      до merge, runtime-verification (events_verified_live) — после deploy.
     stage: analytics-review
     blocking: true
     responsible_role: analytics-reviewer
@@ -355,7 +358,22 @@ gates:
     source_of_truth: context/product/MetricCatalog.md
     applicability: [PRODUCT, ANALYTICS, ADOPTION]
     stale_detection: {bind_to: artifact_hashes}
-    required_evidence: [tracking_plan, event_schema, product_metrics, dashboard_spec, events_verified_live]
+    required_evidence: [tracking_plan, event_schema, product_metrics, dashboard_spec]
+
+  analytics_runtime_verification:
+    id: analytics_runtime_verification
+    purpose: >
+      Аналитика проверена ПОСЛЕ deploy: события реально приходят, свойства корректны,
+      нет PII, идентификация и cohort работают, dashboard получает данные.
+      v3.27.2 WP3: разделён из analytics_readiness — применяется после release.
+    stage: post-release
+    blocking: true
+    responsible_role: analytics-reviewer
+    review_mode: read-only
+    source_of_truth: context/product/MetricCatalog.md
+    applicability: [PRODUCT, ANALYTICS, ADOPTION]
+    stale_detection: {bind_to: release_sha}
+    required_evidence: [events_verified_live, no_pii_in_events, cohort_identification_works, dashboard_receives_data]
 
   documentation_updated:
     id: documentation_updated
