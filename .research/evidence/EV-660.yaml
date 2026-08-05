@@ -21,5 +21,5 @@ freshness:
 reliability:
   level: medium
   rationale: "Негативное утверждение с зафиксированным охватом; ландшафт сверхподвижен (чужой анализ устарел по 3 пунктам за недели)."
-status: active
-superseded_by: null
+status: superseded
+superseded_by: EV-673

@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-673
+request_id: RR-013
+statement: >
+  Суперсидит EV-660. Вывод "связной цепочки не обнаружено" больше не действует: за неделю
+  2026-07-30…08-05 обнаружен multi-agents-control-plane (EV-670), воспроизводящий цепочку
+  кита по факту кода: gates + receipts + evidence + writer≠judge. Но кит остаётся единственным
+  с полной реализацией: реестры, delivery lifecycle, research-контур, qualification framework,
+  dogfood. Дифференциация смещается от "единственный с цепочкой" к "единственный с полной
+  реализацией + dogfood + research".
+evidence_type: inference
+derived_from: [EV-670, EV-671, EV-672, EV-660]
+source:
+  title: "Синтез по конкурентному охвату RR-013"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-05"
+  is_primary: true
+citation:
+  locator: "перекрёстная сверка EV-670/EV-671/EV-672 против EV-660"
+captured_at: "2026-08-05"
+captured_by: "research-модуль, прогон RR-013"
+freshness:
+  volatile: true
+  expires_at: "2026-11-05"
+reliability:
+  level: high
+  rationale: "EV-670 верифицирован через web_fetch: code analysis подтверждает gates, receipts, SHA-binding, writer≠judge. Вывод основан на фактах, не на предположениях."
+status: active
+superseded_by: null

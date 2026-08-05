@@ -154,8 +154,8 @@ def selftest():
     expect("PRODUCT + UI/analytics/security -> треки VISUAL/ANALYTICS/SECURITY/DOCUMENTATION",
            {"VISUAL", "ANALYTICS", "SECURITY", "DOCUMENTATION"} <= req)
     # аудит: PRODUCT сам по себе не имел ux/analytics гейтов — трек их добавил
-    expect("гейты треков добавлены к base (ux_review/analytics_readiness/security)",
-           {"ux_review", "analytics_readiness", "security"} <= set(p["gates"]))
+    expect("гейты треков добавлены к base (ux_review/analytics_design_readiness/security)",
+           {"ux_review", "analytics_design_readiness", "security"} <= set(p["gates"]))
     expect("base_workflow = PRODUCT", p["base_workflow"] == "PRODUCT")
     expect("plan валиден", validate_plan(p) == [])
 

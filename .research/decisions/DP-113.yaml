@@ -65,5 +65,5 @@ proposed_validation:
 evidence_ids: [EV-670, EV-671, EV-672, EV-660, EV-663]
 author: "research-модуль, прогон RR-013 (writer inline, разведка через web_fetch; субагенты не использовались)"
 review: null
-status: draft
+status: accepted
 created_at: "2026-08-05"

@@ -16,7 +16,7 @@ jobs:
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install pyyaml
+      - run: pip install pyyaml pytest
       - name: Реестр агентов и манифест
         run: python3 validation/validate_ai_first_registry.py
       - name: Workflow-контракты и gates
@@ -417,7 +417,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: "${{ matrix.python-version }}"}
-      - run: pip install pyyaml
+      - run: pip install pyyaml pytest
       - name: "Совместимость Python (stdlib + pyyaml)"
         run: python3 validation/validate_python_compat.py
       - name: "Канонический e2e движка (task -> commit -> evidence -> gates, без модели)"
