@@ -17,6 +17,12 @@ from pathlib import Path
 
 import pytest
 
+# Эти contract-тесты — критический путь исполнения. pr-smoke.yml гоняет слой через
+# `pytest tests/contracts/ -m critical_path`; без маркера здесь smoke собирал файлы и
+# отбрасывал ВСЕ (0 selected -> pytest exit 5). Маркер критического пути conftest вешает
+# только на авто-обёртки selftest'ов (уровень tests/), сюда он не долетает — проставляем явно.
+pytestmark = [pytest.mark.critical_path, pytest.mark.contract]
+
 
 class TestOrchestratorContracts:
     """Contract tests for tools/orchestrator.py."""
