@@ -1,20 +1,37 @@
-# release.yml — автоматический выпуск: пуш в main с изменением VERSION
+# release.yml — автоматический выпуск: успешный package-quality на main с изменением VERSION
 # создаёт тег vX.Y.Z и GitHub Release с текстом из соответствующего раздела CHANGELOG.
+# v3.27.6: stable Release создаётся ТОЛЬКО после успешного package-quality на том же SHA.
 # Идемпотентен: если тег/Release уже существуют — шаг спокойно завершается.
 name: release
 on:
-  push:
+  workflow_run:
+    workflows: ["package-quality"]
+    types: [completed]
     branches: [main]
-    paths: [VERSION]
   workflow_dispatch: {}
 permissions:
   contents: write
 jobs:
   release:
+    # Запускается только если package-quality завершился успешно И в push был изменён VERSION
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Проверить, что VERSION был изменён в этом push
+        id: check_version
+        run: |
+          # Проверяем, был ли VERSION изменён в последнем коммите
+          if git diff HEAD~1 HEAD --name-only | grep -q "^VERSION$"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "VERSION не был изменён в этом push — пропуск release"
+          fi
       - name: Создать тег и Release из CHANGELOG
+        if: steps.check_version.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -37,8 +54,8 @@ jobs:
           case "$VERSION" in *-*) PRERELEASE="--prerelease" ;; esac   # SemVer pre-release (rc/alpha/beta)
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
             --title "AI Ops Kit $TAG" \
             $PRERELEASE \
             --notes-file /tmp/notes.md
-          echo "Создан $TAG -> $GITHUB_SHA"
+          echo "Создан $TAG -> ${{ github.event.workflow_run.head_sha }}"

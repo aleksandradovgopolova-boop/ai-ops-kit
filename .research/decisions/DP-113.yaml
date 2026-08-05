@@ -1,0 +1,86 @@
+# DP-113: Конкурентный охват август 2026 — три соседа воспроизводят цепочку кита
+# RR-013 → EV-670, EV-671, EV-672 → DP-113
+schema_version: 1
+kind: decision.package
+id: DP-113
+request: RR-013
+title: "Конкурентный охват август 2026: EV-660 требует обновления, ratchet — заимствуемый механизм"
+decision_maker: human
+decision_status: proposed  # требует человеческого решения
+created_at: "2026-08-05"
+evidence: [EV-670, EV-671, EV-672]
+
+summary: |
+  За неделю 2026-07-30…08-05 появились три проекта, воспроизводящих части цепочки кита:
+  
+  1. **multi-agents-control-plane** (Apache-2.0, 5★) — воспроизводит ВСЮ цепочку:
+     gates + receipts + evidence + writer≠judge. Это первое полное воспроизведение
+     тезиса кита под permissive-лицензией. Масштаб крошечный, схемы нестабильны.
+  
+  2. **super-simple-software-factory** (MIT, 410★) — воспроизводит ключевую мысль:
+     детерминированный код владеет последовательностью, gates as DoD, envelope-контракты.
+     Реальная аудитория и канал распространения (Claude Code skill).
+  
+  3. **ratchet** (MIT, 431★) — НЕ конкурент, а механизм, которого у кита нет:
+     in-session gate через PostToolUse hook, измеряет каждую правку в момент правки.
+  
+  Вывод EV-660 («связной цепочки не обнаружено») больше не действует: обнаружена.
+  Но кит остаётся единственным с полной реализацией: реестры, delivery lifecycle,
+  research-контур, qualification framework, dogfood.
+
+findings:
+  - id: F1
+    claim: "multi-agents-control-plane воспроизводит всю цепочку кита"
+    evidence: EV-670
+    confidence: high
+    implication: "EV-660 требует суперсидинга; дифференциация кита смещается от 'единственный с цепочкой' к 'единственный с полной реализацией + dogfood'"
+  
+  - id: F2
+    claim: "super-simple-software-factory имеет реальную аудиторию (410★) и канал распространения"
+    evidence: EV-671
+    confidence: high
+    implication: "Доказательство спроса на жанр; envelope-механизм потенциально заимствуем"
+  
+  - id: F3
+    claim: "ratchet закрывает разрыв: in-session gate vs phase-boundary gate"
+    evidence: EV-672
+    confidence: high
+    implication: "Киту стоит рассмотреть in-session gate как дополнительный класс гейтов"
+  
+  - id: F4
+    claim: "Все три проекта под permissive-лицензиями (Apache-2.0, MIT)"
+    evidence: [EV-670, EV-671, EV-672]
+    confidence: high
+    implication: "Заимствование возможно с attribution; требует обновления NOTICE.md"
+
+recommendations:
+  - id: R1
+    priority: high
+    action: "Суперсидить EV-660 новым evidence с расширенным охватом"
+    rationale: "EV-660 — негативное утверждение 'связной цепочки не обнаружено'; теперь обнаружена (EV-670)"
+  
+  - id: R2
+    priority: medium
+    action: "Оценить заимствование envelope-механизма из super-simple-software-factory"
+    rationale: "EnvelopeBase как типизированный контракт между фазами — потенциальное улучшение контрактов кита"
+  
+  - id: R3
+    priority: medium
+    action: "Оценить заимствование in-session gate механизма из ratchet"
+    rationale: "PostToolUse hook дополняет phase-boundary gates; закрывает разрыв в проверке минимализма/YAGNI"
+  
+  - id: R4
+    priority: low
+    action: "Обновить NOTICE.md при любом заимствовании"
+    rationale: "Apache-2.0 и MIT требуют attribution"
+
+risks:
+  - "Если не обновить EV-660, кит будет позиционироваться на устаревшем утверждении"
+  - "Если не рассмотреть заимствование, конкуренты могут опередить в UX"
+  - "Заимствование без анализа может сломать существующие контракты"
+
+next_steps:
+  - "Человеческое решение: суперсидить EV-660?"
+  - "Человеческое решение: заимствовать envelope-механизм?"
+  - "Человеческое решение: заимствовать in-session gate?"
+  - "Если да — создать ADR и реализовать в следующем релизе"

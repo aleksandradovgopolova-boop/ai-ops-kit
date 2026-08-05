@@ -44,7 +44,7 @@ claims:
   - id: gate-count
     doc: "ROADMAP/докуметация о числе quality gates (quality/gates.yaml)"
     type: count
-    source: {path: ../quality/gates.yaml, pattern: '^    id: ', expected: 31}
+    source: {path: ../quality/gates.yaml, pattern: '^    id: ', expected: 32}  # v3.27.6: analytics_readiness → analytics_design_readiness + analytics_runtime_verification (+1)
 
   - id: mvp-blocking-count
     doc: "AGENTS.md инвариант «blocking-гейтов MVP ≤ 8» (ровно 8 объявлено)"
