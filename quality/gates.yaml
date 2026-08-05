@@ -164,7 +164,7 @@ gates:
     review_mode: read-only
     human_approval: false
     checklist: rules/quality/code-review-etiquette.yaml
-    applicability: [ENGINEERING, CRITICAL]
+    applicability: [ENGINEERING, CRITICAL, PRODUCT]  # v3.27.1 WP2: PRODUCT добавлен — продуктовая full-stack функция требует независимого ревью кода
     stale_detection: {bind_to: tested_revision}
     required_evidence: [reviewed_revision, blockers_closed]
 
@@ -176,7 +176,7 @@ gates:
     responsible_role: security-reviewer
     review_mode: read-only
     human_approval: {required_when: [privileged, destructive, secret_boundary_change]}
-    applicability: [ENGINEERING, CRITICAL]   # INCIDENT — post-MVP (не определён); инциденты идут через CRITICAL
+    applicability: [ENGINEERING, CRITICAL, PRODUCT]   # v3.27.1 WP2: PRODUCT добавлен; INCIDENT — post-MVP (не определён); инциденты идут через CRITICAL
     stale_detection: {bind_to: tested_revision}
     required_evidence: [no_secrets, no_injection_surface, deps_approved]
 
@@ -193,7 +193,7 @@ gates:
     review_mode: read-only
     human_approval: false
     required_when: [architecture_change, new_service, cross_boundary_change, breaking_api, data_migration, new_integration, deployment_change]
-    applicability: [ENGINEERING, AI_FEATURE]   # членство в workflow; фактическое срабатывание — по required_when
+    applicability: [ENGINEERING, AI_FEATURE, PRODUCT, CRITICAL]   # v3.27.1 WP2: PRODUCT и CRITICAL добавлены — архитектурно значимые изменения требуют проверки независимо от base workflow
     checklist: rules/quality/architecture-review.yaml
     stale_detection: {bind_to: tested_revision}
     required_evidence: [reviewed_revision, architecture_boundaries_ok]
@@ -213,7 +213,7 @@ gates:
     validator: validate-deploy-readiness       # runnable: tools/deploy_readiness.py
     human_approval: false
     required_when: [deployment_change, new_service, infrastructure_change]
-    applicability: [ENGINEERING, AI_FEATURE]   # членство; фактическое срабатывание — по required_when
+    applicability: [ENGINEERING, AI_FEATURE, PRODUCT, CRITICAL]   # v3.27.1 WP2: PRODUCT и CRITICAL добавлены — изменение поставки требует проверки зрелости независимо от base workflow
     checklist: rules/quality/deploy-readiness.yaml
     stale_detection: {bind_to: tested_revision}
     required_evidence: [deploy_maturity, rollback_declared]

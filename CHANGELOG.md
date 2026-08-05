@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+## [3.27.1] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP2): Gate Coverage Matrix
+
+Исправление пробелов в матрице workflow → gates. PRODUCT и CRITICAL теперь имеют полный
+контур качества.
+
+- **quality/gates.yaml** — расширена applicability:
+  - code_review: [ENGINEERING, CRITICAL] → [ENGINEERING, CRITICAL, PRODUCT]
+  - security: [ENGINEERING, CRITICAL] → [ENGINEERING, CRITICAL, PRODUCT]
+  - architecture_review: [ENGINEERING, AI_FEATURE] → [ENGINEERING, AI_FEATURE, PRODUCT, CRITICAL]
+  - deploy_readiness: [ENGINEERING, AI_FEATURE] → [ENGINEERING, AI_FEATURE, PRODUCT, CRITICAL]
+
+- **registry/workflows.yaml** — добавлены missing gates:
+  - PRODUCT: +code_review, +security, +architecture_review, +deploy_readiness
+  - CRITICAL: +architecture_review, +deploy_readiness
+
+- PRODUCT теперь не может пройти без независимого code review, security check,
+  architecture review (при архитектурных сигналах) и deploy readiness (при изменении поставки).
+- CRITICAL теперь не может пройти без architecture review и deploy readiness.
+
 ## [3.27.0] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP1): Lifecycle Intent
 
 Первый шаг плана Process Applicability & Lifecycle Closure. Добавлена единая стадия
