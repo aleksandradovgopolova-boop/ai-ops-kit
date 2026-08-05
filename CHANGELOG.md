@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [3.27.5] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP6): Process Contract Tests
+
+20 contract tests, доказывающих инварианты процессов.
+
+TestGateCoverageMatrix (8 тестов):
+- PRODUCT требует code_review, security, architecture_review, deploy_readiness
+- CRITICAL требует architecture_review, deploy_readiness
+- gates applicability включает PRODUCT и CRITICAL
+
+TestAnalyticsGateSplit (5 тестов):
+- analytics_design_readiness существует и НЕ требует events_verified_live
+- analytics_runtime_verification существует и ТРЕБУЕТ events_verified_live
+- PRODUCT/ANALYTICS/ADOPTION используют analytics_design_readiness
+
+TestProgressiveVerification (4 теста):
+- docs-only возвращает skip tier
+- draft intent возвращает affected tier
+- merge_candidate intent возвращает full tier
+- no affected tests возвращает targeted_tests_not_found (impact_unknown)
+
+TestReleaseEvidence (3 теста):
+- released без DeliveryReceipt -> fail
+- released с SHA-verified DeliveryReceipt -> ok
+- released с sha_verified=false -> fail
+
 ## [3.27.4] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP5): Release Evidence
 
 feature.status=released теперь требует SHA-verified DeliveryReceipt, а не просто done-артефакт.
