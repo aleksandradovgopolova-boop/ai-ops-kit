@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [3.25.1] — 2026-08-05 — CI Trigger Fix: полный CI не на каждый draft PR
+
+Исправление дефекта процесса: `package-quality.yml` запускался на каждый PR, делая `pr-smoke`
+бессмысленным. Теперь полный CI запускается только когда PR действительно готов.
+
+- `package-quality.yml` триггеры: `pull_request: types: [ready_for_review, synchronize]` —
+  полный CI запускается только при выходе из draft или новом коммите в non-draft PR.
+- `pr-smoke.yml` остаётся на каждом PR — быстрая проверка критического пути (~2 мин).
+- Лестница проверок: draft → smoke; ready for review → full; merge → full на актуальном SHA.
+
 ## [3.25.0] — 2026-08-05 — Verification Foundation: pytest, test harness, CI layers
 
 Фундамент тестовой инфраструктуры. Не переписываем 199 selftest'ов — добавляем pytest как
