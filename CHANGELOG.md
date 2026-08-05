@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [3.26.2] — 2026-08-05 — Progressive Verification: execution_pipeline integration
+
+Интеграция progressive verification в execution_pipeline.
+
+- `run_pipeline()` теперь автоматически вычисляет `changed_files` после коммита
+  через `_committed_changed_files()` и передаёт их в `evidence_collector.collect()`.
+- Это включает targeted test execution: для небольших изменений запускаются только
+  затронутые тесты (affected tier) вместо полного набора.
+- Baseline-diff НЕ использует changed_files (полный прогон ДО изменений — корректно).
+- Результат evidence включает `verification` поле с информацией о выбранном tier.
+
 ## [3.26.1] — 2026-08-05 — Progressive Verification: evidence_collector integration
 
 Интеграция verification_tiers в evidence_collector для targeted test execution.
