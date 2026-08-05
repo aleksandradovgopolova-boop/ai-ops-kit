@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [3.27.3] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP4): Progressive Verification Truth
+
+Исправление проблем Progressive Verification для честной и быстрой верификации.
+
+- **verification_tiers.py** — расширен:
+  - Добавлен `skip` tier для docs-only (не запускаем product build/test)
+  - Добавлен `impact_status`: targeted_tests_found / targeted_tests_not_found / docs_only
+  - Добавлен `lifecycle_intent` параметр: explore→skip, draft→affected, ready_for_review→module, merge_candidate→full
+  - Команды тестов берутся из project_detector (child config), не угадываются pytest/jest
+  - 15 selftest'ов
+
+- **evidence_collector.py** — обновлён:
+  - Поддержка `skip` tier: docs-only возвращает pass с skip_verification evidence
+  - Передаёт impact_status в verification info
+
+- **package-quality.yml** — добавлено условие:
+  - `if: github.event.pull_request.draft == false` — не запускаем полный CI для draft PR
+
+Решённые проблемы:
+- docs-only → без product build/test (skip tier)
+- no affected tests → impact_unknown, не "не влияет" (targeted_tests_not_found)
+- команды test runner из child config (project_detector)
+- explicit draft/merge/release tier (lifecycle_intent)
+- condition для draft PR в full CI (if: draft == false)
+
 ## [3.27.2] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP3): Analytics Gate Split
 
 Разделение analytics_readiness на два гейта для решения временного парадокса.
