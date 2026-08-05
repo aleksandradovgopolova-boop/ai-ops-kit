@@ -4,6 +4,38 @@
 
 ## [Unreleased]
 
+## [3.27.0] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP1): Lifecycle Intent
+
+Первый шаг плана Process Applicability & Lifecycle Closure. Добавлена единая стадия
+жизненного цикла задачи (lifecycle_intent), которая определяется детерминированно из
+состояния WorkItem.
+
+- **tools/lifecycle_intent.py** — новый модуль для определения lifecycle stage:
+  - Стадии: discovery, implementation, review, delivery, completed
+  - Терминальные: cancelled, superseded, abandoned
+  - `derive()` — детерминированный вывод из status/evidence/PR/receipt
+  - `validate_transition()` — проверка допустимости переходов
+  - `intent_to_lifecycle()` — маппинг CLI intents на lifecycle stages
+  - 22 selftest'а
+
+- **schemas/workitem.schema.json** — добавлено поле `lifecycle_intent` (optional, enum)
+
+- **tools/workitem.py** — интеграция lifecycle_intent:
+  - `start()` инициализирует lifecycle_intent="discovery"
+  - `derive_status()` вычисляет lifecycle_intent детерминированно
+  - `status_cmd()` сохраняет lifecycle_intent в workitem.yaml
+
+- Детерминированный вывод:
+  - draft без evidence → discovery
+  - draft с evidence → implementation
+  - done без PR → implementation
+  - done с PR → review
+  - done с merged PR → delivery
+  - done с receipt → completed
+  - needs_human_decision → review
+  - blocked без evidence → discovery
+  - blocked с evidence → implementation
+
 ## [3.26.3] — 2026-08-05 — Progressive Verification: fix-loop integration
 
 Интеграция progressive verification в fix-loop (автоматическая через execution_pipeline).
