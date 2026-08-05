@@ -261,7 +261,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
         return runner(cmd)
     import subprocess
     import json as _json
-    import time as _t
+    import time
     last = ""
     for _attempt in range(3):   # транзиентный rc!=0 (сеть/оверлоад локальной сессии) -> ретрай, не крах прогона
         _t0 = time.monotonic()
@@ -278,7 +278,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
                 _record_call(model or "claude-code-local", None, None, time.monotonic() - _t0, provider="claude-cli")
                 return r.stdout
         last = (r.stderr or r.stdout or "")[:200]
-        _t.sleep(3 * (_attempt + 1))
+        time.sleep(3 * (_attempt + 1))
     raise RuntimeError("claude -p rc!=0 после 3 попыток: %s" % last)
 
 
