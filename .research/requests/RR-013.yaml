@@ -49,5 +49,5 @@ memory_check:
     MCP-контур (RR-012) и sandbox/permission (EV-910) не переоткрываем.
 required_confidence: medium
 deadline: "2026-08-21"
-status: draft
+status: in_progress
 created_at: "2026-08-05"

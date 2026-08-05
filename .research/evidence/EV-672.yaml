@@ -1,0 +1,56 @@
+# EV-672: ratchet — конкурентный анализ (in-session gate mechanism)
+# RR-013, created 2026-08-05, status: partial (inbox-only, code verification pending)
+schema_version: 1
+kind: research.evidence
+id: EV-672
+request: RR-013
+source:
+  type: github-repository
+  url: "https://github.com/0xwilliamortiz/ratchet"
+  accessed: "2026-08-05"
+  reliability: medium  # inbox-only, code verification pending
+captured_at: "2026-08-05"
+expires_at: "2026-11-05"
+facts:
+  - claim: "создан 2026-07-31, push 2026-08-04, MIT, 430 звёзд, Node>=20, 115 тестов"
+    evidence_type: repository-metadata
+    verified: false
+  - claim: "тезис: 'Your agent reads the rules. This checks whether it followed them'"
+    evidence_type: readme-quote
+    verified: false
+  - claim: "механика: хук PostToolUse читает каждую правку агента, измеряет её (строки, новые файлы, новые зависимости) и возвращает вердикт в ту же сессию"
+    evidence_type: readme-quote
+    verified: false
+  - claim: "вердикты разделены на 'certain' и 'likely'"
+    evidence_type: readme-quote
+    verified: false
+  - claim: "топики: claude-code, claude-code-plugin, hooks, code-quality, yagni"
+    evidence_type: repository-metadata
+    verified: false
+analysis:
+  overlap_with_kit:
+    - "детерминированная проверка соблюдения правил (аналог quality gates)"
+    - "измерение правок (строки, файлы, зависимости)"
+  differences_from_kit:
+    - "in-session gate (момент правки) vs phase-boundary gate (граница стадии)"
+    - "PostToolUse hook vs quality/gates.yaml validators"
+    - "нет gate-результатов в machine-readable виде"
+    - "нет привязки к SHA"
+    - "нет delivery lifecycle"
+  license: MIT  # permissive, заимствование возможно с attribution
+  threat_level: low  # не конкурент, а механизм, которого у кита нет
+  unique_value: "замыкание петли на соблюдение правил в момент правки, а не на ревью"
+  gap_in_kit: "у кита проверка привязана к фазам и валидаторам (quality/gates.yaml), то есть срабатывает на границе стадии, а не в момент правки"
+open_questions:
+  - "Закрывает ли in-session gate реальный разрыв в наших гейтах?"
+  - "Стоит ли киту in-session gate как отдельный класс?"
+  - "Что он ломает в stale_detection/bind_to?"
+  - "Можно ли комбинировать: in-session для минимализма, phase-boundary для архитектуры?"
+  - "Формулировка 'every minimalism ruleset for coding agents is an open loop' — прямой аргумент против постфактум-гейтов"
+next_steps:
+  - "Верифицировать код: клонировать репозиторий, проанализировать PostToolUse hook"
+  - "Оценить применимость к киту: можно ли добавить in-session gate без поломки phase-boundary"
+  - "Сравнить с существующими hooks в Claude Code"
+  - "Решить: заимствовать механизм, адаптировать, или отложить"
+supersedes: null
+related: [EV-660]

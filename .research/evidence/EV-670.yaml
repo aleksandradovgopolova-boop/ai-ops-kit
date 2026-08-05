@@ -1,0 +1,51 @@
+# EV-670: multi-agents-control-plane — конкурентный анализ
+# RR-013, created 2026-08-05, status: partial (inbox-only, code verification pending)
+schema_version: 1
+kind: research.evidence
+id: EV-670
+request: RR-013
+source:
+  type: github-repository
+  url: "https://github.com/QiQi14/multi-agents-control-plane"
+  accessed: "2026-08-05"
+  reliability: medium  # inbox-only, code verification pending
+captured_at: "2026-08-05"
+expires_at: "2026-11-05"  # 3 месяца
+facts:
+  - claim: "создан 2026-07-30, push 2026-08-04, 5 звёзд, Apache-2.0"
+    evidence_type: repository-metadata
+    verified: false  # требует проверки на GitHub
+  - claim: "stdlib-Python-only, v0.2.2 pre-1.0"
+    evidence_type: repository-metadata
+    verified: false
+  - claim: "самописание: 'a task state machine with contracts, receipts, risk gates, and evidence, so that planning, execution, and review are separate roles with separate authority'"
+    evidence_type: readme-quote
+    verified: false
+  - claim: "сchemes объявлены нестабильными"
+    evidence_type: readme-quote
+    verified: false
+analysis:
+  overlap_with_kit:
+    - "gates (risk gates) — аналог quality/gates.yaml"
+    - "receipts — аналог DeliveryReceipt"
+    - "evidence artifacts — аналог evidence-on-SHA"
+    - "separate roles/authority — аналог writer≠judge"
+  differences_from_kit:
+    - "масштаб крошечный (5 звёзд vs кит с dogfood)"
+    - "схемы нестабильны (v0.2.2 pre-1.0)"
+    - "нет реестров, лицензий, research-контура"
+    - "нет delivery lifecycle (intent/receipt reconciliation)"
+  license: Apache-2.0  # permissive, заимствование возможно с attribution
+  threat_level: low  # маленький масштаб, но тезис совпадает дословно
+open_questions:
+  - "Есть ли gate-результаты в machine-readable виде?"
+  - "Есть ли привязка evidence к точному SHA?"
+  - "Есть ли delivery-транзакция (intent/receipt)?"
+  - "Разделение полномочий writer≠judge — проверяемый инвариант или соглашение?"
+next_steps:
+  - "Верифицировать код: клонировать репозиторий, проанализировать структуру"
+  - "Проверить наличие machine-readable gate results"
+  - "Проверить SHA-binding evidence"
+  - "Оценить качество реализации vs кит"
+supersedes: null  # не суперсидит, а расширяет EV-660
+related: [EV-660, EV-663]
