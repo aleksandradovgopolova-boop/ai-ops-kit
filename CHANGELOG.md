@@ -4,6 +4,27 @@
 
 ## [Unreleased]
 
+## [3.21.1] — 2026-08-05 — Runtime Trust Recovery: claude-cli production-path regression
+
+Шаг 0 плана восстановления доверия к флагманскому runtime. Находка живого прогона: любой вызов
+`claude-cli` падал с `NameError('time')` ещё до обращения к модели, при этом selftest оставался
+зелёным, потому что тестовый runner возвращал результат **до** production-path (time.monotonic,
+json parse, _record_call, retries).
+
+- **Что было сломано.** `_claude_cli_call` импортировал `time as _t`, но ниже использовал
+  `time.monotonic()` и `time.sleep()` — имя `time` не было определено. Injected runner в selftest
+  возвращал текст напрямую (`return runner(cmd)`), минуя весь production-path. Selftest зелёный,
+  runtime мёртв.
+- **Фикс production-path.** Runner теперь заменяет `subprocess.run`, а не весь вызов. Production-path
+  (`time.monotonic`, `json.loads`, `_record_call`, retry-loop) проходит полностью в selftest. Если
+  `import time` сломан — тест падает на `time.monotonic()`, а не проходит молча.
+- **Две новые регрессии.** (1) `_record_call` действительно вызван: `input_tokens`, `output_tokens`,
+  `latency`, `cost` записываются в `_CALL_STATS`. (2) Retry-loop: runner возвращает `returncode=1`
+  первые 2 попытки → `returncode=0` на 3-й; `time.sleep()` вызывается без `NameError`.
+- **Источники правды синхронизированы.** README: 179 → 193 проверки (фактическое число CI-шагов).
+  ROADMAP: 28 → 31 gate (фактическое число из `quality/gates.yaml`). `release-claims.yaml`: комментарий
+  про `generated-commands` обновлён на `first-class executing adapter` (v3.9.0).
+
 ## [3.21.0] — 2026-08-04 — Engineering Operating Model (срез 3): экономическая граница ДО траты
 
 Финальный срез — закрывает всю фичу Engineering Operating Model (3.19 → 3.21).
