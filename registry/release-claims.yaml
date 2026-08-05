@@ -5,14 +5,14 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.21.1
+version: 3.22.0
 phase: "v3.21 — Engineering Operating Model (срез 3): экономическая граница ДО траты. ВСЯ ФИЧА EngOps (3.19→3.21) ЗАКРЫТА."
 channel: stable
 patch_note: "3.21.0 — Engineering Operating Model (срез 3, WP7): economic_preflight — граница расхода ДО первого вызова модели. Прежде деньги узнавались ПОСЛЕ траты: контекстный бюджет денег не касался, Budget.charge_call рвался на N-м вызове (N-1 уже оплачены), cost_account сверял расход после прогона. Теперь оценка по фактической истории репозитория (usage_ledger) против лимитов RunPlan.execution_budget, встроена в preflight.py шагом 7 (после approvals, до tool loop). Решение по ХУДШЕМУ сравнимому прогону, а не по медиане. Честность: нет истории -> unavailable, НИКОГДА 0 (и не блокируем, иначе первый прогон в репозитории невозможен); задача с вызовами cost_status unavailable даёт НИЖНЮЮ ГРАНИЦУ (estimated_lower_bound) с явным предупреждением, что граница может не сработать; никаких выдуманных коэффициентов по writer_tier — в UsageRecord нет ни класса задачи, ни tier. Вердикты proceed/proceed_unknown/confirm_required/block. Ключ economics в схеме (require_estimate=true требует enforce=block — иначе противоречие), `ai-ops engops cost`, строка в doctor. ВСЯ ФИЧА EngOps (3.19 коммит/ветка -> 3.20 окружения/поставка -> 3.21 экономика) ЗАКРЫТА."
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в AGENTS.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 199
+checks_count: 200
 agents_count: 51
 
 qualified_on: >

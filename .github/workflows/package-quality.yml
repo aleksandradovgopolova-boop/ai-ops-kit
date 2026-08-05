@@ -155,6 +155,8 @@ jobs:
         run: python3 tools/usage_ledger.py --selftest
       - name: "Session Telemetry — снимок сессии (объём/стоимость/контекст, честный usage_status; v3.16.0)"
         run: python3 tools/session_telemetry.py --selftest
+      - name: "Session Telemetry Provider — opt-in чтение реальной Claude session metadata (v3.22.0)"
+        run: python3 tools/session_telemetry_provider.py --selftest
       - name: "Session Guardrails — economy-политика + рекомендация + completion ritual (v3.16.0; selftest)"
         run: python3 tools/session_guardrails.py --selftest
       - name: "Session Boundary Classifier — отношение новой задачи к сессии (v3.17.0; selftest)"
