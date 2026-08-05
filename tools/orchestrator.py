@@ -252,20 +252,21 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
     v3.10.0 Usage Truth: `--output-format json` -> claude usage (input/output_tokens) + total_cost_usd
     ИЗМЕРЯЮТСЯ и пишутся в _record_call (provider=claude-cli). Claude CLI usage больше НЕ исчезает.
 
-    runner инъектируется (офлайн-selftest без вызова CLI); по умолчанию subprocess. Ключ не требуется."""
+    runner инъектируется (офлайн-selftest без вызова CLI); заменяет subprocess.run, а не весь вызов —
+    production-path (time.monotonic, json parse, _record_call, retries) проходит полностью. Ключ не требуется."""
     cmd = ["claude", "-p", prompt, "--output-format", "json",
            "--allowedTools", "Read", "Grep", "Glob"]
     if model:
         cmd += ["--model", model]
-    if runner is not None:
-        return runner(cmd)
     import subprocess
     import json as _json
     import time
+    # runner заменяет subprocess.run (не весь вызов) — production-path проходит в selftest
+    _run = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
     last = ""
     for _attempt in range(3):   # транзиентный rc!=0 (сеть/оверлоад локальной сессии) -> ретрай, не крах прогона
         _t0 = time.monotonic()
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = _run(cmd)
         if r.returncode == 0:
             try:
                 d = _json.loads(r.stdout)
@@ -663,17 +664,45 @@ def selftest():
             _os.environ.pop("OPENAI_COMPATIBLE_BASE_URL", None)
         else:
             _os.environ["OPENAI_COMPATIBLE_BASE_URL"] = _b
-    # v3.9.0 First-class Claude Code Adapter: claude-cli провайдер, tool-less, runner инъектируется (офлайн)
+    # v3.9.0 First-class Claude Code Adapter: claude-cli провайдер, runner заменяет subprocess.run
+    # (не весь вызов) — production-path (time.monotonic, json parse, _record_call, retries) проходит полностью.
+    # v3.21.1 (Runtime Trust Recovery): тест ловит NameError('time') — runner возвращает объект с
+    # returncode/stdout/stderr, а не текст напрямую. Если import time сломан, тест упадёт на time.monotonic().
+    import json as _test_json
+    class _FakeResult:
+        def __init__(self, stdout="", returncode=0, stderr=""):
+            self.stdout = stdout
+            self.returncode = returncode
+            self.stderr = stderr
     _seen = {}
+    _call_stats_before = len(_CALL_STATS)
     def _fake_runner(cmd):
         _seen["cmd"] = cmd
-        return "PROPOSED-ACTIONS-JSON"
+        return _FakeResult(stdout=_test_json.dumps({
+            "result": "PROPOSED-ACTIONS-JSON",
+            "usage": {"input_tokens": 100, "output_tokens": 50},
+            "model": "claude-opus",
+            "total_cost_usd": 0.01
+        }))
     _prov = make_claude_cli_provider(model="claude-opus", runner=_fake_runner)
     _out = _prov("сгенерируй tool-loop действия")
     if _out == "PROPOSED-ACTIONS-JSON":
         print("PASS claude-cli: возвращает текст-предложение модели (кит исполняет)")
     else:
         ok = False; print("FAIL claude-cli: не вернул текст провайдера")
+    # v3.21.1 регрессия: _record_call вызван (usage измеряется), time.monotonic() не упал
+    _call_stats_after = len(_CALL_STATS)
+    if _call_stats_after > _call_stats_before:
+        _last_call = _CALL_STATS[-1]
+        _has_tokens = _last_call.get("input_tokens") == 100 and _last_call.get("output_tokens") == 50
+        _has_cost = _last_call.get("cost_usd_est") is not None
+        _has_latency = _last_call.get("latency") is not None and _last_call["latency"] >= 0
+        if _has_tokens and _has_latency:
+            print("PASS claude-cli: production-path пройден (time.monotonic + _record_call + usage)")
+        else:
+            ok = False; print(f"FAIL claude-cli: production-path неполный — tokens={_has_tokens}, latency={_has_latency}, call={_last_call}")
+    else:
+        ok = False; print("FAIL claude-cli: _record_call не вызван (production-path не пройден)")
     _c = _seen.get("cmd") or []
     _allowed = []
     if "--allowedTools" in _c:
@@ -690,6 +719,19 @@ def selftest():
         print("PASS claude-cli: зарегистрирован как first-class провайдер")
     else:
         ok = False; print("FAIL claude-cli: не резолвится через make_provider")
+    # v3.21.1 регрессия: retry-loop + sleep проходят без NameError
+    _retry_calls = []
+    def _flaky_runner(cmd):
+        _retry_calls.append(1)
+        if len(_retry_calls) < 3:
+            return _FakeResult(returncode=1, stderr="transient error")
+        return _FakeResult(stdout=_test_json.dumps({"result": "ok", "usage": {}}))
+    _retry_prov = make_claude_cli_provider(runner=_flaky_runner)
+    _retry_out = _retry_prov("тест retry")
+    if _retry_out == "ok" and len(_retry_calls) == 3:
+        print("PASS claude-cli: retry-loop + sleep работают (3 попытки, time.monotonic не упал)")
+    else:
+        ok = False; print(f"FAIL claude-cli: retry не сработал — calls={len(_retry_calls)}, out={_retry_out}")
         if _kb is not None:
             _os.environ["OPENAI_COMPATIBLE_API_KEY"] = _kb
 

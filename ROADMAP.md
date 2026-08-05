@@ -2,7 +2,7 @@
 
 Видение — в `VISION.md`. Здесь — что уже есть, чего не хватает и в каком порядке
 закрываем разрыв. Каждая фаза — отдельный minor-релиз, аддитивный и обратно
-совместимый в пределах 2.x; 3.x (текущий канал — **v3.21.0 stable**: Engineering Operating Model ЗАВЕРШЁН, срезы 1–3 (дисциплина коммита и ветки с детектом отставания базы; карта окружений и честная зрелость поставки + гейт `deploy_readiness`; экономическая граница ДО траты в preflight; `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
+совместимый в пределах 2.x; 3.x (текущий канал — **v3.21.1 stable**: Engineering Operating Model ЗАВЕРШЁН, срезы 1–3 (дисциплина коммита и ветки с детектом отставания базы; карта окружений и честная зрелость поставки + гейт `deploy_readiness`; экономическая граница ДО траты в preflight; `ai-ops engops`); Development Culture & Resource Guardrails завершён (гигиена сессий/контекста: телеметрия, пороги бюджета, Task Completion Ritual + `ai-ops session`; boundary classifier + культура делегирования; cost-aware work method + `ai-ops method`); Architecture Baseline (v3.15.0); Startup Context Budget завершён v3.12–3.14; UI Evidence Readiness (v3.11.0); Usage Truth (честный учёт модельных расходов, v3.10.0); First-class Claude Code Adapter + complexity-aware routing (v3.9.0); фаза v3.8 Product Bootstrap завершена в 3.8.0; точная версия в VERSION) остаётся обратно совместимым —
 физический разнос дерева по packages (breaking) намечен на v3.2/v4.0, см. «Схема версий».
 
 ## Что уже есть (опора)
@@ -10,7 +10,7 @@
 | Механизм видения | Состояние в ките |
 |---|---|
 | Product First | Контракт PRODUCT (problem → users → value → ... → handoff), агенты product/* |
-| Writer ≠ judge, gates | 28 gates с revision-binding, machine-readable результаты (MVP-blocking = 8; счётчик запиннен claim gate-count/mvp-blocking-count) |
+| Writer ≠ judge, gates | 31 gate с revision-binding, machine-readable результаты (MVP-blocking = 8; счётчик запиннен claim gate-count/mvp-blocking-count) |
 | Everything as Code | Registry как источник истины, схемы контрактов, валидаторы в CI |
 | Review-агенты | 14 независимых ревьюеров по зонам: plan, prompt, requirements, code, architecture, performance, security, accessibility, ux, design-system, analytics, documentation, observability, product |
 | Аналитика | Частично: ProductAnalyticsPlan, Experiment (шаблоны), experiment-designer, product-analyst |
