@@ -1426,7 +1426,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         tree_clean_before_checks = _tree_clean(work_root)
 
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
-    coll = evidence_collector.collect(profile, work_root, pol)
+    # v3.26.1 Progressive Verification: передаём changed_files для targeted test execution
+    _changed_for_verification = _committed_changed_files(work_root, committed_sha) if (commit and is_git and committed_sha) else None
+    coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification)
 
     # 6a. finding аудита (P0.5): проверки могли намутить дерево (build-артефакты, lock-файлы) —
     #     тогда собранный evidence уже не отражает закоммиченный SHA. Фиксируем факт, не скрываем.
