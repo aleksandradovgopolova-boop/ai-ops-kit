@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [3.27.2] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP3): Analytics Gate Split
+
+Разделение analytics_readiness на два гейта для решения временного парадокса.
+
+- **analytics_design_readiness** (blocking, до merge): tracking_plan, event_schema,
+  product_metrics, dashboard_spec. Применяется в PRODUCT, ANALYTICS, ADOPTION.
+- **analytics_runtime_verification** (blocking, после deploy): events_verified_live,
+  no_pii_in_events, cohort_identification_works, dashboard_receives_data.
+  Применяется после release, не в workflow gates.
+
+Проблема: analytics_readiness требовал events_verified_live до merge, но live-поток
+появляется только после deployment. Это приводило к блокировке или формальному закрытию.
+
+Решение: design-часть (tracking plan, schema, metrics, dashboard spec) проверяется до merge.
+Runtime-verification (события реально приходят, нет PII, cohort работает) — после deploy.
+
+- quality/gates.yaml: analytics_readiness → analytics_design_readiness + analytics_runtime_verification
+- registry/workflows.yaml: ANALYTICS и ADOPTION используют analytics_design_readiness
+- registry/tracks.yaml: ANALYTICS track добавляет analytics_design_readiness
+
 ## [3.27.1] — 2026-08-05 — Process Applicability & Lifecycle Truth (WP2): Gate Coverage Matrix
 
 Исправление пробелов в матрице workflow → gates. PRODUCT и CRITICAL теперь имеют полный
