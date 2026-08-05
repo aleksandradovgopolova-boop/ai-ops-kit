@@ -1,5 +1,5 @@
 # EV-671: super-simple-software-factory — конкурентный анализ
-# RR-013, created 2026-08-05, status: partial (inbox-only, code verification pending)
+# RR-013, created 2026-08-05, status: verified
 schema_version: 1
 kind: research.evidence
 id: EV-671
@@ -8,48 +8,59 @@ source:
   type: github-repository
   url: "https://github.com/disler/super-simple-software-factory"
   accessed: "2026-08-05"
-  reliability: medium  # inbox-only, code verification pending
+  reliability: high  # code verified via web_fetch 2026-08-05
 captured_at: "2026-08-05"
 expires_at: "2026-11-05"
 facts:
-  - claim: "создан 2026-07-31, MIT, 371 звезда на 2026-08-05"
+  - claim: "создан 2026-07-31, MIT, 410 звёзд на 2026-08-05"
     evidence_type: repository-metadata
-    verified: false
+    verified: true
   - claim: "самоописание: 'Repeatable agents-plus-code workflows, packaged as one skill, stamped into any repo. Deterministic Python owns the graph'"
     evidence_type: readme-quote
-    verified: false
+    verified: true
   - claim: "README: 'moving the control plane out of the prompt and into Python', 'Gates become the definition of done', 'Agent proposes, code disposes'"
     evidence_type: readme-quote
-    verified: false
-  - claim: "типизированные JSON-envelope на стыках фаз, поток событий в SQLite как трейс"
-    evidence_type: readme-quote
-    verified: false
-  - claim: "распространяется как один Claude Code skill; автор ведёт YouTube-канал"
-    evidence_type: readme-quote
-    verified: false
+    verified: true
+  - claim: "Типизированные envelope: агент возвращает строго типизированный JSON (EnvelopeBase), парсится и сохраняется как envelope.json, внедряется в промпт следующего агента"
+    evidence_type: code-analysis
+    verified: true
+  - claim: "SQLite-трейс: все события записываются в sssf.db в реальном времени; agent_pi.py читает stdout агента построчно и вставляет в БД; WAL для неблокирующего чтения"
+    evidence_type: code-analysis
+    verified: true
+  - claim: "Gates as DoD: функции проверки после работы агента, но до завершения фазы; проверяют фактические результаты (файлы, тесты), а не предсказания; фаза успешна только если все гейты зелёные"
+    evidence_type: code-analysis
+    verified: true
+  - claim: "Распространение: Claude Code Skill — копируется .claude/skills/sssf/, установка через /sssf install"
+    evidence_type: code-analysis
+    verified: true
+  - claim: "Структура: .claude/skills/sssf/ (SKILL.md, cookbooks/, references/, scripts/, apps/visualizer/, templates/)"
+    evidence_type: repository-metadata
+    verified: true
 analysis:
   overlap_with_kit:
     - "детерминированный код владеет последовательностью (аналог execution_pipeline)"
     - "gates as definition of done (аналог quality gates)"
     - "типизированные envelope на стыках фаз (аналог контрактов)"
     - "агент — ограниченный узел внутри фазы (аналог writer role)"
+    - "SQLite-трейс (аналог lifecycle-journal.jsonl)"
   differences_from_kit:
-    - "нет реестров (workflows, gates, agents)"
-    - "нет delivery lifecycle"
+    - "нет реестров (workflows, gates, agents registry)"
+    - "нет delivery lifecycle (intent/receipt)"
     - "нет research-контура"
     - "нет license/qualification framework"
     - "распространяется как skill, не как package"
+    - "нет SHA-verified evidence"
   license: MIT  # permissive, заимствование возможно с attribution
-  threat_level: medium  # реальная аудитория (371 звезда) и канал распространения (YouTube)
-  unique_value: "канал распространения (skill + video) — доказательство спроса на жанр"
+  threat_level: medium  # реальная аудитория (410 звёзд) и канал распространения (Claude Code skill)
+  unique_value: "канал распространения (skill + video) — доказательство спроса на жанр; envelope-механизм — потенциально заимствуем"
 open_questions:
-  - "Что именно из envelope-структуры можно заимствовать?"
-  - "SQLite-трейс — подмножество наших lifecycle journals или другая ось?"
-  - "Gates as DoD — детерминированный граф вместо реестров?"
-  - "Аудитория — угроза позиционированию или доказательство спроса?"
+  - "✅ Что именно из envelope-структуры можно заимствовать? — EnvelopeBase как типизированный контракт между фазами"
+  - "✅ SQLite-трейс — подмножество наших lifecycle journals или другая ось? — Аналог lifecycle-journal.jsonl, но в SQLite для real-time querying"
+  - "✅ Gates as DoD — детерминированный граф вместо реестров? — НЕТ: гейты проверяют фактические результаты, не граф"
+  - "✅ Аудитория — угроза позиционированию или доказательство спроса? — Доказательство спроса на жанр; не угроза (нет delivery lifecycle)"
 next_steps:
-  - "Верифицировать код: клонировать репозиторий, проанализировать envelope-структуру"
+  - "Оценить применимость envelope-механизма к киту"
   - "Сравнить SQLite-трейс с lifecycle-journal.jsonl"
-  - "Оценить канал распространения: skill + video vs package + docs"
+  - "Решить: заимствовать envelope-контракт, адаптировать, или отложить"
 supersedes: null
 related: [EV-660, EV-663]
