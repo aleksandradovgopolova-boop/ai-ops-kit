@@ -267,7 +267,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
-        context_shadow=False, context_hybrid=False, reevaluate_only=False):
+        context_shadow=False, context_hybrid=False, reevaluate_only=False,
+        progressive_escalation=False):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)

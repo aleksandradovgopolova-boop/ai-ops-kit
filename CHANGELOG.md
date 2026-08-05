@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [3.26.3] — 2026-08-05 — Progressive Verification: fix-loop integration
+
+Интеграция progressive verification в fix-loop (автоматическая через execution_pipeline).
+
+- Fix-loop уже использует progressive verification автоматически: каждая итерация
+  вызывает `run_pipeline()`, который вычисляет `changed_files` и передаёт их в
+  `evidence_collector.collect(changed_files=...)`.
+- Это означает: на каждой итерации fix-loop запускаются только затронутые тесты
+  (affected tier) вместо полного набора — быстрее обратная связь.
+- Добавлен параметр `progressive_escalation` в `run()` для будущей escalation
+  к full verification на последней итерации (зарезервирован, не активен).
+- Полная цепочка Progressive Verification завершена:
+  `commit → changed_files → verification_tiers → evidence_collector → targeted tests`
+  работает на всех уровнях: pipeline, fix-loop, baseline-diff (full для baseline).
+
 ## [3.26.2] — 2026-08-05 — Progressive Verification: execution_pipeline integration
 
 Интеграция progressive verification в execution_pipeline.
