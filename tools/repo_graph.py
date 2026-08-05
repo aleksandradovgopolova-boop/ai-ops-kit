@@ -1,34 +1,64 @@
 #!/usr/bin/env python3
-"""repo_graph.py (v3.6.0) — Repository Graph Lite: первый НЕ-vector retrieval-шаг Context Engine.
+"""repo_graph.py (v3.26.0) — Repository Graph: детерминированный граф зависимостей для impact analysis.
 
 Реализует первую ступень цепочки ContextArchitectureDecision (v3.3.2): repository = источник истины,
-детерминированный граф ПЕРЕД любым семантическим поиском. Через stdlib `ast` (без сети/vector-DB):
+детерминированный граф ПЕРЕД любым семантическим поиском. Через stdlib `ast` (Python) и regex (JS/TS):
   - symbols: топ-уровневые функции/классы по файлам (symbol_index);
   - imports: зависимости модулей -> внутренние рёбра (файл A импортирует файл B репо);
   - tests: тест-файлы и что они импортируют;
   - impact(changed): обратный обход рёбер — какие файлы (транзитивно) зависят от изменённого
-    (для automatic write-scope / relevant-test-selection в v3.6).
+    (для automatic write-scope / relevant-test-selection в v3.6);
+  - affected_tests(changed_files): какие тесты затронуты изменениями (v3.26 Progressive Verification).
 
-Только Python-файлы (лайт). CLI: repo_graph.py [root] [--impact tools/x.py] [--json] | --selftest
+Поддерживаемые языки: Python (ast), JavaScript/TypeScript (regex-based import parsing).
+
+CLI: repo_graph.py [root] [--impact tools/x.py] [--affected-tests path1 path2] [--json] | --selftest
 """
 from __future__ import annotations
 
 import ast
 import json
+import re
 import sys
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]
 DEFAULT_SUBDIRS = ("tools", "validation")
+JS_TS_EXTENSIONS = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")
 
 
-def _py_files(root: Path, subdirs, path_filter=None):
+def _py_files(root: Path, subdirs=None, path_filter=None):
+    """Найти Python файлы. Если subdirs=None — искать во всём репо."""
     out = []
-    for sd in subdirs:
-        d = root / sd
-        if d.is_dir():
-            for p in sorted(d.rglob("*.py")):
-                # v3.7.0: access pre-filter — denied-путь НЕ читается для графа
+    search_dirs = [root / sd for sd in subdirs] if subdirs else [root]
+    for d in search_dirs:
+        if not d.is_dir():
+            continue
+        for p in sorted(d.rglob("*.py")):
+            # v3.7.0: access pre-filter — denied-путь НЕ читается для графа
+            if path_filter is not None and not path_filter(str(p.relative_to(root))):
+                continue
+            # Пропускаем venv, .git, node_modules
+            parts = p.relative_to(root).parts
+            if any(skip in parts for skip in (".git", "node_modules", "venv", ".venv", "__pycache__")):
+                continue
+            out.append(p)
+    return out
+
+
+def _js_ts_files(root: Path, subdirs=None, path_filter=None):
+    """v3.26.0: найти JS/TS файлы в указанных директориях (или во всём репо если subdirs=None)."""
+    out = []
+    search_dirs = [root / sd for sd in (subdirs or [""])] if subdirs else [root]
+    for d in search_dirs:
+        if not d.is_dir():
+            continue
+        for ext in JS_TS_EXTENSIONS:
+            for p in sorted(d.rglob(f"*{ext}")):
+                # Пропускаем node_modules, dist, build
+                parts = p.relative_to(root).parts
+                if any(skip in parts for skip in ("node_modules", "dist", "build", ".next", "coverage")):
+                    continue
                 if path_filter is not None and not path_filter(str(p.relative_to(root))):
                     continue
                 out.append(p)
@@ -36,7 +66,7 @@ def _py_files(root: Path, subdirs, path_filter=None):
 
 
 def _analyze(path: Path):
-    """(symbols, imported_module_stems) файла через ast; все Import/ImportFrom (вкл. в функциях)."""
+    """(symbols, imported_module_stems) Python-файла через ast; все Import/ImportFrom (вкл. в функциях)."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, OSError):
@@ -54,30 +84,92 @@ def _analyze(path: Path):
     return symbols, mods
 
 
-def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None) -> dict:
+def _analyze_js(path: Path):
+    """v3.26.0: (symbols, imported_module_stems) JS/TS файла через regex.
+    Парсит: import ... from '...', import '...', require('...'), export function/class."""
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return [], set()
+
+    # Symbols: export function/class/const
+    symbols = re.findall(r'(?:export\s+)?(?:function|class|const|let|var)\s+(\w+)', content)
+    symbols = list(dict.fromkeys(symbols))  # dedup preserving order
+
+    # Imports: import ... from 'module', import 'module', require('module')
+    mods = set()
+    # ES modules: import ... from '...'
+    for m in re.findall(r'''import\s+(?:.*?\s+from\s+)?['"]([^'"]+)['"]''', content):
+        # Берём только relative imports (начинаются с . или ..) или внутренние модули
+        if m.startswith(".") or (not m.startswith("/") and not m.startswith("@")):
+            # Извлекаем имя модуля (без расширения и пути)
+            mod_name = Path(m).stem if "/" in m else m.split("/")[0]
+            mods.add(mod_name)
+    # CommonJS: require('...')
+    for m in re.findall(r'''require\s*\(\s*['"]([^'"]+)['"]\s*\)''', content):
+        if m.startswith(".") or (not m.startswith("/") and not m.startswith("@")):
+            mod_name = Path(m).stem if "/" in m else m.split("/")[0]
+            mods.add(mod_name)
+
+    return symbols, mods
+
+
+def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=True) -> dict:
+    """Построить граф зависимостей. v3.26.0: include_js=True добавляет JS/TS файлы."""
     root = Path(root)
-    files = _py_files(root, subdirs, path_filter=path_filter)
+    py_files = _py_files(root, subdirs, path_filter=path_filter)
+    js_files = _js_ts_files(root, subdirs, path_filter=path_filter) if include_js else []
+    all_files = py_files + js_files
+
     stem_to_rel = {}
     rels = []
-    for f in files:
+    for f in all_files:
         rel = str(f.relative_to(root))
         rels.append((f, rel))
-        stem_to_rel[f.stem] = rel   # плоское имя модуля -> путь (репо импортит по bare stem via sys.path)
+        stem_to_rel[f.stem] = rel   # плоское имя модуля -> путь
 
     file_info, symbol_index, import_edges, tests = {}, {}, {}, {}
     for f, rel in rels:
-        syms, mods = _analyze(f)
-        file_info[rel] = {"symbols": syms, "imports": sorted(mods)}
+        # Выбираем анализатор по расширению
+        if f.suffix in JS_TS_EXTENSIONS:
+            syms, mods = _analyze_js(f)
+        else:
+            syms, mods = _analyze(f)
+        file_info[rel] = {"symbols": syms, "imports": sorted(mods), "language": "js" if f.suffix in JS_TS_EXTENSIONS else "py"}
         for s in syms:
             symbol_index.setdefault(s, []).append(rel)
         internal = sorted({stem_to_rel[m] for m in mods if m in stem_to_rel and stem_to_rel[m] != rel})
         import_edges[rel] = internal
         stem = Path(rel).stem
-        if stem.startswith("test_") or stem.endswith("_test"):
+        if stem.startswith("test_") or stem.endswith("_test") or stem.endswith(".test") or stem.endswith(".spec"):
             tests[rel] = internal
-    return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs),
+    return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
             "file_count": len(rels), "files": file_info, "symbol_index": symbol_index,
-            "import_edges": import_edges, "tests": tests}
+            "import_edges": import_edges, "tests": tests,
+            "languages": {"python": len(py_files), "javascript": len(js_files)}}
+
+
+def affected_tests(graph: dict, changed_files: list) -> list:
+    """v3.26.0 Progressive Verification: какие тесты затронуты изменениями.
+    changed_files — список относительных путей изменённых файлов.
+    Возвращает список тест-файлов, которые импортируют изменённые файлы (транзитивно)."""
+    if not changed_files:
+        return []
+    # Собираем все затронутые файлы (прямые + транзитивные через impact)
+    all_affected = set(changed_files)
+    for cf in changed_files:
+        all_affected.update(impact(graph, cf))
+    # Находим тесты, которые импортируют затронутые файлы
+    tests = graph.get("tests", {})
+    result = []
+    for test_file, test_imports in tests.items():
+        # Тест затронут, если любой из его импортов в all_affected
+        if any(imp in all_affected for imp in test_imports):
+            result.append(test_file)
+        # Или если сам тест-файл в changed_files
+        elif test_file in changed_files:
+            result.append(test_file)
+    return sorted(set(result))
 
 
 def impact(graph: dict, changed_rel: str) -> list:
@@ -123,6 +215,25 @@ def selftest():
         expect("impact(b.py) включает a.py и test_b.py (обратные зависимости)",
                "tools/a.py" in imp and "tools/test_b.py" in imp)
         expect("impact(a.py) пуст (никто не импортит a)", impact(g, "tools/a.py") == [])
+        # v3.26.0: affected_tests
+        at = affected_tests(g, ["tools/b.py"])
+        expect("affected_tests(b.py) включает test_b.py", "tools/test_b.py" in at)
+        at2 = affected_tests(g, ["tools/a.py"])
+        expect("affected_tests(a.py) пуст (нет тестов, импортирующих a)", at2 == [])
+
+    # v3.26.0: JS/TS парсинг
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "src").mkdir()
+        (root / "src" / "utils.ts").write_text("export function helper() { return 1; }\n", encoding="utf-8")
+        (root / "src" / "main.ts").write_text("import { helper } from './utils';\nconsole.log(helper());\n", encoding="utf-8")
+        (root / "src" / "utils.test.ts").write_text("import { helper } from './utils';\ntest('helper', () => expect(helper()).toBe(1));\n", encoding="utf-8")
+        g = build_graph(root, ("src",))
+        expect("JS: symbols извлечены (helper в utils.ts)", "helper" in g["files"]["src/utils.ts"]["symbols"])
+        expect("JS: import-ребро main.ts -> utils.ts", "src/utils.ts" in g["import_edges"].get("src/main.ts", []))
+        expect("JS: тест-файл распознан", "src/utils.test.ts" in g["tests"])
+        at = affected_tests(g, ["src/utils.ts"])
+        expect("JS: affected_tests(utils.ts) включает utils.test.ts", "src/utils.test.ts" in at)
 
     # дог-фуд: реальный граф кита (tools+validation), стабильные факты
     real = build_graph()
@@ -141,10 +252,11 @@ def selftest():
 def main(argv):
     if "--selftest" in argv:
         return selftest()
-    # позиционные аргументы, ИСКЛЮЧАЯ флаги и значение --impact (иначе путь impact примут за root)
+    # позиционные аргументы, ИСКЛЮЧАЯ флаги и значение --impact/--affected-tests
     skip = set()
-    if "--impact" in argv:
-        skip.add(argv.index("--impact") + 1)
+    for flag in ("--impact", "--affected-tests"):
+        if flag in argv:
+            skip.add(argv.index(flag) + 1)
     args = [a for i, a in enumerate(argv) if not a.startswith("--") and i not in skip]
     root = Path(args[0]) if args else PKG
     g = build_graph(root)
@@ -156,11 +268,26 @@ def main(argv):
         else:
             print(f"IMPACT {changed} -> {len(imp)} файлов: {imp}")
         return 0
+    if "--affected-tests" in argv:
+        idx = argv.index("--affected-tests")
+        # Собираем все пути после --affected-tests до следующего флага или конца
+        changed_files = []
+        for i in range(idx + 1, len(argv)):
+            if argv[i].startswith("--"):
+                break
+            changed_files.append(argv[i])
+        at = affected_tests(g, changed_files)
+        if "--json" in argv:
+            print(json.dumps({"changed_files": changed_files, "affected_tests": at}, ensure_ascii=False, indent=2))
+        else:
+            print(f"AFFECTED-TESTS: {len(changed_files)} changed -> {len(at)} tests: {at}")
+        return 0
     if "--json" in argv:
         print(json.dumps({k: v for k, v in g.items() if k != "files"}, ensure_ascii=False, indent=2))
     else:
-        print(f"REPO-GRAPH: {g['file_count']} файлов; символов={len(g['symbol_index'])}; "
-              f"тестов={len(g['tests'])}")
+        langs = g.get("languages", {})
+        print(f"REPO-GRAPH: {g['file_count']} файлов (py={langs.get('python', 0)}, js={langs.get('javascript', 0)}); "
+              f"символов={len(g['symbol_index'])}; тестов={len(g['tests'])}")
     return 0
 
 

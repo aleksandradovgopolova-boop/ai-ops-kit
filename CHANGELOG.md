@@ -4,6 +4,29 @@
 
 ## [Unreleased]
 
+## [3.26.0] — 2026-08-05 — Progressive Verification: test selection + verification tiers
+
+Фундамент для прогрессивной верификации — проверки масштабируются по размеру изменений.
+
+- **repo_graph.py расширен для Node/TypeScript.** Добавлен `_analyze_js()` — regex-based парсинг
+  импортов (ES modules + CommonJS) и символов (export function/class/const). `build_graph()`
+  теперь включает JS/TS файлы (опция `include_js=True`). Поддерживаемые расширения: .js, .jsx,
+  .ts, .tsx, .mjs, .cjs. Пропускаются node_modules, dist, build, .next, coverage.
+- **affected_tests()** — новая функция в repo_graph: какие тесты затронуты изменениями.
+  changed_files → impact() → test files, которые импортируют затронутые модули (транзитивно).
+- **verification_tiers.py** — новый модуль для определения уровня верификации:
+  - `affected` — только затронутые тесты (быстро, для итерации)
+  - `module` — все тесты затронутых модулей (средне, для checkpoint)
+  - `full` — полный набор (медленно, для merge/release)
+  - `decide_tier(changed_files)` — автоматический выбор: критическая инфраструктура → full,
+    документация → affected, >20 файлов → module.
+  - `select_tests(changed_files, child_root, tier)` — test selection engine: возвращает
+    `{tier, affected_tests, targeted_command, note}`.
+- **CLI:** `repo_graph.py --affected-tests file1 file2` — показать затронутые тесты.
+  `verification_tiers.py --changed file1 file2 [--tier affected|module|full]` — выбрать тесты.
+- **Selftest'ы:** repo_graph — 20 тестов (Python + JS/TS + affected_tests); verification_tiers —
+  10 тестов (decide_tier + select_tests).
+
 ## [3.25.1] — 2026-08-05 — CI Trigger Fix: полный CI не на каждый draft PR
 
 Исправление дефекта процесса: `package-quality.yml` запускался на каждый PR, делая `pr-smoke`

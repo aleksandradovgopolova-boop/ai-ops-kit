@@ -189,6 +189,7 @@ python3 validation/validate_integration_trace.py examples/integration-trace-demo
 python3 validation/validate_post_release_readout.py --selftest
 python3 validation/validate_post_release_readout.py examples/readout-demo
 python3 tools/repo_graph.py --selftest
+python3 tools/verification_tiers.py --selftest
 python3 tools/data_classification.py --selftest
 python3 tools/context_retrieval.py --selftest
 python3 tools/semantic_lite.py --selftest

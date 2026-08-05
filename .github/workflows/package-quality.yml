@@ -207,8 +207,10 @@ jobs:
         run: |
           python3 validation/validate_post_release_readout.py --selftest
           python3 validation/validate_post_release_readout.py examples/readout-demo
-      - name: Repository Graph Lite — детерминированный граф репо + impact (selftest, дог-фуд на ките)
+      - name: Repository Graph — граф зависимостей + impact + affected_tests (v3.26.0; Python + JS/TS)
         run: python3 tools/repo_graph.py --selftest
+      - name: Verification Tiers — test selection + verification tiers (v3.26.0; Progressive Verification)
+        run: python3 tools/verification_tiers.py --selftest
       - name: Data classification — авторитетный класс (marker advisory-only) (selftest)
         run: python3 tools/data_classification.py --selftest
       - name: Context retrieval — full-text + budgeted role view + access-filter + cache (selftest)
