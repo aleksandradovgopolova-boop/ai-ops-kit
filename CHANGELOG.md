@@ -4,6 +4,29 @@
 
 ## [Unreleased]
 
+## [3.24.0] — 2026-08-05 — Cost & Architecture Accuracy: технические хвосты
+
+Закрываем технические хвосты, которые мешают точной экономической оценке и архитектурному контролю.
+
+- **UsageRecord расширен.** Новые поля: `task_type`, `workflow`, `risk`, `size`, `writer_tier`,
+  `execution_mode`, `stack`, `architecture_impact`. Заполняются через `extra_context` в
+  `usage_ledger.append()` из signals/plan/model_resolution. Старые записи получают `None` (честно).
+  `aggregate()` теперь группирует по `by_task_type`, `by_workflow`, `by_writer_tier` — для ответа
+  на вопрос «сколько стоит QUICK vs PRODUCT vs ENGINEERING».
+- **Parallel Ledger Fan-In.** `usage_ledger.merge_ledgers(child_root, source_roots)` — сводит
+  usage-ledger из нескольких параллельных клонов в основной продукт. Дедупликация по
+  (run_id, role, input_tokens, output_tokens, latency). Закрывает старый хвост: расходы
+  parallel-пакетов записывались в ledgers отдельных клонов, но не сводились в родительский
+  product ledger на fan-in.
+- **Architecture Baseline Drift Detection.** `architecture_baseline.diff_baselines(old, new)` —
+  сравнивает два baseline по 12 осям, возвращает `{axis: {added, removed, changed}}`. Пустой
+  dict = нет дрейфа. Используется для обновления baseline при значимых изменениях.
+- **Architecture Signals from Diff.** `architecture_baseline.architecture_signals_from_diff(changed_files)` —
+  автоматически выводит сигналы (architecture_change, new_service, cross_boundary_change,
+  breaking_api, data_migration, new_integration, deployment_change) из списка изменённых файлов.
+  Закрывает риск: продакт может не понять, что задача архитектурно значимая, а классификатор
+  может не выставить сигнал. Теперь сигналы выводятся детерминированно из путей файлов.
+
 ## [3.23.0] — 2026-08-05 — Engineering Advisor: слой «как лучше сделать»
 
 Не добавляем новых проверок — добавляем слой рекомендаций, который отвечает на вопрос

@@ -299,6 +299,64 @@ def _fmt(b):
     return "\n".join(L)
 
 
+def diff_baselines(baseline_old, baseline_new):
+    """v3.24.0 Architecture Baseline Drift Detection: сравнить два baseline (old vs new) по осям.
+    Возвращает {axis: {added, removed, changed}} для каждой оси, где есть различия.
+    Пустой dict = нет дрейфа. Используется для обновления baseline при значимых изменениях."""
+    drift = {}
+    for axis in AXES:
+        old_data = baseline_old.get(axis, {})
+        new_data = baseline_new.get(axis, {})
+        if old_data == new_data:
+            continue
+        # Простое сравнение: что добавилось, что исчезло, что изменилось
+        old_keys = set(old_data.keys()) if isinstance(old_data, dict) else set()
+        new_keys = set(new_data.keys()) if isinstance(new_data, dict) else set()
+        added = new_keys - old_keys
+        removed = old_keys - new_keys
+        changed = {k for k in old_keys & new_keys if old_data.get(k) != new_data.get(k)}
+        if added or removed or changed:
+            drift[axis] = {"added": sorted(added), "removed": sorted(removed), "changed": sorted(changed)}
+    return drift
+
+
+def architecture_signals_from_diff(changed_files, baseline=None):
+    """v3.24.0 автоматически выводить architecture signals из списка изменённых файлов.
+    Используется для определения, нужен ли architecture_review gate.
+    -> set of signal names (architecture_change, new_service, cross_boundary_change, breaking_api,
+    data_migration, new_integration, deployment_change)."""
+    signals = set()
+    if not changed_files:
+        return signals
+    for f in changed_files:
+        fp = str(f)
+        # API changes
+        if any(p in fp for p in ("api/", "routes", "endpoints", "graphql", "proto/")):
+            signals.add("breaking_api")
+        # Data/migrations
+        if any(p in fp for p in ("migrations/", "schema", "models/", "entities/")):
+            signals.add("data_migration")
+        # Deployment
+        if any(p in fp for p in ("deploy", "docker", "k8s/", "terraform/", "infrastructure/",
+                                  ".github/workflows", "Dockerfile", "docker-compose")):
+            signals.add("deployment_change")
+        # New service/integration
+        if any(p in fp for p in ("services/", "integrations/", "adapters/", "clients/")):
+            signals.add("new_integration")
+            signals.add("new_service")
+        # Cross-boundary
+        if any(p in fp for p in ("shared/", "contracts/", "interfaces/", "boundary/")):
+            signals.add("cross_boundary_change")
+        # General architecture change
+        if any(p in fp for p in ("architecture/", "core/", "domain/", "kernel/")):
+            signals.add("architecture_change")
+    # Если baseline доступен, проверяем, изменились ли границы/модули
+    if baseline and signals:
+        # Если есть drift в boundaries или module_map — усиливаем сигнал
+        pass  # baseline comparison handled separately via diff_baselines()
+    return signals
+
+
 def selftest():
     ok = True
 
