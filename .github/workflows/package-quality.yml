@@ -8,6 +8,8 @@ on:
   workflow_dispatch: {}  # ручной запуск перед release
 jobs:
   quality:
+    # v3.27.3 WP4: не запускаем полный CI для draft PR даже при synchronize
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

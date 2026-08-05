@@ -62,9 +62,11 @@ def _commands_by_check(profile):
 def collect(profile, root, policy, changed_files=None):
     """Прогнать команды профиля через Tool Broker и собрать evidence для implementation_verification.
 
-    v3.26.0: Если changed_files задан, используется verification_tiers для определения
-    targeted test command (affected/module/full tier). Это позволяет запускать только
-    затронутые тесты вместо полного набора.
+    v3.27.3 WP4: Если changed_files задан, используется verification_tiers для определения
+    targeted test command (skip/affected/module/full tier).
+    - skip: docs-only — не запускаем product build/test
+    - affected/module: запускаем только затронутые тесты
+    - full: полный набор тестов
     """
     root = Path(root)
     by_check = _commands_by_check(profile)
@@ -72,12 +74,30 @@ def collect(profile, root, policy, changed_files=None):
     checks_report, schema_evidence, provided, blockers = {}, {}, [], []
     not_applicable, tests_absent = [], False   # v2.61: инструмент отсутствует в подтверждённом стеке
 
-    # v3.26.0: Progressive Verification — определяем verification tier и targeted command
+    # v3.27.3 WP4: Progressive Verification — определяем verification tier и targeted command
     verification_info = None
     if changed_files:
         verification_info = verification_tiers.select_tests(changed_files, str(root))
         tier = verification_info.get("tier", "affected")
+        impact_status = verification_info.get("impact_status")
         targeted_cmd = verification_info.get("targeted_command")
+
+        # v3.27.3 WP4: skip tier — docs-only, не запускаем product build/test
+        if tier == "skip":
+            return {
+                "schema_version": 1, "kind": "evidence-collection",
+                "revision": revision, "checks": {},
+                "schema_evidence": {},
+                "gate_evidence": {"implementation_verification": {
+                    "status": "pass",
+                    "provided": ["skip_verification"],
+                    "evidence": [f"skip_reason:{impact_status}"],
+                }},
+                "not_applicable": [],
+                "tests_absent": False,
+                "verification": verification_info,
+            }
+
         # Если tier=full или нет targeted command — используем обычные команды из профиля
         # Если tier=affected/module и есть targeted command — заменяем test-команду
         if tier != "full" and targeted_cmd:
