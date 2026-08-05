@@ -93,7 +93,7 @@ workflows:
       # memory-capture: опубликовать запись в memory/ (decision/lesson) ИЛИ явно отказаться
       # с причиной в TaskState — молчаливый пропуск не является выполнением стадии.
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
-    quality_gates: [intake_completeness, concurrency_preflight, discovery_completeness, requirements, specification, event_contract_consistency, plan_readiness, implementation_verification, stakeholder_readiness]
+    quality_gates: [intake_completeness, concurrency_preflight, discovery_completeness, requirements, specification, event_contract_consistency, plan_readiness, implementation_verification, code_review, security, architecture_review, deploy_readiness, stakeholder_readiness]  # v3.27.1 WP2: добавлены code_review, security, architecture_review, deploy_readiness — продуктовая full-stack функция требует полного контура качества
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: orchestrated
     minimum_execution_mode: sequential
@@ -333,7 +333,7 @@ workflows:
       # human-approval: решение за человеком (one-way door); PM фиксирует бриф и одобрение
       - {id: human-approval, owner: product-manager, writer: product-manager, review_mode: writer}
       - {id: memory-capture, owner: repository-memory-curator, writer: repository-memory-curator, review_mode: writer}
-    quality_gates: [intake_completeness, concurrency_preflight, plan_readiness, implementation_verification, security, code_review]
+    quality_gates: [intake_completeness, concurrency_preflight, plan_readiness, implementation_verification, security, code_review, architecture_review, deploy_readiness]  # v3.27.1 WP2: добавлены architecture_review, deploy_readiness — критическое изменение требует полного контура качества
     required_capabilities: [structured_output, file_read, file_write]
     preferred_execution_mode: orchestrated
     minimum_execution_mode: sequential
