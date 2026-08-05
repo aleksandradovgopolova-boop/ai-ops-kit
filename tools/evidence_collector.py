@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Stack-aware evidence collector (v2.44, Execution Engine — детерминированный сбор evidence).
+"""Stack-aware evidence collector (v3.26.0, Execution Engine — детерминированный сбор evidence).
 
 Замыкает Project Detector -> gate. RepositoryProfile (tools/project_detector.py) знает команды
 build/lint/typecheck/test конкретного репо; этот коллектор ИСПОЛНЯЕТ их через Tool Broker
 (уровень execution) и превращает результат в структурный evidence для гейта
 `implementation_verification` — ровно по его evidence_schema (build/lint/typecheck/tests с
 command/exit_code/revision). Никакого LLM: вердикт = exit_code реальной команды.
+
+v3.26.0 Progressive Verification: поддержка changed_files для targeted test execution.
+Если передан changed_files, коллектор использует verification_tiers для определения
+затронутых тестов и запускает только их (affected tier) вместо полного набора.
 
 Инвариант честности:
   - в `provided` попадают ТОЛЬКО флаги проверок, которые реально запущены и прошли (exit 0);
@@ -15,7 +19,7 @@ command/exit_code/revision). Никакого LLM: вердикт = exit_code р
     команды в профиле будут отклонены Policy, а не выполнены.
 
 Использование:
-  evidence_collector.py collect [root] [--policy-level execution] [--json]
+  evidence_collector.py collect [root] [--policy-level execution] [--changed file1 file2] [--json]
       -> детектит профиль, гоняет команды, печатает {collection, gate_evidence}
   evidence_collector.py --selftest
 """
@@ -32,6 +36,7 @@ for _p in (PKG / "tools",):
 
 import tool_broker            # noqa: E402
 import project_detector       # noqa: E402
+import verification_tiers     # noqa: E402  v3.26.0
 
 # проверка -> (флаг required_evidence, ключ в evidence_schema гейта)
 CHECK_MAP = {
@@ -54,13 +59,30 @@ def _commands_by_check(profile):
     return out
 
 
-def collect(profile, root, policy):
-    """Прогнать команды профиля через Tool Broker и собрать evidence для implementation_verification."""
+def collect(profile, root, policy, changed_files=None):
+    """Прогнать команды профиля через Tool Broker и собрать evidence для implementation_verification.
+
+    v3.26.0: Если changed_files задан, используется verification_tiers для определения
+    targeted test command (affected/module/full tier). Это позволяет запускать только
+    затронутые тесты вместо полного набора.
+    """
     root = Path(root)
     by_check = _commands_by_check(profile)
     revision = tool_broker._revision(root)
     checks_report, schema_evidence, provided, blockers = {}, {}, [], []
     not_applicable, tests_absent = [], False   # v2.61: инструмент отсутствует в подтверждённом стеке
+
+    # v3.26.0: Progressive Verification — определяем verification tier и targeted command
+    verification_info = None
+    if changed_files:
+        verification_info = verification_tiers.select_tests(changed_files, str(root))
+        tier = verification_info.get("tier", "affected")
+        targeted_cmd = verification_info.get("targeted_command")
+        # Если tier=full или нет targeted command — используем обычные команды из профиля
+        # Если tier=affected/module и есть targeted command — заменяем test-команду
+        if tier != "full" and targeted_cmd:
+            # Заменяем test-команды на targeted
+            by_check["test"] = [("targeted", targeted_cmd)]
 
     for check in CHECK_ORDER:
         flag, schema_key = CHECK_MAP[check]
@@ -158,6 +180,8 @@ def collect(profile, root, policy):
         # tests — по политике (tests_absent).
         "not_applicable": not_applicable,
         "tests_absent": tests_absent,
+        # v3.26.0: Progressive Verification info (если changed_files был задан)
+        "verification": verification_info,
     }
 
 
@@ -254,6 +278,27 @@ def selftest():
         expect("полиглот: реальный тест прошёл рядом с pytest-exit5 -> tests_passed выдан, check pass",
                "tests_passed" in ge6["provided"] and r6["checks"]["test"]["status"] == "pass")
 
+        # v3.26.0: Progressive Verification — changed_files -> targeted test command
+        # Создаём репо с двумя модулями и тестами
+        (root / "module_a.py").write_text("def func_a(): return 1\n", encoding="utf-8")
+        (root / "module_b.py").write_text("def func_b(): return 2\n", encoding="utf-8")
+        (root / "tests").mkdir(exist_ok=True)
+        (root / "tests" / "test_a.py").write_text("import module_a\ndef test_a(): assert module_a.func_a() == 1\n", encoding="utf-8")
+        (root / "tests" / "test_b.py").write_text("import module_b\ndef test_b(): assert module_b.func_b() == 2\n", encoding="utf-8")
+        prof_multi = {"stacks": [{"language": "python", "commands": {
+            "build": None, "lint": None, "typecheck": None,
+            "test": "python3 -m pytest tests/"}}]}
+        # Без changed_files — полный прогон
+        r7 = collect(prof_multi, root, pol)
+        expect("без changed_files: verification=None", r7.get("verification") is None)
+        # С changed_files — targeted прогон
+        r8 = collect(prof_multi, root, pol, changed_files=["module_a.py"])
+        v8 = r8.get("verification")
+        expect("с changed_files: verification info заполнен", v8 is not None)
+        expect("с changed_files: tier=affected (один файл)", v8.get("tier") == "affected")
+        expect("с changed_files: test_a.py в affected_tests",
+               "tests/test_a.py" in (v8.get("affected_tests") or []))
+
     print("evidence_collector selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -266,12 +311,13 @@ def main(argv):
     c = sub.add_parser("collect")
     c.add_argument("root", nargs="?", default=".")
     c.add_argument("--policy-level", default="execution")
+    c.add_argument("--changed", nargs="*", default=None, help="v3.26.0: changed files for progressive verification")
     c.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "collect":
         profile = project_detector.detect(a.root)
         policy = tool_broker.Policy(level=a.policy_level)
-        r = collect(profile, a.root, policy)
+        r = collect(profile, a.root, policy, changed_files=a.changed)
         if a.json:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         else:

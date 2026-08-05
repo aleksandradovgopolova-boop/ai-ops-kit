@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [3.26.1] — 2026-08-05 — Progressive Verification: evidence_collector integration
+
+Интеграция verification_tiers в evidence_collector для targeted test execution.
+
+- `evidence_collector.collect()` теперь принимает `changed_files` параметр.
+- Если changed_files задан, используется `verification_tiers.select_tests()` для определения
+  targeted test command (affected/module/full tier).
+- Для tier=affected/module запускаются только затронутые тесты вместо полного набора.
+- Для tier=full или отсутствия targeted command — обычный полный прогон.
+- Результат включает `verification` поле с информацией о выбранном tier и affected tests.
+- CLI: `evidence_collector.py collect --changed file1 file2` для progressive verification.
+- Selftest: 14 тестов (включая 4 новых для changed_files).
+
 ## [3.26.0] — 2026-08-05 — Progressive Verification: test selection + verification tiers
 
 Фундамент для прогрессивной верификации — проверки масштабируются по размеру изменений.
