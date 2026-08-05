@@ -25,7 +25,9 @@ import sys
 from pathlib import Path
 
 FIELDS = ("run_id", "workitem_id", "package_id", "role", "provider", "model", "runtime",
-          "input_tokens", "output_tokens", "usage_status", "cost", "cost_status", "latency", "trigger")
+          "input_tokens", "output_tokens", "usage_status", "cost", "cost_status", "latency", "trigger",
+          # v3.24.0 Cost & Architecture Accuracy — контекстные поля для economic alternatives и cost-per-decision
+          "task_type", "workflow", "risk", "size", "writer_tier", "execution_mode", "stack", "architecture_impact")
 USAGE_STATUS = ("measured", "estimated", "unavailable")
 TRIGGERS = ("initial", "retry", "review", "escalation", "fallback", "reevaluate")
 
@@ -81,9 +83,17 @@ def _product_path(child_root):
     return Path(child_root) / ".ai" / "usage" / "product-ledger.jsonl"
 
 
-def append(child_root, workitem_id, records, run_id=None):
-    """Записать UsageRecords в ledger задачи И продукта (append-only). Возвращает число записанных."""
+def append(child_root, workitem_id, records, run_id=None, extra_context=None):
+    """Записать UsageRecords в ledger задачи И продукта (append-only). Возвращает число записанных.
+    v3.24.0: extra_context — dict дополнительных полей (task_type, workflow, stack, risk, size, writer_tier,
+    execution_mode, architecture_impact), которые штампуется на ВСЕ записи (если в записи поле None)."""
     recs = [normalize(r, run_id=run_id, workitem_id=workitem_id) for r in (records or [])]
+    # v3.24.0: штампуем extra_context на записи, где поля ещё не заполнены
+    if extra_context:
+        for rec in recs:
+            for k, v in extra_context.items():
+                if k in FIELDS and rec.get(k) is None and v is not None:
+                    rec[k] = v
     if not recs:
         return 0
     for p in (_task_path(child_root, workitem_id), _product_path(child_root)):
@@ -119,11 +129,13 @@ def load_product(child_root):
 def aggregate(records):
     """Агрегат ЧЕСТНО: суммы токенов/стоимости ТОЛЬКО по записям с данными; unavailable считается отдельно
     (не как 0). -> {calls, measured/estimated/unavailable counts, input/output_tokens, cost,
-    cost_complete (нет ли unavailable-стоимости), by_role/by_trigger/by_provider}."""
+    cost_complete (нет ли unavailable-стоимости), by_role/by_trigger/by_provider/by_task_type/by_workflow/by_writer_tier}."""
     agg = {"calls": 0, "usage_measured": 0, "usage_unavailable": 0,
            "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
            "cost_measured": 0, "cost_estimated": 0, "cost_unavailable": 0,
-           "by_role": {}, "by_trigger": {}, "by_provider": {}}
+           "by_role": {}, "by_trigger": {}, "by_provider": {},
+           # v3.24.0: новые измерения для economic alternatives и cost-per-decision
+           "by_task_type": {}, "by_workflow": {}, "by_writer_tier": {}}
     for r in records or []:
         agg["calls"] += 1
         us = r.get("usage_status")
@@ -142,13 +154,62 @@ def aggregate(records):
             agg["cost_unavailable"] += 1
         if r.get("cost") is not None:
             agg["cost"] += float(r["cost"])
-        for dim, key in (("by_role", "role"), ("by_trigger", "trigger"), ("by_provider", "provider")):
+        for dim, key in (("by_role", "role"), ("by_trigger", "trigger"), ("by_provider", "provider"),
+                         ("by_task_type", "task_type"), ("by_workflow", "workflow"),
+                         ("by_writer_tier", "writer_tier")):
             k = r.get(key) or "unknown"
             agg[dim][k] = agg[dim].get(k, 0) + 1
     agg["cost"] = round(agg["cost"], 6)
     # ЧЕСТНОСТЬ: стоимость ПОЛНАЯ только если ни одного вызова с неизвестной стоимостью.
     agg["cost_complete"] = agg["cost_unavailable"] == 0
     return agg
+
+
+def merge_ledgers(child_root, source_roots):
+    """v3.24.0 Parallel Ledger Fan-In: свести usage-ledger из нескольких клонов (source_roots) в основной
+    child_root. Читает features/*/usage-ledger.jsonl и .ai/usage/product-ledger.jsonl из каждого клона,
+    дедуплицирует по (run_id, role, latency, input_tokens, output_tokens), дозаписывает в основной.
+    Возвращает число добавленных записей."""
+    import json as _json
+    added = 0
+    seen = set()
+    # Загружаем существующие записи из основного для дедупликации
+    main_product = _product_path(child_root)
+    if main_product.exists():
+        for rec in _load(main_product):
+            key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"), rec.get("output_tokens"), rec.get("latency"))
+            seen.add(key)
+    # Собираем из клонов
+    for src in source_roots:
+        src_path = Path(src)
+        # Product ledger
+        src_product = src_path / ".ai" / "usage" / "product-ledger.jsonl"
+        if src_product.exists():
+            for rec in _load(src_product):
+                key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"), rec.get("output_tokens"), rec.get("latency"))
+                if key not in seen:
+                    seen.add(key)
+                    main_product.parent.mkdir(parents=True, exist_ok=True)
+                    with main_product.open("a", encoding="utf-8") as f:
+                        f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+                    added += 1
+        # Task ledgers (features/*/usage-ledger.jsonl)
+        for task_ledger in src_path.glob("features/*/usage-ledger.jsonl"):
+            wid = task_ledger.parent.name
+            main_task = _task_path(child_root, wid)
+            main_task.parent.mkdir(parents=True, exist_ok=True)
+            task_seen = set()
+            if main_task.exists():
+                for rec in _load(main_task):
+                    key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"))
+                    task_seen.add(key)
+            for rec in _load(task_ledger):
+                key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"))
+                if key not in task_seen:
+                    task_seen.add(key)
+                    with main_task.open("a", encoding="utf-8") as f:
+                        f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+    return added
 
 
 def selftest():

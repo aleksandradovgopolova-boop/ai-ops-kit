@@ -1230,9 +1230,20 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                         "attempt_id": _attempt_id, **_cost_rep})
             # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)
             # в ledger задачи + продукта. Честный usage_status; неизвестное -> unavailable, не 0.
+            # v3.24.0 Cost & Architecture Accuracy: extra_context штампуется на все записи —
+            # task_type/workflow/risk/size/writer_tier/execution_mode/stack для economic alternatives.
             try:
                 import usage_ledger as _ul
-                _ul.append(child_root, fid, _stats, run_id=fid)
+                _extra = {
+                    "task_type": signals.get("task_type"),
+                    "workflow": (_plan.get("base_workflow") if isinstance(_plan, dict) else None),
+                    "risk": signals.get("risk"),
+                    "size": signals.get("size"),
+                    "writer_tier": ((_model_resolution or {}).get("writer") or {}).get("tier"),
+                    "execution_mode": "sequential" if signals.get("_sequence_internal") else "single",
+                    "stack": ",".join(s.get("language", "") for s in (signals.get("_stacks") or [])) or None,
+                }
+                _ul.append(child_root, fid, _stats, run_id=fid, extra_context={k: v for k, v in _extra.items() if v is not None})
             except Exception:  # noqa: BLE001 — учёт usage не должен ронять прогон
                 pass
         try:
