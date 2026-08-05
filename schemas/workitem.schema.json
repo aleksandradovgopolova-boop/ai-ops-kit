@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "workitem",
-  "description": "Единая сущность продуктового изменения: один id связывает routed workflow, Feature Blueprint и прогон оркестратора; один статус.",
+  "description": "Единая сущность продуктового изменения: один id связывает routed workflow, Feature Blueprint и прогон оркестратора; один статус + lifecycle_intent (v3.27.0 WP1).",
   "type": "object",
   "required": ["schema_version", "kind", "id", "workflow", "paths", "status"],
   "properties": {
@@ -21,6 +21,11 @@
         "workitem": {"type": "string"}
       }
     },
-    "status": {"enum": ["draft", "done", "blocked", "needs_human_decision", "needs_more_evidence"]}
+    "status": {"enum": ["draft", "done", "blocked", "needs_human_decision", "needs_more_evidence"]},
+    "lifecycle_intent": {
+      "type": "string",
+      "enum": ["discovery", "implementation", "review", "delivery", "completed", "cancelled", "superseded", "abandoned"],
+      "description": "v3.27.0 WP1: единая стадия жизненного цикла. Определяется детерминированно из состояния WorkItem (gates, evidence, blueprint, delivery receipt). Не требует явного указания пользователем."
+    }
   }
 }

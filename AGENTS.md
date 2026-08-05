@@ -121,6 +121,7 @@ python3 validation/validate_bootstrap_qualification.py --selftest
 python3 validation/validate_bootstrap_qualification.py
 python3 validation/validate_surface_wiring.py --selftest
 python3 tools/workitem.py --selftest
+python3 tools/lifecycle_intent.py --selftest
 python3 tools/run_plan.py --selftest
 python3 tools/run_plan.py validate
 python3 tools/ai_ops_run.py --selftest

@@ -73,8 +73,10 @@ jobs:
           python3 validation/validate_bootstrap_qualification.py
       - name: Surface-wiring consistency (Вывод 2 SEAM session — advisory, selftest)
         run: python3 validation/validate_surface_wiring.py --selftest
-      - name: WorkItem — единая сущность и статус (selftest)
+      - name: WorkItem — единая сущность и статус + lifecycle_intent (v3.27.0 WP1; selftest)
         run: python3 tools/workitem.py --selftest
+      - name: Lifecycle Intent — единая стадия жизненного цикла задачи (v3.27.0 WP1; selftest)
+        run: python3 tools/lifecycle_intent.py --selftest
       - name: RunPlan — base_workflow + tracks (selftest + tracks integrity)
         run: |
           python3 tools/run_plan.py --selftest

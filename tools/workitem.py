@@ -38,6 +38,7 @@ sys.path.insert(0, str(PKG / "validation"))
 import gate_executor          # noqa: E402
 import run_report             # noqa: E402
 import ai_route               # noqa: E402
+import lifecycle_intent       # noqa: E402  v3.27.0 WP1
 
 STATUS_ACTION = {
     "done": "готово — блокирующих гейтов нет, blueprint в порядке",
@@ -76,6 +77,7 @@ def start(features_dir, fid, task, task_type=None, risk=None):
             "workitem": f"features/{fid}/workitem.yaml",
         },
         "status": "draft",
+        "lifecycle_intent": "discovery",  # v3.27.0 WP1: начальная стадия
     }
     wi_path(features_dir, fid).write_text(
         yaml.safe_dump(wi, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -83,7 +85,8 @@ def start(features_dir, fid, task, task_type=None, risk=None):
 
 
 def derive_status(workflow, feature_dir, evidence):
-    """Единый статус из gate_executor (гейты) + run_report (здоровье blueprint)."""
+    """Единый статус из gate_executor (гейты) + run_report (здоровье blueprint).
+    v3.27.0 WP1: также вычисляет lifecycle_intent детерминированно из состояния."""
     gates = gate_executor.evaluate(workflow, evidence or {})
     kinds = gates["gate_kinds"]
     unmet = gates["unmet_gates"]
@@ -107,9 +110,15 @@ def derive_status(workflow, feature_dir, evidence):
         status = "needs_more_evidence"
     else:
         status = "done"
+
+    # v3.27.0 WP1: вычисляем lifecycle_intent детерминированно
+    has_evidence = bool(evidence) and not evidence_missing
+    li = lifecycle_intent.derive(status, has_evidence=has_evidence)
+
     return {
         "schema_version": 1, "kind": "workitem-status",
         "workflow": workflow, "status": status, "action": STATUS_ACTION[status],
+        "lifecycle_intent": li,  # v3.27.0 WP1
         "blocked": gates["blocked"], "unmet_gates": unmet,
         "real_fail": real_fail, "human_unmet": human_unmet,
         "evidence_missing": evidence_missing, "blueprint_verdict": verdict,
@@ -130,6 +139,7 @@ def status_cmd(features_dir, fid, run_dir=None, evidence_file=None):
         evidence.update(gate_executor.load_evidence(evidence_file))  # явный evidence — приоритет
     res = derive_status(wf, feature_dir, evidence)
     wi["status"] = res["status"]
+    wi["lifecycle_intent"] = res["lifecycle_intent"]  # v3.27.0 WP1
     p.write_text(yaml.safe_dump(wi, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return res
 
