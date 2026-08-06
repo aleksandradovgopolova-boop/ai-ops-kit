@@ -1,44 +1,44 @@
 {
   "orchestrator_startup": {
-    "median_ms": 0.133,
-    "min_ms": 0.123,
-    "max_ms": 0.143,
+    "median_ms": 0.144,
+    "min_ms": 0.137,
+    "max_ms": 0.151,
     "iterations": 2
   },
   "preflight_assess": {
-    "median_ms": 11.437,
-    "min_ms": 11.384,
-    "max_ms": 11.49,
+    "median_ms": 13.127,
+    "min_ms": 12.852,
+    "max_ms": 13.402,
     "iterations": 2
   },
   "security_scan_100files": {
-    "median_ms": 0.285,
-    "min_ms": 0.284,
-    "max_ms": 0.285,
+    "median_ms": 0.346,
+    "min_ms": 0.343,
+    "max_ms": 0.349,
     "iterations": 2
   },
   "tool_loop_parse_100": {
-    "median_ms": 0.114,
-    "min_ms": 0.113,
-    "max_ms": 0.115,
+    "median_ms": 0.133,
+    "min_ms": 0.133,
+    "max_ms": 0.134,
     "iterations": 2
   },
   "usage_aggregate_1000": {
-    "median_ms": 1.218,
-    "min_ms": 1.197,
-    "max_ms": 1.239,
+    "median_ms": 1.384,
+    "min_ms": 1.367,
+    "max_ms": 1.4,
     "iterations": 2
   },
   "lifecycle_store_rw_10": {
-    "median_ms": 75.963,
-    "min_ms": 74.339,
-    "max_ms": 77.587,
+    "median_ms": 85.225,
+    "min_ms": 83.813,
+    "max_ms": 86.637,
     "iterations": 2
   },
   "context_compiler_assemble": {
-    "median_ms": 1.108,
-    "min_ms": 0.889,
-    "max_ms": 1.326,
+    "median_ms": 0.766,
+    "min_ms": 0.762,
+    "max_ms": 0.769,
     "iterations": 2
   }
 }

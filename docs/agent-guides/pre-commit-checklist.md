@@ -208,5 +208,6 @@ python3 validation/validate_research_artifacts.py
 python3 .research/tools/verify_quotes.py --selftest
 python3 .research/tools/freshness_sweep.py --selftest
 python3 .research/tools/ev_scaffold.py --selftest
+python3 -m pytest tests/contracts/ -v --tb=short --no-cov
 python3 -m pytest tests/contracts/ -v --tb=short
 ```

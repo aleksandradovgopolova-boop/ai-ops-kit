@@ -33,6 +33,8 @@ import yaml
 PKG = Path(__file__).resolve().parents[1]
 WORKFLOW = Path(".github/workflows/package-quality.yml")
 CHECKLIST = Path("AGENTS.md")
+# v3.28.0: полный список команд перенесён в docs/agent-guides/pre-commit-checklist.md
+CHECKLIST_GUIDE = Path("docs/agent-guides/pre-commit-checklist.md")
 
 
 def normalize(line: str) -> str:
@@ -59,14 +61,19 @@ def ci_commands(root: Path) -> set:
 
 
 def checklist_commands(root: Path) -> set:
-    """Множество нормализованных `python3 ...` команд из bash-блоков AGENTS.md."""
-    text = (root / CHECKLIST).read_text(encoding="utf-8")
+    """Множество нормализованных `python3 ...` команд из bash-блоков AGENTS.md + pre-commit-checklist.md."""
     cmds = set()
-    for block in re.findall(r"```(?:bash|sh)?\n(.*?)```", text, re.DOTALL):
-        for raw in block.splitlines():
-            norm = normalize(raw)
-            if norm.startswith("python3 "):
-                cmds.add(norm)
+    # v3.28.0: читаем оба файла — AGENTS.md (сокращённый) и pre-commit-checklist.md (полный)
+    for checklist_path in [CHECKLIST, CHECKLIST_GUIDE]:
+        full_path = root / checklist_path
+        if not full_path.exists():
+            continue
+        text = full_path.read_text(encoding="utf-8")
+        for block in re.findall(r"```(?:bash|sh)?\n(.*?)```", text, re.DOTALL):
+            for raw in block.splitlines():
+                norm = normalize(raw)
+                if norm.startswith("python3 "):
+                    cmds.add(norm)
     return cmds
 
 
@@ -83,11 +90,11 @@ def run(root: Path, as_json=False):
         print(json.dumps({"schema_version": 1, "kind": "agents-checklist-sync",
                           "missing_from_checklist": missing}, ensure_ascii=False, indent=2))
     elif missing:
-        print(f"CHECKLIST-DRIFT: {len(missing)} проверок CI отсутствуют в чеклисте AGENTS.md:")
+        print(f"CHECKLIST-DRIFT: {len(missing)} проверок CI отсутствуют в чеклисте (AGENTS.md + pre-commit-checklist.md):")
         for c in missing:
-            print(f"  CI запускает, но AGENTS.md не перечисляет:  {c}")
+            print(f"  CI запускает, но чеклист не перечисляет:  {c}")
     else:
-        print("CHECKLIST-OK: чеклист AGENTS.md покрывает все проверки CI.")
+        print("CHECKLIST-OK: чеклист (AGENTS.md + pre-commit-checklist.md) покрывает все проверки CI.")
     return 1 if missing else 0
 
 
@@ -99,8 +106,8 @@ def selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    # 1) реальный пакет: чеклист покрывает CI
-    expect("реальный пакет: CI ⊆ AGENTS.md", check(PKG) == [])
+    # 1) реальный пакет: чеклист покрывает CI (AGENTS.md + pre-commit-checklist.md)
+    expect("реальный пакет: CI ⊆ чеклист", check(PKG) == [])
 
     # 2) нормализация: redirect/комментарий не мешают совпадению
     expect("redirect отбрасывается",
