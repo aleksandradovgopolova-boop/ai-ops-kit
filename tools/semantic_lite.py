@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """semantic_lite.py (v3.6.3) — детерминированный semantic-fallback (TF-IDF/cosine), БЕЗ vector-DB.
 
 Следующая ступень retrieval-цепочки ContextArchitectureDecision после full-text: лексический
@@ -9,7 +10,6 @@ full-text: понижает вес частых токенов и повышае
 
 CLI:  semantic_lite.py <root> --query "..." [--k N] [--json] | --selftest
 """
-from __future__ import annotations
 
 import json
 import math

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Sequential-mode оркестратор (минимальный общий знаменатель, принцип 29).
 
 Исполняет workflow-контракт последовательно одной моделью с изоляцией ролей:
@@ -26,6 +27,12 @@
   orchestrator.py --selftest                                — QUICK на временной папке
 
 Требует pyyaml.
+
+Модульная структура (v3.x):
+  - orchestrator_http.py      — HTTP client (_http_post_json + retry)
+  - orchestrator_providers.py — Provider implementations (mock/anthropic/openai/claude-cli)
+  - orchestrator_usage.py     — Usage recording (_CALL_STATS, _CALL_CONTEXT, _record_call)
+  - orchestrator.py           — Workflow execution (state, core, run_workflow, selftest)
 """
 
 import hashlib
@@ -39,307 +46,20 @@ import yaml
 
 PKG = Path(__file__).resolve().parents[1]
 
+# ---------------- re-exports from submodules ----------------
+# Backward compatibility: `import orchestrator; orchestrator.make_provider(...)` continues to work.
 
-# ---------------- provider ----------------
-
-def mock_provider(role_prompt: str) -> str:
-    """Детерминированный офлайн-провайдер: возвращает структурированную заглушку."""
-    first = role_prompt.splitlines()[0][:80] if role_prompt else ""
-    return (f"[mock-provider] Роль принята: {first}\n"
-            f"Результат стадии подготовлен согласно контракту роли.")
-
-
-# --- живые провайдеры (v2.18): реальная модель по ключу из env ---
-# Секреты НЕ в репо: ключ читается ТОЛЬКО из переменной окружения. Сеть — через
-# системный прокси (urllib берёт HTTPS_PROXY автоматически). Без ключа — честная
-# ошибка, а не тихий фолбэк на mock (иначе «живой» прогон был бы фикцией).
-DEFAULT_MODELS = {"anthropic": "claude-sonnet-5", "openai": "gpt-4o"}
-# v3.0-rc7 (finding живого прогона kimi): reasoning-модели (kimi-k3 и т.п.) тратят большой бюджет на
-# внутренний reasoning ПЕРЕД контентом. При 2048 весь бюджет уходил в reasoning -> finish_reason=length,
-# content пустой. 8192 даёт место reasoning + артефакт. Обычные модели стопятся раньше по stop (без вреда).
-_MAX_TOKENS = 8192
-
-
-def _http_post_json(url, headers, payload, timeout=120, retries=6):
-    """POST JSON с ретраями на ТРАНЗИЕНТНЫЕ сбои (finding живого прогона: SSL-handshake timeout
-    оборвал задачу). Ретраим сетевые таймауты/сбросы и 5xx/429 с бэкоффом; 4xx (кроме 429) —
-    не ретраим (это не транзиент, а ошибка запроса/ключа). Бэкофф детерминированный (без сна на
-    последней попытке)."""
-    import json as _json
-    import time
-    import urllib.error
-    import urllib.request
-    body = _json.dumps(payload).encode("utf-8")
-    last = None
-    for attempt in range(retries):
-        req = urllib.request.Request(url, data=body,
-                                     headers={**headers, "content-type": "application/json"},
-                                     method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:   # прокси — из env
-                return _json.loads(r.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            last = e
-            if e.code not in (429, 500, 502, 503, 504) or attempt == retries - 1:
-                raise
-            # v3.0-rc7 (finding kimi): 429/overload перегруженного провайдера — уважаем Retry-After,
-            # иначе экспон. бэкофф с бОльшим потолком (multi-call ENGINEERING-прогон переживает всплеск).
-            ra = 0
-            try:
-                ra = int((e.headers or {}).get("Retry-After") or 0)
-            except (ValueError, TypeError):
-                ra = 0
-            time.sleep(max(ra, min(3 * (2 ** attempt), 60)))
-            continue
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-            last = e                                    # сетевой транзиент (в т.ч. SSL timeout)
-            if attempt == retries - 1:
-                raise
-        time.sleep(min(3 * (2 ** attempt), 60))         # 3s,6,12,24,48,60 между попытками
-    raise last if last else RuntimeError("http retry exhausted")
-
-
-# v3.1 (trace v0.2): аккумулятор статистики вызовов модели — tokens/latency/cost для трейса. Вызывающий
-# (ai_ops_run) дренирует после прогона и эмитит в journal + отчёт. Наблюдаемость, не источник истины.
-_CALL_STATS = []
-# Приблизительные цены $/1M токенов (только ОЦЕНКА cost; при отсутствии модели cost_usd_est=None).
-_PRICE_PER_MTOK = {
-    "claude-sonnet-5": {"in": 3.0, "out": 15.0},
-    "deepseek-chat": {"in": 0.27, "out": 1.10},
-}
-
-
-def drain_call_stats():
-    """Забрать и очистить накопленную статистику вызовов модели (per-call {model,in,out,latency_s,cost})."""
-    global _CALL_STATS
-    s, _CALL_STATS = _CALL_STATS, []
-    return s
-
-
-# v3.10.0 Usage Truth: контекст вызова (role/trigger/provider/runtime/run_id/workitem_id/package_id).
-# ai_ops_run ставит его через provider-обёртку ПЕРЕД вызовом; _record_call вмерживает в каждую запись.
-_CALL_CONTEXT = {}
-
-
-def set_call_context(**ctx):
-    _CALL_CONTEXT.update({k: v for k, v in ctx.items() if v is not None})
-
-
-def clear_call_context():
-    _CALL_CONTEXT.clear()
-
-
-def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, cost_status=None):
-    # v3.10.0 Usage Truth. cost: ИЗМЕРЕННАЯ стоимость (напр. claude -p total_cost_usd). Иначе оценка по
-    # прайс-таблице, если есть токены+цена (cost_status=estimated); иначе None (unavailable).
-    if cost is not None:
-        cost_status = cost_status or "measured"
-    else:
-        price = _PRICE_PER_MTOK.get(model)
-        if price and in_tok is not None and out_tok is not None:
-            cost = round(in_tok / 1e6 * price["in"] + out_tok / 1e6 * price["out"], 6)
-            cost_status = "estimated"
-        else:
-            cost_status = "unavailable"
-    # ЧЕСТНО: неизвестное использование -> unavailable, НЕ 0. measured, если провайдер вернул токены.
-    usage_status = "measured" if (in_tok is not None or out_tok is not None) else "unavailable"
-    rec = {"model": model, "provider": provider, "runtime": None,
-           "input_tokens": in_tok, "output_tokens": out_tok, "usage_status": usage_status,
-           "cost": cost, "cost_status": cost_status,
-           "latency": (round(latency_s, 3) if latency_s is not None else None),
-           "cost_usd_est": cost}   # cost_usd_est — назад-совместимо (budget/cost_account/trace)
-    rec.update(_CALL_CONTEXT)      # role/trigger/run_id/workitem_id/package_id/runtime/provider
-    _CALL_STATS.append(rec)
-
-
-def _anthropic_call(prompt, model):
-    import os
-    import time
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        raise SystemExit("ANTHROPIC_API_KEY не задан — живой прогон невозможен. "
-                         "Задайте ключ в окружении или используйте --provider mock (офлайн).")
-    _t0 = time.monotonic()
-    data = _http_post_json(
-        "https://api.anthropic.com/v1/messages",
-        {"x-api-key": key, "anthropic-version": "2023-06-01"},
-        {"model": model, "max_tokens": _MAX_TOKENS,
-         "messages": [{"role": "user", "content": prompt}]})
-    _u = data.get("usage") or {}
-    _record_call(model, _u.get("input_tokens"), _u.get("output_tokens"), time.monotonic() - _t0)
-    parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
-    return "\n".join(parts).strip() or "(пустой ответ модели)"
-
-
-def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/completions",
-                 key_env="OPENAI_API_KEY"):
-    """OpenAI Chat Completions и любой OpenAI-совместимый endpoint (DeepSeek, local, …)
-    через base_url + ключ из указанной env. Секрет — только из env, не в репо/логах."""
-    import os
-    key = os.environ.get(key_env)
-    if not key:
-        raise SystemExit(f"{key_env} не задан — живой прогон невозможен. "
-                         "Задайте ключ в окружении или используйте --provider mock (офлайн).")
-    import time
-    # v3.0-rc5 (finding живого прогона kimi): перегруженный провайдер отдаёт HTTP 200 с ПУСТЫМ content
-    # (не 429 — _http_post_json его не ловит). Для author/review это фатально (артефакт «не вернулся»).
-    # Ретраим пустой ответ с бэкоффом; часть моделей кладёт текст в reasoning_content — используем и его.
-    for attempt in range(3):
-        _t0 = time.monotonic()
-        # v3.0-rc7: reasoning-модели медленные (kimi-k3) — 120с не хватало -> 300с default.
-        # v3.6.8: таймаут настраиваем через env OPENAI_COMPATIBLE_TIMEOUT (флагман kimi-k3 бывает >300с).
-        _to = int(os.environ.get("OPENAI_COMPATIBLE_TIMEOUT", "300"))
-        data = _http_post_json(
-            base_url, {"authorization": f"Bearer {key}"},
-            {"model": model, "max_tokens": _MAX_TOKENS,
-             "messages": [{"role": "user", "content": prompt}]},
-            timeout=_to)
-        msg = (data.get("choices", [{}])[0] or {}).get("message", {}) or {}
-        content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
-        if content:
-            _u = data.get("usage") or {}   # v3.1 trace v0.2: OpenAI-совместимый usage
-            _record_call(model, _u.get("prompt_tokens"), _u.get("completion_tokens"), time.monotonic() - _t0)
-            return content
-        if attempt < 2:
-            time.sleep(2 ** attempt)
-    return "(пустой ответ модели)"
-
-
-def make_provider(name: str, model: str = None):
-    """Вернуть callable(role_prompt)->text для провайдера.
-    'mock' (по умолчанию, офлайн, детерминированный) | 'anthropic' | 'openai'.
-    Живые провайдеры вызывают реальный API по ключу из env; без ключа — честная ошибка.
-    ВАЖНО: живой путь опционален (opt-in через --provider) — CI/selftest офлайн на mock."""
-    if name in (None, "mock"):
-        return mock_provider
-    if name == "anthropic":
-        m = model or DEFAULT_MODELS["anthropic"]
-        return lambda prompt: _anthropic_call(prompt, m)
-    if name == "openai":
-        m = model or DEFAULT_MODELS["openai"]
-        return lambda prompt: _openai_call(prompt, m)
-    if name == "openai-compatible":
-        # DeepSeek / local / любой OpenAI-совместимый: base_url + ключ из env (provider-agnostic).
-        import os
-        base = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
-        if not base:
-            raise SystemExit("OPENAI_COMPATIBLE_BASE_URL не задан — для openai-совместимого "
-                             "провайдера (напр. DeepSeek: https://api.deepseek.com/chat/completions) "
-                             "укажите base URL в env.")
-        if not model:
-            raise SystemExit("--model обязателен для openai-compatible (напр. deepseek-chat).")
-        return lambda prompt: _openai_call(prompt, model, base_url=base,
-                                           key_env="OPENAI_COMPATIBLE_API_KEY")
-    if name in ("claude-cli", "claude-code-local"):
-        # v3.9.0 First-class Claude Code Adapter: локальный `claude -p` как СИЛЬНЫЙ writer.
-        return make_claude_cli_provider(model)
-    raise SystemExit(f"неизвестный провайдер '{name}' "
-                     f"(есть: mock, anthropic, openai, openai-compatible, claude-cli)")
-
-
-def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
-    """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
-    БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
-
-    БЕЗОПАСНОСТЬ (executing-adapter контракт): `--allowedTools Read Grep Glob` — ТОЛЬКО read-only инструменты.
-    Claude ЧИТАЕТ репо (информированное предложение), но НЕ может писать/исполнять (нет Write/Edit/Bash/git) ->
-    НЕ трогает FS/git/сеть, НЕ пушит, НЕ создаёт PR, НЕ меняет checkout, НЕ владеет исполнением/lifecycle.
-    Модель ПРЕДЛАГАЕТ действия ТЕКСТОМ (JSON tool-loop); применяет их КИТ через свой sandbox/broker
-    (scope-enforced, exact-SHA, gates, delivery). AI Ops = control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ
-    исполнитель. (Полный tool-less `--tools ""` авторит вслепую -> невалидная спека; read-only даёт контекст
-    без права действия — доказано fs-rc3.)
-
-    v3.10.0 Usage Truth: `--output-format json` -> claude usage (input/output_tokens) + total_cost_usd
-    ИЗМЕРЯЮТСЯ и пишутся в _record_call (provider=claude-cli). Claude CLI usage больше НЕ исчезает.
-
-    runner инъектируется (офлайн-selftest без вызова CLI); заменяет subprocess.run, а не весь вызов —
-    production-path (time.monotonic, json parse, _record_call, retries) проходит полностью. Ключ не требуется.
-
-    Устойчивость к транзиентам (находка F-011, Real-Product Qualification): транзиентные сбои API
-    (5xx/429/**529 Overloaded**, сетевые, subprocess-timeout) ретраятся с экспоненциальным backoff+jitter,
-    а не после 3 фиксированных пауз — один невосстановленный 529 больше не роняет весь многошаговый прогон.
-    Синтетический конверт claude `is_error:true` на rc==0 (напр. 529: `input_tokens:0, stop_reason:stop_sequence`)
-    распознаётся и НЕ выдаётся за валидный результат. Полный человекочитаемый текст ошибки сохраняется
-    (парсинг `content[].text`/`error`), а не режется до 200 символов (F-011a — обрезка прятала «529 Overloaded»)."""
-    cmd = ["claude", "-p", prompt, "--output-format", "json",
-           "--allowedTools", "Read", "Grep", "Glob"]
-    if model:
-        cmd += ["--model", model]
-    import subprocess
-    import json as _json
-    import time
-    import random
-    # runner заменяет subprocess.run (не весь вызов) — production-path проходит в selftest
-    _run = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
-
-    def _human_error(text):
-        # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
-        try:
-            d = _json.loads(text)
-        except Exception:
-            return (text or "").strip()[:2000]
-        parts = []
-        if d.get("error"):
-            parts.append(str(d.get("error")))
-        msg = d.get("message") if isinstance(d.get("message"), dict) else None
-        for blk in ((msg.get("content") if msg else None) or d.get("content") or []):
-            if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
-                parts.append(blk["text"])
-        return (" | ".join(parts) or (text or "").strip())[:2000]
-
-    def _transient(text):
-        t = (text or "").lower()
-        return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
-                                    "500", "502", "503", "504", "internal server error",
-                                    "temporarily", "server_error", "timeout", "timed out", "connection"))
-
-    def _backoff(n):
-        time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
-
-    last = ""
-    for _attempt in range(max_attempts):
-        _t0 = time.monotonic()
-        try:
-            r = _run(cmd)
-        except subprocess.TimeoutExpired:   # обычно слишком большой промпт (весь транскрипт одним argv, см. F-011)
-            last = "claude -p: таймаут subprocess (%ss) — вероятно слишком большой промпт" % timeout
-            if _attempt + 1 >= max_attempts:
-                break
-            _backoff(_attempt); continue
-        if r.returncode == 0:
-            try:
-                d = _json.loads(r.stdout)
-            except Exception:   # json не распарсился -> usage unavailable (НЕ теряем факт вызова)
-                _record_call(model or "claude-code-local", None, None, time.monotonic() - _t0, provider="claude-cli")
-                return r.stdout
-            if d.get("is_error"):   # синтетический конверт claude (rc=0!), напр. 529 Overloaded — НЕ валидный результат
-                last = _human_error(r.stdout)
-                if _transient(last) and _attempt + 1 < max_attempts:
-                    _backoff(_attempt); continue
-                raise RuntimeError("claude -p вернул is_error (rc=0): %s" % last)
-            u = d.get("usage") or {}
-            _record_call(d.get("model") or model or "claude-code-local",
-                         u.get("input_tokens"), u.get("output_tokens"), time.monotonic() - _t0,
-                         provider="claude-cli", cost=d.get("total_cost_usd"))
-            return d.get("result") or ""
-        last = _human_error(r.stderr or r.stdout or "")   # rc!=0 (сеть/5xx/оверлоад) -> ретрай с backoff
-        if _attempt + 1 >= max_attempts:
-            break
-        _backoff(_attempt)
-    raise RuntimeError("claude -p не удался после %d попыток: %s" % (max_attempts, last))
-
-
-def make_claude_cli_provider(model=None, runner=None):
-    """callable(prompt)->text через локальный `claude -p` (tool-less). См. _claude_cli_call: executing-adapter
-    контракт — Claude предлагает, кит исполняет и блокирует по гейтам."""
-    return lambda prompt: _claude_cli_call(prompt, model=model, runner=runner)
-
-
-def make_openai_provider(model, base_url, key_env):
-    """openai-compatible провайдер с ЯВНЫМ endpoint+key_env — per-role/vendor маршрутизация (v3.7.12,
-    Router->ai_ops_run). Ключ читает _openai_call из env по имени key_env; значение не передаётся и не
-    логируется. Так writer/reviewer резолвятся в РАЗНЫЕ модели/вендоры в одном прогоне."""
-    return lambda prompt: _openai_call(prompt, model, base_url=base_url, key_env=key_env)
+sys.path.insert(0, str(PKG / "tools"))
+from orchestrator_http import _http_post_json
+from orchestrator_usage import (
+    _CALL_STATS, _CALL_CONTEXT, _PRICE_PER_MTOK,
+    _record_call, drain_call_stats, set_call_context, clear_call_context,
+)
+from orchestrator_providers import (
+    mock_provider, DEFAULT_MODELS, _MAX_TOKENS,
+    _anthropic_call, _openai_call, _claude_cli_call,
+    make_provider, make_claude_cli_provider, make_openai_provider,
+)
 
 
 # ---------------- state ----------------

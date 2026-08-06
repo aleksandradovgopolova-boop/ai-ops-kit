@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Открытие draft PR (v2.63, P0-эпик) — финальный шаг движка task -> проверяемый draft PR.
 
 После того как pipeline применил изменения, закоммитил на ветке ai-ops/<id> и собрал evidence,

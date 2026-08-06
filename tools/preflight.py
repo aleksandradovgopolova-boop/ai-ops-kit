@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Preflight Truth — проверки ДО запуска модели (v2.115).
 
 Аудит: Spec-First блокировал ДОСТАВКУ, а не РЕАЛИЗАЦИЮ — pipeline сначала гонял tool loop, писал код и
@@ -29,6 +30,7 @@ sys.path.insert(0, str(PKG / "tools"))
 
 import spec_levels   # noqa: E402
 import approvals     # noqa: E402
+from contracts import PreflightResult  # noqa: E402
 
 # Уровни, для которых слой контекста обязан быть здоров (ошибки -> fail-closed, не «продолжаем молча»).
 _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
@@ -36,8 +38,8 @@ _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
 
 def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
            spec_cov=None, work_pkg=None, lifecycle_errors=None, domains=None, author=False,
-           reevaluate_only=False):
-    """-> {kind, ok, blocked, checks{...}, reasons[]}. Детерминированно, без модели и без правок.
+           reevaluate_only=False) -> PreflightResult:
+    """-> PreflightResult {kind, ok, blocked, checks{...}, reasons[]}. Детерминированно, без модели и без правок.
     v3.8.3: reevaluate_only=True — переоценка гейтов УЖЕ построенной фичи (после человеко-approval),
     БЕЗ переавторинга. Build-preconditions (spec-first/atomic/context-budget) НЕ применяются (реализация
     уже была); classification/approvals/lifecycle проверяются (approval — именно то, ради чего переоценка)."""

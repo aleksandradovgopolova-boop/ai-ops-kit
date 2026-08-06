@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate scenario-evidence (Вывод 1 «дефектов одной сессии»: СЦЕНАРИЙ, А НЕ СЛОЙ).
 
 Находка: гейт implementation_verification = «сборка/линт/тесты на ревизии». Пять дефектов одной сессии
@@ -14,7 +15,6 @@ graduation-бар (перенос из advisory в required_evidence + скво�
 
   validate_scenario_evidence.py --selftest
 """
-from __future__ import annotations
 
 import sys
 

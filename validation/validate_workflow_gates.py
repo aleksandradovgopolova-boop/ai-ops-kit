@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Согласованность workflow ↔ gate (v2.16; track-aware + orphan-guard v2.67).
 
 Раньше валидаторы проверяли только существование gate/agent id и обязательные поля,

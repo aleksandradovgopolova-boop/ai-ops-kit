@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Контроль целостности managed-слоя (.ai/managed) AI-first системы — Фаза 4.
 
 Обнаруживает прямую (ручную) правку managed-файлов: parent записывает sha256 всех

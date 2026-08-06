@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка claims — контрактов «документ утверждает о коде» (v2.9).
 
 Идея из team-os-toolkit (init-team-brain, claims.yaml + drift checker):

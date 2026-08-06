@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """context_cost.py (v3.13.0 Startup Context Budget, срез 2) — ОЦЕНКА стоимости стартового набора
 контекста сессии в токенах, с поправкой на кириллицу, разбивкой по файлам и вердиктом против бюджета.
 
@@ -18,7 +19,6 @@ Advisory: rc 0 (превышение — сигнал, не блок); с `--str
 Использование:  context_cost.py <child_root> [--json] [--budget N] [--strict]
                 context_cost.py --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

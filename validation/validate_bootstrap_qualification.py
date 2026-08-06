@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate BootstrapQualificationPlan (v3.8.0 — Product Bootstrap & Readiness Qualification).
 
 План 3.8 — ДАННЫЕ, не живой прогон. Валидатор стережёт инварианты, чтобы Product Bootstrap не пропускал
@@ -15,7 +16,6 @@
 
   validate_bootstrap_qualification.py [qualification/bootstrap/v3.8.0-plan.yaml] | --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path

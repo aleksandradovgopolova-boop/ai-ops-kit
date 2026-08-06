@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка декларации обязанностей постоянного агента Robin (v2.21).
 
 Robin — спека (runtime/robin/ROBIN.md), не бот; обязанности объявляются

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Context Lifecycle -> RunHandoff + resume (v2.99, эпик Context Engineering, этап 3).
 
 Длинная задача должна переживать несколько сессий без потери решений, архитектуры и состояния

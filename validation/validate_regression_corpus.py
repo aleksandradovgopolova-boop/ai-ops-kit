@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка Regression Corpus (regression-corpus/RC-*.yaml) — v3.5.
 
 RegressionCase (schemas/regression-case.schema.json) — постоянная находка с таксономией слоя.

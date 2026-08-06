@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate + render spec-change artifact (v2.89 Product Authoring: specification).
 
 Гейт `specification` (ENGINEERING/PRODUCT) требует evidence openspec_valid + requirements_covered.

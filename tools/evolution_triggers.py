@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """evolution_triggers.py (v3.2.4) — замыкание governance-петли ADR ↔ Product Health.
 
 ADR декларируют влияние на quality attributes (improves/tradeoff/degrades). Product Health

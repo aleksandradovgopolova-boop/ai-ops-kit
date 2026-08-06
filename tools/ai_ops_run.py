@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """ai-ops run — единый контроллер задачи (v2.34, Execution Engine Фаза 2, срез 1).
 
 Собирает разрозненные шаги в ОДНУ транзакцию: классификация/маршрут → RunPlan

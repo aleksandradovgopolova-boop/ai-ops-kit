@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate KeyLifecyclePolicy (security-долг #3, OWASP ASI).
 
 Инварианты: каждый ключ имеет TTL>0 (дедлайн ротации) и env_ref (значение — только из env, НЕ в файле);
@@ -7,7 +8,6 @@ supported=true требует непустого evidence (нельзя заяв
 
   validate_key_lifecycle.py [examples/key-lifecycle-demo/KLP-001.yaml] | --selftest
 """
-from __future__ import annotations
 
 import re
 import sys

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка машиночитаемых конфигов AI-first системы (02_tools/ai-first-system/config).
 
 Ловит то, что реально ломается при ручных правках конфигов:

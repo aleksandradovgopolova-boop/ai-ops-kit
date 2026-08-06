@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """storybook_adapter.py (v3.1.7) — сборка UIEvidenceBundle из ЛОКАЛЬНЫХ артефактов child-репо.
 
 Зачем (маршрут v3.1): reviewer-false-fail сконцентрирован в 4 UI-review-гейтах (см. bench_lite /
@@ -24,7 +25,6 @@ CLI:
   storybook_adapter.py --build <child_root> [--sha SHA] [--changed a.tsx,b.tsx] [--out bundle.json]
   storybook_adapter.py --selftest
 """
-from __future__ import annotations
 
 import argparse
 import json

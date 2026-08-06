@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """deploy_readiness.py (v3.20.0 Engineering Operating Model, WP5) — ЧЕСТНАЯ зрелость поставки.
 
 Кит НЕ деплоит и не собирается: он не даёт **врать о готовности деплоя**. Лестница — та же, что у
@@ -23,7 +24,6 @@ UI-evidence (tools/ui_readiness.py), потому что болезнь та ж�
 CLI:  deploy_readiness.py <root> [--json]
       deploy_readiness.py --selftest
 """
-from __future__ import annotations
 
 import json
 import re

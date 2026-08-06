@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """WorkItem — единая сущность продуктового изменения (v2.17).
 
 Раньше было два несвязанных контура: прогон workflow (orchestrator TaskState) и

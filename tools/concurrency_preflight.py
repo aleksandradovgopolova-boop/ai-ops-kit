@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Concurrency preflight (v2.28) — проверка коллизий параллельной работы до старта.
 
 Класс проблемы «concurrent-edit collision + stale premise»: два потока независимо меняют

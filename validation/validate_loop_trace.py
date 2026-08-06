@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка LoopTrace + анализ прогресса — v3.5 Observability.
 
 LoopTrace (schemas/loop-trace.schema.json) — трейс итераций governed-цикла. Валидатор + анализатор:

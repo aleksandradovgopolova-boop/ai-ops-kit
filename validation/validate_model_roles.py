@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate model-roles registry (Provider Independence & Cheapest Qualified Model, ADR-004).
 
 Связывает роли рантайма с КЛАССАМИ возможностей (registry/models.yaml model_classes), НЕ с вендорами.
@@ -14,7 +15,6 @@
 
   validate_model_roles.py [registry/model-roles.yaml] | --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path

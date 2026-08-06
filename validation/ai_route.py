@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Движок маршрутизации AI-first системы (Фаза 6).
 
 По входным признакам задачи выбирает workflow / provider / model_class / runtime /

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """parallel_planner.py (v3.6.5) — bounded parallel-2 execution planner (детерминированный, offline).
 
 Планирует исполнение WorkGraph по решениям ParallelSafetyDecision и правилам безопасности, и решает
@@ -18,7 +19,6 @@ fan-in. Живой parallel-run (реальные worktrees + модель + PR)
 
 CLI: parallel_planner.py [examples/work-graph-demo] [--json] | --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

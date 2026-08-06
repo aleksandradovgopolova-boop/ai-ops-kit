@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """architecture_baseline.py (v3.15.0 Architecture Baseline) — ДЕШЁВЫЙ ДЕТЕРМИНИРОВАННЫЙ снимок
 архитектуры репозитория на ТОЧНОМ SHA (read-only, без модели). Не судит «хорошо/плохо» — фиксирует
 НАБЛЮДАЕМЫЕ факты по осям, оставляя оценку independent architecture-reviewer'у (полный AI-review отдельно).
@@ -13,7 +14,6 @@
 
 CLI:  architecture_baseline.py <root> [--sha SHA] [--json]   |   architecture_baseline.py --selftest
 """
-from __future__ import annotations
 
 import json
 import subprocess

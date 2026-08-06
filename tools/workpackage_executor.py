@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Sequential WorkPackage Executor (v3.1) — исполнить план по пакетам, а не одним блобом.
 
 Аудит: Atomic Planner создаёт КОНКРЕТНЫЕ WorkPackages (v2.111), но их никто не ИСПОЛНЯЛ — задача

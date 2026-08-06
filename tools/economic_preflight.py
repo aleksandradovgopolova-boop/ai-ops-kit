@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """economic_preflight.py (v3.21.0 Engineering Operating Model, WP7) — экономическая граница ДО траты.
 
 Аудит. Экономика кита была устроена так, что деньги узнавались ПОСЛЕ того, как их потратили:
@@ -26,7 +27,6 @@
 CLI:  economic_preflight.py <root> [--task-type ENGINEERING] [--max-cost 5] [--max-calls 40] [--json]
       economic_preflight.py --selftest
 """
-from __future__ import annotations
 
 import json
 import statistics

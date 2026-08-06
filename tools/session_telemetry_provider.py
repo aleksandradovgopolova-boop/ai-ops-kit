@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """session_telemetry_provider.py (v3.22 Culture Runtime Integration) — opt-in чтение реальной
 Claude session metadata. Контракт: попытаться прочитать данные из runtime, если не удалось —
 честно вернуть None (unavailable, не 0).
@@ -17,7 +18,6 @@ Claude session metadata. Контракт: попытаться прочитат
 CLI:  session_telemetry_provider.py [--session-id ID] [--project-dir DIR] [--json]
       session_telemetry_provider.py --selftest
 """
-from __future__ import annotations
 
 import json
 import os

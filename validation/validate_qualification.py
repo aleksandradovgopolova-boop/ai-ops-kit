@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate qualification scenario pack (v2.84 Qualification).
 
 Пакет живых сценариев (qualification/scenarios.yaml) — не декоративный список: он должен быть

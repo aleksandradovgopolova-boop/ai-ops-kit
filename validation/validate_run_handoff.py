@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate RunHandoff (v2.99, эпик Context Engineering, этап 3 — Context Lifecycle и Resume).
 
 Стережёт форму передачи состояния между сессиями:

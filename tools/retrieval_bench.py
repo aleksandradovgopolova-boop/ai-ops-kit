@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """retrieval_bench.py (v3.6.2) — оффлайн golden-корпус precision/recall retrieval-стратегий.
 
 Закрывает research-gap FL-003 / RR-009 (сравнить retrieval-стратегии под бюджет) — но ЧЕСТНО:
@@ -12,7 +13,6 @@
 
 CLI:  retrieval_bench.py --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

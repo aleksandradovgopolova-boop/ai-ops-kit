@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """data_classification.py (v3.6.4) — авторитетная классификация данных (trust-фикс #4).
 
 Ревью владельца: недоверенный контент НЕ должен понижать свой access-класс через inline-маркер
@@ -13,7 +14,6 @@
 
 Только stdlib. CLI: data_classification.py <policy.yaml> [--json] | --selftest
 """
-from __future__ import annotations
 
 import json
 import re

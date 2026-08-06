@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка workflow-контрактов и gate-реестра AI-first системы (registry/workflows.yaml, quality/gates.yaml).
 
 Ловит то, что реально ломается при ручных правках контрактов:

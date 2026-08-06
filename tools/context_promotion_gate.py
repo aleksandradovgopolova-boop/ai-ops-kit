@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """context_promotion_gate.py (v3.7.0) — trust-контракты готовности Context Engine v2 к promotion.
 
 Перед включением hybrid (execution получает mandatory v1 + разрешённые v2-кандидаты) нужно доказать,
@@ -18,7 +19,6 @@ gate над результатом `context_engine.build_context`, которы�
 
 Не трогает execution. Только stdlib. CLI: context_promotion_gate.py --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path

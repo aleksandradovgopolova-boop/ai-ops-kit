@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate requirements artifact (v2.86 Product Authoring).
 
 Гейт `requirements` (ENGINEERING/PRODUCT) требует evidence: testable_requirements +

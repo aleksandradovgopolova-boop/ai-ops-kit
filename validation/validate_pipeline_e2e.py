@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Канонический e2e движка на РЕАЛЬНОЙ фикстуре (v2.96, аудит 2.96 — Real Qualification).
 
 CI кита раньше гонял в основном selftest-модули и статические валидаторы. Этот харнесс закрывает

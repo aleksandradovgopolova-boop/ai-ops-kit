@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """qual_run.py — квалификационный прогон канонического пути на живой модели (v2.68).
 
 Гоняет N реальных задач через собранный движок (`ai-ops run --engine pipeline --execute`)

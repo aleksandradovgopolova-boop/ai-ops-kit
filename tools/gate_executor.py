@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Gate executor — единый исполнитель quality gates (замыкание контура, v2.15).
 
 Раньше sequential-оркестратор проводил стадии, но НЕ читал quality_gates контракта

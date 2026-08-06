@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка ProviderResidencyPolicy (PRP) — v3.4 Security, Permissions & Economics.
 
 PRP (schemas/provider-residency-policy.schema.json) — enforceable data-residency/retention. Валидатор:

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка parallel-architecture триады — v3.3.2 Operational Architecture Backbone.
 
 Покрывает три контракта одним валидатором (они взаимозависимы: PSD и IP выводятся из WorkGraph):

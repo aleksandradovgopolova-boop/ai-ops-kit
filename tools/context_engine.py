@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """context_engine.py (v3.6.7) — единый канонический оркестратор Context Engine v2.
 
 Ревью владельца по v3.6.6: shadow подключал только `build_view()` (full-text role view), а не всю
@@ -25,7 +26,6 @@ retrieval-цепочку (Repository Graph, graph-augmentation, semantic-lite, c
 
 Только stdlib + pyyaml.  CLI: context_engine.py <child_root> --query ".." --role executor --sha SHA | --selftest
 """
-from __future__ import annotations
 
 import hashlib
 import json

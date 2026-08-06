@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка свежести знаний (v2.9) — по классам устаревания из FreshnessPolicy.
 
 Сканирует markdown-документы с frontmatter `stability` и помечает протухшие:

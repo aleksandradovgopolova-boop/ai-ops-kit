@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Синхронность пред-коммит-чеклиста AGENTS.md с CI (v2.15) — drift-control.
 
 AGENTS.md обещает: «Прогнать полный набор проверок (тот же, что в CI

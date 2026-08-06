@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Security Review Cascade — asymmetric fail-closed security judge (v3.8.4-rc).
 
 СТАТУС: experimental / qualification-only. НЕ подключён к рабочему strict security_review и НЕ даёт
@@ -37,7 +38,6 @@ security пропуск уязвимости — критический пров
 Контракт результата: kind=SecurityCascadeResult. check()/selftest().
   security_review_cascade.py --selftest
 """
-from __future__ import annotations
 
 import re
 import sys

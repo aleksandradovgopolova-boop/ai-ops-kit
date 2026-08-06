@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Оценка прогона фичи (v2.2) — «хорошо это или плохо» одной командой.
 
 Собирает по каталогу функции честный отчёт:
@@ -24,7 +25,6 @@ tools/effect_metrics.py («метрики эффекта»). Требует pyya
 
 # PEP 563: ленивые аннотации — `Path | None` (PEP 604) не вычисляется при импорте,
 # поэтому модуль грузится и на Python 3.9 (дефолт macOS CommandLineTools).
-from __future__ import annotations
 
 import importlib.util
 import json

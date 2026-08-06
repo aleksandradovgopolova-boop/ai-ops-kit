@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка PackageCapabilityScope (PCS) — v3.4 Security, Permissions & Economics.
 
 PCS (schemas/package-capability-scope.schema.json) привязывает пакет WorkGraph к разрешённым

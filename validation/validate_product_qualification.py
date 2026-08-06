@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Product Qualification (детерминированно) — сквозные продуктовые гарантии через РЕАЛЬНЫЙ контроллер.
 
 Аудит требовал product-qualification: «ContextBundle меняет prompt; неполная спека не пускает в

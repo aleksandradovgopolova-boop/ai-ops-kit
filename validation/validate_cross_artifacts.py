@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Кросс-артефактная консистентность (v2.3; идея — Spec Kit `analyze`).
 
 Первый и главный класс расхождений (подтверждён боевым прогоном ii-sreda):

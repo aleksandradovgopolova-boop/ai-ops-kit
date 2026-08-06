@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Генератор runtime-файлов из общего source of truth (принцип 27).
 
 Из registry/workflows.yaml и registry/agents.yaml генерирует в child-репозитории

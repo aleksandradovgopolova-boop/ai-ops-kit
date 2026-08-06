@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Валидатор Feature Blueprint (schemas/feature-blueprint.schema.json, Ф1 roadmap).
 
 Blueprint — паспорт функции: features/<id>/blueprint.yaml со ссылками на артефакты

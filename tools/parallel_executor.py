@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """parallel_executor.py (v3.7.1) — bounded parallel-2 executor (оркестрация поверх decision-слоя).
 
 Доводит parallel_planner + integration_gate до ИСПОЛНИТЕЛЯ: план -> изолированный прогон каждого
@@ -17,7 +18,6 @@ base moved / merge conflict -> block/revalidation (не «умная» авто-
 
 Только stdlib. CLI: parallel_executor.py [examples/work-graph-demo] | --selftest
 """
-from __future__ import annotations
 
 import concurrent.futures as _cf
 import json
