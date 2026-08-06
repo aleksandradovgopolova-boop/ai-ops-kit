@@ -12,7 +12,7 @@ patch_note: "3.21.0 — Engineering Operating Model (срез 3, WP7): economic_
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в pre-commit-checklist.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 205
+checks_count: 206
 agents_count: 51
 
 qualified_on: >

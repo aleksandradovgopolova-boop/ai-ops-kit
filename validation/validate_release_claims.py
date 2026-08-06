@@ -72,7 +72,7 @@ def check(data, pkg=PKG):
         e.append(f"claims.version '{ver}' != VERSION '{vf}' (claims отстали от релиза)")
     checks, agents = derived_counts(pkg)
     if data.get("checks_count") != checks:
-        e.append(f"claims.checks_count={data.get('checks_count')} != python3-проверок в AGENTS.md={checks} (устаревшее число)")
+        e.append(f"claims.checks_count={data.get('checks_count')} != python3-проверок в чеклисте={checks} (устаревшее число)")
     if data.get("agents_count") != agents:
         e.append(f"claims.agents_count={data.get('agents_count')} != агентов в registry/agents.yaml={agents}")
     for name in (data.get("docs_must_reference_version") or []):
