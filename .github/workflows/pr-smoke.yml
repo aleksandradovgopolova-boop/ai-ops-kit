@@ -22,7 +22,7 @@ jobs:
 
       - name: Pytest — selftest wrappers (critical modules)
         run: |
-          python3 -m pytest tests/conftest.py -v -k "orchestrator or execution_pipeline or preflight or tool_broker or gate_executor or ai_ops_run or ai_ops_cli" --tb=short
+          python3 -m pytest tests/ -v -k "test_selftest_orchestrator or test_selftest_execution_pipeline or test_selftest_preflight or test_selftest_tool_broker or test_selftest_gate_executor or test_selftest_ai_ops_run or test_selftest_ai_ops_cli" --tb=short --no-cov
 
       - name: Key validators
         run: |

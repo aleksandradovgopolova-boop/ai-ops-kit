@@ -218,7 +218,7 @@ def format_text(report: dict) -> str:
         lines.append(f"   ⚠ {c['cost_unavailable_count']} calls with unknown cost (not counted as $0)")
     if c.get("avg_cost_per_call") is not None:
         lines.append(f"   Avg: ${c['avg_cost_per_call']:.4f}/call")
-    if c.get("avg_cost_perWorkitem") is not None:
+    if c.get("avg_cost_per_workitem") is not None:
         lines.append(f"   Avg: ${c['avg_cost_per_workitem']:.4f}/workitem")
     if c.get("by_task_type"):
         lines.append("   By task type: " + ", ".join(f"{k}={v}" for k, v in sorted(c["by_task_type"].items())))
