@@ -215,3 +215,170 @@ class TestPrintHuman:
         }
         # Should not raise
         ai_ops_run.print_human(report)
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestMainCli:
+    """Tests for main() — CLI argument parsing and dispatch."""
+
+    def test_main_with_no_task(self):
+        """main() with no subcommand should return non-zero (argparse required=True)."""
+        with pytest.raises(SystemExit):
+            ai_ops_run.main([])
+
+    def test_main_with_run_subcommand(self, child_root):
+        """main(['run', ...]) should dispatch to run() and return an exit code."""
+        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=child_root, capture_output=True)
+        (child_root / "dummy.txt").write_text("init")
+        subprocess.run(["git", "add", "."], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=child_root, capture_output=True)
+
+        exit_code = ai_ops_run.main([
+            "run", "test task", str(child_root),
+            "--engine", "controller", "--json",
+        ])
+        assert isinstance(exit_code, int)
+
+    def test_main_with_execute_flag(self, child_root):
+        """main(['run', ..., '--execute']) should trigger pipeline execution."""
+        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=child_root, capture_output=True)
+        (child_root / "dummy.txt").write_text("init")
+        subprocess.run(["git", "add", "."], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=child_root, capture_output=True)
+
+        exit_code = ai_ops_run.main([
+            "run", "test task", str(child_root),
+            "--engine", "pipeline", "--execute", "--provider", "mock", "--json",
+        ])
+        assert isinstance(exit_code, int)
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestRouteSelection:
+    """Tests for task routing — QUICK vs ENGINEERING."""
+
+    def _init_repo(self, child_root):
+        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=child_root, capture_output=True)
+        (child_root / "dummy.txt").write_text("init")
+        subprocess.run(["git", "add", "."], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=child_root, capture_output=True)
+
+    def test_quick_route_returns_planned(self, child_root):
+        """QUICK task with controller engine -> planned status."""
+        self._init_repo(child_root)
+        report = ai_ops_run.run(
+            task_text="fix typo",
+            signals={"task_type": "QUICK", "size": "small", "risk": "low"},
+            child_root=child_root,
+            feature="quick-test",
+            engine="controller",
+        )
+        assert report["status"] == "planned"
+
+    def test_engineering_route_returns_planned(self, child_root):
+        """ENGINEERING task with controller engine -> planned status."""
+        self._init_repo(child_root)
+        report = ai_ops_run.run(
+            task_text="refactor module",
+            signals={"task_type": "ENGINEERING", "size": "medium", "risk": "medium"},
+            child_root=child_root,
+            feature="eng-test",
+            engine="controller",
+        )
+        assert report["status"] == "planned"
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestArtifactWriting:
+    """Tests for artifact writing — plan, workitem files created."""
+
+    def _init_repo(self, child_root):
+        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=child_root, capture_output=True)
+        (child_root / "dummy.txt").write_text("init")
+        subprocess.run(["git", "add", "."], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=child_root, capture_output=True)
+
+    def test_artifact_writing_plan_and_workitem(self, child_root):
+        """Controller path writes workitem.yaml, run-plan.yaml, and run-report.json."""
+        self._init_repo(child_root)
+        report = ai_ops_run.run(
+            task_text="add feature",
+            signals={"task_type": "QUICK"},
+            child_root=child_root,
+            feature="artifact-test",
+            engine="controller",
+        )
+        wid = report["workitem_id"]
+        features_dir = child_root / "features" / wid
+        assert (features_dir / "workitem.yaml").is_file()
+        assert (features_dir / "run-plan.yaml").is_file()
+        assert (features_dir / "run-report.json").is_file()
+
+    def test_run_report_is_valid_json(self, child_root):
+        """run-report.json must be parseable JSON."""
+        self._init_repo(child_root)
+        report = ai_ops_run.run(
+            task_text="test task",
+            signals={"task_type": "QUICK"},
+            child_root=child_root,
+            feature="json-test",
+            engine="controller",
+        )
+        wid = report["workitem_id"]
+        import json as _json
+        report_path = child_root / "features" / wid / "run-report.json"
+        data = _json.loads(report_path.read_text(encoding="utf-8"))
+        assert isinstance(data, dict)
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestExitCodesExtended:
+    """Extended exit code tests — covers more report shapes."""
+
+    def test_exit_code_planned_is_zero(self):
+        """Planned status (controller success) -> exit code 0."""
+        report = {"status": "planned", "workitem_id": "test"}
+        assert ai_ops_run.exit_code(report) == 0
+
+    def test_exit_code_pipeline_error(self):
+        """Pipeline status=error -> exit code 2."""
+        report = {"kind": "execution-pipeline", "status": "error", "ready_for_pr": False}
+        assert ai_ops_run.exit_code(report) == 2
+
+    def test_exit_code_pipeline_not_ready(self):
+        """Pipeline ready_for_pr=False -> exit code 1."""
+        report = {"kind": "execution-pipeline", "status": "done", "ready_for_pr": False}
+        assert ai_ops_run.exit_code(report) == 1
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestReviewFixContext:
+    """Tests for _review_fix_context — blocker context for writer iteration."""
+
+    def test_returns_none_when_ready(self):
+        """ready_for_pr=True -> no fix context needed."""
+        report = {"ready_for_pr": True}
+        assert ai_ops_run._review_fix_context(report) is None
+
+    def test_returns_none_for_non_dict(self):
+        """Non-dict input -> None."""
+        assert ai_ops_run._review_fix_context(None) is None
+        assert ai_ops_run._review_fix_context("string") is None
+
+    def test_returns_none_for_preflight_blocked(self):
+        """blocked-preflight -> not model-fixable -> None."""
+        report = {"ready_for_pr": False, "overall_status": "blocked-preflight"}
+        assert ai_ops_run._review_fix_context(report) is None

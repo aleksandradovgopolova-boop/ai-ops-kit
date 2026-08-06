@@ -208,21 +208,265 @@ class TestOrchestratorContracts:
 
 
 class TestToolBrokerContracts:
-    """Contract tests for tools/tool_broker.py — skipped until interface verified."""
-    # TODO: Verify tool_broker interface and add contract tests
-    pass
+    """Contract tests for tools/tool_broker.py."""
+
+    def test_policy_engine_returns_dict_with_decision(self):
+        """Policy.decide() must return a dict with 'allow' (bool) and 'reason' (str)."""
+        import tool_broker
+        pol = tool_broker.Policy(level="read-only")
+        result = pol.decide({"op": "read", "path": "src/a.ts"})
+        assert isinstance(result, dict)
+        assert "allow" in result and isinstance(result["allow"], bool)
+        assert "reason" in result and isinstance(result["reason"], str)
+
+    def test_policy_engine_read_always_allowed(self):
+        """read-only level must allow read operations within the repo."""
+        import tool_broker
+        pol = tool_broker.Policy(level="read-only")
+        result = pol.decide({"op": "read", "path": "src/a.ts"})
+        assert result["allow"] is True
+
+    def test_policy_engine_write_respects_level(self):
+        """read-only level must deny write; controlled-write must allow it within scope."""
+        import tool_broker
+        pol_ro = tool_broker.Policy(level="read-only")
+        assert pol_ro.decide({"op": "write", "path": "src/a.ts"})["allow"] is False
+
+        pol_cw = tool_broker.Policy(level="controlled-write", write_scope=["src/"])
+        assert pol_cw.decide({"op": "write", "path": "src/a.ts"})["allow"] is True
+        assert pol_cw.decide({"op": "write", "path": "config/x.yaml"})["allow"] is False
+
+    def test_execute_denied_has_no_side_effects(self, child_root):
+        """execute() on a denied action must NOT create files or run commands."""
+        import tool_broker
+        pol = tool_broker.Policy(level="read-only")
+        target = child_root / "src" / "should_not_exist.ts"
+        result = tool_broker.execute(
+            {"op": "write", "path": "src/should_not_exist.ts", "content": "bad"},
+            child_root, pol,
+        )
+        assert result["allowed"] is False
+        assert result["ok"] is False
+        assert not target.exists()
+
+    def test_scrub_env_removes_secrets(self, monkeypatch):
+        """scrub_env() must strip unknown env vars (allowlist-based)."""
+        import tool_broker
+        fake_env = {
+            "PATH": "/usr/bin",
+            "HOME": "/home/user",
+            "OPENAI_API_KEY": "sk-secret",
+            "DATABASE_URL": "postgres://secret",
+            "LC_ALL": "en_US.UTF-8",
+        }
+        scrubbed = tool_broker.scrub_env(env=fake_env)
+        assert "PATH" in scrubbed
+        assert "HOME" in scrubbed
+        assert "LC_ALL" in scrubbed  # LC_ prefix allowed
+        assert "OPENAI_API_KEY" not in scrubbed
+        assert "DATABASE_URL" not in scrubbed
+
+    def test_block_push_blocks_writes(self):
+        """block_push=True must deny git push commands."""
+        import tool_broker
+        pol = tool_broker.Policy(level="execution", block_push=True)
+        result = pol.decide({"op": "git", "command": "git push origin main"})
+        assert result["allow"] is False
+        assert "block_push" in result["reason"] or "git push" in result["reason"].lower()
+
+    def test_execute_returns_evidence_dict(self, child_root):
+        """execute() must always return a dict with op, allowed, reason keys."""
+        import tool_broker
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"])
+        (child_root / "src").mkdir(exist_ok=True)
+        (child_root / "src" / "test.txt").write_text("hello")
+        # Init git so _revision works
+        import subprocess
+        subprocess.run(["git", "init", "-q"], cwd=str(child_root), capture_output=True)
+        subprocess.run(["git", "config", "user.email", "t@t"], cwd=str(child_root), capture_output=True)
+        subprocess.run(["git", "config", "user.name", "t"], cwd=str(child_root), capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=str(child_root), capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=str(child_root), capture_output=True)
+
+        result = tool_broker.execute({"op": "read", "path": "src/test.txt"}, child_root, pol)
+        assert isinstance(result, dict)
+        assert "op" in result
+        assert "allowed" in result
+        assert "reason" in result
 
 
 class TestGateExecutorContracts:
-    """Contract tests for tools/gate_executor.py — skipped until interface verified."""
-    # TODO: Verify gate_executor interface and add contract tests
-    pass
+    """Contract tests for tools/gate_executor.py."""
+
+    def test_evaluate_gate_returns_required_keys(self):
+        """evaluate_gate() must return a dict with schema_version, gate, status, blocking, etc."""
+        import gate_executor
+        gates = gate_executor.load_gates()
+        gate_id = "intake_completeness"
+        gate = gates[gate_id]
+        result = gate_executor.evaluate_gate(gate_id, gate, {})
+        required_keys = {"schema_version", "gate", "status", "blocking", "checks",
+                         "blockers", "warnings", "evidence", "owner", "review_mode"}
+        for key in required_keys:
+            assert key in result, f"Missing key '{key}' in evaluate_gate result"
+        assert result["status"] in ("pass", "warn", "fail")
+
+    def test_deterministic_gate_pass_on_valid_input(self):
+        """A deterministic gate with passing evidence must return status=pass."""
+        import gate_executor
+        gates = gate_executor.load_gates()
+        gate_id = "intake_completeness"
+        gate = gates[gate_id]
+        required = gate.get("required_evidence", []) or []
+        evidence = {gate_id: {"status": "pass", "provided": list(required),
+                              "checks": [{"id": r, "status": "pass"} for r in required],
+                              "evidence": ["test"], "warnings": [], "blockers": []}}
+        result = gate_executor.evaluate_gate(gate_id, gate, evidence)
+        assert result["status"] == "pass"
+
+    def test_deterministic_gate_fail_on_invalid_input(self):
+        """A blocking gate without evidence must fail (fail-closed)."""
+        import gate_executor
+        gates = gate_executor.load_gates()
+        # Find a blocking gate
+        blocking_gate_id = None
+        for gid, g in gates.items():
+            if g.get("blocking"):
+                blocking_gate_id = gid
+                break
+        assert blocking_gate_id is not None, "No blocking gate found for test"
+        gate = gates[blocking_gate_id]
+        # No evidence -> fail-closed for blocking gate
+        result = gate_executor.evaluate_gate(blocking_gate_id, gate, {})
+        assert result["status"] == "fail"
+        assert len(result["blockers"]) > 0
+
+    def test_load_gates_returns_dict(self):
+        """load_gates() must return a non-empty dict of gate definitions."""
+        import gate_executor
+        gates = gate_executor.load_gates()
+        assert isinstance(gates, dict)
+        assert len(gates) > 0
+        # Each gate must have at least an id-like key
+        for gid, g in gates.items():
+            assert isinstance(g, dict), f"Gate '{gid}' is not a dict"
+
+    def test_collect_evidence_returns_dict(self, tmp_path):
+        """collect_evidence() must return a dict (even if empty for missing artifacts)."""
+        import gate_executor
+        result = gate_executor.collect_evidence("QUICK", tmp_path)
+        assert isinstance(result, dict)
+
+    def test_classify_returns_valid_kind(self):
+        """classify() must return one of the known gate kinds."""
+        import gate_executor
+        gates = gate_executor.load_gates()
+        valid_kinds = {"human-approval", "deterministic", "ai-review", "writer-check"}
+        for gid, g in gates.items():
+            kind = gate_executor.classify(g)
+            assert kind in valid_kinds, f"Gate '{gid}' has unknown kind '{kind}'"
+
+    def test_validate_evidence_accepts_valid(self):
+        """validate_evidence() must return no errors for well-formed evidence."""
+        import gate_executor
+        evidence = {
+            "some_gate": {
+                "status": "pass",
+                "provided": ["key1"],
+                "checks": [{"id": "c1", "status": "pass"}],
+                "evidence": ["artifact.md"],
+                "warnings": [],
+                "blockers": [],
+            }
+        }
+        errors = gate_executor.validate_evidence(evidence)
+        assert errors == []
 
 
 class TestPreflightContracts:
-    """Contract tests for tools/preflight.py — skipped until interface verified."""
-    # TODO: Verify preflight interface and add contract tests
-    pass
+    """Contract tests for tools/preflight.py."""
+
+    def test_assess_returns_required_keys(self, child_root):
+        """assess() must return a dict with schema_version, kind, ok, blocked, checks, reasons."""
+        import preflight
+        result = preflight.assess(
+            {"task_type": "QUICK"}, child_root, "w",
+            payload={"text": "test"},
+            spec_cov={"spec_artifact": False, "blocking_missing": []},
+            work_pkg={"should_decompose": False},
+        )
+        required_keys = {"schema_version", "kind", "ok", "blocked", "checks", "reasons", "task_type"}
+        for key in required_keys:
+            assert key in result, f"Missing key '{key}' in assess() result"
+        assert result["kind"] == "PreflightTruth"
+        assert isinstance(result["ok"], bool)
+        assert isinstance(result["blocked"], bool)
+
+    def test_assess_blocked_implies_reasons(self, child_root):
+        """When blocked=True, reasons must be non-empty."""
+        import preflight
+        # Incomplete spec -> blocked
+        result = preflight.assess(
+            {"task_type": "QUICK"}, child_root, "w",
+            payload={"text": "test"},
+            spec_cov={"spec_artifact": True, "blocking_missing": ["goal", "scope"]},
+            work_pkg={"should_decompose": False},
+        )
+        assert result["blocked"] is True
+        assert len(result["reasons"]) > 0
+        assert any("spec-first" in r for r in result["reasons"])
+
+    def test_assess_quick_without_spec_not_blocked(self, child_root):
+        """QUICK task without spec must NOT be blocked (spec is light for QUICK)."""
+        import preflight
+        result = preflight.assess(
+            {"task_type": "QUICK"}, child_root, "w",
+            payload={"text": "test"},
+            spec_cov={"spec_artifact": False, "blocking_missing": []},
+            work_pkg={"should_decompose": False},
+        )
+        assert result["blocked"] is False
+        assert result["checks"]["spec"]["ok"] is True
+
+    def test_assess_engineering_without_spec_blocked(self, child_root):
+        """ENGINEERING (heavy) without spec and without --author must be blocked."""
+        import preflight
+        result = preflight.assess(
+            {"task_type": "ENGINEERING"}, child_root, "w",
+            payload={"text": "test"},
+            spec_cov={"spec_artifact": False, "blocking_missing": []},
+            work_pkg={"should_decompose": False},
+        )
+        assert result["blocked"] is True
+        assert any("spec-first" in r for r in result["reasons"])
+
+    def test_assess_reevaluate_skips_build_preconditions(self, child_root):
+        """reevaluate_only=True must skip spec-first/atomic build preconditions."""
+        import preflight
+        result = preflight.assess(
+            {"task_type": "ENGINEERING"}, child_root, "w",
+            payload={"text": "test"},
+            spec_cov={"spec_artifact": False, "blocking_missing": []},
+            work_pkg={"should_decompose": False},
+            reevaluate_only=True,
+        )
+        # spec check should be marked as skipped
+        assert result["checks"]["spec"].get("skipped_reevaluate") is True
+        # No spec-first reason in reasons
+        assert not any("spec-first" in r for r in result["reasons"])
+
+    def test_assess_context_overflow_blocked(self, child_root):
+        """Context budget overflow must block before execution."""
+        import preflight
+        result = preflight.assess(
+            {"task_type": "ENGINEERING"}, child_root, "w",
+            payload={"text": "test"},
+            spec_cov={"spec_artifact": False, "blocking_missing": []},
+            work_pkg={"should_decompose": False},
+            bundle={"overflow": True},
+        )
+        assert result["blocked"] is True
+        assert any("context-budget" in r for r in result["reasons"])
 
 
 class TestExecutionPipelineContracts:
