@@ -1,64 +1,33 @@
-# EV-672: ratchet — конкурентный анализ (in-session gate mechanism)
-# RR-013, created 2026-08-05, status: verified
 schema_version: 1
 kind: research.evidence
 id: EV-672
-request: RR-013
+request_id: RR-013
+statement: >
+  ratchet (0xwilliamortiz, MIT, создан 2026-07-31, 431★) — механизм in-session gate,
+  которого у кита нет. Хук PostToolUse срабатывает после каждого действия агента (Edit,
+  MultiEdit, Write), анализирует diff, измеряет метрики (строки, файлы, зависимости,
+  дубликаты символов, stdlib vs самописное, wrapper, yagni) и возвращает вердикт в сессию.
+  Вердикты: certain (точный парсинг, блокировка в strict), likely (структурный анализ),
+  heuristic (regex). Детекторы: dep, exists, stdlib, native, wrapper, yagni, validation,
+  budget. Не конкурент киту, а дополнение: замыкание петли на соблюдение правил в момент
+  правки, а не на ревью.
+evidence_type: documented_fact
 source:
-  type: github-repository
+  title: "0xwilliamortiz/ratchet — GitHub repository"
   url: "https://github.com/0xwilliamortiz/ratchet"
-  accessed: "2026-08-05"
-  reliability: high  # code verified via web_fetch 2026-08-05
+  type: source_repository
+  published_at: "2026-07-31"
+  is_primary: true
+citation:
+  locator: "hooks/, commands/, AGENTS.md"
+  quote: "Your agent reads the rules. This checks whether it followed them"
 captured_at: "2026-08-05"
-expires_at: "2026-11-05"
-facts:
-  - claim: "создан 2026-07-31, push 2026-08-04, MIT, 431 звезда, Node>=20, 115 тестов"
-    evidence_type: repository-metadata
-    verified: true
-  - claim: "тезис: 'Your agent reads the rules. This checks whether it followed them'"
-    evidence_type: readme-quote
-    verified: true
-  - claim: "Механика: хук PostToolUse срабатывает после каждого действия агента (Edit, MultiEdit, Write); анализирует diff, измеряет метрики, проверяет правила; вердикты возвращаются в сессию"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Измеряется: строки кода (net added), файлы (новые), зависимости (новые пакеты из манифестов), символы/код (дубликаты, stdlib, native, wrapper, yagni, validation)"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Вердикты: certain (точный парсинг, блокировка в strict), likely (структурный анализ), heuristic (regex)"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Детекторы: dep (зависимости), exists (дубликаты символов), stdlib (самописные vs stdlib), native (платформенные возможности), wrapper (обёртки без логики), yagni (интерфейсы с одной реализацией), validation (regex), budget (лимиты)"
-    evidence_type: code-analysis
-    verified: true
-  - claim: "Структура: .claude-plugin, .ratchet (mark.json, ledger.jsonl), bin, commands, hooks (PostToolUse + ratchetui.exe), scripts, skills"
-    evidence_type: repository-metadata
-    verified: true
-analysis:
-  overlap_with_kit:
-    - "детерминированная проверка соблюдения правил (аналог quality gates)"
-    - "измерение правок (строки, файлы, зависимости)"
-  differences_from_kit:
-    - "in-session gate (момент правки) vs phase-boundary gate (граница стадии)"
-    - "PostToolUse hook vs quality/gates.yaml validators"
-    - "нет gate-результатов в machine-readable виде (только вердикты в сессии)"
-    - "нет привязки к SHA"
-    - "нет delivery lifecycle"
-    - "нет реестров"
-  license: MIT  # permissive, заимствование возможно с attribution
-  threat_level: low  # не конкурент, а механизм, которого у кита нет
-  unique_value: "замыкание петли на соблюдение правил в момент правки, а не на ревью"
-  gap_in_kit: "у кита проверка привязана к фазам и валидаторам (quality/gates.yaml), то есть срабатывает на границе стадии, а не в момент правки"
-  potential_adoption: "PostToolUse hook как дополнительный класс гейтов для минимализма/YAGNI в момент правки"
-open_questions:
-  - "✅ Закрывает ли in-session gate реальный разрыв в наших гейтах? — ДА: гейты кита срабатывают на границе стадии, ratchet — в момент правки"
-  - "✅ Стоит ли киту in-session gate как отдельный класс? — ДА: для минимализма/YAGNI; не заменяет phase-boundary, а дополняет"
-  - "✅ Что он ломает в stale_detection/bind_to? — НЕ ломает: in-session gate не привязан к SHA, работает в рамках сессии"
-  - "✅ Можно ли комбинировать: in-session для минимализма, phase-boundary для архитектуры? — ДА: ортогональные классы"
-  - "✅ Формулировка 'every minimalism ruleset for coding agents is an open loop' — прямой аргумент против постфактум-гейтов? — ДА: валидный аргумент для дополнения, не замены"
-next_steps:
-  - "Оценить применимость PostToolUse hook к киту"
-  - "Спроектировать in-session gate как дополнительный класс в quality/gates.yaml"
-  - "Решить: заимствовать механизм, адаптировать, или отложить"
-  - "Проверить совместимость с Claude Code hooks API"
-supersedes: null
-related: [EV-660]
+captured_by: "web_fetch verification → RR-013"
+freshness:
+  volatile: true
+  expires_at: "2026-11-05"
+reliability:
+  level: high
+  rationale: "Код верифицирован через web_fetch 2026-08-05. PostToolUse hook, детекторы и вердикты подтверждены анализом структуры репозитория."
+status: active
+superseded_by: null

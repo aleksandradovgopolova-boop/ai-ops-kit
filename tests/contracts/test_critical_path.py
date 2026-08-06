@@ -17,6 +17,12 @@ from pathlib import Path
 
 import pytest
 
+# Эти contract-тесты — критический путь исполнения. pr-smoke.yml гоняет слой через
+# `pytest tests/contracts/ -m critical_path`; без маркера здесь smoke собирал файлы и
+# отбрасывал ВСЕ (0 selected -> pytest exit 5). Маркер критического пути conftest вешает
+# только на авто-обёртки selftest'ов (уровень tests/), сюда он не долетает — проставляем явно.
+pytestmark = [pytest.mark.critical_path, pytest.mark.contract]
+
 
 class TestOrchestratorContracts:
     """Contract tests for tools/orchestrator.py."""
@@ -109,6 +115,65 @@ class TestOrchestratorContracts:
         # Contract: retried until success
         assert result == "ok"
         assert len(attempts) == 3
+
+    def test_claude_cli_retry_on_transient_is_error(self, monkeypatch):
+        """F-011 positive: rc==0, но синтетический is_error:true (напр. 529 Overloaded) — это транзиент.
+        Механизм ДОЛЖЕН переждать (ретрай) и вернуть валидный результат, а не отдать ошибку за ответ."""
+        import orchestrator
+        monkeypatch.setattr("time.sleep", lambda *a, **k: None)   # без реальных пауз
+
+        class FakeResult:
+            def __init__(self, stdout="", returncode=0, stderr=""):
+                self.stdout = stdout; self.returncode = returncode; self.stderr = stderr
+
+        env529 = json.dumps({"is_error": True, "stop_reason": "stop_sequence", "usage": {"input_tokens": 0},
+                             "content": [{"type": "text",
+                                          "text": "API Error: 529 Overloaded. This is a server-side issue, usually temporary."}]})
+        ok = json.dumps({"result": "DONE", "usage": {"input_tokens": 3, "output_tokens": 1}})
+        seq = [FakeResult(env529, 0), FakeResult(env529, 0), FakeResult(ok, 0)]
+        calls = []
+        def runner(cmd):
+            calls.append(1); return seq[len(calls) - 1]
+
+        provider = orchestrator.make_claude_cli_provider(runner=runner)
+        result = provider("test")
+        assert result == "DONE"       # пережил транзиент и вернул валидный результат
+        assert len(calls) == 3        # side-effect: ретрай ДЕЙСТВИТЕЛЬНО произошёл (3 вызова)
+
+    def test_claude_cli_is_error_not_passed_as_result(self, monkeypatch):
+        """F-011 fail-closed: синтетический is_error:true НЕ должен стать зелёным результатом.
+        Нетранзиентная ошибка (напр. auth) поднимается RuntimeError, а не возвращается как валидный ответ."""
+        import orchestrator
+        monkeypatch.setattr("time.sleep", lambda *a, **k: None)
+
+        class FakeResult:
+            def __init__(self, stdout="", returncode=0, stderr=""):
+                self.stdout = stdout; self.returncode = returncode; self.stderr = stderr
+
+        bad = json.dumps({"is_error": True,
+                          "content": [{"type": "text", "text": "Invalid API key: authentication_error"}]})
+        provider = orchestrator.make_claude_cli_provider(runner=lambda cmd: FakeResult(bad, 0))
+        with pytest.raises(RuntimeError) as ei:
+            provider("test")
+        assert "authentication_error" in str(ei.value)   # причина донесена, не проглочена как результат
+
+    def test_claude_cli_error_not_truncated(self, monkeypatch):
+        """F-011a: полный человекочитаемый текст ошибки claude сохраняется (парсинг content[].text),
+        а не режется до 200 символов — иначе диагностика сбоя провайдера теряется ровно там, где нужна."""
+        import orchestrator
+        monkeypatch.setattr("time.sleep", lambda *a, **k: None)
+
+        class FakeResult:
+            def __init__(self, stdout="", returncode=0, stderr=""):
+                self.stdout = stdout; self.returncode = returncode; self.stderr = stderr
+
+        long_msg = "OVERLOADED " * 40   # > 200 символов
+        payload = json.dumps({"error": "server_error", "content": [{"type": "text", "text": long_msg}]})
+        provider = orchestrator.make_claude_cli_provider(runner=lambda cmd: FakeResult(payload, 1))
+        with pytest.raises(RuntimeError) as ei:
+            provider("test")
+        assert len(long_msg) > 200
+        assert long_msg.strip() in str(ei.value)   # текст сохранён целиком (не обрезан до 200)
 
     def test_claude_cli_read_only_tools(self):
         """Claude CLI must be restricted to read-only tools."""

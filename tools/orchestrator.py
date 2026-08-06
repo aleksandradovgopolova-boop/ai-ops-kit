@@ -237,7 +237,7 @@ def make_provider(name: str, model: str = None):
                      f"(есть: mock, anthropic, openai, openai-compatible, claude-cli)")
 
 
-def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
+def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
 
@@ -253,7 +253,14 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
     ИЗМЕРЯЮТСЯ и пишутся в _record_call (provider=claude-cli). Claude CLI usage больше НЕ исчезает.
 
     runner инъектируется (офлайн-selftest без вызова CLI); заменяет subprocess.run, а не весь вызов —
-    production-path (time.monotonic, json parse, _record_call, retries) проходит полностью. Ключ не требуется."""
+    production-path (time.monotonic, json parse, _record_call, retries) проходит полностью. Ключ не требуется.
+
+    Устойчивость к транзиентам (находка F-011, Real-Product Qualification): транзиентные сбои API
+    (5xx/429/**529 Overloaded**, сетевые, subprocess-timeout) ретраятся с экспоненциальным backoff+jitter,
+    а не после 3 фиксированных пауз — один невосстановленный 529 больше не роняет весь многошаговый прогон.
+    Синтетический конверт claude `is_error:true` на rc==0 (напр. 529: `input_tokens:0, stop_reason:stop_sequence`)
+    распознаётся и НЕ выдаётся за валидный результат. Полный человекочитаемый текст ошибки сохраняется
+    (парсинг `content[].text`/`error`), а не режется до 200 символов (F-011a — обрезка прятала «529 Overloaded»)."""
     cmd = ["claude", "-p", prompt, "--output-format", "json",
            "--allowedTools", "Read", "Grep", "Glob"]
     if model:
@@ -261,26 +268,65 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600):
     import subprocess
     import json as _json
     import time
+    import random
     # runner заменяет subprocess.run (не весь вызов) — production-path проходит в selftest
     _run = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
+
+    def _human_error(text):
+        # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
+        try:
+            d = _json.loads(text)
+        except Exception:
+            return (text or "").strip()[:2000]
+        parts = []
+        if d.get("error"):
+            parts.append(str(d.get("error")))
+        msg = d.get("message") if isinstance(d.get("message"), dict) else None
+        for blk in ((msg.get("content") if msg else None) or d.get("content") or []):
+            if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
+                parts.append(blk["text"])
+        return (" | ".join(parts) or (text or "").strip())[:2000]
+
+    def _transient(text):
+        t = (text or "").lower()
+        return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
+                                    "500", "502", "503", "504", "internal server error",
+                                    "temporarily", "server_error", "timeout", "timed out", "connection"))
+
+    def _backoff(n):
+        time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
+
     last = ""
-    for _attempt in range(3):   # транзиентный rc!=0 (сеть/оверлоад локальной сессии) -> ретрай, не крах прогона
+    for _attempt in range(max_attempts):
         _t0 = time.monotonic()
-        r = _run(cmd)
+        try:
+            r = _run(cmd)
+        except subprocess.TimeoutExpired:   # обычно слишком большой промпт (весь транскрипт одним argv, см. F-011)
+            last = "claude -p: таймаут subprocess (%ss) — вероятно слишком большой промпт" % timeout
+            if _attempt + 1 >= max_attempts:
+                break
+            _backoff(_attempt); continue
         if r.returncode == 0:
             try:
                 d = _json.loads(r.stdout)
-                u = d.get("usage") or {}
-                _record_call(d.get("model") or model or "claude-code-local",
-                             u.get("input_tokens"), u.get("output_tokens"), time.monotonic() - _t0,
-                             provider="claude-cli", cost=d.get("total_cost_usd"))
-                return d.get("result") or ""
             except Exception:   # json не распарсился -> usage unavailable (НЕ теряем факт вызова)
                 _record_call(model or "claude-code-local", None, None, time.monotonic() - _t0, provider="claude-cli")
                 return r.stdout
-        last = (r.stderr or r.stdout or "")[:200]
-        time.sleep(3 * (_attempt + 1))
-    raise RuntimeError("claude -p rc!=0 после 3 попыток: %s" % last)
+            if d.get("is_error"):   # синтетический конверт claude (rc=0!), напр. 529 Overloaded — НЕ валидный результат
+                last = _human_error(r.stdout)
+                if _transient(last) and _attempt + 1 < max_attempts:
+                    _backoff(_attempt); continue
+                raise RuntimeError("claude -p вернул is_error (rc=0): %s" % last)
+            u = d.get("usage") or {}
+            _record_call(d.get("model") or model or "claude-code-local",
+                         u.get("input_tokens"), u.get("output_tokens"), time.monotonic() - _t0,
+                         provider="claude-cli", cost=d.get("total_cost_usd"))
+            return d.get("result") or ""
+        last = _human_error(r.stderr or r.stdout or "")   # rc!=0 (сеть/5xx/оверлоад) -> ретрай с backoff
+        if _attempt + 1 >= max_attempts:
+            break
+        _backoff(_attempt)
+    raise RuntimeError("claude -p не удался после %d попыток: %s" % (max_attempts, last))
 
 
 def make_claude_cli_provider(model=None, runner=None):

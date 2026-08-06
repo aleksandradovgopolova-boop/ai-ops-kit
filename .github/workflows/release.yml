@@ -1,6 +1,7 @@
-# release.yml — автоматический выпуск: успешный package-quality на main с изменением VERSION
+# release.yml — автоматический выпуск: успешный package-quality на main
 # создаёт тег vX.Y.Z и GitHub Release с текстом из соответствующего раздела CHANGELOG.
 # v3.27.6: stable Release создаётся ТОЛЬКО после успешного package-quality на том же SHA.
+# Проверка: package-quality успешен AND VERSION содержит версию AND тег ещё отсутствует.
 # Идемпотентен: если тег/Release уже существуют — шаг спокойно завершается.
 name: release
 on:
@@ -13,33 +14,36 @@ permissions:
   contents: write
 jobs:
   release:
-    # Запускается только если package-quality завершился успешно И в push был изменён VERSION
+    # Запускается только если package-quality завершился успешно
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Проверить, что VERSION был изменён в этом push
-        id: check_version
-        run: |
-          # Проверяем, был ли VERSION изменён в последнем коммите
-          if git diff HEAD~1 HEAD --name-only | grep -q "^VERSION$"; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "VERSION не был изменён в этом push — пропуск release"
-          fi
-      - name: Создать тег и Release из CHANGELOG
-        if: steps.check_version.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Проверить, нужен ли release
+        id: check_release
         run: |
           VERSION=$(tr -d '[:space:]' < VERSION)
           TAG="v$VERSION"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG уже существует — пропуск."; exit 0
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Проверяем, существует ли уже тег
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "needed=false" >> $GITHUB_OUTPUT
+            echo "Тег $TAG уже существует — пропуск release"
+          else
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "Тег $TAG отсутствует — release нужен"
           fi
+      - name: Создать тег и Release из CHANGELOG
+        if: steps.check_release.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.check_release.outputs.version }}"
+          TAG="${{ steps.check_release.outputs.tag }}"
           # Раздел CHANGELOG для этой версии (от '## [X.Y.Z]' до следующего '## ')
           awk -v ver="$VERSION" '
             $0 ~ "^## \\[" ver "\\]" {on=1}
