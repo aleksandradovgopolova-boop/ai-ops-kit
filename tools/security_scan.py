@@ -178,6 +178,26 @@ def security_evidence(secrets, injections, new_deps):
     return ev
 
 
+# v3.27.7: артефакты сборки/кэши (__pycache__/.pyc, .pytest_cache, node_modules, dist, ...) — НЕ исходники.
+# security-скан не должен их читать: бинарный .pyc, прочитанный как текст (errors="ignore"), даёт мусор,
+# который ложно совпадает с доменными regex'ами (напр. input_validation по байтам .pyc) -> ложный
+# security-домен -> ложный блок security-гейта. Флаки по ОС/версии Python: в fix-loop selftest
+# воспроизводилось на Linux/py3.12 (где __pycache__ попадал в diff коммита) и НЕ на macOS. Тот же класс
+# исключений, что в execution_pipeline (cleanliness). Плюс страховка: файл с NUL-байтами не сканируем.
+_ARTIFACT_RE = re.compile(
+    r"(?:^|/)(?:__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|\.tox|\.nox|\.hypothesis|"
+    r"node_modules|dist|build|out|coverage|\.next|\.nuxt|\.svelte-kit|\.turbo|target|\.venv|venv)(?:/|$)"
+    r"|\.(?:pyc|pyo|class|o|so|dll|dylib)$|\.egg-info(?:/|$)")
+
+
+def _is_artifact(rel: str) -> bool:
+    return bool(_ARTIFACT_RE.search(rel))
+
+
+def _looks_binary(data: bytes) -> bool:
+    return b"\x00" in data[:8192]
+
+
 def _git_changed_files(root, base):
     r = subprocess.run(["git", "-C", str(root), "diff", "--name-only", f"{base}..HEAD"],
                        capture_output=True, text=True)
@@ -189,12 +209,17 @@ def _git_changed_files(root, base):
 def _read_files(root, rels):
     out = {}
     for rel in rels:
+        if _is_artifact(rel):
+            continue                                   # артефакт/байткод — не исходник, не сканируем
         p = Path(root) / rel
         if p.is_file():
             try:
-                out[rel] = p.read_text(encoding="utf-8", errors="ignore")
+                raw = p.read_bytes()
             except OSError:
-                pass
+                continue
+            if _looks_binary(raw):
+                continue                               # бинарь -> текстовый скан дал бы мусор/ложные матчи
+            out[rel] = raw.decode("utf-8", errors="ignore")
     return out
 
 

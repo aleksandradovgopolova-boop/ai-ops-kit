@@ -1971,6 +1971,11 @@ def selftest():
         root = Path(td)
         for _a in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t")):
             subprocess.run(["git", "-C", td, *_a], capture_output=True)
+        # v3.27.7: реальные репо гитигнорят байткод. Без .gitignore прогон pytest в fix-loop создаёт
+        # __pycache__/*.pyc, которые засоряют git-дерево worktree -> prepare_mutated_tree=True ->
+        # overall_status=error -> ready_for_pr=False (флаки: на Linux/CI __pycache__ попадал в учёт,
+        # на macOS — нет; тот же .pyc ломал и security-домены). Фикстура теперь как настоящий репо.
+        (root / ".gitignore").write_text("__pycache__/\n*.pyc\n.pytest_cache/\n", encoding="utf-8")
         (root / "m.py").write_text("def base():\n    return 1\n", encoding="utf-8")
         (root / "test_base.py").write_text("from m import base\n\ndef test_base():\n    assert base() == 1\n",
                                            encoding="utf-8")
