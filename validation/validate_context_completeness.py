@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """validate_context_completeness.py (v3.12.0 Startup Context Budget) — проверка ПОЛНОТЫ контекста
 репозитория: объявленные обязательными документы (session_orchestration.living_status.required_context_docs)
 должны присутствовать в project/custom-оверлее репозитория, а не только в managed-наборе кита.
@@ -15,7 +16,6 @@ Advisory: rc 0 (пробел — сигнал, не блок), 1 — при --st
 Использование:  validate_context_completeness.py <child_root> [--strict] [--json]
                 validate_context_completeness.py --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

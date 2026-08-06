@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """gate_policy.py (v3.1.6) — риск-калиброванная UI-gate applicability + SHADOW-политика.
 
 Находка Phase B (см. bench_lite): reviewer-false-fail сконцентрирован в 4 UI-review-гейтах,
@@ -24,7 +25,6 @@ SHADOW-режим: движок продолжает решать по current_p
 
 Только stdlib. selftest не требует сети/тулчейна.
 """
-from __future__ import annotations
 
 import argparse
 import json

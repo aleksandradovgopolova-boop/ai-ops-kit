@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка machine-readable реестра AI-first системы (registry/ + manifest/).
 
 Ловит то, что реально ломается при ручных правках реестра/манифеста:

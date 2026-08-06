@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """promotion_qual.py (v3.6.8 harness) — драйвер живой квалификации PromotionQualificationPlan.
 
 Не фейкает живые прогоны. Делает то, что МОЖНО честно сделать до провайдер-ключа:
@@ -19,7 +20,6 @@ CLI:
   promotion_qual.py --runbook [plan]            # команды прогонов (dry, без исполнения)
   promotion_qual.py --selftest
 """
-from __future__ import annotations
 
 import json
 import os

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка FeatureLearning (product-learning/*.yaml) — v3.3 Product Learning.
 
 FeatureLearning (schemas/feature-learning.schema.json) — мост research-решение (DecisionPackage) ->

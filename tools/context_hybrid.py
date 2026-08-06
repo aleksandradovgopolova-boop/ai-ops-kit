@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """context_hybrid.py (v3.7.0) — hybrid-контекст: mandatory v1 + разрешённые v2-additions.
 
 Промежуточная ступень promotion Context Engine (shadow -> HYBRID -> default). Hybrid НЕ заменяет v1:
@@ -15,7 +16,6 @@ Context Engine v2 — и ТОЛЬКО если `context_promotion_gate` подт
 Сам feeding hybrid-контекста модели — за флагом в runtime (живой шаг v3.7). Здесь — детерминированная
 СБОРКА + guard (offline, проверяемо). Только stdlib.  CLI: context_hybrid.py --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path

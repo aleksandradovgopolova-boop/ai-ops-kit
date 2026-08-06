@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate standalone engine (v2.82 Standalone Child).
 
 Аудит v2.79 (P0.3 / standalone): движок раньше жил только в клоне кита — child не мог

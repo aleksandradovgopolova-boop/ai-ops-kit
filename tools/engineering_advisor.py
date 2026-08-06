@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """engineering_advisor.py (v3.23 Engineering Advisor) — слой «как лучше сделать», а не очередной
 набор проверок. Композиция из существующих модулей: environment_map, deploy_readiness,
 project_detector, commit_policy, branch_policy, economic_preflight.
@@ -15,7 +16,6 @@ Advise, не block — рекомендации, а не требования.
 CLI:  engineering_advisor.py <child_root> [--task-type TYPE] [--json]
       engineering_advisor.py --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

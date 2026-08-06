@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка ContextArchitectureDecision (CAD) — v3.3.2 Operational Architecture Backbone.
 
 CAD (schemas/context-architecture-decision.schema.json) — контракт retrieval-архитектуры контекста

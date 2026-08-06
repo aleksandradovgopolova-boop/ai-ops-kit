@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Детектор «протухших» (stale) gate-результатов.
 
 Gate-результат (*.gate.json, schemas/gate-result.schema.json) привязан к состоянию:

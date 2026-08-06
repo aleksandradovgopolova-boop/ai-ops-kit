@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate ContextBundle (v2.97, эпик Context Engineering, этап 1 — Context Compiler).
 
 Стережёт инварианты пакета контекста (structure + честность отбора):

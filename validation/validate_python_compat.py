@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Python-совместимость: PEP 604 union-аннотации без future-import ломают <3.10 (v2.69).
 
 finding квалификационного прогона (self-audit): tools/generate_artifacts.py использовал

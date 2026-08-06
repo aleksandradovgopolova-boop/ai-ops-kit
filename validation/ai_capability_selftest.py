@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Capability self-test AI-first системы (Фаза 6).
 
 Механизм: configured capability -> documentation evidence -> smoke test -> verified + timestamp.

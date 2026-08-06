@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Intent-based UX поверх движка (v2.102, эпик Context Engineering, этап 6).
 
 Снаружи AI Ops должен быть проще внутренней архитектуры. Обычный сценарий управляется намерениями,

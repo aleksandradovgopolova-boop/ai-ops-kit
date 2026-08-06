@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """gate_runtime.py (v3.6.5) — GateResult v2 runtime decision-слой.
 
 Доводит GateResult v2 (schemas/gate-result-v2.schema.json, контракт с v3.1.8) до РАБОЧЕЙ логики
@@ -18,7 +19,6 @@ Offline, детерминирован. Не трогает боевой _run_rev
 
 CLI: gate_runtime.py --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

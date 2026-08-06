@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """cost_account.py (v3.4.4) — сверка расхода (Trace v0.2 run_cost) с BudgetContract по scope.
 
 Замыкает экономику v3.4: BudgetContract объявляет границы (v3.4.0), run_cost (Trace v0.2) их меряет —

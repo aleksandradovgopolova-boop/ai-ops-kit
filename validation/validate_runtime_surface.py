@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """validate_runtime_surface.py (v3.14.0 Startup Context Budget, срез 3) — бюджет стоимости самого кита:
 (1) описание КАЖДОГО поставляемого скилла ≤ 300 символов (описание — это триггеры и границы; подробности
 живут в теле, которое грузится по вызову, а не в стартовом листинге); (2) well-formedness декларации
@@ -12,7 +13,6 @@ Advisory-строгость: rc 1 при нарушении бюджета оп�
 Использование:  validate_runtime_surface.py [skills_dir]     — проверить бюджет описаний
                 validate_runtime_surface.py --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path

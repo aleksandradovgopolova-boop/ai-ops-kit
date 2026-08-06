@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-ops-kit"
+dynamic = ["version"]
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = ["pyyaml"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tools", "validation"]

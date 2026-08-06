@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Execution budget — жёсткий потолок прогона (v2.38, Execution Engine Фаза 2).
 
 RunPlan объявляет execution_budget (max_model_calls / max_cost). Раньше это была только

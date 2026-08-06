@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Adaptive Spec-First -> SpecCoverage (v2.98, эпик Context Engineering, этап 2).
 
 Не требовать полной спецификации для мелкой задачи, но не начинать сложное изменение без достаточного

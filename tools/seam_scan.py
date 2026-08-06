@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """seam_scan.py (v3.7) — детектор «дефекта шва» по дифу (contract-between-layers, тихий отказ).
 
 Класс дефекта (находка владельца): слой A пишет, слой B читает, тесты ОБОИХ зелёные, а контракт между
@@ -24,7 +25,6 @@
 
 Только stdlib. CLI: seam_scan.py <diff-file> [--json] | --selftest   (или diff из stdin: seam_scan.py -)
 """
-from __future__ import annotations
 
 import json
 import re

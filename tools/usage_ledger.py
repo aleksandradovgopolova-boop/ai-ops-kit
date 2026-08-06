@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """usage_ledger.py (v3.10.0 Usage Truth) — ЧЕСТНЫЙ учёт ВСЕХ модельных/runtime-вызовов.
 
 Каждый вызов модели (writer/reviewer/fix-loop/fallback/escalation/parallel-пакеты) пишет UsageRecord.
@@ -18,11 +19,12 @@ Ledger:
 CLI:  usage_ledger.py <child_root> [--workitem <wid>] [--json]   # показать стоимость задачи/продукта
       usage_ledger.py --selftest
 """
-from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
+
+from contracts import UsageRecord  # noqa: E402
 
 FIELDS = ("run_id", "workitem_id", "package_id", "role", "provider", "model", "runtime",
           "input_tokens", "output_tokens", "usage_status", "cost", "cost_status", "latency", "trigger",
@@ -32,7 +34,7 @@ USAGE_STATUS = ("measured", "estimated", "unavailable")
 TRIGGERS = ("initial", "retry", "review", "escalation", "fallback", "reevaluate")
 
 
-def check(rec):
+def check(rec: UsageRecord) -> list[str]:
     """Валидация одной UsageRecord + ЧЕСТНОСТЬ. -> список ошибок."""
     e = []
     if not isinstance(rec, dict):
@@ -62,7 +64,7 @@ def check(rec):
     return e
 
 
-def normalize(rec, run_id=None, workitem_id=None):
+def normalize(rec: dict, run_id: str = None, workitem_id: str = None) -> UsageRecord:
     """Привести сырую запись _record_call к UsageRecord (заполнить недостающие ключи None, влить контекст)."""
     out = {k: rec.get(k) for k in FIELDS}
     if out.get("run_id") is None:

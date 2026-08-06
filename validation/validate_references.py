@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Целостность ссылок внутри пакета (v2.9) — drift-control, наведённый на себя.
 
 Идея из team-os-toolkit (claims/drift): ссылка, которую никто не проверяет,

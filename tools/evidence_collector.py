@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Stack-aware evidence collector (v3.26.0, Execution Engine — детерминированный сбор evidence).
 
 Замыкает Project Detector -> gate. RepositoryProfile (tools/project_detector.py) знает команды

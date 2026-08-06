@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Learning-loop fitness — v3.3.1. Целостность петли research -> learning -> architecture.
 
 FeatureLearning (product-learning/) фиксирует исход и в follow_up ссылается на порождённые артефакты.

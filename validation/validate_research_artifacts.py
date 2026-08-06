@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """validate_research_artifacts.py — валидатор артефактов research-модуля (v0.2).
 
 Проверяет .research/ (живой экземпляр), examples/research-demo/ и examples схем:

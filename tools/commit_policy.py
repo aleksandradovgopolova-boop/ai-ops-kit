@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """commit_policy.py (v3.19.0 Engineering Operating Model, WP1) — CommitContract: что вправе стать
 ОДНИМ коммитом.
 
@@ -30,7 +31,6 @@ CLI:
                    [--task-type ENGINEERING] [--approval AR-1] [--json]
   commit_policy.py --selftest
 """
-from __future__ import annotations
 
 import json
 import re

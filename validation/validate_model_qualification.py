@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate model-qualification registry (ДОКАЗАТЕЛЬНЫЙ допуск model×revision×role, ADR-004).
 
 Ревью: матрица допуска была class×role и вручную вписана — слишком грубо и не из Bench. Здесь допуск
@@ -13,7 +14,6 @@ false_green>0 или низком success). Плюс: model_id есть в model
 
   validate_model_qualification.py [registry/model-qualification.yaml] | --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path

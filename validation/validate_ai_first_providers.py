@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка реестров provider/model/runtime/tool + capability-index + routing-policy (Фаза 6).
 
 Ловит то, что ломается при ручных правках реестров абстракции:

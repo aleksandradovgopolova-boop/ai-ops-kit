@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate SpecCoverage (v2.98, эпик Context Engineering, этап 2 — Adaptive Spec-First).
 
 Стережёт инварианты адаптивной спецификации:

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка реестра ArchitectureDecision (decisions/adr/*.yaml) — v3.2 fitness.
 
 ADR — это governed-набор, а не разрозненные файлы. Поверх поштучной структурной проверки

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate plan artifact (v2.86 Product Authoring).
 
 Гейт `plan_readiness` (ENGINEERING/PRODUCT) требует evidence: work_packages + dependencies +

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """context_shadow.py (v3.6.7) — SHADOW-режим ПОЛНОЙ Context Engine v2 рядом с боевым v1.
 
 Ревью владельца: НЕ заменять старый Context Compiler сразу. Первый режим wiring — v1 (обязательный,
@@ -13,7 +14,6 @@ Shadow НЕ управляет прогоном: чистая наблюдаем
 
 CLI:  context_shadow.py <child_root> --query "..." [--role executor] [--sha SHA] | --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """ApprovalRecord + доменные human_approval_conditions (v2.115 Preflight Truth).
 
 Аудит: human-approval был обычным boolean (`signals.human_approved`), который технически мог передать

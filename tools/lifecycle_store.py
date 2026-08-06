@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Durable lifecycle I/O (v3.0.12, finding аудита блока B) — единый контракт надёжной записи и
 fail-closed чтения КРИТИЧЕСКИХ resume-артефактов (run-settings, run-handoff, active-work, SequencePlan).
 

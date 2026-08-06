@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка установки AI-first системы в child-репозиторий (Фаза 8).
 
 Проверяет живую установку в корне репозитория (первый existing-repo pilot):

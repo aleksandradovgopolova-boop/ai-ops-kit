@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка постуры безопасности (v2.20) — governance/security-posture.yaml.
 
 Постура — машиночитаемая карта по 13 областям безопасности со статусом и evidence.

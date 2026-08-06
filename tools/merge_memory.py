@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """merge→memory flow (v2.25) — обновление долговременной памяти при мердже WorkItem.
 
 Когда работа доведена и смерджена, знание не должно теряться: что изменилось, какие

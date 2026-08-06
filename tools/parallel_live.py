@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """parallel_live.py (v3.8.3-rc2) — LIVE MULTI-PACKAGE execution с governed fan-in. Два пути:
   - run_live (СЕРИЙНО, один репо): execution_concurrency=serial, parallel_safe=true, fan_in=live;
   - run_live_concurrent (НАСТОЯЩАЯ конкурентность): отдельный disposable-клон+ветка+прогон на пакет,
@@ -21,7 +22,6 @@ v3.8.3-rc2 Parallel Trust Wiring (concurrent path):
 
 Только stdlib + существующие модули кита. CLI: parallel_live.py --selftest
 """
-from __future__ import annotations
 
 import fnmatch
 import shutil

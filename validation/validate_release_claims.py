@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Release Truth Alignment (v3.8.1): machine-readable claims о ТЕКУЩЕМ релизе -> CI ловит ДРЕЙФ между
 публичной поверхностью (README/ROADMAP/registry) и фактическим состоянием кода. Инвариант: источники
 правды НЕ отстают от runtime (README v3.0.x при коде 3.8 — это дефект, который должен ловить CI).
@@ -14,7 +15,6 @@
 
   validate_release_claims.py [registry/release-claims.yaml] | --selftest
 """
-from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -26,12 +26,21 @@ DEFAULT = PKG / "registry" / "release-claims.yaml"
 
 
 def derived_counts(pkg=PKG):
-    """Фактические числа из источников (не из claims): (checks_count, agents_count)."""
+    """Фактические числа из источников (не из claims): (checks_count, agents_count).
+    v3.28.0: checks_count считается из docs/agent-guides/pre-commit-checklist.md
+    (AGENTS.md сокращён до карты, полный список команд вынесен в гид)."""
     checks = 0
     try:
-        for ln in (pkg / "AGENTS.md").read_text(encoding="utf-8").splitlines():
-            if ln.strip().startswith("python3 "):
-                checks += 1
+        checklist = pkg / "docs" / "agent-guides" / "pre-commit-checklist.md"
+        if checklist.exists():
+            for ln in checklist.read_text(encoding="utf-8").splitlines():
+                if ln.strip().startswith("python3 "):
+                    checks += 1
+        else:
+            # Fallback: старый AGENTS.md (до v3.28.0)
+            for ln in (pkg / "AGENTS.md").read_text(encoding="utf-8").splitlines():
+                if ln.strip().startswith("python3 "):
+                    checks += 1
     except OSError:
         pass
     agents = 0

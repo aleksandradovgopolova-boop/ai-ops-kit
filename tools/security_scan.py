@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Детерминированный security-scan для гейта security (v2.95, аудит 2.95 — ENGINEERING evidence).
 
 Гейт security требует evidence [no_secrets, no_injection_surface, deps_approved]. Раньше в pipeline

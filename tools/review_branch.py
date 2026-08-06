@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Настоящий read-only review действующей ветки (v2.116, `ai-ops review`).
 
 Аудит: `review` не был настоящим intent — падал в preview; движок реально запускался только для

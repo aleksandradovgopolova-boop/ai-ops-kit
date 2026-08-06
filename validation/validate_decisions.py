@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка реестра решений (v2.10) — Decision Intelligence из team-os-toolkit.
 
 Реестр (decisions/registry.yaml) хранит принципы (способ мышления), эпизоды

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """model_router.py (v3.7.5) — provider-neutral runtime resolver (ADR-004).
 
 Делает провайдер-независимость ИСПОЛНЯЕМОЙ: роль -> КОНКРЕТНАЯ самая дешёвая КВАЛИФИЦИРОВАННАЯ модель
@@ -17,7 +18,6 @@ resolve(role): среди допущенных для роли моделей в
 
 Только stdlib+pyyaml. CLI: model_router.py <role> [--json] | --selftest
 """
-from __future__ import annotations
 
 import json
 import sys

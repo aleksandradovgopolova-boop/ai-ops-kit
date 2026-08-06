@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """RunPlan — план исполнения задачи (v2.32, Execution Engine Фаза 1).
 
 Модель «один workflow» заменяется на base_workflow + tracks. base_workflow (из ai_route)

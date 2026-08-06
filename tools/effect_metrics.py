@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Метрики эффекта по истории прогонов (v2.5) — слой «Метрики эффекта» из внешнего ревью.
 
 Вход: .ai/project/report-history/*.jsonl — срезы run_report --record (по файлу на фичу).

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Проверка ArchitectureDecision (ADR) — v3.2 Architecture, Product & UI Governance.
 
 ADR (schemas/architecture-decision.schema.json) фиксирует КОНКРЕТНОЕ структурное решение о системе

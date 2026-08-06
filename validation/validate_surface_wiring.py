@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """Validate surface-wiring (Вывод 2 «дефектов одной сессии»: core<->wrapper<->client wiring drift).
 
 Дефект `/api/catalog`: путь умеет ЯДРО, покрыт тестами ядра И тестами клиента (клиент мокал fetch,
@@ -12,7 +13,6 @@
 
   validate_surface_wiring.py [manifest.json] | --selftest
 """
-from __future__ import annotations
 
 import json
 import sys
