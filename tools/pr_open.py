@@ -20,11 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-for _p in (PKG / "tools",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
+import _bootstrap  # noqa: E402
 # переиспользуем разбор owner/repo и работу с REST из concurrency_preflight (без дублирования)
 import concurrency_preflight as _cp   # noqa: E402
 import urllib.error                    # noqa: E402

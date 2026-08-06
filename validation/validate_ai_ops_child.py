@@ -26,9 +26,9 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
+import _bootstrap  # noqa: E402
 REPO_ROOT = Path.cwd()
 CI = PKG / "validation"
-sys.path.insert(0, str(CI))
 
 CHILD_CONFIG = REPO_ROOT / ".ai-ops.yaml"
 AI_DIR = REPO_ROOT / ".ai"

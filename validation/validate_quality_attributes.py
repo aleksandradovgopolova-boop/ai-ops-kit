@@ -22,8 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "validation"))
+import _bootstrap  # noqa: E402
 import validate_adr_registry as reg  # noqa: E402
 
 ACTIVE = {"accepted"}

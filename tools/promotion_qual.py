@@ -31,8 +31,7 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
-sys.path.insert(0, str(PKG / "validation"))
+import _bootstrap  # noqa: E402
 import parallel_planner as pp          # noqa: E402
 import gate_runtime as gr              # noqa: E402
 import context_engine as ce            # noqa: E402

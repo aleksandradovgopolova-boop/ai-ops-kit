@@ -27,7 +27,7 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
+import _bootstrap  # noqa: E402
 import parallel_planner as pp   # noqa: E402
 
 WG_DEMO = PKG / "examples" / "work-graph-demo" / "work-graph.yaml"

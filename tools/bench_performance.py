@@ -33,9 +33,7 @@ import time
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]
-for _p in (str(PKG / "tools"), str(PKG / "validation")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+import _bootstrap  # noqa: E402
 
 BASELINE_PATH = PKG / "tools" / ".bench-baseline.json"
 DEFAULT_ITERATIONS = 5

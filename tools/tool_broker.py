@@ -419,6 +419,12 @@ def execute(action: dict, root, policy: Policy) -> dict:
             p.write_text(action.get("content", ""), encoding="utf-8")
             ev.update({"ok": True, "bytes": len(action.get("content", "").encode("utf-8"))})
         else:  # shell / git — env со скрабленными секретами (модель не получает токены)
+            # SECURITY: shell=True с модельным выводом — риск инъекций.
+            # Митигации: scrub_env() удаляет секреты из env, timeout ограничивает выполнение,
+            # output scrubbing скрывает чувствительные данные в выводе.
+            # Policy Engine контролирует, какие команды разрешены (read/write/shell levels).
+            # Для production рекомендуется shell=False + list args, но tool-loop требует shell
+            # для поддержки pipe/redirect/glob, которые генерирует модель.
             timeout = action.get("timeout", SHELL_TIMEOUT_DEFAULT)
             try:
                 r = subprocess.run(action["command"], shell=True, cwd=str(root),

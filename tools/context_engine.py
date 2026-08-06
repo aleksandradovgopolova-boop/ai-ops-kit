@@ -35,8 +35,7 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
+import _bootstrap  # noqa: E402
 import context_retrieval as cr   # noqa: E402
 import repo_graph                # noqa: E402
 import semantic_lite             # noqa: E402

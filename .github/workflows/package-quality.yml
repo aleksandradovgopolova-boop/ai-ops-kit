@@ -41,6 +41,24 @@ jobs:
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
+  # v3.28.0 P3-15: Python 3.9 compatibility — critical path on minimum supported version
+  python39-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.9"}
+      - run: pip install pyyaml pytest pytest-cov hypothesis
+      - name: "Python 3.9 compat check"
+        run: python3 validation/validate_python_compat.py
+      - name: "Contract tests on 3.9"
+        run: python3 -m pytest tests/contracts/ -v --tb=short --no-cov
+      - name: "Core selftests on 3.9"
+        run: bash .github/ci-groups/core.sh
+      - name: "Execution selftests on 3.9"
+        run: bash .github/ci-groups/execution.sh
+
   # v2.96 Real Qualification: канонический e2e движка на РЕАЛЬНОЙ фикстуре, на нескольких версиях
   # Python (раньше CI гонял только 3.12). Стек-квалификация failure-парсера — тоже здесь.
   pipeline-e2e:

@@ -31,8 +31,7 @@ import tempfile
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
-
+import _bootstrap  # noqa: E402
 import project_detector as pd          # noqa: E402
 import execution_pipeline as ep        # noqa: E402
 

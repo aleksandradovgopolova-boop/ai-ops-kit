@@ -22,8 +22,7 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "validation"))
-sys.path.insert(0, str(PKG / "tools"))
+import _bootstrap  # noqa: E402
 import validate_architecture_decision as vad  # noqa: E402
 import gate_policy  # noqa: E402
 

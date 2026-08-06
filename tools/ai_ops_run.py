@@ -34,11 +34,7 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
-for _p in (PKG / "tools", PKG / "validation"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
+import _bootstrap  # noqa: E402
 import run_plan          # noqa: E402
 import workitem          # noqa: E402
 import active_work       # noqa: E402

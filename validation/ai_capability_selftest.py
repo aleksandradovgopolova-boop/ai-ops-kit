@@ -26,6 +26,7 @@ from pathlib import Path
 
 PKG_ROOT = Path(__file__).resolve().parents[1]
 
+import _bootstrap  # noqa: E402
 results = []
 
 
@@ -108,7 +109,6 @@ def error_normalization_test():
 # --- 3. routing downgrade на unknown/degraded ---
 
 def routing_downgrade_test():
-    sys.path.insert(0, str(PKG_ROOT / "validation"))
     try:
         import yaml
         cap = yaml.safe_load((PKG_ROOT / "registry" /

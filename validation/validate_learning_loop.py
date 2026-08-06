@@ -25,8 +25,7 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "validation"))
+import _bootstrap  # noqa: E402
 import validate_adr_registry as adrreg          # noqa: E402
 import validate_feature_learning as flreg        # noqa: E402
 

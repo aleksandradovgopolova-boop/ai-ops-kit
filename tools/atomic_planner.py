@@ -31,11 +31,7 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-for _p in (PKG / "tools",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
+import _bootstrap  # noqa: E402
 MAX_SUBSYSTEMS = 2          # больше системных границ на пакет -> кандидат на разбиение
 SIZE_FILES = {"small": 3, "medium": 8, "large": 20, "xl": 40}
 

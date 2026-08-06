@@ -14,9 +14,9 @@ import tempfile
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]
+import _bootstrap  # noqa: E402
 
 # Import from sibling submodules
-sys.path.insert(0, str(PKG / "tools"))
 from orchestrator_http import _http_post_json
 from orchestrator_usage import _record_call, _CALL_STATS
 

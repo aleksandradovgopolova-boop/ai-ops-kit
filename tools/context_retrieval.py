@@ -26,7 +26,7 @@ from pathlib import Path
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bootstrap  # noqa: E402
 import data_classification as _dc   # noqa: E402  (v3.6.4 авторитетная классификация)
 RETRIEVAL_INDEX_VERSION = "1"
 
