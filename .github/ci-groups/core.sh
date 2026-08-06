@@ -35,3 +35,5 @@ python3 tools/kit_observability.py --selftest
 # Changelog automation — валидация VERSION в CHANGELOG (v3.28.0 R20; selftest)
 python3 tools/changelog_gen.py --selftest
 python3 tools/changelog_gen.py validate
+# Formal invariants catalog (v3.28.0 R14; selftest)
+python3 tools/invariants.py --selftest

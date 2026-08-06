@@ -1,0 +1,17 @@
+# AI Ops Kit — runtime dependencies (v3.28.0 R17)
+# Install: pip install -r requirements.txt
+#
+# Only pyyaml is REQUIRED for core functionality.
+# Other dependencies are for development/testing only.
+
+# === Runtime (required) ===
+pyyaml>=6.0
+
+# === Development (optional) ===
+# Uncomment for development:
+# pytest>=7.0
+# pytest-cov>=4.0
+# hypothesis>=6.0
+# ruff>=0.8.0
+# mypy>=1.0
+# pre-commit>=3.0

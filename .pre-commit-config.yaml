@@ -1,0 +1,42 @@
+# Pre-commit hooks for AI Ops Kit (v3.28.0 R16)
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(tools|validation|tests)/
+      - id: ruff-format
+        files: ^(tools|validation|tests)/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: python-compat
+        name: Python 3.9 compatibility check
+        entry: python3 validation/validate_python_compat.py
+        language: system
+        files: ^(tools|validation)/.*\.py$
+        pass_filenames: false
+
+      - id: selftest-smoke
+        name: Critical selftest smoke
+        entry: python3 -m pytest tests/contracts/ -q --no-cov --tb=line
+        language: system
+        files: ^(tools|validation|tests)/
+        pass_filenames: false
+        stages: [pre-push]

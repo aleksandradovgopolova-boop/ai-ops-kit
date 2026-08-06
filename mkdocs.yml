@@ -1,0 +1,55 @@
+# MkDocs configuration for AI Ops Kit API documentation (v3.28.0 R18)
+# Build: pip install mkdocs mkdocs-material && mkdocs build
+# Serve: mkdocs serve
+site_name: AI Ops Kit
+site_description: AI Product Operating System — API Reference
+site_url: https://ai-ops-kit.github.io/
+repo_url: https://github.com/aleksandradovgopolova-boop/ai-ops-kit
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Execution Engine: architecture/execution-engine.md
+    - Quality Gates: architecture/quality-gates.md
+    - Registry: architecture/registry.md
+  - API Reference:
+    - Core:
+      - Orchestrator: api/orchestrator.md
+      - Execution Pipeline: api/execution-pipeline.md
+      - Preflight: api/preflight.md
+      - Tool Loop: api/tool-loop.md
+    - Contracts:
+      - TypedDict Contracts: api/contracts.md
+      - Invariants: api/invariants.md
+    - Operations:
+      - Kit Observability: api/kit-observability.md
+      - Usage Ledger: api/usage-ledger.md
+      - Benchmarks: api/benchmarks.md
+  - Guides:
+    - Installation: guides/installation.md
+    - Child Repository: guides/child-repo.md
+    - CI Configuration: guides/ci.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - toc:
+      permalink: true
