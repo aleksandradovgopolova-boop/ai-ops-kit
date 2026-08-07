@@ -37,7 +37,9 @@ jobs:
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install pyyaml pytest
+      # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
+      # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
+      - run: pip install pyyaml pytest pytest-cov
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -72,7 +74,9 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: "${{ matrix.python-version }}"}
-      - run: pip install pyyaml pytest
+      # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
+      # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
+      - run: pip install pyyaml pytest pytest-cov
       - name: "Совместимость Python (stdlib + pyyaml)"
         run: python3 validation/validate_python_compat.py
       - name: "Канонический e2e движка (task -> commit -> evidence -> gates, без модели)"
