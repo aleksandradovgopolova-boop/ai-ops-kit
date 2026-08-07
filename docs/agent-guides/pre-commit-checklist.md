@@ -4,32 +4,10 @@
 все должны быть PASS.
 
 ```bash
-python3 validation/ai_capability_selftest.py
 python3 tools/pr_open.py --selftest
-python3 tools/run_plan.py validate
 python3 tools/gate_result_v2.py --selftest
-python3 validation/validate_work_graph.py examples/work-graph-demo
-python3 validation/validate_budget_contract.py examples/budget-demo
-python3 validation/validate_capability_scope.py examples/capability-demo
-python3 validation/validate_access_filter.py examples/access-filter-demo
-python3 validation/validate_provider_residency.py examples/residency-demo
-python3 tools/model_comparison.py examples/model-comparison-demo
 python3 tools/branch_policy.py --selftest
-python3 validation/validate_loop_trace.py examples/loop-trace-demo
-python3 validation/validate_integration_trace.py examples/integration-trace-demo
-python3 validation/validate_post_release_readout.py examples/readout-demo
-python3 tools/parallel_planner.py examples/work-graph-demo
-python3 validation/validate_event_catalog.py examples/event-catalog-demo/events.yaml
-python3 tools/security_enforcement.py --key-preflight examples/key-lifecycle-demo/KLP-001.yaml
-python3 validation/validate_agent_evals.py --all
-python3 validation/validate_openspec_change.py examples/openspec-demo
-python3 validation/validate_feature_blueprint.py examples/feature-blueprint-demo/express-checkout
-python3 validation/validate_cross_artifacts.py examples/feature-blueprint-demo/express-checkout
-python3 validation/validate_knowledge_graph.py examples/knowledge-graph-demo/graph.yaml
-python3 tools/product_health.py examples/product-health-demo/input.yaml
-python3 validation/validate_freshness.py context
 python3 validation/validate_agents_checklist.py --selftest
-python3 tools/promotion_qual.py --verify-negatives
 python3 installer/ai_ops.py --selftest
 python3 validation/validate_research_artifacts.py --selftest
 python3 .research/tools/verify_quotes.py --selftest
@@ -38,6 +16,17 @@ python3 .research/tools/ev_scaffold.py --selftest
 python3 -m pytest tests/contracts/ -v --tb=short --no-cov
 python3 -m pytest tests/contracts/ -v --tb=short
 ```
+
+## Что переехало в pytest и почему здесь этого нет
+
+Все 70 валидаторов, все перенесённые селфтесты и прогоны на примерах-фикстурах запускаются из
+pytest: `test_validator_runtime_contract.py` (каждый валидатор из копии репозитория),
+`test_<module>_selftest.py` (перенесённые тела) и `test_example_fixtures.py` (валидатор + его
+пример). Дублировать те же команды здесь значило бы гонять одно и то же дважды — из-за этого
+полный контур занимал девять минут вместо четырёх с половиной.
+
+Ниже осталось только то, что pytest не покрывает: семь модулей с неперенесёнными селфтестами,
+инструменты .research и контрактные слои.
 
 ## Валидаторы: почему их прогонов здесь больше нет
 

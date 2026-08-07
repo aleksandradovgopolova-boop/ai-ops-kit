@@ -12,7 +12,7 @@ patch_note: "3.30.0 — кит научился подтверждать, что
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в pre-commit-checklist.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 33
+checks_count: 11
 agents_count: 51
 # Числа гейтов — DERIVED. ПОПРАВКА к формулировке v3.28.x: claim'ы gate-count/mvp-blocking-count,
 # на которые ссылается ROADMAP, существуют — они в knowledge/claims.yaml и их проверяет
