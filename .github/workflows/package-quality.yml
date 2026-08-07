@@ -13,7 +13,10 @@ on:
 # и валидаторы падали с ModuleNotFoundError. Задаём путь явно, чтобы CI повторял чеклист
 # буквально, а не «почти».
 env:
-  PYTHONPATH: tools:validation
+  # Пути АБСОЛЮТНЫЕ: относительный PYTHONPATH разрешается от cwd процесса, а селфтест
+  # инсталлятора порождает подпроцессы с cwd в child-репозитории — там нет ни tools/,
+  # ни validation/, и `tools:validation` молча перестаёт работать.
+  PYTHONPATH: ${{ github.workspace }}/tools:${{ github.workspace }}/validation
 
 jobs:
   quality:
