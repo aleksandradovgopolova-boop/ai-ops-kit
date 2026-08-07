@@ -50,7 +50,7 @@ jobs:
         with: {python-version: "3.12"}
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov
+      - run: pip install pyyaml pytest pytest-cov hypothesis
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -83,7 +83,7 @@ jobs:
         with: {python-version: "${{ matrix.python-version }}"}
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov
+      - run: pip install pyyaml pytest pytest-cov hypothesis
       - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
         run: |
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"

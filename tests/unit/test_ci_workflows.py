@@ -105,6 +105,27 @@ def test_every_k_filter_selects_at_least_one_test():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
+def test_every_pytest_job_installs_hypothesis(wf):
+    """Набор содержит property-based тесты — джоб без hypothesis падает на СБОРКЕ.
+
+    Всплыло при переходе групп CI на pytest: прежние шелл-группы property-based тесты не
+    запускали, и отсутствие зависимости было незаметно. Джоб `quality` упал с
+    ModuleNotFoundError на collect, не выполнив ни одного теста.
+    """
+    broken = []
+    for name, job in _jobs(wf):
+        runs = _steps_text(job)
+        installs = any("hypothesis" in r for r in runs)
+        runs_pytest = any(re.search(r"-m pytest\b", r) or "ci-groups/" in r for r in runs)
+        if runs_pytest and not installs:
+            broken.append(name)
+    assert not broken, (
+        f"{wf.name}: джобы {broken} запускают pytest, но не ставят hypothesis — "
+        f"падение на сборке до первого теста")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
 def test_pull_request_trigger_covers_pr_creation(wf):
     """Фильтр types без `opened` пропускает PR, созданный сразу как non-draft.
 
