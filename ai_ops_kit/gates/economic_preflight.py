@@ -1,0 +1,7 @@
+"""Алиас: gates.economic_preflight -> плоский модуль economic_preflight (один объект, не копия)."""
+import sys
+
+import _bootstrap  # noqa: F401 — кладёт tools/validation в sys.path
+import economic_preflight as _target
+
+sys.modules[__name__] = _target
