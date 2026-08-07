@@ -1,6 +1,7 @@
 """Тесты валидационного слоя: параметризованный прогон selftest'ов + внешние тесты на три валидатора."""
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -35,7 +36,10 @@ def _discover_selftest_files() -> list[Path]:
                 source = py_file.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            if "--selftest" in source:
+            # v3.30: ищем РЕАЛЬНУЮ функцию, а не подстроку. После выноса selftest в tests/
+            # упоминание `--selftest` остаётся в докстринге модуля, и обнаружение пыталось
+            # запускать несуществующий режим.
+            if re.search(r"^def selftest\(", source, re.M):
                 found.append(py_file)
     return found
 

@@ -137,6 +137,30 @@ def prove(root, base_sha, head_sha, profile, changed_files=None, runner=None, ti
         result["reason"] = f"не удалось создать дерево на базовой ревизии: {err_add[:200]}"
         return result
     try:
+        # ШАГ 0 (обязательный): набор тестов должен отрабатывать на базе САМ ПО СЕБЕ. Без этого
+        # ненулевой код после подсадки теста ничего не значит.
+        # Поймано живым прогоном на ии-среде: во временном дереве нет node_modules, `npm run test`
+        # вернул 127 «command not found», и это было засчитано за «тест падает на базе» —
+        # сфабрикованное доказательство ровно того класса, который кит обязан не допускать.
+        if runner is not None:
+            rc_clean = runner(cmd, str(wt))
+        else:
+            try:
+                rc_clean = subprocess.run(cmd, shell=True, cwd=str(wt), capture_output=True,
+                                          timeout=timeout).returncode
+            except subprocess.TimeoutExpired:
+                rc_clean = "timeout"
+        result["checks"].append({"id": "suite_runs_on_base", "command": cmd,
+                                 "returncode": rc_clean,
+                                 "status": "pass" if rc_clean == 0 else "fail"})
+        if rc_clean != 0:
+            result["status"] = "unverifiable"
+            result["reason"] = (
+                f"на базовой ревизии набор тестов не отрабатывает сам по себе (код {rc_clean}) — "
+                "среда не готова (нет зависимостей/тулчейна) или база уже красная; "
+                "падение после подсадки теста в таких условиях ничего не доказывает")
+            return result
+
         rc_co, _, err_co = _git(wt, "checkout", head_sha, "--", *split["tests"])
         if rc_co != 0:
             result["status"] = "unverifiable"
@@ -230,6 +254,9 @@ def selftest():
         for a in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
             _git(root, *a)
         (root / "calc.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
+        # на базе ОБЯЗАН быть живой набор тестов: иначе проверка «набор отрабатывает сам по себе»
+        # честно скажет unverifiable, и это правильно — доказывать не от чего
+        (root / "test_existing.py").write_text("def test_existing():\n    assert True\n", encoding="utf-8")
         _git(root, "add", "-A"); _git(root, "commit", "-qm", "база с ошибкой")
         base = _git(root, "rev-parse", "HEAD")[1]
         (root / "calc.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
@@ -237,7 +264,7 @@ def selftest():
             "from calc import add\n\ndef test_add():\n    assert add(2, 2) == 4\n", encoding="utf-8")
         _git(root, "add", "-A"); _git(root, "commit", "-qm", "фикс + тест")
         head = _git(root, "rev-parse", "HEAD")[1]
-        prof = {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q test_calc.py"}}]}
+        prof = {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q"}}]}
         pr = prove(root, base, head, prof, ["calc.py", "test_calc.py"])
         expect("тест падает на базе -> proven", pr["status"] == "proven")
         expect("proven даёт pass гейта", gate_evidence(pr)["status"] == "pass")
@@ -246,7 +273,7 @@ def selftest():
         (root / "test_noop.py").write_text("def test_noop():\n    assert True\n", encoding="utf-8")
         _git(root, "add", "-A"); _git(root, "commit", "-qm", "пустой тест")
         head2 = _git(root, "rev-parse", "HEAD")[1]
-        prof2 = {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q test_noop.py"}}]}
+        prof2 = {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q"}}]}
         pr2 = prove(root, base, head2, prof2, ["calc.py", "test_noop.py"])
         expect("тест проходит на базе -> not_proven", pr2["status"] == "not_proven")
         ge = gate_evidence(pr2)
@@ -255,6 +282,13 @@ def selftest():
         ge2 = gate_evidence(pr2, behavior_unchanged="чистый рефакторинг импортов")
         expect("объявление закрывает гейт, но ГРОМКО",
                ge2["status"] == "pass" and any("рефакторинг импортов" in w for w in ge2["warnings"]))
+
+        # среда не готова (команды нет) -> unverifiable, а НЕ «доказано»
+        prof_broken = {"stacks": [{"commands": {"test": "definitely-not-a-command-xyz"}}]}
+        pr3 = prove(root, base, head, prof_broken, ["calc.py", "test_calc.py"])
+        expect("набор не отрабатывает на базе -> unverifiable (не «доказано»)",
+               pr3["status"] == "unverifiable" and "сам по себе" in pr3["reason"])
+        expect("unverifiable не закрывает гейт", gate_evidence(pr3)["status"] == "fail")
 
     print("regression_evidence selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

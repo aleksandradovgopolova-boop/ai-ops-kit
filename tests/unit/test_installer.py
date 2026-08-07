@@ -324,6 +324,7 @@ def test_broken_child_config_raises_named_error(ai_ops, child, monkeypatch):
     assert ".ai-ops.yaml" in str(exc.value)
 
 
+@pytest.mark.slow   # тяжёлая обёртка селфтеста: в быстрый профиль не входит
 def test_installer_selftest_passes():
     """Собственный selftest инсталлятора остаётся зелёным (не подменяем его этими тестами)."""
     r = subprocess.run([sys.executable, str(INSTALLER), "--selftest"],

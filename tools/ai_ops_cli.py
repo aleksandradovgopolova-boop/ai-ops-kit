@@ -356,8 +356,12 @@ def _run_intent(intent, task, child_root, signals, a):
             bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
             (fdir / "context-bundle.yaml").write_text(
                 yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception:  # noqa: BLE001
+        except Exception as _ce:  # noqa: BLE001 — план не должен рушиться из-за контекста...
+            # ...но деградация обязана быть видна: без бандла оценка пакета уходит на дефолты,
+            # а context-bundle.yaml не пишется — молча это выглядит как обычный план.
             bundle = None
+            print(f"  ⚠ контекст не собран ({type(_ce).__name__}: {_ce}) — оценка пакета по "
+                  f"умолчаниям, context-bundle.yaml не записан")
         cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
         (fdir / "spec-coverage.yaml").write_text(yaml.safe_dump(cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
         wp = atomic_planner.decompose(signals, wid=wid, child_root=child_root, bundle=bundle)
