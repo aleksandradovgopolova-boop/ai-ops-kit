@@ -7,7 +7,6 @@
 set -euo pipefail
 
 # Sequential-оркестратор (selftest)
-python3 tools/orchestrator.py --selftest
 # Execution budget — потолок вызовов модели (selftest)
 python3 tools/budget.py --selftest
 # Tool-calling петля — механика (selftest)

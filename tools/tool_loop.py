@@ -54,6 +54,10 @@ def make_model_proposer(provider):
             '  {"op":"shell","command":"..."}                — команда (сборка/тест/проверка)\n'
             '  {"op":"read","path":"..."}                    — прочитать файл\n'
             '  {"done":true,"summary":"..."}                 — верни ЭТО, когда задача выполнена\n'
+            '  {"done":true,"summary":"...","behavior_unchanged":"<причина>"} — ТОЛЬКО если правка\n'
+            '      не меняет поведение (рефакторинг, переименование, форматирование). Обычная\n'
+            '      правка ОБЯЗАНА сопровождаться тестом, который падает на коде ДО неё:\n'
+            '      без него исправление ничем не подтверждено и гейт его не пропустит.\n'
             "Правила: НЕ повторяй уже успешно выполненный шаг (см. журнал ниже — там строки "
             "'-> OK'). Как только нужные файлы записаны и проверка (shell) прошла — сразу верни "
             "done, не пиши файл повторно. ЧИТАЙ (read) МИНИМУМ — 1-2 файла, чтобы понять, затем "
@@ -174,6 +178,7 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
     evidence, transcript = [], []
     context = base_context
     stopped = "max_steps"
+    behavior_unchanged = None      # v3.30: объявление writer'а при завершении, см. обработку done
     bad_streak = 0
     consec_reads = 0
     for step in range(max_steps):
@@ -204,7 +209,13 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
             continue
         if action.get("done"):
             stopped = "done"
-            transcript.append({"step": step, "done": True, "summary": action.get("summary", "")})
+            # v3.30: объявление «поведение не менялось» — единственный законный способ закрыть
+            # regression_test_evidence без теста. Это НЕ тихий обход: причина едет в отчёт и в
+            # warnings гейта. Пустую строку за объявление не считаем.
+            _bu = action.get("behavior_unchanged")
+            behavior_unchanged = str(_bu).strip() if isinstance(_bu, str) and _bu.strip() else None
+            transcript.append({"step": step, "done": True, "summary": action.get("summary", ""),
+                               "behavior_unchanged": behavior_unchanged})
             break
         ev = tool_broker.execute(action, root, policy)   # Policy решает + исполнение + Evidence
         evidence.append(ev)
@@ -235,7 +246,10 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
             "model_calls": bud.model_calls,
             "executed": [e for e in evidence if e["allowed"]],
             "denied": [e for e in evidence if not e["allowed"]],
-            "evidence": evidence, "transcript": transcript}
+            "evidence": evidence, "transcript": transcript,
+            # v3.30: объявление «поведение не менялось» — единственный законный способ закрыть
+            # regression_test_evidence без теста; его читает execution_pipeline.
+            "behavior_unchanged": behavior_unchanged}
 
 
 def selftest():
