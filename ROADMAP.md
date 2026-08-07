@@ -556,6 +556,11 @@ freshness и первым живым DecisionPackage. Архитектура **e
   blocker resolver.
 - **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
   (owner_effort, где кит ускоряет/страхует/мешает, регрессии, стоимость/latency из Usage Truth) решают дальнейшее.
+  Проведено: niti 2026-08-06 (установка + 4 brownfield-задачи, 4/4 доведены, 0 false-green) —
+  findings F-012 (mock-провайдер молчит про режим external-executor + done при NOT_READY),
+  F-013 (блокер спеки не называет допустимые статусы разделов),
+  F-014 (worktree создаётся не от текущего HEAD — последовательные задачи не строятся друг на друге);
+  задачи и acceptance — `qualification/REAL-PRODUCT-NITI-2026-08-06.md`.
 - **После данных (точечно, ПО ФАКТАМ):** DX; устойчивость runtime; адресный рефакторинг. **Дальше:** Codex
   executing adapter; multi-product control plane.
 
