@@ -20,7 +20,7 @@ env:
   # Пути АБСОЛЮТНЫЕ: относительный PYTHONPATH разрешается от cwd процесса, а селфтест
   # инсталлятора порождает подпроцессы с cwd в child-репозитории — там нет ни tools/,
   # ни validation/, и `tools:validation` молча перестаёт работать.
-  PYTHONPATH: ${{ github.workspace }}/tools:${{ github.workspace }}/validation
+  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/tools:${{ github.workspace }}/validation
 
 jobs:
   quality:

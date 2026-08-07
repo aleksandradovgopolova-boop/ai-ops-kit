@@ -94,19 +94,38 @@ def test_dev_only_modules_are_not_in_product_packages():
 
 
 @pytest.mark.unit
-def test_alias_files_do_not_copy_state():
-    """Запрещённая форма шима: `from X import *` вместо подмены sys.modules."""
-    bad = []
+def test_exactly_one_side_is_an_alias():
+    """У каждого модуля ровно одна сторона — алиас, вторая — настоящий код.
+
+    Инвариант держится и ДО переезда (код в tools/, алиас в пакете), и ПОСЛЕ (код в пакете, алиас
+    в tools/ для обратной совместимости 661 импорта). Две копии кода или два алиаса одинаково
+    плохи: в первом случае правки расходятся, во втором модуля нет вообще.
+
+    Форма алиаса обязана быть подменой sys.modules: `from X import *` создал бы второй объект
+    модуля со своим состоянием — этот класс уже стоил отладки в orchestrator_usage и pr_open.
+    """
+    def is_alias(path: Path) -> bool:
+        return "sys.modules[__name__]" in path.read_text(encoding="utf-8")
+
+    problems = []
     for d in sorted(SURFACE.iterdir()):
         if not d.is_dir() or d.name == "__pycache__":
             continue
         for f in sorted(d.glob("*.py")):
             if f.name == "__init__.py":
                 continue
-            src = f.read_text(encoding="utf-8")
-            if "sys.modules[__name__]" not in src or "import *" in src:
-                bad.append(f"{d.name}/{f.name}")
-    assert not bad, f"алиасы копируют состояние вместо подмены модуля: {bad}"
+            flat = PKG / "tools" / f.name
+            if not flat.is_file():
+                problems.append(f"{d.name}/{f.name}: плоского файла нет вовсе")
+                continue
+            sides = [is_alias(f), is_alias(flat)]
+            if sides.count(True) != 1:
+                where = "оба алиасы" if all(sides) else "оба с кодом"
+                problems.append(f"{d.name}/{f.name}: {where}")
+            for path in (f, flat):
+                if "import *" in path.read_text(encoding="utf-8"):
+                    problems.append(f"{path}: алиас через `import *` копирует состояние")
+    assert not problems, problems[:8]
 
 
 # -------------------------------------------------------- side-effect proof ---
@@ -123,3 +142,32 @@ def test_state_is_really_shared():
         assert marker in flat._CALL_STATS, "состояние не общее — это две копии модуля"
     finally:
         flat._CALL_STATS.remove(marker)
+
+
+@pytest.mark.unit
+def test_flat_aliases_are_self_sufficient():
+    """Плоский алиас обязан САМ уметь найти пакет.
+
+    Поймано CI: алиас делал `import ai_ops_kit...`, не положив корень в sys.path. Локально это
+    скрывала editable-установка (её .pth кладёт корень в любой процесс), а в CI и в
+    child-репозитории, где PYTHONPATH не задан, запуск файла напрямую падал с
+    ModuleNotFoundError. Тот же класс, что и «чеклист держался на editable-установке».
+    """
+    bad = []
+    for d in sorted(SURFACE.iterdir()):
+        if not d.is_dir() or d.name == "__pycache__":
+            continue
+        for f in sorted(d.glob("*.py")):
+            if f.name == "__init__.py":
+                continue
+            flat = PKG / "tools" / f.name
+            if not flat.is_file():
+                continue
+            src = flat.read_text(encoding="utf-8")
+            if "sys.modules[__name__]" not in src:
+                continue                      # настоящий код, не алиас
+            if "import _bootstrap" not in src:
+                bad.append(flat.name)
+    assert not bad, (
+        "алиасы импортируют пакет, не положив корень в sys.path — упадут вне editable-установки: "
+        f"{bad[:8]}")

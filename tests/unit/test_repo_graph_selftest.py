@@ -67,8 +67,12 @@ def test_repo_graph_selftest():
     expect(f"реальный граф кита строится без ошибок ({real['file_count']} файлов)",
            real["file_count"] > 50 and isinstance(real["symbol_index"], dict))
     imp_gp = impact(real, "tools/gate_policy.py")
+    # v3.30: код переехал в пакеты — реальные импортёры теперь под ai_ops_kit/*, а tools/*
+    # остались алиасами. Запрос по плоскому пути по-прежнему работает (граф резолвит имя модуля),
+    # но ОТВЕТ содержит настоящие пути.
     expect("impact(gate_policy) включает execution_pipeline и bench_lite (реальные импортёры)",
-           "tools/execution_pipeline.py" in imp_gp and "tools/bench_lite.py" in imp_gp)
+           "ai_ops_kit/engine/execution_pipeline.py" in imp_gp
+           and "ai_ops_kit/devtools/bench_lite.py" in imp_gp)
     expect("symbol_index покрывает известный символ (build_graph)",
            "build_graph" in real["symbol_index"])
 

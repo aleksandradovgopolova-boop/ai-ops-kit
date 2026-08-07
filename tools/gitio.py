@@ -1,39 +1,16 @@
-#!/usr/bin/env python3
-"""Единый git-хелпер (v3.0.13, блок C самоаудита) — ОДИН источник вызова git для tools/.
+"""Совместимость: плоское имя gitio -> ai_ops_kit.engine.gitio.
 
-Прежде идентичная функция `_git` (rc, stdout.strip(), stderr.strip()) была скопирована в 7 модулях,
-и НИ ОДНА не задавала timeout: зависший git-субпроцесс (сеть/lock/hook) вешал весь прогон навсегда.
-Здесь — один вызов с таймаутом по умолчанию; при таймауте возвращается rc=124 (соглашение GNU timeout)
-и понятный stderr, а не блокировка.
+Код переехал в пакет. Здесь алиас через sys.modules — ОДИН объект модуля, не копия:
+иначе состояние разъедется между двумя путями импорта.
 
-CLI: gitio.py --selftest
+_bootstrap импортируется ПЕРВЫМ и кладёт корень репозитория в sys.path — без этого
+`import ai_ops_kit...` падает при запуске файла напрямую (`python3 tools/gitio.py`)
+и в child-репозитории, где PYTHONPATH не задан. Локально это скрывала
+editable-установка.
 """
-from __future__ import annotations
-
-import argparse
-import subprocess
 import sys
 
-GIT_TIMEOUT_DEFAULT = 90   # сек: обычные plumbing-команды завершаются мгновенно; потолок против зависаний
+import _bootstrap  # noqa: F401 — кладёт корень и tools/validation в sys.path
+import ai_ops_kit.engine.gitio as _target
 
-
-def git(root, *args, timeout=GIT_TIMEOUT_DEFAULT):
-    """git -C <root> <args...> -> (returncode, stdout.strip(), stderr.strip()). Таймаут -> (124, '', reason)."""
-    try:
-        r = subprocess.run(["git", "-C", str(root), *args],
-                           capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return 124, "", f"git timeout {timeout}s: {' '.join(str(a) for a in args)[:120]}"
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
-
-
-def main(argv):
-    ap = argparse.ArgumentParser(prog="gitio.py")
-    ap.add_argument("--selftest", action="store_true")
-    a = ap.parse_args(argv)
-    ap.print_help()
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+sys.modules[__name__] = _target
