@@ -211,3 +211,13 @@ python3 .research/tools/ev_scaffold.py --selftest
 python3 -m pytest tests/contracts/ -v --tb=short --no-cov
 python3 -m pytest tests/contracts/ -v --tb=short
 ```
+
+## Не входит в чеклист — объявленные исключения
+
+Валидатор, которого нет в списке выше, обязан быть здесь с причиной. Полноту проверяет
+`tests/unit/test_checklist_completeness.py`: молчаливо выпасть из чеклиста нельзя, иначе список
+и реальный набор валидаторов расходятся — этот класс дрейфа уже дважды ловили на `checks_count`.
+
+- `validation/validate_ai_ops_child.py` — проверяет установку кита в **child-репозиторий**
+  (`.ai-ops.yaml`, зоны `.ai/*`, целостность managed-слоя). В репозитории самого кита проверять
+  нечего; запускается в child-репо и покрыт `tests/unit/test_installer.py`.

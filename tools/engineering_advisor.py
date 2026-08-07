@@ -96,7 +96,8 @@ def _delivery_plan(child_root, task_type=None):
     import branch_policy
     recs = []
     try:
-        profile = project_detector.detect(child_root)
+        # единая точка детекции: свежий кеш профиля или пере-детект при изменившихся манифестах
+        profile = project_detector.load_or_detect(child_root)
         stacks = profile.get("stacks", [])
         # Branch strategy
         recs.append({

@@ -155,8 +155,14 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None):
     rule_cats.add("core")
     included_rules = sorted(c for c in rule_cats if (PKG / "rules" / c).is_dir())
 
-    # --- repository_context: RepositoryProfile ---
-    profile = project_detector.detect(child_root)
+    # --- repository_context: RepositoryProfile (единая точка: кеш .ai/repository-profile.yaml,
+    #     перечитывается сам, если манифесты изменились) ---
+    # write=False принципиально: компиляция контекста — ЧТЕНИЕ, она не автор профиля. Через
+    # compile_bundle проходит `preview` (build_preview), а preview обязан не трогать репозиторий;
+    # с write=True `preview onboard` пере-создавал .ai/repository-profile.yaml — то есть выполнял
+    # действие, которое только показывал. Автор профиля — `onboard`, он и пишет файл.
+    # Свежесть данных не страдает: протухший кеш load_or_detect не отдаёт в любом случае.
+    profile = project_detector.load_or_detect(child_root, write=False)
     repo_ctx = [f"{s['language']} ({', '.join(s.get('frameworks') or []) or 'no-fw'})"
                 for s in profile.get("stacks", [])]
     files = sorted({src for s in profile.get("stacks", []) for src in (s.get("evidence_source") or [])})

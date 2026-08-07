@@ -31,12 +31,70 @@ def _profile_summary(profile):
     return f"Стек: {langs}. Команды проверки: {cmds or 'нет'}."
 
 
+# Соответствие required_evidence гейта intake_completeness входным сигналам.
+INTAKE_SIGNAL_MAP = {"classified_type": "task_type", "size": "size", "risk": "risk"}
+
+# Что кит классифицирует САМ: task_type выводит роутер (run_plan.build_plan -> base_workflow),
+# поэтому спрашивать его у пользователя не нужно. Всё остальное — продуктовое суждение вызывающего:
+# вывести размер и риск из репозитория нечем, а угадать их значило бы сфабриковать evidence
+# блокирующего гейта. Значит, их надо ЗАПРОСИТЬ до старта, а не завалить гейт после прогона.
+DERIVED_INTAKE_FLAGS = {"classified_type"}
+
+# Словари значений — из мест, где они реально используются: size ниже сверяется с
+# atomic_planner.SIZE_FILES, risk — уровни эскалации spec_levels (critical/high -> L3).
+INTAKE_SIGNAL_VALUES = {
+    "size": ("small", "medium", "large", "xl"),
+    "risk": ("low", "medium", "high", "critical"),
+}
+
+
+def missing_intake_signals(signals):
+    """Обязательные intake-сигналы, которых нет во входе, — с допустимыми значениями.
+
+    Источник истины — `required_evidence` гейта intake_completeness в quality/gates.yaml, а не
+    список в коде: иначе он разойдётся с реестром (тот же класс дрейфа, что checks_count).
+
+    Зачем: без `size` блокирующий гейт intake_completeness падает «бездоказательным pass», но
+    узнаётся это только ПОСЛЕ прогона — в живой квалификации так сгорело 6 прогонов из 6, один
+    из них 36 минут. Спросить надо до старта."""
+    sig = signals or {}
+    try:
+        gate = (gate_executor.load_gates() or {}).get("intake_completeness") or {}
+        required = list(gate.get("required_evidence") or [])
+    except Exception:   # noqa: BLE001 — недоступный реестр не должен ронять прогон
+        required = list(INTAKE_SIGNAL_MAP)
+    out = []
+    for flag in required:
+        if flag in DERIVED_INTAKE_FLAGS:
+            continue
+        key = INTAKE_SIGNAL_MAP.get(flag, flag)
+        if not sig.get(key):
+            out.append({"flag": flag, "signal": key,
+                        "allowed": list(INTAKE_SIGNAL_VALUES.get(key) or [])})
+    return out
+
+
+def intake_signals_hint(missing, task="<задача>"):
+    """Готовая к печати подсказка: чего не хватает и как это передать одной строкой."""
+    if not missing:
+        return None
+    example = ", ".join(f'"{m["signal"]}":"{(m["allowed"] or ["<значение>"])[0]}"' for m in missing)
+    names = ", ".join(m["signal"] for m in missing)
+    one = len(missing) == 1
+    lines = [f"intake неполон: не {'задан' if one else 'заданы'} {names} — "
+             f"блокирующий гейт intake_completeness {'его' if one else 'их'} требует"]
+    for m in missing:
+        allowed = " | ".join(m["allowed"]) if m["allowed"] else "значение"
+        lines.append(f"  · {m['signal']}: {allowed}")
+    lines.append(f"  добавь: --signals '{{{example}}}'")
+    return lines
+
+
 def _intake_evidence(signals):
     """intake_completeness evidence из сигналов: классификация уже сделана (реальный evidence,
     не фабрикация). Маппинг сигнал->required_evidence-флаг; provided только для присутствующих."""
     sig = signals or {}
-    mapping = {"classified_type": "task_type", "size": "size", "risk": "risk"}
-    provided = [flag for flag, key in mapping.items() if sig.get(key)]
+    provided = [flag for flag, key in INTAKE_SIGNAL_MAP.items() if sig.get(key)]
     if not provided:
         return None
     return {"status": "pass", "provided": provided,

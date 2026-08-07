@@ -69,11 +69,14 @@ def build_preview(intent, task, child_root, signals):
     if not signals.get("task_type"):
         signals["task_type"] = plan["base_workflow"]
     flags = resolve_flags(signals)
-    bundle = None
+    bundle, bundle_error = None, None
     try:
         bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
-    except Exception:  # noqa: BLE001
-        bundle = None
+    except Exception as _e:  # noqa: BLE001 — сборка контекста не должна ронять превью...
+        # ...но и молчать о деградации нельзя: с bundle=None превью печатало «агентов 0 · ~None
+        # ток.» как обычный результат, и прогон с несобранным контекстом выглядел нормальным
+        # (показательный случай из внешнего ревью про 137 проглоченных исключений).
+        bundle, bundle_error = None, f"{type(_e).__name__}: {_e}"[:200]
     cov = spec_levels.assess(signals)
     wp = atomic_planner.assess(signals, child_root=child_root, bundle=bundle)
 
@@ -107,7 +110,10 @@ def build_preview(intent, task, child_root, signals):
         "data_used": {"agents": (bundle or {}).get("included", {}).get("agents", []),
                       "rules": (bundle or {}).get("included", {}).get("rules", []),
                       "estimated_tokens": (bundle or {}).get("estimated_tokens"),
-                      "context_budget": (bundle or {}).get("context_budget")},
+                      "context_budget": (bundle or {}).get("context_budget"),
+                      # None здесь означает «контекст не собран», а не «контекст пуст» — разницу
+                      # обязан видеть и человек, и машиночитаемый потребитель превью.
+                      "context_error": bundle_error},
         "approvals_needed": approvals,
         "decomposition_advised": wp["should_decompose"],
         "expected_result": expected,
@@ -245,7 +251,11 @@ def _print_preview(pv):
     print(f"  сделаю: гейтов {len(pv['will_do']['stages'])} · авто-режим "
           f"(engine={af['engine']}, review={af['review']}, author={af['author']}, sandbox={af['sandbox']})")
     du = pv["data_used"]
-    print(f"  данные: агентов {len(du['agents'])} · ~{du['estimated_tokens']}/{du['context_budget']} ток.")
+    if du.get("context_error"):
+        print(f"  ⚠ данные: КОНТЕКСТ НЕ СОБРАН ({du['context_error']}) — прогон пойдёт вслепую, "
+              f"оценки агентов и токенов недоступны")
+    else:
+        print(f"  данные: агентов {len(du['agents'])} · ~{du['estimated_tokens']}/{du['context_budget']} ток.")
     if pv["approvals_needed"]:
         for a in pv["approvals_needed"]:
             print(f"  approval: {a}")
@@ -487,7 +497,13 @@ def main(argv):
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
     ap.add_argument("--base", default=None, help="resume/review: base-ветка (по умолчанию auto: upstream/remote-default/текущая)")
-    ap.add_argument("--provider", default="mock", help="review: провайдер ревьюера (не mock -> живой вердикт)")
+    # v3.28.x (P0-1): дефолта `mock` больше НЕТ. Для `run --execute`/`do` провайдера выбирает резолв
+    # (.ai-ops.yaml + ключ в env -> claude в PATH -> mock с громким предупреждением); явный --provider
+    # (в т.ч. mock) всегда побеждает. Для `review`/`resume` остаётся прежний офлайн-дефолт mock.
+    ap.add_argument("--provider", default=None,
+                    help="провайдер (mock|anthropic|openai|claude-cli|qwen|deepseek|kimi). "
+                         "run --execute без флага — авторезолв (AI_OPS_PROVIDER_AUTORESOLVE=0 выключает); "
+                         "review: провайдер ревьюера (не mock -> живой вердикт)")
     ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--sequential", action="store_true",
                     help="run: неатомарную задачу исполнять по WorkPackages последовательно (v3.1)")
@@ -525,7 +541,7 @@ def main(argv):
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
         # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
         # `ai-ops resume --provider X --model Y` молча уходил в mock (политика/провайдер терялись).
-        argv2 += ["--provider", a.provider, "--signals", a.signals]
+        argv2 += ["--provider", a.provider or "mock", "--signals", a.signals]
         if a.model:
             argv2 += ["--model", a.model]
         if getattr(a, "replan", False):
@@ -566,6 +582,13 @@ def main(argv):
             return rc
 
     pv = build_preview(intent, task, Path(child_root), signals)
+    # v3.28.x (F-015): роутер классифицировал тип задачи ВНУТРИ build_preview — но там он работает
+    # с копией signals, и наружу классификация не выходила. Движок получал сигналы без task_type,
+    # терял evidence `classified_type` и валил блокирующий intake_completeness у пользователя,
+    # который всё указал правильно. Материализуем решение роутера в сигналы прогона.
+    _understood_type = (pv.get("understood") or {}).get("task_type")
+    if _understood_type and not signals.get("task_type"):
+        signals["task_type"] = _understood_type
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
     else:
@@ -575,7 +598,28 @@ def main(argv):
     # v3.22: `do` — alias для `run --execute` с авторазрешением блокировщиков (review_fix_attempts, author, open_pr)
     if (intent == "run" and a.execute) or intent == "do":
         import ai_ops_run
+        import pipeline_helpers
+        # v3.28.x (F-015, находка живой квалификации): intake-сигналы проверяем ДО старта.
+        # `size` требует блокирующий гейт intake_completeness, вывести его из репозитория нечем,
+        # и раньше пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона — в раунде C
+        # так сгорело 6 прогонов из 6, самый долгий 36 минут. Fail-closed сохраняется (exit 2,
+        # тот же код, что у незакрытого гейта), но платится секундами, а не часом работы модели.
+        _missing = pipeline_helpers.missing_intake_signals(signals)
+        if _missing:
+            _hint = pipeline_helpers.intake_signals_hint(_missing, task)
+            if a.json:
+                print(json.dumps({"kind": "intake-incomplete", "exit": 2,
+                                  "missing": _missing, "hint": _hint}, ensure_ascii=False, indent=2))
+            else:
+                for _ln in _hint:
+                    print(_ln)
+            return 2
         flags = pv["will_do"]["auto_flags"]
+        # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и дальше идёт под своим именем во все
+        # ветки (sequential/обычная) — иначе автовыбор терялся бы по дороге, как уже было в v2.120/v3.0-rc2.
+        _pres = ai_ops_run.resolve_provider_for_run(a.provider, Path(child_root), execute=True,
+                                                    quiet=a.json)
+        provider = _pres["provider"]
         # v3.22: `do` форсирует флаги автономного прогона
         if intent == "do":
             flags["author"] = True
@@ -604,13 +648,13 @@ def main(argv):
                       f"попытка заархивирована -> {rt.get('archived_attempt') or '—'}")
                 resume_from = a.retry_package
             if wp["should_decompose"] and wp["work_packages"]:
-                base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(a.provider, a.model))
-                auth = orchestrator.make_provider(a.provider, a.model) if flags["author"] and a.provider != "mock" else None
-                rev = orchestrator.make_provider(a.provider, a.model) if flags["review"] and a.provider != "mock" else None
+                base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(provider, a.model))
+                auth = orchestrator.make_provider(provider, a.model) if flags["author"] and provider != "mock" else None
+                rev = orchestrator.make_provider(provider, a.model) if flags["review"] and provider != "mock" else None
                 print(f"— исполняю по WorkPackages: {len(wp['work_packages'])} пакет(ов) —")
                 seq = workpackage_executor.execute_sequence(
                     task, signals, Path(child_root), wp["work_packages"], lambda pkg: base_prop,
-                    feature=wid, base=a.base, provider_name=a.provider, model=a.model,
+                    feature=wid, base=a.base, provider_name=provider, model=a.model,
                     author=flags["author"], author_proposer=auth,
                     review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"],
                     sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps,
@@ -641,10 +685,12 @@ def main(argv):
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
-                             author=flags["author"], provider_name=a.provider, model=a.model,
+                             author=flags["author"], provider_name=provider, model=a.model,
                              base=a.base, open_pr=a.open_pr, max_steps=a.max_steps,
                              require_fix=flags.get("require_fix", False),
-                             review_fix_attempts=review_fix)
+                             review_fix_attempts=review_fix,
+                             provider_resolution={k: _pres.get(k) for k in
+                                                  ("provider", "source", "reason", "warning")})
         ai_ops_run.print_human(rep)
         return ai_ops_run.exit_code(rep)
     return 0

@@ -11,7 +11,10 @@ from __future__ import annotations
   4. каждый файл из docs_must_reference_version РЕАЛЬНО содержит claims.version (публичная поверхность
      ссылается на текущую версию, а не на прошлый продукт);
   5. каждый runtime_capabilities-claim == фактический status в registry/runtimes.yaml (ловит дрейф
-     заявленных возможностей адаптеров: parallel/resume и т.п.).
+     заявленных возможностей адаптеров: parallel/resume и т.п.);
+  6. claims.gates_count / claims.mvp_blocking_count == quality/gates.yaml (DERIVED), и каждый гейт
+     из mvp_blocking_gates реально blocking: true (список MVP-блокеров без силы — та же ложь
+     публичной поверхности, что и устаревшее число).
 
   validate_release_claims.py [registry/release-claims.yaml] | --selftest
 """
@@ -53,6 +56,69 @@ def derived_counts(pkg=PKG):
     return checks, agents
 
 
+def derived_gate_counts(pkg=PKG):
+    """(gates_count, mvp_blocking_count) из quality/gates.yaml.
+
+    v3.28.x: ROADMAP заявлял «MVP-blocking = 8; счётчик запиннен claim
+    gate-count/mvp-blocking-count» — но таких claim'ов не существовало и никто их не сверял.
+    Заявление о том, что число запиннено, само было незапиннено. Числа гейтов — публичная
+    поверхность (их называют README/ROADMAP), значит они обязаны дериверироваться, как
+    checks_count и agents_count."""
+    gates_total, mvp = 0, 0
+    try:
+        gd = yaml.safe_load((pkg / "quality" / "gates.yaml").read_text(encoding="utf-8")) or {}
+        gates = gd.get("gates") or {}
+        gates_total = len(gates)
+        mvp = len(gd.get("mvp_blocking_gates") or [])
+    except OSError:
+        pass
+    return gates_total, mvp
+
+
+def derived_verification_counts(pkg=PKG):
+    """(validators_total, externally_tested) — сколько валидаторов есть и сколько проверяются
+    ВНЕШНИМ тестом, а не только собственным --selftest.
+
+    Рекомендация №6 внешнего ревью: 74 валидатора — продуктовое обещание качества, но проверяются
+    они самоаттестацией (валидатор подтверждает сам себя). Закрыть все разом нельзя, поэтому
+    закрывается главное: число перестаёт быть неизвестным. Claim обязан совпадать с фактом, значит
+    и добавление внешнего теста, и его удаление требуют осознанной правки claims — молча ни
+    вырасти, ни просесть покрытие не может.
+
+    «Внешне протестирован» = имя модуля валидатора буквально упоминается в tests/. Параметризованный
+    прогон selftest'ов сюда не попадает: он обнаруживает файлы в рантайме и ничьего имени не
+    содержит — то есть самоаттестация за внешнюю проверку не засчитывается."""
+    import re as _re
+    vdir = pkg / "validation"
+    if not vdir.is_dir():
+        return 0, 0
+    names = sorted(p.stem for p in vdir.glob("validate_*.py"))
+    covered = set()
+    tdir = pkg / "tests"
+    if tdir.is_dir():
+        for t in tdir.rglob("test_*.py"):
+            try:
+                txt = t.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for n in names:
+                if n not in covered and _re.search(rf"\b{_re.escape(n)}\b", txt):
+                    covered.add(n)
+    return len(names), len(covered)
+
+
+def mvp_gates_are_blocking(pkg=PKG):
+    """Гейты из mvp_blocking_gates обязаны иметь blocking: true. Иначе список MVP-блокеров —
+    декларация без силы: гейт числится блокирующим, а прогон он не останавливает."""
+    try:
+        gd = yaml.safe_load((pkg / "quality" / "gates.yaml").read_text(encoding="utf-8")) or {}
+    except OSError:
+        return []
+    gates = gd.get("gates") or {}
+    return [g for g in (gd.get("mvp_blocking_gates") or [])
+            if not (gates.get(g) or {}).get("blocking")]
+
+
 def _runtime_status(pkg, runtime, capability):
     try:
         rt = yaml.safe_load((pkg / "registry" / "runtimes.yaml").read_text(encoding="utf-8"))
@@ -72,9 +138,26 @@ def check(data, pkg=PKG):
         e.append(f"claims.version '{ver}' != VERSION '{vf}' (claims отстали от релиза)")
     checks, agents = derived_counts(pkg)
     if data.get("checks_count") != checks:
-        e.append(f"claims.checks_count={data.get('checks_count')} != python3-проверок в AGENTS.md={checks} (устаревшее число)")
+        e.append(f"claims.checks_count={data.get('checks_count')} != python3-проверок в чеклисте={checks} (устаревшее число)")
     if data.get("agents_count") != agents:
         e.append(f"claims.agents_count={data.get('agents_count')} != агентов в registry/agents.yaml={agents}")
+    gates_total, mvp = derived_gate_counts(pkg)
+    if data.get("gates_count") != gates_total:
+        e.append(f"claims.gates_count={data.get('gates_count')} != гейтов в quality/gates.yaml={gates_total}")
+    if data.get("mvp_blocking_count") != mvp:
+        e.append(f"claims.mvp_blocking_count={data.get('mvp_blocking_count')} != "
+                 f"mvp_blocking_gates в quality/gates.yaml={mvp}")
+    vtotal, vtested = derived_verification_counts(pkg)
+    if data.get("validators_count") != vtotal:
+        e.append(f"claims.validators_count={data.get('validators_count')} != валидаторов в validation/={vtotal}")
+    if data.get("validators_externally_tested") != vtested:
+        e.append(f"claims.validators_externally_tested={data.get('validators_externally_tested')} "
+                 f"!= фактически покрытых внешним тестом={vtested} (покрытие изменилось — "
+                 f"обнови claim осознанно, молча просесть оно не должно)")
+    _weak = mvp_gates_are_blocking(pkg)
+    if _weak:
+        e.append(f"mvp_blocking_gates без blocking: true — {', '.join(_weak)} "
+                 f"(числятся блокерами, но прогон не останавливают)")
     for name in (data.get("docs_must_reference_version") or []):
         p = pkg / name
         if not p.exists():
@@ -111,8 +194,12 @@ def selftest():
     vf = (PKG / "VERSION").read_text(encoding="utf-8").strip()
     # берём реальный runtime-claim, который точно есть (parallel_execution generic-orchestrator)
     st = _runtime_status(PKG, "generic-orchestrator", "parallel_execution")
+    _g, _m = derived_gate_counts()
+    _vt, _vc = derived_verification_counts()
     base = {"registry_type": "release-claims", "version": vf, "checks_count": checks,
-            "agents_count": agents, "docs_must_reference_version": ["README.md"],
+            "agents_count": agents, "gates_count": _g, "mvp_blocking_count": _m,
+            "validators_count": _vt, "validators_externally_tested": _vc,
+            "docs_must_reference_version": ["README.md"],
             "runtime_capabilities": [{"runtime": "generic-orchestrator",
                                       "capability": "parallel_execution", "status": st}]}
     expect("согласованные claims -> без ошибок", check(base) == [])
@@ -122,6 +209,15 @@ def selftest():
            any("checks_count" in x for x in check({**base, "checks_count": 91})))
     expect("agents_count устарел -> ошибка",
            any("agents_count" in x for x in check({**base, "agents_count": 1})))
+    # v3.28.x: числа гейтов — тоже публичная поверхность, тоже DERIVED.
+    expect("gates_count устарел -> ошибка",
+           any("gates_count" in x for x in check({**base, "gates_count": 999})))
+    expect("mvp_blocking_count устарел -> ошибка",
+           any("mvp_blocking_count" in x for x in check({**base, "mvp_blocking_count": 999})))
+    expect("MVP-блокеры реально blocking: true в реестре", mvp_gates_are_blocking() == [])
+    expect("просадка внешнего покрытия валидаторов -> ошибка",
+           any("validators_externally_tested" in x
+               for x in check({**base, "validators_externally_tested": 0})))
     expect("runtime capability дрейф -> ошибка",
            any("дрейф" in x for x in check({**base, "runtime_capabilities": [
                {"runtime": "generic-orchestrator", "capability": "parallel_execution", "status": "unsupported"}]})))

@@ -147,21 +147,28 @@ BENCHMARKS = {
 }
 
 
-def load_baseline() -> dict:
-    """Загрузить baseline из файла. Пустой dict если файла нет."""
-    if not BASELINE_PATH.exists():
+def load_baseline(path=None) -> dict:
+    """Загрузить baseline. path=None -> BASELINE_PATH репозитория."""
+    p = Path(path) if path else BASELINE_PATH
+    if not p.exists():
         return {}
     try:
-        return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+        return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
 
 
-def save_baseline(results: dict):
-    """Сохранить результаты как новый baseline."""
-    BASELINE_PATH.write_text(
-        json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+def save_baseline(results: dict, path=None):
+    """Сохранить результаты как baseline. path=None -> BASELINE_PATH репозитория.
+
+    Путь берётся аргументом, а не подменой модульной глобали: селфтест запускается как
+    `python3 tools/bench_performance.py --selftest`, то есть модулем `__main__`, и его
+    `import bench_performance as bp` создавал ВТОРОЙ объект модуля. Подмена `bp.BASELINE_PATH`
+    патчила копию, а save_baseline из `__main__` продолжал писать в настоящий файл репозитория —
+    каждый прогон селфтеста молча переписывал baseline замерами текущей машины. Порог «медленнее
+    baseline >2x» при этом переставал что-либо значить: baseline догонял любую регрессию."""
+    p = Path(path) if path else BASELINE_PATH
+    p.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def run_all(iterations=DEFAULT_ITERATIONS) -> dict:
@@ -249,19 +256,16 @@ def selftest() -> int:
 
     # 3. Baseline save/load roundtrip
     with tempfile.TemporaryDirectory() as tmpdir:
-        import bench_performance as bp
-        orig = bp.BASELINE_PATH
-        bp.BASELINE_PATH = Path(tmpdir) / "baseline.json"
-        try:
-            save_baseline(results)
-            loaded = load_baseline()
-            expect("baseline roundtrip: same keys", set(loaded.keys()) == set(results.keys()))
-            for name in results:
-                if results[name].get("median_ms") is not None:
-                    expect(f"baseline roundtrip: {name} median matches",
-                           loaded[name]["median_ms"] == results[name]["median_ms"])
-        finally:
-            bp.BASELINE_PATH = orig
+        tmp_baseline = Path(tmpdir) / "baseline.json"
+        save_baseline(results, tmp_baseline)
+        loaded = load_baseline(tmp_baseline)
+        expect("baseline roundtrip: same keys", set(loaded.keys()) == set(results.keys()))
+        for name in results:
+            if results[name].get("median_ms") is not None:
+                expect(f"baseline roundtrip: {name} median matches",
+                       loaded[name]["median_ms"] == results[name]["median_ms"])
+        expect("selftest НЕ трогает baseline репозитория", not tmp_baseline.samefile(BASELINE_PATH)
+               if BASELINE_PATH.exists() else True)
 
     # 4. Comparison logic
     baseline = {"test_bench": {"median_ms": 10.0}}

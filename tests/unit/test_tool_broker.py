@@ -299,3 +299,69 @@ class TestSandboxPolicy:
         action = {"op": "shell", "command": "nc host 1234"}
         result = policy.decide(action)
         assert result["allow"] is False
+
+
+@pytest.mark.unit
+class TestAbsolutePathInsideRoot:
+    """F-016 (находка живой квалификации, раунд C, T2): writer предлагал АБСОЛЮТНЫЙ путь внутри
+    собственного worktree, брокер отклонял его как traversal, writer повторял относительным.
+
+    Отказ был формально безопасен, но ложен: путь-то внутри корня. Цена — лишний шаг цикла и
+    denied в отчёте, который выглядит как попытка побега.
+    """
+
+    def _policy(self, root):
+        return tool_broker.Policy(level="controlled-write", write_scope=["src"],
+                                  child_root=str(root))
+
+    def test_absolute_path_inside_root_is_allowed_and_written(self, tmp_path):
+        root = tmp_path.resolve()
+        (root / "src").mkdir()
+        ev = tool_broker.execute({"op": "write", "path": str(root / "src" / "a.py"),
+                                  "content": "x = 1\n"}, root, self._policy(root))
+        assert ev["allowed"] is True, ev["reason"]
+        assert (root / "src" / "a.py").read_text(encoding="utf-8") == "x = 1\n"
+        assert ev["path_normalized_from"] == str(root / "src" / "a.py"), \
+            "нормализация не отражена в evidence — постфактум не видно, что путь привели к корню"
+
+    def test_absolute_path_outside_root_is_still_traversal(self, tmp_path):
+        root = tmp_path.resolve()
+        (root / "src").mkdir()
+        outside = tmp_path.parent / "escape.py"
+        ev = tool_broker.execute({"op": "write", "path": str(outside), "content": "x"},
+                                 root, self._policy(root))
+        assert ev["allowed"] is False
+        assert not outside.exists()
+
+    def test_dotdot_escape_is_still_traversal(self, tmp_path):
+        root = tmp_path.resolve()
+        (root / "src").mkdir()
+        ev = tool_broker.execute({"op": "write", "path": "../escape.py", "content": "x"},
+                                 root, self._policy(root))
+        assert ev["allowed"] is False
+
+    def test_write_scope_still_applies_to_absolute_paths(self, tmp_path):
+        """Нормализация не должна становиться обходом write_scope."""
+        root = tmp_path.resolve()
+        (root / "src").mkdir()
+        ev = tool_broker.execute({"op": "write", "path": str(root / "other.py"), "content": "x"},
+                                 root, self._policy(root))
+        assert ev["allowed"] is False
+        assert "write_scope" in ev["reason"]
+        assert not (root / "other.py").exists()
+
+    def test_symlink_out_of_root_is_not_relativized(self, tmp_path):
+        """resolve() физический: симлинк наружу не превращается во «внутренний» путь."""
+        root = tmp_path / "repo"
+        (root / "src").mkdir(parents=True)
+        target = tmp_path / "outside"
+        target.mkdir()
+        link = root / "src" / "link"
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pytest.skip("симлинки недоступны в этой среде")
+        ev = tool_broker.execute({"op": "write", "path": str(link / "a.py"), "content": "x"},
+                                 root, self._policy(root))
+        assert ev["allowed"] is False
+        assert not (target / "a.py").exists()

@@ -12,8 +12,18 @@ patch_note: "3.21.0 — Engineering Operating Model (срез 3, WP7): economic_
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в pre-commit-checklist.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 205
+checks_count: 206
 agents_count: 51
+# v3.28.x: числа гейтов теперь тоже DERIVED. ROADMAP заявлял, что они «запиннены claim
+# gate-count/mvp-blocking-count», но таких claim'ов не существовало — заявление о пиннинге само
+# было незапиннено. Валидатор дополнительно требует blocking: true у каждого MVP-блокера.
+gates_count: 32
+mvp_blocking_count: 8
+# Честное состояние верификации самих валидаторов (рекомендация №6 внешнего ревью): большинство
+# по-прежнему подтверждает себя собственным --selftest. Число деривируется из tests/ и обязано
+# совпадать: и рост, и просадка покрытия требуют осознанной правки этого файла.
+validators_count: 70
+validators_externally_tested: 11
 
 qualified_on: >
   provider-neutral портфель по РОЛЯМ: дешёвый API-writer (money-mode) + СИЛЬНЫЙ writer (локальный

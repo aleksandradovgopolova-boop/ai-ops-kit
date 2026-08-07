@@ -46,6 +46,67 @@ def _outbox_dir(features_dir, fid):
     return _P(features_dir) / fid / "delivery-outbox"
 
 
+# --- профиль стека в отчёте (v3.28.x, review 2026-08-06, P1-3) ---
+# Отчёт печатал «стек: не определён» на всех путях, где profile в отчёт не попадал
+# (blocked-preflight, ошибка прогона), хотя project_detector отрабатывал верно. Плюс `', '.join(...)`
+# упал бы TypeError на СЫРОМ результате detect(): stacks там — список СЛОВАРЕЙ. Обе дыры закрыты:
+# профиль заполняется явно, а display несёт человекочитаемый вид «python (pip)».
+
+def resolve_provider_for_run(explicit, child_root, execute=False, quiet=False):
+    """v3.28.x (P0-1) Единая точка выбора провайдера для CLI-путей `run`.
+
+    Автовыбор (`.ai-ops.yaml` + ключ в env -> `claude` в PATH -> mock) применяется ТОЛЬКО в
+    пользовательском пути `run --execute`: без --execute модель не вызывается, и офлайн-дефолт
+    mock сохраняется (CI/selftest/планирование остаются детерминированными). Решение печатается
+    ДО прогона: скатились в mock — говорим прямо, а не показываем «правок 0» постфактум.
+    Возвращает словарь-решение resolve_provider (имя провайдера обязан использовать вызывающий)."""
+    import orchestrator_providers as _op
+    if not execute:
+        return {"provider": explicit or "mock", "source": "explicit" if explicit else "no-execute",
+                "reason": "провайдер не вызывается (нет --execute)", "warning": None,
+                "autoresolve": False, "checked": []}
+    res = _op.resolve_provider(explicit=explicit, root=child_root)
+    if not quiet:
+        _op.print_provider_resolution(res)
+    return res
+
+
+def _stacks_human(profile):
+    """['python (pip)', 'node (pnpm)'] из профиля любой формы: словари detect() или строки-языки."""
+    out = []
+    for s in (profile or {}).get("stacks") or []:
+        if isinstance(s, dict):
+            lang = s.get("language") or "?"
+            pm = s.get("package_manager")
+            out.append(f"{lang} ({pm})" if pm else str(lang))
+        elif s:
+            out.append(str(s))
+    return out
+
+
+def _profile_for_report(root, existing=None):
+    """Профиль репозитория для отчёта прогона: {stacks: [язык], display: ['python (pip)'], undetermined}.
+    Детекция — через публичный project_detector.detect(root); сбой детекции не роняет прогон."""
+    prof = None
+    try:
+        import project_detector
+        prof = project_detector.detect(Path(root))
+    except Exception:   # noqa: BLE001 — отчёт не должен падать из-за детектора
+        prof = None
+    if isinstance(prof, dict):
+        out = {"stacks": [s.get("language") for s in prof.get("stacks") or [] if isinstance(s, dict)],
+               "display": _stacks_human(prof),
+               "undetermined": list(prof.get("undetermined") or [])}
+        if not out["undetermined"] and isinstance(existing, dict):
+            out["undetermined"] = list(existing.get("undetermined") or [])
+        return out
+    if isinstance(existing, dict):
+        out = dict(existing)
+        out.setdefault("display", _stacks_human(existing))
+        return out
+    return None
+
+
 def _unresolved_intents(features_dir, fid, branch=None):
     """v3.0.17 (finding аудита P0): DeliveryIntent'ы БЕЗ парного DeliveryReceipt (незавершённая доставка).
     Реконсиляция и блокировка новой доставки опираются на ФАКТ отсутствия Receipt — НЕ на поле status
@@ -265,7 +326,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
         context_shadow=False, context_hybrid=False, reevaluate_only=False,
-        progressive_escalation=False):
+        progressive_escalation=False, provider_resolution=None):
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -751,6 +812,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                    "preflight": pretruth,
                    "loop": None, "commit": {"sha": None},   # честно: ни петли, ни коммита
                    "not_yet": pretruth["reasons"],
+                   # P1-3: даже заблокированный прогон честно показывает распознанный стек
+                   "profile": _profile_for_report(child_root),
+                   "provider_resolution": dict(provider_resolution) if provider_resolution else None,
                    "lifecycle": {"workitem": f"features/{fid}/workitem.yaml",
                                  "run_plan": f"features/{fid}/run-plan.yaml",
                                  "preflight": f"features/{fid}/preflight.yaml"}}
@@ -898,7 +962,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _fix_left -= 1
         except (KeyboardInterrupt, SystemExit):
             with contextlib.redirect_stdout(sys.stderr):
-                active_work.finish_cmd(aw_path, fid)
+                active_work.finish_cmd(aw_path, fid, status="blocked",
+                                       reason="прогон прерван (Ctrl-C/exit) — работа не завершена")
             raise
         except Exception as _e:  # noqa: BLE001
             # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
@@ -906,7 +971,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
             # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
             with contextlib.redirect_stdout(sys.stderr):
-                active_work.finish_cmd(aw_path, fid)
+                active_work.finish_cmd(aw_path, fid, status="blocked",
+                                       reason=f"прогон упал: {type(_e).__name__}")
             try:
                 from workpackage_executor import _classify_failure
                 _fail = _classify_failure(_e)
@@ -951,6 +1017,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
         rep["provider"] = provider_name
+        # P0-1 side-effect proof: КАК выбран провайдер — в отчёте (и в run-report.json на диске),
+        # а не только в stdout: иначе решение резолва невозможно проверить постфактум.
+        if provider_resolution:
+            rep["provider_resolution"] = dict(provider_resolution)
+        # P1-3: обогащаем профиль движка (там stacks — только языки) человекочитаемым display
+        rep["profile"] = _profile_for_report(child_root, rep.get("profile"))
+        # F-014: в отчёт кладём базу, выбранную резолвером ПРОГОНА. Движок резолвит повторно, но
+        # получает уже конкретную ветку и потому всегда рапортует source=explicit-* — по такому
+        # отчёту не отличить «человек задал --base» от «кит выбрал сам».
+        if isinstance(base_binding, dict) and base_binding.get("base_ref"):
+            rep["base_binding"] = {k: v for k, v in base_binding.items() if k != "kind"}
         # v3.8.3-rc3: финализировать model_attempts (исход последней попытки) + честные initial/effective_model.
         if isinstance(_model_resolution, dict) and _model_resolution.get("model_attempts"):
             _last = _model_resolution["model_attempts"][-1]
@@ -1277,8 +1354,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                                                             else "not-ready"),
                                     "ready_for_pr": bool(rep.get("ready_for_pr")),
                                     "commit": (rep.get("commit") or {}).get("sha")})
+        # F-012: `done` только когда работа действительно доведена. NOT_READY -> blocked, иначе
+        # `ai-ops status` показывает пустоту при незакрытых гейтах и ненаписанном коде.
+        _ready = bool(rep.get("ready_for_pr"))
+        _unmet = (rep.get("gates") or {}).get("unmet") or []
+        _wrote = ((rep.get("loop") or {}).get("applied_writes") or 0) > 0
+        if _ready:
+            _st, _why = "done", None
+        elif _wrote:
+            _st, _why = "blocked", f"гейты не закрыты: {', '.join(_unmet) or 'см. отчёт'}"
+        else:
+            _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid)
+            active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
         return rep
 
     # 1-2. RunPlan (route + треки + агрегированные гейты).
@@ -1372,11 +1460,38 @@ def _print_pipeline(r):
     prov = r.get("provider") or "?"
     model = f"/{r['model']}" if r.get("model") else ""
     print(f"  base_workflow: {r.get('base_workflow')} · провайдер: {prov}{model} ({r.get('runtime')})")
-    print(f"  стек: {', '.join(r.get('profile', {}).get('stacks') or ['не определён'])}")
+    _stacks = (r.get("profile") or {}).get("display") or _stacks_human(r.get("profile"))
+    print(f"  стек: {', '.join(_stacks) or 'не определён'}")
+    _changed = commit.get("changed_files")
+    _files_note = f" · файлов в коммите {len(_changed)}" if _changed is not None and commit.get("sha") else ""
     print(f"  tool-loop: {loop.get('stopped')} · шагов {loop.get('steps')} · "
-          f"правок {loop.get('applied_writes')} · отклонено {loop.get('denied')}")
+          f"правок {loop.get('applied_writes')} · отклонено {loop.get('denied')}{_files_note}")
+    # F-017: правок через брокера 0, а файлы в коммите есть — значит писал не движок (writer правил
+    # файлы своими инструментами). Раньше отчёт показывал только «правок 0» и выглядел как «ничего
+    # не произошло», хотя работа была сделана. Ground truth — коммит.
+    if _changed and not (loop.get("applied_writes") or 0):
+        print(f"    правки внесены writer'ом напрямую, не через брокера: {', '.join(_changed[:5])}"
+              + (f" и ещё {len(_changed) - 5}" if len(_changed) > 5 else ""))
+    # F-012: движок никого не позвал и ничего не написал — назвать режим и что делать дальше.
+    # Раньше это читалось только по косвенным признакам (созданный worktree + «not_yet: живой
+    # предложитель»), и исполнитель догадывался, что код должен написать он.
+    if (r.get("provider") == "mock") and not (loop.get("applied_writes") or 0):
+        _wt = (r.get("isolation") or {}).get("worktree")
+        _br = (r.get("commit") or {}).get("branch") or f"ai-ops/{r.get('workitem_id')}"
+        print("  исполнитель: внешний агент — движок с провайдером mock кода НЕ пишет")
+        print(f"    рабочий каталог: {_wt or 'основное дерево'} · ветка: {_br}")
+        print("    напиши правки там, закоммить, затем переоцени гейты: "
+              f"ai-ops run \"<задача>\" . --feature {r.get('workitem_id')} --execute --reevaluate-only")
+        print("    или задай живого провайдера: --provider claude-cli (нужен claude в PATH)")
     iso = (r.get("isolation") or {}).get("worktree")
     print(f"  изоляция: {iso or 'основное дерево (без worktree)'}")
+    # F-014: от какой базы отрезан worktree — видно сразу, а не выясняется конфликтом при слиянии.
+    _bb = r.get("base_binding") or (r.get("delivery") or {}).get("base_binding") or {}
+    if _bb.get("base_ref"):
+        _src = {"current-branch": "текущая ветка", "upstream": "upstream",
+                "remote-default": "remote default", "explicit-local": "задана явно",
+                "explicit-remote": "задана явно (origin)"}.get(_bb.get("source"), _bb.get("source"))
+        print(f"  база worktree: {_bb['base_ref']} {(_bb.get('base_sha') or '')[:12]} ({_src})")
     if commit.get("sha"):
         print(f"  commit: {commit['sha'][:12]} на {commit.get('branch')} · "
               f"evidence на точном SHA: {commit.get('evidence_on_exact_sha')} · "
@@ -1692,8 +1807,14 @@ def selftest():
         expect("v2.94: lifecycle-артефакты в отчёте", isinstance(rp.get("lifecycle"), dict)
                and rp["lifecycle"].get("workitem") == f"features/{pfid}/workitem.yaml")
         _awd = active_work.load(root / ".ai" / "runtime" / "active-work.yaml")
-        expect("v2.94: active-work закрыта (done) по завершении прогона",
-               any(w.get("id") == pfid and w.get("status") == "done" for w in _awd.get("active", [])))
+        # F-012: `done` — ТОЛЬКО для доведённой работы. Прогон снят с учёта в любом исходе, но
+        # незакрытые гейты дают blocked с причиной: иначе `ai-ops status` показывает пустоту там,
+        # где работа не сделана (находка живой квалификации на niti).
+        _awe = next((w for w in _awd.get("active", []) if w.get("id") == pfid), None)
+        expect("F-012: active-work снята с учёта по завершении прогона", _awe is not None)
+        expect("F-012: статус отражает исход (done только при ready_for_pr, иначе blocked+причина)",
+               bool(_awe) and (_awe.get("status") == "done" if rp.get("ready_for_pr")
+                               else (_awe.get("status") == "blocked" and _awe.get("status_reason"))))
         expect("v2.94: единый план — движок НЕ строил второй (workitem_id совпал)",
                rp["workitem_id"] == pfid)
 
@@ -1711,9 +1832,12 @@ def selftest():
                and (rep_boom.get("failure") or {}).get("failure_class") == "network"
                and (rep_boom.get("failure") or {}).get("retryable") is True)
         expect("v3.0-rc17: exit_code(provider-error)=2 (не 0)", exit_code(rep_boom) == 2)
-        expect("v3.0-rc17: active-work закрыта даже при падении провайдера",
-               not any(w.get("id") == "boomwi" and w.get("status") != "done"
-                       for w in active_work.load(root / ".ai" / "runtime" / "active-work.yaml").get("active", [])))
+        # F-012: упавший прогон тоже снимается с учёта, но `done` про него — ложь: код не написан.
+        _awb = next((w for w in active_work.load(root / ".ai" / "runtime" / "active-work.yaml")
+                     .get("active", []) if w.get("id") == "boomwi"), None)
+        expect("v3.0-rc17/F-012: падение провайдера -> active-work снята с учёта как blocked, не done",
+               bool(_awb) and _awb.get("status") == "blocked"
+               and "ConnectionResetError" in (_awb.get("status_reason") or ""))
         # v2.97 Context Compiler: у прогона сохранён ContextBundle, размер измерен ДО модели
         expect("v2.97: ContextBundle сохранён рядом с планом",
                (root / "features" / pfid / "context-bundle.yaml").exists())
@@ -2041,7 +2165,14 @@ def main(argv):
     rp.add_argument("--signals", default="{}")
     rp.add_argument("--features-dir")
     rp.add_argument("--runtime", default="claude-code")
-    rp.add_argument("--provider", default="mock")
+    # v3.28.x (P0-1): дефолта `mock` больше НЕТ — без явного флага провайдера выбирает резолв
+    # (orchestrator_providers.resolve_provider) и печатает решение до прогона. Явный --provider
+    # (в т.ч. `mock`) всегда побеждает; автовыбор работает только при --execute.
+    rp.add_argument("--provider", default=None,
+                    help="провайдер (mock|anthropic|openai|openai-compatible|claude-cli|qwen|"
+                         "deepseek|kimi). Без флага при --execute — авторезолв: .ai-ops.yaml + ключ "
+                         "в env -> claude в PATH -> mock (с предупреждением). "
+                         "AI_OPS_PROVIDER_AUTORESOLVE=0 выключает авторезолв")
     rp.add_argument("--session", default="cli")
     rp.add_argument("--execute", action="store_true")
     rp.add_argument("--feature", help="имя существующей фичи — привязать WorkItem к ней "
@@ -2110,7 +2241,9 @@ def main(argv):
     rs.add_argument("--force", action="store_true",
                     help="продолжить, даже если нужна ревалидация (база/состояние изменились) — "
                          "осознанное решение человека")
-    rs.add_argument("--provider", default="mock")
+    # resume НЕ автовыбирает провайдера (продолжение прогона не должно менять исполнителя молча):
+    # без флага — прежний офлайн-дефолт mock.
+    rs.add_argument("--provider", default=None)
     rs.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat)")
     rs.add_argument("--replan", action="store_true",
                     help="осознанно сменить классификацию/policy при продолжении (не resume, а replan "
@@ -2138,7 +2271,7 @@ def main(argv):
         # РЕАЛЬНОЕ продолжение (v2.109)
         task = a.task or (pf.get("next_action") if pf.get("can_resume") else None) or "продолжить работу"
         report = run(task, json.loads(a.signals), Path(a.child_root),
-                     provider_name=a.provider, model=a.model, engine="pipeline",
+                     provider_name=a.provider or "mock", model=a.model, engine="pipeline",
                      execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
                      replan=a.replan)
         rinfo = report.get("resume") or {}
@@ -2155,13 +2288,20 @@ def main(argv):
             return 2 if report.get("status") == "error" else 1
         return 0 if report.get("ready_for_pr") else 1
     if a.cmd == "run":
+        # P0-1: провайдер резолвится ОДИН раз здесь и уходит в движок под своим именем (в отчёте
+        # он же). Автовыбор — только в пользовательском пути --execute; без --execute (планирование)
+        # провайдер не вызывается вовсе, поэтому остаётся офлайн-дефолт mock.
+        prov = resolve_provider_for_run(a.provider, Path(a.child_root), execute=a.execute,
+                                        quiet=a.json)
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
-                     a.runtime, a.provider, a.session, a.execute, feature=a.feature,
+                     a.runtime, prov["provider"], a.session, a.execute, feature=a.feature,
                      engine=a.engine, open_pr=a.open_pr, model=a.model,
                      baseline_diff=a.baseline_diff, require_fix=a.require_fix, max_steps=a.max_steps,
                      discard_previous=a.discard, sandbox=a.sandbox, review=a.review, author=a.author,
                      review_fix_attempts=a.fix_attempts, context_shadow=a.context_shadow,
-                     context_hybrid=a.context_hybrid, reevaluate_only=a.reevaluate_only)
+                     context_hybrid=a.context_hybrid, reevaluate_only=a.reevaluate_only,
+                     provider_resolution={k: prov.get(k) for k in
+                                          ("provider", "source", "reason", "warning")})
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:

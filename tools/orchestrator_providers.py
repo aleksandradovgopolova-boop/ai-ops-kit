@@ -8,6 +8,7 @@ usage recording from orchestrator_usage.
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -94,9 +95,40 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
     return "(пустой ответ модели)"
 
 
+# v3.28.x (review 2026-08-06, P2-7): имена провайдеров из registry/providers.yaml, которые технически
+# являются OpenAI-совместимыми (protocols: [rest, openai-compatible]). Раньше `--provider qwen` падал
+# «неизвестный провайдер», хотя реестр его объявляет — registry и код расходились.
+# ИСТОЧНИК ИСТИНЫ — registry/providers.yaml (key_env) и registry/models.yaml (default_model);
+# соответствие проверяется тестом tests/unit/test_provider_resolution.py (registry-consistency).
+# base_url — те же проверенные эндпоинты, что в tools/provider_endpoints.py; переопределяется env.
+# Секрет НИКОГДА не в коде: здесь только ИМЯ переменной окружения.
+OPENAI_COMPATIBLE_VENDORS = {
+    "deepseek": {"key_env": "DEEPSEEK_API_KEY", "base_url_env": "DEEPSEEK_BASE_URL",
+                 "base_url": "https://api.deepseek.com/chat/completions",
+                 "default_model": "deepseek-v4-flash"},
+    "qwen": {"key_env": "QWEN_API_KEY", "base_url_env": "QWEN_BASE_URL",
+             "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+             "default_model": "qwen3-coder-plus"},
+    "kimi": {"key_env": "KIMI_API_KEY", "base_url_env": "KIMI_BASE_URL",
+             "base_url": "https://api.moonshot.ai/v1/chat/completions",
+             "default_model": "kimi-k2.7-code-highspeed"},
+}
+
+# Объявлены в registry/providers.yaml, но НЕ реализованы адаптером движка. Честная ошибка с причиной
+# лучше и «неизвестного провайдера» (реестр их знает), и тихого фолбэка на mock.
+DECLARED_NOT_IMPLEMENTED = {
+    "google": "нет REST-адаптера Gemini (registry: kind hosted-api, protocols [rest])",
+    "gigachat": "нужен OAuth-адаптер NGW (registry: adoption_status planned-future)",
+    "local": "укажите endpoint явно: --provider openai-compatible + OPENAI_COMPATIBLE_BASE_URL "
+             "(registry: LOCAL_LLM_BASE_URL)",
+    "custom": "укажите endpoint явно: --provider openai-compatible + OPENAI_COMPATIBLE_BASE_URL",
+}
+
+
 def make_provider(name: str, model: str = None):
     """Вернуть callable(role_prompt)->text для провайдера.
-    'mock' (по умолчанию, офлайн, детерминированный) | 'anthropic' | 'openai'.
+    'mock' (по умолчанию, офлайн, детерминированный) | 'anthropic' | 'openai' |
+    'openai-compatible' | 'claude-cli' | вендоры из OPENAI_COMPATIBLE_VENDORS (qwen/deepseek/kimi).
     Живые провайдеры вызывают реальный API по ключу из env; без ключа — честная ошибка.
     ВАЖНО: живой путь опционален (opt-in через --provider) — CI/selftest офлайн на mock."""
     if name in (None, "mock"):
@@ -109,7 +141,6 @@ def make_provider(name: str, model: str = None):
         return lambda prompt: _openai_call(prompt, m)
     if name == "openai-compatible":
         # DeepSeek / local / любой OpenAI-совместимый: base_url + ключ из env (provider-agnostic).
-        import os
         base = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
         if not base:
             raise SystemExit("OPENAI_COMPATIBLE_BASE_URL не задан — для openai-совместимого "
@@ -122,8 +153,167 @@ def make_provider(name: str, model: str = None):
     if name in ("claude-cli", "claude-code-local"):
         # v3.9.0 First-class Claude Code Adapter: локальный `claude -p` как СИЛЬНЫЙ writer.
         return make_claude_cli_provider(model)
-    raise SystemExit(f"неизвестный провайдер '{name}' "
-                     f"(есть: mock, anthropic, openai, openai-compatible, claude-cli)")
+    if name in OPENAI_COMPATIBLE_VENDORS:
+        # qwen/deepseek/kimi — openai-совместимые вендоры реестра: base_url по умолчанию + ключ
+        # СТРОГО из env вендора. Ключа нет -> честная ошибка внутри _openai_call (не тихий mock).
+        v = OPENAI_COMPATIBLE_VENDORS[name]
+        base = os.environ.get(v["base_url_env"]) or v["base_url"]
+        return lambda prompt: _openai_call(prompt, model or v["default_model"],
+                                           base_url=base, key_env=v["key_env"])
+    if name in DECLARED_NOT_IMPLEMENTED:
+        raise SystemExit(f"провайдер '{name}' объявлен в registry/providers.yaml, но не реализован "
+                         f"адаптером движка: {DECLARED_NOT_IMPLEMENTED[name]}")
+    raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai, "
+                     f"openai-compatible, claude-cli, "
+                     f"{', '.join(sorted(OPENAI_COMPATIBLE_VENDORS))})")
+
+
+# ---------------- резолв провайдера (v3.28.x, review 2026-08-06, P0-1) ----------------
+#
+# Проблема: `--provider` имел хардкод-дефолт `mock`, поэтому в чистом репозитории `run --execute`
+# давал «провайдер: mock · правок 0» даже когда `claude` есть в PATH, а `.ai-ops.yaml` объявляет
+# providers.default: anthropic с ключом в env. Резолв ниже выбирает провайдера ЯВНО и ГРОМКО.
+#
+# Приоритет (первый сработавший побеждает):
+#   1. явный --provider X (в т.ч. явный `mock`) — решение человека всегда сильнее автовыбора;
+#   2. .ai-ops.yaml -> providers.default, ЕСЛИ ключ этого провайдера РЕАЛЬНО есть в env
+#      (credentials_ref: "env:ANTHROPIC_API_KEY" -> проверяем os.environ, значение не читаем в лог);
+#   3. `claude` в PATH -> claude-cli (локальная сессия, ключ не нужен);
+#   4. иначе mock + ГРОМКОЕ предупреждение ДО прогона (а не молчаливый ноль правок постфактум).
+#
+# Инвариант офлайн-детерминизма (failure mode №1 Change Brief): автовыбор применяется ТОЛЬКО в
+# пользовательском пути `run --execute`. Всё остальное (selftest, pytest, CI) получает mock —
+# см. autoresolve_enabled(): под pytest/в CI автовыбор выключен по умолчанию, а
+# AI_OPS_PROVIDER_AUTORESOLVE=0 выключает его где угодно явно (selftest-пути ставят именно его).
+
+PROVIDER_AUTORESOLVE_ENV = "AI_OPS_PROVIDER_AUTORESOLVE"
+_FALSY = {"0", "false", "no", "off", "none", ""}
+_TRUTHY = {"1", "true", "yes", "on"}
+
+# Имя env-переменной с ключом по провайдеру — ИЗ registry/providers.yaml (auth.env[0]).
+# Используется только когда child-конфиг не задал credentials_ref явно.
+PROVIDER_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "gigachat": "GIGACHAT_AUTH_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "qwen": "QWEN_API_KEY",
+    "kimi": "KIMI_API_KEY",
+    "local": "LOCAL_LLM_BASE_URL",
+    "openai-compatible": "OPENAI_COMPATIBLE_API_KEY",
+    "custom": "CUSTOM_PROVIDER_TOKEN",
+}
+
+NO_LIVE_PROVIDER_WARNING = ("живой провайдер не настроен → правок не будет; "
+                            "задайте ANTHROPIC_API_KEY или установите claude CLI")
+
+
+def autoresolve_enabled(env=None) -> bool:
+    """Разрешён ли автовыбор провайдера. Явный AI_OPS_PROVIDER_AUTORESOLVE побеждает всегда;
+    без него автовыбор выключен под pytest и в CI (офлайн-детерминизм, деньги не тратятся)."""
+    env = os.environ if env is None else env
+    raw = env.get(PROVIDER_AUTORESOLVE_ENV)
+    if raw is not None:
+        return str(raw).strip().lower() not in _FALSY
+    if env.get("PYTEST_CURRENT_TEST"):
+        return False
+    if str(env.get("CI", "")).strip().lower() in _TRUTHY:
+        return False
+    return True
+
+
+def _child_providers(root):
+    """providers-секция child-конфига `.ai-ops.yaml`: {default, key_env: {id: ENV_NAME}}.
+    Из credentials_ref берём ТОЛЬКО имя env-переменной (env:NAME); secret:-ссылку проверить
+    из движка нельзя -> такой провайдер автовыбором не берём (fail-closed, не «вроде бы есть»)."""
+    out = {"default": None, "key_env": {}, "unverifiable": {}}
+    if not root:
+        return out
+    try:
+        import yaml as _yaml
+        p = Path(root) / ".ai-ops.yaml"
+        if not p.is_file():
+            return out
+        data = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except Exception:   # noqa: BLE001 — битый/нечитаемый конфиг не должен ронять прогон
+        return out
+    prov = (data or {}).get("providers") if isinstance(data, dict) else None
+    if not isinstance(prov, dict):
+        return out
+    d = prov.get("default")
+    out["default"] = d if isinstance(d, str) and d else None
+    for item in prov.get("configured") or []:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        ref = str(item.get("credentials_ref") or "")
+        if ref.startswith("env:") and ref[4:]:
+            out["key_env"][item["id"]] = ref[4:]
+        elif ref:
+            out["unverifiable"][item["id"]] = ref.split(":", 1)[0]
+    return out
+
+
+def resolve_provider(explicit=None, root=None, env=None, which=None):
+    """Выбрать провайдера для пользовательского прогона. Возвращает словарь-решение:
+    {provider, source, reason, warning, autoresolve, checked} — имя провайдера НЕ теряется по
+    дороге: вызывающий обязан передать его в make_provider и записать в отчёт прогона.
+
+    explicit — значение --provider (None = пользователь не задавал; 'mock' = задал явно).
+    root     — корень child-репозитория (там ищем .ai-ops.yaml).
+    env/which — инъекция окружения и shutil.which (тестируемость без сети и без CLI)."""
+    env = os.environ if env is None else env
+    which = shutil.which if which is None else which
+    checked = []
+
+    if explicit:
+        return {"provider": explicit, "source": "explicit", "autoresolve": False,
+                "reason": f"задан явно: --provider {explicit}", "warning": None, "checked": checked}
+
+    if not autoresolve_enabled(env):
+        return {"provider": "mock", "source": "autoresolve-disabled", "autoresolve": False,
+                "reason": (f"автовыбор выключен ({PROVIDER_AUTORESOLVE_ENV}=0 / pytest / CI) — "
+                           "офлайн-детерминизм: mock"),
+                "warning": None, "checked": checked}
+
+    cfg = _child_providers(root)
+    default = cfg.get("default")
+    if default and default != "mock":
+        key_env = cfg["key_env"].get(default) or PROVIDER_KEY_ENV.get(default)
+        if default in cfg["unverifiable"] and default not in cfg["key_env"]:
+            checked.append(f".ai-ops.yaml providers.default={default}: credentials_ref — "
+                           f"{cfg['unverifiable'][default]}:-ссылка, из движка не проверяется")
+        elif not key_env:
+            checked.append(f".ai-ops.yaml providers.default={default}: неизвестно, какой env-ключ "
+                           "проверять (нет credentials_ref и записи в registry)")
+        elif env.get(key_env):
+            return {"provider": default, "source": "child-config", "autoresolve": True,
+                    "reason": f".ai-ops.yaml providers.default={default}, ключ {key_env} есть в env",
+                    "warning": None, "checked": checked, "key_env": key_env}
+        else:
+            checked.append(f".ai-ops.yaml providers.default={default}: {key_env} отсутствует в env")
+
+    if which("claude"):
+        return {"provider": "claude-cli", "source": "claude-cli-in-path", "autoresolve": True,
+                "reason": "claude CLI найден в PATH (локальная сессия, API-ключ не нужен)",
+                "warning": None, "checked": checked}
+    checked.append("claude CLI не найден в PATH")
+
+    return {"provider": "mock", "source": "fallback", "autoresolve": True,
+            "reason": "живого провайдера не нашлось", "warning": NO_LIVE_PROVIDER_WARNING,
+            "checked": checked}
+
+
+def print_provider_resolution(res, printer=print):
+    """Громкая печать решения ДО прогона (честность деклараций: скатились в mock — говорим сразу)."""
+    if not isinstance(res, dict):
+        return
+    if res.get("warning"):
+        printer(f"⚠ провайдер: mock — {res['warning']}")
+        for c in res.get("checked") or []:
+            printer(f"  · {c}")
+    elif res.get("source") not in (None, "explicit"):
+        printer(f"провайдер: {res.get('provider')} — {res.get('reason')}")
 
 
 def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
@@ -348,6 +538,54 @@ def selftest():
         ok = False; print(f"FAIL claude-cli: retry не сработал — calls={len(_retry_calls)}, out={_retry_out}")
     if _kb is not None:
         _os.environ["OPENAI_COMPATIBLE_API_KEY"] = _kb
+
+    # v3.28.x (P2-7): вендоры реестра (qwen/deepseek/kimi) резолвятся в openai-compatible путь,
+    # ключ строго из env вендора; объявленный-но-нереализованный — честная ошибка с причиной.
+    _qs = _os.environ.pop("QWEN_API_KEY", None)
+    try:
+        make_provider("qwen")("тест")
+        ok = False; print("FAIL vendors: qwen без QWEN_API_KEY должен падать честной ошибкой")
+    except SystemExit as _e:
+        if "QWEN_API_KEY" in str(_e):
+            print("PASS vendors: qwen -> openai-compatible путь, ключ строго из QWEN_API_KEY")
+        else:
+            ok = False; print(f"FAIL vendors: qwen упал не по ключу — {_e}")
+    finally:
+        if _qs is not None:
+            _os.environ["QWEN_API_KEY"] = _qs
+    try:
+        make_provider("gigachat")
+        ok = False; print("FAIL vendors: нереализованный провайдер реестра должен падать")
+    except SystemExit as _e:
+        print("PASS vendors: gigachat -> честная ошибка «объявлен в registry, не реализован»"
+              if "registry" in str(_e) else "FAIL vendors: причина не названа")
+
+    # v3.28.x (P0-1) резолв провайдера: явный выбор > child-config+ключ > claude в PATH > mock+варн.
+    _r_expl = resolve_provider(explicit="mock", root=None, env={}, which=lambda n: "/usr/bin/claude")
+    if _r_expl["provider"] == "mock" and _r_expl["source"] == "explicit":
+        print("PASS resolve: явный --provider mock побеждает автовыбор")
+    else:
+        ok = False; print(f"FAIL resolve: явный выбор не победил — {_r_expl}")
+    _env_on = {PROVIDER_AUTORESOLVE_ENV: "1"}
+    _r_cli = resolve_provider(env=_env_on, which=lambda n: "/usr/bin/claude" if n == "claude" else None)
+    if _r_cli["provider"] == "claude-cli":
+        print("PASS resolve: claude в PATH -> claude-cli")
+    else:
+        ok = False; print(f"FAIL resolve: claude в PATH не дал claude-cli — {_r_cli}")
+    _r_mock = resolve_provider(env=_env_on, which=lambda n: None)
+    if _r_mock["provider"] == "mock" and _r_mock.get("warning"):
+        print("PASS resolve: нет ключей и CLI -> mock + громкое предупреждение до прогона")
+    else:
+        ok = False; print(f"FAIL resolve: молчаливый mock — {_r_mock}")
+    _r_off = resolve_provider(env={PROVIDER_AUTORESOLVE_ENV: "0"}, which=lambda n: "/usr/bin/claude")
+    if _r_off["provider"] == "mock" and _r_off["source"] == "autoresolve-disabled":
+        print("PASS resolve: AI_OPS_PROVIDER_AUTORESOLVE=0 -> mock (CI/selftest офлайн)")
+    else:
+        ok = False; print(f"FAIL resolve: выключатель автовыбора не сработал — {_r_off}")
+    if autoresolve_enabled({"PYTEST_CURRENT_TEST": "x"}) is False and autoresolve_enabled({"CI": "true"}) is False:
+        print("PASS resolve: под pytest/в CI автовыбор выключен по умолчанию")
+    else:
+        ok = False; print("FAIL resolve: автовыбор не выключен под pytest/CI")
 
     print("orchestrator_providers selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

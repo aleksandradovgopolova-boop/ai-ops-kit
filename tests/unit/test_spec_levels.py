@@ -119,3 +119,49 @@ class TestAssess:
         provided["constraints"] = {"status": "needs_human", "note": "needs owner"}
         result = spec_levels.assess({"task_type": "QUICK"}, provided)
         assert "constraints" in result["needs_human"]
+
+
+@pytest.mark.unit
+class TestUnrecognisedSectionStatus:
+    """F-013 (находка живой квалификации на niti): раздел заполнен, но статус вне словаря.
+
+    Раньше такой раздел молча уезжал в missing, и блокер печатал «не заполнено: goal, scope…» —
+    ложный след ценой лишней итерации: содержимое было, ошибкой было одно слово.
+    """
+
+    def _filled_with(self, status):
+        provided = {s: {"status": "complete", "content": "x"} for s in spec_levels.LEVEL_SECTIONS[0]}
+        provided["goal"] = {"status": status, "content": "цель описана подробно"}
+        return spec_levels.assess({"task_type": "QUICK"}, provided)
+
+    def test_error_names_allowed_statuses(self):
+        cov = self._filled_with("filled")
+        assert any("'filled'" in e and "complete" in e and "not_applicable" in e
+                   for e in cov["form_errors"]), \
+            "из сообщения не понять, что писать вместо 'filled', — придётся читать исходники"
+
+    def test_filled_section_is_separated_from_empty_one(self):
+        cov = self._filled_with("filled")
+        bad = {b["id"]: b for b in cov["invalid_status"]}
+        assert "goal" in bad, "раздел с нераспознанным статусом не отличён от пустого"
+        assert bad["goal"]["given"] == "filled"
+        assert bad["goal"]["has_content"] is True
+
+    def test_still_fail_closed(self):
+        """Отличать причину — не значит пропускать: спека с нераспознанным статусом не готова."""
+        cov = self._filled_with("filled")
+        assert cov["ready_to_implement"] is False
+        assert "goal" in cov["blocking_missing"]
+
+    def test_valid_statuses_produce_no_noise(self):
+        cov = self._filled_with("not_applicable")
+        assert cov["invalid_status"] == []
+        assert cov["form_errors"] == []
+
+    def test_created_spec_carries_the_vocabulary(self, tmp_path):
+        """Словарь статусов должен быть в самом файле — его заполняет агент без исходников кита."""
+        path, created = spec_levels.create_spec(tmp_path, "wi-1", {"task_type": "QUICK"})
+        assert created
+        text = path.read_text(encoding="utf-8")
+        for status in spec_levels.SECTION_STATUSES - {"missing"}:
+            assert status in text, f"в шаблоне спеки нет статуса {status}"

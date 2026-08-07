@@ -315,6 +315,29 @@ def _escapes_root(rel):
     return norm == ".." or norm.startswith(".." + os.sep) or norm.startswith("../")
 
 
+def _relativize_inside_root(root, rel):
+    """Абсолютный путь, физически лежащий ВНУТРИ root -> путь относительно root. Иначе None.
+
+    F-016 (находка живой квалификации, раунд C, задача T2): writer предлагал абсолютный путь
+    внутри собственного worktree, брокер отклонял его как traversal (`_escapes_root` судит
+    лексически, без знания корня), writer повторял попытку относительным путём. Формально
+    безопасно, фактически — ложный отказ и лишний шаг цикла на ровном месте.
+
+    Проверка физическая (resolve), поэтому симлинк наружу сюда не пролезет: путь обязан
+    разрешиться внутрь настоящего корня."""
+    if not rel or not os.path.isabs(str(rel)):
+        return None
+    try:
+        target = Path(rel).resolve()
+        base = Path(root).resolve()
+    except OSError:
+        return None
+    try:
+        return target.relative_to(base).as_posix()
+    except ValueError:
+        return None
+
+
 def _within_root(root, rel):
     """Belt-and-suspenders: итоговый путь физически внутри root (resolve, без симлинк-побега)."""
     try:
@@ -369,9 +392,21 @@ def _revision(root):
 def execute(action: dict, root, policy: Policy) -> dict:
     """Единственная точка исполнения. ВСЕГДА проверяет policy.decide() первым."""
     root = Path(root)
+    # F-016: абсолютный путь ВНУТРИ рабочего корня приводим к относительному до решения политики.
+    # Здесь — единственное место, где корень известен по-настоящему (для worktree он не равен
+    # child_root), поэтому нормализация живёт тут, а не в decide(). Всё, что не разрешается внутрь
+    # корня, остаётся traversal'ом: fail-closed не ослаблен.
+    _normalized_from = None
+    if action.get("op") in ("read", "write"):
+        _relp = _relativize_inside_root(root, action.get("path") or "")
+        if _relp:
+            _normalized_from = action.get("path")
+            action = dict(action, path=_relp)
     d = policy.decide(action)
     ev = {"op": action.get("op"), "target": action.get("path") or action.get("command"),
           "allowed": d["allow"], "reason": d["reason"], "revision": _revision(root)}
+    if _normalized_from:
+        ev["path_normalized_from"] = _normalized_from
     if not d["allow"]:
         ev["ok"] = False
         return ev   # запрещено — НИЧЕГО не исполняем
