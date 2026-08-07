@@ -171,6 +171,7 @@ class TestDecompositionAdvice:
 
 @pytest.mark.critical_path
 @pytest.mark.unit
+@pytest.mark.slow   # тяжёлая обёртка селфтеста: в быстрый профиль не входит
 class TestMainCLI:
     """Tests for main() — CLI entry point."""
 

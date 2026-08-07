@@ -22,8 +22,8 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 | Слой | Содержимое |
 |------|-----------|
 | **Execution Engine** | `ai-ops run` — единый движок «задача → draft PR» |
-| **Quality Gates** | 32 гейта с machine-readable контрактами |
-| **Agents** | 51 AI-агент с независимыми ревьюерами |
+| **Quality Gates** | 33 гейта объявлено; на конкретной задаче оценивается её набор (QUICK — 3) |
+| **Agents** | 51 роль объявлена в реестре; движок вызывает по имени 10, остальные — контракты владения и ревью |
 | **Registry** | Модели, провайдеры, workflow — machine-readable SoT |
 | **Security** | 12 доменов, детерминированный scan, human-in-the-loop |
 | **Observability** | Метрики стоимости, задач, доставки, моделей |
