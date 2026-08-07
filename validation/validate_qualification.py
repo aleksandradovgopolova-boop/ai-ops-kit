@@ -23,8 +23,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 # известные флаги сценариев (ai-ops run / qual_run). Значения флагов с аргументом (--task-type X)
 # пишутся как два токена; проверяем имя флага.
 KNOWN_FLAGS = {

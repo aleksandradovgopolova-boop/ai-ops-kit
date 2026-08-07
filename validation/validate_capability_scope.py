@@ -22,7 +22,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 SCHEMA = PKG / "schemas" / "package-capability-scope.schema.json"
 DEMO = PKG / "examples" / "capability-demo"
 WG_DEMO = PKG / "examples" / "work-graph-demo" / "work-graph.yaml"

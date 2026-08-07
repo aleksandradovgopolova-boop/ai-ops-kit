@@ -31,8 +31,8 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 # Домен -> сигналы-триггеры, которые ДЕТЕРМИНИРОВАННО (по сигналам, до диффа) делают домен применимым
 # и требующим человеко-одобрения. Для secrets/dependencies applicability.signals в доменах пуст (они
 # ловятся по содержимому диффа), поэтому им заданы явные сигналы намерения.

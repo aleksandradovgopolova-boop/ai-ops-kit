@@ -27,7 +27,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 RULE_DOC = PKG / "rules" / "core" / "EngineeringOperatingModel.md"
 
 _ENFORCE_VALUES = ("advise", "block")

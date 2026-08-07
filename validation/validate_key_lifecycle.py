@@ -15,7 +15,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 DEFAULT = PKG / "examples" / "key-lifecycle-demo" / "KLP-001.yaml"
 # эвристика «похоже на секрет-значение» (не имя env, а сам ключ)
 _SECRETISH = re.compile(r"sk-[A-Za-z0-9]{12,}|gho_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN")

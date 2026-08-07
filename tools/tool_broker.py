@@ -42,9 +42,8 @@ SHELL_TIMEOUT_DEFAULT = 300   # сек: shell-команда не висит в�
 SHELL_OUTPUT_TAIL = 4000
 _READ_MAX = 20000   # v3.0-rc18: read отдаёт файл С НАЧАЛА до этого потолка (ревьюер верифицирует полноту)
 
-PKG = Path(__file__).resolve().parents[1]
-
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 def _scrub_output(text):
     """v3.0.11 (finding аудита P1): редактировать секреты в output_tail (read-контент, stdout/stderr shell)
     ПЕРЕД тем, как он попадёт в evidence/отчёт. scrub_env закрывает окружение дочернего процесса, но

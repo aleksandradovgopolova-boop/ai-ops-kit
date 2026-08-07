@@ -25,7 +25,8 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 SCHEMA = PKG / "schemas" / "ui-evidence-bundle.schema.json"
 
 STATUS3 = {"pass", "fail", "not_run"}

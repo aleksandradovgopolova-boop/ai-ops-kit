@@ -147,3 +147,31 @@ def test_workflow_is_valid_yaml_with_jobs(wf):
     """Битый workflow не запускается вовсе — молчаливо зелёный PR без единой проверки."""
     data = yaml.safe_load(wf.read_text(encoding="utf-8"))
     assert isinstance(data, dict) and data.get("jobs"), f"{wf.name}: нет jobs"
+
+
+# --------------------------------------- корень пакета не зависит от глубины ---
+
+@pytest.mark.unit
+def test_no_module_hardcodes_root_depth():
+    """Корень пакета ищется по маркеру, а не через `parents[N]`.
+
+    90 модулей считали корень как `Path(__file__).resolve().parents[1]`. Пока дерево плоское, это
+    работает; при переносе файла на уровень глубже каждый начинает смотреть не туда — сегодня на
+    этом уже споткнулся gate_result_v2, когда его селфтест переехал в tests/unit. Поиск вверх до
+    файла VERSION (он есть и в ките, и в поставке .ai/managed) от глубины не зависит, поэтому
+    будущее разбиение дерева на пакеты не ломает пути.
+    """
+    import re
+
+    offenders = []
+    for d in ("tools", "validation", "installer"):
+        for p in sorted((PKG / d).glob("*.py")):
+            for m in re.finditer(r"^(PKG|PKG_ROOT|ROOT)\s*=\s*Path\(__file__\)[^\n]*parents\[\d+\]",
+                                 p.read_text(encoding="utf-8"), re.M):
+                # фолбэк внутри выражения-поиска допустим: он вторая ветка, не основная
+                if "VERSION" in m.group(0):
+                    continue
+                offenders.append(f"{d}/{p.name}: {m.group(0)[:60]}")
+    assert not offenders, (
+        "корень пакета зашит через parents[N] — перенос файла глубже сломает пути: "
+        f"{offenders[:6]}")

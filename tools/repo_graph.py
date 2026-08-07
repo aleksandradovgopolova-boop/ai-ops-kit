@@ -22,7 +22,8 @@ import re
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 DEFAULT_SUBDIRS = ("tools", "validation")
 JS_TS_EXTENSIONS = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")
 

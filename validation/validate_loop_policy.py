@@ -21,7 +21,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 SCHEMA = PKG / "schemas" / "loop-policy.schema.json"
 LOOP_TYPES = {"implementation", "review_fix", "ui_storybook", "research", "product_learning",
               "safe_improvement"}

@@ -37,7 +37,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 KINDS = {"domain", "audit", "analytics"}
 # каноничная грамматика: lowercase, dot-нотация, ≥2 сегмента, внутри сегмента [a-z0-9_]
 EVENT_RE = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z0-9]+(?:_[a-z0-9]+)*)+$")

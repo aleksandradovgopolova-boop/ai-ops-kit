@@ -42,9 +42,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
-
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 def check_claim(base: Path, c: dict):
     """Вернуть (status, detail): status in {ok, drift, error}."""
     ctype = c.get("type")
