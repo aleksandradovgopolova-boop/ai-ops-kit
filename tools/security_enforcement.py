@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "validation"))
+import _bootstrap  # noqa: E402
 import validate_memory_governance as _mgp   # noqa: E402
 
 

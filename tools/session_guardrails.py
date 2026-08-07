@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bootstrap  # noqa: E402
 import session_telemetry  # noqa: E402
 
 try:

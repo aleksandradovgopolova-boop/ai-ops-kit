@@ -39,7 +39,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bootstrap  # noqa: E402
 import ai_ops_run  # noqa: E402
 import gate_policy  # noqa: E402
 

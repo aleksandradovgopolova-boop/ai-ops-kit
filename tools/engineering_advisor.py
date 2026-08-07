@@ -21,12 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-for _p in (PKG / "tools",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-
+import _bootstrap  # noqa: E402
 def _env_recommendation(child_root):
     """Layer 1: какие окружения использовать."""
     import environment_map
@@ -101,7 +96,8 @@ def _delivery_plan(child_root, task_type=None):
     import branch_policy
     recs = []
     try:
-        profile = project_detector.detect(child_root)
+        # единая точка детекции: свежий кеш профиля или пере-детект при изменившихся манифестах
+        profile = project_detector.load_or_detect(child_root)
         stacks = profile.get("stacks", [])
         # Branch strategy
         recs.append({

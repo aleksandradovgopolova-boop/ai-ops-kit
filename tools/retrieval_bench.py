@@ -18,8 +18,7 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
+import _bootstrap  # noqa: E402
 import context_retrieval as cr   # noqa: E402
 import repo_graph as rg          # noqa: E402
 import semantic_lite as sl       # noqa: E402

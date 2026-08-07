@@ -24,8 +24,7 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
+import _bootstrap  # noqa: E402
 import gate_policy       # noqa: E402
 import gate_result_v2    # noqa: E402
 

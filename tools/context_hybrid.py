@@ -20,8 +20,7 @@ Context Engine v2 — и ТОЛЬКО если `context_promotion_gate` подт
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
+import _bootstrap  # noqa: E402
 import context_promotion_gate as cpg   # noqa: E402
 
 DEFAULT_MODEL_WINDOW = 120000

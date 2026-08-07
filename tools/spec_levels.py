@@ -105,7 +105,7 @@ def assess(signals, provided=None):
     level = cls["level"]
     req = required_sections(level)
     provided = provided or {}
-    sections, blocking_missing, form_errors = [], [], []
+    sections, blocking_missing, form_errors, invalid_status = [], [], [], []
     for sid in req:
         entry = provided.get(sid)
         if not entry:
@@ -114,7 +114,15 @@ def assess(signals, provided=None):
             status = entry.get("status", "missing")
             note = entry.get("note")
             if status not in SECTION_STATUSES:
-                form_errors.append(f"{sid}: неизвестный статус '{status}'")
+                # F-013 (находка живой квалификации на niti): раздел БЫЛ заполнен, но со статусом
+                # вне словаря (например `filled`) — и уезжал в missing, а блокер печатал
+                # «не заполнено». Диагноз уводил в сторону: содержимое есть, дело в слове.
+                # Называем допустимые значения и помечаем случай отдельно от пустого раздела.
+                form_errors.append(
+                    f"{sid}: неизвестный статус '{status}' — допустимо: "
+                    f"{'/'.join(sorted(SECTION_STATUSES - {'missing'}))}")
+                invalid_status.append({"id": sid, "given": status,
+                                       "has_content": bool(entry.get("content"))})
                 status = "missing"
             if status == "declined" and not note:
                 form_errors.append(f"{sid}: declined без объяснения (note обязателен)")
@@ -128,6 +136,9 @@ def assess(signals, provided=None):
         "escalated_from": cls["escalated_from"],
         "sections": sections,
         "blocking_missing": blocking_missing,
+        # F-013: разделы, у которых содержимое есть, а статус вне словаря — отдельно от пустых,
+        # чтобы блокер не звал «заполнить» уже заполненное.
+        "invalid_status": invalid_status,
         "needs_human": needs_human,
         "ready_to_implement": (not blocking_missing) and (not form_errors),
         "form_errors": form_errors,
@@ -217,9 +228,17 @@ def create_spec(child_root, wid, signals, overwrite=False):
                 for sid in required_sections(level)}
     doc = {"schema_version": 1, "kind": "spec", "workitem_id": str(wid),
            "level": level, "level_name": cls["level_name"],
-           "level_reason": cls["reason"], "sections": sections}
+           "level_reason": cls["reason"],
+           # F-013: словарь статусов — прямо в файле. Спеку заполняет человек или агент без
+           # контекста исходников кита; раньше допустимые значения находились только чтением
+           # spec_levels.py, а угаданное слово молча превращало раздел в «не заполнено».
+           "section_statuses": sorted(SECTION_STATUSES),
+           "sections": sections}
     sp.parent.mkdir(parents=True, exist_ok=True)
-    sp.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    sp.write_text(
+        "# status раздела: " + " | ".join(sorted(SECTION_STATUSES - {"missing"}))
+        + "\n# declined требует note с объяснением.\n"
+        + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return sp, True
 
 

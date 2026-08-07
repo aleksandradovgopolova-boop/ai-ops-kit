@@ -17,9 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
-
+import _bootstrap  # noqa: E402
 import execution_pipeline as _ep   # noqa: E402
 import worktree as _wt             # noqa: E402
 

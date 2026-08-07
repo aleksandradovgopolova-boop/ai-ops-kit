@@ -35,12 +35,7 @@ import re
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-for _p in (PKG / "tools", PKG / "validation"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-
+import _bootstrap  # noqa: E402
 # Кириллица -> латиница: задачи на русском иначе схлопываются в один slug (коллизия
 # workitem_id/имени отчёта). Стандартная транслитерация, только stdlib.
 _TRANSLIT = {

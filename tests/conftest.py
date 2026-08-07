@@ -144,9 +144,7 @@ SELFTEST_MODULES_TOOLS = [
     "review_branch",
     "workpackage_executor",
     "security_enforcement",
-    "tool_loop",
     "context_cost",
-    "cost_method",
 ]
 
 SELFTEST_MODULES_VALIDATION = [

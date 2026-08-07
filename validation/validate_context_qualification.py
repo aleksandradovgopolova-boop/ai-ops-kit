@@ -28,9 +28,7 @@ import tempfile
 import subprocess
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
-
+import _bootstrap  # noqa: E402
 import context_compiler   # noqa: E402
 import atomic_planner     # noqa: E402
 import run_handoff        # noqa: E402

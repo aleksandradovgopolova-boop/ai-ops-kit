@@ -22,10 +22,10 @@ from pathlib import Path
 import yaml
 
 PKG_ROOT = Path(__file__).resolve().parents[1]
+import _bootstrap  # noqa: E402
 REPO_ROOT = Path.cwd()
 REG = PKG_ROOT / "registry"
 CI = PKG_ROOT / "validation"
-sys.path.insert(0, str(CI))
 
 ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 SECRETISH_RE = re.compile(r"(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|-----BEGIN)")

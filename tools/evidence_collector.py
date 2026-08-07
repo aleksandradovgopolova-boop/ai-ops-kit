@@ -30,11 +30,7 @@ import json
 import sys
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-for _p in (PKG / "tools",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
+import _bootstrap  # noqa: E402
 import tool_broker            # noqa: E402
 import project_detector       # noqa: E402
 import verification_tiers     # noqa: E402  v3.26.0

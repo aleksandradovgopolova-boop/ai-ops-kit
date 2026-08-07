@@ -22,8 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
+import _bootstrap  # noqa: E402
 FIX_LOOP_LIMIT = 2   # стартовый порог: после N безуспешных fix-итераций — стоп/эскалация, не жечь
 
 

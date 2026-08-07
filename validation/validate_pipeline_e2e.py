@@ -28,8 +28,7 @@ import tempfile
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PKG / "tools"))
-
+import _bootstrap  # noqa: E402
 import ai_ops_run  # noqa: E402
 
 FIX = PKG / "qualification" / "fixtures" / "python"
