@@ -38,11 +38,13 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 
 ## Версия
 
-**v3.28.0 stable** — Verification Foundation II
+**v3.29.0 stable** — Field Findings
 
-- 732 pytest теста (unit + contract + property-based)
-- 25% покрытие (критические модули 50-75%)
-- 19 формальных инвариантов
+- честный первый запуск: `run --execute` сам поднимает живого провайдера, а не молча уходит в mock
+- полнота intake проверяется ДО старта прогона, а не вердиктом после
+- worktree режется от текущей ветки — последовательные задачи строятся друг на друге
+- lifecycle не помечает работу `done` при `NOT_READY`
+- 1019 pytest тестов (unit + contract + property-based)
 - CI matrix: 7 параллельных групп
 - Performance benchmarks + changelog automation
 

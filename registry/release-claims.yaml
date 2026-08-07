@@ -5,10 +5,10 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.28.0
-phase: "v3.28 — Verification Foundation II: тесты, типизация, наблюдаемость, бенчмарки, changelog automation"
+version: 3.29.0
+phase: "v3.29 — Field Findings: честный первый запуск, полнота intake, база worktree, правдивый lifecycle"
 channel: stable
-patch_note: "3.21.0 — Engineering Operating Model (срез 3, WP7): economic_preflight — граница расхода ДО первого вызова модели. Прежде деньги узнавались ПОСЛЕ траты: контекстный бюджет денег не касался, Budget.charge_call рвался на N-м вызове (N-1 уже оплачены), cost_account сверял расход после прогона. Теперь оценка по фактической истории репозитория (usage_ledger) против лимитов RunPlan.execution_budget, встроена в preflight.py шагом 7 (после approvals, до tool loop). Решение по ХУДШЕМУ сравнимому прогону, а не по медиане. Честность: нет истории -> unavailable, НИКОГДА 0 (и не блокируем, иначе первый прогон в репозитории невозможен); задача с вызовами cost_status unavailable даёт НИЖНЮЮ ГРАНИЦУ (estimated_lower_bound) с явным предупреждением, что граница может не сработать; никаких выдуманных коэффициентов по writer_tier — в UsageRecord нет ни класса задачи, ни tier. Вердикты proceed/proceed_unknown/confirm_required/block. Ключ economics в схеме (require_estimate=true требует enforce=block — иначе противоречие), `ai-ops engops cost`, строка в doctor. ВСЯ ФИЧА EngOps (3.19 коммит/ветка -> 3.20 окружения/поставка -> 3.21 экономика) ЗАКРЫТА."
+patch_note: "3.29.0 — закрыты находки двух живых прогонов (niti, ии-среда раунд C) и внешнего ревью v3.28.0. Меняется поведение по умолчанию: run --execute сам выбирает живого провайдера вместо хардкод-mock; отказывается стартовать при неполном intake (exit 2) вместо вердикта после прогона; worktree режется от текущей ветки, а не от remote-default, поэтому последовательные задачи строятся друг на друге. Lifecycle больше не помечает работу done при NOT_READY. Закрыт класс дефектов, из-за которого контур проверки не проверял сам себя: селфтест бенчмарков переписывал собственный baseline, шаг pr-smoke с устаревшим -k выбирал ноль тестов, чеклист опирался на editable-установку и в чистом окружении не выполнял 13 команд из 206."
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в pre-commit-checklist.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
