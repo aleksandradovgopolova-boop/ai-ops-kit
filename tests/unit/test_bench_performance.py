@@ -92,3 +92,25 @@ class TestSelftest:
     def test_selftest_passes(self):
         """selftest() returns 0."""
         assert bench_performance.selftest() == 0
+
+    def test_selftest_subprocess_does_not_rewrite_repo_baseline(self):
+        """Селфтест НЕ переписывает tools/.bench-baseline.json.
+
+        Регрессия: селфтест запускается как `python3 tools/bench_performance.py --selftest`, то есть
+        модулем `__main__`, а внутри делал `import bench_performance as bp` — второй объект модуля.
+        Подмена `bp.BASELINE_PATH` патчила копию, save_baseline из `__main__` писал в настоящий
+        файл. Каждый прогон селфтеста (он же в CI и в пре-коммит-чеклисте) молча заменял baseline
+        замерами текущей машины, и порог «медленнее baseline >2x» переставал ловить регрессии:
+        baseline догонял любое замедление."""
+        import subprocess
+        import sys
+
+        path = bench_performance.BASELINE_PATH
+        before = path.read_bytes() if path.exists() else None
+
+        rc = subprocess.run([sys.executable, str(bench_performance.PKG / "tools" / "bench_performance.py"),
+                             "--selftest"], capture_output=True)
+
+        assert rc.returncode == 0, rc.stdout.decode()[-2000:]
+        after = path.read_bytes() if path.exists() else None
+        assert after == before, "селфтест переписал baseline репозитория"
