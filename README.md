@@ -38,13 +38,13 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 
 ## Версия
 
-**v3.29.0 stable** — Field Findings
+**v3.30.0 stable** — Proof of Fix
 
-- честный первый запуск: `run --execute` сам поднимает живого провайдера, а не молча уходит в mock
-- полнота intake проверяется ДО старта прогона, а не вердиктом после
-- worktree режется от текущей ветки — последовательные задачи строятся друг на друге
-- lifecycle не помечает работу `done` при `NOT_READY`
-- 1019 pytest тестов (unit + contract + property-based)
+- правка подтверждается тестом, который падает на коде ДО неё, — не только «ничего не сломалось»
+- все 70 валидаторов имеют внешний тест (глубина разная: контракт функции / рантайм / штучные)
+- selftest выносится из продакшн-модулей в `tests/` (пилот: orchestrator 607 → 330 строк)
+- честный первый запуск, полнота intake до старта, worktree от текущей ветки (v3.29.0)
+- 1164 pytest теста (unit + contract + property-based)
 - CI matrix: 7 параллельных групп
 - Performance benchmarks + changelog automation
 

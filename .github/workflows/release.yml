@@ -23,16 +23,22 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: Проверить, нужен ли release
         id: check_release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(tr -d '[:space:]' < VERSION)
           TAG="v$VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-          # Проверяем, существует ли уже тег
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
+          # v3.30: спрашиваем GitHub, а не локальный клон. actions/checkout теги НЕ тянет,
+          # поэтому `git rev-parse "$TAG"` всегда говорил «тега нет», и шаг шёл создавать уже
+          # существующий релиз -> HTTP 422 «Release.tag_name already exists». Заявленная в шапке
+          # идемпотентность не работала: КАЖДЫЙ мерж в main между релизами давал красный release.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+             || git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "needed=false" >> $GITHUB_OUTPUT
-            echo "Тег $TAG уже существует — пропуск release"
+            echo "Release/тег $TAG уже существует — пропуск (идемпотентность)"
           else
             echo "needed=true" >> $GITHUB_OUTPUT
             echo "Тег $TAG отсутствует — release нужен"
