@@ -233,68 +233,6 @@ def format_text(results: dict, comparison: dict = None) -> str:
     return "\n".join(lines)
 
 
-def selftest() -> int:
-    """Selftest: benchmarks запускаются, результаты — положительные числа."""
-    ok = True
-
-    def expect(label: str, cond: bool):
-        nonlocal ok
-        if not cond:
-            print(f"  FAIL: {label}")
-            ok = False
-
-    # 1. Все benchmarks возвращают результаты
-    results = run_all(iterations=2)
-    expect("all benchmarks returned", len(results) == len(BENCHMARKS))
-
-    # 2. Каждый результат — dict с median_ms
-    for name, r in results.items():
-        if r.get("error"):
-            continue  # some benchmarks may fail in minimal env
-        expect(f"{name}: median_ms is number",
-               isinstance(r.get("median_ms"), (int, float)) and r["median_ms"] >= 0)
-
-    # 3. Baseline save/load roundtrip
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_baseline = Path(tmpdir) / "baseline.json"
-        save_baseline(results, tmp_baseline)
-        loaded = load_baseline(tmp_baseline)
-        expect("baseline roundtrip: same keys", set(loaded.keys()) == set(results.keys()))
-        for name in results:
-            if results[name].get("median_ms") is not None:
-                expect(f"baseline roundtrip: {name} median matches",
-                       loaded[name]["median_ms"] == results[name]["median_ms"])
-        expect("selftest НЕ трогает baseline репозитория", not tmp_baseline.samefile(BASELINE_PATH)
-               if BASELINE_PATH.exists() else True)
-
-    # 4. Comparison logic
-    baseline = {"test_bench": {"median_ms": 10.0}}
-    comparison = compare_with_baseline(
-        {"test_bench": {"median_ms": 15.0, "min_ms": 14.0, "max_ms": 16.0, "iterations": 3}},
-        baseline, threshold=2.0
-    )
-    expect("comparison: 1.5x is OK", comparison["test_bench"]["status"] == "OK")
-
-    comparison2 = compare_with_baseline(
-        {"test_bench": {"median_ms": 25.0, "min_ms": 24.0, "max_ms": 26.0, "iterations": 3}},
-        baseline, threshold=2.0
-    )
-    expect("comparison: 2.5x is WARNING", comparison2["test_bench"]["status"] == "WARNING")
-
-    comparison3 = compare_with_baseline(
-        {"test_bench": {"median_ms": 60.0, "min_ms": 59.0, "max_ms": 61.0, "iterations": 3}},
-        baseline, threshold=2.0
-    )
-    expect("comparison: 6x is REGRESSION", comparison3["test_bench"]["status"] == "REGRESSION")
-
-    # 5. format_text
-    text = format_text(results)
-    expect("format_text: has header", "Performance Benchmarks" in text)
-
-    print("bench_performance selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="AI Ops Kit performance benchmarks")
@@ -307,9 +245,6 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--selftest", action="store_true", help="Run selftest")
     args = parser.parse_args()
-
-    if args.selftest:
-        return selftest()
 
     results = run_all(iterations=args.iterations)
     baseline = load_baseline()

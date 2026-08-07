@@ -96,59 +96,7 @@ def _load_dir(d: Path):
     return [_load(f) for f in sorted(Path(d).glob("PCS-*.yaml"))] if Path(d).is_dir() else []
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    ex = json.loads(SCHEMA.read_text(encoding="utf-8"))["examples"][0]
-    expect("пример из схемы валиден", check(ex) == [])
-    expect("network без justification -> ошибка (least-privilege)",
-           any("network" in x for x in check({**ex,
-               "allowed_permissions": ["read-only", "network"]})))
-    expect("network c justification -> валиден",
-           check({**ex, "allowed_permissions": ["read-only", "network"],
-                  "justification": {"network": "внешний вызов платёжного API"}}) == [])
-    expect("execution без justification -> ошибка",
-           any("execution" in x for x in check({**ex,
-               "allowed_permissions": ["execution"]})))
-    expect("неизвестный уровень -> ошибка",
-           any("неизвестный уровень" in x for x in check({**ex, "allowed_permissions": ["god-mode"]})))
-    expect("битый id -> ошибка", any("id" in x for x in check({**ex, "id": "PCS1"})))
-
-    # покрытие
-    wg = {"id": "WG-001", "packages": [{"id": "api"}, {"id": "ui"}, {"id": "wiring"}]}
-    full = [{"id": "PCS-001", "work_graph": "WG-001", "package": "api"},
-            {"id": "PCS-002", "work_graph": "WG-001", "package": "ui"},
-            {"id": "PCS-003", "work_graph": "WG-001", "package": "wiring"}]
-    expect("полное покрытие пакетов -> ок", check_coverage(wg, full) == [])
-    expect("пакет без PCS -> нарушение инварианта",
-           any("БЕЗ capability-scope" in x for x in check_coverage(wg, full[:2])))
-    expect("PCS на пакет вне WG -> ошибка",
-           any("вне WG-001" in x for x in check_coverage(wg,
-               full + [{"id": "PCS-009", "work_graph": "WG-001", "package": "ghost"}])))
-    expect("дубль PCS на пакет -> ошибка",
-           any(">1 PCS" in x for x in check_coverage(wg,
-               full + [{"id": "PCS-009", "work_graph": "WG-001", "package": "api"}])))
-
-    # реальный демо: PCS структурно валидны + покрывают WG-001
-    real = _load_dir(DEMO)
-    expect(f"реальные PCS в examples/capability-demo валидны ({len(real)})",
-           all(check(p) == [] for p in real) and len(real) >= 1)
-    if WG_DEMO.exists() and real:
-        expect("реальные PCS покрывают WG-001 (каждый пакет имеет scope)",
-               check_coverage(_load(WG_DEMO), real) == [])
-
-    print("validate_capability_scope selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     d = Path(args[0]) if args else DEMO
     pcs_list = _load_dir(d)

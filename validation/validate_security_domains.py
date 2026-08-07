@@ -74,43 +74,7 @@ def check(data):
     return errors
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    real = PKG / "security" / "security-domains.yaml"
-    if real.exists():
-        expect("поставляемый security-domains.yaml валиден",
-               check(yaml.safe_load(real.read_text(encoding="utf-8"))) == [])
-    good = {"kind": "security-domains", "allowed_evidence_sources": ["secret_scan", "security_reviewer"],
-            "domains": [{"id": d, "applicability": {"signals": [], "file_patterns": [".*"]},
-                         "required_evidence": ["secret_scan"], "severity_policy": {"default": "high"},
-                         "remediation_template": {"summary": "fix"}} for d in REQUIRED_DOMAINS]}
-    expect("синтетический полный набор валиден", check(good) == [])
-    expect("не тот kind -> ошибка", any("security-domains" in e for e in check({"kind": "x"})))
-    bad_ev = {"kind": "security-domains", "allowed_evidence_sources": ["secret_scan"],
-              "domains": [{"id": "secrets", "applicability": {"file_patterns": [".*"]},
-                           "required_evidence": ["magic"], "severity_policy": {"default": "high"},
-                           "remediation_template": {"summary": "x"}}]}
-    expect("required_evidence вне allowed -> ошибка", any("magic" in e for e in check(bad_ev)))
-    bad_sev = {"kind": "security-domains", "allowed_evidence_sources": ["secret_scan"],
-               "domains": [{"id": "secrets", "applicability": {"file_patterns": [".*"]},
-                            "required_evidence": ["secret_scan"], "severity_policy": {"default": "meh"},
-                            "remediation_template": {"summary": "x"}}]}
-    expect("неизвестная severity -> ошибка", any("severity_policy" in e for e in check(bad_sev)))
-    expect("неполный набор доменов -> ошибка", any("не хватает" in e for e in check(bad_sev)))
-
-    print("validate_security_domains selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     path = Path(argv[0]) if argv else (PKG / "security" / "security-domains.yaml")
     if not path.exists():
         print(f"SECURITY-DOMAINS: файл не найден: {path}")

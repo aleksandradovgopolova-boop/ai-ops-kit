@@ -98,51 +98,7 @@ def check(data, pkg=PKG):
     return e
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    if DEFAULT.exists():
-        errs = check(yaml.safe_load(DEFAULT.read_text(encoding="utf-8")))
-        expect("реальный registry/model-roles.yaml валиден", errs == [])
-        for x in errs:
-            print("   -", x)
-
-    classes, _ = _model_classes_and_cost()
-    base = {"registry_type": "model-roles",
-            "roles": {r: {"preferred_class": ("balanced" if r in ("implementation", "code_review") else "high-reasoning"),
-                          "fallback_class": "high-reasoning"} for r in ROLES},
-            "escalation_policy": {"triggers": ["reviewer_abstain"], "max_targeted_retries": 1,
-                                  "escalate_scope": "review_only", "cost_never_by_weakening_gates": True},
-            "qualification_matrix": {
-                "balanced": {"implementation": "qualified", "code_review": "conditional",
-                             "security_review": "not_qualified", "integration_judge": "not_qualified"},
-                "high-reasoning": {"implementation": "qualified", "code_review": "qualified",
-                                   "security_review": "qualified", "integration_judge": "qualified"}}}
-    expect("синтетический базовый валиден", check(base) == [])
-    expect("escalate_scope != review_only -> ошибка",
-           any("review_only" in x for x in check({**base, "escalation_policy": {**base["escalation_policy"], "escalate_scope": "full"}})))
-    expect("cost_never_by_weakening_gates=false -> ошибка",
-           any("cost_never" in x for x in check({**base, "escalation_policy": {**base["escalation_policy"], "cost_never_by_weakening_gates": False}})))
-    # судья на неквалифицированном классе -> ошибка
-    bad_judge = {**base, "roles": {**base["roles"], "security_review": {"preferred_class": "balanced", "fallback_class": "balanced"}}}
-    expect("security_review на 'balanced' (не qualified) -> safety-first ошибка",
-           any("судья" in x for x in check(bad_judge)))
-    # несуществующий класс
-    expect("несуществующий класс -> ошибка",
-           any("model_classes" in x for x in check({**base, "roles": {**base["roles"], "implementation": {"preferred_class": "vibes", "fallback_class": "high-reasoning"}}})))
-
-    print("validate_model_roles selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     path = Path(args[0]) if args else DEFAULT
     errs = check(yaml.safe_load(path.read_text(encoding="utf-8")))

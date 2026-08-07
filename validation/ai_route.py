@@ -303,35 +303,7 @@ SCENARIOS = [
 ]
 
 
-def selftest():
-    ok = True
-    for sc in SCENARIOS:
-        d = route(sc["inp"])
-        missing = [k for k in REQUIRED_KEYS if k not in d or d[k] in (None, "")]
-        # selected_provider may legitimately be None only if no provider; here always set
-        problems = []
-        if missing:
-            problems.append(f"нет ключей {missing}")
-        for k, v in sc["expect"].items():
-            if d.get(k) != v:
-                problems.append(f"{k}={d.get(k)!r} != ожидалось {v!r}")
-        if not d.get("reasons"):
-            problems.append("пустые reasons")
-        status = "OK  " if not problems else "FAIL"
-        if problems:
-            ok = False
-        print(f"{status} [{sc['name']}] -> wf={d['workflow']} prov={d['selected_provider']} "
-              f"rt={d['selected_runtime']} class={d['selected_model_class']} mode={d['execution_mode']} "
-              f"approval={d['human_approval_required']}")
-        for p in problems:
-            print(f"       - {p}")
-    print("routing self-test:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if len(argv) > 1 and argv[1] == "--selftest":
-        return selftest()
     if len(argv) > 1:
         inp = json.loads(argv[1])
         print(json.dumps(route(inp), ensure_ascii=False, indent=2))

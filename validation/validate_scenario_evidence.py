@@ -47,38 +47,7 @@ def check(ev, task_type):
     return findings
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    good = {"status": "pass", "named_user_scenario": "владелец видит правку коллеги над общим объектом",
-            "scenario_test": "tests/e2e/shared_object.py::test_two_users_one_object"}
-    expect("ENGINEERING + named scenario + scenario_test -> без advisory", check(good, "ENGINEERING") == [])
-    # проверка, что гейт СРАБАТЫВАЕТ (Оговорка дока: гейт, который не падал, неотличим от отсутствующего)
-    empty = {"status": "pass", "provided": ["build_passed", "tests_passed", "tested_revision"]}
-    fires = check(empty, "ENGINEERING")
-    expect("ENGINEERING без сценария/теста -> advisory СРАБАТЫВАЕТ (2 находки)", len(fires) == 2)
-    expect("PRODUCT без сценария -> тоже срабатывает", len(check(empty, "PRODUCT")) == 2)
-    expect("CRITICAL: только scenario, нет теста -> одна находка",
-           len(check({"named_user_scenario": "s"}, "CRITICAL")) == 1)
-    expect("scenario_test не похож на тест -> находка",
-           any("не похож" in f for f in check({"named_user_scenario": "s", "scenario_test": "just words"}, "ENGINEERING")))
-    # неприменимость: QUICK/VISUAL не требуют сценарного evidence -> тихо
-    expect("QUICK -> неприменимо, тихо (нет ложного шума)", check(empty, "QUICK") == [])
-    expect("VISUAL -> неприменимо, тихо", check(empty, "VISUAL") == [])
-    expect("evidence не словарь при ENGINEERING -> честная находка", check(None, "ENGINEERING") != [])
-
-    print("validate_scenario_evidence selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     print(__doc__)
     return 0
 

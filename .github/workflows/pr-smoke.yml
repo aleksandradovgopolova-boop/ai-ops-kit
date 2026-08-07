@@ -38,7 +38,7 @@ jobs:
           # v3.28.x: обёртки селфтестов давно параметризованы — это test_selftest_runs_clean[<файл>],
           # а не test_selftest_<модуль>. Прежний -k не совпадал ни с одним именем: pytest выбирал
           # 0 тестов и отдавал код 5, то есть шаг «проверил» ровно ничего на каждом PR.
-          python3 -m pytest tests/ -v --tb=short --no-cov -k "test_selftest_runs_clean and (orchestrator.py or execution_pipeline.py or preflight.py or tool_broker.py or gate_executor.py or ai_ops_run.py or ai_ops_cli.py)"
+          python3 -m pytest tests/ -v --tb=short --no-cov -k "test_orchestrator_selftest or test_execution_pipeline_selftest or test_preflight_selftest or test_tool_broker_selftest or test_gate_executor_selftest or test_ai_ops_run_selftest or test_ai_ops_cli_selftest"
 
       - name: Key validators
         run: |

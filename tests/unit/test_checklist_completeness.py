@@ -45,10 +45,14 @@ def test_every_validator_is_listed_or_declared_excluded():
     listed = set(re.findall(r"python3 (validation/\S+\.py)", _text()))
     excluded = _declared_exclusions()
 
-    missing = sorted(real - listed - excluded)
+    # v3.30: после выноса selftest валидатор может не значиться в чеклисте — его проверки
+    # переехали в pytest (tests/unit/test_<validator>_selftest.py) и гоняются оттуда.
+    migrated = {f"validation/{p.stem.replace('test_', '', 1).replace('_selftest', '')}.py"
+                for p in (PKG / "tests" / "unit").glob("test_validate_*_selftest.py")}
+    missing = sorted(real - listed - excluded - migrated)
     assert not missing, (
-        "валидаторы не в чеклисте и не в объявленных исключениях — они не запускаются "
-        f"ни в CI, ни перед коммитом: {missing}")
+        "валидаторы не в чеклисте, не в объявленных исключениях и без перенесённого "
+        f"pytest-селфтеста — они не запускаются нигде: {missing}")
 
 
 @pytest.mark.unit

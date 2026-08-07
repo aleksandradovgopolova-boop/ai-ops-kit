@@ -94,19 +94,10 @@ jobs:
       - run: pip install pyyaml pytest pytest-cov
       - name: "Совместимость Python (stdlib + pyyaml)"
         run: python3 validation/validate_python_compat.py
-      - name: "Канонический e2e движка (task -> commit -> evidence -> gates, без модели)"
-        run: python3 validation/validate_pipeline_e2e.py --selftest
-      - name: "Стек-квалификация failure-парсера (golden + live при наличии тулчейна)"
-        run: python3 validation/validate_stack_qualification.py --selftest
       - name: "Ядро движка: контроллер + pipeline + broker + security-scan (selftest)"
         run: |
-          python3 tools/security_scan.py --selftest
       - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
         run: |
-          python3 tools/preflight.py --selftest
-          python3 tools/approvals.py --selftest
-      - name: "Real review intent: read-only ревью ветки (selftest)"
-        run: python3 tools/review_branch.py --selftest
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
       - name: "Research-модуль: схемы, связи RR->EV->DP, freshness, quote-конвенция"

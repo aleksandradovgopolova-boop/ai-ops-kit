@@ -184,24 +184,5 @@ def _authoring_specs():
     }
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("pipeline_helpers: imports work", True)
-    expect("pipeline_helpers: _profile_summary is callable", callable(_profile_summary))
-    expect("pipeline_helpers: _intake_evidence is callable", callable(_intake_evidence))
-    expect("pipeline_helpers: _reviewable_gates is callable", callable(_reviewable_gates))
-    expect("pipeline_helpers: _parse_yaml_block is callable", callable(_parse_yaml_block))
-    expect("pipeline_helpers: NO_SELF_REVIEW contains security", "security" in NO_SELF_REVIEW)
-
-    print("pipeline_helpers selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 if __name__ == "__main__":
     sys.exit(selftest())

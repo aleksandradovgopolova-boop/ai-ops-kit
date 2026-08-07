@@ -143,10 +143,6 @@ def run_checks():
     return r, skips
 
 
-def selftest():
-    return main([])
-
-
 def main(argv):
     if not FIX.is_dir():
         print(f"STACK-QUAL: нет каталога фикстур: {FIX}")

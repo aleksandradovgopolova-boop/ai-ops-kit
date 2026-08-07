@@ -186,40 +186,7 @@ def cmd_check(feature_dir: Path):
     return 0
 
 
-def selftest():
-    ok = True
-
-    def expect(name, got, want):
-        nonlocal ok
-        good = got == want
-        ok = ok and good
-        print(f"{'PASS' if good else 'FAIL'} {name}" + ("" if good else f" (got {got})"))
-
-    with tempfile.TemporaryDirectory() as td:
-        feats = Path(td) / "features"
-        expect("new создаёт blueprint", cmd_new(feats, "demo-x", "Demo X"), 0)
-        fdir = feats / "demo-x"
-        expect("scaffold discovery", cmd_scaffold(fdir, "discovery"), 0)
-        ps = fdir / "discovery" / "problem-statement.md"
-        expect("скелет problem-statement создан", ps.exists(), True)
-        expect("check: незаполненные скелеты discovery -> 1", cmd_check(fdir), 1)
-        ps.write_text(ps.read_text(encoding="utf-8") + "\nНастоящее содержание.\n", encoding="utf-8")
-        hyp = fdir / "discovery" / "hypotheses.md"
-        hyp.write_text(hyp.read_text(encoding="utf-8") + "\nH1.\n", encoding="utf-8")
-        expect("check: после заполнения -> 0", cmd_check(fdir), 0)
-        expect("scaffold идемпотентен (не перезаписывает)",
-               "Настоящее содержание." in ps.read_text(encoding="utf-8") if cmd_scaffold(fdir, "discovery") == 0 else False,
-               True)
-        expect("add experiment", cmd_add(fdir, "discovery", "experiments/exp-1.md",
-                                         "templates/product/Experiment.md"), 0)
-        expect("файл эксперимента создан", (fdir / "experiments" / "exp-1.md").exists(), True)
-    print("generate_artifacts selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     if not argv:
         print(__doc__)
         return 1

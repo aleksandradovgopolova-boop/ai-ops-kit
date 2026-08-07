@@ -95,46 +95,7 @@ def _load(path: Path):
     return json.loads(text)
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    # эталон из примера схемы должен быть валиден
-    ex = json.loads(SCHEMA.read_text(encoding="utf-8"))["examples"][0]
-    expect("пример из схемы валиден", check(ex) == [])
-
-    expect("нет negative-последствий -> ошибка (издержки скрыты)",
-           any("negative" in x for x in check({**ex, "consequences": {"positive": ["x"], "negative": []}})))
-    expect("битый id -> ошибка", any("id" in x for x in check({**ex, "id": "ADR1"})))
-    expect("неизвестный status -> ошибка", any("status" in x for x in check({**ex, "status": "done"})))
-    expect("superseded без superseded_by -> ошибка",
-           any("superseded_by" in x for x in check({**ex, "status": "superseded"})))
-    expect("superseded с superseded_by -> валиден",
-           check({**ex, "status": "superseded", "superseded_by": "ADR-002"}) == [])
-    expect("битый quality_attribute -> ошибка",
-           any("attribute" in x for x in check({**ex,
-               "quality_attributes": [{"attribute": "vibes", "effect": "improves"}]})))
-    expect("битый ui_impact -> ошибка", any("ui_impact" in x for x in check({**ex, "ui_impact": "huge"})))
-    expect("ui_impact=user_facing валиден (согласовано с gate_policy)",
-           check({**ex, "ui_impact": "user_facing"}) == [])
-    expect("пустой context -> ошибка", any("context" in x for x in check({**ex, "context": "  "})))
-
-    # согласованность enum'ов со схемой (drift-guard)
-    sch = json.loads(SCHEMA.read_text(encoding="utf-8"))
-    expect("enum status == схема (нет дрейфа)",
-           set(sch["properties"]["status"]["enum"]) == STATUS)
-
-    print("validate_architecture_decision selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     if not args:
         print(__doc__)

@@ -131,9 +131,5 @@ def main(argv):
     return 0 if ok else 1
 
 
-def selftest():
-    return main([])
-
-
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

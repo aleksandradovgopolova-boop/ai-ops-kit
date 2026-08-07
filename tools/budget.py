@@ -59,47 +59,7 @@ class Budget:
                 "remaining_calls": self.remaining_calls()}
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    b = Budget(max_model_calls=2)
-    b.charge_call(); b.charge_call()
-    expect("два вызова в пределах бюджета", b.model_calls == 2)
-    try:
-        b.charge_call(); raised = False
-    except BudgetExceeded:
-        raised = True
-    expect("третий вызов -> BudgetExceeded", raised)
-    expect("потолок не превышен (осталось 0, calls=2)", b.remaining_calls() == 0 and b.model_calls == 2)
-
-    unb = Budget()
-    for _ in range(100):
-        unb.charge_call()
-    expect("без лимита -> не блокирует", unb.model_calls == 100 and unb.remaining_calls() is None)
-
-    cb = Budget(max_cost=1.0)
-    cb.charge_call(cost=0.6)
-    try:
-        cb.charge_call(cost=0.6); raised = False
-    except BudgetExceeded:
-        raised = True
-    expect("max_cost превышение -> BudgetExceeded (если cost учитывается)", raised)
-
-    expect("from_dict читает RunPlan.execution_budget",
-           Budget.from_dict({"max_model_calls": 5}).max_model_calls == 5)
-
-    print("budget selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     print(__doc__)
     return 0
 

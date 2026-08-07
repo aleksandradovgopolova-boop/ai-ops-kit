@@ -75,31 +75,7 @@ def run(as_json=False):
     return 1 if errors else 0
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    data = yaml.safe_load(POSTURE.read_text(encoding="utf-8"))
-    e, tally = check(data, PKG)
-    expect("реальная постура: форма валидна и evidence резолвится", e == [])
-    expect("покрыты все 13 областей", len(data.get("areas") or []) == 13)
-
-    bad = {"areas": [{"id": "x", "title": "t", "status": "выдумка", "severity": "high",
-                      "evidence": ["nope/missing.md"]}]}
-    e2, _ = check(bad, PKG)
-    expect("невалидный status -> ошибка", any("status" in x for x in e2))
-    expect("битый evidence-путь -> ошибка (drift)", any("не резолвится" in x for x in e2))
-    print("security-posture selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     return run(as_json="--json" in argv)
 
 

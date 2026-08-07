@@ -174,27 +174,7 @@ class TestDecompositionAdvice:
 @pytest.mark.slow   # тяжёлая обёртка селфтеста: в быстрый профиль не входит
 class TestMainCLI:
     """Tests for main() — CLI entry point."""
-
-    def test_main_selftest(self, child_root, monkeypatch):
-        """main(['--selftest']) should run selftest and return 0."""
-        monkeypatch.chdir(child_root)
-        # Create minimal git repo
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=child_root, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test"], cwd=child_root, capture_output=True)
-        (child_root / "dummy.txt").write_text("init")
-        subprocess.run(["git", "add", "."], cwd=child_root, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=child_root, capture_output=True)
-
-        # Set child_root as working directory
-        import os
-        old_cwd = os.getcwd()
-        try:
-            os.chdir(child_root)
-            rc = ai_ops_cli.main(["--selftest"])
-            assert rc == 0
-        finally:
-            os.chdir(old_cwd)
+    # test_main_selftest удалён: тело переехало в tests/unit/test_ai_ops_cli_selftest.py
 
     def test_main_preview_returns_zero(self, child_root, monkeypatch):
         """main(['preview', 'plan', ...]) should return 0 (preview only)."""

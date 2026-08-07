@@ -109,10 +109,6 @@ def run_e2e():
     return r, None
 
 
-def selftest():
-    return main([])
-
-
 def main(argv):
     if not FIX.is_dir():
         print(f"PIPELINE-E2E: нет python-фикстуры: {FIX}")

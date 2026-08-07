@@ -105,10 +105,4 @@ class TestGenerate:
         assert result.startswith("## [")
 
 
-@pytest.mark.unit
-class TestSelftest:
-    """Tests for selftest(): built-in sanity check."""
-
-    def test_selftest_passes(self):
-        """selftest() returns 0."""
-        assert changelog_gen.selftest() == 0
+# TestSelftest удалён: тело переехало в tests/unit/test_changelog_gen_selftest.py

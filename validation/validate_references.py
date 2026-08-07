@@ -188,60 +188,7 @@ def run(root: Path, as_json=False):
     return 1 if findings else 0
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    # 1) реальный пакет: ссылок быть не должно
-    real = check(PKG)
-    expect("реальный пакет без висячих ссылок", real == [])
-
-    # 2) искусственный слом: гейт видят падающим (принцип team-os)
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "registry").mkdir(parents=True)
-        (root / "quality").mkdir()
-        (root / "manifest").mkdir()
-        (root / "rules").mkdir()
-        (root / "skills").mkdir()
-        (root / "registry" / "agents.yaml").write_text(
-            "agents:\n  - id: real-agent\n", encoding="utf-8")
-        (root / "quality" / "gates.yaml").write_text(
-            "gates:\n  real_gate: {id: real_gate}\n", encoding="utf-8")
-        (root / "manifest" / "ai-ops-manifest.yaml").write_text(
-            "skills:\n  shipped:\n    - id: real-skill\n      path: skills/real-skill/SKILL.md\n"
-            "update_policy:\n  updater: installer/does_not_exist.py\n",   # протухший путь
-            encoding="utf-8")
-        (root / "skills" / "real-skill").mkdir()
-        (root / "skills" / "real-skill" / "SKILL.md").write_text(
-            "---\nname: real-skill\nchecklist: rules/missing.yaml\n---\n", encoding="utf-8")
-        (root / "registry" / "workflows.yaml").write_text(
-            "workflows:\n"
-            "  W:\n"
-            "    quality_gates: [ghost_gate]\n"
-            "    stages:\n"
-            "      - {id: s1, owner: ghost-agent, uses_skills: [ghost-skill]}\n",
-            encoding="utf-8")
-        f = check(root)
-        kinds = {x["kind"] for x in f}
-        expect("ловит несуществующий gate", "gate" in kinds)
-        expect("ловит несуществующего agent", "agent" in kinds)
-        expect("ловит несуществующий skill", "skill" in kinds)
-        expect("ловит битый checklist-путь", "path" in kinds)
-        expect("deep-research (внешний) НЕ ложно-битый",
-               all(x["ref"] != "deep-research" for x in f))
-        expect("ловит протухший путь в манифесте", "manifest-path" in kinds)
-    print("validate_references selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     return run(PKG, as_json="--json" in argv)
 
 

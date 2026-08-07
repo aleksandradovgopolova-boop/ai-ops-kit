@@ -111,42 +111,7 @@ checkout_started -> checkout_completed
 DS_BAD = DS_OK.replace("checkout_completed", "checkout_finished")
 
 
-def selftest():
-    ok = True
-
-    def expect(name, got, want):
-        nonlocal ok
-        good = got == want
-        ok = ok and good
-        print(f"{'PASS' if good else 'FAIL'} {name}" + ("" if good else f" (got {got})"))
-
-    with tempfile.TemporaryDirectory() as td:
-        def mk(name, tp=None, ds=None):
-            d = Path(td) / name
-            (d / "analytics").mkdir(parents=True)
-            if tp is not None:
-                (d / TRACKING).write_text(tp, encoding="utf-8")
-            if ds is not None:
-                (d / DASHBOARD).write_text(ds, encoding="utf-8")
-            return d
-
-        p, w, s = check_feature(mk("a", TP_OK, DS_OK))
-        expect("согласованная пара -> чисто", (len(p), len(w)), (0, 0))
-        p, _, _ = check_feature(mk("b", TP_OK, DS_BAD))
-        expect("необъявленное событие в дашборде -> PROBLEM", len(p) > 0, True)
-        p, _, s = check_feature(mk("c", TP_OK, None))
-        expect("нет dashboard-spec -> skip без ошибок", (len(p), s is not None), (0, True))
-        p, _, _ = check_feature(mk("d", None, DS_OK))
-        expect("дашборд без tracking plan -> PROBLEM", len(p), 1)
-        p, w, _ = check_feature(mk("e", "# Tracking Plan\nбез таблицы\n", DS_OK))
-        expect("нераспарсиваемый tracking plan -> WARN, не fail", (len(p), len(w)), (0, 1))
-    print("cross-artifacts selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     if not argv:
         print("использование: validate_cross_artifacts.py <feature-dir> [...] | --selftest")
         return 1

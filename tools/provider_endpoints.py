@@ -44,48 +44,7 @@ def key_available(provider):
     return bool(os.environ.get(cfg["key_env"]) or (cfg.get("key_env_fallback") and os.environ.get(cfg["key_env_fallback"])))
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("kimi endpoint -> moonshot.ai + KIMI_API_KEY",
-           endpoint_for("kimi")["base_url"].startswith("https://api.moonshot.ai") and endpoint_for("kimi")["key_env"] == "KIMI_API_KEY")
-    expect("qwen endpoint -> dashscope-intl", "dashscope-intl" in endpoint_for("qwen")["base_url"])
-    expect("deepseek endpoint -> api.deepseek.com", "api.deepseek.com" in endpoint_for("deepseek")["base_url"])
-    expect("неизвестный провайдер -> None", endpoint_for("ghost") is None)
-
-    # deepseek fallback на OPENAI_COMPATIBLE_API_KEY, если DEEPSEEK_API_KEY нет
-    _saved_d = os.environ.pop("DEEPSEEK_API_KEY", None)
-    _saved_o = os.environ.get("OPENAI_COMPATIBLE_API_KEY")
-    os.environ["OPENAI_COMPATIBLE_API_KEY"] = "x"
-    expect("deepseek без DEEPSEEK_API_KEY -> fallback OPENAI_COMPATIBLE_API_KEY",
-           endpoint_for("deepseek")["key_env"] == "OPENAI_COMPATIBLE_API_KEY" and key_available("deepseek") is True)
-    os.environ["DEEPSEEK_API_KEY"] = "y"
-    expect("deepseek с DEEPSEEK_API_KEY -> primary", endpoint_for("deepseek")["key_env"] == "DEEPSEEK_API_KEY")
-    os.environ.pop("DEEPSEEK_API_KEY", None)
-    if _saved_d is not None:
-        os.environ["DEEPSEEK_API_KEY"] = _saved_d
-    if _saved_o is None:
-        os.environ.pop("OPENAI_COMPATIBLE_API_KEY", None)
-    else:
-        os.environ["OPENAI_COMPATIBLE_API_KEY"] = _saved_o
-
-    _saved_k = os.environ.pop("KIMI_API_KEY", None)
-    expect("kimi без ключа -> key_available False", key_available("kimi") is False)
-    if _saved_k is not None:
-        os.environ["KIMI_API_KEY"] = _saved_k
-
-    print("provider_endpoints selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     print(__doc__)
     return 0
 

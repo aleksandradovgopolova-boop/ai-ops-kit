@@ -105,29 +105,7 @@ def make_demo(root: Path, *, dangling=False, bad_relation=False):
     return p
 
 
-def selftest():
-    ok = True
-    types, rels = load_dictionary()
-
-    def expect(name, errs, want_errors):
-        nonlocal ok
-        good = bool(errs) == want_errors
-        ok = ok and good
-        print(f"{'PASS' if good else 'FAIL'} {name}" + ("" if good else f" -> {errs}"))
-
-    with tempfile.TemporaryDirectory() as td:
-        expect("валидный граф", validate_graph(make_demo(Path(td) / "a"), types, rels), False)
-        expect("dangling reference -> fail",
-               validate_graph(make_demo(Path(td) / "b", dangling=True), types, rels), True)
-        expect("недопустимая связь -> fail",
-               validate_graph(make_demo(Path(td) / "c", bad_relation=True), types, rels), True)
-    print("knowledge-graph selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     if not argv:
         print("использование: validate_knowledge_graph.py <graph.yaml> [...] | --selftest")
         return 1

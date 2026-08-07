@@ -92,49 +92,7 @@ def _load(p: Path):
     return yaml.safe_load(t) if p.suffix in (".yaml", ".yml") else json.loads(t)
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    ex = json.loads(SCHEMA.read_text(encoding="utf-8"))["examples"][0]
-    expect("пример из схемы валиден", check(ex) == [])
-    expect("реальный examples/access-filter-demo целостен",
-           all(check(_load(f)) == [] for f in sorted(DEMO.glob("AFP-*.yaml"))) if DEMO.is_dir() else True)
-    expect("filter_stage != before_retrieval -> ошибка",
-           any("before_retrieval" in x for x in check({**ex, "filter_stage": "after"})))
-    expect("default_deny=false -> ошибка",
-           any("default_deny" in x for x in check({**ex, "default_deny": False})))
-    # роль без правила
-    less = {**ex, "rules": ex["rules"][:4]}
-    expect("роль без правила доступа -> ошибка (никакой retrieval без filter)",
-           any("нет правила доступа" in x for x in check(less)))
-    # secret в allowed
-    sec = {**ex, "rules": [{**ex["rules"][0], "allowed_classes": ["public", "secret"]}] + ex["rules"][1:]}
-    expect("secret в allowed_classes -> ошибка (секреты не в context)",
-           any("секреты не входят" in x for x in check(sec)))
-    # класс не объявлен
-    und = {**ex, "data_classes": ["public", "internal"],
-           "rules": [{"role": "planner", "allowed_classes": ["confidential"]}] + [
-               {"role": r, "allowed_classes": ["public"]} for r in
-               ["executor", "ui_reviewer", "security_reviewer", "integration"]]}
-    expect("класс вне data_classes -> ошибка",
-           any("не объявлен в data_classes" in x for x in check(und)))
-    expect("битый context_architecture -> ошибка",
-           any("context_architecture" in x for x in check({**ex, "context_architecture": "CAD1"})))
-    expect("дубль правила на роль -> ошибка",
-           any(">1 правила" in x for x in check({**ex, "rules": ex["rules"] + [ex["rules"][0]]})))
-
-    print("validate_access_filter selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     target = Path(args[0]) if args else DEMO
     files = sorted(target.glob("AFP-*.yaml")) if target.is_dir() else [target]

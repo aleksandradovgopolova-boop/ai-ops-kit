@@ -239,23 +239,5 @@ def _change_context_range(work_root, base_revision, head_revision, max_chars=140
     return "\n".join(parts) + "\n"
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("pipeline_git: imports work", True)
-    expect("pipeline_git: _git is callable", callable(_git))
-    expect("pipeline_git: _has_changes is callable", callable(_has_changes))
-    expect("pipeline_git: _tree_clean is callable", callable(_tree_clean))
-    expect("pipeline_git: _resolve_base is callable", callable(_resolve_base))
-
-    print("pipeline_git selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 if __name__ == "__main__":
     sys.exit(selftest())

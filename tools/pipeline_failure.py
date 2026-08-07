@@ -250,24 +250,5 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr, reviewer_re
     return errs
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("pipeline_failure: imports work", True)
-    expect("pipeline_failure: _diff_checks is callable", callable(_diff_checks))
-    expect("pipeline_failure: _failure_signal is callable", callable(_failure_signal))
-    expect("pipeline_failure: _failure_ids is callable", callable(_failure_ids))
-    expect("pipeline_failure: _env_proven_ok is callable", callable(_env_proven_ok))
-    expect("pipeline_failure: _security_verdict_errors is callable", callable(_security_verdict_errors))
-
-    print("pipeline_failure selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 if __name__ == "__main__":
     sys.exit(selftest())
