@@ -21,7 +21,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 ENTITIES = PKG / "registry" / "entities.yaml"
 
 

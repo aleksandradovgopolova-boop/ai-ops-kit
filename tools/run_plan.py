@@ -25,8 +25,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 # finding аудита (P1.1): workitem_id доходит до путей (worktree add строит root/<wt>/<wid>).
 # Пускаем только безопасный slug — иначе `../`, абсолютные пути и разделители дают traversal.
 WORKITEM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")

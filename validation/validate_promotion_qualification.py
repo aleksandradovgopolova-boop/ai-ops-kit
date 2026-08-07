@@ -25,7 +25,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 DEFAULT_PLAN = PKG / "qualification" / "promotion" / "v3.6.8-plan.yaml"
 
 REQUIRED_SEQUENCE = ["shadow", "hybrid", "default"]

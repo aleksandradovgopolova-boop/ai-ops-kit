@@ -23,7 +23,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 SCHEMA = PKG / "schemas" / "loop-trace.schema.json"
 DEMO = PKG / "examples" / "loop-trace-demo"
 DIRECTION = {"lower_is_better", "higher_is_better"}

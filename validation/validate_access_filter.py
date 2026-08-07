@@ -22,7 +22,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 SCHEMA = PKG / "schemas" / "access-filter-policy.schema.json"
 DEMO = PKG / "examples" / "access-filter-demo"
 ROLES = {"planner", "executor", "ui_reviewer", "security_reviewer", "integration"}

@@ -13,9 +13,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 # v3.1 (trace v0.2): аккумулятор статистики вызовов модели — tokens/latency/cost для трейсе. Вызывающий
 # (ai_ops_run) дренирует после прогона и эмитит в journal + отчёт. Наблюдаемость, не источник истины.
 _CALL_STATS = []
@@ -69,47 +68,7 @@ def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, co
     _CALL_STATS.append(rec)
 
 
-# ---------------- selftest ----------------
-
-def selftest():
-    ok = True
-    # _record_call + drain_call_stats: записали -> дренировали -> очистилось
-    _CALL_STATS.clear()
-    _CALL_CONTEXT.clear()
-    _record_call("test-model", 100, 50, 1.234, provider="test")
-    if len(_CALL_STATS) == 1 and _CALL_STATS[0]["model"] == "test-model":
-        print("PASS usage: _record_call записывает в _CALL_STATS")
-    else:
-        ok = False; print("FAIL usage: _record_call не записал")
-    stats = drain_call_stats()
-    if len(stats) == 1 and len(_CALL_STATS) == 0:
-        print("PASS usage: drain_call_stats забирает и очищает")
-    else:
-        ok = False; print("FAIL usage: drain не сработал")
-    # set_call_context / clear_call_context
-    set_call_context(role="writer", trigger="initial")
-    _record_call("m", 10, 20, 0.5)
-    rec = _CALL_STATS[-1]
-    if rec.get("role") == "writer" and rec.get("trigger") == "initial":
-        print("PASS usage: set_call_context вмерживается в запись")
-    else:
-        ok = False; print("FAIL usage: контекст не вмержился")
-    clear_call_context()
-    _record_call("m2", 1, 2, 0.1)
-    if "role" not in _CALL_STATS[-1]:
-        print("PASS usage: clear_call_context очищает контекст")
-    else:
-        ok = False; print("FAIL usage: контекст не очистился")
-    _CALL_STATS.clear()
-    _CALL_CONTEXT.clear()
-
-    print("orchestrator_usage selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if len(argv) > 1 and argv[1] == "--selftest":
-        return selftest()
     print(__doc__)
     return 0
 

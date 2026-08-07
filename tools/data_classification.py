@@ -22,7 +22,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 SCHEMA = PKG / "schemas" / "data-classification-policy.schema.json"
 DEMO = PKG / "examples" / "data-classification-demo"
 ORDER = {"public": 0, "internal": 1, "confidential": 2, "secret": 3}

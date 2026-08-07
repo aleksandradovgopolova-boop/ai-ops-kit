@@ -105,6 +105,27 @@ def test_every_k_filter_selects_at_least_one_test():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
+def test_every_pytest_job_installs_hypothesis(wf):
+    """Набор содержит property-based тесты — джоб без hypothesis падает на СБОРКЕ.
+
+    Всплыло при переходе групп CI на pytest: прежние шелл-группы property-based тесты не
+    запускали, и отсутствие зависимости было незаметно. Джоб `quality` упал с
+    ModuleNotFoundError на collect, не выполнив ни одного теста.
+    """
+    broken = []
+    for name, job in _jobs(wf):
+        runs = _steps_text(job)
+        installs = any("hypothesis" in r for r in runs)
+        runs_pytest = any(re.search(r"-m pytest\b", r) or "ci-groups/" in r for r in runs)
+        if runs_pytest and not installs:
+            broken.append(name)
+    assert not broken, (
+        f"{wf.name}: джобы {broken} запускают pytest, но не ставят hypothesis — "
+        f"падение на сборке до первого теста")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
 def test_pull_request_trigger_covers_pr_creation(wf):
     """Фильтр types без `opened` пропускает PR, созданный сразу как non-draft.
 
@@ -147,3 +168,31 @@ def test_workflow_is_valid_yaml_with_jobs(wf):
     """Битый workflow не запускается вовсе — молчаливо зелёный PR без единой проверки."""
     data = yaml.safe_load(wf.read_text(encoding="utf-8"))
     assert isinstance(data, dict) and data.get("jobs"), f"{wf.name}: нет jobs"
+
+
+# --------------------------------------- корень пакета не зависит от глубины ---
+
+@pytest.mark.unit
+def test_no_module_hardcodes_root_depth():
+    """Корень пакета ищется по маркеру, а не через `parents[N]`.
+
+    90 модулей считали корень как `Path(__file__).resolve().parents[1]`. Пока дерево плоское, это
+    работает; при переносе файла на уровень глубже каждый начинает смотреть не туда — сегодня на
+    этом уже споткнулся gate_result_v2, когда его селфтест переехал в tests/unit. Поиск вверх до
+    файла VERSION (он есть и в ките, и в поставке .ai/managed) от глубины не зависит, поэтому
+    будущее разбиение дерева на пакеты не ломает пути.
+    """
+    import re
+
+    offenders = []
+    for d in ("tools", "validation", "installer"):
+        for p in sorted((PKG / d).glob("*.py")):
+            for m in re.finditer(r"^(PKG|PKG_ROOT|ROOT)\s*=\s*Path\(__file__\)[^\n]*parents\[\d+\]",
+                                 p.read_text(encoding="utf-8"), re.M):
+                # фолбэк внутри выражения-поиска допустим: он вторая ветка, не основная
+                if "VERSION" in m.group(0):
+                    continue
+                offenders.append(f"{d}/{p.name}: {m.group(0)[:60]}")
+    assert not offenders, (
+        "корень пакета зашит через parents[N] — перенос файла глубже сломает пути: "
+        f"{offenders[:6]}")

@@ -40,7 +40,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 BLUEPRINT_TEMPLATE = PKG / "templates" / "blueprint" / "FeatureBlueprint.yaml"
 GENERATION_FILE = ".generation.json"
 STAGES = ["discovery", "definition", "ux", "architecture", "delivery",

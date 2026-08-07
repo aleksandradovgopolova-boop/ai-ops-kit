@@ -30,19 +30,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # v3.30: группы — разбиение pytest по маркерам, а не рукописные списки команд.
+        # Проверка, добавленная как тест, попадает в свою группу сама.
         include:
-          - group: core
-            script: .github/ci-groups/core.sh
-          - group: execution
-            script: .github/ci-groups/execution.sh
-          - group: quality-product
-            script: .github/ci-groups/quality-product.sh
-          - group: culture-ops
-            script: .github/ci-groups/culture-ops.sh
-          - group: context-security
-            script: .github/ci-groups/context-security.sh
-          - group: validation
-            script: .github/ci-groups/validation.sh
+          - group: fast
+            script: .github/ci-groups/fast.sh
+          - group: selftests-a
+            script: .github/ci-groups/selftests-a.sh
+          - group: selftests-m
+            script: .github/ci-groups/selftests-m.sh
           - group: contracts
             script: .github/ci-groups/contracts.sh
     env:
@@ -54,7 +50,7 @@ jobs:
         with: {python-version: "3.12"}
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov
+      - run: pip install pyyaml pytest pytest-cov hypothesis
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -69,10 +65,8 @@ jobs:
       - run: pip install pyyaml pytest pytest-cov hypothesis
       - name: "Contract tests on 3.9"
         run: python3 -m pytest tests/contracts/ -v --tb=short --no-cov
-      - name: "Core selftests on 3.9"
-        run: bash .github/ci-groups/core.sh
-      - name: "Execution selftests on 3.9"
-        run: bash .github/ci-groups/execution.sh
+      - name: "Быстрый профиль на 3.9"
+        run: bash .github/ci-groups/fast.sh
 
   # v2.96 Real Qualification: канонический e2e движка на РЕАЛЬНОЙ фикстуре, на нескольких версиях
   # Python (раньше CI гонял только 3.12). Стек-квалификация failure-парсера — тоже здесь.
@@ -89,16 +83,8 @@ jobs:
         with: {python-version: "${{ matrix.python-version }}"}
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov
-      - name: "Ядро движка: контроллер + pipeline + broker + security-scan (selftest)"
-        run: |
+      - run: pip install pyyaml pytest pytest-cov hypothesis
       - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
         run: |
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
-      - name: "Research-модуль: схемы, связи RR->EV->DP, freshness, quote-конвенция"
-        run: |
-          python3 validation/validate_research_artifacts.py --selftest
-          python3 .research/tools/verify_quotes.py --selftest
-          python3 .research/tools/freshness_sweep.py --selftest
-          python3 .research/tools/ev_scaffold.py --selftest

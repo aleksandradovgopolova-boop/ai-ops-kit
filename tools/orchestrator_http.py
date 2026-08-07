@@ -12,9 +12,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
-
-
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 def _http_post_json(url, headers, payload, timeout=120, retries=6):
     """POST JSON с ретраями на ТРАНЗИЕНТНЫЕ сбои (finding живого прогона: SSL-handshake timeout
     оборвал задачу). Ретраим сетевые таймауты/сбросы и 5xx/429 с бэкоффом; 4xx (кроме 429) —

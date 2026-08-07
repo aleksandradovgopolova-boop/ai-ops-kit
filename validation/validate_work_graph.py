@@ -25,7 +25,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 DEMO = PKG / "examples" / "work-graph-demo"
 MODE = {"single", "sequential", "parallel", "hybrid"}
 VERDICT = {"parallel_safe", "needs_sequential", "hybrid"}

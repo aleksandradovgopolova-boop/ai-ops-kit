@@ -24,7 +24,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 DELIVER = PKG / "containers" / "deliver-run-branches.sh"
 
 

@@ -21,7 +21,8 @@ from pathlib import Path
 
 import yaml
 
-PKG_ROOT = Path(__file__).resolve().parents[1]
+PKG_ROOT = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+                 Path(__file__).resolve().parents[1])
 REPO_ROOT = Path.cwd()
 SYS_DIR = PKG_ROOT
 AGENTS_DIR = SYS_DIR / "agents"
