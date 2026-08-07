@@ -7,6 +7,14 @@ on:
   pull_request:
     branches: [main]
 
+# v3.28.x: команды чеклиста запускаются как `python3 validation/x.py`, и валидаторы делают
+# `import _bootstrap` (файл лежит в tools/). На машине разработчика это работает из-за editable-
+# установки кита (.pth кладёт tools/ в sys.path ЛЮБОГО процесса) — в чистом окружении CI её нет,
+# и валидаторы падали с ModuleNotFoundError. Задаём путь явно, чтобы CI повторял чеклист
+# буквально, а не «почти».
+env:
+  PYTHONPATH: tools:validation
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -16,7 +24,7 @@ jobs:
         with: {python-version: "3.12"}
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov
+      - run: pip install pyyaml pytest pytest-cov hypothesis
 
       - name: Pytest — critical path + contracts
         run: |

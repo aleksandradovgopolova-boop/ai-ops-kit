@@ -7,6 +7,14 @@ on:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
 
+# v3.28.x: команды чеклиста запускаются как `python3 validation/x.py`, и валидаторы делают
+# `import _bootstrap` (файл лежит в tools/). На машине разработчика это работает из-за editable-
+# установки кита (.pth кладёт tools/ в sys.path ЛЮБОГО процесса) — в чистом окружении CI её нет,
+# и валидаторы падали с ModuleNotFoundError. Задаём путь явно, чтобы CI повторял чеклист
+# буквально, а не «почти».
+env:
+  PYTHONPATH: tools:validation
+
 jobs:
   quality:
     # v3.27.3 WP4: не запускаем полный CI для draft PR даже при synchronize

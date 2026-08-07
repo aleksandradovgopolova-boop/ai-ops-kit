@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+## [3.28.0] — 2026-08-06 — Verification Foundation II
+
+Запись восстановлена 2026-08-07: релиз 3.28.0 вышел БЕЗ записи в CHANGELOG, из-за чего
+`changelog_gen` держал `package-quality` красным на main с 6 августа. Содержание собрано по
+релизному коммиту `85dc201` и последующим правкам того же среза.
+
+Тесты:
+- 34 → 230 тестов pytest: 161 unit (10 модулей), 19 property-based (hypothesis) на budget,
+  usage_ledger, security_scan, preflight, 16 на kit_observability;
+- дальнейший набор покрытия до 732 тестов (execution_pipeline 53%, ai_ops_run 75%),
+  заполнены contract-заглушки, закрыты модули с 0%.
+
+Типизация:
+- `tools/contracts.py` — 8 TypedDict (UsageRecord, PreflightResult, GateResultV2, RunReport,
+  DeliveryIntent/Receipt, ContextBundle, WorkItemState), интеграция в preflight и usage_ledger.
+
+Архитектура:
+- `orchestrator.py` 3210 → 606 строк; извлечены `orchestrator_http.py`,
+  `orchestrator_providers.py`, `orchestrator_usage.py` с полной обратной совместимостью
+  (re-export). Позже так же разделён `execution_pipeline`.
+
+CI:
+- `package-quality.yml` — один job заменён на 7 параллельных групп (`.github/ci-groups/`).
+
+Пакет:
+- `pyproject.toml` + `setup.py` (`pip install -e .`), `tools/__init__.py`,
+  `validation/__init__.py`; включён coverage, добавлены бенчмарки производительности и
+  автоматизация changelog.
+
 ## [3.27.7] — 2026-08-06 — Fix: claude -p writer переживает транзиентный 529 (F-011)
 
 Патч-релиз (без новой функциональности). Устойчивость первоклассного локального writer'а
