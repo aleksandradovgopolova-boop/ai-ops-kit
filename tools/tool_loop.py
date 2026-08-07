@@ -31,16 +31,29 @@ import budget as _budget_mod  # noqa: E402
 
 
 def parse_action(text):
-    """Достать JSON-предложение из ответа модели (терпимо к обрамлению текстом)."""
+    """Достать JSON-предложение из ответа модели (терпимо к обрамлению текстом).
+
+    v3.30: разбор проверяет ФОРМУ, а не только синтаксис. Прежде `{}` и `{"чужая":"схема"}`
+    возвращались как есть — «полудействие» без op/done проходило разбор, брокер его отклонял,
+    но счётчик max_bad_proposals не срабатывал: модель, зациклившаяся на пустом объекте, жгла
+    все шаги и бюджет вместо раннего останова. Обрезанный JSON при этом назывался «no-json»,
+    и подсказка, уходящая обратно в модель, уводила её не туда."""
     if isinstance(text, dict):
         return text
-    m = re.search(r"\{.*\}", text or "", re.S)
+    raw = text or ""
+    m = re.search(r"\{.*\}", raw, re.S)
     if not m:
-        return {"error": "no-json"}
+        return {"error": "bad-json" if "{" in raw else "no-json"}
     try:
-        return json.loads(m.group(0))
+        obj = json.loads(m.group(0))
     except json.JSONDecodeError:
         return {"error": "bad-json"}
+    if not isinstance(obj, dict):
+        return {"error": "no-action"}
+    # действие цикла (op/done) ИЛИ вердикт ревьюера (kind/status) — иначе это не предложение
+    if not (obj.get("op") or obj.get("done") or obj.get("kind") or obj.get("status")):
+        return {"error": "no-action"}
+    return obj
 
 
 def make_model_proposer(provider):
