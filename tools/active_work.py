@@ -243,20 +243,32 @@ def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_jso
     return 0
 
 
-def finish_cmd(path, wid):
+def finish_cmd(path, wid, status="done", reason=None):
+    """Снять работу с учёта. status — из STATUS; 'done' ТОЛЬКО когда работа действительно закончена.
+
+    v3.28.x (F-012, находка живой квалификации на niti): прогон помечал работу `done` независимо
+    от исхода — при NOT_READY, при исключении провайдера и даже при Ctrl-C. `ai-ops status` после
+    этого показывал пустоту, хотя работа не сделана: реестр активной работы врал ровно там, где
+    он единственный источник правды о незавершённом."""
+    if status not in STATUS:
+        print(f"ОШИБКА: status '{status}' не в {sorted(STATUS)}")
+        return 1
     # v3.0.12: read-modify-write под блокировкой (симметрично register — без гонки на общем реестре)
     with _locked(path):
         data = load(path)
         found = False
         for w in data["active"]:
             if w.get("id") == wid:
-                w["status"] = "done"
+                w["status"] = status
+                if reason:
+                    w["status_reason"] = reason
                 found = True
         if not found:
             print(f"ACTIVE-WORK: работа '{wid}' не найдена.")
             return 1
         save(path, data)
-    print(f"ACTIVE-WORK: работа '{wid}' помечена done.")
+    print(f"ACTIVE-WORK: работа '{wid}' помечена {status}"
+          f"{' — ' + reason if reason else ''}.")
     return 0
 
 

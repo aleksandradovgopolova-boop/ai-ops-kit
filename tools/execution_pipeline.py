@@ -713,11 +713,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # (features/<wid>/spec.yaml), но он НЕ полон (есть blocking_missing) -> «неполная спека не
     # пускает в implementation» (аудит). Спеки нет -> поведение прежнее (spec-first опционален для
     # мелких задач, spec_depth через гейты). Читаем реальный артефакт, а не сигналы.
-    spec_incomplete = []
+    spec_incomplete, spec_bad_status = [], []
     try:
         _cov = _sl.assess_from_artifacts(signals, child_root, wid, work_root=work_root)
         if _cov.get("spec_artifact") and _cov.get("blocking_missing"):
             spec_incomplete = list(_cov["blocking_missing"])
+        # F-013: разделы с содержимым, но нераспознанным статусом — это НЕ «не заполнено».
+        # Прежний вывод отправлял заполнять уже заполненное; настоящая правка — одно слово.
+        spec_bad_status = list(_cov.get("invalid_status") or [])
     except Exception as _e:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение
         # -> spec_incomplete=[] -> spec_complete_ok=True: реальный, но неоцениваемый spec.yaml проходил в
         # реализацию. Теперь ошибка оценки спеки = блокирующий незакрытый пункт (не тихий пропуск).
@@ -849,8 +852,16 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if spec_depth_missing:
         not_yet.append("spec-depth: не закрыты разделы уровня " + ", ".join(spec_depth_missing))
     if spec_incomplete:
-        not_yet.append("spec-first: features/<wid>/spec.yaml неполон — заполни разделы: "
-                       + ", ".join(spec_incomplete))
+        _bad = {b["id"]: b for b in spec_bad_status}
+        _empty = [s for s in spec_incomplete if s not in _bad]
+        if _empty:
+            not_yet.append("spec-first: features/<wid>/spec.yaml неполон — заполни разделы: "
+                           + ", ".join(_empty))
+        for sid, b in _bad.items():
+            not_yet.append(
+                f"spec-first: раздел {sid} {'заполнен, но' if b.get('has_content') else 'имеет'} "
+                f"нераспознанный статус '{b.get('given')}' — допустимо: "
+                + "/".join(sorted(_sl.SECTION_STATUSES - {"missing"})))
     if context_overflow:
         not_yet.append("context budget превышен — задачу нужно декомпозировать (см. work_package)")
     if not approvals_cover_ok:
@@ -887,6 +898,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "commit": {"branch": work_branch, "sha": committed_sha,
                    "evidence_revision": evidence_revision,
                    "evidence_on_exact_sha": revision_matches,
+                   # F-017 (раунд C, T5): loop.applied_writes считает правки, применённые ЧЕРЕЗ
+                   # брокера, и это не то же самое, что реально изменённые файлы: writer уровня
+                   # `claude -p` правит файлы своими инструментами. В отчёте расходилось
+                   # `applied_writes: 0` с коммитом на 2 файла. Ground truth — коммит, кладём его
+                   # рядом, чтобы не приходилось выяснять это вручную.
+                   "changed_files": list(_changed_for_verification or []),
                    "tree_clean_before_checks": tree_clean_before_checks,
                    "tree_clean_after_checks": tree_clean_after_checks},
         "checks": coll["checks"],
