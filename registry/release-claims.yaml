@@ -12,7 +12,7 @@ patch_note: "3.29.0 — закрыты находки двух живых про
 
 # Числа сверяются ДЕРИВИРОВАННО (не на слово): checks_count = python3-команды в pre-commit-checklist.md;
 # agents_count = записи в registry/agents.yaml. Устаревшие числа (напр. «91+») CI отклонит.
-checks_count: 206
+checks_count: 205
 agents_count: 51
 # Числа гейтов — DERIVED. ПОПРАВКА к формулировке v3.28.x: claim'ы gate-count/mvp-blocking-count,
 # на которые ссылается ROADMAP, существуют — они в knowledge/claims.yaml и их проверяет
