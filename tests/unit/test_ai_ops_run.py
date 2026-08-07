@@ -968,15 +968,7 @@ class TestMainResumeSubcommand:
 
 @pytest.mark.critical_path
 @pytest.mark.unit
-class TestMainSelftest:
-    """Tests for main() — selftest flag."""
-
-    def test_selftest_flag(self):
-        """--selftest should run the selftest suite."""
-        # selftest returns 0 on success, 1 on failure
-        result = ai_ops_run.main(["--selftest"])
-        assert isinstance(result, int)
-
+# TestMainSelftest удалён: selftest вынесен в tests/unit/test_ai_ops_run_selftest.py
 
 @pytest.mark.critical_path
 @pytest.mark.unit

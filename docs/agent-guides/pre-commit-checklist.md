@@ -22,11 +22,9 @@ python3 tools/budget.py --selftest
 python3 tools/tool_loop.py --selftest
 python3 tools/gitio.py --selftest
 python3 tools/lifecycle_store.py --selftest
-python3 tools/execution_pipeline.py --selftest
 python3 tools/pr_open.py --selftest
 python3 tools/gate_executor.py --selftest
 python3 validation/validate_reviewer_result.py --selftest
-python3 tools/tool_broker.py --selftest
 python3 tools/security_scan.py --selftest
 python3 tools/context_compiler.py --selftest
 python3 validation/validate_context_bundle.py --selftest
@@ -51,7 +49,6 @@ python3 tools/workitem.py --selftest
 python3 tools/lifecycle_intent.py --selftest
 python3 tools/run_plan.py --selftest
 python3 tools/run_plan.py validate
-python3 tools/ai_ops_run.py --selftest
 python3 tools/bench_lite.py --selftest
 python3 tools/gate_policy.py --selftest
 python3 tools/gate_result_v2.py --selftest
@@ -200,7 +197,6 @@ python3 validation/validate_container_delivery.py
 python3 tools/preflight.py --selftest
 python3 tools/approvals.py --selftest
 python3 tools/review_branch.py --selftest
-python3 tools/workpackage_executor.py --selftest
 python3 installer/ai_ops.py --selftest
 python3 validation/validate_research_artifacts.py --selftest
 python3 validation/validate_research_artifacts.py

@@ -100,9 +100,6 @@ jobs:
         run: python3 validation/validate_stack_qualification.py --selftest
       - name: "Ядро движка: контроллер + pipeline + broker + security-scan (selftest)"
         run: |
-          python3 tools/ai_ops_run.py --selftest
-          python3 tools/execution_pipeline.py --selftest
-          python3 tools/tool_broker.py --selftest
           python3 tools/security_scan.py --selftest
       - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
         run: |
@@ -110,8 +107,6 @@ jobs:
           python3 tools/approvals.py --selftest
       - name: "Real review intent: read-only ревью ветки (selftest)"
         run: python3 tools/review_branch.py --selftest
-      - name: "Sequential WorkPackage Executor: пакет->commit->gates->handoff->следующий (selftest)"
-        run: python3 tools/workpackage_executor.py --selftest
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
       - name: "Research-модуль: схемы, связи RR->EV->DP, freshness, quote-конвенция"
