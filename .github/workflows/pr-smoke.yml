@@ -32,7 +32,10 @@ jobs:
 
       - name: Pytest — selftest wrappers (critical modules)
         run: |
-          python3 -m pytest tests/ -v -k "test_selftest_orchestrator or test_selftest_execution_pipeline or test_selftest_preflight or test_selftest_tool_broker or test_selftest_gate_executor or test_selftest_ai_ops_run or test_selftest_ai_ops_cli" --tb=short --no-cov
+          # v3.28.x: обёртки селфтестов давно параметризованы — это test_selftest_runs_clean[<файл>],
+          # а не test_selftest_<модуль>. Прежний -k не совпадал ни с одним именем: pytest выбирал
+          # 0 тестов и отдавал код 5, то есть шаг «проверил» ровно ничего на каждом PR.
+          python3 -m pytest tests/ -v --tb=short --no-cov -k "test_selftest_runs_clean and (orchestrator.py or execution_pipeline.py or preflight.py or tool_broker.py or gate_executor.py or ai_ops_run.py or ai_ops_cli.py)"
 
       - name: Key validators
         run: |
