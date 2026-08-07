@@ -386,6 +386,22 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     intake = _intake_evidence(signals)
     if intake:
         gate_ev.setdefault("intake_completeness", intake)
+    # v3.30 (раунд C, T1/T2/T4): доказательство того, что правка ЧИНИТ. Тест из коммита прогоняется
+    # на БАЗОВОЙ ревизии и обязан там упасть — иначе он не покрывает исправление. Считаем только
+    # когда есть что сравнивать (коммит на git-дереве); сбой самой проверки не роняет прогон, а
+    # честно уходит в unverifiable.
+    regression_proof = None
+    if commit and is_git and committed_sha:
+        try:
+            import regression_evidence
+            regression_proof = regression_evidence.prove(
+                work_root, base_sha, committed_sha, profile,
+                changed_files=_changed_for_verification)
+            gate_ev.setdefault("regression_test_evidence", regression_evidence.gate_evidence(
+                regression_proof, behavior_unchanged=(loop or {}).get("behavior_unchanged")))
+        except Exception as _e:  # noqa: BLE001 — доказательство не должно ронять уже сделанную работу
+            regression_proof = {"kind": "RegressionEvidence", "status": "unverifiable",
+                                "reason": f"проверка не отработала: {type(_e).__name__}: {_e}"[:200]}
     # v2.86: evidence артефакт-гейтов (requirements/plan_readiness) из author-стадии — форма
     # подтверждена детерминированно; НЕ перетираем уже имеющееся evidence (setdefault).
     for _gid, _ev in (authored_ev or {}).items():
@@ -906,6 +922,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                    "changed_files": list(_changed_for_verification or []),
                    "tree_clean_before_checks": tree_clean_before_checks,
                    "tree_clean_after_checks": tree_clean_after_checks},
+        # v3.30: доказательство исправления — в отчёте, а не только в вердикте гейта: постфактум
+        # видно, ЧЕМ подтверждена правка (или почему не подтверждена).
+        "regression": regression_proof,
         "checks": coll["checks"],
         "exemptions": sorted(exempt),          # флаги, освобождённые как неприменимые (видно, не тихо)
         "tests_warn": tests_warn,              # громкий сигнал об отсутствии тестов (если есть)

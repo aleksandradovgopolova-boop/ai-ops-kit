@@ -19,7 +19,8 @@ import _bootstrap  # noqa: E402
 
 # Import from sibling submodules
 from orchestrator_http import _http_post_json
-from orchestrator_usage import _record_call, _CALL_STATS
+import orchestrator_usage          # noqa: E402 — _CALL_STATS читаем ЖИВЫМ (drain пересоздаёт список)
+from orchestrator_usage import _record_call
 
 
 # --- провайдеры ---
@@ -479,7 +480,7 @@ def selftest():
             self.returncode = returncode
             self.stderr = stderr
     _seen = {}
-    _call_stats_before = len(_CALL_STATS)
+    _call_stats_before = len(orchestrator_usage._CALL_STATS)
     def _fake_runner(cmd):
         _seen["cmd"] = cmd
         return _FakeResult(stdout=_test_json.dumps({
@@ -495,9 +496,9 @@ def selftest():
     else:
         ok = False; print("FAIL claude-cli: не вернул текст провайдера")
     # v3.21.1 регрессия: _record_call вызван (usage измеряется), time.monotonic() не упал
-    _call_stats_after = len(_CALL_STATS)
+    _call_stats_after = len(orchestrator_usage._CALL_STATS)
     if _call_stats_after > _call_stats_before:
-        _last_call = _CALL_STATS[-1]
+        _last_call = orchestrator_usage._CALL_STATS[-1]
         _has_tokens = _last_call.get("input_tokens") == 100 and _last_call.get("output_tokens") == 50
         _has_cost = _last_call.get("cost_usd_est") is not None
         _has_latency = _last_call.get("latency") is not None and _last_call["latency"] >= 0

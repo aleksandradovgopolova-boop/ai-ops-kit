@@ -59,11 +59,11 @@ def derived_counts(pkg=PKG):
 def derived_gate_counts(pkg=PKG):
     """(gates_count, mvp_blocking_count) из quality/gates.yaml.
 
-    v3.28.x: ROADMAP заявлял «MVP-blocking = 8; счётчик запиннен claim
-    gate-count/mvp-blocking-count» — но таких claim'ов не существовало и никто их не сверял.
-    Заявление о том, что число запиннено, само было незапиннено. Числа гейтов — публичная
-    поверхность (их называют README/ROADMAP), значит они обязаны дериверироваться, как
-    checks_count и agents_count."""
+    ПОПРАВКА: claim'ы gate-count/mvp-blocking-count, на которые ссылается ROADMAP, существуют —
+    в knowledge/claims.yaml, их проверяет validate_claims (тип count по паттерну строк). Здешние
+    счётчики дублируют значение, но добавляют проверку, которой там нет: каждый гейт из
+    mvp_blocking_gates обязан быть blocking: true. Число гейтов — публичная поверхность, поэтому
+    деривируется, как checks_count и agents_count; при его изменении править ОБА реестра."""
     gates_total, mvp = 0, 0
     try:
         gd = yaml.safe_load((pkg / "quality" / "gates.yaml").read_text(encoding="utf-8")) or {}

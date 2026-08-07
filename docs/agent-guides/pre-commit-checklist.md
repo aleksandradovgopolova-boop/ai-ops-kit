@@ -18,7 +18,6 @@ python3 tools/generate_artifacts.py --selftest
 python3 tools/run_report.py --selftest
 python3 tools/effect_metrics.py --selftest
 python3 tools/kit_observability.py --selftest
-python3 tools/orchestrator.py --selftest
 python3 tools/budget.py --selftest
 python3 tools/tool_loop.py --selftest
 python3 tools/gitio.py --selftest

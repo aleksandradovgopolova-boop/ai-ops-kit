@@ -31,6 +31,26 @@ gates:
     stale_detection: {bind_to: intake_hash}
     required_evidence: [classified_type, size, risk]
 
+  regression_test_evidence:
+    id: regression_test_evidence
+    purpose: >
+      Правка ПОДТВЕРЖДЕНА: тест, приехавший вместе с ней, падает на коде ДО правки и проходит
+      после. implementation_verification доказывает, что ничего не сломалось; этот гейт — что
+      починилось то, что чинили. Класс: непроверенное исправление (раунд C живой квалификации,
+      T1/T2/T4 — writer правил код, тесты и до правки проходили, гейты вставали зелёными).
+    stage: implementation
+    blocking: false          # advisory до обкатки на живых прогонах; MVP-blocking ≤ 8 не трогаем
+    responsible_role: final-verifier
+    review_mode: read-only
+    validator: validate-regression-evidence   # runnable: tools/regression_evidence.py
+    human_approval: false
+    applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]   # пишущие в код
+    required_evidence: [regression_proven]
+    exemption_policy: >
+      Рефакторинг без смены поведения закрывается объявлением writer'а
+      {"done": true, "behavior_unchanged": "<причина>"} — причина попадает в warnings и в отчёт.
+      Отсутствие команды тестов в стеке даёт unverifiable, НЕ «доказано».
+
   concurrency_preflight:
     id: concurrency_preflight
     purpose: >

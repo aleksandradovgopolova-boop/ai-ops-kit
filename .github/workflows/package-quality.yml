@@ -2,7 +2,11 @@ name: package-quality
 on:
   # v3.25.1: полный CI НЕ на каждый draft PR — только когда PR готов к review/merge
   pull_request:
-    types: [ready_for_review, synchronize]  # ready_for_review = выход из draft; synchronize = новый коммит в non-draft PR
+    # v3.30: добавлен opened. Прежде PR, созданный СРАЗУ как non-draft и смерженный без
+    # последующих коммитов, не давал ни ready_for_review, ни synchronize — полный CI не
+    # запускался вовсе, а PR показывал зелёный статус по одному pr-smoke. Draft-PR
+    # по-прежнему отсекается условием на уровне джоба, так что смысл v3.25.1 сохранён.
+    types: [opened, ready_for_review, synchronize]
   push:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
