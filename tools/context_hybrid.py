@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""context_hybrid.py (v3.7.0) — hybrid-контекст: mandatory v1 + разрешённые v2-additions.
+r"""context_hybrid.py (v3.7.0) — hybrid-контекст: mandatory v1 + разрешённые v2-additions.
 
 Промежуточная ступень promotion Context Engine (shadow -> HYBRID -> default). Hybrid НЕ заменяет v1:
 execution получает ВЕСЬ обязательный контекст v1 (policy/spec/decisions) ПЛЮС дополнительные кандидаты

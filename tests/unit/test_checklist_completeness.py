@@ -45,14 +45,18 @@ def test_every_validator_is_listed_or_declared_excluded():
     listed = set(re.findall(r"python3 (validation/\S+\.py)", _text()))
     excluded = _declared_exclusions()
 
-    # v3.30: после выноса selftest валидатор может не значиться в чеклисте — его проверки
-    # переехали в pytest (tests/unit/test_<validator>_selftest.py) и гоняются оттуда.
+    # v3.30: чеклист перестал быть единственным местом запуска. Валидатор считается покрытым,
+    # если его проверки переехали в pytest (test_<validator>_selftest.py) ИЛИ он под
+    # рантайм-контрактом (test_validator_runtime_contract прогоняет его из копии репозитория).
+    # Дублировать те же команды в чеклисте значит гонять одно и то же дважды.
     migrated = {f"validation/{p.stem.replace('test_', '', 1).replace('_selftest', '')}.py"
                 for p in (PKG / "tests" / "unit").glob("test_validate_*_selftest.py")}
-    missing = sorted(real - listed - excluded - migrated)
+    from test_validator_runtime_contract import NEEDS_ARTIFACT, STANDALONE
+    contracted = {f"validation/{n}.py" for n in list(STANDALONE) + list(NEEDS_ARTIFACT)}
+    missing = sorted(real - listed - excluded - migrated - contracted)
     assert not missing, (
-        "валидаторы не в чеклисте, не в объявленных исключениях и без перенесённого "
-        f"pytest-селфтеста — они не запускаются нигде: {missing}")
+        "валидаторы не запускаются нигде: ни в чеклисте, ни в объявленных исключениях, "
+        f"ни в pytest (перенесённый селфтест / рантайм-контракт): {missing}")
 
 
 @pytest.mark.unit

@@ -67,8 +67,6 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.9"}
       - run: pip install pyyaml pytest pytest-cov hypothesis
-      - name: "Python 3.9 compat check"
-        run: python3 validation/validate_python_compat.py
       - name: "Contract tests on 3.9"
         run: python3 -m pytest tests/contracts/ -v --tb=short --no-cov
       - name: "Core selftests on 3.9"
@@ -92,8 +90,6 @@ jobs:
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
       - run: pip install pyyaml pytest pytest-cov
-      - name: "Совместимость Python (stdlib + pyyaml)"
-        run: python3 validation/validate_python_compat.py
       - name: "Ядро движка: контроллер + pipeline + broker + security-scan (selftest)"
         run: |
       - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
@@ -103,7 +99,6 @@ jobs:
       - name: "Research-модуль: схемы, связи RR->EV->DP, freshness, quote-конвенция"
         run: |
           python3 validation/validate_research_artifacts.py --selftest
-          python3 validation/validate_research_artifacts.py
           python3 .research/tools/verify_quotes.py --selftest
           python3 .research/tools/freshness_sweep.py --selftest
           python3 .research/tools/ev_scaffold.py --selftest
