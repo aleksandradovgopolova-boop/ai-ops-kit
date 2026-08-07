@@ -487,7 +487,13 @@ def main(argv):
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
     ap.add_argument("--base", default=None, help="resume/review: base-ветка (по умолчанию auto: upstream/remote-default/текущая)")
-    ap.add_argument("--provider", default="mock", help="review: провайдер ревьюера (не mock -> живой вердикт)")
+    # v3.28.x (P0-1): дефолта `mock` больше НЕТ. Для `run --execute`/`do` провайдера выбирает резолв
+    # (.ai-ops.yaml + ключ в env -> claude в PATH -> mock с громким предупреждением); явный --provider
+    # (в т.ч. mock) всегда побеждает. Для `review`/`resume` остаётся прежний офлайн-дефолт mock.
+    ap.add_argument("--provider", default=None,
+                    help="провайдер (mock|anthropic|openai|claude-cli|qwen|deepseek|kimi). "
+                         "run --execute без флага — авторезолв (AI_OPS_PROVIDER_AUTORESOLVE=0 выключает); "
+                         "review: провайдер ревьюера (не mock -> живой вердикт)")
     ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--sequential", action="store_true",
                     help="run: неатомарную задачу исполнять по WorkPackages последовательно (v3.1)")
@@ -525,7 +531,7 @@ def main(argv):
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
         # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
         # `ai-ops resume --provider X --model Y` молча уходил в mock (политика/провайдер терялись).
-        argv2 += ["--provider", a.provider, "--signals", a.signals]
+        argv2 += ["--provider", a.provider or "mock", "--signals", a.signals]
         if a.model:
             argv2 += ["--model", a.model]
         if getattr(a, "replan", False):
@@ -576,6 +582,11 @@ def main(argv):
     if (intent == "run" and a.execute) or intent == "do":
         import ai_ops_run
         flags = pv["will_do"]["auto_flags"]
+        # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и дальше идёт под своим именем во все
+        # ветки (sequential/обычная) — иначе автовыбор терялся бы по дороге, как уже было в v2.120/v3.0-rc2.
+        _pres = ai_ops_run.resolve_provider_for_run(a.provider, Path(child_root), execute=True,
+                                                    quiet=a.json)
+        provider = _pres["provider"]
         # v3.22: `do` форсирует флаги автономного прогона
         if intent == "do":
             flags["author"] = True
@@ -604,13 +615,13 @@ def main(argv):
                       f"попытка заархивирована -> {rt.get('archived_attempt') or '—'}")
                 resume_from = a.retry_package
             if wp["should_decompose"] and wp["work_packages"]:
-                base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(a.provider, a.model))
-                auth = orchestrator.make_provider(a.provider, a.model) if flags["author"] and a.provider != "mock" else None
-                rev = orchestrator.make_provider(a.provider, a.model) if flags["review"] and a.provider != "mock" else None
+                base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(provider, a.model))
+                auth = orchestrator.make_provider(provider, a.model) if flags["author"] and provider != "mock" else None
+                rev = orchestrator.make_provider(provider, a.model) if flags["review"] and provider != "mock" else None
                 print(f"— исполняю по WorkPackages: {len(wp['work_packages'])} пакет(ов) —")
                 seq = workpackage_executor.execute_sequence(
                     task, signals, Path(child_root), wp["work_packages"], lambda pkg: base_prop,
-                    feature=wid, base=a.base, provider_name=a.provider, model=a.model,
+                    feature=wid, base=a.base, provider_name=provider, model=a.model,
                     author=flags["author"], author_proposer=auth,
                     review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"],
                     sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps,
@@ -641,10 +652,12 @@ def main(argv):
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
-                             author=flags["author"], provider_name=a.provider, model=a.model,
+                             author=flags["author"], provider_name=provider, model=a.model,
                              base=a.base, open_pr=a.open_pr, max_steps=a.max_steps,
                              require_fix=flags.get("require_fix", False),
-                             review_fix_attempts=review_fix)
+                             review_fix_attempts=review_fix,
+                             provider_resolution={k: _pres.get(k) for k in
+                                                  ("provider", "source", "reason", "warning")})
         ai_ops_run.print_human(rep)
         return ai_ops_run.exit_code(rep)
     return 0

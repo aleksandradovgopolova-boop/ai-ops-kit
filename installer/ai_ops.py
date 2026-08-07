@@ -53,6 +53,33 @@ MANAGED = AI_DIR / "managed"
 META = {".checksums.json", ".provenance.json", ".update-lock"}
 
 
+class ChildConfigError(Exception):
+    """Битый/нечитаемый .ai-ops.yaml. Отдельный тип — чтобы main() показал ВНЯТНУЮ причину
+    с именем файла, а не уронил пользователя трейсбеком yaml.parser."""
+
+
+def _read_child_cfg():
+    """Разобрать .ai-ops.yaml child-репозитория. Нет файла -> {} (ещё не установлен).
+    Битый YAML или нечитаемый файл -> ChildConfigError (fail-closed, но объяснимо)."""
+    if not CHILD_CONFIG.exists():
+        return {}
+    try:
+        data = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else "синтаксическая ошибка"
+        raise ChildConfigError(
+            f"{CHILD_CONFIG} — невалидный YAML: {first}. Это конфиг установки кита: "
+            f"почините синтаксис или восстановите файл из git (git checkout -- .ai-ops.yaml).") from e
+    except OSError as e:
+        raise ChildConfigError(f"{CHILD_CONFIG} — файл не читается: {e}") from e
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ChildConfigError(
+            f"{CHILD_CONFIG} — ожидался YAML-словарь верхнего уровня, получен {type(data).__name__}.")
+    return data
+
+
 def pkg_version():
     return (PKG / "VERSION").read_text(encoding="utf-8").strip()
 
@@ -94,9 +121,7 @@ def compatible_range_for(version):
 
 def child_allowed_range():
     """allowed_version_range из .ai-ops.yaml (пусто, если не задан/нет конфига)."""
-    if not CHILD_CONFIG.exists():
-        return ""
-    cfg = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
+    cfg = _read_child_cfg()
     return str((cfg.get("parent") or {}).get("allowed_version_range", "") or "")
 
 
@@ -115,12 +140,7 @@ def parent_source():
 
 
 def _child_cfg_data():
-    if not CHILD_CONFIG.exists():
-        return {}
-    try:
-        return yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8")) or {}
-    except (yaml.YAMLError, OSError):
-        return {}
+    return _read_child_cfg()
 
 
 def _configured_runtimes():
@@ -204,13 +224,7 @@ def package_ownership(pkg_root=PKG):
 def selected_packages():
     """Опциональный список пакетов из child .ai-ops.yaml -> packages. None -> все (дефолт).
     Обратная совместимость: поля нет -> None -> ставится всё (footprint как раньше)."""
-    if not CHILD_CONFIG.exists():
-        return None
-    try:
-        cfg = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return None
-    pkgs = cfg.get("packages")
+    pkgs = _read_child_cfg().get("packages")
     return list(pkgs) if isinstance(pkgs, list) and pkgs else None
 
 
@@ -225,15 +239,82 @@ def filter_by_packages(pairs, selected, ownership):
             if ownership.get(rel) is None or ownership.get(rel) in sel]
 
 
+# ─── Разделение поставки: runtime vs dev (v3.28.x, P2-7) ────────────────────────────────
+# В child-репозиторий едет только то, что нужно для ИСПОЛНЕНИЯ (`ai-ops run/plan/status/
+# doctor/onboard` + гейты). Ассеты РАЗРАБОТКИ САМОГО КИТА остаются в parent: они проверяют
+# кит, а не продукт пользователя, и раздували поставку (503 файла / ~3.6 МБ managed).
+#
+# Инвариант честности (failure mode №5 Change Brief): исключать можно ТОЛЬКО файл, который
+# ни один поставляемый модуль/политика/реестр не вызывает в child. Полнота рантайм-замыкания
+# движка доказывается validation/validate_standalone_engine.py (ENGINE_CLOSURE) и
+# tests/unit/test_installer.py — регресс упадёт там, а не молча у пользователя.
+
+DEV_ONLY_PREFIXES = (
+    "qualification/",   # пакет живых сценариев квалификации движка — данные разработки кита
+    "containers/",      # эталонный контейнер изоляции движка (P0.2 jail) — ассет parent-репозитория
+)
+
+DEV_ONLY_TOOLS = frozenset({
+    "bench_lite", "bench_performance", "retrieval_bench",  # бенчмарки самого движка/ретрива
+    "model_comparison",                                    # сравнение моделей (исследование кита)
+    "changelog_gen",                                       # генератор CHANGELOG кита
+    "qual_run", "promotion_qual",                          # харнессы квалификации (данные — qualification/)
+    "kit_observability",                                   # наблюдаемость самого кита
+})
+
+# Валидаторы, которые РЕАЛЬНО вызываются в child-репозитории. Источники (проверяемо grep'ом):
+#   ai_route                      — рантайм-замыкание движка (validate_standalone_engine)
+#   ai_managed_checksums          — drift-detection managed-зоны (manifest.update_policy)
+#   validate_ai_ops_child         — валидация установки (child-CI, `ai-ops validate`)
+#   validate_claims/_references/_freshness            — tools/gate_executor.py
+#   validate_cross_artifacts/_feature_blueprint       — tools/run_report.py
+#   validate_plan_artifact/_requirements_artifact     — tools/pipeline_helpers.py
+#   validate_spec_artifact/_reviewer_result           — tools/pipeline_evidence.py, orchestrator
+#   validate_memory_governance                        — tools/security_enforcement.py
+#   validate_adr_registry/_quality_attributes         — tools/evolution_triggers.py
+#   validate_surface_wiring/_scenario_evidence/_event_catalog/_openspec_change — quality/gates.yaml
+#   validate_engops_policy/_duties/_knowledge_graph/_storybook_evidence — политики и реестры в поставке
+#   validate_architecture_decision                    — транзитивный импорт из keep-set
+# Остальные (validate_package_boundaries, validate_qualification, validate_release_claims,
+# validate_container_*, validate_ai_first_*, …) проверяют ВНУТРЕННИЕ инварианты кита и гоняются
+# только в parent-CI — в child они мёртвый груз.
+RUNTIME_VALIDATORS = frozenset({
+    "__init__", "ai_route", "ai_managed_checksums", "validate_ai_ops_child",
+    "validate_claims", "validate_references", "validate_freshness",
+    "validate_cross_artifacts", "validate_feature_blueprint",
+    "validate_plan_artifact", "validate_requirements_artifact",
+    "validate_spec_artifact", "validate_reviewer_result", "validate_memory_governance",
+    "validate_adr_registry", "validate_quality_attributes", "validate_architecture_decision",
+    "validate_surface_wiring", "validate_scenario_evidence", "validate_event_catalog",
+    "validate_openspec_change", "validate_engops_policy", "validate_duties",
+    "validate_knowledge_graph", "validate_storybook_evidence",
+})
+
+
+def is_runtime_asset(rel):
+    """Едет ли файл managed_set в child-репозиторий? False — ассет разработки кита."""
+    if rel.startswith(DEV_ONLY_PREFIXES):
+        return False
+    stem = rel.rsplit("/", 1)[-1][:-3] if rel.endswith(".py") else None
+    if rel.startswith("tools/") and stem in DEV_ONLY_TOOLS:
+        return False
+    if rel.startswith("validation/") and stem is not None:
+        return stem in RUNTIME_VALIDATORS
+    return True
+
+
 def managed_set():
     """Список (source_path, relative_target) managed-файлов — из манифеста.
     v2.48: при заданном .ai-ops.yaml -> packages фильтруется по выбранным пакетам (аддитивно;
-    дефолт — все пакеты, footprint без изменений)."""
+    дефолт — все пакеты, footprint без изменений).
+    v3.28.x: отсекаются dev-ассеты кита (is_runtime_asset) — поставка = только исполнение."""
     pairs = []
     for pattern in manifest().get("update_policy", {}).get("managed_set", []):
         for src in sorted(PKG.glob(pattern)):
             if src.is_file():
-                pairs.append((src, src.relative_to(PKG).as_posix()))
+                rel = src.relative_to(PKG).as_posix()
+                if is_runtime_asset(rel):
+                    pairs.append((src, rel))
     return filter_by_packages(pairs, selected_packages(), package_ownership())
 
 
@@ -288,8 +369,7 @@ def sync_skills(child_root: Path):
 def installed_version():
     if not CHILD_CONFIG.exists():
         return None
-    cfg = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
-    return str((cfg.get("parent") or {}).get("installed_version", ""))
+    return str((_read_child_cfg().get("parent") or {}).get("installed_version", ""))
 
 
 def detect_drift(root=None):
@@ -641,9 +721,30 @@ def cmd_update(force=False, smoke_checks=None):
     return 0 if report["status"] == "ok" else 1
 
 
+def _is_git_worktree(root: Path):
+    """Находится ли root внутри рабочего дерева git. False и когда git не установлен."""
+    try:
+        r = subprocess.run(["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+                           capture_output=True, text=True)
+    except OSError:
+        return False
+    return r.returncode == 0 and r.stdout.strip() == "true"
+
+
 def cmd_init(target_dir):
     """Установка в новый child (для второго пилота)."""
     root = Path(target_dir).resolve()
+    # Кит ставится ТОЛЬКО в git-репозиторий: движок изолирует прогон в worktree, фиксирует
+    # коммит и собирает evidence на точном SHA. Без git установка была бы ложным зелёным —
+    # `init` отчитался бы успехом, а `run` упал бы позже и невнятно.
+    if not root.is_dir():
+        print(f"ОШИБКА: каталога {root} нет — создайте его и инициализируйте git (git init).")
+        return 2
+    if not _is_git_worktree(root):
+        print(f"ОШИБКА: {root} — не git-репозиторий (или git недоступен). Кит ставится в "
+              f"git-репозиторий: движок работает через worktree/коммит и собирает evidence "
+              f"на точном SHA. Выполните `git init` (и первый коммит), затем повторите init.")
+        return 2
     ai = root / ".ai"
     if (ai / "managed").exists():
         print(f"{ai} уже существует — используйте update."); return 1
@@ -1011,9 +1112,15 @@ def selftest():
     # 2. e2e: init во временный child, затем child-валидатор
     with tempfile.TemporaryDirectory() as td:
         child = Path(td) / "child"
+        # child обязан быть git-репозиторием (init это требует — движок работает через worktree)
+        child.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "-C", str(child), "init", "-q"], capture_output=True)
         with contextlib.redirect_stdout(io.StringIO()):
             rc = cmd_init(str(child))
         expect("init вернул 0", rc == 0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_nogit = cmd_init(str(Path(td) / "not-a-repo"))
+        expect("init в несуществующий/не-git каталог -> rc=2 (fail-closed)", rc_nogit == 2)
         cfg = yaml.safe_load((child / ".ai-ops.yaml").read_text(encoding="utf-8"))
         prov = json.loads((child / ".ai" / "managed" / ".provenance.json").read_text(encoding="utf-8"))
         expect("config.installed_version == версия пакета",
@@ -1135,6 +1242,15 @@ def _force_utf8_stdio():
 
 def main(argv):
     _force_utf8_stdio()
+    try:
+        return _dispatch(argv)
+    except ChildConfigError as e:
+        # fail-closed, но объяснимо: конфиг установки битый — говорим ЧТО и ГДЕ чинить.
+        print(f"ОШИБКА конфигурации установки: {e}")
+        return 2
+
+
+def _dispatch(argv):
     if len(argv) < 2:
         print(__doc__); return 0
     cmd = argv[1]
