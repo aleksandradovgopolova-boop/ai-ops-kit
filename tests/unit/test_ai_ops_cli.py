@@ -234,3 +234,43 @@ class TestOnboardIntent:
             assert profile.is_file()
         finally:
             os.chdir(old_cwd)
+
+
+@pytest.mark.unit
+class TestDegradedContextIsVisible:
+    """Проглоченное исключение не должно выглядеть нормальным результатом.
+
+    Внешнее ревью назвало этот случай поимённо среди 137 `except Exception`: сбой
+    compile_bundle уходил в `bundle = None`, и превью печатало «агентов 0 · ~None ток.» — прогон
+    с несобранным контекстом ничем не отличался от обычного.
+    """
+
+    def _broken_bundle(self, monkeypatch):
+        import context_compiler
+
+        def _boom(*a, **kw):
+            raise RuntimeError("реестр недоступен")
+
+        monkeypatch.setattr(context_compiler, "compile_bundle", _boom)
+
+    def test_preview_reports_context_failure(self, tmp_path, monkeypatch):
+        self._broken_bundle(monkeypatch)
+        pv = ai_ops_cli.build_preview("run", "задача", tmp_path, {"task_type": "QUICK"})
+        assert "RuntimeError" in (pv["data_used"]["context_error"] or ""), \
+            "сбой сборки контекста не виден машиночитаемому потребителю превью"
+
+    def test_printed_preview_warns_loudly(self, tmp_path, monkeypatch, capsys):
+        self._broken_bundle(monkeypatch)
+        pv = ai_ops_cli.build_preview("run", "задача", tmp_path, {"task_type": "QUICK"})
+        ai_ops_cli._print_preview(pv)
+        out = capsys.readouterr().out
+        assert "КОНТЕКСТ НЕ СОБРАН" in out
+        assert "агентов 0" not in out, "деградация всё ещё показана как нормальные данные"
+
+    def test_healthy_preview_has_no_error_and_prints_numbers(self, tmp_path, capsys):
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='d'\n", encoding="utf-8")
+        pv = ai_ops_cli.build_preview("run", "задача", tmp_path, {"task_type": "QUICK"})
+        assert pv["data_used"]["context_error"] is None
+        ai_ops_cli._print_preview(pv)
+        out = capsys.readouterr().out
+        assert "данные: агентов" in out and "КОНТЕКСТ НЕ СОБРАН" not in out

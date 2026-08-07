@@ -69,11 +69,14 @@ def build_preview(intent, task, child_root, signals):
     if not signals.get("task_type"):
         signals["task_type"] = plan["base_workflow"]
     flags = resolve_flags(signals)
-    bundle = None
+    bundle, bundle_error = None, None
     try:
         bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
-    except Exception:  # noqa: BLE001
-        bundle = None
+    except Exception as _e:  # noqa: BLE001 — сборка контекста не должна ронять превью...
+        # ...но и молчать о деградации нельзя: с bundle=None превью печатало «агентов 0 · ~None
+        # ток.» как обычный результат, и прогон с несобранным контекстом выглядел нормальным
+        # (показательный случай из внешнего ревью про 137 проглоченных исключений).
+        bundle, bundle_error = None, f"{type(_e).__name__}: {_e}"[:200]
     cov = spec_levels.assess(signals)
     wp = atomic_planner.assess(signals, child_root=child_root, bundle=bundle)
 
@@ -107,7 +110,10 @@ def build_preview(intent, task, child_root, signals):
         "data_used": {"agents": (bundle or {}).get("included", {}).get("agents", []),
                       "rules": (bundle or {}).get("included", {}).get("rules", []),
                       "estimated_tokens": (bundle or {}).get("estimated_tokens"),
-                      "context_budget": (bundle or {}).get("context_budget")},
+                      "context_budget": (bundle or {}).get("context_budget"),
+                      # None здесь означает «контекст не собран», а не «контекст пуст» — разницу
+                      # обязан видеть и человек, и машиночитаемый потребитель превью.
+                      "context_error": bundle_error},
         "approvals_needed": approvals,
         "decomposition_advised": wp["should_decompose"],
         "expected_result": expected,
@@ -245,7 +251,11 @@ def _print_preview(pv):
     print(f"  сделаю: гейтов {len(pv['will_do']['stages'])} · авто-режим "
           f"(engine={af['engine']}, review={af['review']}, author={af['author']}, sandbox={af['sandbox']})")
     du = pv["data_used"]
-    print(f"  данные: агентов {len(du['agents'])} · ~{du['estimated_tokens']}/{du['context_budget']} ток.")
+    if du.get("context_error"):
+        print(f"  ⚠ данные: КОНТЕКСТ НЕ СОБРАН ({du['context_error']}) — прогон пойдёт вслепую, "
+              f"оценки агентов и токенов недоступны")
+    else:
+        print(f"  данные: агентов {len(du['agents'])} · ~{du['estimated_tokens']}/{du['context_budget']} ток.")
     if pv["approvals_needed"]:
         for a in pv["approvals_needed"]:
             print(f"  approval: {a}")
