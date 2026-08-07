@@ -142,3 +142,32 @@ def test_state_is_really_shared():
         assert marker in flat._CALL_STATS, "состояние не общее — это две копии модуля"
     finally:
         flat._CALL_STATS.remove(marker)
+
+
+@pytest.mark.unit
+def test_flat_aliases_are_self_sufficient():
+    """Плоский алиас обязан САМ уметь найти пакет.
+
+    Поймано CI: алиас делал `import ai_ops_kit...`, не положив корень в sys.path. Локально это
+    скрывала editable-установка (её .pth кладёт корень в любой процесс), а в CI и в
+    child-репозитории, где PYTHONPATH не задан, запуск файла напрямую падал с
+    ModuleNotFoundError. Тот же класс, что и «чеклист держался на editable-установке».
+    """
+    bad = []
+    for d in sorted(SURFACE.iterdir()):
+        if not d.is_dir() or d.name == "__pycache__":
+            continue
+        for f in sorted(d.glob("*.py")):
+            if f.name == "__init__.py":
+                continue
+            flat = PKG / "tools" / f.name
+            if not flat.is_file():
+                continue
+            src = flat.read_text(encoding="utf-8")
+            if "sys.modules[__name__]" not in src:
+                continue                      # настоящий код, не алиас
+            if "import _bootstrap" not in src:
+                bad.append(flat.name)
+    assert not bad, (
+        "алиасы импортируют пакет, не положив корень в sys.path — упадут вне editable-установки: "
+        f"{bad[:8]}")
