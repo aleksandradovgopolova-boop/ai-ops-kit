@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """WorkItem — единая сущность продуктового изменения (v2.17).
 
 Раньше было два несвязанных контура: прогон workflow (orchestrator TaskState) и
@@ -26,6 +25,7 @@ Feature Blueprint (features/<id>/) — с разными id и разными «
   workitem.py status <features-dir> <feature-id> [--run-dir DIR] [--evidence e.json] [--json]
   workitem.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

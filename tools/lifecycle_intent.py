@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """lifecycle_intent.py (v3.27.0 WP1 — Process Applicability & Lifecycle Truth)
 
 Единая стадия жизненного цикла задачи. Определяется детерминированно из состояния WorkItem
@@ -31,6 +30,7 @@ Terminal states:
 CLI: lifecycle_intent.py --status done --has-pr true --pr-merged false --has-receipt false
      lifecycle_intent.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка постуры безопасности (v2.20) — governance/security-posture.yaml.
 
 Постура — машиночитаемая карта по 13 областям безопасности со статусом и evidence.
@@ -14,6 +13,7 @@ from __future__ import annotations
 Использование:  validate_security_posture.py [--json] | --selftest
 Возврат 0 — форма валидна и все evidence резолвятся, 1 — ошибка.
 """
+from __future__ import annotations
 
 import json
 import sys

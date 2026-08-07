@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка декларации обязанностей постоянного агента Robin (v2.21).
 
 Robin — спека (runtime/robin/ROBIN.md), не бот; обязанности объявляются
@@ -20,6 +19,7 @@ Robin — спека (runtime/robin/ROBIN.md), не бот; обязанност
                 validate_duties.py --selftest
 Возврат 0 — валиден, 1 — есть ошибки.
 """
+from __future__ import annotations
 
 import json
 import sys

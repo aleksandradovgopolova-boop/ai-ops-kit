@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка LoopPolicy — v3.3.2 Operational Architecture Backbone.
 
 LoopPolicy (schemas/loop-policy.schema.json) — контракт управляемого цикла. Валидатор:
@@ -14,6 +13,7 @@ LoopPolicy (schemas/loop-policy.schema.json) — контракт управля
 
 Использование:  validate_loop_policy.py <loop-policy.(yaml|json)> [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

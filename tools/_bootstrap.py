@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """_bootstrap.py — shared sys.path setup for tools/ and validation/ modules."""
+from __future__ import annotations
 import sys
 from pathlib import Path
 

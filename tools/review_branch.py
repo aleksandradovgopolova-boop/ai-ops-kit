@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Настоящий read-only review действующей ветки (v2.116, `ai-ops review`).
 
 Аудит: `review` не был настоящим intent — падал в preview; движок реально запускался только для
@@ -10,6 +9,7 @@ ai-review гейтам плана (writer ≠ judge). Диф ветки прот
 Использование (программно): review(child_root, wid, reviewer_proposer, base="main") -> отчёт.
 CLI: review_branch.py <child_root> <wid> [--base main] [--json]  (реальный ревьюер — через ai-ops).
 """
+from __future__ import annotations
 
 import argparse
 import json

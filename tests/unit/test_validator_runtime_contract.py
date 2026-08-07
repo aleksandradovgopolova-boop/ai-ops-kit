@@ -164,3 +164,29 @@ def test_lists_cover_every_validator_without_uniform_seam():
     everything = {p.stem for p in (PKG / "validation").glob("validate_*.py")}
     listed = set(STANDALONE) | set(NEEDS_ARTIFACT) | set(UNIFORM_CHECK_VALIDATORS) | set(OTHER_SEAMS) | set(BESPOKE_ELSEWHERE)
     assert not (everything - listed), f"валидаторы вне всякого контракта: {sorted(everything - listed)}"
+
+
+# ------------------------------------------------ справка не должна быть пустой ---
+
+@pytest.mark.unit
+@pytest.mark.parametrize("rel", sorted(
+    [f"tools/{p.name}" for p in (PKG / "tools").glob("*.py")] +
+    [f"validation/{p.name}" for p in (PKG / "validation").glob("*.py")] +
+    ["installer/ai_ops.py"]))
+def test_module_description_is_a_real_docstring(rel):
+    """Описание модуля обязано быть ДОКСТРИНГОМ, а не строкой после `from __future__`.
+
+    В 168 модулях строка-описание стояла после future-импорта и потому докстрингом не являлась:
+    `__doc__` был None. 49 из них печатают `print(__doc__)` как справку — то есть на запрос
+    помощи пользователь получал слово «None». Порядок «докстринг, затем from __future__» — ещё и
+    единственно корректный для Python.
+    """
+    import ast
+
+    path = PKG / rel
+    src = path.read_text(encoding="utf-8")
+    if '"""' not in src:
+        pytest.skip(f"{rel}: без строкового описания")
+    assert ast.get_docstring(ast.parse(src)) is not None, (
+        f"{rel}: описание не является докстрингом (__doc__ = None) — "
+        f"перенеси его ВЫШЕ `from __future__ import annotations`")

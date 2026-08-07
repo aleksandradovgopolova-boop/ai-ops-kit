@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """contracts.py (v3.28.0 R4) — TypedDict контракты для ключевых структур данных.
 
 Типизация границ между модулями: вызывающий видит, какие ключи ожидать в возвращаемых dict'ах.
@@ -20,6 +19,7 @@ IDE и mypy получают навигацию и проверку; стары�
 Только аннотации, без runtime-логики. Импортируется как:
   from contracts import UsageRecord, PreflightResult
 """
+from __future__ import annotations
 
 import sys
 from typing import Any, Literal, Optional, TypedDict

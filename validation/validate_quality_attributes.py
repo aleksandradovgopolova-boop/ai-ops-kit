@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Quality-attributes fitness поверх ADR-реестра — v3.2 Architecture Governance.
 
 Каждый ADR декларирует влияние на quality attributes (improves/degrades/tradeoff/neutral).
@@ -18,6 +17,7 @@ governance-смеллы, пока решения не расползлись в 
                 validate_quality_attributes.py --selftest
 Возврат 0 — fitness пройден, 1 — есть смелл.
 """
+from __future__ import annotations
 import json
 import sys
 from pathlib import Path

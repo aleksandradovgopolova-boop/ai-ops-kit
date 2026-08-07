@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """bench_performance.py (v3.28.0 R19) — performance benchmarks для критических модулей.
 
 Замеряет время выполнения ключевых операций кита и сравнивает с baseline:
@@ -24,6 +23,7 @@ CLI:
   bench_performance.py [--iterations N] [--threshold X] [--update-baseline] [--json]
   bench_performance.py --selftest
 """
+from __future__ import annotations
 
 import json
 import statistics

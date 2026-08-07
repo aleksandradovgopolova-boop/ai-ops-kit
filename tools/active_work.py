@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Реестр активных работ репозитория (v2.22, связи задач — v2.23) — координация
 параллельных сессий.
 
@@ -27,6 +26,7 @@ from __future__ import annotations
 Возврат: 0 — ок (пересечения area/contract/dependency — предупреждения, не ошибка);
 1 — ошибка использования/данных или циклическая зависимость при register.
 """
+from __future__ import annotations
 
 import argparse
 import contextlib

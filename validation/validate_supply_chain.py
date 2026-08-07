@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate SupplyChainPinPolicy (security-долг перед расширением автономности, OWASP ASI).
 
 Инвариант: внешние модели/skills/MCP ставятся ТОЛЬКО по зафиксированному revision/hash — плавающие
@@ -11,6 +10,7 @@ install-верификации (sha256/signature/sigstore). Без такой п
   validate_supply_chain.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import re
 import sys

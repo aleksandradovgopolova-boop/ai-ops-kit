@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка реестра ArchitectureDecision (decisions/adr/*.yaml) — v3.2 fitness.
 
 ADR — это governed-набор, а не разрозненные файлы. Поверх поштучной структурной проверки
@@ -15,6 +14,7 @@ ADR — это governed-набор, а не разрозненные файлы.
                 validate_adr_registry.py --selftest
 Возврат 0 — реестр целостен, 1 — есть нарушение.
 """
+from __future__ import annotations
 import json
 import sys
 from pathlib import Path

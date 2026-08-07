@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """ui_readiness.py (v3.11.0 UI Evidence Readiness) — дешёвый ДЕТЕРМИНИРОВАННЫЙ baseline готовности
 UI-evidence (Storybook), + gating «UI-CI только на UI-изменениях/VISUAL», + шаблон скрипта БЕЗ установки.
 
@@ -16,6 +15,7 @@ visual имеют ОТДЕЛЬНЫЕ статусы (pass|fail|not_run|absent) �
 
 CLI:  ui_readiness.py <child_root> [--json]   |   ui_readiness.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

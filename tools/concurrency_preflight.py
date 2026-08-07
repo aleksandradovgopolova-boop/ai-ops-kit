@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Concurrency preflight (v2.28) — проверка коллизий параллельной работы до старта.
 
 Класс проблемы «concurrent-edit collision + stale premise»: два потока независимо меняют
@@ -30,6 +29,7 @@ main / сузить scope / согласовать владельца по Owner
 Возврат 0 — выполнено (в т.ч. verdict=collision: это предупреждение стадии intake, не крах
 инструмента); 1 — ошибка использования.
 """
+from __future__ import annotations
 
 import argparse
 import json

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """cost_account.py (v3.4.4) — сверка расхода (Trace v0.2 run_cost) с BudgetContract по scope.
 
 Замыкает экономику v3.4: BudgetContract объявляет границы (v3.4.0), run_cost (Trace v0.2) их меряет —
@@ -19,6 +18,7 @@ cost_usd_est=None — измерение помечается measured=false и 
 CLI:  cost_account.py <budget.(yaml|json)> <run_cost.(json|yaml)> [--iterations N] [--json]
       cost_account.py --selftest
 """
+from __future__ import annotations
 import json
 import sys
 from pathlib import Path

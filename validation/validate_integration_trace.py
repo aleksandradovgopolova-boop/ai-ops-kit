@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка IntegrationTrace + parallel-vs-sequential анализ — v3.5 Observability.
 
 IntegrationTrace (schemas/integration-trace.schema.json) — трейс fan-in. Валидатор + анализатор:
@@ -14,6 +13,7 @@ IntegrationTrace (schemas/integration-trace.schema.json) — трейс fan-in. 
 
 Использование:  validate_integration_trace.py [<it.(yaml|json)>|<dir>] [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

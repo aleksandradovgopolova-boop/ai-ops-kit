@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка свежести знаний (v2.9) — по классам устаревания из FreshnessPolicy.
 
 Сканирует markdown-документы с frontmatter `stability` и помечает протухшие:
@@ -18,6 +17,7 @@ v3.12.0 Startup Context Budget: БЕЗ аргумента дефолт — ко�
 (.ai/project/context, при отсутствии .ai/custom/context), а НЕ шаблоны кита. Шаблоны кита
 (template: true во frontmatter) исключены из проверки (протухает копия в репо, не шаблон).
 """
+from __future__ import annotations
 
 import json
 import sys

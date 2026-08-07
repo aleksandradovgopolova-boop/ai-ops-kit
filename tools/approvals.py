@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """ApprovalRecord + доменные human_approval_conditions (v2.115 Preflight Truth).
 
 Аудит: human-approval был обычным boolean (`signals.human_approved`), который технически мог передать
@@ -25,6 +24,7 @@ ApprovalRecord (features/<wid>/approvals/*.yaml):
   approvals.py record <child_root> <wid> --approval secrets --by u@x --scope f --reason r [--revision sha]
   approvals.py --selftest
 """
+from __future__ import annotations
 
 import argparse
 import json

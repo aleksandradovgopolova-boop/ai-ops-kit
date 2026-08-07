@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Container delivery scope — доставка ТОЛЬКО ветки текущего прогона (v2.113).
 
 Аудит: контейнерная доставка должна забирать из одноразового клона обратно в основной репо ТОЛЬКО
@@ -18,6 +17,7 @@ from __future__ import annotations
 Использование: validate_container_delivery.py [--selftest]
 Возврат 0 — ок, 1 — доставка утащила лишнее / затёрла чужое.
 """
+from __future__ import annotations
 
 import subprocess
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate security-domains.yaml (v2.101, эпик Context Engineering, этап 5 — Security Pack).
 
 Стережёт доменный контракт security-ревью:
@@ -15,6 +14,7 @@ from __future__ import annotations
   validate_security_domains.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

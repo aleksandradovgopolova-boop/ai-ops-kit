@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Синхронность пред-коммит-чеклиста AGENTS.md с CI (v2.15) — drift-control.
 
 AGENTS.md обещает: «Прогнать полный набор проверок (тот же, что в CI
@@ -21,6 +20,7 @@ AGENTS.md обещает: «Прогнать полный набор прове�
 Использование:  validate_agents_checklist.py [--json] | --selftest
 Возврат 0 — чеклист покрывает CI, 1 — есть непокрытая проверка (или ошибка чтения).
 """
+from __future__ import annotations
 
 import json
 import re

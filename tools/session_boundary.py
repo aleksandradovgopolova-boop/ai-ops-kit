@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """session_boundary.py (v3.17.0 Development Culture Guardrails, WP2) — Session Boundary Classifier:
 определить отношение НОВОЙ задачи к текущей сессии/WorkItem, чтобы решить continue/compact vs clear/new.
 
@@ -18,6 +17,7 @@ CLI:  session_boundary.py --current WI-143 --new-task "текст" [--new-wi WI-
                           [--scope-overlap] [--continues] [--json]
       session_boundary.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

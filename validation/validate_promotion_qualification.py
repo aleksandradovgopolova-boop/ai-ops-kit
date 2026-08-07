@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate PromotionQualificationPlan (v3.6.8 — Live Qualification & Controlled Promotion).
 
 План живой квалификации и КОНТРОЛИРУЕМОГО promotion Context Engine v2 — это данные, а не живой прогон.
@@ -19,6 +18,7 @@ from __future__ import annotations
   validate_promotion_qualification.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

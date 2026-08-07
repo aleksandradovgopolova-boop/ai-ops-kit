@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Product Health Score (Ф4 roadmap, v2.0) — детерминированный калькулятор.
 
 Вход: YAML с сырыми метриками (экспорт из аналитики/мониторинга, руками или CI):
@@ -21,6 +20,7 @@ Findings: метрики с normalized < 0.7. Интерпретация и ре
                 product_health.py --selftest
 Возврат 0 — успех (независимо от band: отчёт — данные, решение за людьми/INSIGHTS).
 """
+from __future__ import annotations
 
 import json
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """repo_graph.py (v3.26.0) — Repository Graph: детерминированный граф зависимостей для impact analysis.
 
 Реализует первую ступень цепочки ContextArchitectureDecision (v3.3.2): repository = источник истины,
@@ -15,6 +14,7 @@ from __future__ import annotations
 
 CLI: repo_graph.py [root] [--impact tools/x.py] [--affected-tests path1 path2] [--json] | --selftest
 """
+from __future__ import annotations
 
 import ast
 import json

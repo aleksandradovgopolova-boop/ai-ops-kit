@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка ContextArchitectureDecision (CAD) — v3.3.2 Operational Architecture Backbone.
 
 CAD (schemas/context-architecture-decision.schema.json) — контракт retrieval-архитектуры контекста
@@ -16,6 +15,7 @@ CAD (schemas/context-architecture-decision.schema.json) — контракт ret
 
 Использование:  validate_context_architecture.py <cad.(yaml|json)> [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Release Truth Alignment (v3.8.1): machine-readable claims о ТЕКУЩЕМ релизе -> CI ловит ДРЕЙФ между
 публичной поверхностью (README/ROADMAP/registry) и фактическим состоянием кода. Инвариант: источники
 правды НЕ отстают от runtime (README v3.0.x при коде 3.8 — это дефект, который должен ловить CI).
@@ -18,6 +17,7 @@ from __future__ import annotations
 
   validate_release_claims.py [registry/release-claims.yaml] | --selftest
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

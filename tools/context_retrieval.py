@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """context_retrieval.py (v3.6.1) — full-text retrieval + budgeted role context view.
 
 Следующая ступень цепочки ContextArchitectureDecision (после Repository Graph Lite, v3.6.0):
@@ -16,6 +15,7 @@ AccessFilterPolicy (v3.4.2) и token-бюджета (BudgetContract, v3.4.0). В
 CLI:  context_retrieval.py <root> --query "kw1 kw2" --role planner [--budget N] [--afp <file>] [--json]
       context_retrieval.py --selftest
 """
+from __future__ import annotations
 
 import hashlib
 import json

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка FeatureLearning (product-learning/*.yaml) — v3.3 Product Learning.
 
 FeatureLearning (schemas/feature-learning.schema.json) — мост research-решение (DecisionPackage) ->
@@ -18,6 +17,7 @@ FeatureLearning (schemas/feature-learning.schema.json) — мост research-р�
 Использование:  validate_feature_learning.py [product-learning] [--json] | --selftest
 Возврат 0 — валиден/целостен, 1 — ошибки.
 """
+from __future__ import annotations
 import json
 import re
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Движок маршрутизации AI-first системы (Фаза 6).
 
 По входным признакам задачи выбирает workflow / provider / model_class / runtime /
@@ -14,6 +13,7 @@ execution_mode / fallbacks и возвращает МАШИНОЧИТАЕМОЕ 
 
 Требует pyyaml.
 """
+from __future__ import annotations
 
 import json
 import sys

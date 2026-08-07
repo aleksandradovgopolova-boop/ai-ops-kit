@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """HTTP client for orchestrator providers — POST JSON with retry on transient failures.
 
 Extracted from orchestrator.py to keep provider/HTTP concerns isolated.
 """
+from __future__ import annotations
 
 import hashlib
 import json

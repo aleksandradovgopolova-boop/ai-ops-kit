@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Preflight Truth — проверки ДО запуска модели (v2.115).
 
 Аудит: Spec-First блокировал ДОСТАВКУ, а не РЕАЛИЗАЦИЮ — pipeline сначала гонял tool loop, писал код и
@@ -21,6 +20,7 @@ from __future__ import annotations
 Использование:
   preflight.py --selftest
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

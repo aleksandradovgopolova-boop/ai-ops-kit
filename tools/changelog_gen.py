@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """changelog_gen.py (v3.28.0 R20) — автоматизация CHANGELOG.
 
 Две функции:
@@ -20,6 +19,7 @@ CLI:
   changelog_gen.py validate                                     # проверка VERSION в CHANGELOG
   changelog_gen.py --selftest
 """
+from __future__ import annotations
 
 import re
 import subprocess

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Метрики эффекта по истории прогонов (v2.5) — слой «Метрики эффекта» из внешнего ревью.
 
 Вход: .ai/project/report-history/*.jsonl — срезы run_report --record (по файлу на фичу).
@@ -18,6 +17,7 @@ from __future__ import annotations
                 effect_metrics.py --selftest
 Возврат 0 всегда (отчёт — данные; решения за людьми/INSIGHTS), 1 — только при ошибке чтения.
 """
+from __future__ import annotations
 
 import json
 import sys

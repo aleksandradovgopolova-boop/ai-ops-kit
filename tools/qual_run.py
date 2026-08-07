@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """qual_run.py — квалификационный прогон канонического пути на живой модели (v2.68).
 
 Гоняет N реальных задач через собранный движок (`ai-ops run --engine pipeline --execute`)
@@ -27,6 +26,7 @@ tasks.txt — по одной задаче на строку; пустые ст�
 Секреты в отчёт не попадают (Broker вырезает env через scrub_env).
 Возврат 0 — все задачи прошли критерии; 1 — есть провал/ошибка; 2 — конфиг/окружение.
 """
+from __future__ import annotations
 
 import argparse
 import json

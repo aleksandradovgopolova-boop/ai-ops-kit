@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """ui_evidence_collect.py (v3.7 UI-CI, подтянуто в v3.6.8) — сбор РЕАЛЬНОГО UI-evidence на точном SHA.
 
 StorybookPolicy: UI-evidence (.ai/ui-evidence/{interaction,a11y,visual,design-system}.json) производит
@@ -18,6 +17,7 @@ implementation_verification build/lint/test). Здесь — оркестрат�
 
 Только stdlib. CLI: ui_evidence_collect.py <work_root> --sha SHA | --selftest
 """
+from __future__ import annotations
 
 import json
 import subprocess

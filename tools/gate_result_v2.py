@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """gate_result_v2.py (v3.1.8) — GateResult v2 + миграционный адаптер v2<->v1.
 
 Калиброванное UI-enforcement вводит два состояния, которых нет в gate-result v1
@@ -17,6 +16,7 @@ v2 — отдельный файл (schemas/gate-result-v2.schema.json), а эт
 
 Только stdlib.  CLI: gate_result_v2.py <result.json> [--json] | --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

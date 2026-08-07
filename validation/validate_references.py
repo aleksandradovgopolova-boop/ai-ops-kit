@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Целостность ссылок внутри пакета (v2.9) — drift-control, наведённый на себя.
 
 Идея из team-os-toolkit (claims/drift): ссылка, которую никто не проверяет,
@@ -19,6 +18,7 @@ from __future__ import annotations
 Использование:  validate_references.py [--json] | --selftest
 Возврат 0 — все ссылки резолвятся, 1 — есть висячая ссылка (или ошибка чтения).
 """
+from __future__ import annotations
 
 import json
 import re

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка BudgetContract — v3.4 Security, Permissions & Economics.
 
 BudgetContract (schemas/budget-contract.schema.json) — декларативный бюджет scope с привязкой к
@@ -15,6 +14,7 @@ BudgetContract (schemas/budget-contract.schema.json) — декларативн�
 
 Использование:  validate_budget_contract.py [<file|dir>] [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

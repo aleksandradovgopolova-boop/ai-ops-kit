@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """branch_policy.py (v3.19.0 Engineering Operating Model, WP2) — BranchContract: на какой ветке
 движок вправе работать и доставлять.
 
@@ -26,6 +25,7 @@ CLI:
   branch_policy.py <root> [--base main] [--engine-delivery] [--json]
   branch_policy.py --selftest
 """
+from __future__ import annotations
 
 import fnmatch
 import json

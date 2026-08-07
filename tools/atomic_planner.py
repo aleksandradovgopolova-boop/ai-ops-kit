@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Atomic Planning и Context Budget -> WorkPackagePlan (v2.100, эпик Context Engineering, этап 4).
 
 Размер рабочего пакета должен соответствовать способности модели выполнить его ДО деградации
@@ -25,6 +24,7 @@ from __future__ import annotations
   atomic_planner.py --selftest
 Возврат 0 — пакет атомарен; 1 — нужна декомпозиция (или ошибка).
 """
+from __future__ import annotations
 
 import argparse
 import json

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Открытие draft PR (v2.63, P0-эпик) — финальный шаг движка task -> проверяемый draft PR.
 
 После того как pipeline применил изменения, закоммитил на ветке ai-ops/<id> и собрал evidence,
@@ -13,6 +12,7 @@ REST (`/repos/{owner}/{repo}/pulls`, draft:true). Токен — ТОЛЬКО и
 Использование (программно): open_draft_pr(root, branch, title, body, base) -> отчёт.
   pr_open.py --selftest
 """
+from __future__ import annotations
 
 import json
 import os

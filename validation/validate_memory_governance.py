@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate MemoryGovernancePolicy (security-долг #2, OWASP ASI).
 
 Инварианты: каждая запись памяти несёт provenance (origin + source_type); имеет expiry (ttl_days>0 /
@@ -8,6 +7,7 @@ review_date / permanent+justification); НЕ self-ingested без подтвер
 
   validate_memory_governance.py [examples/memory-governance-demo/MGP-001.yaml] | --selftest
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

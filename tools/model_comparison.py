@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """model_comparison.py (v3.4.5) — сравнение моделей по task-tier (SAFETY-FIRST).
 
 Последний инкремент v3.4. Агрегирует ModelBenchResult (качество из Bench Lite/живых прогонов +
@@ -15,6 +14,7 @@ tier — сколь угодно дешёвая/быстрая/«качеств�
 
 CLI:  model_comparison.py [<dir с MBR-*.yaml>] [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

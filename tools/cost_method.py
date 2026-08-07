@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """cost_method.py (v3.18.0 Development Culture Guardrails, WP6) — Cost-aware Work Method: единый советник
 ЭКОНОМИЧНОГО способа работы, собирающий рекомендации в ФИКСИРОВАННОМ порядке приоритетов владельца:
 
@@ -17,6 +16,7 @@ CLI:  cost_method.py <child_root> [--task-type T] [--risk R] [--context N] [--fi
                      [--fix-attempts N] [--small-change] [--json]
       cost_method.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

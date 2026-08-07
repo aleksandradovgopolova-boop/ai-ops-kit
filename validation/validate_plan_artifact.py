@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate plan artifact (v2.86 Product Authoring).
 
 Гейт `plan_readiness` (ENGINEERING/PRODUCT) требует evidence: work_packages + dependencies +
@@ -26,6 +25,7 @@ check() -> список ошибок. provided_evidence() -> закрытые re
   validate_plan_artifact.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """delegation_advisor.py (v3.17.0 Development Culture Guardrails, WP4) — Delegation Culture: советует
 вынести «тяжёлые для контекста» работы в ОТДЕЛЬНЫЙ краткоживущий контекст (сабагент), а в основную сессию
 вернуть только СВОДКУ, чтобы разведка/логи/сравнения не оседали в контексте до конца сессии.
@@ -18,6 +17,7 @@ CLI:  delegation_advisor.py [--files N] [--compare N] [--log-lines N] [--researc
                            [--mechanical] [--json]
       delegation_advisor.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

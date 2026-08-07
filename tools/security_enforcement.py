@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """security_enforcement.py (v3.7.2) — RUNTIME enforcement трёх security-контрактов (не новые схемы).
 
 Ревью: OWASP-ASI контракты (SupplyChainPin/MemoryGovernance/KeyLifecycle) есть как schema+validator+demo,
@@ -15,6 +14,7 @@ merge_memory и preflight:
 
 Никакой сети/секретов в коде. Только stdlib+pyyaml. CLI: security_enforcement.py --selftest
 """
+from __future__ import annotations
 
 import hashlib
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate package boundaries (v2.46, 3.0-срез 0 — подготовка сплита БЕЗ переноса файлов).
 
 Дизайн 3.0 (docs/3.0-design.md) делит кит на 5 пакетов. Этот валидатор стережёт границы
@@ -19,6 +18,7 @@ from __future__ import annotations
 
 Использование:  validate_package_boundaries.py [--selftest]
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Валидатор Feature Blueprint (schemas/feature-blueprint.schema.json, Ф1 roadmap).
 
 Blueprint — паспорт функции: features/<id>/blueprint.yaml со ссылками на артефакты
@@ -17,6 +16,7 @@ documentation, release, monitoring, retrospective.
                 python3 validation/validate_feature_blueprint.py --selftest
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
+from __future__ import annotations
 
 import sys
 import tempfile

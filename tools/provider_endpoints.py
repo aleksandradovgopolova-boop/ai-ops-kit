@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """provider_endpoints.py (v3.7.12) — map провайдер -> (base_url, key_env) для openai-compatible вызовов.
 
 Делает per-role кросс-вендор маршрутизацию ФИЗИЧЕСКИ исполнимой: model_router выбирает model_id (у него
@@ -9,6 +8,7 @@ from __future__ import annotations
 
 Только stdlib. CLI: provider_endpoints.py --selftest
 """
+from __future__ import annotations
 
 import os
 import sys

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Git-related helpers for the execution pipeline.
 
 Extracted from execution_pipeline.py to keep git operations isolated.
 """
+from __future__ import annotations
 
 import re
 import sys

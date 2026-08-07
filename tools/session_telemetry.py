@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """session_telemetry.py (v3.16.0 Development Culture Guardrails, WP1) — машинный СНИМОК сессии:
 объём/стоимость/гигиена контекста. Собирается из usage-ledger AI Ops (+ usage Claude CLI, который туда
 пишется), данных WorkItem и — при наличии — runtime-значения контекста (`/context`). Всё честно помечено
@@ -15,6 +14,7 @@ usage_status: measured | estimated | unavailable. НИКОГДА не показ
 CLI:  session_telemetry.py <child_root> [--workitem WID] [--session SID] [--context N] [--json]
       session_telemetry.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

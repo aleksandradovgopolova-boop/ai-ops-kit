@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка LoopTrace + анализ прогресса — v3.5 Observability.
 
 LoopTrace (schemas/loop-trace.schema.json) — трейс итераций governed-цикла. Валидатор + анализатор:
@@ -16,6 +15,7 @@ LoopTrace (schemas/loop-trace.schema.json) — трейс итераций gover
 
 Использование:  validate_loop_trace.py [<lt.(yaml|json)>|<dir>] [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

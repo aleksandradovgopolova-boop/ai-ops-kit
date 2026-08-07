@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Context Compiler -> ContextBundle (v2.97, эпик Context Engineering, этап 1).
 
 Перед прогоном формируем МИНИМАЛЬНЫЙ релевантный пакет контекста для WorkItem, а не грузим в модель
@@ -23,6 +22,7 @@ from __future__ import annotations
   context_compiler.py --selftest
 Возврат 0 — ок, 1 — ошибка (или overflow при --strict).
 """
+from __future__ import annotations
 
 import argparse
 import json

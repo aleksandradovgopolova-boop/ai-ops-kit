@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка AccessFilterPolicy (AFP) — v3.4 Security, Permissions & Economics.
 
 AFP (schemas/access-filter-policy.schema.json) — фильтр доступа ДО retrieval. Валидатор:
@@ -15,6 +14,7 @@ AFP (schemas/access-filter-policy.schema.json) — фильтр доступа �
 
 Использование:  validate_access_filter.py [<afp.(yaml|json)>|<dir>] [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

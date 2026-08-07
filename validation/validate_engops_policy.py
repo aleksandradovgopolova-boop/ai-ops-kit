@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """validate_engops_policy.py (v3.19.0 Engineering Operating Model, срез 1) — well-formedness политики
 EngOps и ПАРИТЕТ дефолтов «код ↔ правило».
 
@@ -20,6 +19,7 @@ EngOps и ПАРИТЕТ дефолтов «код ↔ правило».
                 validate_engops_policy.py --selftest
 Возврат 0 — связно и без дрейфа, 1 — есть нарушение.
 """
+from __future__ import annotations
 
 import re
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Sequential-mode оркестратор (минимальный общий знаменатель, принцип 29).
 
 Исполняет workflow-контракт последовательно одной моделью с изоляцией ролей:
@@ -33,6 +32,7 @@ from __future__ import annotations
   - orchestrator_usage.py     — Usage recording (_CALL_STATS, _CALL_CONTEXT, _record_call)
   - orchestrator.py           — Workflow execution (state, core, run_workflow)
 """
+from __future__ import annotations
 
 import hashlib
 import json

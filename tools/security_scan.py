@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Детерминированный security-scan для гейта security (v2.95, аудит 2.95 — ENGINEERING evidence).
 
 Гейт security требует evidence [no_secrets, no_injection_surface, deps_approved]. Раньше в pipeline
@@ -20,6 +19,7 @@ from __future__ import annotations
   security_scan.py --selftest
 Возврат 0 — ок, 1 — ошибка/находки.
 """
+from __future__ import annotations
 
 import argparse
 import json

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Генератор артефактов по Feature Blueprint (Ф3 roadmap, v1.5).
 
 Принцип 27 (единый источник): скелеты артефактов создаются детерминированно из
@@ -27,6 +26,7 @@ templates/ по blueprint.yaml; СОДЕРЖАНИЕ пишут агенты с�
 
 Возврат 0 — успех, 1 — ошибка/незаполненные скелеты. Требует pyyaml.
 """
+from __future__ import annotations
 
 # PEP 563: ленивые аннотации — `str | None` (PEP 604) не вычисляется при импорте,
 # поэтому модуль грузится и на Python 3.9 (дефолт macOS CommandLineTools). finding

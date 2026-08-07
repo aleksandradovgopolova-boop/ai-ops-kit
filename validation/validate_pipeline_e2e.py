@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Канонический e2e движка на РЕАЛЬНОЙ фикстуре (v2.96, аудит 2.96 — Real Qualification).
 
 CI кита раньше гонял в основном selftest-модули и статические валидаторы. Этот харнесс закрывает
@@ -19,6 +18,7 @@ CI кита раньше гонял в основном selftest-модули и
   validate_pipeline_e2e.py --selftest # то же (для чек-листа CI)
 Возврат 0 — ок, 1 — цепочка не сошлась.
 """
+from __future__ import annotations
 
 import json
 import shutil

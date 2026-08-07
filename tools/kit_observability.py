@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """kit_observability.py (v3.28.0 R13) — наблюдаемость самого кита.
 
 Агрегирует метрики эффективности AI Ops Kit по данным child-репозитория:
@@ -17,6 +16,7 @@ CLI:
   kit_observability.py <child_root> [--json]
   kit_observability.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """verification_tiers.py (v3.27.3 WP4 Progressive Verification Truth) — определение уровня
 верификации и выбор тестов на основе изменённых файлов и lifecycle_intent.
 
@@ -21,6 +20,7 @@ Impact status:
 CLI: verification_tiers.py --changed file1 file2 [--tier affected|module|full|skip] [--intent draft|merge|release] [--json]
      verification_tiers.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

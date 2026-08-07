@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate requirements artifact (v2.86 Product Authoring).
 
 Гейт `requirements` (ENGINEERING/PRODUCT) требует evidence: testable_requirements +
@@ -28,6 +27,7 @@ check() -> список ошибок (пусто = валидно). provided_evi
   validate_requirements_artifact.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

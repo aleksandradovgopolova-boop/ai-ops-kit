@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Согласованность workflow ↔ gate (v2.16; track-aware + orphan-guard v2.67).
 
 Раньше валидаторы проверяли только существование gate/agent id и обязательные поля,
@@ -28,6 +27,7 @@ tracks.yaml добавляет гейты по сигналам задачи, м
 Использование:  validate_workflow_gates.py [--json] | --selftest
 Возврат 0 — согласовано (возможны WARN), 1 — есть ERROR.
 """
+from __future__ import annotations
 
 import json
 import sys

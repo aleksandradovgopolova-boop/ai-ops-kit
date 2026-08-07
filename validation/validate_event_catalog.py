@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка событийного каталога (v2.29) — единый источник имён событий.
 
 Класс дефектов: три «языка» именования расходятся. Контракт (domain events, прошедшее
@@ -29,6 +28,7 @@ standalone. Валидатор:
                 validate_event_catalog.py --selftest
 Возврат 0 — валиден (возможны WARN), 1 — есть ошибки.
 """
+from __future__ import annotations
 
 import json
 import re

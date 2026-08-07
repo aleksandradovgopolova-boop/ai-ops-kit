@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """General helper functions for the execution pipeline.
 
 Extracted from execution_pipeline.py — profile summary, intake evidence,
 gate checklist, reviewable gates, YAML parsing, openspec validation.
 """
+from __future__ import annotations
 
 import os
 import re

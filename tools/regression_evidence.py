@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Regression Evidence (v3.30, находка раунда C) — доказательство того, что правка ЧИНИТ.
 
 Проблема. Цикл останавливается, когда writer сам объявляет `{"done": true}`, а гейт
@@ -24,6 +23,7 @@ from __future__ import annotations
 Использование:  regression_evidence.py prove <root> <base_sha> <head_sha> [--json]
                 regression_evidence.py --selftest
 """
+from __future__ import annotations
 
 import argparse
 import json

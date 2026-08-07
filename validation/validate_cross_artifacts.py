@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Кросс-артефактная консистентность (v2.3; идея — Spec Kit `analyze`).
 
 Первый и главный класс расхождений (подтверждён боевым прогоном ii-sreda):
@@ -21,6 +20,7 @@ from __future__ import annotations
 Использование:  validate_cross_artifacts.py <feature-dir> [...] | --selftest
 Возврат 0 — чисто/skip, 1 — есть PROBLEM. Требует pyyaml (для селфтеста — нет).
 """
+from __future__ import annotations
 
 import re
 import sys

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка workflow-контрактов и gate-реестра AI-first системы (registry/workflows.yaml, quality/gates.yaml).
 
 Ловит то, что реально ломается при ручных правках контрактов:
@@ -14,6 +13,7 @@ from __future__ import annotations
 Использование:  python3 02_tools/ci/validate_ai_first_workflows.py
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

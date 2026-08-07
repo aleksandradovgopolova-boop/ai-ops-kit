@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """session_guardrails.py (v3.16.0 Development Culture Guardrails, WP3+WP5) — политика экономии сессии
 (пороги контекста) + рекомендация по границе сессии + Task Completion Ritual.
 
@@ -15,6 +14,7 @@ CLI:  session_guardrails.py <child_root> [--workitem WID] [--context N] [--next-
                             [--next "текст"] [--pr URL] [--checks "183/183"] [--unsafe] [--json]
       session_guardrails.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

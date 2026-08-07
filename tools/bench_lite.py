@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Bench Lite (v3.1.3) — детерминированный ОФФЛАЙН golden-корпус для измерения решений движка.
 
 Зачем: находка Phase B — GREEN-throughput ограничен НЕ качеством модели, а консервативным
@@ -31,6 +30,7 @@ CLI:
   python3 tools/bench_lite.py --run [--out report.json]   # прогнать корпус, напечатать/сохранить отчёт
   python3 tools/bench_lite.py --selftest                  # прогон + жёсткие проверки (для CI)
 """
+from __future__ import annotations
 
 import argparse
 import json

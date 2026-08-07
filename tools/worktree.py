@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Изоляция работы по WorkItem через git worktree (v2.24) — параллельные сессии.
 
 Чтобы несколько сессий не мешали друг другу в одном рабочем дереве, каждая работа
@@ -17,6 +16,7 @@ from __future__ import annotations
   worktree.py --selftest
 Возврат 0 — ок, 1 — ошибка.
 """
+from __future__ import annotations
 
 import argparse
 import json

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Детектор «протухших» (stale) gate-результатов.
 
 Gate-результат (*.gate.json, schemas/gate-result.schema.json) привязан к состоянию:
@@ -23,6 +22,7 @@ Stale BLOCKING gate трактуется как fail (exit 1). Не-blocking —
 
 Только стандартная библиотека.
 """
+from __future__ import annotations
 
 import hashlib
 import json

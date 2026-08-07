@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """merge→memory flow (v2.25) — обновление долговременной памяти при мердже WorkItem.
 
 Когда работа доведена и смерджена, знание не должно теряться: что изменилось, какие
@@ -16,6 +15,7 @@ from __future__ import annotations
   merge_memory.py --selftest
 Возврат 0 — записано, 1 — ошибка.
 """
+from __future__ import annotations
 
 import argparse
 import sys

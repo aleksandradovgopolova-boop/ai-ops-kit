@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка структурного результата ревьюера (v2.33, Execution Engine Фаза 1).
 
 Reviewer возвращает не свободный markdown, а структуру (schemas/reviewer-result.schema.json):
@@ -19,6 +18,7 @@ status/checks/blockers. Она — источник истины для гейт
                 validate_reviewer_result.py --selftest
 Возврат 0 — валиден, 1 — ошибки.
 """
+from __future__ import annotations
 
 import json
 import sys

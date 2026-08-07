@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Единый git-хелпер (v3.0.13, блок C самоаудита) — ОДИН источник вызова git для tools/.
 
 Прежде идентичная функция `_git` (rc, stdout.strip(), stderr.strip()) была скопирована в 7 модулях,
@@ -9,6 +8,7 @@ from __future__ import annotations
 
 CLI: gitio.py --selftest
 """
+from __future__ import annotations
 
 import argparse
 import subprocess

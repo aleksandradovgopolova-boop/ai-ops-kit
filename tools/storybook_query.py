@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """storybook_query.py (v3.6.6) — минимальный READ-ONLY Storybook-адаптер (не новый центр системы).
 
 Ревью владельца: Storybook MCP — минимальный адаптер, а не центр. Первая версия преимущественно
@@ -12,6 +11,7 @@ storybook_adapter; здесь read-only навигация по каталогу
 
 CLI: storybook_query.py <child_root> [--related a.tsx,b.tsx] [--json] | --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

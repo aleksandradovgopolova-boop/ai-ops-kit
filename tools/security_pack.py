@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Security Pack -> доменный security-вердикт (v2.101, эпик Context Engineering, этап 5).
 
 Security review как набор ПРИМЕНИМЫХ доменов (security/security-domains.yaml), а не один вердикт.
@@ -17,6 +16,7 @@ required_evidence целиком покрыто пройденными дете�
   security_pack.py --selftest
 Возврат 0 — блокеров нет; 1 — есть блокирующие находки (или ошибка).
 """
+from __future__ import annotations
 
 import argparse
 import json

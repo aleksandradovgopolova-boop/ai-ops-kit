@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка PostReleaseReadout (PRR) — v3.5 Observability.
 
 PRR (schemas/post-release-readout.schema.json) замыкает петлю доставили→измерили→узнали. Валидатор:
@@ -14,6 +13,7 @@ PRR (schemas/post-release-readout.schema.json) замыкает петлю до�
 
 Использование:  validate_post_release_readout.py [<prr.(yaml|json)>|<dir>] [--json] | --selftest
 """
+from __future__ import annotations
 import json
 import re
 import sys

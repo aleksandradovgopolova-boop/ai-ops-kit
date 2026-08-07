@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """usage_ledger.py (v3.10.0 Usage Truth) — ЧЕСТНЫЙ учёт ВСЕХ модельных/runtime-вызовов.
 
 Каждый вызов модели (writer/reviewer/fix-loop/fallback/escalation/parallel-пакеты) пишет UsageRecord.
@@ -19,6 +18,7 @@ Ledger:
 CLI:  usage_ledger.py <child_root> [--workitem <wid>] [--json]   # показать стоимость задачи/продукта
       usage_ledger.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys

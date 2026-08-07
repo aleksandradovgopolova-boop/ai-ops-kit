@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Python-совместимость: PEP 604 union-аннотации без future-import ломают <3.10 (v2.69).
 
 finding квалификационного прогона (self-audit): tools/generate_artifacts.py использовал
@@ -16,6 +15,7 @@ ERROR. Так класс «падает на 3.9» ловится в CI, а не
 Использование:  validate_python_compat.py [--json] | --selftest
 Возврат 0 — совместимо, 1 — есть нарушение.
 """
+from __future__ import annotations
 
 import argparse
 import ast

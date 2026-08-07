@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Evidence collection, authoring, and review functions for the execution pipeline.
 
 Extracted from execution_pipeline.py — artifact authoring, independent reviews,
 security review, evidence re-evaluation, dependency installation.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

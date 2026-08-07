@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate container isolation assets (v2.90, P0.2 runtime jail).
 
 Брокер (tool_broker) даёт enforceable-подмножество ВНУТРИ процесса. Настоящую изоляцию ФС/
@@ -16,6 +15,7 @@ from __future__ import annotations
   validate_container_assets.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

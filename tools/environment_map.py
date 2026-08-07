@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """environment_map.py (v3.20.0 Engineering Operating Model, WP4) — честная карта окружений продукта.
 
 Аудит: у кита не было понятия «окружение» вообще. Гейты рассуждали о коде и ревью, а вопросы «куда это
@@ -23,6 +22,7 @@ from __future__ import annotations
 CLI:  environment_map.py <root> [--json]
       environment_map.py --selftest
 """
+from __future__ import annotations
 
 import json
 import re

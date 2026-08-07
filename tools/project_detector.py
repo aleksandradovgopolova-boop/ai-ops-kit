@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Project Detector -> RepositoryProfile (v2.41, P0#5 аудита — stack-aware evidence).
 
 После подключения кита система должна САМА определить стек и команды build/lint/typecheck/
@@ -21,6 +20,7 @@ status: draft — источник истины подтверждает чел�
                 project_detector.py --selftest
 Возврат 0 — ок, 1 — ошибка.
 """
+from __future__ import annotations
 
 import argparse
 import hashlib

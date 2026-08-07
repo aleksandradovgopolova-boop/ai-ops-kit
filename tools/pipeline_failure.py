@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Failure analysis and environment qualification for the execution pipeline.
 
 Extracted from execution_pipeline.py — failure signal detection, diff checks,
 security verdict validation, environment symptom detection.
 """
+from __future__ import annotations
 
 import re
 import sys

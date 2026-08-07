@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Stack-aware evidence collector (v3.26.0, Execution Engine — детерминированный сбор evidence).
 
 Замыкает Project Detector -> gate. RepositoryProfile (tools/project_detector.py) знает команды
@@ -24,6 +23,7 @@ v3.26.0 Progressive Verification: поддержка changed_files для target
       -> детектит профиль, гоняет команды, печатает {collection, gate_evidence}
   evidence_collector.py --selftest
 """
+from __future__ import annotations
 
 import argparse
 import json

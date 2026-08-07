@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Tool-calling loop (v2.42, Execution Engine Фаза 2, срез 3 — механика петли).
 
 Замыкает «task → controlled execution»: модель ПРЕДЛАГАЕТ действие (JSON), Policy решает
@@ -19,6 +18,7 @@ from __future__ import annotations
 Использование (программно): run_loop(proposer, root, policy, budget) -> отчёт петли.
   tool_loop.py --selftest
 """
+from __future__ import annotations
 
 import json
 import re

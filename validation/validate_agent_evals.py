@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Гейт eval-кейсов: изменённый агент обязан иметь eval-кейсы (evaluations/README.md).
 
 Правило: если в диапазоне изменений (diff base..HEAD) добавлен или изменён файл
@@ -18,6 +17,7 @@ evaluations/agents/<agent-id>.md, где <agent-id> — имя файла аге
 Использование:  python3 validation/validate_agent_evals.py [--base <ref>] [--selftest]
 Возврат 0 — чисто, 1 — есть ошибки.
 """
+from __future__ import annotations
 
 import os
 import re

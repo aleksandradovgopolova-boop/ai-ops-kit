@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка UIEvidenceBundle (v3.1.7) — контракт UI-evidence из локальных артефактов child-репо.
 
 Bundle (schemas/ui-evidence-bundle.schema.json) собирается tools/storybook_adapter.py и станет
@@ -21,6 +20,7 @@ Bundle (schemas/ui-evidence-bundle.schema.json) собирается tools/story
                 validate_storybook_evidence.py --selftest
 Возврат 0 — валиден, 1 — ошибки.
 """
+from __future__ import annotations
 import json
 import sys
 from pathlib import Path

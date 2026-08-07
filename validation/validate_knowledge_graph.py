@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Валидатор Knowledge Graph (Ф4 roadmap, v2.0).
 
 Словарь типов и связей — registry/entities.yaml; граф проекта — knowledge/graph.yaml
@@ -14,6 +13,7 @@ from __future__ import annotations
                 python3 validation/validate_knowledge_graph.py --selftest
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
+from __future__ import annotations
 
 import sys
 import tempfile
