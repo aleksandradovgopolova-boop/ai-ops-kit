@@ -105,6 +105,27 @@ def test_every_k_filter_selects_at_least_one_test():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
+def test_pull_request_trigger_covers_pr_creation(wf):
+    """Фильтр types без `opened` пропускает PR, созданный сразу как non-draft.
+
+    Именно так и вышло: PR #27 показывал зелёный статус, а полный CI на нём не запускался ни
+    разу — ни ready_for_review (из draft не выходили), ни synchronize (коммитов после создания
+    не было). Зелёный сигнал означал один pr-smoke, а не проверку.
+    """
+    data = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+    # ключ `on` YAML разбирает как булев True — обращаемся по обоим вариантам
+    on = data.get("on") if isinstance(data.get("on"), dict) else data.get(True)
+    pr = (on or {}).get("pull_request")
+    if not isinstance(pr, dict) or "types" not in pr:
+        pytest.skip(f"{wf.name}: pull_request без фильтра types — срабатывает на все события")
+    types = pr["types"] or []
+    assert "opened" in types, (
+        f"{wf.name}: types={types} без 'opened' — PR, созданный non-draft и смерженный без "
+        f"дополнительных коммитов, не запустит этот workflow вообще")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
 def test_workflow_is_valid_yaml_with_jobs(wf):
     """Битый workflow не запускается вовсе — молчаливо зелёный PR без единой проверки."""
     data = yaml.safe_load(wf.read_text(encoding="utf-8"))
