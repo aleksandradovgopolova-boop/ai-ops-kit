@@ -1,21 +1,23 @@
-# Перед коммитом — полный список проверок
+# Перед коммитом
 
-Прогнать полный набор проверок (тот же, что в CI `.github/workflows/package-quality.yml`);
-все должны быть PASS.
+Полный контур — одна команда:
 
 ```bash
-python3 tools/pr_open.py --selftest
-python3 tools/gate_result_v2.py --selftest
-python3 tools/branch_policy.py --selftest
-python3 validation/validate_agents_checklist.py --selftest
-python3 installer/ai_ops.py --selftest
-python3 validation/validate_research_artifacts.py --selftest
-python3 .research/tools/verify_quotes.py --selftest
-python3 .research/tools/freshness_sweep.py --selftest
-python3 .research/tools/ev_scaffold.py --selftest
-python3 -m pytest tests/contracts/ -v --tb=short --no-cov
-python3 -m pytest tests/contracts/ -v --tb=short
+./scripts/check-full.sh
 ```
+
+Быстрая обратная связь во время работы (~1 мин, без тестов с маркером slow):
+
+```bash
+./scripts/check-fast.sh
+```
+
+Отдельных команд здесь больше нет. Всё, что раньше перечислялось построчно — 201 команда на
+пике — переехало в pytest: селфтесты модулей стали `tests/unit/test_<module>_selftest.py`,
+валидаторы гоняются рантайм-контрактом из копии репозитория, прогоны на примерах живут в
+`test_example_fixtures.py`, инструменты `.research` — в `test_research_tools.py`. Дублировать
+их здесь значило бы гонять одно и то же дважды: именно из-за этого полный контур занимал девять
+минут вместо четырёх с половиной.
 
 ## Что переехало в pytest и почему здесь этого нет
 

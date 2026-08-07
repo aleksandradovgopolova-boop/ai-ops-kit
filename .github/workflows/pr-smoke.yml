@@ -42,6 +42,3 @@ jobs:
 
       - name: Key validators
         run: |
-          python3 validation/validate_ai_first_registry.py
-          python3 validation/validate_ai_first_workflows.py
-          python3 validation/validate_release_claims.py

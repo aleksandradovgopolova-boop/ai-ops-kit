@@ -118,8 +118,11 @@ CORRUPTIONS = {
     "quality/gates.yaml": (
         "schema_version: 1\nregistry_type: quality-gates\ngates: {}\nmvp_blocking_gates: []\n",
         ["validate_ai_first_workflows", "validate_references", "validate_claims"]),
-    "docs/agent-guides/pre-commit-checklist.md": (
-        "# пусто\n",
+    # v3.30: чеклист больше не список команд, и validate_agents_checklist его не читает — он
+    # охраняет инвариант «CI не запускает проверки мимо pytest». Портим то, что он реально читает.
+    ".github/workflows/pr-smoke.yml": (
+        "name: x\non: {pull_request: {branches: [main]}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: python3 validation/validate_ai_first_registry.py\n",
         ["validate_agents_checklist"]),
 }
 

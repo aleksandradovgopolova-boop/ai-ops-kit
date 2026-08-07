@@ -1,150 +1,76 @@
 #!/usr/bin/env python3
-"""Синхронность пред-коммит-чеклиста AGENTS.md с CI (v2.15) — drift-control.
+"""Инвариант: проверки запускаются ТОЛЬКО через pytest (v3.30).
 
-AGENTS.md обещает: «Прогнать полный набор проверок (тот же, что в CI
-`.github/workflows/package-quality.yml`)». Но список команд ведётся руками
-в двух местах, поэтому расходится: агент, честно выполнивший чеклист и
-получивший все PASS, всё равно может запушить PR, красный в CI (если в CI
-добавили проверку, а в чеклист — забыли).
+Прежняя роль этого валидатора — ловить дрейф между списком команд в чеклисте и командами в CI.
+Списка больше нет: 201 команда переехала в pytest, чеклист сводится к `./scripts/check-full.sh`.
+Валидатор перенаправлен на инвариант, который этот переезд защищает: CI не имеет права запускать
+проверки в обход pytest, иначе дубль и рассинхрон вернутся — за одну сессию их ловили трижды.
 
-Этот валидатор детерминированно проверяет инвариант **CI ⊆ AGENTS.md**:
-каждая команда `python3 ...`, которую запускает workflow, обязана
-присутствовать в bash-чеклисте AGENTS.md. Обратное направление
-(в чеклисте команд БОЛЬШЕ, чем в CI) — допустимо: локально можно гонять
-дополнительные проверки.
+Разрешено: pytest в любом виде, скрипты групп (они сами вызывают pytest), установка зависимостей,
+служебные шаги. Запрещено: прямой запуск валидатора или инструмента как проверки.
 
-Сравнение по нормализованной команде: отбрасываются перенаправления
-(`> /dev/null`), хвостовые комментарии и лишние пробелы; учитываются путь
-скрипта и его аргументы (`--selftest` и пример — разные проверки).
-
-Использование:  validate_agents_checklist.py [--json] | --selftest
-Возврат 0 — чеклист покрывает CI, 1 — есть непокрытая проверка (или ошибка чтения).
+  validate_agents_checklist.py [--json]
 """
 from __future__ import annotations
 
 import json
 import re
 import sys
-import tempfile
 from pathlib import Path
 
 import yaml
 
 PKG = Path(__file__).resolve().parents[1]
-WORKFLOW = Path(".github/workflows/package-quality.yml")
-CHECKLIST = Path("AGENTS.md")
-# v3.28.0: полный список команд перенесён в docs/agent-guides/pre-commit-checklist.md
-CHECKLIST_GUIDE = Path("docs/agent-guides/pre-commit-checklist.md")
+WORKFLOWS = PKG / ".github" / "workflows"
+
+# Шаги, которые не являются проверками и потому не обязаны идти через pytest.
+ALLOWED = (
+    re.compile(r"^python3?\s+-m\s+pytest\b"),
+    re.compile(r"^bash\s+\.github/ci-groups/"),
+    re.compile(r"^pip\s+install\b"),
+    re.compile(r"^\./scripts/check-(fast|full)\.sh"),
+)
 
 
-def normalize(line: str) -> str:
-    """Нормализовать shell-команду: убрать redirect, комментарий, лишние пробелы."""
-    line = line.split(">", 1)[0]      # отбросить перенаправление вывода
-    line = line.split("#", 1)[0]      # отбросить хвостовой комментарий
-    return " ".join(line.split())
-
-
-def ci_commands(root: Path) -> set:
-    """Множество нормализованных `python3 ...` команд из CI-workflow."""
-    doc = yaml.safe_load((root / WORKFLOW).read_text(encoding="utf-8"))
-    cmds = set()
-    for job in (doc.get("jobs") or {}).values():
-        for step in (job.get("steps") or []):
-            run = step.get("run")
-            if not isinstance(run, str):
-                continue
-            for raw in run.splitlines():
-                norm = normalize(raw)
-                if norm.startswith("python3 "):
-                    cmds.add(norm)
-    return cmds
-
-
-def checklist_commands(root: Path) -> set:
-    """Множество нормализованных `python3 ...` команд из bash-блоков AGENTS.md + pre-commit-checklist.md."""
-    cmds = set()
-    # v3.28.0: читаем оба файла — AGENTS.md (сокращённый) и pre-commit-checklist.md (полный)
-    for checklist_path in [CHECKLIST, CHECKLIST_GUIDE]:
-        full_path = root / checklist_path
-        if not full_path.exists():
+def offending_commands(root: Path = PKG):
+    """Команды в workflow, которые запускают проверку мимо pytest."""
+    bad = []
+    for wf in sorted((root / ".github" / "workflows").glob("*.yml")):
+        try:
+            doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as e:
+            bad.append((wf.name, f"нечитаемый YAML: {e}"))
             continue
-        text = full_path.read_text(encoding="utf-8")
-        for block in re.findall(r"```(?:bash|sh)?\n(.*?)```", text, re.DOTALL):
-            for raw in block.splitlines():
-                norm = normalize(raw)
-                if norm.startswith("python3 "):
-                    cmds.add(norm)
-    return cmds
-
-
-def check(root: Path):
-    """Вернуть список команд, которые CI запускает, а чеклист AGENTS.md — нет."""
-    ci = ci_commands(root)
-    doc = checklist_commands(root)
-    return sorted(ci - doc)
-
-
-def run(root: Path, as_json=False):
-    missing = check(root)
-    if as_json:
-        print(json.dumps({"schema_version": 1, "kind": "agents-checklist-sync",
-                          "missing_from_checklist": missing}, ensure_ascii=False, indent=2))
-    elif missing:
-        print(f"CHECKLIST-DRIFT: {len(missing)} проверок CI отсутствуют в чеклисте (AGENTS.md + pre-commit-checklist.md):")
-        for c in missing:
-            print(f"  CI запускает, но чеклист не перечисляет:  {c}")
-    else:
-        print("CHECKLIST-OK: чеклист (AGENTS.md + pre-commit-checklist.md) покрывает все проверки CI.")
-    return 1 if missing else 0
-
-
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    # 1) реальный пакет: чеклист покрывает CI (AGENTS.md + pre-commit-checklist.md)
-    expect("реальный пакет: CI ⊆ чеклист", check(PKG) == [])
-
-    # 2) нормализация: redirect/комментарий не мешают совпадению
-    expect("redirect отбрасывается",
-           normalize("python3 tools/x.py a > /dev/null") == "python3 tools/x.py a")
-    expect("комментарий отбрасывается",
-           normalize("python3 x.py  # note") == "python3 x.py")
-
-    # 3) искусственный слом: CI знает проверку, которой нет в чеклисте
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / ".github" / "workflows").mkdir(parents=True)
-        (root / WORKFLOW).write_text(
-            "jobs:\n"
-            "  quality:\n"
-            "    steps:\n"
-            "      - run: python3 validation/shared.py\n"
-            "      - run: |\n"
-            "          python3 validation/only_in_ci.py --selftest\n"
-            "          python3 validation/shared.py > /dev/null\n",
-            encoding="utf-8")
-        (root / CHECKLIST).write_text(
-            "# AGENTS\n\n```bash\npython3 validation/shared.py\n```\n",
-            encoding="utf-8")
-        missing = check(root)
-        expect("ловит проверку, которой нет в чеклисте",
-               missing == ["python3 validation/only_in_ci.py --selftest"])
-        expect("общую проверку (даже с redirect) НЕ считает пропущенной",
-               "python3 validation/shared.py" not in missing)
-
-    print("validate_agents_checklist selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
+        for job in (doc.get("jobs") or {}).values():
+            for step in (job.get("steps") or []):
+                run = step.get("run")
+                if not isinstance(run, str):
+                    continue
+                for raw in run.splitlines():
+                    line = raw.strip()
+                    if not line.startswith(("python3 ", "python ")):
+                        continue
+                    if any(p.match(line) for p in ALLOWED):
+                        continue
+                    bad.append((wf.name, line))
+    return bad
 
 
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
-    return run(PKG, as_json="--json" in argv)
+    bad = offending_commands()
+    if "--json" in argv:
+        print(json.dumps({"kind": "pytest-only-invariant",
+                          "offending": [{"workflow": w, "command": c} for w, c in bad]},
+                         ensure_ascii=False, indent=2))
+        return 1 if bad else 0
+    if bad:
+        print(f"PYTEST-ONLY-DRIFT: {len(bad)} проверок запускаются мимо pytest:")
+        for w, c in bad:
+            print(f"  {w}: {c}")
+        print("  перенеси проверку в tests/ — она попадёт в свою группу CI сама")
+        return 1
+    print("PYTEST-ONLY-OK: CI запускает проверки только через pytest.")
+    return 0
 
 
 if __name__ == "__main__":
