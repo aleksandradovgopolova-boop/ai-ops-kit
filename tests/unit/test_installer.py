@@ -109,6 +109,12 @@ def test_init_clean_repo_writes_real_files(child):
     engine = managed / "tools" / "ai_ops_run.py"
     assert engine.is_file(), "движок .ai/managed/tools/ai_ops_run.py не записан на диск"
     engine_src = engine.read_text(encoding="utf-8")
+    # v3.30: код движка переехал в ai_ops_kit/engine/, плоский путь остался входной точкой
+    # (её знают документация и doctor). Проверяем обе стороны: алиас записан И код доехал.
+    if "sys.modules[__name__]" in engine_src:
+        real = managed / "ai_ops_kit" / "engine" / "ai_ops_run.py"
+        assert real.is_file(), "алиас записан, а кода движка в поставке нет"
+        engine_src = real.read_text(encoding="utf-8")
     assert "def main(" in engine_src and len(engine_src) > 1000, \
         "движок записан, но содержимое не похоже на исполняемый модуль"
 
@@ -287,7 +293,16 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
     managed = installed / ".ai" / "managed"
     files = [p for p in managed.rglob("*") if p.is_file()]
     total = sum(p.stat().st_size for p in files)
-    assert len(files) < 450, f"файлов в managed: {len(files)} (ожидалось меньше 450)"
+    # v3.30: код переехал в пакеты ai_ops_kit/*, а плоские tools/*.py остались тонкими алиасами
+    # обратной совместимости — их в поставке ~87 файлов на 39 КиБ. Считать их в потолок значило бы
+    # либо ослабить потолок, либо запретить переходный слой. Поэтому потолок применяется к
+    # СОДЕРЖАТЕЛЬНЫМ файлам, а алиасы ограничены отдельно по объёму: раздуться незаметно не смогут.
+    aliases = [p for p in files if p.suffix == ".py"
+               and "sys.modules[__name__]" in p.read_text(encoding="utf-8", errors="ignore")]
+    alias_bytes = sum(p.stat().st_size for p in aliases)
+    substantive = len(files) - len(aliases)
+    assert substantive < 450, f"содержательных файлов в managed: {substantive} (потолок 450)"
+    assert alias_bytes < 200 * 1024, f"алиасы разрослись: {alias_bytes / 1024:.0f} КиБ (потолок 200)"
     assert total < 3.2 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ"
 
 
