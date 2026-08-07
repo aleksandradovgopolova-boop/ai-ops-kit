@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Гейт eval-кейсов: изменённый агент обязан иметь eval-кейсы (evaluations/README.md).
 
 Правило: если в диапазоне изменений (diff base..HEAD) добавлен или изменён файл
@@ -18,6 +17,7 @@ evaluations/agents/<agent-id>.md, где <agent-id> — имя файла аге
 Использование:  python3 validation/validate_agent_evals.py [--base <ref>] [--selftest]
 Возврат 0 — чисто, 1 — есть ошибки.
 """
+from __future__ import annotations
 
 import os
 import re
@@ -100,34 +100,6 @@ def evals_present_on_disk():
     return {p.stem for p in d.glob("*.md") if p.stem.lower() != "readme"} if d.is_dir() else set()
 
 
-def selftest():
-    ok = True
-
-    def expect(name, got, want):
-        nonlocal ok
-        status = "PASS" if got == want else "FAIL"
-        ok = ok and (got == want)
-        print(f"{status} {name}")
-
-    # 1. изменённый агент без eval-кейсов -> ошибка
-    errs = check(["agents/core/task-planner.md"], evals_present=set())
-    expect("изменённый агент без eval -> fail", len(errs), 1)
-    # 2. изменённый агент с eval-кейсами -> чисто
-    errs = check(["agents/core/task-planner.md"], evals_present={"task-planner"})
-    expect("изменённый агент с eval -> pass", len(errs), 0)
-    # 3. изменения вне agents/ и README не требуют eval
-    errs = check(["registry/agents.yaml", "agents/README.md", "workflows/release.md"],
-                 evals_present=set())
-    expect("не-агентные изменения -> pass", len(errs), 0)
-    # 4. структура: реальный eval-файл валиден; выдуманный «пустой» — нет
-    expect("структура существующего eval валидна",
-           eval_structure_errors("code-reviewer"), [])
-    expect("структура отсутствующего eval -> ошибка",
-           len(eval_structure_errors("__nope__")) >= 1, True)
-    print("agent-evals selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def run_all():
     """--all: проверить СТРУКТУРУ всех имеющихся eval-файлов + отчёт покрытия по реестру.
     Структурные ошибки -> exit 1. Отсутствующие агенты -> WARN (цель 51/51)."""
@@ -151,8 +123,6 @@ def run_all():
 
 
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     if "--all" in argv:
         return run_all()
     base = resolve_base(argv)

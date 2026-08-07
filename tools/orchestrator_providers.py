@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Provider implementations for orchestrator — mock, anthropic, openai, claude-cli.
 
 Extracted from orchestrator.py. Imports HTTP client from orchestrator_http and
 usage recording from orchestrator_usage.
 """
+from __future__ import annotations
 
 import hashlib
 import json

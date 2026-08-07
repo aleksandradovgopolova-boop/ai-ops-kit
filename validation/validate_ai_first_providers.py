@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка реестров provider/model/runtime/tool + capability-index + routing-policy (Фаза 6).
 
 Ловит то, что ломается при ручных правках реестров абстракции:
@@ -14,6 +13,7 @@ from __future__ import annotations
 Использование:  python3 02_tools/ci/validate_ai_first_providers.py
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
+from __future__ import annotations
 
 import re
 import sys

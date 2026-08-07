@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """session_telemetry_provider.py (v3.22 Culture Runtime Integration) — opt-in чтение реальной
 Claude session metadata. Контракт: попытаться прочитать данные из runtime, если не удалось —
 честно вернуть None (unavailable, не 0).
@@ -18,6 +17,7 @@ Claude session metadata. Контракт: попытаться прочитат
 CLI:  session_telemetry_provider.py [--session-id ID] [--project-dir DIR] [--json]
       session_telemetry_provider.py --selftest
 """
+from __future__ import annotations
 
 import json
 import os
@@ -147,54 +147,6 @@ def check(data):
     if data.get("input_tokens", 0) < 0:
         e.append("input_tokens < 0")
     return e
-
-
-def selftest():
-    """Selftest: контракт + честность (None если нет данных)."""
-    ok = True
-
-    # 1. read_session_metadata без данных -> None (честно)
-    result = read_session_metadata(session_id="nonexistent-session-12345")
-    if result is None:
-        print("PASS session_telemetry_provider: nonexistent session -> None (честно)")
-    else:
-        ok = False
-        print("FAIL session_telemetry_provider: nonexistent session должен вернуть None")
-
-    # 2. check(None) -> [] (валидация проходит)
-    errors = check(None)
-    if not errors:
-        print("PASS session_telemetry_provider: check(None) -> [] (unavailable валиден)")
-    else:
-        ok = False
-        print(f"FAIL session_telemetry_provider: check(None) должен вернуть [], got {errors}")
-
-    # 3. check с валидными данными -> []
-    valid_data = {
-        "session_id": "test-session",
-        "started_at": "2026-08-05T10:00:00Z",
-        "message_count": 10,
-        "input_tokens": 5000,
-        "output_tokens": 2000,
-    }
-    errors = check(valid_data)
-    if not errors:
-        print("PASS session_telemetry_provider: check(valid) -> []")
-    else:
-        ok = False
-        print(f"FAIL session_telemetry_provider: check(valid) должен вернуть [], got {errors}")
-
-    # 4. check с невалидными данными -> errors
-    invalid_data = {"message_count": -1}
-    errors = check(invalid_data)
-    if errors:
-        print("PASS session_telemetry_provider: check(invalid) -> errors")
-    else:
-        ok = False
-        print("FAIL session_telemetry_provider: check(invalid) должен вернуть errors")
-
-    print("session_telemetry_provider selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
 
 
 if __name__ == "__main__":

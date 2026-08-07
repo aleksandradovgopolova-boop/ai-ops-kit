@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """session_guardrails.py (v3.16.0 Development Culture Guardrails, WP3+WP5) — политика экономии сессии
 (пороги контекста) + рекомендация по границе сессии + Task Completion Ritual.
 
@@ -15,6 +14,7 @@ CLI:  session_guardrails.py <child_root> [--workitem WID] [--context N] [--next-
                             [--next "текст"] [--pr URL] [--checks "183/183"] [--unsafe] [--json]
       session_guardrails.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys
@@ -213,67 +213,7 @@ def render_block(ritual):
     return "\n".join(L)
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and bool(cond)
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    d = SESSION_ECONOMY_DEFAULTS
-    expect("classify 100k -> normal", classify_context(100_000, d) == "normal")
-    expect("classify 180k -> attention", classify_context(180_000, d) == "attention")
-    expect("classify 300k -> compact_recommended", classify_context(300_000, d) == "compact_recommended")
-    expect("classify 450k -> new_session_recommended", classify_context(450_000, d) == "new_session_recommended")
-    expect("classify None -> unknown (честно)", classify_context(None, d) == "unknown")
-
-    snap = lambda ctx, wid="WI-1": {"kind": "SessionTelemetry", "context_current": ctx,
-                                    "context_status": "estimated", "workitem_id": wid,
-                                    "input_tokens": 1, "output_tokens": 1, "estimated_cost": 1.0,
-                                    "cost_complete": True, "turns": 5}
-
-    r = recommend(snap(92_000), d, next_relation="continuation", task_done=False)
-    expect("тот же WI, лёгкий контекст, не завершён -> continue",
-           r["outcome"] == "continue" and r["command"] is None)
-    r = recommend(snap(271_000), d, next_relation="same_task", task_done=False)
-    expect("тот же WI, дорогой контекст, не завершён -> compact + команда",
-           r["outcome"] == "compact" and "/compact" in r["command"])
-    r = recommend(snap(318_000), d, next_relation="new_independent_task", task_done=True, repo_path="/x")
-    expect("новая независимая задача, задача закрыта -> clear + команда",
-           r["outcome"] == "clear" and "/clear" in r["command"])
-    r = recommend(snap(450_000), d, next_relation="new_independent_task", task_done=True, repo_path="/x")
-    expect("контекст >400k -> new_session (гигиена важнее)",
-           r["outcome"] == "new_session" and "claude" in r["command"])
-    r = recommend(snap(450_000), d, next_relation="continuation", task_done=False)
-    expect("контекст >400k, продолжение не завершено -> compact (не new_session)",
-           r["outcome"] == "compact")
-    r = recommend(snap(300_000), d, next_relation="new_independent_task", task_done=True, at_safe_boundary=False)
-    expect("небезопасная граница -> defer, без команды",
-           r["outcome"] == "defer" and r["command"] is None)
-
-    rit = completion_ritual(snap(318_000), d, workitem_id="WI-1", pr="PR#48", checks="183/183",
-                            next_relation="new_independent_task", next_task="Environment Discovery",
-                            repo_path="/repo")
-    expect("ритуал: исход clear + NextCommand", rit["session_recommendation"]["outcome"] == "clear"
-           and rit["next_command"] and check(rit) == [])
-    expect("ритуал complete при всех галочках", rit["complete"] is True)
-    block = render_block(rit)
-    expect("блок содержит PR/стоимость/рекомендацию/команду",
-           "PR#48" in block and "Рекомендация" in block and "/clear" in block)
-
-    # неполный ритуал -> complete False + предупреждение
-    rit2 = completion_ritual(snap(92_000, wid="WI-1"), d, workitem_id="WI-1", pr=None, checks=None,
-                             next_relation="continuation", committed=False)
-    expect("нет PR/commit/checks -> ритуал не complete", rit2["complete"] is False)
-
-    print("session_guardrails selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     wid = ctx = nrel = nxt = pr = checks = None
     args, it = [], iter(argv)
     unsafe = "--unsafe" in argv

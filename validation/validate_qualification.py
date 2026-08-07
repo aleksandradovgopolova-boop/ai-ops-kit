@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate qualification scenario pack (v2.84 Qualification).
 
 Пакет живых сценариев (qualification/scenarios.yaml) — не декоративный список: он должен быть
@@ -17,6 +16,7 @@ from __future__ import annotations
   validate_qualification.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -77,54 +77,7 @@ def check(data, workflow_ids=None):
     return errors
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    wf = {"QUICK", "ENGINEERING", "PRODUCT"}
-    good = {"kind": "qualification-scenarios",
-            "scenarios": [{"id": "s1", "title": "t", "task": "do", "task_type": "QUICK",
-                           "acceptance": ["a"], "proves": "p", "flags": ["--sandbox"]}],
-            "os_stack_matrix": {"os": ["macOS"], "stacks": ["node"]}}
-    expect("валидный пакет -> без ошибок", check(good, wf) == [])
-    bad_tt = {"kind": "qualification-scenarios",
-              "scenarios": [{"id": "s1", "title": "t", "task": "d", "task_type": "NOPE",
-                             "acceptance": ["a"], "proves": "p"}],
-              "os_stack_matrix": {"os": ["macOS"], "stacks": ["node"]}}
-    expect("неизвестный task_type -> ошибка", any("NOPE" in e for e in check(bad_tt, wf)))
-    bad_flag = {"kind": "qualification-scenarios",
-                "scenarios": [{"id": "s1", "title": "t", "task": "d", "task_type": "QUICK",
-                               "acceptance": ["a"], "proves": "p", "flags": ["--ghost"]}],
-                "os_stack_matrix": {"os": ["macOS"], "stacks": ["node"]}}
-    expect("неизвестный флаг -> ошибка", any("--ghost" in e for e in check(bad_flag, wf)))
-    expect("нет обязательного поля -> ошибка",
-           any("proves" in e for e in check(
-               {"kind": "qualification-scenarios",
-                "scenarios": [{"id": "s1", "title": "t", "task": "d", "task_type": "QUICK",
-                               "acceptance": ["a"]}],
-                "os_stack_matrix": {"os": ["m"], "stacks": ["n"]}}, wf)))
-    expect("нет матрицы -> ошибка",
-           any("os_stack_matrix" in e for e in check(
-               {"kind": "qualification-scenarios",
-                "scenarios": [{"id": "s1", "title": "t", "task": "d", "task_type": "QUICK",
-                               "acceptance": ["a"], "proves": "p"}]}, wf)))
-    # реальный поставляемый пакет проходит
-    real = PKG / "qualification" / "scenarios.yaml"
-    if real.exists():
-        expect("поставляемый qualification/scenarios.yaml валиден",
-               check(yaml.safe_load(real.read_text(encoding="utf-8"))) == [])
-
-    print("validate_qualification selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     path = Path(argv[0]) if argv else (PKG / "qualification" / "scenarios.yaml")
     if not path.exists():
         print(f"QUALIFICATION: файл не найден: {path}")

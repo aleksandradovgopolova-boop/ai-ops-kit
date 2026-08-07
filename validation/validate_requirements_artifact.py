@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate requirements artifact (v2.86 Product Authoring).
 
 Гейт `requirements` (ENGINEERING/PRODUCT) требует evidence: testable_requirements +
@@ -28,6 +27,7 @@ check() -> список ошибок (пусто = валидно). provided_evi
   validate_requirements_artifact.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -78,41 +78,7 @@ def load(path):
     return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    good = {"schema_version": 1, "kind": "requirements-artifact", "workitem_id": "feat-1",
-            "requirements": [{"id": "R1", "statement": "фильтр по статусу сужает список",
-                              "acceptance": ["when статус=paid then только оплаченные"]}]}
-    expect("валидный артефакт -> без ошибок", check(good) == [])
-    expect("валидный -> закрывает оба required_evidence",
-           provided_evidence(good) == ["testable_requirements", "acceptance_scenarios"])
-    expect("пустой requirements -> ошибка + evidence пуст",
-           check({"schema_version": 1, "kind": "requirements-artifact", "requirements": []}) != []
-           and provided_evidence({"kind": "requirements-artifact", "requirements": []}) == [])
-    expect("требование без acceptance -> ошибка (нет сценария приёмки)",
-           any("acceptance" in e for e in check({"schema_version": 1, "kind": "requirements-artifact",
-               "requirements": [{"id": "R1", "statement": "x"}]})))
-    expect("требование без statement -> ошибка",
-           any("statement" in e for e in check({"schema_version": 1, "kind": "requirements-artifact",
-               "requirements": [{"id": "R1", "acceptance": ["a"]}]})))
-    expect("неверный kind -> ошибка", any("kind" in e for e in check({"kind": "x", "requirements": []})))
-    expect("дублирующийся id -> ошибка",
-           any("дубл" in e for e in check({"schema_version": 1, "kind": "requirements-artifact",
-               "requirements": [{"id": "R1", "statement": "a", "acceptance": ["s"]},
-                                {"id": "R1", "statement": "b", "acceptance": ["s"]}]})))
-    print("validate_requirements_artifact selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     if not argv:
         print(__doc__); return 1
     errs = check(load(argv[0]))

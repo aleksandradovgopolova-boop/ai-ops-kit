@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Qualification нового слоя Context Engineering — Q1..Q10 (v2.103, этап 7, финал эпика).
 
 Новые требования (этапы 1-6) считаются готовыми только после отдельных сценариев. Этот харнесс
@@ -22,6 +21,7 @@ run_handoff, spec_levels, security_pack, tool_broker) — без живой мо
   validate_context_qualification.py [--selftest]
 Возврат 0 — все Q пройдены, 1 — есть провалы.
 """
+from __future__ import annotations
 
 import sys
 import tempfile

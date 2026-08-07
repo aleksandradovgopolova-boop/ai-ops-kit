@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Git-related helpers for the execution pipeline.
 
 Extracted from execution_pipeline.py to keep git operations isolated.
 """
+from __future__ import annotations
 
 import re
 import sys
@@ -237,24 +237,6 @@ def _change_context_range(work_root, base_revision, head_revision, max_chars=140
                     "файлов выше — читай целиком через {\"op\":\"read\"} для верификации]")
         parts.append("\nCombined unified-дифф base..head:\n" + body)
     return "\n".join(parts) + "\n"
-
-
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("pipeline_git: imports work", True)
-    expect("pipeline_git: _git is callable", callable(_git))
-    expect("pipeline_git: _has_changes is callable", callable(_has_changes))
-    expect("pipeline_git: _tree_clean is callable", callable(_tree_clean))
-    expect("pipeline_git: _resolve_base is callable", callable(_resolve_base))
-
-    print("pipeline_git selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
 
 
 if __name__ == "__main__":

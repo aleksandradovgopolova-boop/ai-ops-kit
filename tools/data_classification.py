@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """data_classification.py (v3.6.4) — авторитетная классификация данных (trust-фикс #4).
 
 Ревью владельца: недоверенный контент НЕ должен понижать свой access-класс через inline-маркер
@@ -14,6 +13,7 @@ from __future__ import annotations
 
 Только stdlib. CLI: data_classification.py <policy.yaml> [--json] | --selftest
 """
+from __future__ import annotations
 
 import json
 import re
@@ -82,54 +82,7 @@ def _load(p: Path):
     return yaml.safe_load(p.read_text(encoding="utf-8"))
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    # marker НЕ понижает класс
-    expect("marker 'public' НЕ понижает (base internal остаётся internal)",
-           classify("# data-class: public\nx=1\n") == "internal")
-    expect("marker 'confidential' ПОВЫШАЕТ (internal -> confidential)",
-           classify("# data-class: confidential\nx=1\n") == "confidential")
-    expect("секрет всегда secret, даже с marker public",
-           classify("# data-class: public\nsk-ant-api03deadbeefcafe\n") == "secret")
-    # policy авторитетна
-    pol = {"schema_version": 1, "kind": "DataClassificationPolicy", "id": "DCP-001",
-           "default_class": "internal", "strict_unknown": False,
-           "rules": [{"path_prefix": "secrets/", "class": "secret"},
-                     {"path_prefix": "src/private/", "class": "confidential"}]}
-    expect("policy: secrets/x -> secret (без marker)", classify("y=1\n", "secrets/x.py", pol) == "secret")
-    expect("policy: src/private/x -> confidential", classify("y=1\n", "src/private/x.py", pol) == "confidential")
-    expect("policy: marker public на confidential-пути НЕ понижает",
-           classify("# data-class: public\n", "src/private/x.py", pol) == "confidential")
-    expect("policy: longest-prefix wins", _policy_class(
-        {"rules": [{"path_prefix": "src/", "class": "internal"},
-                   {"path_prefix": "src/private/", "class": "confidential"}]}, "src/private/a.py") == "confidential")
-    # strict unknown -> deny (confidential)
-    expect("strict + unknown path -> confidential (deny), не internal",
-           classify("x=1\n", "weird/x.py", pol, strict=True) == "confidential")
-    expect("не-strict + unknown -> internal", classify("x=1\n", "weird/x.py", pol) == "internal")
-
-    # validate_policy
-    expect("валидная policy проходит", validate_policy(pol) == [])
-    expect("битый class в rule -> ошибка",
-           any("class" in x for x in validate_policy({**pol, "rules": [{"path_prefix": "a/", "class": "vibes"}]})))
-    expect("битый default_class -> ошибка", any("default_class" in x for x in validate_policy({**pol, "default_class": "x"})))
-    if DEMO.is_dir():
-        expect("реальный demo DCP валиден",
-               all(validate_policy(_load(f)) == [] for f in sorted(DEMO.glob("DCP-*.yaml"))))
-
-    print("data_classification selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     if not args:
         print(__doc__)

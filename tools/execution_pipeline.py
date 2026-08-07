@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Единый execution-pipeline (v2.58, P0-эпик) — СБОРКА исполнения в один движок.
 
 Аудит: компоненты есть, но не собраны; generic-путь гонял doc-оркестратор, а не tool-loop.
@@ -18,6 +17,7 @@ from __future__ import annotations
   run_pipeline(task, signals, child_root, proposer, policy, budget, max_steps) -> отчёт.
   execution_pipeline.py --selftest
 """
+from __future__ import annotations
 
 import json
 import os

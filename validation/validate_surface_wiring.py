@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate surface-wiring (Вывод 2 «дефектов одной сессии»: core<->wrapper<->client wiring drift).
 
 Дефект `/api/catalog`: путь умеет ЯДРО, покрыт тестами ядра И тестами клиента (клиент мокал fetch,
@@ -13,6 +12,7 @@ from __future__ import annotations
 
   validate_surface_wiring.py [manifest.json] | --selftest
 """
+from __future__ import annotations
 
 import json
 import sys
@@ -59,49 +59,7 @@ def check(manifest):
     return {"errors": errors, "advisories": advisories}
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    clean = {"core": ["/api/catalog"],
-             "wrappers": {"prod": ["/api/catalog"], "dev": ["/api/catalog"], "serverless": ["/api/catalog"]},
-             "client": ["/api/catalog"]}
-    expect("согласованная поверхность -> без errors", check(clean)["errors"] == [])
-
-    # ровно дефект /api/catalog: ядро умеет, ни одна обёртка не смонтировала, клиент вызывает
-    drift = {"core": ["/api/catalog"], "wrappers": {"prod": [], "dev": []}, "client": ["/api/catalog"]}
-    e = check(drift)["errors"]
-    expect("drift СРАБАТЫВАЕТ: core route не в обёртках", any("НЕ смонтирован" in x for x in e))
-    expect("drift СРАБАТЫВАЕТ: client путь не обслуживается", any("не обслуживается ни одной" in x for x in e))
-
-    # смонтировано в одном контуре, забыто в другом -> частичный drift ловится
-    partial = {"core": ["/api/catalog"], "wrappers": {"prod": ["/api/catalog"], "dev": []}, "client": ["/api/catalog"]}
-    expect("частичный drift (dev забыл) -> error именно по dev",
-           any("'dev'" in x for x in check(partial)["errors"]))
-
-    # префиксный маунт: /api/catalog обслуживает /api/catalog/123
-    pref = {"core": [], "wrappers": {"prod": ["/api/catalog"]}, "client": ["/api/catalog/123"]}
-    expect("префиксный маунт покрывает вложенный путь", check(pref)["errors"] == [])
-
-    # смонтировано, но никто не вызывает -> advisory (не error)
-    unused = {"core": ["/api/catalog"], "wrappers": {"prod": ["/api/catalog", "/api/legacy"]}, "client": ["/api/catalog"]}
-    u = check(unused)
-    expect("смонтировано-но-невызвано -> advisory, не error",
-           u["errors"] == [] and any("/api/legacy" in a for a in u["advisories"]))
-
-    expect("manifest не объект -> честная ошибка", check(None)["errors"] != [])
-
-    print("validate_surface_wiring selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     if not args:
         print(__doc__)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Стек-квалификация движка на РЕАЛЬНЫХ фикстурах — детерминированно, без живой модели (v2.91).
 
 Живые сценарии (qualification/scenarios.yaml) требуют модель и гоняются на машине пользователя.
@@ -23,6 +22,7 @@ from __future__ import annotations
   validate_stack_qualification.py --selftest # то же (для чек-листа CI)
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import shutil
 import subprocess
@@ -141,10 +141,6 @@ def run_checks():
     skips.append("live java: прогон требует сети к Maven Central -> проверка по golden (снят живьём)")
 
     return r, skips
-
-
-def selftest():
-    return main([])
 
 
 def main(argv):

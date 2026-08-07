@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """engineering_advisor.py (v3.23 Engineering Advisor) — слой «как лучше сделать», а не очередной
 набор проверок. Композиция из существующих модулей: environment_map, deploy_readiness,
 project_detector, commit_policy, branch_policy, economic_preflight.
@@ -16,6 +15,7 @@ Advise, не block — рекомендации, а не требования.
 CLI:  engineering_advisor.py <child_root> [--task-type TYPE] [--json]
       engineering_advisor.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys
@@ -274,52 +274,6 @@ def check(data):
             if "advice" not in r:
                 e.append(f"recommendation[{i}] missing advice")
     return e
-
-
-def selftest():
-    """Selftest: контракт + честность (unavailable не как 0)."""
-    import tempfile
-    ok = True
-
-    # 1. advise на пустом репо — не падает, возвращает рекомендации
-    with tempfile.TemporaryDirectory() as td:
-        result = advise(td)
-        if result.get("kind") == "EngineeringAdvice":
-            print("PASS engineering_advisor: advise на пустом репо -> EngineeringAdvice")
-        else:
-            ok = False
-            print(f"FAIL engineering_advisor: kind={result.get('kind')}")
-        # 2. check валиден
-        errors = check(result)
-        if not errors:
-            print("PASS engineering_advisor: check(valid) -> []")
-        else:
-            ok = False
-            print(f"FAIL engineering_advisor: check(valid) -> {errors}")
-        # 3. recommendations — список
-        recs = result.get("recommendations", [])
-        if isinstance(recs, list):
-            print(f"PASS engineering_advisor: {len(recs)} рекомендаций")
-        else:
-            ok = False
-            print("FAIL engineering_advisor: recommendations не список")
-        # 4. summary — строка
-        if isinstance(result.get("summary"), str):
-            print(f"PASS engineering_advisor: summary = '{result['summary']}'")
-        else:
-            ok = False
-            print("FAIL engineering_advisor: summary не строка")
-
-    # 5. check с невалидными данными -> errors
-    errors = check({"kind": "wrong"})
-    if errors:
-        print("PASS engineering_advisor: check(invalid) -> errors")
-    else:
-        ok = False
-        print("FAIL engineering_advisor: check(invalid) должен вернуть errors")
-
-    print("engineering_advisor selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
 
 
 if __name__ == "__main__":

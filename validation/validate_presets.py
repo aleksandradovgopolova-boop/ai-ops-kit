@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка декларативных presets (presets/*.yaml).
 
 Ловит:
@@ -12,6 +11,7 @@ from __future__ import annotations
 Использование:  python3 validation/validate_presets.py
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Usage recording for orchestrator — call stats accumulator, context, pricing.
 
 Extracted from orchestrator.py. Global state (_CALL_STATS, _CALL_CONTEXT) lives here;
 orchestrator.py re-exports for backward compatibility.
 """
+from __future__ import annotations
 
 import hashlib
 import json

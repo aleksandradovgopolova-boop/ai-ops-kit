@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка установки AI-first системы в child-репозиторий (Фаза 8).
 
 Проверяет живую установку в корне репозитория (первый existing-repo pilot):
@@ -17,6 +16,7 @@ from __future__ import annotations
 Возврат 0 — чисто, 1 — есть ошибки; пропуск, если .ai-ops.yaml нет (репо не child).
 Требует pyyaml.
 """
+from __future__ import annotations
 
 import json
 import re

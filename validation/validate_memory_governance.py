@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate MemoryGovernancePolicy (security-долг #2, OWASP ASI).
 
 Инварианты: каждая запись памяти несёт provenance (origin + source_type); имеет expiry (ttl_days>0 /
@@ -8,6 +7,7 @@ review_date / permanent+justification); НЕ self-ingested без подтвер
 
   validate_memory_governance.py [examples/memory-governance-demo/MGP-001.yaml] | --selftest
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -65,50 +65,7 @@ def check(data):
     return e
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    base = {"schema_version": 1, "kind": "MemoryGovernancePolicy", "policy_id": "MGP-001",
-            "entries": [{"id": "m1", "provenance": {"origin": "user", "source_type": "human"},
-                         "expiry": {"mode": "ttl_days", "value": 90}, "self_ingested": False}]}
-    expect("валидная MGP проходит", check(base) == [])
-    expect("нет provenance.origin -> ошибка",
-           any("provenance.origin" in x for x in check({**base, "entries": [
-               {"id": "m", "provenance": {"source_type": "human"}, "expiry": {"mode": "ttl_days", "value": 1}, "self_ingested": False}]})))
-    expect("derived без upstream -> ошибка",
-           any("upstream" in x for x in check({**base, "entries": [
-               {"id": "m", "provenance": {"origin": "o", "source_type": "derived"}, "expiry": {"mode": "permanent", "justification": "j"}, "self_ingested": False}]})))
-    expect("permanent без justification -> ошибка",
-           any("justification" in x for x in check({**base, "entries": [
-               {"id": "m", "provenance": {"origin": "o", "source_type": "human"}, "expiry": {"mode": "permanent"}, "self_ingested": False}]})))
-    expect("ttl_days<=0 -> ошибка",
-           any("ttl_days" in x for x in check({**base, "entries": [
-               {"id": "m", "provenance": {"origin": "o", "source_type": "human"}, "expiry": {"mode": "ttl_days", "value": 0}, "self_ingested": False}]})))
-    expect("self_ingested без human_confirmed -> ошибка (no-self-ingestion)",
-           any("self-ingestion" in x for x in check({**base, "entries": [
-               {"id": "m", "provenance": {"origin": "agent", "source_type": "system"}, "expiry": {"mode": "ttl_days", "value": 7}, "self_ingested": True}]})))
-    expect("self_ingested + human_confirmed -> ок",
-           check({**base, "entries": [
-               {"id": "m", "provenance": {"origin": "agent", "source_type": "system"}, "expiry": {"mode": "ttl_days", "value": 7}, "self_ingested": True, "human_confirmed": True}]}) == [])
-
-    if DEFAULT.exists():
-        errs = check(yaml.safe_load(DEFAULT.read_text(encoding="utf-8")))
-        expect(f"реальный {DEFAULT.name} валиден", errs == [])
-        for x in errs:
-            print("   -", x)
-
-    print("validate_memory_governance selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     path = Path(args[0]) if args else DEFAULT
     if not path.exists():

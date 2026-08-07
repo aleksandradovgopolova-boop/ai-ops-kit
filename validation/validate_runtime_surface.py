@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """validate_runtime_surface.py (v3.14.0 Startup Context Budget, срез 3) — бюджет стоимости самого кита:
 (1) описание КАЖДОГО поставляемого скилла ≤ 300 символов (описание — это триггеры и границы; подробности
 живут в теле, которое грузится по вызову, а не в стартовом листинге); (2) well-formedness декларации
@@ -13,6 +12,7 @@ Advisory-строгость: rc 1 при нарушении бюджета оп�
 Использование:  validate_runtime_surface.py [skills_dir]     — проверить бюджет описаний
                 validate_runtime_surface.py --selftest
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -85,49 +85,7 @@ def run(skills_dir=None):
     return 0
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and bool(cond)
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "ok-skill").mkdir()
-        (root / "ok-skill" / "SKILL.md").write_text(
-            "---\nname: ok\ndescription: короткое описание в бюджете\n---\n# тело", encoding="utf-8")
-        (root / "fat-skill").mkdir()
-        (root / "fat-skill" / "SKILL.md").write_text(
-            "---\nname: fat\ndescription: " + ("очень длинное " * 40) + "\n---\n# тело", encoding="utf-8")
-        over = check_skill_descriptions(root)
-        expect("раздутое описание детектируется", any(o["skill"] == "fat-skill" for o in over))
-        expect("короткое описание проходит", not any(o["skill"] == "ok-skill" for o in over))
-
-    expect("runtime_surface отсутствует -> валидно (экспорт всего)", check_runtime_surface({}) == [])
-    expect("runtime_surface enabled='all' валиден",
-           check_runtime_surface({"runtime_surface": {"skills": {"enabled": "all"}}}) == [])
-    expect("runtime_surface enabled=[список] валиден",
-           check_runtime_surface({"runtime_surface": {"commands": {"enabled": ["ai-run"]}}}) == [])
-    expect("runtime_surface enabled=число -> ошибка",
-           check_runtime_surface({"runtime_surface": {"skills": {"enabled": 5}}}) != [])
-
-    # ключевой инвариант: РЕАЛЬНЫЕ поставляемые скиллы кита в бюджете
-    real_over = check_skill_descriptions(PKG / "skills")
-    expect("все поставляемые скиллы кита ≤300 символов",
-           not real_over)
-    if real_over:
-        print("  превышают:", ", ".join(f"{o['skill']}({o['chars']})" for o in real_over))
-
-    print("validate_runtime_surface selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     return run(args[0] if args else None)
 

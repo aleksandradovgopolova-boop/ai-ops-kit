@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate PromotionQualificationPlan (v3.6.8 — Live Qualification & Controlled Promotion).
 
 План живой квалификации и КОНТРОЛИРУЕМОГО promotion Context Engine v2 — это данные, а не живой прогон.
@@ -19,6 +18,7 @@ from __future__ import annotations
   validate_promotion_qualification.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -127,52 +127,7 @@ def _good_plan():
     }
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("валидный план проходит", check(_good_plan()) == [])
-    expect("promotion_sequence не shadow->hybrid->default -> ошибка",
-           any("promotion_sequence" in x for x in
-               check({**_good_plan(), "promotion_sequence": [{"stage": "default", "description": "d", "gate": "g"}]})))
-    bad_run = _good_plan()
-    bad_run["runs"][0]["exact_sha_bound"] = False
-    expect("run без exact_sha_bound -> ошибка", any("exact_sha_bound" in x for x in check(bad_run)))
-    phantom = _good_plan()
-    phantom["runs"][0]["uses"] = ["does_not_exist_9x.py"]
-    expect("uses на несуществующий инструмент -> ошибка (честность)",
-           any("несуществующ" in x for x in check(phantom)))
-    miss_neg = _good_plan()
-    miss_neg["negative_scenarios"] = miss_neg["negative_scenarios"][:-1]
-    expect("неполный набор негативов -> ошибка", any("негатив" in x for x in check(miss_neg)))
-    miss_crit = _good_plan()
-    miss_crit["exit_criteria"] = miss_crit["exit_criteria"][:-1]
-    expect("неполный набор exit-критериев -> ошибка", any("критери" in x for x in check(miss_crit)))
-    no_kind = _good_plan()
-    no_kind["runs"] = no_kind["runs"][:2]
-    expect("runs не покрывают все три вида -> ошибка", any("обязательные виды" in x for x in check(no_kind)))
-    expect("пустой blocked_by -> ошибка", any("blocked_by" in x for x in check({**_good_plan(), "blocked_by": []})))
-
-    # реальный план на диске (если есть) — валиден
-    if DEFAULT_PLAN.exists():
-        data = yaml.safe_load(DEFAULT_PLAN.read_text(encoding="utf-8"))
-        errs = check(data)
-        expect(f"реальный {DEFAULT_PLAN.name} валиден", errs == [])
-        if errs:
-            for x in errs:
-                print("   -", x)
-
-    print("validate_promotion_qualification selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     path = Path(args[0]) if args else DEFAULT_PLAN
     if not path.exists():

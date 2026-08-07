@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка машиночитаемых конфигов AI-first системы (02_tools/ai-first-system/config).
 
 Ловит то, что реально ломается при ручных правках конфигов:
@@ -11,6 +10,7 @@ from __future__ import annotations
 Использование:  python3 02_tools/ci/validate_ai_first_config.py
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

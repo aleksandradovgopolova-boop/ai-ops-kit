@@ -29,6 +29,7 @@ PKG = Path(__file__).resolve().parents[2]
 
 # Валидаторы, запускаемые без аргументов (сканируют репозиторий).
 STANDALONE = [
+    "validate_access_filter",
     "validate_adr_registry",
     "validate_agent_evals",
     "validate_agents_checklist",
@@ -37,35 +38,71 @@ STANDALONE = [
     "validate_ai_first_registry",
     "validate_ai_first_workflows",
     "validate_ai_ops_child",
+    "validate_bootstrap_qualification",
+    "validate_budget_contract",
+    "validate_capability_scope",
     "validate_claims",
+    "validate_container_assets",
     "validate_container_delivery",
     "validate_context_qualification",
+    "validate_decisions",
+    "validate_duties",
     "validate_engops_policy",
+    "validate_event_catalog",
+    "validate_feature_learning",
     "validate_freshness",
+    "validate_integration_trace",
+    "validate_key_lifecycle",
     "validate_learning_loop",
+    "validate_loop_trace",
+    "validate_memory_governance",
+    "validate_model_qualification",
+    "validate_model_roles",
     "validate_openspec_change",
+    "validate_package_boundaries",
     "validate_pipeline_e2e",
+    "validate_post_release_readout",
     "validate_presets",
     "validate_product_qualification",
+    "validate_promotion_qualification",
+    "validate_provider_residency",
     "validate_python_compat",
+    "validate_qualification",
     "validate_quality_attributes",
     "validate_references",
+    "validate_regression_corpus",
+    "validate_release_claims",
     "validate_research_artifacts",
     "validate_runtime_surface",
     "validate_scenario_evidence",
+    "validate_security_domains",
+    "validate_security_posture",
     "validate_stack_qualification",
     "validate_stale_gates",
+    "validate_standalone_engine",
+    "validate_supply_chain",
     "validate_surface_wiring",
     "validate_work_graph",
+    "validate_workflow_gates",
 ]
 
 # Валидаторы, которым нужен путь к артефакту.
 NEEDS_ARTIFACT = [
+    "validate_architecture_decision",
+    "validate_context_architecture",
     "validate_context_bundle",
     "validate_context_completeness",
     "validate_cross_artifacts",
+    "validate_feature_blueprint",
     "validate_knowledge_graph",
+    "validate_loop_policy",
+    "validate_plan_artifact",
+    "validate_requirements_artifact",
+    "validate_reviewer_result",
     "validate_run_handoff",
+    "validate_spec_artifact",
+    "validate_spec_coverage",
+    "validate_storybook_evidence",
 ]
 
 # Порча источника правды -> валидаторы, которые ОБЯЗАНЫ её заметить (замер 2026-08-07).
@@ -164,3 +201,29 @@ def test_lists_cover_every_validator_without_uniform_seam():
     everything = {p.stem for p in (PKG / "validation").glob("validate_*.py")}
     listed = set(STANDALONE) | set(NEEDS_ARTIFACT) | set(UNIFORM_CHECK_VALIDATORS) | set(OTHER_SEAMS) | set(BESPOKE_ELSEWHERE)
     assert not (everything - listed), f"валидаторы вне всякого контракта: {sorted(everything - listed)}"
+
+
+# ------------------------------------------------ справка не должна быть пустой ---
+
+@pytest.mark.unit
+@pytest.mark.parametrize("rel", sorted(
+    [f"tools/{p.name}" for p in (PKG / "tools").glob("*.py")] +
+    [f"validation/{p.name}" for p in (PKG / "validation").glob("*.py")] +
+    ["installer/ai_ops.py"]))
+def test_module_description_is_a_real_docstring(rel):
+    """Описание модуля обязано быть ДОКСТРИНГОМ, а не строкой после `from __future__`.
+
+    В 168 модулях строка-описание стояла после future-импорта и потому докстрингом не являлась:
+    `__doc__` был None. 49 из них печатают `print(__doc__)` как справку — то есть на запрос
+    помощи пользователь получал слово «None». Порядок «докстринг, затем from __future__» — ещё и
+    единственно корректный для Python.
+    """
+    import ast
+
+    path = PKG / rel
+    src = path.read_text(encoding="utf-8")
+    if '"""' not in src:
+        pytest.skip(f"{rel}: без строкового описания")
+    assert ast.get_docstring(ast.parse(src)) is not None, (
+        f"{rel}: описание не является докстрингом (__doc__ = None) — "
+        f"перенеси его ВЫШЕ `from __future__ import annotations`")

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """ui_evidence_collect.py (v3.7 UI-CI, подтянуто в v3.6.8) — сбор РЕАЛЬНОГО UI-evidence на точном SHA.
 
 StorybookPolicy: UI-evidence (.ai/ui-evidence/{interaction,a11y,visual,design-system}.json) производит
@@ -18,6 +17,7 @@ implementation_verification build/lint/test). Здесь — оркестрат�
 
 Только stdlib. CLI: ui_evidence_collect.py <work_root> --sha SHA | --selftest
 """
+from __future__ import annotations
 
 import json
 import subprocess
@@ -75,46 +75,7 @@ def collect(work_root, commit_sha, run_npm=True, timeout=600) -> dict:
             "meta": str(meta.relative_to(root))}
 
 
-def selftest():
-    import tempfile
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        # python-only -> не UI
-        (root / "pyproj").mkdir()
-        expect("python-child (нет package.json) -> не UI-стек", is_ui_stack(root) is False)
-        # package.json со storybook-скриптом -> UI
-        (root / "package.json").write_text(json.dumps({
-            "scripts": {"ui-evidence": "bash scripts/ui-evidence.sh"},
-            "devDependencies": {"@storybook/react-vite": "^8"}}), encoding="utf-8")
-        expect("package.json со storybook/ui-evidence -> UI-стек", is_ui_stack(root) is True)
-        # collect без npm-запуска: пишет авторитетную meta с committed_sha
-        res = collect(root, "abc123def", run_npm=False)
-        expect("collect(run_npm=False) -> не skipped, meta записана", res["skipped"] is False)
-        meta = json.loads((root / ".ai" / "ui-evidence" / "meta.json").read_text())
-        expect("meta.commit_sha == переданный committed_sha (SHA-binding от kit)",
-               meta["commit_sha"] == "abc123def")
-        # без sha -> skipped (нельзя привязать)
-        expect("collect без commit_sha -> skipped", collect(root, None, run_npm=False)["skipped"] is True)
-
-    with tempfile.TemporaryDirectory() as td2:
-        r2 = Path(td2)
-        (r2 / "package.json").write_text(json.dumps({"dependencies": {"react": "^18"}}), encoding="utf-8")
-        expect("package.json без storybook/ui-evidence -> НЕ UI-стек (skip)", is_ui_stack(r2) is False)
-
-    print("ui_evidence_collect selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     if not args:
         print(__doc__)

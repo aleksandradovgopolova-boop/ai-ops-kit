@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Tool Broker + Policy Engine (v2.36, Execution Engine Фаза 2, срез 2).
 
 Голый API-рантайм (generic-orchestrator) не имеет своего tool loop — раньше модель лишь
@@ -20,6 +19,7 @@ write_scope + config/protected-paths.yaml), НЕ модель. Broker испол
 
   tool_broker.py --selftest
 """
+from __future__ import annotations
 
 import json
 import os

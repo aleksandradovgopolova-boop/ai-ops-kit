@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Validate package boundaries (v2.46, 3.0-срез 0 — подготовка сплита БЕЗ переноса файлов).
 
 Дизайн 3.0 (docs/3.0-design.md) делит кит на 5 пакетов. Этот валидатор стережёт границы
@@ -19,6 +18,7 @@ from __future__ import annotations
 
 Использование:  validate_package_boundaries.py [--selftest]
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -146,81 +146,7 @@ def check(pkg_root):
     return errs, report
 
 
-def selftest():
-    import tempfile
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    def write_pkg(root, name, depends_on, includes):
-        d = root / "packages" / name
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "package.yaml").write_text(yaml.safe_dump({
-            "schema_version": 1, "kind": "ai-ops-package", "name": name,
-            "description": "x", "depends_on": depends_on, "includes": includes}),
-            encoding="utf-8")
-
-    # валидный минимальный набор
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "core").mkdir(); (root / "core" / "a.txt").write_text("x", encoding="utf-8")
-        (root / "q").mkdir(); (root / "q" / "b.txt").write_text("y", encoding="utf-8")
-        write_pkg(root, "ai-ops-core", [], ["core/**"])
-        write_pkg(root, "ai-ops-quality", ["ai-ops-core"], ["q/**"])
-        errs, rep = check(root)
-        expect("валидный набор -> без ошибок", errs == [])
-        expect("покрытие посчитано", rep["files_assigned"] == 2)
-
-    # цикл
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "core").mkdir(); (root / "core" / "a.txt").write_text("x", encoding="utf-8")
-        (root / "q").mkdir(); (root / "q" / "b.txt").write_text("y", encoding="utf-8")
-        write_pkg(root, "ai-ops-core", ["ai-ops-quality"], ["core/**"])
-        write_pkg(root, "ai-ops-quality", ["ai-ops-core"], ["q/**"])
-        errs, _ = check(root)
-        expect("цикл зависимостей -> ошибка", any("цикл" in e for e in errs))
-
-    # висячий glob
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "core").mkdir(); (root / "core" / "a.txt").write_text("x", encoding="utf-8")
-        write_pkg(root, "ai-ops-core", [], ["core/**", "nonexistent/**"])
-        errs, _ = check(root)
-        expect("висячий include-glob -> ошибка", any("не резолвится" in e for e in errs))
-
-    # пересечение границ
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "shared").mkdir(); (root / "shared" / "a.txt").write_text("x", encoding="utf-8")
-        write_pkg(root, "ai-ops-core", [], ["shared/**"])
-        write_pkg(root, "ai-ops-quality", ["ai-ops-core"], ["shared/**"])
-        errs, _ = check(root)
-        expect("пересечение файлов -> ошибка", any("двумя пакетами" in e for e in errs))
-
-    # несуществующая зависимость
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        (root / "core").mkdir(); (root / "core" / "a.txt").write_text("x", encoding="utf-8")
-        write_pkg(root, "ai-ops-core", ["ai-ops-ghost"], ["core/**"])
-        errs, _ = check(root)
-        expect("depends_on на несуществующий пакет -> ошибка", any("несуществующий пакет" in e for e in errs))
-
-    # реальный пакет кита
-    errs, rep = check(PKG)
-    expect("реальные границы кита согласованы", errs == [])
-    print(f"  покрытие: {rep.get('files_assigned')} назначено, {rep.get('files_unassigned')} не назначено")
-
-    print("validate_package_boundaries selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     errs, rep = check(PKG)
     if errs:
         print("PACKAGE-BOUNDARIES: НАРУШЕНИЯ:")

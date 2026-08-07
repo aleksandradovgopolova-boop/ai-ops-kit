@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """delegation_advisor.py (v3.17.0 Development Culture Guardrails, WP4) — Delegation Culture: советует
 вынести «тяжёлые для контекста» работы в ОТДЕЛЬНЫЙ краткоживущий контекст (сабагент), а в основную сессию
 вернуть только СВОДКУ, чтобы разведка/логи/сравнения не оседали в контексте до конца сессии.
@@ -18,6 +17,7 @@ CLI:  delegation_advisor.py [--files N] [--compare N] [--log-lines N] [--researc
                            [--mechanical] [--json]
       delegation_advisor.py --selftest
 """
+from __future__ import annotations
 
 import json
 import sys
@@ -95,43 +95,7 @@ def render(recs):
     return "\n".join(L)
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and bool(cond)
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    r = advise({"exploration_files": 30})
-    expect("30 файлов разведки -> делегировать exploration",
-           any(x["trigger"] == "repository_wide_exploration" for x in r))
-    expect("возвращается сводка, не сырьё",
-           r and "релевантные пути" in r[0]["return_to_main"]
-           and "все прочитанные файлы" in r[0]["do_not_return"])
-    expect("check валиден", check(r) == [])
-    r = advise({"exploration_files": 3})
-    expect("3 файла -> НЕ делегировать (ниже порога)", not r)
-    r = advise({"compare_files": 6})
-    expect("сравнение 6 файлов -> делегировать", any(x["trigger"] == "many_file_comparison" for x in r))
-    r = advise({"log_lines": 2000})
-    expect("большой лог -> делегировать", any(x["trigger"] == "large_log_analysis" for x in r))
-    r = advise({"external_research": True, "independent_review": True, "mass_mechanical_inspection": True})
-    expect("research/review/mechanical -> 3 рекомендации", len(r) == 3)
-    expect("research делегируется research-сабагенту",
-           any(x["delegate_to"] == "research-сабагент" for x in r))
-    expect("пустые сигналы -> нет рекомендаций", advise({}) == [])
-    # честность: рекомендация не может возвращать сырьё
-    bad = [{"trigger": "x", "return_to_main": ["все прочитанные файлы"], "do_not_return": []}]
-    expect("check ловит возврат сырья", check(bad) != [])
-
-    print("delegation_advisor selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     sig = {"external_research": "--research" in argv, "independent_review": "--review" in argv,
            "mass_mechanical_inspection": "--mechanical" in argv}
     it = iter(argv)

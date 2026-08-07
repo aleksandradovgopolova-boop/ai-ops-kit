@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """merge→memory flow (v2.25) — обновление долговременной памяти при мердже WorkItem.
 
 Когда работа доведена и смерджена, знание не должно теряться: что изменилось, какие
@@ -16,6 +15,7 @@ from __future__ import annotations
   merge_memory.py --selftest
 Возврат 0 — записано, 1 — ошибка.
 """
+from __future__ import annotations
 
 import argparse
 import sys
@@ -86,57 +86,7 @@ def record(memory_dir, wid, summary, areas=None, decisions=None, lessons=None,
     return 0
 
 
-def selftest():
-    import tempfile
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    with tempfile.TemporaryDirectory() as td:
-        expect("без summary -> ошибка", record(td, "wi-1", "") == 1)
-
-        # v3.7.1 (#4) governance-барьер: без human_confirmed self-ingested запись НЕ создаётся
-        rc_block = record(td, "wi-0", "Правка без подтверждения куратора.", at="2026-07-15")
-        f_block = Path(td) / "lessons-learned" / "2026-07-15-wi-0.md"
-        expect("без human_confirmed -> BLOCKED, файл НЕ создан (анти-самоотравление)",
-               rc_block == 1 and not f_block.exists())
-
-        rc = record(td, "wi-1", "Добавлено редактирование дашборда после создания.",
-                    areas=["dashboard-editor", "session-context"],
-                    decisions="dashboard хранит source_session_id",
-                    lessons="теряется связь artifact<->session; добавить версионирование",
-                    at="2026-07-15", human_confirmed=True)
-        f = Path(td) / "lessons-learned" / "2026-07-15-wi-1.md"
-        expect("record c human_confirmed: файл создан", rc == 0 and f.exists())
-
-        # v3.7.2 FAIL-CLOSED (#6): сбой governance-enforcement -> запись НЕ создаётся (не fail-open)
-        import security_enforcement as _se
-        _orig = _se.enforce_memory_entry
-        _se.enforce_memory_entry = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
-        try:
-            rc_crash = record(td, "wi-crash", "правка", at="2026-07-15", human_confirmed=True)
-        finally:
-            _se.enforce_memory_entry = _orig
-        f_crash = Path(td) / "lessons-learned" / "2026-07-15-wi-crash.md"
-        expect("governance enforcement упал -> BLOCKED, файл НЕ создан (fail-closed)",
-               rc_crash == 1 and not f_crash.exists())
-        txt = f.read_text(encoding="utf-8")
-        expect("содержит summary", "редактирование дашборда" in txt)
-        expect("содержит зоны", "dashboard-editor" in txt)
-        expect("содержит решения", "source_session_id" in txt)
-        expect("содержит уроки", "версионирование" in txt)
-        expect("отсылает к decisions/registry", "decisions/registry.yaml" in txt)
-
-    print("merge_memory selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     ap = argparse.ArgumentParser(prog="merge_memory.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("record")

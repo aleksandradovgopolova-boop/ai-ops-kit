@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """validate_research_artifacts.py — валидатор артефактов research-модуля (v0.2).
 
 Проверяет .research/ (живой экземпляр), examples/research-demo/ и examples схем:
@@ -18,6 +17,7 @@ from __future__ import annotations
 Использование: python3 validation/validate_research_artifacts.py [--strict] [--selftest]
 Exit code: 0 — ок (warnings допустимы), 1 — ошибки (или warnings при --strict).
 """
+from __future__ import annotations
 import argparse
 import datetime as dt
 import glob

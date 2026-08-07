@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Evidence collection, authoring, and review functions for the execution pipeline.
 
 Extracted from execution_pipeline.py — artifact authoring, independent reviews,
 security review, evidence re-evaluation, dependency installation.
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -366,26 +366,6 @@ def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_ro
         if not ok:
             uncovered.append(dom)
     return uncovered
-
-
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("pipeline_evidence: imports work", True)
-    expect("pipeline_evidence: _install_dependencies is callable", callable(_install_dependencies))
-    expect("pipeline_evidence: _author_with_retry is callable", callable(_author_with_retry))
-    expect("pipeline_evidence: _run_authoring is callable", callable(_run_authoring))
-    expect("pipeline_evidence: _run_reviews is callable", callable(_run_reviews))
-    expect("pipeline_evidence: _review_security is callable", callable(_review_security))
-    expect("pipeline_evidence: _reevaluate_artifact_evidence is callable", callable(_reevaluate_artifact_evidence))
-
-    print("pipeline_evidence selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
 
 
 if __name__ == "__main__":

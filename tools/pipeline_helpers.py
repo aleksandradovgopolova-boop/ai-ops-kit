@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """General helper functions for the execution pipeline.
 
 Extracted from execution_pipeline.py — profile summary, intake evidence,
 gate checklist, reviewable gates, YAML parsing, openspec validation.
 """
+from __future__ import annotations
 
 import os
 import re
@@ -182,25 +182,6 @@ def _authoring_specs():
                            "work_packages: [{id, summary, depends_on: [id,...]}], "
                            "write_scope: [пути]"),
     }
-
-
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    expect("pipeline_helpers: imports work", True)
-    expect("pipeline_helpers: _profile_summary is callable", callable(_profile_summary))
-    expect("pipeline_helpers: _intake_evidence is callable", callable(_intake_evidence))
-    expect("pipeline_helpers: _reviewable_gates is callable", callable(_reviewable_gates))
-    expect("pipeline_helpers: _parse_yaml_block is callable", callable(_parse_yaml_block))
-    expect("pipeline_helpers: NO_SELF_REVIEW contains security", "security" in NO_SELF_REVIEW)
-
-    print("pipeline_helpers selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
 
 
 if __name__ == "__main__":

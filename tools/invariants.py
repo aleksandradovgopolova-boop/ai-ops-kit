@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """invariants.py (v1.0.0) — Formal invariant catalog for the AI Ops Kit critical path.
 
 Machine-checkable invariant specifications for: preflight, execution pipeline, delivery,
@@ -13,6 +12,7 @@ Usage:
 
 python3 tools/invariants.py --selftest
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

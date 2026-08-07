@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """ai-ops run — единый контроллер задачи (v2.34, Execution Engine Фаза 2, срез 1).
 
 Собирает разрозненные шаги в ОДНУ транзакцию: классификация/маршрут → RunPlan
@@ -25,6 +24,7 @@ from __future__ import annotations
   ai_ops_run.py --selftest
 Код возврата: 0 — успех/ready; 1 — blocked или pipeline не готов к PR; 2 — ошибка прогона.
 """
+from __future__ import annotations
 
 import argparse
 import contextlib

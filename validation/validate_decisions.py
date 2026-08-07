@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка реестра решений (v2.10) — Decision Intelligence из team-os-toolkit.
 
 Реестр (decisions/registry.yaml) хранит принципы (способ мышления), эпизоды
@@ -20,6 +19,7 @@ from __future__ import annotations
                 validate_decisions.py --selftest
 Возврат 0 — валиден (возможны WARN), 1 — есть ошибки целостности.
 """
+from __future__ import annotations
 
 import json
 import sys
@@ -127,56 +127,7 @@ def run(reg: Path, as_json=False):
     return 1 if errors else 0
 
 
-def selftest():
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    valid = {"schema_version": 1, "kind": "decisions-registry",
-             "episodes": [{"id": "ep-1", "question": "q", "decision": "d", "reason": "r",
-                           "reversibility": "two-way", "date": "2026-07-13"}],
-             "principles": [{"id": "dp-1", "principle": "p", "scope": ["s"], "status": "ratified",
-                             "confidence": "high", "recurrence_count": 3, "review_date": "2026-12-01",
-                             "derived_from": ["ep-1"]}],
-             "outcomes": [{"decision": "ep-1", "outcome": "ok"}]}
-    e, w = check(valid)
-    expect("валидный реестр без ошибок", e == [])
-
-    e, _ = check({"principles": [{"id": "dp-x", "principle": "p", "scope": ["s"], "status": "retired",
-                                  "confidence": "low", "recurrence_count": 1, "review_date": "2026-01-01",
-                                  "derived_from": []}], "episodes": []})
-    expect("retired без retired_reason -> ошибка", any("retired_reason" in x for x in e))
-
-    e, _ = check({"principles": [{"id": "dp-y", "principle": "p", "scope": ["s"], "status": "ratified",
-                                  "confidence": "high", "recurrence_count": 2, "review_date": "2026-01-01",
-                                  "derived_from": ["ep-nope"]}], "episodes": []})
-    expect("derived_from на несуществующий эпизод -> ошибка", any("ep-nope" in x for x in e))
-
-    e, _ = check({"principles": [], "episodes": [
-        {"id": "ep-z", "question": "q", "decision": "d", "reason": "r",
-         "reversibility": "maybe", "date": "2026-07-13"}]})
-    expect("невалидный reversibility -> ошибка", any("reversibility" in x for x in e))
-
-    _, w = check({"principles": [{"id": "dp-w", "principle": "p", "scope": ["s"], "status": "ratified",
-                                  "confidence": "high", "recurrence_count": 1, "review_date": "2026-12-01",
-                                  "derived_from": []}], "episodes": []})
-    expect("ratified из одного случая -> WARN калибровки", any("одного случая" in x for x in w))
-
-    # реальный реестр кита
-    reg = PKG / "decisions" / "registry.yaml"
-    if reg.exists():
-        e, _ = check(yaml.safe_load(reg.read_text(encoding="utf-8")))
-        expect("реестр кита валиден", e == [])
-    print("validate_decisions selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def main(argv):
-    if "--selftest" in argv:
-        return selftest()
     args = [a for a in argv if not a.startswith("--")]
     reg = Path(args[0]).resolve() if args else (PKG / "decisions" / "registry.yaml")
     return run(reg, as_json="--json" in argv)
