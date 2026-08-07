@@ -572,6 +572,13 @@ def main(argv):
             return rc
 
     pv = build_preview(intent, task, Path(child_root), signals)
+    # v3.28.x (F-015): роутер классифицировал тип задачи ВНУТРИ build_preview — но там он работает
+    # с копией signals, и наружу классификация не выходила. Движок получал сигналы без task_type,
+    # терял evidence `classified_type` и валил блокирующий intake_completeness у пользователя,
+    # который всё указал правильно. Материализуем решение роутера в сигналы прогона.
+    _understood_type = (pv.get("understood") or {}).get("task_type")
+    if _understood_type and not signals.get("task_type"):
+        signals["task_type"] = _understood_type
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
     else:
@@ -581,6 +588,22 @@ def main(argv):
     # v3.22: `do` — alias для `run --execute` с авторазрешением блокировщиков (review_fix_attempts, author, open_pr)
     if (intent == "run" and a.execute) or intent == "do":
         import ai_ops_run
+        import pipeline_helpers
+        # v3.28.x (F-015, находка живой квалификации): intake-сигналы проверяем ДО старта.
+        # `size` требует блокирующий гейт intake_completeness, вывести его из репозитория нечем,
+        # и раньше пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона — в раунде C
+        # так сгорело 6 прогонов из 6, самый долгий 36 минут. Fail-closed сохраняется (exit 2,
+        # тот же код, что у незакрытого гейта), но платится секундами, а не часом работы модели.
+        _missing = pipeline_helpers.missing_intake_signals(signals)
+        if _missing:
+            _hint = pipeline_helpers.intake_signals_hint(_missing, task)
+            if a.json:
+                print(json.dumps({"kind": "intake-incomplete", "exit": 2,
+                                  "missing": _missing, "hint": _hint}, ensure_ascii=False, indent=2))
+            else:
+                for _ln in _hint:
+                    print(_ln)
+            return 2
         flags = pv["will_do"]["auto_flags"]
         # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и дальше идёт под своим именем во все
         # ветки (sequential/обычная) — иначе автовыбор терялся бы по дороге, как уже было в v2.120/v3.0-rc2.
