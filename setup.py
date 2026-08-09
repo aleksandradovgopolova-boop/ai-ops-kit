@@ -1,35 +1,22 @@
-"""Setup for ai-ops-kit with flat module layout.
+"""Сборка ai-ops-kit. Конфигурация — в pyproject.toml; здесь только точка входа setuptools.
 
-The tools/ and validation/ directories contain modules that should be
-importable as top-level names (e.g. `import orchestrator`).
-This setup installs a .pth file that adds those directories to sys.path.
+ЧЕГО ЗДЕСЬ БОЛЬШЕ НЕТ (v3.33.1). Прежде setup.py на уровне модуля писал `.pth` в site-packages
+ПОЛЬЗОВАТЕЛЯ, подкладывая корень репозитория, `tools/` и `validation/` в sys.path КАЖДОГО процесса
+Python на машине. Три беды сразу:
+
+  1. Файл писался при любом запуске setup.py — включая сборку колеса в изолированном окружении и
+     установку в venv, — но попадал в общий пользовательский site, за пределы целевого окружения.
+  2. Путь зашивался абсолютный, от каталога сборки. У пользователя, ставящего пакет из sdist, это
+     временный каталог, который тут же удаляется: в системе оставался мусорный .pth.
+  3. Главное: это и есть тот самый пояс, который прячет дефекты. Весь август репозиторий чинил
+     класс «работает локально из-за editable-установки» — а ставил себе эту установку сам, на любом
+     `pip install`. Пакет, который правит sys.path чужих процессов, лишает и себя, и пользователя
+     возможности увидеть, что он на самом деле сломан.
+
+Пути пакету не нужны: `ai_ops_kit/shared/_bootstrap.py` находит корень по маркеру VERSION в рантайме
+и кладёт `tools/` с `validation/` сам. Проверено установкой в venv — 95 модулей из 95 импортируются
+без единого .pth (`scripts/check-clean-install.sh`).
 """
-import os
-import site
-from pathlib import Path
 from setuptools import setup
-
-SETUP_DIR = Path(__file__).resolve().parent
-
-
-def _write_pth():
-    """Write a .pth file into site-packages so tools/ and validation/ are on sys.path."""
-    site_dir = site.getusersitepackages()
-    os.makedirs(site_dir, exist_ok=True)
-    pth_path = os.path.join(site_dir, "ai_ops_kit.pth")
-    # .pth files execute each line starting with 'import' as a single statement.
-    # Adds: project root (for `import tools.x`), tools/ and validation/ (for `import x`).
-    line = (
-        "import os, sys; "
-        "[sys.path.insert(0, p) for p in "
-        "[{root!r}] + [os.path.join({root!r}, d) for d in ('tools', 'validation')] "
-        "if os.path.isdir(p) and p not in sys.path]"
-    ).format(root=str(SETUP_DIR))
-    with open(pth_path, "w") as f:
-        f.write(line + "\n")
-
-
-# Write .pth file when setup.py is executed (pip install -e .)
-_write_pth()
 
 setup()
