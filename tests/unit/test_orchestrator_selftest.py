@@ -43,6 +43,7 @@ _CALL_STATS = _LiveCallStats()
 
 
 @pytest.mark.unit
+@pytest.mark.slow   # тяжёлая обёртка селфтеста: в быстрый профиль не входит
 def test_orchestrator_selftest(capsys):
     """Перенесённое тело. `ok` накапливает вердикт, как в исходной функции."""
     ok = True

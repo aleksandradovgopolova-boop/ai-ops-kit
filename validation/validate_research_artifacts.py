@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """validate_research_artifacts.py — валидатор артефактов research-модуля (v0.2).
 
 Проверяет .research/ (живой экземпляр), examples/research-demo/ и examples схем:
@@ -18,6 +17,7 @@ from __future__ import annotations
 Использование: python3 validation/validate_research_artifacts.py [--strict] [--selftest]
 Exit code: 0 — ок (warnings допустимы), 1 — ошибки (или warnings при --strict).
 """
+from __future__ import annotations
 import argparse
 import datetime as dt
 import glob
@@ -167,31 +167,6 @@ def load_set(base):
             errs.extend(f'{os.path.relpath(f, ROOT)} {e}' for e in check_schema(obj, schemas[kind]))
             objs[kind][obj.get('id')] = obj
     return objs, errs, schemas
-
-
-def selftest():
-    rrs = {'RR-001': {}}
-    evs = {'EV-001': {'request_id': 'RR-001', 'status': 'active',
-                      'freshness': {'volatile': True, 'expires_at': '2026-01-01'},
-                      'captured_at': '2026-07-23',
-                      'source': {'url': 'https://e', 'is_primary': True}, 'citation': {}},
-           'EV-002': {'request_id': 'RR-001', 'status': 'superseded', 'superseded_by': None,
-                      'freshness': {'volatile': False}, 'captured_at': '2026-07-01',
-                      'source': {}, 'citation': {}}}
-    dps = {'DP-001': {'request_id': 'RR-001', 'evidence_ids': ['EV-001'],
-                      'rationale': ['опирается на EV-001 и EV-999']}}
-    link_errs = check_links(rrs, evs, dps)
-    assert any('superseded без superseded_by' in e for e in link_errs), link_errs
-    assert any('EV-999' in e for e in link_errs), link_errs
-    f_errs, f_warns = check_freshness_and_quotes(evs, dt.date(2026, 7, 23))
-    assert any('просрочен' in w for w in f_warns), f_warns
-    assert any('без citation.quote' in w for w in f_warns), f_warns
-    assert not f_errs, f_errs
-    bad = check_schema({'schema_version': 2}, {'type': 'object',
-                       'properties': {'schema_version': {'const': 1}},
-                       'required': ['schema_version'], 'additionalProperties': False})
-    assert bad
-    print('SELFTEST-OK')
 
 
 def main():

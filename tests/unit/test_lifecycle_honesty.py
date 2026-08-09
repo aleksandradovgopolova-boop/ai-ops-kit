@@ -154,3 +154,31 @@ class TestWritesAreReconciledWithTheCommit:
         """Без коммита считать нечего — не выдумываем ноль файлов как факт."""
         ai_ops_run.print_human(_report())
         assert "файлов в коммите" not in capsys.readouterr().out
+
+
+@pytest.mark.unit
+class TestSwallowedFailuresAreVisible:
+    """Проглоченное исключение не имеет права выглядеть пройденной проверкой.
+
+    Аудит 72 молча глотающих обработчиков выявил ложно-зелёное: при сбое preflight отчёт печатал
+    «preflight-конфликтов: 0» — то есть заявлял «конфликтов нет» там, где проверки не было вовсе.
+    """
+
+    def test_failed_preflight_is_not_reported_as_zero_conflicts(self, capsys):
+        ai_ops_run.print_human(_report(
+            lifecycle={"concurrency_preflight": {"error": "OSError: реестр недоступен",
+                                                 "conflicts": None}}))
+        out = capsys.readouterr().out
+        assert "preflight НЕ ВЫПОЛНЕН" in out
+        assert "preflight-конфликтов: 0" not in out, "сбой проверки выдан за отсутствие конфликтов"
+
+    def test_clean_preflight_still_reports_zero(self, capsys):
+        ai_ops_run.print_human(_report(lifecycle={"concurrency_preflight": {"conflicts": []}}))
+        out = capsys.readouterr().out
+        assert "preflight-конфликтов: 0" in out
+        assert "НЕ ВЫПОЛНЕН" not in out
+
+    def test_conflicts_are_counted(self, capsys):
+        ai_ops_run.print_human(_report(
+            lifecycle={"concurrency_preflight": {"conflicts": [{"id": "a"}, {"id": "b"}]}}))
+        assert "preflight-конфликтов: 2" in capsys.readouterr().out

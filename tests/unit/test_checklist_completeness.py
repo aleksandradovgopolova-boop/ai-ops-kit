@@ -45,10 +45,18 @@ def test_every_validator_is_listed_or_declared_excluded():
     listed = set(re.findall(r"python3 (validation/\S+\.py)", _text()))
     excluded = _declared_exclusions()
 
-    missing = sorted(real - listed - excluded)
+    # v3.30: чеклист перестал быть единственным местом запуска. Валидатор считается покрытым,
+    # если его проверки переехали в pytest (test_<validator>_selftest.py) ИЛИ он под
+    # рантайм-контрактом (test_validator_runtime_contract прогоняет его из копии репозитория).
+    # Дублировать те же команды в чеклисте значит гонять одно и то же дважды.
+    migrated = {f"validation/{p.stem.replace('test_', '', 1).replace('_selftest', '')}.py"
+                for p in (PKG / "tests" / "unit").glob("test_validate_*_selftest.py")}
+    from test_validator_runtime_contract import NEEDS_ARTIFACT, STANDALONE
+    contracted = {f"validation/{n}.py" for n in list(STANDALONE) + list(NEEDS_ARTIFACT)}
+    missing = sorted(real - listed - excluded - migrated - contracted)
     assert not missing, (
-        "валидаторы не в чеклисте и не в объявленных исключениях — они не запускаются "
-        f"ни в CI, ни перед коммитом: {missing}")
+        "валидаторы не запускаются нигде: ни в чеклисте, ни в объявленных исключениях, "
+        f"ни в pytest (перенесённый селфтест / рантайм-контракт): {missing}")
 
 
 @pytest.mark.unit
@@ -79,3 +87,38 @@ def test_checks_count_claim_matches_the_checklist():
 
     claims = yaml.safe_load((PKG / "registry" / "release-claims.yaml").read_text(encoding="utf-8"))
     assert claims["checks_count"] == len(_commands())
+
+
+# --------------------------------------------------- одно число — один реестр ---
+
+@pytest.mark.unit
+def test_pinned_numbers_are_not_duplicated_across_registries():
+    """Одно число — один источник. Дубль обнаруживается только поломкой, и уже обнаружился.
+
+    Число гейтов пиннится и в `knowledge/claims.yaml` (тип count, проверяет validate_claims), и в
+    `registry/release-claims.yaml` (gates_count, проверяет validate_release_claims). Добавление
+    одного гейта уронило оба валидатора, потому что обновить надо было два места, а знал об этом
+    только тот, кто уже наступил.
+
+    Дубль здесь ОСОЗНАННЫЙ: release-claims добавляет проверку `blocking: true` у MVP-блокеров,
+    которой в knowledge/claims нет. Поэтому тест не запрещает дубль, а требует, чтобы значения
+    СОВПАДАЛИ — расхождение поймается здесь, а не через красный CI на следующем релизе.
+    """
+    import yaml
+
+    claims = yaml.safe_load((PKG / "knowledge" / "claims.yaml").read_text(encoding="utf-8"))
+    release = yaml.safe_load((PKG / "registry" / "release-claims.yaml").read_text(encoding="utf-8"))
+
+    pinned = {c["id"]: c for c in (claims.get("claims") or claims.get("items") or [])
+              if isinstance(c, dict) and c.get("type") == "count"}
+    pairs = {"gate-count": "gates_count", "mvp-blocking-count": "mvp_blocking_count"}
+    checked = 0
+    for claim_id, release_key in pairs.items():
+        if claim_id not in pinned or release_key not in release:
+            continue
+        expected = (pinned[claim_id].get("source") or {}).get("expected")
+        assert expected == release[release_key], (
+            f"{claim_id}={expected} в knowledge/claims.yaml, но {release_key}={release[release_key]} "
+            f"в release-claims — одно число разъехалось по двум реестрам")
+        checked += 1
+    assert checked == len(pairs), f"сверено {checked} из {len(pairs)} дублирующихся чисел"

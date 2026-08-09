@@ -391,6 +391,11 @@ def detect_drift(root=None):
             drift.append({"path": rel, "kind": "changed",
                           "checksum_expected": digest, "checksum_actual": sha256(p)})
     for p in sorted(root.rglob("*")):
+        # Байткод не часть managed-слоя: он появляется от любого запуска и дрейфом не является.
+        # Всплыло при переходе групп CI на pytest — прогон на 3.9 создавал __pycache__ внутри
+        # тестовой установки, и проверка целостности рапортовала «ДРИФТ (11 файлов)».
+        if "__pycache__" in p.parts or p.suffix in (".pyc", ".pyo"):
+            continue
         if p.is_file() and p.name not in META and p.name != ".gitkeep":
             rel = p.relative_to(root).as_posix()
             if rel not in recorded and p.name != "README.md" or (rel not in recorded and p.name == "README.md" and rel != "README.md"):

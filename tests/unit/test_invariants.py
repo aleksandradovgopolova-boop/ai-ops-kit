@@ -20,7 +20,6 @@ sys.path.insert(0, str(PKG_ROOT / "tools"))
 from invariants import (  # noqa: E402
     ALL_INVARIANTS,
     check_invariant,
-    selftest as invariants_selftest,
 )
 import budget as budget_mod  # noqa: E402
 
@@ -48,8 +47,7 @@ st_task_type = st.sampled_from([
 class TestInvariantCatalogSelfTest:
     """Verify the invariant catalog itself is well-formed."""
 
-    def test_selftest_passes(self):
-        assert invariants_selftest() is True
+# тест selftest() удалён: тело переехало в tests/unit/test_invariants_selftest.py
 
     def test_all_invariants_have_ids(self):
         ids = [inv["id"] for inv in ALL_INVARIANTS]

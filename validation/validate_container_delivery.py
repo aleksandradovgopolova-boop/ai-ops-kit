@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Container delivery scope — доставка ТОЛЬКО ветки текущего прогона (v2.113).
 
 Аудит: контейнерная доставка должна забирать из одноразового клона обратно в основной репо ТОЛЬКО
@@ -18,13 +17,15 @@ from __future__ import annotations
 Использование: validate_container_delivery.py [--selftest]
 Возврат 0 — ок, 1 — доставка утащила лишнее / затёрла чужое.
 """
+from __future__ import annotations
 
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-PKG = Path(__file__).resolve().parents[1]
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+            Path(__file__).resolve().parents[1])
 DELIVER = PKG / "containers" / "deliver-run-branches.sh"
 
 
@@ -129,10 +130,6 @@ def main(argv):
         print(f"{'PASS' if passed else 'FAIL'} {name}")
     print("validate_container_delivery:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
-
-
-def selftest():
-    return main([])
 
 
 if __name__ == "__main__":

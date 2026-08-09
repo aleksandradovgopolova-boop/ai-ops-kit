@@ -14,7 +14,9 @@ child-репозиториев. Здесь разрабатывается сам
 | `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `validation/`, `tools/` | Валидаторы и инструменты (Python, только pyyaml) | Да, каждому инструменту — selftest |
+| `ai_ops_kit/` | **Код движка**: 95 модулей в 12 пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/` |
+| `tools/` | Плоские имена как алиасы через `sys.modules` — ОДИН объект модуля, не копия. Существуют ради 661 импорта и входных точек `doctor`/документации | Только вместе с модулем в пакете; новые алиасы не заводить |
+| `validation/` | Валидаторы (Python, только pyyaml); код плоский, не переезжал | Да; тесты валидатора — в `tests/`, не внутри модуля |
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
 | `manifest/ai-ops-manifest.yaml` | Центральный манифест пакета | `package_version` — только при релизе |
 | `packages/` | Декларации границ 5 пакетов 3.0 (файл→пакет, зависимости) — БЕЗ переноса файлов (3.0-срез 0) | Синхронно с `validate_package_boundaries.py` |
@@ -48,12 +50,19 @@ child-репозиториев. Здесь разрабатывается сам
 
 ## Перед коммитом — обязательно
 
-Прогнать полный набор проверок (тот же, что в CI `.github/workflows/package-quality.yml`);
-все должны быть PASS. Полный список команд — в
-[docs/agent-guides/pre-commit-checklist.md](docs/agent-guides/pre-commit-checklist.md).
+Полный контур — **одна команда**, тот же набор, что в CI `.github/workflows/package-quality.yml`:
 
-Кратко: все `validation/*.py` и `tools/*.py` с флагом `--selftest`, плюс
-`python3 -m pytest tests/contracts/ -v --tb=short`.
+```bash
+./scripts/check-full.sh     # полный контур
+./scripts/check-fast.sh     # быстрый профиль во время работы (~1 мин, без маркера slow)
+```
+
+Построчного чеклиста больше нет: селфтесты модулей, все 70 валидаторов и прогоны на примерах
+переехали в pytest — дублировать их значило бы гонять одно и то же дважды. Почему именно так —
+в [docs/agent-guides/pre-commit-checklist.md](docs/agent-guides/pre-commit-checklist.md).
+
+**Selftest не живёт в продакшн-модуле.** Модули `ai_ops_kit/` едут в child-репозиторий; тест
+модуля — в `tests/unit/test_<module>_selftest.py`.
 
 ## Инженерный цикл
 

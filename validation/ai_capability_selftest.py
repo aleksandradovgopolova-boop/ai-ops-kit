@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Capability self-test AI-first системы (Фаза 6).
 
 Механизм: configured capability -> documentation evidence -> smoke test -> verified + timestamp.
@@ -18,14 +17,15 @@ Credentialed (пропускаются без ключей): provider auth / mod
 Результат: печать сводки; exit 1, если офлайн-тест провален.
 Обновление last_verified_at в capability-index — задача updater'а (Ф9), здесь только отчёт.
 """
+from __future__ import annotations
 
 import json
 import os
 import sys
 from pathlib import Path
 
-PKG_ROOT = Path(__file__).resolve().parents[1]
-
+PKG_ROOT = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+                 Path(__file__).resolve().parents[1])
 import _bootstrap  # noqa: E402
 results = []
 

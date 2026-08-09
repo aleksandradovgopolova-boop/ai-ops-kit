@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 """Проверка OpenSpec change-пакетов + сторож параллельного слияния (Фаза 5).
 
 OpenSpec — spec-протокол (specs = источник истины, changes = дельты). Детерминированные
@@ -16,6 +15,7 @@ validate/archive/sync выполняет сам OpenSpec CLI. ДОПОЛНИТЕ
 Формат корня: <root>/openspec/{specs,changes}. root по умолчанию — пример-фикстура.
 Требует pyyaml не нужен — только стандартная библиотека.
 """
+from __future__ import annotations
 
 import re
 import sys

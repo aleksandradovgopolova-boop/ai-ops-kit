@@ -32,6 +32,8 @@ def _repo_with_bug(root):
     for a in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
         _git(root, *a)
     (root / "calc.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
+    # живой набор тестов на базе — обязательное предусловие доказательства
+    (root / "test_existing.py").write_text("def test_existing():\n    assert True\n", encoding="utf-8")
     _git(root, "add", "-A"); _git(root, "commit", "-qm", "база с ошибкой")
     base = _git(root, "rev-parse", "HEAD").stdout.strip()
     (root / "calc.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
@@ -41,8 +43,9 @@ def _repo_with_bug(root):
     return base, _git(root, "rev-parse", "HEAD").stdout.strip()
 
 
-def _profile(target="test_calc.py"):
-    return {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q {target}"}}]}
+def _profile(target=""):
+    """Команда прогоняет ВЕСЬ набор — как в реальном репозитории (`npm run test`, `pytest`)."""
+    return {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q {target}".strip()}}]}
 
 
 # ---------------------------------------------------------------- positive ---
@@ -54,7 +57,9 @@ class TestProofOfFix:
         base, head = _repo_with_bug(tmp_path)
         proof = re_.prove(tmp_path, base, head, _profile(), ["calc.py", "test_calc.py"])
         assert proof["status"] == "proven", proof.get("reason")
-        assert proof["checks"][0]["id"] == "test_fails_on_base"
+        ids = [c["id"] for c in proof["checks"]]
+        assert ids == ["suite_runs_on_base", "test_fails_on_base"], \
+            "порядок проверок важен: сначала среда, потом вывод о падении"
 
     def test_proven_closes_the_gate(self, tmp_path):
         base, head = _repo_with_bug(tmp_path)
@@ -81,7 +86,7 @@ class TestUnprovenIsNotAccepted:
         _git(tmp_path, "add", "-A"); _git(tmp_path, "commit", "-qm", "пустой тест")
         head = _git(tmp_path, "rev-parse", "HEAD").stdout.strip()
 
-        proof = re_.prove(tmp_path, base, head, _profile("test_noop.py"),
+        proof = re_.prove(tmp_path, base, head, _profile(),
                           ["calc.py", "test_noop.py"])
 
         assert proof["status"] == "not_proven"
@@ -102,6 +107,20 @@ class TestUnprovenIsNotAccepted:
     def test_config_counts_as_code(self):
         """«Это же просто конфиг» — типовая обёртка непроверенной правки поведения."""
         assert re_.prove(".", "a", "b", _profile(), ["config/app.yaml"])["status"] == "not_proven"
+
+    def test_broken_environment_is_unverifiable_not_proven(self, tmp_path):
+        """Живая находка: во временном дереве не было node_modules, `npm run test` вернул 127
+        «command not found», и это засчиталось за «тест падает на базе» — сфабрикованное
+        доказательство. Теперь набор обязан отработать на базе САМ ПО СЕБЕ."""
+        base, head = _repo_with_bug(tmp_path)
+        broken = {"stacks": [{"commands": {"test": "definitely-not-a-command-xyz"}}]}
+
+        proof = re_.prove(tmp_path, base, head, broken, ["calc.py", "test_calc.py"])
+
+        assert proof["status"] == "unverifiable", proof.get("reason")
+        assert "сам по себе" in proof["reason"]
+        assert re_.gate_evidence(proof)["status"] == "fail"
+        assert proof["checks"][0]["id"] == "suite_runs_on_base"
 
     def test_blocker_names_the_way_out(self):
         blockers = re_.gate_evidence({"status": "not_proven", "reason": "нет теста"})["blockers"]
@@ -134,6 +153,8 @@ def test_verdict_really_reaches_the_run_report(tmp_path, monkeypatch):
         "[project]\nname = 'demo'\n\n[tool.pytest.ini_options]\naddopts = '-q'\n", encoding="utf-8")
     (tmp_path / "calc.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
     (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_existing.py").write_text(
+        "def test_existing():\n    assert True\n", encoding="utf-8")
     for a in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"],
               ["add", "-A"], ["commit", "-qm", "база"]):
         _git(tmp_path, *a)
