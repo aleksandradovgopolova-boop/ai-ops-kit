@@ -600,6 +600,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 из копии репозитория) и в CI, все должны быть PASS (см. AGENTS.md). Код плоский, в пакеты не
 переезжал; тела селфтестов вынесены в `tests/`.
 
+- `validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `tools/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
 - `validation/ai_capability_selftest.py`
 - `validation/ai_managed_checksums.py`
 - `validation/ai_route.py`

@@ -558,7 +558,7 @@ freshness и первым живым DecisionPackage. Архитектура **e
   Field Findings (находки живых прогонов niti и раунда C), Proof of Fix (тест обязан падать на коде ДО
   правки; гейт `regression_test_evidence` **advisory**, переключение в blocking — после живого раунда),
   Package Layout (код в `ai_ops_kit/*`, selftest вне продакшна, один `./scripts/check-full.sh`).
-  Тестов 34 → 1476.
+  Тестов 34 → 1486.
 - **Затем — Autonomous Operation** (прежний 3.15 из спеки владельца): worker, `ai-ops do`, ask-once,
   blocker resolver.
 - **Real-Product Qualification:** 10 РЕАЛЬНЫХ задач на продуктах владельца через `./ai-run`; данные
