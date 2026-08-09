@@ -53,6 +53,7 @@ STANDALONE = [
     "validate_freshness",
     "validate_integration_trace",
     "validate_key_lifecycle",
+    "validate_layering",
     "validate_learning_loop",
     "validate_loop_trace",
     "validate_memory_governance",
@@ -120,6 +121,11 @@ CORRUPTIONS = {
         ["validate_ai_first_workflows", "validate_references", "validate_claims"]),
     # v3.30: чеклист больше не список команд, и validate_agents_checklist его не читает — он
     # охраняет инвариант «CI не запускает проверки мимо pytest». Портим то, что он реально читает.
+    # v3.32: слои пакетов — тоже источник правды. Пустой список слоёв означает, что про каждый
+    # пакет нельзя ни запретить, ни разрешить ничего; валидатор обязан это заметить.
+    "packages/layering.yaml": (
+        "schema_version: 1\nkind: package-layering\nlayers: []\nrules: []\nknown_violations: []\n",
+        ["validate_layering"]),
     ".github/workflows/pr-smoke.yml": (
         "name: x\non: {pull_request: {branches: [main]}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
         "    steps:\n      - run: python3 validation/validate_ai_first_registry.py\n",

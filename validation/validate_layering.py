@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Направления зависимостей между пакетами ai_ops_kit/* против packages/layering.yaml (v3.32.0).
+
+Переезд в пакеты (3.31.0) дал модулям имена, но не дал границам силы: `gates` мог импортировать
+`engops`, и никто бы не заметил. Здесь граф импортов СЧИТАЕТСЯ по коду и сверяется с объявленным.
+
+Ратчет, а не строгий DAG: на 3.31.1 в коде 9 взаимных зависимостей и 119 циклов. Правило,
+краснеющее на всём сразу, выключают — поэтому запрещены нарушения ПОПЕРЁК слоёв, а известные
+исключения перечислены поимённо и вправе только сокращаться. Исчезнувшее исключение обязано быть
+удалено из реестра: список, который разрешает несуществующее, перестаёт что-либо значить.
+
+Импорты считаются по ПЛОСКОМУ имени (`import tool_broker`) и по пакетному
+(`from ai_ops_kit.engine.tool_broker import ...`) — переход на пакетные имена идёт отдельно, и
+проверка не должна ослепнуть на полпути.
+
+Использование:
+  validate_layering.py                # проверить
+  validate_layering.py --graph        # напечатать рёбра (для разбора циклов)
+Возврат 0 — чисто, 1 — есть нарушения.
+"""
+from __future__ import annotations
+
+import ast
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+import yaml
+
+PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
+           Path(__file__).resolve().parents[1])
+SURFACE = PKG / "ai_ops_kit"
+SPEC = PKG / "packages" / "layering.yaml"
+
+
+def load_spec(path=SPEC):
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def module_owners(surface=SURFACE):
+    """{плоское имя модуля: пакет} — по фактическому дереву, а не по списку в конфиге."""
+    owners = {}
+    for d in sorted(surface.iterdir()):
+        if not d.is_dir() or d.name == "__pycache__":
+            continue
+        for f in sorted(d.glob("*.py")):
+            if f.name != "__init__.py":
+                owners[f.stem] = d.name
+    return owners
+
+
+def _imported_names(src):
+    """Имена верхнего уровня из import/from — через AST, а не регуляркой по строкам."""
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    names = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names += [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.append(node.module)
+    return names
+
+
+def build_graph(surface=SURFACE):
+    """{(из пакета, в пакет): {'модуль->модуль', ...}} по реальным импортам."""
+    owners = module_owners(surface)
+    edges = defaultdict(set)
+    for d in sorted(surface.iterdir()):
+        if not d.is_dir() or d.name == "__pycache__":
+            continue
+        for f in sorted(d.glob("*.py")):
+            if f.name == "__init__.py":
+                continue
+            for name in _imported_names(f.read_text(encoding="utf-8")):
+                parts = name.split(".")
+                if parts[0] == "ai_ops_kit" and len(parts) >= 3:
+                    target = parts[1]                      # ai_ops_kit.<пакет>.<модуль>
+                elif parts[0] in owners:
+                    target = owners[parts[0]]              # плоское имя
+                else:
+                    continue
+                if target != d.name:
+                    edges[(d.name, target)].add(f"{f.stem} -> {parts[-1]}")
+    return dict(edges)
+
+
+def _layer_index(spec):
+    idx = {}
+    for i, layer in enumerate(spec.get("layers") or []):
+        for p in layer.get("packages") or []:
+            idx[p] = i
+    return idx
+
+
+def check(spec, edges):
+    """Список нарушений: зависимость вверх по слоям, нарушение rules, протухшее исключение."""
+    errors = []
+    idx = _layer_index(spec)
+    known = set()
+    for item in spec.get("known_violations") or []:
+        known.add(tuple(str(item).split(":")[0].strip().split(" -> ")))
+
+    unknown_pkgs = sorted({p for e in edges for p in e} - set(idx))
+    if unknown_pkgs:
+        errors.append(f"пакеты вне слоёв (объявить в layering.yaml): {unknown_pkgs}")
+
+    seen = set()
+    for (src, dst), why in sorted(edges.items()):
+        if src not in idx or dst not in idx:
+            continue
+        violation = None
+        if idx[dst] > idx[src]:
+            violation = f"зависимость ВВЕРХ по слоям: {src} -> {dst}"
+        for rule in spec.get("rules") or []:
+            f = rule.get("forbid") or {}
+            if (f.get("to") in (None, dst) and f.get("from") in (None, src)
+                    and (f.get("to") or f.get("from"))):
+                violation = f"правило {rule['id']}: {src} -> {dst} ({rule['reason']})"
+        if violation:
+            if (src, dst) in known:
+                seen.add((src, dst))
+            else:
+                errors.append(f"{violation}; импорты: {sorted(why)[:3]}")
+
+    for stale in sorted(known - seen):
+        errors.append(f"известное нарушение {stale[0]} -> {stale[1]} исчезло из кода — "
+                      "удалить из known_violations (реестр вправе только сокращаться)")
+    return errors
+
+
+def main(argv):
+    spec = load_spec()
+    edges = build_graph()
+    if "--graph" in argv:
+        try:
+            for (a, b), why in sorted(edges.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+                print(f"{len(why):4}  {a} -> {b}")
+        except BrokenPipeError:      # `--graph | head` — не повод для трейсбека
+            pass
+        return 0
+    errors = check(spec, edges)
+    for e in errors:
+        print(f"  [FAIL] {e}")
+    if errors:
+        print(f"LAYERING-FAIL: нарушений {len(errors)}")
+        return 1
+    print(f"LAYERING-OK: {len(edges)} межпакетных рёбер, все в объявленных границах.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

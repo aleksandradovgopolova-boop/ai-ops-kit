@@ -600,6 +600,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 из копии репозитория) и в CI, все должны быть PASS (см. AGENTS.md). Код плоский, в пакеты не
 переезжал; тела селфтестов вынесены в `tests/`.
 
+- `validation/validate_layering.py` — направления зависимостей между пакетами `ai_ops_kit/*`: граф импортов по AST против `packages/layering.yaml` (v3.32.0)
 - `validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `tools/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
 - `validation/ai_capability_selftest.py`
 - `validation/ai_managed_checksums.py`
@@ -673,6 +674,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `qualification/scenarios.yaml` — 5 канонических live-сценариев квалификации движка + матрица ОС/стеков (v2.84)
 - `docs/qualification-runbook.md` — как прогнать живую квалификацию на реальном child (env, команды, чтение отчёта, матрица) (v2.84)
 - `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)
+- `packages/layering.yaml` — слои 12 пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
 - `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)

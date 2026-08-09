@@ -14,7 +14,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `ai_ops_kit/` | **Код движка**: 95 модулей в 12 пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/` |
+| `ai_ops_kit/` | **Код движка**: 95 модулей в 12 пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/`, и обязан уложиться в слои `packages/layering.yaml` |
 | `tools/` | Плоские имена как алиасы через `sys.modules` — ОДИН объект модуля, не копия. Существуют ради 661 импорта и входных точек `doctor`/документации | Только вместе с модулем в пакете; новые алиасы не заводить |
 | `validation/` | Валидаторы (Python, только pyyaml); код плоский, не переезжал | Да; тесты валидатора — в `tests/`, не внутри модуля |
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
@@ -37,6 +37,9 @@ child-репозиториев. Здесь разрабатывается сам
 - **Стадии ссылаются только на существующие agent id и gate id.**
 - **Никаких новых зависимостей** без явного решения: Python-инструменты работают на stdlib + pyyaml.
 - **Язык документации — русский**, идентификаторы и ключи — английские.
+- **Слои пакетов.** `foundation` → `primitives` → `capabilities` → `entrypoints`; зависимость вверх
+  запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимные связи ВНУТРИ ядра пока
+  разрешены осознанно — замер 9 пар и 119 циклов; строгий DAG требует разбора, а не выключателя.
 - **Три кольца** (owner-review 2026-07-30, см. `qualification/bootstrap/v3.8.0-plan.yaml` → `architecture_rings`).
   Kernel (Task→Context→Execution→Evidence→Decision→Delivery) НЕ зависит от Intelligence (research/
   product-learning/аналитика); Intelligence зависит от Kernel и ЧИТАЕТ его события. Governance подключается
@@ -57,7 +60,7 @@ child-репозиториев. Здесь разрабатывается сам
 ./scripts/check-fast.sh     # быстрый профиль во время работы (~1 мин, без маркера slow)
 ```
 
-Построчного чеклиста больше нет: селфтесты модулей, все 70 валидаторов и прогоны на примерах
+Построчного чеклиста больше нет: селфтесты модулей, все 71 валидатор и прогоны на примерах
 переехали в pytest — дублировать их значило бы гонять одно и то же дважды. Почему именно так —
 в [docs/agent-guides/pre-commit-checklist.md](docs/agent-guides/pre-commit-checklist.md).
 
