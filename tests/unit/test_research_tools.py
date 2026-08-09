@@ -22,7 +22,7 @@ def test_research_tool_selftest(name):
     path = PKG / ".research" / "tools" / name
     if not path.is_file():
         pytest.skip(f"{name} отсутствует — исследовательский контур не установлен")
-    env = dict(os.environ); env["PYTHONPATH"] = f"{PKG}/tools:{PKG}/validation"
+    env = dict(os.environ); env.pop("PYTHONPATH", None)   # v3.31: окружение пользователя, без пояса
     r = subprocess.run([sys.executable, str(path), "--selftest"], cwd=PKG, env=env,
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, (r.stdout + r.stderr)[-700:]

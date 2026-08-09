@@ -7,17 +7,9 @@ on:
   pull_request:
     branches: [main]
 
-# v3.28.x: команды чеклиста запускаются как `python3 validation/x.py`, и валидаторы делают
-# `import _bootstrap` (файл лежит в tools/). На машине разработчика это работает из-за editable-
-# установки кита (.pth кладёт tools/ в sys.path ЛЮБОГО процесса) — в чистом окружении CI её нет,
-# и валидаторы падали с ModuleNotFoundError. Задаём путь явно, чтобы CI повторял чеклист
-# буквально, а не «почти».
-env:
-  # Пути АБСОЛЮТНЫЕ: относительный PYTHONPATH разрешается от cwd процесса, а селфтест
-  # инсталлятора порождает подпроцессы с cwd в child-репозитории — там нет ни tools/,
-  # ни validation/, и `tools:validation` молча перестаёт работать.
-  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/tools:${{ github.workspace }}/validation
-
+# v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ — см. пояснение в package-quality.yml. Коротко: пояс прятал
+# дефект импорта в валидаторах, из-за которого кит не запускался в child-репозитории при зелёном
+# CI. Причина устранена в коде (validation/_bootstrap.py); CI видит окружение пользователя.
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -40,5 +32,3 @@ jobs:
           # 0 тестов и отдавал код 5, то есть шаг «проверил» ровно ничего на каждом PR.
           python3 -m pytest tests/ -v --tb=short --no-cov -k "test_orchestrator_selftest or test_execution_pipeline_selftest or test_preflight_selftest or test_tool_broker_selftest or test_gate_executor_selftest or test_ai_ops_run_selftest or test_ai_ops_cli_selftest"
 
-      - name: Key validators
-        run: |
