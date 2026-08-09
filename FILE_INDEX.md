@@ -5,13 +5,18 @@
 
 ## Корень
 
-Версия, история, лицензии, видение и roadmap, инструкции для людей и агентов (AGENTS.md/CLAUDE.md).
+Версия, история, лицензии, видение и roadmap, инструкции для людей и агентов (AGENTS.md/CLAUDE.md),
+сборка пакета и вход в контур проверки.
 
+- `.ai-change-brief.md` — Change Brief текущего среза (по `templates/quality/ChangeBrief.md`)
+- `.dockerignore`
 - `.gitignore`
+- `.pre-commit-config.yaml`
 - `AGENTS.md`
 - `APPLY.md`
 - `CHANGELOG.md`
 - `CLAUDE.md`
+- `FILE_INDEX.md` — этот файл
 - `LICENSE`
 - `MIGRATION_GUIDE.md`
 - `NOTICE.md`
@@ -20,6 +25,17 @@
 - `ROADMAP.md`
 - `VERSION`
 - `VISION.md`
+- `mkdocs.yml`
+- `pyproject.toml`, `setup.py` — дистрибутив (`pip install -e .`); включает `ai_ops_kit`
+- `pytest.ini` — маркеры (в т.ч. `slow`) и addopts контура
+- `requirements.txt` (рантайм: только pyyaml), `requirements-dev.txt` (pytest/hypothesis/ruff/mypy)
+
+## scripts/
+
+Единственная точка входа в контур проверки (v3.31.0): построчного чеклиста больше нет.
+
+- `scripts/check-full.sh` — полный контур перед коммитом (~4.5 мин), тот же набор, что в CI
+- `scripts/check-fast.sh` — быстрый профиль во время работы (~1 мин, без маркера `slow`)
 
 ## docs/
 
@@ -346,6 +362,22 @@ Decision Intelligence (v2.10): реестр решений — принципы 
 
 - `decisions/registry.yaml`
 
+## product-learning/
+
+FeatureLearning (v3.3.0): DecisionPackage -> гипотеза -> проверка -> verdict -> learnings -> ADR/бэклог.
+Схема — `schemas/feature-learning.schema.json`.
+
+- `product-learning/FL-001.yaml`
+- `product-learning/FL-002.yaml`
+- `product-learning/FL-003.yaml`
+
+## regression-corpus/
+
+Regression Corpus + Failure Taxonomy (v3.5.0): по кейсу на слой отказа — что сломалось, чем ловится,
+чтобы класс дефекта не вернулся молча.
+
+- `regression-corpus/RC-001.yaml` … `RC-004.yaml`
+
 ## governance/
 
 Границы данных и безопасность: что можно/нельзя хранить и передавать внешним моделям; постура безопасности (карта по 13 областям, security-posture.yaml) и политики (security-policies.md).
@@ -525,10 +557,50 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `platform-guides/roo-code.md`
 - `platform-guides/zcode.md`
 
+## ai_ops_kit/
+
+**Код движка.** 95 модулей в 12 пакетах (v3.31.0). Плоское имя (`tools/<module>.py`) осталось
+алиасом через `sys.modules` — ОДИН объект модуля, не копия, поэтому состояние общее и 661
+существующий импорт работает без правки. Аннотации отдельных модулей — ниже, в разделе `tools/`.
+
+Правила границ проверяет `tests/unit/test_package_surface.py`: каждый модуль ровно в одном пакете,
+модулей вне пакетов нет, dev-only не лежит в продуктовом пакете.
+
+- `ai_ops_kit/shared/` (5) — общий фундамент: `_bootstrap` (кладёт корень в `sys.path`; единственный
+  модуль, оставшийся плоским — переезд дал бы цикл), `contracts` (TypedDict), `project_detector`,
+  `generate_artifacts`, `generate_runtime`
+- `ai_ops_kit/context/` (9) — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
+  `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `repo_graph`,
+  `semantic_lite`
+- `ai_ops_kit/engine/` (18) — исполнение: `ai_ops_run`, `execution_pipeline` (+`pipeline_*`),
+  `tool_broker`, `tool_loop`, `worktree`, `gitio`, `run_plan`, `run_handoff`, `budget`,
+  `atomic_planner`, `workpackage_executor`, `parallel_{planner,executor,live}`
+- `ai_ops_kit/gates/` (13) — гейты и допуск: `gate_executor`, `gate_policy`, `gate_runtime`,
+  `gate_result_v2`, `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
+  `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
+- `ai_ops_kit/providers/` (9) — модели и деньги: `orchestrator` (+`_http`/`_providers`/`_usage`),
+  `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`
+- `ai_ops_kit/lifecycle/` (9) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
+  `active_work`, `run_report`, `product_health`, `effect_metrics`, `evolution_triggers`, `merge_memory`
+- `ai_ops_kit/delivery/` (2) — доставка наружу: `pr_open`, `review_branch`
+- `ai_ops_kit/engops/` (11) — инженерная операционная модель: `commit_policy`, `branch_policy`,
+  `environment_map`, `deploy_readiness`, `architecture_baseline`, `engineering_advisor`,
+  `delegation_advisor`, `session_{boundary,guardrails,telemetry,telemetry_provider}`
+- `ai_ops_kit/security/` (6) — `security_scan`, `security_pack`, `security_enforcement`,
+  `security_review_cascade`, `data_classification`, `seam_scan`
+- `ai_ops_kit/ui/` (4) — `storybook_adapter`, `storybook_query`, `ui_evidence_collect`, `ui_readiness`
+- `ai_ops_kit/cli/` (1) — `ai_ops_cli`
+- `ai_ops_kit/devtools/` (8) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
+  (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
+  `kit_observability`, `model_comparison`, `promotion_qual`, `qual_run`, `retrieval_bench`
+
 ## validation/
 
-Валидаторы и self-test'ы — запускаются в CI, все должны быть PASS (см. AGENTS.md).
+Валидаторы — запускаются из pytest (`tests/unit/test_validator_runtime_contract.py` гоняет каждый
+из копии репозитория) и в CI, все должны быть PASS (см. AGENTS.md). Код плоский, в пакеты не
+переезжал; тела селфтестов вынесены в `tests/`.
 
+- `validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `tools/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
 - `validation/ai_capability_selftest.py`
 - `validation/ai_managed_checksums.py`
 - `validation/ai_route.py`
@@ -558,6 +630,10 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `validation/validate_workflow_gates.py`
 
 ## tools/
+
+**Плоские имена — алиасы, реальный код в `ai_ops_kit/` (см. раздел выше).** Пути сохранены: их знают
+документация, `doctor` и 661 существующий импорт. Аннотации ниже описывают сами модули — по какому бы
+имени их ни импортировали; объект модуля один и тот же.
 
 Генераторы (runtime-команды, артефакты по blueprint), sequential-оркестратор, gate executor (исполнение и блокировка quality gates), Product Health, run_report (оценка прогона + история срезов), effect_metrics (метрики эффекта).
 
@@ -654,7 +730,10 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 
 ## .github/
 
-CI пакета (package-quality) и релизный workflow (release.yml: VERSION в main -> тег + Release).
+CI пакета (package-quality — 4 параллельные группы), быстрый слой на PR (pr-smoke) и релизный
+workflow (release.yml: VERSION в main -> тег + Release; идемпотентен — существующий релиз не пересоздаёт).
 
 - `.github/workflows/package-quality.yml`
+- `.github/workflows/pr-smoke.yml`
 - `.github/workflows/release.yml`
+- `.github/ci-groups/{fast,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы

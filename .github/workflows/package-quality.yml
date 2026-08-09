@@ -11,17 +11,11 @@ on:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
 
-# v3.28.x: команды чеклиста запускаются как `python3 validation/x.py`, и валидаторы делают
-# `import _bootstrap` (файл лежит в tools/). На машине разработчика это работает из-за editable-
-# установки кита (.pth кладёт tools/ в sys.path ЛЮБОГО процесса) — в чистом окружении CI её нет,
-# и валидаторы падали с ModuleNotFoundError. Задаём путь явно, чтобы CI повторял чеклист
-# буквально, а не «почти».
-env:
-  # Пути АБСОЛЮТНЫЕ: относительный PYTHONPATH разрешается от cwd процесса, а селфтест
-  # инсталлятора порождает подпроцессы с cwd в child-репозитории — там нет ни tools/,
-  # ни validation/, и `tools:validation` молча перестаёт работать.
-  PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/tools:${{ github.workspace }}/validation
-
+# v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ. Он ставился (v3.28.x) потому, что валидаторы делали
+# `import _bootstrap`, а файл лежал только в tools/ — и заодно прятал этот дефект от CI: с поясом
+# `installer --selftest` был зелёным, без пояса падал, то есть в child-репозитории кит не работал,
+# а CI об этом молчал. Причина устранена в коде (validation/_bootstrap.py), пояс снят: CI обязан
+# видеть ровно то же окружение, что пользователь. Не возвращать — вместо этого чинить импорт.
 jobs:
   quality:
     # v3.27.3 WP4: не запускаем полный CI для draft PR даже при synchronize
@@ -84,7 +78,5 @@ jobs:
       # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
       # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
       - run: pip install pyyaml pytest pytest-cov hypothesis
-      - name: "Preflight Truth: проверки до модели + ApprovalRecord (selftest)"
-        run: |
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
