@@ -81,11 +81,25 @@ def _analyze(path: Path):
     for n in ast.walk(tree):
         if isinstance(n, ast.Import):
             for a in n.names:
-                mods.add(a.name.split(".")[0])
+                mods.add(_stem(a.name.split(".")))
         elif isinstance(n, ast.ImportFrom):
             if n.module and n.level == 0:
-                mods.add(n.module.split(".")[0])
+                parts = n.module.split(".")
+                # `from ai_ops_kit.<пакет> import <модуль>, ...` — модули перечислены в names,
+                # а не в module. Без этой ветки все внутренние связи схлопывались бы в один узел
+                # `ai_ops_kit`, и --impact терял бы РЕАЛЬНЫХ импортёров (v3.33; тот же класс,
+                # что уже ловил переезд в v3.31 — тогда граф видел только алиасы).
+                if parts[0] == "ai_ops_kit" and len(parts) == 2:
+                    mods.update(a.name for a in n.names)
+                else:
+                    mods.add(_stem(parts))
     return symbols, mods
+
+
+def _stem(parts):
+    """Имя модуля, под которым он известен графу: последний сегмент внутри пакета кита,
+    первый — для всего остального (stdlib и сторонние узнаются по верхнему имени)."""
+    return parts[-1] if parts[0] == "ai_ops_kit" and len(parts) >= 3 else parts[0]
 
 
 def _analyze_js(path: Path):

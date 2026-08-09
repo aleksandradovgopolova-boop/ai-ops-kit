@@ -24,9 +24,9 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import gate_policy       # noqa: E402
-import gate_result_v2    # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.gates import gate_policy       # noqa: E402
+from ai_ops_kit.gates import gate_result_v2    # noqa: E402
 
 
 def decide(gate, signals, verdicts, evidence_status="not_run", max_retries=1,

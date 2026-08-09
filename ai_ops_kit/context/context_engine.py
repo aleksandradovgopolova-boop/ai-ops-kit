@@ -35,10 +35,10 @@ from pathlib import Path
 
 import yaml
 
-import _bootstrap  # noqa: E402
-import context_retrieval as cr   # noqa: E402
-import repo_graph                # noqa: E402
-import semantic_lite             # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.context import context_retrieval as cr   # noqa: E402
+from ai_ops_kit.context import repo_graph                # noqa: E402
+from ai_ops_kit.context import semantic_lite             # noqa: E402
 
 SEMANTIC_RECALL_FLOOR = 3        # < столько детерминированных кандидатов -> recall недостаточен
 DEFAULT_BUDGET_TOKENS = 20000

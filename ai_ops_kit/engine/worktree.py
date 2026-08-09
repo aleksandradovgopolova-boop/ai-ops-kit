@@ -26,7 +26,7 @@ from pathlib import Path
 
 
 def _git(root, *args):
-    import gitio
+    from ai_ops_kit.engine import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 

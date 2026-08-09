@@ -18,7 +18,7 @@ for _p in (PKG / "tools", PKG / "validation"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import gate_executor  # noqa: E402
+from ai_ops_kit.gates import gate_executor  # noqa: E402
 
 
 def _profile_summary(profile):

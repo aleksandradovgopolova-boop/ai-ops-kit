@@ -20,8 +20,8 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import usage_ledger  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.providers import usage_ledger  # noqa: E402
 
 
 def _context_estimate(records):
@@ -52,7 +52,7 @@ def snapshot(child_root, workitem_id=None, session_id=None, context_current=None
     # v3.22: opt-in provider — попытаться прочитать реальную Claude session metadata
     provider_data = None
     try:
-        import session_telemetry_provider
+        from ai_ops_kit.engops import session_telemetry_provider
         provider_data = session_telemetry_provider.read_session_metadata(session_id=session_id)
     except Exception:  # noqa: BLE001
         pass  # provider unavailable — честно продолжаем без него

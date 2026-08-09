@@ -20,8 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import context_promotion_gate as cpg   # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.context import context_promotion_gate as cpg   # noqa: E402
 
 DEFAULT_MODEL_WINDOW = 120000
 
@@ -53,7 +53,7 @@ def build_hybrid_from_child(child_root, query, role, *, sha, afp, dcp=None, v1_m
                             model_window=DEFAULT_MODEL_WINDOW, repo_id=None, require_snapshot=True):
     """Композиция: build_context(v2) -> promotion gate -> hybrid. Политики/содержимое — как в shadow.
     budget — токен-лимит из НАСТОЯЩЕГО child BudgetContract (не внутренний default)."""
-    import context_engine as ce
+    from ai_ops_kit.context import context_engine as ce
     allowed = ce.cr.role_allowed_classes(afp, role) if afp else set()
     view = ce.build_context(child_root, query, role, sha=sha, afp=afp, dcp=dcp,
                             budget_tokens=(budget or ce.DEFAULT_BUDGET_TOKENS),

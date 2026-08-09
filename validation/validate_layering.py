@@ -76,10 +76,13 @@ def build_graph(surface=SURFACE):
                 continue
             for name in _imported_names(f.read_text(encoding="utf-8")):
                 parts = name.split(".")
-                if parts[0] == "ai_ops_kit" and len(parts) >= 3:
-                    target = parts[1]                      # ai_ops_kit.<пакет>.<модуль>
+                # Обе пакетные формы: `from ai_ops_kit.<пакет> import <модуль>` даёт module из ДВУХ
+                # частей, `from ai_ops_kit.<пакет>.<модуль> import <имя>` — из трёх. Требование
+                # len>=3 стоило проверке зрения: после перевода импортов она видела 4 ребра из 49.
+                if parts[0] == "ai_ops_kit" and len(parts) >= 2:
+                    target = parts[1]
                 elif parts[0] in owners:
-                    target = owners[parts[0]]              # плоское имя
+                    target = owners[parts[0]]              # плоское имя (пока остались)
                 else:
                     continue
                 if target != d.name:

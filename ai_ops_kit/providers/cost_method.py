@@ -22,7 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 FIX_LOOP_LIMIT = 2   # стартовый порог: после N безуспешных fix-итераций — стоп/эскалация, не жечь
 
 
@@ -36,7 +36,7 @@ def advise(signals, snapshot=None, child_root=None):
 
     # 1. Гигиена сессии/контекста
     try:
-        import session_guardrails as _sg
+        from ai_ops_kit.engops import session_guardrails as _sg
         pol = _sg.load_policy(child_root or ".")
         ctx = (snapshot or {}).get("context_current")
         state = _sg.classify_context(ctx, pol)
@@ -56,7 +56,7 @@ def advise(signals, snapshot=None, child_root=None):
 
     # 2. Делегирование разведки
     try:
-        import delegation_advisor as _da
+        from ai_ops_kit.engops import delegation_advisor as _da
         for d in _da.advise(s):
             add(2, "delegation", f"{d['trigger']}: {d['reason']} -> {d['delegate_to']}")
     except Exception:  # noqa: BLE001
@@ -70,7 +70,7 @@ def advise(signals, snapshot=None, child_root=None):
 
     # 4. Выбор runtime
     try:
-        import model_router as _mr
+        from ai_ops_kit.providers import model_router as _mr
         wt = _mr.writer_tier(s)
         if wt["tier"] == "cheap-api":
             add(4, "runtime", f"{wt['reason']} — Opus/сильный writer не нужен; дешёвый qualified writer")
@@ -141,7 +141,7 @@ def main(argv):
     root = args[0] if args else "."
     snap = None
     try:
-        import session_telemetry
+        from ai_ops_kit.engops import session_telemetry
         snap = session_telemetry.snapshot(root, context_current=ctx)
     except Exception:  # noqa: BLE001
         snap = {"context_current": ctx}

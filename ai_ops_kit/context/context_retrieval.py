@@ -27,8 +27,8 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
-import data_classification as _dc   # noqa: E402  (v3.6.4 авторитетная классификация)
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.security import data_classification as _dc   # noqa: E402  (v3.6.4 авторитетная классификация)
 RETRIEVAL_INDEX_VERSION = "1"
 
 

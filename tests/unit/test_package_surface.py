@@ -58,9 +58,15 @@ def _dev_only():
 @pytest.mark.unit
 @pytest.mark.parametrize("pkg", PRODUCT_PACKAGES)
 def test_package_modules_are_the_same_object(pkg):
-    """Алиас обязан БЫТЬ модулем, а не его копией — иначе состояние разъезжается."""
+    """Алиас обязан БЫТЬ модулем, а не его копией — иначе состояние разъезжается.
+
+    `_bootstrap` исключён осознанно (v3.33): его тёзки в `tools/`, `validation/` и в пакете —
+    независимые модули по необходимости, потому что каждый обязан быть импортируем ДО того, как
+    настроены пути. Требование единственного объекта к ним неприменимо и безопасно: состояния они
+    не держат, а правка sys.path идемпотентна.
+    """
     for f in sorted((SURFACE / pkg).glob("*.py")):
-        if f.name == "__init__.py":
+        if f.name in ("__init__.py", "_bootstrap.py"):
             continue
         via_pkg = importlib.import_module(f"ai_ops_kit.{pkg}.{f.stem}")
         flat = importlib.import_module(f.stem)
@@ -103,7 +109,15 @@ def test_exactly_one_side_is_an_alias():
 
     Форма алиаса обязана быть подменой sys.modules: `from X import *` создал бы второй объект
     модуля со своим состоянием — этот класс уже стоил отладки в orchestrator_usage и pr_open.
+
+    v3.33: `_bootstrap` — объявленное исключение. Его задача — положить пути ДО того, как станет
+    возможен любой импорт, поэтому он обязан существовать в каждом каталоге, откуда запускают код:
+    `tools/`, `validation/` и внутри пакета. Три тёзки не расходятся по смыслу — каждый ищет корень
+    по маркеру VERSION и идемпотентно правит sys.path, состояния ни один не держит. Алиас здесь
+    невозможен: чтобы импортировать алиас, нужен путь, который кладёт как раз он.
     """
+    BOOTSTRAP_BY_DESIGN = {"_bootstrap.py"}
+
     def is_alias(path: Path) -> bool:
         return "sys.modules[__name__]" in path.read_text(encoding="utf-8")
 
@@ -112,7 +126,7 @@ def test_exactly_one_side_is_an_alias():
         if not d.is_dir() or d.name == "__pycache__":
             continue
         for f in sorted(d.glob("*.py")):
-            if f.name == "__init__.py":
+            if f.name == "__init__.py" or f.name in BOOTSTRAP_BY_DESIGN:
                 continue
             flat = PKG / "tools" / f.name
             if not flat.is_file():
