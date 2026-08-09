@@ -34,7 +34,7 @@ from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 
 BASELINE_PATH = PKG / "tools" / ".bench-baseline.json"
 DEFAULT_ITERATIONS = 5
@@ -64,21 +64,21 @@ def _time_fn(fn, iterations=DEFAULT_ITERATIONS, warmup=1):
 def _bench_orchestrator_startup():
     """Benchmark: import orchestrator + make_provider('mock')."""
     import importlib
-    import orchestrator
+    from ai_ops_kit.providers import orchestrator
     importlib.reload(orchestrator)
     orchestrator.make_provider("mock")
 
 
 def _bench_preflight_assess():
     """Benchmark: preflight.assess() на типовых сигналах."""
-    import preflight
+    from ai_ops_kit.gates import preflight
     with tempfile.TemporaryDirectory() as tmpdir:
         preflight.assess({"task_type": "ENGINEERING"}, tmpdir, "bench-wid")
 
 
 def _bench_security_scan():
     """Benchmark: scan_secrets + scan_injection на 100 файлах."""
-    import security_scan
+    from ai_ops_kit.security import security_scan
     files = {}
     for i in range(100):
         files[f"file_{i}.py"] = f"x = {i}\ny = 'hello_{i}'\n"
@@ -88,7 +88,7 @@ def _bench_security_scan():
 
 def _bench_tool_loop_parse():
     """Benchmark: parse_action() на 100 различных входах."""
-    import tool_loop
+    from ai_ops_kit.engine import tool_loop
     inputs = [
         '{"op": "read", "path": "test.py"}',
         '{"done": true, "summary": "ok"}',
@@ -102,7 +102,7 @@ def _bench_tool_loop_parse():
 
 def _bench_usage_aggregate():
     """Benchmark: usage_ledger.aggregate() на 1000 записей."""
-    import usage_ledger
+    from ai_ops_kit.providers import usage_ledger
     records = [
         {"run_id": f"r{i}", "role": "implementation", "provider": "mock",
          "model": "test", "input_tokens": 100, "output_tokens": 50,
@@ -115,7 +115,7 @@ def _bench_usage_aggregate():
 
 def _bench_lifecycle_store():
     """Benchmark: durable_write + load_guarded на временном файле."""
-    import lifecycle_store
+    from ai_ops_kit.lifecycle import lifecycle_store
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "test.yaml"
         data = {"kind": "test", "value": 1, "items": list(range(100))}
@@ -126,7 +126,7 @@ def _bench_lifecycle_store():
 
 def _bench_context_compiler():
     """Benchmark: context_compiler.assemble() на минимальном child."""
-    import context_compiler
+    from ai_ops_kit.context import context_compiler
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         (root / ".ai").mkdir(exist_ok=True)

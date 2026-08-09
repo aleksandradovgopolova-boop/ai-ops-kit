@@ -21,11 +21,11 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 def _env_recommendation(child_root):
     """Layer 1: какие окружения использовать."""
-    import environment_map
-    import deploy_readiness
+    from ai_ops_kit.engops import environment_map
+    from ai_ops_kit.engops import deploy_readiness
     recs = []
     try:
         env_map = environment_map.assess(child_root)
@@ -91,9 +91,9 @@ def _env_recommendation(child_root):
 
 def _delivery_plan(child_root, task_type=None):
     """Layer 2: delivery plan — branch, commits, tests, deploy, rollback."""
-    import project_detector
-    import commit_policy
-    import branch_policy
+    from ai_ops_kit.shared import project_detector
+    from ai_ops_kit.engops import commit_policy
+    from ai_ops_kit.engops import branch_policy
     recs = []
     try:
         # единая точка детекции: свежий кеш профиля или пере-детект при изменившихся манифестах
@@ -134,7 +134,7 @@ def _delivery_plan(child_root, task_type=None):
                     "source": "project_detector",
                 })
         # Deploy/rollback
-        import deploy_readiness
+        from ai_ops_kit.engops import deploy_readiness
         deploy = deploy_readiness.assess(child_root)
         maturity = deploy.get("deploy_maturity", "absent")
         if maturity in ("runnable", "verified"):
@@ -172,7 +172,7 @@ def _delivery_plan(child_root, task_type=None):
 
 def _economic_alternatives(child_root, task_type=None):
     """Layer 3: экономические альтернативы — не делать / настройка / переиспользование / build."""
-    import economic_preflight
+    from ai_ops_kit.gates import economic_preflight
     recs = []
     try:
         est, verdict = economic_preflight.assess(child_root)

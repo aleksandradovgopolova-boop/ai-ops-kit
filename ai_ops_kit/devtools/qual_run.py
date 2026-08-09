@@ -35,7 +35,7 @@ import re
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 # Кириллица -> латиница: задачи на русском иначе схлопываются в один slug (коллизия
 # workitem_id/имени отчёта). Стандартная транслитерация, только stdlib.
 _TRANSLIT = {
@@ -114,7 +114,7 @@ def default_runner(child_root, provider, model, open_pr, task_type="QUICK", base
     производит evidence (backlog P0.4 — постадийное исполнение RunPlan) -> они честно
     заблокируют. Класс задаётся флагом --task-type осознанно, не для обхода гейтов.
     """
-    import ai_ops_run
+    from ai_ops_kit.engine import ai_ops_run
 
     def run_one(task):
         signals = {"task_text": task, "task_type": task_type, "size": "small", "risk": "low",

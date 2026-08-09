@@ -15,17 +15,17 @@ for _p in (PKG / "tools", PKG / "validation"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-import tool_loop       # noqa: E402
-import tool_broker     # noqa: E402
-import gate_executor   # noqa: E402
-import gate_policy     # noqa: E402
+from ai_ops_kit.engine import tool_loop       # noqa: E402
+from ai_ops_kit.engine import tool_broker     # noqa: E402
+from ai_ops_kit.gates import gate_executor   # noqa: E402
+from ai_ops_kit.gates import gate_policy     # noqa: E402
 
-from pipeline_helpers import (   # noqa: E402
+from ai_ops_kit.engine.pipeline_helpers import (   # noqa: E402
     _parse_yaml_block, _openspec_validate, _authoring_specs,
     _reviewable_gates, _gate_checklist,
 )
-from pipeline_git import _change_context  # noqa: E402
-from pipeline_failure import _security_verdict_errors, _evidence_ref_errors  # noqa: E402
+from ai_ops_kit.engine.pipeline_git import _change_context  # noqa: E402
+from ai_ops_kit.engine.pipeline_failure import _security_verdict_errors, _evidence_ref_errors  # noqa: E402
 
 
 def _install_dependencies(profile, root, policy):
@@ -48,7 +48,7 @@ def _install_dependencies(profile, root, policy):
 def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
     """v3.0-rc14 (finding живой квалификации kimi): author-вызов ретраится при невалидном/пустом
     артефакте."""
-    import budget as _budget_mod
+    from ai_ops_kit.engine import budget as _budget_mod
     prompt = base_prompt
     data, errs = None, ["author не вызван"]
     for attempt in range(attempts):
@@ -113,7 +113,7 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
 def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, budget,
                    openspec_validate=None):
     """v2.86 Product Authoring: движок производит артефакты requirements/plan."""
-    import budget as _budget_mod
+    from ai_ops_kit.engine import budget as _budget_mod
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     out_dir = Path(work_root) / ".ai" / "runplan" / wid
     gate_ev = dict(gate_ev)
@@ -290,7 +290,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
 
 def _review_security(reviewer_proposer, work_root, pack_result, revision, budget, change_context=None):
     """v2.106: независимый security-reviewer выносит вердикт по needs_review доменам."""
-    import security_pack
+    from ai_ops_kit.security import security_pack
     import validate_reviewer_result as vrr
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     domains = {d["id"]: d for d in security_pack.load_domains()[0]}
@@ -316,7 +316,7 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
     res = rv.get("result")
     observed = list(rv.get("reads") or [])
     if revision:
-        from pipeline_git import _git
+        from ai_ops_kit.engine.pipeline_git import _git
         _rc, _names, _ = _git(work_root, "show", "--name-only", "--format=", revision)
         if _rc == 0:
             observed += [ln.strip() for ln in _names.splitlines() if ln.strip()]
@@ -330,8 +330,8 @@ def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_ro
     """v3.0-rc20/rc3.0.2 (finding аудита P0/P1): домены с непустыми human_approval_conditions, чьи
     file_patterns СОВПАЛИ с РЕАЛЬНО изменёнными путями, ОБЯЗАНЫ иметь валидный человеческий ApprovalRecord."""
     import re as _re
-    import security_pack
-    import approvals as _appr
+    from ai_ops_kit.security import security_pack
+    from ai_ops_kit.gates import approvals as _appr
     _CATCH_ALL = {".*", ".+", "", "^.*$", "(?s).*"}
     triggered = {}
     try:

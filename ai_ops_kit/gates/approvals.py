@@ -328,7 +328,7 @@ def write_record(child_root, wid, approval, approved_by, scope, reason, revision
     p = d / f"{approval}.yaml"
     # v3.0.14 (finding аудита #2): ApprovalRecord — человеческий источник истины для high-risk; пишем
     # DURABLE (атомарно+fsync+перечитывание), а не plain write_text (частичная запись = потеря одобрения).
-    import lifecycle_store as _ls
+    from ai_ops_kit.lifecycle import lifecycle_store as _ls
     _r = _ls.durable_write(p, rec, require_keys=("approval", "approved_by", "scope"))
     if not _r.get("ok"):
         raise OSError(f"не удалось надёжно сохранить ApprovalRecord {p}: {_r.get('error')}")

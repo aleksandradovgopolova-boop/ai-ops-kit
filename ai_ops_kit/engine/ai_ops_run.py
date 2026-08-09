@@ -34,11 +34,11 @@ from pathlib import Path
 
 import yaml
 
-import _bootstrap  # noqa: E402
-import run_plan          # noqa: E402
-import workitem          # noqa: E402
-import active_work       # noqa: E402
-import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import run_plan          # noqa: E402
+from ai_ops_kit.lifecycle import workitem          # noqa: E402
+from ai_ops_kit.lifecycle import active_work       # noqa: E402
+from ai_ops_kit.lifecycle import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
 def _outbox_dir(features_dir, fid):
@@ -60,7 +60,7 @@ def resolve_provider_for_run(explicit, child_root, execute=False, quiet=False):
     mock сохраняется (CI/selftest/планирование остаются детерминированными). Решение печатается
     ДО прогона: скатились в mock — говорим прямо, а не показываем «правок 0» постфактум.
     Возвращает словарь-решение resolve_provider (имя провайдера обязан использовать вызывающий)."""
-    import orchestrator_providers as _op
+    from ai_ops_kit.providers import orchestrator_providers as _op
     if not execute:
         return {"provider": explicit or "mock", "source": "explicit" if explicit else "no-execute",
                 "reason": "провайдер не вызывается (нет --execute)", "warning": None,
@@ -89,7 +89,7 @@ def _profile_for_report(root, existing=None):
     Детекция — через публичный project_detector.detect(root); сбой детекции не роняет прогон."""
     prof = None
     try:
-        import project_detector
+        from ai_ops_kit.shared import project_detector
         prof = project_detector.detect(Path(root))
     except Exception:   # noqa: BLE001 — отчёт не должен падать из-за детектора
         prof = None
@@ -140,7 +140,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
     pending = _unresolved_intents(features_dir, fid)
     if not pending:
         return None
-    import pr_open
+    from ai_ops_kit.delivery import pr_open
     d = _outbox_dir(features_dir, fid)
     jn = _P(features_dir) / fid / "lifecycle-journal.jsonl"
     results = []
@@ -268,7 +268,7 @@ def _with_provider_fallback(primary, secondary, on_switch=None):
             return primary(*a, **k)
         except Exception as e:  # noqa: BLE001
             try:
-                from workpackage_executor import _classify_failure
+                from ai_ops_kit.engine.workpackage_executor import _classify_failure
                 _retryable = bool(_classify_failure(e).get("retryable"))
             except Exception:  # noqa: BLE001
                 _retryable = False
@@ -302,7 +302,7 @@ def _provider_trust(provider, key_env, klp_by_env, env, now, cache):
     -> динамический fallback/escalation обходил security-инвариант (P1). Теперь покрыт каждый вызываемый."""
     if provider in cache:
         return cache[provider]
-    import security_enforcement as _se
+    from ai_ops_kit.security import security_enforcement as _se
     ent = klp_by_env.get(key_env) or {}
     keyspec = {"name": provider, "env_ref": key_env,
                **{k: ent[k] for k in ("ttl_days", "issued_at", "rotated_at", "next_rotation_at") if k in ent}}
@@ -336,9 +336,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     # (adversarial-review: раньше execution_pipeline вызывался только из selftest). Делегируем
     # весь прогон в execution_pipeline.run_pipeline; proposer — из провайдера (или передан).
     if engine == "pipeline":
-        import execution_pipeline
-        import tool_loop
-        import orchestrator
+        from ai_ops_kit.engine import execution_pipeline
+        from ai_ops_kit.engine import tool_loop
+        from ai_ops_kit.providers import orchestrator
         # v3.0-rc2 (P0.1) Canonical Resume Context: при resume восстанавливаем ПОЛИТИКУ исходного прогона
         # (signals/task_type/risk + sandbox/baseline_diff/require_fix/author/review/open_pr/write_scope/
         # max_steps) из сохранённого run-settings.yaml — иначе resume молча теряет политику и
@@ -423,8 +423,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # нет резолва/ключа/endpoint -> прежнее поведение (passthrough --model) + честная запись в отчёт.
         _writer_model, _writer_prov, _rev_model, _rev_prov = model, None, model, None
         try:
-            import model_router as _mr
-            import provider_endpoints as _pe
+            from ai_ops_kit.providers import model_router as _mr
+            from ai_ops_kit.providers import provider_endpoints as _pe
             _plan = _mr.plan_run(signals=signals)   # v3.9.0-rc3: signals -> preferred_writer_tier
             _model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
                                  "mode": "explicit-override" if model else "router", "notes": []}
@@ -600,7 +600,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # Проверяем ДО регистрации/изменения состояния, чтобы честный ранний выход ничего не оставил.
         resume_ctx = None
         if resume:
-            import run_handoff
+            from ai_ops_kit.engine import run_handoff
             pf = run_handoff.resume_preflight(child_root, fid, base=base)
             if not pf["can_resume"]:
                 return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
@@ -698,7 +698,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
         lifecycle_errors = []
         # v2.97 Context Compiler: минимальный релевантный ContextBundle для WorkItem (детерминированно).
-        import context_compiler
+        from ai_ops_kit.context import context_compiler
         try:
             bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
             (features_dir / fid / "context-bundle.yaml").write_text(
@@ -722,8 +722,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         _hybrid_fed = None
         if context_hybrid and payload:
             try:
-                import context_hybrid as _chyb
-                import context_engine as _ce
+                from ai_ops_kit.context import context_hybrid as _chyb
+                from ai_ops_kit.context import context_engine as _ce
                 _mand = None
                 if bundle:
                     _inc = bundle.get("included", {})
@@ -773,7 +773,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _hybrid_fed = {"kind": "ContextHybrid", "error": f"hybrid feed failed: {type(_e).__name__}: {_e}"[:300],
                                "fed_to_model": False}
         # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
-        import spec_levels
+        from ai_ops_kit.gates import spec_levels
         try:
             # v2.110 Real Spec-First: coverage из РЕАЛЬНЫХ артефактов (features/<fid>/spec.yaml +
             # засчёт requirements/plan/openspec), а не из сигналов с пустым provided.
@@ -785,7 +785,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         except Exception as e:  # noqa: BLE001
             spec_cov = None; lifecycle_errors.append(f"spec_levels: {type(e).__name__}: {e}")
         # v2.100 Atomic Planning: оценка размера пакета + нужна ли декомпозиция по контекстному бюджету.
-        import atomic_planner
+        from ai_ops_kit.engine import atomic_planner
         try:
             # v2.111: decompose — при необходимости строит КОНКРЕТНЫЕ WorkPackages (не только оси).
             work_pkg = atomic_planner.decompose(signals, wid=fid, child_root=child_root, bundle=bundle)
@@ -796,7 +796,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v2.115 Preflight Truth: проверки ДО запуска модели. Блок -> tool loop НЕ запускается,
         # правки/коммит НЕ создаются (Spec-First блокирует РЕАЛИЗАЦИЮ, а не только доставку). Единая
         # точка: spec/атомарность/overflow/approvals/lifecycle. Выполняется и для fresh, и для resume.
-        import preflight as _pf
+        from ai_ops_kit.gates import preflight as _pf
         pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
                               spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors,
                               author=author, reevaluate_only=reevaluate_only)
@@ -904,7 +904,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 if model is None and (_unmet & _QUALITY_GATES) and _esc_idx < len(_esc_ladder):
                     if _model_resolution.get("model_attempts"):
                         _model_resolution["model_attempts"][-1]["outcome"] = "quality_failed"
-                    import provider_endpoints as _pe2
+                    from ai_ops_kit.providers import provider_endpoints as _pe2
 
                     def _cand_trusted(c):  # rc3: JIT trust кандидата эскалации (ключ + KLP/TTL)
                         if not _pe2.key_available(c.get("provider")):
@@ -977,7 +977,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 active_work.finish_cmd(aw_path, fid, status="blocked",
                                        reason=f"прогон упал: {type(_e).__name__}")
             try:
-                from workpackage_executor import _classify_failure
+                from ai_ops_kit.engine.workpackage_executor import _classify_failure
                 _fail = _classify_failure(_e)
             except Exception:  # noqa: BLE001
                 _fail = {"failure_class": "engine", "exception_type": type(_e).__name__,
@@ -1082,7 +1082,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # промоушеном retrieval в runtime. Полностью guarded: сбой shadow не влияет на прогон.
         if context_shadow:
             try:
-                import context_shadow as _cshadow
+                from ai_ops_kit.context import context_shadow as _cshadow
                 # v3.6.7d: содержимое читаем из ТОЧНОГО execution-worktree (HEAD==committed_sha,
                 # require_snapshot доказывает это), политики — из основного checkout (.ai/policies).
                 # Обязательный контекст v1 (spec/decisions) берём из реального ContextBundle и передаём
@@ -1143,7 +1143,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         _jp = features_dir / fid / "lifecycle-journal.jsonl"
         _jname = str(_jp)
         _handoff_ok = False
-        import run_handoff
+        from ai_ops_kit.engine import run_handoff
         try:
             wt = child_root / ".ai" / "worktrees" / fid
             handoff = run_handoff.build_handoff(rep, work_root=(wt if wt.is_dir() else child_root))
@@ -1182,7 +1182,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # и не создаёт дубль; delivery_id детерминирован по (wid, branch, commit) — повтор бьёт в ту же запись.
         if _plan and _handoff_ok and _report_ok:
             import hashlib as _hl
-            import concurrency_preflight as _cpp
+            from ai_ops_kit.gates import concurrency_preflight as _cpp
             _branch = _plan["work_branch"]
             _csha = _plan["committed_sha"]
             # repository identity (owner/name из origin) — часть СТРОГОЙ идентичности доставки
@@ -1315,7 +1315,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # v3.24.0 Cost & Architecture Accuracy: extra_context штампуется на все записи —
             # task_type/workflow/risk/size/writer_tier/execution_mode/stack для economic alternatives.
             try:
-                import usage_ledger as _ul
+                from ai_ops_kit.providers import usage_ledger as _ul
                 _extra = {
                     "task_type": signals.get("task_type"),
                     "workflow": (_plan.get("base_workflow") if isinstance(_plan, dict) else None),
@@ -1336,8 +1336,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
         # Контекст оценивается по ledger (estimated) — рантайм может уточнить через `ai-ops session --context`.
         try:
-            import session_telemetry as _st
-            import session_guardrails as _sg
+            from ai_ops_kit.engops import session_telemetry as _st
+            from ai_ops_kit.engops import session_guardrails as _sg
             _snap = _st.snapshot(child_root, workitem_id=fid)
             _pol = _sg.load_policy(child_root)
             _done = bool(rep.get("ready_for_pr"))
@@ -1404,7 +1404,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     status, run_state = "planned", f".ai/runtime/workitems/{fid}/TaskState.yaml"
     run_state_materialized = False   # честно: в planned run_state — обещание пути, не файл
     if execute or runtime == "generic-orchestrator":
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         st, run_dir = orchestrator.run_workflow(
             base_wf, task_text, child_root,
             provider=orchestrator.make_provider(provider_name),
@@ -1672,7 +1672,7 @@ def main(argv):
                          "с ревалидацией) — иначе смена task_type/risk/write_scope блокируется")
     a = ap.parse_args(argv)
     if a.cmd == "resume":
-        import run_handoff
+        from ai_ops_kit.engine import run_handoff
         pf = run_handoff.resume_preflight(a.child_root, a.feature, base=a.base)
         if not a.execute:
             if a.json:

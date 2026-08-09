@@ -30,10 +30,10 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import tool_broker            # noqa: E402
-import project_detector       # noqa: E402
-import verification_tiers     # noqa: E402  v3.26.0
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import tool_broker            # noqa: E402
+from ai_ops_kit.shared import project_detector       # noqa: E402
+from ai_ops_kit.gates import verification_tiers     # noqa: E402  v3.26.0
 
 # проверка -> (флаг required_evidence, ключ в evidence_schema гейта)
 CHECK_MAP = {

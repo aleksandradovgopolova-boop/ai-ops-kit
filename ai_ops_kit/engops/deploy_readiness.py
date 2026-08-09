@@ -33,10 +33,10 @@ from pathlib import Path
 import yaml
 
 try:
-    from environment_map import assess as env_assess
+    from ai_ops_kit.engops.environment_map import assess as env_assess
 except ImportError:  # pragma: no cover — путь подмешивает вызывающий
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from environment_map import assess as env_assess
+    from ai_ops_kit.engops.environment_map import assess as env_assess
 
 MATURITY = ("absent", "configured", "runnable", "verified")
 

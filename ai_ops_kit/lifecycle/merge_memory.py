@@ -49,7 +49,7 @@ def record(memory_dir, wid, summary, areas=None, decisions=None, lessons=None,
                              "upstream": [f"WorkItem:{wid}"]},
               "expiry": {"mode": "review_date", "value": at}}
     try:
-        import security_enforcement as _se
+        from ai_ops_kit.security import security_enforcement as _se
         _ok, _viol = _se.enforce_memory_entry(_entry)
     except Exception as _ge:  # noqa: BLE001 — FAIL-CLOSED: сбой governance = не пишем
         print(f"BLOCKED (memory governance FAIL-CLOSED): сбой enforcement -> запись НЕ создана "

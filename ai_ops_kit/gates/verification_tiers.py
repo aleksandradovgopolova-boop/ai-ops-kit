@@ -26,7 +26,7 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 # ============================================================================
 # Verification Tiers
 # ============================================================================
@@ -123,8 +123,8 @@ def select_tests(changed_files: list, child_root: str, tier: str = None, lifecyc
     - impact_status: targeted_tests_found | targeted_tests_not_found | docs_only
     - команды берутся из project_detector (child config), не угадываются
     """
-    import repo_graph
-    import project_detector
+    from ai_ops_kit.context import repo_graph
+    from ai_ops_kit.shared import project_detector
 
     tier = decide_tier(changed_files, tier, lifecycle_intent)
     child_root = Path(child_root)

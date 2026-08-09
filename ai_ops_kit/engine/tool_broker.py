@@ -51,7 +51,7 @@ def _scrub_output(text):
     if not text:
         return text
     try:
-        import security_scan as _ss
+        from ai_ops_kit.security import security_scan as _ss
         for _name, _pat in _ss.SECRET_PATTERNS:
             text = _pat.sub("«***REDACTED-SECRET***»", text)
     except Exception:  # noqa: BLE001 — скраб не должен ронять брокер; в худшем случае — без редактирования

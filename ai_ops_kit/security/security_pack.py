@@ -26,8 +26,8 @@ from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
-import security_scan  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.security import security_scan  # noqa: E402
 import yaml           # noqa: E402
 
 DETERMINISTIC = {"secret_scan", "dependency_diff", "injection_scan"}

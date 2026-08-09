@@ -26,11 +26,11 @@ from pathlib import Path
 
 import yaml
 
-import lifecycle_store as _ls   # v3.0.12: fail-closed чтение RunHandoff (битый != «resume безопасен»)
+from ai_ops_kit.lifecycle import lifecycle_store as _ls   # v3.0.12: fail-closed чтение RunHandoff (битый != «resume безопасен»)
 
 
 def _git(root, *args):
-    import gitio
+    from ai_ops_kit.engine import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 

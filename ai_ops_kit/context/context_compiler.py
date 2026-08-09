@@ -34,9 +34,9 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
-import run_plan            # noqa: E402
-import project_detector    # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import run_plan            # noqa: E402
+from ai_ops_kit.shared import project_detector    # noqa: E402
 
 CONTEXT_BUDGET_DEFAULT = 120_000   # токенов; override через signals["context_budget"] или config
 

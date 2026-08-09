@@ -30,8 +30,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import parallel_executor as pe   # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import parallel_executor as pe   # noqa: E402
 
 
 def _git(root, *args, check=True):
@@ -177,7 +177,9 @@ def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/int
         # evidence_collector (backend pytest/lint/typecheck; frontend build/lint/test; ...) — НЕ хардкод
         # pytest. Как у sequential-executor'а (_aggregate_verify). Fail-closed при сбое коллектора.
         try:
-            import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+            from ai_ops_kit.shared import project_detector as _pd
+            from ai_ops_kit.gates import evidence_collector as _ec
+            from ai_ops_kit.engine import tool_broker as _tb
             _pol = _tb.sandbox_policy(child_root=str(child_root))
             _coll = _ec.collect(_pd.detect(child_root), child_root, _pol)
             _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
@@ -304,7 +306,9 @@ def make_isolated_integration_runner(child_root, base_sha, clones, integration_b
                 conflicts += 1; _git(iroot, "merge", "--abort", check=False)
         integration_sha = _git(iroot, "rev-parse", "HEAD").stdout.strip()
         try:
-            import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+            from ai_ops_kit.shared import project_detector as _pd
+            from ai_ops_kit.gates import evidence_collector as _ec
+            from ai_ops_kit.engine import tool_broker as _tb
             _coll = _ec.collect(_pd.detect(iroot), iroot, _tb.sandbox_policy(child_root=str(iroot)))
             _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
             stack_ok = _iv.get("status") == "pass"

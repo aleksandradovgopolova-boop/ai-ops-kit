@@ -25,10 +25,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import spec_levels   # noqa: E402
-import approvals     # noqa: E402
-from contracts import PreflightResult  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.gates import spec_levels   # noqa: E402
+from ai_ops_kit.gates import approvals     # noqa: E402
+from ai_ops_kit.shared.contracts import PreflightResult  # noqa: E402
 
 # Уровни, для которых слой контекста обязан быть здоров (ошибки -> fail-closed, не «продолжаем молча»).
 _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
@@ -144,7 +144,7 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     #    reevaluate_only — переоценка уже построенной фичи, новой существенной траты нет: не применяем.
     if not reevaluate_only:
         try:
-            import economic_preflight as _ep
+            from ai_ops_kit.gates import economic_preflight as _ep
             _est = _ep.estimate(child_root)
             _ev = _ep.check_economics(_est, (plan or {}).get("execution_budget") or {},
                                       _ep.policy_from_config(child_root))

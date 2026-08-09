@@ -32,11 +32,11 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
-import parallel_planner as pp          # noqa: E402
-import gate_runtime as gr              # noqa: E402
-import context_engine as ce            # noqa: E402
-import context_retrieval as cr         # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import parallel_planner as pp          # noqa: E402
+from ai_ops_kit.gates import gate_runtime as gr              # noqa: E402
+from ai_ops_kit.context import context_engine as ce            # noqa: E402
+from ai_ops_kit.context import context_retrieval as cr         # noqa: E402
 import validate_promotion_qualification as vpq   # noqa: E402
 
 DEFAULT_PLAN = PKG / "qualification" / "promotion" / "v3.6.8-plan.yaml"

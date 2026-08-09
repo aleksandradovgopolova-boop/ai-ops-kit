@@ -46,7 +46,7 @@ STAGES = ["discovery", "definition", "ux", "architecture", "delivery",
 # своих функций (AttributeError: module 'ga' has no attribute 'cmd_new'). Обычный импорт даёт
 # настоящий модуль независимо от того, где физически лежит файл.
 import validate_feature_blueprint as vfb   # noqa: E402
-import generate_artifacts as ga            # noqa: E402
+from ai_ops_kit.shared import generate_artifacts as ga            # noqa: E402
 import validate_cross_artifacts as vca     # noqa: E402
 
 

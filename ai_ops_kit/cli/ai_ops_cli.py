@@ -21,7 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 # intent -> (описание, какое действие, нужен ли текст задачи)
 INTENTS = {
     "new":     ("создать новую фичу/каркас", "scaffold", False),
@@ -54,10 +54,10 @@ def resolve_flags(signals):
 
 def build_preview(intent, task, child_root, signals):
     """Execution preview: что понято, что будет сделано, какие данные, какие approvals, результат."""
-    import run_plan
-    import context_compiler
-    import spec_levels
-    import atomic_planner
+    from ai_ops_kit.engine import run_plan
+    from ai_ops_kit.context import context_compiler
+    from ai_ops_kit.gates import spec_levels
+    from ai_ops_kit.engine import atomic_planner
     signals = dict(signals or {})
     if task:
         signals.setdefault("task_text", task)
@@ -142,7 +142,7 @@ def _print_preview(pv):
 
 
 def _wid_for(task, signals, feature):
-    import run_plan
+    from ai_ops_kit.engine import run_plan
     return feature or run_plan.build_plan(dict(signals, task_text=task or ""),
                                           workitem_id=feature)["workitem_id"]
 
@@ -154,7 +154,7 @@ def _run_intent(intent, task, child_root, signals, a):
     js = a.json
 
     if intent == "onboard":
-        import project_detector
+        from ai_ops_kit.shared import project_detector
         prof = project_detector.detect(child_root)
         out = child_root / ".ai" / "repository-profile.yaml"
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -172,7 +172,7 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0
 
     if intent == "status":
-        import active_work
+        from ai_ops_kit.lifecycle import active_work
         awp = child_root / ".ai" / "runtime" / "active-work.yaml"
         if not awp.is_file():
             print("STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)")
@@ -180,7 +180,7 @@ def _run_intent(intent, task, child_root, signals, a):
         return active_work.list_cmd(awp, as_json=js)
 
     if intent == "health":
-        import product_health
+        from ai_ops_kit.lifecycle import product_health
         cand = [child_root / "product" / "product-health.yaml",
                 child_root / ".ai" / "product-health.yaml",
                 child_root / "product-health.yaml"]
@@ -198,9 +198,9 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0
 
     if intent == "new":
-        import workitem
-        import spec_levels
-        import run_plan
+        from ai_ops_kit.lifecycle import workitem
+        from ai_ops_kit.gates import spec_levels
+        from ai_ops_kit.engine import run_plan
         if not signals.get("task_type"):
             signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
         wid = _wid_for(task, signals, a.feature)
@@ -217,10 +217,10 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0
 
     if intent == "plan":
-        import run_plan
-        import context_compiler
-        import spec_levels
-        import atomic_planner
+        from ai_ops_kit.engine import run_plan
+        from ai_ops_kit.context import context_compiler
+        from ai_ops_kit.gates import spec_levels
+        from ai_ops_kit.engine import atomic_planner
         if not signals.get("task_type"):
             signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
         plan = run_plan.build_plan(dict(signals, task_text=task or ""), workitem_id=a.feature)
@@ -254,14 +254,14 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0
 
     if intent == "review":
-        import review_branch
-        import run_plan
+        from ai_ops_kit.delivery import review_branch
+        from ai_ops_kit.engine import run_plan
         wid = a.feature or _wid_for(task, signals, a.feature)
         # реальный ревьюер — отдельный провайдер (writer ≠ judge); mock не выносит вердикт (needs-reviewer)
         rev_prop = None
         prov = getattr(a, "provider", "mock") or "mock"
         if prov != "mock":
-            import orchestrator
+            from ai_ops_kit.providers import orchestrator
             rev_prop = orchestrator.make_provider(prov, getattr(a, "model", None))
         rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)
         if js:
@@ -280,7 +280,7 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
 
     if intent == "discuss":
-        import run_plan
+        from ai_ops_kit.engine import run_plan
         wid = _wid_for(task, signals, a.feature)
         fdir = child_root / "features" / wid
         fdir.mkdir(parents=True, exist_ok=True)
@@ -306,7 +306,7 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0
 
     if intent == "advise":
-        import engineering_advisor
+        from ai_ops_kit.engops import engineering_advisor
         result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
         if js:
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -334,10 +334,10 @@ def _session_guard_before_start(child_root, task, signals, feature=None):
     4. delegation — если большая разведка, рекомендовать сабагент
     Выводит рекомендации пользователю, не блокирует прогон."""
     try:
-        import session_telemetry
-        import session_guardrails
-        import session_boundary
-        import delegation_advisor
+        from ai_ops_kit.engops import session_telemetry
+        from ai_ops_kit.engops import session_guardrails
+        from ai_ops_kit.engops import session_boundary
+        from ai_ops_kit.engops import delegation_advisor
         # 1. snapshot
         snap = session_telemetry.snapshot(str(child_root), workitem_id=feature)
         ctx = snap.get("context_current")
@@ -415,7 +415,7 @@ def main(argv):
         signals["feature"] = a.feature
 
     if intent == "resume":
-        import ai_ops_run
+        from ai_ops_kit.engine import ai_ops_run
         # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
         # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
@@ -435,8 +435,8 @@ def main(argv):
 
     # v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не только превью).
     if intent == "specify":
-        import spec_levels
-        import run_plan
+        from ai_ops_kit.gates import spec_levels
+        from ai_ops_kit.engine import run_plan
         if not signals.get("task_type"):
             signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
         wid = a.feature or run_plan.build_plan(dict(signals, task_text=task or ""))["workitem_id"]
@@ -476,8 +476,8 @@ def main(argv):
     # только `run --execute` и `do` реально запускают движок; остальное — превью/делегация
     # v3.22: `do` — alias для `run --execute` с авторазрешением блокировщиков (review_fix_attempts, author, open_pr)
     if (intent == "run" and a.execute) or intent == "do":
-        import ai_ops_run
-        import pipeline_helpers
+        from ai_ops_kit.engine import ai_ops_run
+        from ai_ops_kit.engine import pipeline_helpers
         # v3.28.x (F-015, находка живой квалификации): intake-сигналы проверяем ДО старта.
         # `size` требует блокирующий гейт intake_completeness, вывести его из репозитория нечем,
         # и раньше пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона — в раунде C
@@ -508,10 +508,10 @@ def main(argv):
         # v2.120: sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget обычного
         # пути — иначе тихая потеря containment и live-провайдера (дефект аудита P0.2).
         if a.sequential:
-            import atomic_planner
-            import workpackage_executor
-            import tool_loop
-            import orchestrator
+            from ai_ops_kit.engine import atomic_planner
+            from ai_ops_kit.engine import workpackage_executor
+            from ai_ops_kit.engine import tool_loop
+            from ai_ops_kit.providers import orchestrator
             wid = a.feature or _wid_for(task, signals, a.feature)
             wp = atomic_planner.decompose(signals, wid=wid, child_root=Path(child_root))
             # v3.0-rc13 (P1): доверенный retry — архив попытки + reset на checkpoint предшественника,

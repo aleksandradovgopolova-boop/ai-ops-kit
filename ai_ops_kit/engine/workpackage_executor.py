@@ -26,9 +26,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 def _git(root, *a):
-    import gitio
+    from ai_ops_kit.engine import gitio
     return gitio.git(root, *a)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
@@ -76,7 +76,7 @@ def _durable_write_yaml(path, data, require_keys=()):
     lifecycle-артефакта. Делегирует ЕДИНОМУ durable-контракту lifecycle_store.durable_write (tmp ->
     flush+fsync(файл) -> atomic rename -> fsync(КАТАЛОГ) -> перечитать+провалидировать). Прежде здесь была
     отдельная копия БЕЗ fsync каталога — теперь один источник истины для всех durable-записей."""
-    import lifecycle_store
+    from ai_ops_kit.lifecycle import lifecycle_store
     return lifecycle_store.durable_write(path, data, require_keys=require_keys)
 
 
@@ -260,7 +260,7 @@ def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, revi
     # (a) QUALIFIED security-судья (writer≠judge, read-only) — только он, не общий reviewer
     if strict_judge_qualified and security_reviewer_proposer is not None:
         try:
-            import execution_pipeline as _ep
+            from ai_ops_kit.engine import execution_pipeline as _ep
             ctx = _ep._change_context_range(vroot, base_sha, final_sha)  # вся цепочка base..final
             status, res = _ep._review_security(security_reviewer_proposer, vroot, agg_sec, final_sha,
                                                {"max_model_calls": 12}, change_context=ctx)
@@ -283,7 +283,7 @@ def _aggregate_close_security(agg_sec, vroot, base_sha, final_sha, signals, revi
     _nr = list(agg_sec.get("needs_review") or [])
     if wid and _root and _nr:
         try:
-            import approvals as _appr
+            from ai_ops_kit.gates import approvals as _appr
             _recs = _appr.load_approvals(_root, wid)
             _now = _appr._now_iso()
             _closed = [d for d in _nr if any(
@@ -314,7 +314,7 @@ def _aggregate_code_review(vroot, base_sha, final_sha, signals, reviewer_propose
     if not (review and reviewer_proposer):
         return True, None
     try:
-        import execution_pipeline as _ep
+        from ai_ops_kit.engine import execution_pipeline as _ep
         ctx = _ep._change_context_range(vroot, base_sha, final_sha)
         gev, revs = _ep._run_reviews(reviewer_proposer, vroot, ["code_review"], {},
                                      dict(signals or {}), final_sha, {"max_model_calls": 16},
@@ -433,7 +433,9 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
     -> {"checks":..., "sha": base_sha, "proven": True} | None."""
     if not base_sha:
         return None
-    import project_detector as _pd, evidence_collector as _ec, tool_broker as _tb
+    from ai_ops_kit.shared import project_detector as _pd
+    from ai_ops_kit.gates import evidence_collector as _ec
+    from ai_ops_kit.engine import tool_broker as _tb
     child_root = Path(child_root)
     if _git(child_root, "rev-parse", "--is-inside-work-tree")[0] != 0:
         return None
@@ -465,9 +467,11 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
     execute_sequence БЕЗ изменения поведения (чистый вход->aggregate-dict). Перепроверяет результат
     ЦЕЛИКОМ на final_sha против sequence_base_sha: регрессии проверок, дерево чистое, HEAD==final_sha,
     evidence на final_sha, агрегатный security (полный дифф base..final) и aggregate code_review."""
-    import project_detector as _pd2, evidence_collector as _ec2, tool_broker as _tb2
-    import execution_pipeline as _ep
-    import security_pack as _sp2
+    from ai_ops_kit.shared import project_detector as _pd2
+    from ai_ops_kit.gates import evidence_collector as _ec2
+    from ai_ops_kit.engine import tool_broker as _tb2
+    from ai_ops_kit.engine import execution_pipeline as _ep
+    from ai_ops_kit.security import security_pack as _sp2
     try:
         wt = Path(child_root) / ".ai" / "worktrees" / wid
         vroot = wt if wt.is_dir() else Path(child_root)
@@ -524,7 +528,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути (containment не теряется);
     open_pr применяется к финальному пакету (интегрированная ветка). -> {kind, workitem_id, packages,
     completed, stopped_at, executed_all, ready_all, final_sha, sequential_chain}."""
-    import ai_ops_run
+    from ai_ops_kit.engine import ai_ops_run
     child_root = Path(child_root)
     features_dir = Path(features_dir) if features_dir else child_root / "features"
     wid = feature
@@ -586,7 +590,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 plan_hash=cur_plan_hash, saved_plan_hash=saved_plan["plan_hash"])
     # v3.0.2/v3.0.7 (finding аудита P0): base_ref из СОХРАНЁННОГО плана — источник истины на resume/retry;
     # для fresh — строгий резолв (auto/explicit). Явная другая base на resume -> base-contract-drift.
-    import execution_pipeline as _ep
+    from ai_ops_kit.engine import execution_pipeline as _ep
     if saved_plan and saved_plan.get("base_ref"):
         if resume_from and base and base != saved_plan["base_ref"]:
             return _seq_err(wid, ordered,
@@ -781,7 +785,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         # Escape = scope-violation -> останавливает последовательность (нельзя строить поверх «уехавшего»).
         pkg_scope = write_scope_for(pkg) if write_scope_for else None
         if stop_reason is None and sha and pkg_scope:
-            import approvals as _appr
+            from ai_ops_kit.gates import approvals as _appr
             wt = child_root / ".ai" / "worktrees" / wid
             changed = _changed_files(wt if wt.is_dir() else child_root, sha)
             # v2.124.1 (finding живого прогона): write_scope ограничивает КОД модели, а НЕ артефакты,
@@ -847,7 +851,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                         "status": status})
         # v3.0.14 (#3): event journal — package_end (Run->Package->Gate: gates_unmet + статус пакета)
         try:
-            import lifecycle_store as _lsj
+            from ai_ops_kit.lifecycle import lifecycle_store as _lsj
             _lsj.journal_append(features_dir / wid / "lifecycle-journal.jsonl",
                                 {"kind": "package_end", "run_id": wid, "workitem_id": wid,
                                  "package_id": pid, "pkg_hash": _pkg_hash(pkg), "sha": sha,
@@ -908,7 +912,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             _vd = _rv.get("verdict")
             if _vd == "verified-equal":
                 try:
-                    import pr_open
+                    from ai_ops_kit.delivery import pr_open
                     pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}", base=base,
                                                title=f"ai-ops: {task[:60]}",
                                                body=(f"Sequential WorkPackages: {len(ordered)} пакет(ов). "
@@ -940,7 +944,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
            "aggregate": aggregate, "delivery": delivery, "draft_pr": pr,
            "resumed_from": resume_from}
     # v3.0.14 (finding аудита #2): sequence-report — durable (атомарно); сбой фиксируем в отчёте, не молчим
-    import lifecycle_store as _ls2
+    from ai_ops_kit.lifecycle import lifecycle_store as _ls2
     _sr = _ls2.durable_write(features_dir / wid / "sequence-report.yaml", seq)
     if not _sr.get("ok"):
         seq["report_persist_error"] = _sr.get("error")

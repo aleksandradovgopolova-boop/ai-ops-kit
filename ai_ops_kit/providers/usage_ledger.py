@@ -24,7 +24,7 @@ import json
 import sys
 from pathlib import Path
 
-from contracts import UsageRecord  # noqa: E402
+from ai_ops_kit.shared.contracts import UsageRecord  # noqa: E402
 
 FIELDS = ("run_id", "workitem_id", "package_id", "role", "provider", "model", "runtime",
           "input_tokens", "output_tokens", "usage_status", "cost", "cost_status", "latency", "trigger",
