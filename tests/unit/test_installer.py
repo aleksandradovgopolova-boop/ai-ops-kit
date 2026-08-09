@@ -273,6 +273,33 @@ def test_delivery_contains_runtime_validators(installed, ai_ops):
     assert not missing, f"из поставки выпали рантайм-валидаторы: {missing}"
 
 
+def test_delivery_contains_bootstrap_for_every_shipped_importer(installed):
+    """Уехал модуль с `import _bootstrap` — обязан уехать и сам _bootstrap (v3.31.1).
+
+    Белый список поставки перечисляет ВАЛИДАТОРЫ, а `_bootstrap` — их загрузчик путей, и по
+    имени на валидатор не похож. В v3.31.0 из-за этого в child уехали валидаторы, умирающие
+    на первой строке: `ModuleNotFoundError: No module named '_bootstrap'`. Проверка привязана
+    к факту импорта, а не к списку имён.
+
+    Проверяются каталоги, ИЗ КОТОРЫХ запускают скрипты (`tools/`, `validation/`): там sys.path[0]
+    — сам каталог, и `_bootstrap` обязан лежать рядом. Модули внутри `ai_ops_kit/**` сюда не
+    входят намеренно: в них входят через алиас, который путь уже поставил, — требовать копию
+    загрузчика в каждом пакете значило бы разводить его по дереву без нужды.
+    """
+    managed = installed / ".ai" / "managed"
+    missing = []
+    for d in ("tools", "validation"):
+        for f in sorted((managed / d).glob("*.py")):
+            if f.name == "_bootstrap.py":
+                continue
+            if "import _bootstrap" in f.read_text(encoding="utf-8"):
+                if not (f.parent / "_bootstrap.py").is_file():
+                    missing.append(f.relative_to(managed).as_posix())
+    assert not missing, (
+        "в поставке есть точки входа, импортирующие _bootstrap, которого рядом нет — "
+        f"в child они падают на первой строке: {missing[:8]}")
+
+
 def test_delivery_excludes_kit_development_assets(installed):
     """Ассеты РАЗРАБОТКИ КИТА не едут в child-репозиторий (P2-7)."""
     managed = installed / ".ai" / "managed"

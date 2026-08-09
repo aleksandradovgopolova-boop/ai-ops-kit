@@ -48,6 +48,21 @@ jobs:
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
+  # v3.31.1: прогон установки в ЧИСТОМ окружении. Отдельная джоба, а не тест в группе, именно
+  # ради окружения: ставится ТОЛЬКО pyyaml — ни pytest, ни hypothesis, ни editable-установки кита.
+  # За один день так всплыли четыре дефекта, невидимых зелёному CI: голый import _bootstrap в
+  # валидаторах, пояс PYTHONPATH, молчаливый no-op всех 94 точек входа и _bootstrap, не попавший
+  # в поставку. Джоба заодно проверяет заявку requirements.txt «нужен только pyyaml».
+  clean-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml          # РОВНО рантайм-зависимость, ничего сверх
+      - name: "Установка в чистый репозиторий без кита рядом"
+        run: bash scripts/check-clean-install.sh
+
   # v3.28.0 P3-15: Python 3.9 compatibility — critical path on minimum supported version
   python39-compat:
     runs-on: ubuntu-latest
