@@ -31,7 +31,7 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 MAX_SUBSYSTEMS = 2          # больше системных границ на пакет -> кандидат на разбиение
 SIZE_FILES = {"small": 3, "medium": 8, "large": 20, "xl": 40}
 
@@ -45,7 +45,7 @@ def estimate(signals, child_root=None, bundle=None):
     context_tokens, budget = None, None
     if bundle is None and child_root is not None:
         try:
-            import context_compiler
+            from ai_ops_kit.context import context_compiler
             bundle = context_compiler.compile_bundle(signals, child_root)
         except Exception:  # noqa: BLE001
             bundle = None

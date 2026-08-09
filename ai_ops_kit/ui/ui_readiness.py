@@ -92,7 +92,7 @@ def assess(child_root):
     evidence_present = False
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import storybook_adapter as _sb
+        from ai_ops_kit.ui import storybook_adapter as _sb
         bundle = _sb.build_bundle(root)
         per_status = {
             "story_index": "present" if (bundle.get("story_index") or bundle.get("components")) else "absent",

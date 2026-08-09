@@ -20,9 +20,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 # переиспользуем разбор owner/repo и работу с REST из concurrency_preflight (без дублирования)
-import concurrency_preflight as _cp   # noqa: E402
+from ai_ops_kit.gates import concurrency_preflight as _cp   # noqa: E402
 import urllib.error                    # noqa: E402
 import urllib.request                  # noqa: E402
 
@@ -34,7 +34,7 @@ def _pr_payload(branch, title, body, base):
 
 
 def _git(root, *args):
-    import gitio
+    from ai_ops_kit.engine import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 

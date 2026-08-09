@@ -18,10 +18,10 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import context_retrieval as cr   # noqa: E402
-import repo_graph as rg          # noqa: E402
-import semantic_lite as sl       # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.context import context_retrieval as cr   # noqa: E402
+from ai_ops_kit.context import repo_graph as rg          # noqa: E402
+from ai_ops_kit.context import semantic_lite as sl       # noqa: E402
 
 
 def _fulltext(root, query, subdirs, k=3):

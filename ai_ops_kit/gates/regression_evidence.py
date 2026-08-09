@@ -31,7 +31,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402,F401
+from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401
 
 # Пути, которые считаем тестами. Намеренно широко: язык не угадываем, ориентируемся на
 # общепринятые соглашения именования. Ложноположительное «это тест» безопаснее обратного —
@@ -228,8 +228,8 @@ def main(argv):
     if a.cmd != "prove" or not (a.root and a.base_sha and a.head_sha):
         ap.print_help()
         return 1
-    import project_detector
-    from pipeline_git import _committed_changed_files
+    from ai_ops_kit.shared import project_detector
+    from ai_ops_kit.engine.pipeline_git import _committed_changed_files
     prof = project_detector.load_or_detect(a.root, write=False)
     res = prove(a.root, a.base_sha, a.head_sha, prof, _committed_changed_files(a.root, a.head_sha))
     print(json.dumps(res, ensure_ascii=False, indent=2) if a.json

@@ -45,18 +45,18 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 
 # ---------------- re-exports from submodules ----------------
 # Backward compatibility: `import orchestrator; orchestrator.make_provider(...)` continues to work.
 
 
-from orchestrator_http import _http_post_json
-from orchestrator_usage import (
+from ai_ops_kit.providers.orchestrator_http import _http_post_json
+from ai_ops_kit.providers.orchestrator_usage import (
     _CALL_STATS, _CALL_CONTEXT, _PRICE_PER_MTOK,
     _record_call, drain_call_stats, set_call_context, clear_call_context,
 )
-from orchestrator_providers import (
+from ai_ops_kit.providers.orchestrator_providers import (
     mock_provider, DEFAULT_MODELS, _MAX_TOKENS,
     _anthropic_call, _openai_call, _claude_cli_call,
     make_provider, make_claude_cli_provider, make_openai_provider,
@@ -178,7 +178,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                          f"{existing.get('workflow')} != {workflow_id}. Используйте --fresh.")
 
     # execution budget (v2.38): жёсткий потолок вызовов модели; enforcement ДО вызова
-    import budget as _budget_mod
+    from ai_ops_kit.engine import budget as _budget_mod
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     budget_exceeded = None
 
@@ -241,7 +241,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     # gate executor: контур замыкается здесь — workflow НЕ done, пока блокирующие
     # гейты контракта не выполнены (writer ≠ judge; честный отказ вместо тихого done).
     sys.path.insert(0, str(PKG / "tools"))
-    import gate_executor
+    from ai_ops_kit.gates import gate_executor
     gate_ev = dict(gate_evidence or {})
     if collect:      # вывести evidence из вердиктов reviewer-стадий; явный --evidence имеет приоритет
         gate_ev = {**gate_executor.collect_evidence(workflow_id, run_dir), **gate_ev}
@@ -300,7 +300,7 @@ def main(argv):
         if "--evidence" in rest:            # JSON по schemas/gate-evidence.schema.json (валидируется)
             i = rest.index("--evidence")
             sys.path.insert(0, str(PKG / "tools"))
-            import gate_executor
+            from ai_ops_kit.gates import gate_executor
             gate_evidence = gate_executor.load_evidence(rest[i + 1])
             del rest[i:i + 2]
         # провайдер: mock (по умолчанию, офлайн) | anthropic | openai (живая модель по ключу env)

@@ -83,20 +83,36 @@ def test_stale_known_violation_is_caught():
         "протухшее исключение не поймано — реестр превратится в кладбище")
 
 
-def test_graph_sees_both_import_styles(tmp_path):
-    """side-effect: ребро появляется и от плоского имени, и от пакетного.
+def test_graph_sees_every_import_style(tmp_path):
+    """side-effect: ребро появляется от ЛЮБОЙ формы импорта, которой связывают модули.
 
-    Переход на пакетные имена идёт отдельным срезом; проверка не вправе ослепнуть на полпути.
+    v3.33: форма `from ai_ops_kit.<пакет> import <модуль>` даёт module из ДВУХ частей. Проверка
+    требовала трёх — и после перевода импортов увидела 4 ребра вместо 49, оставшись зелёной.
+    Проверка, ослепшая на новой форме, хуже отсутствующей: она подтверждает границы, которых
+    больше не видит.
     """
     surface = tmp_path / "ai_ops_kit"
     (surface / "alpha").mkdir(parents=True)
     (surface / "beta").mkdir(parents=True)
     (surface / "beta" / "target.py").write_text("X = 1\n", encoding="utf-8")
     (surface / "alpha" / "flat.py").write_text("import target\n", encoding="utf-8")
-    (surface / "alpha" / "qualified.py").write_text(
+    (surface / "alpha" / "deep.py").write_text(
         "from ai_ops_kit.beta.target import X\n", encoding="utf-8")
+    (surface / "alpha" / "shallow.py").write_text(
+        "from ai_ops_kit.beta import target\n", encoding="utf-8")
 
-    edges = vl.build_graph(surface)
-    who = edges.get(("alpha", "beta"), set())
-    assert any("flat" in w for w in who), f"плоский импорт не дал ребра: {edges}"
-    assert any("qualified" in w for w in who), f"пакетный импорт не дал ребра: {edges}"
+    who = vl.build_graph(surface).get(("alpha", "beta"), set())
+    for style in ("flat", "deep", "shallow"):
+        assert any(style in w for w in who), f"форма '{style}' не дала ребра: {sorted(who)}"
+
+
+def test_graph_covers_the_real_repository():
+    """Страховка от тихой слепоты: связей между пакетами заведомо больше горстки.
+
+    Точное число — предмет рефакторинга, а вот обвал до единиц означает, что сломался разбор,
+    а не что код стал чище. Порог намеренно грубый: он ловит поломку парсера, а не колебания.
+    """
+    edges = vl.build_graph()
+    assert len(edges) >= 20, (
+        f"межпакетных рёбер всего {len(edges)} — так не бывает при 95 модулях; "
+        "скорее всего разбор импортов перестал понимать используемую форму")

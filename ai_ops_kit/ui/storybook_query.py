@@ -17,8 +17,8 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import storybook_adapter as sa   # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.ui import storybook_adapter as sa   # noqa: E402
 
 
 def load_stories(child_root):

@@ -37,10 +37,10 @@ from pathlib import Path
 import yaml
 
 try:                                    # в ките — tools/gitio.py; в дочке — .ai/managed/tools/gitio.py
-    from gitio import git
+    from ai_ops_kit.engine.gitio import git
 except ImportError:                     # pragma: no cover — путь подмешивает вызывающий
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from gitio import git
+    from ai_ops_kit.engine.gitio import git
 
 DEFAULTS = {
     "enforce": "advise",                # advise | block — сила МЯГКИХ правил

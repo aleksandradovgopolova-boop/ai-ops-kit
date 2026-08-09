@@ -22,7 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 import validate_adr_registry as reg          # noqa: E402
 import validate_quality_attributes as qa     # noqa: E402
 

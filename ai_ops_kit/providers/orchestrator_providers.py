@@ -16,12 +16,12 @@ from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
 
 # Import from sibling submodules
-from orchestrator_http import _http_post_json
-import orchestrator_usage          # noqa: E402 — _CALL_STATS читаем ЖИВЫМ (drain пересоздаёт список)
-from orchestrator_usage import _record_call
+from ai_ops_kit.providers.orchestrator_http import _http_post_json
+from ai_ops_kit.providers import orchestrator_usage          # noqa: E402 — _CALL_STATS читаем ЖИВЫМ (drain пересоздаёт список)
+from ai_ops_kit.providers.orchestrator_usage import _record_call
 
 
 # --- провайдеры ---

@@ -17,13 +17,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import execution_pipeline as _ep   # noqa: E402
-import worktree as _wt             # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import execution_pipeline as _ep   # noqa: E402
+from ai_ops_kit.engine import worktree as _wt             # noqa: E402
 
 
 def _git(root, *a):
-    import gitio
+    from ai_ops_kit.engine import gitio
     return gitio.git(root, *a)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 

@@ -36,7 +36,7 @@ from pathlib import Path
 
 import yaml
 
-import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
+from ai_ops_kit.lifecycle import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
 
 STATUS = {"in-progress", "review", "blocked", "done"}
 

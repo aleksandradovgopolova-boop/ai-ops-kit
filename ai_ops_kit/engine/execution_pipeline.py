@@ -26,37 +26,37 @@ import subprocess
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import project_detector      # noqa: E402
-import tool_loop             # noqa: E402
-import tool_broker           # noqa: E402
-import evidence_collector    # noqa: E402
-import run_plan              # noqa: E402
-import gate_executor         # noqa: E402
-import gate_policy           # noqa: E402  (v3.1.8 калиброванное UI-enforcement)
-import storybook_adapter     # noqa: E402  (v3.1.9 exact-SHA UI evidence)
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import project_detector      # noqa: E402
+from ai_ops_kit.engine import tool_loop             # noqa: E402
+from ai_ops_kit.engine import tool_broker           # noqa: E402
+from ai_ops_kit.gates import evidence_collector    # noqa: E402
+from ai_ops_kit.engine import run_plan              # noqa: E402
+from ai_ops_kit.gates import gate_executor         # noqa: E402
+from ai_ops_kit.gates import gate_policy           # noqa: E402  (v3.1.8 калиброванное UI-enforcement)
+from ai_ops_kit.ui import storybook_adapter     # noqa: E402  (v3.1.9 exact-SHA UI evidence)
 
 
 # ---------------------------------------------------------------------------
 # Submodule imports — functions extracted into focused modules for maintainability.
 # All names are re-exported so that `execution_pipeline.XXX` continues to work.
 # ---------------------------------------------------------------------------
-from pipeline_helpers import (  # noqa: E402,F401
+from ai_ops_kit.engine.pipeline_helpers import (  # noqa: E402,F401
     _profile_summary, _intake_evidence, NO_SELF_REVIEW, _reviewable_gates,
     _gate_checklist, _parse_yaml_block, _openspec_validate, _authoring_specs,
 )
-from pipeline_git import (  # noqa: E402,F401
+from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _git, _has_changes, _tree_clean, _TOOL_CACHE_RE, _tree_clean_after_checks,
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
     _verify_remote_base, _change_context, _change_context_range,
 )
-from pipeline_failure import (  # noqa: E402,F401
+from ai_ops_kit.engine.pipeline_failure import (  # noqa: E402,F401
     _ENV_SYMPTOMS, _check_has_env_symptom, _env_proven_ok, _env_unqualified,
     _baseline_failure_summary, _failure_signal, _FAILURE_ID_PATTERNS,
     _VOLATILE_RE, _normalize_failure_id, _failure_ids, _diff_checks,
     _evidence_ref_errors, _security_verdict_errors,
 )
-from pipeline_evidence import (  # noqa: E402,F401
+from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402,F401
     _install_dependencies, _author_with_retry, _run_spec_authoring,
     _run_authoring, _authored_context, _reevaluate_artifact_evidence,
     _run_reviews, _review_security, _human_approval_domains_uncovered,
@@ -87,7 +87,7 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
                         reason=f"remote base сдвинулась (validated {base_sha[:12]} != remote "
                                f"{(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
         return delivery
-    import pr_open
+    from ai_ops_kit.delivery import pr_open
     pr = pr_open.open_draft_pr(work_root, work_branch, title=f"ai-ops: {task[:60]}", base=base_ref,
                                body=f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
                                     f"({base_sha[:12]}) → evidence на {committed_sha}.",
@@ -159,7 +159,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                           f"от произвольного HEAD)"),
                 "loop": None, "isolation": {"worktree": None}, "gates": None, "overall_status": "error"}
     if isolate:
-        import worktree as _wt
+        from ai_ops_kit.engine import worktree as _wt
         branch = f"ai-ops/{wid}"
         wp = child_root / ".ai" / "worktrees" / wid
         branch_exists = _wt._branch_exists(child_root, branch)
@@ -393,7 +393,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     regression_proof = None
     if commit and is_git and committed_sha:
         try:
-            import regression_evidence
+            from ai_ops_kit.gates import regression_evidence
             regression_proof = regression_evidence.prove(
                 work_root, base_sha, committed_sha, profile,
                 changed_files=_changed_for_verification)
@@ -460,7 +460,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             _changed = _committed_changed_files(work_root, committed_sha)
             # v3.11.0 UI Evidence Readiness: UI-CI ТОЛЬКО при изменении UI-файлов ИЛИ VISUAL-задаче.
             # Иначе — skip (не применимо; НЕ маскируем — просто не гоняем UI-CI зря на не-UI изменении).
-            import ui_readiness as _uir
+            from ai_ops_kit.ui import ui_readiness as _uir
             _ui_run, _ui_reason = _uir.should_run_ui_evidence(_changed, signals)
             if not _ui_run:
                 ui_evidence, ui_evidence_bundle = None, None
@@ -468,7 +468,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 # v3.7 UI-CI: собрать РЕАЛЬНЫЙ UI-evidence на committed_sha (vitest interaction + axe a11y +
                 # storybook visual). Не-UI child / нет артефактов -> build_bundle честно вернёт not_run/absent.
                 try:
-                    import ui_evidence_collect
+                    from ai_ops_kit.ui import ui_evidence_collect
                     ui_evidence_collect.collect(work_root, committed_sha)
                 except Exception:   # noqa: BLE001 — сбор evidence не должен ронять прогон
                     pass
@@ -485,7 +485,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     seam_advisory = None
     if committed_sha:
         try:
-            import seam_scan
+            from ai_ops_kit.security import seam_scan
             _diff = _change_context_range(work_root, base_sha, committed_sha, max_chars=20000)
             _sc = seam_scan.scan_diff(_diff or "")
             _dec = seam_scan.gate_decision(_sc)
@@ -515,7 +515,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # обязана быть замечена и в QUICK — иначе новая зависимость в QUICK-задаче проскакивала без
     # ApprovalRecord. Если находка -> gate_ev.security=fail -> ниже security форсируется в оценку гейтов.
     if committed_sha and is_git and "security" not in gate_ev:
-        import security_pack
+        from ai_ops_kit.security import security_pack
         try:
             security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
         except Exception as _e:  # noqa: BLE001
@@ -535,7 +535,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # И из РЕАЛЬНЫХ находок security pack (новая зависимость/секрет, внесённые самой правкой), даже
         # если сигнала заранее не было. boolean signals.human_approved БОЛЬШЕ НЕ используется — засчитывается
         # ТОЛЬКО валидный ApprovalRecord (человек). Reviewer (writer≠judge) НЕ заменяет человеко-одобрение.
-        import approvals as _appr
+        from ai_ops_kit.gates import approvals as _appr
         _merged_sig = {**signals, **_appr.signals_from_findings(security_pack_result)}
         effective_approval_signals = _merged_sig   # v3.0-rc2 (P0.5): используется и в recheck ниже
         _appr_missing = list(_appr.check(_merged_sig, child_root, wid).get("missing") or [])
@@ -574,7 +574,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             # закрывает security. Нет qualified судьи -> pending_human ДО валидного человеческого одобрения.
             # ПОД-ПАКЕТ executor'а (_sequence_internal) НЕ хардстопим здесь: security судится на АГРЕГАТЕ
             # (integration-SHA, _aggregate_close_security). Enforcement #5 на агрегате executor'а — следующий шаг.
-            import approvals as _appr_sec
+            from ai_ops_kit.gates import approvals as _appr_sec
             _sec_recs = _appr_sec.load_approvals(child_root, wid)
             _sec_now, _sec_ph = _appr_sec._now_iso(), _appr_sec.plan_binding_hash(child_root, wid)
             _sec_domains = {"security", "security_review", *security_pack_result["needs_review"]}
@@ -652,7 +652,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
         # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
         try:
-            import security_scan as _ss
+            from ai_ops_kit.security import security_scan as _ss
             _sec_changed = _ss._git_changed_files(work_root, committed_sha + "^") if committed_sha else []
         except Exception:  # noqa: BLE001
             _sec_changed = []
@@ -700,7 +700,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # гейтов, но незакрытые -> блокируют ready. Маппим только доказуемые разделы (недоказуемые не
     # над-блокируем). Это подмножество unmet-гейтов -> не блокирует сверх гейтов, но делает
     # spec-depth явным ready-критерием ("реализация не начинается без блокирующих разделов").
-    import spec_levels as _sl
+    from ai_ops_kit.gates import spec_levels as _sl
     _SECTION_GATE = {
         "goal": "intake_completeness", "scope": "intake_completeness",
         "acceptance_criteria": "intake_completeness",
@@ -749,7 +749,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # (подсистемы/размер) остаются advisory (в report['work_package']), блокирует только жёсткий лимит.
     context_overflow = False
     try:
-        import context_compiler as _cc
+        from ai_ops_kit.context import context_compiler as _cc
         _bundle = _cc.compile_bundle(signals, work_root, plan=plan)
         context_overflow = bool(_bundle.get("overflow"))
     except Exception:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение при
@@ -787,7 +787,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     approval_recheck = {"ok": True, "uncovered": []}
     if commit and committed_sha:
         try:
-            import approvals as _appr
+            from ai_ops_kit.gates import approvals as _appr
             _changed = _committed_changed_files(work_root, committed_sha)
             # v3.0-rc2 (P0.5): recheck по ЭФФЕКТИВНЫМ сигналам (намерение + findings-derived), а не только
             # входным — иначе scope одобрения для НАЙДЕННОЙ зависимости/секрета не перепроверяется на дифф.

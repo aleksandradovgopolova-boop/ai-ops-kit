@@ -28,8 +28,8 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
-import parallel_planner as pp   # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engine import parallel_planner as pp   # noqa: E402
 
 WG_DEMO = PKG / "examples" / "work-graph-demo" / "work-graph.yaml"
 

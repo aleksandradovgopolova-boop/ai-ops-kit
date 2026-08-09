@@ -184,7 +184,7 @@ def _deploy_readiness_run(base=None):
         if (cand / "deploy_readiness.py").is_file() and str(cand) not in sys.path:
             sys.path.insert(0, str(cand))
     try:
-        import deploy_readiness
+        from ai_ops_kit.engops import deploy_readiness
     except Exception as e:  # noqa: BLE001 — нет инструмента -> warn с причиной, не тихий pass
         return "warn", [{"id": f"deploy_readiness_tool_unavailable:{e}", "status": "warn"}], []
     rep = deploy_readiness.assess(b)

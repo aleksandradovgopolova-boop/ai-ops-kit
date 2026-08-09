@@ -20,8 +20,8 @@ import json
 import sys
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import session_telemetry  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.engops import session_telemetry  # noqa: E402
 
 try:
     import yaml
@@ -238,7 +238,7 @@ def main(argv):
     # v3.17.0 WP2: если отношение не задано явно, но есть текст следующей задачи — классифицируем.
     if not nrel and nxt:
         try:
-            import session_boundary
+            from ai_ops_kit.engops import session_boundary
             nrel, _ = session_boundary.classify(current_workitem=wid, new_task=nxt)
         except Exception:  # noqa: BLE001
             nrel = None
