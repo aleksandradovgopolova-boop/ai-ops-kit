@@ -299,7 +299,11 @@ def is_runtime_asset(rel):
     if rel.startswith("tools/") and stem in DEV_ONLY_TOOLS:
         return False
     if rel.startswith("validation/") and stem is not None:
-        return stem in RUNTIME_VALIDATORS
+        # Белый список перечисляет ВАЛИДАТОРЫ. `_bootstrap` — не валидатор, а их загрузчик путей:
+        # без него каждый уехавший валидатор умирает на `import _bootstrap` в первой же строке.
+        # Так и вышло в v3.31.0: файл добавили в кит, а в поставку он не попал, потому что имя не
+        # похоже на валидатор. Поймано прогоном установки в чистом окружении (v3.31.1).
+        return stem in RUNTIME_VALIDATORS or stem == "_bootstrap"
     return True
 
 
