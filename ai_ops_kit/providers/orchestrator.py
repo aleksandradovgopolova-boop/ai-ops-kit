@@ -130,6 +130,7 @@ def _write_reviewer_json(run_dir, sid, text):
         return False
     try:
         sys.path.insert(0, str(PKG / "validation"))
+        from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
         import validate_reviewer_result as _vrr
         if _vrr.check(obj):           # непустой список ошибок -> невалидно
             return False
