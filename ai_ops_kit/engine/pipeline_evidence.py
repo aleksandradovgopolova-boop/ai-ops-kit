@@ -69,6 +69,7 @@ def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
 
 def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
     """v2.89: произвести OpenSpec change для гейта specification."""
+    from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
     import validate_spec_artifact as vsa
     prompt = (
         "Ты автор OpenSpec-изменения (spec-change) для задачи. Верни ТОЛЬКО YAML со схемой:\n"

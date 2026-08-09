@@ -69,4 +69,34 @@ python3 .ai/managed/validation/validate_ai_ops_child.py > "$WORK/child-validate.
   || { tail -20 "$WORK/child-validate.log" >&2; fail "validate_ai_ops_child упал в свежей установке"; }
 echo "OK  validate_ai_ops_child зелёный"
 
+# ------------------------------------------------------------------ 6. дистрибутив: настоящий pip install
+# Инсталлятор кладёт кит в .ai/managed — это ОДИН путь поставки. Второй, объявленный pyproject.toml,
+# — обычный пакет. v3.33.0 объявил «пакет стал пакетом», проверив это имитацией sys.path; настоящая
+# установка тут же показала модуль, который так не импортируется. Имитация — не установка.
+cd "$WORK"
+python3 -m venv "$WORK/venv" >/dev/null 2>&1 || fail "не удалось создать venv"
+"$WORK/venv/bin/pip" install -q "$KIT" > "$WORK/pip.log" 2>&1 \
+  || { tail -20 "$WORK/pip.log" >&2; fail "pip install пакета не прошёл"; }
+echo "OK  pip install прошёл"
+
+# Каждый модуль — ПЕРВЫМ в своём процессе: порядок импортов не контракт, и модуль, работающий лишь
+# после соседа, в чужом коде сломается на первом же прямом импорте.
+"$WORK/venv/bin/python" - <<'PROBE' || fail "модули пакета не импортируются после pip install"
+import importlib, subprocess, sys, pathlib
+pkg = pathlib.Path(importlib.import_module("ai_ops_kit").__file__).parent
+mods = [f"ai_ops_kit.{d.name}.{f.stem}"
+        for d in sorted(pkg.iterdir()) if d.is_dir() and d.name != "__pycache__"
+        for f in sorted(d.glob("*.py")) if f.name != "__init__.py"]
+bad = []
+for m in mods:
+    r = subprocess.run([sys.executable, "-c", f"import {m}"], capture_output=True, text=True)
+    if r.returncode != 0:
+        bad.append(f"{m}: {r.stderr.strip().splitlines()[-1] if r.stderr else '?'}")
+print(f"    проверено модулей: {len(mods)}, сломанных: {len(bad)}")
+for b in bad[:5]:
+    print(f"    FAIL {b}")
+sys.exit(1 if bad else 0)
+PROBE
+echo "OK  все модули пакета импортируются из site-packages"
+
 echo "CLEAN-INSTALL OK: кит работает там, где нет ни кита, ни pytest, ни PYTHONPATH"
