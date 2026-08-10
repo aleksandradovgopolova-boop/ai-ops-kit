@@ -469,6 +469,18 @@
             },
             "additionalProperties": false
           }
+        },
+        "confirmed": {
+          "type": "object",
+          "description": "v3.35: факты, ПОДТВЕРЖДЁННЫЕ владельцем (ключ -> значение). Единственный производитель состояния `user_confirmed`: подтверждение человека сильнее любого вывода кита и перебивает `inferred`/`unknown`. Ключи — id вопросов модели (primary_user, main_problem, production_env, sensitive_data, …) и ключи реконструкции (architecture_style, …).",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "boolean",
+              "number",
+              "array"
+            ]
+          }
         }
       },
       "additionalProperties": false

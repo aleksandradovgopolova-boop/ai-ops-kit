@@ -89,7 +89,9 @@ def test_architecture_style_is_never_verified(tmp_path):
 def test_unknowable_facts_are_declared_unknown(tmp_path):
     """О том, что из кода не выводится, слой говорит прямо, а не молчит."""
     rec = A.reconstruct(tmp_path, A.discover(tmp_path), MODEL)
-    for key in ("primary_user", "product_goal", "production_environment", "sensitive_data"):
+    # `production_env` называется так же, как id ВОПРОСА в модели: иначе предложение к вопросу не
+    # доходит (находка ревью). В пустом репозитории признаков деплоя нет -> unknown.
+    for key in ("primary_user", "product_goal", "production_env", "sensitive_data"):
         assert rec[key]["status"] == A.UNKNOWN
         assert rec[key]["note"]
 
@@ -162,6 +164,65 @@ def test_gap_plan_separates_blocking_from_later(tmp_path):
     gp = A.gap_plan(aud, MODEL)
     assert gp["required_now"]["blocks_work"] is True
     assert gp["opportunistic"]["blocks_work"] is False
+
+
+def test_partial_contour_of_blocking_tier_is_a_blocking_gap(tmp_path):
+    """Находка ревью: `blocking_gaps` считал только missing/unknown, поэтому контур яруса
+    `required_now` в состоянии `partial` объявлялся незаблокированным — и один отчёт давал два
+    противоположных ответа о нём (`gap_plan` его блокирующим считал). В child-репозитории кита
+    `.ai-ops.yaml` есть ВСЕГДА, значит контур границ AI никогда бы в blocking_gaps не попал."""
+    (tmp_path / ".ai-ops.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    aud = A.audit(tmp_path, A.discover(tmp_path), MODEL)
+    row = next(r for r in aud["contours"] if r["contour"] == "engineering_quality_security")
+    assert row["state"] == A.PARTIAL and row["gap_tier"] == "required_now"
+    assert "engineering_quality_security" in aud["blocking_gaps"]
+    gp = A.gap_plan(aud, MODEL)
+    assert ("engineering_quality_security"
+            in [c["contour"] for c in gp["required_now"]["contours"]])
+
+
+def test_proposal_reaches_the_question_it_belongs_to(tmp_path):
+    """Находка ревью: обещание «по коду предполагаю X — подтвердить?» не исполнялось НИКОГДА —
+    ключ вопроса (`production_env`) не совпадал с ключом реконструкции (`production_environment`),
+    а остальные пересекались только там, где значение заведомо unknown."""
+    (tmp_path / "Dockerfile").write_text("FROM python\n", encoding="utf-8")
+    ev = A.discover(tmp_path)
+    rec = A.reconstruct(tmp_path, ev, MODEL)
+    aud = A.audit(tmp_path, ev, MODEL)
+    ask = A.question_package(aud, rec)
+    with_proposal = [q for q in ask["questions"] if q["proposal"]]
+    assert with_proposal, "ни один вопрос не получил предложения, хотя основание есть"
+    assert any(q["id"] == "production_env" for q in with_proposal)
+
+
+def test_owner_confirmation_produces_user_confirmed(tmp_path):
+    """Находка ревью: `user_confirmed` был объявлен в семи состояниях (trust: high) и не
+    производился НИЧЕМ — при этом именно он объявлен единственным способом повысить `inferred`.
+    То же правило, которое авторы применили к `stale`, к нему применено не было.
+
+    Производитель: подтверждение владельца в `.ai-ops.yaml`. Подтверждение человека сильнее любого
+    вывода кита, поэтому оно перебивает и `inferred`, и `unknown`."""
+    (tmp_path / "src" / "modules").mkdir(parents=True)
+    (tmp_path / "src" / "modules" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "product_operating_model:\n"
+        "  confirmed:\n"
+        "    primary_user: внутренние аналитики\n"
+        "    architecture_style: modular_monolith\n", encoding="utf-8")
+    rec = A.reconstruct(tmp_path, A.discover(tmp_path), MODEL)
+    assert rec["primary_user"]["status"] == A.USER_CONFIRMED       # было unknown
+    assert rec["primary_user"]["value"] == "внутренние аналитики"
+    assert rec["architecture_style"]["status"] == A.USER_CONFIRMED  # было inferred
+    assert "владельц" in " ".join(rec["primary_user"]["evidence"]).lower()
+
+
+def test_confirmed_fact_is_not_asked_again(tmp_path):
+    """Подтверждённое владельцем не переспрашивается — иначе ASK ONCE не выполняется."""
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "product_operating_model:\n  confirmed:\n    primary_user: аналитики\n", encoding="utf-8")
+    ev = A.discover(tmp_path)
+    ask = A.question_package(A.audit(tmp_path, ev, MODEL), A.reconstruct(tmp_path, ev, MODEL))
+    assert not [q for q in ask["questions"] if q["id"] == "primary_user"]
 
 
 def test_run_returns_whole_scenario(tmp_path):

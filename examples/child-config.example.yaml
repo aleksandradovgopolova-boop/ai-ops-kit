@@ -45,6 +45,11 @@ communication: {audience: product, detail_level: concise, explain_jargon: true, 
 # Доопределение превращает `unknown` («не умею видеть здесь») в проверяемое состояние — кит
 # ничего не выдумывает вместо вас. Раскомментируйте и укажите свои.
 # product_operating_model:
+#   # Подтверждённое владельцем сильнее любого вывода кита: эти факты кит перестаёт угадывать и
+#   # перестаёт переспрашивать (состояние user_confirmed).
+#   confirmed:
+#     primary_user: внутренние аналитики
+#     production_env: prod
 #   contours:
 #     analytics_learning: {change_signals: ["src/telemetry/**", "src/**/events.ts"]}
 #     data_contracts:     {change_signals: ["src/domain/**"]}

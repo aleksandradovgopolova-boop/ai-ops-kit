@@ -147,7 +147,13 @@ def _matches(rel_path: str, pattern: str) -> bool:
     (`**/migrations/**`), которого `Path.match` не даёт. Отдельно — префиксный случай для
     паттернов-каталогов, чтобы `schemas/` не требовал писать `schemas/**`.
     """
-    rel = rel_path.replace("\\", "/").lstrip("./")
+    rel = rel_path.replace("\\", "/")
+    # НЕ lstrip("./"): это снятие НАБОРА символов, а не префикса, и `.ai-ops.yaml` превращался в
+    # `ai-ops.yaml`. Следствие было тяжёлым: ни один dot-путь не совпадал со своим же сигнальным
+    # паттерном, поэтому изменение исполняемой части контракта (protected_paths, approvals) и
+    # CI-конвейера проходило гейт связности как согласованное. Снимаем ровно префикс `./`.
+    while rel.startswith("./"):
+        rel = rel[2:]
     pat = (pattern or "").replace("\\", "/")
     if not pat:
         return False
@@ -183,8 +189,14 @@ def _repo_has_signal(child_root: Path, patterns: list) -> bool:
             if _resolve(root, head):
                 return True
             continue
-        # Паттерн без якоря (`**/models.py`, `**/*.proto`) — ищем ограниченно.
-        tail = pat.split("/")[-1]
+        # Паттерн без якоря (`**/models.py`, `**/*.proto`, `**/migrations/**`) — ищем ограниченно.
+        # Хвост берём ПОСЛЕДНИМ ЗНАЧАЩИМ сегментом: у `**/migrations/**` последний сегмент — `**`,
+        # а `rglob("**")` возвращает сам корень, то есть сигнал «есть» в любом каталоге. Из-за этого
+        # `unknown` сворачивался в `not_changed` — главный инвариант модели нарушался везде.
+        segs = [s for s in pat.split("/") if s and s != "**"]
+        if not segs:
+            continue                               # паттерн из одних `**` не является сигналом
+        tail = segs[-1]
         try:
             if next(root.rglob(tail), None) is not None:
                 return True
@@ -208,6 +220,18 @@ def derive_affects(child_root: Path, changed_files: list, model: dict | None = N
     root = Path(child_root)
     overrides = repo_overrides(root) if overrides is None else overrides
     files = [str(f).replace("\\", "/") for f in (changed_files or [])]
+
+    # ПРАВИЛО СПЕЦИФИЧНОСТИ: точный путь сильнее чужого glob. `context/system/DataMap.md` — явный
+    # сигнал и источник истины контура данных, но он же попадает под `context/system/**` контура
+    # архитектуры; без этого правила КОРРЕКТНОЕ обновление модели данных давало ложную находку
+    # `undeclared_change` по архитектуре. Гейт, выдающий шум, перестают читать — и он становится
+    # хуже отсутствующего, поэтому шум здесь не косметика, а дефект. Найдено живой проверкой 3.35.
+    exact_owner = {}
+    for _cid in contour_ids(model):
+        for _p in signals_for(model, _cid, overrides):
+            if "*" not in _p and not _p.endswith("/"):
+                exact_owner.setdefault(_p.replace("\\", "/"), set()).add(_cid)
+
     out = {}
     for cid in contour_ids(model):
         pats = signals_for(model, cid, overrides)
@@ -215,7 +239,19 @@ def derive_affects(child_root: Path, changed_files: list, model: dict | None = N
             out[cid] = {"state": UNKNOWN, "matched": [], "signals": 0,
                         "reason": "у контура нет сигнальных путей — состояние не определяется"}
             continue
-        matched = [f for f in files if any(_matches(f, p) for p in pats)]
+        exact_pats = [p for p in pats if "*" not in p and not p.endswith("/")]
+        matched = []
+        for f in files:
+            hit_exact = any(_matches(f, p) for p in exact_pats)
+            if hit_exact:
+                matched.append(f)
+                continue
+            # Точный владелец этого пути есть, и это не мы -> путь принадлежит ему, не нам.
+            owners = exact_owner.get(f.lstrip("./") if f.startswith("./") else f, set())
+            if owners and cid not in owners:
+                continue
+            if any(_matches(f, p) for p in pats):
+                matched.append(f)
         if matched:
             out[cid] = {"state": CHANGED, "matched": matched, "signals": len(pats),
                         "reason": f"изменение затрагивает сигнальные пути контура ({len(matched)})"}
@@ -321,6 +357,10 @@ def main(argv=None):
     a = sub.add_parser("affects"); a.add_argument("repo")
     a.add_argument("--files", default="", help="пути через запятую (git diff --name-only)")
     a.add_argument("--json", action="store_true")
+    rc = sub.add_parser("reconcile"); rc.add_argument("repo")
+    rc.add_argument("--files", default="", help="пути через запятую (git diff --name-only)")
+    rc.add_argument("--workitem", help="features/<id>/workitem.yaml — источник объявленного affects")
+    rc.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv if argv is not None else sys.argv[1:])
     root = Path(ns.repo)
     model = load_model()
@@ -341,6 +381,27 @@ def main(argv=None):
         return 0
 
     files = [x.strip() for x in (ns.files or "").split(",") if x.strip()]
+
+    if ns.cmd == "reconcile":
+        # Объявленный `affects` берём из WorkItem'а; его отсутствие — НЕ «ничего не меняем», а
+        # «ещё не определяли», и находка `undeclared_change` про это и скажет.
+        declared = {}
+        if ns.workitem:
+            wp = Path(ns.workitem)
+            if wp.is_file():
+                try:
+                    declared = (yaml.safe_load(wp.read_text(encoding="utf-8")) or {}).get("affects") or {}
+                except yaml.YAMLError:
+                    declared = {}
+        rep = reconcile(root, declared, files, model)
+        if ns.json:
+            print(json.dumps(rep, ensure_ascii=False, indent=2)); return 0
+        print(f"СВЯЗНОСТЬ КОНТУРОВ: {rep['verdict']} · сверяемо {rep['comparable']}")
+        for f in rep["findings"]:
+            print(f"  {f['severity']:6} {f['id']} / {f['contour']}: {f['detail']}")
+        # Гейт advisory: несогласованность НЕ роняет код возврата, но и не молчит.
+        return 0
+
     der = derive_affects(root, files, model)
     if ns.json:
         print(json.dumps(der, ensure_ascii=False, indent=2)); return 0

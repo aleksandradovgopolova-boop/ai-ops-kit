@@ -81,8 +81,17 @@ classification:
     new_max_commits: 5
     early_max_commits: 50
     existing_min_commits: 50
-  signals: [source_files, commits, ci_present, tests_present, migrations_present,
-            release_history, dependency_manifests, product_docs, architecture_docs]
+  # Имена — РОВНО те, что производит `repo_audit.discover()` и читает `classify()`. Прежде треть
+  # списка (`ci_present`, `tests_present`, `migrations_present`) не существовала ни в одном отчёте,
+  # а часть остальных собиралась, но в классификации не участвовала: реестр перечислял сигналы,
+  # которых нет. Список описывает то, что ДЕЙСТВИТЕЛЬНО решает класс.
+  signals: [tree_readable, source_files, test_files, commits, ci, migrations, release_history]
+  collected_but_not_classifying: [containers, dependency_manifests, product_docs,
+                                  architecture_docs, decisions, env_configs, api_schemas]
+  collected_but_not_classifying_note: >
+    Собираются в discover() и попадают в reconstruct()/audit(), но класс репозитория по ним не
+    определяется. Названы отдельно, чтобы «сигнал класса» и «наблюдение о репозитории» не читались
+    как одно и то же.
   rule: >
     UNKNOWN, если ни один сигнал не читается (нет доступа к дереву или к истории) — это не
     «пустой репозиторий». Пустой репозиторий читается и даёт нули; нечитаемый не даёт ничего, и

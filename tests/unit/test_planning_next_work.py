@@ -118,6 +118,21 @@ def test_item_without_write_scope_not_declared_parallel_safe(tmp_path):
     assert any(s["id"] == "REV-01" for s in rep["parallel_skipped"])
 
 
+def test_parallel_candidate_is_compared_with_next_best_itself(tmp_path):
+    """Находка ревью: набор параллельных работ сверялся только МЕЖДУ СОБОЙ — `chosen` стартовал
+    пустым, а `next_best` в сравнение не попадал. Кит утверждал «области записи не пересекаются»
+    про работу, чей write_scope лежит ВНУТРИ scope выбранной следующей: две сессии уходили писать
+    один файл, ровно тот вред, ради которого правило непересечения и существует."""
+    r = _repo(tmp_path, [
+        _item("W1", value="high", write_scope=["src/api/orders/"]),
+        _item("W2", value="low", write_scope=["src/api/orders/validation.py"]),
+    ])
+    rep = N.compute(r)
+    assert rep["next_best"]["id"] == "W1"
+    assert "W2" not in [p["id"] for p in rep["parallel_with"]]
+    assert any(s["id"] == "W2" for s in rep["parallel_skipped"])
+
+
 def test_missing_roadmap_is_error_in_report(tmp_path):
     (tmp_path / "planning").mkdir()
     (tmp_path / "planning" / "plan.yaml").write_text(yaml.safe_dump(

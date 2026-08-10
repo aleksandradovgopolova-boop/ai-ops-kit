@@ -140,8 +140,13 @@ def _rank(w, res, model, plan):
     return score, why
 
 
-def _parallel_set(candidates, by_id):
+def _parallel_set(candidates, by_id, anchor=None):
     """Что можно вести ОДНОВРЕМЕННО с лучшим кандидатом.
+
+    `anchor` — сам лучший кандидат, и он ОБЯЗАН участвовать в сравнении. Прежде набор сверялся
+    только между собой (`chosen` стартовал пустым), поэтому кит утверждал «области записи не
+    пересекаются» про работу, чей scope лежит ВНУТРИ scope выбранной следующей: две сессии уходили
+    писать один файл — ровно тот вред, ради которого правило непересечения и существует.
 
     Правило: непересекающиеся области записи И отсутствие зависимости между элементами. Элемент
     без объявленного `write_scope` в набор НЕ попадает: недоказанная безопасность — не
@@ -177,6 +182,8 @@ def _parallel_set(candidates, by_id):
         return a_id in seen
 
     chosen, skipped = [], []
+    if anchor is not None:
+        chosen.append(anchor)                      # якорь занимает свою область записи первым
     for c in candidates:
         w = by_id[c["id"]]
         if not (w.get("write_scope") or []):
@@ -189,6 +196,8 @@ def _parallel_set(candidates, by_id):
             skipped.append({"id": c["id"], "reason": f"пересекается или связана с {clash}"})
             continue
         chosen.append(c)
+    if anchor is not None:
+        chosen = [c for c in chosen if c["id"] != anchor["id"]]   # «параллельно с собой» не бывает
     return chosen, skipped
 
 
@@ -262,7 +271,7 @@ def compute(child_root, budget_left=None):
     next_best = ready[0] if ready else None
     parallel, par_skipped = ([], [])
     if len(ready) > 1:
-        parallel, par_skipped = _parallel_set(ready[1:], by_id)
+        parallel, par_skipped = _parallel_set(ready[1:], by_id, anchor=next_best)
 
     return {"schema_version": 1, "plan_present": True,
             "plan_errors": val["errors"], "plan_warnings": val["warnings"],
