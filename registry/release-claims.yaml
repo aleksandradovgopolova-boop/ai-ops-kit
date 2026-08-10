@@ -63,6 +63,16 @@ standing_boundaries:
   # .ai/managed/ в child и точки входа, которые знают документация и doctor. Ратчет на состав
   # top-level имён — tests/unit/test_distribution_surface.py: новое родовое имя молча не появится.
   - generic_toplevel_names_tools_validation
+  # Остаточный `.pth`-пояс, который `setup.py` писал в site-packages до v3.33.1, НЕ
+  # снимается ни `pip uninstall`, ни установкой/обновлением кита — и это решение, а не недоделка.
+  #   pip не может: файла нет в RECORD установки (он писался side effect'ом сборки, а не как её
+  #     результат), а хука uninstall в pip/PEP 517 не существует вовсе.
+  #   installer не должен: молча удалять файлы за пределами своего окружения — тот же дефект, что
+  #     и молча их писать, только с обратным знаком. Именно эта вольность и создала пояс.
+  # Поэтому лечение — ЯВНОЕ: `ai-ops doctor` находит пояс, называет файл и команду, блокирует
+  # вердикт (пояс делает зелёными fail-closed-проверки), а `doctor --remove-path-belt` удаляет по
+  # просьбе. Проверка — tests/unit/test_path_hygiene.py, tests/unit/test_installer.py.
+  - residual_pth_belt_removed_only_on_explicit_request
 
 # v3.9.1: устаревшие маркеры «текущего статуса», которых НЕ должно быть в README/ROADMAP (ловит повторный
 # дрейф в CI). Добавлять сюда стейл-фразы при их удалении из публичной поверхности.
