@@ -94,7 +94,13 @@ def discover(child_root) -> dict:
         for p in root.rglob("*"):
             if not p.is_file():
                 continue
-            if any(part in _SKIP_DIRS for part in p.parts):
+            # ОТНОСИТЕЛЬНО корня, а не абсолютно. `p.parts` включает предков корня, поэтому
+            # репозиторий, лежащий под каталогом с именем `build`, `dist`, `vendor` или
+            # `.claude/worktrees/*` (штатное место работы агентов Claude Code), терял ВЕСЬ код:
+            # `source_files: 0` -> класс NEW_PRODUCT с уверенностью high и «работающей системы я не
+            # нашёл» на живом продукте. Ниже, в `_find`, фильтр с самого начала был относительным —
+            # два разных правила в одном модуле.
+            if any(part in _SKIP_DIRS for part in p.relative_to(root).parts):
                 continue
             if p.suffix.lower() in _SRC_EXT:
                 src += 1
@@ -410,6 +416,15 @@ def _contour_state(child_root, c: dict, evidence: dict) -> dict:
             state = PARTIAL
         else:
             state = MISSING
+
+    # Заготовка плана НЕ закрывает контур планирования: файл есть, а плана нет.
+    if state == VERIFIED and c.get("id") == "planning_execution":
+        try:
+            from ai_ops_kit.planning import delivery_plan as _dp
+            if _dp.is_template(_dp.load(root)):
+                state = PARTIAL
+        except Exception:                              # noqa: BLE001 — план не обязан разбираться
+            pass
 
     rec = c.get("reconstruction") or {}
     qs = c.get("questions") or []

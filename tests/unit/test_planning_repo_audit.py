@@ -104,6 +104,27 @@ def test_evidence_never_points_into_worktree_copies(tmp_path):
     assert all(".claude" not in m for m in (ev["migrations"] or []))
 
 
+def test_repo_under_a_technical_directory_keeps_its_code(tmp_path):
+    """НАХОДКА РЕВЬЮ: фильтр исключений применялся к АБСОЛЮТНОМУ пути (`p.parts` включает предков
+    корня), поэтому репозиторий, лежащий под каталогом `build`, `dist`, `vendor` или
+    `.claude/worktrees/*` (штатное место работы агентов Claude Code), терял ВЕСЬ код: 0 файлов ->
+    класс NEW_PRODUCT с уверенностью high и «работающей системы я не нашёл» на живом продукте.
+    """
+    # Корень репозитория лежит ПОД каталогом с «техническим» именем.
+    root = tmp_path / "build" / "app"
+    (root / "src").mkdir(parents=True)
+    for i in range(15):
+        (root / "src" / f"m{i}.py").write_text("x = 1\n", encoding="utf-8")
+    ev = A.discover(root)
+    assert ev["source_files"] == 15, f"код потерян из-за имени предка корня: {ev['source_files']}"
+    assert A.classify(ev, MODEL)["class"] != "NEW_PRODUCT"
+
+    # А вендор ВНУТРИ репозитория по-прежнему исключается.
+    (root / "node_modules" / "pkg").mkdir(parents=True)
+    (root / "node_modules" / "pkg" / "index.js").write_text("x", encoding="utf-8")
+    assert A.discover(root)["source_files"] == 15
+
+
 def test_exactly_one_gap_tier_blocks_work():
     """Иначе онбординг снова требует «заполнить всё до работы»."""
     blocking = [t for t in MODEL["gap_tiers"] if t.get("blocks_work")]

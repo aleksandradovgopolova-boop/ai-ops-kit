@@ -549,7 +549,7 @@ def cmd_diff():
         return 0
     for c in changes:
         print(f"  {c['action']:8} {c['path']}  ({c['reason']})")
-    print(f"итого: {len(changes)} изменений (применить: ai-ops update)")
+    print(f"итого: {len(changes)} изменений (применить: ./ai-ops update)")
     return 0
 
 
@@ -641,6 +641,39 @@ def _seed_planning_contour(root: Path, dry=False):
     return out
 
 
+ENTRY_NAME = "ai-ops"
+
+
+def _install_entry_point(root: Path, dry=False):
+    """Положить в репозиторий ЗАПУСКАЕМЫЙ `./ai-ops` из шаблона (v3.35.1).
+
+    Все подсказки кита печатали `ai-ops …`, а такой команды не существовало: ни `console_scripts`
+    (в продуктовый репозиторий кит ставится копированием, а не через pip), ни файла. Владелец
+    копировал строку из первого же сообщения и получал `command not found` — обещание слоя
+    коммуникации «в каждом сообщении сказано, что дальше» ломалось на первой команде.
+
+    Обёртка, а не запись в PATH: PATH не наша зона, а `./ai-ops` работает сразу и переживает clone.
+    -> {"action": created|updated|unchanged|skipped-no-template, "path": str|None}
+    """
+    src = MANAGED / "templates" / "runtime" / "ai-ops-entry.sh"
+    if not src.is_file():
+        src = PKG / "templates" / "runtime" / "ai-ops-entry.sh"
+    if not src.is_file():
+        return {"action": "skipped-no-template", "path": None}
+    body = src.read_text(encoding="utf-8")
+    dst = root / ENTRY_NAME
+    old = dst.read_text(encoding="utf-8") if dst.is_file() else ""
+    action = "unchanged" if old == body else ("updated" if old else "created")
+    if not dry and action != "unchanged":
+        dst.write_text(body, encoding="utf-8")
+    if not dry:
+        try:
+            dst.chmod(0o755)
+        except OSError:
+            pass
+    return {"action": action, "path": str(dst)}
+
+
 COMM_MARK_BEGIN = "<!-- AI-OPS-COMMUNICATION-POLICY:BEGIN — управляется китом, не править вручную -->"
 COMM_MARK_END = "<!-- AI-OPS-COMMUNICATION-POLICY:END -->"
 
@@ -655,7 +688,7 @@ def _install_communication_adapter(root: Path, dry=False):
 
     ИДЕМПОТЕНТНО и БЕЗОПАСНО: блок ограничен маркерами, повторный запуск ЗАМЕНЯЕТ только его, текст
     пользователя вне маркеров не трогается никогда. Это и есть «перегенерация», которую обещал
-    шаблон: правишь политику -> `ai-ops update` -> блок обновлён, остальное на месте.
+    шаблон: правишь политику -> `./ai-ops update` -> блок обновлён, остальное на месте.
     -> {"action": created|updated|unchanged|skipped-no-template, "path": str}
     """
     src = MANAGED / "templates" / "runtime" / "claude-communication.md"
@@ -747,7 +780,7 @@ def cmd_update(force=False, smoke_checks=None):
                     if s.get("action") == "created-draft"]
         if _seeded0:
             msg += (" Back-fill модели продукта: " + ", ".join(_seeded0)
-                    + " (черновики, заполнить вам; затем `ai-ops model .`).")
+                    + " (черновики, заполнить вам; затем `./ai-ops model`).")
         report.update(report=msg); write_report(report)
         print(msg); return 0
 
@@ -800,6 +833,7 @@ def cmd_update(force=False, smoke_checks=None):
     report["commands_installed"] = materialize_runtime(REPO_ROOT)
     # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
     # перегенерируйте» стало правдой, а не обещанием в шаблоне. Текст вне маркеров не трогается.
+    report["entry_point"] = _install_entry_point(REPO_ROOT)
     report["communication_adapter"] = _install_communication_adapter(REPO_ROOT)
     report["planning_seeded"] = _seed_planning_contour(REPO_ROOT)
 
@@ -831,7 +865,7 @@ def cmd_update(force=False, smoke_checks=None):
                         + (" Политика общения подключена к runtime (блок в CLAUDE.md между "
                            "маркерами; текст вне них не тронут)." if _comm in ("created", "updated")
                            else "")
-                        + (" Дальше: `ai-ops model .` покажет, что кит понял о проекте, и спросит "
+                        + (" Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                            "недостающее одним пакетом." if _seeded else "")
                         + " Создайте PR с этим diff — silent update запрещён.")
     out = write_report(report)
@@ -902,7 +936,8 @@ def cmd_init(target_dir):
     if seeded:
         print(f"создан черновик контура планирования: {', '.join(s['artifact'] for s in seeded)} "
               f"— направление и приоритеты кит не выдумывает, заполните их "
-              f"(или запустите `ai-ops model .` — он спросит одним пакетом).")
+              f"(или запустите `./ai-ops model` — он спросит одним пакетом).")
+    _install_entry_point(root)
     comm = _install_communication_adapter(root)
     if comm["action"] in ("created", "updated"):
         print("политика общения подключена к runtime (блок в CLAUDE.md) — опсик по умолчанию "
@@ -1061,17 +1096,17 @@ def cmd_doctor(argv=()):
         _m = ui_readiness.assess(".")["storybook_maturity"]
         print(f"ui-evidence (Storybook): {_m}"
               + ("  — не UI-продукт? тогда норма (не маскируем)" if _m == "absent" else "")
-              + ("   → `ai-ops onboard` для деталей" if _m != "verified" else ""))
+              + ("   → `./ai-ops onboard` для деталей" if _m != "verified" else ""))
     except Exception as _e:  # noqa: BLE001 — недоступность readiness не роняет doctor
         print(f"ui-evidence (Storybook): недоступно ({_e})")
     # v3.12.0 Startup Context Budget: полнота обязательных документов контекста репозитория.
-    # Пробел -> сообщаем + подсказываем `ai-ops update` (он back-fill'ит черновики). Не роняем doctor
+    # Пробел -> сообщаем + подсказываем `./ai-ops update` (он back-fill'ит черновики). Не роняем doctor
     # (advisory: контекст — ответственность репозитория, кит его лишь заполняет черновиком).
     _req, _gaps = _context_gaps()
     if _req:
         print(f"контекст (обязательные документы): "
               + ("✓ все на месте" if not _gaps
-                 else f"✗ нет в оверлее: {', '.join(_gaps)} → `ai-ops update` создаст черновики"))
+                 else f"✗ нет в оверлее: {', '.join(_gaps)} → `./ai-ops update` создаст черновики"))
     # v3.35 Product Operating Model: контур планирования — пробел ВИДЕН, а не молчит. Репозиторий
     # без направления и плана не может ответить «что брать следующим»: любой ответ был бы про
     # порядок строк в бэклоге, а не про продукт.
@@ -1079,7 +1114,7 @@ def cmd_doctor(argv=()):
     if _preq:
         print(f"планирование (направление и план): "
               + ("✓ артефакты на месте" if not _pgaps
-                 else f"✗ нет: {', '.join(_pgaps)} → `ai-ops model .` покажет пробелы и спросит "
+                 else f"✗ нет: {', '.join(_pgaps)} → `./ai-ops model` покажет пробелы и спросит "
                       f"недостающее одним пакетом"))
     # v3.13.0 Startup Context Budget: наблюдаемая стоимость стартового набора vs бюджет (advisory).
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):

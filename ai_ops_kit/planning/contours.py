@@ -235,6 +235,42 @@ def sot_state(child_root: Path, model: dict | None = None) -> dict:
     return out
 
 
+def unquote_git_path(path: str) -> str:
+    """Путь из git как есть -> настоящее имя. Второй эшелон защиты от `core.quotePath`.
+
+    Источник уже чинится ключом `-z` (`engine/pipeline_git.py`), но сюда пути приходят и из других
+    мест (CLI `--files`, ручные вызовы, чужие обёртки). Если имя пришло в кавычках с
+    octal-escape'ами, оно не совпадёт ни с одним паттерном и `changed` станет `not_changed` —
+    молча. Разбираем: кавычки снимаем, восьмеричные escape'ы собираем в байты и декодируем UTF-8.
+    """  # noqa: D301
+    s = str(path or "")
+    if not (len(s) >= 2 and s[0] == '"' and s[-1] == '"'):
+        return s
+    body = s[1:-1]
+    out = bytearray()
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 3 < len(body) + 1 and body[i + 1:i + 4].isdigit():
+            try:
+                out.append(int(body[i + 1:i + 4], 8))
+                i += 4
+                continue
+            except ValueError:
+                pass
+        if ch == "\\" and i + 1 < len(body):
+            out.extend({"n": b"\n", "t": b"\t", '"': b'"', "\\": b"\\"}.get(body[i + 1],
+                                                                          body[i + 1].encode()))
+            i += 2
+            continue
+        out.extend(ch.encode("utf-8"))
+        i += 1
+    try:
+        return out.decode("utf-8")
+    except UnicodeDecodeError:
+        return s
+
+
 def _matches(rel_path: str, pattern: str) -> bool:
     """Соответствие пути globу. Каталог-паттерн (`decisions/`) покрывает всё под ним.
 
@@ -345,7 +381,7 @@ def derive_affects(child_root: Path, changed_files: list, model: dict | None = N
     model = model or load_model()
     root = Path(child_root)
     overrides = repo_overrides(root) if overrides is None else overrides
-    files = [str(f).replace("\\", "/") for f in (changed_files or [])]
+    files = [unquote_git_path(f).replace("\\", "/") for f in (changed_files or [])]
 
     # ПРАВИЛО СПЕЦИФИЧНОСТИ: точный путь сильнее чужого glob. `context/system/DataMap.md` — явный
     # сигнал и источник истины контура данных, но он же попадает под `context/system/**` контура
@@ -395,7 +431,7 @@ def derive_affects(child_root: Path, changed_files: list, model: dict | None = N
 def _sot_touched(child_root: Path, cid: str, changed_files: list, model: dict) -> list:
     """Какие источники истины контура попали в изменение (с учётом оверлея пути)."""
     c = contour(model, cid) or {}
-    files = [str(f).replace("\\", "/") for f in (changed_files or [])]
+    files = [unquote_git_path(f).replace("\\", "/") for f in (changed_files or [])]
     hit = []
     for s in sot_for(model, cid, child_root):
         rel = (s.get("path") or "").replace("\\", "/")
@@ -448,10 +484,21 @@ def reconcile(child_root: Path, declared: dict, changed_files: list,
                              "detail": d["reason"]})
             continue
         if d["state"] == CHANGED and want != CHANGED:
-            findings.append({"id": "undeclared_change", "contour": cid, "severity": "major",
+            # СТРОГОСТЬ ПО ФАКТУ ЗАЯВЛЕНИЯ, а не по факту изменения. `major` — только когда автор
+            # ЧТО-ТО заявил и промахнулся мимо этого контура. Если не заявлено НИЧЕГО, сверять не с
+            # чем: назвать затронутые контуры полезно, но объявлять это провалом — шум на каждой
+            # задаче. Прежде кит сам засевал `affects` по типу задачи и ловил СЕБЯ ЖЕ: находка
+            # «источник истины не обновлён» появлялась на любой обычной работе, потому что заявление
+            # выдумал он, а не человек. Гейт, шумящий на всём, перестают читать — модель запрещает
+            # это прямо (`consistency.never`).
+            declared_anything = any(v == CHANGED for v in decl.values())
+            findings.append({"id": "undeclared_change", "contour": cid,
+                             "severity": "major" if declared_anything else "info",
                              "detail": f"изменение трогает {', '.join(d['matched'][:4])} — "
-                                       f"контур не заявлен в affects "
-                                       f"(заявлено: {want or 'ничего'})"})
+                                       + (f"контур не заявлен в affects (заявлено: "
+                                          f"{', '.join(k for k, v in decl.items() if v == CHANGED)})"
+                                          if declared_anything else
+                                          "affects не заявлен, поэтому это наблюдение, а не расхождение")})
         if want == CHANGED:
             touched = _sot_touched(child_root, cid, changed_files, model)
             if not touched:

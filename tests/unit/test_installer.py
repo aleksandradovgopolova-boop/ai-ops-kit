@@ -449,6 +449,35 @@ def test_communication_adapter_is_idempotent_and_keeps_user_text(installed, ai_o
     assert "Не трогать это." in text, "текст пользователя вне маркеров затронут"
 
 
+def test_child_gets_a_runnable_entry_point(installed):
+    """НАХОДКА РЕВЬЮ, ломавшая обещание слоя коммуникации на ПЕРВОЙ команде: все подсказки кита
+    печатали `ai-ops …`, а такой команды не существует — ни `console_scripts`, ни файла. Владелец
+    копировал строку и получал `command not found`.
+
+    Политика требует в каждом сообщении «что дальше». Пункт, который нельзя выполнить, этому
+    требованию не удовлетворяет: в подсказке обязано быть то, что копируется и запускается.
+    """
+    import os
+    import subprocess
+    entry = installed / "ai-ops"
+    assert entry.is_file(), "в репозиторий не положена запускаемая точка входа"
+    assert os.access(entry, os.X_OK), "точка входа не исполняемая"
+    r = subprocess.run([str(entry), "status"], cwd=str(installed),
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode in (0, 1), f"./ai-ops status не работает: {r.returncode} {r.stderr[:300]}"
+    assert "установлено" in (r.stdout + r.stderr), r.stdout[:300]
+
+
+def test_hints_point_to_something_runnable(installed, ai_ops):
+    """Ни одна подсказка не должна учить неработающей команде."""
+    import subprocess
+    out = subprocess.run(["python3", str(ai_ops.PKG / "installer" / "ai_ops.py"), "doctor"],
+                         cwd=str(installed), capture_output=True, text=True, timeout=180).stdout
+    bad = [ln for ln in out.splitlines()
+           if "`ai-ops " in ln and "./ai-ops" not in ln and "python3" not in ln]
+    assert not bad, f"подсказки учат несуществующей команде: {bad[:3]}"
+
+
 def test_delivery_footprint_is_smaller_than_legacy(installed):
     """Поставка ощутимо меньше монолитной (baseline ревью: 503 файла / ~3.6 МБ managed)."""
     managed = installed / ".ai" / "managed"

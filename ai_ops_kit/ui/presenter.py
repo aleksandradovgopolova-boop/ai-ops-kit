@@ -218,6 +218,16 @@ def from_repository_understanding(rep: dict) -> dict:
 
 def from_next_work(rep: dict) -> dict:
     """`next_work.compute()` -> UserMessage. «Что делать дальше» человеческими словами."""
+    if rep.get("plan_is_template"):
+        return message(
+            status="needs_input",
+            summary="В плане работ пока лежит мой пример, а не твоя работа.",
+            why_it_matters="Советовать по нему я не стану: это была бы выдумка про твой продукт, "
+                           "а не факт о нём.",
+            next_steps=["впиши свои задачи в план и убери пометку «пример»",
+                        "или скажи — соберу первый план из ответов на несколько вопросов"],
+            technical={"gap": rep.get("gap")})
+
     if not rep.get("plan_present"):
         return message(status="blocked",
                        summary="Плана работ в проекте пока нет, поэтому предложить следующую "

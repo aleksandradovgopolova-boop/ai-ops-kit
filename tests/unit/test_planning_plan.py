@@ -40,22 +40,22 @@ def _item(wid, **kw):
 # ── positive ──────────────────────────────────────────────────────────────────────────────────
 
 def test_valid_plan_parses_and_derives_status(tmp_path):
-    _write(tmp_path, [_item("A", type="architecture", owner_role="architect"),
-                      _item("B", depends_on=["A"])])
+    _write(tmp_path, [_item("a", type="architecture", owner_role="architect"),
+                      _item("b", depends_on=["a"])])
     pl = P.load(tmp_path)
     rep = P.validate(pl, MODEL)
     assert rep["errors"] == [], rep["errors"]
     res = P.resolve(pl, tmp_path, MODEL)
-    assert res["A"]["status"] == "ready"
-    assert res["B"]["status"] == "blocked"
-    assert "A" in res["B"]["blocked_by"]
+    assert res["a"]["status"] == "ready"
+    assert res["b"]["status"] == "blocked"
+    assert "a" in res["b"]["blocked_by"]
     # Причина названа словами, а не подразумевается: пустой список причин = молчаливый вывод.
-    assert res["B"]["reasons"]
+    assert res["b"]["reasons"]
 
 
 def test_derived_status_is_order_independent(tmp_path):
     """Перестановка строк в файле не меняет ответ: обход топологический, а не по порядку строк."""
-    forward = [_item("A"), _item("B", depends_on=["A"]), _item("C", depends_on=["B"])]
+    forward = [_item("a"), _item("b", depends_on=["a"]), _item("c", depends_on=["b"])]
     _write(tmp_path, forward)
     a = {k: v["status"] for k, v in P.resolve(P.load(tmp_path), tmp_path, MODEL).items()}
     _write(tmp_path, list(reversed(forward)))
@@ -64,10 +64,10 @@ def test_derived_status_is_order_independent(tmp_path):
 
 
 def test_unblocks_counts_transitive_downstream(tmp_path):
-    _write(tmp_path, [_item("A"), _item("B", depends_on=["A"]), _item("C", depends_on=["B"])])
+    _write(tmp_path, [_item("a"), _item("b", depends_on=["a"]), _item("c", depends_on=["b"])])
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert res["A"]["unblocks"] == 2      # B и C, а не только прямой потомок
-    assert res["C"]["unblocks"] == 0
+    assert res["a"]["unblocks"] == 2      # B и C, а не только прямой потомок
+    assert res["c"]["unblocks"] == 0
 
 
 # ── fail-closed ───────────────────────────────────────────────────────────────────────────────
@@ -92,49 +92,63 @@ def test_broken_yaml_raises(tmp_path):
 
 
 def test_cycle_is_error_not_warning(tmp_path):
-    _write(tmp_path, [_item("A", depends_on=["B"]), _item("B", depends_on=["A"])])
+    _write(tmp_path, [_item("a", depends_on=["b"]), _item("b", depends_on=["a"])])
     rep = P.validate(P.load(tmp_path), MODEL)
     assert any("цикл" in x.lower() for x in rep["errors"])
 
 
 def test_cycle_does_not_hang_resolve(tmp_path):
     """Цикл — ошибка валидатора, но resolve обязан завершиться и не молчать об этих элементах."""
-    _write(tmp_path, [_item("A", depends_on=["B"]), _item("B", depends_on=["A"])])
+    _write(tmp_path, [_item("a", depends_on=["b"]), _item("b", depends_on=["a"])])
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert set(res) == {"A", "B"}
+    assert set(res) == {"a", "b"}
 
 
 def test_unknown_dependency_blocks(tmp_path):
     """Зависимость вне плана НЕ считается закрытой: неизвестное не зелёное."""
-    _write(tmp_path, [_item("A", depends_on=["NOPE"])])
+    _write(tmp_path, [_item("a", depends_on=["nope"])])
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert res["A"]["status"] == "blocked"
-    assert "NOPE" in res["A"]["blocked_by"]
+    assert res["a"]["status"] == "blocked"
+    assert "nope" in res["a"]["blocked_by"]
+
+
+def test_plan_id_must_be_usable_by_the_engine(tmp_path):
+    """Находка ревью: валидатор плана допускал `ARCH-01`, а движок требует slug нижнего регистра и
+    падал сырым ValueError на `ai-ops run --feature ARCH-01`. Расхождение двух правил об одном id
+    делало объявленный приоритет «факт из WorkItem > объявление человека» недостижимым для id из
+    собственного шаблона кита."""
+    _write(tmp_path, [_item("ARCH-01")])
+    rep = P.validate(P.load(tmp_path), MODEL)
+    assert any("нижн" in x.lower() or "slug" in x.lower() for x in rep["errors"]), rep["errors"]
+
+    # Годный id проходит.
+    _write(tmp_path, [_item("arch-01")])
+    assert P.validate(P.load(tmp_path), MODEL)["errors"] == []
 
 
 def test_vendor_field_is_rejected(tmp_path):
     """План называет РОЛЬ. Поле исполнителя привязало бы план продукта к вендору."""
-    _write(tmp_path, [_item("A", runtime="claude-code")])
+    _write(tmp_path, [_item("a", runtime="claude-code")])
     rep = P.validate(P.load(tmp_path), MODEL)
     assert any("runtime" in x for x in rep["errors"])
 
 
 def test_declared_derived_status_is_flagged(tmp_path):
     """`ready` в файле — расхождение: этот статус обязан считать граф."""
-    _write(tmp_path, [_item("A", status="ready")])
+    _write(tmp_path, [_item("a", status="ready")])
     rep = P.validate(P.load(tmp_path), MODEL)
     assert any("ВЫВОДИМЫЙ" in x for x in rep["warnings"])
 
 
 def test_unknown_role_and_type_are_errors(tmp_path):
-    _write(tmp_path, [_item("A", owner_role="wizard", type="magic")])
+    _write(tmp_path, [_item("a", owner_role="wizard", type="magic")])
     rep = P.validate(P.load(tmp_path), MODEL)
     assert any("owner_role" in x for x in rep["errors"])
     assert any("type" in x for x in rep["errors"])
 
 
 def test_goal_must_resolve(tmp_path):
-    _write(tmp_path, [_item("A", goal="nope")])
+    _write(tmp_path, [_item("a", goal="nope")])
     rep = P.validate(P.load(tmp_path), MODEL)
     assert any("goal" in x for x in rep["errors"])
 
@@ -143,46 +157,79 @@ def test_goal_must_resolve(tmp_path):
 
 def test_workitem_fact_overrides_declared_status(tmp_path):
     """WorkItem закрыт гейтами -> элемент плана done, даже если в файле стоит todo."""
-    _write(tmp_path, [_item("A")])
+    _write(tmp_path, [_item("a")])
     d = tmp_path / "features" / "A"
     d.mkdir(parents=True)
     (d / "workitem.yaml").write_text("id: A\nstatus: done\n", encoding="utf-8")
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert res["A"]["status"] == "done"
-    assert res["A"]["source"] == "workitem"
-    assert res["A"]["drift"]                       # расхождение с объявленным ВИДНО, а не скрыто
+    assert res["a"]["status"] == "done"
+    assert res["a"]["source"] == "workitem"
+    assert res["a"]["drift"]                       # расхождение с объявленным ВИДНО, а не скрыто
+
+
+def _register_real(tmp_path, wid, areas):
+    """Регистрация активной работы ЧЕРЕЗ САМ ДВИЖОК, а не рукописным YAML.
+
+    Ревью нашло, что прежние фикстуры выдумывали форму: писали `areas:` и `workitem: A`, тогда как
+    `active_work.register` пишет `affected_areas:` и `workitem: features/<id>/workitem.yaml`
+    (ПУТЬ, не id). Тесты были зелёными на форме, которой движок не производит, — то есть проверяли
+    моё представление, а не реальность. Единственная защита от повторения: фикстура обязана
+    вызывать продакшн-запись, а не имитировать её.
+    """
+    from ai_ops_kit.lifecycle import active_work
+    rt = tmp_path / ".ai" / "runtime"
+    rt.mkdir(parents=True, exist_ok=True)
+    aw = rt / "active-work.yaml"
+    rc = active_work.register(aw, wid, f"ai-ops/{wid}", list(areas), "sess-1",
+                              workitem=f"features/{wid}/workitem.yaml")
+    assert rc == 0, "регистрация активной работы не удалась"
+    return aw
 
 
 def test_active_work_makes_item_in_progress(tmp_path):
-    _write(tmp_path, [_item("A")])
-    rt = tmp_path / ".ai" / "runtime"
-    rt.mkdir(parents=True)
-    (rt / "active-work.yaml").write_text(
-        "schema_version: 1\nkind: active-work\nactive:\n"
-        "  - id: s1\n    workitem: A\n    branch: b\n    areas: [src/a/]\n"
-        "    session: s\n    status: in-progress\n", encoding="utf-8")
+    """Форма записи — та, что производит движок (см. _register_real)."""
+    _write(tmp_path, [_item("a")])
+    _register_real(tmp_path, "a", ["src/a/"])
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert res["A"]["status"] == "in_progress"
-    assert res["A"]["source"] == "active-work"
+    assert res["a"]["status"] == "in_progress"
+    assert res["a"]["source"] == "active-work"
 
 
 def test_write_scope_conflict_with_active_work_blocks(tmp_path):
-    """Пересечение области записи с активной работой блокирует — иначе две сессии рвут одно место."""
-    _write(tmp_path, [_item("A", write_scope=["src/shared/"])])
-    rt = tmp_path / ".ai" / "runtime"
-    rt.mkdir(parents=True)
-    (rt / "active-work.yaml").write_text(
-        "schema_version: 1\nkind: active-work\nactive:\n"
-        "  - id: s1\n    workitem: OTHER\n    branch: b\n    areas: [src/shared/models/]\n"
-        "    session: s\n    status: in-progress\n", encoding="utf-8")
+    """Пересечение области записи с активной работой блокирует — иначе две сессии рвут одно место.
+
+    Форма записи — реальная (`affected_areas`, `workitem` путём). На рукописной форме этот тест был
+    зелёным при полностью нерабочей проверке конфликта.
+    """
+    _write(tmp_path, [_item("a", write_scope=["src/shared/"])])
+    _register_real(tmp_path, "other-work", ["src/shared/models/"])
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert res["A"]["status"] == "blocked"
-    assert res["A"]["conflicts_with"] == ["OTHER"]
+    assert res["a"]["status"] == "blocked"
+    assert res["a"]["conflicts_with"] == ["other-work"]
+
+
+def test_path_shape_variants_still_conflict(tmp_path):
+    """Находка ревью: сравнение областей записи строковое, без нормализации — `./src/`, `src/` и
+    `src\\` считались непересекающимися, и три сессии уходили писать один каталог."""
+    _write(tmp_path, [_item("a", write_scope=["./src/"])])
+    _register_real(tmp_path, "other-work", ["src"])
+    res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
+    assert res["a"]["conflicts_with"] == ["other-work"], "./src/ и src — один каталог"
+
+
+def test_global_write_scope_conflicts_with_everything(tmp_path):
+    """Находка ревью: `write_scope: ["**"]` давал «пересечений нет» — потерян fail-closed, который
+    в `engine/parallel_planner.py` уже починен как баг v3.6.5. Работа, пишущая всюду, конфликтует
+    со всем: недоказанная безопасность не есть безопасность."""
+    _write(tmp_path, [_item("a", write_scope=["**"])])
+    _register_real(tmp_path, "other-work", ["src/api/"])
+    res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
+    assert res["a"]["conflicts_with"] == ["other-work"]
 
 
 def test_human_decision_blocks_even_with_deps_done(tmp_path):
-    _write(tmp_path, [_item("A", status="done"),
-                      _item("B", depends_on=["A"], human_decision="нужно решение владельца")])
+    _write(tmp_path, [_item("a", status="done"),
+                      _item("b", depends_on=["a"], human_decision="нужно решение владельца")])
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
-    assert res["B"]["status"] == "blocked"
-    assert any("решение человека" in r for r in res["B"]["reasons"])
+    assert res["b"]["status"] == "blocked"
+    assert any("решение человека" in r for r in res["b"]["reasons"])

@@ -319,6 +319,56 @@ def test_child_config_is_parsed_once_per_state(tmp_path, monkeypatch):
     assert calls["n"] == 2
 
 
+def test_cyrillic_path_from_git_is_still_seen(tmp_path):
+    """НАХОДКА РЕВЬЮ, критичная для русскоязычного продукта: при `core.quotePath` (по умолчанию ВКЛ)
+    git отдаёт не-ASCII имена в escape-кавычках. Такой путь не совпадал ни с одним сигнальным
+    паттерном, и `changed` превращался в `not_changed` — утверждение вместо признания, то есть
+    главный инвариант модели ломался на КАЖДОМ файле с русским именем, а гейт молчал.
+
+    Источник чинится ключом `-z` в `engine/pipeline_git.py`; здесь — второй эшелон, потому что пути
+    приходят и из CLI `--files`, и из чужих обёрток.
+    """
+    d = tmp_path / "context" / "product"
+    d.mkdir(parents=True)
+    (d / "Обзор.md").write_text("# обзор", encoding="utf-8")
+
+    quoted = r'"context/product/\320\236\320\261\320\267\320\276\321\200.md"'
+    assert C.unquote_git_path(quoted) == "context/product/Обзор.md"
+    der = C.derive_affects(tmp_path, [quoted], MODEL, overrides={})
+    assert der["product_strategy"]["state"] == C.CHANGED, \
+        "путь с кириллицей в git-кавычках обязан распознаваться"
+    # И обычный путь, конечно, тоже.
+    assert C.derive_affects(tmp_path, ["context/product/Обзор.md"], MODEL,
+                            overrides={})["product_strategy"]["state"] == C.CHANGED
+
+
+def test_undeclared_change_is_information_when_nothing_was_declared(tmp_path):
+    """НАХОДКА РЕВЬЮ: кит сам засевал `affects` по типу задачи, а потом читал это как ЗАЯВЛЕНИЕ
+    АВТОРА — и на каждой обычной инженерной задаче выдавал major-находку «источник истины не
+    обновлён». Заявления не было: его выдумал кит.
+
+    Правило: `major` — только когда автор ЧТО-ТО заявил и промахнулся. Если не заявлено ничего,
+    сверять нечего с чем: контуры из diff — ИНФОРМАЦИЯ («работа затронула вот это»), а не провал.
+    Иначе гейт шумит на всём, и его перестают читать — реестр запрещает это прямо.
+    """
+    (tmp_path / "context" / "system").mkdir(parents=True)
+    (tmp_path / "context" / "system" / "DataMap.md").write_text("# д", encoding="utf-8")
+    files = ["context/system/DataMap.md"]
+
+    # Ничего не заявлено -> информация, вердикт НЕ падает.
+    rep = C.reconcile(tmp_path, {}, files, MODEL, overrides={})
+    und = [f for f in rep["findings"] if f["id"] == "undeclared_change"]
+    assert und, "затронутый контур обязан быть назван"
+    assert all(f["severity"] == "info" for f in und), [f["severity"] for f in und]
+    assert rep["verdict"] == "ok"
+
+    # Заявлено ДРУГОЕ -> автор промахнулся, это major.
+    rep2 = C.reconcile(tmp_path, {"analytics_learning": True}, files, MODEL, overrides={})
+    assert [f for f in rep2["findings"]
+            if f["id"] == "undeclared_change" and f["severity"] == "major"]
+    assert rep2["verdict"] == "inconsistent"
+
+
 def test_corrupt_model_raises(tmp_path):
     bad = tmp_path / "pom.yaml"
     bad.write_text("contours: []\n", encoding="utf-8")

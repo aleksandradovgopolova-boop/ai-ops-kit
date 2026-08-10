@@ -269,12 +269,15 @@ def _run_intent(intent, task, child_root, signals, a):
         wid = _wid_for(task, signals, a.feature)
         workitem.start(str(child_root / "features"), wid, task or wid,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
-        # v3.35: `affects` засевается ПОДСКАЗКОЙ по типу работы, а не выводится из diff. Разница
-        # принципиальная: заявление автора и факт изменения — два независимых источника, и сверять
-        # их имеет смысл только пока они независимы. Автозаполнение из diff сделало бы находку
-        # `undeclared_change` невозможной, то есть выключило бы гейт, оставив его зелёным.
-        # Прежде поле оставалось `{}` навсегда, а `suggest_affects` не вызывался нигде (ревью 3.35).
-        _seed_workitem_affects(child_root, wid, signals.get("task_type"))
+        # v3.35.1 (ревью перед квалификацией): засев `affects` ПО ТИПУ ЗАДАЧИ УБРАН. Кит записывал
+        # `{engineering_quality_security: true}` всем шести инженерным типам, а `reconcile` читал это
+        # как заявление АВТОРА — и на каждой обычной задаче выдавал major-находку «источник истины не
+        # обновлён», потому что задача не трогает DevelopmentProcess.md. Кит ловил себя же.
+        # Теперь `affects` берётся ТОЛЬКО из плана: если элемент с этим id объявлен в
+        # `planning/plan.yaml`, его заявление переносится в WorkItem — это настоящее заявление
+        # человека и настоящая связь уровней. Нет элемента — поле остаётся пустым, и гейт называет
+        # затронутые контуры информацией, а не расхождением.
+        _copy_affects_from_plan(child_root, wid)
         sp, created = spec_levels.create_spec(child_root, wid, signals)
         if js:
             print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
@@ -282,7 +285,7 @@ def _run_intent(intent, task, child_root, signals, a):
         else:
             print(f"NEW: каркас фичи '{wid}' · features/{wid}/workitem.yaml + spec.yaml "
                   f"({'создан' if created else 'уже был'})")
-            print(f"  далее: ai-ops specify \"{task or '<задача>'}\" {child_root} --feature {wid}")
+            print(f"  далее: ./ai-ops specify \"{task or '<задача>'}\" {child_root} --feature {wid}")
         return 0
 
     if intent == "plan":
@@ -395,23 +398,25 @@ def _run_intent(intent, task, child_root, signals, a):
     return None
 
 
-def _seed_workitem_affects(child_root, wid, task_type):
-    """Записать в WorkItem подсказку `affects` по типу работы (v3.35). Тихо ничего не делает, если
-    модель недоступна: онбординг и создание фичи не обязаны падать из-за реестра контуров."""
+def _copy_affects_from_plan(child_root, wid):
+    """Перенести `affects` из элемента плана с этим id в WorkItem. -> перенесённое или None.
+
+    Это ЕДИНСТВЕННЫЙ законный источник `affects`: заявление человека в `planning/plan.yaml`. Кит не
+    заявляет за автора — прежний засев по типу задачи выдумывал заявление и ловил на нём сам себя.
+    Нет элемента плана с этим id — поле остаётся пустым, и это честно: заявления действительно не
+    было. Тихо ничего не делает при недоступности плана: создание фичи не обязано падать из-за него.
+    """
     import yaml as _yaml
     try:
-        from ai_ops_kit.planning import contours as _c
-        model = _c.load_model()
-    except Exception:                                  # noqa: BLE001 — реестр не обязан быть рядом
+        from ai_ops_kit.planning import delivery_plan as _dp
+        plan = _dp.load(child_root)
+    except Exception:                                  # noqa: BLE001 — план не обязан существовать
         return None
-    wf = (task_type or "").strip()
-    # Тип работы плана (`engineering`/`visual`/…) и класс задачи движка (`ENGINEERING`/`VISUAL`/…)
-    # — разные словари; сопоставление объявлено здесь, а не угадывается по регистру.
-    by_workflow = {"QUICK": "engineering", "ENGINEERING": "engineering", "PRODUCT": "product",
-                   "RESEARCH": "research", "VISUAL": "visual", "AI_FEATURE": "engineering",
-                   "CRITICAL": "security", "ANALYTICS": "analytics"}
-    suggested = _c.suggest_affects(model, by_workflow.get(wf.upper(), ""))
-    if not suggested:
+    if not plan:
+        return None
+    item = next((w for w in _dp.items(plan) if str(w.get("id")) == str(wid)), None)
+    declared = (item or {}).get("affects") or {}
+    if not declared:
         return None
     wp = Path(child_root) / "features" / str(wid) / "workitem.yaml"
     if not wp.is_file():
@@ -421,10 +426,11 @@ def _seed_workitem_affects(child_root, wid, task_type):
     except _yaml.YAMLError:
         return None
     if data.get("affects"):
-        return None                                    # объявленное человеком не перезаписываем
-    data["affects"] = suggested
+        return None                                    # уже объявлено — не перезаписываем
+    data["affects"] = dict(declared)
+    data["affects_source"] = f"planning/plan.yaml -> {wid}"
     wp.write_text(_yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
-    return suggested
+    return declared
 
 
 def _session_guard_before_start(child_root, task, signals, feature=None):
@@ -553,7 +559,7 @@ def main(argv):
             print(f"  уровень {cov['level_name']} · обязательных разделов {len(cov['sections'])} · "
                   f"заполнить: {len(cov['blocking_missing'])}")
             print(f"  заполни разделы в {sp.relative_to(Path(child_root)) if str(sp).startswith(child_root) else sp}, "
-                  f"затем: ai-ops run \"{task or '<задача>'}\" {child_root} --feature {wid} --execute")
+                  f"затем: ./ai-ops run \"{task or '<задача>'}\" {child_root} --feature {wid} --execute")
         return 0
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
