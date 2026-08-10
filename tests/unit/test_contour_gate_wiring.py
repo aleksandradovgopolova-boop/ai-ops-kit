@@ -38,6 +38,59 @@ def test_gate_is_actually_called_in_the_pipeline():
 
 
 @pytest.mark.unit
+def test_findings_reach_the_human_in_the_run_output():
+    """ГЕЙТ, ЧЬИ НАХОДКИ НЕ ВИДНЫ, — ЭТО ГЕЙТ, КОТОРОГО НЕТ.
+
+    Гейт исполнялся, считал находки и писал их в evidence, а вывод прогона о них молчал: «описание
+    продукта отстало от кода» жило только в yaml-артефакте, который человек не открывает. Проверяем
+    ПОВЕДЕНИЕ печати, а не наличие строки в файле.
+    """
+    from ai_ops_kit.engine import ai_ops_run
+    import io
+    import contextlib as _cl
+
+    rep = {"kind": "execution-pipeline", "child_root": ".", "contour_consistency": {
+        "status": "warn", "report": {
+            "comparable": True, "derived": {},
+            "findings": [{"id": "source_of_truth_behind", "contour": "data_contracts",
+                          "severity": "major", "detail": "схема изменилась, openapi нет"}]}}}
+    buf = io.StringIO()
+    with _cl.redirect_stdout(buf):
+        ai_ops_run._print_contour_consistency(rep)
+    out = buf.getvalue()
+    assert out.strip(), "находки гейта не напечатаны — человек о них не узнает"
+    assert "описание" in out.lower(), out
+    assert "source_of_truth_behind" not in out, "наружу вышло внутреннее имя находки"
+
+    # Согласованный прогон отдельным блоком не шумит: вердикт прогона уже всё сказал.
+    quiet = io.StringIO()
+    with _cl.redirect_stdout(quiet):
+        ai_ops_run._print_contour_consistency({"kind": "execution-pipeline", "child_root": ".",
+                                               "contour_consistency": {"status": "pass", "report": {
+                                                   "comparable": True, "derived": {}, "findings": []}}})
+    assert quiet.getvalue().strip() == ""
+
+    # Гейт не исполнялся — тишина (evidence уже сказал `warn`), но и не выдумываем «согласовано».
+    none = io.StringIO()
+    with _cl.redirect_stdout(none):
+        ai_ops_run._print_contour_consistency({"kind": "execution-pipeline"})
+    assert none.getvalue() == ""
+
+
+@pytest.mark.unit
+def test_pipeline_report_carries_the_findings():
+    """Находки обязаны быть В ОТЧЁТЕ, иначе печатать нечего: разводка проверяется разбором."""
+    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    assert '"contour_consistency": contour_consistency' in src, \
+        "полный отчёт гейта не попадает в отчёт прогона — до человека ему не дойти"
+    printer = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
+    tree = ast.parse(printer)
+    called = {n.func.id for n in ast.walk(tree)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "_print_contour_consistency" in called, "печать находок не вызывается из вывода прогона"
+
+
+@pytest.mark.unit
 def test_gate_is_declared_where_it_is_counted():
     """Гейт объявлен в реестре и посчитан в публичном числе — иначе он существует только в коде."""
     import yaml

@@ -37,11 +37,9 @@ JARGON = ("workitem_id", "base_workflow", "auto_flags", "ready_for_merge", "spec
           "ONBOARD:", "SPECIFY:", "DISCUSS:", "PLAN:", "NEW:", "REVIEW ", "ENGINEERING ADVISOR",
           "■ intent")
 
-# ЕДИНСТВЕННОЕ ИСКЛЮЧЕНИЕ, И ОНО ВРЕМЕННОЕ. `from_contour_consistency` — находки гейта связности;
-# гейт их считает, но человеку в выводе прогона они пока не показываются (пункт 2 разбора перед
-# квалификацией). Пункт закрывается — строка уходит; исключение живёт здесь именно для того, чтобы
-# дыру нельзя было забыть, объявив её нормой.
-NOT_WIRED_YET = {"from_contour_consistency"}
+# Исключений нет и быть не должно: переводчик без вызова — мёртвый код. Пустое множество оставлено
+# намеренно, чтобы попытка «пока положу сюда» была видимым решением, а не привычкой.
+NOT_WIRED_YET = set()
 
 
 def _translators():
@@ -71,13 +69,10 @@ def test_every_translator_is_actually_called():
 
 
 @pytest.mark.unit
-def test_known_hole_is_still_the_only_one():
-    """Исключение обязано быть узким: список «пока не подключено» не должен расти.
-
-    Без этой проверки `NOT_WIRED_YET` превратился бы в место, куда складывают долги.
-    """
-    assert NOT_WIRED_YET == {"from_contour_consistency"}, \
-        "появился новый неподключённый переводчик — это дыра, а не исключение"
+def test_no_translator_is_allowed_to_stay_unwired():
+    """Список исключений обязан оставаться пустым: иначе он станет местом для долгов."""
+    assert NOT_WIRED_YET == set(), \
+        "неподключённый переводчик — это дыра, а не исключение: подключите или удалите"
 
 
 @pytest.mark.unit
