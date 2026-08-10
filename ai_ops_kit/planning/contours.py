@@ -47,6 +47,28 @@ CHANGED, NOT_CHANGED, UNKNOWN = "changed", "not_changed", "unknown"
 # механизм 3.12: managed-слой кита отдельно от правды репозитория).
 _OVERLAYS = ("", ".ai/project/", ".ai/custom/")
 
+# Каталоги, которые НЕ являются продуктом: внутренности кита, вендор, сборка, бэкапы. Поиск
+# сигнального пути обязан их пропускать, иначе кит принимает свои же файлы за факт о продукте.
+# Обкатка на wow-repo (стек node/react/astro): контур архитектуры заявлял `not_changed`, потому что
+# нашёл Dockerfile в `.ai/runtime/backups/3.27.6/.ai/managed/containers/` — бэкапе СОБСТВЕННОГО
+# managed-слоя. Это подмена признания утверждением: честный ответ был `unknown`. Тот же класс, что
+# доказательства, указывавшие внутрь `.claude/worktrees/*`.
+# `.ai/project/` и `.ai/custom/` из-под запрета выведены отдельно (см. _under_excluded): там лежит
+# правда РЕПОЗИТОРИЯ, а не кита.
+_NOT_PRODUCT = (".git", ".ai", ".claude", "node_modules", "dist", "build", "target", "vendor",
+                ".venv", "venv", "__pycache__", ".next", ".mypy_cache", ".pytest_cache",
+                ".ruff_cache")
+
+
+def _under_excluded(rel: str) -> bool:
+    """Лежит ли путь внутри каталога, не являющегося продуктом. project/custom-оверлей — исключение."""
+    parts = [x for x in str(rel).replace("\\", "/").split("/") if x and x != "."]
+    if not parts:
+        return False
+    if parts[:2] in (([".ai", "project"]), ([".ai", "custom"])):
+        return False                                   # правда репозитория, а не кита
+    return any(x in _NOT_PRODUCT for x in parts)
+
 
 class ModelCorrupt(Exception):
     """Модель контуров недостоверна — по ней работают детект, гейт и doctor, догадки запрещены."""
@@ -227,8 +249,9 @@ def _repo_has_signal(child_root: Path, patterns: list) -> bool:
         pat = pat.replace("\\", "/")
         head = pat.split("*")[0].rstrip("/")
         if head:
-            p = root / head
-            if p.exists():
+            if _under_excluded(head):
+                continue                               # сигнал, указывающий внутрь кита/вендора
+            if (root / head).exists():
                 return True
             # `context/product/MetricCatalog.md` мог уехать в project/custom-оверлей
             if _resolve(root, head):
@@ -243,8 +266,9 @@ def _repo_has_signal(child_root: Path, patterns: list) -> bool:
             continue                               # паттерн из одних `**` не является сигналом
         tail = segs[-1]
         try:
-            if next(root.rglob(tail), None) is not None:
-                return True
+            for hit in root.rglob(tail):
+                if not _under_excluded(hit.relative_to(root)):
+                    return True
         except OSError:
             continue
     return False
