@@ -121,6 +121,12 @@ gap_tiers:
 #                      модели (doctor сообщает, onboarding заполняет черновик);
 #   change_signals   — пути, изменение которых ОЗНАЧАЕТ, что контур затронут. Стек-зависимы;
 #                      репозиторий доопределяет своими в `.ai-ops.yaml -> product_operating_model`;
+#                      ТАМ ЖЕ репозиторий вправе объявить свой `source_of_truth`: кит знает типовые
+#                      места, но где лежит правда ЭТОГО продукта, знает только владелец. Обкатка на
+#                      ii-sreda показала цену пробела: ADR лежат в `docs/architecture/decisions/`,
+#                      сигнал их ловил верно, а объявленного китом `decisions/registry.yaml` в
+#                      репозитории нет — и находка «истина не обновлена» срабатывала ВЕЧНО на
+#                      контуре, который поддерживается как надо (12 находок из 41);
 #   owner_role       — роль-владелец из `roles` ниже. РОЛЬ, не исполнитель и не вендор.
 contours:
   - id: product_strategy
@@ -230,8 +236,13 @@ contours:
       - {path: context/team/DevelopmentProcess.md, required: true}
       - {path: .ai-ops.yaml, required: true, note: "protected_paths, approvals, границы — исполняемая часть контракта"}
       - {path: security/, required: false}
-    change_signals: ["context/team/**", ".ai-ops.yaml", "security/**", "quality/**",
-                     "tests/**", "**/*.test.*", "**/*_test.py", "**/test_*.py"]
+    # ОБКАТКА (ii-sreda, 44 продуктовых коммита): паттерн `**/*.test.*` дал 28 находок из 41 —
+    # больше половины всего шума гейта из одного сигнала. Тестовые файлы УБРАНЫ из сигналов
+    # осознанно: источник истины этого контура — ПРАВИЛА (DevelopmentProcess.md, .ai-ops.yaml), а
+    # тесты — их продукт. Написание теста нормальная работа, оно не меняет тестовую стратегию;
+    # требовать обновления правил на каждый тест — та бюрократия, которую модель запрещает прямо.
+    # `quality/**` и `security/**` оставлены: там лежат сами правила и политики, а не их применение.
+    change_signals: ["context/team/**", ".ai-ops.yaml", "security/**", "quality/**"]
     reconstruction: {ability: partial, from: [CI, линтеры, тесты, pre-commit],
                      note: "правила проверки видны; границы «чего AI делать нельзя» знает только человек"}
     gap_tier: required_now

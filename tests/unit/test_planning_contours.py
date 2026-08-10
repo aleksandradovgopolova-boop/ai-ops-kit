@@ -115,6 +115,54 @@ def test_repo_without_data_signals_is_unknown(tmp_path):
     assert der["data_contracts"]["state"] == C.UNKNOWN
 
 
+def test_writing_a_test_does_not_change_the_engineering_contour(tmp_path):
+    """ОБКАТКА НА ЖИВОМ РЕПОЗИТОРИИ (ii-sreda, 44 продуктовых коммита): паттерн `**/*.test.*` дал
+    28 находок из 41 — больше половины всего шума гейта из одного сигнала.
+
+    Дефект модели, а не гейта. Источник истины контура Engineering/Quality/Security — ПРАВИЛА
+    (DevelopmentProcess.md, .ai-ops.yaml), а не тесты. Написание теста — нормальная работа, оно не
+    меняет тестовую стратегию и не обязано её переписывать. Требовать обновления правил на каждый
+    тест — та самая бюрократия «восемь документов на задачу», которую модель запрещает прямо.
+    """
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "auth.test.ts").write_text("test('x', () => {})\n", encoding="utf-8")
+    (tmp_path / "context" / "team").mkdir(parents=True)
+    (tmp_path / "context" / "team" / "DevelopmentProcess.md").write_text("# правила", encoding="utf-8")
+    der = C.derive_affects(tmp_path, ["src/auth.test.ts"], MODEL, overrides={})
+    assert der["engineering_quality_security"]["state"] != C.CHANGED
+
+    # А изменение самих ПРАВИЛ контур меняет — сигнал остался там, где ему место.
+    der2 = C.derive_affects(tmp_path, ["context/team/DevelopmentProcess.md"], MODEL, overrides={})
+    assert der2["engineering_quality_security"]["state"] == C.CHANGED
+
+
+def test_repo_declares_where_its_truth_lives(tmp_path):
+    """ОБКАТКА: ii-sreda держит ADR в `docs/architecture/decisions/`, а не в `decisions/registry.yaml`.
+    Сигнал `**/ADR-*.md` контур ловил верно, но объявленного китом источника истины в репозитории нет
+    — и `declared_not_updated` срабатывал ВЕЧНО на контуре, который поддерживается как надо (12
+    находок из 41).
+
+    Дыра была в дизайне: репозиторий мог доопределить `change_signals`, но НЕ `source_of_truth`.
+    Кит знает типовые места, но где лежит правда ЭТОГО продукта, знает только владелец.
+    """
+    d = tmp_path / "docs" / "architecture" / "decisions"
+    d.mkdir(parents=True)
+    (d / "ADR-069-TYPECHECK.md").write_text("# решение", encoding="utf-8")
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "product_operating_model:\n"
+        "  contours:\n"
+        "    research_decisions:\n"
+        "      source_of_truth: [docs/architecture/decisions/]\n", encoding="utf-8")
+    files = ["docs/architecture/decisions/ADR-069-TYPECHECK.md"]
+    rep = C.reconcile(tmp_path, {"research_decisions": True}, files, MODEL)
+    assert not [f for f in rep["findings"]
+                if f["id"] == "declared_not_updated" and f["contour"] == "research_decisions"], \
+        "обновление ADR в объявленном репозиторием месте не должно считаться необновлением истины"
+    # Пробел контура тоже закрыт объявлением репозитория.
+    st = C.sot_state(tmp_path, MODEL)
+    assert st["research_decisions"]["ok"], "объявленный репозиторием источник истины не учтён"
+
+
 def test_corrupt_model_raises(tmp_path):
     bad = tmp_path / "pom.yaml"
     bad.write_text("contours: []\n", encoding="utf-8")

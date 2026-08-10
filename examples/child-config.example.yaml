@@ -53,3 +53,9 @@ communication: {audience: product, detail_level: concise, explain_jargon: true, 
 #   contours:
 #     analytics_learning: {change_signals: ["src/telemetry/**", "src/**/events.ts"]}
 #     data_contracts:     {change_signals: ["src/domain/**"]}
+#     # Где у ЭТОГО продукта лежит правда контура. Объявление владельца сильнее догадки кита:
+#     # пути кита остаются, но перестают быть обязательными. Без этого находка «источник истины
+#     # не обновлён» срабатывает на каждом коммите в контур, который поддерживается как надо.
+#     research_decisions:
+#       source_of_truth: [docs/architecture/decisions/]
+#       change_signals: ["docs/architecture/decisions/**", "**/ADR-*.md"]
