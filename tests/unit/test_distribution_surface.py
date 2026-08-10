@@ -22,7 +22,8 @@
 """
 from __future__ import annotations
 
-import tomllib
+import ast
+import re
 from pathlib import Path
 
 import yaml
@@ -35,9 +36,15 @@ GENERIC = KNOWN_TOPLEVEL - {"ai_ops_kit"}          # имена, которые 
 
 
 def _declared_packages():
-    cfg = tomllib.loads((PKG / "pyproject.toml").read_text(encoding="utf-8"))
-    include = cfg["tool"]["setuptools"]["packages"]["find"]["include"]
-    return {name.split(".")[0] for name in include}
+    """Список include из pyproject — разбором текста, БЕЗ tomllib.
+
+    `tomllib` появился в 3.11, а объявленный пол кита — 3.9: проверка совместимости не вправе
+    сама её нарушать. Читаем ровно одну строку `include = [...]`, значение — литерал списка.
+    """
+    text = (PKG / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r"^\s*include\s*=\s*(\[[^\]]*\])", text, re.M)
+    assert m, "в pyproject.toml не найден include для packages.find"
+    return {name.split(".")[0] for name in ast.literal_eval(m.group(1))}
 
 
 def test_toplevel_names_are_exactly_the_declared_set():
