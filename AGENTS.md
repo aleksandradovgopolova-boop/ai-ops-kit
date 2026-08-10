@@ -63,9 +63,16 @@ child-репозиториев. Здесь разрабатывается сам
 Полный контур — **одна команда**, тот же набор, что в CI `.github/workflows/package-quality.yml`:
 
 ```bash
-./scripts/check-full.sh     # полный контур
+./scripts/check-full.sh     # охват full-current-python: весь pytest на ТВОЁМ интерпретаторе
 ./scripts/check-fast.sh     # быстрый профиль во время работы (~1 мин, без маркера slow)
 ```
+
+**Называй охват, а не говори «полный».** `check-full.sh` — это `full-current-python`: одна версия
+Python, та, что стоит у тебя. Объявленный пол `requires-python` и установку в чистое окружение
+даёт только `compatibility-matrix` — джобы CI `python39-compat`, `pipeline-e2e`, `clean-install`.
+Оба охвата объявлены в `registry/release-claims.yaml -> evidence_scopes`; заявление о полноте без
+имени охвата отклоняет `validate_release_claims`. Повод: PR #38 написал «полный контур зелёный»,
+и `python39-compat` опроверг это в том же релизе.
 
 Построчного чеклиста больше нет: селфтесты модулей, все 71 валидатор и прогоны на примерах
 переехали в pytest — дублировать их значило бы гонять одно и то же дважды. Почему именно так —
