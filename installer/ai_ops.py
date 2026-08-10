@@ -743,6 +743,11 @@ def cmd_update(force=False, smoke_checks=None):
         if created:
             msg += (" Back-fill контекста: созданы черновики (status: draft) — "
                     + ", ".join(created) + " (проверьте и заполните, затем commit).")
+        _seeded0 = [s["artifact"] for s in (report.get("planning_seeded") or [])
+                    if s.get("action") == "created-draft"]
+        if _seeded0:
+            msg += (" Back-fill модели продукта: " + ", ".join(_seeded0)
+                    + " (черновики, заполнить вам; затем `ai-ops model .`).")
         report.update(report=msg); write_report(report)
         print(msg); return 0
 
@@ -811,10 +816,23 @@ def cmd_update(force=False, smoke_checks=None):
         out = write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
+    _seeded = [s["artifact"] for s in (report.get("planning_seeded") or [])
+               if s.get("action") == "created-draft"]
+    _comm = (report.get("communication_adapter") or {}).get("action")
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
                         f"{n} файлов под контролем."
                         + (f" Back-fill контекста (черновики status: draft): {', '.join(created)}."
                            if created else "")
+                        # v3.35.1: back-fill МОДЕЛИ назывался в отчёте, но не в сообщении — человек
+                        # видел в diff новые ROADMAP.md/planning/plan.yaml/CLAUDE.md без объяснения,
+                        # а файл, о котором не сказано, читается как подложенный молча.
+                        + (f" Back-fill модели продукта (черновики, заполнить вам): "
+                           f"{', '.join(_seeded)}." if _seeded else "")
+                        + (" Политика общения подключена к runtime (блок в CLAUDE.md между "
+                           "маркерами; текст вне них не тронут)." if _comm in ("created", "updated")
+                           else "")
+                        + (" Дальше: `ai-ops model .` покажет, что кит понял о проекте, и спросит "
+                           "недостающее одним пакетом." if _seeded else "")
                         + " Создайте PR с этим diff — silent update запрещён.")
     out = write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
