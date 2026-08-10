@@ -387,7 +387,7 @@ def _is_stale(root: Path, rels, today=None) -> bool:
     return False
 
 
-def _contour_state(child_root, c: dict, evidence: dict) -> dict:
+def _contour_state(child_root, c: dict, evidence: dict, model: dict) -> dict:
     """Состояние контура в терминах семи статусов + что с ним делать.
 
     Логика намеренно скучная: есть обязательные источники истины -> `verified`; часть есть ->
@@ -396,8 +396,13 @@ def _contour_state(child_root, c: dict, evidence: dict) -> dict:
     дерево не читается: тогда неизвестно даже отсутствие.
     """
     root = Path(child_root)
-    req = [s for s in (c.get("source_of_truth") or []) if s.get("required")]
-    opt = [s for s in (c.get("source_of_truth") or []) if not s.get("required")]
+    # `sot_for`, а не поле контура. Прежде онбординг читал ТОЛЬКО дефолт кита, поэтому `ai-ops model`
+    # — единственное, что видит человек — давал ответ, ПРОТИВОПОЛОЖНЫЙ `contours.sot_state`:
+    # владелец объявил, где лежит его правда, а кит продолжал требовать свой путь и переспрашивать
+    # вечно. Правило «объявление владельца сильнее догадки кита» до этого модуля не доехало.
+    _sot = _contours.sot_for(model, c["id"], root)
+    req = [s for s in _sot if s.get("required")]
+    opt = [s for s in _sot if not s.get("required")]
 
     def _has(rel):
         for pre in ("", ".ai/project/", ".ai/custom/"):
@@ -452,7 +457,8 @@ def audit(child_root, evidence: dict | None = None, model: dict | None = None) -
     """
     model = model or _contours.load_model()
     evidence = evidence if evidence is not None else discover(child_root)
-    rows = [_contour_state(child_root, c, evidence) for c in (model.get("contours") or [])]
+    rows = [_contour_state(child_root, c, evidence, model)
+            for c in (model.get("contours") or [])]
     by_state = {}
     for r in rows:
         by_state[r["state"]] = by_state.get(r["state"], 0) + 1
