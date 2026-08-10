@@ -48,9 +48,42 @@ def load():
     except FileNotFoundError:
         tracks = {}
     track_gates = set()
-    for t in tracks.values():
-        track_gates.update(t.get("gates") or [])
-    return gates, wfs, mvp, track_gates
+    for t in (tracks.values() if isinstance(tracks, dict) else []):
+        if isinstance(t, dict):
+            track_gates.update(t.get("gates") or [])
+    return gates, wfs, mvp, track_gates, tracks
+
+
+def track_errors(tracks):
+    """Ошибки самого реестра треков.
+
+    Замер порчи реестров показал: `tracks: []` не ловил НИКТО. Проверялось только, что гейты,
+    упомянутые треками, существуют — а опустошённый реестр молча отключает «Design/Analytics/
+    Docs by Default», ради которых треки и существуют. Плюс комментарий в tracks.yaml ссылался на
+    validate_run_plan.py, которого нет: заявленная проверка отсутствовала.
+    """
+    errors = []
+    if not tracks:
+        errors.append("registry/tracks.yaml: треков нет вовсе — механика треков (обязательные "
+                      "области качества по сигналам задачи) молча отключена")
+        return errors
+    if not isinstance(tracks, dict):
+        errors.append(f"registry/tracks.yaml: tracks должен быть отображением id->описание, "
+                      f"получено {type(tracks).__name__}")
+        return errors
+    for tid, t in sorted(tracks.items()):
+        if not isinstance(t, dict):
+            errors.append(f"трек '{tid}': описание не отображение")
+            continue
+        for key in ("signal", "kind", "gates"):
+            if not t.get(key):
+                errors.append(f"трек '{tid}': нет обязательного поля '{key}'")
+        kind = t.get("kind")
+        if kind and kind not in ("required", "conditional"):
+            errors.append(f"трек '{tid}': kind='{kind}', допустимо required|conditional")
+        if t.get("kind") == "conditional" and not t.get("skip_reason"):
+            errors.append(f"трек '{tid}': conditional без skip_reason — пропуск будет необъяснимым")
+    return errors
 
 
 def check(gates: dict, wfs: dict, mvp=None, track_gates=None):
@@ -102,8 +135,9 @@ def check(gates: dict, wfs: dict, mvp=None, track_gates=None):
 
 
 def run(as_json=False):
-    gates, wfs, mvp, track_gates = load()
+    gates, wfs, mvp, track_gates, tracks = load()
     errors, warns = check(gates, wfs, mvp, track_gates)
+    errors = track_errors(tracks) + errors
     if as_json:
         print(json.dumps({"schema_version": 1, "kind": "workflow-gate-consistency",
                           "errors": errors, "warns": warns}, ensure_ascii=False, indent=2))

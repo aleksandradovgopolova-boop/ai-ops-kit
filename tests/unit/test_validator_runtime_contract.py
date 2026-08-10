@@ -106,7 +106,12 @@ NEEDS_ARTIFACT = [
     "validate_storybook_evidence",
 ]
 
-# Порча источника правды -> валидаторы, которые ОБЯЗАНЫ её заметить (замер 2026-08-07).
+# Порча источника правды -> валидаторы, которые ОБЯЗАНЫ её заметить.
+# Соответствие ЗАМЕРЕНО, а не предположено: каждый реестр опустошался в копии репозитория и
+# фиксировалось, кто покраснел. Считались только standalone-валидаторы: требующие артефакт
+# возвращают ненулевой код на пустом вызове ВСЕГДА, и первый замер из-за них показывал
+# «ловят 15-21» на любую порчу — ложная картина, из которой вышли бы неверные тесты.
+# Так нашлась дыра: порчу registry/tracks.yaml не ловил НИКТО (закрыто в validate_workflow_gates).
 CORRUPTIONS = {
     "registry/agents.yaml": (
         "agents: []\n",
@@ -126,6 +131,25 @@ CORRUPTIONS = {
     "packages/layering.yaml": (
         "schema_version: 1\nkind: package-layering\nlayers: []\nrules: []\nknown_violations: []\n",
         ["validate_layering"]),
+    "registry/models.yaml": (
+        "models: []\n",
+        ["validate_ai_first_providers", "validate_model_roles"]),
+    "registry/workflows.yaml": (
+        "workflows: {}\n",
+        ["validate_ai_first_providers", "validate_ai_first_workflows", "validate_claims",
+         "validate_pipeline_e2e", "validate_product_qualification", "validate_workflow_gates"]),
+    "registry/runtimes.yaml": (
+        "runtimes: {}\n",
+        ["validate_ai_first_providers", "validate_release_claims"]),
+    "registry/capability-index.yaml": (
+        "capabilities: {}\n",
+        ["validate_ai_first_registry"]),
+    "registry/model-roles.yaml": (
+        "roles: {}\n",
+        ["validate_model_roles"]),
+    "registry/tracks.yaml": (
+        "schema_version: 1\nregistry_type: tracks\ntracks: []\n",
+        ["validate_workflow_gates"]),
     ".github/workflows/pr-smoke.yml": (
         "name: x\non: {pull_request: {branches: [main]}}\njobs:\n  j:\n    runs-on: ubuntu-latest\n"
         "    steps:\n      - run: python3 validation/validate_ai_first_registry.py\n",
