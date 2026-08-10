@@ -267,11 +267,13 @@ def apply(child_root, boot: dict | None = None, understanding: dict | None = Non
     которую кит не смог прочитать.
     """
     root = Path(child_root)
+    # Аудит считается ОДИН раз на команду: он обходит дерево, и повторный проход ради тех же
+    # фактов — та же расточительность, что обход на каждый контур (тир 3).
+    understanding = understanding or _audit.run(root)
     boot = boot or plan(root, understanding)
     if boot["plan_corrupt"]:
         return {"schema_version": 1, "kind": "bootstrap-result", "written": [], "skipped": [],
                 "error": "план в репозитории не разбирается — не перезаписываю: сначала починим файл"}
-    understanding = understanding or _audit.run(root)
     written, skipped = [], []
     for a in boot["actions"]:
         target = root / a["path"]
@@ -302,11 +304,12 @@ def main(argv=None):
     ns = ap.parse_args(argv if argv is not None else sys.argv[1:])
     root = Path(ns.repo)
     try:
-        boot = plan(root)
+        und = _audit.run(root)
+        boot = plan(root, und)
     except (_contours.ModelCorrupt, _plan.PlanCorrupt) as e:
         print(f"ОШИБКА: {e}")
         return 1
-    rep = boot if ns.cmd == "plan" else apply(root, boot)
+    rep = boot if ns.cmd == "plan" else apply(root, boot, und)
     if ns.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
         return 0 if not rep.get("error") else 1

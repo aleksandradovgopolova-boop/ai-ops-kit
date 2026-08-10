@@ -312,13 +312,17 @@ def _run_intent(intent, task, child_root, signals, a):
         from ai_ops_kit.planning import product_bootstrap as _boot
         from ai_ops_kit.planning import contours as _contours
         from ai_ops_kit.planning import delivery_plan as _dp
+        from ai_ops_kit.planning import repo_audit as _ra
         try:
-            boot = _boot.plan(child_root)
+            # Аудит — один раз на команду: сухой прогон и запись смотрят на ОДНИ факты, иначе между
+            # «вот что создам» и «создал» могла бы оказаться разница, которую человек не просил.
+            _und = _ra.run(child_root)
+            boot = _boot.plan(child_root, _und)
         except (_contours.ModelCorrupt, _dp.PlanCorrupt) as e:
             print(f"ОШИБКА: {e}")
             return 1
         applied = bool(getattr(a, "apply", False))
-        rep = _boot.apply(child_root, boot) if applied else boot
+        rep = _boot.apply(child_root, boot, _und) if applied else boot
         if js:
             print(json.dumps(rep, ensure_ascii=False, indent=2))
         else:
