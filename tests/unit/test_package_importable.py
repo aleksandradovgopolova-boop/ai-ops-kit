@@ -29,6 +29,18 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 SURFACE = PKG / "ai_ops_kit"
 
+# v3.34: ЗОНА-ИСКЛЮЧЕНИЕ. `validation` — точки входа, а не модули движка: их основной способ
+# вызова — запуск процессом (CI, `ai-ops doctor`, pytest), и в этом режиме корня репозитория на
+# `sys.path` нет по определению. Поэтому валидатор обязан начинаться с плоского `import _bootstrap`
+# — единственного способа положить пути ДО того, как появится пакетное имя. Инварианты «плоский
+# алиас в tools/», «единственный дом» и «импорт с одним корнем» писались для кода, который
+# импортируют; распространить их сюда значило бы завести 76 алиасов в `tools/` — то есть раздуть
+# СЛЕДУЮЩЕЕ родовое имя ради формальной чистоты предыдущего.
+#
+# Исключение объявлено ОДНИМ именем и проверяется на нерасползание (см. тест ниже): любой другой
+# пакет, пытающийся жить по этим правилам, поймается.
+EXEMPT_ZONE = "validation"
+
 PROBE = textwrap.dedent("""
     import sys, importlib, json
     root = sys.argv[1]
@@ -49,7 +61,7 @@ PROBE = textwrap.dedent("""
 def _modules():
     out = []
     for d in sorted(SURFACE.iterdir()):
-        if not d.is_dir() or d.name == "__pycache__":
+        if not d.is_dir() or d.name in ("__pycache__", EXEMPT_ZONE):
             continue
         for f in sorted(d.glob("*.py")):
             if f.name != "__init__.py":
@@ -119,7 +131,7 @@ def test_no_flat_internal_imports_left():
            for f in d.glob("*.py") if f.name != "__init__.py"}
     leftovers = []
     for d in sorted(SURFACE.iterdir()):
-        if not d.is_dir() or d.name == "__pycache__":
+        if not d.is_dir() or d.name in ("__pycache__", EXEMPT_ZONE):
             continue
         for f in sorted(d.glob("*.py")):
             if f.name == "__init__.py":

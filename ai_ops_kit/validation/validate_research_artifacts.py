@@ -23,12 +23,16 @@ import datetime as dt
 import glob
 import json
 import os
+from pathlib import Path
 import re
 import sys
 
 import yaml
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# v3.34: корень ищется маркером VERSION, а не двумя dirname. Глубина файла не контракт —
+# при переезде validation/ в пакет ROOT уехал в ai_ops_kit/ и валидатор упал на схемах.
+ROOT = str(next((_p for _p in Path(__file__).resolve().parents if (_p / 'VERSION').is_file()),
+                Path(__file__).resolve().parents[2]))
 QUOTE_CONVENTION_SINCE = dt.date(2026, 7, 23)
 EV_REF = re.compile(r'\bEV-\d{3,}\b')
 

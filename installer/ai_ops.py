@@ -263,7 +263,6 @@ DEV_ONLY_TOOLS = frozenset({
 })
 
 # Валидаторы, которые РЕАЛЬНО вызываются в child-репозитории. Источники (проверяемо grep'ом):
-#   ai_route                      — рантайм-замыкание движка (validate_standalone_engine)
 #   ai_managed_checksums          — drift-detection managed-зоны (manifest.update_policy)
 #   validate_ai_ops_child         — валидация установки (child-CI, `ai-ops validate`)
 #   validate_claims/_references/_freshness            — tools/gate_executor.py
@@ -279,7 +278,7 @@ DEV_ONLY_TOOLS = frozenset({
 # validate_container_*, validate_ai_first_*, …) проверяют ВНУТРЕННИЕ инварианты кита и гоняются
 # только в parent-CI — в child они мёртвый груз.
 RUNTIME_VALIDATORS = frozenset({
-    "__init__", "ai_route", "ai_managed_checksums", "validate_ai_ops_child",
+    "__init__", "ai_managed_checksums", "validate_ai_ops_child",
     "validate_claims", "validate_references", "validate_freshness",
     "validate_cross_artifacts", "validate_feature_blueprint",
     "validate_plan_artifact", "validate_requirements_artifact",

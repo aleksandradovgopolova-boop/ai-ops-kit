@@ -29,8 +29,11 @@ from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
-import ai_ops_run  # noqa: E402
+try:                                          # v3.34: валидатор двурежимен
+    from ai_ops_kit.validation import _bootstrap   # noqa: F401 — импорт пакетом (после pip install)
+except ImportError:                                # запуск скриптом: корня на пути ещё нет,
+    import _bootstrap                              # noqa: F401 — и положить его может только он сам
+from ai_ops_kit.engine import ai_ops_run  # noqa: E402
 
 FIX = PKG / "qualification" / "fixtures" / "python"
 

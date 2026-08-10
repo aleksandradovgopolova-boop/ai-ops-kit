@@ -90,7 +90,7 @@ def derived_verification_counts(pkg=PKG):
     прогон selftest'ов сюда не попадает: он обнаруживает файлы в рантайме и ничьего имени не
     содержит — то есть самоаттестация за внешнюю проверку не засчитывается."""
     import re as _re
-    vdir = pkg / "validation"
+    vdir = pkg / "ai_ops_kit" / "validation"
     if not vdir.is_dir():
         return 0, 0
     names = sorted(p.stem for p in vdir.glob("validate_*.py"))

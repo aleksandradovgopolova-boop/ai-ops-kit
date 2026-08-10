@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import importlib
 from pathlib import Path
 
@@ -23,15 +24,27 @@ import _bootstrap  # noqa: F401 — кладёт tools/ и корень в sys.p
 
 PKG = Path(__file__).resolve().parents[2]
 SURFACE = PKG / "ai_ops_kit"
+# v3.34: ЗОНА-ИСКЛЮЧЕНИЕ. `validation` — точки входа, а не модули движка: их основной способ
+# вызова — запуск процессом (CI, `ai-ops doctor`, pytest), и в этом режиме корня репозитория на
+# `sys.path` нет по определению. Поэтому валидатор обязан начинаться с плоского `import _bootstrap`
+# — единственного способа положить пути ДО того, как появится пакетное имя. Инварианты «плоский
+# алиас в tools/», «единственный дом» и «импорт с одним корнем» писались для кода, который
+# импортируют; распространить их сюда значило бы завести 76 алиасов в `tools/` — то есть раздуть
+# СЛЕДУЮЩЕЕ родовое имя ради формальной чистоты предыдущего.
+#
+# Исключение объявлено ОДНИМ именем и проверяется на нерасползание (см. тест ниже): любой другой
+# пакет, пытающийся жить по этим правилам, поймается.
+EXEMPT_ZONE = "validation"
+
 PRODUCT_PACKAGES = sorted(d.name for d in SURFACE.iterdir()
-                          if d.is_dir() and d.name not in {"__pycache__", "devtools"})
+                          if d.is_dir() and d.name not in {"__pycache__", "devtools", EXEMPT_ZONE})
 
 
 def _aliases():
     """{плоское имя: [пакеты, где он объявлен]}"""
     out = {}
     for d in sorted(SURFACE.iterdir()):
-        if not d.is_dir() or d.name == "__pycache__":
+        if not d.is_dir() or d.name in ("__pycache__", EXEMPT_ZONE):
             continue
         for f in sorted(d.glob("*.py")):
             if f.name != "__init__.py":
@@ -112,7 +125,7 @@ def test_exactly_one_side_is_an_alias():
 
     v3.33: `_bootstrap` — объявленное исключение. Его задача — положить пути ДО того, как станет
     возможен любой импорт, поэтому он обязан существовать в каждом каталоге, откуда запускают код:
-    `tools/`, `validation/` и внутри пакета. Три тёзки не расходятся по смыслу — каждый ищет корень
+    `tools/`, `ai_ops_kit/validation/` и внутри пакета. Три тёзки не расходятся по смыслу — каждый ищет корень
     по маркеру VERSION и идемпотентно правит sys.path, состояния ни один не держит. Алиас здесь
     невозможен: чтобы импортировать алиас, нужен путь, который кладёт как раз он.
     """
@@ -123,7 +136,10 @@ def test_exactly_one_side_is_an_alias():
 
     problems = []
     for d in sorted(SURFACE.iterdir()):
-        if not d.is_dir() or d.name == "__pycache__":
+        # v3.34: зона-исключение алиасов не имеет и иметь не должна — валидаторы запускают
+        # процессом по пути, а импортируют пакетным именем. 76 алиасов в `tools/` раздули бы
+        # следующее родовое имя ради формальной чистоты предыдущего.
+        if not d.is_dir() or d.name in ("__pycache__", EXEMPT_ZONE):
             continue
         for f in sorted(d.glob("*.py")):
             if f.name == "__init__.py" or f.name in BOOTSTRAP_BY_DESIGN:
@@ -185,3 +201,66 @@ def test_flat_aliases_are_self_sufficient():
     assert not bad, (
         "алиасы импортируют пакет, не положив корень в sys.path — упадут вне editable-установки: "
         f"{bad[:8]}")
+
+
+# ------------------------------------------------------------- зона-исключение ---
+
+# Не-валидаторы, которым место в зоне ОБЪЯВЛЕНО поимённо. Список вправе только сокращаться:
+# зона существует ради двурежимных точек входа, и всё, что попало сюда «просто так», обязано
+# быть названо здесь с причиной — иначе исключение из инварианта станет складом.
+ZONE_NON_VALIDATORS = {
+    "__init__": "маркер пакета",
+    "_bootstrap": "загрузчик путей: с него начинается КАЖДЫЙ валидатор в script-режиме",
+    "ai_capability_selftest": "самопроверка возможностей, запускается процессом как валидатор",
+    "ai_managed_checksums": "drift-детект managed-зоны; вызывается installer'ом и в child",
+}
+
+
+@pytest.mark.unit
+def test_exempt_zone_is_a_single_declared_package():
+    """Исключение одно и названо. Два исключения — это уже не исключение, а второе правило."""
+    assert EXEMPT_ZONE == "validation"
+    assert (SURFACE / EXEMPT_ZONE).is_dir(), "зона объявлена, а пакета нет"
+
+
+@pytest.mark.unit
+def test_exempt_zone_holds_only_entrypoints():
+    """fail-closed: зона не превращается в склад для кода, которому там не место.
+
+    Ровно так `ai_route` — движок маршрутизации, а не валидатор — годами лежал среди валидаторов
+    и импортировался ПЛОСКО из `workitem` и `run_plan`. Пока каталог не был пакетом, это никому
+    не мешало и никем не проверялось; при переносе (v3.34) вылезло сразу. Проверка ниже — чтобы
+    следующий такой модуль ловился в тот же день, а не через год.
+    """
+    strays = []
+    for f in sorted((SURFACE / EXEMPT_ZONE).glob("*.py")):
+        if f.stem.startswith("validate_") or f.stem in ZONE_NON_VALIDATORS:
+            continue
+        strays.append(f.stem)
+    assert not strays, (
+        f"в зоне-исключении лежит не точка входа: {strays}. Либо модуль переезжает в свой пакет "
+        f"(как ai_route -> engine в v3.34), либо вписывается в ZONE_NON_VALIDATORS с причиной")
+
+
+@pytest.mark.unit
+def test_zone_exemption_list_only_shrinks():
+    """Объявленный не-валидатор, которого больше нет, обязан уйти из списка."""
+    real = {f.stem for f in (SURFACE / EXEMPT_ZONE).glob("*.py")}
+    stale = sorted(set(ZONE_NON_VALIDATORS) - real)
+    assert not stale, f"объявлены несуществующие модули зоны: {stale}"
+
+
+@pytest.mark.unit
+def test_zone_modules_really_need_the_exemption():
+    """side-effect: зона оправдана ФАКТОМ, а не удобством.
+
+    Если валидаторы перестанут делать плоский `import _bootstrap`, исключение станет ненужным и
+    обязано быть снято. Проверка обнаружит это сама, а не будет ждать, пока кто-то вспомнит.
+    """
+    # Идиома двурежимна (v3.34): пакетный импорт в try, ПЛОСКИЙ в except. Именно плоский
+    # фолбэк и есть причина исключения — он невозможен для обычного модуля пакета.
+    flat_bootstrap = [f.name for f in sorted((SURFACE / EXEMPT_ZONE).glob("*.py"))
+                      if re.search(r"^\s*import _bootstrap\b", f.read_text(encoding="utf-8"), re.M)]
+    assert flat_bootstrap, (
+        "ни один валидатор больше не делает плоский import _bootstrap — причина зоны-исключения "
+        "исчезла, снимите EXEMPT_ZONE и верните validation под общий инвариант")
