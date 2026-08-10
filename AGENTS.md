@@ -42,7 +42,9 @@ child-репозиториев. Здесь разрабатывается сам
   из `validation/`: они не пакет, пакетного имени у них нет.
 - **Слои пакетов.** `foundation` → `primitives` → `capabilities` → `intelligence` → `entrypoints`; зависимость вверх
   запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимные связи ВНУТРИ ядра пока
-  разрешены осознанно — замер 9 пар и 119 циклов; строгий DAG требует разбора, а не выключателя.
+  разрешены осознанно — замер 9 пар и 31 цикл длиннее двух; строгий DAG требует разбора, а не
+  выключателя. С v3.34 замер — ПОТОЛОК: новая пара или цикл краснеет, ушедшая обязана быть списана
+  в `packages/layering.yaml` (ратчет ходит только вниз).
 - **Три кольца** (owner-review 2026-07-30, см. `qualification/bootstrap/v3.8.0-plan.yaml` → `architecture_rings`).
   Kernel (Task→Context→Execution→Evidence→Decision→Delivery) НЕ зависит от Intelligence (research/
   product-learning/аналитика); Intelligence зависит от Kernel и ЧИТАЕТ его события. Governance подключается

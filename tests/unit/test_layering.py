@@ -4,9 +4,10 @@
 проверял никто: `gates` мог импортировать `engops`, `shared` — что угодно, и это прошло бы молча.
 `validate_layering.py` считает граф по коду и сверяет с `packages/layering.yaml`.
 
-Замер на 3.31.1: 9 взаимных зависимостей и 119 циклов внутри ядра. Строгий DAG покраснел бы на
+Замер: 9 взаимных зависимостей и 31 цикл длиннее двух внутри ядра. Строгий DAG покраснел бы на
 всём сразу — такое правило выключают. Поэтому запрещено то, что нарушено НЕ БЫВАЕТ сегодня и
 должно остаться таким: security/ui выше фундамента, зависимости у `shared`, импорт `cli`/`devtools`.
+А то, что разрешено внутри ядра, с v3.34 держит ПОТОЛОК: `ratchet_errors` не даёт числу расти.
 
 Главный риск такой проверки — оказаться тавтологией: она зелёная, потому что запрещает лишь то,
 чего и так нет. Поэтому большинство тестов ниже — про ЗУБЫ: подсунуть синтетический граф с
@@ -132,6 +133,76 @@ def test_graph_sees_every_import_style(tmp_path):
     who = vl.build_graph(surface).get(("alpha", "beta"), set())
     for style in ("flat", "deep", "shallow"):
         assert any(style in w for w in who), f"форма '{style}' не дала ребра: {sorted(who)}"
+
+
+def test_ratchet_is_green_on_the_real_repository(spec):
+    """positive: замер в реестре совпадает с кодом, потолок не превышен."""
+    errors = vl.ratchet_errors(spec, vl.build_graph())
+    assert not errors, "ратчет циклов:\n  " + "\n  ".join(errors)
+
+
+def test_cycle_count_is_independent_of_traversal_order():
+    """side-effect: считаются РАЗЛИЧНЫЕ циклы, а не обходы.
+
+    Это и есть дефект, найденный в 3.34: baseline хранил 119 — число ротаций, то есть каждый цикл
+    посчитан по разу с каждой своей вершины. На треугольнике такое даёт 3 вместо 1. Величина,
+    зависящая от способа обхода, потолком быть не может: следующий замер посчитает иначе и получит
+    другой ответ на неизменном коде.
+    """
+    triangle = {("a", "b"): {"x -> y"}, ("b", "c"): {"x -> y"}, ("c", "a"): {"x -> y"}}
+    assert vl.cyclic_counts(triangle)["cycles_longer_than_two"] == 1
+    assert vl.cyclic_counts(triangle)["mutual_pairs"] == 0
+
+    # Цикл и обратный ему — разные связи в коде, оба обязаны считаться.
+    both = {**triangle, ("b", "a"): {"x -> y"}, ("c", "b"): {"x -> y"},
+            ("a", "c"): {"x -> y"}}
+    counts = vl.cyclic_counts(both)
+    assert counts["cycles_longer_than_two"] == 2, counts
+    assert counts["mutual_pairs"] == 3, counts
+
+
+def test_ratchet_sees_the_real_graph(spec):
+    """side-effect: доказать, что счёт меняется от РЕАЛЬНОГО графа, ПРЕЖДЕ чем верить реакции.
+
+    Без этого шага тест «потолок не превышен» зелёный и на сломанном счётчике, всегда
+    возвращающем ноль.
+    """
+    edges = vl.build_graph()
+    base = vl.cyclic_counts(edges)
+    assert base["mutual_pairs"] > 0 and base["cycles_longer_than_two"] > 0, base
+
+    without = {e: w for e, w in edges.items() if e != ("gates", "providers")}
+    after = vl.cyclic_counts(without)
+    assert after["mutual_pairs"] == base["mutual_pairs"] - 1, (
+        f"снятие реального ребра не изменило замер: {base} -> {after}")
+    assert after["cycles_longer_than_two"] < base["cycles_longer_than_two"]
+
+
+@pytest.mark.parametrize("key", ["mutual_pairs", "cycles_longer_than_two"])
+def test_ratchet_catches_a_new_cycle(spec, key):
+    """fail-closed: новая взаимная связь внутри ядра краснеет, хотя слоями она разрешена.
+
+    `check` о таких рёбрах молчит намеренно — они внутри `capabilities`. Именно поэтому нужен
+    потолок: без него «не запрещено» читается как «расти можно».
+    """
+    tightened = dict(spec, baseline=dict(spec["baseline"], **{key: spec["baseline"][key] - 1}))
+    errors = vl.ratchet_errors(tightened, vl.build_graph())
+    assert any(f"ратчет {key}" in e and "при потолке" in e for e in errors), errors
+
+
+@pytest.mark.parametrize("declared", [None, "31", True, {}])
+def test_ratchet_without_a_number_is_not_green(spec, declared):
+    """fail-closed: потолок без числа — не «ограничений нет», а нечем проверять.
+
+    Пустой или испорченный baseline обязан краснеть. Иначе достаточно стереть ключ, чтобы ратчет
+    молча перестал существовать — ровно так опустошение registry/tracks.yaml проходило до #39.
+    """
+    broken = dict(spec, baseline={k: v for k, v in spec["baseline"].items()
+                                 if k != "mutual_pairs"})
+    if declared is not None:
+        broken["baseline"] = dict(broken["baseline"], mutual_pairs=declared)
+    errors = vl.ratchet_errors(broken, vl.build_graph())
+    assert any("нет числа" in e for e in errors), (declared, errors)
 
 
 def test_graph_covers_the_real_repository():
