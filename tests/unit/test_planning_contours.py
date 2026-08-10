@@ -195,6 +195,94 @@ def test_signal_search_ignores_kit_internals_and_vendor_dirs(tmp_path):
     assert der2["system_architecture"]["state"] == C.NOT_CHANGED
 
 
+def test_signal_search_does_not_descend_into_non_product_dirs(tmp_path):
+    """ОБКАТКА НА ТРЕТЬЕМ РЕПОЗИТОРИИ (niti, Next.js, 488 коммитов): один вызов гейта тратил
+    12 СЕКУНД только на поиск сигнальных путей, а гейт зовут на КАЖДОМ прогоне конвейера.
+
+    Предыдущая правка (исключение внутренностей кита) это УСУГУБИЛА: до неё `rglob` останавливался
+    на первом попадании — часто внутри `node_modules` — а после стал обходить дерево ЦЕЛИКОМ, чтобы
+    отфильтровать исключённое. Правильно не фильтровать после обхода, а НЕ ЗАХОДИТЬ.
+
+    Проверяется механизм, а не время: время зависит от машины и размера вендора, а «не заходить»
+    — свойство, которое либо есть, либо нет.
+    """
+    for rel in ("node_modules/pkg/deep/models/x.py", "dist/models/y.py",
+                ".ai/managed/schemas/z.json", ".git/objects/aa/bb",
+                "src/api/models/order.py"):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x", encoding="utf-8")
+    visited = [str(d) for d in C._product_dirs(tmp_path)]
+    for bad in ("node_modules", "dist", ".ai/managed", ".git"):
+        assert not any(bad in v for v in visited), f"обход зашёл в {bad}: {visited}"
+    assert any("src" in v for v in visited), "обход не дошёл до кода продукта"
+    # И результат по существу верен: сигнал есть, потому что есть src/api/models продукта.
+    assert C._repo_has_signal(tmp_path, ["**/models/**"]) is True
+
+
+def test_signal_search_ignores_vendor_only_matches(tmp_path):
+    """Совпадение ТОЛЬКО в вендоре сигналом не является: иначе `unknown` снова станет `not_changed`."""
+    p = tmp_path / "node_modules" / "pkg" / "models" / "x.py"
+    p.parent.mkdir(parents=True)
+    p.write_text("x", encoding="utf-8")
+    assert C._repo_has_signal(tmp_path, ["**/models/**"]) is False
+
+
+def test_fsd_entities_layer_is_not_a_data_model(tmp_path):
+    """ОБКАТКА (niti, Next.js, 186 продуктовых коммитов): паттерн `**/entities/**` дал 6 находок из
+    9 — и все ложные. niti построена по Feature-Sliced Design, где `src/entities/` это СЛОЙ
+    ИНТЕРФЕЙСА (внутри `ui/`, `lib/`, `index.ts`), а не модель данных. Конвенция распространённая,
+    поэтому сигнал был ложным не только здесь.
+
+    Однозначные сигналы контура данных остаются: миграции, ORM-модели, openapi/proto/graphql/prisma
+    — их имя означает контракт данных, а не слой приложения.
+    """
+    fsd = tmp_path / "apps" / "web" / "src" / "entities" / "concept" / "ui"
+    fsd.mkdir(parents=True)
+    (fsd / "ConceptCard.tsx").write_text("export const C = () => null\n", encoding="utf-8")
+    der = C.derive_affects(tmp_path, ["apps/web/src/entities/concept/ui/ConceptCard.tsx"],
+                           MODEL, overrides={})
+    assert der["data_contracts"]["state"] != C.CHANGED, \
+        "слой entities из FSD не является моделью данных"
+
+    # А настоящая миграция контур меняет.
+    (tmp_path / "supabase" / "migrations").mkdir(parents=True)
+    (tmp_path / "supabase" / "migrations" / "0001.sql").write_text("select 1;", encoding="utf-8")
+    der2 = C.derive_affects(tmp_path, ["supabase/migrations/0001.sql"], MODEL, overrides={})
+    assert der2["data_contracts"]["state"] == C.CHANGED
+
+
+def test_source_of_truth_declared_as_signal_makes_contour_self_satisfying(tmp_path):
+    """ОБКАТКА НА niti: замер дал 0 находок на 186 коммитах — и это был ЛОЖНЫЙ ноль, полученный
+    самим замеряющим. Объявив `supabase/migrations/` источником истины контура данных, любое
+    изменение схемы стало трогать «свою истину»: контур самоудовлетворяющийся, гейт не срабатывает
+    НИКОГДА, и отчёт выглядит как «всё согласовано».
+
+    Истина — ОПИСАНИЕ (openapi, DataMap); схемы и миграции — сигнал. Тест держит разницу: при
+    сужении истины до описания находка возвращается.
+    """
+    (tmp_path / "supabase" / "migrations").mkdir(parents=True)
+    (tmp_path / "supabase" / "migrations" / "0006.sql").write_text("alter table;", encoding="utf-8")
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs" / "openapi.yaml").write_text("openapi: 3.0.0", encoding="utf-8")
+    files = ["supabase/migrations/0006.sql"]
+
+    # Истина = описание. Схема изменилась, описание нет -> находка ЕСТЬ.
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "product_operating_model:\n  contours:\n    data_contracts:\n"
+        "      source_of_truth: [docs/openapi.yaml]\n", encoding="utf-8")
+    rep = C.reconcile(tmp_path, {"data_contracts": True}, files, MODEL)
+    assert [f for f in rep["findings"] if f["id"] == "declared_not_updated"], \
+        "изменение схемы без обновления описания обязано быть находкой"
+
+    # Истина = сами миграции. Контур самоудовлетворяющийся -> находки НЕТ, и это ложный зелёный.
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "product_operating_model:\n  contours:\n    data_contracts:\n"
+        "      source_of_truth: [docs/openapi.yaml, supabase/migrations/]\n", encoding="utf-8")
+    rep2 = C.reconcile(tmp_path, {"data_contracts": True}, files, MODEL)
+    assert not [f for f in rep2["findings"] if f["id"] == "declared_not_updated"]
+
+
 def test_corrupt_model_raises(tmp_path):
     bad = tmp_path / "pom.yaml"
     bad.write_text("contours: []\n", encoding="utf-8")

@@ -237,6 +237,26 @@ def _matches(rel_path: str, pattern: str) -> bool:
     return False
 
 
+def _product_dirs(child_root: Path):
+    """Каталоги ПРОДУКТА: обход с ПОДРЕЗКОЙ на не-продуктовых каталогах.
+
+    Подрезка, а не фильтрация после обхода. Обкатка на niti (Next.js, 488 коммитов) показала цену
+    разницы: один вызов гейта тратил 12 СЕКУНД на поиск сигнальных путей, а гейт зовут на КАЖДОМ
+    прогоне конвейера. Причём предыдущая правка (исключение внутренностей кита) это усугубила: до
+    неё `rglob` останавливался на первом попадании — часто внутри `node_modules` — а после стала
+    обходить дерево целиком, чтобы отфильтровать исключённое. `os.walk` с подрезкой `dirnames`
+    в исключённые каталоги не заходит вовсе.
+    """
+    import os
+    root = Path(child_root)
+    for cur, dirnames, filenames in os.walk(root, topdown=True):
+        rel = Path(cur).relative_to(root)
+        # Подрезка НА МЕСТЕ: os.walk не пойдёт в удалённые из dirnames каталоги.
+        dirnames[:] = [d for d in dirnames
+                       if not _under_excluded(str(rel / d) if str(rel) != "." else d)]
+        yield Path(cur), filenames
+
+
 def _repo_has_signal(child_root: Path, patterns: list) -> bool:
     """Есть ли в репозитории ХОТЬ ОДИН путь, попадающий под сигналы контура.
 
@@ -245,6 +265,7 @@ def _repo_has_signal(child_root: Path, patterns: list) -> bool:
     самой проверки, а ответ нужен один бит.
     """
     root = Path(child_root)
+    unanchored = []
     for pat in patterns or []:
         pat = pat.replace("\\", "/")
         head = pat.split("*")[0].rstrip("/")
@@ -264,13 +285,21 @@ def _repo_has_signal(child_root: Path, patterns: list) -> bool:
         segs = [s for s in pat.split("/") if s and s != "**"]
         if not segs:
             continue                               # паттерн из одних `**` не является сигналом
-        tail = segs[-1]
-        try:
-            for hit in root.rglob(tail):
-                if not _under_excluded(hit.relative_to(root)):
+        unanchored.append(segs[-1])
+
+    if not unanchored:
+        return False
+    # ОДИН подрезанный обход на все безякорные паттерны: прежде их было до восьми, и каждый гнал
+    # свой полный rglob по дереву.
+    import fnmatch as _fn
+    try:
+        for cur, filenames in _product_dirs(root):
+            names = filenames + [cur.name]
+            for tail in unanchored:
+                if any(_fn.fnmatch(n, tail) for n in names):
                     return True
-        except OSError:
-            continue
+    except OSError:
+        return False
     return False
 
 
