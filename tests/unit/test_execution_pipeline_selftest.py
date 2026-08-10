@@ -846,8 +846,25 @@ def test_execution_pipeline_selftest():
 
         # _change_context напрямую: список изменённых файлов + unified-дифф на точной ревизии
         _git(root, "checkout", "-q", "-B", "cx-direct")
+        # src/ мог исчезнуть: git не хранит ПУСТЫЕ каталоги, а пайплайн с commit=True без isolate
+        # делает `git add -A` и уносит содержимое на рабочую ветку — возврат на базовую удаляет и
+        # файлы, и каталог. Зависимость была НЕЯВНОЙ и держалась на версии git: локально (2.43)
+        # каталог исчезал и тест падал FileNotFoundError, в CI (2.54) переживал. Тест, зелёный от
+        # версии git, рано или поздно соврёт в обе стороны. Продуктового дефекта нет:
+        # `ai-ops run --execute` всегда изолируется, пара commit=True + isolate=False есть только здесь.
+        (root / "src").mkdir(exist_ok=True)
         (root / "src" / "cxd.py").write_text("def cxd():\n    return 42\n", encoding="utf-8")
-        _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "cxd")
+        # Индексируем ТОЛЬКО проверяемый файл. `add -A` уносил в коммит ещё и артефакты прогонов,
+        # накопленные ПРЕДЫДУЩИМИ шагами теста (.ai/reevaluate-evidence-*.json): стат-список
+        # раздувался, дифф упирался в усечение _change_context на 12000 символов, и тело правки
+        # («return 42») из контекста ВЫПАДАЛО. Проверка обязана мерить _change_context, а не объём
+        # мусора рядом.
+        #
+        # Замерено, что это artefact теста, а не продукта: реальный прогон
+        # (`isolate=True, commit=True`) коммитит РОВНО изменённый файл — проверено отдельным
+        # прогоном в чистом репозитории, в коммите один src/real.py. Мусор копится только здесь,
+        # где десятки шагов подряд работают в одном дереве без изоляции.
+        _git(root, "add", "src/cxd.py"); _git(root, "commit", "-q", "-m", "cxd")
         _, cxsha, _ = _git(root, "rev-parse", "HEAD")
         cc = _change_context(root, cxsha.strip())
         expect("_change_context: содержит изменённый путь и тело диффа",
@@ -859,6 +876,7 @@ def test_execution_pipeline_selftest():
         # последний коммит). Два коммита поверх базы -> оба файла в range-контексте.
         _git(root, "checkout", "-q", "-B", "cx-range")
         _, base_r, _ = _git(root, "rev-parse", "HEAD"); base_r = base_r.strip()
+        (root / "src").mkdir(exist_ok=True)
         (root / "src" / "rA.py").write_text("A = 1\n", encoding="utf-8")
         _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "pkgA")
         (root / "src" / "rB.py").write_text("B = 2\n", encoding="utf-8")
@@ -1006,6 +1024,7 @@ def test_execution_pipeline_selftest():
         # v3.0.1 (finding аудита P0): BASE BINDING — рабочая ветка форкается от --base, а НЕ от текущего
         # HEAD. Делаем ветку feat-base с ДРУГИМ SHA, checkout остаётся на orig_branch, прогон с base=feat-base.
         _git(root, "checkout", "-q", "-B", "feat-base")
+        (root / "src").mkdir(exist_ok=True)
         (root / "src" / "on_feat.py").write_text("FEAT = 1\n", encoding="utf-8")
         _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "commit on feat-base")
         _, feat_sha, _ = _git(root, "rev-parse", "HEAD"); feat_sha = feat_sha.strip()

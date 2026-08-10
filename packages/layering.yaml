@@ -34,6 +34,14 @@ layers:
       лестница; разбор взаимных зависимостей идёт отдельными срезами (см. baseline).
     packages: [context, providers, lifecycle, gates, engine, delivery, engops]
 
+  - name: intelligence
+    purpose: >
+      продуктовая аналитика: здоровье продукта, эффект, триггеры эволюции. Кольцо Intelligence из
+      AGENTS.md — зависит от Kernel и ЧИТАЕТ его события, но Kernel от него НЕ зависит. Слой выше
+      ядра именно поэтому: зависимость вверх запрещена, значит инвариант проверяется, а не
+      декларируется. Отключение этого слоя целиком не должно мешать доставке.
+    packages: [intelligence]
+
   - name: entrypoints
     purpose: "точки входа и инструменты разработки кита. Их не импортирует никто."
     packages: [cli, devtools]
@@ -77,13 +85,15 @@ baseline:
     в child). НЕ запрещено: взаимные связи внутри capabilities. Это пол, а не лестница — но пол,
     которого не было.
 
-# Инвариант трёх колец (AGENTS.md) сегодня НЕ проверяется — и это не забывчивость.
-# Kernel не должен зависеть от Intelligence, но кольца не совпадают с границами пакетов:
-# `lifecycle` держит и ядро (lifecycle_store, workitem, run_report), и аналитику
-# (product_health, effect_metrics, evolution_triggers). Пока они в одном пакете, утверждение
-# «Kernel не зависит от Intelligence» невыразимо в терминах пакетов — объявлять его проверенным
-# было бы ложной декларацией.
-unverifiable_today:
+# v3.33.2: инвариант трёх колец СТАЛ проверяемым. Прежде `lifecycle` держал и ядро
+# (lifecycle_store, workitem, run_report), и аналитику (product_health, effect_metrics,
+# evolution_triggers) — «Kernel не зависит от Intelligence» было невыразимо в терминах пакетов и
+# честно значилось непроверяемым. Аналитика вынесена в пакет `intelligence` слоем ВЫШЕ ядра;
+# зависимость вверх запрещена, поэтому утверждение теперь проверяет validate_layering.
+# Перенос оказался безопасным по замеру: эти три модуля не импортировал НИКТО, а сами они тянули
+# только shared — то есть кольцо де-факто уже соблюдалось, не хватало границы, чтобы это увидеть.
+verified_invariants:
   - id: kernel-does-not-depend-on-intelligence
-    blocked_by: "lifecycle смешивает ядро и аналитику"
-    next_step: "разнести lifecycle на состояние работы и продуктовую аналитику — отдельный срез"
+    how: "слой intelligence выше capabilities; зависимость вверх запрещена (validate_layering)"
+
+unverifiable_today: []

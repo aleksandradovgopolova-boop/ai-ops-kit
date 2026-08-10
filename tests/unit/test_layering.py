@@ -51,6 +51,8 @@ def test_every_package_is_placed_in_a_layer(spec):
 
 
 @pytest.mark.parametrize("edge,expect", [
+    (("gates", "intelligence"), "ВВЕРХ"),    # инвариант колец: Kernel не зависит от Intelligence
+    (("engine", "intelligence"), "ВВЕРХ"),
     (("security", "gates"), "ВВЕРХ"),        # primitives не вправе тянуть ядро
     (("ui", "engine"), "ВВЕРХ"),
     (("shared", "context"), "foundation-is-a-leaf"),
@@ -63,6 +65,32 @@ def test_forbidden_edge_is_caught(spec, edge, expect):
     assert errors, f"нарушение {edge[0]} -> {edge[1]} прошло молча — правило не работает"
     assert any(expect in e for e in errors), (
         f"нарушение поймано, но названо непонятно (ждали '{expect}'): {errors}")
+
+
+def test_intelligence_may_read_the_kernel(spec):
+    """Кольцо Intelligence ЧИТАЕТ события ядра — вниз по слоям, это разрешено.
+
+    Инвариант односторонний. Запретить обе стороны значило бы отрезать аналитику от данных,
+    ради которых она существует, и правило перестало бы описывать реальную архитектуру.
+    """
+    assert not vl.check(spec, {("intelligence", "gates"): {"x -> y"}}), \
+        "аналитике запрещено читать ядро — правило описывает не ту архитектуру"
+
+
+def test_rings_invariant_is_declared_verified(spec):
+    """Инвариант объявлен проверяемым — и это утверждение обязано быть правдой.
+
+    До v3.33.2 он честно значился `unverifiable_today`, потому что `lifecycle` держал и ядро, и
+    аналитику. Объявить его проверенным, не имея границы, было бы ровно той ложной декларацией,
+    которую кит запрещает сам себе.
+    """
+    verified = {v["id"] for v in (spec.get("verified_invariants") or [])}
+    assert "kernel-does-not-depend-on-intelligence" in verified
+    assert not (spec.get("unverifiable_today") or []), \
+        "остались непроверяемые утверждения — они должны быть перечислены, а не забыты"
+    layers = {l["name"]: i for i, l in enumerate(spec["layers"])}
+    assert layers["intelligence"] > layers["capabilities"], \
+        "слой intelligence обязан стоять ВЫШЕ ядра, иначе инвариант не выражен"
 
 
 def test_package_outside_layers_is_caught(spec):
