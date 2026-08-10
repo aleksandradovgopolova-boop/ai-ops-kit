@@ -258,6 +258,17 @@ def _run_intent(intent, task, child_root, signals, a):
                 print(f"  {mark} {q['ask']}")
                 if q["proposal"]:
                     print(f"      предполагаю: {q['proposal']['value']} — подтвердить?")
+            # ВОПРОСАМ НУЖНО МЕСТО. Прежде кит печатал их и завершался: куда отвечать — не сказано,
+            # интерактива нет, человек в тупике на главном шаге первого сценария.
+            if rep["ask"]["questions"]:
+                ans = repo_audit.write_question_file(child_root, rep["ask"])
+                try:
+                    shown = ans.relative_to(Path(child_root))
+                except ValueError:
+                    shown = ans
+                print(f"\n  Ответы впишите здесь: {shown}")
+                print("  Потом запустите снова: ./ai-ops model — ответы станут подтверждёнными "
+                      "фактами и больше не будут переспрашиваться.")
         return 0
 
     if intent == "health":

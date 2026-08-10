@@ -231,6 +231,76 @@ def classify(evidence: dict, model: dict | None = None) -> dict:
             "reasons": reasons, "onboarding": "reconstruct_then_bootstrap"}
 
 
+ANSWERS_REL = ".ai/project/onboarding-answers.yaml"
+
+
+def answers_path(child_root) -> Path:
+    return Path(child_root) / ANSWERS_REL
+
+
+def read_answers(child_root) -> dict:
+    """Ответы человека из файла онбординга. Пустое значение — это «ещё не ответил», а не ответ."""
+    p = answers_path(child_root)
+    if not p.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return {}
+    ans = (data.get("answers") or {}) if isinstance(data, dict) else {}
+    return {k: v for k, v in ans.items()
+            if v not in (None, "", [], {}) and str(v).strip() not in ("", "?")}
+
+
+def write_question_file(child_root, ask: dict):
+    """Создать/дополнить файл, в который человек ВПИШЕТ ответы. -> путь.
+
+    Прежде `ai-ops model` печатал вопросы и ЗАВЕРШАЛСЯ: куда писать ответы, не сказано, интерактива
+    нет — человек прочитал двенадцать вопросов и не может ответить. Тупик на главном шаге первого
+    сценария, при том что онбординг обещал «соберу материалы и покажу на проверку».
+
+    Существующие ответы НЕ затираются никогда: файл дополняется новыми вопросами, ответы остаются.
+    """
+    p = answers_path(child_root)
+    existing = read_answers(child_root)
+    lines = [
+        "# Ответы владельца на вопросы онбординга AI Ops.",
+        "#",
+        "# Здесь только то, что из кода честно не выводится: цели продукта, его пользователи,",
+        "# границы, которые нельзя нарушать. Кит эти вещи не выдумывает — поэтому спрашивает.",
+        "#",
+        "# Как отвечать: впишите значение после двоеточия. Пустая строка означает «ещё не ответил»,",
+        "# и вопрос останется. Ответ сильнее любого вывода кита: он становится подтверждённым фактом",
+        "# (`user_confirmed`) и больше не переспрашивается.",
+        "#",
+        "# После заполнения запустите снова:  ./ai-ops model",
+        "answers:",
+    ]
+    seen = set()
+    for q in ask.get("questions") or []:
+        qid = q.get("id")
+        if not qid or qid in seen:
+            continue
+        seen.add(qid)
+        lines.append(f"  # {q.get('ask', '')}")
+        if q.get("proposal") and q["proposal"].get("value"):
+            lines.append(f"  #   по коду предполагаю: {q['proposal']['value']} — подтвердите или "
+                         f"замените")
+        val = existing.get(qid)
+        lines.append(f"  {qid}: " + (yaml.safe_dump(val, allow_unicode=True,
+                                                   default_flow_style=True).strip()
+                                     if val is not None else '""'))
+        lines.append("")
+    # Ответы на вопросы, которых больше не задают, сохраняем: человек их дал, они факт.
+    for qid, val in existing.items():
+        if qid not in seen:
+            lines.append(f"  {qid}: " + yaml.safe_dump(val, allow_unicode=True,
+                                                       default_flow_style=True).strip())
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return p
+
+
 def owner_confirmed(child_root) -> dict:
     """Факты, ПОДТВЕРЖДЁННЫЕ владельцем: `.ai-ops.yaml -> product_operating_model.confirmed`.
 
@@ -239,14 +309,22 @@ def owner_confirmed(child_root) -> dict:
     реестре, которого не вычисляет никто, — ровно та «capability без реализации», которую
     инварианты кита запрещают (то же правило уже применено к `stale`).
     """
+    # Файл ответов читается НЕЗАВИСИМО от наличия `.ai-ops.yaml`: человек отвечает на вопросы
+    # онбординга ДО того, как у репозитория появится настроенная конфигурация, и ранний выход по
+    # отсутствию конфига обнулял его ответы молча.
+    data = {}
     cfg = Path(child_root) / ".ai-ops.yaml"
-    if not cfg.is_file():
-        return {}
-    try:
-        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return {}                                      # битый конфиг — забота doctor'а
-    conf = (data.get("product_operating_model") or {}).get("confirmed") or {}
+    if cfg.is_file():
+        try:
+            data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            data = {}                                  # битый конфиг — забота doctor'а
+    if not isinstance(data, dict):
+        data = {}
+    conf = dict((data.get("product_operating_model") or {}).get("confirmed") or {})
+    # Файл ответов онбординга — ВТОРОЙ законный источник подтверждений и основной по факту: человек
+    # отвечает там, а не правит конфигурацию руками. Ответ из файла имеет тот же вес.
+    conf.update(read_answers(child_root))
     return {k: v for k, v in conf.items() if v not in (None, "")}
 
 
@@ -325,9 +403,18 @@ def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
 
     # То, что из кода НЕ выводится. Молчать об этом нельзя: молчание читается как «нечего сказать».
     for key, note in (("primary_user", "пользователи продукта из репозитория не выводятся"),
-                      ("product_goal", "цель продукта из репозитория не выводится"),
+                      # Ключ назван так же, как id ВОПРОСА в модели (`main_goal_now`): иначе ответ
+                      # человека никогда не встретится со своим вопросом — ровно тот дефект, что был
+                      # у `production_env` (ключ реконструкции не совпадал с id вопроса).
+                      ("main_goal_now", "цель продукта из репозитория не выводится"),
                       ("sensitive_data", "чувствительность данных определяет владелец")):
-        out[key] = {"value": None, "status": UNKNOWN, "evidence": [], "note": note}
+        # `asks_human: True` — ключ, который кит НЕ ВЫВОДИТ ПО ОПРЕДЕЛЕНИЮ, а не «пока не нашёл».
+        # Разница машиночитаемая, потому что от неё зависит, задавать ли вопрос: `languages`
+        # неизвестны на пустом репозитории, но выводятся из манифестов — спрашивать их у человека
+        # неуважительно. И у каждого такого ключа обязан быть ПАРНЫЙ вопрос в модели, иначе ответ
+        # никогда не встретится со своим вопросом (так уже случилось дважды).
+        out[key] = {"value": None, "status": UNKNOWN, "evidence": [], "note": note,
+                    "asks_human": True}
 
     # Ключ реконструкции обязан совпадать с id ВОПРОСА (`production_env` в модели), иначе
     # предложение «по коду предполагаю X — подтвердить?» не доходит до вопроса никогда — именно так
@@ -337,17 +424,21 @@ def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
         out["production_env"] = {
             "value": "окружение, куда деплоит существующий конвейер", "status": INFERRED,
             "evidence": list(evidence.get("containers") or evidence.get("ci") or []),
-            "note": "какое окружение считается production — решение владельца"}
+            "note": "какое окружение считается production — решение владельца",
+            "asks_human": True}
     else:
         out["production_env"] = {"value": None, "status": UNKNOWN, "evidence": [],
-                                 "note": "признаков деплоя не найдено"}
+                                 "note": "признаков деплоя не найдено", "asks_human": True}
 
     # ПОСЛЕДНИМ: подтверждение владельца перебивает и `inferred`, и `unknown`. Порядок не случаен —
     # человек сильнее любого вывода кита, и обратное затирание сделало бы подтверждение бесполезным.
+    _answers = read_answers(child_root)
     for key, value in owner_confirmed(child_root).items():
+        where = (ANSWERS_REL if key in _answers else ".ai-ops.yaml")
         out[key] = {"value": value, "status": USER_CONFIRMED,
-                    "evidence": ["подтверждено владельцем в .ai-ops.yaml"],
-                    "note": "подтверждение человека сильнее вывода кита"}
+                    "evidence": [f"подтверждено владельцем ({where})"],
+                    "note": "подтверждение человека сильнее вывода кита",
+                    "asks_human": (out.get(key) or {}).get("asks_human", False)}
     return out
 
 

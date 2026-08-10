@@ -91,7 +91,7 @@ def test_unknowable_facts_are_declared_unknown(tmp_path):
     rec = A.reconstruct(tmp_path, A.discover(tmp_path), MODEL)
     # `production_env` называется так же, как id ВОПРОСА в модели: иначе предложение к вопросу не
     # доходит (находка ревью). В пустом репозитории признаков деплоя нет -> unknown.
-    for key in ("primary_user", "product_goal", "production_env", "sensitive_data"):
+    for key in ("primary_user", "main_goal_now", "production_env", "sensitive_data"):
         assert rec[key]["status"] == A.UNKNOWN
         assert rec[key]["note"]
 
@@ -244,6 +244,65 @@ def test_confirmed_fact_is_not_asked_again(tmp_path):
     ev = A.discover(tmp_path)
     ask = A.question_package(A.audit(tmp_path, ev, MODEL), A.reconstruct(tmp_path, ev, MODEL))
     assert not [q for q in ask["questions"] if q["id"] == "primary_user"]
+
+
+def test_questions_get_a_place_to_answer(tmp_path):
+    """РЕВЬЮ UX + ПРОДУКТОВОЕ: `ai-ops model` печатал 12 вопросов и ЗАВЕРШАЛСЯ. Куда писать ответы,
+    не сказано ни словом, интерактива нет — человек прочитал вопросы и не может ответить. Тупик на
+    главном шаге первого сценария: онбординг обещал «соберу материалы и покажу на проверку».
+
+    Вопросы обязаны получить МЕСТО: файл с ними, путь к нему и команда, которую запустить после.
+    """
+    ev = A.discover(tmp_path)
+    ask = A.question_package(A.audit(tmp_path, ev, MODEL), A.reconstruct(tmp_path, ev, MODEL))
+    assert ask["questions"], "на пустом репозитории вопросы должны быть"
+
+    path = A.write_question_file(tmp_path, ask)
+    assert path.is_file(), "файл для ответов не создан"
+    body = path.read_text(encoding="utf-8")
+    for q in ask["questions"][:3]:
+        assert q["id"] in body, f"вопрос {q['id']} не попал в файл"
+    assert "ai-ops model" in body, "в файле не сказано, что запустить после ответов"
+
+    # Повторный вызов НЕ затирает ответы человека.
+    body2 = body.replace("primary_user: \"\"", 'primary_user: "внутренние аналитики"')
+    path.write_text(body2, encoding="utf-8")
+    A.write_question_file(tmp_path, ask)
+    assert "внутренние аналитики" in path.read_text(encoding="utf-8"), "ответ человека затёрт"
+
+
+def test_answers_become_user_confirmed_and_stop_being_asked(tmp_path):
+    """Ответ человека — сильнейший источник (`user_confirmed`), и переспрашивать его нельзя.
+
+    Это замыкает петлю первого сценария: вопрос -> ответ -> подтверждённый факт -> вопрос снят.
+    Прежде `user_confirmed` производился только правкой `.ai-ops.yaml` руками.
+    """
+    (tmp_path / ".ai" / "project").mkdir(parents=True)
+    (tmp_path / ".ai" / "project" / "onboarding-answers.yaml").write_text(
+        "answers:\n  primary_user: внутренние аналитики\n  main_problem: \"\"\n", encoding="utf-8")
+    ev = A.discover(tmp_path)
+    rec = A.reconstruct(tmp_path, ev, MODEL)
+    assert rec["primary_user"]["status"] == A.USER_CONFIRMED
+    assert rec["primary_user"]["value"] == "внутренние аналитики"
+    # Пустой ответ подтверждением НЕ считается: пустая строка — это «ещё не ответил».
+    assert rec["main_goal_now"]["status"] == A.UNKNOWN
+
+    ask = A.question_package(A.audit(tmp_path, ev, MODEL), rec)
+    assert not [q for q in ask["questions"] if q["id"] == "primary_user"], "подтверждённое переспросили"
+    assert [q for q in ask["questions"] if q["id"] == "main_problem"], "неотвеченное обязано остаться"
+
+
+def test_every_unknowable_key_has_a_matching_question(tmp_path):
+    """Ключ реконструкции, у которого НЕТ парного вопроса, подтвердить невозможно: ответ человека
+    никогда не встретится со своим вопросом. Так уже случилось дважды (`production_env`,
+    `product_goal`), поэтому проверяем связь, а не отдельные имена."""
+    rec = A.reconstruct(tmp_path, A.discover(tmp_path), MODEL)
+    # Только те, что кит НЕ ВЫВОДИТ по определению (`asks_human`). `languages` неизвестны на
+    # пустом репозитории, но выводятся из манифестов — спрашивать их у человека неуважительно.
+    unknowable = {k for k, v in rec.items() if v.get("asks_human")}
+    question_ids = {q["id"] for c in MODEL["contours"] for q in (c.get("questions") or [])}
+    orphans = sorted(unknowable - question_ids)
+    assert not orphans, f"ключи без парного вопроса — подтвердить их нечем: {orphans}"
 
 
 def test_run_returns_whole_scenario(tmp_path):
