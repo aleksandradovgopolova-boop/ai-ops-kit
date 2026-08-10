@@ -42,6 +42,11 @@ INTENTS = {
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
+    # v3.35.2 (тир 4): BOOTSTRAP существовал СТРОКОЙ в реестре — кит не создавал ни направления, ни
+    # плана, и владелец после онбординга оставался с пониманием и без работы. Сухой прогон по
+    # умолчанию: запись в чужой репозиторий он обязан увидеть до того, как она произошла.
+    "bootstrap": ("создать первое направление и план из фактов репозитория (--apply — записать)",
+                  "bootstrap", False),
 }
 
 
@@ -300,6 +305,28 @@ def _run_intent(intent, task, child_root, signals, a):
                       "фактами и больше не будут переспрашиваться.")
         return 0
 
+    if intent == "bootstrap":
+        # BOOTSTRAP: онбординг заканчивается работой, а не документацией. Пишет ТОЛЬКО с --apply и
+        # ТОЛЬКО отсутствующее; заготовку кита заменяет (в ней нет фактов о продукте), настоящий
+        # план — никогда.
+        from ai_ops_kit.planning import product_bootstrap as _boot
+        from ai_ops_kit.planning import contours as _contours
+        from ai_ops_kit.planning import delivery_plan as _dp
+        try:
+            boot = _boot.plan(child_root)
+        except (_contours.ModelCorrupt, _dp.PlanCorrupt) as e:
+            print(f"ОШИБКА: {e}")
+            return 1
+        applied = bool(getattr(a, "apply", False))
+        rep = _boot.apply(child_root, boot) if applied else boot
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2))
+        else:
+            _say(child_root, "from_bootstrap", rep, applied=applied)
+            if not applied and rep["will_write"]:
+                print(f"\n  Записать: ./ai-ops bootstrap --apply")
+        return 1 if rep.get("error") else 0
+
     if intent == "health":
         from ai_ops_kit.intelligence import product_health
         cand = [child_root / "product" / "product-health.yaml",
@@ -545,6 +572,9 @@ def main(argv):
                     help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
+    ap.add_argument("--apply", action="store_true",
+                    help="bootstrap: РЕАЛЬНО создать отсутствующие направление и план "
+                         "(без флага — сухой прогон: показать, что будет создано)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -615,7 +645,7 @@ def main(argv):
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
     if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss",
-                                       "review", "advise", "next", "model"):
+                                       "review", "advise", "next", "model", "bootstrap"):
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc

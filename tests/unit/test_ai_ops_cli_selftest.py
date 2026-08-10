@@ -27,11 +27,13 @@ def test_ai_ops_cli_selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("14 intent-команд", len(INTENTS) == 14
+    expect("15 intent-команд", len(INTENTS) == 15
            and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "advise", "resume", "review",
                 "status", "health",
                 # v3.35 Product Operating Model: план продукта и понимание репозитория.
-                "next", "model"} == set(INTENTS))
+                "next", "model",
+                # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
+                "bootstrap"} == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
     fq = resolve_flags({"task_type": "QUICK"})

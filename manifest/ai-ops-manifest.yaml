@@ -891,7 +891,19 @@ session_orchestration:
     package: ai_ops_kit/planning                      # контур Planning & Execution в коде
     validator: ai_ops_kit/validation/validate_product_model.py
     gate: contour_consistency                         # advisory до обкатки на child-репозиториях
-    commands: [next, model]                           # четыре вопроса / понимание репозитория
+    commands: [next, model, bootstrap]                # четыре вопроса / понимание / первый план
+    # v3.35.2 (тир 4): BOOTSTRAP БЫЛ СТРОКОЙ. Первый сценарий объявлял
+    # `… ASK -> BOOTSTRAP -> PLAN -> RECOMMEND`, но кит не создавал ни направления, ни плана:
+    # владелец после онбординга оставался с пониманием и без работы. Теперь создаёт — из фактов
+    # аудита, не перезаписывая существующее, и с пометками «нужно ваше слово» там, где факта нет.
+    bootstrap:
+      module: ai_ops_kit/planning/product_bootstrap.py
+      writes: [ROADMAP.md, planning/plan.yaml]        # по объявленным `paths`, если объявлены
+      never_writes: "существующие файлы (кроме собственной заготовки `template: true`)"
+      dry_run_by_default: true                        # запись в чужой репозиторий видна ДО записи
+      invariant: >
+        продуктовые факты не выдумываются: цели, боли и «следующий результат» из кода не выводятся,
+        и на их месте стоит пометка владельцу, а не правдоподобный текст
     required_repo_artifacts:                          # обязательные артефакты контура планирования
       - ROADMAP.md                                    # направление: четыре горизонта
       - planning/plan.yaml                            # delivery plan: kind: delivery-plan

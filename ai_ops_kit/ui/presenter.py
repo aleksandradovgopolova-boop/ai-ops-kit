@@ -242,11 +242,12 @@ def from_repository_understanding(rep: dict) -> dict:
         steps.append(f"задам {n_q} "
                      + ("короткий " if n_q % 10 == 1 and n_q % 100 != 11 else "коротких ")
                      + _q(n_q))
-        steps.append("соберу недостающие материалы и покажу их тебе на проверку")
-    else:
-        steps.append("покажу, какие задачи имеет смысл брать дальше")
-    if aud["blocking_gaps"]:
-        steps.append("после этого появится план работ")
+    # ОНБОРДИНГ ЗАКАНЧИВАЕТСЯ РАБОТОЙ. Прежде здесь стояло «соберу недостающие материалы и покажу
+    # их тебе на проверку» — обещание, которого кит не выполнял ничем: BOOTSTRAP существовал строкой
+    # в реестре. Теперь названа команда, которая это делает, и она рядом.
+    steps.append("соберу первое направление и план из фактов репозитория: ./ai-ops bootstrap")
+    if not n_q:
+        steps.append("после этого покажу, какую работу имеет смысл взять первой")
 
     return message(
         status="needs_input" if n_q else "ok",
@@ -796,6 +797,87 @@ def from_advice(result: dict) -> dict:
                 f"срочного нет.",
         why_it_matters=recs[0].get("advice"),
         next_steps=["покажу список целиком, если нужно"], technical=tech)
+
+
+def from_bootstrap(rep: dict, applied=False) -> dict:
+    """`bootstrap.plan()` / `bootstrap.apply()` -> UserMessage. Онбординг заканчивается РАБОТОЙ.
+
+    Запись артефактов в чужой репозиторий владелец обязан увидеть ДО того, как она произошла, —
+    поэтому сухой прогон спрашивает решение, а не сообщает о сделанном.
+    """
+    if rep.get("error"):
+        return message(status="blocked", headline="Создавать не стал",
+                       summary=str(rep["error"]),
+                       why_it_matters="Перезаписать файл, который я не смог прочитать, значит "
+                                      "уничтожить работу, которую в нём кто-то делал.",
+                       next_steps=["починим файл и повторим"],
+                       technical={"error": rep["error"]})
+
+    if applied:
+        wrote = rep.get("written") or []
+        skipped = rep.get("skipped") or []
+        n_work = rep.get("work_items") or 0
+        n_q = rep.get("blocking_questions") or 0
+        if not wrote:
+            return message(
+                status="ok", headline="Всё уже было на месте",
+                summary="Создавать было нечего: направление и план в проекте уже есть.",
+                next_steps=["спроси «что дальше» — предложу работу по существующему плану"],
+                technical={"пропущено": ", ".join(s["path"] for s in skipped) or "—"})
+        # СКОЛЬКО ИЗ НИХ МОЖНО НАЧАТЬ БЕЗ МЕНЯ — РАЗНЫЕ ОТВЕТЫ. Если каждая работа начинается с
+        # ответа владельца, обещать «спроси что дальше — назову первую работу» нельзя: там будет
+        # «ждёт решения человека», и это ровно тот разрыв обещания, из-за которого правится тир 4.
+        doable = rep.get("ready_without_human")
+        waiting = rep.get("awaiting_human") or 0
+        tech = {"создано": ", ".join(w["path"] for w in wrote),
+                "пропущено": ", ".join(s["path"] for s in skipped) or "—",
+                "работ": n_work, "ждут ответа": waiting, "вопросов": n_q}
+        if doable == 0 and n_work:
+            return message(
+                status="needs_input", headline="План есть, и он начинается с тебя",
+                summary=f"Собрал направление и план: {n_work} "
+                        f"{_q(n_work, 'работа', 'работы', 'работ')}; все они начинаются с твоего "
+                        f"ответа.",
+                why_it_matters="Это не бюрократия: без ответов я не знаю ни для кого продукт, ни "
+                               "что считать результатом, — и выдумывать это я не буду.",
+                next_steps=["впиши ответы в .ai/project/onboarding-answers.yaml",
+                            "потом спроси «что дальше» — работа станет готовой"],
+                technical=tech)
+        return message(
+            status="ok", headline="Готово: теперь есть с чем работать",
+            summary=f"Собрал направление и план: {n_work} "
+                    f"{_q(n_work, 'работа', 'работы', 'работ')} по тому, чего проекту "
+                    f"не хватает.",
+            why_it_matters=(f"Из них {waiting} ждут твоего ответа — из кода это не выводится, и я "
+                            f"это не выдумывал; остальное могу начать сам." if waiting else
+                            "Всё это выведено из твоего репозитория, а не придумано за тебя."),
+            next_steps=["спроси «что дальше» — назову первую работу и обоснование",
+                        "в файлах есть пометки «нужно ваше слово» — там я не стал догадываться"],
+            technical=tech)
+
+    will = rep.get("will_write") or []
+    items = rep.get("work_items") or []
+    if not will:
+        return message(
+            status="ok", headline="Создавать нечего",
+            summary="Направление и план в проекте уже есть — трогать их я не буду.",
+            why_it_matters="Существующий файл — факт о продукте, и он сильнее любого моего шаблона.",
+            next_steps=["спроси «что дальше» — предложу работу по существующему плану"],
+            technical={a["path"]: a["why"] for a in (rep.get("actions") or [])})
+    n = len(items)
+    return message(
+        status="needs_input", headline="Могу собрать первый план",
+        summary=f"Готов создать направление и план работ: {n} "
+                f"{_q(n, 'работа', 'работы', 'работ')} по тому, чего проекту не хватает.",
+        why_it_matters="Всё это выведено из твоего репозитория: каждая работа — область, где у "
+                       "проекта нет описания. Продуктовые цели я выдумывать не буду — там, где "
+                       "нужен твой ответ, останется пометка.",
+        decision={"question": "создать " + " и ".join(will),
+                  "recommendation": "создать — существующие файлы я не перезаписываю",
+                  "on_approve": "создам и сразу скажу, какую работу брать первой",
+                  "on_reject": "ничего не пишу; понимание проекта останется, плана не будет"},
+        next_steps=[f"первой пойдёт «{items[0]['title']}»"] if items else None,
+        technical={a["path"]: a["why"] for a in (rep.get("actions") or [])})
 
 
 def from_intake_gap(missing, hint_command=None) -> dict:
