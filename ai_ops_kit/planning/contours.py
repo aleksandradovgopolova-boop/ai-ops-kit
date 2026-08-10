@@ -97,6 +97,49 @@ def repo_overrides(child_root: Path) -> dict:
     return {k: list((v or {}).get("change_signals") or []) for k, v in pom.items()}
 
 
+def repo_sot(child_root) -> dict:
+    """Источники истины, объявленные РЕПОЗИТОРИЕМ: `.ai-ops.yaml -> …contours.<id>.source_of_truth`.
+
+    Кит знает типовые места, но где лежит правда ЭТОГО продукта, знает только владелец. Обкатка на
+    живом репозитории показала цену пробела: ADR лежали в `docs/architecture/decisions/`, сигнал их
+    ловил верно, а объявленного китом `decisions/registry.yaml` в репозитории нет — и находка
+    «истина не обновлена» срабатывала ВЕЧНО на контуре, который поддерживается как надо.
+    Объявленное репозиторием ДОПОЛНЯЕТ дефолт кита, а не заменяет: путь кита мог существовать тоже.
+    """
+    cfg = Path(child_root) / ".ai-ops.yaml"
+    if not cfg.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return {}
+    pom = (data.get("product_operating_model") or {}).get("contours") or {}
+    return {k: list((v or {}).get("source_of_truth") or []) for k, v in pom.items()}
+
+
+def sot_for(model: dict, cid: str, child_root=None) -> list:
+    """Источники истины контура: объявленные китом + доопределённые репозиторием.
+
+    -> список {"path", "required"}. Пути репозитория считаются обязательными: владелец назвал их
+    сам, значит это и есть его правда, а не необязательное дополнение.
+    """
+    base = [dict(s) for s in ((contour(model, cid) or {}).get("source_of_truth") or [])]
+    declared = (repo_sot(child_root) if child_root is not None else {}).get(cid) or []
+    if declared:
+        # ОБЪЯВЛЕНИЕ ВЛАДЕЛЬЦА СИЛЬНЕЕ ДОГАДКИ КИТА. Пути кита остаются в списке (они могли
+        # существовать тоже), но перестают быть ОБЯЗАТЕЛЬНЫМИ: иначе `ok` у контура недостижим
+        # никогда, и doctor вечно требует файл, которого в этом продукте не будет. Ровно этот
+        # случай дала обкатка: ADR лежат не там, где кит по умолчанию их ищет.
+        for s in base:
+            s["required"] = False
+            s["superseded_by"] = "repository"
+    known = {s.get("path") for s in base}
+    for rel in declared:
+        if rel not in known:
+            base.append({"path": rel, "required": True, "declared_by": "repository"})
+    return base
+
+
 def signals_for(model: dict, cid: str, overrides: dict | None = None) -> list:
     """Сигнальные пути контура: объявленные китом + доопределённые репозиторием."""
     base = list((contour(model, cid) or {}).get("change_signals") or [])
@@ -125,7 +168,9 @@ def sot_state(child_root: Path, model: dict | None = None) -> dict:
     out = {}
     for c in model.get("contours") or []:
         req_missing, opt_missing, present = [], [], []
-        for s in c.get("source_of_truth") or []:
+        # sot_for, а не поле контура: репозиторий вправе объявить свой источник истины, и тогда
+        # догадка кита перестаёт быть обязательной (иначе `ok` недостижим никогда).
+        for s in sot_for(model, c["id"], root):
             rel = s.get("path") or ""
             if _resolve(root, rel):
                 present.append(rel)
@@ -271,7 +316,7 @@ def _sot_touched(child_root: Path, cid: str, changed_files: list, model: dict) -
     c = contour(model, cid) or {}
     files = [str(f).replace("\\", "/") for f in (changed_files or [])]
     hit = []
-    for s in c.get("source_of_truth") or []:
+    for s in sot_for(model, cid, child_root):
         rel = (s.get("path") or "").replace("\\", "/")
         if not rel:
             continue
@@ -329,7 +374,7 @@ def reconcile(child_root: Path, declared: dict, changed_files: list,
         if want == CHANGED:
             touched = _sot_touched(child_root, cid, changed_files, model)
             if not touched:
-                sot = [s.get("path") for s in (contour(model, cid) or {}).get("source_of_truth") or []]
+                sot = [s.get("path") for s in sot_for(model, cid, child_root)]
                 findings.append({"id": "declared_not_updated", "contour": cid, "severity": "major",
                                  "detail": "контур заявлен изменённым, но источник истины не "
                                            f"обновлён (ожидался один из: {', '.join(sot)})"})
