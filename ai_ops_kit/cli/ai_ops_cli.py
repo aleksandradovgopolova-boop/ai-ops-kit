@@ -180,7 +180,7 @@ def _run_intent(intent, task, child_root, signals, a):
         return active_work.list_cmd(awp, as_json=js)
 
     if intent == "health":
-        from ai_ops_kit.lifecycle import product_health
+        from ai_ops_kit.intelligence import product_health
         cand = [child_root / "product" / "product-health.yaml",
                 child_root / ".ai" / "product-health.yaml",
                 child_root / "product-health.yaml"]
