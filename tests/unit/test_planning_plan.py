@@ -155,12 +155,35 @@ def test_goal_must_resolve(tmp_path):
 
 # ── side-effect proof ─────────────────────────────────────────────────────────────────────────
 
+def _write_workitem(root: Path, wid: str, status: str) -> Path:
+    """WorkItem по тому же пути, по которому его ЧИТАЕТ продакшн-код: `features/<id>/workitem.yaml`.
+
+    ТЕСТ БЫЛ ЗЕЛЁНЫМ ОТ СВОЙСТВА МАШИНЫ. Фикстура писала `features/A/` для элемента плана `a`:
+    на macOS файловая система регистронезависимая, и `features/a/workitem.yaml` находил файл в
+    `features/A/`; на Linux (CI) — нет, и `python39-compat` с `quality (fast)` падали. Локальный
+    охват `full-current-python` этого увидеть НЕ МОГ по определению — ровно тот случай, ради
+    которого объявлены два охвата доказательства.
+
+    Каталог собирается из ТОГО ЖЕ `wid`, что и элемент плана, а не из литерала: это единственное,
+    что мешает опечатке снова стать зелёной на одной ОС и красной на другой.
+    """
+    import os
+    d = root / "features" / wid
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "workitem.yaml").write_text(f"id: {wid}\nstatus: {status}\n", encoding="utf-8")
+    # ПРОВЕРКА РЕГИСТРА — НА ЛЮБОЙ ОС. `is_file()` на macOS вернёт True и для `features/A/`, поэтому
+    # спрашиваем у ОС ИМЕНА: так расхождение регистра краснеет там, где его написали, а не через
+    # десять минут в CI на другой файловой системе.
+    names = os.listdir(root / "features")
+    assert wid in names, f"каталог работы создан под другим именем: {names} (ожидалось '{wid}')"
+    return d / "workitem.yaml"
+
+
 def test_workitem_fact_overrides_declared_status(tmp_path):
     """WorkItem закрыт гейтами -> элемент плана done, даже если в файле стоит todo."""
-    _write(tmp_path, [_item("a")])
-    d = tmp_path / "features" / "A"
-    d.mkdir(parents=True)
-    (d / "workitem.yaml").write_text("id: A\nstatus: done\n", encoding="utf-8")
+    wid = "a"
+    _write(tmp_path, [_item(wid)])
+    _write_workitem(tmp_path, wid, "done")
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
     assert res["a"]["status"] == "done"
     assert res["a"]["source"] == "workitem"
