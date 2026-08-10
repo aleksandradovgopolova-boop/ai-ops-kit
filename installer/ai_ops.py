@@ -7,7 +7,9 @@
   update [--force]     — обновить managed-слой из пакета (алгоритм ниже); --force игнорирует drift
   init <path>          — установить систему в новый child (создать .ai/, конфиг-заготовку)
   validate             — прогнать связанные валидаторы (child, registry, workflows, providers)
-  doctor               — быстрая диагностика (версии, зоны, целостность, node/openspec)
+  doctor               — быстрая диагностика (гигиена путей окружения, версии, зоны, целостность,
+                         node/openspec); --remove-path-belt удаляет остаточный .pth-пояс кита,
+                         который писал setup.py до v3.33.1 (pip его не заберёт)
   migrate              — применить цепочку миграций манифеста (сейчас пустая, механизм готов)
   verify-capabilities  — offline capability self-test
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
@@ -862,9 +864,50 @@ def cmd_validate():
     return 0 if all(r["status"] == "pass" for r in results) else 1
 
 
-def cmd_doctor():
+def _path_hygiene():
+    """Модуль гигиены путей — импорт ПАКЕТНЫЙ и с явным корнем.
+
+    Явный корень здесь принципиален: проверка ищет остаточный пояс, подкладывающий пути кита в
+    каждый процесс. Если бы она сама импортировалась благодаря этому поясу, то на чистой машине
+    молчала бы «недоступно» — то есть отсутствие пояса выглядело бы как отсутствие проверки."""
+    for root in (AI_DIR / "managed", PKG):
+        if (root / "ai_ops_kit" / "shared" / "path_hygiene.py").is_file():
+            if str(root) not in sys.path:
+                sys.path.insert(0, str(root))
+            break
+    from ai_ops_kit.shared import path_hygiene
+    return path_hygiene
+
+
+def cmd_doctor(argv=()):
     inst, avail = installed_version(), pkg_version()
     ok = True
+    # Гигиена путей идёт ПЕРВОЙ и БЛОКИРУЕТ. До v3.33.1 setup.py кита писал .pth-пояс в
+    # site-packages пользователя; 3.33.1 убрал запись, но не убрал уже написанные файлы — pip о них
+    # не знает. Пояс исполняется при старте Python и подкладывает корень репозитория, tools/ и
+    # validation/ в КАЖДЫЙ процесс: замерено, что он делает зелёными fail-closed-проверки
+    # (tests/unit/test_validator_bootstrap.py). Поэтому это не advisory и не в конце списка: если
+    # окружение врёт, всё, что doctor напечатает ниже, ничего не доказывает.
+    try:
+        _ph = _path_hygiene()
+    except Exception as _e:  # noqa: BLE001 — недоступность модуля не роняет doctor, но и не молчит
+        print(f"пути окружения: НЕ ПРОВЕРЕНО ({_e}) — это не «чисто»")
+        ok = False
+    else:
+        if "--remove-path-belt" in argv:
+            _rep = _ph.assess()
+            _results = _ph.remove_belts(_rep)
+            if not _results:
+                print("пути окружения: удалять нечего — пояса не найдены")
+            for _r in _results:
+                print(f"пояс {'удалён' if _r['removed'] else 'НЕ удалён'}: {_r['path']}"
+                      + (f" ({_r['error']})" if _r["error"] else ""))
+        _hyg = _ph.assess()
+        print(_ph.summary_line(_hyg))
+        # unknown (ни один site-каталог не просмотрен) идёт в проблемы наравне с найденным поясом:
+        # «не знаю» — не «чисто», а вердикт doctor не вправе опираться на непроверенное.
+        if _hyg["counts"]["blocking"] or _hyg["status"] == "unknown":
+            ok = False
     print(f"версии: установлено {inst or '—'} / пакет {avail} "
           f"{'✓' if inst == avail else '⟳ нужен update'}")
     if inst != avail:
@@ -1278,7 +1321,7 @@ def _dispatch(argv):
     if cmd == "validate":
         return cmd_validate()
     if cmd == "doctor":
-        return cmd_doctor()
+        return cmd_doctor(argv)
     if cmd == "migrate":
         return cmd_migrate()
     if cmd == "verify-capabilities":

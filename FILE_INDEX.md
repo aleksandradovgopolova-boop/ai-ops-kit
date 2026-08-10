@@ -36,6 +36,8 @@
 
 - `scripts/check-full.sh` — полный контур перед коммитом (~4.5 мин), тот же набор, что в CI
 - `scripts/check-fast.sh` — быстрый профиль во время работы (~1 мин, без маркера `slow`)
+- `scripts/warn-path-belt.sh` — предупредить об остаточном `.pth`-поясе кита ДО прогона: на такой
+  машине «локально всё зелёное» ничего не значит. Только предупреждение, вызывается из обоих контуров
 
 ## docs/
 
@@ -568,9 +570,10 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 Правила границ проверяет `tests/unit/test_package_surface.py`: каждый модуль ровно в одном пакете,
 модулей вне пакетов нет, dev-only не лежит в продуктовом пакете.
 
-- `ai_ops_kit/shared/` (5) — общий фундамент: `_bootstrap` (кладёт корень в `sys.path`; единственный
+- `ai_ops_kit/shared/` (6) — общий фундамент: `_bootstrap` (кладёт корень в `sys.path`; единственный
   модуль, оставшийся плоским — переезд дал бы цикл), `contracts` (TypedDict), `project_detector`,
-  `generate_artifacts`, `generate_runtime`
+  `generate_artifacts`, `generate_runtime`, `path_hygiene` (остаточный `.pth`-пояс кита в
+  site-packages: `doctor` блокирует и говорит, чем удалять)
 - `ai_ops_kit/context/` (9) — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
   `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `repo_graph`,
   `semantic_lite`
