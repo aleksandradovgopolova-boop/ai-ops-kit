@@ -24,7 +24,8 @@ def test_validate_workflow_gates_selftest():
 
     # реальный пакет: ошибок согласованности быть не должно (и WARN тоже: после track-aware
     # и wiring MVP-blocking гейтов остатка быть не должно)
-    gates, wfs, mvp, track_gates = load()
+    # load() отдаёт ещё и сам реестр треков: его непустоту проверяет track_errors
+    gates, wfs, mvp, track_gates, tracks = load()
     e, wn = check(gates, wfs, mvp, track_gates)
     expect("реальный пакет: workflow↔gate согласованы (0 ошибок)", e == [])
     expect("реальный пакет: 0 WARN (треки учтены, MVP-blocking подключены)", wn == [])
@@ -70,5 +71,14 @@ def test_validate_workflow_gates_selftest():
     e9, w9 = check({"go": {"applicability": ["QUICK"], "blocking": True, "enforced_by": "openspec-ci-guard"}},
                    {"QUICK": {"quality_gates": []}}, mvp={"go"}, track_gates=set())
     expect("enforced_by -> достижим извне, без ERROR и WARN", e9 == [] and w9 == [])
+
+    # v3.30: пустой реестр треков не ловил НИКТО — проверяем оба направления
+    from validate_workflow_gates import track_errors
+    expect("непустой реальный реестр треков ошибок не даёт", track_errors(tracks) == [])
+    expect("пустой реестр треков -> ошибка (механика треков молча не отключается)",
+           any("треков нет" in e for e in track_errors({})))
+    expect("conditional без skip_reason -> необъяснимый пропуск назван",
+           any("skip_reason" in e for e in track_errors(
+               {"t": {"signal": "s", "kind": "conditional", "gates": ["g"]}})))
 
     assert ok, "перенесённый селфтест validate_workflow_gates: см. строки FAIL в выводе"

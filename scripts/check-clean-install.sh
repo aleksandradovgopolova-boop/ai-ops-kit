@@ -75,9 +75,25 @@ echo "OK  validate_ai_ops_child зелёный"
 # установка тут же показала модуль, который так не импортируется. Имитация — не установка.
 cd "$WORK"
 python3 -m venv "$WORK/venv" >/dev/null 2>&1 || fail "не удалось создать venv"
+
+# Снимок .pth-поясов ДО установки. Сравнение до/после, а не «после пусто»: у разработчика,
+# ставившего кит до v3.33.1, пояс уже лежит в пользовательском site (его находит `ai-ops doctor`).
+# Проверять здесь надо не чистоту машины, а то, что УСТАНОВКА не добавила ни одного пояса —
+# именно это делал setup.py на каждом pip install.
+belts_of() { PYTHONPATH="$KIT" "$1" -c 'from ai_ops_kit.shared import path_hygiene as ph
+print("\n".join(sorted(f["path"] for f in ph.assess()["findings"] if f["rule"] == "path_belt")))'; }
+belts_of "$WORK/venv/bin/python" > "$WORK/belts-before.txt" || fail "снимок поясов не снялся"
+
 "$WORK/venv/bin/pip" install -q "$KIT" > "$WORK/pip.log" 2>&1 \
   || { tail -20 "$WORK/pip.log" >&2; fail "pip install пакета не прошёл"; }
 echo "OK  pip install прошёл"
+
+belts_of "$WORK/venv/bin/python" > "$WORK/belts-after.txt" || fail "снимок поясов не снялся"
+if ! new_belts="$(comm -13 "$WORK/belts-before.txt" "$WORK/belts-after.txt")" || [ -n "${new_belts//[[:space:]]/}" ]; then
+  echo "$new_belts" >&2
+  fail "установка написала .pth-пояс в site-packages — пакет правит sys.path чужих процессов"
+fi
+echo "OK  установка не написала ни одного .pth-пояса"
 
 # Каждый модуль — ПЕРВЫМ в своём процессе: порядок импортов не контракт, и модуль, работающий лишь
 # после соседа, в чужом коде сломается на первом же прямом импорте.
