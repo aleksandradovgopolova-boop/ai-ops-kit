@@ -438,7 +438,13 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
                and "sys.modules[__name__]" in p.read_text(encoding="utf-8", errors="ignore")]
     alias_bytes = sum(p.stat().st_size for p in aliases)
     substantive = len(files) - len(aliases)
-    assert substantive < 450, f"содержательных файлов в managed: {substantive} (потолок 450)"
+    # v3.35: потолок ПОДНЯТ 450 -> 470 осознанно. Product Operating Model едет в child по существу:
+    # `ai-ops next`/`ai-ops model` работают В продуктовом репозитории, значит туда обязаны попасть
+    # пакет `planning` (6 файлов), presenter, валидатор модели, две реестровые декларации, три
+    # шаблона и скилл — 14 содержательных файлов, замерено, а не оценено. Смысл потолка сохранён:
+    # baseline монолита 503, и 456 по-прежнему ощутимо меньше. Поднимать его молча нельзя — это то
+    # же число класса DERIVED, что и замеры слоёв.
+    assert substantive < 470, f"содержательных файлов в managed: {substantive} (потолок 470)"
     assert alias_bytes < 200 * 1024, f"алиасы разрослись: {alias_bytes / 1024:.0f} КиБ (потолок 200)"
     assert total < 3.2 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ"
 

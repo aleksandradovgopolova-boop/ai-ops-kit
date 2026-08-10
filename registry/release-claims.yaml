@@ -20,7 +20,7 @@ agents_count: 51
 # требование blocking: true у каждого гейта из mvp_blocking_gates (список блокеров без силы —
 # такая же ложь публичной поверхности, как устаревшее число). При изменении числа гейтов править
 # ОБА места: knowledge/claims.yaml (pattern-счётчик) и этот файл.
-gates_count: 33
+gates_count: 34
 mvp_blocking_count: 8
 # Верификация самих валидаторов (рекомендация №6 внешнего ревью). Число деривируется из tests/ и
 # обязано совпадать: и рост, и просадка покрытия требуют осознанной правки этого файла.
@@ -30,8 +30,8 @@ mvp_blocking_count: 8
 #      на РЕАЛЬНОЙ порче своего источника правды;
 #  9 — штучные тесты (security_domains, spec_coverage, workflow_gates, installer-группа и др.);
 #  +1 — validate_layering (v3.32.0): граф импортов между пакетами против layering.yaml.
-validators_count: 71
-validators_externally_tested: 71
+validators_count: 72
+validators_externally_tested: 72
 
 qualified_on: >
   provider-neutral портфель по РОЛЯМ: дешёвый API-writer (money-mode) + СИЛЬНЫЙ writer (локальный

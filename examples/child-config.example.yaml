@@ -34,3 +34,17 @@ approval_policy: {human_approval_required_for: [protected_paths, destructive]}
 overlays: {project: .ai/project/, custom: .ai/custom/}
 protected_paths: [.github/workflows/]
 confidentiality_policy: {send_code_to_external_provider: allowed}
+
+# v3.35 Human Communication Layer: как кит разговаривает с ЧЕЛОВЕКОМ в этом репозитории.
+# `product` (по умолчанию) — сначала смысл и результат, техника по запросу. Меняется и обычной
+# фразой: «рассказывай подробнее техническую часть» -> technical, «полный контекст» -> debug.
+communication: {audience: product, detail_level: concise, explain_jargon: true, technical_details: on_request}
+
+# v3.35 Модель продуктового репозитория: доопределение сигнальных путей под ЭТОТ стек.
+# Кит знает типовые пути; какие пути в этом продукте относятся к контуру, знает владелец.
+# Доопределение превращает `unknown` («не умею видеть здесь») в проверяемое состояние — кит
+# ничего не выдумывает вместо вас. Раскомментируйте и укажите свои.
+# product_operating_model:
+#   contours:
+#     analytics_learning: {change_signals: ["src/telemetry/**", "src/**/events.ts"]}
+#     data_contracts:     {change_signals: ["src/domain/**"]}

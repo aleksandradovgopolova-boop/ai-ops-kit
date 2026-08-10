@@ -68,6 +68,29 @@ gates:
     required_evidence: [checked_paths, verdict]   # verdict ∈ clean|collision
     collision_policy: "verdict=collision -> координация / rebase на актуальный main / сузить scope / согласовать владельца (OwnershipMap)"
 
+  contour_consistency:
+    id: contour_consistency
+    purpose: >
+      Связность контуров продукта (v3.35 Product Operating Model): изменение обязано быть
+      согласовано с источниками истины тех контуров, которые оно затрагивает. Класс дефекта —
+      «закрыли WorkItem, обновив React-компонент, при изменившейся модели данных»: код и
+      представление о нём расходятся молча, и следующая сессия читает устаревшее описание как
+      правду. Кит выводит затронутые контуры из diff и сверяет с объявленным `affects` WorkItem'а.
+      Три состояния, и `unknown` НЕ равен `not_changed`: контур без сигнальных путей в этом
+      репозитории кит видеть не умеет и говорит об этом, а не зеленит.
+    stage: verification
+    blocking: false          # advisory до обкатки на child-репозиториях (правило движения по roadmap)
+    responsible_role: architecture-reviewer
+    review_mode: read-only
+    validator: validate-product-model        # runnable: tools/contours.py + validate_product_model.py
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]
+    required_evidence: [affects, changed_files, verdict]   # verdict ∈ ok|inconsistent
+    findings: [undeclared_change, declared_not_updated, unknown_contour]
+    never: >
+      `not_changed` НЕ требует обновления документов — бюрократия «восемь документов на задачу»
+      запрещена явно; незатронутый контур закрывается сам собой.
+
   event_contract_consistency:
     id: event_contract_consistency
     purpose: >

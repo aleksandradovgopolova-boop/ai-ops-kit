@@ -64,6 +64,7 @@ STANDALONE = [
     "validate_pipeline_e2e",
     "validate_post_release_readout",
     "validate_presets",
+    "validate_product_model",
     "validate_product_qualification",
     "validate_promotion_qualification",
     "validate_provider_residency",
@@ -128,6 +129,15 @@ CORRUPTIONS = {
     # охраняет инвариант «CI не запускает проверки мимо pytest». Портим то, что он реально читает.
     # v3.32: слои пакетов — тоже источник правды. Пустой список слоёв означает, что про каждый
     # пакет нельзя ни запретить, ни разрешить ничего; валидатор обязан это заметить.
+    # v3.35: модель контуров и политика коммуникации стали источниками правды для КОДА
+    # (детект связности, presenter, doctor, onboarding). Порча, которую никто не ловит, — тот же
+    # класс, что registry/tracks.yaml в 3.33: реестр врёт, а зелёный CI это подтверждает.
+    "registry/product-operating-model.yaml": (
+        "schema_version: 1\nregistry_type: product-operating-model\ncontours: []\n",
+        ["validate_product_model"]),
+    "registry/communication-policy.yaml": (
+        "schema_version: 1\nregistry_type: communication-policy\naudiences: {}\n",
+        ["validate_product_model"]),
     "packages/layering.yaml": (
         "schema_version: 1\nkind: package-layering\nlayers: []\nrules: []\nknown_violations: []\n",
         ["validate_layering"]),

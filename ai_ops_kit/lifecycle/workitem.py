@@ -78,6 +78,11 @@ def start(features_dir, fid, task, task_type=None, risk=None):
         },
         "status": "draft",
         "lifecycle_intent": "discovery",  # v3.27.0 WP1: начальная стадия
+        # v3.35 Product Operating Model: какие контуры продукта работа изменяет. Три состояния,
+        # и третье не равно второму: changed / not_changed / unknown. Пустой словарь означает «ещё
+        # не определяли», а НЕ «ничего не меняем» — заполняется из diff (`contours.derive_affects`)
+        # либо человеком; сверку делает `contours.reconcile`.
+        "affects": {},
     }
     wi_path(features_dir, fid).write_text(
         yaml.safe_dump(wi, allow_unicode=True, sort_keys=False), encoding="utf-8")
