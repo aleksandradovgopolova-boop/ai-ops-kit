@@ -114,6 +114,31 @@ def test_degraded_stays_degraded_on_every_level():
         assert "проверено не всё" in out
 
 
+def test_unknown_contours_are_not_translated_into_agreement():
+    """МУТАЦИОННОЕ РЕВЮ: главный инвариант релиза (`unknown` != зелёное утверждение) защищён в
+    `contours.py` пятью тестами и НЕ защищён в presenter ни одним. При отсутствии major-находок
+    перевод печатал «Изменение согласовано с описанием продукта», выбрасывая все `unknown_contour`:
+    кит проверил ОДИН контур из восьми и сообщил владельцу, что всё согласовано.
+    """
+    rep = {"comparable": True, "derived": {},
+           "findings": [{"id": "unknown_contour", "contour": f"c{i}", "severity": "info",
+                         "detail": "нет сигнальных путей"} for i in range(7)]}
+    msg = PR.from_contour_consistency(rep)
+    assert msg["status"] != "ok", "семь непроверенных контуров — это не «согласовано»"
+    for aud in PR.AUDIENCES:
+        out = PR.render(msg, audience=aud)
+        assert "7" in out or "семь" in out, out
+        assert "согласовано" not in out.lower() or "не" in out.lower()
+
+
+def test_nothing_to_compare_is_not_progress():
+    """`comparable: False` давал `status: ok`, и ярлык печатал «Работа продвинулась. Сверять пока
+    нечего» — бодрость на месте отсутствия проверки."""
+    msg = PR.from_contour_consistency({"comparable": False, "derived": {}, "findings": []})
+    assert msg["status"] != "ok"
+    assert "продвинулась" not in PR.render(msg, audience="product")
+
+
 def test_next_work_translation_says_why_not_score():
     rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
            "roadmap": {"errors": [], "warnings": []},

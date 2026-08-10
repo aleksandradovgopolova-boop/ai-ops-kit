@@ -80,6 +80,67 @@ def test_four_questions_are_all_answered(tmp_path):
         assert q in text
 
 
+def test_ranking_is_not_satisfied_by_alphabet_or_file_order(tmp_path):
+    """МУТАЦИОННОЕ РЕВЮ: замена `sort(-score)` на `sort(id)` НЕ покраснела — во всех фикстурах
+    ожидаемый победитель случайно шёл первым по алфавиту (`arch-01` < `ui-01`, `w1` < `w2`). Три
+    теста «про ранжирование» проверяли верхнюю карточку алфавитно отсортированного бэклога, то есть
+    ровно то, что `next work` обещает НЕ делать.
+
+    Здесь победитель — последний и по алфавиту, и по порядку строк в файле. Тест невозможно
+    удовлетворить случайно.
+    """
+    r = _repo(tmp_path, [
+        _item("aaa-01", value="low", write_scope=["src/aaa/"]),          # первый по алфавиту
+        _item("bbb-01", value="low", write_scope=["src/bbb/"]),
+        _item("zzz-01", type="architecture", owner_role="architect",     # ПОСЛЕДНИЙ по алфавиту
+              value="high", write_scope=["context/system/"]),
+        _item("eng-01", depends_on=["zzz-01"]),                          # ждут zzz-01
+        _item("eng-02", depends_on=["zzz-01"]),
+    ])
+    rep = N.compute(r)
+    assert rep["next_best"]["id"] == "zzz-01", (
+        "выбор идёт по счёту, а не по алфавиту: zzz-01 разблокирует двоих и имеет высокую ценность")
+    assert [x["id"] for x in rep["ready"]][0] == "zzz-01"
+
+
+def test_ranking_weights_come_from_the_registry(tmp_path):
+    """Заявление «веса объявлены в модели, порядок не зашит в код» обязано быть проверяемым:
+    смена веса в модели меняет выбор. Иначе это недоказанное утверждение."""
+    import copy
+    r = _repo(tmp_path, [
+        _item("aaa-01", value="high", write_scope=["src/aaa/"]),         # берёт ценностью
+        _item("zzz-01", write_scope=["src/zzz/"]),                       # берёт плечом
+        _item("eng-01", depends_on=["zzz-01"]),
+    ])
+    base = N.compute(r)["next_best"]["id"]
+
+    model = copy.deepcopy(N._contours.load_model())
+    for row in model["next_work"]["ranking"]:
+        if row["id"] == "unblocks_downstream":
+            row["weight"] = 0                       # плечо больше не влияет
+        if row["id"] == "product_value":
+            row["weight"] = 100
+    import unittest.mock as _m
+    with _m.patch.object(N._contours, "load_model", return_value=model):
+        shifted = N.compute(r)["next_best"]["id"]
+    assert base != shifted, "смена весов в модели не изменила выбор — значит веса не читаются"
+    assert shifted == "aaa-01"
+
+
+def test_resolve_is_identical_in_both_file_orders(tmp_path):
+    """МУТАЦИОННОЕ РЕВЮ: `_topo_order` -> порядок строк файла НЕ покраснел, хотя заявление
+    «перестановка строк не меняет ответ» опубликовано в release-claims. Мутант меняет ответ:
+    зависящая работа, записанная РАНЬШЕ своей зависимости, получала `blocked` вместо `ready`.
+    На плане из сотни работ это тихо скрывает готовую работу."""
+    from ai_ops_kit.planning import delivery_plan as DP
+    forward = [_item("a-01", status="done"), _item("b-01", depends_on=["a-01"])]
+    _repo(tmp_path, forward)
+    first = {k: v["status"] for k, v in DP.resolve(DP.load(tmp_path), tmp_path).items()}
+    _repo(tmp_path, list(reversed(forward)))
+    second = {k: v["status"] for k, v in DP.resolve(DP.load(tmp_path), tmp_path).items()}
+    assert first == second == {"a-01": "done", "b-01": "ready"}, (first, second)
+
+
 def test_goal_priority_beats_equal_leverage(tmp_path):
     """При равном плече выбирается работа цели ПЕРВОГО приоритета — порядок goals это приоритет."""
     r = _repo(tmp_path,

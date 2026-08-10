@@ -309,31 +309,66 @@ def from_next_work(rep: dict) -> dict:
 
 
 def from_contour_consistency(rep: dict) -> dict:
-    """`contours.reconcile()` -> UserMessage. Ровно тот случай, ради которого модель нужна."""
-    major = [f for f in rep["findings"] if f["severity"] == "major"]
-    if not rep["comparable"]:
-        return message(status="ok", summary="Сверять пока нечего: изменений не предъявлено.",
-                       next_steps=["проверю связность, когда появится изменение"])
-    if not major:
-        return message(status="ok",
-                       summary="Изменение согласовано с описанием продукта.",
-                       next_steps=["продолжаю"],
-                       technical={"findings": len(rep["findings"])})
-    undeclared = [f["contour"] for f in major if f["id"] == "undeclared_change"]
-    not_updated = [f["contour"] for f in major if f["id"] == "declared_not_updated"]
-    parts = []
-    if not_updated:
-        parts.append("изменилось то, что описано в проекте, но само описание не обновлено")
-    if undeclared:
-        parts.append("изменение затронуло области, о которых задача не предупреждала")
-    return message(
-        status="degraded",
-        summary="Изменение готово, но описание продукта за ним не поспело: " + "; ".join(parts) + ".",
-        why_it_matters="Следующая сессия — и человек, и агент — прочитает устаревшее описание как "
-                       "правду. Именно так расходятся код и представление о нём.",
-        next_steps=["обновлю затронутые описания и покажу изменения",
-                    "либо скажи, что менять их не нужно, и я запишу это как решение"],
-        technical={f["contour"]: f["detail"] for f in major})
+    """`contours.reconcile()` -> UserMessage. Ровно тот случай, ради которого модель нужна.
+
+    ГЛАВНЫЙ ИНВАРИАНТ ОБЯЗАН ДОЖИВАТЬ ДО ЧЕЛОВЕКА. Прежде при отсутствии major-находок перевод
+    печатал «Изменение согласовано с описанием продукта», выбрасывая все `unknown_contour`: кит
+    проверил один контур из восьми и сообщил владельцу, что всё согласовано. `unknown` был защищён
+    в `contours.py` пятью тестами и не защищён здесь ни одним — мутационное ревью это и поймало.
+    Непроверенное называется непроверенным на всех трёх уровнях детализации.
+    """
+    findings = rep.get("findings") or []
+    major = [f for f in findings if f.get("severity") == "major"]
+    unknown = [f for f in findings if f.get("id") == "unknown_contour"]
+
+    if not rep.get("comparable"):
+        # «Сверять нечего» — это не прогресс. Прежде здесь стоял `ok`, и ярлык печатал
+        # «Работа продвинулась» на месте непроведённой проверки.
+        return message(
+            status="degraded",
+            summary="Сверить описание продукта с изменением пока нечего: изменений не предъявлено.",
+            why_it_matters="Это не «всё согласовано» — это «проверка не проводилась».",
+            next_steps=["сверю, когда появится изменение"],
+            technical={"comparable": False, "findings": len(findings)})
+
+    if major:
+        behind = [f["contour"] for f in major if f.get("id") == "source_of_truth_behind"]
+        parts = []
+        if behind:
+            parts.append("изменилось то, что описано в проекте, а само описание не обновлено")
+        other = [f for f in major if f.get("id") != "source_of_truth_behind"]
+        if other:
+            parts.append("есть расхождения между заявленным и сделанным")
+        msg = message(
+            status="degraded",
+            summary="Изменение готово, но описание продукта за ним не поспело: "
+                    + "; ".join(parts) + ".",
+            why_it_matters="Следующая сессия — и человек, и агент — прочитает устаревшее описание "
+                           "как правду. Именно так расходятся код и представление о нём."
+                           + (f" Ещё {len(unknown)} "
+                              f"{_q(len(unknown), 'область', 'области', 'областей')} проверить "
+                              f"нечем." if unknown else ""),
+            next_steps=["обновлю затронутые описания и покажу изменения",
+                        "либо скажи, что менять их не нужно, и я запишу это как решение"],
+            technical={f["contour"]: f["detail"] for f in major})
+        return msg
+
+    if unknown:
+        n = len(unknown)
+        return message(
+            status="degraded",
+            summary=f"Расхождений не нашёл, но проверить смог не всё: {n} "
+                    f"{_q(n, 'область', 'области', 'областей')} продукта мне здесь не видно.",
+            why_it_matters="Про них я не говорю «в порядке» — я говорю «не знаю»: подменять "
+                           "признание утверждением значит зеленить непроверенное.",
+            next_steps=[f"назови, где в проекте живут эти области "
+                        f"({', '.join(f['contour'] for f in unknown[:3])}…), и я начну их видеть"],
+            technical={f["contour"]: f["detail"] for f in unknown})
+
+    return message(status="ok",
+                   summary="Изменение согласовано с описанием продукта — проверены все области.",
+                   next_steps=["продолжаю"],
+                   technical={"findings": len(findings)})
 
 
 def demo(audience="product"):

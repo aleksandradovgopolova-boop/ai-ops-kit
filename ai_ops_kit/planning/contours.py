@@ -479,33 +479,39 @@ def reconcile(child_root: Path, declared: dict, changed_files: list,
     for cid in contour_ids(model):
         d = derived[cid]
         want = decl.get(cid)
+
         if d["state"] == UNKNOWN:
             findings.append({"id": "unknown_contour", "contour": cid, "severity": "info",
                              "detail": d["reason"]})
             continue
-        if d["state"] == CHANGED and want != CHANGED:
-            # СТРОГОСТЬ ПО ФАКТУ ЗАЯВЛЕНИЯ, а не по факту изменения. `major` — только когда автор
-            # ЧТО-ТО заявил и промахнулся мимо этого контура. Если не заявлено НИЧЕГО, сверять не с
-            # чем: назвать затронутые контуры полезно, но объявлять это провалом — шум на каждой
-            # задаче. Прежде кит сам засевал `affects` по типу задачи и ловил СЕБЯ ЖЕ: находка
-            # «источник истины не обновлён» появлялась на любой обычной работе, потому что заявление
-            # выдумал он, а не человек. Гейт, шумящий на всём, перестают читать — модель запрещает
-            # это прямо (`consistency.never`).
-            declared_anything = any(v == CHANGED for v in decl.values())
-            findings.append({"id": "undeclared_change", "contour": cid,
-                             "severity": "major" if declared_anything else "info",
-                             "detail": f"изменение трогает {', '.join(d['matched'][:4])} — "
-                                       + (f"контур не заявлен в affects (заявлено: "
-                                          f"{', '.join(k for k, v in decl.items() if v == CHANGED)})"
-                                          if declared_anything else
-                                          "affects не заявлен, поэтому это наблюдение, а не расхождение")})
-        if want == CHANGED:
+
+        # ── ГЛАВНАЯ НАХОДКА: ОПИСАНИЕ ОТСТАЛО ОТ КОДА ──────────────────────────────────────────
+        # Это ФАКТ, и он не зависит от того, заполнил ли человек `affects`: сигналы контура тронуты,
+        # источник истины — нет. Прежде находка требовала заявления, и на документированном пути
+        # (`run` создаёт id из хеша задачи, элемента плана с таким id нет) поле было пустым ВСЕГДА —
+        # гейт структурно не мог дать не-`pass`. Мутационное ревью поймало это как выжившего мутанта:
+        # «файлов 5, включая миграции и CI -> verdict ok».
+        if d["state"] == CHANGED:
             touched = _sot_touched(child_root, cid, changed_files, model)
             if not touched:
                 sot = [s.get("path") for s in sot_for(model, cid, child_root)]
-                findings.append({"id": "declared_not_updated", "contour": cid, "severity": "major",
-                                 "detail": "контур заявлен изменённым, но источник истины не "
-                                           f"обновлён (ожидался один из: {', '.join(sot)})"})
+                findings.append({
+                    "id": "source_of_truth_behind", "contour": cid, "severity": "major",
+                    "detail": f"изменение трогает {', '.join(d['matched'][:4])}, а описание контура "
+                              f"не обновлено (ожидался один из: {', '.join(sot)})"})
+
+        # ── УЧЁТ ЗАЯВЛЕНИЯ: полезно, но это не тот дефект, ради которого гейт существует ─────────
+        # `info` осознанно. Незаполненное поле не делает работу несогласованной, а шум на каждой
+        # задаче гарантирует, что гейт перестанут читать — модель запрещает это прямо.
+        if d["state"] == CHANGED and want != CHANGED:
+            findings.append({"id": "undeclared_change", "contour": cid, "severity": "info",
+                             "detail": f"контур затронут, но не заявлен в affects "
+                                       f"(тронуто: {', '.join(d['matched'][:3])})"})
+        if want == CHANGED and d["state"] == NOT_CHANGED:
+            findings.append({"id": "declared_not_changed", "contour": cid, "severity": "info",
+                             "detail": "контур заявлен изменённым, но ни один его сигнальный путь "
+                                       "не тронут — заявление шире изменения"})
+
     return {"comparable": bool(changed_files), "derived": derived, "declared": decl,
             "findings": findings,
             "verdict": ("ok" if not [f for f in findings if f["severity"] == "major"]
