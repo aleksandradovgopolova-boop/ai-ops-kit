@@ -23,6 +23,6 @@
 
 Кейсы агента — в `evaluations/agents/<agent-id>.md` (id = имя файла агента без
 расширения; шаблон — `AgentEvaluationCase.md`). CI-гейт
-`validation/validate_agent_evals.py` требует файл кейсов для каждого агента,
+`ai_ops_kit/validation/validate_agent_evals.py` требует файл кейсов для каждого агента,
 **добавленного или изменённого** в diff'е — существующие агенты без кейсов не
 блокируются, долг закрывается по мере того, как их трогают.

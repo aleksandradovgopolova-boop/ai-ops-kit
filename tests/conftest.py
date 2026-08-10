@@ -15,10 +15,15 @@ from pathlib import Path
 
 import pytest
 
-# Add tools/ to path for imports
+# Add tools/ to path for imports.
+# v3.34: валидаторы переехали в ai_ops_kit/validation/. Плоское имя оставлено ЗДЕСЬ намеренно —
+# тесты импортируют валидатор как модуль (`from validate_x import check`), и переписывать 70
+# файлов ради формы импорта в харнессе смысла нет. Это не пояс: доказательство того, что
+# валидатор работает БЕЗ путей, даёт test_validator_runtime_contract — он запускает каждый
+# процессом из копии репозитория с вычищенным PYTHONPATH.
 PKG_ROOT = Path(__file__).resolve().parents[1]
 TOOLS_DIR = PKG_ROOT / "tools"
-VALIDATION_DIR = PKG_ROOT / "validation"
+VALIDATION_DIR = PKG_ROOT / "ai_ops_kit" / "validation"
 for p in (TOOLS_DIR, VALIDATION_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))

@@ -32,7 +32,7 @@ claims:
   - id: blueprint-final-stage
     doc: Feature Blueprint закрывается стадией retrospective
     type: symbol-exists
-    source: {path: ../validation/validate_feature_blueprint.py, symbol: retrospective}
+    source: {path: ../ai_ops_kit/validation/validate_feature_blueprint.py, symbol: retrospective}
 
   - id: shipped-skills-registered
     doc: manifest.skills.shipped перечисляет поставляемые скиллы

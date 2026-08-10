@@ -40,9 +40,10 @@ _BRANCH_KEYS = ("enforce", "branch_prefix", "protected_refs", "base_drift_adviso
 
 def _load_tool_defaults():
     """DEFAULTS из обоих инструментов. -> (commit_defaults, branch_defaults)."""
-    sys.path.insert(0, str(PKG / "tools"))
-    import branch_policy
-    import commit_policy
+    # Корень на путь кладём сами: в script-режиме его там нет, а имена нужны пакетные —
+    # плоские сюда уже привели бы к тому же ModuleNotFoundError после pip install.
+    sys.path.insert(0, str(PKG))
+    from ai_ops_kit.engops import branch_policy, commit_policy
     return dict(commit_policy.DEFAULTS), dict(branch_policy.DEFAULTS)
 
 

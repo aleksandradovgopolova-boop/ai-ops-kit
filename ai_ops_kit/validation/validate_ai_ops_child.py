@@ -27,7 +27,10 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-import _bootstrap  # noqa: E402
+try:                                          # v3.34: валидатор двурежимен
+    from ai_ops_kit.validation import _bootstrap   # noqa: F401 — импорт пакетом (после pip install)
+except ImportError:                                # запуск скриптом: корня на пути ещё нет,
+    import _bootstrap                              # noqa: F401 — и положить его может только он сам
 REPO_ROOT = Path.cwd()
 CI = PKG / "validation"
 

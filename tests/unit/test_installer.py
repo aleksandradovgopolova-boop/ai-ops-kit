@@ -363,7 +363,7 @@ def test_status_ok_on_fresh_install(installed):
 def test_delivery_contains_full_engine_closure(installed, ai_ops):
     """fail-closed для разделения поставки: рантайм-замыкание движка целиком в child.
 
-    Источник истины — ENGINE_CLOSURE из validation/validate_standalone_engine.py: если
+    Источник истины — ENGINE_CLOSURE из ai_ops_kit/validation/validate_standalone_engine.py: если
     из поставки выпадет файл движка, тест падает здесь, а не у пользователя в проде."""
     sys.path.insert(0, str(KIT / "validation"))
     try:
@@ -379,7 +379,7 @@ def test_delivery_contains_runtime_validators(installed, ai_ops):
     """Валидаторы, которые движок вызывает в child (гейты, отчёт), обязаны доехать."""
     managed = installed / ".ai" / "managed"
     missing = [name for name in sorted(ai_ops.RUNTIME_VALIDATORS)
-               if not (managed / "validation" / f"{name}.py").is_file()]
+               if not (managed / "ai_ops_kit" / "validation" / f"{name}.py").is_file()]
     assert not missing, f"из поставки выпали рантайм-валидаторы: {missing}"
 
 
@@ -391,7 +391,7 @@ def test_delivery_contains_bootstrap_for_every_shipped_importer(installed):
     на первой строке: `ModuleNotFoundError: No module named '_bootstrap'`. Проверка привязана
     к факту импорта, а не к списку имён.
 
-    Проверяются каталоги, ИЗ КОТОРЫХ запускают скрипты (`tools/`, `validation/`): там sys.path[0]
+    Проверяются каталоги, ИЗ КОТОРЫХ запускают скрипты (`tools/`, `ai_ops_kit/validation/`): там sys.path[0]
     — сам каталог, и `_bootstrap` обязан лежать рядом. Модули внутри `ai_ops_kit/**` сюда не
     входят намеренно: в них входят через алиас, который путь уже поставил, — требовать копию
     загрузчика в каждом пакете значило бы разводить его по дереву без нужды.
@@ -451,7 +451,7 @@ def test_managed_set_excludes_are_declared_not_implicit(ai_ops):
     assert not any(r.startswith("qualification/") for r in rels)
     assert not any(r.startswith("containers/") for r in rels)
     assert "tools/ai_ops_run.py" in rels
-    assert "validation/ai_route.py" in rels
+    assert "ai_ops_kit/engine/ai_route.py" in rels
 
 
 # ---------------------------------------------------------------- внутренние функции

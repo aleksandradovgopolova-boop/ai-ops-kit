@@ -607,35 +607,35 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 из копии репозитория) и в CI, все должны быть PASS (см. AGENTS.md). Код плоский, в пакеты не
 переезжал; тела селфтестов вынесены в `tests/`.
 
-- `validation/validate_layering.py` — направления зависимостей между пакетами `ai_ops_kit/*`: граф импортов по AST против `packages/layering.yaml` (v3.32.0)
-- `validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `tools/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
-- `validation/ai_capability_selftest.py`
-- `validation/ai_managed_checksums.py`
-- `validation/ai_route.py`
-- `validation/validate_agent_evals.py`
-- `validation/validate_agents_checklist.py`
-- `validation/validate_ai_first_config.py`
-- `validation/validate_ai_first_providers.py`
-- `validation/validate_ai_first_registry.py`
-- `validation/validate_ai_first_workflows.py`
-- `validation/validate_ai_ops_child.py`
-- `validation/validate_claims.py`
-- `validation/validate_cross_artifacts.py`
-- `validation/validate_decisions.py`
-- `validation/validate_engops_policy.py` — связность порогов EngOps + паритет «правило ↔ DEFAULTS кода» (v3.19.0)
-- `validation/validate_event_catalog.py` — согласованность имён событий, drift-скан (v2.29)
-- `validation/validate_duties.py` — обязанности постоянного агента Robin (v2.21)
-- `validation/validate_feature_blueprint.py`
-- `validation/validate_freshness.py`
-- `validation/validate_research_artifacts.py` — research-модуль: схемы + связи RR→EV→DP + freshness + quote-конвенция (CI)
-- `validation/validate_knowledge_graph.py`
-- `validation/validate_openspec_change.py`
-- `validation/validate_presets.py`
-- `validation/validate_references.py`
-- `validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
-- `validation/validate_security_posture.py`
-- `validation/validate_stale_gates.py`
-- `validation/validate_workflow_gates.py`
+- `ai_ops_kit/validation/validate_layering.py` — направления зависимостей между пакетами `ai_ops_kit/*`: граф импортов по AST против `packages/layering.yaml` (v3.32.0)
+- `ai_ops_kit/validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `tools/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
+- `ai_ops_kit/validation/ai_capability_selftest.py`
+- `ai_ops_kit/validation/ai_managed_checksums.py`
+- `ai_ops_kit/validation/ai_route.py`
+- `ai_ops_kit/validation/validate_agent_evals.py`
+- `ai_ops_kit/validation/validate_agents_checklist.py`
+- `ai_ops_kit/validation/validate_ai_first_config.py`
+- `ai_ops_kit/validation/validate_ai_first_providers.py`
+- `ai_ops_kit/validation/validate_ai_first_registry.py`
+- `ai_ops_kit/validation/validate_ai_first_workflows.py`
+- `ai_ops_kit/validation/validate_ai_ops_child.py`
+- `ai_ops_kit/validation/validate_claims.py`
+- `ai_ops_kit/validation/validate_cross_artifacts.py`
+- `ai_ops_kit/validation/validate_decisions.py`
+- `ai_ops_kit/validation/validate_engops_policy.py` — связность порогов EngOps + паритет «правило ↔ DEFAULTS кода» (v3.19.0)
+- `ai_ops_kit/validation/validate_event_catalog.py` — согласованность имён событий, drift-скан (v2.29)
+- `ai_ops_kit/validation/validate_duties.py` — обязанности постоянного агента Robin (v2.21)
+- `ai_ops_kit/validation/validate_feature_blueprint.py`
+- `ai_ops_kit/validation/validate_freshness.py`
+- `ai_ops_kit/validation/validate_research_artifacts.py` — research-модуль: схемы + связи RR→EV→DP + freshness + quote-конвенция (CI)
+- `ai_ops_kit/validation/validate_knowledge_graph.py`
+- `ai_ops_kit/validation/validate_openspec_change.py`
+- `ai_ops_kit/validation/validate_presets.py`
+- `ai_ops_kit/validation/validate_references.py`
+- `ai_ops_kit/validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
+- `ai_ops_kit/validation/validate_security_posture.py`
+- `ai_ops_kit/validation/validate_stale_gates.py`
+- `ai_ops_kit/validation/validate_workflow_gates.py`
 
 ## tools/
 
@@ -668,13 +668,13 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
 - `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
 - `tools/evidence_collector.py` — stack-aware сбор evidence: гоняет команды профиля через Broker -> gate implementation_verification (v2.44)
-- `validation/validate_package_boundaries.py` — границы 5 пакетов 3.0: DAG зависимостей + непересечение + резолв include (v2.46, срез 0)
-- `validation/validate_standalone_engine.py` — доказывает самодостаточность движка: строит managed из managed_set и гоняет `ai-ops run` из `.ai/managed/` отдельным процессом без parent-клона (v2.82)
-- `validation/validate_qualification.py` — согласованность пакета живых сценариев (форма, task_type из workflows, известные флаги, матрица ОС/стеков) (v2.84)
-- `validation/validate_requirements_artifact.py` — структура артефакта требований (testable requirements + acceptance scenarios) -> evidence гейта requirements (v2.86)
-- `validation/validate_plan_artifact.py` — структура плана (work_packages + dependencies + write_scope) -> evidence гейта plan_readiness (v2.86)
-- `validation/validate_spec_artifact.py` — форма spec-change + рендер в OpenSpec-markdown; движок валидирует реальным `openspec` CLI -> evidence гейта specification (v2.89)
-- `validation/validate_container_assets.py` — стережёт jail-флаги контейнера (read-only/cap-drop/лимиты/non-root) от регресса (v2.90)
+- `ai_ops_kit/validation/validate_package_boundaries.py` — границы 5 пакетов 3.0: DAG зависимостей + непересечение + резолв include (v2.46, срез 0)
+- `ai_ops_kit/validation/validate_standalone_engine.py` — доказывает самодостаточность движка: строит managed из managed_set и гоняет `ai-ops run` из `.ai/managed/` отдельным процессом без parent-клона (v2.82)
+- `ai_ops_kit/validation/validate_qualification.py` — согласованность пакета живых сценариев (форма, task_type из workflows, известные флаги, матрица ОС/стеков) (v2.84)
+- `ai_ops_kit/validation/validate_requirements_artifact.py` — структура артефакта требований (testable requirements + acceptance scenarios) -> evidence гейта requirements (v2.86)
+- `ai_ops_kit/validation/validate_plan_artifact.py` — структура плана (work_packages + dependencies + write_scope) -> evidence гейта plan_readiness (v2.86)
+- `ai_ops_kit/validation/validate_spec_artifact.py` — форма spec-change + рендер в OpenSpec-markdown; движок валидирует реальным `openspec` CLI -> evidence гейта specification (v2.89)
+- `ai_ops_kit/validation/validate_container_assets.py` — стережёт jail-флаги контейнера (read-only/cap-drop/лимиты/non-root) от регресса (v2.90)
 - `containers/Dockerfile` — эталонный образ изолированного рантайма движка (non-root, python+node+openspec) (v2.90)
 - `containers/run-sandboxed.sh` — запуск движка в jail'е: read-only root + writable только worktree + лимиты + cap-drop (v2.90, P0.2)
 - `docs/container-isolation.md` — два слоя изоляции (брокер + контейнер), что enforce'ит jail, как запускать, честная граница по сети (v2.90)

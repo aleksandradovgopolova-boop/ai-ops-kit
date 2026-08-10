@@ -174,8 +174,8 @@ def _authoring_specs():
     """v2.86: артефакт-гейты, которые движок умеет ЗАКРЫВАТЬ производством артефакта + детерминированной
     проверкой ФОРМЫ (не «качества»). specification обрабатывается ОТДЕЛЬНО."""
     from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-    import validate_requirements_artifact as vra
-    import validate_plan_artifact as vpa
+    from ai_ops_kit.validation import validate_requirements_artifact as vra
+    from ai_ops_kit.validation import validate_plan_artifact as vpa
     return {
         "requirements": ("requirements.yaml", vra, "requirements-artifact",
                          "requirements: список объектов {id, statement (тестируемое требование), "

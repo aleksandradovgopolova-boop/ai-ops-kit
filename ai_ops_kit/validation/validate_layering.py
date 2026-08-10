@@ -4,10 +4,13 @@
 Переезд в пакеты (3.31.0) дал модулям имена, но не дал границам силы: `gates` мог импортировать
 `engops`, и никто бы не заметил. Здесь граф импортов СЧИТАЕТСЯ по коду и сверяется с объявленным.
 
-Ратчет, а не строгий DAG: на 3.31.1 в коде 9 взаимных зависимостей и 119 циклов. Правило,
+Ратчет, а не строгий DAG: в коде 9 взаимных зависимостей и 31 цикл длиннее двух. Правило,
 краснеющее на всём сразу, выключают — поэтому запрещены нарушения ПОПЕРЁК слоёв, а известные
 исключения перечислены поимённо и вправе только сокращаться. Исчезнувшее исключение обязано быть
 удалено из реестра: список, который разрешает несуществующее, перестаёт что-либо значить.
+
+С v3.34 замер сам стал потолком (`ratchet_errors`): взаимные связи внутри `capabilities` слоями
+разрешены, и без потолка это значило «расти можно». Ратчет ходит только вниз.
 
 Импорты считаются по ПЛОСКОМУ имени (`import tool_broker`) и по пакетному
 (`from ai_ops_kit.engine.tool_broker import ...`) — переход на пакетные имена идёт отдельно, и
@@ -16,6 +19,7 @@
 Использование:
   validate_layering.py                # проверить
   validate_layering.py --graph        # напечатать рёбра (для разбора циклов)
+  validate_layering.py --counts       # напечатать замер: взаимные пары, циклы длиннее двух
 Возврат 0 — чисто, 1 — есть нарушения.
 """
 from __future__ import annotations
@@ -90,6 +94,59 @@ def build_graph(surface=SURFACE):
     return dict(edges)
 
 
+def cyclic_counts(edges):
+    """Взаимные пары и элементарные циклы длиннее двух в пакетном графе.
+
+    Цикл считается ОДИН раз, а не по разу с каждой стартовой вершины. Обход продолжается только
+    в вершины строго больше стартовой, поэтому каждый элементарный цикл перечисляется ровно
+    однажды — тем обходом, что начат в его минимальной вершине. Цикл и его обратный — разные
+    циклы направленного графа, оба считаются: это разные связи в коде.
+
+    v3.34: прежний замер (119) считал РОТАЦИИ — каждый цикл по разу с каждой своей вершины, то
+    есть 11 троек, 14 четвёрок и 6 пятёрок давали 33+56+30. Различных циклов 31. Число, зависящее
+    от способа обхода, потолком быть не может: следующий посчитает иначе и получит другой ответ.
+    """
+    nodes = sorted({p for e in edges for p in e})
+    adj = {n: sorted({b for (a, b) in edges if a == n}) for n in nodes}
+    mutual = {tuple(sorted(e)) for e in edges if (e[1], e[0]) in edges}
+    found = []
+
+    def walk(start, node, path, seen):
+        for nxt in adj.get(node, ()):
+            if nxt == start:
+                if len(path) > 2:
+                    found.append(tuple(path))
+            elif nxt not in seen and nxt > start:
+                walk(start, nxt, path + [nxt], seen | {nxt})
+
+    for start in nodes:
+        walk(start, start, [start], {start})
+    return {"mutual_pairs": len(mutual), "cycles_longer_than_two": len(found)}
+
+
+def ratchet_errors(spec, edges):
+    """Замер циклов ядра как потолок: новых связей не появляется, а ушедшие обязаны быть списаны.
+
+    Взаимные связи ВНУТРИ `capabilities` слоями разрешены сознательно (см. purpose слоя), поэтому
+    `check` о них ничего не говорит. Без потолка это значит «расти можно»: замер 3.32 был записью
+    в файле, которую никто не читал. Ратчет ходит только вниз — ровно как реестр known_violations.
+    """
+    base = spec.get("baseline") or {}
+    errors = []
+    for key, actual in sorted(cyclic_counts(edges).items()):
+        declared = base.get(key)
+        if not isinstance(declared, int) or isinstance(declared, bool):
+            errors.append(f"ратчет {key}: в baseline нет числа (сейчас {actual}) — "
+                          "потолка не существует, проверять не с чем")
+        elif actual > declared:
+            errors.append(f"ратчет {key}: стало {actual} при потолке {declared} — новая взаимная "
+                          "связь или цикл внутри ядра; развязать или осознанно поднять потолок")
+        elif actual < declared:
+            errors.append(f"ратчет {key}: стало {actual} при потолке {declared} — связь ушла, "
+                          "опустить потолок в packages/layering.yaml (ратчет ходит только вниз)")
+    return errors
+
+
 def _layer_index(spec):
     idx = {}
     for i, layer in enumerate(spec.get("layers") or []):
@@ -144,13 +201,20 @@ def main(argv):
         except BrokenPipeError:      # `--graph | head` — не повод для трейсбека
             pass
         return 0
-    errors = check(spec, edges)
+    counts = cyclic_counts(edges)
+    if "--counts" in argv:
+        for k, v in sorted(counts.items()):
+            print(f"{k}: {v}")
+        return 0
+    errors = check(spec, edges) + ratchet_errors(spec, edges)
     for e in errors:
         print(f"  [FAIL] {e}")
     if errors:
         print(f"LAYERING-FAIL: нарушений {len(errors)}")
         return 1
-    print(f"LAYERING-OK: {len(edges)} межпакетных рёбер, все в объявленных границах.")
+    print(f"LAYERING-OK: {len(edges)} межпакетных рёбер, все в объявленных границах; "
+          f"взаимных пар {counts['mutual_pairs']}, циклов длиннее двух "
+          f"{counts['cycles_longer_than_two']} — не выше потолка.")
     return 0
 
 

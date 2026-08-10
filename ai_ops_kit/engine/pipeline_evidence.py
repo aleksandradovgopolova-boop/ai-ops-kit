@@ -70,7 +70,7 @@ def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
 def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
     """v2.89: произвести OpenSpec change для гейта specification."""
     from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-    import validate_spec_artifact as vsa
+    from ai_ops_kit.validation import validate_spec_artifact as vsa
     prompt = (
         "Ты автор OpenSpec-изменения (spec-change) для задачи. Верни ТОЛЬКО YAML со схемой:\n"
         "  schema_version: 1\n  kind: spec-change\n  capability: <slug>\n  why: <зачем>\n"
@@ -209,7 +209,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                  max_reads=10, change_context=None,
                  calibrated_enforcement=False, ui_evidence=None):
     """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence."""
-    import validate_reviewer_result as vrr
+    from ai_ops_kit.validation import validate_reviewer_result as vrr
     gates = gate_executor.load_gates()
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     reviews = []
@@ -292,7 +292,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
 def _review_security(reviewer_proposer, work_root, pack_result, revision, budget, change_context=None):
     """v2.106: независимый security-reviewer выносит вердикт по needs_review доменам."""
     from ai_ops_kit.security import security_pack
-    import validate_reviewer_result as vrr
+    from ai_ops_kit.validation import validate_reviewer_result as vrr
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     domains = {d["id"]: d for d in security_pack.load_domains()[0]}
     applicable = list(pack_result.get("needs_review", []) or [])

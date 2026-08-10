@@ -65,7 +65,7 @@ check_produces_output "workitem --help" \
   python3 .ai/managed/tools/workitem.py --help
 
 # ------------------------------------------------------------------ 5. валидатор child'а зелёный
-python3 .ai/managed/validation/validate_ai_ops_child.py > "$WORK/child-validate.log" 2>&1 \
+python3 .ai/managed/ai_ops_kit/validation/validate_ai_ops_child.py > "$WORK/child-validate.log" 2>&1 \
   || { tail -20 "$WORK/child-validate.log" >&2; fail "validate_ai_ops_child упал в свежей установке"; }
 echo "OK  validate_ai_ops_child зелёный"
 

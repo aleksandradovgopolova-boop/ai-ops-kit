@@ -3,8 +3,8 @@
 
 Аудит v2.79 (P0.3 / standalone): движок раньше жил только в клоне кита — child не мог
 запустить `ai-ops run` без внешнего `git clone` parent-пакета. v2.82 кладёт движок
-(tools/ + validation/ + их данные) в managed-слой (`.ai/managed/`), и PKG движка резолвится
-как `Path(__file__).parents[1]` == `.ai/managed/`. Этот валидатор ДОКАЗЫВАЕТ самодостаточность,
+(tools/ + ai_ops_kit/ + их данные) в managed-слой (`.ai/managed/`), и PKG движка резолвится
+по маркеру VERSION в `.ai/managed/`. Этот валидатор ДОКАЗЫВАЕТ самодостаточность,
 а не декларирует её:
 
   1. completeness: строит managed-слой из manifest.update_policy.managed_set и проверяет, что
@@ -46,7 +46,7 @@ ENGINE_MODULES = [
     "tools/tool_loop.py", "tools/orchestrator.py", "tools/run_plan.py",
     "tools/run_report.py", "tools/gate_executor.py", "tools/evidence_collector.py",
     "tools/project_detector.py", "tools/budget.py", "tools/workitem.py",
-    "tools/active_work.py", "tools/worktree.py", "validation/ai_route.py",
+    "tools/active_work.py", "tools/worktree.py", "ai_ops_kit/engine/ai_route.py",
 ]
 ENGINE_DATA = [
     "config/protected-paths.yaml", "quality/gates.yaml",
@@ -87,8 +87,8 @@ MANAGED = Path(sys.argv[1]).resolve()
 CHILD = Path(sys.argv[2]).resolve()
 # ЕДИНСТВЕННЫЙ источник кода — managed-слой; parent-кит на path НЕ добавляем.
 sys.path.insert(0, str(MANAGED / "tools"))
-sys.path.insert(0, str(MANAGED / "validation"))
-import execution_pipeline
+sys.path.insert(0, str(MANAGED))          # v3.34: корень managed — оттуда импортируется ai_ops_kit.*
+from ai_ops_kit.engine import execution_pipeline
 script = iter([
     {"op": "write", "path": "src/add.py", "content": "def add(a, b):\n    return a + b\n"},
     {"done": True, "summary": "add"},
