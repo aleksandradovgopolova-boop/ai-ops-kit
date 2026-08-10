@@ -248,15 +248,38 @@ def from_next_work(rep: dict) -> dict:
     active = rep.get("in_progress") or []
     blocked = rep.get("blocked") or []
     if not nb:
+        # Ведро `not_ready` — работа, ГОТОВАЯ по графу, но не прошедшая допуск (бюджет, capability,
+        # конфликт записи). Прежде оно терялось, и продакту сообщался ложный факт «работа не
+        # объявлена», хотя работа объявлена и всего лишь не допущена. Перевод менял не язык, а
+        # факты — то, что политика запрещает прямо.
+        not_ready = rep.get("not_ready") or []
+        _ADMISSION_RU = {
+            "within_budget": "не укладывается в остаток бюджета",
+            "capabilities_ready": "требует возможностей, которых нет",
+            "no_write_conflict": "трогает файлы, которые уже правит другая работа",
+            "no_human_decision": "ждёт решения человека",
+            "deps_done": "ждёт незакрытые зависимости",
+        }
+        if not_ready:
+            causes = sorted({_ADMISSION_RU.get(c, c)
+                             for r in not_ready for c in (r.get("blocked_by_admission") or [])})
+            why = ("Работа объявлена, но взять её сейчас нельзя: "
+                   + "; ".join(causes) + ".") if causes else \
+                  "Работа объявлена, но не прошла проверку готовности."
+        elif blocked:
+            why = f"Это не значит, что всё сделано: {len(blocked)} задач ждут снятия блокировки."
+        else:
+            why = "Это не значит, что всё сделано: работа пока не объявлена."
         return message(
             status="blocked",
             summary="Готовой к работе задачи сейчас нет.",
-            why_it_matters=("Это не значит, что всё сделано: "
-                            + (f"{len(blocked)} задач ждут снятия блокировки" if blocked
-                               else "работа не объявлена")),
-            next_steps=["покажу, что именно блокирует, если нужно"],
-            technical={"blocked": ", ".join(b["id"] for b in blocked),
-                       "in_progress": ", ".join(a["id"] for a in active)})
+            why_it_matters=why,
+            next_steps=["покажу, что именно мешает, если нужно"],
+            technical={"blocked": ", ".join(b["id"] for b in blocked) or "—",
+                       "in_progress": ", ".join(a["id"] for a in active) or "—",
+                       "not_admitted": ", ".join(
+                           f"{r.get('id')}: {', '.join(r.get('blocked_by_admission') or [])}"
+                           for r in not_ready) or "—"})
 
     par = rep.get("parallel_with") or []
     steps = [f"возьмусь за «{nb['title']}»"]

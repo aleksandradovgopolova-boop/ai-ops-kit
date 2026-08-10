@@ -22,7 +22,8 @@
      содержит обязательные `summary` и `next`; `order` — перестановка объявленных вопросов;
   8. ПЛАН (если есть): проходит `plan.validate` без ошибок, и `ROADMAP.md` — без ошибок контракта.
 
-  validate_product_model.py [<repo>] [--json] | --selftest
+  validate_product_model.py [<repo>] [--json]
+Тесты валидатора — в tests/unit/ (selftest не живёт в продакшн-модуле, AGENTS.md).
 """
 from __future__ import annotations
 
@@ -169,8 +170,19 @@ def check_comms(data):
     for r in data.get("rules") or []:
         if not r.get("id") or not (r.get("rule") or "").strip():
             e.append("rules: правило без id или без текста")
-    if not data.get("adapters"):
+    adapters = data.get("adapters") or []
+    if not adapters:
         e.append("adapters пусты — политика без адаптеров не доезжает ни до одного runtime")
+    for a in adapters:
+        aid = a.get("id") or "<без id>"
+        if not a.get("path"):
+            e.append(f"адаптер '{aid}': не указан path")
+        # Адаптер-инструкция обязан объявить, ЧЕМ он доставляется: v3.35 ревью нашло адаптер,
+        # который был объявлен и не доставлялся ничем — «Claude Code подхватывает автоматически»
+        # было правдой только при условии, что блок кто-то положил, а не кладывал никто.
+        if a.get("kind") == "runtime-instruction" and not a.get("delivered_by"):
+            e.append(f"адаптер '{aid}': kind=runtime-instruction без delivered_by — объявленная "
+                     f"инструкция, которую ничто не доставляет, до runtime не доезжает")
     return e
 
 

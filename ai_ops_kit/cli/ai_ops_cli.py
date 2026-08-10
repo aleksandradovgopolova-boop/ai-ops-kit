@@ -269,6 +269,12 @@ def _run_intent(intent, task, child_root, signals, a):
         wid = _wid_for(task, signals, a.feature)
         workitem.start(str(child_root / "features"), wid, task or wid,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
+        # v3.35: `affects` засевается ПОДСКАЗКОЙ по типу работы, а не выводится из diff. Разница
+        # принципиальная: заявление автора и факт изменения — два независимых источника, и сверять
+        # их имеет смысл только пока они независимы. Автозаполнение из diff сделало бы находку
+        # `undeclared_change` невозможной, то есть выключило бы гейт, оставив его зелёным.
+        # Прежде поле оставалось `{}` навсегда, а `suggest_affects` не вызывался нигде (ревью 3.35).
+        _seed_workitem_affects(child_root, wid, signals.get("task_type"))
         sp, created = spec_levels.create_spec(child_root, wid, signals)
         if js:
             print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
@@ -387,6 +393,38 @@ def _run_intent(intent, task, child_root, signals, a):
         return 0
 
     return None
+
+
+def _seed_workitem_affects(child_root, wid, task_type):
+    """Записать в WorkItem подсказку `affects` по типу работы (v3.35). Тихо ничего не делает, если
+    модель недоступна: онбординг и создание фичи не обязаны падать из-за реестра контуров."""
+    import yaml as _yaml
+    try:
+        from ai_ops_kit.planning import contours as _c
+        model = _c.load_model()
+    except Exception:                                  # noqa: BLE001 — реестр не обязан быть рядом
+        return None
+    wf = (task_type or "").strip()
+    # Тип работы плана (`engineering`/`visual`/…) и класс задачи движка (`ENGINEERING`/`VISUAL`/…)
+    # — разные словари; сопоставление объявлено здесь, а не угадывается по регистру.
+    by_workflow = {"QUICK": "engineering", "ENGINEERING": "engineering", "PRODUCT": "product",
+                   "RESEARCH": "research", "VISUAL": "visual", "AI_FEATURE": "engineering",
+                   "CRITICAL": "security", "ANALYTICS": "analytics"}
+    suggested = _c.suggest_affects(model, by_workflow.get(wf.upper(), ""))
+    if not suggested:
+        return None
+    wp = Path(child_root) / "features" / str(wid) / "workitem.yaml"
+    if not wp.is_file():
+        return None
+    try:
+        data = _yaml.safe_load(wp.read_text(encoding="utf-8")) or {}
+    except _yaml.YAMLError:
+        return None
+    if data.get("affects"):
+        return None                                    # объявленное человеком не перезаписываем
+    data["affects"] = suggested
+    wp.write_text(_yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return suggested
 
 
 def _session_guard_before_start(child_root, task, signals, feature=None):

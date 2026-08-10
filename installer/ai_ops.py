@@ -641,6 +641,45 @@ def _seed_planning_contour(root: Path, dry=False):
     return out
 
 
+COMM_MARK_BEGIN = "<!-- AI-OPS-COMMUNICATION-POLICY:BEGIN — управляется китом, не править вручную -->"
+COMM_MARK_END = "<!-- AI-OPS-COMMUNICATION-POLICY:END -->"
+
+
+def _install_communication_adapter(root: Path, dry=False):
+    """v3.35: политика коммуникации ДОЕЗЖАЕТ до runtime — блок в `CLAUDE.md` репозитория.
+
+    Прежде адаптер `claude-code-memory` был объявлен в `registry/communication-policy.yaml` («Claude
+    Code подхватывает его автоматически») и шаблон обещал «правьте политику и перегенерируйте», но
+    ни одна строка кода блок не доставляла: он лежал статическим файлом в managed-слое и в CLAUDE.md
+    не попадал никогда. Объявленный адаптер без доставки — то же, что capability без реализации.
+
+    ИДЕМПОТЕНТНО и БЕЗОПАСНО: блок ограничен маркерами, повторный запуск ЗАМЕНЯЕТ только его, текст
+    пользователя вне маркеров не трогается никогда. Это и есть «перегенерация», которую обещал
+    шаблон: правишь политику -> `ai-ops update` -> блок обновлён, остальное на месте.
+    -> {"action": created|updated|unchanged|skipped-no-template, "path": str}
+    """
+    src = MANAGED / "templates" / "runtime" / "claude-communication.md"
+    if not src.is_file():
+        src = PKG / "templates" / "runtime" / "claude-communication.md"
+    if not src.is_file():
+        return {"action": "skipped-no-template", "path": None}
+    body = src.read_text(encoding="utf-8").strip()
+    block = f"{COMM_MARK_BEGIN}\n{body}\n{COMM_MARK_END}\n"
+    dst = root / "CLAUDE.md"
+    old = dst.read_text(encoding="utf-8") if dst.is_file() else ""
+    if COMM_MARK_BEGIN in old and COMM_MARK_END in old:
+        head, _, rest = old.partition(COMM_MARK_BEGIN)
+        _, _, tail = rest.partition(COMM_MARK_END)
+        new = head + block + tail.lstrip("\n")
+        action = "unchanged" if new == old else "updated"
+    else:
+        new = (old.rstrip("\n") + "\n\n" + block) if old.strip() else block
+        action = "updated" if old.strip() else "created"
+    if not dry and new != old:
+        dst.write_text(new, encoding="utf-8")
+    return {"action": action, "path": str(dst)}
+
+
 def _planning_gaps(root: Path):
     """(required, missing) — артефакты контура планирования, которых в репозитории нет."""
     pom = ((manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
@@ -754,6 +793,10 @@ def cmd_update(force=False, smoke_checks=None):
     bump_child_config(target)
     report["skills_synced"] = sync_skills(REPO_ROOT)
     report["commands_installed"] = materialize_runtime(REPO_ROOT)
+    # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
+    # перегенерируйте» стало правдой, а не обещанием в шаблоне. Текст вне маркеров не трогается.
+    report["communication_adapter"] = _install_communication_adapter(REPO_ROOT)
+    report["planning_seeded"] = _seed_planning_contour(REPO_ROOT)
 
     # smoke: валидаторы. При провале — ТРАНЗАКЦИОННЫЙ ОТКАТ всего footprint (managed,
     # .claude/skills, .claude/commands, .ai/generated, .ai-ops.yaml) к снимку из backup.
@@ -842,6 +885,10 @@ def cmd_init(target_dir):
         print(f"создан черновик контура планирования: {', '.join(s['artifact'] for s in seeded)} "
               f"— направление и приоритеты кит не выдумывает, заполните их "
               f"(или запустите `ai-ops model .` — он спросит одним пакетом).")
+    comm = _install_communication_adapter(root)
+    if comm["action"] in ("created", "updated"):
+        print("политика общения подключена к runtime (блок в CLAUDE.md) — опсик по умолчанию "
+              "говорит смыслом, а не внутренним состоянием.")
     synced = sync_skills(root)
     if synced:
         print(f"синхронизированы скиллы в .claude/skills/: {', '.join(synced)}")

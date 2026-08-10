@@ -43,6 +43,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.planning import contours as _contours
 
 # Расширения, считающиеся исходным кодом при классификации. Список узкий сознательно: markdown и
@@ -211,8 +213,35 @@ def classify(evidence: dict, model: dict | None = None) -> dict:
     reasons.append(f"код есть (файлов {src}), продуктовой и архитектурной истории почти нет")
     if commits is not None:
         reasons.append(f"коммитов {commits}")
+        # Порог `early_max_commits` объявлен в реестре и ОБЯЗАН читаться: реестр обещает, что пороги
+        # правятся данными живых прогонов, а не кодом. Прежде он не читался никем — объявление без
+        # реализации, то есть в точности то, что инварианты кита запрещают.
+        early_max = th.get("early_max_commits", 50)
+        if commits > early_max:
+            reasons.append(f"история длиннее порога ранней стадии ({early_max}), но признаков "
+                           f"живой системы (CI, тесты, миграции, релизы) меньше двух — "
+                           f"состояние определяется как раннее осознанно")
     return {"class": "EARLY_PRODUCT", "confidence": "medium" if commits is not None else "low",
             "reasons": reasons, "onboarding": "reconstruct_then_bootstrap"}
+
+
+def owner_confirmed(child_root) -> dict:
+    """Факты, ПОДТВЕРЖДЁННЫЕ владельцем: `.ai-ops.yaml -> product_operating_model.confirmed`.
+
+    Это единственный производитель состояния `user_confirmed`, и он обязан существовать: состояние
+    объявлено в модели с `trust: high` и названо единственным способом повысить `inferred`. Слово в
+    реестре, которого не вычисляет никто, — ровно та «capability без реализации», которую
+    инварианты кита запрещают (то же правило уже применено к `stale`).
+    """
+    cfg = Path(child_root) / ".ai-ops.yaml"
+    if not cfg.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return {}                                      # битый конфиг — забота doctor'а
+    conf = (data.get("product_operating_model") or {}).get("confirmed") or {}
+    return {k: v for k, v in conf.items() if v not in (None, "")}
 
 
 def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
@@ -291,9 +320,28 @@ def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
     # То, что из кода НЕ выводится. Молчать об этом нельзя: молчание читается как «нечего сказать».
     for key, note in (("primary_user", "пользователи продукта из репозитория не выводятся"),
                       ("product_goal", "цель продукта из репозитория не выводится"),
-                      ("production_environment", "какое окружение production — решение владельца"),
                       ("sensitive_data", "чувствительность данных определяет владелец")):
         out[key] = {"value": None, "status": UNKNOWN, "evidence": [], "note": note}
+
+    # Ключ реконструкции обязан совпадать с id ВОПРОСА (`production_env` в модели), иначе
+    # предложение «по коду предполагаю X — подтвердить?» не доходит до вопроса никогда — именно так
+    # обещание и не исполнялось. Основание для догадки есть там, где есть контейнер или CI-деплой;
+    # где его нет, состояние остаётся `unknown`, а не выдумывается.
+    if evidence.get("containers") or evidence.get("ci"):
+        out["production_env"] = {
+            "value": "окружение, куда деплоит существующий конвейер", "status": INFERRED,
+            "evidence": list(evidence.get("containers") or evidence.get("ci") or []),
+            "note": "какое окружение считается production — решение владельца"}
+    else:
+        out["production_env"] = {"value": None, "status": UNKNOWN, "evidence": [],
+                                 "note": "признаков деплоя не найдено"}
+
+    # ПОСЛЕДНИМ: подтверждение владельца перебивает и `inferred`, и `unknown`. Порядок не случаен —
+    # человек сильнее любого вывода кита, и обратное затирание сделало бы подтверждение бесполезным.
+    for key, value in owner_confirmed(child_root).items():
+        out[key] = {"value": value, "status": USER_CONFIRMED,
+                    "evidence": ["подтверждено владельцем в .ai-ops.yaml"],
+                    "note": "подтверждение человека сильнее вывода кита"}
     return out
 
 
@@ -396,11 +444,17 @@ def audit(child_root, evidence: dict | None = None, model: dict | None = None) -
     ai_only = [r["contour"] for r in rows
                if r["state"] != VERIFIED and r["ai_can_reconstruct"] == "full" and not r["questions"]]
     human = [r["contour"] for r in rows if r["state"] != VERIFIED and r["needs_human"]]
+    # Блокирующий пробел — ЛЮБОЕ незакрытое состояние на блокирующем ярусе, а не только полное
+    # отсутствие. Прежде считались лишь missing/unknown, поэтому контур яруса `required_now` в
+    # состоянии `partial` объявлялся незаблокированным — и один отчёт давал два противоположных
+    # ответа о нём (`gap_plan` его блокирующим считал). В child-репозитории кита `.ai-ops.yaml`
+    # есть ВСЕГДА, значит контур границ AI не попадал в blocking_gaps никогда.
+    blocking_tiers = {t.get("id") for t in (model.get("gap_tiers") or []) if t.get("blocks_work")}
     return {"contours": rows, "by_state": by_state,
             "ready": [r["contour"] for r in rows if r["state"] == VERIFIED],
             "ai_can_build": ai_only, "needs_human": human,
             "blocking_gaps": [r["contour"] for r in rows
-                              if r["state"] in (MISSING, UNKNOWN) and r["gap_tier"] == "required_now"]}
+                              if r["state"] != VERIFIED and r["gap_tier"] in blocking_tiers]}
 
 
 def gap_plan(audit_rep: dict, model: dict | None = None) -> dict:
@@ -436,8 +490,10 @@ def question_package(audit_rep: dict, reconstructed: dict | None = None) -> dict
         if r["state"] == VERIFIED and not r["questions"]:
             continue
         for q in r["questions"]:
-            proposal = None
             hint = rec.get(q["id"])
+            if hint and hint.get("status") == USER_CONFIRMED:
+                continue                               # подтверждённое владельцем не переспрашиваем
+            proposal = None
             if hint and hint.get("value") and hint.get("status") in (VERIFIED, INFERRED):
                 proposal = {"value": hint["value"], "status": hint["status"],
                             "evidence": hint.get("evidence") or []}

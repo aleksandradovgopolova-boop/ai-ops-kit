@@ -158,6 +158,24 @@ def test_no_ready_work_is_not_reported_as_done():
     assert "не значит, что всё сделано" in PR.render(msg, audience="product")
 
 
+def test_not_admitted_work_is_not_reported_as_unannounced():
+    """Находка ревью: `from_next_work` знал только ведро `blocked` и терял `not_ready` (готово по
+    графу, не прошло допуск). Продакту сообщался ЛОЖНЫЙ факт «работа не объявлена», хотя работа
+    объявлена и всего лишь не уложилась в бюджет — перевод менял не язык, а факты."""
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "in_progress": [], "blocked": [], "ready": [], "parallel_with": [],
+           "parallel_skipped": [], "next_best": None,
+           "not_ready": [{"id": "W1", "title": "работа", "owner_role": "engineer",
+                          "blocked_by_admission": ["within_budget"],
+                          "admission": [{"id": "within_budget", "ok": False,
+                                         "detail": "оценка 50000 против остатка 1000"}]}]}
+    msg = PR.from_next_work(rep)
+    out = PR.render(msg, audience="product")
+    assert "работа не объявлена" not in out
+    assert "бюджет" in out.lower() or "within_budget" in str(msg["technical_details"]["payload"])
+
+
 def test_unreadable_repo_is_not_described_as_understood():
     """Класс UNKNOWN не имеет права звучать как «я разобрался»."""
     rep = {"classification": {"class": "UNKNOWN", "confidence": "none", "reasons": []},

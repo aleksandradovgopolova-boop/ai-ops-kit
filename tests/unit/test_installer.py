@@ -425,6 +425,30 @@ def test_delivery_excludes_kit_development_assets(installed):
             f"валидатор внутренних инвариантов кита {dev_val} в поставке"
 
 
+def test_communication_adapter_reaches_claude_md(installed):
+    """Находка ревью: политика коммуникации объявляла адаптер `claude-code-memory` («Claude Code
+    подхватывает его автоматически») и обещание «правьте политику и перегенерируйте» — при этом
+    ни одна строка кода блок не доставляла и не генерировала. Он доезжал статическим шаблоном в
+    managed-слой, а в CLAUDE.md не попадал никогда."""
+    md = installed / "CLAUDE.md"
+    assert md.is_file(), "CLAUDE.md не создан — адаптер политики коммуникации не доехал"
+    text = md.read_text(encoding="utf-8")
+    assert "AI-OPS-COMMUNICATION-POLICY" in text          # блок помечен маркерами
+    assert "product" in text                              # уровень по умолчанию назван
+
+
+def test_communication_adapter_is_idempotent_and_keeps_user_text(installed, ai_ops):
+    """Повторная установка не дублирует блок и не трогает текст ВНЕ маркеров."""
+    md = installed / "CLAUDE.md"
+    md.write_text("# Мои правила\n\nНе трогать это.\n\n" + md.read_text(encoding="utf-8"),
+                  encoding="utf-8")
+    ai_ops._install_communication_adapter(installed)
+    text = md.read_text(encoding="utf-8")
+    assert text.count(ai_ops.COMM_MARK_BEGIN) == 1, "блок продублирован"
+    assert text.count(ai_ops.COMM_MARK_END) == 1
+    assert "Не трогать это." in text, "текст пользователя вне маркеров затронут"
+
+
 def test_delivery_footprint_is_smaller_than_legacy(installed):
     """Поставка ощутимо меньше монолитной (baseline ревью: 503 файла / ~3.6 МБ managed)."""
     managed = installed / ".ai" / "managed"

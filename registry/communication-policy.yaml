@@ -113,9 +113,16 @@ adapters:
   - id: claude-code-memory
     kind: runtime-instruction
     path: templates/runtime/claude-communication.md
+    delivered_by: installer/ai_ops.py -> _install_communication_adapter
+    delivered_to: CLAUDE.md репозитория (блок между маркерами AI-OPS-COMMUNICATION-POLICY)
+    delivered_on: [init, update]
     note: >
-      Блок для CLAUDE.md репозитория: Claude Code подхватывает его автоматически. Адаптер, а не
-      источник истины — при смене runtime политика остаётся здесь.
+      Блок в CLAUDE.md репозитория: Claude Code подхватывает его автоматически. Ставится и
+      обновляется установщиком идемпотентно — текст вне маркеров не трогается. Адаптер, а не
+      источник истины: при смене runtime политика остаётся здесь.
+      v3.35 (ревью): прежде адаптер был ОБЪЯВЛЕН, но не доставлялся ничем — шаблон доезжал в
+      managed-слой и в CLAUDE.md не попадал никогда. Поля `delivered_*` названы, чтобы следующий
+      такой разрыв был видим в реестре, а не только в коде.
 
 # ── Проверка ──────────────────────────────────────────────────────────────────────────────────
 evaluation:
