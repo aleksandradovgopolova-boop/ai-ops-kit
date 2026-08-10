@@ -64,6 +64,7 @@ STANDALONE = [
     "validate_pipeline_e2e",
     "validate_post_release_readout",
     "validate_presets",
+    "validate_product_model",
     "validate_product_qualification",
     "validate_promotion_qualification",
     "validate_provider_residency",
@@ -128,6 +129,15 @@ CORRUPTIONS = {
     # охраняет инвариант «CI не запускает проверки мимо pytest». Портим то, что он реально читает.
     # v3.32: слои пакетов — тоже источник правды. Пустой список слоёв означает, что про каждый
     # пакет нельзя ни запретить, ни разрешить ничего; валидатор обязан это заметить.
+    # v3.35: модель контуров и политика коммуникации стали источниками правды для КОДА
+    # (детект связности, presenter, doctor, onboarding). Порча, которую никто не ловит, — тот же
+    # класс, что registry/tracks.yaml в 3.33: реестр врёт, а зелёный CI это подтверждает.
+    "registry/product-operating-model.yaml": (
+        "schema_version: 1\nregistry_type: product-operating-model\ncontours: []\n",
+        ["validate_product_model"]),
+    "registry/communication-policy.yaml": (
+        "schema_version: 1\nregistry_type: communication-policy\naudiences: {}\n",
+        ["validate_product_model"]),
     "packages/layering.yaml": (
         "schema_version: 1\nkind: package-layering\nlayers: []\nrules: []\nknown_violations: []\n",
         ["validate_layering"]),
@@ -239,7 +249,11 @@ def test_lists_cover_every_validator_without_uniform_seam():
     """Валидатор, не попавший ни в один список, остаётся без внешней проверки незамеченным."""
     from test_validator_contract import OTHER_SEAMS, UNIFORM_CHECK_VALIDATORS
 
-    everything = {p.stem for p in (PKG / "validation").glob("validate_*.py")}
+    # v3.35: путь исправлен. С 3.34 валидаторы лежат в `ai_ops_kit/validation/`, а корневого
+    # `validation/` не существует — страж сканировал ПУСТОЕ множество и не мог покраснеть никогда.
+    # Соседний test_validator_contract.py путь тогда починили, здесь забыли; найдено ревью 3.35.
+    everything = {p.stem for p in (PKG / "ai_ops_kit" / "validation").glob("validate_*.py")}
+    assert everything, "валидаторов не найдено — страж полноты покрытия сканирует пустое место"
     listed = set(STANDALONE) | set(NEEDS_ARTIFACT) | set(UNIFORM_CHECK_VALIDATORS) | set(OTHER_SEAMS) | set(BESPOKE_ELSEWHERE)
     assert not (everything - listed), f"валидаторы вне всякого контракта: {sorted(everything - listed)}"
 
@@ -249,7 +263,7 @@ def test_lists_cover_every_validator_without_uniform_seam():
 @pytest.mark.unit
 @pytest.mark.parametrize("rel", sorted(
     [f"tools/{p.name}" for p in (PKG / "tools").glob("*.py")] +
-    [f"validation/{p.name}" for p in (PKG / "validation").glob("*.py")] +
+    [f"ai_ops_kit/validation/{p.name}" for p in (PKG / "ai_ops_kit" / "validation").glob("*.py")] +
     ["installer/ai_ops.py"]))
 def test_module_description_is_a_real_docstring(rel):
     """Описание модуля обязано быть ДОКСТРИНГОМ, а не строкой после `from __future__`.

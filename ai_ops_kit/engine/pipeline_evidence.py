@@ -6,6 +6,7 @@ security review, evidence re-evaluation, dependency installation.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -173,6 +174,56 @@ def _authored_context(authored, work_root, wid):
             pass
     return ("=== СПЕЦИФИКАЦИЯ ЗАДАЧИ (создана ДО реализации; следуй ей) ===\n" + "\n\n".join(parts)
             if parts else "")
+
+
+def contour_consistency_evidence(child_root, wid, changed_files, timeout=120):
+    """Evidence гейта `contour_consistency` (v3.35): сверка затронутых контуров с объявленным.
+
+    ПОЧЕМУ ПОДПРОЦЕСС, А НЕ ИМПОРТ. Прямой вызов `ai_ops_kit.planning.contours` из движка добавил бы
+    ребро `engine -> planning`, а вместе с ним новые циклы через `planning -> lifecycle`; ратчет
+    `packages/layering.yaml` поймал бы это сразу. Шов тот же, что у `validate_product_model`:
+    точка входа `tools/contours.py` + машиночитаемый вывод.
+
+    Гейт ADVISORY: несогласованность даёт `warn`, а не `fail` (правило движения по roadmap —
+    blocking только после обкатки на child-репозиториях). Недоступность инструмента тоже `warn`,
+    НИКОГДА `pass`: молчаливое «всё согласовано» на непроведённой проверке — ложный зелёный.
+    -> {"status": "pass"|"warn", "provided": [...], "evidence": [...], "report": {...}|None}
+    """
+    import subprocess as _sp
+    from pathlib import Path as _P
+    root = _P(child_root)
+    entry = _P(__file__).resolve()
+    pkg = next((x for x in entry.parents if (x / "VERSION").is_file()), entry.parents[2])
+    tool = pkg / "tools" / "contours.py"
+    if not tool.is_file():
+        return {"status": "warn", "provided": [], "report": None,
+                "evidence": ["инструмент связности контуров недоступен — проверка НЕ проведена "
+                             "(это не 'согласовано')"]}
+    args = [sys.executable, str(tool), "reconcile", str(root),
+            "--files", ",".join(changed_files or []), "--json"]
+    wi = root / "features" / str(wid) / "workitem.yaml"
+    if wi.is_file():
+        args += ["--workitem", str(wi)]
+    try:
+        r = _sp.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+        rep = json.loads((r.stdout or "").strip() or "{}")
+    except (OSError, _sp.SubprocessError, json.JSONDecodeError) as e:
+        return {"status": "warn", "provided": [], "report": None,
+                "evidence": [f"сверка контуров не выполнена ({type(e).__name__}) — "
+                             f"проверка НЕ проведена"]}
+    major = [f for f in (rep.get("findings") or []) if f.get("severity") == "major"]
+    unknown = [f for f in (rep.get("findings") or []) if f.get("id") == "unknown_contour"]
+    lines = [f"изменённых путей {len(changed_files or [])} · вердикт {rep.get('verdict')}"]
+    lines += [f"{f['id']} / {f['contour']}: {f['detail']}" for f in major[:6]]
+    if unknown:
+        lines.append(f"контуров без сигнальных путей (состояние не определяется): "
+                     f"{', '.join(f['contour'] for f in unknown)}")
+    if not rep.get("comparable"):
+        return {"status": "warn", "provided": ["changed_files"], "report": rep,
+                "evidence": ["изменений не предъявлено — сверять нечего (это не 'согласовано')"]}
+    return {"status": "pass" if not major else "warn",
+            "provided": ["affects", "changed_files", "verdict"],
+            "evidence": lines, "report": rep}
 
 
 def _reevaluate_artifact_evidence(work_root, wid, gate_ids):

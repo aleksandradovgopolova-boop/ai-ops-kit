@@ -27,9 +27,11 @@ def test_ai_ops_cli_selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("12 intent-команд", len(INTENTS) == 12
+    expect("14 intent-команд", len(INTENTS) == 14
            and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "advise", "resume", "review",
-                "status", "health"} == set(INTENTS))
+                "status", "health",
+                # v3.35 Product Operating Model: план продукта и понимание репозитория.
+                "next", "model"} == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
     fq = resolve_flags({"task_type": "QUICK"})

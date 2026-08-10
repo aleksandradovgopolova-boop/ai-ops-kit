@@ -23,13 +23,15 @@ class TestIntentsRegistry:
     """Tests for INTENTS — the intent registry."""
 
     def test_intents_count(self):
-        """INTENTS should have exactly 12 intents."""
-        assert len(ai_ops_cli.INTENTS) == 12
+        """INTENTS should have exactly 14 intents (v3.35: +next, +model)."""
+        assert len(ai_ops_cli.INTENTS) == 14
 
     def test_intents_contain_expected(self):
         """INTENTS should contain all expected intent names."""
         expected = {"new", "onboard", "discuss", "specify", "plan", "run",
-                    "do", "advise", "resume", "review", "status", "health"}
+                    "do", "advise", "resume", "review", "status", "health",
+                    # v3.35 Product Operating Model: план продукта и понимание репозитория.
+                    "next", "model"}
         assert set(ai_ops_cli.INTENTS.keys()) == expected
 
     def test_each_intent_has_required_fields(self):

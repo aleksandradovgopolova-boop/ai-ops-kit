@@ -218,9 +218,39 @@ def _injected_kit_paths(text: str, site_dir: Path):
     return out
 
 
-def _python_hint(site_dir: str) -> str:
-    m = _PYVER_RE.search(site_dir)
-    return f"python{m.group(1)}" if m else "python3"
+def _same_dir(a, b) -> bool:
+    try:
+        return os.path.realpath(str(a)) == os.path.realpath(str(b))
+    except OSError:
+        return _norm(a) == _norm(b)
+
+
+def pip_command(site_dir) -> str:
+    """Команда, которой снимается установка ИМЕННО из этого site-каталога.
+
+    Версию интерпретатора видно из пути (`…/Python/3.9/…`), но БИНАРНИКА с таким именем на машине
+    может не быть: на macOS пользовательский site 3.9 обслуживает `python3`, а `python3.9` в PATH
+    отсутствует — и напечатанная команда не запускается. Подсказка, которую нельзя выполнить, хуже
+    отсутствующей: пользователь верит, что сделал, а ничего не произошло.
+
+    Поэтому: если это пользовательский site ТЕКУЩЕГО интерпретатора — называем его буквально
+    (`sys.executable` заведомо существует). Иначе версию называем, но говорим прямо, что имя
+    бинарника надо подставить своё: угадать его нельзя, а молча выдать `python3` значило бы
+    предложить снять установку У ДРУГОГО интерпретатора.
+    """
+    tail = " -m pip uninstall -y ai-ops-kit"
+    try:
+        current = site.getusersitepackages()
+    except Exception:  # noqa: BLE001 — отсутствие user-site не мешает дать подсказку по версии
+        current = None
+    if current and _same_dir(current, site_dir):
+        exe = str(sys.executable)
+        return (f'"{exe}"' if " " in exe else exe) + tail
+    m = _PYVER_RE.search(str(site_dir))
+    if m:
+        return (f"python{m.group(1)}{tail}   # интерпретатор {m.group(1)}; бинарник на этой машине "
+                f"может называться иначе — подставьте свой")
+    return f"<интерпретатор, которому принадлежит {site_dir}>{tail}"
 
 
 def is_pip_owned(pth: Path, pip_owned=frozenset()) -> bool:
@@ -267,7 +297,7 @@ def classify(pth: Path, in_user_site: bool, pip_owned=frozenset()):
                          "нормой, здесь границ нет"
                        + (". Файл ОБЩИЙ для всех editable-установок окружения: удалять нельзя"
                           if shared else "")),
-            "fix": f"{_python_hint(str(pth.parent))} -m pip uninstall -y ai-ops-kit"
+            "fix": pip_command(pth.parent)
                    + (f" (строку из {pth.name} убирает pip, не rm)" if shared else ""),
         }
 

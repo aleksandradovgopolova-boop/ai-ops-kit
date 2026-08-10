@@ -36,6 +36,9 @@ INTENTS = {
     "review":  ("независимый ревью произведённого", "review", True),
     "status":  ("статус активной работы", "status", False),
     "health":  ("здоровье продукта", "health", False),
+    # v3.35 Product Operating Model: план продукта и его связность.
+    "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
+    "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
 }
 
 
@@ -95,6 +98,8 @@ def build_preview(intent, task, child_root, signals):
                       "review": "вердикты независимых ревьюеров",
                       "onboard": "RepositoryProfile (стек/команды)",
                       "status": "список активной работы", "health": "Product Health Score",
+                      "next": "ответ на четыре вопроса + следующая работа с обоснованием",
+                      "model": "понимание репозитория: класс, контуры, пробелы, вопросы владельцу",
                       "discuss": "черновик проблемы/гипотез (discovery)",
                       "new": "каркас фичи",
                       "resume": "продолжение с последнего подтверждённого шага"}.get(intent, "результат намерения"))
@@ -179,6 +184,64 @@ def _run_intent(intent, task, child_root, signals, a):
             return 0
         return active_work.list_cmd(awp, as_json=js)
 
+    if intent == "next":
+        # Четыре вопроса: где мы, что идёт сейчас, что блокирует, что взять следующим.
+        from ai_ops_kit.planning import next_work
+        from ai_ops_kit.planning import delivery_plan as _plan
+        from ai_ops_kit.planning import contours as _contours
+        try:
+            rep = next_work.compute(child_root, budget_left=getattr(a, "budget", None))
+        except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
+            print(f"ОШИБКА: {e}")
+            return 1
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2))
+        else:
+            # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
+            # состоянием. Разбор по четырём вопросам доступен на technical/debug и по --json.
+            from ai_ops_kit.ui import presenter
+            aud = presenter.audience_from_config(child_root)
+            print(presenter.render(presenter.from_next_work(rep), audience=aud))
+            # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
+            # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
+            for _e in (rep.get("plan_errors") or []):
+                print(f"  ✗ план: {_e}")
+            for _e in (rep.get("roadmap") or {}).get("errors") or []:
+                print(f"  ✗ направление: {_e}")
+            if aud != "product":
+                print()
+                print(next_work.render(rep))
+        # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие работы: без плана и с битым roadmap
+        # ответ «что взять следующим» недостоверен, и молчаливый ноль это скрывал бы.
+        return 0 if (rep.get("plan_present") and not rep.get("plan_errors")
+                     and not rep["roadmap"]["errors"]) else 1
+
+    if intent == "model":
+        # DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK. Ничего не пишет: онбординг сначала
+        # ПОНИМАЕТ репозиторий и только потом предлагает достройку.
+        from ai_ops_kit.planning import repo_audit
+        from ai_ops_kit.planning import contours as _contours
+        try:
+            rep = repo_audit.run(child_root)
+        except _contours.ModelCorrupt as e:
+            print(f"ОШИБКА: {e}")
+            return 1
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
+        else:
+            from ai_ops_kit.ui import presenter
+            aud = presenter.audience_from_config(child_root)
+            print(presenter.render(presenter.from_repository_understanding(rep), audience=aud))
+            if aud != "product":
+                print()
+                print(repo_audit.render(rep))
+            for q in rep["ask"]["questions"]:
+                mark = "⚠" if q["blocks_work"] else "·"
+                print(f"  {mark} {q['ask']}")
+                if q["proposal"]:
+                    print(f"      предполагаю: {q['proposal']['value']} — подтвердить?")
+        return 0
+
     if intent == "health":
         from ai_ops_kit.intelligence import product_health
         cand = [child_root / "product" / "product-health.yaml",
@@ -206,6 +269,12 @@ def _run_intent(intent, task, child_root, signals, a):
         wid = _wid_for(task, signals, a.feature)
         workitem.start(str(child_root / "features"), wid, task or wid,
                        task_type=signals.get("task_type"), risk=signals.get("risk"))
+        # v3.35: `affects` засевается ПОДСКАЗКОЙ по типу работы, а не выводится из diff. Разница
+        # принципиальная: заявление автора и факт изменения — два независимых источника, и сверять
+        # их имеет смысл только пока они независимы. Автозаполнение из diff сделало бы находку
+        # `undeclared_change` невозможной, то есть выключило бы гейт, оставив его зелёным.
+        # Прежде поле оставалось `{}` навсегда, а `suggest_affects` не вызывался нигде (ревью 3.35).
+        _seed_workitem_affects(child_root, wid, signals.get("task_type"))
         sp, created = spec_levels.create_spec(child_root, wid, signals)
         if js:
             print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
@@ -326,6 +395,38 @@ def _run_intent(intent, task, child_root, signals, a):
     return None
 
 
+def _seed_workitem_affects(child_root, wid, task_type):
+    """Записать в WorkItem подсказку `affects` по типу работы (v3.35). Тихо ничего не делает, если
+    модель недоступна: онбординг и создание фичи не обязаны падать из-за реестра контуров."""
+    import yaml as _yaml
+    try:
+        from ai_ops_kit.planning import contours as _c
+        model = _c.load_model()
+    except Exception:                                  # noqa: BLE001 — реестр не обязан быть рядом
+        return None
+    wf = (task_type or "").strip()
+    # Тип работы плана (`engineering`/`visual`/…) и класс задачи движка (`ENGINEERING`/`VISUAL`/…)
+    # — разные словари; сопоставление объявлено здесь, а не угадывается по регистру.
+    by_workflow = {"QUICK": "engineering", "ENGINEERING": "engineering", "PRODUCT": "product",
+                   "RESEARCH": "research", "VISUAL": "visual", "AI_FEATURE": "engineering",
+                   "CRITICAL": "security", "ANALYTICS": "analytics"}
+    suggested = _c.suggest_affects(model, by_workflow.get(wf.upper(), ""))
+    if not suggested:
+        return None
+    wp = Path(child_root) / "features" / str(wid) / "workitem.yaml"
+    if not wp.is_file():
+        return None
+    try:
+        data = _yaml.safe_load(wp.read_text(encoding="utf-8")) or {}
+    except _yaml.YAMLError:
+        return None
+    if data.get("affects"):
+        return None                                    # объявленное человеком не перезаписываем
+    data["affects"] = suggested
+    wp.write_text(_yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return suggested
+
+
 def _session_guard_before_start(child_root, task, signals, feature=None):
     """v3.22 Culture Runtime Integration: session guard ДО старта задачи.
     1. snapshot — текущее состояние сессии
@@ -396,6 +497,8 @@ def main(argv):
                                             "checkpoint предшественника и продолжает (без ручного git reset)")
     ap.add_argument("--replan", action="store_true",
                     help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
+    ap.add_argument("--budget", type=int, default=None,
+                    help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -455,7 +558,8 @@ def main(argv):
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
-    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise"):
+    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss",
+                                       "review", "advise", "next", "model"):
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc

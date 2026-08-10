@@ -44,6 +44,7 @@ UNIFORM_CHECK_VALIDATORS = [
     "validate_model_roles",
     "validate_plan_artifact",
     "validate_post_release_readout",
+    "validate_product_model",
     "validate_promotion_qualification",
     "validate_provider_residency",
     "validate_qualification",

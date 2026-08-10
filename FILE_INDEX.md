@@ -65,6 +65,13 @@
 - `registry/capability-index.yaml`
 - `registry/entities.yaml`
 - `registry/models.yaml`
+- `registry/product-operating-model.yaml` — **модель продуктового репозитория** (v3.35): 8 контуров
+  (класс вопросов, источник истины, сигналы изменения, роль, реконструируемость, ярус достройки),
+  12 ролей работы (ссылочная целостность на agents.yaml), 14 типов работы, объявляемые и выводимые
+  статусы, 7 состояний артефакта, классы репозитория, ярусы Gap Plan, правила отбора next work
+- `registry/communication-policy.yaml` — **Human Communication Layer** (v3.35): контракт
+  `UserMessage` (четыре вопроса), три аудитории (default `product`), правила простого языка,
+  адаптеры (presenter в коде / скилл / инструкция для CLAUDE.md)
 - `registry/providers.yaml`
 - `registry/routing-policy.yaml`
 - `registry/runtimes.yaml`
@@ -192,6 +199,8 @@
 - `skills/frontend-design/SKILL.md`
 - `skills/product-demo-video/SKILL.md`
 - `skills/repo-onboarding/SKILL.md` — первичный онбординг репо -> черновики context/* (v2.22)
+- `skills/plain-language-communication/SKILL.md` — правила разговора с владельцем продукта
+  (v3.35, НЕ opt-in; источник истины — registry/communication-policy.yaml, форма — presenter)
 - `skills/product-session-review/SKILL.md`
 - `skills/system-constraint-analysis/SKILL.md`
 - `skills/user-documentation/SKILL.md`
@@ -263,6 +272,8 @@
 - `templates/analytics/TrackingPlan.md`
 - `templates/blueprint/FeatureBlueprint.lean.yaml`
 - `templates/blueprint/FeatureBlueprint.yaml`
+- `templates/planning/ROADMAP.md`, `templates/planning/plan.yaml` — контур планирования для child (v3.35)
+- `templates/runtime/claude-communication.md` — адаптер политики коммуникации для CLAUDE.md (v3.35)
 - `templates/ci/ai-ops-record.yml` — CI-нетто автонакопления срезов эффекта (v2.30)
 - `templates/ci/ai-ops-validate.yml` — child-CI валидации: пин kit = installed_version, без protected-трения (v2.35)
 - `templates/ci/ai-ops-update.yml`
@@ -587,6 +598,12 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`
 - `ai_ops_kit/lifecycle/` (6) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
   `active_work`, `run_report`, `merge_memory`
+- `ai_ops_kit/planning/` (5) — контур Planning & Execution модели продуктового репозитория (v3.35):
+  `contours` (состояние контуров + связность изменения с источниками истины; `unknown != not_changed`),
+  `delivery_plan` (`planning/plan.yaml`, вывод статуса из графа/гейтов/активной работы),
+  `roadmap` (контракт четырёх горизонтов + связь целей с планом),
+  `next_work` (четыре вопроса: где мы / что идёт / что блокирует / что взять следующим),
+  `repo_audit` (первый сценарий: DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK с provenance)
 - `ai_ops_kit/intelligence/` (3) — продуктовая аналитика, кольцо Intelligence: `product_health`,
   `effect_metrics`, `evolution_triggers`. Слой ВЫШЕ ядра — ядро от них зависеть не вправе (v3.33.2)
 - `ai_ops_kit/delivery/` (2) — доставка наружу: `pr_open`, `review_branch`
@@ -595,7 +612,9 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `delegation_advisor`, `session_{boundary,guardrails,telemetry,telemetry_provider}`
 - `ai_ops_kit/security/` (6) — `security_scan`, `security_pack`, `security_enforcement`,
   `security_review_cascade`, `data_classification`, `seam_scan`
-- `ai_ops_kit/ui/` (4) — `storybook_adapter`, `storybook_query`, `ui_evidence_collect`, `ui_readiness`
+- `ai_ops_kit/ui/` (5) — `storybook_adapter`, `storybook_query`, `ui_evidence_collect`, `ui_readiness`,
+  `presenter` (Human Communication Layer v3.35: контракт `UserMessage` и три аудитории; наружу
+  выходит смысл, а не внутреннее состояние)
 - `ai_ops_kit/cli/` (1) — `ai_ops_cli`
 - `ai_ops_kit/devtools/` (8) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
   (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,

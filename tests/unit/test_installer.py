@@ -425,6 +425,30 @@ def test_delivery_excludes_kit_development_assets(installed):
             f"валидатор внутренних инвариантов кита {dev_val} в поставке"
 
 
+def test_communication_adapter_reaches_claude_md(installed):
+    """Находка ревью: политика коммуникации объявляла адаптер `claude-code-memory` («Claude Code
+    подхватывает его автоматически») и обещание «правьте политику и перегенерируйте» — при этом
+    ни одна строка кода блок не доставляла и не генерировала. Он доезжал статическим шаблоном в
+    managed-слой, а в CLAUDE.md не попадал никогда."""
+    md = installed / "CLAUDE.md"
+    assert md.is_file(), "CLAUDE.md не создан — адаптер политики коммуникации не доехал"
+    text = md.read_text(encoding="utf-8")
+    assert "AI-OPS-COMMUNICATION-POLICY" in text          # блок помечен маркерами
+    assert "product" in text                              # уровень по умолчанию назван
+
+
+def test_communication_adapter_is_idempotent_and_keeps_user_text(installed, ai_ops):
+    """Повторная установка не дублирует блок и не трогает текст ВНЕ маркеров."""
+    md = installed / "CLAUDE.md"
+    md.write_text("# Мои правила\n\nНе трогать это.\n\n" + md.read_text(encoding="utf-8"),
+                  encoding="utf-8")
+    ai_ops._install_communication_adapter(installed)
+    text = md.read_text(encoding="utf-8")
+    assert text.count(ai_ops.COMM_MARK_BEGIN) == 1, "блок продублирован"
+    assert text.count(ai_ops.COMM_MARK_END) == 1
+    assert "Не трогать это." in text, "текст пользователя вне маркеров затронут"
+
+
 def test_delivery_footprint_is_smaller_than_legacy(installed):
     """Поставка ощутимо меньше монолитной (baseline ревью: 503 файла / ~3.6 МБ managed)."""
     managed = installed / ".ai" / "managed"
@@ -438,7 +462,13 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
                and "sys.modules[__name__]" in p.read_text(encoding="utf-8", errors="ignore")]
     alias_bytes = sum(p.stat().st_size for p in aliases)
     substantive = len(files) - len(aliases)
-    assert substantive < 450, f"содержательных файлов в managed: {substantive} (потолок 450)"
+    # v3.35: потолок ПОДНЯТ 450 -> 470 осознанно. Product Operating Model едет в child по существу:
+    # `ai-ops next`/`ai-ops model` работают В продуктовом репозитории, значит туда обязаны попасть
+    # пакет `planning` (6 файлов), presenter, валидатор модели, две реестровые декларации, три
+    # шаблона и скилл — 14 содержательных файлов, замерено, а не оценено. Смысл потолка сохранён:
+    # baseline монолита 503, и 456 по-прежнему ощутимо меньше. Поднимать его молча нельзя — это то
+    # же число класса DERIVED, что и замеры слоёв.
+    assert substantive < 470, f"содержательных файлов в managed: {substantive} (потолок 470)"
     assert alias_bytes < 200 * 1024, f"алиасы разрослись: {alias_bytes / 1024:.0f} КиБ (потолок 200)"
     assert total < 3.2 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ"
 

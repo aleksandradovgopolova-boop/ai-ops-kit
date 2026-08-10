@@ -60,6 +60,7 @@ from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402,F401
     _install_dependencies, _author_with_retry, _run_spec_authoring,
     _run_authoring, _authored_context, _reevaluate_artifact_evidence,
     _run_reviews, _review_security, _human_approval_domains_uncovered,
+    contour_consistency_evidence,          # v3.35: исполнение гейта connectivity контуров
 )
 
 
@@ -785,10 +786,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # изменённые пути. Preflight проверил наличие одобрения ДО правок; здесь — что scope одобрения
     # накрыл то, что модель реально тронула. scope не покрывает изменения -> одобрено не то -> НЕ ready.
     approval_recheck = {"ok": True, "uncovered": []}
+    contour_consistency = None
     if commit and committed_sha:
         try:
             from ai_ops_kit.gates import approvals as _appr
             _changed = _committed_changed_files(work_root, committed_sha)
+            # v3.35 Product Operating Model: гейт `contour_consistency` ИСПОЛНЯЕТСЯ здесь — на том
+            # же diff коммита, что и recheck одобрений. Прежде гейт был объявлен в реестре, но его
+            # никто не вызывал: связность контуров существовала как библиотека и как обещание в
+            # CHANGELOG (найдено независимым ревью 3.35). Advisory: несогласованность даёт warn.
+            contour_consistency = contour_consistency_evidence(child_root, wid, _changed)
+            gate_ev["contour_consistency"] = {
+                "status": contour_consistency["status"],
+                "provided": contour_consistency["provided"],
+                "evidence": contour_consistency["evidence"]}
             # v3.0-rc2 (P0.5): recheck по ЭФФЕКТИВНЫМ сигналам (намерение + findings-derived), а не только
             # входным — иначе scope одобрения для НАЙДЕННОЙ зависимости/секрета не перепроверяется на дифф.
             approval_recheck = _appr.recheck_after_diff(child_root, wid, _changed, signals=effective_approval_signals)

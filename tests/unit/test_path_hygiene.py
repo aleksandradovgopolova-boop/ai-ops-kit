@@ -349,3 +349,48 @@ def test_belt_really_hides_a_defect(tmp_path):
     # И этот же пояс проверка обязана видеть — тот файл, что реально сработал.
     rep = ph.assess(user_site_dirs=[str(user_site)], env_site_dirs=[])
     assert rep["counts"]["blocking"] == 1, rep["findings"]
+
+
+# ------------------------------------------------- подсказку можно ВЫПОЛНИТЬ, а не только прочитать
+
+def test_pip_command_for_current_interpreter_is_runnable():
+    """positive + side-effect proof: команда для СВОЕГО user-site называет существующий бинарник.
+
+    Прежняя подсказка выводила имя из пути (`…/Python/3.9/…` -> `python3.9`), а на macOS этот
+    user-site обслуживает `python3`, и `python3.9` в PATH отсутствует: напечатанную команду нельзя
+    было выполнить. Подсказка, которую нельзя выполнить, хуже отсутствующей — пользователь верит,
+    что снял установку, а ничего не произошло.
+
+    Проверяем не форму строки, а РАБОТОСПОСОБНОСТЬ: тем же интерпретатором вызываем `pip --version`.
+    """
+    import site as _site
+
+    cmd = ph.pip_command(_site.getusersitepackages())
+
+    exe = cmd.split(" -m pip")[0].strip('"')
+    assert exe == sys.executable, f"названа не текущая программа: {cmd}"
+    assert "-m pip uninstall -y ai-ops-kit" in cmd, cmd
+    probe = subprocess.run([exe, "-m", "pip", "--version"], capture_output=True, text=True,
+                           timeout=120)
+    assert probe.returncode == 0, (
+        f"подсказка называет неработающую команду: {cmd}\n{probe.stderr[-400:]}")
+
+
+def test_pip_command_for_foreign_interpreter_admits_the_guess():
+    """fail-closed для подсказки: про ЧУЖОЙ интерпретатор имя бинарника угадать нельзя.
+
+    Версию называем (она в пути и это факт), но `python3` молча подставить не вправе: это была бы
+    команда снять установку у ДРУГОГО интерпретатора. Значит — сказать прямо, что имя своё."""
+    cmd = ph.pip_command("/Users/somebody/Library/Python/3.11/lib/python/site-packages")
+
+    assert cmd.startswith("python3.11 -m pip uninstall -y ai-ops-kit"), cmd
+    assert "подставьте свой" in cmd, f"подсказка выдаёт догадку за факт: {cmd}"
+
+
+def test_pip_command_without_version_in_path_does_not_invent_one(tmp_path):
+    """Из пути версия не выводится — не выдумываем: называем каталог, чтобы владельца можно было
+    найти самому."""
+    cmd = ph.pip_command(tmp_path / "site-packages")
+
+    assert "python3 -m pip" not in cmd, f"подставлен наугад python3: {cmd}"
+    assert str(tmp_path) in cmd and "pip uninstall -y ai-ops-kit" in cmd, cmd
