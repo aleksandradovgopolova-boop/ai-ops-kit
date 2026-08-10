@@ -163,6 +163,38 @@ def test_repo_declares_where_its_truth_lives(tmp_path):
     assert st["research_decisions"]["ok"], "объявленный репозиторием источник истины не учтён"
 
 
+def test_signal_search_ignores_kit_internals_and_vendor_dirs(tmp_path):
+    """ОБКАТКА НА ВТОРОМ РЕПОЗИТОРИИ (wow-repo, стек node/react/astro): гейт не сработал НИ РАЗУ на
+    8 коммитах, включая коммит на 54 файла «Build WowRepo MVP engine, design system». Разбор дал
+    дефект хуже шума: контур system_architecture заявлял `not_changed`, потому что поиск сигнала
+    находил Dockerfile внутри `.ai/runtime/backups/3.27.6/.ai/managed/containers/` — бэкапа
+    СОБСТВЕННОГО managed-слоя кита.
+
+    Это подмена признания утверждением в обратную сторону: честный ответ был `unknown` («не умею
+    видеть этот контур здесь»), а кит говорил «сигнальные пути есть и не затронуты». Тот же класс,
+    что доказательства, указывавшие внутрь `.claude/worktrees/*` — кит принимал свои внутренности за
+    факт о продукте.
+    """
+    # Только внутренности кита и вендор — сигнальных путей ПРОДУКТА нет.
+    for rel in (".ai/runtime/backups/3.27.6/.ai/managed/containers/Dockerfile",
+                "node_modules/some-pkg/Dockerfile",
+                "dist/Dockerfile",
+                ".ai/managed/schemas/x.json"):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x", encoding="utf-8")
+    der = C.derive_affects(tmp_path, ["src/pages/index.astro"], MODEL, overrides={})
+    assert der["system_architecture"]["state"] == C.UNKNOWN, \
+        "Dockerfile в бэкапе кита не является сигнальным путём продукта"
+    assert der["data_contracts"]["state"] == C.UNKNOWN, \
+        "схема внутри .ai/managed не является схемой продукта"
+
+    # А настоящий Dockerfile продукта контур видит.
+    (tmp_path / "Dockerfile").write_text("FROM node", encoding="utf-8")
+    der2 = C.derive_affects(tmp_path, ["src/pages/index.astro"], MODEL, overrides={})
+    assert der2["system_architecture"]["state"] == C.NOT_CHANGED
+
+
 def test_corrupt_model_raises(tmp_path):
     bad = tmp_path / "pom.yaml"
     bad.write_text("contours: []\n", encoding="utf-8")
