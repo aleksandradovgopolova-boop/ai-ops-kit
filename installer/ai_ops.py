@@ -601,6 +601,53 @@ def _backfill_required_context(today=None, dry=False):
     return out
 
 
+def _seed_planning_contour(root: Path, dry=False):
+    """v3.35: контур Planning & Execution доезжает до репозитория ЧЕРНОВИКАМИ.
+
+    Артефакты объявлены в манифесте (`product_operating_model.required_repo_artifacts`), а не
+    зашиты здесь: список того, что обязано быть у продуктового репозитория, — это модель, а не
+    подробность установки.
+
+    Черновик, а НЕ готовый файл: направление продукта и приоритеты кит не выводит из кода и
+    выдумывать их не имеет права (`reconstruction.ability: none` у контура Product & Strategy).
+    Существующие файлы не трогаются НИКОГДА — репозиторий мог заполнить их до установки.
+    -> список {artifact, action}
+    """
+    import datetime as _dt
+    pom = ((manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
+    required = list(pom.get("required_repo_artifacts") or [])
+    templates = pom.get("templates") or {}
+    by_name = {Path(v).name: v for v in templates.values()}
+    out = []
+    for rel in required:
+        dst = root / rel
+        if dst.exists():
+            out.append({"artifact": rel, "action": "exists"}); continue
+        # ROADMAP.md <- templates/planning/ROADMAP.md; planning/plan.yaml <- .../plan.yaml
+        src_rel = by_name.get(Path(rel).name)
+        src = (PKG / src_rel) if src_rel else None
+        if not src or not src.is_file():
+            out.append({"artifact": rel, "action": "skipped-no-template"}); continue
+        if not dry:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            text = src.read_text(encoding="utf-8")
+            # Тот же приём, что у back-fill контекста (3.12): снять `template: true`, поставить
+            # `status: draft`. Иначе КОПИЯ в репозитории унаследовала бы маркер шаблона и
+            # навсегда выпала из проверки свежести — протухать должна копия, а не шаблон кита.
+            if dst.suffix == ".md":
+                text = _draftify(text, _dt.date.today().isoformat())
+            dst.write_text(text, encoding="utf-8")
+        out.append({"artifact": rel, "action": "created-draft"})
+    return out
+
+
+def _planning_gaps(root: Path):
+    """(required, missing) — артефакты контура планирования, которых в репозитории нет."""
+    pom = ((manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
+    req = list(pom.get("required_repo_artifacts") or [])
+    return req, [r for r in req if not (root / r).exists()]
+
+
 def _context_gaps():
     """(required, missing) — обязательные документы контекста, отсутствующие в project/custom-оверлее."""
     req = _required_context_docs()
@@ -790,6 +837,11 @@ def cmd_init(target_dir):
         edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
         print(f"создана заготовка {cfg} (версия {pkg_version()}; "
               f"source {'из git remote' if psrc else 'placeholder — заполните'}) — отредактируйте {edit_hint}.")
+    seeded = [s for s in _seed_planning_contour(root) if s["action"] == "created-draft"]
+    if seeded:
+        print(f"создан черновик контура планирования: {', '.join(s['artifact'] for s in seeded)} "
+              f"— направление и приоритеты кит не выдумывает, заполните их "
+              f"(или запустите `ai-ops model .` — он спросит одним пакетом).")
     synced = sync_skills(root)
     if synced:
         print(f"синхронизированы скиллы в .claude/skills/: {', '.join(synced)}")
@@ -955,6 +1007,15 @@ def cmd_doctor(argv=()):
         print(f"контекст (обязательные документы): "
               + ("✓ все на месте" if not _gaps
                  else f"✗ нет в оверлее: {', '.join(_gaps)} → `ai-ops update` создаст черновики"))
+    # v3.35 Product Operating Model: контур планирования — пробел ВИДЕН, а не молчит. Репозиторий
+    # без направления и плана не может ответить «что брать следующим»: любой ответ был бы про
+    # порядок строк в бэклоге, а не про продукт.
+    _preq, _pgaps = _planning_gaps(REPO_ROOT)
+    if _preq:
+        print(f"планирование (направление и план): "
+              + ("✓ артефакты на месте" if not _pgaps
+                 else f"✗ нет: {', '.join(_pgaps)} → `ai-ops model .` покажет пробелы и спросит "
+                      f"недостающее одним пакетом"))
     # v3.13.0 Startup Context Budget: наблюдаемая стоимость стартового набора vs бюджет (advisory).
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
         if (_cand / "context_cost.py").is_file() and str(_cand) not in sys.path:

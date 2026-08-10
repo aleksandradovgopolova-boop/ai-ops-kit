@@ -78,6 +78,10 @@ skills:
       path: skills/repo-onboarding/SKILL.md
       opt_in: true
       checklist: rules/meta/repo-onboarding.yaml
+    - id: plain-language-communication  # v3.35, НЕ opt-in: регулирует каждый ответ человеку
+      path: skills/plain-language-communication/SKILL.md
+      opt_in: false
+      policy: registry/communication-policy.yaml
   authoring_convention: rules/meta/skill-authoring.yaml   # v2.11: конвенция авторинга (из skill-creator)
 
 quality_gates:
@@ -882,6 +886,30 @@ session_orchestration:
       # Пути относительно context/ (в репо: .ai/project/context/<путь>).
       - product/ProductStatus.md               # что реально готово/живёт (ярус 1)
       - now.md                                 # снимок на дату (ярус 1)
+  product_operating_model:                    # v3.35: модель продуктового репозитория
+    registry: registry/product-operating-model.yaml   # 8 контуров, роли, типы работы, состояния
+    package: ai_ops_kit/planning                      # контур Planning & Execution в коде
+    validator: ai_ops_kit/validation/validate_product_model.py
+    gate: contour_consistency                         # advisory до обкатки на child-репозиториях
+    commands: [next, model]                           # четыре вопроса / понимание репозитория
+    required_repo_artifacts:                          # обязательные артефакты контура планирования
+      - ROADMAP.md                                    # направление: четыре горизонта
+      - planning/plan.yaml                            # delivery plan: kind: delivery-plan
+    templates:
+      roadmap: templates/planning/ROADMAP.md
+      plan: templates/planning/plan.yaml
+    invariants:
+      - "unknown != not_changed: контур без сигнальных путей кит видеть не умеет и говорит об этом"
+      - "выводимый статус (ready/blocked/waiting) не объявляется — он считается из графа и гейтов"
+      - "план называет РОЛЬ; исполнителя выбирает роутер в момент запуска"
+      - "not_changed не требует обновления документов — бюрократии «8 документов на задачу» нет"
+  communication:                              # v3.35: Human Communication Layer
+    policy: registry/communication-policy.yaml
+    presenter: ai_ops_kit/ui/presenter.py             # контракт UserMessage в КОДЕ, не только в скилле
+    skill: skills/plain-language-communication/SKILL.md
+    runtime_adapter: templates/runtime/claude-communication.md
+    default_audience: product                         # по умолчанию — владелец продукта, не отладчик
+    invariant: "перевод меняет язык, а не факты: degraded остаётся degraded на всех уровнях"
   concurrency_preflight:                      # v2.28: коллизии параллельной работы до старта
     gate: concurrency_preflight                # quality/gates.yaml, stage intake, advisory
     tool: tools/concurrency_preflight.py       # base_changes (git) + open PRs (gh -> REST) + active-work

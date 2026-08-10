@@ -30,9 +30,11 @@ layers:
   - name: capabilities
     purpose: >
       ядро движка: контекст, провайдеры, состояние работы, гейты, исполнение, доставка,
-      инженерная операционная модель. Внутри слоя связи допустимы — это одно кольцо, а не
+      инженерная операционная модель, планирование (v3.35: `planning` — модель контуров, delivery
+      plan, next work; читает `lifecycle`/`shared`, и его не импортирует никто из ядра — точка
+      входа одна, CLI). Внутри слоя связи допустимы — это одно кольцо, а не
       лестница; разбор взаимных зависимостей идёт отдельными срезами (см. baseline).
-    packages: [context, providers, lifecycle, gates, engine, delivery, engops]
+    packages: [context, providers, lifecycle, gates, engine, delivery, engops, planning]
 
   - name: intelligence
     purpose: >
