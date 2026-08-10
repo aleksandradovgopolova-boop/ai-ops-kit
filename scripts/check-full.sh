@@ -10,6 +10,11 @@ set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
 
+# Порядок не случаен: сперва честность ОКРУЖЕНИЯ (v3.33.3 — пояс в site-packages делает любой
+# зелёный результат недоказательным), затем честность ОХВАТА (v3.34). Оба предупреждения — ДО
+# прогона: узнавать, что «зелёное» ничего не значит, надо не после успеха.
+scripts/warn-path-belt.sh
+
 FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)
 CURRENT=$(python3 -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
 

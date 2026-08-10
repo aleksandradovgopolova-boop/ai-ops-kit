@@ -16,6 +16,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -65,11 +66,73 @@ def _make_child_repo(root: Path):
     return root
 
 
-def _run_cli(root: Path, *args, timeout=180):
+def _run_cli(root: Path, *args, timeout=180, env=None):
     """Запустить инсталлятор ОТДЕЛЬНЫМ процессом из каталога root (как это делает пользователь).
     Отдельный процесс важен: только так видно трейсбек, который не поймал бы in-process вызов."""
     return subprocess.run([sys.executable, str(INSTALLER), *args],
-                          cwd=str(root), capture_output=True, text=True, timeout=timeout)
+                          cwd=str(root), capture_output=True, text=True, timeout=timeout,
+                          env=env)
+
+
+def _isolated_env(tmp: Path):
+    """Окружение с ЧИСТЫМИ и СВОИМИ site-каталогами — предусловие тестов про `doctor`.
+
+    С v3.33.3 `doctor` судит и о гигиене путей МАШИНЫ: остаточный `.pth`-пояс кита в site-packages
+    (см. tests/unit/test_path_hygiene.py). Проверка блокирующая — пояс делает зелёными
+    fail-closed-тесты. Значит без изоляции тест «doctor зелёный на свежей установке» мерил бы
+    чистоту ноутбука: у любого, кто ставил кит до v3.33.1, пояс лежит в пользовательском site.
+    Тест, который краснеет от постороннего файла в HOME, рано или поздно соврёт в обе стороны —
+    класс, разобранный в 3.33.2 («тест, зелёный от версии git»).
+
+    Изоляция — три шага, и третий обязателен:
+      HOME              → tmp: обнуляет glob по ~/Library/Python и ~/.local;
+      PYTHONUSERBASE    → tmp: уводит site.getusersitepackages() в свой каталог, куда тест вправе
+                          подложить пояс;
+      PYTHONPATH        → каталог со СИМЛИНКАМИ на зависимости, а НЕ сам site-packages. Наивная
+                          изоляция уносит вместе с поясом и pyyaml (если тот стоит в
+                          пользовательском site) — инсталлятор падает на `import yaml` до первой
+                          проверки. Передать сам каталог site-packages тоже нельзя: он вернулся бы
+                          в sys.path и попал под скан — тест снова зависел бы от чужого файла.
+    """
+    home, deps = tmp / "home", tmp / "deps"
+    home.mkdir(parents=True, exist_ok=True)
+    deps.mkdir(parents=True, exist_ok=True)
+    src = Path(yaml.__file__).resolve().parent
+    dst = deps / src.name
+    if not dst.exists():
+        try:
+            os.symlink(src, dst, target_is_directory=True)
+        except (OSError, NotImplementedError):     # Windows без прав на симлинки
+            shutil.copytree(src, dst)
+    env = dict(os.environ)
+    env["HOME"] = str(home)
+    env["PYTHONUSERBASE"] = str(home / "userbase")
+    env["PYTHONPATH"] = str(deps)
+    return env
+
+
+# Ровно то, что писал `setup.py` кита до v3.33.1 (git show v3.33.1~1:setup.py).
+_BELT_TEMPLATE = (
+    "import os, sys; [sys.path.insert(0, p) for p in ['{root}'] + "
+    "[os.path.join('{root}', d) for d in ('tools', 'validation')] "
+    "if os.path.isdir(p) and p not in sys.path]\n"
+)
+
+
+def _write_belt(user_site: Path) -> Path:
+    user_site.mkdir(parents=True, exist_ok=True)
+    belt = user_site / "ai_ops_kit.pth"
+    belt.write_text(_BELT_TEMPLATE.format(root=KIT), encoding="utf-8")
+    return belt
+
+
+def _user_site_of(env: dict) -> Path:
+    """Каталог пользовательского site для заданного окружения — спрашиваем интерпретатор,
+    а не собираем путь вручную (раскладка разная на macOS/Linux/Windows)."""
+    r = subprocess.run([sys.executable, "-c", "import site; print(site.getusersitepackages())"],
+                       capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr
+    return Path(r.stdout.strip())
 
 
 def _tree_digest(root: Path):
@@ -232,13 +295,60 @@ def test_broken_child_config_reports_clear_error(child, command):
 
 # ---------------------------------------------------------------- 6. doctor на свежей установке
 
-def test_doctor_ok_on_fresh_install(installed):
-    """positive: сразу после init диагностика зелёная (rc=0), без трейсбеков."""
-    r = _run_cli(installed, "doctor")
+def test_doctor_ok_on_fresh_install(installed, tmp_path):
+    """positive: сразу после init диагностика зелёная (rc=0), без трейсбеков.
+
+    Окружение изолировано (см. `_isolated_env`) — иначе тест мерил бы чистоту site-packages
+    разработчика, а не свежую установку."""
+    r = _run_cli(installed, "doctor", env=_isolated_env(tmp_path))
     out = r.stdout + r.stderr
     assert "Traceback" not in out
+    assert "пути окружения: ✓" in out, out[-2000:]
     assert "doctor: OK" in out, out[-2000:]
     assert r.returncode == 0, out[-2000:]
+
+
+def test_doctor_blocks_on_residual_path_belt(installed, tmp_path):
+    """fail-closed: остаточный пояс в site-packages красит doctor и называет команду удаления.
+
+    Пара к тесту выше: то же окружение, та же установка, единственное отличие — подложенный пояс.
+    Значит красным doctor делает именно он, а не что-то ещё."""
+    env = _isolated_env(tmp_path)
+    belt = _write_belt(_user_site_of(env))
+
+    r = _run_cli(installed, "doctor", env=env)
+
+    out = r.stdout + r.stderr
+    assert "Traceback" not in out
+    assert "path_belt" in out and str(belt) in out, out[-2000:]
+    assert f'rm -f "{belt}"' in out, "doctor нашёл пояс, но не сказал, как его убрать"
+    assert "doctor: ЕСТЬ ПРОБЛЕМЫ" in out and r.returncode != 0, (
+        "пояс делает зелёными fail-closed-проверки — doctor не вправе это пропускать")
+
+
+def test_doctor_removes_the_belt_on_explicit_request(installed, tmp_path):
+    """side-effect proof: `--remove-path-belt` РЕАЛЬНО удаляет файл, и только по явной просьбе.
+
+    Порядок инвертирован намеренно: сначала доказываем, что без флага файл на диске остаётся
+    (пакет, молча удаляющий файлы вне своего окружения, — тот же дефект, что и молча пишущий),
+    и лишь потом — что с флагом он исчезает."""
+    env = _isolated_env(tmp_path)
+    belt = _write_belt(_user_site_of(env))
+
+    dry = _run_cli(installed, "doctor", env=env)
+    assert belt.exists(), "doctor без флага удалил файл в site-packages — этого он делать не вправе"
+    # Предохранитель: удаляющий флаг запускаем только убедившись, что в области видимости нет
+    # НАСТОЯЩИХ site-каталогов. Ровно на этом тест однажды снёс пояс на машине разработчика:
+    # изоляция передавала реальный site-packages через PYTHONPATH, он попал под скан, и удаление
+    # оказалось настоящим. Тест, способный удалить файл вне tmp, — не тест, а грабли.
+    outside = [ln for ln in dry.stdout.splitlines()
+               if "path_belt" in ln and str(tmp_path) not in ln]
+    assert not outside, f"в области видимости настоящие site-каталоги, удаление опасно: {outside}"
+
+    r = _run_cli(installed, "doctor", "--remove-path-belt", env=env)
+
+    assert not belt.exists(), f"флаг не удалил пояс:\n{r.stdout[-2000:]}"
+    assert "пояс удалён" in r.stdout, r.stdout[-2000:]
 
 
 def test_status_ok_on_fresh_install(installed):
