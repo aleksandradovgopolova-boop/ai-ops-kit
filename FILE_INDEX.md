@@ -559,7 +559,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 
 ## ai_ops_kit/
 
-**Код движка.** 95 модулей в 12 пакетах (v3.31.0). Плоское имя (`tools/<module>.py`) осталось
+**Код движка.** 95 модулей в 13 пакетах (v3.33.2). Плоское имя (`tools/<module>.py`) осталось
 алиасом через `sys.modules` — ОДИН объект модуля, не копия, поэтому состояние общее и 661
 существующий импорт работает без правки. Аннотации отдельных модулей — ниже, в разделе `tools/`.
 
@@ -582,8 +582,10 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
 - `ai_ops_kit/providers/` (9) — модели и деньги: `orchestrator` (+`_http`/`_providers`/`_usage`),
   `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`
-- `ai_ops_kit/lifecycle/` (9) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
-  `active_work`, `run_report`, `product_health`, `effect_metrics`, `evolution_triggers`, `merge_memory`
+- `ai_ops_kit/lifecycle/` (6) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
+  `active_work`, `run_report`, `merge_memory`
+- `ai_ops_kit/intelligence/` (3) — продуктовая аналитика, кольцо Intelligence: `product_health`,
+  `effect_metrics`, `evolution_triggers`. Слой ВЫШЕ ядра — ядро от них зависеть не вправе (v3.33.2)
 - `ai_ops_kit/delivery/` (2) — доставка наружу: `pr_open`, `review_branch`
 - `ai_ops_kit/engops/` (11) — инженерная операционная модель: `commit_policy`, `branch_policy`,
   `environment_map`, `deploy_readiness`, `architecture_baseline`, `engineering_advisor`,

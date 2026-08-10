@@ -14,7 +14,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `ai_ops_kit/` | **Код движка**: 95 модулей в 12 пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/`, и обязан уложиться в слои `packages/layering.yaml` |
+| `ai_ops_kit/` | **Код движка**: 95 модулей в 13 пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/`, и обязан уложиться в слои `packages/layering.yaml` |
 | `tools/` | Плоские имена как алиасы через `sys.modules` + запуск скриптом через `runpy`. Внутри пакета импорты уже пакетные; алиасы остались ради внешних вызовов и точек входа `doctor`/документации | Только вместе с модулем в пакете; новые алиасы не заводить |
 | `validation/` | Валидаторы (Python, только pyyaml); код плоский, не переезжал | Да; тесты валидатора — в `tests/`, не внутри модуля |
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
@@ -40,13 +40,15 @@ child-репозиториев. Здесь разрабатывается сам
 - **Импорты внутри пакета — пакетные** (`from ai_ops_kit.<пакет> import <модуль>`). Плоское имя
   соседа связь прячет: её не видит ни человек, ни `validate_layering`. Исключение — валидаторы
   из `validation/`: они не пакет, пакетного имени у них нет.
-- **Слои пакетов.** `foundation` → `primitives` → `capabilities` → `entrypoints`; зависимость вверх
+- **Слои пакетов.** `foundation` → `primitives` → `capabilities` → `intelligence` → `entrypoints`; зависимость вверх
   запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимные связи ВНУТРИ ядра пока
   разрешены осознанно — замер 9 пар и 119 циклов; строгий DAG требует разбора, а не выключателя.
 - **Три кольца** (owner-review 2026-07-30, см. `qualification/bootstrap/v3.8.0-plan.yaml` → `architecture_rings`).
   Kernel (Task→Context→Execution→Evidence→Decision→Delivery) НЕ зависит от Intelligence (research/
   product-learning/аналитика); Intelligence зависит от Kernel и ЧИТАЕТ его события. Governance подключается
   ПО РИСКУ, не на каждой задаче. Изменение продукта не должно требовать заполнения исследовательской онтологии.
+  С v3.33.2 первая половина — не декларация, а ПРОВЕРКА: аналитика живёт в пакете `intelligence` слоем
+  ВЫШЕ ядра, зависимость вверх запрещена (`validate_layering`). Обратное направление разрешено намеренно.
 - **Runtime через адаптер, не замена.** AI Ops управляет исполнителем (Claude Code/Codex/OpenHands SDK/…)
   через адаптер; workflow/approvals/evidence не переписываются при смене runtime. Свой tool-loop не наращиваем,
   если внешний runtime делает это надёжно.
