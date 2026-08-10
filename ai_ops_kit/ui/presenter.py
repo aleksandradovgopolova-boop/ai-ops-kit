@@ -32,8 +32,12 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 POLICY = PKG / "registry" / "communication-policy.yaml"
 
 AUDIENCES = ("product", "technical", "debug")
+# ЯРЛЫК — ПОСЛЕДНЕЕ СРЕДСТВО, А НЕ ОСНОВНОЕ. Общий ярлык статуса подходит не всякому случаю:
+# `ok` = «Работа продвинулась» трижды вступал в противоречие с текстом рядом («ничего не идёт»,
+# «сверять нечего», «нечего измерять»). Переводчики обязаны давать `headline` под свой случай;
+# ярлык ниже остаётся для сообщений, собранных вручную.
 STATUS_LABEL = {
-    "ok": "Работа продвинулась",
+    "ok": "Готово",
     "needs_input": "Нужно твоё решение",
     "blocked": "Пока не могу продолжить",
     "done": "Готово",
@@ -85,7 +89,7 @@ def audience_from_config(child_root, policy=None) -> str:
 
 
 def message(status, summary, why_it_matters=None, decision=None, next_steps=None,
-            technical=None) -> dict:
+            technical=None, headline=None) -> dict:
     """Собрать UserMessage.
 
     `technical` не выбрасывается, а откладывается: на уровне `product` он доступен по запросу, на
@@ -97,6 +101,12 @@ def message(status, summary, why_it_matters=None, decision=None, next_steps=None
         raise ValueError("summary обязателен: сообщение без «что произошло» — это лог")
     msg = {"schema_version": 1, "kind": "user-message", "status": status,
            "summary": summary.strip()}
+    if headline:
+        # ЯРЛЫК НЕ ДОЛЖЕН ВРАТЬ. Общий ярлык статуса подходит не всякому случаю: `degraded` на
+        # «нечего измерять» печатал «Готово, но проверено не всё» — а готово не было ничего.
+        # Явный заголовок разрешён именно для таких мест; статус при этом не меняется, то есть
+        # машиночитаемая честность сохраняется.
+        msg["headline"] = headline.strip()
     if why_it_matters:
         msg["why_it_matters"] = why_it_matters.strip()
     if decision:
@@ -118,7 +128,7 @@ def render(msg: dict, audience="product", show_technical=False) -> str:
     if audience not in AUDIENCES:
         audience = "product"
     L = []
-    label = STATUS_LABEL.get(msg.get("status"), msg.get("status", ""))
+    label = msg.get("headline") or STATUS_LABEL.get(msg.get("status"), msg.get("status", ""))
     L.append(f"{label}. {msg.get('summary', '')}".strip())
     if msg.get("why_it_matters"):
         L.append(msg["why_it_matters"])
@@ -298,7 +308,7 @@ def from_next_work(rep: dict) -> dict:
                      " и ".join(f"«{p['title']}»" for p in par) +
                      " — эти работы не пересекаются по изменяемым файлам")
     return message(
-        status="ok",
+        status="ok", headline="Что взять следующим",
         summary=f"Следующей имеет смысл взять «{nb['title']}».",
         why_it_matters="Потому что " + "; ".join(nb["why"]) + ".",
         next_steps=steps,
@@ -325,8 +335,8 @@ def from_contour_consistency(rep: dict) -> dict:
         # «Сверять нечего» — это не прогресс. Прежде здесь стоял `ok`, и ярлык печатал
         # «Работа продвинулась» на месте непроведённой проверки.
         return message(
-            status="degraded",
-            summary="Сверить описание продукта с изменением пока нечего: изменений не предъявлено.",
+            status="degraded", headline="Сверять нечего",
+            summary="Изменений не предъявлено.",
             why_it_matters="Это не «всё согласовано» — это «проверка не проводилась».",
             next_steps=["сверю, когда появится изменение"],
             technical={"comparable": False, "findings": len(findings)})
@@ -356,8 +366,8 @@ def from_contour_consistency(rep: dict) -> dict:
     if unknown:
         n = len(unknown)
         return message(
-            status="degraded",
-            summary=f"Расхождений не нашёл, но проверить смог не всё: {n} "
+            status="degraded", headline="Проверил не всё",
+            summary=f"Расхождений не нашёл, но {n} "
                     f"{_q(n, 'область', 'области', 'областей')} продукта мне здесь не видно.",
             why_it_matters="Про них я не говорю «в порядке» — я говорю «не знаю»: подменять "
                            "признание утверждением значит зеленить непроверенное.",
@@ -365,10 +375,105 @@ def from_contour_consistency(rep: dict) -> dict:
                         f"({', '.join(f['contour'] for f in unknown[:3])}…), и я начну их видеть"],
             technical={f["contour"]: f["detail"] for f in unknown})
 
-    return message(status="ok",
+    return message(status="ok", headline="Согласовано",
                    summary="Изменение согласовано с описанием продукта — проверены все области.",
                    next_steps=["продолжаю"],
                    technical={"findings": len(findings)})
+
+
+def from_active_work(rep: dict) -> dict:
+    """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
+
+    Прежде `status` печатал `STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)` — путь к
+    внутреннему файлу вместо ответа, и одинаково на всех трёх аудиториях: настройка «с кем ты
+    говоришь» на эту команду не влияла вовсе. Три независимых ревью нашли это как один дефект.
+    """
+    active = [a for a in (rep or {}).get("active") or []
+              if (a.get("status") or "") != "done"]
+    if not active:
+        return message(
+            status="ok", headline="Сейчас ничего не идёт",
+            summary="Работа не начата.",
+            next_steps=["скажи, что взять, или спроси «что дальше» — предложу с обоснованием"],
+            technical={"active": 0})
+
+    n = len(active)
+    what = "; ".join(
+        (a.get("title") or a.get("workitem") or a.get("id") or "работа")
+        for a in active[:3])
+    return message(
+        status="ok", headline="Работа идёт",
+        summary=f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}.",
+        why_it_matters=("Пока она не закончена, работу, которая трогает те же файлы, лучше не "
+                        "начинать — иначе две сессии перепишут одно место." if n else None),
+        next_steps=["спроси «что дальше», если нужно чем-то заняться параллельно"],
+        technical={"работ": n, "детали": what,
+                   "области": ", ".join(sorted({x for a in active
+                                                for x in (a.get("affected_areas")
+                                                          or a.get("areas") or [])})) or "—",
+                   "ветки": ", ".join(a.get("branch") or "?" for a in active),
+                   "id": ", ".join(str(a.get("id") or "?") for a in active)})
+
+
+def from_product_health(rep) -> dict:
+    """Product Health -> UserMessage. Отсутствие данных — НЕ «всё хорошо».
+
+    Прежняя формулировка была честной по сути («без данных score не считается») и негодной по форме:
+    путь к файлу и слово `score` продакту не нужны, а что делать дальше — не сказано.
+    """
+    if not rep:
+        return message(
+            status="degraded", headline="Пока не могу измерить",
+            summary="Данных о состоянии продукта я не получил.",
+            why_it_matters="Это не «всё хорошо» — это «не знаю»: считать по пустому месту я не буду.",
+            next_steps=["подключи метрики продукта, и я начну показывать динамику"],
+            technical={"input": "product/product-health.yaml", "status": "unavailable"})
+    hs = (rep.get("health_score") or {})
+    band = hs.get("band")
+    value = hs.get("value")
+    good = band in ("good", "excellent", "healthy")
+    return message(
+        status="ok" if good else "degraded",
+        summary=(f"Состояние продукта: {band}." if band else "Состояние продукта измерено."),
+        why_it_matters=None if good else "Стоит посмотреть, что тянет вниз, до следующей работы.",
+        next_steps=["покажу разбор по метрикам, если нужно"],
+        technical={"health_score": value, "band": band})
+
+
+# Состояние строки doctor -> насколько это плохо. Порядок важен: вердикт следует за ХУДШЕЙ строкой.
+_DOCTOR_RANK = {"ok": 0, "info": 0, "unknown": 1, "gap": 1, "warn": 1, "fail": 2, "blocked": 2}
+
+
+def from_doctor(lines) -> dict:
+    """Строки проверки установки -> UserMessage. Вердикт следует за ХУДШЕЙ строкой.
+
+    Прежде итог `doctor: OK` не зависел от строк с `✗` в том же выводе: человек либо перестаёт
+    читать строки, либо перестаёт верить вердикту. Оба исхода делают проверку бесполезной.
+    """
+    rows = list(lines or [])
+    worst = max((_DOCTOR_RANK.get(r.get("state"), 1) for r in rows), default=0)
+    gaps = [r for r in rows if _DOCTOR_RANK.get(r.get("state"), 1) >= 1]
+
+    if worst == 0:
+        return message(status="ok", headline="Всё в порядке",
+                       summary="Кит на месте и работает как ожидается.",
+                       next_steps=["можно ставить задачу"],
+                       technical={"проверок": len(rows)})
+    n = len(gaps)
+    if worst >= 2:
+        return message(
+            status="blocked",
+            summary=f"Кит проверил себя и нашёл {n} {_q(n, 'проблему', 'проблемы', 'проблем')}, "
+                    f"из-за которых работать нельзя.",
+            why_it_matters="Пока это не исправлено, всё остальное, что я скажу, ничего не доказывает.",
+            next_steps=[r.get("text", "") for r in gaps if _DOCTOR_RANK.get(r.get("state")) >= 2][:2],
+            technical={r.get("id", f"строка{i}"): r.get("text") for i, r in enumerate(rows)})
+    return message(
+        status="degraded", headline="Работать можно, но есть замечания",
+        summary=f"Кит на месте; замечаний {n}.",
+        why_it_matters="Работать можно; замечания стоит закрыть, чтобы проверки говорили полную правду.",
+        next_steps=[r.get("text", "") for r in gaps][:2],
+        technical={r.get("id", f"строка{i}"): r.get("text") for i, r in enumerate(rows)})
 
 
 def demo(audience="product"):

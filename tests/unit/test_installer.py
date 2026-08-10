@@ -465,7 +465,10 @@ def test_child_gets_a_runnable_entry_point(installed):
     r = subprocess.run([str(entry), "status"], cwd=str(installed),
                        capture_output=True, text=True, timeout=120)
     assert r.returncode in (0, 1), f"./ai-ops status не работает: {r.returncode} {r.stderr[:300]}"
-    assert "установлено" in (r.stdout + r.stderr), r.stdout[:300]
+    # `status` — ПРОДУКТОВЫЙ вопрос («что идёт прямо сейчас»), а не отчёт о слое кита: у владельца
+    # это первое значение слова. Состояние самого кита спрашивают реже и зовут `kit-status`.
+    assert "идёт" in r.stdout or "не начата" in r.stdout, r.stdout[:300]
+    assert "managed" not in r.stdout, "продуктовый вопрос ответил отчётом о внутренностях кита"
 
 
 def test_hints_point_to_something_runnable(installed, ai_ops):

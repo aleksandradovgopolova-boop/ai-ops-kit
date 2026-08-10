@@ -28,7 +28,18 @@ find_installer() {
 
 cmd=${1:-}
 case "$cmd" in
-  init|update|status|diff|doctor|validate|migrate|verify-capabilities|selftest)
+  # `status` СОЗНАТЕЛЬНО не здесь: у владельца «status» — это «что идёт прямо сейчас», продуктовый
+  # вопрос к движку. Состояние самого кита (версия, целостность managed) спрашивают реже и называют
+  # отдельно — `kit-status`. Прежде обе команды звались одинаково, и владелец вместо ответа про
+  # работу получал отчёт о дрейфе managed-слоя.
+  kit-status)
+    shift; set -- status "$@"
+    if inst=$(find_installer); then exec python3 "$inst" "$@"; fi
+    echo "Состояние кита показывает сам кит, а его исходник рядом не найден." >&2
+    echo "Укажите: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops kit-status" >&2
+    exit 2
+    ;;
+  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest)
     if inst=$(find_installer); then
       exec python3 "$inst" "$@"
     fi

@@ -114,6 +114,55 @@ def test_degraded_stays_degraded_on_every_level():
         assert "проверено не всё" in out
 
 
+def test_status_and_health_speak_to_a_human(tmp_path):
+    """РЕВЬЮ UX + АРХИТЕКТУРНОЕ + ПРОДУКТОВОЕ (независимо, все три): presenter звали только два
+    интента из пятнадцати. `status` и `health` печатали внутреннее состояние ОДИНАКОВО на всех трёх
+    аудиториях, то есть настройка «с кем ты говоришь» на них не влияла вовсе:
+
+        STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)
+        HEALTH: нет входных метрик (ожидается product/product-health.yaml) — честно: без данных
+                score не считается
+
+    Второе предложение честное и его надо сохранить — но путь к файлу и слово «score» продакту не
+    нужны, а «что делать дальше» не сказано.
+    """
+    empty = PR.from_active_work({"active": []})
+    out = PR.render(empty, audience="product")
+    # Ярлык не должен противоречить тексту: «Работа продвинулась. Ничего не идёт» — самоотрицание.
+    assert "продвинулась" not in out, out
+    assert "active-work.yaml" not in out and ".ai/" not in out
+    assert "ничего" in out.lower() or "не иду" in out.lower() or "не идёт" in out.lower()
+
+    busy = PR.from_active_work({"active": [
+        {"id": "w1", "affected_areas": ["src/api/"], "branch": "ai-ops/w1",
+         "status": "in-progress", "owner_session": "s1"}]})
+    assert "w1" not in PR.render(busy, audience="product"), "id работы продакту не нужен"
+    assert "w1" in PR.render(busy, audience="debug")
+
+    # HEALTH без данных: честность сохранена, жаргон убран, следующий шаг назван.
+    no_data = PR.from_product_health(None)
+    out2 = PR.render(no_data, audience="product")
+    assert "score" not in out2.lower() and "product-health.yaml" not in out2
+    low = out2.lower()
+    assert "не" in low and ("данн" in low or "измер" in low)
+    assert no_data["status"] != "ok", "отсутствие данных — не «всё хорошо»"
+
+
+def test_doctor_verdict_follows_the_worst_line():
+    """РЕВЬЮ UX: итог `doctor: OK` не зависел от строк с `✗` в том же выводе — человек либо
+    перестанет читать строки, либо перестанет верить вердикту."""
+    ok = PR.from_doctor([{"id": "a", "state": "ok", "text": "всё на месте"}])
+    assert ok["status"] == "ok"
+
+    mixed = PR.from_doctor([{"id": "a", "state": "ok", "text": "всё на месте"},
+                            {"id": "b", "state": "gap", "text": "нет ROADMAP.md"}])
+    assert mixed["status"] != "ok", "вердикт обязан следовать за худшей строкой"
+    assert "1" in PR.render(mixed, audience="product"), "сколько именно замечаний — часть ответа"
+
+    broken = PR.from_doctor([{"id": "a", "state": "fail", "text": "окружение врёт"}])
+    assert broken["status"] == "blocked"
+
+
 def test_unknown_contours_are_not_translated_into_agreement():
     """МУТАЦИОННОЕ РЕВЮ: главный инвариант релиза (`unknown` != зелёное утверждение) защищён в
     `contours.py` пятью тестами и НЕ защищён в presenter ни одним. При отсутствии major-находок

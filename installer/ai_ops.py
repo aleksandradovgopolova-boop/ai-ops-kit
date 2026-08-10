@@ -912,6 +912,18 @@ def cmd_init(target_dir):
     MANAGED = ai / "managed"
     n = write_checksums(MANAGED)
     write_provenance(pkg_version(), MANAGED, note="Initial install by ai-ops init.")
+    # v3.35.1: back-fill обязательного контекста делает и `init`, а не только `update`. Прежде свежая
+    # установка ОСТАВЛЯЛА ЗА СОБОЙ известный пробел (`✗ нет в оверлее: ProductStatus.md, now.md`),
+    # который закрывал лишь следующий `update` — а вердикт doctor его игнорировал и печатал `OK`.
+    # Как только вердикт стал следовать за худшей строкой, стало видно: пробел был настоящий, просто
+    # про него молчали. Ставить кит и сразу иметь замечание — плохой первый экран.
+    global AI_DIR
+    _saved_ai = AI_DIR
+    AI_DIR = ai
+    try:
+        _backfill_required_context()
+    finally:
+        AI_DIR = _saved_ai
     MANAGED = saved
     cfg = root / ".ai-ops.yaml"
     if not cfg.exists():
@@ -1030,9 +1042,24 @@ def _path_hygiene():
     return path_hygiene
 
 
+_DOCTOR_LINES = []
+
+
+def _dprint(*args, **kwargs):
+    """print для doctor: печатает и ЗАПОМИНАЕТ строку, чтобы вердикт мог следовать за худшей.
+
+    Перехват, а не второй список правил: `✗`/`⚠` ставят те же функции, что печатают строки, и
+    отдельный перечень «что считать замечанием» неизбежно разъехался бы с фактическим выводом.
+    """
+    line = " ".join(str(a) for a in args)
+    _DOCTOR_LINES.append(line)
+    print(line, **kwargs)
+
+
 def cmd_doctor(argv=()):
     inst, avail = installed_version(), pkg_version()
     ok = True
+    _DOCTOR_LINES.clear()
     # Гигиена путей идёт ПЕРВОЙ и БЛОКИРУЕТ. До v3.33.1 setup.py кита писал .pth-пояс в
     # site-packages пользователя; 3.33.1 убрал запись, но не убрал уже написанные файлы — pip о них
     # не знает. Пояс исполняется при старте Python и подкладывает корень репозитория, tools/ и
@@ -1042,50 +1069,50 @@ def cmd_doctor(argv=()):
     try:
         _ph = _path_hygiene()
     except Exception as _e:  # noqa: BLE001 — недоступность модуля не роняет doctor, но и не молчит
-        print(f"пути окружения: НЕ ПРОВЕРЕНО ({_e}) — это не «чисто»")
+        _dprint(f"пути окружения: НЕ ПРОВЕРЕНО ({_e}) — это не «чисто»")
         ok = False
     else:
         if "--remove-path-belt" in argv:
             _rep = _ph.assess()
             _results = _ph.remove_belts(_rep)
             if not _results:
-                print("пути окружения: удалять нечего — пояса не найдены")
+                _dprint("пути окружения: удалять нечего — пояса не найдены")
             for _r in _results:
-                print(f"пояс {'удалён' if _r['removed'] else 'НЕ удалён'}: {_r['path']}"
+                _dprint(f"пояс {'удалён' if _r['removed'] else 'НЕ удалён'}: {_r['path']}"
                       + (f" ({_r['error']})" if _r["error"] else ""))
         _hyg = _ph.assess()
-        print(_ph.summary_line(_hyg))
+        _dprint(_ph.summary_line(_hyg))
         # unknown (ни один site-каталог не просмотрен) идёт в проблемы наравне с найденным поясом:
         # «не знаю» — не «чисто», а вердикт doctor не вправе опираться на непроверенное.
         if _hyg["counts"]["blocking"] or _hyg["status"] == "unknown":
             ok = False
-    print(f"версии: установлено {inst or '—'} / пакет {avail} "
+    _dprint(f"версии: установлено {inst or '—'} / пакет {avail} "
           f"{'✓' if inst == avail else '⟳ нужен update'}")
     if inst != avail:
         ok = False
     for zone in ("managed", "project", "custom", "generated", "runtime"):
         exists = (AI_DIR / zone).exists()
-        print(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")
+        _dprint(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")
         ok = ok and exists
     drift = detect_drift() or []
-    print(f"целостность managed: {'✓' if not drift else '✗ drift (' + str(len(drift)) + ')'}")
+    _dprint(f"целостность managed: {'✓' if not drift else '✗ drift (' + str(len(drift)) + ')'}")
     ok = ok and not drift
     # v2.82 Standalone Child: движок должен быть в .ai/managed, чтобы `ai-ops run` работал без
     # внешнего клона кита. Наличие ai_ops_run.py в managed = движок установлен; если его нет,
     # это не всегда ошибка (child мог выбрать packages без ai-ops-execution) — сообщаем честно.
     engine_entry = AI_DIR / "managed" / "tools" / "ai_ops_run.py"
     if engine_entry.exists():
-        print("движок (standalone): ✓ .ai/managed/tools/ai_ops_run.py "
+        _dprint("движок (standalone): ✓ .ai/managed/tools/ai_ops_run.py "
               "(ai-ops run работает без клона parent)")
     else:
-        print("движок (standalone): — не установлен (пакет ai-ops-execution не выбран? "
+        _dprint("движок (standalone): — не установлен (пакет ai-ops-execution не выбран? "
               "тогда `ai-ops run` требует клон parent)")
     node = shutil.which("node")
     osp = shutil.which("openspec")
     osp_hint = ("— (не найден; OpenSpec включён по умолчанию — установите "
                 "@fission-ai/openspec или выключите openspec.enabled)")
-    print(f"node: {'✓' if node else '— (нужен для OpenSpec — включён по умолчанию)'}")
-    print(f"openspec CLI: {'✓' if osp else osp_hint}")
+    _dprint(f"node: {'✓' if node else '— (нужен для OpenSpec — включён по умолчанию)'}")
+    _dprint(f"openspec CLI: {'✓' if osp else osp_hint}")
     # v3.11.0 UI Evidence Readiness: честная зрелость UI-evidence (absent НЕ маскируем как проблему —
     # это применимо только к UI-продуктам; absent для не-UI child — норма). doctor только СООБЩАЕТ.
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
@@ -1094,17 +1121,17 @@ def cmd_doctor(argv=()):
     try:
         import ui_readiness
         _m = ui_readiness.assess(".")["storybook_maturity"]
-        print(f"ui-evidence (Storybook): {_m}"
+        _dprint(f"ui-evidence (Storybook): {_m}"
               + ("  — не UI-продукт? тогда норма (не маскируем)" if _m == "absent" else "")
               + ("   → `./ai-ops onboard` для деталей" if _m != "verified" else ""))
     except Exception as _e:  # noqa: BLE001 — недоступность readiness не роняет doctor
-        print(f"ui-evidence (Storybook): недоступно ({_e})")
+        _dprint(f"ui-evidence (Storybook): недоступно ({_e})")
     # v3.12.0 Startup Context Budget: полнота обязательных документов контекста репозитория.
     # Пробел -> сообщаем + подсказываем `./ai-ops update` (он back-fill'ит черновики). Не роняем doctor
     # (advisory: контекст — ответственность репозитория, кит его лишь заполняет черновиком).
     _req, _gaps = _context_gaps()
     if _req:
-        print(f"контекст (обязательные документы): "
+        _dprint(f"контекст (обязательные документы): "
               + ("✓ все на месте" if not _gaps
                  else f"✗ нет в оверлее: {', '.join(_gaps)} → `./ai-ops update` создаст черновики"))
     # v3.35 Product Operating Model: контур планирования — пробел ВИДЕН, а не молчит. Репозиторий
@@ -1112,7 +1139,7 @@ def cmd_doctor(argv=()):
     # порядок строк в бэклоге, а не про продукт.
     _preq, _pgaps = _planning_gaps(REPO_ROOT)
     if _preq:
-        print(f"планирование (направление и план): "
+        _dprint(f"планирование (направление и план): "
               + ("✓ артефакты на месте" if not _pgaps
                  else f"✗ нет: {', '.join(_pgaps)} → `./ai-ops model` покажет пробелы и спросит "
                       f"недостающее одним пакетом"))
@@ -1122,9 +1149,9 @@ def cmd_doctor(argv=()):
             sys.path.insert(0, str(_cand))
     try:
         import context_cost
-        print(context_cost.summary_line("."))
+        _dprint(context_cost.summary_line("."))
     except Exception as _e:  # noqa: BLE001 — оценка стоимости не роняет doctor
-        print(f"стоимость старта: недоступно ({_e})")
+        _dprint(f"стоимость старта: недоступно ({_e})")
     # v3.19.0 Engineering Operating Model: операционная гигиена. doctor только СООБЩАЕТ (политика
     # коммитов + актуальность ветки против базы). Отставание базы — самый частый молчаливый дефект:
     # диф ветки все смотрят, её актуальность — никто. Не роняем doctor (это темп владельца, не поломка).
@@ -1133,33 +1160,48 @@ def cmd_doctor(argv=()):
             sys.path.insert(0, str(_cand))
     try:
         import commit_policy
-        print(commit_policy.summary_line("."))
+        _dprint(commit_policy.summary_line("."))
     except Exception as _e:  # noqa: BLE001
-        print(f"политика коммитов: недоступно ({_e})")
+        _dprint(f"политика коммитов: недоступно ({_e})")
     try:
         import branch_policy
-        print(branch_policy.summary_line("."))
+        _dprint(branch_policy.summary_line("."))
     except Exception as _e:  # noqa: BLE001
-        print(f"актуальность ветки: недоступно ({_e})")
+        _dprint(f"актуальность ветки: недоступно ({_e})")
     # v3.20.0 EngOps срез 2: окружения и зрелость поставки. `not_detected`/`absent` НЕ маскируем —
     # для библиотеки/CLI это норма; расхождение «CI деплоит в необъявленное окружение» — сообщаем.
     try:
         import environment_map
-        print(environment_map.summary_line("."))
+        _dprint(environment_map.summary_line("."))
     except Exception as _e:  # noqa: BLE001
-        print(f"окружения: недоступно ({_e})")
+        _dprint(f"окружения: недоступно ({_e})")
     try:
         import deploy_readiness
-        print(deploy_readiness.summary_line("."))
+        _dprint(deploy_readiness.summary_line("."))
     except Exception as _e:  # noqa: BLE001
-        print(f"поставка (deploy): недоступно ({_e})")
+        _dprint(f"поставка (deploy): недоступно ({_e})")
     # v3.21.0 EngOps срез 3: экономическая граница ДО траты. unavailable НЕ выдаём за ноль.
     try:
         import economic_preflight
-        print(economic_preflight.summary_line("."))
+        _dprint(economic_preflight.summary_line("."))
     except Exception as _e:  # noqa: BLE001
-        print(f"экономика (оценка до прогона): недоступно ({_e})")
-    print("doctor:", "OK" if ok else "ЕСТЬ ПРОБЛЕМЫ")
+        _dprint(f"экономика (оценка до прогона): недоступно ({_e})")
+    # ВЕРДИКТ СЛЕДУЕТ ЗА ХУДШЕЙ СТРОКОЙ. Прежде итог `doctor: OK` не зависел от строк с `✗` в том
+    # же выводе: `контекст: ✗ нет в оверлее …` и рядом `doctor: OK`. Человек либо перестаёт читать
+    # строки, либо перестаёт верить вердикту — оба исхода делают проверку бесполезной (находка UX).
+    # Считаем замечания по фактическому выводу: `✗`/`⚠` ставят те же функции, что печатают строки,
+    # и второй список «что считать замечанием» разъехался бы с первым.
+    _gaps = [ln for ln in _DOCTOR_LINES if "✗" in ln]
+    _warns = [ln for ln in _DOCTOR_LINES if "⚠" in ln and "✗" not in ln]
+    if not ok:
+        print(f"doctor: ЕСТЬ ПРОБЛЕМЫ — {len(_gaps) or 'см. строки'} блокирующих")
+    elif _gaps:
+        print(f"doctor: работать можно, но есть замечания — {len(_gaps)} "
+              f"(строки с ✗ выше)")
+    elif _warns:
+        print(f"doctor: OK с предупреждениями — {len(_warns)}")
+    else:
+        print("doctor: OK")
     return 0 if ok else 1
 
 

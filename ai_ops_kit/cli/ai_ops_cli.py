@@ -178,11 +178,29 @@ def _run_intent(intent, task, child_root, signals, a):
 
     if intent == "status":
         from ai_ops_kit.lifecycle import active_work
+        from ai_ops_kit.ui import presenter
         awp = child_root / ".ai" / "runtime" / "active-work.yaml"
-        if not awp.is_file():
-            print("STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)")
-            return 0
-        return active_work.list_cmd(awp, as_json=js)
+        data = {"active": []}
+        if awp.is_file():
+            try:
+                data = active_work.load(awp)
+            except active_work.ActiveWorkCorrupt as e:
+                # Битый реестр — не «работы нет»: координация сессий недостоверна (инвариант 3.0.12).
+                print(presenter.render(presenter.message(
+                    status="blocked",
+                    summary="Не могу сказать, что идёт прямо сейчас: запись об идущих работах "
+                            "повреждена.",
+                    why_it_matters="Пока это так, я не знаю, не перепишет ли новая работа то, что "
+                                   "уже правит другая сессия.",
+                    next_steps=["восстановить запись и повторить"],
+                    technical={"ошибка": str(e)}),
+                    audience=presenter.audience_from_config(child_root)))
+                return 1
+        if js:
+            return active_work.list_cmd(awp, as_json=True) if awp.is_file() else 0
+        aud = presenter.audience_from_config(child_root)
+        print(presenter.render(presenter.from_active_work(data), audience=aud))
+        return 0
 
     if intent == "next":
         # Четыре вопроса: где мы, что идёт сейчас, что блокирует, что взять следующим.
@@ -249,15 +267,17 @@ def _run_intent(intent, task, child_root, signals, a):
                 child_root / "product-health.yaml"]
         src = next((p for p in cand if p.is_file()), None)
         if not src:
-            print("HEALTH: нет входных метрик (ожидается product/product-health.yaml) — "
-                  "честно: без данных score не считается")
+            from ai_ops_kit.ui import presenter
+            aud = presenter.audience_from_config(child_root)
+            print(presenter.render(presenter.from_product_health(None), audience=aud))
             return 1
         report = product_health.compute(yaml.safe_load(src.read_text(encoding="utf-8")))
         if js:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
-            hs = report["health_score"]
-            print(f"HEALTH: score {hs['value']} ({hs['band']}) · источник {src.relative_to(child_root)}")
+            from ai_ops_kit.ui import presenter
+            aud = presenter.audience_from_config(child_root)
+            print(presenter.render(presenter.from_product_health(report), audience=aud))
         return 0
 
     if intent == "new":
