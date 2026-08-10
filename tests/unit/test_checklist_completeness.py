@@ -2,7 +2,7 @@
 
 Рекомендация №9 внешнего ревью: «206 проверок — это shell-список, а не тест-раннер; требует ручной
 синхронизации». `checks_count` уже деривируется (validate_release_claims), но это ловит только
-устаревшее ЧИСЛО. Валидатор, добавленный в `validation/` и не вписанный в чеклист, не ловился
+устаревшее ЧИСЛО. Валидатор, добавленный в `ai_ops_kit/validation/` и не вписанный в чеклист, не ловился
 ничем: он просто не запускался ни в CI, ни перед коммитом — тихая дыра в контуре качества.
 
 Здесь закрывается сам класс дрейфа: каждый валидатор либо в чеклисте, либо в объявленных
@@ -36,23 +36,24 @@ def _declared_exclusions():
     tail = _text().split("## Не входит в чеклист", 1)
     if len(tail) < 2:
         return set()
-    return set(re.findall(r"`(validation/[\w./-]+\.py)`", tail[1]))
+    return set(re.findall(r"`(ai_ops_kit/validation/[\w./-]+\.py)`", tail[1]))
 
 
 @pytest.mark.unit
 def test_every_validator_is_listed_or_declared_excluded():
-    real = {f"validation/{p.name}" for p in (PKG / "validation").glob("validate_*.py")}
-    listed = set(re.findall(r"python3 (validation/\S+\.py)", _text()))
+    real = {f"ai_ops_kit/validation/{p.name}"
+            for p in (PKG / "ai_ops_kit" / "validation").glob("validate_*.py")}
+    listed = set(re.findall(r"python3 (ai_ops_kit/validation/\S+\.py)", _text()))
     excluded = _declared_exclusions()
 
     # v3.30: чеклист перестал быть единственным местом запуска. Валидатор считается покрытым,
     # если его проверки переехали в pytest (test_<validator>_selftest.py) ИЛИ он под
     # рантайм-контрактом (test_validator_runtime_contract прогоняет его из копии репозитория).
     # Дублировать те же команды в чеклисте значит гонять одно и то же дважды.
-    migrated = {f"validation/{p.stem.replace('test_', '', 1).replace('_selftest', '')}.py"
+    migrated = {f"ai_ops_kit/validation/{p.stem.replace('test_', '', 1).replace('_selftest', '')}.py"
                 for p in (PKG / "tests" / "unit").glob("test_validate_*_selftest.py")}
     from test_validator_runtime_contract import NEEDS_ARTIFACT, STANDALONE
-    contracted = {f"validation/{n}.py" for n in list(STANDALONE) + list(NEEDS_ARTIFACT)}
+    contracted = {f"ai_ops_kit/validation/{n}.py" for n in list(STANDALONE) + list(NEEDS_ARTIFACT)}
     missing = sorted(real - listed - excluded - migrated - contracted)
     assert not missing, (
         "валидаторы не запускаются нигде: ни в чеклисте, ни в объявленных исключениях, "
@@ -62,7 +63,7 @@ def test_every_validator_is_listed_or_declared_excluded():
 @pytest.mark.unit
 def test_exclusions_are_real_files_and_not_also_listed():
     """Исключение на несуществующий файл — мёртвая запись; исключение И в списке — противоречие."""
-    listed = set(re.findall(r"python3 (validation/\S+\.py)", _text()))
+    listed = set(re.findall(r"python3 (ai_ops_kit/validation/\S+\.py)", _text()))
     for rel in _declared_exclusions():
         assert (PKG / rel).is_file(), f"объявлено исключение для несуществующего {rel}"
         assert rel not in listed, f"{rel} и в чеклисте, и в исключениях — противоречие"

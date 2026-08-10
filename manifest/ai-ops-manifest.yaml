@@ -968,7 +968,6 @@ update_policy:
     # child-репозитории ссылается на несуществующий пакет.
     - "ai_ops_kit/**/*.py"
     - "tools/**/*.py"
-    - "validation/**/*.py"
     - "config/**/*"
     - "qualification/**/*"
     - "containers/*"
@@ -984,7 +983,9 @@ update_policy:
   example_install: "examples/child-install/"
 
 package_migrations:
-  chain: []                  # первый релиз; цепочка появится с 0.1.0-to-0.2.0
+  # v3.34: валидаторы переехали в ai_ops_kit/validation/ — раскладка child зеркалит кит.
+  chain:
+    - 3.33-to-3.34
 
 contracts_dir: schemas/
 compatibility_check: python3 validation/validate_ai_first_registry.py

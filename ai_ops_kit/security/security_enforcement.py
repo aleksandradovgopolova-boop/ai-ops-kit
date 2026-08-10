@@ -24,7 +24,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-import validate_memory_governance as _mgp   # noqa: E402
+from ai_ops_kit.validation import validate_memory_governance as _mgp   # noqa: E402
 
 
 def verify_artifact(data: bytes, entry: dict):

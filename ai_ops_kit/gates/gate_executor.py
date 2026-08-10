@@ -36,6 +36,9 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
+# v3.34: валидаторы переехали в пакет. Путь один на модуль — чтобы следующий перенос правился
+# в одном месте, а не в каждом вызове подпроцесса.
+VALIDATION = PKG / "ai_ops_kit" / "validation"
 _EVIDENCE_KEYS = {"status", "provided", "checks", "evidence", "warnings", "blockers", "override"}
 
 
@@ -150,7 +153,7 @@ def collect_evidence(workflow_id: str, run_dir) -> dict:
 
 def _run_validator(*args) -> bool:
     """Запустить package-валидатор офлайн; True при rc==0."""
-    r = subprocess.run([sys.executable, str(PKG / "validation" / args[0]), *args[1:]],
+    r = subprocess.run([sys.executable, str(VALIDATION / args[0]), *args[1:]],
                        capture_output=True, text=True)
     return r.returncode == 0
 
@@ -216,7 +219,7 @@ def _freshness_run(base=None):
         return "warn", checks, []
     checks = []
     for r in roots:
-        proc = subprocess.run([sys.executable, str(PKG / "validation" / "validate_freshness.py"),
+        proc = subprocess.run([sys.executable, str(VALIDATION / "validate_freshness.py"),
                                str(r), "--json"], capture_output=True, text=True)
         try:
             rep = json.loads(proc.stdout)
