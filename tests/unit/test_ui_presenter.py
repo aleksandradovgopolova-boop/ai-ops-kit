@@ -39,7 +39,7 @@ def test_render_answers_four_questions_in_order():
 
 
 def test_three_audiences_render():
-    for aud in PR.AUDIENCES:
+    for aud in PR.audiences():
         assert PR.demo(aud)
 
 
@@ -109,7 +109,7 @@ def test_degraded_stays_degraded_on_every_level():
                          "severity": "major", "detail": "источник истины не обновлён"}]}
     msg = PR.from_contour_consistency(rep)
     assert msg["status"] == "degraded"
-    for aud in PR.AUDIENCES:
+    for aud in PR.audiences():
         out = PR.render(msg, audience=aud)
         assert "проверено не всё" in out
 
@@ -146,6 +146,38 @@ def test_status_and_health_speak_to_a_human(tmp_path):
     low = out2.lower()
     assert "не" in low and ("данн" in low or "измер" in low)
     assert no_data["status"] != "ok", "отсутствие данных — не «всё хорошо»"
+
+
+def test_contract_comes_from_the_registry_not_from_code(tmp_path, monkeypatch):
+    """ТИР 3: presenter держал свою копию словарей статусов и аудиторий.
+
+    Реестр — источник истины, и для собственной политики коммуникации тоже: иначе переименование
+    ярлыка требует правки двух мест, а расхождение обнаруживается глазами.
+    """
+    assert PR._contract()["source"] == "registry", "контракт читается не из реестра"
+    assert set(PR.statuses()) == {"ok", "needs_input", "blocked", "done", "degraded"}
+    assert PR.statuses()["degraded"], "у статуса нет ярлыка — реестр неполон"
+
+    # Ярлык из реестра действительно доезжает до текста.
+    pol = tmp_path / "policy.yaml"
+    pol.write_text("statuses:\n  ok: {label: 'ЯРЛЫК-ИЗ-РЕЕСТРА'}\n"
+                   "audiences:\n  product: {default: true}\n", encoding="utf-8")
+    monkeypatch.setattr(PR, "POLICY", pol)
+    PR._CONTRACT.clear()
+    try:
+        m = PR.message(status="ok", summary="проверка.")
+        assert "ЯРЛЫК-ИЗ-РЕЕСТРА" in PR.render(m, audience="product")
+    finally:
+        PR._CONTRACT.clear()
+
+    # Реестр недоступен -> работаем на аварийных значениях и НЕ выдаём их за источник истины.
+    monkeypatch.setattr(PR, "POLICY", tmp_path / "нет.yaml")
+    PR._CONTRACT.clear()
+    try:
+        assert PR._contract()["source"] == "fallback"
+        assert PR.render(PR.message(status="ok", summary="x."), audience="product")
+    finally:
+        PR._CONTRACT.clear()
 
 
 def test_doctor_verdict_follows_the_worst_line():
@@ -215,7 +247,7 @@ def test_unknown_contours_are_not_translated_into_agreement():
                          "detail": "нет сигнальных путей"} for i in range(7)]}
     msg = PR.from_contour_consistency(rep)
     assert msg["status"] != "ok", "семь непроверенных контуров — это не «согласовано»"
-    for aud in PR.AUDIENCES:
+    for aud in PR.audiences():
         out = PR.render(msg, audience=aud)
         assert "7" in out or "семь" in out, out
         assert "согласовано" not in out.lower() or "не" in out.lower()

@@ -80,8 +80,24 @@ class PlanCorrupt(Exception):
     """План недостоверен. Пустой план означал бы «работы нет» -> `next` ответил бы «всё сделано»."""
 
 
+def plan_rel(child_root) -> str:
+    """Где в ЭТОМ репозитории лежит план работ. -> относительный путь.
+
+    По умолчанию `planning/plan.yaml` в корне. Монорепозиторий, где продукт живёт в `apps/web/`,
+    так себя описать не мог вовсе: `next` отвечал «плана нет» репозиторию, у которого план есть
+    (тир 3 разбора перед квалификацией). Объявляется в
+    `.ai-ops.yaml -> product_operating_model.paths.plan`.
+    """
+    try:
+        return _contours.declared_path(child_root, "plan", PLAN_REL)
+    except _contours.ConfigInvalid as e:
+        # Недостоверное объявление пути — fail-closed: взять дефолт значило бы читать НЕ ТОТ файл и
+        # уверенно отвечать по нему.
+        raise PlanCorrupt(str(e)) from e
+
+
 def plan_path(child_root) -> Path:
-    return Path(child_root) / PLAN_REL
+    return Path(child_root) / plan_rel(child_root)
 
 
 def load(child_root, path=None):
@@ -508,7 +524,7 @@ def main(argv=None):
         print(f"ОШИБКА: {e}")
         return 1
     if plan is None:
-        print(f"ПЛАНА НЕТ: ожидался {PLAN_REL} — контур Planning & Execution не заполнен")
+        print(f"ПЛАНА НЕТ: ожидался {plan_rel(root)} — контур Planning & Execution не заполнен")
         return 1
 
     if ns.cmd == "validate":

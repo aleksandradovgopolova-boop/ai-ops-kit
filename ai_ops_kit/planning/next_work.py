@@ -212,13 +212,16 @@ def compute(child_root, budget_left=None):
     model = _contours.load_model()
     plan = _plan.load(child_root)
     rm = _roadmap.check(child_root, plan)
+    # Путь называем ФАКТИЧЕСКИЙ, а не дефолтный: монорепозиторий объявляет свой, и сообщение
+    # «нет planning/plan.yaml» отправило бы владельца искать файл не там, где он у него лежит.
+    plan_rel = _plan.plan_rel(child_root)
 
     if plan is None:
         return {"schema_version": 1, "plan_present": False,
                 "roadmap": {"errors": rm["errors"], "warnings": rm["warnings"]},
                 "where_are_we": None, "in_progress": [], "blocked": [], "ready": [],
                 "next_best": None, "parallel_with": [], "not_ready": [],
-                "gap": f"нет {_plan.PLAN_REL} — контур Planning & Execution не заполнен; "
+                "gap": f"нет {plan_rel} — контур Planning & Execution не заполнен; "
                        f"шаблон: templates/planning/plan.yaml"}
 
     # ЗАГОТОВКА — НЕ ПЛАН. Иначе кит советует работу из своего примера как настоящую (найдено тремя
@@ -229,7 +232,7 @@ def compute(child_root, budget_left=None):
                 "roadmap": {"errors": rm["errors"], "warnings": rm["warnings"]},
                 "where_are_we": None, "in_progress": [], "blocked": [], "ready": [],
                 "next_best": None, "parallel_with": [], "parallel_skipped": [], "not_ready": [],
-                "gap": f"{_plan.PLAN_REL} — это ещё ЗАГОТОВКА кита (пример работы, не ваш план). "
+                "gap": f"{plan_rel} — это ещё ЗАГОТОВКА кита (пример работы, не ваш план). "
                        f"Впишите свою работу и снимите строку `template: true`; советовать из "
                        f"примера кит не станет."}
 

@@ -31,18 +31,15 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
            Path(__file__).resolve().parents[2])
 POLICY = PKG / "registry" / "communication-policy.yaml"
 
-AUDIENCES = ("product", "technical", "debug")
-# ЯРЛЫК — ПОСЛЕДНЕЕ СРЕДСТВО, А НЕ ОСНОВНОЕ. Общий ярлык статуса подходит не всякому случаю:
-# `ok` = «Работа продвинулась» трижды вступал в противоречие с текстом рядом («ничего не идёт»,
-# «сверять нечего», «нечего измерять»). Переводчики обязаны давать `headline` под свой случай;
-# ярлык ниже остаётся для сообщений, собранных вручную.
-STATUS_LABEL = {
-    "ok": "Готово",
-    "needs_input": "Нужно твоё решение",
-    "blocked": "Пока не могу продолжить",
-    "done": "Готово",
-    "degraded": "Готово, но проверено не всё",
-}
+# Аварийные значения — РОВНО на случай недоступного реестра, и в этом случае слой громко говорит,
+# что читает не источник истины (см. `_contract`). Держать здесь вторую копию контракта нельзя:
+# реестр перестаёт быть источником истины для собственной политики, и расхождение обнаруживается
+# только глазами (тир 3 разбора перед квалификацией).
+_FALLBACK_AUDIENCES = ("product", "technical", "debug")
+_FALLBACK_STATUS_LABEL = {"ok": "Готово", "needs_input": "Нужно твоё решение",
+                          "blocked": "Пока не могу продолжить", "done": "Готово",
+                          "degraded": "Готово, но проверено не всё"}
+_CONTRACT = {}          # кэш разобранного контракта: {audiences, labels, default, config_key}
 
 
 def _q(n, one="вопрос", few="вопроса", many="вопросов"):
@@ -69,14 +66,55 @@ def load_policy(path=None) -> dict:
         raise PolicyMissing(f"политика коммуникации не разбирается ({p}): {e}") from e
 
 
+def _contract(policy=None) -> dict:
+    """Контракт сообщений ИЗ РЕЕСТРА: аудитории, ярлыки статусов, default. -> dict.
+
+    Реестр — источник истины, и для собственной политики коммуникации тоже. Прежде presenter держал
+    копию словарей в коде: добавить статус или переименовать ярлык означало править два места, а
+    расхождение обнаруживалось глазами. Кэш — по разобранному файлу; при недоступном реестре
+    работаем на аварийных значениях и НЕ молчим об этом (`source`).
+    """
+    if policy is None and _CONTRACT:
+        return _CONTRACT
+    try:
+        data = policy if policy is not None else load_policy()
+        labels = {k: (v or {}).get("label") or _FALLBACK_STATUS_LABEL.get(k, k)
+                  for k, v in (data.get("statuses") or {}).items()}
+        auds = tuple((data.get("audiences") or {}).keys())
+        default = data.get("default_audience") or next(
+            (k for k, v in (data.get("audiences") or {}).items() if (v or {}).get("default")),
+            "product")
+        if not labels or not auds:
+            raise PolicyMissing("в политике коммуникации нет statuses/audiences")
+        out = {"labels": labels, "audiences": auds, "default": default,
+               "config_key": data.get("config_key", "communication"), "source": "registry"}
+    except PolicyMissing:
+        out = {"labels": dict(_FALLBACK_STATUS_LABEL), "audiences": _FALLBACK_AUDIENCES,
+               "default": "product", "config_key": "communication", "source": "fallback"}
+    if policy is None:
+        _CONTRACT.clear()
+        _CONTRACT.update(out)
+    return out
+
+
+def statuses() -> dict:
+    """Статусы контракта и их ярлыки. -> {status: label}."""
+    return dict(_contract()["labels"])
+
+
+def audiences() -> tuple:
+    """Уровни детализации из реестра. -> кортеж имён."""
+    return tuple(_contract()["audiences"])
+
+
 def audience_from_config(child_root, policy=None) -> str:
     """Аудитория из `.ai-ops.yaml -> communication.audience`. По умолчанию — `product`.
 
     Default именно `product`: система по умолчанию разговаривает с владельцем продукта, а не с
     отладчиком. Обратный default — то, как внутренний язык и просачивался наружу.
     """
-    policy = policy or load_policy()
-    default = policy.get("default_audience", "product")
+    con = _contract(policy)
+    default = con["default"]
     cfg = Path(child_root) / ".ai-ops.yaml"
     if not cfg.is_file():
         return default
@@ -84,8 +122,8 @@ def audience_from_config(child_root, policy=None) -> str:
         data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
         return default
-    aud = ((data.get(policy.get("config_key", "communication")) or {}).get("audience"))
-    return aud if aud in AUDIENCES else default
+    aud = ((data.get(con["config_key"]) or {}).get("audience"))
+    return aud if aud in con["audiences"] else default
 
 
 def message(status, summary, why_it_matters=None, decision=None, next_steps=None,
@@ -95,8 +133,9 @@ def message(status, summary, why_it_matters=None, decision=None, next_steps=None
     `technical` не выбрасывается, а откладывается: на уровне `product` он доступен по запросу, на
     `technical`/`debug` печатается. Выбросить его значило бы сделать кит непроверяемым.
     """
-    if status not in STATUS_LABEL:
-        raise ValueError(f"status '{status}' вне контракта {sorted(STATUS_LABEL)}")
+    _labels = statuses()
+    if status not in _labels:
+        raise ValueError(f"status '{status}' вне контракта {sorted(_labels)}")
     if not (summary or "").strip():
         raise ValueError("summary обязателен: сообщение без «что произошло» — это лог")
     msg = {"schema_version": 1, "kind": "user-message", "status": status,
@@ -125,10 +164,11 @@ def message(status, summary, why_it_matters=None, decision=None, next_steps=None
 
 def render(msg: dict, audience="product", show_technical=False) -> str:
     """UserMessage -> текст. Один контракт, три языка; факты во всех трёх одни и те же."""
-    if audience not in AUDIENCES:
-        audience = "product"
+    con = _contract()
+    if audience not in con["audiences"]:
+        audience = con["default"]
     L = []
-    label = msg.get("headline") or STATUS_LABEL.get(msg.get("status"), msg.get("status", ""))
+    label = msg.get("headline") or con["labels"].get(msg.get("status"), msg.get("status", ""))
     L.append(f"{label}. {msg.get('summary', '')}".strip())
     if msg.get("why_it_matters"):
         L.append(msg["why_it_matters"])
@@ -848,7 +888,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="presenter.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("demo")
-    d.add_argument("--audience", choices=list(AUDIENCES), default="product")
+    d.add_argument("--audience", choices=list(audiences()), default="product")
     d.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv if argv is not None else sys.argv[1:])
     if ns.cmd == "demo":
