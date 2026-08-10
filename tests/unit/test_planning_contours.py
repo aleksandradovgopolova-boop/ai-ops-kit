@@ -283,6 +283,42 @@ def test_source_of_truth_declared_as_signal_makes_contour_self_satisfying(tmp_pa
     assert not [f for f in rep2["findings"] if f["id"] == "declared_not_updated"]
 
 
+def test_child_config_is_parsed_once_per_state(tmp_path, monkeypatch):
+    """Конфигурация репозитория читалась НА КАЖДЫЙ вызов: до восьми разборов YAML за одно
+    срабатывание гейта (`repo_overrides` + `repo_sot` на каждый контур).
+
+    Кэш — правка ПРОИЗВОДИТЕЛЬНОСТИ, а не согласованности, и это важно не перепутать: ключ включает
+    mtime, поэтому изменённый файл перечитывается. Именно перечитывание живьём испортило один из
+    замеров обкатки — конфигурацию правили, пока прогон шёл. Снимок обязан делать АНАЛИЗ, а не
+    читатель конфигурации: читатель не знает, где границы анализа.
+    """
+    cfg = tmp_path / ".ai-ops.yaml"
+    cfg.write_text("product_operating_model:\n  contours:\n    data_contracts:\n"
+                   "      change_signals: [src/domain/**]\n", encoding="utf-8")
+    import yaml as _y
+    calls = {"n": 0}
+    real = _y.safe_load
+
+    def counting(*a, **kw):
+        calls["n"] += 1
+        return real(*a, **kw)
+    monkeypatch.setattr(C.yaml, "safe_load", counting)
+
+    C._CFG_CACHE.clear()
+    for _ in range(5):
+        assert C.repo_overrides(tmp_path)["data_contracts"] == ["src/domain/**"]
+        C.repo_sot(tmp_path)
+    assert calls["n"] == 1, f"конфигурация разобрана {calls['n']} раз вместо одного"
+
+    # Изменённый файл ПЕРЕЧИТЫВАЕТСЯ: кэш не превращается в устаревший снимок.
+    import os
+    cfg.write_text("product_operating_model:\n  contours:\n    data_contracts:\n"
+                   "      change_signals: [src/other/**]\n", encoding="utf-8")
+    os.utime(cfg, (0, 0))                              # заведомо иной mtime
+    assert C.repo_overrides(tmp_path)["data_contracts"] == ["src/other/**"]
+    assert calls["n"] == 2
+
+
 def test_corrupt_model_raises(tmp_path):
     bad = tmp_path / "pom.yaml"
     bad.write_text("contours: []\n", encoding="utf-8")

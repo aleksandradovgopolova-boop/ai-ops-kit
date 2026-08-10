@@ -101,6 +101,48 @@ def contour(model: dict, cid: str) -> dict | None:
     return next((c for c in model.get("contours") or [] if c.get("id") == cid), None)
 
 
+# Кэш разобранной конфигурации репозитория по СОСТОЯНИЮ файла (путь, mtime, размер). Прежде
+# `.ai-ops.yaml` разбирался на каждый вызов: до восьми разборов YAML за одно срабатывание гейта
+# (`repo_overrides` + `repo_sot` на каждый контур).
+#
+# ЭТО ПРАВКА ПРОИЗВОДИТЕЛЬНОСТИ, А НЕ СОГЛАСОВАННОСТИ, и путать нельзя: mtime в ключе означает, что
+# изменённый файл ПЕРЕЧИТЫВАЕТСЯ. Именно перечитывание живьём испортило один из замеров обкатки —
+# конфигурацию правили, пока прогон шёл, и находки исчезали посреди выборки. Снимок обязан делать
+# АНАЛИЗ (прочитать конфигурацию один раз и передать дальше), а не читатель: читатель не знает, где
+# границы анализа, и молча замороженная конфигурация была бы дефектом хуже лишнего разбора.
+_CFG_CACHE = {}
+
+
+def _child_config(child_root) -> dict:
+    """Разобранный `.ai-ops.yaml` репозитория. -> dict (пустой, если файла нет или он битый).
+
+    Битый конфиг даёт ПУСТОЙ словарь, а не исключение: доопределение путей — не то место, где стоит
+    ронять прогон, а невалидный конфиг ловят `doctor` и `validate_ai_ops_child`.
+    """
+    cfg = Path(child_root) / ".ai-ops.yaml"
+    try:
+        st = cfg.stat()
+    except OSError:
+        return {}
+    key = (str(cfg), st.st_mtime_ns, st.st_size)
+    hit = _CFG_CACHE.get(key)
+    if hit is not None:
+        return hit
+    try:
+        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    _CFG_CACHE.clear()                             # состояние файла сменилось — прежнее не нужно
+    _CFG_CACHE[key] = data
+    return data
+
+
+def _declared_contours(child_root) -> dict:
+    return (_child_config(child_root).get("product_operating_model") or {}).get("contours") or {}
+
+
 def repo_overrides(child_root: Path) -> dict:
     """Сигналы, доопределённые репозиторием в `.ai-ops.yaml -> product_operating_model.contours`.
 
@@ -108,15 +150,8 @@ def repo_overrides(child_root: Path) -> dict:
     `src/telemetry/`. Доопределение — способ превратить `unknown` в проверяемое состояние
     руками владельца, а не выдумкой кита.
     """
-    cfg = Path(child_root) / ".ai-ops.yaml"
-    if not cfg.is_file():
-        return {}
-    try:
-        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return {}                                  # битый конфиг — забота doctor'а, не наша
-    pom = (data.get("product_operating_model") or {}).get("contours") or {}
-    return {k: list((v or {}).get("change_signals") or []) for k, v in pom.items()}
+    return {k: list((v or {}).get("change_signals") or [])
+            for k, v in _declared_contours(child_root).items()}
 
 
 def repo_sot(child_root) -> dict:
@@ -128,15 +163,8 @@ def repo_sot(child_root) -> dict:
     «истина не обновлена» срабатывала ВЕЧНО на контуре, который поддерживается как надо.
     Объявленное репозиторием ДОПОЛНЯЕТ дефолт кита, а не заменяет: путь кита мог существовать тоже.
     """
-    cfg = Path(child_root) / ".ai-ops.yaml"
-    if not cfg.is_file():
-        return {}
-    try:
-        data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return {}
-    pom = (data.get("product_operating_model") or {}).get("contours") or {}
-    return {k: list((v or {}).get("source_of_truth") or []) for k, v in pom.items()}
+    return {k: list((v or {}).get("source_of_truth") or [])
+            for k, v in _declared_contours(child_root).items()}
 
 
 def sot_for(model: dict, cid: str, child_root=None) -> list:
