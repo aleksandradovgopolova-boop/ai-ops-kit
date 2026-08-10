@@ -182,14 +182,15 @@ def repo_copy(tmp_path_factory):
 def _run(copy, name, *args, timeout=300):
     """Запуск валидатора так, как его запускает пользователь: БЕЗ PYTHONPATH.
 
-    v3.31: прежде здесь ставился `PYTHONPATH=<copy>/tools:<copy>/validation`, и из-за него тест
+    v3.31: прежде здесь ставился `PYTHONPATH=<copy>/tools:<copy>/ai_ops_kit/validation`, и из-за него тест
     «валидатор зелёный из копии репозитория» не мог поймать дефект, ради которого написан: десять
     валидаторов не находили `_bootstrap` нигде, кроме окружения с этим поясом. Проверка, которая
     сама себе стелет путь, проверяет не то, что обещает.
     """
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
-    return subprocess.run([sys.executable, str(copy / "validation" / f"{name}.py"), *args],
+    return subprocess.run(
+        [sys.executable, str(copy / "ai_ops_kit" / "validation" / f"{name}.py"), *args],
                           cwd=str(copy), capture_output=True, env=env, timeout=timeout)
 
 

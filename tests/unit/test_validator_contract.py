@@ -90,7 +90,7 @@ def _check(name):
 def test_list_matches_reality():
     """Валидатор с тем же швом, не внесённый в список, остался бы вне контракта незамеченным."""
     discovered = set()
-    for p in sorted((PKG / "validation").glob("validate_*.py")):
+    for p in sorted((PKG / "ai_ops_kit" / "validation").glob("validate_*.py")):
         seam = _seam_of(p)
         if seam and seam[0] == "data" and seam[1] <= 2:
             discovered.add(p.stem)
@@ -126,4 +126,4 @@ class TestUniformCheckContract:
 @pytest.mark.parametrize("name,reason", sorted(OTHER_SEAMS.items()))
 def test_other_seams_still_exist(name, reason):
     """Исключение на исчезнувший валидатор — мёртвая запись, она маскирует потерю покрытия."""
-    assert (PKG / "validation" / f"{name}.py").is_file(), f"{name} не найден ({reason})"
+    assert (PKG / "ai_ops_kit" / "validation" / f"{name}.py").is_file(), f"{name} не найден ({reason})"

@@ -79,7 +79,7 @@ areas:
     title: Red teaming, evals, тестовые сценарии перед продом
     status: implemented
     severity: high
-    evidence: [quality/gates.yaml, rules/ai/red-team-checklist.yaml, validation/validate_agent_evals.py, evaluations/agents]
+    evidence: [quality/gates.yaml, rules/ai/red-team-checklist.yaml, ai_ops_kit/validation/validate_agent_evals.py, evaluations/agents]
     note: gate ai_eval + ai_red_team; eval-покрытие 51/51 со структурной проверкой (v2.19).
 
   - id: incident-killswitch

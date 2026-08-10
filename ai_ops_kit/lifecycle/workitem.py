@@ -37,7 +37,7 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.gates import gate_executor          # noqa: E402
 from ai_ops_kit.lifecycle import run_report             # noqa: E402
 from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-import ai_route               # noqa: E402
+from ai_ops_kit.engine import ai_route   # noqa: E402
 from ai_ops_kit.lifecycle import lifecycle_intent       # noqa: E402  v3.27.0 WP1
 
 STATUS_ACTION = {

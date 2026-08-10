@@ -25,9 +25,12 @@ from pathlib import Path
 
 import yaml
 
-import _bootstrap  # noqa: E402
-import validate_adr_registry as adrreg          # noqa: E402
-import validate_feature_learning as flreg        # noqa: E402
+try:                                          # v3.34: валидатор двурежимен
+    from ai_ops_kit.validation import _bootstrap   # noqa: F401 — импорт пакетом (после pip install)
+except ImportError:                                # запуск скриптом: корня на пути ещё нет,
+    import _bootstrap                              # noqa: F401 — и положить его может только он сам
+from ai_ops_kit.validation import validate_adr_registry as adrreg          # noqa: E402
+from ai_ops_kit.validation import validate_feature_learning as flreg        # noqa: E402
 
 _ADR = re.compile(r"^ADR-[0-9]{3,}$")
 

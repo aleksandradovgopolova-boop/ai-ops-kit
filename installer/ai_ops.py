@@ -47,7 +47,7 @@ import yaml
 HERE = Path(__file__).resolve()
 PKG = HERE.parents[1]                      # корень пакета (repo root)
 REPO_ROOT = Path.cwd()                     # child-репозиторий = текущая директория
-CI = PKG / "validation"
+CI = PKG / "ai_ops_kit" / "validation"
 
 CHILD_CONFIG = REPO_ROOT / ".ai-ops.yaml"
 AI_DIR = REPO_ROOT / ".ai"
@@ -248,7 +248,7 @@ def filter_by_packages(pairs, selected, ownership):
 #
 # Инвариант честности (failure mode №5 Change Brief): исключать можно ТОЛЬКО файл, который
 # ни один поставляемый модуль/политика/реестр не вызывает в child. Полнота рантайм-замыкания
-# движка доказывается validation/validate_standalone_engine.py (ENGINE_CLOSURE) и
+# движка доказывается ai_ops_kit/validation/validate_standalone_engine.py (ENGINE_CLOSURE) и
 # tests/unit/test_installer.py — регресс упадёт там, а не молча у пользователя.
 
 DEV_ONLY_PREFIXES = (
@@ -265,7 +265,6 @@ DEV_ONLY_TOOLS = frozenset({
 })
 
 # Валидаторы, которые РЕАЛЬНО вызываются в child-репозитории. Источники (проверяемо grep'ом):
-#   ai_route                      — рантайм-замыкание движка (validate_standalone_engine)
 #   ai_managed_checksums          — drift-detection managed-зоны (manifest.update_policy)
 #   validate_ai_ops_child         — валидация установки (child-CI, `ai-ops validate`)
 #   validate_claims/_references/_freshness            — tools/gate_executor.py
@@ -281,7 +280,7 @@ DEV_ONLY_TOOLS = frozenset({
 # validate_container_*, validate_ai_first_*, …) проверяют ВНУТРЕННИЕ инварианты кита и гоняются
 # только в parent-CI — в child они мёртвый груз.
 RUNTIME_VALIDATORS = frozenset({
-    "__init__", "ai_route", "ai_managed_checksums", "validate_ai_ops_child",
+    "__init__", "ai_managed_checksums", "validate_ai_ops_child",
     "validate_claims", "validate_references", "validate_freshness",
     "validate_cross_artifacts", "validate_feature_blueprint",
     "validate_plan_artifact", "validate_requirements_artifact",
@@ -300,7 +299,7 @@ def is_runtime_asset(rel):
     stem = rel.rsplit("/", 1)[-1][:-3] if rel.endswith(".py") else None
     if rel.startswith("tools/") and stem in DEV_ONLY_TOOLS:
         return False
-    if rel.startswith("validation/") and stem is not None:
+    if rel.startswith("ai_ops_kit/validation/") and stem is not None:
         # Белый список перечисляет ВАЛИДАТОРЫ. `_bootstrap` — не валидатор, а их загрузчик путей:
         # без него каждый уехавший валидатор умирает на `import _bootstrap` в первой же строке.
         # Так и вышло в v3.31.0: файл добавили в кит, а в поставку он не попал, потому что имя не

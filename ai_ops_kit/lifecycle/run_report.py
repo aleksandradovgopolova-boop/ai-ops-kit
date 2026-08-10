@@ -46,9 +46,9 @@ STAGES = ["discovery", "definition", "ux", "architecture", "delivery",
 # своих функций (AttributeError: module 'ga' has no attribute 'cmd_new'). Обычный импорт даёт
 # настоящий модуль независимо от того, где физически лежит файл.
 from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-import validate_feature_blueprint as vfb   # noqa: E402
+from ai_ops_kit.validation import validate_feature_blueprint as vfb   # noqa: E402
 from ai_ops_kit.shared import generate_artifacts as ga            # noqa: E402
-import validate_cross_artifacts as vca     # noqa: E402
+from ai_ops_kit.validation import validate_cross_artifacts as vca     # noqa: E402
 
 
 def graph_findings(feature_dir: Path, graph_path: Path, current_stage: str):

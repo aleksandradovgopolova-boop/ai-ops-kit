@@ -90,7 +90,7 @@ def derived_verification_counts(pkg=PKG):
     прогон selftest'ов сюда не попадает: он обнаруживает файлы в рантайме и ничьего имени не
     содержит — то есть самоаттестация за внешнюю проверку не засчитывается."""
     import re as _re
-    vdir = pkg / "validation"
+    vdir = pkg / "ai_ops_kit" / "validation"
     if not vdir.is_dir():
         return 0, 0
     names = sorted(p.stem for p in vdir.glob("validate_*.py"))
@@ -127,6 +127,52 @@ def _runtime_status(pkg, runtime, capability):
         return None
     runtimes = (rt or {}).get("runtimes") or {}
     return (((runtimes.get(runtime) or {}).get("capabilities") or {}).get(capability) or {}).get("status")
+
+
+REQUIRED_SCOPES = ("full-current-python", "compatibility-matrix")
+# Заявление о полноте проверки. Ищется в тексте релиза; допустимо только с именем охвата.
+_FULL_CLAIM = ("полный контур", "полного контура", "полный набор проверок", "все проверки зелен")
+
+
+def evidence_scope_errors(data, pkg=PKG):
+    """Охват доказательства объявлен и не подменяется словом «полный».
+
+    Кит весь август чинил проверки, смотревшие не туда, — и на 3.33.2 сам сделал ту же ошибку в
+    тексте релиза: «полный контур зелёный» означало один интерпретатор, а опровергла его джоба
+    3.9 в том же PR. Слово «полный» без величины охвата — не преувеличение, а другое утверждение.
+
+    Проверяется:
+      * оба охвата объявлены, у каждого сказано, чем получен и чего НЕ покрывает (охват без
+        границы — снова «полный»);
+      * obtained_by, ссылающийся на файл репозитория, указывает на существующий файл;
+      * заявление о полноте в patch_note называет охват.
+    """
+    errors = []
+    scopes = data.get("evidence_scopes")
+    if not isinstance(scopes, dict) or not scopes:
+        return ["evidence_scopes отсутствует: охват доказательства не объявлен, поэтому "
+                "«полный контур зелёный» ничем не ограничен"]
+    for name in REQUIRED_SCOPES:
+        s = scopes.get(name)
+        if not isinstance(s, dict):
+            errors.append(f"evidence_scopes.{name} не объявлен — доказательство релиза не может "
+                          "различить охваты, которых нет")
+            continue
+        for field in ("obtained_by", "covers", "does_not_cover"):
+            if not str(s.get(field) or "").strip():
+                errors.append(f"evidence_scopes.{name}.{field} пуст — охват без этого поля "
+                              "снова означает «полный»")
+        got = str(s.get("obtained_by") or "")
+        rel = got.lstrip("./").split()[0] if got.startswith("./") else ""
+        if rel and not (pkg / rel).exists():
+            errors.append(f"evidence_scopes.{name}.obtained_by ссылается на {rel} — файла нет")
+
+    note = str(data.get("patch_note") or "").lower()
+    if any(c in note for c in _FULL_CLAIM) and not any(n in note for n in REQUIRED_SCOPES):
+        errors.append("patch_note заявляет полноту проверки, не называя охват "
+                      f"({' | '.join(REQUIRED_SCOPES)}) — то же заявление шире полученного, "
+                      "которое python39-compat опроверг на 3.33.2")
+    return errors
 
 
 def check(data, pkg=PKG):
@@ -173,6 +219,7 @@ def check(data, pkg=PKG):
     # v3.9.1/v3.9.2: устаревшие маркеры «текущего статуса» НЕ должны присутствовать в публичной поверхности.
     # Сканируем НАСТРАИВАЕМЫЙ набор файлов (stale_marker_files — README/ROADMAP/NOTICE/docs/*), а не только
     # docs_must_reference_version. Так дрейф вроде «sequential-only» ловится и в docs/, не только вверху.
+    e += evidence_scope_errors(data, pkg)
     _scan = list(data.get("stale_marker_files") or data.get("docs_must_reference_version") or [])
     for marker in (data.get("forbidden_stale_markers") or []):
         for name in _scan:

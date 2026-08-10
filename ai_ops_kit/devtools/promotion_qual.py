@@ -38,7 +38,7 @@ from ai_ops_kit.gates import gate_runtime as gr              # noqa: E402
 from ai_ops_kit.context import context_engine as ce            # noqa: E402
 from ai_ops_kit.context import context_retrieval as cr         # noqa: E402
 from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-import validate_promotion_qualification as vpq   # noqa: E402
+from ai_ops_kit.validation import validate_promotion_qualification as vpq   # noqa: E402
 
 DEFAULT_PLAN = PKG / "qualification" / "promotion" / "v3.6.8-plan.yaml"
 # v3.6.8: провайдер по умолчанию — kimi (moonshot) через openai-compatible ветку make_provider.

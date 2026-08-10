@@ -28,13 +28,16 @@ import tempfile
 import subprocess
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import context_compiler   # noqa: E402
-import atomic_planner     # noqa: E402
-import run_handoff        # noqa: E402
-import spec_levels        # noqa: E402
-import security_pack      # noqa: E402
-import tool_broker        # noqa: E402
+try:                                          # v3.34: валидатор двурежимен
+    from ai_ops_kit.validation import _bootstrap   # noqa: F401 — импорт пакетом (после pip install)
+except ImportError:                                # запуск скриптом: корня на пути ещё нет,
+    import _bootstrap                              # noqa: F401 — и положить его может только он сам
+from ai_ops_kit.context import context_compiler   # noqa: E402
+from ai_ops_kit.engine import atomic_planner     # noqa: E402
+from ai_ops_kit.engine import run_handoff        # noqa: E402
+from ai_ops_kit.gates import spec_levels        # noqa: E402
+from ai_ops_kit.security import security_pack      # noqa: E402
+from ai_ops_kit.engine import tool_broker        # noqa: E402
 
 
 def _repo(td, files):
@@ -111,7 +114,7 @@ def run_scenarios():
            pf2["revalidation_needed"] is True)
 
     # Q3b (v2.109 Real Resume): resume РЕАЛЬНО продолжает поверх подтверждённой работы (не рестарт).
-    import ai_ops_run  # noqa: E402
+    from ai_ops_kit.engine import ai_ops_run  # noqa: E402
     with tempfile.TemporaryDirectory() as td:
         root = _repo(td, {"src/keep": "seed"})
         cur = subprocess.run(["git", "-C", td, "rev-parse", "--abbrev-ref", "HEAD"],

@@ -35,9 +35,13 @@ def test_validate_release_claims_selftest():
     st = _runtime_status(PKG, "generic-orchestrator", "parallel_execution")
     _g, _m = derived_gate_counts()
     _vt, _vc = derived_verification_counts()
+    # v3.34: охват доказательства — часть контракта claims, поэтому есть и в минимальном наборе.
+    scopes = {n: {"obtained_by": "CI", "covers": "x", "does_not_cover": "y"}
+              for n in ("full-current-python", "compatibility-matrix")}
     base = {"registry_type": "release-claims", "version": vf, "checks_count": checks,
             "agents_count": agents, "gates_count": _g, "mvp_blocking_count": _m,
             "validators_count": _vt, "validators_externally_tested": _vc,
+            "evidence_scopes": scopes,
             "docs_must_reference_version": ["README.md"],
             "runtime_capabilities": [{"runtime": "generic-orchestrator",
                                       "capability": "parallel_execution", "status": st}]}

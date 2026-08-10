@@ -28,9 +28,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-import _bootstrap  # noqa: E402
-import ai_ops_run       # noqa: E402
-import spec_levels      # noqa: E402
+try:                                          # v3.34: валидатор двурежимен
+    from ai_ops_kit.validation import _bootstrap   # noqa: F401 — импорт пакетом (после pip install)
+except ImportError:                                # запуск скриптом: корня на пути ещё нет,
+    import _bootstrap                              # noqa: F401 — и положить его может только он сам
+from ai_ops_kit.engine import ai_ops_run       # noqa: E402
+from ai_ops_kit.gates import spec_levels      # noqa: E402
 
 
 def _mkrepo(files):
@@ -137,7 +140,7 @@ def run_scenarios():
        and wp5_disk.get("should_decompose") is True and len(wp5_disk.get("work_packages") or []) > 0
        and any("atomic-planning" in r for r in (rep5.get("preflight") or {}).get("reasons", [])))
     # выбор СУЩЕСТВУЮЩЕГО пакета из плана -> preflight по атомарности пройден; вымышленный id -> блок (v2.120)
-    import atomic_planner as _ap5
+    from ai_ops_kit.engine import atomic_planner as _ap5
     sig5b = {"task_type": "ENGINEERING", "size": "large",
              "affected_areas": ["catalog", "orders", "billing", "search"]}
     real_pid = _ap5.decompose(sig5b, wid="pq5b", child_root=root5)["work_packages"][0]["id"]
@@ -241,8 +244,8 @@ def run_scenarios():
 
     # PQ9 (v3.1): WorkPackages РЕАЛЬНО исполняются последовательно (не одним блобом). Каждый пакет —
     # свой коммит/SHA, поверх предыдущего; зависимый пакет не стартует без подтверждённого.
-    import atomic_planner as _ap
-    import workpackage_executor as _wpe
+    from ai_ops_kit.engine import atomic_planner as _ap
+    from ai_ops_kit.engine import workpackage_executor as _wpe
     root9 = _mkrepo({"calc.py": "def add(a, b):\n    return a + b\n"})
     cur9 = subprocess.run(["git", "-C", str(root9), "rev-parse", "--abbrev-ref", "HEAD"],
                           capture_output=True, text=True).stdout.strip()

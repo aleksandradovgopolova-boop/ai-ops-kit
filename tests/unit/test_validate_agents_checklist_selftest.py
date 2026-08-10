@@ -85,7 +85,7 @@ def test_unreadable_workflow_is_reported(tmp_path):
 
 @pytest.mark.unit
 def test_exit_code_and_json_reflect_the_verdict():
-    r = subprocess.run([sys.executable, str(PKG / "validation" / "validate_agents_checklist.py"),
+    r = subprocess.run([sys.executable, str(PKG / "ai_ops_kit" / "validation" / "validate_agents_checklist.py"),
                         "--json"], cwd=PKG, capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout + r.stderr
     assert json.loads(r.stdout)["offending"] == []

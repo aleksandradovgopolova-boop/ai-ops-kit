@@ -78,7 +78,7 @@ gates:
     blocking: false          # advisory до обкатки
     responsible_role: solution-architect
     review_mode: writer
-    validator: validate-event-catalog        # runnable: validation/validate_event_catalog.py
+    validator: validate-event-catalog        # runnable: ai_ops_kit/validation/validate_event_catalog.py
     human_approval: false
     applicability: [ENGINEERING, PRODUCT, ANALYTICS, AI_FEATURE]
     required_evidence: [catalog_valid, names_reconciled]
@@ -95,7 +95,7 @@ gates:
     blocking: false          # advisory до обкатки (как соседние consistency-гейты)
     responsible_role: solution-architect
     review_mode: writer
-    validator: validate-surface-wiring        # runnable: validation/validate_surface_wiring.py (по манифесту поверхности child)
+    validator: validate-surface-wiring        # runnable: ai_ops_kit/validation/validate_surface_wiring.py (по манифесту поверхности child)
     human_approval: false
     applicability: [ENGINEERING, PRODUCT, AI_FEATURE, CRITICAL]
     required_evidence: [routes_declared, wrappers_matched, client_paths_matched]
@@ -165,7 +165,7 @@ gates:
     # SEAM_DEFECTS перестаёт быть чек-листом и становится полем гейта.
     advisory_evidence: [named_user_scenario, scenario_test]
     advisory_applicability: [ENGINEERING, PRODUCT, CRITICAL]
-    advisory_validator: validate-scenario-evidence   # runnable: validation/validate_scenario_evidence.py
+    advisory_validator: validate-scenario-evidence   # runnable: ai_ops_kit/validation/validate_scenario_evidence.py
     # v2.33: детерминированный evidence-контракт — что должен вернуть исполняемый runner
     # (не «pass словом»). Enforcement формы — validate_evidence_schema.py; в gate_executor
     # применяется, когда evidence подан в структурной форме (иначе required_evidence-дисциплина).
@@ -247,7 +247,7 @@ gates:
     review_mode: writer
     validator: openspec-validate-and-guard
     # Детерминированный OpenSpec-гейт: enforced НЕ per-task gate_executor'ом, а OpenSpec CLI
-    # + validation/validate_openspec_change.py в CI (см. openspec/README). Поэтому он не в
+    # + ai_ops_kit/validation/validate_openspec_change.py в CI (см. openspec/README). Поэтому он не в
     # workflow.quality_gates — enforced_by фиксирует реальный путь исполнения (честность).
     enforced_by: openspec-ci-guard
     human_approval: false

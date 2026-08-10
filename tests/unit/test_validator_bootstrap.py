@@ -1,8 +1,8 @@
 """Валидаторы стартуют без PYTHONPATH — то есть в child-репозитории и в чистом клоне (v3.31.0).
 
-Десять модулей `validation/*.py` делают `import _bootstrap` ради side effect: он кладёт корень
+Десять модулей `ai_ops_kit/validation/*.py` делают `import _bootstrap` ради side effect: он кладёт корень
 пакета в `sys.path`, откуда импортируется `ai_ops_kit`. При запуске скрипта `sys.path[0]` — это
-каталог скрипта, то есть `validation/`; `tools/_bootstrap.py` оттуда не виден. Работало только
+каталог скрипта, то есть `ai_ops_kit/validation/`; `tools/_bootstrap.py` оттуда не виден. Работало только
 там, где `tools/` уже лежал в путях: в CI — из-за PYTHONPATH в обоих workflow, у разработчика —
 из-за editable-установки. В свежей установке `validate_ai_ops_child.py` падал с
 ModuleNotFoundError, и `installer --selftest` это честно показывал.
@@ -13,7 +13,7 @@ ModuleNotFoundError, и `installer --selftest` это честно показы�
 
 Три обязательных теста на capability (AGENTS.md):
   * positive     — каждый такой валидатор стартует БЕЗ PYTHONPATH из чужого cwd;
-  * fail-closed  — в копии репозитория без `validation/_bootstrap.py` тот же запуск падает именно
+  * fail-closed  — в копии репозитория без `ai_ops_kit/validation/_bootstrap.py` тот же запуск падает именно
                    с ModuleNotFoundError: проверка имеет зубы, а не подтверждает сама себя;
   * side-effect  — bootstrap РЕАЛЬНО кладёт корень в путь: `import ai_ops_kit` в том же процессе
                    проходит (иначе модуль импортируется, но задачу не решает).
@@ -29,13 +29,13 @@ from pathlib import Path
 import pytest
 
 PKG = Path(__file__).resolve().parents[2]
-VALIDATION = PKG / "validation"
+VALIDATION = PKG / "ai_ops_kit" / "validation"
 MISSING = "No module named '_bootstrap'"
 
 
 def _needs_bootstrap(root: Path) -> list[Path]:
     """Валидаторы, импортирующие _bootstrap. Список не зашит: новый такой модуль подхватится сам."""
-    return sorted(f for f in (root / "validation").glob("*.py")
+    return sorted(f for f in (root / "ai_ops_kit" / "validation").glob("*.py")
                   if f.name != "_bootstrap.py"
                   and "import _bootstrap" in f.read_text(encoding="utf-8"))
 
@@ -72,7 +72,7 @@ def test_validators_start_without_pythonpath(tmp_path):
 def test_missing_bootstrap_is_caught(tmp_path):
     """fail-closed: без validation/_bootstrap.py тот же запуск падает — проверка не тавтология."""
     clone = tmp_path / "clone"
-    for rel in ("VERSION", "validation", "tools", "ai_ops_kit"):
+    for rel in ("VERSION", "tools", "ai_ops_kit"):
         src = PKG / rel
         dst = clone / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -80,12 +80,12 @@ def test_missing_bootstrap_is_caught(tmp_path):
             shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
         else:
             shutil.copy2(src, dst)
-    (clone / "validation" / "_bootstrap.py").unlink()
+    (clone / "ai_ops_kit" / "validation" / "_bootstrap.py").unlink()
 
-    victim = clone / "validation" / "validate_ai_ops_child.py"
+    victim = clone / "ai_ops_kit" / "validation" / "validate_ai_ops_child.py"
     r = _run(victim, tmp_path)
     assert MISSING in r.stderr, (
-        "удалили validation/_bootstrap.py, а запуск не сломался — тест не проверяет то, "
+        "удалили ai_ops_kit/validation/_bootstrap.py, а запуск не сломался — тест не проверяет то, "
         f"ради чего написан.\nstdout: {r.stdout[-500:]}\nstderr: {r.stderr[-500:]}")
 
 
