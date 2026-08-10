@@ -24,7 +24,10 @@ from pathlib import Path
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 # intent -> (описание, какое действие, нужен ли текст задачи)
 INTENTS = {
-    "new":     ("создать новую фичу/каркас", "scaffold", False),
+    # Третье поле — нужен ли текст задачи. `new` и `resume` его ИСПОЛЬЗУЮТ (заголовок работы,
+    # выбор фичи), поэтому объявлены честно: расхождение объявления с использованием и было тем,
+    # из-за чего `new` принимал текст задачи за каталог репозитория.
+    "new":     ("создать новую фичу/каркас", "scaffold", True),
     "onboard": ("определить стек и команды репозитория", "onboard", False),
     "discuss": ("обсудить идею до спецификации (discovery)", "discuss", True),
     "specify": ("построить спецификацию нужной глубины", "specify", True),
@@ -32,7 +35,7 @@ INTENTS = {
     "run":     ("выполнить задачу движком (авто-подбор стадий)", "run", True),
     "do":      ("автономный прогон: run --execute + авторазрешение блокировщиков", "do", True),
     "advise":  ("инженерный совет: окружения, delivery plan, альтернативы (без исполнения)", "advise", True),
-    "resume":  ("продолжить прерванную работу по фиче", "resume", False),
+    "resume":  ("продолжить прерванную работу по фиче", "resume", True),
     "review":  ("независимый ревью произведённого", "review", True),
     "status":  ("статус активной работы", "status", False),
     "health":  ("здоровье продукта", "health", False),
@@ -92,17 +95,27 @@ def build_preview(intent, task, child_root, signals):
     if signals.get("secret_boundary") or signals.get("destructive"):
         approvals.append("человек: затронута граница секретов/деструктивное действие")
 
-    expected = ("проверяемый draft PR (если гейты закрыты)" if intent == "run"
-                else {"plan": "RunPlan + оценка без изменений кода",
-                      "specify": f"спецификация уровня {cov['level_name']}",
-                      "review": "вердикты независимых ревьюеров",
-                      "onboard": "RepositoryProfile (стек/команды)",
-                      "status": "список активной работы", "health": "Product Health Score",
-                      "next": "ответ на четыре вопроса + следующая работа с обоснованием",
-                      "model": "понимание репозитория: класс, контуры, пробелы, вопросы владельцу",
-                      "discuss": "черновик проблемы/гипотез (discovery)",
-                      "new": "каркас фичи",
-                      "resume": "продолжение с последнего подтверждённого шага"}.get(intent, "результат намерения"))
+    # ЭТУ СТРОКУ ЧИТАЕТ ЧЕЛОВЕК. Прежде здесь стояли внутренние имена артефактов — `RunPlan +
+    # оценка без изменений кода`, `RepositoryProfile (стек/команды)`, `Product Health Score`, — и
+    # они выходили наружу через превью, то есть через самое частое сообщение кита. Проверка на
+    # реалистичном дереве показала это первой же строкой ответа.
+    # Формулировка — от первого лица и глаголом: эту строку человек читает как ответ на «что ты
+    # сейчас сделаешь». Существительные не годятся: «Собираюсь: чем проект написан» — не фраза.
+    expected = ("проверю изменение и открою черновой pull request, если все проверки пройдут"
+                if intent == "run"
+                else {"plan": "построю план работы и оценю объём; код при этом не меняю",
+                      "specify": "напишу заготовку описания задачи нужной глубины",
+                      "review": "проведу независимую проверку сделанного",
+                      "onboard": "разберусь, чем проект написан и чем он проверяется",
+                      "status": "скажу, что идёт прямо сейчас",
+                      "health": "оценю состояние продукта",
+                      "next": "скажу, где мы, что идёт, что мешает и что взять следующим",
+                      "model": "разберусь в проекте: что за продукт, что я знаю, чего не знаю",
+                      "discuss": "заведу черновик обсуждения: какую боль решаем и как поймём, "
+                                 "что помогло",
+                      "new": "заведу место для новой работы",
+                      "resume": "продолжу с последнего подтверждённого шага"}.get(
+                          intent, "выполню намерение"))
 
     return {
         "schema_version": 1, "kind": "ExecutionPreview",
@@ -152,6 +165,28 @@ def _wid_for(task, signals, feature):
                                           workitem_id=feature)["workitem_id"]
 
 
+def _say(child_root, translator, *args, **kwargs):
+    """Внутренний отчёт -> человеческий текст. ЕДИНСТВЕННЫЙ путь наружу для команд намерений.
+
+    Прежде каждая команда печатала своё: `ONBOARD: стек python`, `SPECIFY: создан`, `REVIEW wid:
+    verdict=…`. Правило «наружу выходит смысл» держалось на памяти автора команды, и из двенадцати
+    команд его соблюдали три. Здесь оно держится на том, что другого способа напечатать нет.
+
+    Имя переводчика — строка: так `cli` не тянет `ui` на импорте (слои). Опечатка в имени падает
+    громко (`AttributeError`), а не печатает пустоту, и её же ловит тест разводки.
+    """
+    from ai_ops_kit.ui import presenter
+    fn = getattr(presenter, translator)
+    print(presenter.render(fn(*args, **kwargs),
+                           audience=presenter.audience_from_config(child_root)))
+
+
+def _audience(child_root):
+    """Уровень детализации для этого репозитория. Отдельно — там, где нужен и внутренний вывод."""
+    from ai_ops_kit.ui import presenter
+    return presenter.audience_from_config(child_root)
+
+
 def _run_intent(intent, task, child_root, signals, a):
     """v2.112 Intent UX: РЕАЛЬНОЕ действие для намерения. -> код возврата или None (нет спец-действия)."""
     import yaml
@@ -167,13 +202,7 @@ def _run_intent(intent, task, child_root, signals, a):
         if js:
             print(json.dumps({"written": str(out), "profile": prof}, ensure_ascii=False, indent=2))
         else:
-            stacks = ", ".join(s.get("language", "?") for s in prof.get("stacks", [])) or "не определён"
-            print(f"ONBOARD: стек {stacks} · профиль записан {out.relative_to(child_root)}")
-            for s in prof.get("stacks", []):
-                cmds = {k: v for k, v in (s.get("commands") or {}).items() if v}
-                print(f"  · {s.get('language')}: {', '.join(f'{k}={v}' for k, v in cmds.items()) or 'команды не найдены'}")
-            if prof.get("undetermined"):
-                print(f"  ⚠ не определено: {', '.join(prof['undetermined'])}")
+            _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
         return 0
 
     if intent == "status":
@@ -314,9 +343,8 @@ def _run_intent(intent, task, child_root, signals, a):
             print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
                               "spec": str(sp), "spec_created": created}, ensure_ascii=False, indent=2))
         else:
-            print(f"NEW: каркас фичи '{wid}' · features/{wid}/workitem.yaml + spec.yaml "
-                  f"({'создан' if created else 'уже был'})")
-            print(f"  далее: ./ai-ops specify \"{task or '<задача>'}\" {child_root} --feature {wid}")
+            _say(child_root, "from_new_feature", wid, task or wid, created,
+                 f"./ai-ops specify \"{task or '<задача>'}\" --feature {wid}")
         return 0
 
     if intent == "plan":
@@ -331,7 +359,7 @@ def _run_intent(intent, task, child_root, signals, a):
         fdir = child_root / "features" / wid
         fdir.mkdir(parents=True, exist_ok=True)
         (fdir / "run-plan.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        bundle = None
+        bundle, ctx_error = None, None
         try:
             bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
             (fdir / "context-bundle.yaml").write_text(
@@ -340,8 +368,7 @@ def _run_intent(intent, task, child_root, signals, a):
             # ...но деградация обязана быть видна: без бандла оценка пакета уходит на дефолты,
             # а context-bundle.yaml не пишется — молча это выглядит как обычный план.
             bundle = None
-            print(f"  ⚠ контекст не собран ({type(_ce).__name__}: {_ce}) — оценка пакета по "
-                  f"умолчаниям, context-bundle.yaml не записан")
+            ctx_error = f"{type(_ce).__name__}: {_ce}"[:200]
         cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
         (fdir / "spec-coverage.yaml").write_text(yaml.safe_dump(cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
         wp = atomic_planner.decompose(signals, wid=wid, child_root=child_root, bundle=bundle)
@@ -349,11 +376,11 @@ def _run_intent(intent, task, child_root, signals, a):
         if js:
             print(json.dumps({"workitem_id": wid, "plan": f"features/{wid}/run-plan.yaml",
                               "spec_level": cov["level_name"], "should_decompose": wp["should_decompose"],
-                              "work_packages": len(wp["work_packages"])}, ensure_ascii=False, indent=2))
+                              "work_packages": len(wp["work_packages"]),
+                              "context_error": ctx_error}, ensure_ascii=False, indent=2))
         else:
-            print(f"PLAN: '{wid}' · workflow {plan['base_workflow']} · спека {cov['level_name']} · "
-                  f"пакетов {len(wp['work_packages']) or 'атомарно'}")
-            print(f"  артефакты в features/{wid}/ (run-plan, context-bundle, spec-coverage, work-package) — код НЕ менялся")
+            _say(child_root, "from_plan_built", wid, plan["base_workflow"], cov["level_name"],
+                 len(wp["work_packages"]), context_error=ctx_error)
         return 0
 
     if intent == "review":
@@ -370,15 +397,7 @@ def _run_intent(intent, task, child_root, signals, a):
         if js:
             print(json.dumps(rep, ensure_ascii=False, indent=2))
         else:
-            rmerge = (rep.get("readiness") or {}).get("ready_for_merge")
-            print(f"REVIEW {wid}: verdict={rep['verdict']} · ready_for_merge={rmerge} · ревьюируемых гейтов "
-                  f"{len(rep.get('reviewable') or [])} · изменено файлов {len(rep.get('changed_files') or [])}")
-            for rv in rep.get("reviews") or []:
-                print(f"  · {rv['gate']}: {rv.get('status') or 'invalid'}")
-            if rep.get("evidence_path"):
-                print(f"  evidence: {rep['evidence_path']}")
-            if rep.get("note"):
-                print(f"  {rep['note']}")
+            _say(child_root, "from_review", rep)
         # v2.121 (P1.3): exit code = готовность к merge (needs-reviewer/needs-changes -> non-zero)
         return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
 
@@ -404,8 +423,7 @@ def _run_intent(intent, task, child_root, signals, a):
             print(json.dumps({"workitem_id": wid, "draft": str(draft), "created": created},
                              ensure_ascii=False, indent=2))
         else:
-            print(f"DISCUSS: {'создан' if created else 'уже есть'} черновик discovery {draft.relative_to(child_root)}")
-            print("  заполни разделы, затем: ai-ops specify …")
+            _say(child_root, "from_discovery_draft", draft.relative_to(child_root), created)
         return 0
 
     if intent == "advise":
@@ -414,16 +432,7 @@ def _run_intent(intent, task, child_root, signals, a):
         if js:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
-            print(f"ENGINEERING ADVISOR: {result['summary']}")
-            print(f"Repository: {result['repository']}")
-            if result.get("task_type"):
-                print(f"Task type: {result['task_type']}")
-            print()
-            for r in result["recommendations"]:
-                p = r.get("priority", 3)
-                marker = "⚠" if p == 1 else "·" if p == 2 else " "
-                print(f"  {marker} [{r.get('category')}] {r['advice']}")
-                print(f"    (source: {r.get('source')})")
+            _say(child_root, "from_advice", result)
         return 0
 
     return None
@@ -547,9 +556,17 @@ def main(argv):
     # разбор [задача] child_root
     needs_task = INTENTS.get(intent, ("", "", False))[2]
     task, child_root = None, "."
-    if needs_task:
-        task = rest.pop(0) if rest else ""
-    child_root = rest.pop(0) if rest else "."
+    # КАТАЛОГ РЕПОЗИТОРИЯ — ПОСЛЕДНИЙ АРГУМЕНТ (его подставляет `./ai-ops`), текст задачи — перед
+    # ним. Прежде разбор шёл слева и опирался на флаг `needs_task`: у `new` он стоял `False`, и
+    # `./ai-ops new "добавить экспорт в CSV"` объявлял каталогом репозитория… текст задачи. Каркас
+    # создавался в `./добавить экспорт в CSV/features/wi-unknown/`, код возврата 0 — кит молча
+    # работал не в том репозитории и сообщал об успехе. Нашлось тестом разводки команд.
+    if rest and Path(rest[-1]).is_dir():
+        child_root = rest.pop()
+    if rest:
+        task = rest.pop(0)
+    elif needs_task:
+        task = ""
     signals = json.loads(a.signals)
     if a.feature:
         signals["feature"] = a.feature
@@ -586,11 +603,13 @@ def main(argv):
             print(json.dumps({"path": str(sp), "created": created, "coverage": cov},
                              ensure_ascii=False, indent=2))
         else:
-            print(f"SPECIFY: {'создан' if created else 'уже существует'} {sp}")
-            print(f"  уровень {cov['level_name']} · обязательных разделов {len(cov['sections'])} · "
-                  f"заполнить: {len(cov['blocking_missing'])}")
-            print(f"  заполни разделы в {sp.relative_to(Path(child_root)) if str(sp).startswith(child_root) else sp}, "
-                  f"затем: ./ai-ops run \"{task or '<задача>'}\" {child_root} --feature {wid} --execute")
+            try:
+                shown = sp.relative_to(Path(child_root))
+            except ValueError:
+                shown = sp
+            _say(Path(child_root), "from_specification", shown, created, cov["level_name"],
+                 cov["sections"], cov["blocking_missing"],
+                 f"./ai-ops run \"{task or '<задача>'}\" --feature {wid} --execute")
         return 0
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
@@ -612,7 +631,12 @@ def main(argv):
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
     else:
-        _print_preview(pv)
+        # Смысл — всегда; внутренний разбор превью (стадии, флаги, бюджет) — на technical/debug,
+        # как у `next` и `model`. Разбор не выброшен: без него не отладить неверный подбор режима.
+        _say(Path(child_root), "from_execution_preview", pv)
+        if _audience(Path(child_root)) != "product":
+            print()
+            _print_preview(pv)
 
     # только `run --execute` и `do` реально запускают движок; остальное — превью/делегация
     # v3.22: `do` — alias для `run --execute` с авторазрешением блокировщиков (review_fix_attempts, author, open_pr)
@@ -631,8 +655,10 @@ def main(argv):
                 print(json.dumps({"kind": "intake-incomplete", "exit": 2,
                                   "missing": _missing, "hint": _hint}, ensure_ascii=False, indent=2))
             else:
-                for _ln in _hint:
-                    print(_ln)
+                # Готовая команда с ответом обязана дойти до человека на любом уровне детализации,
+                # иначе сообщение назовёт препятствие и не даст его убрать.
+                _say(Path(child_root), "from_intake_gap", _missing,
+                     pipeline_helpers.intake_signals_command(_missing))
             return 2
         flags = pv["will_do"]["auto_flags"]
         # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и дальше идёт под своим именем во все

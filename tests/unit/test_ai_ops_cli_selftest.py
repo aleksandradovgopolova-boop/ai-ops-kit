@@ -121,8 +121,10 @@ def test_ai_ops_cli_selftest():
 
         # v2.116: `review` — настоящий intent (не preview). Без ветки -> честный no-branch (rc!=0).
         rc_rv, out_rv = _run(["review", "поревьюить", str(root), "--feature", "nope-wid"])
+        # v3.35.2: вердикт переведён на человеческий язык. Честность проверяется та же и строже:
+        # `no-branch` — это «сверять нечего», а НЕ «замечаний нет».
         expect("v2.116 review: настоящий intent — без ветки честный no-branch (не падает в preview)",
-               "REVIEW" in out_rv and "no-branch" in out_rv and rc_rv != 0)
+               rc_rv != 0 and "Проверять нечего" in out_rv and "можно вливать" not in out_rv)
 
     # v2.120: `run --execute` РЕАЛЬНО проводит provider/model/max-steps/open-pr в движок (не mock-хардкод).
     import subprocess as _sp

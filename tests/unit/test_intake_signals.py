@@ -120,6 +120,10 @@ def test_run_without_size_stops_before_the_engine(tmp_path, capsys):
                           "--signals", '{"risk":"low"}'])
 
     assert rc == 2, "fail-closed нарушен: неполный intake должен давать ненулевой код"
-    assert "intake неполон" in capsys.readouterr().out
+    # v3.35.2: спрашиваем словами, но готовую строку ответа даём — иначе сообщение называет
+    # препятствие и не даёт его убрать. Проверяем и то, и другое.
+    _out = capsys.readouterr().out
+    assert "насколько большая задача" in _out, _out
+    assert '--signals' in _out and '"size"' in _out, _out
     assert not (tmp_path / ".ai" / "worktrees").exists(), "движок стартовал, хотя intake неполон"
     assert not (tmp_path / "features").exists(), "движок успел создать артефакты работы"

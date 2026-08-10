@@ -163,6 +163,47 @@ def test_doctor_verdict_follows_the_worst_line():
     assert broken["status"] == "blocked"
 
 
+def test_every_review_verdict_says_what_actually_happened():
+    """ШЕСТЬ ВЕРДИКТОВ РЕВЬЮ, И ТРИ ИЗ НИХ НЕ «ГОТОВО».
+
+    Опаснее всех `no-ai-review-gates`: `ready_for_merge=True` при том, что не проверялось НИЧЕГО.
+    Первая версия перевода печатала на нём «Независимая проверка прошла: замечаний нет» — ровно та
+    подмена, из-за которой слой человеческого языка мог бы стать способом скрыть недоказанное.
+    """
+    def _msg(verdict, ready, **extra):
+        return PR.from_review(dict({"verdict": verdict, "changed_files": ["a.py"], "reviews": [],
+                                    "readiness": {"ready_for_merge": ready,
+                                                  "reason": "тестовое основание"}}, **extra))
+
+    passed = _msg("pass", True, reviews=[{"gate": "code_quality", "status": "pass"}])
+    assert passed["status"] == "ok" and "Проверено" in PR.render(passed, audience="product")
+
+    # Готово вливать — но никто ничего не смотрел, и это обязано быть сказано.
+    ungated = _msg("no-ai-review-gates", True)
+    out = PR.render(ungated, audience="product").lower()
+    assert "замечаний нет" not in out.split("«")[0], out
+    assert "не проводилась" in out or "никто не искал" in out, out
+
+    nobody = _msg("needs-reviewer", False)
+    assert nobody["status"] == "degraded"
+    assert "не проверено" in PR.render(nobody, audience="product").lower()
+
+    nothing = _msg("no-branch", False)
+    assert nothing["status"] != "ok"
+    assert "нечего" in PR.render(nothing, audience="product").lower()
+
+    broken = _msg("error", False)
+    assert broken["status"] == "blocked"
+
+    changes = _msg("needs-changes", False, reviews=[{"gate": "security", "status": "fail"}])
+    assert changes["status"] == "blocked"
+
+    # Незнакомый вердикт — не «всё хорошо» и не «всё плохо»: перевода нет, и это признаётся.
+    weird = _msg("нечто-новое", False)
+    assert weird["status"] == "degraded"
+    assert "не понимаю" in PR.render(weird, audience="product").lower()
+
+
 def test_unknown_contours_are_not_translated_into_agreement():
     """МУТАЦИОННОЕ РЕВЮ: главный инвариант релиза (`unknown` != зелёное утверждение) защищён в
     `contours.py` пятью тестами и НЕ защищён в presenter ни одним. При отсутствии major-находок

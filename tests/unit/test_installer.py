@@ -304,7 +304,10 @@ def test_doctor_ok_on_fresh_install(installed, tmp_path):
     out = r.stdout + r.stderr
     assert "Traceback" not in out
     assert "пути окружения: ✓" in out, out[-2000:]
-    assert "doctor: OK" in out, out[-2000:]
+    # Вердикт печатает человекочитаемый слой (v3.35.2), поэтому проверяем СМЫСЛ, а не строку
+    # `doctor: OK`: код возврата и отсутствие замечаний — то, что этот тест защищает.
+    assert "Всё в порядке" in out, out[-2000:]
+    assert "замечани" not in out.lower(), out[-2000:]
     assert r.returncode == 0, out[-2000:]
 
 
@@ -322,8 +325,11 @@ def test_doctor_blocks_on_residual_path_belt(installed, tmp_path):
     assert "Traceback" not in out
     assert "path_belt" in out and str(belt) in out, out[-2000:]
     assert f'rm -f "{belt}"' in out, "doctor нашёл пояс, но не сказал, как его убрать"
-    assert "doctor: ЕСТЬ ПРОБЛЕМЫ" in out and r.returncode != 0, (
+    assert r.returncode != 0, (
         "пояс делает зелёными fail-closed-проверки — doctor не вправе это пропускать")
+    # Вердикт обязан НАЗВАТЬ причину, а не сосчитать строки с `✗` (v3.35.2).
+    assert "подменяет пути импорта" in out, out[-2000:]
+    assert "ничего не доказывает" in out, "не сказано, почему остальному выводу нельзя верить"
 
 
 def test_doctor_removes_the_belt_on_explicit_request(installed, tmp_path):

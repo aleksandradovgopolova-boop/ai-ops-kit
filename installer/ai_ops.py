@@ -1043,6 +1043,16 @@ def _path_hygiene():
 
 
 _DOCTOR_LINES = []
+# ПОЧЕМУ работать нельзя — названо, а не сосчитано. Прежде блокирующий исход печатался как
+# «ЕСТЬ ПРОБЛЕМЫ — 2 блокирующих»: число строк с `✗`, которое к настоящей причине (например,
+# отставшая версия, чья строка помечена `⟳`) отношения не имело.
+_DOCTOR_BLOCKERS = []
+
+
+def _blocker(reason):
+    """Записать причину, из-за которой работать нельзя. -> False (для `ok = _blocker(...)`)."""
+    _DOCTOR_BLOCKERS.append(str(reason))
+    return False
 
 
 def _dprint(*args, **kwargs):
@@ -1060,6 +1070,7 @@ def cmd_doctor(argv=()):
     inst, avail = installed_version(), pkg_version()
     ok = True
     _DOCTOR_LINES.clear()
+    _DOCTOR_BLOCKERS.clear()
     # Гигиена путей идёт ПЕРВОЙ и БЛОКИРУЕТ. До v3.33.1 setup.py кита писал .pth-пояс в
     # site-packages пользователя; 3.33.1 убрал запись, но не убрал уже написанные файлы — pip о них
     # не знает. Пояс исполняется при старте Python и подкладывает корень репозитория, tools/ и
@@ -1070,7 +1081,7 @@ def cmd_doctor(argv=()):
         _ph = _path_hygiene()
     except Exception as _e:  # noqa: BLE001 — недоступность модуля не роняет doctor, но и не молчит
         _dprint(f"пути окружения: НЕ ПРОВЕРЕНО ({_e}) — это не «чисто»")
-        ok = False
+        ok = _blocker("окружение не проверено — всё, что напечатано ниже, ничего не доказывает")
     else:
         if "--remove-path-belt" in argv:
             _rep = _ph.assess()
@@ -1085,15 +1096,16 @@ def cmd_doctor(argv=()):
         # unknown (ни один site-каталог не просмотрен) идёт в проблемы наравне с найденным поясом:
         # «не знаю» — не «чисто», а вердикт doctor не вправе опираться на непроверенное.
         if _hyg["counts"]["blocking"] or _hyg["status"] == "unknown":
-            ok = False
+            ok = _blocker("окружение подменяет пути импорта — проверки могут быть зелёными ложно")
     _dprint(f"версии: установлено {inst or '—'} / пакет {avail} "
           f"{'✓' if inst == avail else '⟳ нужен update'}")
     if inst != avail:
-        ok = False
+        ok = _blocker(f"установлена версия {inst or '—'}, а рядом лежит {avail} — нужен update")
     for zone in ("managed", "project", "custom", "generated", "runtime"):
         exists = (AI_DIR / zone).exists()
         _dprint(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")
-        ok = ok and exists
+        if not exists:
+            ok = _blocker(f"каталог {zone} отсутствует — установка неполная")
     drift = detect_drift() or []
     _dprint(f"целостность managed: {'✓' if not drift else '✗ drift (' + str(len(drift)) + ')'}")
     ok = ok and not drift
@@ -1191,18 +1203,45 @@ def cmd_doctor(argv=()):
     # строки, либо перестаёт верить вердикту — оба исхода делают проверку бесполезной (находка UX).
     # Считаем замечания по фактическому выводу: `✗`/`⚠` ставят те же функции, что печатают строки,
     # и второй список «что считать замечанием» разъехался бы с первым.
-    _gaps = [ln for ln in _DOCTOR_LINES if "✗" in ln]
-    _warns = [ln for ln in _DOCTOR_LINES if "⚠" in ln and "✗" not in ln]
-    if not ok:
-        print(f"doctor: ЕСТЬ ПРОБЛЕМЫ — {len(_gaps) or 'см. строки'} блокирующих")
-    elif _gaps:
-        print(f"doctor: работать можно, но есть замечания — {len(_gaps)} "
-              f"(строки с ✗ выше)")
-    elif _warns:
-        print(f"doctor: OK с предупреждениями — {len(_warns)}")
-    else:
-        print("doctor: OK")
+    print(_doctor_verdict(_DOCTOR_LINES, blockers=_DOCTOR_BLOCKERS))
     return 0 if ok else 1
+
+
+def _doctor_state(line):
+    """Строка вывода doctor -> насколько это плохо. Разметку ставят те же функции, что печатают."""
+    if "✗" in line:
+        return "gap"
+    return "warn" if "⚠" in line else "ok"
+
+
+def _doctor_verdict(lines, blockers=()):
+    """Итог doctor человеческим языком. -> текст одной или нескольких строк.
+
+    Переводчик `from_doctor` был написан и НЕ ПОДКЛЮЧЁН: он существовал только в тесте, а человек
+    по-прежнему читал `doctor: OK с предупреждениями — 3`. Ровно тот же класс, что «гейт есть,
+    находки не видны»: слой, который никто не зовёт, не работает, сколько бы тестов его ни держало.
+
+    Если сам слой недоступен (нет политики коммуникации), печатаем прежний короткий вердикт и
+    ГОВОРИМ об этом: молча подменять человеческий язык машинным — то, из-за чего слой и появился.
+    """
+    rows = [{"id": f"строка{i + 1}", "state": _doctor_state(ln), "text": ln}
+            for i, ln in enumerate(lines or [])]
+    # Блокирующая причина могла не оставить строки с `✗` (отставшая версия помечена `⟳`), поэтому
+    # вердикт следует за ФАКТОМ отказа, а не за разметкой вывода.
+    rows += [{"id": f"нельзя работать {i + 1}", "state": "fail", "text": b}
+             for i, b in enumerate(blockers or [])]
+    try:
+        from ai_ops_kit.ui import presenter
+        return presenter.render(presenter.from_doctor(rows),
+                                audience=presenter.audience_from_config("."))
+    except Exception as _e:  # noqa: BLE001 — вердикт обязан быть напечатан всегда
+        gaps = [r for r in rows if r["state"] in ("gap", "fail")]
+        warns = [r for r in rows if r["state"] == "warn"]
+        verdict = (f"ЕСТЬ ПРОБЛЕМЫ — работать нельзя: {'; '.join(blockers)}" if blockers else
+                   f"работать можно, но есть замечания — {len(gaps)}" if gaps else
+                   f"OK с предупреждениями — {len(warns)}" if warns else "OK")
+        return (f"doctor: {verdict}\n"
+                f"  (человекочитаемый слой недоступен: {type(_e).__name__}: {_e})")
 
 
 def cmd_usage(argv):
