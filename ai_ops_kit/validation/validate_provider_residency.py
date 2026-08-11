@@ -34,7 +34,7 @@ RETENTION = {"zero", "ephemeral", "standard"}
 _ID = re.compile(r"^PRP-[0-9]{3,}$")
 
 
-def check(data: dict):
+def check(data: dict, provider_classes=None):
     e = []
     if not isinstance(data, dict):
         return ["PRP не объект"]
@@ -86,6 +86,32 @@ def check(data: dict):
             e.append(f"нет правила residency для класса '{dc}'")
         elif n > 1:
             e.append(f"класс '{dc}' имеет >1 правила")
+
+    # ПРОВЕРКА №5 ТЕПЕРЬ ИСПОЛНЯЕТСЯ (2026-08-12). Докстрока объявляла кросс-сверку маршрутов с
+    # `registry/providers.yaml` пятым пунктом, `route_allowed` и `_provider_classes` были написаны,
+    # но `check`/`main` их НЕ ЗВАЛИ — их звал только собственный селфтест. То есть заявленная
+    # проверка существовала как код и не исполнялась ни на одном прогоне валидатора.
+    #
+    # Что она добавляет к инвариантам №4: те ограничивают ПОЛИТИКУ, а эта сверяет её с реальным
+    # реестром. Политика, не оставляющая классу данных ни одного пригодного провайдера, формально
+    # безупречна и практически неисполнима — маршрутизировать такой класс будет некуда.
+    #
+    # Реестр ВНЕДРЯЕТСЯ, а не читается здесь: `check` остаётся чистой функцией, как и
+    # `validate_reviewer_result.check(data, gate_ids=None)`. `None` — «реестр неизвестен», и тогда
+    # проверка пропускается ЯВНО (о причине говорит main), а не молча из-за пустого словаря.
+    if provider_classes:
+        for r in rules:
+            if not isinstance(r, dict):
+                continue
+            dc = r.get("data_class")
+            if dc not in DATA_CLASSES:
+                continue
+            routable = [pid for pid, cc in provider_classes.items()
+                        if route_allowed(data, dc, cc) is True]
+            if not routable:
+                allowed = ", ".join(r.get("allowed_provider_classes") or []) or "ничего"
+                e.append(f"класс '{dc}': ни один провайдер реестра не подходит под allowed "
+                         f"[{allowed}] — политика неисполнима для этого класса")
     return e
 
 
@@ -107,8 +133,10 @@ def _provider_classes():
                 if isinstance(p, dict) and p.get("confidentiality_class"):
                     out[pid] = p["confidentiality_class"]
         return out
-    except Exception:
-        return {}
+    # None != {} (2026-08-12): пустой словарь означал бы «в реестре нет провайдеров с классом», и
+    # кросс-проверка №5 молча не нашла бы нарушений. Неизвестное обязано называться неизвестным.
+    except (OSError, yaml.YAMLError, AttributeError):
+        return None
 
 
 def _load(p: Path):
@@ -121,8 +149,12 @@ def main(argv):
     target = Path(args[0]) if args else DEMO
     files = sorted(target.glob("PRP-*.yaml")) if target.is_dir() else [target]
     errors = []
+    pcs = _provider_classes()
+    if pcs is None:
+        errors.append(f"{PROVIDERS.name}: реестр провайдеров не прочитан — кросс-проверка маршрутов "
+                      f"(п.5) НЕ выполнена; это не «нарушений нет»")
     for f in files:
-        errors += [f"{f.name}: {x}" for x in check(_load(f))]
+        errors += [f"{f.name}: {x}" for x in check(_load(f), provider_classes=pcs)]
     if "--json" in argv:
         print(json.dumps({"count": len(files), "errors": errors}, ensure_ascii=False, indent=2))
     elif errors:
