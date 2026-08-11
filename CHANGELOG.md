@@ -2,7 +2,7 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased]
+## [3.36.0] — 2026-08-11
 
 ### Тир 4: BOOTSTRAP был СТРОКОЙ — стал командой
 
