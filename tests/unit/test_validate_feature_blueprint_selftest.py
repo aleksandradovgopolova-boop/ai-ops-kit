@@ -73,3 +73,45 @@ def test_validate_feature_blueprint_selftest():
         expect("released с DeliveryReceipt, но sha_verified=false -> fail (WP5)", errs_rel3, True)
 
     assert ok, "перенесённый селфтест validate_feature_blueprint: см. строки FAIL в выводе"
+
+
+def _released_with_done_artifact(root):
+    """Фича в состоянии released с одним done-артефактом — предпосылка проверки расписки."""
+    fdir = make_demo(root)
+    bp = yaml.safe_load((fdir / "blueprint.yaml").read_text(encoding="utf-8"))
+    bp["feature"]["status"] = "released"
+    bp["artifacts"]["discovery"][0]["status"] = "done"
+    (fdir / "blueprint.yaml").write_text(yaml.safe_dump(bp, allow_unicode=True), encoding="utf-8")
+    return fdir
+
+
+def test_unreadable_receipt_is_not_reported_as_missing(tmp_path):
+    """Битая расписка НЕ выдаётся за отсутствующую (ревизия 2026-08-11).
+
+    Прежде `except Exception: pass` уравнивал «файла нет» и «файл есть, но не разбирается»:
+    оба давали сообщение «нет SHA-verified DeliveryReceipt». Блокировка работала, но владельцу
+    называли неверную причину — он шёл создавать расписку, которая уже лежала рядом сломанной.
+    Тот же инвариант, что `unknown` != `not_changed`.
+    """
+    fdir = _released_with_done_artifact(tmp_path / "corrupt")
+    # YAML, который заведомо не разбирается: незакрытая кавычка в значении.
+    (fdir / "delivery-receipt.yaml").write_text("kind: \"DeliveryReceipt\nsha_verified: true\n",
+                                                encoding="utf-8")
+    errs = [e for e in validate_dir(fdir) if "released" in e]
+    assert errs, "битая расписка перестала блокировать — fail-closed потерян"
+    joined = " ".join(errs)
+    assert "прочитать его не удалось" in joined, (
+        f"причина названа неверно: битую расписку не отличили от отсутствующей -> {errs}")
+    assert "delivery-receipt.yaml" in joined, f"не назван файл, который надо починить -> {errs}"
+
+
+def test_missing_receipt_does_not_claim_unreadable(tmp_path):
+    """Обратная сторона: когда расписки НЕТ, про «не удалось прочитать» не говорится.
+
+    Без этой проверки различие можно было бы «получить», приписав фразу в оба случая.
+    """
+    fdir = _released_with_done_artifact(tmp_path / "missing")
+    errs = [e for e in validate_dir(fdir) if "released" in e]
+    assert errs, "released без расписки перестал блокировать"
+    assert "прочитать" not in " ".join(errs), (
+        f"отсутствие расписки описано как нечитаемость -> {errs}")

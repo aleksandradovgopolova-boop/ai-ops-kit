@@ -14,6 +14,4 @@ from validate_container_delivery import (  # noqa: F401 — имена, кото
 
 @pytest.mark.slow
 def test_validate_container_delivery_selftest():
-    return main([])
-
-    assert ok, "перенесённый селфтест validate_container_delivery: см. строки FAIL в выводе"
+    assert main([]) == 0, "перенесённый селфтест validate_container_delivery: см. строки FAIL в выводе"

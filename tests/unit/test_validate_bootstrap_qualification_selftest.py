@@ -30,7 +30,10 @@ def test_validate_bootstrap_qualification_selftest():
             print("   -", x)
         base = yaml.safe_load(DEFAULT_PLAN.read_text(encoding="utf-8"))
     else:
-        expect("v3.8.0-plan существует", False); return 1
+        # Ревизия 2026-08-11: здесь стоял `return 1` — он минует финальный `assert ok`, и
+        # пропавший план качества давал ЗЕЛЁНЫЙ тест при напечатанном FAIL. Утверждаем сразу.
+        expect("v3.8.0-plan существует", False)
+        raise AssertionError(f"v3.8.0-plan не найден ({DEFAULT_PLAN}) — селфтест выполнить нечем")
 
     # негативы: срезанная стадия / сценарий / критерий / фантомный builds_over / нет greenfield
     import copy

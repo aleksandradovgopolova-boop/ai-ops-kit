@@ -1,0 +1,231 @@
+# planning/plan.yaml — delivery plan самого AI Ops Kit.
+#
+# Уровень МЕЖДУ направлением (`ROADMAP.md`) и прогоном. По этому файлу `ai-ops next` отвечает на
+# четыре вопроса: где мы, что идёт сейчас, что блокирует и чем, какую работу взять следующей.
+#
+# ПОЧЕМУ ФАЙЛ ПОЯВИЛСЯ (ревизия 2026-08-11). Кит требует план от каждого подключённого
+# репозитория, а у себя не имел его вовсе: `roadmap.check()` сверяет цели с планом только когда
+# план есть, поэтому связка «направление ↔ работа» у кита не проверялась ничем, а `ai-ops next`
+# на самом ките не мог ответить «что взять следующим». Цели здесь — те же id, что в `ROADMAP.md`.
+#
+# ОТКУДА ВЗЯТА РАБОТА. Это подтверждённый остаток ревизии (`docs/audit-report.md` §6) и объявленные
+# разрывы репозитория (`qualification/bootstrap/v3.8.0-plan.yaml -> future_opportunities`,
+# `registry/release-claims.yaml -> standing_boundaries`). Ничего не придумано: у каждой работы есть
+# место в репозитории, где она обоснована. Что требует решения владельца — помечено
+# `human_decision` и НЕ имеет статуса `todo` как будто это уже решено.
+#
+# Три правила (проверяет `validate_product_model.py` -> `delivery_plan.validate`):
+#  1. Статус — только тот, которого код не знает: todo / in_progress / done / dropped.
+#     `ready` / `blocked` / `waiting` кит считает сам из зависимостей и гейтов.
+#  2. Роль, а не исполнитель: runtime/model/provider/assignee/agent запрещены проверкой.
+#  3. id — slug нижнего регистра: такой же, как требует движок для `--feature`.
+schema_version: 1
+kind: delivery-plan
+
+goals:
+  # Порядок = приоритет. Те же id и тот же порядок, что под «Сейчас» и «Следующий результат»
+  # в ROADMAP.md: расхождение кит покажет сам (`ai-ops next`).
+  - id: real-product-qualification
+    status: active
+    outcome:
+      # Первый живой brownfield пройден (qualification/REAL-PRODUCT-NITI-2026-08-06.md).
+      first_real_brownfield_passed: true
+      findings_from_first_run_closed: false
+
+  - id: checks-that-run
+    status: active
+    outcome:
+      # Замеры — в docs/audit-report.md §1. Первые три закрыты ревизией.
+      no_test_passes_without_assert: true
+      linter_runs_on_the_engine_package: true
+      every_declared_entry_point_works: true
+      swallowed_exceptions_reviewed: true
+
+  - id: advisory-gates-obkatka
+    status: active
+    outcome:
+      # 13 из 34 гейтов объявлены и не блокируют (quality/gates.yaml).
+      advisory_gates_have_field_evidence: false
+
+  - id: second-real-brownfield
+    status: active
+    outcome:
+      owner_reaches_verified_pr_without_patching_the_kit: false
+
+  - id: green-means-checked
+    status: active
+    outcome:
+      ci_lint_job_green: false
+      evidence_scope_named_not_implied: true
+
+work:
+  # ─── checks-that-run ────────────────────────────────────────────────────────────────────────
+  - id: swallowed-exceptions-audit
+    title: Разобрать 49 мест, где исключение гасится молча (26 try/except/pass + 23 голых except)
+    type: quality
+    goal: checks-that-run
+    status: done
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # ЗАКРЫТО 2026-08-11. Разобраны все 49 мест; правило оказалось НЕ «сузить типы везде».
+    # (а) Гашение искажало ВЕРДИКТ или ЧИСЛО -> исправлено:
+    #     validate_feature_blueprint (битая DeliveryReceipt не равна отсутствующей),
+    #     kit_observability (непрочитанное называется в отчёте),
+    #     validate_container_delivery (пустой клон делал проверку тривиально верной),
+    #     validate_stale_gates ×3 (дефект кода не должен выглядеть как «нет git»).
+    # (б) Гашение теряло АУДИТ-запись при верном решении «не ронять прогон» -> добавлена вторая
+    #     половина решения: прогон продолжается, но утрата ВИДНА в отчёте
+    #     (`rep.bookkeeping_errors`) — usage_ledger.append и lifecycle_journal.fix_attempt.
+    #     Образец взят в самом файле: рядом уже был `escalation_error` («НЕ глотаем молча»).
+    # (в) Гашение безвредно по построению (кеш переоценки evidence: не записали -> пересчитаем)
+    #     -> решение ЗАПИСАНО в noqa вместо пустого подавления. Поведение не менялось.
+    # Остаток BLE001/S110 — это (в): подавления с записанной причиной, не долг.
+
+  - id: subprocess-check-audit
+    title: Проверить 65 вызовов subprocess.run без check — необработанный код возврата даёт ложный green
+    type: quality
+    goal: checks-that-run
+    status: done
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/, installer/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # Кит зовёт git и внешние инструменты; проглоченный rc — ровно тот класс, против которого
+    # стоит fail-closed. Механически не правится: каждое место требует решения «падать или нет».
+    # СДЕЛАНО 2026-08-11: разобраны 65 мест. Опасными оказались 2 — `git clone` в
+    # validate_container_delivery: пустой клон делал проверку «доставлять нечего» ТРИВИАЛЬНО
+    # верной (ложный green в валидаторе). Исправлены. ОСТАЛЬНЫЕ 63 — подготовка временного
+    # git-репозитория внутри валидаторов (init/config/add/commit): их отказ и так валит проверку
+    # ниже, поэтому цена правки выше пользы. Замер и разбор — docs/audit-report.md, R-23.
+
+  - id: coverage-threshold-decision
+    title: Решить судьбу --cov без порога — метрика собирается и ни на что не влияет
+    type: quality
+    goal: checks-that-run
+    status: done
+    owner_role: qa
+    depends_on: []
+    write_scope: [pytest.ini, .github/]
+    value: medium
+    affects: {engineering_quality_security: true}
+    # РЕШЕНО 2026-08-12: сделано И то, И другое, потому что это были две разные проблемы.
+    # `--cov` убран из addopts (он включал покрытие в КАЖДОМ запуске, поэтому все шесть скриптов
+    # гасили его `--no-cov`, а джобы падали на «unrecognized arguments», если забывали pytest-cov)
+    # и добавлена отдельная джоба `coverage` с порогом-РАТЧЕТОМ: пол 70% при замере 71%
+    # (23 889 инструкций, 7 015 без покрытия). Локальный цикл покрытие не считает — v3.35.1
+    # замерил, что это стоило ~2× времени при отрицательной пользе.
+    # Побочно: тест-охранник `_addopts_require_cov` читал КОММЕНТАРИИ pytest.ini как настройку и
+    # уронил два теста на исправной конфигурации — детектор исправлен, инвариант усилен на явный
+    # `--cov` в команде (охранял только исчезнувший путь через addopts).
+
+  - id: ruff-rule-set-widening
+    title: Расширять исполняемый набор ruff по одному правилу за решение, каждое со своей уборкой
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    owner_role: engineer
+    depends_on: [swallowed-exceptions-audit, subprocess-check-audit]
+    write_scope: [pyproject.toml]
+    value: medium
+    affects: {engineering_quality_security: true}
+    # СДЕЛАНО 2026-08-12: набор 4 -> 27 правил БЕЗ уборки — добавлены только те, что замерены на
+    # нуле по всему репозиторию (сравнение семантики, неисполнимый код, потеря информации об
+    # ошибке B012/B904/PLE0704, изменяемый default B006, exec/eval, двунаправленный unicode).
+    # Это чистое расширение сети: от существующего кода они не требуют ничего, ловят только новое.
+    # ОСТАЛОСЬ (требует уборки, каждое — отдельное решение): BLE001 17 мест в продакшне + S110 23 —
+    # по индивидуальному суждению каждое, штамповать `noqa` без причины нельзя; PLW1510 63
+    # (подготовка временных git-репо в валидаторах); F401 105, I001 131, EXE001 180 — стиль.
+
+  # ─── green-means-checked ────────────────────────────────────────────────────────────────────
+  - id: ci-lint-job-proven
+    title: Убедиться, что джоба lint и исправленный хук python-compat зелены в реальном CI
+    type: delivery
+    goal: green-means-checked
+    status: todo
+    owner_role: delivery
+    depends_on: []
+    write_scope: [.github/]
+    value: high
+    affects: {delivery_operations: true}
+    # Ревизия проверила их локально (YAML разобран, `bash -n` чист, `ruff check .` зелёный), но
+    # ни джоба, ни хук в CI ещё не исполнялись ни разу. Плюс охват ревизии — только
+    # full-current-python на 3.14: пол 3.9 и чистую установку даёт лишь матрица CI.
+
+  - id: ruff-format-decision
+    title: Решить судьбу ruff-format в pre-commit — хук неприменим, пока не выбран путь
+    type: quality
+    goal: green-means-checked
+    status: done
+    owner_role: engineer
+    depends_on: []
+    write_scope: [.pre-commit-config.yaml]
+    value: medium
+    affects: {engineering_quality_security: true}
+    # РЕШЕНО 2026-08-12: хук снят как неприменимый, принятие форматтера вынесено в горизонт
+    # «Later» ROADMAP вместе с ценой. Замер при РЕАЛЬНОЙ конвенции (line-length 110 — p99 длин
+    # строк по символам, а не по байтам): 528 файлов из 901 и ~45 000 изменённых строк. Хук
+    # работает по staged-файлам, поэтому любой коммит, тронувший один тест, приносил бы полный
+    # переформат этого файла — правку в таком диффе не отревьюить. Мёртвый хук хуже отсутствующего:
+    # он создаёт видимость контроля стиля. Стиль не остался без присмотра — `ruff check` исполняется.
+
+  # ─── real-product-qualification ─────────────────────────────────────────────────────────────
+  - id: niti-findings-close
+    title: Закрыть находки первого живого brownfield-прогона (niti) и довести их до апстрима
+    type: engineering
+    goal: real-product-qualification
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/, installer/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # Источник: qualification/REAL-PRODUCT-NITI-2026-08-06.md — findings «в порядке боли».
+    # Прогон дошёл до результата, но часть находок осталась на локальной ветке и не влита.
+
+  - id: change-brief-home
+    title: Дать Change Brief место хранения вместо двух файлов в корне
+    type: docs
+    goal: real-product-qualification
+    status: done
+    owner_role: docs
+    depends_on: []
+    write_scope: [docs/, templates/]
+    value: low
+    affects: {planning_execution: true}
+    # РЕШЕНО 2026-08-12: `docs/change-briefs/<версия>-<slug>.md`, по файлу на изменение, не
+    # перезаписываются; правило и состав — в README каталога. Два брифа из корня перенесены через
+    # git mv (3.34 и 3.35), скрытых имён в корне больше нет: бриф это документ, а не служебное
+    # состояние. Вариант `.ai/runtime/` отклонён — он выводит запись решения из истории.
+
+  # ─── advisory-gates-obkatka ─────────────────────────────────────────────────────────────────
+  - id: contour-consistency-field-evidence
+    title: Обкатать contour_consistency на живом репозитории и решить о переводе в blocking
+    type: quality
+    goal: advisory-gates-obkatka
+    status: todo
+    owner_role: qa
+    depends_on: [niti-findings-close]
+    write_scope: [quality/gates.yaml, ai_ops_kit/planning/]
+    value: medium
+    affects: {engineering_quality_security: true, planning_execution: true}
+    # Гейт объявлен advisory ДО обкатки — правило репозитория (ROADMAP.md -> «Правила движения»).
+    # Пока обкатки нет, заявленное качество опирается на 21 блокирующий гейт, а не на 34.
+
+  # ─── second-real-brownfield ─────────────────────────────────────────────────────────────────
+  - id: second-brownfield-run
+    title: Провести установку и задачу до verified PR на втором реальном brownfield-репозитории
+    type: delivery
+    goal: second-real-brownfield
+    status: todo
+    owner_role: delivery
+    depends_on: [ci-lint-job-proven]
+    write_scope: [qualification/]
+    value: high
+    affects: {delivery_operations: true, analytics_learning: true}
+    # Проверяемо глазами владельца: установка и onboarding без вмешательств, DeliveryReceipt с
+    # sha_verified=true, названная стоимость прогона. Требует провайдер-ключей и тулчейна стека —
+    # объявленная эксплуатационная предпосылка (v3.8.0-plan.yaml -> blocked_by), не дефект.

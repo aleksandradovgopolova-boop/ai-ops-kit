@@ -44,7 +44,10 @@ def git_head(root: Path):
         r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root,
                            capture_output=True, text=True, timeout=10)
         return r.stdout.strip() if r.returncode == 0 else None
-    except Exception:
+    # Узкие типы (ревизия 2026-08-11): `None` здесь значит «git недоступен» — честный unknown,
+    # объявленный в докстроке. Под `except Exception` в этот же ответ сваливался бы и ДЕФЕКТ кода,
+    # то есть баг маскировался бы под отсутствие git. Ожидаемое: нет бинарника (OSError) и таймаут.
+    except (OSError, subprocess.SubprocessError):
         return None
 
 
@@ -54,7 +57,7 @@ def file_changed_since(root: Path, revision: str, rel_path: str):
         r = subprocess.run(["git", "diff", "--quiet", revision, "--", rel_path],
                            cwd=root, capture_output=True, timeout=10)
         return r.returncode != 0
-    except Exception:
+    except (OSError, subprocess.SubprocessError):   # см. пояснение в git_head
         return None
 
 
@@ -116,7 +119,9 @@ def scan(root: Path):
         if stale:
             try:
                 blocking = json.loads(gp.read_text(encoding="utf-8")).get("blocking", True)
-            except Exception:
+            # fail-closed по умолчанию: нечитаемый гейт считаем блокирующим. Типы узкие, чтобы
+            # дефект валидатора не выглядел как «файл не разобрался» (ревизия 2026-08-11).
+            except (OSError, json.JSONDecodeError, AttributeError):
                 blocking = True
             rec = (gp.relative_to(root).as_posix(), stale)
             (stale_blocking if blocking else stale_nonblocking).append(rec)
