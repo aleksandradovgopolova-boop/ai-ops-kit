@@ -155,27 +155,40 @@ ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI и
 
 ```yaml
   ai-ops:
-    runs-on: ubuntu-latest
+    # Раннер выбирается переменной: `ubuntu-latest` есть только у GitHub, и в организации со
+    # своими раннерами джоба с этим ярлыком просто висит в очереди.
+    runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
+      # Python ставим только на раннерах GitHub: на своей машине tool cache уходит в
+      # `/Users/runner`, которого нет, а `pip install` в системный python Ubuntu 24.04
+      # запрещён (PEP 668). На своём раннере python 3.12 + pyyaml должны быть предустановлены.
       - uses: actions/setup-python@v5
+        if: ${{ !vars.CI_RUNNER_LINUX }}
         with: {python-version: "3.12"}
       - run: pip install pyyaml
+        if: ${{ !vars.CI_RUNNER_LINUX }}
       - name: Clone ai-ops-kit (пин на installed_version из .ai-ops.yaml)
         run: |
           VER=$(python3 -c "import yaml; print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
+          # $RUNNER_TEMP, а не /tmp: свой раннер не одноразовый, и клон падает на
+          # «destination path already exists».
           git clone --depth 1 --branch "v$VER" https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git "$RUNNER_TEMP"/ai-ops-kit
       - run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py validate
       - run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py doctor
-      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/validation/validate_knowledge_graph.py knowledge/graph.yaml
+      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_knowledge_graph.py knowledge/graph.yaml
       - name: Blueprint + оценка прогона (все фичи)
         run: |
           for f in features/*/blueprint.yaml; do
             d="$(dirname "$f")"
-            python3 "$RUNNER_TEMP"/ai-ops-kit/validation/validate_feature_blueprint.py "$d"
+            python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_feature_blueprint.py "$d"
             python3 "$RUNNER_TEMP"/ai-ops-kit/tools/run_report.py "$d" --graph knowledge/graph.yaml
           done
 ```
+
+> Пути валидаторов — `ai_ops_kit/validation/…`. Корневого `validation/` нет с 3.34; рецепт со
+> старым путём разошёлся по репозиториям и ломал их CI молча, поэтому теперь существование каждого
+> пути из документации проверяется тестом.
 
 ## 5. Обновления
 
