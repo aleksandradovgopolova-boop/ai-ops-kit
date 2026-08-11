@@ -250,3 +250,25 @@ def test_empty_zone_survives_a_clone(tmp_path):
 
     # Идемпотентность: зона с содержимым маркера не получает и повторно ничего не создаёт.
     assert inst.ensure_zone_markers(root) == []
+
+
+def test_fingerprints_go_to_the_served_repo_not_the_current_one(tmp_path, monkeypatch):
+    """Отпечатки пишутся В ТОТ репозиторий, который обслуживают.
+
+    Первая версия брала путь из глобального `REPO_ROOT`, и `sync_ci_workflows(other_root)` писал
+    отпечатки в текущий каталог. Поймано тем, что в коммит САМОГО КИТА попал чужой
+    `.ai/runtime/ci-templates.json` — то есть кит наследил в себе, обслуживая другого.
+    """
+    here = tmp_path / "current"
+    (here / ".github" / "workflows").mkdir(parents=True)
+    served = tmp_path / "served"
+    (served / ".github" / "workflows").mkdir(parents=True)
+    for name in ("ai-ops-validate.yml", "ai-ops-update.yml", "ai-ops-record.yml"):
+        shutil.copy2(KIT / "templates" / "ci" / name, served / ".github" / "workflows" / name)
+
+    inst = _installer(here)                      # REPO_ROOT = here
+    inst.sync_ci_workflows(served)               # обслуживаем ДРУГОЙ репозиторий
+
+    assert (served / ".ai" / "runtime" / "ci-templates.json").is_file(), \
+        "отпечатки не попали в обслуживаемый репозиторий"
+    assert not (here / ".ai").exists(), "кит наследил в текущем репозитории, обслуживая чужой"
