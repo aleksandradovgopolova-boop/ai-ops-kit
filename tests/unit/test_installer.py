@@ -455,6 +455,23 @@ def test_communication_adapter_is_idempotent_and_keeps_user_text(installed, ai_o
     assert "Не трогать это." in text, "текст пользователя вне маркеров затронут"
 
 
+def _path_python_with_pyyaml():
+    """Есть ли в PATH интерпретатор, которым обёртка `./ai-ops` реально сможет работать.
+
+    Обёртка выбирает интерпретатор по способности импортировать pyyaml — единственную рантайм-
+    зависимость кита (см. `templates/runtime/ai-ops-entry.sh`). Если такого в PATH нет, кит на
+    этой машине не запускается ВООБЩЕ, и тест обёртки проверять нечем: он мерил бы окружение,
+    а не предмет. В CI интерпретатор с pyyaml есть всегда, там проверка исполняется.
+    """
+    import shutil
+    import subprocess
+    for cand in ("python3", "python3.13", "python3.12", "python3.11", "python3.10", "python3.9", "python"):
+        exe = shutil.which(cand)
+        if exe and subprocess.run([exe, "-c", "import yaml"], capture_output=True).returncode == 0:
+            return exe
+    return None
+
+
 def test_child_gets_a_runnable_entry_point(installed):
     """НАХОДКА РЕВЬЮ, ломавшая обещание слоя коммуникации на ПЕРВОЙ команде: все подсказки кита
     печатали `ai-ops …`, а такой команды не существует — ни `console_scripts`, ни файла. Владелец
@@ -465,6 +482,9 @@ def test_child_gets_a_runnable_entry_point(installed):
     """
     import os
     import subprocess
+    if not _path_python_with_pyyaml():
+        pytest.skip("в PATH нет python3 с pyyaml — на этой машине кит не запускается, "
+                    "и тест обёртки мерил бы окружение, а не её")
     entry = installed / "ai-ops"
     assert entry.is_file(), "в репозиторий не положена запускаемая точка входа"
     assert os.access(entry, os.X_OK), "точка входа не исполняемая"
@@ -475,6 +495,51 @@ def test_child_gets_a_runnable_entry_point(installed):
     # это первое значение слова. Состояние самого кита спрашивают реже и зовут `kit-status`.
     assert "идёт" in r.stdout or "не начата" in r.stdout, r.stdout[:300]
     assert "managed" not in r.stdout, "продуктовый вопрос ответил отчётом о внутренностях кита"
+
+
+def test_entry_point_without_usable_python_says_what_to_do(installed):
+    """fail-closed: нет интерпретатора с pyyaml -> внятное сообщение, а НЕ трейсбек.
+
+    До ревизии 2026-08-11 обёртка звала голое `python3` из PATH. На машине, где pyyaml стоит в
+    другом интерпретаторе (brew поднял минорную версию; кит ставили из venv), владелец получал
+    `ModuleNotFoundError: No module named 'yaml'` — трейсбек вместо сообщения, на ПЕРВОЙ команде.
+    Пустой PATH здесь моделирует именно это: ни один кандидат не пригоден.
+    """
+    import subprocess
+    entry = installed / "ai-ops"
+    env = {"PATH": str(installed / "no-python-here"), "HOME": os.environ.get("HOME", "/tmp")}
+    r = subprocess.run([str(entry), "status"], cwd=str(installed), env=env,
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 2, f"ожидался fail-closed rc=2, получено {r.returncode}"
+    err = r.stderr
+    assert "Traceback" not in err and "ModuleNotFoundError" not in err, (
+        f"вместо сообщения показан трейсбек:\n{err[:400]}")
+    assert "pyyaml" in err, f"не названа причина:\n{err[:400]}"
+    assert "AI_OPS_PYTHON" in err and "pip install" in err, (
+        f"сказано, что сломано, но не сказано, что делать:\n{err[:400]}")
+
+
+def test_entry_point_honours_explicit_interpreter(installed):
+    """positive + side-effect proof: AI_OPS_PYTHON сильнее перебора PATH.
+
+    Явное слово владельца обязано работать даже когда в PATH пригодного python3 нет вообще —
+    иначе на машине с нестандартным окружением кит остаётся незапускаемым при живом интерпретаторе.
+    """
+    import subprocess
+    entry = installed / "ai-ops"
+    # PYTHONDONTWRITEBYTECODE в env НЕ передаём намеренно — так запускает владелец, и именно так
+    # был найден дефект: успешная команда роняла 11 `.pyc` в checksummed managed-слой.
+    env = {"PATH": str(installed / "no-python-here"), "HOME": os.environ.get("HOME", "/tmp"),
+           "AI_OPS_PYTHON": sys.executable}
+    r = subprocess.run([str(entry), "status"], cwd=str(installed), env=env,
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode in (0, 1), (
+        f"AI_OPS_PYTHON={sys.executable} не был использован: rc={r.returncode}\n{r.stderr[:400]}")
+    assert "идёт" in r.stdout or "не начата" in r.stdout, r.stdout[:300]
+    # side-effect proof: кит не сорит в чужом репозитории. `.gitignore` установщик в дочку не
+    # пишет, поэтому байткод в managed уехал бы в коммит владельца по `git add -A`.
+    pyc = [str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")]
+    assert not pyc, f"команда оставила байткод кита в managed-слое дочки: {pyc[:5]}"
 
 
 def test_hints_point_to_something_runnable(installed, ai_ops):
