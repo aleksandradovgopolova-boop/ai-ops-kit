@@ -156,7 +156,7 @@ def test_repo_declares_where_its_truth_lives(tmp_path):
     files = ["docs/architecture/decisions/ADR-069-TYPECHECK.md"]
     rep = C.reconcile(tmp_path, {"research_decisions": True}, files, MODEL)
     assert not [f for f in rep["findings"]
-                if f["id"] == "declared_not_updated" and f["contour"] == "research_decisions"], \
+                if f["id"] == "source_of_truth_behind" and f["contour"] == "research_decisions"], \
         "обновление ADR в объявленном репозиторием месте не должно считаться необновлением истины"
     # Пробел контура тоже закрыт объявлением репозитория.
     st = C.sot_state(tmp_path, MODEL)
@@ -271,16 +271,16 @@ def test_source_of_truth_declared_as_signal_makes_contour_self_satisfying(tmp_pa
     (tmp_path / ".ai-ops.yaml").write_text(
         "product_operating_model:\n  contours:\n    data_contracts:\n"
         "      source_of_truth: [docs/openapi.yaml]\n", encoding="utf-8")
-    rep = C.reconcile(tmp_path, {"data_contracts": True}, files, MODEL)
-    assert [f for f in rep["findings"] if f["id"] == "declared_not_updated"], \
+    rep = C.reconcile(tmp_path, {}, files, MODEL)
+    assert [f for f in rep["findings"] if f["id"] == "source_of_truth_behind"], \
         "изменение схемы без обновления описания обязано быть находкой"
 
     # Истина = сами миграции. Контур самоудовлетворяющийся -> находки НЕТ, и это ложный зелёный.
     (tmp_path / ".ai-ops.yaml").write_text(
         "product_operating_model:\n  contours:\n    data_contracts:\n"
         "      source_of_truth: [docs/openapi.yaml, supabase/migrations/]\n", encoding="utf-8")
-    rep2 = C.reconcile(tmp_path, {"data_contracts": True}, files, MODEL)
-    assert not [f for f in rep2["findings"] if f["id"] == "declared_not_updated"]
+    rep2 = C.reconcile(tmp_path, {}, files, MODEL)
+    assert not [f for f in rep2["findings"] if f["id"] == "source_of_truth_behind"]
 
 
 def test_child_config_is_parsed_once_per_state(tmp_path, monkeypatch):
@@ -319,6 +319,110 @@ def test_child_config_is_parsed_once_per_state(tmp_path, monkeypatch):
     assert calls["n"] == 2
 
 
+def test_cyrillic_path_from_git_is_still_seen(tmp_path):
+    """НАХОДКА РЕВЬЮ, критичная для русскоязычного продукта: при `core.quotePath` (по умолчанию ВКЛ)
+    git отдаёт не-ASCII имена в escape-кавычках. Такой путь не совпадал ни с одним сигнальным
+    паттерном, и `changed` превращался в `not_changed` — утверждение вместо признания, то есть
+    главный инвариант модели ломался на КАЖДОМ файле с русским именем, а гейт молчал.
+
+    Источник чинится ключом `-z` в `engine/pipeline_git.py`; здесь — второй эшелон, потому что пути
+    приходят и из CLI `--files`, и из чужих обёрток.
+    """
+    d = tmp_path / "context" / "product"
+    d.mkdir(parents=True)
+    (d / "Обзор.md").write_text("# обзор", encoding="utf-8")
+
+    quoted = r'"context/product/\320\236\320\261\320\267\320\276\321\200.md"'
+    assert C.unquote_git_path(quoted) == "context/product/Обзор.md"
+    der = C.derive_affects(tmp_path, [quoted], MODEL, overrides={})
+    assert der["product_strategy"]["state"] == C.CHANGED, \
+        "путь с кириллицей в git-кавычках обязан распознаваться"
+    # И обычный путь, конечно, тоже.
+    assert C.derive_affects(tmp_path, ["context/product/Обзор.md"], MODEL,
+                            overrides={})["product_strategy"]["state"] == C.CHANGED
+
+
+def test_source_of_truth_behind_is_found_without_any_declaration(tmp_path):
+    """МУТАЦИОННОЕ РЕВЮ ПОЙМАЛО МОЮ РЕГРЕССИЮ. Убрав выдуманный китом засев `affects`, я оставил
+    находку зависеть от заполненности поля — а на документированном пути (`ai-ops run`) поле пустое
+    всегда, потому что id фичи берётся из хеша задачи и элемента плана с таким id нет. Гейт
+    структурно перестал уметь давать не-`pass`: «файлов 5, включая миграции и CI -> verdict ok».
+    Я починил шум и получил тишину, то есть дефект, который сам же назвал опаснее шума.
+
+    ПРАВИЛЬНАЯ СЕМАНТИКА: гейт спрашивает не «верно ли автор заполнил поле», а «поспело ли описание
+    продукта за кодом». Это ФАКТ, и он проверяется без всякого заявления: сигналы контура тронуты,
+    источник истины — нет. Заявление (`affects`) остаётся полезным, но вторичным.
+    """
+    (tmp_path / "context" / "system").mkdir(parents=True)
+    (tmp_path / "context" / "system" / "DataMap.md").write_text("# д", encoding="utf-8")
+    (tmp_path / "supabase" / "migrations").mkdir(parents=True)
+    (tmp_path / "supabase" / "migrations" / "0006.sql").write_text("alter table;", encoding="utf-8")
+
+    # НИЧЕГО не заявлено — и находка всё равно есть, потому что схема сменилась, а карта данных нет.
+    rep = C.reconcile(tmp_path, {}, ["supabase/migrations/0006.sql"], MODEL, overrides={})
+    behind = [f for f in rep["findings"] if f["id"] == "source_of_truth_behind"]
+    assert behind, "описание отстало от кода — это находка независимо от affects"
+    assert behind[0]["contour"] == "data_contracts"
+    assert behind[0]["severity"] == "major"
+    assert rep["verdict"] == "inconsistent"
+
+    # Источник истины обновлён вместе с кодом -> находки нет.
+    rep2 = C.reconcile(tmp_path, {}, ["supabase/migrations/0006.sql",
+                                      "context/system/DataMap.md"], MODEL, overrides={})
+    assert not [f for f in rep2["findings"] if f["id"] == "source_of_truth_behind"]
+    assert rep2["verdict"] == "ok"
+
+
+def test_declaration_mismatch_is_bookkeeping_not_the_main_event(tmp_path):
+    """Расхождение заявления с фактом полезно, но это не тот дефект, ради которого гейт существует:
+    severity `info`. Иначе кит шумит на каждой задаче, где человек не заполнил поле."""
+    (tmp_path / "context" / "system").mkdir(parents=True)
+    (tmp_path / "context" / "system" / "DataMap.md").write_text("# д", encoding="utf-8")
+    files = ["context/system/DataMap.md"]
+
+    rep = C.reconcile(tmp_path, {}, files, MODEL, overrides={})
+    und = [f for f in rep["findings"] if f["id"] == "undeclared_change"]
+    assert und and all(f["severity"] == "info" for f in und)
+    # DataMap.md — сам источник истины контура данных, поэтому «описание отстало» тут не возникает.
+    assert not [f for f in rep["findings"] if f["id"] == "source_of_truth_behind"
+                and f["contour"] == "data_contracts"]
+    assert rep["verdict"] == "ok", "незаполненное поле не делает работу несогласованной"
+
+    # Заявлено то, чего не было -> тоже учёт, а не провал.
+    # `system_architecture` виден (есть context/system/), и правило специфичности отдаёт
+    # DataMap.md контуру данных — значит для архитектуры это «заявлено, но не тронуто».
+    rep2 = C.reconcile(tmp_path, {"system_architecture": True}, files, MODEL, overrides={})
+    dn = [f for f in rep2["findings"] if f["id"] == "declared_not_changed"]
+    assert dn and all(f["severity"] == "info" for f in dn)
+
+
+def _unused_old_name(tmp_path):
+    """НАХОДКА РЕВЬЮ: кит сам засевал `affects` по типу задачи, а потом читал это как ЗАЯВЛЕНИЕ
+    АВТОРА — и на каждой обычной инженерной задаче выдавал major-находку «источник истины не
+    обновлён». Заявления не было: его выдумал кит.
+
+    Правило: `major` — только когда автор ЧТО-ТО заявил и промахнулся. Если не заявлено ничего,
+    сверять нечего с чем: контуры из diff — ИНФОРМАЦИЯ («работа затронула вот это»), а не провал.
+    Иначе гейт шумит на всём, и его перестают читать — реестр запрещает это прямо.
+    """
+    (tmp_path / "context" / "system").mkdir(parents=True)
+    (tmp_path / "context" / "system" / "DataMap.md").write_text("# д", encoding="utf-8")
+    files = ["context/system/DataMap.md"]
+
+    # Ничего не заявлено -> информация, вердикт НЕ падает.
+    rep = C.reconcile(tmp_path, {}, files, MODEL, overrides={})
+    und = [f for f in rep["findings"] if f["id"] == "undeclared_change"]
+    assert und, "затронутый контур обязан быть назван"
+    assert all(f["severity"] == "info" for f in und), [f["severity"] for f in und]
+    assert rep["verdict"] == "ok"
+
+    # Заявлено ДРУГОЕ -> автор промахнулся, это major.
+    rep2 = C.reconcile(tmp_path, {"analytics_learning": True}, files, MODEL, overrides={})
+    assert [f for f in rep2["findings"]
+            if f["id"] == "undeclared_change" and f["severity"] == "major"]
+    assert rep2["verdict"] == "inconsistent"
+
+
 def test_corrupt_model_raises(tmp_path):
     bad = tmp_path / "pom.yaml"
     bad.write_text("contours: []\n", encoding="utf-8")
@@ -340,11 +444,18 @@ def test_broken_repo_config_does_not_crash_overrides(tmp_path):
 # ── side-effect proof ─────────────────────────────────────────────────────────────────────────
 
 def test_declared_changed_without_sot_update_is_finding(tmp_path):
-    """Ровно тот случай, ради которого модель существует: обновлён компонент, модель данных нет."""
+    """Ровно тот случай, ради которого модель существует: обновлён код, описание — нет.
+
+    Проверяется ФАКТОМ, а не заявлением: `affects` пуст, и находка всё равно есть. Прежде тест
+    полагался на заявление, и мутационное ревью показало, что на документированном пути заявления
+    не бывает — гейт не мог сработать.
+    """
     r = _repo(tmp_path)
-    rep = C.reconcile(r, {"data_contracts": True}, ["src/ui/Dashboard.tsx"], MODEL, overrides={})
+    (r / "src" / "api" / "models").mkdir(parents=True, exist_ok=True)
+    (r / "src" / "api" / "models" / "order.py").write_text("class O: pass\n", encoding="utf-8")
+    rep = C.reconcile(r, {}, ["src/api/models/order.py"], MODEL, overrides={})
     ids = [f["id"] for f in rep["findings"]]
-    assert "declared_not_updated" in ids
+    assert "source_of_truth_behind" in ids
     assert rep["verdict"] == "inconsistent"
 
 
@@ -360,7 +471,7 @@ def test_sot_update_closes_declared_change(tmp_path):
     rep = C.reconcile(r, {"data_contracts": True}, ["context/system/DataMap.md"], MODEL,
                       overrides={})
     assert not [f for f in rep["findings"]
-                if f["id"] == "declared_not_updated" and f["contour"] == "data_contracts"]
+                if f["id"] == "source_of_truth_behind" and f["contour"] == "data_contracts"]
 
 
 def test_no_diff_is_not_comparable_rather_than_ok(tmp_path):

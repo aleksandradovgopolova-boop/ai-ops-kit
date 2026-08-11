@@ -27,11 +27,13 @@ def test_ai_ops_cli_selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("14 intent-команд", len(INTENTS) == 14
+    expect("15 intent-команд", len(INTENTS) == 15
            and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "advise", "resume", "review",
                 "status", "health",
                 # v3.35 Product Operating Model: план продукта и понимание репозитория.
-                "next", "model"} == set(INTENTS))
+                "next", "model",
+                # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
+                "bootstrap"} == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
     fq = resolve_flags({"task_type": "QUICK"})
@@ -107,8 +109,11 @@ def test_ai_ops_cli_selftest():
         expect("v2.112 status: реальное чтение active-work (не превью)", rc_s == 0 and "STATUS" in out_s or rc_s == 0)
 
         rc_h, out_h = _run(["health", str(root)])
+        # v3.35.1: формулировка переведена на человеческий язык (слой коммуникации), но ЧЕСТНОСТЬ
+        # проверяется та же: код возврата 1, отказ считать по пустому месту, и явное «это не всё
+        # хорошо, это не знаю». Проверяем смысл, а не прежнюю фразу.
         expect("v2.112 health: без метрик — честный отказ (не фабрикует score)",
-               rc_h == 1 and "нет входных метрик" in out_h)
+               rc_h == 1 and "не знаю" in out_h and "по пустому месту" in out_h)
 
         # preview-режим НЕ выполняет действие, а показывает превью
         (root / ".ai" / "repository-profile.yaml").unlink()
@@ -118,8 +123,10 @@ def test_ai_ops_cli_selftest():
 
         # v2.116: `review` — настоящий intent (не preview). Без ветки -> честный no-branch (rc!=0).
         rc_rv, out_rv = _run(["review", "поревьюить", str(root), "--feature", "nope-wid"])
+        # v3.35.2: вердикт переведён на человеческий язык. Честность проверяется та же и строже:
+        # `no-branch` — это «сверять нечего», а НЕ «замечаний нет».
         expect("v2.116 review: настоящий intent — без ветки честный no-branch (не падает в preview)",
-               "REVIEW" in out_rv and "no-branch" in out_rv and rc_rv != 0)
+               rc_rv != 0 and "Проверять нечего" in out_rv and "можно вливать" not in out_rv)
 
     # v2.120: `run --execute` РЕАЛЬНО проводит provider/model/max-steps/open-pr в движок (не mock-хардкод).
     import subprocess as _sp
