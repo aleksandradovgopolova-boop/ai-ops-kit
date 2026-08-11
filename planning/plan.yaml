@@ -106,30 +106,39 @@ work:
     title: Решить судьбу --cov без порога — метрика собирается и ни на что не влияет
     type: quality
     goal: checks-that-run
-    status: todo
+    status: done
     owner_role: qa
     depends_on: []
     write_scope: [pytest.ini, .github/]
     value: medium
     affects: {engineering_quality_security: true}
-    human_decision: >
-      Порог покрытия ввести или убрать `--cov` из addopts? Сейчас каждый прогон CI идёт с
-      `--no-cov`, а `--cov-fail-under` нет вовсе: цена без пользы (docs/audit-report.md, R-17).
-      Тот же вывод, что в v3.35.1 про метрику с отрицательной пользой.
+    # РЕШЕНО 2026-08-12: сделано И то, И другое, потому что это были две разные проблемы.
+    # `--cov` убран из addopts (он включал покрытие в КАЖДОМ запуске, поэтому все шесть скриптов
+    # гасили его `--no-cov`, а джобы падали на «unrecognized arguments», если забывали pytest-cov)
+    # и добавлена отдельная джоба `coverage` с порогом-РАТЧЕТОМ: пол 70% при замере 71%
+    # (23 889 инструкций, 7 015 без покрытия). Локальный цикл покрытие не считает — v3.35.1
+    # замерил, что это стоило ~2× времени при отрицательной пользе.
+    # Побочно: тест-охранник `_addopts_require_cov` читал КОММЕНТАРИИ pytest.ini как настройку и
+    # уронил два теста на исправной конфигурации — детектор исправлен, инвариант усилен на явный
+    # `--cov` в команде (охранял только исчезнувший путь через addopts).
 
   - id: ruff-rule-set-widening
     title: Расширять исполняемый набор ruff по одному правилу за решение, каждое со своей уборкой
     type: quality
     goal: checks-that-run
-    status: todo
+    status: in_progress
     owner_role: engineer
     depends_on: [swallowed-exceptions-audit, subprocess-check-audit]
     write_scope: [pyproject.toml]
     value: medium
     affects: {engineering_quality_security: true}
-    # Исполняются F821/F811/B023/F841 (ноль находок). Остаток — 912 находок, порядок по пользе:
-    # PLW1510 (65) -> BLE001+S110 (49) -> F401 (105). SIM115 и RUF100 включать НЕ надо —
-    # обоснование в pyproject.toml, там же замеры.
+    # СДЕЛАНО 2026-08-12: набор 4 -> 27 правил БЕЗ уборки — добавлены только те, что замерены на
+    # нуле по всему репозиторию (сравнение семантики, неисполнимый код, потеря информации об
+    # ошибке B012/B904/PLE0704, изменяемый default B006, exec/eval, двунаправленный unicode).
+    # Это чистое расширение сети: от существующего кода они не требуют ничего, ловят только новое.
+    # ОСТАЛОСЬ (требует уборки, каждое — отдельное решение): BLE001 17 мест в продакшне + S110 23 —
+    # по индивидуальному суждению каждое, штамповать `noqa` без причины нельзя; PLW1510 63
+    # (подготовка временных git-репо в валидаторах); F401 105, I001 131, EXE001 180 — стиль.
 
   # ─── green-means-checked ────────────────────────────────────────────────────────────────────
   - id: ci-lint-job-proven
@@ -150,16 +159,18 @@ work:
     title: Решить судьбу ruff-format в pre-commit — хук неприменим, пока не выбран путь
     type: quality
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [.pre-commit-config.yaml]
     value: medium
     affects: {engineering_quality_security: true}
-    human_decision: >
-      `ruff format --check tools tests` -> 333 файла к переформатированию. Один коммит
-      форматирования утопит `git blame`; отказ оставляет мёртвый хук, и pre-commit не работает ни
-      у кого (docs/audit-report.md, R-14). Решение о цене истории — владельца.
+    # РЕШЕНО 2026-08-12: хук снят как неприменимый, принятие форматтера вынесено в горизонт
+    # «Later» ROADMAP вместе с ценой. Замер при РЕАЛЬНОЙ конвенции (line-length 110 — p99 длин
+    # строк по символам, а не по байтам): 528 файлов из 901 и ~45 000 изменённых строк. Хук
+    # работает по staged-файлам, поэтому любой коммит, тронувший один тест, приносил бы полный
+    # переформат этого файла — правку в таком диффе не отревьюить. Мёртвый хук хуже отсутствующего:
+    # он создаёт видимость контроля стиля. Стиль не остался без присмотра — `ruff check` исполняется.
 
   # ─── real-product-qualification ─────────────────────────────────────────────────────────────
   - id: niti-findings-close
@@ -179,17 +190,16 @@ work:
     title: Дать Change Brief место хранения вместо двух файлов в корне
     type: docs
     goal: real-product-qualification
-    status: todo
+    status: done
     owner_role: docs
     depends_on: []
     write_scope: [docs/, templates/]
     value: low
     affects: {planning_execution: true}
-    human_decision: >
-      Где живут заполненные Change Brief'ы: `docs/change-briefs/<wi-id>.md`, один
-      перезаписываемый файл с явным правилом, или `.ai/runtime/` (тогда не попадают в историю)?
-      Сейчас `.ai-change-brief.md` и `.ai-change-brief-pom.md` в корне — второй с суффиксом,
-      чтобы не потерять первый (docs/audit-report.md, R-16).
+    # РЕШЕНО 2026-08-12: `docs/change-briefs/<версия>-<slug>.md`, по файлу на изменение, не
+    # перезаписываются; правило и состав — в README каталога. Два брифа из корня перенесены через
+    # git mv (3.34 и 3.35), скрытых имён в корне больше нет: бриф это документ, а не служебное
+    # состояние. Вариант `.ai/runtime/` отклонён — он выводит запись решения из истории.
 
   # ─── advisory-gates-obkatka ─────────────────────────────────────────────────────────────────
   - id: contour-consistency-field-evidence

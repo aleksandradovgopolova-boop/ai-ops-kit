@@ -6,4 +6,4 @@ set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
 scripts/warn-path-belt.sh
-python3 -m pytest tests/ -q --no-cov -m "not slow" "$@"
+python3 -m pytest tests/ -q -m "not slow" "$@"

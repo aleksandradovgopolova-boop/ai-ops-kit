@@ -8,7 +8,6 @@
 Версия, история, лицензии, видение и roadmap, инструкции для людей и агентов (AGENTS.md/CLAUDE.md),
 сборка пакета и вход в контур проверки.
 
-- `.ai-change-brief.md` — Change Brief текущего среза (по `templates/quality/ChangeBrief.md`)
 - `.dockerignore`
 - `.gitignore`
 - `.pre-commit-config.yaml`
@@ -54,6 +53,8 @@
 - `docs/parallel-sessions.md`
 - `docs/3.0-design.md` — дизайн 3.0: `ai-ops run` основным путём + сплит на 5 пакетов (план, запуск по явному решению)
 - `docs/dogfooding-metrics.md` — чеклист обкатки: как метрики (North Star/baseline) закрываются сами через `/ai-run`
+- `docs/change-briefs/` — заполненные Change Brief'ы, по одному файлу на изменение
+  (`<версия>-<slug>.md`, не перезаписываются); правило и состав — в `README.md` каталога
 - `docs/audit-report.md` — ревизия репозитория 2026-08-11: реестр находок с доказательствами, что исправлено, оставшийся долг и решения владельца
 - `docs/changelog/roadmap-history.md` — архив пройденного пути (фазы v1.3 → v3.36), заморожен 2026-08-11; направление живёт в `ROADMAP.md`
 

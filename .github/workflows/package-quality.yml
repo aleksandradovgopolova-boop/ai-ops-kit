@@ -42,9 +42,11 @@ jobs:
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
-      # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov hypothesis
+      # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
+      # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
+      # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
+      # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
+      - run: pip install pyyaml pytest hypothesis
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -85,6 +87,36 @@ jobs:
           fi
           echo "битых директив # noqa нет"
 
+  # 2026-08-12: ПОКРЫТИЕ СТАЛО ГЕЙТОМ, а не сбором ради сбора. Прежде `--cov` стоял в addopts
+  # pytest.ini — то есть включался в каждом запуске, — и поэтому все скрипты контура гасили его
+  # через `--no-cov`. Итог: покрытие реально считалось ровно в одном шаге и не сверялось с порогом
+  # НИГДЕ. Метрика без последствий стоит времени и не даёт ничего; ровно тот же вывод, что v3.35.1
+  # сделал про охват («контур платил за метрику с ОТРИЦАТЕЛЬНОЙ пользой»).
+  #
+  # Здесь у неё последствие есть. Порог — РАТЧЕТ по замеру: полный набор даёт 71%
+  # (23 889 инструкций, 7 015 без покрытия), пол взят 70% — один пункт запаса, чтобы честный
+  # рефакторинг не краснел на шуме. Поднимать можно и нужно; опускать — только осознанно и
+  # заметно, как ратчет пар и циклов в packages/layering.yaml.
+  #
+  # Отдельная джоба, а не флаг в матрице: покрытие требует ПОЛНОГО набора (на быстром профиле
+  # замер 47% — он меряет другое), и его 4-минутный прогон незачем вешать на четыре группы.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml pytest pytest-cov hypothesis
+      - name: "Покрытие продукта с порогом-ратчетом (пол 70%, замер 71%)"
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m pytest tests/ -q \
+            --cov=ai_ops_kit --cov=installer \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=70
+
   # v3.31.1: прогон установки в ЧИСТОМ окружении. Отдельная джоба, а не тест в группе, именно
   # ради окружения: ставится ТОЛЬКО pyyaml — ни pytest, ни hypothesis, ни editable-установки кита.
   # За один день так всплыли четыре дефекта, невидимых зелёному CI: голый import _bootstrap в
@@ -110,7 +142,7 @@ jobs:
         with: {python-version: "3.9"}
       - run: pip install pyyaml pytest pytest-cov hypothesis
       - name: "Contract tests on 3.9"
-        run: python3 -m pytest tests/contracts/ -v --tb=short --no-cov
+        run: python3 -m pytest tests/contracts/ -v --tb=short
       - name: "Быстрый профиль на 3.9"
         run: bash .github/ci-groups/fast.sh
 
@@ -127,8 +159,10 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: "${{ matrix.python-version }}"}
-      # pytest.ini объявляет --cov в addopts: любой запуск pytest без --no-cov требует
-      # pytest-cov. Джоб без него падал с «unrecognized arguments: --cov=...» ещё до тестов.
-      - run: pip install pyyaml pytest pytest-cov hypothesis
+      # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
+      # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
+      # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
+      # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
+      - run: pip install pyyaml pytest hypothesis
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short

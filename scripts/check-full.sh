@@ -44,7 +44,7 @@ else
   echo
 fi
 
-python3 -m pytest tests/ -q --no-cov "$@"
+python3 -m pytest tests/ -q "$@"
 
 echo
 echo "ЗЕЛЁНЫЙ ОХВАТ: full-current-python (${CURRENT}). Формулируя результат, назови охват:"
