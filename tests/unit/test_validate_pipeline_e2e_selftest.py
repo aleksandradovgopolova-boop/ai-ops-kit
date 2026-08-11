@@ -14,6 +14,4 @@ from validate_pipeline_e2e import (  # noqa: F401 — имена, которые
 
 @pytest.mark.slow
 def test_validate_pipeline_e2e_selftest():
-    return main([])
-
-    assert ok, "перенесённый селфтест validate_pipeline_e2e: см. строки FAIL в выводе"
+    assert main([]) == 0, "перенесённый селфтест validate_pipeline_e2e: см. строки FAIL в выводе"

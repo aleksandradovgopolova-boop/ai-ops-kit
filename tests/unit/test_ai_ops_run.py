@@ -199,22 +199,10 @@ class TestProviderFallback:
         assert wrapped is primary
 
 
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestPrintHuman:
-    """Tests for print_human — human-readable report output."""
-
-    def test_print_human_no_crash(self, child_root):
-        """print_human should not crash on pipeline reports."""
-        report = {
-            "kind": "execution-pipeline",
-            "status": "done",
-            "workitem_id": "test",
-            "loop": {"stopped": "done"},
-            "gates": {"blocked": False, "unmet_gates": []},
-        }
-        # Should not raise
-        ai_ops_run.print_human(report)
+# Здесь стояло ПЕРВОЕ объявление `TestPrintHuman` (ревизия 2026-08-11). Ниже в файле есть второе
+# с тем же именем — Python оставляет последнее, и это первое не исполнялось никогда. Второе его
+# полностью содержит (тот же `test_print_human_no_crash` плюс два), так что удаление — снятие
+# затенённого дубля, а не потеря проверки.
 
 
 @pytest.mark.critical_path
@@ -1030,7 +1018,7 @@ class TestRunWithPipelineErrors:
         """Pipeline execution writes lifecycle-journal with run_start + run_end."""
         self._init_repo(child_root)
         pscript = iter([{"op": "write", "path": "j.py", "content": "j=1\n"}, {"done": True}])
-        report = ai_ops_run.run(
+        ai_ops_run.run(                      # предмет проверки — журнал на диске, не возврат
             task_text="journal test",
             signals={"task_type": "QUICK", "size": "small", "risk": "low",
                      "affected_areas": ["core"]},
@@ -1102,8 +1090,6 @@ class TestResumeImmutablePolicy:
     def test_resume_with_replan_flag(self, child_root):
         """Resume with replan=True -> bypasses drift check (no drift error)."""
         self._init_repo(child_root)
-        cur = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                             cwd=child_root, capture_output=True, text=True).stdout.strip()
         fdir = child_root / "features" / "replan-test"
         fdir.mkdir(parents=True)
         (fdir / "run-settings.yaml").write_text(

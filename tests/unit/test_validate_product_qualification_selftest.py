@@ -14,6 +14,4 @@ from validate_product_qualification import (  # noqa: F401 — имена, ко�
 
 @pytest.mark.slow
 def test_validate_product_qualification_selftest():
-    return main([])
-
-    assert ok, "перенесённый селфтест validate_product_qualification: см. строки FAIL в выводе"
+    assert main([]) == 0, "перенесённый селфтест validate_product_qualification: см. строки FAIL в выводе"

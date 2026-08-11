@@ -44,7 +44,6 @@ def test_parallel_live_selftest():
     wg = {"schema_version": 1, "kind": "WorkGraph", "id": "WG-T", "feature": "f", "execution_mode": "hybrid",
           "packages": [{"id": "api", "depends_on": [], "write_scope": ["a/**"]},
                        {"id": "ui", "depends_on": [], "write_scope": ["b/**"]}]}
-    good = {"api": None, "ui": None}
 
     def fake_run(task, sig, root, **kw):
         return {"ready_for_pr": True, "commit": {"sha": kw["feature"].ljust(40, "0")}}
