@@ -54,12 +54,83 @@ def test_every_kit_path_in_templates_exists():
 
 
 @pytest.mark.unit
+def test_documented_recipes_call_paths_that_exist():
+    """Рецепт из документации люди КОПИРУЮТ — и он обязан работать.
+
+    Ии-среда собрала свою `ai-ops`-джобу по `docs/QUICKSTART.md`, а тот звал
+    `validation/validate_knowledge_graph.py` — корневой каталог, которого нет с 3.34. Шаблон мы
+    починили, документацию нет, и следующий репозиторий унёс бы поломку снова. Документация —
+    такая же поверхность доставки, как шаблон.
+    """
+    docs = [KIT / "docs" / "QUICKSTART.md", KIT / "README.md"]
+    missing, checked = [], 0
+    for d in docs:
+        if not d.is_file():
+            continue
+        for rel in _kit_paths(d.read_text(encoding="utf-8")):
+            checked += 1
+            if not (KIT / rel).exists():
+                missing.append(f"{d.name}: {rel}")
+    assert checked >= 3, f"пути внутрь кита перестали находиться в документации ({checked})"
+    assert not missing, "документация зовёт несуществующее в ките: " + "; ".join(missing)
+
+
+@pytest.mark.unit
 def test_no_template_clones_into_shared_tmp():
     """`/tmp` считает раннер одноразовым. На своём раннере каталог живёт между джобами, и клон
     падает на «destination path already exists» (находка PR #53)."""
     offenders = [t.name for t in sorted(TEMPLATES.glob("*.yml"))
                  if "/tmp/ai-ops-kit" in t.read_text(encoding="utf-8")]
     assert not offenders, f"клон в общий /tmp остался в шаблонах: {offenders}"
+
+
+# ── CI кита не должен предполагать, какая под ним машина ──────────────────────────────────────
+# ИИ-СРЕДА ВЫПИСАЛА ТРИ ДОПУЩЕНИЯ ОБ ОДНОРАЗОВЫХ РАННЕРАХ GITHUB, и кит услышал одно (`/tmp`).
+# Остальные два жили в его же шаблонах: `runs-on: ubuntu-latest` (в организации со своими
+# раннерами такая джоба просто висит в очереди) и `setup-python` + `pip install` (tool cache уходит
+# в `/Users/runner`, которого нет, а установка в системный python Ubuntu 24.04 запрещена PEP 668).
+# Их решение — выбор раннера переменной — обкатано на живом стенде; здесь оно закреплено правилом.
+
+def _templates():
+    return sorted(TEMPLATES.glob("*.yml"))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("tpl", _templates(), ids=lambda p: p.name)
+def test_runner_is_chosen_by_variable_not_hardcoded(tpl):
+    import yaml
+    jobs = (yaml.safe_load(tpl.read_text(encoding="utf-8")) or {}).get("jobs") or {}
+    assert jobs, f"{tpl.name}: джоб не найдено — правило ослепло"
+    for name, job in jobs.items():
+        runs = str(job.get("runs-on", ""))
+        assert "vars." in runs, (
+            f"{tpl.name}:{name} — раннер зашит ('{runs}'): на своих раннерах джоба не стартует")
+        assert "ubuntu-latest" in runs, (
+            f"{tpl.name}:{name} — нет запасного значения: у большинства раннеры GitHub")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("tpl", _templates(), ids=lambda p: p.name)
+def test_python_setup_only_on_github_runners(tpl):
+    """Установка python — только там, где она работает; на своей машине вместо неё ПРОВЕРКА."""
+    import yaml
+    jobs = (yaml.safe_load(tpl.read_text(encoding="utf-8")) or {}).get("jobs") or {}
+    for name, job in jobs.items():
+        steps = job.get("steps") or []
+        installs = [s for s in steps
+                    if "setup-python" in str(s.get("uses", ""))
+                    or "pip install" in str(s.get("run", ""))]
+        for s in installs:
+            cond = str(s.get("if", ""))
+            assert "!vars." in cond, (
+                f"{tpl.name}:{name} — установка python не ограничена раннерами GitHub "
+                f"(шаг: {s.get('uses') or s.get('run')})")
+        if installs:
+            checks = [s for s in steps if str(s.get("if", "")).strip().startswith("${{ vars.")]
+            assert checks, (f"{tpl.name}:{name} — на своём раннере предустановка не проверяется: "
+                            f"падение случится глубже и невнятнее")
+            joined = " ".join(str(s.get("run", "")) for s in checks)
+            assert "yaml" in joined, f"{tpl.name}:{name} — проверка не смотрит на pyyaml"
 
 
 def _git(root, *args):
