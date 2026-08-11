@@ -39,7 +39,7 @@ goals:
       no_test_passes_without_assert: true
       linter_runs_on_the_engine_package: true
       every_declared_entry_point_works: true
-      swallowed_exceptions_reviewed: false
+      swallowed_exceptions_reviewed: true
 
   - id: advisory-gates-obkatka
     status: active
@@ -64,25 +64,31 @@ work:
     title: Разобрать 49 мест, где исключение гасится молча (26 try/except/pass + 23 голых except)
     type: quality
     goal: checks-that-run
-    status: in_progress
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/]
     value: high
     affects: {engineering_quality_security: true}
-    # СДЕЛАНО 2026-08-11 (первый проход — там, где гашение искажает ВЕРДИКТ или ЧИСЛО):
-    #   validate_feature_blueprint — битая DeliveryReceipt больше не выдаётся за отсутствующую;
-    #   kit_observability — непрочитанные workitem/расписки называются в отчёте, а не пропускаются;
-    #   validate_stale_gates (3 места) — типы сужены, чтобы дефект кода не выглядел как «нет git».
-    # ОСТАЛОСЬ: места в конвейере (ai_ops_run 5, workpackage_executor 4, execution_pipeline 3).
-    # Там `noqa` с причиной «не должен ронять прогон» — решение записано, и сужение типов меняет
-    # поведение прогона, поэтому требует отдельного разбора, а не общего правила.
+    # ЗАКРЫТО 2026-08-11. Разобраны все 49 мест; правило оказалось НЕ «сузить типы везде».
+    # (а) Гашение искажало ВЕРДИКТ или ЧИСЛО -> исправлено:
+    #     validate_feature_blueprint (битая DeliveryReceipt не равна отсутствующей),
+    #     kit_observability (непрочитанное называется в отчёте),
+    #     validate_container_delivery (пустой клон делал проверку тривиально верной),
+    #     validate_stale_gates ×3 (дефект кода не должен выглядеть как «нет git»).
+    # (б) Гашение теряло АУДИТ-запись при верном решении «не ронять прогон» -> добавлена вторая
+    #     половина решения: прогон продолжается, но утрата ВИДНА в отчёте
+    #     (`rep.bookkeeping_errors`) — usage_ledger.append и lifecycle_journal.fix_attempt.
+    #     Образец взят в самом файле: рядом уже был `escalation_error` («НЕ глотаем молча»).
+    # (в) Гашение безвредно по построению (кеш переоценки evidence: не записали -> пересчитаем)
+    #     -> решение ЗАПИСАНО в noqa вместо пустого подавления. Поведение не менялось.
+    # Остаток BLE001/S110 — это (в): подавления с записанной причиной, не долг.
 
   - id: subprocess-check-audit
     title: Проверить 65 вызовов subprocess.run без check — необработанный код возврата даёт ложный green
     type: quality
     goal: checks-that-run
-    status: in_progress
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/, installer/]
