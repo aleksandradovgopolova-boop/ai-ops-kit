@@ -22,7 +22,7 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 | Слой | Содержимое |
 |------|-----------|
 | **Execution Engine** | `ai-ops run` — единый движок «задача → draft PR» |
-| **Quality Gates** | 33 гейта объявлено; на конкретной задаче оценивается её набор (QUICK — 3) |
+| **Quality Gates** | 34 гейта объявлено; на конкретной задаче оценивается её набор (QUICK — 3) |
 | **Agents** | 51 роль объявлена в реестре; движок вызывает по имени 10, остальные — контракты владения и ревью |
 | **Registry** | Модели, провайдеры, workflow — machine-readable SoT |
 | **Security** | 12 доменов, детерминированный scan, human-in-the-loop |
@@ -38,7 +38,7 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 
 ## Версия
 
-**v3.36.0 stable** — Qualification Readiness
+**v3.36.1 stable** — Qualification Readiness · Trust Patch
 
 - онбординг заканчивается РАБОТОЙ, а не документацией: `ai-ops bootstrap` собирает направление и
   план из фактов аудита, и `ai-ops next` сразу советует, за что взяться и почему

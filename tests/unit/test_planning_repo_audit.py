@@ -271,6 +271,31 @@ def test_questions_get_a_place_to_answer(tmp_path):
     assert "внутренние аналитики" in path.read_text(encoding="utf-8"), "ответ человека затёрт"
 
 
+def test_repeated_look_does_not_touch_the_file(tmp_path):
+    """`ai-ops model` зовут и просто «посмотреть состояние» — второй такой вызов не вправе трогать
+    файл ради того же текста.
+
+    НАЙДЕНО ПРОВЕРКОЙ КИТА ИМ ЖЕ: команда, объявленная как «понимание репозитория», оставляла в
+    чужом `git status` изменённый файл. Данные не терялись, но каждый осмотр выглядел как правка.
+    """
+    ev = A.discover(tmp_path)
+    ask = A.question_package(A.audit(tmp_path, ev, MODEL), A.reconstruct(tmp_path, ev, MODEL))
+    p = A.write_question_file(tmp_path, ask)
+    first = p.stat().st_mtime_ns
+    body = p.read_text(encoding="utf-8")
+
+    A.write_question_file(tmp_path, ask)
+    assert p.stat().st_mtime_ns == first, "файл переписан, хотя текст тот же"
+    assert p.read_text(encoding="utf-8") == body
+
+    # А когда есть что дописать — файл ОБЯЗАН измениться: экономия не должна съесть новый вопрос.
+    ask2 = {"questions": list(ask["questions"]) + [
+        {"id": "brand_new_question", "ask": "новый вопрос?", "blocks_work": False,
+         "proposal": None}]}
+    A.write_question_file(tmp_path, ask2)
+    assert "brand_new_question" in p.read_text(encoding="utf-8"), "новый вопрос не дописан"
+
+
 def test_answers_become_user_confirmed_and_stop_being_asked(tmp_path):
     """Ответ человека — сильнейший источник (`user_confirmed`), и переспрашивать его нельзя.
 

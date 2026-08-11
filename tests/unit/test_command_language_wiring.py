@@ -184,6 +184,30 @@ def test_json_output_is_untouched_by_the_language_layer(repo, capsys):
 
 
 @pytest.mark.unit
+def test_side_effects_do_not_depend_on_the_output_format(repo, capsys, tmp_path):
+    """`--json` и человеческий вывод — РАЗНЫЕ ФОРМЫ ОДНОГО НАМЕРЕНИЯ, а не разные команды.
+
+    НАЙДЕНО ПРОВЕРКОЙ КИТА ИМ ЖЕ: форма для ответов создавалась только в человеческой ветке, то есть
+    машинный потребитель того же `model` оставался без места для ответа. Побочный эффект, зависящий
+    от формата вывода, — это две команды под одним именем.
+    """
+    import shutil
+    a, b = tmp_path / "human", tmp_path / "machine"
+    shutil.copytree(repo, a)
+    shutil.copytree(repo, b)
+
+    rc_h, _ = _run(["model", str(a)], capsys)
+    rc_j, out_j = _run(["model", str(b), "--json"], capsys)
+    assert rc_h == 0 and rc_j == 0
+
+    answers = ".ai/project/onboarding-answers.yaml"
+    assert (a / answers).is_file(), "человеку места для ответа не создали"
+    assert (b / answers).is_file(), "машинному потребителю места для ответа не создали"
+    # И путь назван в машиночитаемом выводе: иначе о файле знает только тот, кто читает текст.
+    assert "answers_file" in json.loads(out_j), "в JSON не сказано, куда отвечать"
+
+
+@pytest.mark.unit
 def test_missing_intake_is_asked_in_words_with_a_ready_answer(repo, capsys):
     """Пропущенный `size` стоил в поле 6 прогонов из 6 (самый долгий 36 минут). Спросить надо словами,
     но и готовую строку ответа дать обязательно — иначе сообщение называет препятствие и не даёт его
