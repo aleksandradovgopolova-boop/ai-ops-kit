@@ -128,7 +128,9 @@ def check_router():
     except Exception as e:
         fail("ai_route.py", f"не удалось импортировать движок: {e}")
         return
-    rc = ai_route.selftest_quiet() if hasattr(ai_route, "selftest_quiet") else None
+    # Ревизия 2026-08-11: здесь вызывался `ai_route.selftest_quiet()`, а вердикт выбрасывался.
+    # Функции с таким именем в `ai_route` нет вовсе — `hasattr` был ложен, вызова не происходило,
+    # и строка лишь создавала видимость проверки. Форма проверяется через route() ниже.
     # ai_route.selftest печатает; используем route() напрямую для тихой проверки формы
     for sc in getattr(ai_route, "SCENARIOS", []):
         d = ai_route.route(sc["inp"])

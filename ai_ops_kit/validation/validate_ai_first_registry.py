@@ -130,7 +130,6 @@ def check_registry():
             fail("agents.yaml", f"запись '{aid}' указывает на несуществующий файл агента")
         else:
             declared = e.get("file")
-            actual = file_ids[aid][0]
             if declared and not (SYS_DIR / declared).exists():
                 fail("agents.yaml", f"file '{declared}' для '{aid}' не существует")
 
