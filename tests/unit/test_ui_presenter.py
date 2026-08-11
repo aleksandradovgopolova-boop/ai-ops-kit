@@ -39,7 +39,7 @@ def test_render_answers_four_questions_in_order():
 
 
 def test_three_audiences_render():
-    for aud in PR.AUDIENCES:
+    for aud in PR.audiences():
         assert PR.demo(aud)
 
 
@@ -109,9 +109,156 @@ def test_degraded_stays_degraded_on_every_level():
                          "severity": "major", "detail": "источник истины не обновлён"}]}
     msg = PR.from_contour_consistency(rep)
     assert msg["status"] == "degraded"
-    for aud in PR.AUDIENCES:
+    for aud in PR.audiences():
         out = PR.render(msg, audience=aud)
         assert "проверено не всё" in out
+
+
+def test_status_and_health_speak_to_a_human(tmp_path):
+    """РЕВЬЮ UX + АРХИТЕКТУРНОЕ + ПРОДУКТОВОЕ (независимо, все три): presenter звали только два
+    интента из пятнадцати. `status` и `health` печатали внутреннее состояние ОДИНАКОВО на всех трёх
+    аудиториях, то есть настройка «с кем ты говоришь» на них не влияла вовсе:
+
+        STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)
+        HEALTH: нет входных метрик (ожидается product/product-health.yaml) — честно: без данных
+                score не считается
+
+    Второе предложение честное и его надо сохранить — но путь к файлу и слово «score» продакту не
+    нужны, а «что делать дальше» не сказано.
+    """
+    empty = PR.from_active_work({"active": []})
+    out = PR.render(empty, audience="product")
+    # Ярлык не должен противоречить тексту: «Работа продвинулась. Ничего не идёт» — самоотрицание.
+    assert "продвинулась" not in out, out
+    assert "active-work.yaml" not in out and ".ai/" not in out
+    assert "ничего" in out.lower() or "не иду" in out.lower() or "не идёт" in out.lower()
+
+    busy = PR.from_active_work({"active": [
+        {"id": "w1", "affected_areas": ["src/api/"], "branch": "ai-ops/w1",
+         "status": "in-progress", "owner_session": "s1"}]})
+    assert "w1" not in PR.render(busy, audience="product"), "id работы продакту не нужен"
+    assert "w1" in PR.render(busy, audience="debug")
+
+    # HEALTH без данных: честность сохранена, жаргон убран, следующий шаг назван.
+    no_data = PR.from_product_health(None)
+    out2 = PR.render(no_data, audience="product")
+    assert "score" not in out2.lower() and "product-health.yaml" not in out2
+    low = out2.lower()
+    assert "не" in low and ("данн" in low or "измер" in low)
+    assert no_data["status"] != "ok", "отсутствие данных — не «всё хорошо»"
+
+
+def test_contract_comes_from_the_registry_not_from_code(tmp_path, monkeypatch):
+    """ТИР 3: presenter держал свою копию словарей статусов и аудиторий.
+
+    Реестр — источник истины, и для собственной политики коммуникации тоже: иначе переименование
+    ярлыка требует правки двух мест, а расхождение обнаруживается глазами.
+    """
+    assert PR._contract()["source"] == "registry", "контракт читается не из реестра"
+    assert set(PR.statuses()) == {"ok", "needs_input", "blocked", "done", "degraded"}
+    assert PR.statuses()["degraded"], "у статуса нет ярлыка — реестр неполон"
+
+    # Ярлык из реестра действительно доезжает до текста.
+    pol = tmp_path / "policy.yaml"
+    pol.write_text("statuses:\n  ok: {label: 'ЯРЛЫК-ИЗ-РЕЕСТРА'}\n"
+                   "audiences:\n  product: {default: true}\n", encoding="utf-8")
+    monkeypatch.setattr(PR, "POLICY", pol)
+    PR._CONTRACT.clear()
+    try:
+        m = PR.message(status="ok", summary="проверка.")
+        assert "ЯРЛЫК-ИЗ-РЕЕСТРА" in PR.render(m, audience="product")
+    finally:
+        PR._CONTRACT.clear()
+
+    # Реестр недоступен -> работаем на аварийных значениях и НЕ выдаём их за источник истины.
+    monkeypatch.setattr(PR, "POLICY", tmp_path / "нет.yaml")
+    PR._CONTRACT.clear()
+    try:
+        assert PR._contract()["source"] == "fallback"
+        assert PR.render(PR.message(status="ok", summary="x."), audience="product")
+    finally:
+        PR._CONTRACT.clear()
+
+
+def test_doctor_verdict_follows_the_worst_line():
+    """РЕВЬЮ UX: итог `doctor: OK` не зависел от строк с `✗` в том же выводе — человек либо
+    перестанет читать строки, либо перестанет верить вердикту."""
+    ok = PR.from_doctor([{"id": "a", "state": "ok", "text": "всё на месте"}])
+    assert ok["status"] == "ok"
+
+    mixed = PR.from_doctor([{"id": "a", "state": "ok", "text": "всё на месте"},
+                            {"id": "b", "state": "gap", "text": "нет ROADMAP.md"}])
+    assert mixed["status"] != "ok", "вердикт обязан следовать за худшей строкой"
+    assert "1" in PR.render(mixed, audience="product"), "сколько именно замечаний — часть ответа"
+
+    broken = PR.from_doctor([{"id": "a", "state": "fail", "text": "окружение врёт"}])
+    assert broken["status"] == "blocked"
+
+
+def test_every_review_verdict_says_what_actually_happened():
+    """ШЕСТЬ ВЕРДИКТОВ РЕВЬЮ, И ТРИ ИЗ НИХ НЕ «ГОТОВО».
+
+    Опаснее всех `no-ai-review-gates`: `ready_for_merge=True` при том, что не проверялось НИЧЕГО.
+    Первая версия перевода печатала на нём «Независимая проверка прошла: замечаний нет» — ровно та
+    подмена, из-за которой слой человеческого языка мог бы стать способом скрыть недоказанное.
+    """
+    def _msg(verdict, ready, **extra):
+        return PR.from_review(dict({"verdict": verdict, "changed_files": ["a.py"], "reviews": [],
+                                    "readiness": {"ready_for_merge": ready,
+                                                  "reason": "тестовое основание"}}, **extra))
+
+    passed = _msg("pass", True, reviews=[{"gate": "code_quality", "status": "pass"}])
+    assert passed["status"] == "ok" and "Проверено" in PR.render(passed, audience="product")
+
+    # Готово вливать — но никто ничего не смотрел, и это обязано быть сказано.
+    ungated = _msg("no-ai-review-gates", True)
+    out = PR.render(ungated, audience="product").lower()
+    assert "замечаний нет" not in out.split("«")[0], out
+    assert "не проводилась" in out or "никто не искал" in out, out
+
+    nobody = _msg("needs-reviewer", False)
+    assert nobody["status"] == "degraded"
+    assert "не проверено" in PR.render(nobody, audience="product").lower()
+
+    nothing = _msg("no-branch", False)
+    assert nothing["status"] != "ok"
+    assert "нечего" in PR.render(nothing, audience="product").lower()
+
+    broken = _msg("error", False)
+    assert broken["status"] == "blocked"
+
+    changes = _msg("needs-changes", False, reviews=[{"gate": "security", "status": "fail"}])
+    assert changes["status"] == "blocked"
+
+    # Незнакомый вердикт — не «всё хорошо» и не «всё плохо»: перевода нет, и это признаётся.
+    weird = _msg("нечто-новое", False)
+    assert weird["status"] == "degraded"
+    assert "не понимаю" in PR.render(weird, audience="product").lower()
+
+
+def test_unknown_contours_are_not_translated_into_agreement():
+    """МУТАЦИОННОЕ РЕВЮ: главный инвариант релиза (`unknown` != зелёное утверждение) защищён в
+    `contours.py` пятью тестами и НЕ защищён в presenter ни одним. При отсутствии major-находок
+    перевод печатал «Изменение согласовано с описанием продукта», выбрасывая все `unknown_contour`:
+    кит проверил ОДИН контур из восьми и сообщил владельцу, что всё согласовано.
+    """
+    rep = {"comparable": True, "derived": {},
+           "findings": [{"id": "unknown_contour", "contour": f"c{i}", "severity": "info",
+                         "detail": "нет сигнальных путей"} for i in range(7)]}
+    msg = PR.from_contour_consistency(rep)
+    assert msg["status"] != "ok", "семь непроверенных контуров — это не «согласовано»"
+    for aud in PR.audiences():
+        out = PR.render(msg, audience=aud)
+        assert "7" in out or "семь" in out, out
+        assert "согласовано" not in out.lower() or "не" in out.lower()
+
+
+def test_nothing_to_compare_is_not_progress():
+    """`comparable: False` давал `status: ok`, и ярлык печатал «Работа продвинулась. Сверять пока
+    нечего» — бодрость на месте отсутствия проверки."""
+    msg = PR.from_contour_consistency({"comparable": False, "derived": {}, "findings": []})
+    assert msg["status"] != "ok"
+    assert "продвинулась" not in PR.render(msg, audience="product")
 
 
 def test_next_work_translation_says_why_not_score():

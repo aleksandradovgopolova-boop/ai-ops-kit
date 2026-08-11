@@ -899,6 +899,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     return {
         "schema_version": 1, "kind": "execution-pipeline",
         "workitem_id": plan["workitem_id"],
+        "child_root": str(child_root),          # нужен вывода: уровень детализации берётся из репо
         "base_workflow": plan["base_workflow"],
         "profile": {"stacks": [s.get("language") for s in profile.get("stacks", [])],
                     "undetermined": profile.get("undetermined", [])},
@@ -947,6 +948,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                   "tested_revision": committed_sha},
         # v2.121 (P1.2 п.4): покрыло ли человеко-одобрение фактически изменённые пути (после диффа)
         "approval_recheck": approval_recheck,
+        # v3.35.2: НАХОДКИ ГЕЙТА СВЯЗНОСТИ ДОХОДЯТ ДО ЧЕЛОВЕКА. Гейт исполнялся и писал evidence, но
+        # вывод прогона о нём молчал: «описание продукта отстало от кода» существовало только внутри
+        # yaml-артефакта. Гейт, чьи находки не видны, — это гейт, которого нет.
+        "contour_consistency": contour_consistency,
         # v2.83 Full RunPlan: трейс независимых ревью (какие ai-review гейты судились, вердикт,
         # что читал судья, что отклонено). None -> ревью не запускалось (нет --review/reviewer).
         "reviews": reviews,

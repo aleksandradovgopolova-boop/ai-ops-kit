@@ -304,7 +304,10 @@ def test_doctor_ok_on_fresh_install(installed, tmp_path):
     out = r.stdout + r.stderr
     assert "Traceback" not in out
     assert "пути окружения: ✓" in out, out[-2000:]
-    assert "doctor: OK" in out, out[-2000:]
+    # Вердикт печатает человекочитаемый слой (v3.35.2), поэтому проверяем СМЫСЛ, а не строку
+    # `doctor: OK`: код возврата и отсутствие замечаний — то, что этот тест защищает.
+    assert "Всё в порядке" in out, out[-2000:]
+    assert "замечани" not in out.lower(), out[-2000:]
     assert r.returncode == 0, out[-2000:]
 
 
@@ -322,8 +325,11 @@ def test_doctor_blocks_on_residual_path_belt(installed, tmp_path):
     assert "Traceback" not in out
     assert "path_belt" in out and str(belt) in out, out[-2000:]
     assert f'rm -f "{belt}"' in out, "doctor нашёл пояс, но не сказал, как его убрать"
-    assert "doctor: ЕСТЬ ПРОБЛЕМЫ" in out and r.returncode != 0, (
+    assert r.returncode != 0, (
         "пояс делает зелёными fail-closed-проверки — doctor не вправе это пропускать")
+    # Вердикт обязан НАЗВАТЬ причину, а не сосчитать строки с `✗` (v3.35.2).
+    assert "подменяет пути импорта" in out, out[-2000:]
+    assert "ничего не доказывает" in out, "не сказано, почему остальному выводу нельзя верить"
 
 
 def test_doctor_removes_the_belt_on_explicit_request(installed, tmp_path):
@@ -447,6 +453,38 @@ def test_communication_adapter_is_idempotent_and_keeps_user_text(installed, ai_o
     assert text.count(ai_ops.COMM_MARK_BEGIN) == 1, "блок продублирован"
     assert text.count(ai_ops.COMM_MARK_END) == 1
     assert "Не трогать это." in text, "текст пользователя вне маркеров затронут"
+
+
+def test_child_gets_a_runnable_entry_point(installed):
+    """НАХОДКА РЕВЬЮ, ломавшая обещание слоя коммуникации на ПЕРВОЙ команде: все подсказки кита
+    печатали `ai-ops …`, а такой команды не существует — ни `console_scripts`, ни файла. Владелец
+    копировал строку и получал `command not found`.
+
+    Политика требует в каждом сообщении «что дальше». Пункт, который нельзя выполнить, этому
+    требованию не удовлетворяет: в подсказке обязано быть то, что копируется и запускается.
+    """
+    import os
+    import subprocess
+    entry = installed / "ai-ops"
+    assert entry.is_file(), "в репозиторий не положена запускаемая точка входа"
+    assert os.access(entry, os.X_OK), "точка входа не исполняемая"
+    r = subprocess.run([str(entry), "status"], cwd=str(installed),
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode in (0, 1), f"./ai-ops status не работает: {r.returncode} {r.stderr[:300]}"
+    # `status` — ПРОДУКТОВЫЙ вопрос («что идёт прямо сейчас»), а не отчёт о слое кита: у владельца
+    # это первое значение слова. Состояние самого кита спрашивают реже и зовут `kit-status`.
+    assert "идёт" in r.stdout or "не начата" in r.stdout, r.stdout[:300]
+    assert "managed" not in r.stdout, "продуктовый вопрос ответил отчётом о внутренностях кита"
+
+
+def test_hints_point_to_something_runnable(installed, ai_ops):
+    """Ни одна подсказка не должна учить неработающей команде."""
+    import subprocess
+    out = subprocess.run(["python3", str(ai_ops.PKG / "installer" / "ai_ops.py"), "doctor"],
+                         cwd=str(installed), capture_output=True, text=True, timeout=180).stdout
+    bad = [ln for ln in out.splitlines()
+           if "`ai-ops " in ln and "./ai-ops" not in ln and "python3" not in ln]
+    assert not bad, f"подсказки учат несуществующей команде: {bad[:3]}"
 
 
 def test_delivery_footprint_is_smaller_than_legacy(installed):
