@@ -79,6 +79,28 @@ def _git(root: Path, *args):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+def _product_ci(root) -> list:
+    """Признаки CI, ПРИНАДЛЕЖАЩЕГО продукту (не поставленного китом). -> [путь].
+
+    `.github/workflows` считается признаком CI только если в нём есть хотя бы один workflow,
+    который положил не кит. Файлы кита узнаются по имени (`ai-ops-*.yml`) — так их называет
+    установщик, и это же имя проверяет `validate_ci_templates`.
+    """
+    from pathlib import Path as _P
+    root = _P(root)
+    found = []
+    wf = root / ".github" / "workflows"
+    if wf.is_dir():
+        own = [f for f in wf.iterdir()
+               if f.is_file() and f.suffix in (".yml", ".yaml") and not f.name.startswith("ai-ops-")]
+        if own:
+            found.append(".github/workflows")
+    for rel in (".gitlab-ci.yml", "Jenkinsfile", ".circleci"):
+        if (root / rel).exists():
+            found.append(rel)
+    return found
+
+
 def discover(child_root) -> dict:
     """DISCOVER — что фактически лежит в репозитории. Только факты + их источник.
 
@@ -124,7 +146,13 @@ def discover(child_root) -> dict:
     ev["test_files"] = tests if readable else None
     ev["commits"] = commits
     ev["release_history"] = [t for t in (tags or "").splitlines() if t][:5] if tags is not None else None
-    ev["ci"] = _exists(".github/workflows", ".gitlab-ci.yml", "Jenkinsfile", ".circleci")
+    # CI ПРОДУКТА, А НЕ СВОЙ (F-019, живой прогон severnaya_traektoriya 2026-08-12). Каталог
+    # `.github/workflows` создаёт САМ установщик — он кладёт туда `ai-ops-*.yml`. Прежде условие
+    # «каталог существует» выполнялось этими файлами, и в репозитории БЕЗ собственного CI кит
+    # объявлял владельцу «ci_pipeline: build/lint/test, status=verified», ссылаясь на артефакты,
+    # которые сам же и записал секунду назад. Придуманный продуктовый факт со статусом
+    # «подтверждено» — худший из возможных: владелец верит, что кит прочитал ЕГО конвейер.
+    ev["ci"] = _product_ci(root)
     ev["containers"] = _exists("Dockerfile", "docker-compose.yml", "docker-compose.yaml")
     ev["dependency_manifests"] = _exists("package.json", "requirements.txt", "pyproject.toml",
                                          "go.mod", "Cargo.toml", "pom.xml", "Gemfile",
@@ -385,8 +413,14 @@ def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
             for k, v in (s.get("commands") or {}).items():
                 if v:
                     cmds[k] = v
+        # ССЫЛКА СОВПАДАЕТ С ИСТОЧНИКОМ (F-019, часть 2). Значения команд читаются из МАНИФЕСТОВ
+        # стека (`package.json` -> scripts и т.п.), а не из шагов workflow — прежде evidence
+        # указывал только на CI, то есть «подтверждено» ссылалось не туда, где взяты данные.
+        _cmd_ev = list(evidence.get("dependency_manifests") or [])
         out["ci_pipeline"] = {"value": sorted(cmds) or "CI объявлен", "status": VERIFIED,
-                              "evidence": list(evidence["ci"])}
+                              "evidence": list(evidence["ci"]) + _cmd_ev,
+                              "note": "CI продукта обнаружен; перечисленные команды взяты из "
+                                      "манифестов стека, шаги workflow не разбирались"}
 
     if evidence.get("containers"):
         out["deployment"] = {"value": "контейнерная поставка", "status": INFERRED,
