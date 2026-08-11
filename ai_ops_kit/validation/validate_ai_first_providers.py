@@ -125,7 +125,10 @@ def check_routing(policy, prov_ids, classes):
 def check_router():
     try:
         from ai_ops_kit.engine import ai_route
-    except Exception as e:
+    # Причина подавления (2026-08-12): непроходимый импорт движка — это находка валидатора, а
+    # не его собственная авария; текст исключения уходит в отчёт. Тип широкий намеренно:
+    # сломанный модуль может поднять что угодно на уровне импорта.
+    except Exception as e:  # noqa: BLE001 — отказ импорта становится находкой
         fail("ai_route.py", f"не удалось импортировать движок: {e}")
         return
     # Ревизия 2026-08-11: здесь вызывался `ai_route.selftest_quiet()`, а вердикт выбрасывался.
