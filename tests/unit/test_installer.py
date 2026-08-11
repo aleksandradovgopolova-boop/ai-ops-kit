@@ -615,3 +615,37 @@ def test_installer_selftest_passes():
     r = subprocess.run([sys.executable, str(INSTALLER), "--selftest"],
                        cwd=str(KIT), capture_output=True, text=True, timeout=600)
     assert r.returncode == 0, r.stdout[-4000:] + r.stderr[-2000:]
+
+def test_fresh_install_does_not_report_planning_as_ready(installed, ai_ops):
+    """F-018 (живой прогон severnaya_traektoriya, 2026-08-12): doctor рапортовал «✓ артефакты на
+    месте» СРАЗУ после установки — про черновики, которые сам же и положил.
+
+    Кит собственным кодом знает разницу (`delivery_plan.is_template()` на этом же файле даёт True),
+    но doctor спрашивал только `Path.exists()`. Владелец на свежей установке читал зелёное про
+    пустой контур. Комментарий над проверкой обещал обратное: «пробел ВИДЕН, а не молчит».
+    """
+    req, gaps, unfilled = ai_ops._planning_gaps(installed)
+    assert req, "контур планирования не объявлен в манифесте — тест потерял предмет"
+    assert unfilled, "свежая установка объявлена заполненной: заготовки посчитаны за план"
+    assert not gaps, f"заготовки посчитаны ПРОБЕЛОМ — это испортит первый экран: {gaps}"
+
+
+def test_filled_planning_artifacts_are_not_reported_as_gap(installed, ai_ops):
+    """Обратная сторона: заполненные артефакты пробелом не считаются.
+
+    Без этой проверки F-018 можно было бы «закрыть», объявив контур пустым всегда.
+    """
+    (installed / "ROADMAP.md").write_text(
+        "# ROADMAP\n\n## Сейчас\n\n- `real-goal` — настоящая цель\n\n"
+        "## Следующий результат\n\n- `next-goal` — пользователь сможет…\n\n"
+        "## Дальше\n\n- крупная возможность\n\n## Later\n\n- идея — не берём\n",
+        encoding="utf-8")
+    (installed / "planning").mkdir(exist_ok=True)
+    (installed / "planning" / "plan.yaml").write_text(
+        "schema_version: 1\nkind: delivery-plan\ngoals:\n  - id: real-goal\n    status: active\n"
+        "work:\n  - id: w-01\n    title: Работа\n    type: engineering\n    goal: real-goal\n"
+        "    status: todo\n    owner_role: engineer\n    write_scope: [src/]\n",
+        encoding="utf-8")
+
+    _req, gaps, unfilled = ai_ops._planning_gaps(installed)
+    assert not gaps and not unfilled, f"заполненные артефакты объявлены незаполненными: {gaps} {unfilled}"

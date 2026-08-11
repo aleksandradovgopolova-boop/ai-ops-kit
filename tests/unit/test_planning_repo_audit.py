@@ -335,3 +335,39 @@ def test_run_returns_whole_scenario(tmp_path):
     for key in ("classification", "evidence", "reconstructed", "audit", "gap_plan", "ask"):
         assert key in rep
     assert A.render(rep)
+
+
+class TestOwnCiIsNotProductFact:
+    """F-019 (живой прогон severnaya_traektoriya, 2026-08-12): кит подтверждал продуктовый факт
+    СВОИМ ЖЕ артефактом.
+
+    Каталог `.github/workflows` создаёт установщик — он кладёт туда `ai-ops-*.yml`. Условие
+    «каталог существует» выполнялось этими файлами, и в репозитории БЕЗ собственного CI кит
+    объявлял владельцу «ci_pipeline: build/lint/test, status=verified», ссылаясь на то, что сам
+    записал секунду назад. Придуманный факт со статусом «подтверждено» — худший из возможных:
+    владелец верит, что кит прочитал ЕГО конвейер.
+    """
+
+    def _repo(self, tmp_path, own_ci=False, kit_ci=True):
+        wf = tmp_path / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        if kit_ci:
+            (wf / "ai-ops-record.yml").write_text("name: r\n", encoding="utf-8")
+            (wf / "ai-ops-validate.yml").write_text("name: v\n", encoding="utf-8")
+        if own_ci:
+            (wf / "deploy.yml").write_text("name: deploy\n", encoding="utf-8")
+        return tmp_path
+
+    def test_kit_workflows_alone_are_not_product_ci(self, tmp_path):
+        repo = self._repo(tmp_path, own_ci=False, kit_ci=True)
+        assert A._product_ci(repo) == [], (
+            "workflow'ы кита посчитаны за CI продукта — факт подтверждается собственным артефактом")
+
+    def test_foreign_workflow_is_product_ci(self, tmp_path):
+        """Обратная сторона: настоящий CI обязан распознаваться, иначе правка ослепила бы проверку."""
+        repo = self._repo(tmp_path, own_ci=True, kit_ci=True)
+        assert A._product_ci(repo) == [".github/workflows"]
+
+    def test_other_ci_systems_still_detected(self, tmp_path):
+        (tmp_path / ".gitlab-ci.yml").write_text("stages: [build]\n", encoding="utf-8")
+        assert ".gitlab-ci.yml" in A._product_ci(tmp_path)
