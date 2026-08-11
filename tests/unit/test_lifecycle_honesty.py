@@ -141,14 +141,16 @@ class TestWritesAreReconciledWithTheCommit:
                     "changed_files": ["src/a.ts", "src/b.ts"]}))
         out = capsys.readouterr().out
         assert "файлов в коммите 2" in out
-        assert "напрямую, не через брокера" in out
+        # v3.36.4: формулировка сменилась (канал теперь НАЗЫВАЕТСЯ, а не выводится читателем), но
+        # проверяем то же самое: сказано, что работа произведена не брокером, и названы файлы.
+        assert "работа произведена" in out and "брокера" in out
         assert "src/a.ts" in out
 
     def test_no_note_when_broker_applied_the_writes(self, capsys):
         ai_ops_run.print_human(_report(
             loop={"stopped": "done", "steps": 4, "applied_writes": 2, "denied": 0},
             commit={"sha": "abc123", "branch": "b", "changed_files": ["src/a.ts"]}))
-        assert "напрямую, не через брокера" not in capsys.readouterr().out
+        assert "работа произведена" not in capsys.readouterr().out
 
     def test_no_commit_means_no_file_count(self, capsys):
         """Без коммита считать нечего — не выдумываем ноль файлов как факт."""
