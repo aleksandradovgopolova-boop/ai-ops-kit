@@ -164,16 +164,16 @@ ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI и
       - name: Clone ai-ops-kit (пин на installed_version из .ai-ops.yaml)
         run: |
           VER=$(python3 -c "import yaml; print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
-          git clone --depth 1 --branch "v$VER" https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git /tmp/ai-ops-kit
-      - run: python3 /tmp/ai-ops-kit/installer/ai_ops.py validate
-      - run: python3 /tmp/ai-ops-kit/installer/ai_ops.py doctor
-      - run: python3 /tmp/ai-ops-kit/validation/validate_knowledge_graph.py knowledge/graph.yaml
+          git clone --depth 1 --branch "v$VER" https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git "$RUNNER_TEMP"/ai-ops-kit
+      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py validate
+      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py doctor
+      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/validation/validate_knowledge_graph.py knowledge/graph.yaml
       - name: Blueprint + оценка прогона (все фичи)
         run: |
           for f in features/*/blueprint.yaml; do
             d="$(dirname "$f")"
-            python3 /tmp/ai-ops-kit/validation/validate_feature_blueprint.py "$d"
-            python3 /tmp/ai-ops-kit/tools/run_report.py "$d" --graph knowledge/graph.yaml
+            python3 "$RUNNER_TEMP"/ai-ops-kit/validation/validate_feature_blueprint.py "$d"
+            python3 "$RUNNER_TEMP"/ai-ops-kit/tools/run_report.py "$d" --graph knowledge/graph.yaml
           done
 ```
 

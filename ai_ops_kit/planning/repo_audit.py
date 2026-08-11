@@ -260,6 +260,11 @@ def write_question_file(child_root, ask: dict):
     сценария, при том что онбординг обещал «соберу материалы и покажу на проверку».
 
     Существующие ответы НЕ затираются никогда: файл дополняется новыми вопросами, ответы остаются.
+
+    ЛИШНЕЙ ЗАПИСИ НЕ ДЕЛАЕМ. Если содержимое не изменилось, файл не перезаписывается: `ai-ops model`
+    зовут и просто «посмотреть состояние», и трогать mtime (а в чужом репозитории — показывать файл
+    изменённым в `git status`) ради того же текста команда не вправе. Это единственный файл, который
+    она создаёт, и создаёт ровно потому, что вопросам нужно место для ответа.
     """
     p = answers_path(child_root)
     existing = read_answers(child_root)
@@ -296,8 +301,15 @@ def write_question_file(child_root, ask: dict):
         if qid not in seen:
             lines.append(f"  {qid}: " + yaml.safe_dump(val, allow_unicode=True,
                                                        default_flow_style=True).strip())
+    body = "\n".join(lines).rstrip() + "\n"
+    if p.is_file():
+        try:
+            if p.read_text(encoding="utf-8") == body:
+                return p                       # тот же текст — писать нечего
+        except OSError:
+            pass                               # прочитать не смогли — перезапишем, это не потеря
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    p.write_text(body, encoding="utf-8")
     return p
 
 

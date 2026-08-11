@@ -134,6 +134,64 @@ REQUIRED_SCOPES = ("full-current-python", "compatibility-matrix")
 _FULL_CLAIM = ("полный контур", "полного контура", "полный набор проверок", "все проверки зелен")
 
 
+def authoritative_version_errors(data, pkg=PKG):
+    """«Текущая версия» в доке — ОБЪЯВЛЕНИЕ, а не совпадение подстроки. -> список ошибок.
+
+    Прежняя проверка спрашивала «встречается ли строка версии где-нибудь в файле». ROADMAP при этом
+    говорил в шапке «текущий канал — v3.34.0 stable» и ниже, в истории, содержал раздел про 3.36 —
+    подстрока находилась, заявление врало, релиз 3.36.0 прошёл валидатор с обоими утверждениями
+    сразу. Здесь читается ИМЕННО та строка, которая объявляет текущий канал, и она обязана
+    совпадать с VERSION.
+
+    Отсутствие строки — тоже ошибка: если объявление переписали и шаблон перестал совпадать,
+    проверка ослепла, а молча ослепшая проверка хуже отсутствующей.
+    """
+    import re
+    e, ver = [], (pkg / "VERSION").read_text(encoding="utf-8").strip()
+    for rule in (data.get("authoritative_version") or []):
+        name, pat = rule.get("file"), rule.get("pattern")
+        p = pkg / str(name)
+        if not p.is_file():
+            e.append(f"{name}: файл из authoritative_version не найден")
+            continue
+        m = re.search(str(pat), p.read_text(encoding="utf-8"))
+        if not m:
+            e.append(f"{name}: не найдено объявление текущей версии по образцу '{pat}' — "
+                     f"проверка ослепла (объявление переписали?), а не «всё в порядке»")
+            continue
+        if m.group(1) != ver:
+            e.append(f"{name}: объявлена текущая версия {m.group(1)}, а в VERSION {ver} — "
+                     f"публичная поверхность утверждает не то, что выпущено")
+    return e
+
+
+def derived_number_errors(data, pkg=PKG):
+    """Числа в прозе обязаны совпадать с machine-readable claim. -> список ошибок.
+
+    README писал «33 гейта», когда claim уже говорил 34: число набрано руками, а руками набранное
+    число живёт своей жизнью ровно до первого изменения. Проверяем то же правило, что уже применено
+    к самим claim'ам (они деривируются из реестров), — но на публичном тексте.
+    """
+    import re
+    e = []
+    for rule in (data.get("derived_numbers_in_docs") or []):
+        name, pat, field = rule.get("file"), rule.get("pattern"), rule.get("claim")
+        p = pkg / str(name)
+        if not p.is_file():
+            e.append(f"{name}: файл из derived_numbers_in_docs не найден")
+            continue
+        m = re.search(str(pat), p.read_text(encoding="utf-8"))
+        if not m:
+            e.append(f"{name}: не найдено число по образцу '{pat}' (claim {field}) — проверка "
+                     f"ослепла: текст переписали, а правило осталось")
+            continue
+        want = data.get(field)
+        if str(m.group(1)) != str(want):
+            e.append(f"{name}: в тексте {m.group(1)}, а claim {field}={want} — "
+                     f"публичное число разошлось с machine-readable")
+    return e
+
+
 def evidence_scope_errors(data, pkg=PKG):
     """Охват доказательства объявлен и не подменяется словом «полный».
 
@@ -220,6 +278,8 @@ def check(data, pkg=PKG):
     # Сканируем НАСТРАИВАЕМЫЙ набор файлов (stale_marker_files — README/ROADMAP/NOTICE/docs/*), а не только
     # docs_must_reference_version. Так дрейф вроде «sequential-only» ловится и в docs/, не только вверху.
     e += evidence_scope_errors(data, pkg)
+    e += authoritative_version_errors(data, pkg)
+    e += derived_number_errors(data, pkg)
     _scan = list(data.get("stale_marker_files") or data.get("docs_must_reference_version") or [])
     for marker in (data.get("forbidden_stale_markers") or []):
         for name in _scan:

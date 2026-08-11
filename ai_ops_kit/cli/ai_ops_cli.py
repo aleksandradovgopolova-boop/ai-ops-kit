@@ -269,8 +269,14 @@ def _run_intent(intent, task, child_root, signals, a):
                      and not rep["roadmap"]["errors"]) else 1
 
     if intent == "model":
-        # DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK. Ничего не пишет: онбординг сначала
-        # ПОНИМАЕТ репозиторий и только потом предлагает достройку.
+        # DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK. Понимание репозитория: артефактов
+        # проекта команда не создаёт и ничего не перестраивает.
+        #
+        # ОДИН ФАЙЛ ОНА ВСЁ-ТАКИ ПИШЕТ, и объявить это обязательно: `.ai/project/
+        # onboarding-answers.yaml` — форма, в которую человек впишет ответы. Раньше здесь стояло
+        # «ничего не пишет», а команда писала (это внёс фикс тупика с вопросами), и человек, позвав
+        # `model` просто посмотреть состояние, находил в своём `git status` незнакомый файл.
+        # Заявление приведено к фактам, повторный вызов файл НЕ трогает, если текст тот же.
         from ai_ops_kit.planning import repo_audit
         from ai_ops_kit.planning import contours as _contours
         try:
@@ -278,8 +284,17 @@ def _run_intent(intent, task, child_root, signals, a):
         except _contours.ModelCorrupt as e:
             print(f"ОШИБКА: {e}")
             return 1
+        # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА. Прежде форма ответов создавалась только в
+        # человеческой ветке: `--json` того же намерения оставлял человека без места для ответа, то
+        # есть одна команда вела себя двумя разными способами.
+        answers_file = None
+        if rep["ask"]["questions"]:
+            answers_file = repo_audit.write_question_file(child_root, rep["ask"])
         if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
+            out = dict(rep)
+            if answers_file:
+                out["answers_file"] = str(answers_file)
+            print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
         else:
             from ai_ops_kit.ui import presenter
             aud = presenter.audience_from_config(child_root)
@@ -294,12 +309,11 @@ def _run_intent(intent, task, child_root, signals, a):
                     print(f"      предполагаю: {q['proposal']['value']} — подтвердить?")
             # ВОПРОСАМ НУЖНО МЕСТО. Прежде кит печатал их и завершался: куда отвечать — не сказано,
             # интерактива нет, человек в тупике на главном шаге первого сценария.
-            if rep["ask"]["questions"]:
-                ans = repo_audit.write_question_file(child_root, rep["ask"])
+            if answers_file:
                 try:
-                    shown = ans.relative_to(Path(child_root))
+                    shown = answers_file.relative_to(Path(child_root))
                 except ValueError:
-                    shown = ans
+                    shown = answers_file
                 print(f"\n  Ответы впишите здесь: {shown}")
                 print("  Потом запустите снова: ./ai-ops model — ответы станут подтверждёнными "
                       "фактами и больше не будут переспрашиваться.")
