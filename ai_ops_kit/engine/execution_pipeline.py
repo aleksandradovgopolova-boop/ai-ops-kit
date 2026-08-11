@@ -329,6 +329,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             if _spec_ctx:
                 ctx = _spec_ctx + "\n\n" + ctx
 
+    # HEAD НА СТАРТЕ — точка отсчёта «что произвёл ИМЕННО ЭТОТ прогон». Сравнивать с `base_sha`
+    # нельзя: при resume/reevaluate и при работе на ветке, уже ушедшей вперёд базы, HEAD отличается
+    # от базы ДО начала работы — и кит увидел бы работу там, где её не делали. Это была бы ложь в
+    # обратную сторону, не лучше исходной.
+    _rc_hb, _out_hb, _ = _git(work_root, "rev-parse", "HEAD") if is_git else (1, "", "")
+    head_before = _out_hb.strip() if _rc_hb == 0 else None
+
     # 4b. tool-loop: реализация. Пропускается, если pre-authoring дал невалидную спецификацию
     #     (Spec-First: нет валидной спеки -> нет кода — ноль tool-loop вызовов).
     if reevaluate_only:
@@ -349,8 +356,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     shell_changed = bool(applied) or (is_git and _has_changes(work_root))
     # НАХОДКА ИИ-СРЕДЫ: модель может закоммитить САМА (`git commit` в разрешённом shell). Тогда
     # дерево чистое, `applied` пусто, `_has_changes` False — и все три признака говорят «правок
-    # нет», хотя коммит уже лежит на ветке. Третий факт: HEAD ушёл от базы прогона.
-    self_committed, head_sha = (_head_advanced(work_root, base_binding.get("base_sha"))
+    # нет», хотя коммит уже лежит на ветке. Третий факт: HEAD сдвинулся ЗА ЭТОТ прогон.
+    self_committed, head_sha = (_head_advanced(work_root, head_before)
                                 if is_git else (False, None))
 
     # 5. commit на рабочей ветке (finding аудита: evidence должен биться о ТОЧНЫЙ SHA, не
