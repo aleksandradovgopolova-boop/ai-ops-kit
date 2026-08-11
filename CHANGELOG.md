@@ -2,7 +2,7 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased]
+## [3.36.6] — 2026-08-11 · Delivery Proof Debt
 
 ### Долг доказательства поставки: признание вместо подделки
 
