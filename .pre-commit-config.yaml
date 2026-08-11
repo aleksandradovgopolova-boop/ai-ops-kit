@@ -2,14 +2,21 @@
 # Install: pip install pre-commit && pre-commit install
 # Run manually: pre-commit run --all-files
 repos:
+  # v3.36.8 (ревизия 2026-08-11): охват был `^(tools|validation|tests)/`. Каталога `validation/`
+  # в корне нет с v3.34 (переехал в `ai_ops_kit/validation/`), а `tools/*.py` — семистрочные
+  # алиасы. Значит линтовались алиасы и тесты, а пакет `ai_ops_kit/` (40 544 строки продакшна) —
+  # ни разу. Набор правил объявлен в `pyproject.toml -> [tool.ruff.lint]` и по нему сейчас ноль,
+  # поэтому охват можно расширить, не превращая коммит в правку 912 замечаний.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.0
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-        files: ^(tools|validation|tests)/
+        files: ^(ai_ops_kit|installer|tools|tests)/.*\.py$
+      # ruff-format НЕ включён по пакету намеренно: он переформатировал бы 40k строк одним
+      # коммитом и утопил бы историю. Форматирование — отдельное решение владельца.
       - id: ruff-format
-        files: ^(tools|validation|tests)/
+        files: ^(tools|tests)/
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -26,11 +33,15 @@ repos:
 
   - repo: local
     hooks:
+      # v3.36.8 (ревизия 2026-08-11): путь был `validation/validate_python_compat.py` — каталог
+      # переехал в `ai_ops_kit/validation/` в v3.34, и хук ПАДАЛ с «can't open file» на любой
+      # правке в `tools/`. Сломанный хук — не проверка: он либо блокирует работу, либо его
+      # отключают, и тогда совместимость с полом 3.9 не проверяет никто до CI.
       - id: python-compat
         name: Python 3.9 compatibility check
-        entry: python3 validation/validate_python_compat.py
+        entry: python3 ai_ops_kit/validation/validate_python_compat.py
         language: system
-        files: ^(tools|validation)/.*\.py$
+        files: ^(ai_ops_kit|installer|tools)/.*\.py$
         pass_filenames: false
 
       - id: selftest-smoke
