@@ -37,6 +37,7 @@
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -729,7 +730,7 @@ def _context_gaps():
     return req, missing
 
 
-def cmd_update(force=False, smoke_checks=None):
+def cmd_update(force=False, smoke_checks=None, refresh_ci=False):
     inst, target = installed_version(), pkg_version()
     report = {"schema_version": 1, "command": "update", "from_version": inst,
               "to_version": target, "status": "ok", "compatibility": "compatible",
@@ -769,6 +770,11 @@ def cmd_update(force=False, smoke_checks=None):
     backfilled = _backfill_required_context()
     report["context_backfilled"] = backfilled
     created = [b["doc"] for b in backfilled if b["action"] == "created-draft"]
+    # CI ребёнка — ДО раннего выхода, по той же причине, что и back-fill контекста выше: файл может
+    # быть сломан при совпадающей версии (шаблон исправлен внутри релиза, а у ребёнка старый), и
+    # тогда «обновление не требуется» оставляло бы красный CI навсегда. Проверено на wow-repo.
+    report["ci_workflows"] = sync_ci_workflows(REPO_ROOT, refresh=refresh_ci)
+    _ci_line = _ci_report_line(report["ci_workflows"])
 
     changes = build_diff()
     if not changes and inst == target:
@@ -781,6 +787,7 @@ def cmd_update(force=False, smoke_checks=None):
         if _seeded0:
             msg += (" Back-fill модели продукта: " + ", ".join(_seeded0)
                     + " (черновики, заполнить вам; затем `./ai-ops model`).")
+        msg += _ci_line
         report.update(report=msg); write_report(report)
         print(msg); return 0
 
@@ -867,10 +874,180 @@ def cmd_update(force=False, smoke_checks=None):
                            else "")
                         + (" Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                            "недостающее одним пакетом." if _seeded else "")
+                        + _ci_line
                         + " Создайте PR с этим diff — silent update запрещён.")
     out = write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
     return 0 if report["status"] == "ok" else 1
+
+
+# ── CI-workflow'ы ребёнка: доставка исправлений ───────────────────────────────────────────────
+# Файлы принадлежат киту (`ai-ops-*.yml`), но живут в `.github/workflows/` ребёнка. До 3.36.2 они
+# копировались ТОЛЬКО в `init` и только когда файла ещё нет: `update` их не касался вовсе. Значит
+# исправление шаблона не доезжало НИ ДО ОДНОГО уже подключённого репозитория — что и обнаружилось
+# на back-fill 3.36.1, где кит починил путь валидатора у себя, а у ребёнка остался сломанный CI.
+#
+# Молча перезаписывать файл в чужом `.github/` тоже нельзя: владелец вправе его править. Поэтому
+# кит трогает только то, что САМ написал и что с тех пор никто не менял — это знание хранится
+# отпечатком. Остальное он НАЗЫВАЕТ, а решение оставляет человеку.
+CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml")
+CI_PRINTS = AI_DIR / "runtime" / "ci-templates.json"
+# Клон кита в workflow ребёнка: и новая форма (`$RUNNER_TEMP`), и старая (`/tmp`) — иначе проверка
+# не увидит именно те файлы, ради которых написана: у всех подключённых детей там стоит `/tmp`.
+_KIT_PATH_RE = re.compile(r'(?:"?\$\{?RUNNER_TEMP\}?"?|/tmp)/ai-ops-kit/([\w./-]+)')
+
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _ci_prints() -> dict:
+    if not CI_PRINTS.is_file():
+        return {}
+    try:
+        return json.loads(CI_PRINTS.read_text(encoding="utf-8")) or {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _remember_ci(name: str, text: str) -> None:
+    """Запомнить, что этот файл написал кит и с тех пор его никто не менял."""
+    data = _ci_prints()
+    data[name] = _sha(text)
+    CI_PRINTS.parent.mkdir(parents=True, exist_ok=True)
+    CI_PRINTS.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _ci_broken_refs(text: str):
+    """Дефекты кита в его же workflow у ребёнка. -> список описаний (пусто = чисто).
+
+    Два вида, оба — то, что кит сам выпустил и обязан уметь отозвать:
+      * путь внутрь кита, которого в ките нет (каталог валидаторов переехал в 3.34, шаблон остался);
+      * клон в общий `/tmp` (на своём раннере он живёт между джобами, и клон падает на «destination
+        path already exists» — то, ради чего появился `$RUNNER_TEMP`).
+    Проверка конкретная — существование файла и буквальный путь клона, — поэтому ловит и следующий
+    переезд, а не только известные случаи.
+    """
+    bad = sorted({rel for rel in (m.group(1) for m in _KIT_PATH_RE.finditer(text))
+                  if not (PKG / rel).exists()})
+    if "/tmp/ai-ops-kit" in text:
+        bad.append("клон в общий /tmp (нужен $RUNNER_TEMP)")
+    return bad
+
+
+def ci_workflow_state(root: Path = None):
+    """Состояние kit-owned CI ребёнка. -> список {file, state, detail}.
+
+    Состояния: `absent` (не установлен), `current` (совпадает с шаблоном), `stale-ours` (писал кит,
+    никто не менял, шаблон новее), `edited` (правил владелец). Отдельно у каждого — `broken`, если
+    файл зовёт то, чего в ките нет: это сильнее остальных, потому что означает красный CI ребёнка.
+    """
+    root = Path(root or REPO_ROOT)
+    prints, out = _ci_prints(), []
+    for name in CI_TEMPLATES:
+        src = PKG / "templates" / "ci" / name
+        dst = root / ".github" / "workflows" / name
+        if not src.is_file():
+            continue
+        tpl = src.read_text(encoding="utf-8")
+        if not dst.is_file():
+            out.append({"file": name, "state": "absent", "broken": [], "detail": "не установлен"})
+            continue
+        cur = dst.read_text(encoding="utf-8")
+        broken = _ci_broken_refs(cur)
+        if cur == tpl:
+            state, detail = "current", "совпадает с шаблоном кита"
+        elif prints.get(name) == _sha(cur):
+            state, detail = "stale-ours", "писал кит, с тех пор не менялся — шаблон новее"
+        elif name not in prints:
+            # Отпечатков не было до 3.36.2, поэтому у КАЖДОГО подключённого ребёнка происхождение
+            # файла неизвестно. Это не «правил владелец»: назвать догадку фактом здесь значило бы
+            # оставить сломанный CI у всех, кто установил кит раньше.
+            state, detail = "unknown", "происхождение неизвестно (установлен до 3.36.2)"
+        else:
+            state, detail = "edited", "изменён в репозитории — кит его не трогает"
+        if broken:
+            detail += "; зовёт то, чего в ките нет: " + ", ".join(broken)
+        out.append({"file": name, "state": state, "broken": broken, "detail": detail})
+    return out
+
+
+def sync_ci_workflows(root: Path = None, refresh: bool = False):
+    """Доставить исправления шаблонов CI ребёнку. -> список произведённых действий.
+
+    Без `refresh` кит трогает только своё нетронутое (`absent`, `stale-ours`). С `refresh=True`
+    перезаписывает и правленое — это осознанное решение человека (`ai-ops update --refresh-ci`),
+    а не поведение по умолчанию.
+    """
+    root = Path(root or REPO_ROOT)
+    acts = []
+    for row in ci_workflow_state(root):
+        name, state = row["file"], row["state"]
+        src = PKG / "templates" / "ci" / name
+        dst = root / ".github" / "workflows" / name
+        tpl = src.read_text(encoding="utf-8")
+        if state == "current":
+            _remember_ci(name, tpl)               # происхождение теперь известно
+            continue
+        # СЛОМАННЫЙ ФАЙЛ НЕИЗВЕСТНОГО ПРОИСХОЖДЕНИЯ ЧИНИМ, но ничего не теряем: рядом остаётся
+        # копия. Он зовёт то, чего в ките нет, — то есть не работает ни как шаблон кита, ни как
+        # правка владельца; оставить его «из уважения к возможной кастомизации» значило бы
+        # сохранить в чужом репозитории заведомо красный прогон.
+        rescue = state == "unknown" and row["broken"]
+        if state in ("absent", "stale-ours") or rescue or refresh:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            backup = None
+            if rescue or (refresh and state in ("edited", "unknown")):
+                backup = dst.with_suffix(dst.suffix + ".before-ai-ops-update")
+                backup.write_text(dst.read_text(encoding="utf-8"), encoding="utf-8")
+            dst.write_text(tpl, encoding="utf-8")
+            _remember_ci(name, tpl)
+            acts.append({"file": name,
+                         "action": {"absent": "installed", "stale-ours": "refreshed"}.get(
+                             state, "repaired" if rescue else "overwritten"),
+                         "was": state, "broken_before": row["broken"],
+                         "backup": backup.name if backup else None})
+        else:
+            acts.append({"file": name, "action": "left-alone", "was": state,
+                         "broken_before": row["broken"], "detail": row["detail"]})
+    return acts
+
+
+def _ci_report_line(acts) -> str:
+    """Что произошло с CI ребёнка — словами и с причиной. -> кусок сообщения (может быть пустым).
+
+    Сломанный и НЕ обновлённый файл называется отдельно: это красный CI в чужом репозитории, и
+    промолчать о нём — то же самое, что молча его перезаписать, только тише.
+    """
+    done = [a for a in acts if a["action"] != "left-alone"]
+    stuck = [a for a in acts if a["action"] == "left-alone" and a.get("broken_before")]
+    left = [a for a in acts if a["action"] == "left-alone" and not a.get("broken_before")]
+    out = ""
+    if done:
+        out += (" CI ребёнка обновлён вместе с китом: "
+                + ", ".join(f"{a['file']} ({a['action']})" for a in done) + ".")
+        _rep = [a for a in done if a["action"] == "repaired"]
+        if _rep:
+            out += (" Починены сломанные (звали то, чего в ките нет): "
+                    + "; ".join(f"{a['file']} — прежний остался как {a['backup']}"
+                                for a in _rep) + ".")
+    if stuck:
+        out += (" ⚠ ЭТИ WORKFLOW СЛОМАНЫ И НЕ ТРОНУТЫ (вы их правили, кит чужие правки не "
+                "перезаписывает): "
+                + "; ".join(f"{a['file']} зовёт {', '.join(a['broken_before'])}" for a in stuck)
+                + " — CI ребёнка на них красный. Обновить принудительно: "
+                  "`./ai-ops update --refresh-ci` (ваши правки будут потеряны).")
+    if left:
+        # «Правил владелец» и «происхождение неизвестно» — разные вещи, и выдавать второе за
+        # первое нельзя: это ровно та подмена признания утверждением, против которой весь кит.
+        edited = [a["file"] for a in left if a["was"] == "edited"]
+        unknown = [a["file"] for a in left if a["was"] != "edited"]
+        if edited:
+            out += " Не тронуты (правили в репозитории): " + ", ".join(edited) + "."
+        if unknown:
+            out += (" Не тронуты (происхождение неизвестно, дефектов не нашёл): "
+                    + ", ".join(unknown) + ".")
+    return out
 
 
 def _is_git_worktree(root: Path):
@@ -967,27 +1144,17 @@ def cmd_init(target_dir):
     elif mat["codex_generated"]:
         print(f"Codex-промпты сгенерированы в .ai/generated/codex/prompts/ ({mat['codex_generated']} шт.); "
               "CODEX_HOME не задан — при работе с Codex слинкуйте $CODEX_HOME/prompts на эту папку.")
-    upd_src = PKG / "templates" / "ci" / "ai-ops-update.yml"
-    upd_dst = root / ".github" / "workflows" / "ai-ops-update.yml"
-    if upd_src.exists() and not upd_dst.exists():
-        upd_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(upd_src, upd_dst)
-        print(f"установлен CI-workflow автообновления: {upd_dst} "
-              "(раз в день сверяет версию parent и открывает PR с обновлением).")
-    rec_src = PKG / "templates" / "ci" / "ai-ops-record.yml"
-    rec_dst = root / ".github" / "workflows" / "ai-ops-record.yml"
-    if rec_src.exists() and not rec_dst.exists():
-        rec_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(rec_src, rec_dst)
-        print(f"установлен CI-workflow автонакопления истории эффекта: {rec_dst} "
-              "(на push фиксирует срез по затронутым фичам; baseline метрик закрывается сам).")
-    val_src = PKG / "templates" / "ci" / "ai-ops-validate.yml"
-    val_dst = root / ".github" / "workflows" / "ai-ops-validate.yml"
-    if val_src.exists() and not val_dst.exists():
-        val_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(val_src, val_dst)
-        print(f"установлен CI-workflow валидации установки: {val_dst} "
-              "(пин kit = installed_version из .ai-ops.yaml, без protected-трения).")
+    # CI ребёнка ставится ЧЕРЕЗ ТУ ЖЕ функцию, что и обновляет его (v3.36.2). Прежде здесь стояли
+    # три копирования `if not exists`, а `update` не трогал эти файлы вовсе — исправление шаблона
+    # не доезжало ни до одного подключённого репозитория. Один путь установки = один путь доставки.
+    _WHY_CI = {
+        "ai-ops-update.yml": "раз в день сверяет версию parent и открывает PR с обновлением",
+        "ai-ops-record.yml": "на push фиксирует срез по затронутым фичам",
+        "ai-ops-validate.yml": "проверяет, что установка цела и версии согласованы",
+    }
+    for _a in sync_ci_workflows(root):
+        if _a["action"] in ("installed", "refreshed"):
+            print(f"CI-workflow {_a['file']}: {_a['action']} — {_WHY_CI.get(_a['file'], '')}")
     # онбординг: положить рядом объяснение ценности простым языком и показать его
     ob_src = PKG / "docs" / "ONBOARDING.md"
     ob_dst = root / "AI-OPS-ONBOARDING.md"      # не затираем собственный ONBOARDING.md репо
@@ -1155,6 +1322,25 @@ def cmd_doctor(argv=()):
               + ("✓ артефакты на месте" if not _pgaps
                  else f"✗ нет: {', '.join(_pgaps)} → `./ai-ops model` покажет пробелы и спросит "
                       f"недостающее одним пакетом"))
+    # CI ребёнка: файл может лежать на месте и при этом звать то, чего в ките давно нет (переезд
+    # каталога валидаторов в 3.34 сломал так CI у КАЖДОГО ребёнка, и заметили это через два релиза).
+    # doctor обязан видеть это без обновления: проверяем существование путей, а не наличие файла.
+    try:
+        _ci = ci_workflow_state(REPO_ROOT)
+    except Exception as _e:                       # noqa: BLE001 — состояние CI не роняет doctor
+        _dprint(f"CI ребёнка: НЕ ПРОВЕРЕНО ({_e}) — это не «в порядке»")
+    else:
+        _cibad = [r for r in _ci if r["broken"]]
+        _cistale = [r for r in _ci if r["state"] in ("stale-ours", "absent")]
+        if _cibad:
+            _dprint("CI ребёнка: ✗ " + "; ".join(f"{r['file']} зовёт "
+                                                 f"{', '.join(r['broken'])}" for r in _cibad)
+                    + " — прогон в репозитории красный; лечится `./ai-ops update`")
+        elif _cistale:
+            _dprint("⚠ CI ребёнка: шаблоны старее кита — "
+                    + ", ".join(r["file"] for r in _cistale) + " (обновит `./ai-ops update`)")
+        else:
+            _dprint(f"CI ребёнка: ✓ {len(_ci)} workflow согласованы с китом")
     # v3.13.0 Startup Context Budget: наблюдаемая стоимость стартового набора vs бюджет (advisory).
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
         if (_cand / "context_cost.py").is_file() and str(_cand) not in sys.path:
@@ -1554,7 +1740,9 @@ def _dispatch(argv):
     if cmd == "diff":
         return cmd_diff()
     if cmd == "update":
-        return cmd_update(force="--force" in argv)
+        # --refresh-ci: перезаписать и те kit-owned workflow, которые правил владелец. Отдельный
+        # флаг, а не поведение по умолчанию: чужие правки молча не теряются.
+        return cmd_update(force="--force" in argv, refresh_ci="--refresh-ci" in argv)
     if cmd == "init":
         if len(argv) < 3:
             print("использование: ai-ops init <путь-к-репозиторию>"); return 2
