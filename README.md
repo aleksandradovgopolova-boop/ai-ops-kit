@@ -38,7 +38,7 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 
 ## Версия
 
-**v3.36.3 stable** — Qualification Readiness · Runner Agnostic
+**v3.36.4 stable** — Qualification Readiness · Work Is Seen
 
 - онбординг заканчивается РАБОТОЙ, а не документацией: `ai-ops bootstrap` собирает направление и
   план из фактов аудита, и `ai-ops next` сразу советует, за что взяться и почему
