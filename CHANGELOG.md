@@ -2,7 +2,7 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased]
+## [3.36.4] — 2026-08-11 · Work Is Seen
 
 ### «Код не написан — правок 0» при живом коммите
 
