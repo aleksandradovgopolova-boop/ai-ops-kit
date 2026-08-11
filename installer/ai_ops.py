@@ -1393,6 +1393,25 @@ def cmd_doctor(argv=()):
               + ("✓ артефакты на месте" if not _pgaps
                  else f"✗ нет: {', '.join(_pgaps)} → `./ai-ops model` покажет пробелы и спросит "
                       f"недостающее одним пакетом"))
+    # Долг доказательства поставки: невидимый долг перестаёт быть долгом. Отдельная строка нужна
+    # потому, что находка валидатора стала advisory — если о ней молчать и здесь, «выпущено без
+    # доказательства» превратится в «в порядке», а это подмена признания утверждением.
+    try:
+        _unproven = _released_without_proof(REPO_ROOT)
+        _known = _debt_recorded(REPO_ROOT)
+    except Exception as _e:                       # noqa: BLE001 — учёт долга не роняет doctor
+        _dprint(f"поставка без доказательства: НЕ ПРОВЕРЕНО ({_e}) — это не «долга нет»")
+    else:
+        _unrec = [f for f in _unproven if f not in _known]
+        if _unrec:
+            _dprint(f"поставка без доказательства: ✗ {len(_unrec)} из {len(_unproven)} не признаны "
+                    f"долгом ({', '.join(_unrec[:3])}{'…' if len(_unrec) > 3 else ''}) — "
+                    f"валидатор их блокирует; `./ai-ops delivery-proof` покажет варианты")
+        elif _unproven:
+            _dprint(f"⚠ поставка без доказательства: {len(_unproven)} "
+                    f"{'функция' if len(_unproven) == 1 else 'функций'} признаны долгом "
+                    f"({', '.join(sorted(_known)[:3])}{'…' if len(_known) > 3 else ''}) — "
+                    f"не блокирует, закрывается настоящей доставкой")
     # CI ребёнка: файл может лежать на месте и при этом звать то, чего в ките давно нет (переезд
     # каталога валидаторов в 3.34 сломал так CI у КАЖДОГО ребёнка, и заметили это через два релиза).
     # doctor обязан видеть это без обновления: проверяем существование путей, а не наличие файла.
@@ -1499,6 +1518,127 @@ def _doctor_verdict(lines, blockers=()):
                    f"OK с предупреждениями — {len(warns)}" if warns else "OK")
         return (f"doctor: {verdict}\n"
                 f"  (человекочитаемый слой недоступен: {type(_e).__name__}: {_e})")
+
+
+
+# ── Долг доказательства поставки (правило 3.27.4 для исторически выпущенных функций) ──────────
+DEBT_REL = ".ai/project/delivery-proof-debt.yaml"
+
+
+def _released_without_proof(root: Path = None):
+    """Функции со `status: released` без SHA-verified DeliveryReceipt. -> список id.
+
+    Считаем ФАКТ по репозиторию, а не по списку в файле: иначе долг мог бы разойтись с реальностью
+    в обе стороны — и закрытый остался бы висеть, и новый не появился бы.
+    """
+    root = Path(root or REPO_ROOT)
+    out = []
+    for bp in sorted((root / "features").glob("*/blueprint.yaml")):
+        try:
+            data = yaml.safe_load(bp.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue
+        feat = data.get("feature") or {}
+        if feat.get("status") != "released":
+            continue
+        fid = str(feat.get("id") or bp.parent.name)
+        proven = False
+        for rp in (bp.parent / "delivery-receipt.yaml",
+                   root / ".ai" / "runtime" / "delivery" / fid / "receipt.yaml"):
+            if not rp.is_file():
+                continue
+            try:
+                r = yaml.safe_load(rp.read_text(encoding="utf-8")) or {}
+            except yaml.YAMLError:
+                continue
+            if r.get("kind") == "DeliveryReceipt" and r.get("sha_verified") is True:
+                proven = True
+                break
+        if not proven:
+            out.append(fid)
+    return out
+
+
+def _debt_recorded(root: Path = None):
+    """Уже признанный долг: {id: запись}. Пустой словарь, если файла нет или он не тот."""
+    p = Path(root or REPO_ROOT) / DEBT_REL
+    if not p.is_file():
+        return {}
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return {}
+    if data.get("kind") != "DeliveryProofDebt":
+        return {}
+    return {str(f.get("id")): f for f in (data.get("features") or []) if isinstance(f, dict)}
+
+
+def cmd_delivery_proof(argv=()):
+    """Показать/зафиксировать долг доказательства поставки. `--apply` — записать.
+
+    ПОЧЕМУ НЕ АВТОМАТИЧЕСКИ. Запись идёт в `features/` и `.ai/project/` чужого репозитория, и это
+    признание владельца, а не вывод кита: «мы считаем эти функции поставленными, доказательства нет».
+    Сухой прогон по умолчанию — то же правило, что у `bootstrap`.
+    """
+    apply = "--apply" in argv
+    root = REPO_ROOT
+    unproven = _released_without_proof(root)
+    known = _debt_recorded(root)
+    fresh = [f for f in unproven if f not in known]
+    closed = [f for f in known if f not in unproven]
+
+    if not unproven and not known:
+        print("Долга нет: у каждой выпущенной функции есть доказательство поставки.")
+        return 0
+    print(f"Выпущено без доказательства поставки: {len(unproven)} "
+          f"({', '.join(unproven) or '—'}).")
+    if known:
+        print(f"  уже признано долгом: {len(known)} ({', '.join(sorted(known))})")
+    if closed:
+        print(f"  долг закрыт (доказательство появилось): {', '.join(sorted(closed))} — "
+              f"уйдут из списка при записи")
+    if not fresh and not closed:
+        print("Список актуален, писать нечего.")
+        return 0
+    if not apply:
+        print("")
+        print("Сухой прогон. Записать признание долга: `./ai-ops delivery-proof --apply`")
+        print("  Что это значит: в репозитории появится запись «доказательства поставки нет» — "
+              "именно она, а не поддельный receipt.")
+        print("  Находка после этого перестанет валить CI, но останется видимой в doctor и в "
+              "выводе валидатора, пока долг не закрыт.")
+        return 0
+
+    # ВАЖНО: заново признаём ТОЛЬКО то, что уже было признано, плюс сегодняшние факты. Список не
+    # растёт сам по себе в будущем: следующая новая функция без доказательства снова будет ошибкой,
+    # пока человек осознанно не позовёт эту команду.
+    import datetime
+    entries = []
+    for fid in sorted(set(unproven)):
+        prev = known.get(fid) or {}
+        entries.append({"id": fid, "status_at_record": "released",
+                        "recorded_at": prev.get("recorded_at")
+                        or datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+                        "kit_version_at_record": prev.get("kit_version_at_record") or pkg_version()})
+    doc = {
+        "schema_version": 1, "kind": "DeliveryProofDebt",
+        "reason": "released_before_delivery_receipts",
+        "note": ("Эти функции объявлены выпущенными, а SHA-verified DeliveryReceipt у них нет и "
+                 "восстановить его нечем: требование появилось в 3.27.4, а `sha_verified` ставится "
+                 "только сверкой записанного DeliveryIntent с remote. Файл говорит «доказательства "
+                 "нет» — он НЕ является доказательством. Долг закрывается следующей настоящей "
+                 "доставкой функции либо записью merge SHA владельцем (тогда это слово владельца, "
+                 "а не проверенный китом факт)."),
+        "features": entries,
+    }
+    out = root / DEBT_REL
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    print("")
+    print(f"Записано: {DEBT_REL} — признано {len(entries)} "
+          f"{'функция' if len(entries) == 1 else 'функций'}.")
+    print("  Это признание отсутствия доказательства, а не доказательство. Долг виден в doctor.")
+    return 0
 
 
 def cmd_usage(argv):
@@ -1818,6 +1958,8 @@ def _dispatch(argv):
         if len(argv) < 3:
             print("использование: ai-ops init <путь-к-репозиторию>"); return 2
         return cmd_init(argv[2])
+    if cmd == "delivery-proof":
+        return cmd_delivery_proof(argv)
     if cmd == "validate":
         return cmd_validate()
     if cmd == "doctor":
