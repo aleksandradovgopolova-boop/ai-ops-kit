@@ -85,6 +85,30 @@ def test_broken_workflow_is_repaired_and_the_old_one_kept(child):
     assert (p.parent / act["backup"]).is_file()
 
 
+def test_no_stray_backup_when_git_already_keeps_the_old_file(child):
+    """В git-репозитории прежнее содержимое в истории — класть рядом `.before-…` значит мусорить
+    в чужом рабочем дереве. Гарантия «ничего не потеряно» при этом сохраняется."""
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(child)], check=True)
+    for cfg in (("user.email", "t@t"), ("user.name", "t")):
+        subprocess.run(["git", "-C", str(child), "config", *cfg], check=True)
+    _break_path(child)
+    subprocess.run(["git", "-C", str(child), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(child), "commit", "-qm", "init"], check=True)
+
+    inst = _installer(child)
+    acts = inst.sync_ci_workflows(child)
+
+    act = next(a for a in acts if a["file"] == VALIDATE)
+    assert act["action"] == "repaired" and act["backup"] == "git"
+    strays = list((child / ".github" / "workflows").glob("*.before-ai-ops-update"))
+    assert not strays, f"мусор в рабочем дереве: {[p.name for p in strays]}"
+    # И прежнее содержимое действительно достаётся из истории.
+    old = subprocess.run(["git", "-C", str(child), "show", f"HEAD:.github/workflows/{VALIDATE}"],
+                         capture_output=True, text=True, check=True).stdout
+    assert "/tmp/ai-ops-kit" in old, "прежний файл не восстановим из git"
+
+
 def test_state_names_the_defect_before_anything_is_written(child):
     """`doctor` обязан видеть поломку БЕЗ обновления — иначе о ней узнают из красного CI."""
     _break_path(child)
@@ -161,12 +185,68 @@ def test_delivery_happens_even_when_the_version_matches(child):
     """
     import ast
     src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
-    fn = next(n for n in ast.walk(ast.parse(src))
+    tree = ast.parse(src)
+    fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name == "cmd_update")
-    sync_line = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
-                      and getattr(n.func, "id", "") == "sync_ci_workflows"), None)
+    deliver = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
+                    and getattr(n.func, "id", "") == "deliver_assets"), None)
     early = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Return)
                   and isinstance(n.value, ast.Constant) and n.value.value == 0), None)
-    assert sync_line and early, "не нашлось ни вызова доставки, ни раннего выхода"
-    assert sync_line < early, ("доставка CI стоит после раннего выхода — ребёнок с совпадающей "
-                               "версией и сломанным CI не будет починен")
+    assert deliver and early, "не нашлось ни вызова доставки, ни раннего выхода"
+    assert deliver < early, ("доставка стоит после раннего выхода — ребёнок с совпадающей версией "
+                             "не получит ни исправленного CI, ни остальных ассетов")
+
+
+def test_install_and_update_deliver_the_same_things():
+    """Установка и обновление обязаны звать ОДНУ функцию доставки.
+
+    Пока шаги были выписаны в каждой команде по отдельности, они и разошлись: `init` ставил
+    CI-шаблоны, `update` не трогал их вовсе. Расхождение теперь невозможно по построению — и это
+    проверяется, а не подразумевается.
+    """
+    import ast
+    src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    calls = {}
+    for name in ("cmd_update", "cmd_init"):
+        fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
+        calls[name] = {getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
+    for name in ("cmd_update", "cmd_init"):
+        assert "deliver_assets" in calls[name], f"{name} не зовёт общую доставку"
+    # И сама доставка действительно включает CI-шаблоны и маркеры зон.
+    fn = next(n for n in ast.walk(tree)
+              if isinstance(n, ast.FunctionDef) and n.name == "deliver_assets")
+    inside = {getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
+    assert {"sync_ci_workflows", "ensure_zone_markers"} <= inside, inside
+
+
+# ── зоны переживают клон ──────────────────────────────────────────────────────────────────────
+
+def test_empty_zone_survives_a_clone(tmp_path):
+    """CI РЕБЁНКА НАШЁЛ ЭТО В ПЕРВЫЙ ЖЕ ПРОГОН, который наконец запустился: `.ai/custom/` пуста,
+    git пустых каталогов не хранит, и после клона child-валидатор справедливо говорит «нет зоны
+    custom/». Локально при этом всё цело — каталог на диске есть.
+
+    Проверяем не «файл создан», а СВОЙСТВО: после `git clone` зона на месте.
+    """
+    import subprocess
+    root = tmp_path / "child"
+    for zone in ("managed", "project", "custom", "generated", "runtime"):
+        (root / ".ai" / zone).mkdir(parents=True)
+    (root / ".ai" / "managed" / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    for cfg in (("user.email", "t@t"), ("user.name", "t")):
+        subprocess.run(["git", "-C", str(root), "config", *cfg], check=True)
+
+    inst = _installer(root)
+    made = inst.ensure_zone_markers(root)
+    assert any("custom" in m for m in made), made
+
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "init"], check=True)
+    clone = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", str(root), str(clone)], check=True)
+    assert (clone / ".ai" / "custom").is_dir(), "зона не пережила клон — установка выглядит неполной"
+
+    # Идемпотентность: зона с содержимым маркера не получает и повторно ничего не создаёт.
+    assert inst.ensure_zone_markers(root) == []
