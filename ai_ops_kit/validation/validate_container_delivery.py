@@ -57,9 +57,15 @@ def run_scenario():
         _git(child, "branch", "ai-ops/untouched")
         _git(child, "branch", "ai-ops/old")
 
-        # одноразовый клон
+        # одноразовый клон. КОД ВОЗВРАТА ПРОВЕРЯЕТСЯ (ревизия 2026-08-11): молча провалившийся
+        # клон оставлял пустой каталог, и проверка №5 «доставлять нечего» становилась ТРИВИАЛЬНО
+        # верной — в пустом клоне доставлять действительно нечего. То есть валидатор мог выдать
+        # green по причине, не имеющей отношения к предмету. Отказ обязан называться отказом.
         clone = Path(td) / "clone"
-        subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--local", str(child), str(clone)])
+        _cl = subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--local",
+                              str(child), str(clone)], capture_output=True, text=True)
+        ok("delivery: одноразовый клон создан (иначе проверки ниже сравнивают пустоту)",
+           _cl.returncode == 0 and clone.is_dir())
         # клон делает локальные ветки из origin/ai-ops/*, чтобы for-each-ref refs/heads видел их
         for b in ("ai-ops/untouched", "ai-ops/old"):
             _git(clone, "branch", b, f"origin/{b}")
@@ -107,7 +113,11 @@ def run_scenario():
 
         # 5) «доставлять нечего», если прогон ничего не создал/не изменил
         clone2 = Path(td) / "clone2"
-        subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--local", str(child), str(clone2)])
+        _cl2 = subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--local",
+                               str(child), str(clone2)], capture_output=True, text=True)
+        # Без этой проверки «нечего доставлять» ниже подтверждалось бы пустым клоном, а не прогоном.
+        ok("delivery: второй клон создан (иначе «нечего доставлять» верно по пустоте)",
+           _cl2.returncode == 0 and clone2.is_dir())
         snap2 = Path(td) / "snap2.before"
         out2 = _git(clone2, "for-each-ref", "--format=%(objectname) %(refname:short)", "refs/heads/ai-ops/*").stdout
         snap2.write_text(out2, encoding="utf-8")

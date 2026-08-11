@@ -14,6 +14,4 @@ from validate_stack_qualification import (  # noqa: F401 — имена, кот�
 
 @pytest.mark.slow
 def test_validate_stack_qualification_selftest():
-    return main([])
-
-    assert ok, "перенесённый селфтест validate_stack_qualification: см. строки FAIL в выводе"
+    assert main([]) == 0, "перенесённый селфтест validate_stack_qualification: см. строки FAIL в выводе"

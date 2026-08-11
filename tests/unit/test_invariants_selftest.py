@@ -111,6 +111,4 @@ def test_invariants_selftest():
            check_invariant("INV-BUDGET-002", remaining_calls=1, max_model_calls=3, model_calls=2))
 
     print(f"\ninvariants selftest: {'PASS' if ok else 'FAIL'}")
-    return ok
-
     assert ok, "перенесённый селфтест invariants: см. строки FAIL в выводе"

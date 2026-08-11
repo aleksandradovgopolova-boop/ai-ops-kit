@@ -72,7 +72,10 @@ def structured_output_test():
     try:
         obj = json.loads(extract_json(garbage))
         record("structured_output.retry_extract", "pass" if validate_mini(obj) else "fail")
-    except Exception as e:
+    # Причина подавления (2026-08-12): это ПРОБА возможности модели — любой отказ разбора и
+    # есть измеряемый результат, он записывается как fail с текстом. Сужать тип нельзя: набор
+    # исключений определяется тем, что вернула модель, а не нашим кодом.
+    except Exception as e:  # noqa: BLE001 — отказ пробы записывается как fail с причиной
         record("structured_output.retry_extract", "fail", str(e))
 
     # сломанный ответ: должен детектироваться, а не приниматься молча
@@ -124,7 +127,7 @@ def routing_downgrade_test():
             record("routing.downgrade_policy", "pass")
         else:
             record("routing.downgrade_policy", "fail", "policy не содержит ожидаемых статусов")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — отказ пробы записывается как fail с причиной
         record("routing.downgrade_policy", "fail", str(e))
 
 

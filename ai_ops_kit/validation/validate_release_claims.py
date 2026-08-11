@@ -293,6 +293,15 @@ def check(data, pkg=PKG):
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
     path = Path(args[0]) if args else DEFAULT
+    # Аргумент — путь к ФАЙЛУ заявлений, а не к корню репозитория (ревизия 2026-08-11): соседний
+    # `validate_product_model .` принимает корень, поэтому `validate_release_claims .` падал сырым
+    # `IsADirectoryError` на правдоподобном вызове.
+    if not path.is_file():
+        what = "это каталог" if path.is_dir() else "файла нет"
+        print(f"ОШИБКА: ожидался путь к файлу заявлений, получено '{path}' — {what}.")
+        print("Использование: validate_release_claims.py [путь/к/release-claims.yaml]")
+        print(f"Без аргумента берётся {DEFAULT.name} пакета.")
+        return 2
     errs = check(yaml.safe_load(path.read_text(encoding="utf-8")))
     if errs:
         print(f"RELEASE-CLAIMS {path.name}: дрейф источников правды:")

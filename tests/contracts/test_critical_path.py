@@ -472,12 +472,20 @@ class TestPreflightContracts:
 class TestExecutionPipelineContracts:
     """Contract tests for tools/execution_pipeline.py."""
 
-    def test_run_pipeline_returns_report(self, child_root, mock_provider):
-        """run_pipeline() must return a report dict."""
+    def test_run_pipeline_is_importable_and_callable(self):
+        """Точка входа конвейера существует и вызываема.
+
+        ЧЕСТНОЕ ИМЯ (ревизия 2026-08-11). Тест звался `test_run_pipeline_returns_report` и
+        документировался как «run_pipeline обязан вернуть report dict», но `run_pipeline` НЕ
+        вызывал — только проверял `callable`. Возвращаемое значение не проверялось ни разу, а
+        собранный рядом `signals` не использовался: он и был следом выпавшей половины. Имя в
+        контрактном слое с маркером `critical_path` обещало проверку, которой нет.
+
+        Настоящий прогон конвейера с отчётом проверяют `tests/unit/test_execution_pipeline.py`
+        (класс `TestRunPipeline*`) — здесь остаётся дешёвая проверка импортируемости, и названа
+        она тем, что делает.
+        """
         import execution_pipeline
-        signals = {"task_type": "QUICK", "task_text": "test task"}
-        # Note: full pipeline test requires more setup; this is a contract check
-        # that the function signature and return type are stable
         assert callable(execution_pipeline.run_pipeline)
 
 

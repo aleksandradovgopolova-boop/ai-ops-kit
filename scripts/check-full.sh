@@ -23,7 +23,28 @@ echo "НЕ входит: объявленный пол requires-python ${FLOOR:-
 echo "это compatibility-matrix, её дают только джобы CI python39-compat / pipeline-e2e / clean-install."
 echo
 
-python3 -m pytest tests/ -q --no-cov "$@"
+# Линтер — ДО тестов: F821 (вызов несуществующего имени) находится за секунды, а тремя минутами
+# позже уже неинтересен. Ревизия 2026-08-11: ruff не запускался ни здесь, ни в CI, и пять точек
+# входа падали с NameError при живом зелёном контуре.
+if command -v ruff >/dev/null 2>&1; then
+  echo "ЛИНТЕР: ruff, набор из pyproject.toml ([tool.ruff.lint])."
+  ruff check .
+  # Битая директива `# noqa` не подавляет ничего, а ruff говорит об этом ПРЕДУПРЕЖДЕНИЕМ и
+  # выходит с кодом 0: подавление объявлено и не работает. Поднимаем до ошибки.
+  if ruff check . --select ALL 2>&1 | grep -F 'Invalid `# noqa`'; then
+    echo "ОШИБКА: битая директива # noqa — подавление объявлено, но не работает." >&2
+    exit 1
+  fi
+  echo
+else
+  # Громко, а не молча: проверка, которая не запустилась, не должна выглядеть как пройденная.
+  echo "ЛИНТЕР НЕ ЗАПУЩЕН: ruff не установлен, класс F821/F811/B023 сейчас НЕ проверен."
+  echo "Поставить: pip install ruff  (или pip install -e \".[dev]\")"
+  echo "В CI он есть — джоба lint в .github/workflows/package-quality.yml."
+  echo
+fi
+
+python3 -m pytest tests/ -q "$@"
 
 echo
 echo "ЗЕЛЁНЫЙ ОХВАТ: full-current-python (${CURRENT}). Формулируя результат, назови охват:"

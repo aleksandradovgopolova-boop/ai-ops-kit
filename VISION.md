@@ -75,4 +75,5 @@ Continuous Improvement → (новый цикл Discovery).
 новые **quality gates** (quality/gates.yaml); ревьюеры — **агенты** с обязательными
 eval-кейсами; генераторы — инструменты в **tools/** по образцу generate_runtime.py
 (единый источник, drift-детект); Feature Blueprint и Knowledge Graph — **схемы и
-реестры** с валидаторами. План — в `ROADMAP.md`.
+реестры** с валидаторами. Направление — в `ROADMAP.md` (четыре горизонта), пройденный путь —
+в `docs/changelog/roadmap-history.md`.

@@ -107,10 +107,17 @@ def test_garbage_stream_writes_nothing_to_disk(tmp_path):
 
 
 @pytest.mark.unit
-def test_huge_payload_does_not_hang_the_loop(tmp_path):
-    """Гигантский ответ не должен ни зависать, ни проходить как действие."""
-    policy = tool_broker.Policy(level="controlled-write", write_scope=["src"],
-                                child_root=str(tmp_path))
+def test_huge_payload_is_parsed_whole_and_does_not_hang(tmp_path):
+    """Гигантский ответ не зависает при разборе и НЕ обрезается молча.
+
+    ЗАЯВЛЕНИЕ ПРИВЕДЕНО К СОДЕРЖАНИЮ (ревизия 2026-08-11). Докстрока обещала ещё и «не проходить
+    как действие», но проверялось ровно обратное: `action["op"] == "write"` и полная длина
+    содержимого. Следом выпавшей половины была неиспользуемая `policy` — её собирали, чтобы
+    прогнать действие через брокер. Потолка на РАЗМЕР ЗАПИСИ в брокере нет (есть `_READ_MAX`
+    только на чтение), поэтому 2 МБ — законная запись в пределах scope, и утверждать обратное
+    значило бы выдумать политику, которой нет. Молчаливое обрезание — вот настоящий риск: правка
+    уехала бы неполной.
+    """
     huge = json.dumps({"op": "write", "path": "src/a.py", "content": "x" * 2_000_000})
 
     action = tool_loop.parse_action(huge)

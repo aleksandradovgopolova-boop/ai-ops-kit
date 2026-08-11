@@ -141,3 +141,44 @@ class TestPopulatedChild:
         assert "Cost:" in text
         assert "Workitems:" in text
         assert "Delivery:" in text
+
+
+class TestUnreadableIsNamed:
+    """Непрочитанный артефакт НАЗЫВАЕТСЯ в отчёте, а не пропускается молча.
+
+    Ревизия 2026-08-11: загрузчики стояли на `except Exception: continue`, и битый workitem или
+    расписка просто не попадали в счёт — отчёт печатал заниженное число как факт. Для инструмента,
+    чья работа — говорить правду о состоянии, это худший вид ошибки: он не падает, он врёт тихо.
+    Тот же принцип, что `unavailable != 0` в учёте стоимости.
+    """
+
+    def test_broken_workitem_is_reported_not_skipped(self, tmp_path):
+        wi = tmp_path / "features" / "broken" / "workitem.yaml"
+        wi.parent.mkdir(parents=True)
+        wi.write_text('id: "не закрытая кавычка\nstatus: done\n', encoding="utf-8")
+
+        r = kit_observability.compute(str(tmp_path))
+
+        assert r["workitems"]["total"] == 0, "битый workitem посчитан как валидный"
+        named = r["workitems"]["unreadable"]
+        assert len(named) == 1, f"непрочитанный workitem не назван в отчёте: {named}"
+        assert named[0]["path"] == "features/broken/workitem.yaml"
+        assert named[0]["reason"], "не сказано, ПОЧЕМУ файл не прочитан"
+
+    def test_broken_receipt_is_reported_not_skipped(self, tmp_path):
+        rp = tmp_path / "features" / "f1" / "delivery-outbox" / "d1.receipt.yaml"
+        rp.parent.mkdir(parents=True)
+        rp.write_text("kind: [unclosed\n", encoding="utf-8")
+
+        r = kit_observability.compute(str(tmp_path))
+
+        assert r["delivery"]["total"] == 0, "битая расписка посчитана как доставка"
+        named = r["delivery"]["unreadable"]
+        assert len(named) == 1, f"непрочитанная расписка не названа: {named}"
+        assert named[0]["path"] == "features/f1/delivery-outbox/d1.receipt.yaml"
+
+    def test_clean_repo_reports_nothing_unreadable(self, populated_child):
+        """Обратная сторона: на исправных данных список пуст, а не «всегда что-то есть»."""
+        r = kit_observability.compute(populated_child)
+        assert r["workitems"]["unreadable"] == []
+        assert r["delivery"]["unreadable"] == []

@@ -326,10 +326,20 @@ def test_belt_really_hides_a_defect(tmp_path):
     env = {"HOME": str(home), "PYTHONUSERBASE": str(userbase),
            "PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"}
 
-    ask = subprocess.run([sys.executable, "-c", "import site; print(site.getusersitepackages())"],
+    # Ревизия 2026-08-11: предмет замера — ПОЯС В USER-SITE, а он существует только там, где
+    # user-site вообще включён. В venv (`python -m venv`) он выключен по построению
+    # (`site.ENABLE_USER_SITE is False`), пояс не срабатывает — и тест краснел на исправном коде.
+    # Ложное красное дороже пропуска: оно приучает не смотреть на красное. В CI кит ставится в
+    # системный интерпретатор, там проверка исполняется.
+    ask = subprocess.run([sys.executable, "-c",
+                          "import site; print(site.ENABLE_USER_SITE); print(site.getusersitepackages())"],
                          capture_output=True, text=True, env=env, cwd=str(tmp_path), timeout=60)
     assert ask.returncode == 0, ask.stderr
-    user_site = Path(ask.stdout.strip())
+    enabled, _, site_path = ask.stdout.strip().partition("\n")
+    if enabled.strip() != "True":
+        pytest.skip("user-site выключен у этого интерпретатора (venv) — пояса в нём не бывает, "
+                    "замерять нечего")
+    user_site = Path(site_path.strip())
 
     def probe():
         return subprocess.run([sys.executable, "-c", "import _bootstrap; print(_bootstrap.__file__)"],

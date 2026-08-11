@@ -157,8 +157,25 @@ def check_freshness_and_quotes(evs, today):
     return errs, warns
 
 
+def _read_json(path):
+    """Прочитать JSON, ЗАКРЫВ файл (ревизия 2026-08-11).
+
+    Прежде здесь стояло `json.load(open(...))`: дескриптор оставался открытым до сборки мусора.
+    Валидатор открывает по три схемы на каждый прогон и вызывается из тестов сотнями раз —
+    ResourceWarning и исчерпание дескрипторов на слабом раннере.
+    """
+    with open(path, encoding='utf-8') as fh:
+        return json.load(fh)
+
+
+def _read_yaml(path):
+    """Прочитать YAML, ЗАКРЫВ файл. См. `_read_json`."""
+    with open(path, encoding='utf-8') as fh:
+        return yaml.safe_load(fh)
+
+
 def load_set(base):
-    schemas = {k: json.load(open(os.path.join(ROOT, 'schemas', f'{k}.schema.json')))
+    schemas = {k: _read_json(os.path.join(ROOT, 'schemas', f'{k}.schema.json'))
                for k in ('research-request', 'research-evidence', 'decision-package')}
     sets = {'research-request': os.path.join(base, 'requests', '*.yaml'),
             'research-evidence': os.path.join(base, 'evidence', '*.yaml'),
@@ -167,7 +184,7 @@ def load_set(base):
     errs = []
     for kind, pattern in sets.items():
         for f in sorted(glob.glob(pattern)):
-            obj = yaml.safe_load(open(f))
+            obj = _read_yaml(f)
             errs.extend(f'{os.path.relpath(f, ROOT)} {e}' for e in check_schema(obj, schemas[kind]))
             objs[kind][obj.get('id')] = obj
     return objs, errs, schemas
@@ -176,11 +193,10 @@ def load_set(base):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--strict', action='store_true', help='warnings становятся ошибками')
-    ap.add_argument('--selftest', action='store_true')
+    # Флага `--selftest` здесь нет (ревизия 2026-08-11): функция удалена в v3.30 вместе с
+    # переносом селфтестов в pytest, а флаг остался и падал с `NameError`. Теперь argparse
+    # честно скажет «unrecognized arguments» вместо трейсбека.
     args = ap.parse_args()
-    if args.selftest:
-        selftest()
-        return 0
 
     all_errs, all_warns = [], []
     today = dt.date.today()
@@ -199,7 +215,7 @@ def main():
         print(f'[{label}] артефактов: {n}')
     # examples внутри самих схем
     for k in ('research-request', 'research-evidence', 'decision-package'):
-        schema = json.load(open(os.path.join(ROOT, 'schemas', f'{k}.schema.json')))
+        schema = _read_json(os.path.join(ROOT, 'schemas', f'{k}.schema.json'))
         for i, ex in enumerate(schema.get('examples', [])):
             all_errs.extend(f'schema {k} example[{i}] {e}' for e in check_schema(ex, schema))
 

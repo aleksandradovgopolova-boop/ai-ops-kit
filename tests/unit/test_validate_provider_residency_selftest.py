@@ -74,3 +74,58 @@ def test_validate_provider_residency_selftest():
                all(route_allowed(ex, "confidential", pcs[p]) is False for p in ext))
 
     assert ok, "перенесённый селфтест validate_provider_residency: см. строки FAIL в выводе"
+
+
+def _policy(secret_allowed=("on-premise",)):
+    """Минимальная валидная PRP с настраиваемым allowed для класса secret."""
+    return {
+        "schema_version": 1, "kind": "ProviderResidencyPolicy", "id": "PRP-900",
+        "default_deny": True,
+        "rules": [
+            {"data_class": "public", "allowed_provider_classes": ["external-cloud"],
+             "max_retention": "standard"},
+            {"data_class": "internal", "allowed_provider_classes": ["ru-cloud"],
+             "max_retention": "standard"},
+            {"data_class": "confidential", "allowed_provider_classes": ["on-premise"],
+             "max_retention": "ephemeral"},
+            {"data_class": "secret", "allowed_provider_classes": list(secret_allowed),
+             "max_retention": "zero"},
+        ],
+    }
+
+
+class TestDeclaredCrossCheckActuallyRuns:
+    """Проверка №5 из докстроки ИСПОЛНЯЕТСЯ валидатором, а не только селфтестом.
+
+    Ревизия 2026-08-12: `route_allowed` и `_provider_classes` были написаны и объявлены пятым
+    пунктом валидатора, но `check`/`main` их не звали — звал только этот файл. Заявленная проверка
+    существовала как код и не исполнялась ни на одном прогоне.
+    """
+
+    def test_policy_with_no_routable_provider_is_caught(self):
+        """Политика, не оставляющая классу ни одного провайдера, — неисполнима."""
+        registry = {"anthropic": "external-cloud", "local": "on-premise"}
+        # secret разрешён только в ru-cloud, а такого провайдера в реестре нет.
+        errs = check(_policy(secret_allowed=["ru-cloud"]), provider_classes=registry)
+        assert any("неисполнима" in x and "secret" in x for x in errs), errs
+
+    def test_policy_with_routable_provider_passes(self):
+        """Обратная сторона: пригодный провайдер есть -> нарушения нет."""
+        registry = {"anthropic": "external-cloud", "local": "on-premise", "gigachat": "ru-cloud"}
+        errs = check(_policy(), provider_classes=registry)
+        assert not [x for x in errs if "неисполнима" in x], errs
+
+    def test_unknown_registry_skips_check_instead_of_passing_it(self):
+        """`None` — «реестр неизвестен»: проверка пропускается, а не объявляется пройденной.
+
+        Прежде `_provider_classes()` отдавал `{}` на нечитаемом реестре, и кросс-проверка молча
+        «не находила нарушений». Пустое и неизвестное — разные ответы.
+        """
+        errs = check(_policy(secret_allowed=["ru-cloud"]), provider_classes=None)
+        assert not [x for x in errs if "неисполнима" in x], (
+            "при неизвестном реестре проверка сделала вид, что выполнилась")
+
+    def test_real_registry_is_readable(self):
+        """`_provider_classes()` на реальном реестре отдаёт словарь, а не None."""
+        pcs = _provider_classes()
+        assert isinstance(pcs, dict) and pcs, f"реестр провайдеров не прочитан: {pcs!r}"

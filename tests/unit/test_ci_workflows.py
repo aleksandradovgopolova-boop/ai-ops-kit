@@ -21,8 +21,50 @@ WORKFLOWS = sorted((PKG / ".github" / "workflows").glob("*.yml"))
 
 
 def _addopts_require_cov():
-    text = (PKG / "pytest.ini").read_text(encoding="utf-8")
-    return "--cov" in text
+    """Требует ли `addopts` из pytest.ini наличия pytest-cov. -> bool.
+
+    ЧИТАЕМ КОНФИГУРАЦИЮ, А НЕ ТЕКСТ ФАЙЛА (2026-08-12). Прежде здесь стояло `"--cov" in text` по
+    всему pytest.ini — то есть проверка считала настройкой в том числе КОММЕНТАРИИ. Когда `--cov`
+    убрали из addopts в отдельную джобу `coverage`, а в комментарии осталось объяснение почему,
+    детектор продолжил утверждать «addopts требует --cov» и уронил два теста на исправной
+    конфигурации. Проверка, которая мерит не то, что объявляет, — ровно тот класс, ради которого
+    этот файл и существует.
+
+    Разбор простой и достаточный: значение `addopts` в INI продолжается, пока строки с отступом;
+    строки-комментарии внутри блока к значению не относятся.
+    """
+    lines = (PKG / "pytest.ini").read_text(encoding="utf-8").splitlines()
+    value, inside = [], False
+    for raw in lines:
+        stripped = raw.strip()
+        if inside:
+            # Выход из блока: строка без отступа (новый ключ или секция) и непустая.
+            if raw[:1] not in (" ", "\t") and stripped:
+                break
+            if stripped.startswith("#") or stripped.startswith(";"):
+                continue
+            value.append(stripped)
+            continue
+        if re.match(r"^addopts\s*=", stripped):
+            inside = True
+            value.append(stripped.split("=", 1)[1].strip())
+    return any("--cov" in v for v in value)
+
+
+def _explicit_cov_commands(job):
+    """Команды джоба, передающие --cov ЯВНО (а не через addopts). -> [строка].
+
+    Добавлено 2026-08-12 вместе с джобой `coverage`: теперь покрытие включается флагом в одном
+    месте, и инвариант «кто считает покрытие, тот ставит pytest-cov» обязан проверяться и для
+    явного флага, иначе он проверял бы только исчезнувший путь через addopts.
+    """
+    out = []
+    for r in _steps_text(job):
+        # Многострочные команды (`run: |`) разбирает целиком: `--cov` может стоять на строке
+        # продолжения после `\`, а `pytest` — на первой.
+        if re.search(r"\bpytest\b", r) and "--cov" in r and "pip install" not in r.split("\n")[0]:
+            out.append(" ".join(r.split())[:120])
+    return out
 
 
 def _jobs(path):
@@ -45,10 +87,31 @@ def test_workflows_exist():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
+def test_job_that_measures_coverage_installs_pytest_cov(wf):
+    """Кто считает покрытие — тот ставит pytest-cov. Иначе падение на разборе аргументов.
+
+    2026-08-12: инвариант проверяется для ЯВНОГО `--cov` в команде. Прежде путь был один — `--cov`
+    в addopts pytest.ini, — и он исчез: покрытие переехало в отдельную джобу с порогом. Оставить
+    проверку только про addopts значило бы охранять путь, которого больше нет.
+    """
+    broken = []
+    for name, job in _jobs(wf):
+        cmds = _explicit_cov_commands(job)
+        if not cmds:
+            continue
+        if not any("pytest-cov" in r for r in _steps_text(job)):
+            broken.append(f"{name}: {cmds[0]}")
+    assert not broken, (
+        "джоб передаёт --cov, но не ставит pytest-cov — pytest упадёт на «unrecognized "
+        f"arguments» до первого теста: {broken}")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("wf", WORKFLOWS, ids=[w.name for w in WORKFLOWS])
 def test_every_pytest_job_can_satisfy_addopts(wf):
     """Джоб, запускающий pytest без --no-cov, обязан ставить pytest-cov."""
     if not _addopts_require_cov():
-        pytest.skip("pytest.ini больше не требует --cov")
+        pytest.skip("addopts в pytest.ini не требует --cov: покрытие включается явно в джобе coverage")
 
     broken = []
     for name, job in _jobs(wf):
