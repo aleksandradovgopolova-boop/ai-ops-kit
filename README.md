@@ -38,7 +38,7 @@ python3 .ai/managed/tools/ai_ops_cli.py status .
 
 ## Версия
 
-**v3.36.6 stable** — Qualification Readiness · Delivery Proof Debt
+**v3.36.7 stable** — Qualification Readiness · Clean Update
 
 - онбординг заканчивается РАБОТОЙ, а не документацией: `ai-ops bootstrap` собирает направление и
   план из фактов аудита, и `ai-ops next` сразу советует, за что взяться и почему
