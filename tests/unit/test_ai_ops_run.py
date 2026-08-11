@@ -1362,3 +1362,47 @@ class TestMainRunSubcommand:
         captured = capsys.readouterr()
         assert "ai-ops run" in captured.out
         assert isinstance(exit_code, int)
+
+
+@pytest.mark.unit
+class TestBookkeepingLossIsVisible:
+    """Утраченная служебная запись ВИДНА в отчёте, а не пропадает молча.
+
+    Ревизия 2026-08-11: учёт usage и lifecycle-журнал писались под `except Exception: pass`.
+    Решение «служебная запись не роняет прогон» правильное и записанное — падать из-за журнала
+    посреди доставки хуже, чем потерять строку. Но второй половины не было: потеря была
+    невидимой. Для кита, чья заявленная ценность — Usage Truth и `unavailable != 0`, молча
+    пропавшая запись стоимости означает занижённый счёт, поданный как факт.
+
+    Образец взят в том же файле: рядом уже был `escalation_error` с пометкой «rc3: НЕ глотаем
+    молча». Здесь то же для служебных записей.
+    """
+
+    def test_records_what_was_lost_and_why(self):
+        rep = {"kind": "execution-pipeline"}
+        ai_ops_run._note_bookkeeping_error(rep, "usage_ledger.append", OSError("disk full"))
+
+        assert "bookkeeping_errors" in rep, "утрата записи не попала в отчёт"
+        entry = rep["bookkeeping_errors"][0]
+        assert entry["what"] == "usage_ledger.append", "не сказано, ЧТО потеряно"
+        assert "OSError" in entry["error"] and "disk full" in entry["error"], (
+            f"не сказано, ПОЧЕМУ потеряно: {entry}")
+
+    def test_accumulates_and_does_not_overwrite(self):
+        """Две потери — две записи: вторая не затирает первую."""
+        rep = {}
+        ai_ops_run._note_bookkeeping_error(rep, "usage_ledger.append", OSError("x"))
+        ai_ops_run._note_bookkeeping_error(rep, "lifecycle_journal.fix_attempt", ValueError("y"))
+
+        whats = [e["what"] for e in rep["bookkeeping_errors"]]
+        assert whats == ["usage_ledger.append", "lifecycle_journal.fix_attempt"], whats
+
+    def test_clean_run_has_no_such_key(self):
+        """Обратная сторона: без потерь ключа НЕТ — иначе он читался бы как «всегда что-то не так»."""
+        rep = {"kind": "execution-pipeline"}
+        assert "bookkeeping_errors" not in rep
+
+    def test_never_raises_on_unexpected_report_shape(self):
+        """fail-closed наоборот: сам учёт потерь не имеет права уронить прогон."""
+        ai_ops_run._note_bookkeeping_error(None, "x", OSError("y"))
+        ai_ops_run._note_bookkeeping_error("не dict", "x", OSError("y"))
