@@ -30,7 +30,7 @@ goals:
     outcome:
       # Первый живой brownfield пройден (qualification/REAL-PRODUCT-NITI-2026-08-06.md).
       first_real_brownfield_passed: true
-      findings_from_first_run_closed: false
+      findings_from_first_run_closed: true
 
   - id: checks-that-run
     status: active
@@ -55,7 +55,7 @@ goals:
   - id: green-means-checked
     status: active
     outcome:
-      ci_lint_job_green: false
+      ci_lint_job_green: true
       evidence_scope_named_not_implied: true
 
 work:
@@ -136,24 +136,33 @@ work:
     # нуле по всему репозиторию (сравнение семантики, неисполнимый код, потеря информации об
     # ошибке B012/B904/PLE0704, изменяемый default B006, exec/eval, двунаправленный unicode).
     # Это чистое расширение сети: от существующего кода они не требуют ничего, ловят только новое.
-    # ОСТАЛОСЬ (требует уборки, каждое — отдельное решение): BLE001 17 мест в продакшне + S110 23 —
-    # по индивидуальному суждению каждое, штамповать `noqa` без причины нельзя; PLW1510 63
-    # (подготовка временных git-репо в валидаторах); F401 105, I001 131, EXE001 180 — стиль.
+    # СДЕЛАНО 2026-08-12 (второй заход): BLE001/S110/S112 ВКЛЮЧЕНЫ с ратчетом. Пакет валидаторов
+    # разобран полностью и правило в нём исполняется; остальные подпакеты перечислены в
+    # `per-file-ignores` с числами — это замер долга, который вправе только сокращаться.
+    # При разборе валидаторов нашлись две фиктивные проверки (см. R-31/R-32 отчёта), а четыре
+    # места оказались правильным образцом «отказ становится находкой» — причина записана в noqa.
+    # Ратчет проверен: новое гашение в разобранной области краснеет.
+    # ОСТАЛОСЬ: engine (15) -> providers (6) -> мелкие (9) -> tests (8) и .research (3);
+    # PLW1510 63 (подготовка временных git-репо); F401 105, I001 131, EXE001 180 — стиль.
 
   # ─── green-means-checked ────────────────────────────────────────────────────────────────────
   - id: ci-lint-job-proven
     title: Убедиться, что джоба lint и исправленный хук python-compat зелены в реальном CI
     type: delivery
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: delivery
     depends_on: []
     write_scope: [.github/]
     value: high
     affects: {delivery_operations: true}
-    # Ревизия проверила их локально (YAML разобран, `bash -n` чист, `ruff check .` зелёный), но
-    # ни джоба, ни хук в CI ещё не исполнялись ни разу. Плюс охват ревизии — только
-    # full-current-python на 3.14: пол 3.9 и чистую установку даёт лишь матрица CI.
+    # ЗАКРЫТО 2026-08-12 фактом: PR #69, все 11 проверок зелёные. Замеры реального CI:
+    #   lint 8с · coverage 6м37с · python39-compat 3м4с · clean-install 24с · quality ×4 17с–3м13с
+    #   · pipeline-e2e 3.9/3.12 22с/18с · smoke 1м17с.
+    # Подтверждено то, что локально было недоступно: объявленный пол 3.9 и установка в чистое
+    # окружение (охват ревизии был только full-current-python на 3.14).
+    # Цена гейта тоже замерена и снята: первый прогон coverage занял 13м19с — вчетверо больше
+    # самой медленной джобы; `COVERAGE_CORE=sysmon` (CPython 3.12+) дал 6м37с.
 
   - id: ruff-format-decision
     title: Решить судьбу ruff-format в pre-commit — хук неприменим, пока не выбран путь
@@ -177,14 +186,21 @@ work:
     title: Закрыть находки первого живого brownfield-прогона (niti) и довести их до апстрима
     type: engineering
     goal: real-product-qualification
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/, installer/]
     value: high
     affects: {engineering_quality_security: true, delivery_operations: true}
-    # Источник: qualification/REAL-PRODUCT-NITI-2026-08-06.md — findings «в порядке боли».
-    # Прогон дошёл до результата, но часть находок осталась на локальной ветке и не влита.
+    # ЗАКРЫТО 2026-08-12, и ПУНКТ БЫЛ НЕВЕРЕН О СОСТОЯНИИ. Я поставил его по заметке памяти
+    # («правки на локальной ветке, не запушено»), а репозиторий говорит другое: находки F-012,
+    # F-013, F-014 прогона niti — плюс F-015..F-017 с ии-среды — закрыты и влиты ещё в PR #26,
+    # каждая с регресс-тестами (tests/unit/test_base_resolution.py, test_lifecycle_honesty.py,
+    # test_spec_levels.py, test_intake_signals.py). Статус закрытия и объявленное отклонение по
+    # F-012 записаны в самом отчёте прогона.
+    # Заметка памяти относилась к правкам В САМОМ репозитории niti (его продуктовые FIX-001/002/004),
+    # а не к киту: write_scope этой работы — ai_ops_kit/ и installer/. Чужой репозиторий — зона
+    # его владельца, и «довести до апстрима» там решает он.
 
   - id: change-brief-home
     title: Дать Change Brief место хранения вместо двух файлов в корне
@@ -206,7 +222,7 @@ work:
     title: Обкатать contour_consistency на живом репозитории и решить о переводе в blocking
     type: quality
     goal: advisory-gates-obkatka
-    status: todo
+    status: in_progress
     owner_role: qa
     depends_on: [niti-findings-close]
     write_scope: [quality/gates.yaml, ai_ops_kit/planning/]
@@ -214,6 +230,20 @@ work:
     affects: {engineering_quality_security: true, planning_execution: true}
     # Гейт объявлен advisory ДО обкатки — правило репозитория (ROADMAP.md -> «Правила движения»).
     # Пока обкатки нет, заявленное качество опирается на 21 блокирующий гейт, а не на 34.
+    #
+    # ПЕРВЫЙ ЗАМЕР 2026-08-12 — на диффе ревизии в этом репозитории (76 файлов, 93fd134..d022b5a):
+    #   changed: product_strategy, planning_execution, delivery_operations
+    #   not_changed: research_decisions, system_architecture, data_contracts,
+    #                engineering_quality_security, analytics_learning
+    #   unknown: НИ ОДНОГО — сигнальные пути есть у всех восьми контуров этого репозитория.
+    # Отдельно проверено подозрительное: `engineering_quality_security = not_changed` при
+    # изменённых `ai_ops_kit/security/*.py` — это ВЕРНО по модели, сигнал контура `security/**`
+    # указывает на политики в корне, а не на код реализации. Ложного отрицания нет.
+    #
+    # ПЕРЕВОДА В BLOCKING НЕТ, и одного замера для него недостаточно: в этом диффе ни разу не
+    # возник случай, ради которого гейт существует, — изменение модели данных без обновления
+    # DataMap. Нужна обкатка там, где такой случай происходит, то есть на продуктовом репозитории
+    # с изменением схемы. До тех пор гейт остаётся advisory осознанно, а не по забывчивости.
 
   # ─── second-real-brownfield ─────────────────────────────────────────────────────────────────
   - id: second-brownfield-run
