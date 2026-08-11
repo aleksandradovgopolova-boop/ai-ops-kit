@@ -910,7 +910,10 @@ def _assets_report_line(assets: dict) -> str:
 # кит трогает только то, что САМ написал и что с тех пор никто не менял — это знание хранится
 # отпечатком. Остальное он НАЗЫВАЕТ, а решение оставляет человеку.
 CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml")
-CI_PRINTS = AI_DIR / "runtime" / "ci-templates.json"
+# Путь отпечатков считается ОТ ПЕРЕДАННОГО КОРНЯ, а не от глобального REPO_ROOT. Первая версия
+# брала глобальный — и `sync_ci_workflows(other_root)` писал отпечатки в текущий репозиторий, а не
+# в тот, который обслуживал. Поймано тем, что в коммит кита попал чужой `.ai/runtime/ci-templates.json`.
+CI_PRINTS_REL = ".ai/runtime/ci-templates.json"
 # Клон кита в workflow ребёнка: и новая форма (`$RUNNER_TEMP`), и старая (`/tmp`) — иначе проверка
 # не увидит именно те файлы, ради которых написана: у всех подключённых детей там стоит `/tmp`.
 _KIT_PATH_RE = re.compile(r'(?:"?\$\{?RUNNER_TEMP\}?"?|/tmp)/ai-ops-kit/([\w./-]+)')
@@ -967,21 +970,27 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _ci_prints() -> dict:
-    if not CI_PRINTS.is_file():
+def _ci_prints_path(root: Path = None) -> Path:
+    return Path(root or REPO_ROOT) / CI_PRINTS_REL
+
+
+def _ci_prints(root: Path = None) -> dict:
+    p = _ci_prints_path(root)
+    if not p.is_file():
         return {}
     try:
-        return json.loads(CI_PRINTS.read_text(encoding="utf-8")) or {}
+        return json.loads(p.read_text(encoding="utf-8")) or {}
     except (json.JSONDecodeError, OSError):
         return {}
 
 
-def _remember_ci(name: str, text: str) -> None:
+def _remember_ci(name: str, text: str, root: Path = None) -> None:
     """Запомнить, что этот файл написал кит и с тех пор его никто не менял."""
-    data = _ci_prints()
+    p = _ci_prints_path(root)
+    data = _ci_prints(root)
     data[name] = _sha(text)
-    CI_PRINTS.parent.mkdir(parents=True, exist_ok=True)
-    CI_PRINTS.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _ci_broken_refs(text: str):
@@ -1009,7 +1018,7 @@ def ci_workflow_state(root: Path = None):
     файл зовёт то, чего в ките нет: это сильнее остальных, потому что означает красный CI ребёнка.
     """
     root = Path(root or REPO_ROOT)
-    prints, out = _ci_prints(), []
+    prints, out = _ci_prints(root), []
     for name in CI_TEMPLATES:
         src = PKG / "templates" / "ci" / name
         dst = root / ".github" / "workflows" / name
@@ -1053,7 +1062,7 @@ def sync_ci_workflows(root: Path = None, refresh: bool = False):
         dst = root / ".github" / "workflows" / name
         tpl = src.read_text(encoding="utf-8")
         if state == "current":
-            _remember_ci(name, tpl)               # происхождение теперь известно
+            _remember_ci(name, tpl, root)         # происхождение теперь известно
             continue
         # СЛОМАННЫЙ ФАЙЛ НЕИЗВЕСТНОГО ПРОИСХОЖДЕНИЯ ЧИНИМ, но ничего не теряем: рядом остаётся
         # копия. Он зовёт то, чего в ките нет, — то есть не работает ни как шаблон кита, ни как
@@ -1074,7 +1083,7 @@ def sync_ci_workflows(root: Path = None, refresh: bool = False):
                     backup.write_text(dst.read_text(encoding="utf-8"), encoding="utf-8")
                     backup = backup.name
             dst.write_text(tpl, encoding="utf-8")
-            _remember_ci(name, tpl)
+            _remember_ci(name, tpl, root)
             acts.append({"file": name,
                          "action": {"absent": "installed", "stale-ours": "refreshed"}.get(
                              state, "repaired" if rescue else "overwritten"),
