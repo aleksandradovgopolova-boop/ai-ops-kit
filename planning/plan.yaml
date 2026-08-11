@@ -1,0 +1,215 @@
+# planning/plan.yaml — delivery plan самого AI Ops Kit.
+#
+# Уровень МЕЖДУ направлением (`ROADMAP.md`) и прогоном. По этому файлу `ai-ops next` отвечает на
+# четыре вопроса: где мы, что идёт сейчас, что блокирует и чем, какую работу взять следующей.
+#
+# ПОЧЕМУ ФАЙЛ ПОЯВИЛСЯ (ревизия 2026-08-11). Кит требует план от каждого подключённого
+# репозитория, а у себя не имел его вовсе: `roadmap.check()` сверяет цели с планом только когда
+# план есть, поэтому связка «направление ↔ работа» у кита не проверялась ничем, а `ai-ops next`
+# на самом ките не мог ответить «что взять следующим». Цели здесь — те же id, что в `ROADMAP.md`.
+#
+# ОТКУДА ВЗЯТА РАБОТА. Это подтверждённый остаток ревизии (`docs/audit-report.md` §6) и объявленные
+# разрывы репозитория (`qualification/bootstrap/v3.8.0-plan.yaml -> future_opportunities`,
+# `registry/release-claims.yaml -> standing_boundaries`). Ничего не придумано: у каждой работы есть
+# место в репозитории, где она обоснована. Что требует решения владельца — помечено
+# `human_decision` и НЕ имеет статуса `todo` как будто это уже решено.
+#
+# Три правила (проверяет `validate_product_model.py` -> `delivery_plan.validate`):
+#  1. Статус — только тот, которого код не знает: todo / in_progress / done / dropped.
+#     `ready` / `blocked` / `waiting` кит считает сам из зависимостей и гейтов.
+#  2. Роль, а не исполнитель: runtime/model/provider/assignee/agent запрещены проверкой.
+#  3. id — slug нижнего регистра: такой же, как требует движок для `--feature`.
+schema_version: 1
+kind: delivery-plan
+
+goals:
+  # Порядок = приоритет. Те же id и тот же порядок, что под «Сейчас» и «Следующий результат»
+  # в ROADMAP.md: расхождение кит покажет сам (`ai-ops next`).
+  - id: real-product-qualification
+    status: active
+    outcome:
+      # Первый живой brownfield пройден (qualification/REAL-PRODUCT-NITI-2026-08-06.md).
+      first_real_brownfield_passed: true
+      findings_from_first_run_closed: false
+
+  - id: checks-that-run
+    status: active
+    outcome:
+      # Замеры — в docs/audit-report.md §1. Первые три закрыты ревизией.
+      no_test_passes_without_assert: true
+      linter_runs_on_the_engine_package: true
+      every_declared_entry_point_works: true
+      swallowed_exceptions_reviewed: false
+
+  - id: advisory-gates-obkatka
+    status: active
+    outcome:
+      # 13 из 34 гейтов объявлены и не блокируют (quality/gates.yaml).
+      advisory_gates_have_field_evidence: false
+
+  - id: second-real-brownfield
+    status: active
+    outcome:
+      owner_reaches_verified_pr_without_patching_the_kit: false
+
+  - id: green-means-checked
+    status: active
+    outcome:
+      ci_lint_job_green: false
+      evidence_scope_named_not_implied: true
+
+work:
+  # ─── checks-that-run ────────────────────────────────────────────────────────────────────────
+  - id: swallowed-exceptions-audit
+    title: Разобрать 49 мест, где исключение гасится молча (26 try/except/pass + 23 голых except)
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # СДЕЛАНО 2026-08-11 (первый проход — там, где гашение искажает ВЕРДИКТ или ЧИСЛО):
+    #   validate_feature_blueprint — битая DeliveryReceipt больше не выдаётся за отсутствующую;
+    #   kit_observability — непрочитанные workitem/расписки называются в отчёте, а не пропускаются;
+    #   validate_stale_gates (3 места) — типы сужены, чтобы дефект кода не выглядел как «нет git».
+    # ОСТАЛОСЬ: места в конвейере (ai_ops_run 5, workpackage_executor 4, execution_pipeline 3).
+    # Там `noqa` с причиной «не должен ронять прогон» — решение записано, и сужение типов меняет
+    # поведение прогона, поэтому требует отдельного разбора, а не общего правила.
+
+  - id: subprocess-check-audit
+    title: Проверить 65 вызовов subprocess.run без check — необработанный код возврата даёт ложный green
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/, installer/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # Кит зовёт git и внешние инструменты; проглоченный rc — ровно тот класс, против которого
+    # стоит fail-closed. Механически не правится: каждое место требует решения «падать или нет».
+    # СДЕЛАНО 2026-08-11: разобраны 65 мест. Опасными оказались 2 — `git clone` в
+    # validate_container_delivery: пустой клон делал проверку «доставлять нечего» ТРИВИАЛЬНО
+    # верной (ложный green в валидаторе). Исправлены. ОСТАЛЬНЫЕ 63 — подготовка временного
+    # git-репозитория внутри валидаторов (init/config/add/commit): их отказ и так валит проверку
+    # ниже, поэтому цена правки выше пользы. Замер и разбор — docs/audit-report.md, R-23.
+
+  - id: coverage-threshold-decision
+    title: Решить судьбу --cov без порога — метрика собирается и ни на что не влияет
+    type: quality
+    goal: checks-that-run
+    status: todo
+    owner_role: qa
+    depends_on: []
+    write_scope: [pytest.ini, .github/]
+    value: medium
+    affects: {engineering_quality_security: true}
+    human_decision: >
+      Порог покрытия ввести или убрать `--cov` из addopts? Сейчас каждый прогон CI идёт с
+      `--no-cov`, а `--cov-fail-under` нет вовсе: цена без пользы (docs/audit-report.md, R-17).
+      Тот же вывод, что в v3.35.1 про метрику с отрицательной пользой.
+
+  - id: ruff-rule-set-widening
+    title: Расширять исполняемый набор ruff по одному правилу за решение, каждое со своей уборкой
+    type: quality
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    depends_on: [swallowed-exceptions-audit, subprocess-check-audit]
+    write_scope: [pyproject.toml]
+    value: medium
+    affects: {engineering_quality_security: true}
+    # Исполняются F821/F811/B023/F841 (ноль находок). Остаток — 912 находок, порядок по пользе:
+    # PLW1510 (65) -> BLE001+S110 (49) -> F401 (105). SIM115 и RUF100 включать НЕ надо —
+    # обоснование в pyproject.toml, там же замеры.
+
+  # ─── green-means-checked ────────────────────────────────────────────────────────────────────
+  - id: ci-lint-job-proven
+    title: Убедиться, что джоба lint и исправленный хук python-compat зелены в реальном CI
+    type: delivery
+    goal: green-means-checked
+    status: todo
+    owner_role: delivery
+    depends_on: []
+    write_scope: [.github/]
+    value: high
+    affects: {delivery_operations: true}
+    # Ревизия проверила их локально (YAML разобран, `bash -n` чист, `ruff check .` зелёный), но
+    # ни джоба, ни хук в CI ещё не исполнялись ни разу. Плюс охват ревизии — только
+    # full-current-python на 3.14: пол 3.9 и чистую установку даёт лишь матрица CI.
+
+  - id: ruff-format-decision
+    title: Решить судьбу ruff-format в pre-commit — хук неприменим, пока не выбран путь
+    type: quality
+    goal: green-means-checked
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    write_scope: [.pre-commit-config.yaml]
+    value: medium
+    affects: {engineering_quality_security: true}
+    human_decision: >
+      `ruff format --check tools tests` -> 333 файла к переформатированию. Один коммит
+      форматирования утопит `git blame`; отказ оставляет мёртвый хук, и pre-commit не работает ни
+      у кого (docs/audit-report.md, R-14). Решение о цене истории — владельца.
+
+  # ─── real-product-qualification ─────────────────────────────────────────────────────────────
+  - id: niti-findings-close
+    title: Закрыть находки первого живого brownfield-прогона (niti) и довести их до апстрима
+    type: engineering
+    goal: real-product-qualification
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/, installer/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # Источник: qualification/REAL-PRODUCT-NITI-2026-08-06.md — findings «в порядке боли».
+    # Прогон дошёл до результата, но часть находок осталась на локальной ветке и не влита.
+
+  - id: change-brief-home
+    title: Дать Change Brief место хранения вместо двух файлов в корне
+    type: docs
+    goal: real-product-qualification
+    status: todo
+    owner_role: docs
+    depends_on: []
+    write_scope: [docs/, templates/]
+    value: low
+    affects: {planning_execution: true}
+    human_decision: >
+      Где живут заполненные Change Brief'ы: `docs/change-briefs/<wi-id>.md`, один
+      перезаписываемый файл с явным правилом, или `.ai/runtime/` (тогда не попадают в историю)?
+      Сейчас `.ai-change-brief.md` и `.ai-change-brief-pom.md` в корне — второй с суффиксом,
+      чтобы не потерять первый (docs/audit-report.md, R-16).
+
+  # ─── advisory-gates-obkatka ─────────────────────────────────────────────────────────────────
+  - id: contour-consistency-field-evidence
+    title: Обкатать contour_consistency на живом репозитории и решить о переводе в blocking
+    type: quality
+    goal: advisory-gates-obkatka
+    status: todo
+    owner_role: qa
+    depends_on: [niti-findings-close]
+    write_scope: [quality/gates.yaml, ai_ops_kit/planning/]
+    value: medium
+    affects: {engineering_quality_security: true, planning_execution: true}
+    # Гейт объявлен advisory ДО обкатки — правило репозитория (ROADMAP.md -> «Правила движения»).
+    # Пока обкатки нет, заявленное качество опирается на 21 блокирующий гейт, а не на 34.
+
+  # ─── second-real-brownfield ─────────────────────────────────────────────────────────────────
+  - id: second-brownfield-run
+    title: Провести установку и задачу до verified PR на втором реальном brownfield-репозитории
+    type: delivery
+    goal: second-real-brownfield
+    status: todo
+    owner_role: delivery
+    depends_on: [ci-lint-job-proven]
+    write_scope: [qualification/]
+    value: high
+    affects: {delivery_operations: true, analytics_learning: true}
+    # Проверяемо глазами владельца: установка и onboarding без вмешательств, DeliveryReceipt с
+    # sha_verified=true, названная стоимость прогона. Требует провайдер-ключей и тулчейна стека —
+    # объявленная эксплуатационная предпосылка (v3.8.0-plan.yaml -> blocked_by), не дефект.

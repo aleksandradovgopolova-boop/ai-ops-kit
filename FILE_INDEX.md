@@ -22,13 +22,17 @@
 - `NOTICE.md`
 - `README.md`
 - `RELEASE_NOTES_v1.0.0.md`
-- `ROADMAP.md`
+- `ROADMAP.md` — направление продукта: четыре горизонта (Сейчас / Следующий результат / Дальше / Later), контракт проверяется `ai_ops_kit/planning/roadmap.py`. История пути — `docs/changelog/roadmap-history.md`
 - `VERSION`
 - `VISION.md`
 - `mkdocs.yml`
 - `pyproject.toml`, `setup.py` — дистрибутив (`pip install -e .`); включает `ai_ops_kit`
 - `pytest.ini` — маркеры (в т.ч. `slow`) и addopts контура
 - `requirements.txt` (рантайм: только pyyaml), `requirements-dev.txt` (pytest/hypothesis/ruff/mypy)
+
+## planning/
+
+- `planning/plan.yaml` — delivery plan самого кита: 5 целей (id совпадают с `ROADMAP.md`) и подтверждённый остаток ревизии как работа. Читается `ai-ops next`; проверяется `delivery_plan.validate` через `validate_product_model`
 
 ## scripts/
 
@@ -50,6 +54,8 @@
 - `docs/parallel-sessions.md`
 - `docs/3.0-design.md` — дизайн 3.0: `ai-ops run` основным путём + сплит на 5 пакетов (план, запуск по явному решению)
 - `docs/dogfooding-metrics.md` — чеклист обкатки: как метрики (North Star/baseline) закрываются сами через `/ai-run`
+- `docs/audit-report.md` — ревизия репозитория 2026-08-11: реестр находок с доказательствами, что исправлено, оставшийся долг и решения владельца
+- `docs/changelog/roadmap-history.md` — архив пройденного пути (фазы v1.3 → v3.36), заморожен 2026-08-11; направление живёт в `ROADMAP.md`
 
 ## manifest/
 
