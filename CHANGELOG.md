@@ -2,7 +2,7 @@
 
 Формат: [SemVer](https://semver.org/lang/ru/). Версия пакета — в `VERSION`.
 
-## [Unreleased]
+## [3.36.1] — 2026-08-11 · Trust Patch
 
 ### `model` объявляла, что ничего не пишет, — и писала
 

@@ -39,4 +39,9 @@ jobs:
           git clone --depth 1 --branch "v$VER" "$SRC" "$RUNNER_TEMP/ai-ops-kit" \
             || { echo "не удалось клонировать kit v$VER из $SRC — нет тега v$VER, нет доступа к репозиторию или каталог занят (причина в выводе git выше)"; exit 1; }
       - name: Child-валидатор (версии согласованы, managed-слой цел)
-        run: python3 "$RUNNER_TEMP"/ai-ops-kit/validation/validate_ai_ops_child.py
+        # Путь `ai_ops_kit/validation/…`, а НЕ корневой `validation/`: каталог переехал в 3.34, а
+        # шаблон остался на старом пути — каждый child, установленный с 3.34, получал workflow,
+        # который падает на «No such file». Кит был зелёным: `clean-install` проверял установку, но
+        # не ИСПОЛНЯЛ тот CI, который установка отдаёт ребёнку. Теперь исполняет
+        # (tests/unit/test_child_ci_template.py) — иначе следующий переезд повторит это молча.
+        run: python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_ai_ops_child.py
