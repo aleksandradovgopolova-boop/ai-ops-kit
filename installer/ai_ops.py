@@ -774,6 +774,8 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False):
     report.update(_assets)
     _ci_line = _assets_report_line(_assets)
 
+    # Первый диф — только для РЕШЕНИЯ «есть ли что делать». Исполнять по нему нельзя: миграции
+    # ниже переносят файлы, и список удаляемых, посчитанный до них, указывает на старые пути.
     changes = build_diff()
     if not changes and inst == target:
         msg = "Обновление не требуется." + _ci_line
@@ -809,6 +811,12 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False):
         applied.append(step)
     report["migrations_applied"] = applied
 
+    # ДИФ ПЕРЕСЧИТЫВАЕТСЯ ПОСЛЕ МИГРАЦИЙ. Прежде удаление шло по списку, посчитанному ДО них: если
+    # миграция переносила файл (3.33->3.34 перенесла `validation/` в `ai_ops_kit/validation/`),
+    # запись «удалить validation/x.py» указывала на путь, которого уже нет, а копия по новому пути
+    # оставалась навсегда — и попадала под контроль целостности как managed. У ии-среды так осталось
+    # 47 валидаторов кита (8152 строки мёртвого груза), и вычистило их только СЛЕДУЮЩЕЕ обновление.
+    changes = build_diff()
     # заменить managed-файлы
     for src, rel in managed_set():
         dst = MANAGED / rel
@@ -820,6 +828,7 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False):
             p = REPO_ROOT / c["path"]
             if p.exists():
                 p.unlink()
+    # В отчёт идёт то, что РЕАЛЬНО применено, а не то, что планировалось до миграций.
     report["managed_changes"] = changes
 
     n = write_checksums()
