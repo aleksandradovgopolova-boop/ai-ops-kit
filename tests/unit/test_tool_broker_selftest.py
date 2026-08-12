@@ -253,3 +253,39 @@ def test_tool_broker_selftest():
                _command_binaries("CI=1 npm test && ruff check") == ["npm", "ruff"])
 
     assert ok, "перенесённый селфтест tool_broker: см. строки FAIL в выводе"
+
+
+# ─── срез engine ратчета 2026-08-12: скраб секретов fail-closed ──────────────────────────────────
+# НАХОДКА. `_scrub_output` гасил ЛЮБОЙ сбой и возвращал текст КАК ЕСТЬ — с записанной причиной
+# «в худшем случае — без редактирования». Причина была неверна: «худший случай» этой функции — это
+# напечатанный тулом токен, уехавший в evidence открытым текстом и МОЛЧА, то есть ровно то, против
+# чего функция существует. Скраб недоступен -> содержимое не показываем вовсе.
+def test_scrub_failure_withholds_output_instead_of_leaking(monkeypatch):
+    import tool_broker
+
+    secret = "ghp_" + "B" * 36
+    real = tool_broker._scrub_output(f"token {secret}")
+    assert "ghp_" not in real and "REDACTED" in real, "исправный путь должен редактировать"
+
+    from ai_ops_kit.security import security_scan
+
+    class _Broken:
+        """Скраб есть, но не работает — сбой ровно там, где раньше стоял `pass`."""
+
+        def __iter__(self):
+            raise RuntimeError("набор паттернов недоступен")
+
+    monkeypatch.setattr(security_scan, "SECRET_PATTERNS", _Broken())
+    out = tool_broker._scrub_output(f"token {secret}")
+
+    assert secret not in out, "СЕКРЕТ УТЁК в evidence при недоступном скрабе — это тот самый худший случай"
+    assert "OUTPUT-WITHHELD" in out, "утаивание должно быть НАЗВАНО, а не выглядеть как пустой вывод"
+    assert "RuntimeError" in out, "причина утаивания должна быть видна там же, где вывод"
+
+
+def test_scrub_does_not_touch_empty_output(monkeypatch):
+    """Граница: пустой вывод не превращается в сообщение об утаивании (нечего утаивать)."""
+    import tool_broker
+
+    assert tool_broker._scrub_output("") == ""
+    assert tool_broker._scrub_output(None) is None

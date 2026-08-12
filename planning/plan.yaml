@@ -45,7 +45,7 @@ goals:
     status: active
     outcome:
       # 13 из 34 гейтов объявлены и не блокируют (quality/gates.yaml).
-      advisory_gates_have_field_evidence: false
+      advisory_gates_have_field_evidence: true
 
   - id: second-real-brownfield
     status: active
@@ -142,8 +142,26 @@ work:
     # При разборе валидаторов нашлись две фиктивные проверки (см. R-31/R-32 отчёта), а четыре
     # места оказались правильным образцом «отказ становится находкой» — причина записана в noqa.
     # Ратчет проверен: новое гашение в разобранной области краснеет.
-    # ОСТАЛОСЬ: engine (15) -> providers (6) -> мелкие (9) -> tests (8) и .research (3);
-    # PLW1510 63 (подготовка временных git-репо); F401 105, I001 131, EXE001 180 — стиль.
+    # СДЕЛАНО 2026-08-12 (третий заход): срез `engine` (15 мест) + `lifecycle` (1) РАЗОБРАН, оба
+    # пакета ушли из `per-file-ignores`. Из 16 мест 11 подтвердились как осознанные (причина
+    # записана рядом с проверяемым утверждением), 1 снято как шум, 4 оказались ДЕФЕКТАМИ:
+    #   R-33 (P1) `tool_broker._scrub_output` при сбое отдавал НЕСКРАБЛЕННЫЙ вывод в evidence —
+    #        то есть утечку секрета, ради предотвращения которой функция и существует;
+    #   R-34 (P1) `workitem.derive_status` при сбое оценки blueprint давала `verdict=None`, а `None`
+    #        уходил в `else: status = "done"` — неоценённое здоровье выглядело здоровым;
+    #   R-35 (P2) исправление R-26 стояло на пути ИСКЛЮЧЕНИЯ, а `journal_append` при сбое не
+    #        бросает, а возвращает `{"ok": False}`: ни один из 11 вызовов возврат не читал;
+    #   R-36 (P3) `pipeline_evidence` глушил `set(gates)` и получал `valid_ids=None`, что ВЫКЛЮЧАЛО
+    #        проверку существования гейта — фиктивная защита класса R-31/R-32.
+    # Регресс-тесты: tests/unit/test_bookkeeping_visibility.py (7),
+    # test_lifecycle_honesty.py -> TestUnevaluatedBlueprintIsNotHealthy (3),
+    # test_tool_broker_selftest.py -> два теста на fail-closed скраба. Мутация проверена: на коде
+    # до правки тест R-34 даёт `done` и падает.
+    # ОСТАЛОСЬ 28 мест из замеренных 44: providers (6) -> мелкие (12: devtools 4, gates 2, context 2,
+    # ui/shared/planning/engops по 1) -> tests (7) и .research (3). Прежняя строка плана называла
+    # «мелкие (9)» — это была ошибка сложения, числа `per-file-ignores` давали 12.
+    # Плюс PLW1510 63 (подготовка временных git-репо);
+    # F401 105, I001 131, EXE001 180 — стиль.
 
   # ─── green-means-checked ────────────────────────────────────────────────────────────────────
   - id: ci-lint-job-proven
@@ -222,7 +240,7 @@ work:
     title: Обкатать contour_consistency на живом репозитории и решить о переводе в blocking
     type: quality
     goal: advisory-gates-obkatka
-    status: in_progress
+    status: done
     owner_role: qa
     depends_on: [niti-findings-close]
     write_scope: [quality/gates.yaml, ai_ops_kit/planning/]
@@ -243,6 +261,20 @@ work:
     # ПЕРЕВОДА В BLOCKING НЕТ, и одного замера для него недостаточно: в этом диффе ни разу не
     # возник случай, ради которого гейт существует, — изменение модели данных без обновления
     # DataMap. До тех пор гейт остаётся advisory осознанно, а не по забывчивости.
+    #
+    # ЗАКРЫТО 2026-08-12. Обкатка выполнена на РЕАЛЬНОЙ истории niti (единственный подключённый
+    # репозиторий, где модель данных лежит в коде: supabase/migrations/*.sql + openapi.yaml), и
+    # запущена штатной функцией конвейера `contour_consistency_evidence`, а не примитивами.
+    #   B  (67ef9a0): миграция изменена, SoT не тронут -> warn, вердикт inconsistent, назван контур
+    #                 и файл — то самое поведение, ради которого гейт есть;
+    #   B' (6fe342f): миграция И openapi -> pass, ложного срабатывания нет;
+    #   A  ×5:        схемы не касались -> pass, ложных срабатываний 0.
+    # РЕШЕНИЕ: остаётся advisory. Причина конкретная, не инерция: дефолтный SoT контура
+    # (context/system/DataMap.md) объявлен required:false и отсутствует у 0 из 6 подключённых репо.
+    # В blocking такой гейт либо требовал бы документ, которого в проекте нет по решению владельца,
+    # либо не срабатывал вовсе. ПРЕДУСЛОВИЕ перевода: репозиторий объявил SoT data_contracts (как
+    # niti через оверлей); разумная форма — required_when, чтобы blocking действовал только там.
+    # Отчёт: qualification/CONTOUR-CONSISTENCY-OBKATKA-2026-08-12.md
     #
     # КРИТЕРИЙ GRADUATION (owner-review 2026-08-12). Целевой сценарий не ждут — его СТАВЯТ, двумя
     # реальными задачами на одном child-репозитории:
