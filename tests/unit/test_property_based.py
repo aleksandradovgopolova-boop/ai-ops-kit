@@ -43,9 +43,21 @@ class TestBudgetProperties:
             try:
                 b.charge_call(cost=0.0)
                 charged += 1
-            except (budget_mod.BudgetExceeded, Exception):
+            # ТИП СУЖЕН (срез tests ратчета 2026-08-12). Здесь стояло
+            # `except (budget_mod.BudgetExceeded, Exception)`, а кортеж с `Exception` делает
+            # конкретный тип ДЕКОРАТИВНЫМ: ловилось всё. Последствие не косметическое — тест мог
+            # ПРОЙТИ при полностью сломанном бюджете: если `charge_call` падал бы, например,
+            # TypeError на первом же вызове, `charged` оставался 0, и `charged <= ceiling`
+            # выполнялось тривиально. Теперь любое ДРУГОЕ исключение валит тест, как и должно в
+            # property-проверке.
+            except budget_mod.BudgetExceeded:
                 break
         assert charged <= ceiling
+        # ОБРАТНАЯ СТОРОНА, без которой утверждение выше почти ничего не стоит: когда запросов
+        # больше потолка, бюджет обязан израсходоваться РОВНО до потолка, а не «сколько-нибудь».
+        if n_calls > ceiling:
+            assert charged == ceiling, (
+                f"бюджет остановился на {charged} при потолке {ceiling} и {n_calls} запросах")
 
     @given(ceiling=st.integers(min_value=1, max_value=10000))
     @settings(max_examples=50, deadline=2000)
