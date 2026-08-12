@@ -106,3 +106,27 @@ def test_unanswered_and_short_answers_are_preserved(tmp_path):
         f"пустой ответ перестал значить «ещё не ответил» либо короткий потерян: {back}")
     text = answers_path(tmp_path).read_text(encoding="utf-8")
     assert 'primary_user: ""' in text, "неотвеченный вопрос исчез из файла — его больше не задать"
+
+def test_answer_survives_when_question_is_no_longer_asked(tmp_path):
+    """Ответ выживает, когда вопрос БОЛЬШЕ НЕ ЗАДАЮТ — это отдельная ветка записи (F-021, ч.2).
+
+    В `write_question_file` два места, где пишется значение: для вопросов из текущего `ask` и для
+    «ответов на вопросы, которых больше не задают». Первая правка закрыла только первое — а
+    отвеченные вопросы идут ИМЕННО во второе. Дефект остался ровно там, где живут данные: на
+    живом продукте ответы гибли и после «исправления».
+
+    Поймано повторным прогоном на niti, не чтением кода: тест выше проходил, потому что держал
+    оба ключа в `ask`.
+    """
+    write_question_file(tmp_path, ASK)
+    _fill(tmp_path, "primary_user", LONG)
+
+    # Вопрос ушёл из списка — путь «больше не спрашиваем».
+    shrunk = {"questions": [{"id": "main_goal_now", "ask": "Какая главная цель продукта сейчас?"}]}
+    write_question_file(tmp_path, shrunk)
+    write_question_file(tmp_path, shrunk)
+
+    back = read_answers(tmp_path)
+    assert back.get("primary_user") == LONG, (
+        f"ответ на уже не задаваемый вопрос потерян: {back}")
+    yaml.safe_load(answers_path(tmp_path).read_text(encoding="utf-8"))
