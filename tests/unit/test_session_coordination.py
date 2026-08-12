@@ -109,7 +109,8 @@ def test_hook_runs_under_system_bash(tmp_path):
     msg.write_text("test(hook): проверка запуска контракта\n", encoding="utf-8")
     r = subprocess.run(["/bin/bash", str(HOOK), str(msg)],
                        capture_output=True, text=True, timeout=120,
-                       env={**os.environ, "PYTHON": sys.executable})
+                       env={**os.environ, "PYTHON": sys.executable,
+                            "COMMIT_CONTRACT_FILES": "ai_ops_kit/engine/tool_broker.py"})
 
     assert "command not found" not in (r.stderr + r.stdout), (
         f"хук использует то, чего нет в bash 3.2:\n{r.stderr[-500:]}")
@@ -130,7 +131,8 @@ def test_hook_refuses_when_it_cannot_run_instead_of_passing_silently(tmp_path):
     fake.chmod(0o755)
     r = subprocess.run(["/bin/bash", str(HOOK), str(msg)],
                        capture_output=True, text=True, timeout=120,
-                       env={**os.environ, "PYTHON": str(fake)})
+                       env={**os.environ, "PYTHON": str(fake),
+                            "COMMIT_CONTRACT_FILES": "ai_ops_kit/engine/tool_broker.py"})
 
     assert r.returncode != 0, "недоступный контракт пропустил коммит как проверенный"
     assert "НЕ ВЫПОЛНЕН" in r.stderr, r.stderr[-400:]
@@ -161,3 +163,18 @@ def test_active_work_registry_detects_overlapping_areas(tmp_path, capsys):
     free = capsys.readouterr().out
     assert "ratchet-providers" not in free, (
         "непересекающаяся область объявлена занятой — так реестр перестанут читать")
+
+
+@pytest.mark.unit
+def test_empty_index_is_not_a_violation(tmp_path):
+    """Пустой индекс (merge/amend без изменений) — не нарушение: судить нечего.
+
+    Обратная сторона теста выше: если бы хук ронял такой коммит, его отключили бы целиком, и
+    контракт снова перестал бы исполняться.
+    """
+    msg = tmp_path / "COMMIT_EDITMSG"
+    msg.write_text("chore: amend без изменений индекса\n", encoding="utf-8")
+    r = subprocess.run(["/bin/bash", str(HOOK), str(msg)],
+                       capture_output=True, text=True, timeout=120,
+                       env={**os.environ, "PYTHON": sys.executable, "COMMIT_CONTRACT_FILES": " "})
+    assert r.returncode == 0, f"пустой индекс объявлен нарушением:\n{r.stdout}{r.stderr}"

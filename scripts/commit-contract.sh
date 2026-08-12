@@ -26,10 +26,23 @@ fi
 # Только проиндексированное: контракт обязан судить то, что уходит в историю, а не рабочее дерево.
 # Без `mapfile`: на macOS /bin/bash — это 3.2, где его нет, и хук падал бы с «command not found»
 # у каждого, кто работает на маке. Замерено при первом же запуске.
+#
+# `COMMIT_CONTRACT_FILES` — ШОВ ДЛЯ ТЕСТОВ, а не настройка. Хук работает с индексом ЭТОГО
+# репозитория, поэтому тест иначе зависел бы от того, что в индексе прямо сейчас: он проходил при
+# непустом и молча выходил раньше проверок при чистом. Это ровно тот класс — результат зависит от
+# окружения, а не от предмета. Продакшн-путь не меняется: pre-commit переменную не задаёт.
+# Образец приёма — `runner` в orchestrator_providers («runner заменяет subprocess.run, а не весь
+# вызов — production-path проходит в selftest»).
 FILES=()
-while IFS= read -r _f; do
-  [ -n "$_f" ] && FILES+=("$_f")
-done < <(git diff --cached --name-only --diff-filter=ACMR)
+if [ -n "${COMMIT_CONTRACT_FILES:-}" ]; then
+  for _f in $COMMIT_CONTRACT_FILES; do
+    FILES+=("$_f")
+  done
+else
+  while IFS= read -r _f; do
+    [ -n "$_f" ] && FILES+=("$_f")
+  done < <(git diff --cached --name-only --diff-filter=ACMR)
+fi
 if [ ${#FILES[@]} -eq 0 ]; then
   exit 0            # merge/amend без изменений индекса — судить нечего
 fi
