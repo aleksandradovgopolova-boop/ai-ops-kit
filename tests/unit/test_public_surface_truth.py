@@ -56,10 +56,15 @@ def _fake_pkg(tmp_path, readme, roadmap, version="9.9.9"):
 
 def test_stale_channel_is_caught_even_when_the_new_version_appears_below(claims, tmp_path):
     """ТОЧНЫЙ СЛУЧАЙ 3.36.0: шапка говорит про старый канал, а ниже в истории есть новая версия."""
+    # КАНАЛ БЕРЁТСЯ ИЗ РЕЕСТРА, а не вписан словом: шаблоны сверки теперь подставляют `{channel}`
+    # (F-030), и фикстура с зашитым «stable» ослепла бы при первом же честном понижении канала —
+    # именно это и произошло, когда 3.36.10 стал `qualification`. Тест проверяет механизм, а не то,
+    # какое слово стоит в реестре сегодня.
+    ch = claims["channel"]
     pkg = _fake_pkg(
         tmp_path,
-        readme="# п\n\n**v9.9.9 stable** — ок\n",
-        roadmap=("совместимый в пределах 2.x; 3.x (текущий канал — **v3.34.0 stable**: старое)\n\n"
+        readme=f"# п\n\n**v9.9.9 {ch}** — ок\n",
+        roadmap=(f"совместимый в пределах 2.x; 3.x (текущий канал — **v3.34.0 {ch}**: старое)\n\n"
                  "- **v9.9.9 — новое** ✅ уже выпущено\n"))
     errs = vrc.authoritative_version_errors(claims, pkg)
     assert errs, "устаревшая шапка прошла, потому что новая версия нашлась подстрокой ниже"
@@ -69,7 +74,7 @@ def test_stale_channel_is_caught_even_when_the_new_version_appears_below(claims,
 def test_missing_declaration_is_an_error_not_a_pass(claims, tmp_path):
     """Образец перестал совпадать -> проверка ослепла. Это ошибка, а не «замечаний нет»."""
     pkg = _fake_pkg(tmp_path, readme="# п\n\nверсия где-то там\n",
-                    roadmap="3.x (текущий канал — **v9.9.9 stable**: ок)\n")
+                    roadmap=f"3.x (текущий канал — **v9.9.9 {claims['channel']}**: ок)\n")
     errs = vrc.authoritative_version_errors(claims, pkg)
     assert errs and "ослепла" in errs[0], errs
 

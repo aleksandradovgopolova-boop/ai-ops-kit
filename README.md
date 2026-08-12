@@ -51,7 +51,12 @@ cd /path/to/project
 
 ## Версия
 
-**v3.36.10 stable** — Field Findings
+**v3.36.10 qualification** — Field Findings
+
+> Канал `qualification`, а не `stable`, и это не осторожность, а правило: `stable` требует полевых
+> доказательств на двух живых дочках для ЭТОЙ версии, и проверяется машиной
+> (`registry/release-claims.yaml` → `channels`, `validate_release_claims`). Пока обкатки нет, слово
+> `stable` было бы самообъявлением — как у v3.36.9, вышедшей `stable` с P1 внутри.
 
 Все находки этого патча пришли **из поля** — из живой установки и живого обновления, а не из
 чтения кода. Полный реестр с доказательствами — [docs/audit-report.md](docs/audit-report.md).
