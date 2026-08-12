@@ -184,7 +184,14 @@ def provided_from_artifacts(child_root, wid, work_root=None):
                     provided[sid] = {"status": entry.get("status", "missing"), "note": entry.get("note")}
                 elif isinstance(entry, str):
                     provided[sid] = {"status": "complete", "note": None}
-        except Exception:  # noqa: BLE001 — битый spec.yaml не должен ронять оценку
+        # Причина подавления (срез ратчета, 2026-08-12): битый spec.yaml не засчитывает разделы,
+        # то есть оценка идёт путём «не описано» -> missing -> БЛОКИРУЕТ. Fail-closed, и он верен.
+        #
+        # Тип оставлен широким СОЗНАТЕЛЬНО, хотя первым порывом было сузить до
+        # `(OSError, yaml.YAMLError)`: `import yaml` стоит ВНУТРИ этого же `try` (строка выше), и при
+        # отсутствии pyyaml except-клауза упала бы на неразрешённом имени `yaml` — NameError вместо
+        # аккуратного отказа. Сужение здесь ухудшило бы поведение, а не улучшило.
+        except Exception:  # noqa: BLE001,S110 — битый spec -> missing -> блокирует; см. про import выше
             pass
 
     # 2) засчитать разделы по реальным артефактам прогона (если раздел ещё не описан явно)
