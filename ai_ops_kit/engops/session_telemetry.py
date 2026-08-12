@@ -54,8 +54,11 @@ def snapshot(child_root, workitem_id=None, session_id=None, context_current=None
     try:
         from ai_ops_kit.engops import session_telemetry_provider
         provider_data = session_telemetry_provider.read_session_metadata(session_id=session_id)
-    except Exception:  # noqa: BLE001
-        pass  # provider unavailable — честно продолжаем без него
+    # Причина подавления (срез ратчета, 2026-08-12): провайдер телеметрии — OPT-IN, его отсутствие
+    # штатно. Утраты данных нет: ниже статус контекста остаётся `unavailable`, а не подменяется
+    # нулём — тот самый инвариант `unavailable != 0`.
+    except Exception:  # noqa: BLE001,S110 — opt-in провайдер отсутствует; статус остаётся unavailable
+        pass
 
     wids = sorted({r.get("workitem_id") for r in records if r.get("workitem_id")})
     # started_at: из provider (measured) или unavailable

@@ -565,8 +565,14 @@ def _contour_state(child_root, c: dict, evidence: dict, model: dict) -> dict:
             from ai_ops_kit.planning import delivery_plan as _dp
             if _dp.is_template(_dp.load(root)):
                 state = PARTIAL
-        except Exception:                              # noqa: BLE001 — план не обязан разбираться
-            pass
+        # «НЕ СМОГ ПРОВЕРИТЬ» НЕ РАВНО «ПРОВЕРЕНО» (срез ратчета, 2026-08-12). Прежний `pass`
+        # оставлял состояние VERIFIED: при БИТОМ `planning/plan.yaml` контур объявлялся
+        # подтверждённым, хотя проверка не состоялась. И это не гипотеза — `delivery_plan.load()`
+        # по контракту БРОСАЕТ `PlanCorrupt` на неразобранном файле («„работы нет“ и „файл не
+        # заполнен“ это разные ответы»), то есть путь достижим ровно там, где ошибка дороже всего.
+        # Тот же класс, что F-018: существование файла принималось за заполненность.
+        except Exception:  # noqa: BLE001 — любой отказ проверки -> UNKNOWN, а не VERIFIED
+            state = UNKNOWN
 
     rec = c.get("reconstruction") or {}
     qs = c.get("questions") or []

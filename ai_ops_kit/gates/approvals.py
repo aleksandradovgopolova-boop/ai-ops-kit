@@ -205,7 +205,10 @@ def load_approvals(child_root, wid):
                 r = yaml.safe_load(p.read_text(encoding="utf-8"))
                 if isinstance(r, dict) and r.get("kind") == "ApprovalRecord":
                     recs.append(r)
-            except Exception:  # noqa: BLE001 — битую запись игнорируем (не считаем одобрением)
+            # Причина подавления (срез ратчета, 2026-08-12): FAIL-CLOSED и он верен — битая
+            # запись НЕ становится одобрением. Тип широк намеренно: любой отказ чтения обязан
+            # дать «одобрения нет», а не исключение наружу посреди проверки прав.
+            except Exception:  # noqa: BLE001,S110 — битая запись не считается одобрением
                 pass
     return recs
 
