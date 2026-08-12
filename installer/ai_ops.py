@@ -41,6 +41,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -126,6 +127,27 @@ def child_allowed_range():
     """allowed_version_range из .ai-ops.yaml (пусто, если не задан/нет конфига)."""
     cfg = _read_child_cfg()
     return str((cfg.get("parent") or {}).get("allowed_version_range", "") or "")
+
+
+def child_update_policy():
+    """`parent.update_policy` из .ai-ops.yaml: 'pr' | 'manual'. -> str.
+
+    F-022. Поле ОБЯЗАТЕЛЬНО по схеме конфига дочки (`schemas/child-config.schema.json` ->
+    required, enum [pr, manual]), манифест объявляет `silent_update: forbidden`, а `init` печатает
+    владельцу вслух: «обновления — только через ваш PR». Замер 2026-08-12: значение НЕ читала ни
+    одна строка кода — единственные попадания `update_policy` в Python относились к
+    `manifest.update_policy.managed_set`, другому ключу в другом файле. То есть кит просил у
+    владельца обязательное решение, обещал его соблюдать и выбрасывал. Найдено в поле: дочка с
+    `update_policy: pr` получила 3.36.4 -> 3.36.8 НА МЕСТЕ, посреди продуктовой задачи,
+    `pull_request: null`, `human_approval_required: false`.
+
+    ОТСУТСТВИЕ ЗНАЧЕНИЯ ЧИТАЕТСЯ КАК 'pr', а не как «можно молча». Конфиг без обязательного поля —
+    это старая или повреждённая установка, и трактовать её как разрешение silent update значило бы
+    сделать самый мягкий вывод из самого подозрительного состояния.
+    """
+    cfg = _read_child_cfg()
+    val = str((cfg.get("parent") or {}).get("update_policy", "") or "").strip().lower()
+    return val if val in ("pr", "manual") else "pr"
 
 
 def parent_source():
@@ -764,8 +786,137 @@ def _context_gaps():
     return req, missing
 
 
-def cmd_update(force=False, smoke_checks=None, refresh_ci=False):
+def _deferred_update(inst, target, force=False, refresh_ci=False):
+    """F-022: применить обновление в ОТДЕЛЬНОЙ ветке, не трогая рабочее дерево владельца. -> rc.
+
+    ПОЧЕМУ ЧЕРЕЗ WORKTREE, а не через checkout в дереве владельца. Обновление затрагивает десятки
+    файлов; сделать это «в ветке» переключением ветки в общем дереве означало бы увести чужие
+    незакоммиченные правки — тот самый промах, который замерен в `docs/parallel-sessions.md`. В
+    отдельном worktree дерево владельца не меняется ВООБЩЕ, поэтому грязное дерево здесь не
+    блокер: его правки просто не попадают в update-PR, и это верно.
+
+    Само обновление не переписывается: тот же `cmd_update`, вызванный с `--in-place` и cwd =
+    worktree. Две реализации разошлись бы, а `REPO_ROOT = Path.cwd()` делает подмену корня честной.
+    """
+    branch = f"ai-ops/update-v{target}"
+    # База берётся ИЗ РЕПОЗИТОРИЯ. Здесь стояло `main` в подсказке — и на дочке с веткой `master`
+    # кит печатал команду, которая не работает. Ровно тот класс, что F-020/F-021: инструкция,
+    # которую нельзя выполнить, хуже отсутствующей.
+    _base = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--abbrev-ref", "HEAD"],
+                           capture_output=True, text=True).stdout.strip() or "HEAD"
+    if not _is_git_worktree(REPO_ROOT):
+        print(f"ОШИБКА: {REPO_ROOT} — не git-репозиторий, а `update_policy: pr` требует ветки и PR. "
+              f"Либо инициализируйте git, либо поставьте `parent.update_policy: manual` осознанно.")
+        return 2
+    # УСТАНОВКА ОБЯЗАНА БЫТЬ В ИСТОРИИ. Отложенный режим строит ветку из HEAD, поэтому если
+    # `.ai-ops.yaml` или managed-слой ещё не закоммичены, вложенный прогон не найдёт установку и
+    # падал сырым `FileNotFoundError` — замерено на сценарии «init, затем сразу update, ничего не
+    # коммитив». Уборка при этом работала (ветка удалялась, дерево не менялось), но человек видел
+    # трейсбек вместо причины. Отказ объяснимый и с двумя выходами.
+    _missing = [rel for rel in (".ai-ops.yaml", ".ai/managed")
+                if subprocess.run(["git", "-C", str(REPO_ROOT), "cat-file", "-e", f"HEAD:{rel}"],
+                                  capture_output=True).returncode != 0]
+    if _missing:
+        print(f"ОШИБКА: установка кита не в истории git ({', '.join(_missing)} нет в HEAD), а "
+              f"`update_policy: pr` готовит обновление В ВЕТКЕ от HEAD — там установки не окажется.\n"
+              f"  либо закоммитьте установку:  git add -A && git commit -m 'ai-ops init'\n"
+              f"  либо примените на месте:     ai-ops update --in-place")
+        return 2
+    if subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", "--quiet", branch],
+                      capture_output=True).returncode == 0:
+        print(f"ОШИБКА: ветка {branch} уже существует — вероятно, обновление до {target} уже "
+              f"подготовлено. Откройте PR из неё, влейте или удалите её (git branch -D {branch}) "
+              f"и повторите. Молча дописывать в чужую ветку кит не будет.")
+        return 1
+
+    tmp = Path(tempfile.mkdtemp(prefix="ai-ops-update-"))
+    wt = tmp / "wt"
+    r = subprocess.run(["git", "-C", str(REPO_ROOT), "worktree", "add", "-q", "-b", branch, str(wt)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        shutil.rmtree(tmp, ignore_errors=True)
+        print(f"ОШИБКА: не удалось создать worktree для обновления: {r.stderr.strip()[:300]}")
+        return 1
+    try:
+        cmd = [sys.executable, str(HERE), "update", "--in-place"]
+        if force:
+            cmd.append("--force")
+        if refresh_ci:
+            cmd.append("--refresh-ci")
+        applied = subprocess.run(cmd, cwd=str(wt))
+        if applied.returncode != 0:
+            # Ветка бесполезна без применённого обновления: удаляем, чтобы повтор не спотыкался
+            # о «ветка уже существует» и чтобы не осталось видимости подготовленного PR.
+            subprocess.run(["git", "-C", str(REPO_ROOT), "worktree", "remove", "--force", str(wt)],
+                           capture_output=True)
+            subprocess.run(["git", "-C", str(REPO_ROOT), "branch", "-D", branch], capture_output=True)
+            print(f"Обновление в ветке {branch} НЕ применилось (см. вывод выше) — ветка удалена, "
+                  f"рабочее дерево не тронуто.")
+            return applied.returncode
+
+        subprocess.run(["git", "-C", str(wt), "add", "-A"], capture_output=True)
+        staged = subprocess.run(["git", "-C", str(wt), "diff", "--cached", "--name-only"],
+                                capture_output=True, text=True).stdout.split()
+        if not staged:
+            subprocess.run(["git", "-C", str(REPO_ROOT), "worktree", "remove", "--force", str(wt)],
+                           capture_output=True)
+            subprocess.run(["git", "-C", str(REPO_ROOT), "branch", "-D", branch], capture_output=True)
+            print("Обновление не дало изменений, отслеживаемых git — ветка не нужна и удалена.")
+            return 0
+        msg = (f"chore(ai-ops): обновление кита {inst or '—'} -> {target}\n\n"
+               f"Подготовлено `ai-ops update` при `parent.update_policy: pr`: применено в отдельной "
+               f"ветке, рабочее дерево не тронуто. Отчёт — .ai/runtime/last-update-report.json.\n")
+        c = subprocess.run(["git", "-C", str(wt),
+                            "-c", "user.name=ai-ops-updater",
+                            "-c", "user.email=ai-ops-updater@users.noreply.github.com",
+                            "commit", "-q", "-m", msg], capture_output=True, text=True)
+        if c.returncode != 0:
+            print(f"ОШИБКА: обновление применено в {branch}, но коммит не создан: "
+                  f"{(c.stderr or c.stdout).strip()[:300]}. Ветка оставлена как есть.")
+            return 1
+
+        # ОТЧЁТ ПЕРЕЖИВАЕТ WORKTREE. Вложенный прогон пишет
+        # `last-update-report.json` в СВОЙ корень, то есть во временный каталог, который удаляется
+        # ниже — и владелец остался бы без машиночитаемого отчёта об обновлении вовсе. А именно этот
+        # файл и позволил найти F-022: в нём было видно `pull_request: null` при `update_policy: pr`.
+        # Теперь он переносится владельцу и НАЗЫВАЕТ отложенное решение, а не молчит о нём.
+        try:
+            _rep = json.loads((wt / ".ai" / "runtime" / "last-update-report.json")
+                              .read_text(encoding="utf-8"))
+        except (OSError, ValueError) as _re_err:
+            _rep = {"schema_version": 1, "command": "update", "from_version": inst,
+                    "to_version": target, "status": "ok",
+                    "report_read_error": f"{type(_re_err).__name__}: {_re_err}"[:200]}
+        _rep.update({"applied_in_place": False, "deferred_to_branch": branch,
+                     "pull_request": branch, "human_approval_required": True,
+                     "update_policy": "pr",
+                     "report": (f"Обновление {inst or '—'} -> {target} подготовлено в ветке {branch} "
+                                f"({len(staged)} файлов); рабочее дерево не тронуто. "
+                                f"Откройте PR: git push -u origin {branch} && gh pr create --fill")})
+        write_report(_rep)
+    finally:
+        subprocess.run(["git", "-C", str(REPO_ROOT), "worktree", "remove", "--force", str(wt)],
+                       capture_output=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print(f"\n`parent.update_policy: pr` — обновление {inst or '—'} -> {target} подготовлено В ВЕТКЕ, "
+          f"на месте НЕ применено.\n"
+          f"  ветка:          {branch} ({len(staged)} файлов)\n"
+          f"  рабочее дерево: не тронуто\n"
+          f"  открыть PR:     git push -u origin {branch} && gh pr create --fill\n"
+          f"  посмотреть:     git diff {_base}..{branch} --stat\n"
+          f"Чтобы применить на месте осознанно: `ai-ops update --in-place`.")
+    return 0
+
+
+def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False):
     inst, target = installed_version(), pkg_version()
+    # F-022: политика дочки ЧИТАЕТСЯ и исполняется. `pr` -> обновление уходит в ветку, а не в
+    # рабочее дерево; `manual` -> владелец сам решает, когда обновляться, применение на месте
+    # легитимно. `--in-place` — явное согласие или CI-путь (`templates/ci/ai-ops-update.yml`
+    # применяет и САМ открывает PR, поэтому там политика соблюдена другим способом).
+    if not in_place and child_update_policy() == "pr":
+        return _deferred_update(inst, target, force=force, refresh_ci=refresh_ci)
     report = {"schema_version": 1, "command": "update", "from_version": inst,
               "to_version": target, "status": "ok", "compatibility": "compatible",
               "managed_changes": [], "direct_edits_detected": [], "migrations_applied": [],
@@ -1005,6 +1156,14 @@ _GITIGNORE_RULES = """
 .ai/runtime/active-work.yaml
 .ai/runtime/*.lock
 .ai/runtime/**/*.lock
+
+# Транзакционный бэкап managed-слоя и отчёт последнего обновления. ЗАМЕР (F-022, живая проверка на
+# дочке): без этих двух строк подготовленный update-PR содержал 612 файлов, из которых 609 — копия
+# managed-слоя из бэкапа. Настоящих изменений было два (`.ai-ops.yaml` и `.provenance.json`).
+# Дифф, который нельзя отсмотреть, — это тот же ложный green: «отревьюено» превращается в
+# «пролистано».
+.ai/runtime/backups/
+.ai/runtime/last-update-report.json
 
 # Локальный учёт стоимости прогонов: цифры этой машины, а не общий факт. ЕДИНСТВЕННОЕ правило
 # здесь, о котором можно спорить: если команде нужна общая история стоимости — снимите эту
@@ -2041,7 +2200,10 @@ def selftest():
             # sentinel в runtime-ассете (.claude/commands) — update перезапишет, откат обязан вернуть
             cmd_file = child / ".claude" / "commands" / "ai-engineering.md"
             cmd_file.write_text("SENTINEL-PRE-UPDATE", encoding="utf-8")
-            rc = cmd_update(force=False, smoke_checks=[["__does_not_exist__.py"]])
+            # `in_place=True` НАЗЫВАЕТ проверяемый путь (F-022): предмет здесь —
+            # транзакционный откат применённого обновления, а не политика доставки.
+            rc = cmd_update(force=False, smoke_checks=[["__does_not_exist__.py"]],
+                            in_place=True)
             rep = json.loads((AI_DIR / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
             cfg_after = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
             expect("provalen smoke -> rc=1", rc == 1)
@@ -2093,7 +2255,8 @@ def _dispatch(argv):
     if cmd == "update":
         # --refresh-ci: перезаписать и те kit-owned workflow, которые правил владелец. Отдельный
         # флаг, а не поведение по умолчанию: чужие правки молча не теряются.
-        return cmd_update(force="--force" in argv, refresh_ci="--refresh-ci" in argv)
+        return cmd_update(force="--force" in argv, refresh_ci="--refresh-ci" in argv,
+                          in_place="--in-place" in argv)
     if cmd == "init":
         if len(argv) < 3:
             print("использование: ai-ops init <путь-к-репозиторию>"); return 2

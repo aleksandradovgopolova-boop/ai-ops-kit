@@ -62,9 +62,14 @@ jobs:
       - name: Пропуск (auto_update:false, запуск по расписанию)
         if: steps.ver.outputs.needs_update == 'true' && steps.ver.outputs.proceed != 'true'
         run: echo "Доступно обновление $INSTALLED -> $AVAILABLE, но parent.auto_update=false (опт-аут) и запуск по расписанию — PR не открывается. Запустите workflow вручную (Run workflow) или включите auto_update."
+      # `--in-place` ОБЯЗАТЕЛЕН здесь и появился вместе с F-022. Без него `update` при
+      # `parent.update_policy: pr` уходит в отдельную ветку сам — и этот workflow, который делает
+      # ветку и PR СЛЕДУЮЩИМ шагом, получил бы ветку в ветке и пустой diff. Флаг говорит: применяй
+      # на месте, PR открою я. Политика при этом соблюдена — просто другим механизмом, и здесь это
+      # видно, а не подразумевается.
       - name: Запустить ai-ops update
         if: steps.ver.outputs.proceed == 'true'
-        run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py update
+        run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py update --in-place
       - name: Открыть PR с обновлением
         if: steps.ver.outputs.proceed == 'true'
         env:

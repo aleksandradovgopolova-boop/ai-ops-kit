@@ -673,6 +673,10 @@ LEAKY_PATHS = [
     (".ai/reevaluate-evidence-wi-1.json", "кеш переоценки гейтов"),
     (".ai/repository-profile.yaml", "машинный кеш детекции стека"),
     (".ai/managed/ai_ops_kit/__pycache__/x.cpython-314.pyc", "байткод в checksummed слое"),
+    # ЗАМЕР F-022: без этих двух подготовленный update-PR содержал 612 файлов, из которых 609 —
+    # копия managed-слоя из бэкапа. Дифф, который нельзя отсмотреть, — тот же ложный green.
+    (".ai/runtime/backups/3.36.8/managed/agents/core/x.md", "транзакционный бэкап managed-слоя"),
+    (".ai/runtime/last-update-report.json", "отчёт последнего обновления — состояние прогона"),
 ]
 
 # Обратная сторона: это НЕ служебное состояние, а продукт — прятать его нельзя.
