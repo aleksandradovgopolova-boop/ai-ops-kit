@@ -71,9 +71,12 @@ def call_model(model_cfg, gen_cfg, system_prompt, user_prompt):
             last_err = e
             detail = ''
             if isinstance(e, urllib.error.HTTPError):
-                try:
+                try:  # noqa: S110 — причина у except ниже
                     detail = e.read().decode()[:300]
-                except Exception:
+                # Причина подавления: это чтение НЕОБЯЗАТЕЛЬНОЙ детали для сообщения, которое
+                # печатается строкой ниже в любом случае. Сама ошибка уже перехвачена внешним
+                # `except` с конкретными типами и сообщена; не смогли добрать текст — не смогли.
+                except Exception:  # noqa: BLE001,S110 — деталь необязательна, ошибка уже сообщена
                     pass
             print(f"    попытка {attempt + 1} не удалась: {e} {detail}", file=sys.stderr)
             time.sleep(5 * (attempt + 1))
