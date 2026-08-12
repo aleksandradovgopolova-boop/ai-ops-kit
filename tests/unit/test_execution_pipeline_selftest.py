@@ -1043,7 +1043,11 @@ def test_execution_pipeline_selftest():
         _git(root, "checkout", "-q", orig_branch)
         try:
             _wt2 = __import__("worktree"); _wt2.remove(root, "bb-fn", force=True)
-        except Exception: pass
+        # Причина ЗАПИСАНА (срез tests ратчета 2026-08-12): уборка временного worktree ПОСЛЕ
+        # вынесенных выше `expect`. Её отказ не участвует ни в одном утверждении теста; ронять тут
+        # значило бы подменить результат проверки base-binding ошибкой удаления каталога. Мусор
+        # добирается следующей строкой (`worktree prune`).
+        except Exception: pass  # noqa: BLE001,S110 — уборка после вынесенных проверок
         _git(root, "worktree", "prune"); _git(root, "branch", "-D", "ai-ops/bb-fn"); _git(root, "branch", "-D", "feat-base")
 
         # v3.0.1 (P0): high-risk approval — legacy «рыхлая» запись (без binds_to/expires_at/risk/source)

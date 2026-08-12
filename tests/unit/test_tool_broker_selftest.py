@@ -31,9 +31,12 @@ def test_tool_broker_selftest():
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
     def _raises(fn):
+        # Причина ЗАПИСАНА (срез tests ратчета 2026-08-12): предмет этого помощника — САМ ФАКТ
+        # исключения, а не его тип. Сужение здесь сломало бы проверку: тест утверждает «эта операция
+        # обязана упасть», и упасть она вправе чем угодно. Гашения нет — результат возвращается.
         try:
             fn(); return False
-        except Exception:
+        except Exception:  # noqa: BLE001 — предмет проверки: упало или нет, тип не важен
             return True
 
     with tempfile.TemporaryDirectory() as td:
