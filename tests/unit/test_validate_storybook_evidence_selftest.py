@@ -109,7 +109,10 @@ def test_validate_storybook_evidence_selftest():
         sec_enum = set(sch["properties"]["interaction_tests"]["properties"]["status"]["enum"])
         build_enum = set(sch["properties"]["storybook"]["properties"]["build_status"]["enum"])
         expect("enum'ы валидатора == схема (нет дрейфа)", sec_enum == STATUS3 and build_enum == BUILD)
-    except Exception as ex:
+    # Причина ЗАПИСАНА (срез tests ратчета 2026-08-12): тот же правильный образец, что в
+    # test_gate_result_v2_selftest — отказ чтения схемы становится именованным FAIL с текстом
+    # исключения и валит тест, а не проходит молча.
+    except Exception as ex:  # noqa: BLE001 — отказ становится именованным FAIL, а не тишиной
         expect(f"схема читается ({ex})", False)
 
     assert ok, "перенесённый селфтест validate_storybook_evidence: см. строки FAIL в выводе"
