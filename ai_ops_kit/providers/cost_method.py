@@ -34,19 +34,19 @@ def advise(signals, snapshot=None, child_root=None):
     def add(priority, category, advice):
         out.append({"priority": priority, "category": category, "advice": advice})
 
-    def add_unavailable(priority, category, exc):
-        """Категория не рассчитана -> сказать это, а не молча укоротить список советов.
+    def skipped(priority, category, exc):
+        """Категорию совета оценить не удалось — СКАЗАТЬ это, а не выдать 4 совета вместо 5.
 
-        СРЕЗ providers РАТЧЕТА 2026-08-12. Три категории собирались под `except Exception: pass`, и
-        сбой любой из них просто убирал её из ответа: владелец видел список короче и не знал, что
-        совет был потерян, а не «не понадобился». Образец взят в этом же файле: категория 1 уже
-        различает `unknown` («объём контекста неизвестен») и «всё в порядке» — то есть модуль сам
-        считает, что нерассчитанное надо называть. Здесь то же для внутреннего сбоя.
+        Срез `providers` ратчета (2026-08-12). Три блока стояли под `except Exception: pass`, и при
+        сбое под-советчика целая категория (гигиена сессии / делегирование / выбор runtime) молча
+        исчезала из выдачи. Инструмент, чья работа — советовать, советовал меньше и не говорил об
+        этом: человек читал полный список, не зная, что он неполный. Тот же класс, что заниженное
+        число в наблюдаемости и «нет расписки» вместо «не смог прочитать».
+
+        Канал вывода уже есть — сама выдача советов, поэтому пропуск называется в ней же.
+        Прогон при этом не падает: совет — не блокирующий контур.
         """
-        out.append({"priority": priority, "category": category,
-                    "advice": f"совет не рассчитан ({type(exc).__name__}: {exc}) — это НЕ «нечего "
-                              f"советовать»: категория недоступна, проверьте её отдельно",
-                    "unavailable": True})
+        add(priority, category, f"НЕ ОЦЕНЕНО: {category} — {type(exc).__name__}: {exc}"[:300])
 
     # 1. Гигиена сессии/контекста
     try:
@@ -65,16 +65,16 @@ def advise(signals, snapshot=None, child_root=None):
         elif state == "unknown":
             add(1, "session_hygiene", "объём контекста неизвестен — передайте `--context N` из /context рантайма "
                                       "для точной оценки")
-    except Exception as _e:  # noqa: BLE001 — категория не рассчитана -> названа, а не выпала из списка
-        add_unavailable(1, "session_hygiene", _e)
+    except Exception as _e:  # noqa: BLE001 — совет не роняет прогон; пропуск НАЗЫВАЕТСЯ, см. skipped()
+        skipped(1, "session_hygiene", _e)
 
     # 2. Делегирование разведки
     try:
         from ai_ops_kit.engops import delegation_advisor as _da
         for d in _da.advise(s):
             add(2, "delegation", f"{d['trigger']}: {d['reason']} -> {d['delegate_to']}")
-    except Exception as _e:  # noqa: BLE001 — категория не рассчитана -> названа, а не выпала из списка
-        add_unavailable(2, "delegation", _e)
+    except Exception as _e:  # noqa: BLE001 — см. skipped()
+        skipped(2, "delegation", _e)
 
     # 3. Ограничение бесполезных итераций
     attempts = int(s.get("fix_attempts") or 0)
@@ -90,8 +90,8 @@ def advise(signals, snapshot=None, child_root=None):
             add(4, "runtime", f"{wt['reason']} — Opus/сильный writer не нужен; дешёвый qualified writer")
         else:
             add(4, "runtime", f"{wt['reason']} — задача сложная: сильный executor оправдан")
-    except Exception as _e:  # noqa: BLE001 — категория не рассчитана -> названа, а не выпала из списка
-        add_unavailable(4, "runtime", _e)
+    except Exception as _e:  # noqa: BLE001 — см. skipped()
+        skipped(4, "runtime", _e)
 
     # 5. Effort и краткость
     tt = str(s.get("task_type") or "").upper()

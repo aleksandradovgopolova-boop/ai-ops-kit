@@ -58,39 +58,41 @@ def test_cost_method_selftest():
     assert ok, "перенесённый селфтест cost_method: см. строки FAIL в выводе"
 
 
-# ─── срез providers ратчета 2026-08-12: потерянный совет называется ──────────────────────────────
-# НАХОДКА. Три из пяти категорий советника собирались под `except Exception: pass`. Сбой любой из
-# них просто убирал категорию из ответа: владелец видел список короче и не мог отличить «совета не
-# требуется» от «совет не рассчитан». Образец решения взят в самом файле — категория 1 уже
-# различала `unknown` («объём контекста неизвестен») и «всё в порядке».
-import pytest
+class TestSkippedAdviceIsNamed:
+    """Пропущенная категория совета НАЗЫВАЕТСЯ, а не исчезает (срез providers ратчета, 2026-08-12).
 
+    Три блока в `cost_method` стояли под `except Exception: pass`, и при сбое под-советчика целая
+    категория (гигиена сессии / делегирование / выбор runtime) молча выпадала из выдачи. Человек
+    читал полный список, не зная, что он неполный — тот же класс, что заниженное число в
+    наблюдаемости и «нет расписки» вместо «не смог прочитать».
+    """
 
-@pytest.mark.unit
-def test_failed_category_is_named_not_dropped(monkeypatch):
-    import cost_method
-    from ai_ops_kit.providers import model_router
+    def test_broken_subadvisor_is_named_not_dropped(self, monkeypatch):
+        """Сбой под-советчика -> в выдаче есть пункт «НЕ ОЦЕНЕНО», а не тишина."""
+        import cost_method
+        from ai_ops_kit.engops import session_guardrails as sg
 
-    def _boom(_s):
-        raise RuntimeError("реестр моделей недоступен")
+        def boom(*a, **k):
+            raise RuntimeError("под-советчик сломан")
 
-    monkeypatch.setattr(model_router, "writer_tier", _boom)
-    recs = cost_method.advise({"task_type": "ENGINEERING"})
+        monkeypatch.setattr(sg, "load_policy", boom)
+        out = cost_method.advise({"task_type": "QUICK"})
+        skipped = [o for o in out if "НЕ ОЦЕНЕНО" in str(o.get("advice"))]
+        assert skipped, f"категория выпала молча: {[o.get('category') for o in out]}"
+        assert "session_hygiene" in skipped[0]["category"]
+        assert "RuntimeError" in skipped[0]["advice"], "не сказано, ПОЧЕМУ не оценено"
 
-    runtime = [r for r in recs if r["category"] == "runtime"]
-    assert runtime, "категория runtime исчезла из ответа — потеря совета невидима"
-    assert runtime[0].get("unavailable") is True, runtime[0]
-    assert "RuntimeError" in runtime[0]["advice"], "причина недоступности не названа"
-    assert not cost_method.check(recs), "нерассчитанный совет ломает собственный контракт check()"
+    def test_healthy_run_has_no_skipped_marker(self):
+        """Обратная сторона: на исправных советчиках «НЕ ОЦЕНЕНО» не появляется."""
+        import cost_method
+        out = cost_method.advise({"task_type": "QUICK"})
+        assert not [o for o in out if "НЕ ОЦЕНЕНО" in str(o.get("advice"))], out
 
-
-@pytest.mark.unit
-def test_healthy_run_does_not_mark_anything_unavailable():
-    """Обратная сторона: на исправном пути пометок недоступности быть не должно."""
-    import cost_method
-
-    recs = cost_method.advise({"task_type": "ENGINEERING"})
-    assert recs, "советник не дал ни одной рекомендации — тест потерял предмет"
-    assert not [r for r in recs if r.get("unavailable")], (
-        "исправный прогон объявил категории недоступными: "
-        f"{[r['category'] for r in recs if r.get('unavailable')]}")
+    def test_advice_still_returned_when_one_category_fails(self, monkeypatch):
+        """fail-open сохранён: остальные советы на месте, команда не падает."""
+        import cost_method
+        from ai_ops_kit.engops import session_guardrails as sg
+        monkeypatch.setattr(sg, "load_policy", lambda *a, **k: (_ for _ in ()).throw(OSError("нет файла")))
+        out = cost_method.advise({"task_type": "QUICK"})
+        cats = {o["category"] for o in out}
+        assert len(cats) >= 2, f"сбой одной категории убил всю выдачу: {cats}"
