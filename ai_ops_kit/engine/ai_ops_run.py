@@ -39,7 +39,7 @@ from ai_ops_kit.engine import run_plan          # noqa: E402
 from ai_ops_kit.engine.pipeline_helpers import work_produced   # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work       # noqa: E402
-from ai_ops_kit.lifecycle import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
+from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
 def _note_bookkeeping_error(rep, what, exc):

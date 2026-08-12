@@ -27,6 +27,33 @@ def git(root, *args, timeout=GIT_TIMEOUT_DEFAULT):
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
+def committed_changed_files(root, sha):
+    """Файлы, изменённые коммитом sha относительно его первого родителя. -> [path] (пусто при ошибке).
+
+    ПЕРЕЕХАЛА СЮДА 2026-08-12 из `engine/pipeline_git.py`, где называлась `_committed_changed_files`
+    и была ПРИВАТНОЙ — а `gates/regression_evidence` импортировал её по приватному имени через
+    границу пакета. Такой доступ не описан ни одним интерфейсом: он и есть та неявная связность,
+    из-за которой менять кусок системы небезопасно — локального контекста не хватает, чтобы узнать,
+    кто ещё зависит от твоего `_`-имени. Функция — чистый git-запрос, её место рядом с остальными
+    обёртками над git.
+
+    `-z` ОБЯЗАТЕЛЕН, а не украшение. При `core.quotePath` (включён по умолчанию) git отдаёт
+    не-ASCII имена в escape-кавычках: `"context/product/\320\236..."`. Такой путь не совпадает ни с
+    одним сигнальным паттерном, и гейт связности превращал `changed` в `not_changed` — утверждение
+    вместо признания. Для русскоязычного продукта это отменяло гейт целиком. `-z` отдаёт имена как
+    есть, разделённые NUL, и попутно снимает вторую дыру: путь с переводом строки или запятой больше
+    не распадается.
+    """
+    if not sha:
+        return []
+    rc, out, _ = git(root, "diff", "--name-only", "-z", f"{sha}~1", sha)
+    if rc != 0:
+        rc, out, _ = git(root, "show", "--name-only", "-z", "--pretty=format:", sha)
+    if rc != 0:
+        return []
+    return [ln for ln in out.split("\0") if ln.strip()]
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="gitio.py")
     ap.add_argument("--selftest", action="store_true")

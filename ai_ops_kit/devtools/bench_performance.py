@@ -115,7 +115,7 @@ def _bench_usage_aggregate():
 
 def _bench_lifecycle_store():
     """Benchmark: durable_write + load_guarded на временном файле."""
-    from ai_ops_kit.lifecycle import lifecycle_store
+    from ai_ops_kit.shared import lifecycle_store
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "test.yaml"
         data = {"kind": "test", "value": 1, "items": list(range(100))}

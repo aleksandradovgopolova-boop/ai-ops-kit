@@ -15,23 +15,14 @@ def _git(root, *args):
 
 
 def _committed_changed_files(root, sha):
-    """Файлы, изменённые коммитом sha относительно его первого родителя. -> [path] (пусто при ошибке).
+    """Делегат к `shared.gitio.committed_changed_files` — ОДИН источник git-запроса.
 
-    `-z` ОБЯЗАТЕЛЕН, а не украшение. При `core.quotePath` (включён по умолчанию) git отдаёт не-ASCII
-    имена в escape-кавычках: `"context/product/\320\236..."`. Такой путь не совпадает ни с одним
-    сигнальным паттерном, и гейт связности превращал `changed` в `not_changed` — утверждение вместо
-    признания, то есть главный инвариант модели ломался на любом файле с русским именем. Для
-    русскоязычного продукта это отменяло гейт целиком. `-z` отдаёт имена как есть, разделённые NUL,
-    и попутно снимает вторую дыру: путь с переводом строки или запятой больше не распадается.
+    Тело переехало в `shared/gitio.py` (2026-08-12): его импортировал `gates/regression_evidence` по
+    ПРИВАТНОМУ имени через границу пакета. Здесь остался делегат, потому что внутри `engine` функция
+    зовётся из трёх мест, и переписывать их ради переезда — лишний риск без пользы.
     """
-    if not sha:
-        return []
-    rc, out, _ = _git(root, "diff", "--name-only", "-z", f"{sha}~1", sha)
-    if rc != 0:
-        rc, out, _ = _git(root, "show", "--name-only", "-z", "--pretty=format:", sha)
-    if rc != 0:
-        return []
-    return [ln for ln in out.split("\0") if ln.strip()]
+    from ai_ops_kit.shared import gitio
+    return gitio.committed_changed_files(root, sha)
 
 
 def _commit_on_branch(root, branch, message):
