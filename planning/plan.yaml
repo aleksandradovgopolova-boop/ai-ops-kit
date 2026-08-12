@@ -157,7 +157,14 @@ work:
     # test_lifecycle_honesty.py -> TestUnevaluatedBlueprintIsNotHealthy (3),
     # test_tool_broker_selftest.py -> два теста на fail-closed скраба. Мутация проверена: на коде
     # до правки тест R-34 даёт `done` и падает.
-    # ОСТАЛОСЬ 28 мест из замеренных 44: providers (6) -> мелкие (12: devtools 4, gates 2, context 2,
+    # СДЕЛАНО 2026-08-12 (четвёртый заход): срез `providers` (6 мест) РАЗОБРАН, пакет ушёл из
+    # `per-file-ignores`. Три места оказались правильным образцом (fail-closed вердикт ревьюера,
+    # сырой текст вместо потерянной диагностики, `usage unavailable != 0` — заявленный инвариант
+    # исполняется), а три советника в `cost_method` молча УКОРАЧИВАЛИ список рекомендаций: сбой
+    # категории убирал её из ответа, и владелец не мог отличить «совета не требуется» от «совет не
+    # рассчитан». Теперь категория называется нерассчитанной — по образцу самого файла, где
+    # состояние `unknown` уже отличалось от «всё в порядке». Регресс-тесты: 2.
+    # ОСТАЛОСЬ 22 места из замеренных 44: мелкие (12: devtools 4, gates 2, context 2,
     # ui/shared/planning/engops по 1) -> tests (7) и .research (3). Прежняя строка плана называла
     # «мелкие (9)» — это была ошибка сложения, числа `per-file-ignores` давали 12.
     # Плюс PLW1510 63 (подготовка временных git-репо);
@@ -322,3 +329,60 @@ work:
     # обкатки contour_consistency. Полностью подходящий кандидат (msh_news_bot_v2: Python,
     # PostgreSQL+pgvector, 9 workflows, 493 коммита) исключён владельцем; нужен другой такой же.
     # Установка из него откачена побайтово — дерево чистое, SHA не изменён.
+
+  # ─── green-means-checked (находки живых прогонов в дочках) ──────────────────────────────────
+  - id: child-repo-hygiene
+    title: Кит не сорит в истории дочки и не снимает проверки с её PR (F-020, F-021)
+    type: engineering
+    goal: green-means-checked
+    status: done
+    owner_role: engineer
+    depends_on: []
+    write_scope: [installer/, templates/ci/]
+    value: high
+    affects: {delivery_operations: true, engineering_quality_security: true}
+    # ЗАКРЫТО 2026-08-12 по двум находкам живого прогона в ии-среде. Обе — про границу между китом и
+    # чужим репозиторием, там же, где живут почти все находки обкаток.
+    # F-020 (P1): `templates/ci/ai-ops-record.yml` коммитил снимок эффекта с `[skip ci]`. Петлю
+    #   пометка не предотвращала (её предотвращает GitHub: пуш под GITHUB_TOKEN не перезапускает
+    #   workflow — так и было написано в шапке того же файла), зато когда коммит снимка оказывался
+    #   вершиной ветки, GitHub гасил ВСЕ проверки PR: «no checks reported». Ветка выглядела зелёной
+    #   потому, что проверок не было вовсе. Замер: два PR дочки оживляли пустым коммитом.
+    # F-021 (P2): установщик не писал в дочку `.gitignore` вовсе — граница была ОБЪЯВЛЕНА в
+    #   tests/unit/test_installer.py и не закрыта. В поле в коммит владельца пытались уехать
+    #   `.ai/worktrees/` (вложенный репозиторий), `.ai/runtime/active-work.yaml` и `.lock`,
+    #   `.ai/usage/product-ledger.jsonl`, `.ai/reevaluate-evidence-*.json`. Правило доставляется
+    #   через `deliver_assets` (единственная точка доставки), поэтому доедет и до УЖЕ подключённых
+    #   дочек; чужой `.gitignore` дополняется отмеченным блоком, дописка названа в отчёте.
+    # Тесты: обе половины у каждой находки. У F-021 обратная сторона проверяется вопросом К GIT
+    # (`git check-ignore`): продуктовые артефакты (.ai/managed, .ai/project, .ai/custom, features)
+    # НЕ скрыты — иначе находка «закрывалась» бы строкой `.ai/`.
+
+  - id: update-policy-enforcement
+    title: Решить, что делает `update` при update_policy pr — сейчас поле обязательно и не читается (F-022)
+    type: engineering
+    goal: green-means-checked
+    status: todo
+    owner_role: delivery
+    depends_on: []
+    write_scope: [installer/, templates/ci/]
+    value: high
+    affects: {delivery_operations: true, engineering_quality_security: true}
+    human_decision: >
+      что должен делать локальный `ai-ops update` при `parent.update_policy: pr` — отказываться и
+      печатать точную команду, или применять только под явным признаком CI/PR-пути
+    # НАЙДЕНО 2026-08-12 в поле (ии-среда) и ПОДТВЕРЖДЕНО по коду. `parent.update_policy`
+    # ОБЯЗАТЕЛЕН по схеме конфига дочки (`schemas/child-config.schema.json` -> required,
+    # enum [pr, manual]), манифест объявляет `silent_update: forbidden`, а установщик печатает
+    # владельцу вслух: «обновления — только через ваш PR». При этом значение НЕ ЧИТАЕТ ни одна
+    # строка кода: единственные попадания `update_policy` в Python — это
+    # `manifest.update_policy.managed_set`, другой ключ в другом файле.
+    # Замер в поле: `.ai/runtime/last-update-report.json` дочки с `update_policy: pr` показывает
+    # 3.36.4 -> 3.36.8 (88 файлов, миграция 3.33-to-3.34), `pull_request: null`,
+    # `human_approval_required: false` — применено НА МЕСТЕ, посреди продуктовой задачи.
+    # ПОЧЕМУ ТРЕБУЕТ РЕШЕНИЯ, А НЕ ПРАВКИ: CI-путь (`templates/ci/ai-ops-update.yml`) обновляет и
+    # САМ открывает PR, для него применение на месте легитимно. Нарушение — только у локального
+    # вызова, значит нужно либо различать пути явным признаком, либо запрещать локальное
+    # применение. Выбор меняет поведение главной команды установщика.
+    # РЯДОМ, та же природа: коммит `report-history` конфликтует сам с собой при слиянии ветки в
+    # main — журнал дописывается с двух сторон. У дочки так вышло дважды подряд.
