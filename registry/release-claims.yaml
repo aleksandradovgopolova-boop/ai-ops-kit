@@ -52,8 +52,22 @@ authoritative_version:
 
 # Числа в прозе обязаны совпадать с machine-readable claim: README писал «33 гейта», когда claim
 # уже говорил 34. Руками набранное число живёт своей жизнью до первого изменения.
+# ПОКРЫТИЕ БЫЛО НЕПОЛНЫМ, и это дало дрейф (внешнее ревью 12.08.2026). Правило существовало и
+# работало — но перечисляло ОДИН файл, README. Поэтому `docs/index.md`,
+# `docs/architecture/execution-engine.md` и `docs/architecture/quality-gates.md` говорили «32 гейта»
+# при фактических 34, и `CLAIMS-OK` печатался на каждом прогоне. Проверка без охвата — половина
+# проверки, а половина создаёт видимость полной.
+#
+# Числа помечены МАРКЕРОМ `<!-- claim:gates-total -->` (невидим при рендере). Причина: шаблон по
+# прозе ломается от переформулировки, и первая попытка «искать число рядом со словом гейт» сразу дала
+# ложный красный — в ROADMAP рядом стоят «21 гейт» (блокирующие) и «34» (всего). Маркер однозначен, а
+# его исчезновение даёт ОШИБКУ «проверка ослепла», не тишину.
 derived_numbers_in_docs:
-  - {file: README.md, pattern: '\*\*Quality Gates\*\* \| (\d+) гейт', claim: gates_count}
+  - {file: README.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  - {file: ROADMAP.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  - {file: docs/index.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  - {file: docs/architecture/execution-engine.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  - {file: docs/architecture/quality-gates.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
 
 # Каждый claim == фактический status в registry/runtimes.yaml (CI ловит расхождение заявленных
 # возможностей адаптеров/оркестратора). Обновлено под 3.8: concurrent + fan-in + resume доказаны live.
