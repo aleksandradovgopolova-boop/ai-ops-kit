@@ -45,7 +45,7 @@ goals:
     status: active
     outcome:
       # 13 из 34 гейтов объявлены и не блокируют (quality/gates.yaml).
-      advisory_gates_have_field_evidence: false
+      advisory_gates_have_field_evidence: true
 
   - id: second-real-brownfield
     status: active
@@ -240,7 +240,7 @@ work:
     title: Обкатать contour_consistency на живом репозитории и решить о переводе в blocking
     type: quality
     goal: advisory-gates-obkatka
-    status: in_progress
+    status: done
     owner_role: qa
     depends_on: [niti-findings-close]
     write_scope: [quality/gates.yaml, ai_ops_kit/planning/]
@@ -261,6 +261,20 @@ work:
     # ПЕРЕВОДА В BLOCKING НЕТ, и одного замера для него недостаточно: в этом диффе ни разу не
     # возник случай, ради которого гейт существует, — изменение модели данных без обновления
     # DataMap. До тех пор гейт остаётся advisory осознанно, а не по забывчивости.
+    #
+    # ЗАКРЫТО 2026-08-12. Обкатка выполнена на РЕАЛЬНОЙ истории niti (единственный подключённый
+    # репозиторий, где модель данных лежит в коде: supabase/migrations/*.sql + openapi.yaml), и
+    # запущена штатной функцией конвейера `contour_consistency_evidence`, а не примитивами.
+    #   B  (67ef9a0): миграция изменена, SoT не тронут -> warn, вердикт inconsistent, назван контур
+    #                 и файл — то самое поведение, ради которого гейт есть;
+    #   B' (6fe342f): миграция И openapi -> pass, ложного срабатывания нет;
+    #   A  ×5:        схемы не касались -> pass, ложных срабатываний 0.
+    # РЕШЕНИЕ: остаётся advisory. Причина конкретная, не инерция: дефолтный SoT контура
+    # (context/system/DataMap.md) объявлен required:false и отсутствует у 0 из 6 подключённых репо.
+    # В blocking такой гейт либо требовал бы документ, которого в проекте нет по решению владельца,
+    # либо не срабатывал вовсе. ПРЕДУСЛОВИЕ перевода: репозиторий объявил SoT data_contracts (как
+    # niti через оверлей); разумная форма — required_when, чтобы blocking действовал только там.
+    # Отчёт: qualification/CONTOUR-CONSISTENCY-OBKATKA-2026-08-12.md
     #
     # КРИТЕРИЙ GRADUATION (owner-review 2026-08-12). Целевой сценарий не ждут — его СТАВЯТ, двумя
     # реальными задачами на одном child-репозитории:
