@@ -102,7 +102,7 @@ def _bench_tool_loop_parse():
 
 def _bench_usage_aggregate():
     """Benchmark: usage_ledger.aggregate() на 1000 записей."""
-    from ai_ops_kit.providers import usage_ledger
+    from ai_ops_kit.shared import usage_ledger
     records = [
         {"run_id": f"r{i}", "role": "implementation", "provider": "mock",
          "model": "test", "input_tokens": 100, "output_tokens": 50,

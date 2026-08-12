@@ -26,7 +26,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 
-from ai_ops_kit.providers import usage_ledger  # noqa: E402
+from ai_ops_kit.shared import usage_ledger  # noqa: E402
 
 
 def _load_workitems(child_root: Path) -> tuple[list[dict], list[dict]]:

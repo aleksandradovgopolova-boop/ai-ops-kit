@@ -1349,7 +1349,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # v3.24.0 Cost & Architecture Accuracy: extra_context штампуется на все записи —
             # task_type/workflow/risk/size/writer_tier/execution_mode/stack для economic alternatives.
             try:
-                from ai_ops_kit.providers import usage_ledger as _ul
+                from ai_ops_kit.shared import usage_ledger as _ul
                 _extra = {
                     "task_type": signals.get("task_type"),
                     "workflow": (_plan.get("base_workflow") if isinstance(_plan, dict) else None),
