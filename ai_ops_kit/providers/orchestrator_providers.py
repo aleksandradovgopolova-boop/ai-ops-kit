@@ -357,7 +357,11 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
         # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
         try:
             d = _json.loads(text)
-        except Exception:
+        # Причина подавления ЗАПИСАНА (срез providers ратчета 2026-08-12): это форматирование ЧУЖОГО
+        # вывода для человека. Не разобрали JSON — отдаём сырой текст, то есть диагностика не
+        # теряется, а становится менее удобной. Ронять здесь означало бы заменить причину сбоя
+        # провайдера ошибкой разбора его же сообщения об этом сбое.
+        except Exception:  # noqa: BLE001 — не разобрали конверт -> отдаём сырой текст, диагностика цела
             return (text or "").strip()[:2000]
         parts = []
         if d.get("error"):
@@ -390,7 +394,11 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
         if r.returncode == 0:
             try:
                 d = _json.loads(r.stdout)
-            except Exception:   # json не распарсился -> usage unavailable (НЕ теряем факт вызова)
+            # Причина подавления ЗАПИСАНА (срез providers ратчета 2026-08-12): это ПРАВИЛЬНЫЙ образец
+            # Usage Truth. Не разобрали usage — вызов всё равно записывается, с токенами `None`, то
+            # есть «неизвестно», а не «ноль». `unavailable != 0` — заявленный инвариант кита, и
+            # здесь он исполняется: занижённой стоимости, поданной как факт, не появляется.
+            except Exception:   # noqa: BLE001 — usage unavailable (не 0!), факт вызова НЕ теряется
                 _record_call(model or "claude-code-local", None, None, time.monotonic() - _t0, provider="claude-cli")
                 return r.stdout
             if d.get("is_error"):   # синтетический конверт claude (rc=0!), напр. 529 Overloaded — НЕ валидный результат

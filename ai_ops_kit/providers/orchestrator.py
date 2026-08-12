@@ -134,7 +134,12 @@ def _write_reviewer_json(run_dir, sid, text):
         from ai_ops_kit.validation import validate_reviewer_result as _vrr
         if _vrr.check(obj):           # непустой список ошибок -> невалидно
             return False
-    except Exception:
+    # Причина подавления ЗАПИСАНА (срез providers ратчета 2026-08-12): направление отказа
+    # fail-closed и совпадает с направлением всех остальных `return False` этой функции. Она
+    # отвечает на один вопрос — «это валидный вердикт ревьюера?» — и при любом сбое проверки
+    # отвечает «нет». Недоступный валидатор делает НЕ принятыми все вердикты, то есть гейты
+    # остаются незакрытыми; обратное направление (принять непроверенный вердикт) здесь невозможно.
+    except Exception:  # noqa: BLE001 — сбой проверки -> вердикт ревьюера НЕ принят (fail-closed)
         return False
     (run_dir / f"stage-{sid}.reviewer.json").write_text(
         json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")

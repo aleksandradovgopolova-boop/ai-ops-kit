@@ -34,6 +34,20 @@ def advise(signals, snapshot=None, child_root=None):
     def add(priority, category, advice):
         out.append({"priority": priority, "category": category, "advice": advice})
 
+    def add_unavailable(priority, category, exc):
+        """Категория не рассчитана -> сказать это, а не молча укоротить список советов.
+
+        СРЕЗ providers РАТЧЕТА 2026-08-12. Три категории собирались под `except Exception: pass`, и
+        сбой любой из них просто убирал её из ответа: владелец видел список короче и не знал, что
+        совет был потерян, а не «не понадобился». Образец взят в этом же файле: категория 1 уже
+        различает `unknown` («объём контекста неизвестен») и «всё в порядке» — то есть модуль сам
+        считает, что нерассчитанное надо называть. Здесь то же для внутреннего сбоя.
+        """
+        out.append({"priority": priority, "category": category,
+                    "advice": f"совет не рассчитан ({type(exc).__name__}: {exc}) — это НЕ «нечего "
+                              f"советовать»: категория недоступна, проверьте её отдельно",
+                    "unavailable": True})
+
     # 1. Гигиена сессии/контекста
     try:
         from ai_ops_kit.engops import session_guardrails as _sg
@@ -51,16 +65,16 @@ def advise(signals, snapshot=None, child_root=None):
         elif state == "unknown":
             add(1, "session_hygiene", "объём контекста неизвестен — передайте `--context N` из /context рантайма "
                                       "для точной оценки")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _e:  # noqa: BLE001 — категория не рассчитана -> названа, а не выпала из списка
+        add_unavailable(1, "session_hygiene", _e)
 
     # 2. Делегирование разведки
     try:
         from ai_ops_kit.engops import delegation_advisor as _da
         for d in _da.advise(s):
             add(2, "delegation", f"{d['trigger']}: {d['reason']} -> {d['delegate_to']}")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _e:  # noqa: BLE001 — категория не рассчитана -> названа, а не выпала из списка
+        add_unavailable(2, "delegation", _e)
 
     # 3. Ограничение бесполезных итераций
     attempts = int(s.get("fix_attempts") or 0)
@@ -76,8 +90,8 @@ def advise(signals, snapshot=None, child_root=None):
             add(4, "runtime", f"{wt['reason']} — Opus/сильный writer не нужен; дешёвый qualified writer")
         else:
             add(4, "runtime", f"{wt['reason']} — задача сложная: сильный executor оправдан")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _e:  # noqa: BLE001 — категория не рассчитана -> названа, а не выпала из списка
+        add_unavailable(4, "runtime", _e)
 
     # 5. Effort и краткость
     tt = str(s.get("task_type") or "").upper()
