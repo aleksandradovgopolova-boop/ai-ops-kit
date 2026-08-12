@@ -43,9 +43,27 @@ def test_validate_release_claims_selftest():
             "validators_count": _vt, "validators_externally_tested": _vc,
             "evidence_scopes": scopes,
             "docs_must_reference_version": ["README.md"],
+            # КАНАЛ — ЧАСТЬ КОНТРАКТА с F-030: это публичный статус релиза, и он обязан быть
+            # проверяемым. `qualification` не требует полевых доказательств, поэтому минимальный
+            # набор остаётся минимальным; `stable` без обкатки на двух дочках не пройдёт — это
+            # проверяется ниже.
+            "channel": "qualification",
+            "channels": {"qualification": {"requires": ["own_ci_green"]},
+                         "stable": {"requires": ["own_ci_green", "field_evidence"],
+                                    "field_evidence_min_repos": 2}},
             "runtime_capabilities": [{"runtime": "generic-orchestrator",
                                       "capability": "parallel_execution", "status": st}]}
     expect("согласованные claims -> без ошибок", check(base) == [])
+    # F-030: канал зарабатывается. Три проверки — объявление обязательно, `stable` без обкатки не
+    # проходит, обкатка на двух РАЗНЫХ дочках проходит.
+    _no_chan = {k: v for k, v in base.items() if k != "channel"}
+    expect("claims без channel -> ошибка (публичный статус неизвестен)", check(_no_chan) != [])
+    expect("stable без полевых доказательств -> ошибка",
+           check({**base, "channel": "stable"}) != [])
+    expect("stable с обкаткой на двух разных дочках -> без ошибок",
+           check({**base, "channel": "stable",
+                  "field_evidence": [{"repo": "a", "version": vf, "outcome": "ok"},
+                                     {"repo": "b", "version": vf, "outcome": "ok"}]}) == [])
     expect("version != VERSION -> ошибка",
            any("claims отстали" in x for x in check({**base, "version": "0.0.0"})))
     expect("checks_count устарел -> ошибка",

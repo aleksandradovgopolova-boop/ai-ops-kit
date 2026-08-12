@@ -148,8 +148,16 @@ def authoritative_version_errors(data, pkg=PKG):
     """
     import re
     e, ver = [], (pkg / "VERSION").read_text(encoding="utf-8").strip()
+    # `{channel}` в шаблоне подставляется из реестра: канал живёт в одном месте, а не дублируется
+    # в каждой регулярке. Дубль уже стоил слепоты — см. комментарий у `authoritative_version`.
+    chan = re.escape(str(data.get("channel") or "").strip())
     for rule in (data.get("authoritative_version") or []):
         name, pat = rule.get("file"), rule.get("pattern")
+        if pat and "{channel}" in str(pat):
+            if not chan:
+                e.append(f"{name}: шаблон ссылается на {{channel}}, а `channel` в реестре не объявлен")
+                continue
+            pat = str(pat).replace("{channel}", chan)
         p = pkg / str(name)
         if not p.is_file():
             e.append(f"{name}: файл из authoritative_version не найден")
@@ -162,6 +170,55 @@ def authoritative_version_errors(data, pkg=PKG):
         if m.group(1) != ver:
             e.append(f"{name}: объявлена текущая версия {m.group(1)}, а в VERSION {ver} — "
                      f"публичная поверхность утверждает не то, что выпущено")
+    return e
+
+
+def channel_errors(data):
+    """Канал ЗАРАБОТАН, а не объявлен. -> список ошибок.
+
+    F-030 (внешнее ревью 12.08.2026). Поле `channel` было самообъявлением: его не проверял никто, и
+    слово `stable` стоило ровно столько, сколько стоит слово. Цена замерена в тот же день — тег
+    v3.36.9 вышел как `stable` и содержал P1 (F-022: политика обновлений не исполнялась),
+    исправленный через час после релиза; дочки при этом получили именно тег.
+
+    Проверяется не «канал правильный», а СОГЛАСОВАННОСТЬ канала с его же объявленными критериями:
+    критерии живут в `channels` рядом, машиночитаемо. `field_evidence` — записи «эта версия доехала
+    до этого репозитория, и результат известен»; считаются только записи ТЕКУЩЕЙ версии и только
+    РАЗНЫЕ репозитории, потому что два прогона на одной дочке — это одно доказательство, а не два.
+
+    Пустое `field_evidence` на свежем патче — нормальное состояние и честный `qualification`, а не
+    повод промолчать.
+    """
+    e = []
+    chan = str(data.get("channel") or "").strip()
+    defs = data.get("channels") or {}
+    if not chan:
+        return ["channel не объявлен — публичный статус релиза неизвестен"]
+    if not defs:
+        return [f"channel: {chan}, но блока `channels` с критериями нет — заявление непроверяемо"]
+    if chan not in defs:
+        return [f"channel: {chan} не описан в `channels` ({', '.join(sorted(defs))}) — "
+                f"канал без объявленных критериев проверить нельзя"]
+    spec = defs[chan] or {}
+    requires = list(spec.get("requires") or [])
+    version = str(data.get("version") or "").strip()
+
+    if "field_evidence" in requires:
+        need = int(spec.get("field_evidence_min_repos") or 1)
+        rows = [r for r in (data.get("field_evidence") or []) if isinstance(r, dict)]
+        for r in rows:
+            for field in ("repo", "version", "outcome"):
+                if not str(r.get(field) or "").strip():
+                    e.append(f"field_evidence: запись без обязательного поля '{field}': {r} — "
+                             f"доказательство, которое нельзя проверить, доказательством не считается")
+        for_version = {str(r.get("repo")).strip() for r in rows
+                       if str(r.get("version") or "").strip() == version
+                       and str(r.get("outcome") or "").strip() == "ok"}
+        if len(for_version) < need:
+            e.append(f"channel: {chan} требует полевых доказательств минимум на {need} разных "
+                     f"репозиториях для версии {version}, а есть {len(for_version)} "
+                     f"({', '.join(sorted(for_version)) or 'ни одного'}). Канал не заработан: "
+                     f"поставьте `qualification`, пока обкатки нет — либо запишите доказательства.")
     return e
 
 
@@ -280,6 +337,7 @@ def check(data, pkg=PKG):
     e += evidence_scope_errors(data, pkg)
     e += authoritative_version_errors(data, pkg)
     e += derived_number_errors(data, pkg)
+    e += channel_errors(data)
     _scan = list(data.get("stale_marker_files") or data.get("docs_must_reference_version") or [])
     for marker in (data.get("forbidden_stale_markers") or []):
         for name in _scan:
