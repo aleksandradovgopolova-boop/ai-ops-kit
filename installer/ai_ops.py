@@ -1298,7 +1298,8 @@ def _ci_broken_refs(text: str):
 def ci_workflow_state(root: Path = None):
     """Состояние kit-owned CI ребёнка. -> список {file, state, detail}.
 
-    Состояния: `absent` (не установлен), `current` (совпадает с шаблоном), `stale-ours` (писал кит,
+    Состояния: `absent` (не установлен), `opted-out` (кит его ставил, владелец УДАЛИЛ — опт-аут),
+    `current` (совпадает с шаблоном), `stale-ours` (писал кит,
     никто не менял, шаблон новее), `edited` (правил владелец). Отдельно у каждого — `broken`, если
     файл зовёт то, чего в ките нет: это сильнее остальных, потому что означает красный CI ребёнка.
     """
@@ -1311,7 +1312,18 @@ def ci_workflow_state(root: Path = None):
             continue
         tpl = src.read_text(encoding="utf-8")
         if not dst.is_file():
-            out.append({"file": name, "state": "absent", "broken": [], "detail": "не установлен"})
+            # «ФАЙЛА НЕТ» — ЭТО ДВА РАЗНЫХ ФАКТА (F-024, замер на живой дочке 2026-08-12).
+            # Шапка `ai-ops-record.yml` объявляет опт-аут дословно: «Опт-аут: удалить этот файл». Но
+            # отсутствие читалось как `absent` -> «не установлен» -> установить, и удалённый владельцем
+            # рекордер ВОЗВРАЩАЛСЯ на первом же `update`. Объявленный опт-аут не исполнялся — тот же
+            # класс, что F-022. Различить эти два состояния кит может БЕЗ новых полей в схеме: у него
+            # уже есть отпечатки того, что он ставил сам. Есть отпечаток и нет файла -> владелец его
+            # удалил, и это решение; нет ни файла, ни отпечатка -> просто ещё не ставили.
+            if name in prints:
+                out.append({"file": name, "state": "opted-out", "broken": [],
+                            "detail": "удалён владельцем после установки — опт-аут уважается"})
+            else:
+                out.append({"file": name, "state": "absent", "broken": [], "detail": "не установлен"})
             continue
         cur = dst.read_text(encoding="utf-8")
         broken = _ci_broken_refs(cur)
@@ -1354,6 +1366,13 @@ def sync_ci_workflows(root: Path = None, refresh: bool = False):
         # правка владельца; оставить его «из уважения к возможной кастомизации» значило бы
         # сохранить в чужом репозитории заведомо красный прогон.
         rescue = state == "unknown" and row["broken"]
+        if state == "opted-out":
+            # ОПТ-АУТ УВАЖАЕТСЯ ДАЖЕ ПРИ `--refresh-ci`: этот флаг означает «перезапиши мои правки
+            # шаблонов», а не «верни то, что я удалил». Возвращать удалённое по флагу об обновлении
+            # значило бы толковать согласие шире выданного.
+            acts.append({"file": name, "action": "kept-opted-out",
+                         "detail": "удалён владельцем — кит его не возвращает"})
+            continue
         if state in ("absent", "stale-ours") or rescue or refresh:
             dst.parent.mkdir(parents=True, exist_ok=True)
             backup = None
