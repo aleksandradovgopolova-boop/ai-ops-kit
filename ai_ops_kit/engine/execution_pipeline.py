@@ -454,7 +454,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # оптимизация. Его утрата безвредна по построению — гейты просто пересчитаются заново, и
         # ни одно утверждение о них не станет менее доказанным. Поэтому здесь `pass` уместен, в
         # отличие от учёта usage и lifecycle-журнала, где терялась АУДИТ-запись.
-        except Exception:  # noqa: BLE001 — потеря кеша не меняет вердикт, пересчитаем
+        except Exception:  # noqa: BLE001,S110 — потеря кеша не меняет вердикт, пересчитаем
             pass
         for _gid, _ev in _reevaluate_artifact_evidence(work_root, wid, plan["gates"]).items():
             gate_ev.setdefault(_gid, _ev)
@@ -499,7 +499,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 try:
                     from ai_ops_kit.ui import ui_evidence_collect
                     ui_evidence_collect.collect(work_root, committed_sha)
-                except Exception:   # noqa: BLE001 — сбор evidence не должен ронять прогон
+                # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): сбор UI-evidence не
+                # выдаёт вердикт — вердикт выдаёт `evidence_for_gate` ниже, и он fail-closed:
+                # не собрали -> `ui_evidence=None` -> гейт НЕ освобождён. Пропущенный сбор не может
+                # превратиться в зелёное, он превращается в незакрытый гейт.
+                except Exception:   # noqa: BLE001,S110 — не собрали -> гейт не освобождён (fail-closed ниже)
                     pass
                 ui_evidence_bundle = storybook_adapter.build_bundle(work_root, changed_files=_changed)
                 ui_evidence = storybook_adapter.evidence_for_gate(ui_evidence_bundle,
@@ -720,7 +724,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 _json.dumps({"sha": committed_sha, "gate_ev": _passed}, ensure_ascii=False), encoding="utf-8")
         # ЗАПИСЬ того же кеша — симметрично чтению выше: не записали, значит следующий прогон
         # пересчитает. Вердикт не зависит от наличия файла (ревизия 2026-08-11).
-        except Exception:  # noqa: BLE001 — потеря кеша не меняет вердикт, пересчитаем
+        except Exception:  # noqa: BLE001,S110 — потеря кеша не меняет вердикт, пересчитаем
             pass
 
     # честность evidence: ревизия сбора совпадает с зафиксированным SHA (если коммитили)

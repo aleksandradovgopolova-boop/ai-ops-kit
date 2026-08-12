@@ -454,9 +454,14 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
     except Exception:  # noqa: BLE001
         return None
     finally:
+        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): это УБОРКА в `finally`, и её
+        # отказ не участвует ни в одном утверждении — baseline уже либо доказан, либо нет (`return`
+        # выше). Ронять здесь означало бы подменить результат baseline ошибкой удаления временного
+        # worktree. Цена отказа — оставленный каталог в `.ai/worktrees/`, видимый и в `git worktree
+        # list`, и в дереве; это мусор, а не ложный green.
         try:
             _git(child_root, "worktree", "remove", "--force", str(tmp))
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S110 — уборка после уже вынесенного вердикта: отказ не меняет baseline
             pass
 
 
@@ -548,9 +553,14 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # v3.0.8 (finding аудита P0.3): ФАЙЛ ОТСУТСТВУЕТ -> fresh; ЕСТЬ и валиден -> resume/existing; ЕСТЬ, но
     # НЕЧИТАЕМ/невалиден -> lifecycle-corrupted, ОСТАНОВКА (не молчаливая перезапись повреждённого источника).
     import yaml as _y
+    # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): отказ создания каталога НЕ
+    # теряется — он проявляется ниже, на записи SequencePlan через `_durable_write_yaml`, и там путь
+    # fail-closed: `_wr.ok == False` -> `_seq_err(... lifecycle fail-closed ...)`, последовательность
+    # не запускается. Проверено по коду, а не предположено. Падать здесь значило бы сообщить об
+    # `mkdir` вместо того сообщения, которое человек может использовать.
     try:
         pdir.mkdir(parents=True, exist_ok=True)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001,S110 — отказ проявится fail-closed на записи SequencePlan ниже
         pass
     if _sp.exists():
         try:
@@ -565,9 +575,13 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         if _corrupt_reason is not None or _schema_err is not None:
             import hashlib as _h
             _raw = b""
+            # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): байты читаются ТОЛЬКО
+            # чтобы приложить sha256 повреждённого файла к сообщению. Сам вердикт уже вынесен —
+            # ниже безусловный `return _seq_err(... lifecycle-corrupted ...)`. Не прочитали ->
+            # `corrupt_sha256=None`, то есть отчёт теряет подробность, но не меняет решение.
             try:
                 _raw = _sp.read_bytes()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001,S110 — только для sha256 в сообщении; вердикт уже fail-closed
                 pass
             return _seq_err(wid, ordered,
                     (f"lifecycle-corrupted: {_sp} существует, но невалиден "
@@ -857,7 +871,13 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                                  "package_id": pid, "pkg_hash": _pkg_hash(pkg), "sha": sha,
                                  "ready": bool(ready), "status": status,
                                  "gates_unmet": (rep.get("gates") or {}).get("unmet")})
-        except Exception:  # noqa: BLE001 — журнал не роняет исполнение
+        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12). Решение «журнал не роняет
+        # исполнение» верно и остаётся. Утрата записи при этом больше НЕ невидима, но закрыта не
+        # здесь: `journal_append` сам регистрирует пропуск у источника, потому что его основной путь
+        # отказа — не исключение, а возврат `{"ok": False}`, который тут никто не читал (и не читал
+        # ни в одном из 11 вызовов пакета). Накопленное сливается в отчёт последовательности ниже.
+        # Этот `except` остаётся только для сбоя самого импорта модуля журнала.
+        except Exception:  # noqa: BLE001,S110 — пропуск регистрирует journal_append; здесь только сбой импорта
             pass
 
         if executed:
@@ -945,6 +965,10 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
            "resumed_from": resume_from}
     # v3.0.14 (finding аудита #2): sequence-report — durable (атомарно); сбой фиксируем в отчёте, не молчим
     from ai_ops_kit.lifecycle import lifecycle_store as _ls2
+    # Срез engine ратчета 2026-08-12: пропущенные записи журнала называются в ОТЧЁТЕ, а не только в
+    # возврате, который никто не читал. Слив ДО durable_write — иначе на диске лёг бы отчёт, из
+    # которого утрата исчезла. Слив обнуляет накопитель: та же утрата не приедет во второй отчёт.
+    _ls2.merge_bookkeeping_losses(seq)
     _sr = _ls2.durable_write(features_dir / wid / "sequence-report.yaml", seq)
     if not _sr.get("ok"):
         seq["report_persist_error"] = _sr.get("error")

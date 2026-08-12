@@ -79,6 +79,28 @@ def _git(root: Path, *args):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+def _product_ci(root) -> list:
+    """Признаки CI, ПРИНАДЛЕЖАЩЕГО продукту (не поставленного китом). -> [путь].
+
+    `.github/workflows` считается признаком CI только если в нём есть хотя бы один workflow,
+    который положил не кит. Файлы кита узнаются по имени (`ai-ops-*.yml`) — так их называет
+    установщик, и это же имя проверяет `validate_ci_templates`.
+    """
+    from pathlib import Path as _P
+    root = _P(root)
+    found = []
+    wf = root / ".github" / "workflows"
+    if wf.is_dir():
+        own = [f for f in wf.iterdir()
+               if f.is_file() and f.suffix in (".yml", ".yaml") and not f.name.startswith("ai-ops-")]
+        if own:
+            found.append(".github/workflows")
+    for rel in (".gitlab-ci.yml", "Jenkinsfile", ".circleci"):
+        if (root / rel).exists():
+            found.append(rel)
+    return found
+
+
 def discover(child_root) -> dict:
     """DISCOVER — что фактически лежит в репозитории. Только факты + их источник.
 
@@ -124,7 +146,13 @@ def discover(child_root) -> dict:
     ev["test_files"] = tests if readable else None
     ev["commits"] = commits
     ev["release_history"] = [t for t in (tags or "").splitlines() if t][:5] if tags is not None else None
-    ev["ci"] = _exists(".github/workflows", ".gitlab-ci.yml", "Jenkinsfile", ".circleci")
+    # CI ПРОДУКТА, А НЕ СВОЙ (F-019, живой прогон severnaya_traektoriya 2026-08-12). Каталог
+    # `.github/workflows` создаёт САМ установщик — он кладёт туда `ai-ops-*.yml`. Прежде условие
+    # «каталог существует» выполнялось этими файлами, и в репозитории БЕЗ собственного CI кит
+    # объявлял владельцу «ci_pipeline: build/lint/test, status=verified», ссылаясь на артефакты,
+    # которые сам же и записал секунду назад. Придуманный продуктовый факт со статусом
+    # «подтверждено» — худший из возможных: владелец верит, что кит прочитал ЕГО конвейер.
+    ev["ci"] = _product_ci(root)
     ev["containers"] = _exists("Dockerfile", "docker-compose.yml", "docker-compose.yaml")
     ev["dependency_manifests"] = _exists("package.json", "requirements.txt", "pyproject.toml",
                                          "go.mod", "Cargo.toml", "pom.xml", "Gemfile",
@@ -238,6 +266,15 @@ def answers_path(child_root) -> Path:
     return Path(child_root) / ANSWERS_REL
 
 
+class AnswersCorrupt(Exception):
+    """Файл ответов онбординга существует, но не разбирается.
+
+    Отдельный тип, а не `return {}`: «ответов нет» и «ответы есть, но прочитать нечем» — разные
+    ответы, и второй НЕ даёт права переспрашивать и перезаписывать. Ровно так был потерян
+    заполненный файл в живом прогоне niti (F-023).
+    """
+
+
 def read_answers(child_root) -> dict:
     """Ответы человека из файла онбординга. Пустое значение — это «ещё не ответил», а не ответ."""
     p = answers_path(child_root)
@@ -245,8 +282,14 @@ def read_answers(child_root) -> dict:
         return {}
     try:
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return {}
+    except yaml.YAMLError as e:
+        # НЕРАЗОБРАННЫЙ ФАЙЛ — ЭТО НЕ «ОТВЕТОВ НЕТ» (F-023, живой прогон niti 2026-08-12).
+        # Прежде здесь стоял `return {}`, и это было началом потери данных: кит получал «ответов
+        # нет», переспрашивал всё заново и ПЕРЕЗАПИСЫВАЛ файл пустым. Ответы владельца исчезали
+        # молча — вместе с тем, что он вписал руками. Тот же инвариант, что «не смог прочитать» !=
+        # «нет»: см. DeliveryReceipt и реестр гейтов.
+        raise AnswersCorrupt(f"{p}: файл ответов не разбирается ({e}) — починить, а не отвечать "
+                             f"заново; иначе ответы будут перезаписаны пустыми") from e
     ans = (data.get("answers") or {}) if isinstance(data, dict) else {}
     return {k: v for k, v in ans.items()
             if v not in (None, "", [], {}) and str(v).strip() not in ("", "?")}
@@ -267,6 +310,8 @@ def write_question_file(child_root, ask: dict):
     она создаёт, и создаёт ровно потому, что вопросам нужно место для ответа.
     """
     p = answers_path(child_root)
+    # Если файл есть, но не читается — НЕ перезаписываем: это уничтожило бы ответы владельца.
+    # Пусть ошибка дойдёт до человека словами «починить, а не отвечать заново» (F-023).
     existing = read_answers(child_root)
     lines = [
         "# Ответы владельца на вопросы онбординга AI Ops.",
@@ -292,8 +337,22 @@ def write_question_file(child_root, ask: dict):
             lines.append(f"  #   по коду предполагаю: {q['proposal']['value']} — подтвердите или "
                          f"замените")
         val = existing.get(qid)
-        lines.append(f"  {qid}: " + (yaml.safe_dump(val, allow_unicode=True,
-                                                   default_flow_style=True).strip()
+        # ЗНАЧЕНИЕ ПИШЕТСЯ ОДНОЙ СТРОКОЙ, БЕЗ МАРКЕРОВ ДОКУМЕНТА (F-023, живой прогон niti).
+        #
+        # Прежде стоял `yaml.safe_dump(val, default_flow_style=True).strip()`, и он ломал файл
+        # ДВАЖДЫ. Первое: для голого скаляра PyYAML дописывает маркер конца документа —
+        # `safe_dump("текст")` даёт `'текст\n...\n'`, а `.strip()` убирает только пробелы, поэтому
+        # в файл попадала строка `...`, начинавшая НОВЫЙ YAML-документ. Второе: дефолт `width=80`
+        # переносил длинное значение, а префикс `  {qid}: ` добавлялся лишь к первой строке —
+        # продолжение оказывалось на отступе соседних ключей.
+        #
+        # Итог был потерей данных: кит записывал файл, который сам не мог прочитать, `read_answers`
+        # отдавал «ответов нет», кит переспрашивал всё заново и перезаписывал файл пустым. Ломалось
+        # ровно на содержательных ответах — короткие выживали.
+        #
+        # `json.dumps` даёт валидный YAML (YAML — надмножество JSON): двойные кавычки, одна строка,
+        # никаких маркеров документа.
+        lines.append(f"  {qid}: " + (json.dumps(val, ensure_ascii=False)
                                      if val is not None else '""'))
         lines.append("")
     # Ответы на вопросы, которых больше не задают, сохраняем: человек их дал, они факт.
@@ -385,8 +444,14 @@ def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
             for k, v in (s.get("commands") or {}).items():
                 if v:
                     cmds[k] = v
+        # ССЫЛКА СОВПАДАЕТ С ИСТОЧНИКОМ (F-019, часть 2). Значения команд читаются из МАНИФЕСТОВ
+        # стека (`package.json` -> scripts и т.п.), а не из шагов workflow — прежде evidence
+        # указывал только на CI, то есть «подтверждено» ссылалось не туда, где взяты данные.
+        _cmd_ev = list(evidence.get("dependency_manifests") or [])
         out["ci_pipeline"] = {"value": sorted(cmds) or "CI объявлен", "status": VERIFIED,
-                              "evidence": list(evidence["ci"])}
+                              "evidence": list(evidence["ci"]) + _cmd_ev,
+                              "note": "CI продукта обнаружен; перечисленные команды взяты из "
+                                      "манифестов стека, шаги workflow не разбирались"}
 
     if evidence.get("containers"):
         out["deployment"] = {"value": "контейнерная поставка", "status": INFERRED,
@@ -531,8 +596,14 @@ def _contour_state(child_root, c: dict, evidence: dict, model: dict) -> dict:
             from ai_ops_kit.planning import delivery_plan as _dp
             if _dp.is_template(_dp.load(root)):
                 state = PARTIAL
-        except Exception:                              # noqa: BLE001 — план не обязан разбираться
-            pass
+        # «НЕ СМОГ ПРОВЕРИТЬ» НЕ РАВНО «ПРОВЕРЕНО» (срез ратчета, 2026-08-12). Прежний `pass`
+        # оставлял состояние VERIFIED: при БИТОМ `planning/plan.yaml` контур объявлялся
+        # подтверждённым, хотя проверка не состоялась. И это не гипотеза — `delivery_plan.load()`
+        # по контракту БРОСАЕТ `PlanCorrupt` на неразобранном файле («„работы нет“ и „файл не
+        # заполнен“ это разные ответы»), то есть путь достижим ровно там, где ошибка дороже всего.
+        # Тот же класс, что F-018: существование файла принималось за заполненность.
+        except Exception:  # noqa: BLE001 — любой отказ проверки -> UNKNOWN, а не VERIFIED
+            state = UNKNOWN
 
     rec = c.get("reconstruction") or {}
     qs = c.get("questions") or []

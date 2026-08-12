@@ -56,11 +56,13 @@ def _note_bookkeeping_error(rep, what, exc):
     Образец взят в этом же файле: рядом уже есть `escalation_error` с пометкой «rc3: НЕ глотаем
     молча -> честный escalation_error». Здесь — то же для служебных записей: прогон продолжается
     (fail-open сохранён), но в отчёте появляется `bookkeeping_errors` с тем, ЧТО потеряно и почему.
+
+    v3.36.9 (срез engine ратчета): реализация переехала в `lifecycle_store` — тот же приём, что у
+    `_durable_write_yaml` в workpackage_executor. Причина: этот же ответ понадобился второму
+    вызывающему (`workpackage_executor`, событие `package_end`), а два экземпляра одного решения
+    расходятся. Здесь остался делегат — вызовы и тесты, ссылающиеся на него, продолжают работать.
     """
-    if not isinstance(rep, dict):
-        return
-    rep.setdefault("bookkeeping_errors", []).append(
-        {"what": what, "error": f"{type(exc).__name__}: {exc}"[:200]})
+    _ls.note_bookkeeping_error(rep, what, exc)
 
 
 def _outbox_dir(features_dir, fid):
@@ -842,6 +844,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                  "preflight": f"features/{fid}/preflight.yaml"}}
             if lifecycle_errors:
                 rep["lifecycle_errors"] = lifecycle_errors
+            _ls.merge_bookkeeping_losses(rep)   # утраты записей журнала — ДО записи отчёта на диск
             _ls.durable_write_json(features_dir / fid / "run-report.json", rep)   # v3.0.14 (#2): атомарно
             return rep
 
@@ -1038,8 +1041,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                   require_keys=("kind", "workitem_id"))
                 err_rep["run_report"] = f"features/{fid}/run-report.json"
                 err_rep["handoff"] = {"next_action": _safe}
-            except Exception:  # noqa: BLE001 — запись evidence не должна маскировать исходный сбой
-                pass
+            # СРЕЗ engine РАТЧЕТА 2026-08-12. Решение «запись evidence не маскирует исходный сбой»
+            # остаётся верным: подменять причину падения ошибкой записи нельзя. Но у него не было
+            # второй половины. Комментарий ВЫШЕ сам называет цену: не записали свежий отчёт/handoff
+            # — «на диске остаётся старый отчёт прошлого прогона, пользователь думает, что evidence
+            # свежее». При `pass` происходило ровно это, и МОЛЧА: `err_rep` даже не упоминал, что
+            # обещанные им `run_report`/`handoff` на диск не легли. Теперь упоминает.
+            except Exception as _we:  # noqa: BLE001 — исходный сбой важнее сбоя записи, но утрата видна
+                _note_bookkeeping_error(err_rep, "failure_evidence.write", _we)
+            _ls.merge_bookkeeping_losses(err_rep)
             return err_rep
         rep["runtime"] = runtime
         rep["engine"] = "pipeline"
@@ -1354,10 +1364,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 # ...но и пропасть молча не должен: занижённая стоимость, поданная как факт, —
                 # это нарушение той самой Usage Truth, ради которой ledger и существует.
                 _note_bookkeeping_error(rep, "usage_ledger.append", _ue)
-        try:
-            orchestrator.clear_call_context()
-        except Exception:  # noqa: BLE001
-            pass
+        # СРЕЗ engine РАТЧЕТА 2026-08-12: здесь стоял `try/except Exception: pass` без причины.
+        # Подавлять нечего: `clear_call_context` — это `dict.clear()` над модульным `_CALL_CONTEXT`
+        # (`providers/orchestrator_usage.py`), он не бросает. Пустой `except` защищал от
+        # несуществующего сбоя и при этом был бы единственным местом, где утрата контекста вызова
+        # (Usage Truth: role/trigger/provider) прошла бы молча, если бы функция когда-нибудь стала
+        # бросать. Снят, а не задокументирован: подавление без риска — это шум, а не решение.
+        orchestrator.clear_call_context()
         # v3.16.0 Development Culture Guardrails (WP5): каждый прогон завершается SessionRecommendation
         # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
         # Контекст оценивается по ledger (estimated) — рантайм может уточнить через `ai-ops session --context`.
@@ -1378,7 +1391,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             else:
                 rep["session_recommendation"] = _sg.recommend(_snap, _pol,
                                                               next_relation="continuation", task_done=False)
-        except Exception:  # noqa: BLE001 — совет по гигиене сессии не должен ронять прогон
+        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): рекомендация по гигиене
+        # сессии объявлена ADVISE-ONLY выше — она ничего не блокирует и ни одного утверждения не
+        # доказывает. Её отсутствие в отчёте видно по отсутствию ключа `session_recommendation`;
+        # ложным green это стать не может, потому что зелёный отчёт на неё не опирается.
+        except Exception:  # noqa: BLE001,S110 — совет ADVISE-ONLY: его утрата не меняет ни один вердикт
             pass
         # run_end (исход прогона, включая итог доставки)
         _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
@@ -1405,6 +1422,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
+        _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
         return rep
 
     # 1-2. RunPlan (route + треки + агрегированные гейты).

@@ -133,8 +133,11 @@ def _bench_context_compiler():
         (root / "features" / "wid").mkdir(parents=True, exist_ok=True)
         try:
             context_compiler.assemble(str(root), "wid", signals={"task_type": "QUICK"})
-        except Exception:
-            pass  # some deps may not be set up; we measure the attempt
+        # Причина подавления (срез ратчета, 2026-08-12): предмет замера — ВРЕМЯ попытки, а не её
+        # успех. Отсутствие зависимостей стенда штатно и на измеряемую величину не влияет.
+        # Это dev-инструмент, в поставку не едет (DEV_ONLY_TOOLS).
+        except Exception:  # noqa: BLE001,S110 — меряем время попытки, успех здесь не предмет
+            pass
 
 
 BENCHMARKS = {
@@ -178,7 +181,9 @@ def run_all(iterations=DEFAULT_ITERATIONS) -> dict:
     for name, fn in BENCHMARKS.items():
         try:
             results[name] = _time_fn(fn, iterations=iterations)
-        except Exception as e:
+        # Правильный образец: отказ бенчмарка становится записью результата с причиной и
+        # `median_ms: None` — не нулём. Тот же инвариант, что `unavailable != 0`.
+        except Exception as e:  # noqa: BLE001 — отказ становится результатом с причиной
             results[name] = {"error": str(e), "median_ms": None}
     return results
 

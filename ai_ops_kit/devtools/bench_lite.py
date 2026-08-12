@@ -453,7 +453,10 @@ def _one_run(case, calibrated, ui_evidence):
             rep = ai_ops_run.run(**kwargs, calibrated_enforcement=calibrated, ui_evidence=ui_evidence)
             actual = {"ready_for_pr": rep.get("ready_for_pr"),
                       "unmet": (rep.get("gates") or {}).get("unmet", [])}
-        except Exception as e:   # прогон-исключение — отдельный класс, не тихий провал
+        # ПРАВИЛЬНЫЙ ОБРАЗЕЦ (срез ратчета, 2026-08-12): исключение прогона не глотается, а
+        # становится ОТДЕЛЬНЫМ классом результата с текстом — бенчмарк отличает «провалился» от
+        # «упал». Тип широк намеренно: измеряется чужой прогон, он вправе поднять что угодно.
+        except Exception as e:  # noqa: BLE001 — исключение прогона становится результатом, не тишиной
             actual = {"ready_for_pr": None, "unmet": [], "error": repr(e)}
         return actual, signals
 

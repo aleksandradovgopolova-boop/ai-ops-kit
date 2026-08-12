@@ -134,7 +134,12 @@ def _write_reviewer_json(run_dir, sid, text):
         from ai_ops_kit.validation import validate_reviewer_result as _vrr
         if _vrr.check(obj):           # непустой список ошибок -> невалидно
             return False
-    except Exception:
+    # Причина подавления (срез providers ратчета, 2026-08-12): FAIL-CLOSED и это верно. Здесь
+    # решается, принять ли вердикт РЕВЬЮЕРА; если проверить его нечем — не принимаем. Тип широкий
+    # намеренно: сюда попадает и недоступный валидатор, и битый ввод, и любой отказ импорта, и
+    # каждый из них обязан дать «не принято», а не пропуск. Сужать нельзя: неожиданный тип стал бы
+    # исключением наружу, то есть «падение вместо отказа» — хуже для writer≠judge.
+    except Exception:  # noqa: BLE001 — нечем проверить -> вердикт ревьюера не принимается
         return False
     (run_dir / f"stage-{sid}.reviewer.json").write_text(
         json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")

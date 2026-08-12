@@ -714,11 +714,45 @@ def _install_communication_adapter(root: Path, dry=False):
     return {"action": action, "path": str(dst)}
 
 
+def _is_unfilled_planning_artifact(path: Path) -> bool:
+    """Это ещё заготовка кита, а не направление/план продукта? -> bool.
+
+    F-018 (живой прогон severnaya_traektoriya 2026-08-12). `init` кладёт в репозиторий ЧЕРНОВИКИ
+    `ROADMAP.md` и `planning/plan.yaml`, после чего doctor печатал «планирование: ✓ артефакты на
+    месте» — потому что проверял только СУЩЕСТВОВАНИЕ файла. Владелец на свежей установке читал
+    зелёное про контур, который пуст. Хуже: кит СОБСТВЕННЫМ кодом знает разницу —
+    `delivery_plan.is_template()` возвращает True на этом же файле, — но doctor его не спрашивал.
+    Комментарий над проверкой обещал ровно обратное: «пробел ВИДЕН, а не молчит».
+
+    Маркеры берутся те же, что у `is_template`: явный `template: true` и незаполненные id-заглушки.
+    Разбор текстовый намеренно: doctor работает и там, где пакет кита рядом не лежит.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    for marker in ("template: true", "goal-id-1", "goal-id-2", "Это заготовка"):
+        if marker in text:
+            return True
+    return False
+
+
 def _planning_gaps(root: Path):
-    """(required, missing) — артефакты контура планирования, которых в репозитории нет."""
+    """(required, missing) — артефакты контура планирования, которых нет ЛИБО не заполнены.
+
+    Незаполненная заготовка считается пробелом: файл есть, а направления и плана нет. См.
+    `_is_unfilled_planning_artifact` — почему «существует» это не «на месте».
+    """
     pom = ((manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
     req = list(pom.get("required_repo_artifacts") or [])
-    return req, [r for r in req if not (root / r).exists()]
+    gaps, unfilled = [], []
+    for r in req:
+        p = root / r
+        if not p.exists():
+            gaps.append(r)                      # артефакта нет вовсе — это пробел
+        elif _is_unfilled_planning_artifact(p):
+            unfilled.append(r)                  # заготовка на месте — это следующий шаг, не пробел
+    return req, gaps, unfilled
 
 
 def _context_gaps():
@@ -880,6 +914,10 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         "context_backfilled": _backfill_required_context(),
         "ci_workflows": sync_ci_workflows(root, refresh=refresh_ci),
         "zone_markers": ensure_zone_markers(root),
+        # Здесь, а не в `cmd_init`: иначе существующие дочки — те самые, на которых находка и
+        # случилась, — не получили бы правило никогда. Функция идемпотентна, повторный update
+        # молчит.
+        "gitignore": ensure_gitignore(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         "planning_seeded": _seed_planning_contour(root),
@@ -897,6 +935,13 @@ def _assets_report_line(assets: dict) -> str:
     if assets.get("zone_markers"):
         out += (" Пустые зоны `.ai/` получили README, чтобы раскладка пережила клон: "
                 + ", ".join(assets["zone_markers"]) + ".")
+    # Названо, а не сделано молча: `.gitignore` — документ владельца, и дописку в него он обязан
+    # увидеть в отчёте, а не обнаружить в диффе.
+    if assets.get("gitignore") in ("created", "appended"):
+        out += (" `.gitignore` " + ("создан" if assets["gitignore"] == "created" else "дополнен")
+                + ": служебное состояние кита (.ai/worktrees/, runtime-локи и active-work,"
+                  " локальный учёт стоимости, кеши, байткод) скрыто от git."
+                  " Продуктовые артефакты кита не затронуты.")
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += (" Политика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
@@ -938,6 +983,78 @@ _ZONE_WHY = {
     "generated": "Сгенерированное китом: команды runtime, промпты. Правится генератором, не руками.",
     "runtime": "Рабочее состояние прогонов: отчёты, снимки, бэкапы. В историю обычно не нужно.",
 }
+
+
+_GITIGNORE_MARK = "# --- AI Ops Kit: служебное состояние (не история продукта) ---"
+
+# Правила ЗАМЕРЕНЫ, а не выписаны по вкусу. Каждая строка — то, что в поле реально пыталось уехать
+# в коммит владельца (находка ии-среды 2026-08-12, F-021), либо то, что кит уже спрятал у себя
+# (`.ai/repository-profile.yaml` — R-11 ревизии 2026-08-11), либо объявленная граница репозитория
+# (байткод в checksummed managed-слое — tests/unit/test_installer.py).
+_GITIGNORE_RULES = """
+# Кит ставится в чужой репозиторий и обязан не сорить в его истории. Ниже — только то, что
+# наблюдалось уезжающим в коммит, и только служебное: рабочее состояние прогона, локальные
+# кеши и байткод. Продуктовые артефакты кита (features/**, .ai/project/**, .ai/managed/**,
+# .ai/custom/**) НЕ игнорируются — они и есть то, ради чего кит стоит.
+
+# Вложенный git-репозиторий изолированного прогона: `git add -A` берёт его как gitlink,
+# и в истории появляется ссылка на дерево, которого ни у кого больше нет.
+.ai/worktrees/
+
+# Координация параллельных сессий и локи — состояние ЭТОЙ машины, не факт о продукте.
+.ai/runtime/active-work.yaml
+.ai/runtime/*.lock
+.ai/runtime/**/*.lock
+
+# Локальный учёт стоимости прогонов: цифры этой машины, а не общий факт. ЕДИНСТВЕННОЕ правило
+# здесь, о котором можно спорить: если команде нужна общая история стоимости — снимите эту
+# строку, и ledger начнёт коммититься. Остальные строки спорными не являются.
+.ai/usage/*.jsonl
+
+# Кеш переоценки гейтов: по построению безвреден к утрате — не нашли, значит пересчитаем.
+.ai/reevaluate-evidence-*.json
+
+# Машинный кеш детекции стека (кит прячет его и у себя).
+.ai/repository-profile.yaml
+
+# Байткод внутри checksummed managed-слоя: ломает сверку и уезжает по `git add -A`.
+.ai/managed/**/__pycache__/
+.ai/**/*.py[co]
+
+# СОЗНАТЕЛЬНО НЕ ВНЕСЕНО: `.ai/generated/` (манифест зовёт его isolated, но некоторым
+# репозиториям сгенерированные команды runtime нужны в истории — это решение владельца) и
+# `.ai/project/report-history/` (её коммитит workflow ai-ops-record: это история эффекта).
+"""
+
+
+def ensure_gitignore(root: Path = None):
+    """Спрятать служебное состояние кита от git дочки. -> "created" | "appended" | "present".
+
+    ПОЧЕМУ ЭТО ДЕЛАЕТ УСТАНОВЩИК (находка ии-среды 2026-08-12, F-021). Кит не писал в дочку
+    `.gitignore` вовсе, и это было объявленной границей — она записана в
+    `tests/unit/test_installer.py` («`.gitignore` установщик в дочку не пишет, поэтому байткод в
+    managed уехал бы в коммит владельца по `git add -A`»). В поле граница обошлась дорого: за один
+    прогон в коммит владельца дважды пытались уехать `.ai/worktrees/` (как вложенный репозиторий),
+    `.ai/runtime/active-work.yaml` и `.lock`, `.ai/usage/product-ledger.jsonl`,
+    `.ai/reevaluate-evidence-*.json`. Owner чинил это руками в своём репозитории — то есть
+    становился техническим оператором кита, а это ровно та метрика, которую квалификация считает.
+
+    Правила ДОПИСЫВАЮТСЯ отмеченным блоком и никогда не переписывают чужой файл: `.gitignore` —
+    документ владельца, а не наша зона. Повторный вызов ничего не делает (маркер уже есть), поэтому
+    `init` и `update` могут звать функцию свободно.
+    """
+    root = Path(root or REPO_ROOT)
+    path = root / ".gitignore"
+    block = f"{_GITIGNORE_MARK}\n{_GITIGNORE_RULES.strip()}\n"
+    if not path.exists():
+        path.write_text(block, encoding="utf-8")
+        return "created"
+    current = path.read_text(encoding="utf-8")
+    if _GITIGNORE_MARK in current:
+        return "present"
+    sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
+    path.write_text(current + sep + block, encoding="utf-8")
+    return "appended"
 
 
 def ensure_zone_markers(root: Path = None):
@@ -1396,12 +1513,26 @@ def cmd_doctor(argv=()):
     # v3.35 Product Operating Model: контур планирования — пробел ВИДЕН, а не молчит. Репозиторий
     # без направления и плана не может ответить «что брать следующим»: любой ответ был бы про
     # порядок строк в бэклоге, а не про продукт.
-    _preq, _pgaps = _planning_gaps(REPO_ROOT)
+    _preq, _pgaps, _punfilled = _planning_gaps(REPO_ROOT)
     if _preq:
-        _dprint(f"планирование (направление и план): "
-              + ("✓ артефакты на месте" if not _pgaps
-                 else f"✗ нет: {', '.join(_pgaps)} → `./ai-ops model` покажет пробелы и спросит "
-                      f"недостающее одним пакетом"))
+        # ТРИ РАЗНЫХ СОСТОЯНИЯ, А НЕ ДВА (F-018, живой прогон 2026-08-12). Прежде их было два:
+        # «файл есть» -> ✓, «файла нет» -> ✗. Свежая установка попадала в первое, и doctor
+        # рапортовал «✓ артефакты на месте» про черновики, которые сам же положил.
+        #
+        # Заготовка — это НЕ пробел и НЕ готовность: это объявленный следующий шаг. Поэтому она
+        # печатается БЕЗ `✗`/`⚠` — тем же идиомом, что `ui-evidence: absent … (не маскируем)`.
+        # Так соблюдаются оба записанных правила разом: вердикт следует за худшей строкой (иначе
+        # ему не верят), и установка не даёт замечания на первом же экране. Пробел `✗` остаётся
+        # там, где артефакта нет вовсе — это уже дрейф, а не свежесть.
+        if _pgaps:
+            _dprint(f"планирование (направление и план): ✗ нет: {', '.join(_pgaps)} → "
+                    f"`./ai-ops model` покажет пробелы и спросит недостающее одним пакетом")
+        elif _punfilled:
+            _dprint(f"планирование (направление и план): заготовки, не заполнены "
+                    f"({', '.join(_punfilled)}) — ждут `./ai-ops model`; норма для свежей "
+                    f"установки, но направления и плана у репозитория ПОКА НЕТ (не маскируем)")
+        else:
+            _dprint("планирование (направление и план): ✓ артефакты на месте")
     # Долг доказательства поставки: невидимый долг перестаёт быть долгом. Отдельная строка нужна
     # потому, что находка валидатора стала advisory — если о ней молчать и здесь, «выпущено без
     # доказательства» превратится в «в порядке», а это подмена признания утверждением.
