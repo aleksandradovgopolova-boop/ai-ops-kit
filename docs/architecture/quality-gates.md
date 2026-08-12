@@ -1,6 +1,6 @@
 # Quality Gates
 
-32 гейта с machine-readable контрактами.
+34 <!-- claim:gates-total --> гейта с machine-readable контрактами.
 
 ## Типы гейтов
 
