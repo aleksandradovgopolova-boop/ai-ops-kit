@@ -100,7 +100,11 @@ def test_gate_result_v2_selftest():
                           / "gate-result-v2.schema.json").read_text(encoding="utf-8"))
         enum = set(sch["properties"]["status"]["enum"])
         expect("enum status совпадает со схемой (нет дрейфа)", enum == STATUS_V2)
-    except Exception as ex:
+    # Причина ЗАПИСАНА (срез tests ратчета 2026-08-12): это ПРАВИЛЬНЫЙ образец — отказ не
+    # гасится, а становится ИМЕНОВАННЫМ FAIL с текстом исключения, то есть попадает в вывод и валит
+    # тест. Тип широк намеренно: нечитаемая схема, битый JSON и изменившаяся структура обязаны дать
+    # один и тот же честный ответ «схема не читается», а не разные исключения наружу.
+    except Exception as ex:  # noqa: BLE001 — отказ становится именованным FAIL, а не тишиной
         expect(f"схема читается ({ex})", False)
 
     assert ok, "перенесённый селфтест gate_result_v2: см. строки FAIL в выводе"
