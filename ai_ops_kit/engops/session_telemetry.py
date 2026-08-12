@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
-from ai_ops_kit.providers import usage_ledger  # noqa: E402
+from ai_ops_kit.shared import usage_ledger  # noqa: E402
 
 
 def _context_estimate(records):

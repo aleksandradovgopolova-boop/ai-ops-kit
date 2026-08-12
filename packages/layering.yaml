@@ -89,12 +89,30 @@ known_violations:
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 12         # context<->engine, delivery<->engine, engine<->engops, engine<->gates,
-                           # engine<->providers, engops<->gates, engops<->providers,
-                           # gates<->lifecycle, gates<->providers,
-                           # engine<->validation, security<->validation (v3.34, см. ниже),
-                           # engine<->lifecycle (v3.34: workitem зовёт ai_route, переехавший в engine)
-  cycles_longer_than_two: 210
+  mutual_pairs: 7          # context<->engine, delivery<->engine, engine<->gates, engops<->gates,
+                           # engine<->lifecycle, engine<->validation, security<->validation
+                           #
+                           # 12 -> 7 (2026-08-12), четырьмя переездами и без правки логики. Правило
+                           # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
+                           # лежит в foundation, а не в том пакете, где его когда-то написали.
+                           #   usage_ledger (252) providers -> shared: учёт, не провайдер.
+                           #     Снял gates<->providers и engops<->providers.
+                           #   gitio (39) engine -> shared: обёртка над git, инфраструктура.
+                           #     Снял engine<->engops.
+                           #   budget (68) engine -> shared: примитив бюджета прогона.
+                           #     Снял engine<->providers.
+                           #   lifecycle_store (404) lifecycle -> shared: durable-запись и
+                           #     fail-closed чтение — инфраструктура надёжности. Снял
+                           #     gates<->lifecycle и почти половину оставшихся циклов.
+                           #
+                           # ГРАНИЦА ПРАВИЛА НАЗВАНА: `ai_route` (317 строк) тоже не зависит ни от
+                           # кого, и переезд в `shared` снял бы engine<->lifecycle одним `git mv`.
+                           # Не сделано осознанно: это классификация по реестрам, то есть предметная
+                           # логика, а не фундамент. Сложить её в foundation ради счётчика значило бы
+                           # сделать ровно то, что этот срез исправляет, — положить модуль не туда.
+                           # Пару engine<->lifecycle снимает не переезд, а решение «кто классифицирует»
+                           # (`workitem` не должен звать роутер сам), и это проектирование.
+  cycles_longer_than_two: 52
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
     Десять из двенадцати взаимных пар лежат ВНУТРИ слоя capabilities и текущими правилами не

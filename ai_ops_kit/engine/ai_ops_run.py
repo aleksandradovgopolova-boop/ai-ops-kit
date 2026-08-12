@@ -39,7 +39,7 @@ from ai_ops_kit.engine import run_plan          # noqa: E402
 from ai_ops_kit.engine.pipeline_helpers import work_produced   # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work       # noqa: E402
-from ai_ops_kit.lifecycle import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
+from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
 def _note_bookkeeping_error(rep, what, exc):
@@ -1349,7 +1349,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             # v3.24.0 Cost & Architecture Accuracy: extra_context штампуется на все записи —
             # task_type/workflow/risk/size/writer_tier/execution_mode/stack для economic alternatives.
             try:
-                from ai_ops_kit.providers import usage_ledger as _ul
+                from ai_ops_kit.shared import usage_ledger as _ul
                 _extra = {
                     "task_type": signals.get("task_type"),
                     "workflow": (_plan.get("base_workflow") if isinstance(_plan, dict) else None),
