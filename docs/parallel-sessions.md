@@ -40,31 +40,51 @@ git worktree add ../kit-<моя-тема> -b engops/<моя-тема>
 
 ### 2. Заявить область записи ДО взятия работы
 
-У кита для этого есть готовый реестр с межпроцессной блокировкой — `ai_ops_kit/lifecycle/active_work.py`:
+У кита для этого есть готовый реестр с межпроцессной блокировкой — `ai_ops_kit/lifecycle/active_work.py`.
+
+**Путь к реестру НЕ `.ai/runtime/active-work.yaml`, и это важно.** Первая редакция этого документа
+называла именно его — и правила противоречили друг друга: файл лежит ВНУТРИ рабочего дерева, то есть
+у каждого worktree свой. Проверено: реестр, созданный в одном worktree, из другого не виден вовсе.
+Реестр, невидимый другой сессии, — это не координация, а её видимость. Поэтому путь берётся из
+`git rev-parse --git-common-dir`: этот каталог один на репозиторий и все его worktree, и в историю не
+попадает (реестр — состояние машины, не факт о продукте).
 
 ```bash
+# ЗАПУСК ЧЕРЕЗ `-m`, а не по пути к файлу. `python3 ai_ops_kit/lifecycle/active_work.py …` падает с
+# ModuleNotFoundError: запуск файла внутри пакета не кладёт корень репозитория в sys.path. Первая
+# редакция этого документа предлагала именно такую команду — то есть протокол про «проверка обязана
+# исполняться» сам содержал неисполнимую строку. Замерено попыткой её выполнить.
+export PYTHONPATH=.
+REG=$(python3 -c 'from ai_ops_kit.lifecycle import active_work as a; print(a.shared_registry_path())')
+
 # что уже занято
-python3 ai_ops_kit/lifecycle/active_work.py list .ai/runtime/active-work.yaml
+python3 -m ai_ops_kit.lifecycle.active_work list "$REG"
 
 # пересекается ли моя область записи с активными
-python3 ai_ops_kit/lifecycle/active_work.py check .ai/runtime/active-work.yaml \
+python3 -m ai_ops_kit.lifecycle.active_work check "$REG" \
         --areas "ai_ops_kit/engine,ai_ops_kit/lifecycle"
 
 # заявить
-python3 ai_ops_kit/lifecycle/active_work.py register .ai/runtime/active-work.yaml <work-id> \
+python3 -m ai_ops_kit.lifecycle.active_work register "$REG" <work-id> \
         --branch engops/<моя-тема> --areas "<write_scope пункта плана>" --session <кто я>
 
 # снять по завершении (`done` — только когда работа действительно закончена)
-python3 ai_ops_kit/lifecycle/active_work.py finish .ai/runtime/active-work.yaml <work-id>
+python3 -m ai_ops_kit.lifecycle.active_work finish "$REG" <work-id>
 ```
+
+В ДОЧКЕ путь другой и остаётся прежним: `.ai/runtime/active-work.yaml` объявлен в манифесте как
+контракт, и там он работает — сессии в дочке обычно делят один checkout.
 
 Реестр атомарен (`durable_write`), берёт межпроцессный лок вокруг read-modify-write и считает
 пересечения сам (`classify`, `find_cycle`). `delivery_plan` по этим же данным выводит работе статус
 `blocked`, если её `write_scope` пересекается с активной — то есть **план сам скажет**, что работу
 брать нельзя.
 
-*Почему это не сработало 12.08:* у самого кита нет каталога `.ai/runtime/`, и ни одна сессия реестр
-не заводила. Механизм был, его просто не звали — ровно та ошибка, которую кит ловит у дочек.
+*Почему это не сработало 12.08:* ни одна сессия реестр не заводила вовсе. Механизм был, его просто
+не звали — ровно та ошибка, которую кит ловит у дочек. И заведи его тогда кто-нибудь по
+документированному тогда пути (`.ai/runtime/active-work.yaml`), он всё равно не помог бы: в разных
+worktree это разные файлы. Обе половины дефекта — и невызванный механизм, и негодный путь —
+закрыты здесь.
 
 ### 3. `git add <пути>`, никогда `git add -A`
 

@@ -178,3 +178,84 @@ def test_empty_index_is_not_a_violation(tmp_path):
                        capture_output=True, text=True, timeout=120,
                        env={**os.environ, "PYTHON": sys.executable, "COMMIT_CONTRACT_FILES": " "})
     assert r.returncode == 0, f"пустой индекс объявлен нарушением:\n{r.stdout}{r.stderr}"
+
+
+# ─── реестр обязан быть ОБЩИМ для worktree, иначе координации нет ────────────────────────────────
+# НАХОДКА В СВОЁМ ЖЕ ПРОТОКОЛЕ (12.08.2026). Первая редакция docs/parallel-sessions.md требовала
+# двух вещей сразу: работать в своём `git worktree` И заявлять область в
+# `.ai/runtime/active-work.yaml`. Эти правила ПРОТИВОРЕЧАТ друг другу: путь лежит внутри рабочего
+# дерева, у каждого worktree свой — реестр, созданный в одном, из другого не виден. Невидимый
+# реестр это не координация, а её видимость.
+@pytest.mark.unit
+def test_shared_registry_is_the_same_from_every_worktree(tmp_path):
+    """Один путь из основного дерева и из worktree — иначе сессии ведут РАЗНЫЕ реестры."""
+    import active_work
+
+    main = tmp_path / "repo"
+    main.mkdir()
+    for args in (["init", "-q", "."], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+        subprocess.run(["git", "-C", str(main), *args], capture_output=True, check=False)
+    (main / "f.txt").write_text("x\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(main), "add", "-A"], capture_output=True, check=False)
+    subprocess.run(["git", "-C", str(main), "commit", "-qm", "init"], capture_output=True, check=False)
+
+    wt = tmp_path / "wt"
+    r = subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", str(wt)],
+                       capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr
+
+    from_main = active_work.shared_registry_path(main)
+    from_wt = active_work.shared_registry_path(wt)
+    assert from_main == from_wt, (
+        f"реестр разъехался по worktree — координации нет:\n  {from_main}\n  {from_wt}")
+    assert ".git" in from_main.parts, (
+        f"реестр лежит в рабочем дереве, а значит попадёт в историю или разъедется: {from_main}")
+
+
+@pytest.mark.unit
+def test_shared_registry_refuses_outside_git(tmp_path):
+    """Не git — честный отказ, а не путь в никуда: реестр молча «работать» не вправе."""
+    import active_work
+
+    with pytest.raises(active_work.ActiveWorkCorrupt):
+        active_work.shared_registry_path(tmp_path)
+
+
+@pytest.mark.unit
+def test_documented_entry_point_actually_runs():
+    """Форма вызова из docs/parallel-sessions.md обязана ЗАПУСКАТЬСЯ.
+
+    Первая редакция протокола предлагала `python3 ai_ops_kit/lifecycle/active_work.py …` — команда
+    падает с ModuleNotFoundError, потому что запуск файла внутри пакета не кладёт корень репозитория
+    в sys.path. То есть документ про «проверка обязана исполняться» содержал неисполнимую строку.
+    Здесь проверяется ровно та форма, что в документе, и ровно тот путь, что документ называет
+    нерабочим, — иначе тест не отличит одно от другого.
+    """
+    env = {**os.environ, "PYTHONPATH": str(KIT), "PYTHONDONTWRITEBYTECODE": "1"}
+    good = subprocess.run([sys.executable, "-m", "ai_ops_kit.lifecycle.active_work", "--help"],
+                          cwd=str(KIT), capture_output=True, text=True, timeout=120, env=env)
+    assert good.returncode == 0, f"документированная форма не работает:\n{good.stderr[-400:]}"
+    assert "register" in good.stdout, good.stdout[:200]
+
+    bad = subprocess.run([sys.executable, "ai_ops_kit/lifecycle/active_work.py", "--help"],
+                         cwd=str(KIT), capture_output=True, text=True, timeout=120,
+                         env={k: v for k, v in env.items() if k != "PYTHONPATH"})
+    assert bad.returncode != 0, (
+        "запуск по пути к файлу заработал — тогда предупреждение в документе устарело и вводит "
+        "в заблуждение; обнови документ вместе с этим тестом")
+
+
+@pytest.mark.unit
+def test_protocol_document_does_not_teach_the_broken_form():
+    """Документ не вправе снова начать учить нерабочей команде.
+
+    Проверяется не наличие правильной строки (её легко приписать), а ОТСУТСТВИЕ неработающей —
+    именно она стоила времени.
+    """
+    text = (KIT / "docs" / "parallel-sessions.md").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue                     # объяснение, ПОЧЕМУ так нельзя, — не инструкция
+        assert "python3 ai_ops_kit/lifecycle/active_work.py" not in stripped, (
+            f"документ снова предлагает нерабочий запуск: {stripped}")
