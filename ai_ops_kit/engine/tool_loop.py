@@ -27,7 +27,7 @@ from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.engine import tool_broker            # noqa: E402
-from ai_ops_kit.engine import budget as _budget_mod  # noqa: E402
+from ai_ops_kit.shared import budget as _budget_mod  # noqa: E402
 
 
 def parse_action(text):

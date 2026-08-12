@@ -34,7 +34,7 @@ def _pr_payload(branch, title, body, base):
 
 
 def _git(root, *args):
-    from ai_ops_kit.engine import gitio
+    from ai_ops_kit.shared import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 

@@ -89,18 +89,22 @@ known_violations:
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 10         # context<->engine, delivery<->engine, engine<->engops, engine<->gates,
-                           # engine<->providers, engops<->gates,
-                           # gates<->lifecycle,
-                           # engine<->validation, security<->validation (v3.34, см. ниже),
-                           # engine<->lifecycle (v3.34: workitem зовёт ai_route, переехавший в engine)
+  mutual_pairs: 8          # context<->engine, delivery<->engine, engine<->gates,
+                           # engops<->gates, gates<->lifecycle, engine<->lifecycle,
+                           # engine<->validation, security<->validation (v3.34, см. ниже)
                            #
-                           # 12 -> 10 (2026-08-12): `usage_ledger` переехал из `providers` в `shared`.
-                           # Он не провайдер, а УЧЁТ: 252 строки, импортирует только
-                           # `shared.contracts`, а использовали его шесть пакетов. Пары
-                           # `gates<->providers` и `engops<->providers` существовали ТОЛЬКО из-за
-                           # него — обе ушли одним переездом, без правки логики.
-  cycles_longer_than_two: 116
+                           # 12 -> 8 (2026-08-12), тремя переездами и без правки логики. Правило
+                           # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
+                           # лежит в foundation, а не в том пакете, где его когда-то написали.
+                           #   usage_ledger (252 строки) providers -> shared: учёт, не провайдер.
+                           #     Снял пары gates<->providers и engops<->providers.
+                           #   gitio (39 строк) engine -> shared: обёртка над git, инфраструктура.
+                           #     Снял пару engine<->engops.
+                           #   budget (68 строк) engine -> shared: примитив бюджета прогона.
+                           #     Снял пару engine<->providers.
+                           # Все три импортировали только stdlib (+shared.contracts) при 6-11
+                           # потребителях каждый: связность держалась на месте файла, не на логике.
+  cycles_longer_than_two: 89
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
     Десять из двенадцати взаимных пар лежат ВНУТРИ слоя capabilities и текущими правилами не

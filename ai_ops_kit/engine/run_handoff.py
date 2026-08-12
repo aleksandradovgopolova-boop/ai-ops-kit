@@ -30,7 +30,7 @@ from ai_ops_kit.lifecycle import lifecycle_store as _ls   # v3.0.12: fail-closed
 
 
 def _git(root, *args):
-    from ai_ops_kit.engine import gitio
+    from ai_ops_kit.shared import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
