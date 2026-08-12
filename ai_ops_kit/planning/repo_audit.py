@@ -358,8 +358,12 @@ def write_question_file(child_root, ask: dict):
     # Ответы на вопросы, которых больше не задают, сохраняем: человек их дал, они факт.
     for qid, val in existing.items():
         if qid not in seen:
-            lines.append(f"  {qid}: " + yaml.safe_dump(val, allow_unicode=True,
-                                                       default_flow_style=True).strip())
+            # ТОТ ЖЕ json.dumps, ЧТО ВЫШЕ (F-021, вторая половина). Первая правка закрыла только
+            # ветку «вопрос ещё задаётся», а ОТВЕЧЕННЫЕ идут ИМЕННО СЮДА — их уже не спрашивают.
+            # То есть дефект остался ровно там, где живут данные: на niti ответы гибли и после
+            # «исправления», пока это место не поправили. Поймано повторным прогоном на живом
+            # продукте, а не чтением кода.
+            lines.append(f"  {qid}: " + json.dumps(val, ensure_ascii=False))
     body = "\n".join(lines).rstrip() + "\n"
     if p.is_file():
         try:

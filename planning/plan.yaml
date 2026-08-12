@@ -435,15 +435,22 @@ work:
     title: Решить, что делает `update` при update_policy pr — сейчас поле обязательно и не читается (F-022)
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: delivery
     depends_on: []
     write_scope: [installer/, templates/ci/]
     value: high
     affects: {delivery_operations: true, engineering_quality_security: true}
-    human_decision: >
-      что должен делать локальный `ai-ops update` при `parent.update_policy: pr` — отказываться и
-      печатать точную команду, или применять только под явным признаком CI/PR-пути
+    # РЕШЕНО ВЛАДЕЛЬЦЕМ 2026-08-12: отлагать в ветку + PR. СДЕЛАНО: локальный `update` при
+    # `policy: pr` применяет обновление в отдельном git-worktree на ветке `ai-ops/update-v<версия>`
+    # и коммитит там; рабочее дерево владельца не трогается вовсе (грязное дерево не блокер).
+    # Обновление не переписано — тот же `cmd_update` с `--in-place` и другим корнем. CI-путь сохранён
+    # ЯВНЫМ флагом в шаблоне, а не угадыванием окружения. Отсутствие поля читается как `pr`.
+    # Живая проверка на дочке дала ещё два дефекта, оба закрыты: (1) пробел в F-021 — без правил для
+    # `.ai/runtime/backups/` и `last-update-report.json` PR содержал 612 файлов, из них 609 бэкап;
+    # (2) подсказка печатала `git diff main..` на дочке с веткой `master`. Плюс отчёт переносится
+    # владельцу и называет отложенное решение — раньше он оставался в удаляемом worktree.
+    # Тесты: tests/unit/test_update_policy_enforcement.py (9), мутация проверена.
     # НАЙДЕНО 2026-08-12 в поле (ии-среда) и ПОДТВЕРЖДЕНО по коду. `parent.update_policy`
     # ОБЯЗАТЕЛЕН по схеме конфига дочки (`schemas/child-config.schema.json` -> required,
     # enum [pr, manual]), манифест объявляет `silent_update: forbidden`, а установщик печатает

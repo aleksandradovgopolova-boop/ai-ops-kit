@@ -42,18 +42,72 @@ def required_docs(manifest_path: Path = None):
     return list(_DEFAULT_REQUIRED)
 
 
+# Признаки НЕЗАПОЛНЕННОГО документа. Не «слова из шаблона» вообще (тогда любой честный текст,
+# цитирующий шаблон, считался бы заготовкой), а прямые указания, что писать здесь ещё не начали:
+# фраза-инструкция «заполняется в child-репозитории» и круглые скобки-заглушки в местах, где ждут
+# факт. Порог по числу заглушек, а не наличие одной: заполненный документ вправе иметь скобки в
+# прозе. Замер на реальных файлах кита до/после заполнения: шаблон давал 8 и 6 заглушек,
+# заполненные — 0 и 0.
+_TEMPLATE_MARKERS = (
+    "заполняется в child-репозитории",
+    "заполняется в child-репозитории.",
+    "(заполняется",
+)
+_PLACEHOLDER_RE = r"^\s*[-|>*\d.]*\s*\((?:готово / частично / нет|…|[а-яё][^)]{2,60})\)\s*$"
+_PLACEHOLDER_LIMIT = 3
+
+
+def is_template(text: str) -> bool:
+    """Документ контекста — ещё заготовка кита, а не факты репозитория? -> bool.
+
+    ЗАЧЕМ (F-027, внешнее ревью 12.08.2026). `check_completeness` спрашивал только `is_file()`, то
+    есть СУЩЕСТВОВАНИЕ файла принималось за ЗАПОЛНЕННОСТЬ: собственные `ProductStatus.md` и `now.md`
+    кита месяц лежали шаблонами с фразой «Заполняется в child-репозитории», а валидатор печатал
+    `[OK]` и `CONTEXT-COMPLETE`. Это тот же класс, что F-018, где то же самое обнаружилось у
+    планирования — там детектор заготовки уже есть (`delivery_plan.is_template`), а здесь его не
+    было. Один дефект, две подсистемы, исправлена была одна.
+    """
+    import re
+
+    # НОРМАЛИЗАЦИЯ ОБЯЗАТЕЛЬНА, и это замер, а не осторожность: заполненный ProductStatus кита
+    # цитирует фразу-маркер, объясняя свою историю, и НЕ сработал только потому, что перенос строки
+    # разбил её пополам. Детектор, чей ответ зависит от переноса строки, — это удача, а не проверка.
+    low = re.sub(r"\s*\n[>\s]*", " ", (text or "").lower())
+    if any(m in low for m in _TEMPLATE_MARKERS):
+        return True
+    holes = len(re.findall(_PLACEHOLDER_RE, text or "", re.M))
+    return holes >= _PLACEHOLDER_LIMIT
+
+
 def check_completeness(child_root, required=None, manifest_path: Path = None):
-    """-> dict: required / present / missing / complete. Документ считается present, если есть в
-    project/context ИЛИ custom/context оверлея (managed — это шаблон кита, не заполненный репозиторием)."""
+    """-> dict: required / present / template / missing / complete.
+
+    Документ считается present, если есть в project/context ИЛИ custom/context оверлея (managed —
+    это шаблон кита, не заполненный репозиторием). ЗАГОТОВКА присутствием НЕ считается: см.
+    `is_template` — существование файла это не заполненность.
+    """
     root = Path(child_root)
     required = required if required is not None else required_docs(manifest_path)
-    present, missing = [], []
+    present, missing, template = [], [], []
     for doc in required:
-        in_proj = (root / ".ai/project/context" / doc).is_file()
-        in_cust = (root / ".ai/custom/context" / doc).is_file()
-        (present if (in_proj or in_cust) else missing).append(doc)
+        found = next((p for p in ((root / ".ai/project/context" / doc),
+                                  (root / ".ai/custom/context" / doc)) if p.is_file()), None)
+        if found is None:
+            missing.append(doc)
+            continue
+        try:
+            if is_template(found.read_text(encoding="utf-8", errors="replace")):
+                template.append(doc)
+                continue
+        except OSError as e:
+            # Нечитаемый файл — не «заполненный»: молча считать его present значило бы сделать
+            # самый мягкий вывод из самого подозрительного состояния.
+            template.append(f"{doc} (не читается: {type(e).__name__})")
+            continue
+        present.append(doc)
     return {"kind": "context-completeness", "required": required,
-            "present": present, "missing": missing, "complete": not missing}
+            "present": present, "template": template, "missing": missing,
+            "complete": not missing and not template}
 
 
 def run(child_root, strict=False, as_json=False, manifest_path: Path = None):
@@ -63,14 +117,25 @@ def run(child_root, strict=False, as_json=False, manifest_path: Path = None):
     else:
         print(f"=== полнота контекста репозитория ({child_root}) ===")
         for doc in rep["required"]:
-            mark = "OK" if doc in rep["present"] else "MISSING"
+            if doc in rep["present"]:
+                mark = "OK"
+            elif any(str(d).startswith(doc) for d in rep["template"]):
+                mark = "ЗАГОТОВКА"
+            else:
+                mark = "MISSING"
             print(f"  [{mark}] {doc}")
         if rep["complete"]:
-            print("CONTEXT-COMPLETE: все обязательные документы контекста присутствуют в оверлее.")
+            print("CONTEXT-COMPLETE: обязательные документы контекста заполнены фактами репозитория.")
         else:
-            print(f"ВНИМАНИЕ: {len(rep['missing'])} обязательных документов НЕТ в project/custom — "
-                  f"`ai-ops update` создаст их черновики из шаблонов: {', '.join(rep['missing'])}")
-    return 1 if (strict and rep["missing"]) else 0
+            if rep["missing"]:
+                print(f"ВНИМАНИЕ: {len(rep['missing'])} обязательных документов НЕТ в project/custom — "
+                      f"`ai-ops update` создаст их черновики из шаблонов: {', '.join(rep['missing'])}")
+            if rep["template"]:
+                # Заготовка — не «есть»: сказать это прямо, иначе доверие к CONTEXT-COMPLETE ложное.
+                print(f"ВНИМАНИЕ: {len(rep['template'])} документов остались ЗАГОТОВКОЙ кита, а не "
+                      f"фактами репозитория: {', '.join(map(str, rep['template']))}. Это не «есть»: "
+                      f"сессия прочитает их первыми и получит шаблон вместо состояния продукта.")
+    return 1 if (strict and (rep["missing"] or rep["template"])) else 0
 
 
 def main(argv):

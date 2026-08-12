@@ -74,22 +74,31 @@ def test_missing_declaration_is_an_error_not_a_pass(claims, tmp_path):
     assert errs and "ослепла" in errs[0], errs
 
 
+# ОДНО ПРАВИЛО НА ОДИН ФАЙЛ. Оба теста ниже задают правило ЯВНО, а не берут его из реестра: охват в
+# реестре вырос с одного файла до пяти (F-026), и фикстура, зависящая от полного списка, ломалась бы
+# при каждом добавлении документа — тест мерил бы состав реестра вместо предмета.
+_RULE = [{"file": "README.md", "pattern": r"(\d+)\s*<!-- claim:gates-total -->",
+          "claim": "gates_count"}]
+
+
 def test_hand_typed_number_diverging_from_the_claim_is_caught(claims, tmp_path):
     """README писал «33 гейта» при claim'е 34 — и релиз прошёл."""
     pkg = tmp_path
     (pkg / "README.md").write_text(
-        "| **Quality Gates** | 33 гейта объявлено; на конкретной задаче — её набор |\n",
+        "| **Quality Gates** | 33 <!-- claim:gates-total --> гейта объявлено |\n",
         encoding="utf-8")
-    errs = vrc.derived_number_errors(dict(claims, gates_count=34), pkg)
+    errs = vrc.derived_number_errors(
+        dict(claims, gates_count=34, derived_numbers_in_docs=_RULE), pkg)
     assert errs and "33" in errs[0] and "34" in errs[0], errs
 
 
 def test_number_matching_the_claim_passes(claims, tmp_path):
     """Положительный контроль: правило не краснеет всегда."""
     (tmp_path / "README.md").write_text(
-        "| **Quality Gates** | 34 гейта объявлено; на конкретной задаче — её набор |\n",
+        "| **Quality Gates** | 34 <!-- claim:gates-total --> гейта объявлено |\n",
         encoding="utf-8")
-    assert vrc.derived_number_errors(dict(claims, gates_count=34), tmp_path) == []
+    assert vrc.derived_number_errors(
+        dict(claims, gates_count=34, derived_numbers_in_docs=_RULE), tmp_path) == []
 
 
 # ── side-effect proof ─────────────────────────────────────────────────────────────────────────
