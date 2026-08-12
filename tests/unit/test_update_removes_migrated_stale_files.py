@@ -17,6 +17,10 @@
   * positive     — перенесённый миграцией лишний файл удаляется В ТОМ ЖЕ обновлении;
   * fail-closed  — файл, который ДОЛЖЕН быть в managed, не удаляется;
   * side-effect  — отчёт называет то, что реально применено (диф пересчитан после миграций).
+
+F-022: вызовы здесь идут с `in_place=True` — предмет этих тестов механика обновления
+(перенос устаревших файлов миграцией и состав отчёта), а не политика доставки. Без флага
+они уходили бы в отложенный режим и проверяли не то, что обещают в имени.
 """
 from __future__ import annotations
 
@@ -85,7 +89,7 @@ def test_stale_file_moved_by_migration_is_removed_in_the_same_update(child, tmp_
     new_path = root / ".ai" / "managed" / "ai_ops_kit" / "validation" / STALE
 
     inst = _load(root)
-    rc = inst.cmd_update(force=True)
+    rc = inst.cmd_update(force=True, in_place=True)
 
     assert rc == 0, "обновление не прошло"
     assert not (old_dir / STALE).exists(), "файл остался по старому пути"
@@ -103,7 +107,7 @@ def test_files_that_belong_to_managed_survive(child, tmp_path):
     assert must_stay.is_file(), "предпосылка: VERSION в managed есть"
 
     inst = _load(root)
-    inst.cmd_update(force=True)
+    inst.cmd_update(force=True, in_place=True)
 
     assert must_stay.is_file(), "уборка вынесла файл, который обязан быть в managed"
     assert (root / ".ai" / "managed" / "ai_ops_kit" / "validation" / "_bootstrap.py").is_file(), \
@@ -144,7 +148,7 @@ def test_report_names_what_was_actually_applied(child, tmp_path):
     (old_dir / STALE).write_text("# лишний\n", encoding="utf-8")
 
     inst = _load(root)
-    inst.cmd_update(force=True)
+    inst.cmd_update(force=True, in_place=True)
 
     rep = json.loads((root / ".ai" / "runtime" / "last-update-report.json").read_text("utf-8"))
     removed = [c["path"] for c in (rep.get("managed_changes") or [])
