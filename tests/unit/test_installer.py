@@ -737,3 +737,76 @@ def test_gitignore_change_is_named_in_the_report(child, ai_ops):
     assert "не затронуты" in line, "отчёт не говорит, что продуктовые артефакты не тронуты"
     assert ai_ops._assets_report_line({"gitignore": "present"}).strip() == "", (
         "нечего сообщать, а отчёт говорит — это шум, из-за которого перестают читать отчёты")
+
+
+# ---------------------------------------------------------------- F-024: опт-аут CI уважается
+#
+# НАХОДКА (живая установка в дочку, 2026-08-12). Шапка `ai-ops-record.yml` объявляет опт-аут
+# ДОСЛОВНО: «Опт-аут: удалить этот файл». Владелец удаляет — и файл ВОЗВРАЩАЕТСЯ на первом же
+# `ai-ops update`, потому что отсутствие читалось как `absent` -> «не установлен» -> «установить».
+# Объявленный опт-аут не исполнялся, и цена у этого не косметическая: рекордер коммитит и пушит на
+# каждый push, то есть в боте он жёг бы общие минуты Actions (в их же workflow написано, что минуты
+# однажды кончились посреди работы).
+#
+# Различить два смысла «файла нет» кит может БЕЗ новых полей в схеме: у него уже есть отпечатки
+# того, что он ставил сам. Есть отпечаток и нет файла -> владелец удалил (решение);
+# нет ни файла, ни отпечатка -> просто ещё не ставили.
+
+def _record_path(root):
+    return root / ".github" / "workflows" / "ai-ops-record.yml"
+
+
+@pytest.fixture
+def installed_copy(installed, tmp_path):
+    """Своя копия установленной дочки: тесты ниже УДАЛЯЮТ файлы и правят отпечатки.
+
+    Фикстура `installed` модульная и общая — первый же такой тест ломал следующие, и это была моя
+    ошибка того же класса, что тест, зависящий от индекса репозитория: результат зависел от порядка,
+    а не от предмета.
+    """
+    import shutil as _sh
+    dst = tmp_path / "installed-copy"
+    _sh.copytree(installed, dst)
+    return dst
+
+
+def test_deleted_workflow_is_opted_out_not_absent(installed_copy, ai_ops):
+    """Состояние различает решение владельца и «ещё не ставили»."""
+    _record_path(installed_copy).unlink()
+    state = {r["file"]: r["state"] for r in ai_ops.ci_workflow_state(installed_copy)}
+    assert state["ai-ops-record.yml"] == "opted-out", state
+    # обратная сторона: файл, которого кит НИКОГДА не ставил, остаётся absent
+    prints = ai_ops._ci_prints(installed_copy)
+    prints.pop("ai-ops-record.yml", None)
+    ai_ops._ci_prints_path(installed_copy).write_text(
+        __import__("json").dumps(prints, ensure_ascii=False), encoding="utf-8")
+    state2 = {r["file"]: r["state"] for r in ai_ops.ci_workflow_state(installed_copy)}
+    assert state2["ai-ops-record.yml"] == "absent", (
+        "без отпечатка отсутствие обязано читаться как «не установлен» — иначе первая установка "
+        "перестанет ставить шаблоны вовсе")
+
+
+def test_opt_out_survives_sync_and_is_named(installed_copy, ai_ops):
+    """Доставка не возвращает удалённое и ГОВОРИТ об этом, а не молчит."""
+    _record_path(installed_copy).unlink()
+    acts = ai_ops.sync_ci_workflows(installed_copy)
+    assert not _record_path(installed_copy).exists(), "удалённый владельцем workflow вернулся"
+    kept = [a for a in acts if a["file"] == "ai-ops-record.yml"]
+    assert kept and kept[0]["action"] == "kept-opted-out", acts
+
+
+def test_opt_out_survives_refresh_ci(installed_copy, ai_ops):
+    """`--refresh-ci` означает «перезапиши мои правки», а НЕ «верни удалённое».
+
+    Иначе флаг об обновлении толковал бы согласие шире выданного.
+    """
+    _record_path(installed_copy).unlink()
+    ai_ops.sync_ci_workflows(installed_copy, refresh=True)
+    assert not _record_path(installed_copy).exists(), "--refresh-ci отменил решение владельца"
+
+
+def test_first_install_still_delivers_the_workflow(child, ai_ops):
+    """positive, обязательный: на репозитории без кита шаблон по-прежнему ставится."""
+    r = _run_cli(child, "init", ".")
+    assert r.returncode == 0, r.stdout[-400:]
+    assert _record_path(child).exists(), "первая установка перестала ставить рекордер"
