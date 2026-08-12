@@ -41,6 +41,42 @@ from ai_ops_kit.lifecycle import lifecycle_store as _ls   # v3.0.12: durable з�
 STATUS = {"in-progress", "review", "blocked", "done"}
 
 
+def shared_registry_path(start=None):
+    """Путь к реестру, ОБЩЕМУ для всех worktree одного репозитория. -> Path.
+
+    ЗАЧЕМ ЭТО ПОЯВИЛОСЬ (замер 12.08.2026). Протокол параллельной работы
+    (`docs/parallel-sessions.md`) требует двух вещей одновременно: сессия работает в своём
+    `git worktree` (иначе чужой `checkout` уводит незакоммиченные правки) И заявляет область записи
+    в общем реестре (иначе две сессии берут одну работу). В таком виде правила ПРОТИВОРЕЧИЛИ друг
+    другу: `.ai/runtime/active-work.yaml` лежит внутри рабочего дерева, то есть у каждого worktree
+    свой — проверено, файл, созданный в одном, из другого не виден вовсе. Реестр, невидимый другой
+    сессии, — это не координация, а её видимость.
+
+    Поэтому путь берётся из `git rev-parse --git-common-dir`: этот каталог ОДИН на репозиторий и
+    все его worktree (у worktree свой `--git-dir`, но общий `--git-common-dir`). Реестр там же не
+    попадает в историю — он состояние машины, а не факт о продукте.
+
+    ЧТО НЕ МЕНЯЕТСЯ: путь дочки `.ai/runtime/active-work.yaml` объявлен в манифесте
+    (`ai-ops-manifest.yaml`) и остаётся контрактом — в дочке сессии обычно делят один checkout, и
+    там он работает. Эта функция — для случая «несколько worktree одного репозитория».
+    """
+    import subprocess
+
+    cwd = str(start or Path.cwd())
+    r = subprocess.run(["git", "rev-parse", "--git-common-dir"],
+                       cwd=cwd, capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        raise ActiveWorkCorrupt(
+            f"не git-репозиторий или git недоступен ({cwd}): общий реестр сессий разместить негде")
+    # `--git-common-dir` из корня репозитория отдаёт ОТНОСИТЕЛЬНЫЙ `.git` — разрешаем от cwd,
+    # иначе путь из разных worktree указывал бы в разные места, то есть ровно на тот дефект,
+    # ради которого функция и написана.
+    common = Path(r.stdout.strip())
+    if not common.is_absolute():
+        common = (Path(cwd) / common).resolve()
+    return common / "ai-ops" / "active-work.yaml"
+
+
 class ActiveWorkCorrupt(Exception):
     """Реестр active-work недостоверен (повреждён/не сохранён) — координация сессий небезопасна."""
 

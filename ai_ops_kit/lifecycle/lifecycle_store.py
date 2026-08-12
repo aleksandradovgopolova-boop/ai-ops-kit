@@ -169,6 +169,7 @@ def _journal_scan(journal_path):
 # потом сливает накопленное (`drain_bookkeeping_losses`). Образец взят в этом же репозитории:
 # `orchestrator_usage.drain_call_stats` — та же форма «накопили у источника, слили в отчёт».
 _BOOKKEEPING_LOSSES = []
+_BOOKKEEPING_LIMIT = 50
 
 
 def _note_journal_loss(journal_path, event, error):
@@ -180,6 +181,22 @@ def _note_journal_loss(journal_path, event, error):
     """
     ev = event if isinstance(event, dict) else {}
     ref = {k: ev.get(k) for k in ("run_id", "workitem_id", "package_id") if ev.get(k) is not None}
+    # ПОТОЛОК. Накопитель сливается на путях возврата отчёта, но процесс может и не дойти до них
+    # (команда, которая только пишет в журнал). Утрат при исправном диске не бывает вовсе, а при
+    # неисправном они пойдут пачкой — и тогда сотая запись не добавляет знания к первым. Потолок
+    # ЗАМЕТЕН, а не молчалив: последняя запись говорит, сколько ещё было.
+    if len(_BOOKKEEPING_LOSSES) >= _BOOKKEEPING_LIMIT:
+        tail = _BOOKKEEPING_LOSSES[-1]
+        if tail.get("what") == "lifecycle_journal.__overflow__":
+            tail["dropped"] = tail.get("dropped", 0) + 1
+        else:
+            _BOOKKEEPING_LOSSES.append({
+                "what": "lifecycle_journal.__overflow__",
+                "journal": str(journal_path),
+                "error": f"утрат записей журнала больше {_BOOKKEEPING_LIMIT} — перечислены первые",
+                "dropped": 1,
+            })
+        return {"ok": False, "error": error}
     _BOOKKEEPING_LOSSES.append({
         "what": f"lifecycle_journal.{ev.get('kind') or 'unknown'}",
         "journal": str(journal_path),

@@ -649,3 +649,91 @@ def test_filled_planning_artifacts_are_not_reported_as_gap(installed, ai_ops):
 
     _req, gaps, unfilled = ai_ops._planning_gaps(installed)
     assert not gaps and not unfilled, f"заполненные артефакты объявлены незаполненными: {gaps} {unfilled}"
+
+
+# ---------------------------------------------------------------- F-021: кит не сорит в истории дочки
+#
+# НАХОДКА ЖИВОГО ПРОГОНА (ии-среда, 2026-08-12). Кит не писал в дочку `.gitignore` вовсе, и это
+# было ОБЪЯВЛЕННОЙ границей — она записана прямо в этом файле, в
+# `test_entry_point_honours_explicit_interpreter`. В поле граница обошлась дорого: за один прогон в
+# коммит владельца дважды пытались уехать `.ai/worktrees/` (как вложенный репозиторий),
+# `.ai/runtime/active-work.yaml` и `.lock`, `.ai/usage/product-ledger.jsonl`,
+# `.ai/reevaluate-evidence-*.json`. Владелец правил это руками — то есть становился техническим
+# оператором кита, а это ровно та метрика, которую считает квалификация.
+#
+# Проверяем НЕ строками в файле, а вопросом К GIT (`git check-ignore`): правило, которое выглядит
+# верным и не срабатывает, — это тот самый класс «объявлено, но не исполняется».
+
+# Пути, которые в поле реально пытались уехать. Слева — путь, справа — почему он служебный.
+LEAKY_PATHS = [
+    (".ai/worktrees/wi-1/README.md", "вложенный репозиторий изолированного прогона"),
+    (".ai/runtime/active-work.yaml", "координация параллельных сессий этой машины"),
+    (".ai/runtime/ai-ops.lock", "лок"),
+    (".ai/usage/product-ledger.jsonl", "локальный учёт стоимости"),
+    (".ai/reevaluate-evidence-wi-1.json", "кеш переоценки гейтов"),
+    (".ai/repository-profile.yaml", "машинный кеш детекции стека"),
+    (".ai/managed/ai_ops_kit/__pycache__/x.cpython-314.pyc", "байткод в checksummed слое"),
+]
+
+# Обратная сторона: это НЕ служебное состояние, а продукт — прятать его нельзя.
+KEPT_PATHS = [
+    (".ai/project/report-history/wi-1.jsonl", "историю эффекта коммитит workflow ai-ops-record"),
+    (".ai/managed/agents/core/context-builder.md", "managed-слой — предмет доставки"),
+    (".ai/project/ProductStatus.md", "факты о продукте, данные человеком"),
+    (".ai/custom/overlay.md", "оверлей владельца"),
+    ("features/wi-1/blueprint.yaml", "продуктовый артефакт задачи"),
+]
+
+
+def _check_ignored(root, rel):
+    """Спросить у git, скрыт ли путь. -> bool. `check-ignore -q`: 0 — скрыт, 1 — нет."""
+    return _git(root, "check-ignore", "-q", rel).returncode == 0
+
+
+def test_init_hides_kit_service_state_from_child_git(installed):
+    """side-effect proof: после install git САМ говорит, что служебное состояние скрыто."""
+    assert (installed / ".gitignore").is_file(), "install не создал .gitignore в дочке"
+    not_hidden = [f"{rel} ({why})" for rel, why in LEAKY_PATHS if not _check_ignored(installed, rel)]
+    assert not not_hidden, (
+        "служебное состояние кита уедет в коммит владельца по `git add -A`:\n  "
+        + "\n  ".join(not_hidden))
+
+
+def test_init_does_not_hide_product_artifacts(installed):
+    """Обратная сторона, обязательная: правило не вправе спрятать продукт.
+
+    Без неё F-021 «закрывался» бы строкой `.ai/` — и вместе с мусором из истории исчезли бы
+    managed-слой, ответы владельца и история эффекта.
+    """
+    hidden = [f"{rel} ({why})" for rel, why in KEPT_PATHS if _check_ignored(installed, rel)]
+    assert not hidden, "правило спрятало от git продуктовые артефакты:\n  " + "\n  ".join(hidden)
+
+
+def test_existing_gitignore_is_appended_not_overwritten(child, ai_ops):
+    """`.gitignore` — документ владельца: его правила обязаны выжить, а блок не должен дублироваться."""
+    gi = child / ".gitignore"
+    gi.write_text("# правила владельца\nnode_modules/\n*.log\n", encoding="utf-8")
+
+    assert ai_ops.ensure_gitignore(child) == "appended"
+    text = gi.read_text(encoding="utf-8")
+    assert "# правила владельца" in text and "node_modules/" in text, "правила владельца утрачены"
+    assert ".ai/worktrees/" in text, "блок кита не дописан"
+
+    assert ai_ops.ensure_gitignore(child) == "present", "повторный вызов не распознал свой блок"
+    assert gi.read_text(encoding="utf-8") == text, "повторный вызов изменил файл"
+    assert text.count(".ai/worktrees/") == 1, "блок кита продублирован"
+
+
+def test_gitignore_is_created_when_child_has_none(child, ai_ops):
+    assert not (child / ".gitignore").exists()
+    assert ai_ops.ensure_gitignore(child) == "created"
+    assert ".ai/runtime/active-work.yaml" in (child / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_gitignore_change_is_named_in_the_report(child, ai_ops):
+    """Дописка в чужой файл обязана быть НАЗВАНА: иначе владелец узнаёт о ней из диффа."""
+    line = ai_ops._assets_report_line({"gitignore": "appended"})
+    assert ".gitignore" in line and "дополнен" in line, line
+    assert "не затронуты" in line, "отчёт не говорит, что продуктовые артефакты не тронуты"
+    assert ai_ops._assets_report_line({"gitignore": "present"}).strip() == "", (
+        "нечего сообщать, а отчёт говорит — это шум, из-за которого перестают читать отчёты")

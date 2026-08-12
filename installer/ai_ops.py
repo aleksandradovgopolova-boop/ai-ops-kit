@@ -914,6 +914,10 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         "context_backfilled": _backfill_required_context(),
         "ci_workflows": sync_ci_workflows(root, refresh=refresh_ci),
         "zone_markers": ensure_zone_markers(root),
+        # Здесь, а не в `cmd_init`: иначе существующие дочки — те самые, на которых находка и
+        # случилась, — не получили бы правило никогда. Функция идемпотентна, повторный update
+        # молчит.
+        "gitignore": ensure_gitignore(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         "planning_seeded": _seed_planning_contour(root),
@@ -931,6 +935,13 @@ def _assets_report_line(assets: dict) -> str:
     if assets.get("zone_markers"):
         out += (" Пустые зоны `.ai/` получили README, чтобы раскладка пережила клон: "
                 + ", ".join(assets["zone_markers"]) + ".")
+    # Названо, а не сделано молча: `.gitignore` — документ владельца, и дописку в него он обязан
+    # увидеть в отчёте, а не обнаружить в диффе.
+    if assets.get("gitignore") in ("created", "appended"):
+        out += (" `.gitignore` " + ("создан" if assets["gitignore"] == "created" else "дополнен")
+                + ": служебное состояние кита (.ai/worktrees/, runtime-локи и active-work,"
+                  " локальный учёт стоимости, кеши, байткод) скрыто от git."
+                  " Продуктовые артефакты кита не затронуты.")
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += (" Политика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
@@ -972,6 +983,78 @@ _ZONE_WHY = {
     "generated": "Сгенерированное китом: команды runtime, промпты. Правится генератором, не руками.",
     "runtime": "Рабочее состояние прогонов: отчёты, снимки, бэкапы. В историю обычно не нужно.",
 }
+
+
+_GITIGNORE_MARK = "# --- AI Ops Kit: служебное состояние (не история продукта) ---"
+
+# Правила ЗАМЕРЕНЫ, а не выписаны по вкусу. Каждая строка — то, что в поле реально пыталось уехать
+# в коммит владельца (находка ии-среды 2026-08-12, F-021), либо то, что кит уже спрятал у себя
+# (`.ai/repository-profile.yaml` — R-11 ревизии 2026-08-11), либо объявленная граница репозитория
+# (байткод в checksummed managed-слое — tests/unit/test_installer.py).
+_GITIGNORE_RULES = """
+# Кит ставится в чужой репозиторий и обязан не сорить в его истории. Ниже — только то, что
+# наблюдалось уезжающим в коммит, и только служебное: рабочее состояние прогона, локальные
+# кеши и байткод. Продуктовые артефакты кита (features/**, .ai/project/**, .ai/managed/**,
+# .ai/custom/**) НЕ игнорируются — они и есть то, ради чего кит стоит.
+
+# Вложенный git-репозиторий изолированного прогона: `git add -A` берёт его как gitlink,
+# и в истории появляется ссылка на дерево, которого ни у кого больше нет.
+.ai/worktrees/
+
+# Координация параллельных сессий и локи — состояние ЭТОЙ машины, не факт о продукте.
+.ai/runtime/active-work.yaml
+.ai/runtime/*.lock
+.ai/runtime/**/*.lock
+
+# Локальный учёт стоимости прогонов: цифры этой машины, а не общий факт. ЕДИНСТВЕННОЕ правило
+# здесь, о котором можно спорить: если команде нужна общая история стоимости — снимите эту
+# строку, и ledger начнёт коммититься. Остальные строки спорными не являются.
+.ai/usage/*.jsonl
+
+# Кеш переоценки гейтов: по построению безвреден к утрате — не нашли, значит пересчитаем.
+.ai/reevaluate-evidence-*.json
+
+# Машинный кеш детекции стека (кит прячет его и у себя).
+.ai/repository-profile.yaml
+
+# Байткод внутри checksummed managed-слоя: ломает сверку и уезжает по `git add -A`.
+.ai/managed/**/__pycache__/
+.ai/**/*.py[co]
+
+# СОЗНАТЕЛЬНО НЕ ВНЕСЕНО: `.ai/generated/` (манифест зовёт его isolated, но некоторым
+# репозиториям сгенерированные команды runtime нужны в истории — это решение владельца) и
+# `.ai/project/report-history/` (её коммитит workflow ai-ops-record: это история эффекта).
+"""
+
+
+def ensure_gitignore(root: Path = None):
+    """Спрятать служебное состояние кита от git дочки. -> "created" | "appended" | "present".
+
+    ПОЧЕМУ ЭТО ДЕЛАЕТ УСТАНОВЩИК (находка ии-среды 2026-08-12, F-021). Кит не писал в дочку
+    `.gitignore` вовсе, и это было объявленной границей — она записана в
+    `tests/unit/test_installer.py` («`.gitignore` установщик в дочку не пишет, поэтому байткод в
+    managed уехал бы в коммит владельца по `git add -A`»). В поле граница обошлась дорого: за один
+    прогон в коммит владельца дважды пытались уехать `.ai/worktrees/` (как вложенный репозиторий),
+    `.ai/runtime/active-work.yaml` и `.lock`, `.ai/usage/product-ledger.jsonl`,
+    `.ai/reevaluate-evidence-*.json`. Owner чинил это руками в своём репозитории — то есть
+    становился техническим оператором кита, а это ровно та метрика, которую квалификация считает.
+
+    Правила ДОПИСЫВАЮТСЯ отмеченным блоком и никогда не переписывают чужой файл: `.gitignore` —
+    документ владельца, а не наша зона. Повторный вызов ничего не делает (маркер уже есть), поэтому
+    `init` и `update` могут звать функцию свободно.
+    """
+    root = Path(root or REPO_ROOT)
+    path = root / ".gitignore"
+    block = f"{_GITIGNORE_MARK}\n{_GITIGNORE_RULES.strip()}\n"
+    if not path.exists():
+        path.write_text(block, encoding="utf-8")
+        return "created"
+    current = path.read_text(encoding="utf-8")
+    if _GITIGNORE_MARK in current:
+        return "present"
+    sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
+    path.write_text(current + sep + block, encoding="utf-8")
+    return "appended"
 
 
 def ensure_zone_markers(root: Path = None):

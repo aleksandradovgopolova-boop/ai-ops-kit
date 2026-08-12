@@ -63,3 +63,20 @@ repos:
         files: ^(tools|validation|tests)/
         pass_filenames: false
         stages: [pre-push]
+
+      # v3.36.9 (замер 12.08.2026): `commit_policy.check_commit` живёт с v3.19.0 и НЕ ЗАПУСКАЛСЯ
+      # нигде — ни в хуках, ни в CI. На коммите 4a231ae, куда `git add -A` соседней сессии унёс
+      # чужой фикс CI-шаблона и research-скан, контракт даёт `broad_scope`: «затронуто 5
+      # верхнеуровневых каталогов — похоже на несколько задач в одном коммите». Проверка была права
+      # и молчала, потому что её не звали. Протокол — docs/parallel-sessions.md.
+      #
+      # Стадия commit-msg, а не pre-commit: контракту нужны И файлы, И текст сообщения (правила про
+      # заглушки, секреты, ссылку на WorkItem и evidence). На pre-commit сообщения ещё нет, и
+      # исполнилась бы половина контракта — а половина проверки хуже отсутствующей: она создаёт
+      # видимость полной.
+      - id: commit-contract
+        name: CommitContract (охват коммита и осмысленность сообщения)
+        entry: scripts/commit-contract.sh
+        language: system
+        pass_filenames: false
+        stages: [commit-msg]
