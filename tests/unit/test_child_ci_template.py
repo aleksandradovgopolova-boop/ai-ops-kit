@@ -203,3 +203,48 @@ def test_child_validator_is_fail_closed_on_a_broken_install(child, tmp_path):
     r = subprocess.run([sys.executable, str(script)], cwd=str(broken),
                        capture_output=True, text=True, timeout=180)
     assert r.returncode != 0, "рассогласование версий прошло как чистая установка"
+
+
+# ─── F-020: коммит кита не имеет права снимать проверки с PR дочки ───────────────────────────────
+# НАХОДКА ИИ-СРЕДЫ (2026-08-12). `ai-ops-record.yml` коммитил снимок эффекта с пометкой
+# `[skip ci]` «без рекурсии». Петлю эта пометка не предотвращала — её предотвращает GitHub, не
+# перезапускающий workflow на пуш под `GITHUB_TOKEN`. Зато когда коммит снимка оказывался вершиной
+# ветки, GitHub гасил по пометке ВСЕ проверки PR: «no checks reported». Ветка выглядела зелёной
+# потому, что проверок не было вовсе, и ставил это состояние сам кит. Замерено в поле на двух PR.
+SKIP_CI_MARKERS = ("[skip ci]", "[ci skip]", "[skip actions]", "[actions skip]",
+                   "***NO_CI***", "[skip-ci]")
+
+
+@pytest.mark.unit
+def test_no_template_commit_suppresses_child_ci():
+    """Ни один шаблон не вправе коммитить с пометкой, гасящей CI дочки.
+
+    Проверяются ВСЕ шаблоны, а не только тот, где нашли: пометка дешёвая и возвращается копипастой,
+    а последствие у неё одно и то же — PR без единой проверки читается как PR с пройденными.
+    """
+    offenders = []
+    for tpl in sorted(TEMPLATES.glob("*.yml")):
+        text = tpl.read_text(encoding="utf-8")
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue   # объяснение, ПОЧЕМУ пометки нет, — это не пометка
+            for marker in SKIP_CI_MARKERS:
+                if marker in line:
+                    offenders.append(f"{tpl.name}:{line_no}: {marker} в {line.strip()[:80]}")
+    assert not offenders, (
+        "шаблон гасит CI дочки — PR без проверок выглядит как PR с пройденными:\n"
+        + "\n".join(offenders))
+
+
+@pytest.mark.unit
+def test_recorder_still_commits_and_pushes():
+    """Обратная сторона: снятие пометки не должно снять саму запись снимков.
+
+    Без этой половины тест выше проходил бы и на шаблоне, из которого коммит удалили целиком.
+    """
+    text = (TEMPLATES / "ai-ops-record.yml").read_text(encoding="utf-8")
+    assert "git commit -m \"chore: record effect snapshot\"" in text, "коммит снимка исчез"
+    assert "git push" in text, "снимок коммитится, но не отправляется — история эффекта не наберётся"
+    assert "GITHUB_TOKEN" in text, (
+        "исчезло упоминание GITHUB_TOKEN: именно на нём держится защита от петли после снятия "
+        "[skip ci], и эта граница обязана быть названа в шаблоне")
