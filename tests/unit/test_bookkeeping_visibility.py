@@ -118,3 +118,21 @@ def test_sequence_report_on_disk_names_the_loss(tmp_path):
 
     on_disk = yaml.safe_load((features / "wi-1" / "sequence-report.yaml").read_text(encoding="utf-8"))
     assert on_disk["bookkeeping_errors"][0]["what"] == "lifecycle_journal.package_end", on_disk
+
+
+def test_accumulator_has_a_visible_ceiling(tmp_path):
+    """Потолок накопителя не молчит: последняя запись говорит, сколько утрат не перечислено.
+
+    Процесс может не дойти до пути возврата отчёта, а при неисправном диске утраты идут пачкой.
+    Молчаливый обрыв здесь был бы тем же дефектом в миниатюре: часть утрачена невидимо.
+    """
+    journal = tmp_path / "j.jsonl"
+    journal.write_text('{"kind": "x", "seq": 0, "checksum": "nope"}\n', encoding="utf-8")
+    for _ in range(lifecycle_store._BOOKKEEPING_LIMIT + 7):
+        lifecycle_store.journal_append(journal, _event("run_cost"))
+
+    losses = lifecycle_store.drain_bookkeeping_losses()
+    assert len(losses) == lifecycle_store._BOOKKEEPING_LIMIT + 1, len(losses)
+    overflow = losses[-1]
+    assert overflow["what"] == "lifecycle_journal.__overflow__", overflow
+    assert overflow["dropped"] == 7, f"число неперечисленных утрат неверно: {overflow}"
