@@ -91,7 +91,10 @@ def main():
             continue
         try:
             text = fetch(url)
-        except Exception as e:
+        # ПРАВИЛЬНЫЙ ОБРАЗЕЦ (срез .research ратчета, 2026-08-12): отказ сети не глотается, а
+        # становится ПОСЧИТАННЫМ результатом с типом исключения в строке отчёта (`fetch_fail`).
+        # Тип широк намеренно: `fetch` идёт в сеть, она вправе поднять что угодно.
+        except Exception as e:  # noqa: BLE001 — отказ становится строкой отчёта, не тишиной
             counts['fetch_fail'] += 1
             rows.append((evid, 'fetch_fail', f'{type(e).__name__}: {e}'[:80]))
             continue
