@@ -184,3 +184,66 @@ class TestSwallowedFailuresAreVisible:
         ai_ops_run.print_human(_report(
             lifecycle={"concurrency_preflight": {"conflicts": [{"id": "a"}, {"id": "b"}]}}))
         assert "preflight-конфликтов: 2" in capsys.readouterr().out
+
+
+@pytest.mark.unit
+class TestUnevaluatedBlueprintIsNotHealthy:
+    """Неоценённое здоровье blueprint не имеет права выглядеть здоровым (срез ратчета 2026-08-12).
+
+    НАХОДКА. `derive_status` считала вердикт blueprint так: `try: verdict = build_report(...)
+    except: verdict = None`. `None` уходил в последнюю ветку `else: status = "done"` — то есть
+    blueprint, здоровье которого оценить НЕ УДАЛОСЬ, был неотличим от оценённого как здоровый, и
+    работа получала `done`. Тот же класс, что «битая DeliveryReceipt не равна отсутствующей»:
+    нечитаемая расписка — это не отсутствие проблемы.
+    """
+
+    CLOSED_EVIDENCE = {
+        "intake_completeness": {"status": "pass", "provided": ["classified_type", "size", "risk"]},
+        "evidence": {"status": "pass", "provided": ["source_per_claim", "capability_status"]},
+    }
+
+    @staticmethod
+    def _feature_dir(tmp_path):
+        fd = tmp_path / "features" / "wi-1"
+        fd.mkdir(parents=True)
+        (fd / "blueprint.yaml").write_text("kind: feature-blueprint\n", encoding="utf-8")
+        return fd
+
+    def test_healthy_blueprint_with_closed_gates_is_done(self, tmp_path, monkeypatch):
+        """positive: исправный путь не стал строже — оценили, проблем нет -> done."""
+        import workitem
+
+        fd = self._feature_dir(tmp_path)
+        monkeypatch.setattr(workitem.run_report, "build_report", lambda *a, **k: {"verdict": "OK"})
+        st = workitem.derive_status("RESEARCH", fd, self.CLOSED_EVIDENCE)
+        assert st["status"] == "done", st
+        assert "blueprint_verdict_error" not in st, "исправная оценка не должна сообщать об ошибке"
+
+    def test_unevaluatable_blueprint_blocks_instead_of_done(self, tmp_path, monkeypatch):
+        """fail-closed: сбой оценки -> blocked, а НЕ done с пустым вердиктом."""
+        import workitem
+
+        fd = self._feature_dir(tmp_path)
+
+        def _boom(*_a, **_k):
+            raise OSError("blueprint.yaml нечитаем")
+
+        monkeypatch.setattr(workitem.run_report, "build_report", _boom)
+        st = workitem.derive_status("RESEARCH", fd, self.CLOSED_EVIDENCE)
+
+        assert st["status"] == "blocked", (
+            f"неоценённое здоровье blueprint выдано за здоровое: {st['status']}")
+        assert st["blueprint_verdict"] is None
+        assert "OSError" in st["blueprint_verdict_error"], (
+            "причина, по которой оценка не состоялась, обязана быть названа")
+
+    def test_problem_verdict_still_blocks(self, tmp_path, monkeypatch):
+        """Регресс: явный PROBLEM блокировал и раньше — новая ветка его не обошла."""
+        import workitem
+
+        fd = self._feature_dir(tmp_path)
+        monkeypatch.setattr(workitem.run_report, "build_report",
+                            lambda *a, **k: {"verdict": "PROBLEM"})
+        st = workitem.derive_status("RESEARCH", fd, self.CLOSED_EVIDENCE)
+        assert st["status"] == "blocked" and st["blueprint_verdict"] == "PROBLEM"
+        assert "blueprint_verdict_error" not in st, "оценка состоялась — ошибки быть не должно"

@@ -152,6 +152,82 @@ def _journal_scan(journal_path):
     return events, True, None, None
 
 
+# ─── УТРАЧЕННЫЕ СЛУЖЕБНЫЕ ЗАПИСИ (срез engine ратчета, 2026-08-12) ──────────────────────────────
+#
+# НАХОДКА, из-за которой это появилось. Ревизия 2026-08-11 верно решила: «служебная запись не
+# роняет прогон, но её утрата обязана быть ВИДНОЙ» — и поставила `_note_bookkeeping_error` на
+# `usage_ledger.append` и `lifecycle_journal.fix_attempt`. Но поставила её на путь ИСКЛЮЧЕНИЯ, а
+# `journal_append` при сбое НЕ бросает: он возвращает `{"ok": False, "error": ...}` (так и написано
+# в его докстроке: «вызывающий пусть логирует, но не падает»). Замер 2026-08-12: НИ ОДИН из 11
+# вызовов `journal_append` в пакете возврат не читает. То есть исправление закрыло путь, которого
+# почти не бывает, а основной путь сбоя — диск полон, лок не взялся, битая checksum-цепочка —
+# проходил молча. Для журнала это хуже, чем для ledger: пропуск рвёт checksum-ЦЕПОЧКУ, и
+# `journal_read` позже сообщит «broken_at» в другом месте и другому человеку.
+#
+# ПОЧЕМУ ЦЕНТРАЛЬНО, А НЕ ПО ВЫЗОВАМ. Правка 11 мест «проверь ok» — это 11 шансов забыть, и
+# двенадцатый вызов приедет без проверки. Здесь регистрируется САМ факт утраты, у источника; отчёт
+# потом сливает накопленное (`drain_bookkeeping_losses`). Образец взят в этом же репозитории:
+# `orchestrator_usage.drain_call_stats` — та же форма «накопили у источника, слили в отчёт».
+_BOOKKEEPING_LOSSES = []
+
+
+def _note_journal_loss(journal_path, event, error):
+    """Зарегистрировать утрату записи журнала и вернуть тот же контракт {ok: False, error}.
+
+    Идентифицирующие поля события переносятся в запись НАМЕРЕННО: «потеряна запись журнала» без
+    указания, чья именно, заставляет искать руками — а искать будут в момент, когда уже что-то
+    сломалось. `kind` + run/workitem/package дают адрес пропуска сразу.
+    """
+    ev = event if isinstance(event, dict) else {}
+    ref = {k: ev.get(k) for k in ("run_id", "workitem_id", "package_id") if ev.get(k) is not None}
+    _BOOKKEEPING_LOSSES.append({
+        "what": f"lifecycle_journal.{ev.get('kind') or 'unknown'}",
+        "journal": str(journal_path),
+        "error": str(error)[:200],
+        **({"event_ref": ref} if ref else {}),
+    })
+    return {"ok": False, "error": error}
+
+
+def drain_bookkeeping_losses():
+    """Забрать и ОБНУЛИТЬ накопленные утраты служебных записей. -> list[dict].
+
+    Обнуление — часть контракта: одна утрата обязана попасть в ОДИН отчёт, иначе прогон в том же
+    процессе (последовательность пакетов) показал бы чужие потери как свои.
+    """
+    global _BOOKKEEPING_LOSSES
+    out, _BOOKKEEPING_LOSSES = _BOOKKEEPING_LOSSES, []
+    return out
+
+
+def note_bookkeeping_error(rep, what, exc):
+    """Записать в отчёт УТРАТУ служебной записи, не роняя прогон. -> None (правит rep на месте).
+
+    Единый писатель для всех, кому нужно сказать «запись потеряна, прогон продолжается»:
+    `bookkeeping_errors` в отчёте с тем, ЧТО потеряно и почему. Живёт рядом с durable-контрактом,
+    который дополняет; `engine` зовёт его через свои тонкие делегаты.
+    """
+    if not isinstance(rep, dict):
+        return
+    rep.setdefault("bookkeeping_errors", []).append(
+        {"what": what, "error": f"{type(exc).__name__}: {exc}"[:200]
+                                if isinstance(exc, BaseException) else str(exc)[:200]})
+
+
+def merge_bookkeeping_losses(rep):
+    """Слить накопленные утраты записей журнала в отчёт. -> число слитых.
+
+    Зовётся на КАЖДОМ пути возврата отчёта наружу: пропущенный путь возвращает ровно то состояние,
+    ради устранения которого функция появилась, — невидимую утрату.
+    """
+    losses = drain_bookkeeping_losses()
+    if not isinstance(rep, dict):
+        return 0
+    for loss in losses:
+        rep.setdefault("bookkeeping_errors", []).append(dict(loss))
+    return len(losses)
+
+
 def journal_append(journal_path, event):
     """v3.0.14/v3.1 (trace v0.2): append-only JSONL event journal с checksum-цепочкой + head-marker.
     Каждое событие: seq, prev_checksum, собственный checksum. v0.2 ЗАКРЫВАЕТ ограничения v0.1:
@@ -170,8 +246,9 @@ def journal_append(journal_path, event):
             if journal_path.exists():
                 evs, ok, _at, reason = _journal_scan(journal_path)
                 if not ok:
-                    return {"ok": False, "error": f"журнал повреждён ({reason}) — append запрещён "
-                                                  "(не расширяем битую цепочку)"}
+                    return _note_journal_loss(journal_path, event,
+                                              f"журнал повреждён ({reason}) — append запрещён "
+                                              "(не расширяем битую цепочку)")
                 if evs:
                     prev_checksum = evs[-1].get("checksum")
                     seq = int(evs[-1].get("seq", len(evs) - 1)) + 1
@@ -186,8 +263,8 @@ def journal_append(journal_path, event):
                                {"kind": "journal-head", "seq": seq, "checksum": rec["checksum"]},
                                require_keys=("seq", "checksum"))
             return {"ok": True, "seq": seq}
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    except Exception as e:  # noqa: BLE001 — сбой журнала не роняет прогон, но регистрируется ниже
+        return _note_journal_loss(journal_path, event, f"{type(e).__name__}: {e}")
 
 
 def journal_read(journal_path):

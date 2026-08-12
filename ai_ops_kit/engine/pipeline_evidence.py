@@ -262,7 +262,12 @@ def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
             if isinstance(data, dict) and not mod.check(data):
                 ev[gid] = {"status": "pass", "provided": mod.provided_evidence(data),
                            "evidence": [f".ai/runplan/{wid}/{fname} — форма подтверждена (reevaluate, SHA стабилен)"]}
-        except Exception:  # noqa: BLE001
+        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): направление отказа
+        # fail-closed. Нечитаемый или невалидный артефакт НЕ попадает в `ev`, а `ev` — единственный
+        # способ этой функции сказать «гейт закрыт». Значит сбой разбора даёт НЕЗАКРЫТЫЙ гейт, а не
+        # закрытый по ошибке: гейт пересчитается обычным путём. Обратное направление здесь
+        # невозможно по построению — `pass` не умеет добавить `status: pass`.
+        except Exception:  # noqa: BLE001,S110 — сбой разбора артефакта не закрывает гейт (fail-closed)
             pass
     if "specification" in gate_ids:
         try:
@@ -270,7 +275,7 @@ def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
             if _avail and _ok:
                 ev["specification"] = {"status": "pass", "provided": ["openspec_valid"],
                                        "evidence": ["openspec validate --strict (reevaluate, SHA стабилен)"]}
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001,S110 — то же: не подтвердили спеку -> гейт остаётся незакрытым
             pass
     return ev
 
@@ -284,11 +289,13 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     reviews = []
     gate_ev = dict(gate_ev)
-    valid_ids = None
-    try:
-        valid_ids = set(gates)
-    except Exception:
-        valid_ids = None
+    # СРЕЗ engine РАТЧЕТА 2026-08-12: здесь стоял `try: valid_ids = set(gates) except: valid_ids = None`.
+    # Это была ФИКТИВНАЯ защита того же класса, что R-31/R-32: `set()` по словарю бросить не может,
+    # а единственный путь к исключению (`gates: null` в реестре) молча превращал `valid_ids` в None —
+    # и `vrr.check(gate_ids=None)` ПЕРЕСТАВАЛ проверять, существует ли гейт в quality/gates.yaml
+    # (validate_reviewer_result.py:63 — проверка под `gate_ids is not None`). То есть подавление не
+    # спасало от сбоя, а выключало проверку. Сам `load_gates()` выше не обёрнут и падает честно.
+    valid_ids = set(gates)
     change_ctx = change_context if change_context is not None else _change_context(work_root, revision)
     for gid in _reviewable_gates(gate_ids, signals):
         if gid in gate_ev:
