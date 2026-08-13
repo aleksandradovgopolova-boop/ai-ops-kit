@@ -548,6 +548,15 @@ def _session_guard_before_start(child_root, task, signals, feature=None):
         rec = session_guardrails.recommend(snap, pol, next_relation=relation, next_task=task,
                                            task_done=False, repo_path=str(child_root))
         _say(child_root, "from_session_economy", snap, rec)
+        # 3а. автономия: может ли кит взять эту работу в ОТДЕЛЬНУЮ сессию сам, и разрешено ли ему
+        # тратить. Здесь только РЕШЕНИЕ — трата отсюда невозможна: исполнителя и учёт расхода
+        # подключает вызывающий (см. session_launcher.spawn, шов usage_hooks). Печатаем, только когда
+        # рекомендация уже говорит о смене сессии: иначе строка была бы шумом на каждом прогоне.
+        if rec.get("outcome") in ("new_session", "clear"):
+            from ai_ops_kit.engops import session_launcher
+            dec = session_launcher.decide(str(child_root), snap, next_relation=relation,
+                                          next_task=task, task_done=False)
+            _say(child_root, "from_subsession_decision", dec)
         # 4. delegation
         del_signals = {"task_text": task or "", "files_count": 0}
         del_recs = delegation_advisor.advise(del_signals)
