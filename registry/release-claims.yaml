@@ -58,6 +58,11 @@ mvp_blocking_count: 8
 #  +1 — validate_layering (v3.32.0): граф импортов между пакетами против layering.yaml.
 validators_count: 73
 validators_externally_tested: 73
+# Связность ядра: ДЕРИВИРУЕТСЯ из packages/layering.yaml (см. derived_layering_counts).
+# Появились 2026-08-13: числа жили в прозе и не сверялись ничем, поэтому документы кита
+# говорили 12/210 при фактическом ратчете 7/52 — и CI был зелёным.
+layering_mutual_pairs: 7
+layering_cycles_longer_than_two: 52
 
 qualified_on: >
   provider-neutral портфель по РОЛЯМ: дешёвый API-writer (money-mode) + СИЛЬНЫЙ writer (локальный
@@ -99,6 +104,15 @@ derived_numbers_in_docs:
   - {file: docs/index.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
   - {file: docs/architecture/execution-engine.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
   - {file: docs/architecture/quality-gates.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  # Собственный продуктовый контекст кита: до 2026-08-13 он в охват НЕ входил, и именно он разъехался
+  # (34/13 гейтов при 35/14, 12/210 связности при 7/52). Дочки этих файлов не получают — это статус
+  # САМОГО кита, и врать в нём хуже, чем в README: с него начинается каждая сессия.
+  - {file: .ai/project/context/product/ProductStatus.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  - {file: .ai/project/context/product/ProductStatus.md, pattern: '(\d+)\s*<!-- claim:validators-total -->', claim: validators_count}
+  - {file: .ai/project/context/product/ProductStatus.md, pattern: '(\d+)\s*<!-- claim:layering-pairs -->', claim: layering_mutual_pairs}
+  - {file: .ai/project/context/product/ProductStatus.md, pattern: '(\d+)\s*<!-- claim:layering-cycles -->', claim: layering_cycles_longer_than_two}
+  - {file: .ai/project/context/now.md, pattern: '(\d+)\s*<!-- claim:layering-pairs -->', claim: layering_mutual_pairs}
+  - {file: .ai/project/context/now.md, pattern: '(\d+)\s*<!-- claim:layering-cycles -->', claim: layering_cycles_longer_than_two}
 
 # Каждый claim == фактический status в registry/runtimes.yaml (CI ловит расхождение заявленных
 # возможностей адаптеров/оркестратора). Обновлено под 3.8: concurrent + fan-in + resume доказаны live.

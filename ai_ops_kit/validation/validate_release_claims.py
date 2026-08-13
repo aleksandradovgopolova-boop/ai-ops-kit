@@ -57,6 +57,31 @@ def derived_counts(pkg=PKG):
     return checks, agents
 
 
+def derived_layering_counts(pkg=PKG):
+    """(mutual_pairs, cycles_longer_than_two) из `packages/layering.yaml` — источника ратчета.
+
+    ЗАЧЕМ (находка ревью 2026-08-13). Числа связности жили в прозе продуктового контекста и не
+    сверялись ничем: ратчет опустился 12 -> 7 и 210 -> 52, а документы кита продолжали говорить
+    старое при зелёном CLAIMS-OK. Проверка чисел покрывала пять файлов, среди которых этих двух не
+    было, и claim'а для связности не существовало вовсе — то есть проверять было НЕЧЕМ, а не «забыли».
+    Отсутствие файла — ошибка, а не «замечаний нет»: ослепшая проверка хуже отсутствующей.
+    """
+    p = Path(pkg) / "packages" / "layering.yaml"
+    if not p.is_file():
+        return None, None
+    try:
+        d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return None, None
+    # Числа живут в `baseline` — это и есть потолок ратчета (`test_layering` сверяет с ним замер).
+    # Имя ключа НЕ угадывается списком-веером: перебор «а может тут» однажды нашёл бы похожий блок в
+    # другом файле и сверял не то. Ключ один, и его отсутствие — ошибка выше.
+    block = d.get("baseline")
+    if not isinstance(block, dict):
+        return None, None
+    return block.get("mutual_pairs"), block.get("cycles_longer_than_two")
+
+
 def derived_gate_counts(pkg=PKG):
     """(gates_count, mvp_blocking_count) из quality/gates.yaml.
 
@@ -309,6 +334,18 @@ def check(data, pkg=PKG):
     if data.get("mvp_blocking_count") != mvp:
         e.append(f"claims.mvp_blocking_count={data.get('mvp_blocking_count')} != "
                  f"mvp_blocking_gates в quality/gates.yaml={mvp}")
+    lay_pairs, lay_cycles = derived_layering_counts(pkg)
+    if lay_pairs is None:
+        e.append("packages/layering.yaml не прочитан — числа связности проверить нечем "
+                 "(это ошибка, а не «замечаний нет»)")
+    else:
+        if data.get("layering_mutual_pairs") != lay_pairs:
+            e.append(f"claims.layering_mutual_pairs={data.get('layering_mutual_pairs')} != "
+                     f"ратчета в packages/layering.yaml={lay_pairs}")
+        if data.get("layering_cycles_longer_than_two") != lay_cycles:
+            e.append(f"claims.layering_cycles_longer_than_two="
+                     f"{data.get('layering_cycles_longer_than_two')} != ратчета в "
+                     f"packages/layering.yaml={lay_cycles}")
     vtotal, vtested = derived_verification_counts(pkg)
     if data.get("validators_count") != vtotal:
         e.append(f"claims.validators_count={data.get('validators_count')} != валидаторов в validation/={vtotal}")
