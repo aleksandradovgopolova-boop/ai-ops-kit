@@ -52,6 +52,16 @@ goals:
     outcome:
       owner_reaches_verified_pr_without_patching_the_kit: false
 
+  - id: session-autonomy-under-ceiling
+    status: active
+    outcome:
+      # Решение владельца 2026-08-13: подсессии кит открывает сам, но только под потолком.
+      autonomous_spend_has_a_declared_ceiling: true
+      refusals_are_distinguishable_and_spend_nothing: true
+      # Требует измерения сессии (session_telemetry + провайдер) — пока оно не работает,
+      # автономия отказывает по причине session_unidentified, а не тратит вслепую.
+      session_is_identified_and_measured: false
+
   - id: green-means-checked
     status: active
     outcome:
@@ -562,3 +572,28 @@ work:
     #      tests/unit/test_session_coordination.py.
     # ОСТАЛОСЬ (почему status in_progress, а не done): пункт 1 держится на исполнителе, проверки
     # нет; ужесточение контракта до блокирующего — human_decision выше.
+
+  # ─── session-autonomy-under-ceiling ────────────────────────────────────────────────────────────
+  - id: subsession-ceiling
+    title: Потолок автономной траты и решение об открытии подсессии — раньше, чем сама возможность
+    type: engineering
+    goal: session-autonomy-under-ceiling
+    status: in_progress
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/engops/, tests/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # СДЕЛАНО 2026-08-13: `ai_ops_kit/engops/session_launcher.py` — решение (spawn/continue/refuse) с
+    # проверкой потолка ДО траты и шесть различимых отказов. Потолок стоит на трате, которую кит
+    # ДОКАЗЫВАЕТ по своим записям (role=autonomous-subsession, run_id=subsession:<сессия>:<n>), а не
+    # на «расходе сессии вообще»: расход интерактивной сессии человека кит в деньгах не измеряет.
+    # Fail-closed: нет объявленного потолка -> автономия не работает; нечитаемый конфиг не даёт
+    # разрешения; неизмеренный контекст не называется «недорогим».
+    # 17 тестов, 5 мутаций проверены (каждая краснит свой тест). Первая версия теста про
+    # неизмеренный контекст мутацию ПРОПУСКАЛА — проверяла исход, который дают две ветки; переписана
+    # на проверку формулировки причины.
+    # ОСТАЛОСЬ (почему in_progress, а не done): (1) разводка в ритуал завершения и в CLI — она
+    # ложится в ветку измерения сессии, сливается вместе с ней, до тех пор модуль вызывается только
+    # своим CLI и тестами; (2) полевого прогона автономной подсессии ещё не было — по правилу
+    # репозитория «сначала field evidence», поэтому потолок в дефолтах остаётся НЕ объявленным.
