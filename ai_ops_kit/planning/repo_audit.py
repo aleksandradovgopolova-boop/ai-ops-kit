@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -295,6 +296,80 @@ def read_answers(child_root) -> dict:
             if v not in (None, "", [], {}) and str(v).strip() not in ("", "?")}
 
 
+_ANSWER_KEY_RE = re.compile(r"^ {2}([A-Za-z_][A-Za-z0-9_.-]*):(?:\s|$)")
+
+
+def _inline_comment(rest: str) -> str:
+    """Комментарий в хвосте строки значения. -> `# …` или пустая строка.
+
+    Резать по первому `#` нельзя: значение пишется как JSON-строка и `#` внутри кавычек — часть
+    ОТВЕТА, а не комментарий (`goal: "рост #1 по выручке"`). Поэтому кавычки считаются, экранирование
+    учитывается, и решётка признаётся началом комментария только вне кавычек и после пробела —
+    ровно правило YAML.
+    """
+    in_quotes, escaped = False, False
+    for i, ch in enumerate(rest):
+        if escaped:
+            escaped = False
+            continue
+        if in_quotes and ch == "\\":
+            escaped = True
+            continue
+        if ch == '"':
+            in_quotes = not in_quotes
+            continue
+        if ch == "#" and not in_quotes and (i == 0 or rest[i - 1] in " \t"):
+            return rest[i:].rstrip()
+    return ""
+
+
+def _owner_comments(text: str, kit_lines: set) -> dict:
+    """Что в существующем файле написал ЧЕЛОВЕК, а не кит. -> {header, before, inline, tail}.
+
+    ЗАЧЕМ (F-020, живой прогон niti 2026-08-12). `write_question_file` пересобирает файл целиком:
+    значения переносились через `read_answers`, а комментарии — нет. Владелец вписал к каждому
+    ответу источник (`file:line`), и после следующего `ai-ops model` их осталось НОЛЬ строк. Для
+    файла, чья роль — «подтверждённые факты», это потеря ОСНОВАНИЯ: утверждение остаётся, а отличить
+    подтверждённое от переписанного больше нечем. Обход в том прогоне — прятать ссылки внутрь
+    значений — был обходом, а не решением.
+
+    ЧЕЙ КОММЕНТАРИЙ — РЕШАЕТСЯ СРАВНЕНИЕМ С ТЕМ, ЧТО КИТ ПИШЕТ САМ (`kit_lines`), а не догадкой по
+    форме. Строка, совпавшая с собственной строкой кита, принадлежит киту и будет сгенерирована
+    заново; всё остальное — владельца и переносится дословно.
+
+    ГРАНИЦА НАЗВАНА, А НЕ СПРЯТАНА: если формулировка вопроса ИЗМЕНИЛАСЬ между версиями кита, старая
+    строка перестаёт совпадать с новой и будет сохранена как авторская — один раз, при первом
+    прогоне после обновления. Выбор осознанный: лишняя строка видна и удаляется рукой, а потерянное
+    основание не восстанавливается ничем. Обратный порядок предпочтений сделал бы ровно тот дефект,
+    который здесь чинится.
+    """
+    header, before, inline, tail = [], {}, {}, []
+    pending, in_answers = [], False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not in_answers:
+            if stripped == "answers:":
+                in_answers = True
+            elif stripped.startswith("#") and line not in kit_lines:
+                header.append(stripped)
+            continue
+        m = _ANSWER_KEY_RE.match(line)
+        if m:
+            qid = m.group(1)
+            if pending:
+                before[qid] = list(pending)
+                pending = []
+            c = _inline_comment(line[m.end(1) + 1:])
+            if c:
+                inline[qid] = c
+            continue
+        if stripped.startswith("#") and line not in kit_lines:
+            pending.append(stripped)
+    tail = pending                      # комментарии после последнего ключа — тоже человеческие
+    return {"header": header, "before": before, "inline": inline, "tail": tail}
+
+
 def write_question_file(child_root, ask: dict):
     """Создать/дополнить файл, в который человек ВПИШЕТ ответы. -> путь.
 
@@ -303,6 +378,9 @@ def write_question_file(child_root, ask: dict):
     сценария, при том что онбординг обещал «соберу материалы и покажу на проверку».
 
     Существующие ответы НЕ затираются никогда: файл дополняется новыми вопросами, ответы остаются.
+    ВМЕСТЕ С НИМИ ОСТАЮТСЯ КОММЕНТАРИИ ВЛАДЕЛЬЦА (F-020): и те, что стоят над ответом, и хвостовые
+    в той же строке. Ответ без основания — это утверждение, которое нечем проверить, а основание
+    владелец пишет именно комментарием: `main_goal_now: "…"  # docs/product.md:14`.
 
     ЛИШНЕЙ ЗАПИСИ НЕ ДЕЛАЕМ. Если содержимое не изменилось, файл не перезаписывается: `ai-ops model`
     зовут и просто «посмотреть состояние», и трогать mtime (а в чужом репозитории — показывать файл
@@ -313,7 +391,7 @@ def write_question_file(child_root, ask: dict):
     # Если файл есть, но не читается — НЕ перезаписываем: это уничтожило бы ответы владельца.
     # Пусть ошибка дойдёт до человека словами «починить, а не отвечать заново» (F-023).
     existing = read_answers(child_root)
-    lines = [
+    header = [
         "# Ответы владельца на вопросы онбординга AI Ops.",
         "#",
         "# Здесь только то, что из кода честно не выводится: цели продукта, его пользователи,",
@@ -324,18 +402,44 @@ def write_question_file(child_root, ask: dict):
         "# (`user_confirmed`) и больше не переспрашивается.",
         "#",
         "# После заполнения запустите снова:  ./ai-ops model",
-        "answers:",
     ]
+    # Строки, которые кит пишет САМ, — эталон для разбора «чей комментарий» (F-020). Собираются до
+    # генерации, потому что разбор существующего файла обязан знать их заранее.
+    kit_comments, kit_lines = {}, set(header)
+    for q in ask.get("questions") or []:
+        qid = q.get("id")
+        if not qid or qid in kit_comments:
+            continue
+        block = [f"  # {q.get('ask', '')}"]
+        if q.get("proposal") and q["proposal"].get("value"):
+            block.append(f"  #   по коду предполагаю: {q['proposal']['value']} — подтвердите или "
+                         f"замените")
+        kit_comments[qid] = block
+        kit_lines.update(block)
+
+    own = {"header": [], "before": {}, "inline": {}, "tail": []}
+    if p.is_file():
+        try:
+            own = _owner_comments(p.read_text(encoding="utf-8"), kit_lines)
+        except OSError:
+            pass                               # прочитать не смогли — комментариев не будет, но
+            # ответы уже прочитаны выше через `read_answers`, и потерять их этот путь не может
+
+    def _value_line(qid, val):
+        """Строка значения вместе с хвостовым комментарием владельца, если он был."""
+        dumped = json.dumps(val, ensure_ascii=False) if val is not None else '""'
+        c = own["inline"].get(qid)
+        return f"  {qid}: {dumped}" + (f"  {c}" if c else "")
+
+    lines = header + own["header"] + ["answers:"]
     seen = set()
     for q in ask.get("questions") or []:
         qid = q.get("id")
         if not qid or qid in seen:
             continue
         seen.add(qid)
-        lines.append(f"  # {q.get('ask', '')}")
-        if q.get("proposal") and q["proposal"].get("value"):
-            lines.append(f"  #   по коду предполагаю: {q['proposal']['value']} — подтвердите или "
-                         f"замените")
+        lines.extend(kit_comments[qid])
+        lines.extend(f"  {c}" for c in own["before"].get(qid, []))
         val = existing.get(qid)
         # ЗНАЧЕНИЕ ПИШЕТСЯ ОДНОЙ СТРОКОЙ, БЕЗ МАРКЕРОВ ДОКУМЕНТА (F-023, живой прогон niti).
         #
@@ -352,8 +456,7 @@ def write_question_file(child_root, ask: dict):
         #
         # `json.dumps` даёт валидный YAML (YAML — надмножество JSON): двойные кавычки, одна строка,
         # никаких маркеров документа.
-        lines.append(f"  {qid}: " + (json.dumps(val, ensure_ascii=False)
-                                     if val is not None else '""'))
+        lines.append(_value_line(qid, val))
         lines.append("")
     # Ответы на вопросы, которых больше не задают, сохраняем: человек их дал, они факт.
     for qid, val in existing.items():
@@ -363,7 +466,9 @@ def write_question_file(child_root, ask: dict):
             # То есть дефект остался ровно там, где живут данные: на niti ответы гибли и после
             # «исправления», пока это место не поправили. Поймано повторным прогоном на живом
             # продукте, а не чтением кода.
-            lines.append(f"  {qid}: " + json.dumps(val, ensure_ascii=False))
+            lines.extend(f"  {c}" for c in own["before"].get(qid, []))
+            lines.append(_value_line(qid, val))
+    lines.extend(own["tail"])
     body = "\n".join(lines).rstrip() + "\n"
     if p.is_file():
         try:
