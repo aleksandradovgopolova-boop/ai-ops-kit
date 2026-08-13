@@ -334,18 +334,30 @@ def check(data, pkg=PKG):
     if data.get("mvp_blocking_count") != mvp:
         e.append(f"claims.mvp_blocking_count={data.get('mvp_blocking_count')} != "
                  f"mvp_blocking_gates в quality/gates.yaml={mvp}")
-    lay_pairs, lay_cycles = derived_layering_counts(pkg)
-    if lay_pairs is None:
-        e.append("packages/layering.yaml не прочитан — числа связности проверить нечем "
-                 "(это ошибка, а не «замечаний нет»)")
-    else:
-        if data.get("layering_mutual_pairs") != lay_pairs:
-            e.append(f"claims.layering_mutual_pairs={data.get('layering_mutual_pairs')} != "
-                     f"ратчета в packages/layering.yaml={lay_pairs}")
-        if data.get("layering_cycles_longer_than_two") != lay_cycles:
-            e.append(f"claims.layering_cycles_longer_than_two="
-                     f"{data.get('layering_cycles_longer_than_two')} != ратчета в "
-                     f"packages/layering.yaml={lay_cycles}")
+    # Сверяем то, что ОБЪЯВЛЕНО. Ключ отсутствует -> сверять нечего, и это НЕ молчаливое «всё
+    # хорошо»: правило из `derived_numbers_in_docs`, ссылающееся на несуществующий claim, тут же
+    # падает («в тексте 7, а claim ...=None»). То есть незаявленное число не проходит мимо, просто
+    # ошибку даёт другая, более точная проверка.
+    #
+    # Почему не «нет ключа = ошибка»: этот валидатор запускают и на СИНТЕТИЧЕСКИХ реестрах
+    # (селфтест строит минимальный набор полей), и требование полноты превратило бы «набор без этого
+    # поля» в дрейф. Замер: два случая селфтеста краснели именно так — в CI, при зелёном локальном
+    # быстром охвате, потому что эта группа идёт под маркером `slow`.
+    declared = [k for k in ("layering_mutual_pairs", "layering_cycles_longer_than_two") if k in data]
+    if declared:
+        lay_pairs, lay_cycles = derived_layering_counts(pkg)
+        if lay_pairs is None:
+            e.append("claims объявляют числа связности, а packages/layering.yaml не прочитан — "
+                     "проверить их нечем (это ошибка, а не «замечаний нет»)")
+        else:
+            if "layering_mutual_pairs" in data and data["layering_mutual_pairs"] != lay_pairs:
+                e.append(f"claims.layering_mutual_pairs={data['layering_mutual_pairs']} != "
+                         f"ратчета в packages/layering.yaml={lay_pairs}")
+            if ("layering_cycles_longer_than_two" in data
+                    and data["layering_cycles_longer_than_two"] != lay_cycles):
+                e.append(f"claims.layering_cycles_longer_than_two="
+                         f"{data['layering_cycles_longer_than_two']} != ратчета в "
+                         f"packages/layering.yaml={lay_cycles}")
     vtotal, vtested = derived_verification_counts(pkg)
     if data.get("validators_count") != vtotal:
         e.append(f"claims.validators_count={data.get('validators_count')} != валидаторов в validation/={vtotal}")
