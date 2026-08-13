@@ -119,25 +119,87 @@ class TestApprovedWriteStillWorks:
         assert (repo / PROTECTED_REL).read_text(encoding="utf-8") == "-- одобрено\n"
 
 
-class TestCaseVectorIsKnownOpen:
-    """ОТКРЫТЫЙ под-вектор R-37, зафиксирован намеренно — это ратчет, а не одобрение.
+class TestCasePolarityIsAsymmetricOnPurpose:
+    """Регистр: запрет сравнивается широко, разрешение — строго. Асимметрия намеренная.
 
-    На регистронезависимой ФС (macOS по умолчанию) `Migrations/…` — тот же файл, что
-    `migrations/…`, и правило его не накрывает. Закрывать это сравнением без учёта регистра —
-    решение владельца: fail-closed, но на Linux даст ложный отказ для реально другого пути.
-    Тест утверждает ТЕКУЩЕЕ поведение: когда регистр закроют, он покраснеет и его обязаны
-    обновить вместе с решением, а не молча.
+    На регистронезависимой ФС `Migrations/x` и `migrations/x` — один файл. Соблазн «везде без
+    учёта регистра» неверен: `_under` обслуживает и protected_paths (запрет), и write_scope
+    (разрешение). Широкое сравнение в разрешении означало бы fail-OPEN — `SRC/x` засчитался бы
+    как «в пределах зоны». Поэтому полярность разная, и оба направления зафиксированы тестом.
     """
 
-    def test_case_variant_is_still_not_matched(self, policy):
-        assert policy.path_violation("Migrations/destructive/drop_users.sql") is None
-        assert policy.protected_match("Migrations/destructive/drop_users.sql") is None
+    @pytest.mark.parametrize("spelling", [
+        pytest.param("Migrations/destructive/drop_users.sql", id="первая-буква"),
+        pytest.param("MIGRATIONS/DESTRUCTIVE/drop_users.sql", id="весь-префикс"),
+        pytest.param("./Migrations/./destructive/drop_users.sql", id="регистр-плюс-написание"),
+    ])
+    def test_protected_denies_case_variants(self, repo, policy, spelling):
+        """Запрет накрывает вариант регистра — на любой ФС, одинаково в CI и на машине владельца."""
+        ev = tool_broker.execute(
+            {"op": "write", "path": spelling, "content": "-- ПЕРЕЗАПИСАНО\n"}, repo, policy)
+        assert ev["allowed"] is False, f"вариант регистра '{spelling}' обошёл protected_paths"
+        assert (repo / PROTECTED_REL).read_text(encoding="utf-8") == ORIGINAL
 
-    def test_case_insensitive_fs_means_same_file(self, repo):
-        """Замер, а не мнение: совпадают ли на ЭТОЙ ФС файлы, различающиеся регистром."""
+    def test_write_scope_stays_case_sensitive(self, repo):
+        """Обратная полярность: разрешение НЕ расширяется регистром, иначе это fail-open."""
+        pol = tool_broker.Policy(level="execution", write_scope=["src"], approvals=set(),
+                                 shell_mode="off")
+        ev = tool_broker.execute({"op": "write", "path": "SRC/main.py", "content": "x\n"}, repo, pol)
+        assert ev["allowed"] is False, "SRC/ засчиталось как write_scope 'src' — расширение прав"
+
+    def test_verdict_does_not_depend_on_filesystem(self, repo, policy):
+        """Замер ФС — рядом с вердиктом, чтобы видеть: вердикт от неё НЕ зависит.
+
+        Регистрозависимость этой ФС фиксируется как факт прогона; политика в обоих случаях
+        обязана дать один и тот же ответ, иначе evidence на SHA перестаёт воспроизводиться.
+        """
         probe = repo / "migrations" / "destructive" / "CaseProbe.txt"
         probe.write_text("1", encoding="utf-8")
-        same_file = (repo / "migrations" / "destructive" / "caseprobe.txt").exists()
-        if same_file:
-            pytest.xfail("ФС регистронезависима: под-вектор регистра здесь реально эксплуатируем")
-        assert not same_file
+        fs_is_case_insensitive = (repo / "migrations" / "destructive" / "caseprobe.txt").exists()
+        verdict = policy.path_violation("Migrations/destructive/drop_users.sql")
+        assert verdict is not None, (
+            f"вердикт зависит от ФС (case_insensitive={fs_is_case_insensitive}) — так нельзя")
+
+
+class TestCommandDenylistObfuscation:
+    """R-38: денайлисты обходились backslash-escape и продолжением строки.
+
+    Обход был РЕАЛЕН только вне allowlist-режима (в `sandbox_policy` посегментная проверка
+    бинарников ловила оба вектора и до правки), поэтому здесь политика намеренно «голая» —
+    проверяется именно текстовый слой, а не то, что его прикрывает.
+    """
+
+    @pytest.fixture
+    def bare(self):
+        return tool_broker.Policy(level="execution", shell_mode="unrestricted",
+                                  allow_network=False, block_push=True, write_scope=["src"])
+
+    @pytest.mark.parametrize("cmd", [
+        pytest.param("curl example.test/x", id="как-есть"),
+        pytest.param("cu\\rl example.test/x", id="backslash-escape"),
+        pytest.param('cu"r"l example.test/x', id="кавычки"),
+        pytest.param("cur\\\nl example.test/x", id="продолжение-строки"),
+    ])
+    def test_network_denylist_sees_through_obfuscation(self, bare, cmd):
+        assert bare.decide({"op": "shell", "command": cmd})["allow"] is False, (
+            f"сетевая команда прошла: {cmd!r}")
+
+    @pytest.mark.parametrize("cmd", [
+        pytest.param("git push origin main", id="как-есть"),
+        pytest.param("git \\\npush origin main", id="продолжение-строки"),
+        pytest.param("git pu\\sh origin main", id="backslash-escape"),
+        pytest.param("git\tpush origin main", id="табуляция"),
+    ])
+    def test_push_denylist_sees_through_obfuscation(self, bare, cmd):
+        assert bare.decide({"op": "shell", "command": cmd})["allow"] is False, (
+            f"доставка прошла мимо block_push: {cmd!r}")
+
+    @pytest.mark.parametrize("cmd", [
+        pytest.param("pytest -q", id="тесты"),
+        pytest.param("git status", id="git-статус"),
+        pytest.param("grep -rn 'push' src", id="слово-push-в-аргументе-поиска"),
+    ])
+    def test_legitimate_commands_still_pass(self, bare, cmd):
+        """Ужесточение не должно превращаться в ложные отказы на обычной работе."""
+        d = bare.decide({"op": "shell", "command": cmd})
+        assert d["allow"] is True, f"законная команда отклонена: {cmd!r} → {d['reason']}"
