@@ -573,6 +573,36 @@ def test_direct_installer_call_leaves_no_bytecode(installed):
         f"(всего {len(left)}); `.gitignore` в дочку не пишется — это уедет в коммит владельца")
 
 
+@pytest.mark.parametrize("script", [
+    pytest.param("ai_ops_kit/validation/validate_ai_ops_child.py", id="валидатор"),
+    pytest.param("tools/ai_ops_cli.py", id="плоский-алиас"),
+])
+def test_running_from_managed_leaves_no_bytecode(installed, script):
+    """R-39, третий и четвёртый входы: человек зовёт код ИЗ managed напрямую.
+
+    Так это описано в документации и так родился F-025. Обёртка `./ai-ops` тут не участвует,
+    поэтому защита живёт в самих `_bootstrap` — условно, только когда корень оказался
+    managed-слоем дочки. В дереве самого кита байткод остаётся нормой.
+
+    Переменную `PYTHONDONTWRITEBYTECODE` из окружения СНИМАЕМ намеренно: её ставят группы CI, и
+    без снятия тест был бы зелёным в CI по чужой причине, ничего не проверяя.
+    """
+    import subprocess
+
+    def _pyc():
+        return {str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")}
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
+    before = _pyc()
+    r = subprocess.run([sys.executable, str(installed / ".ai" / "managed" / script)],
+                       cwd=str(installed), capture_output=True, text=True, timeout=300, env=env)
+    left = sorted(_pyc() - before)
+    assert not left, (
+        f"запуск `{script}` из managed оставил байткод в checksummed-слое: {left[:5]} "
+        f"(всего {len(left)}); слой сверяется контрольными суммами — кит примет это за правку "
+        f"владельца (F-025). rc={r.returncode}")
+
+
 def test_hints_point_to_something_runnable(installed, ai_ops):
     """Ни одна подсказка не должна учить неработающей команде."""
     import subprocess
@@ -641,6 +671,11 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
     # НАЗВАННАЯ ГРАНИЦА: потолок ловит раздувание ПОСЛЕ пробоя и не умеет предупреждать до него —
     # поэтому дрейф в 72 КиБ прошёл незамеченным через четыре PR. Это объявлено работой
     # (`planning/plan.yaml` -> delivery-size-warns-before-breach), а не оставлено «на подумать».
+    #
+    # R-39 (та же дата, отдельная работа): защита «байткода в managed быть не должно» живёт в
+    # ДОСТАВЛЯЕМОМ дереве — три `_bootstrap` — и стоит 1746 Б (замер: 3 460 003 -> 3 461 749 на
+    # базе до подъёма). Своего подъёма она НЕ потребовала: при потолке 3.5 запас есть. Строка
+    # здесь не ради истории, а ради ленты замеров выше — она должна оставаться полной.
     assert total < 3.5 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ (потолок 3.5)"
 
 
