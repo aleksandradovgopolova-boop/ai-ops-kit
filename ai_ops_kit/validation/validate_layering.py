@@ -53,10 +53,12 @@ def module_owners(surface=SURFACE):
     return owners
 
 
-def _imported_names(src):
+def _imported_names(src, filename=None):
     """Имена верхнего уровня из import/from — через AST, а не регуляркой по строкам."""
     try:
-        tree = ast.parse(src)
+    # Имя файла — часть сообщения интерпретатора (F-022): без него предупреждение
+    # подписывается `<unknown>`, и владелец не может понять, чей файл его вызвал.
+        tree = ast.parse(src, filename=filename or "<unknown>")
     except SyntaxError:
         return []
     names = []
@@ -78,7 +80,7 @@ def build_graph(surface=SURFACE):
         for f in sorted(d.glob("*.py")):
             if f.name == "__init__.py":
                 continue
-            for name in _imported_names(f.read_text(encoding="utf-8")):
+            for name in _imported_names(f.read_text(encoding="utf-8"), filename=str(f)):
                 parts = name.split(".")
                 # Обе пакетные формы: `from ai_ops_kit.<пакет> import <модуль>` даёт module из ДВУХ
                 # частей, `from ai_ops_kit.<пакет>.<модуль> import <имя>` — из трёх. Требование
