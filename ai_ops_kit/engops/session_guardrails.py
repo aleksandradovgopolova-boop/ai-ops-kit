@@ -34,9 +34,21 @@ SESSION_ECONOMY_DEFAULTS = {
     "new_session_recommended_at": 400000,
     "one_task_per_session": True,
     "allow_cross_task_session": False,
+    # ПОТОЛОК СЕССИИ, а не одного прогона (2026-08-13). `engine/budget.py` ограничивает прогон
+    # (max_model_calls/max_cost), `gates/economic_preflight` и ledger — вызовы моделей кита. Ни один
+    # из них не видел главный источник расхода: сессию, которая живёт неделями и на КАЖДОМ ходе
+    # заново оплачивает перечитывание истории. Считается по суммарным токенам всех ходов сессии,
+    # включая кэш-чтения — именно они и есть плата за перечитывание.
+    #
+    # Число стартовое и калибруется, как и пороги контекста. Замер по двум настоящим транскриптам:
+    # рабочая сессия на 45 ходов — 3.5M токенов; сессия, прожившая с 18.07 по 04.08 с девятью
+    # компакциями — 2.9 МЛРД токенов при контексте 405k. Второй случай — ровно тот, который пороги
+    # контекста не ловят: контекст «нормальный» после компакции, а перечитывание уже оплачено.
+    "session_token_budget": 20000000,
 }
 
 CONTEXT_STATES = ("normal", "attention", "compact_recommended", "new_session_recommended", "unknown")
+SPEND_STATES = ("normal", "attention", "over_budget", "unknown")
 # отношение следующей задачи к текущей (словарь WP2; здесь принимается как вход)
 CONTINUE_RELATIONS = ("same_task", "continuation")
 NEW_RELATIONS = ("new_independent_task", "new_product")
@@ -71,6 +83,29 @@ def classify_context(tokens, policy=None):
     return "normal"
 
 
+def classify_session_spend(total_tokens, policy=None):
+    """Потолок РАСХОДА СЕССИИ. None -> unknown (без числа не классифицируем, и это не «норма»).
+
+    Пороги контекста отвечают на «сколько сессия читает СЕЙЧАС», этот — на «сколько она прочитала
+    ВСЕГО». Разница не теоретическая: после компакции контекст падает до нормального, а уже
+    оплаченное перечитывание никуда не девается.
+    """
+    p = policy or SESSION_ECONOMY_DEFAULTS
+    budget = p.get("session_token_budget")
+    if total_tokens is None or not budget:
+        return "unknown"
+    if total_tokens >= budget:
+        return "over_budget"
+    if total_tokens >= budget * 0.7:
+        return "attention"
+    return "normal"
+
+
+def _tok(n):
+    return "н/д" if n is None else (f"{n / 1000000:.1f}M" if n >= 1000000
+                                    else f"{n / 1000:.0f}k" if n >= 1000 else str(n))
+
+
 def _compact_cmd(wid):
     return (f"/compact Сохрани цель {wid or 'текущего WorkItem'}, принятые решения, изменённые файлы, "
             "результаты проверок, открытые блокеры и следующий безопасный шаг. Удали подробные логи, "
@@ -95,54 +130,63 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
     p = policy or SESSION_ECONOMY_DEFAULTS
     ctx = snapshot.get("context_current")
     state = classify_context(ctx, p)
+    spent = snapshot.get("session_total_tokens")
+    spend_state = classify_session_spend(spent, p)
     wid = snapshot.get("workitem_id")
     ctx_txt = "н/д" if ctx is None else f"{ctx/1000:.0f}k [{snapshot.get('context_status')}]"
+    spend_txt = ("н/д" if spent is None
+                 else f"{_tok(spent)} из {_tok(p.get('session_token_budget'))} [{spend_state}]")
+    # Каждый исход несёт оба числа: рекомендация, показывающая только контекст, скрывала бы ровно
+    # тот случай, ради которого потолок сессии и появился (контекст после компакции нормальный).
+    base = {"context_state": state, "context": ctx_txt,
+            "spend_state": spend_state, "session_spend": spend_txt,
+            "measurement": snapshot.get("context_source") or snapshot.get("context_status")}
+
+    def out(outcome, reason, command=None):
+        return dict(base, outcome=outcome, reason=reason, command=command)
 
     if not at_safe_boundary:
-        return {"outcome": "defer", "context_state": state,
-                "reason": "небезопасная граница (миграция/незавершённый commit) — не прерываем; "
-                          "дождаться безопасной точки, затем перезапросить рекомендацию.",
-                "command": None, "context": ctx_txt}
+        return out("defer",
+                   "небезопасная граница (миграция/незавершённый commit) — не прерываем; "
+                   "дождаться безопасной точки, затем перезапросить рекомендацию.")
 
     same = next_relation in CONTINUE_RELATIONS
 
     # слишком тяжёлая сессия -> новая сессия ВНЕ зависимости от новизны (гигиена важнее)
-    if state == "new_session_recommended":
+    if state == "new_session_recommended" or spend_state == "over_budget":
+        why = (f"контекст {ctx_txt} превысил порог новой сессии" if state == "new_session_recommended"
+               else f"сессия прочитала {spend_txt} — потолок расхода сессии исчерпан")
         if same and not task_done:
-            return {"outcome": "compact", "context_state": state,
-                    "reason": f"контекст {ctx_txt} превысил порог новой сессии, но WorkItem не завершён "
-                              "и его контекст нужен — сначала compact на безопасной границе.",
-                    "command": _compact_cmd(wid), "context": ctx_txt}
-        return {"outcome": "new_session", "context_state": state,
-                "reason": f"контекст {ctx_txt} — слишком тяжёлая сессия; не начинать новый блок работы "
-                          "здесь. Handoff/решения сохранены в репозитории.",
-                "command": _new_session_cmds(repo_path, next_task), "context": ctx_txt}
+            return out("compact",
+                       f"{why}, но WorkItem не завершён и его контекст нужен — сначала compact "
+                       "на безопасной границе.",
+                       _compact_cmd(wid))
+        return out("new_session",
+                   f"{why}; не начинать новый блок работы здесь. "
+                   "Handoff/решения сохранены в репозитории.",
+                   _new_session_cmds(repo_path, next_task))
 
     if same:
         # продолжение того же WorkItem
         if not task_done and state in ("compact_recommended",):
-            return {"outcome": "compact", "context_state": state,
-                    "reason": f"тот же WorkItem не завершён, контекст {ctx_txt} уже дорогой, логическая "
-                              "часть закрыта — compact и продолжить.",
-                    "command": _compact_cmd(wid), "context": ctx_txt}
-        return {"outcome": "continue", "context_state": state,
-                "reason": f"следующий шаг — тот же WorkItem {wid or ''}, контекст {ctx_txt}; "
-                          "собранные знания переиспользуются, повторное исследование не нужно.",
-                "command": None, "context": ctx_txt}
+            return out("compact",
+                       f"тот же WorkItem не завершён, контекст {ctx_txt} уже дорогой, логическая "
+                       "часть закрыта — compact и продолжить.",
+                       _compact_cmd(wid))
+        return out("continue",
+                   f"следующий шаг — тот же WorkItem {wid or ''}, контекст {ctx_txt}; "
+                   "собранные знания переиспользуются, повторное исследование не нужно.")
 
     # новая независимая задача / новый продукт
     if not task_done:
-        return {"outcome": "continue", "context_state": state,
-                "reason": "текущий WorkItem ещё не завершён — сначала закрыть его, потом переключаться.",
-                "command": None, "context": ctx_txt}
+        return out("continue",
+                   "текущий WorkItem ещё не завершён — сначала закрыть его, потом переключаться.")
     if p.get("one_task_per_session", True):
-        return {"outcome": "clear", "context_state": state,
-                "reason": f"новая независимая задача (one-task-per-session); продолжение здесь заставит "
-                          f"перечитывать нерелевантную историю ({ctx_txt}). Задача закрыта, handoff сохранён.",
-                "command": _clear_cmds(wid, next_task), "context": ctx_txt}
-    return {"outcome": "continue", "context_state": state,
-            "reason": "cross-task-сессии разрешены политикой (allow_cross_task_session=true).",
-            "command": None, "context": ctx_txt}
+        return out("clear",
+                   f"новая независимая задача (one-task-per-session); продолжение здесь заставит "
+                   f"перечитывать нерелевантную историю ({ctx_txt}). Задача закрыта, handoff сохранён.",
+                   _clear_cmds(wid, next_task))
+    return out("continue", "cross-task-сессии разрешены политикой (allow_cross_task_session=true).")
 
 
 def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, checks=None,
@@ -168,6 +212,8 @@ def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, check
             "estimated_cost": snapshot.get("estimated_cost"), "cost_complete": snapshot.get("cost_complete"),
             "context_current": snapshot.get("context_current"), "context_status": snapshot.get("context_status"),
             "turns": snapshot.get("turns"),
+            "session_total_tokens": snapshot.get("session_total_tokens"),
+            "session_tokens_status": snapshot.get("session_tokens_status"),
         },
         "session_recommendation": rec,
         "next_command": rec.get("command"),
@@ -203,6 +249,7 @@ def render_block(ritual):
          f"Проверки: {ritual['completion_report']['checks'] or '—'}",
          f"Стоимость: {cost_txt}",
          f"Контекст сессии: {ctx_txt}, ходов: {us['turns']}",
+         f"Расход сессии всего: {rec.get('session_spend', 'н/д')}",
          f"Что сохранено: {', '.join(saved) or '—'}",
          f"Рекомендация: {rec['outcome'].upper()} — {rec['reason']}"]
     if rec.get("command"):

@@ -520,11 +520,17 @@ def _copy_affects_from_plan(child_root, wid):
 
 def _session_guard_before_start(child_root, task, signals, feature=None):
     """v3.22 Culture Runtime Integration: session guard ДО старта задачи.
-    1. snapshot — текущее состояние сессии
+    1. snapshot — текущее состояние сессии (контекст и расход — measured по транскрипту сессии)
     2. relation по факту — session_boundary.classify (не жёсткое значение)
-    3. recommend — если new_session/compact, предупредить (advise, не block)
+    3. recommend — расход и исход НАЗЫВАЮТСЯ ВСЕГДА (advise, не block)
     4. delegation — если большая разведка, рекомендовать сабагент
-    Выводит рекомендации пользователю, не блокирует прогон."""
+    Выводит рекомендации пользователю, не блокирует прогон.
+
+    Почему пункт 3 говорит всегда (2026-08-13): раньше он печатал что-либо только на исходах
+    `new_session`/`compact`. Контекст при этом всегда был `unknown` — транскрипт сессии не читался
+    ни разу, — этих исходов не наступало, и страж молчал в 100% прогонов. Молчание неотличимо от
+    «всё в порядке», а решение «здесь новую сессию не начинаем» нужно ДО траты, не после.
+    """
     try:
         from ai_ops_kit.engops import session_telemetry
         from ai_ops_kit.engops import session_guardrails
@@ -532,20 +538,25 @@ def _session_guard_before_start(child_root, task, signals, feature=None):
         from ai_ops_kit.engops import delegation_advisor
         # 1. snapshot
         snap = session_telemetry.snapshot(str(child_root), workitem_id=feature)
-        ctx = snap.get("context_current")
-        ctx_txt = f"{ctx/1000:.0f}k" if ctx else "н/д"
         # 2. relation по факту
         current_wid = snap.get("workitem_id")
         relation_cls, reason = session_boundary.classify(
             current_workitem=current_wid, new_task=task or "", new_workitem=feature)
         relation = session_boundary.to_relation(relation_cls)
-        # 3. recommend
-        rec = session_guardrails.recommend(snap, next_relation=relation, next_task=task, task_done=False)
-        outcome = rec.get("outcome")
-        if outcome in ("new_session", "compact"):
-            print(f"⚠ SESSION GUARD: {outcome} — {rec.get('reason', '')}")
-            print(f"  контекст: {ctx_txt} [{snap.get('context_status')}]")
-            print(f"  команда: {rec.get('command', '')}")
+        # 3. recommend — наружу через presenter, на любом исходе
+        pol = session_guardrails.load_policy(child_root)
+        rec = session_guardrails.recommend(snap, pol, next_relation=relation, next_task=task,
+                                           task_done=False, repo_path=str(child_root))
+        _say(child_root, "from_session_economy", snap, rec)
+        # 3а. автономия: может ли кит взять эту работу в ОТДЕЛЬНУЮ сессию сам, и разрешено ли ему
+        # тратить. Здесь только РЕШЕНИЕ — трата отсюда невозможна: исполнителя и учёт расхода
+        # подключает вызывающий (см. session_launcher.spawn, шов usage_hooks). Печатаем, только когда
+        # рекомендация уже говорит о смене сессии: иначе строка была бы шумом на каждом прогоне.
+        if rec.get("outcome") in ("new_session", "clear"):
+            from ai_ops_kit.engops import session_launcher
+            dec = session_launcher.decide(str(child_root), snap, next_relation=relation,
+                                          next_task=task, task_done=False)
+            _say(child_root, "from_subsession_decision", dec)
         # 4. delegation
         del_signals = {"task_text": task or "", "files_count": 0}
         del_recs = delegation_advisor.advise(del_signals)

@@ -52,6 +52,18 @@ goals:
     outcome:
       owner_reaches_verified_pr_without_patching_the_kit: false
 
+  - id: session-autonomy-under-ceiling
+    status: active
+    outcome:
+      # Решение владельца 2026-08-13: подсессии кит открывает сам, но только под потолком.
+      autonomous_spend_has_a_declared_ceiling: true
+      refusals_are_distinguishable_and_spend_nothing: true
+      # Закрыто той же работой (session-economy-measured): сессия опознаётся по
+      # CLAUDE_CODE_SESSION_ID, контекст читается из транскрипта со статусом measured. Проверено
+      # сцепкой на живой сессии: автономия отказывает уже по причине no_ceiling, а не
+      # session_unidentified — то есть измерение доехало до решения о трате.
+      session_is_identified_and_measured: true
+
   - id: green-means-checked
     status: active
     outcome:
@@ -562,3 +574,63 @@ work:
     #      tests/unit/test_session_coordination.py.
     # ОСТАЛОСЬ (почему status in_progress, а не done): пункт 1 держится на исполнителе, проверки
     # нет; ужесточение контракта до блокирующего — human_decision выше.
+
+  - id: session-economy-measured
+    title: Расход текущей сессии измеряется по транскрипту, и кит сам решает, когда начинать новую
+    type: quality
+    goal: green-means-checked
+    status: done
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/engops/, ai_ops_kit/ui/presenter.py, ai_ops_kit/cli/, rules/core/, tests/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # НАЙДЕНО ПОЛЕМ 2026-08-13: вся политика экономии сессии (v3.16.0 + v3.22) была ОБЪЯВЛЕНА И
+    # МЕРТВА. `session_telemetry_provider` искал транскрипт по пути `<проект>/sessions/<id>.jsonl`;
+    # каталога `sessions/` не существует ни в одном проекте, то есть провайдер не прочитал ни одной
+    # сессии никогда и ни на одной машине с такой раскладкой. Каскад: контекст оставался estimated
+    # по usage-ledger (а там вызовы моделей КИТА, не ходы сессии Claude Code), classify_context(None)
+    # -> `unknown`, и ни один из четырёх исходов (continue/compact/clear/new_session) на живой
+    # работе не наступал. Второй дефект того же места: перебор брал ПЕРВЫЙ найденный каталог
+    # проекта — после починки пути он подставил бы числа чужой сессии в рекомендацию по своей.
+    # Третий: ENV-ветка ждала `CLAUDE_SESSION_ID`, а рантайм выставляет `CLAUDE_CODE_SESSION_ID`.
+    #
+    # СДЕЛАНО. Правило имени каталога выведено СВЕРКОЙ (14 из 14 каталогов сошлись), а не догадкой.
+    # id сессии из ENV — первичный ключ (он уникален), путь репозитория — резервный: на живой машине
+    # рантайм запущен из `/Users/sasad`, а работа идёт над `/Users/sasad/ai-ops-kit`, и обратный
+    # порядок снова не нашёл бы ничего. Контекст, кэш, ходы и компакция теперь measured; компакция
+    # ставится по настоящему маркеру `compact_boundary`, а не угадывается по падению контекста.
+    # Добавлен потолок РАСХОДА СЕССИИ (`session_token_budget`) — того, чего не видели ни
+    # `engine/budget` (потолок прогона), ни ledger (вызовы кита). Расход называется ДО прогона на
+    # ЛЮБОМ исходе: раньше страж молчал в 100% прогонов, а молчание читается как «всё в порядке».
+    # Приватная граница держится тестом: наружу уходят числа и timestamps, содержимое переписки —
+    # никогда. Границу честности не сдвигали: enforcement остаётся advise, кит рантаймом не управляет.
+    #
+    # ЧЕМ ПОЙМАНО: tests/unit/test_session_transcript_measured.py, 16 тестов, каждый проверен
+    # мутацией (12 возвращённых дефектов — все краснеют). Два теста ДОПИСАНЫ ПО РЕЗУЛЬТАТУ мутации:
+    # первая версия набора не ловила ни старый путь `sessions/` в двух из трёх ветвей поиска, ни
+    # подмену `unavailable` нулём — то есть пропустила бы ровно тот дефект, ради которого написана.
+  # ─── session-autonomy-under-ceiling ────────────────────────────────────────────────────────────
+  - id: subsession-ceiling
+    title: Потолок автономной траты и решение об открытии подсессии — раньше, чем сама возможность
+    type: engineering
+    goal: session-autonomy-under-ceiling
+    status: in_progress
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/engops/, tests/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # СДЕЛАНО 2026-08-13: `ai_ops_kit/engops/session_launcher.py` — решение (spawn/continue/refuse) с
+    # проверкой потолка ДО траты и шесть различимых отказов. Потолок стоит на трате, которую кит
+    # ДОКАЗЫВАЕТ по своим записям (role=autonomous-subsession, run_id=subsession:<сессия>:<n>), а не
+    # на «расходе сессии вообще»: расход интерактивной сессии человека кит в деньгах не измеряет.
+    # Fail-closed: нет объявленного потолка -> автономия не работает; нечитаемый конфиг не даёт
+    # разрешения; неизмеренный контекст не называется «недорогим».
+    # 17 тестов, 5 мутаций проверены (каждая краснит свой тест). Первая версия теста про
+    # неизмеренный контекст мутацию ПРОПУСКАЛА — проверяла исход, который дают две ветки; переписана
+    # на проверку формулировки причины.
+    # ОСТАЛОСЬ (почему in_progress, а не done): (1) разводка в ритуал завершения и в CLI — она
+    # ложится в ветку измерения сессии, сливается вместе с ней, до тех пор модуль вызывается только
+    # своим CLI и тестами; (2) полевого прогона автономной подсессии ещё не было — по правилу
+    # репозитория «сначала field evidence», поэтому потолок в дефолтах остаётся НЕ объявленным.
