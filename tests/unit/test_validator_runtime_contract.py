@@ -60,6 +60,7 @@ STANDALONE = [
     "validate_model_qualification",
     "validate_model_roles",
     "validate_openspec_change",
+    "validate_own_medicine",
     "validate_package_boundaries",
     "validate_pipeline_e2e",
     "validate_post_release_readout",
