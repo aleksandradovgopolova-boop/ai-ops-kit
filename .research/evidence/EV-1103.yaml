@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1103
+request_id: RR-014
+statement: >
+  Galileo Agent Control (agentcontrol/agent-control, Apache-2.0) по КОДУ работает на другой оси,
+  чем кит: его единица контроля — вызов шага агента в рантайме, а не артефакт доставки.
+  Проверено на клоне HEAD 45dea6d (2026-08-11): `Step` объявлен как «Runtime payload for an agent
+  step invocation» с полями type ('tool'|'llm'), name, input, output, context; решение по шагу —
+  `ActionDecision = Literal["deny", "steer", "observe"]`; встроенные оценщики — json, list, regex,
+  sql (сопоставление содержимого). Понятий репозитория, коммита, ветки, PR, расписки и evidence
+  в коде нет: 'repository' и 'pull request' — 0 файлов, 15 совпадений 'commit' — это
+  `autocommit_block` миграций Alembic, 4 совпадения sha256 — хеширование api-ключа и подпись
+  HMAC. Слово 'gate' в 46 файлах оказалось подстрокой 'aggregated'; как понятие оно не заведено.
+evidence_type: documented_fact
+source:
+  title: "agentcontrol/agent-control — models/agent.py на закреплённом HEAD 45dea6d"
+  url: "https://raw.githubusercontent.com/agentcontrol/agent-control/45dea6d/models/src/agent_control_models/agent.py"
+  type: source_repository
+  published_at: "2026-01-30"
+  is_primary: true
+citation:
+  locator: "models/src/agent_control_models/agent.py:142 (class Step), actions.py:8 (ActionDecision), controls.py, evaluators/builtin/src/"
+  quote: "Runtime payload for an agent step invocation."
+captured_at: "2026-08-13"
+captured_by: "research-модуль, прогон RR-014 (чтение кода клона, не README)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-13"
+reliability:
+  level: high
+  rationale: >
+    Первичный источник — исходники на конкретном HEAD. Утверждения о ПРИСУТСТВИИ проверены
+    чтением определений; отрицательные («нет понятий репозитория/доставки») ограничены охватом:
+    grep по *.py и *.ts всего репозитория, исключая tests/. Не проверялось: закрытая облачная
+    часть Galileo — возможно, доставочный контур существует там, но подтвердить это нечем.
+status: active
+superseded_by: null

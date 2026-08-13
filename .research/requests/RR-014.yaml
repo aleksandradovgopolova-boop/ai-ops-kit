@@ -42,5 +42,5 @@ memory_check:
     не читается в первоисточнике, живой аналог отдельно не искали.
 required_confidence: medium
 deadline: "2026-08-28"
-status: draft
+status: answered
 created_at: "2026-08-12"
