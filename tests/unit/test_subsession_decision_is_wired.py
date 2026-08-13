@@ -80,9 +80,32 @@ def test_refusals_do_not_collapse_into_one_word():
     over = _render(_dec("refuse", "over_ceiling", ceiling_usd=1.0, spent_usd=1.25))
     unprovable = _render(_dec("refuse", "spend_unprovable", ceiling_usd=1.0))
     assert len({no_ceiling, over, unprovable}) == 3
-    assert "не назначена" in no_ceiling or "никто не называл" in no_ceiling
+    assert "сумму назвать не могу" in no_ceiling
     assert "израсходована" in over
     assert "доказать" in unprovable
+
+
+def test_asking_for_money_comes_with_the_number_and_its_basis():
+    """Вопрос «сколько можно тратить» идёт ВМЕСТЕ с посчитанной суммой.
+
+    Спросить и не предложить числа значило бы требовать решения, для которого у человека нет
+    данных: цену вызова видел только кит. Владельцу остаётся согласиться, а не изобретать.
+    """
+    out = _render(_dec("refuse", "no_ceiling", ceiling_usd=None, suggested_usd=3.17,
+                       suggestion_basis="measured",
+                       suggestion_reason="4 подсессии по $0.79 — это p90 измеренной стоимости."))
+    assert "3.17" in out
+    assert "p90" in out or "измеренной" in out
+    assert "разрешить" in out.lower()
+
+
+def test_without_measurement_it_admits_it_instead_of_inventing():
+    """Нет замера — так и сказано. Придуманное число выглядело бы расчётом, не будучи им."""
+    out = _render(_dec("refuse", "no_ceiling", ceiling_usd=None, suggested_usd=None,
+                       suggestion_basis="no_measurement",
+                       suggestion_reason="измеренных вызовов 0 — меньше 20."))
+    assert "не могу" in out
+    assert "Придумывать" in out or "придумывать" in out
 
 
 def test_owner_text_carries_no_internal_names():
