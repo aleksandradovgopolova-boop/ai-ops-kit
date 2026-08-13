@@ -48,6 +48,7 @@ CLI:  session_launcher.py <child_root> [--context N] [--next-relation R] [--next
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -79,17 +80,25 @@ WARRANTING_STATES = ("compact_recommended", "new_session_recommended")
 
 
 def load_ceiling(child_root):
-    """Потолок автономии из `.ai-ops.yaml -> session_economy`.
+    """Потолок автономии из `.ai-ops.yaml -> session_economy`, а у самого кита — из `config/`.
 
     Читается тот же блок, что у `session_guardrails`, но СВОИМИ ключами и своими дефолтами:
     пороги СОВЕТА и потолок ТРАТЫ — разные решения владельца, и слипаться им нельзя (порог совета
     можно поднять из удобства; потолок траты — нет).
+
+    ВТОРОЙ ИСТОЧНИК И ПОЧЕМУ ОН НЕ ДРЕЙФ. `.ai-ops.yaml` описывает связь «репозиторий ↔ кит», и у
+    самого кита такой связи нет — он и есть кит (это же зафиксировано в проверке самоприменения как
+    «не применимо»). Без второго места автономия была бы навсегда недоступна ровно там, где её
+    отлаживают. Поэтому: файл дочки — ГЛАВНЫЙ, `config/session-economy.yaml` читается ТОЛЬКО когда
+    его нет. Два источника одновременно не складываются и не выбираются «по свежести».
     """
     out = dict(AUTONOMY_DEFAULTS)
-    cfg = Path(child_root) / ".ai-ops.yaml"
-    if yaml and cfg.is_file():
+    child_cfg = Path(child_root) / ".ai-ops.yaml"
+    own_cfg = Path(child_root) / "config" / "session-economy.yaml"
+    src, key = (child_cfg, "session_economy") if child_cfg.is_file() else (own_cfg, "session_economy")
+    if yaml and src.is_file():
         try:
-            se = (yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}).get("session_economy") or {}
+            se = (yaml.safe_load(src.read_text(encoding="utf-8")) or {}).get(key) or {}
         except (yaml.YAMLError, OSError):
             # Нечитаемый конфиг НЕ означает «потолка нет и трать сколько хочешь»: дефолты
             # fail-closed (None), поэтому итог — отказ no_ceiling. Молчаливого разрешения не будет.
@@ -98,6 +107,55 @@ def load_ceiling(child_root):
             if k in se:
                 out[k] = se[k]
     return out
+
+
+# Сколько подсессий должно уместиться в предлагаемую сумму. Не «побольше на всякий случай»: число
+# входит в предложение владельцу, и он должен видеть, за что платит.
+SUGGESTED_SUBSESSIONS = 4
+# Меньше этого числа измеренных вызовов — выборка не выборка, предложения не делаем. Порог не
+# выведен статистикой, он объявлен: на трёх вызовах p90 — это просто максимум.
+MIN_SAMPLE_FOR_SUGGESTION = 20
+
+
+def suggest_ceiling(child_root, subsessions=SUGGESTED_SUBSESSIONS, reference_roots=None):
+    """Предложить сумму, ВЫВЕДЕННУЮ ИЗ ЗАМЕРА, а не выбранную на вкус.
+
+    ЗАЧЕМ. Отказ `no_ceiling` требует от владельца назвать число, которого он знать не может: цену
+    вызова видел только кит. Требовать решения, для которого у человека нет данных, — это переложить
+    работу. Поэтому кит считает сам, а владельцу оставляет согласие.
+
+    ЧЕСТНО О ОСНОВАНИИ. Считается p90 ИЗМЕРЕННОЙ стоимости вызовов из ledger (не средняя: платить
+    придётся за дорогие, а не за типичные) и умножается на число подсессий. Основание всегда
+    называется вместе с числом: `measured` + размер выборки, `borrowed` + откуда взято, либо
+    `no_measurement` и тогда числа НЕТ. Выдуманного числа под видом расчёта не будет.
+    """
+    def _measured(root):
+        return [float(r["cost"]) for r in usage_ledger.load_product(root)
+                if r.get("cost") is not None and r.get("cost_status") == "measured"]
+
+    own = _measured(child_root)
+    costs, basis, source = own, "measured", str(child_root)
+    if len(own) < MIN_SAMPLE_FOR_SUGGESTION and reference_roots:
+        borrowed = []
+        used = []
+        for r in reference_roots:
+            got = _measured(r)
+            if got:
+                borrowed += got
+                used.append(str(r))
+        if len(borrowed) >= MIN_SAMPLE_FOR_SUGGESTION:
+            costs, basis, source = borrowed, "borrowed", ", ".join(used)
+    if len(costs) < MIN_SAMPLE_FOR_SUGGESTION:
+        return {"amount": None, "basis": "no_measurement", "sample": len(costs), "source": None,
+                "reason": f"в этом репозитории измеренных вызовов {len(costs)} — меньше "
+                          f"{MIN_SAMPLE_FOR_SUGGESTION}, поэтому предлагать сумму было бы гаданием."}
+    ordered = sorted(costs)
+    p90 = ordered[max(0, math.ceil(len(ordered) * 0.9) - 1)]
+    amount = math.ceil(p90 * subsessions * 100) / 100.0
+    return {"amount": amount, "basis": basis, "sample": len(costs), "source": source,
+            "p90": round(p90, 4), "subsessions": subsessions,
+            "reason": f"{subsessions} подсессии по ${p90:.2f} — это p90 измеренной стоимости вызова "
+                      f"({len(costs)} вызовов, {'замер этого репозитория' if basis == 'measured' else 'замер: ' + source})."}
 
 
 def autonomous_spend(child_root, session_id):
@@ -142,10 +200,16 @@ def decide(child_root, snapshot, *, ceiling=None, next_relation="new_independent
                        "прерываем и подсессию не открываем; вернуться к решению на безопасной точке.",
                        numbers)
     if limit is None:
+        sug = suggest_ceiling(child_root)
+        numbers["suggested_usd"] = sug.get("amount")
+        numbers["suggestion_basis"] = sug.get("basis")
+        numbers["suggestion_reason"] = sug.get("reason")
         return _refuse("no_ceiling",
                        "потолок автономной траты не объявлен, поэтому тратить без человека нельзя. "
                        "Это не «закончились деньги»: нужно объявить `session_economy."
-                       "max_autonomous_spend_usd`, и автономия включится.",
+                       "max_autonomous_spend_usd`, и автономия включится."
+                       + (f" Предлагаю ${sug['amount']}: {sug['reason']}" if sug.get("amount")
+                          else f" Своё число предложить не могу: {sug['reason']}"),
                        numbers)
     if not session_id or session_id == "unlabelled":
         return _refuse("session_unidentified",

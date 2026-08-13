@@ -234,3 +234,99 @@ def test_decision_check_rejects_refusal_without_code():
     """Валидатор решения не пропускает отказ без кода причины."""
     bad = {"kind": "SubsessionDecision", "action": "refuse", "refusal": None, "reason": "просто нет"}
     assert sl.check(bad)
+
+
+# ─── предложение суммы: считается по замеру, а не выбирается ─────────────────────────────────────
+# Мутации (прогнаны): выборка не проверяется на размер -> test_small_sample_gets_no_suggestion
+# падает (p90 на трёх вызовах = максимум, то есть «расчёт» из ничего); средняя вместо p90 ->
+# test_suggestion_uses_p90_not_average падает; оценочная стоимость идёт в расчёт ->
+# test_only_measured_cost_feeds_the_suggestion падает (число опирается на догадку).
+
+def _charge_cost(root, cost, *, n=1, status="measured"):
+    rec = {"role": "writer", "provider": "claude-cli", "model": "claude-code-local",
+           "input_tokens": 100, "output_tokens": 10, "usage_status": "measured",
+           "cost": cost, "cost_status": status, "trigger": "initial"}
+    usage_ledger.append(root, "w1", [rec], run_id=f"r{n}")
+
+
+def test_small_sample_gets_no_suggestion(tmp_path):
+    """На трёх вызовах p90 — это просто максимум. Предложения нет, и сказано почему."""
+    for i in range(3):
+        _charge_cost(str(tmp_path), 0.4, n=i)
+    s = sl.suggest_ceiling(str(tmp_path))
+    assert s["amount"] is None
+    assert s["basis"] == "no_measurement"
+    assert "гаданием" in s["reason"]
+
+
+def test_suggestion_uses_p90_not_average(tmp_path):
+    """Платить придётся за дорогие вызовы, а не за типичные: 19 дешёвых и 6 дорогих."""
+    for i in range(19):
+        _charge_cost(str(tmp_path), 0.10, n=i)
+    for i in range(6):
+        _charge_cost(str(tmp_path), 1.00, n=100 + i)
+    s = sl.suggest_ceiling(str(tmp_path), subsessions=4)
+    assert s["basis"] == "measured"
+    assert s["sample"] == 25
+    assert s["p90"] == 1.0, "взята не p90, а что-то более удобное"
+    assert s["amount"] == 4.0
+
+
+def test_only_measured_cost_feeds_the_suggestion(tmp_path):
+    """Оценка в расчёт не идёт: иначе предложенное число опиралось бы на догадку."""
+    for i in range(25):
+        _charge_cost(str(tmp_path), 9.99, n=i, status="estimated")
+    assert sl.suggest_ceiling(str(tmp_path))["amount"] is None
+
+
+def test_suggestion_can_be_borrowed_and_says_from_where(tmp_path):
+    """Свежий репозиторий: замера нет — можно взять из другого, но источник НАЗЫВАЕТСЯ."""
+    ref = tmp_path / "ref"
+    ref.mkdir()
+    for i in range(25):
+        _charge_cost(str(ref), 0.50, n=i)
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    s = sl.suggest_ceiling(str(fresh), reference_roots=[str(ref)])
+    assert s["basis"] == "borrowed"
+    assert str(ref) in s["source"]
+    assert s["amount"] == 2.0
+
+
+def test_refusal_carries_the_suggestion(tmp_path):
+    """Отказ «потолок не объявлен» несёт посчитанную сумму — вопрос без числа перекладывал бы работу."""
+    for i in range(25):
+        _charge_cost(str(tmp_path), 0.50, n=i)
+    d = sl.decide(str(tmp_path), _snap())
+    assert d["refusal"] == "no_ceiling"
+    assert d["numbers"]["suggested_usd"] == 2.0
+    assert "Предлагаю $2.0" in d["reason"]
+
+
+def test_own_config_is_read_only_when_child_config_is_absent(tmp_path):
+    """У кита нет `.ai-ops.yaml`, поэтому потолок читается из config/. Файл дочки — главнее."""
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "session-economy.yaml").write_text(
+        "session_economy:\n  max_autonomous_spend_usd: 3.17\n", encoding="utf-8")
+    assert sl.load_ceiling(str(tmp_path))["max_autonomous_spend_usd"] == 3.17
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "session_economy:\n  max_autonomous_spend_usd: 1.0\n", encoding="utf-8")
+    assert sl.load_ceiling(str(tmp_path))["max_autonomous_spend_usd"] == 1.0, \
+        "файл дочки обязан быть главнее — иначе два источника истины"
+
+
+def test_child_never_inherits_the_kit_ceiling(tmp_path):
+    """Разрешение тратить НЕ наследуется установкой.
+
+    Замер на живой установке (`init` в чистый git-репозиторий): `config/session-economy.yaml`
+    приезжает дочке как `.ai/managed/config/session-economy.yaml` — то есть в managed-слой, а не в
+    корень. Читать его как разрешение значило бы тратить чужие деньги по умолчанию, потому что
+    владелец дочки этой суммы не называл. Тест держит именно это: managed-копия невидима для
+    потолка, свежая дочка остаётся fail-closed.
+    """
+    managed = tmp_path / ".ai" / "managed" / "config"
+    managed.mkdir(parents=True)
+    (managed / "session-economy.yaml").write_text(
+        "session_economy:\n  max_autonomous_spend_usd: 3.17\n", encoding="utf-8")
+    assert sl.load_ceiling(str(tmp_path))["max_autonomous_spend_usd"] is None
+    assert sl.decide(str(tmp_path), _snap())["refusal"] == "no_ceiling"
