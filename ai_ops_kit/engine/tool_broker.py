@@ -143,9 +143,30 @@ def _protected_prefixes(child_root=None):
     return out
 
 
+def _canon_rel(rel: str) -> str:
+    """Каноническое написание относительного пути ДО сравнения с правилом (R-37).
+
+    Было: сравнение строковым префиксом после одного `strip("/")`. Тогда одно и то же место,
+    записанное иначе, правило не накрывало — `./p`, `p//q`, `p/./q` проходили мимо
+    protected_paths и write_scope, и запись доходила до диска (проба через execute(): 4 из 5
+    написаний перезаписали защищённый файл). `normpath` схлопывает эти формы к одной.
+
+    ЧЕСТНО про границы: нормализация ЛЕКСИЧЕСКАЯ. Она не знает про регистр ФС — на macOS
+    `Migrations/x` и `migrations/x` это один файл, а здесь они остаются разными строками
+    (открытый под-вектор R-37, решение владельца: сравнивать без учёта регистра всегда —
+    fail-closed, но ложные срабатывания на Linux). Симлинки — тоже не сюда: их ловит
+    физическая проверка `_within_root` в execute()."""
+    p = (rel or "").strip().strip("/")
+    if not p:
+        return ""
+    return os.path.normpath(p).strip("/")
+
+
 def _under(path: str, prefix: str) -> bool:
-    p = path.strip("/")
-    pre = prefix.strip("/")
+    p = _canon_rel(path)
+    pre = _canon_rel(prefix)
+    if not p or not pre:
+        return False
     return p == pre or p.startswith(pre + "/")
 
 
