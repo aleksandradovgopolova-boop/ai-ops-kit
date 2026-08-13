@@ -16,6 +16,8 @@
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
+  subsession           — взять ли работу в отдельную сессию самому: решение + потолок автономной
+                         траты; сухо по умолчанию, тратит только с `--spawn`
   method               — экономичный способ работы: советы по приоритетам (гигиена/делегирование/runtime; v3.18.0)
   engops [branch|commit|env|deploy|cost] — операционная гигиена: актуальность ветки vs база, вердикт
                          по коммиту (v3.19.0), карта окружений и зрелость поставки (v3.20.0),
@@ -1992,6 +1994,90 @@ def cmd_session(argv):
     return session_guardrails.main(["."] + [a for a in argv[2:]])
 
 
+def cmd_subsession(argv):
+    """`ai-ops subsession` — может ли кит взять работу в ОТДЕЛЬНУЮ сессию сам, и разрешено ли ему
+    тратить. По умолчанию только РЕШЕНИЕ (ничего не тратится); тратит `--spawn`.
+
+    ПОЧЕМУ КОМПОЗИЦИЯ ЖИВЁТ ЗДЕСЬ, А НЕ В МОДУЛЕ. `session_launcher` принимает исполнителя и учёт
+    расхода швами (`provider`, `usage_hooks`) и сам их не импортирует: слой моделей уже импортирует
+    слой сессий, и обратный импорт дал бы восьмую взаимную пару (ратчет `test_layering` это ловит).
+    Собрать их вместе может только то, что выше обоих, — точка входа.
+
+    ПОЧЕМУ ЭТА КОМАНДА ПОЯВИЛАСЬ ТОЛЬКО СЕЙЧАС. Правило репозитория — сначала полевое
+    доказательство, потом разводка. Прогон 2026-08-13 записан в
+    `qualification/FIELD-RUN-AUTONOMY-2026-08-13.md`: подсессия открыта, потрачено $0.3945 из
+    объявленных $3.17, расход измерен и записан в ledger, потолок пересчитан после траты.
+    """
+    args = [a for a in argv[2:]]
+    root = "."
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "session_launcher.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    import session_launcher as _sl
+    from ai_ops_kit.engops import session_telemetry as _st
+    from ai_ops_kit.ui import presenter as _pr
+
+    ctx = None
+    if "--context" in args:
+        _i = args.index("--context")
+        if _i + 1 < len(args) and args[_i + 1].isdigit():
+            ctx = int(args[_i + 1])
+    task = None
+    if "--next" in args:
+        _i = args.index("--next")
+        if _i + 1 < len(args):
+            task = args[_i + 1]
+    wid = None
+    if "--workitem" in args:
+        _i = args.index("--workitem")
+        if _i + 1 < len(args):
+            wid = args[_i + 1]
+
+    snap = _st.snapshot(root, workitem_id=wid, context_current=ctx)
+    dec = _sl.decide(root, snap, next_task=task, at_safe_boundary="--unsafe" not in args)
+    print(_pr.render(_pr.from_subsession_decision(dec),
+                     audience="technical" if "--details" in args else "product"))
+    if "--spawn" not in args:
+        # Сухо по умолчанию: команда, которая тратит деньги от одного слова, — не инструмент,
+        # а ловушка. Тратить нужно попросить явно.
+        return 0
+    if dec["action"] != "spawn_subsession":
+        return 0
+
+    class _Hooks:
+        """Учёт расхода: `_record_call` только накапливает в памяти, дренирует вызывающий. Без этого
+        шага автономная трата не попала бы в ledger, и СЛЕДУЮЩИЙ потолок считался бы по неполной
+        сумме — то есть потолок тихо перестал бы работать."""
+
+        def __init__(self):
+            from ai_ops_kit.providers import orchestrator_usage as _ou
+            self._ou = _ou
+
+        def set_context(self, **kw):
+            self._ou.set_call_context(**kw)
+
+        def drain(self):
+            self._ou.clear_call_context()
+            return self._ou.drain_call_stats()
+
+    from ai_ops_kit.providers.orchestrator_providers import make_claude_cli_provider
+    brief = _sl.build_brief(workitem_id=wid, title=task, repo_path=str(REPO_ROOT))
+    res = _sl.spawn(root, brief, snap, provider=make_claude_cli_provider(),
+                    usage_hooks=_Hooks(), workitem_id=wid, decision=dec)
+    if not res["spawned"]:
+        print(_pr.render(_pr.from_subsession_decision(res["decision"]), audience="product"))
+        return 0
+    after = res["spend_after"]
+    print(f"\nПотрачено самостоятельно: ${after['cost']:.4f} (вызовов {after['calls']}).")
+    if res.get("ceiling_crossed_by"):
+        # Потраченного не вернуть; честная половина — назвать перерасход, а не спрятать его.
+        print(f"⚠ разрешённая сумма превышена на ${res['ceiling_crossed_by']:.4f} — "
+              "дальше сам не продолжаю.")
+    print("\nЧто предлагает отдельная сессия:\n")
+    print(res.get("result") or "(пусто)")
+    return 0
+
+
 def cmd_engops(argv):
     """v3.19.0 Engineering Operating Model (срез 1): операционная гигиена коммита и ветки.
     `ai-ops engops` — политика + актуальность текущей ветки; `engops branch [--base X]` — вердикт
@@ -2298,6 +2384,8 @@ def _dispatch(argv):
         return cmd_audit(argv)
     if cmd == "session":
         return cmd_session(argv)
+    if cmd == "subsession":
+        return cmd_subsession(argv)
     if cmd == "method":
         return cmd_method(argv)
     if cmd == "engops":
