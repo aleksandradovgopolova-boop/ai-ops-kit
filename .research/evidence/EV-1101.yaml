@@ -1,0 +1,46 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1101
+request_id: RR-014
+statement: >
+  У Galileo Agent Control ЕСТЬ публичный исходный код, доступный для чтения и заимствования:
+  репозиторий agentcontrol/agent-control под Apache-2.0 (организация agentcontrol, не rungalileo),
+  создан 2026-01-30, 289 звёзд, 44 форка, последний релиз v8.4.0 от 2026-07-27, push 2026-08-11.
+  Самоописание — «Centralized agent control plane for governing runtime agent behavior at scale.
+  Configurable, extensible, and production-ready», топики guardrails / runtime-guardrails / ai-safety.
+  В той же организации ещё два репозитория: openclaw-plugin (Apache-2.0, 32★) и docs-agent-control.
+  Значение для кита: сосед, о котором раньше судили по маркетинговой странице (EV-663, пункт 2),
+  теперь читается кодом; ось пересечения (runtime-guardrails или delivery-lifecycle) НЕ определена —
+  это вопрос RR-014, а не вывод этого evidence.
+evidence_type: documented_fact
+source:
+  title: "GitHub — agentcontrol/agent-control (+ agentcontrol.dev)"
+  url: "https://github.com/agentcontrol/agent-control"
+  type: source_repository
+  published_at: "2026-01-30"
+  is_primary: true
+citation:
+  locator: "GitHub API /repos/agentcontrol/agent-control, /orgs/agentcontrol/repos, /releases; ссылка на репозиторий с agentcontrol.dev"
+  quote: "Centralized agent control plane for governing runtime agent behavior at scale."
+captured_at: "2026-08-12"
+captured_by: "novelty-Watch (scheduled task, прогон 2026-08-12)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-12"
+reliability:
+  level: high
+  rationale: >
+    Первичный источник: GitHub API по репозиторию и организации + ссылка на код с официального
+    сайта продукта. Метрики и лицензия сняты 2026-08-12. Содержимое кода НЕ читалось — evidence
+    фиксирует существование и лицензию открытого кода, не его функциональность.
+conflicts_with:
+  - claim: "Бриф novelty-Watch от 2026-08-05 утверждал: «Galileo Agent Control в открытых GitHub-организациях не находится»."
+    source: ".research/watches/novelty-log.md, запись 2026-08-05"
+    status: resolved
+    note: >
+      Ошибка того брифа, а не evidence: поиск шёл по org:rungalileo. EV-663 такого утверждения
+      не содержит — он называет Galileo Agent Control жанровым соседом и «open source control
+      plane», что подтверждается. EV-663 остаётся active; его пункт (4) про отсутствие публичного
+      репозитория у Rel(AI)Build перепроверен 2026-08-12 и в силе (поиск GitHub — total_count 0).
+status: active
+superseded_by: null

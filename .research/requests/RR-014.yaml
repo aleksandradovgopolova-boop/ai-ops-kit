@@ -1,0 +1,46 @@
+# Продолжение конкурентного охвата после закрытия RR-013.
+# Повод: novelty-Watch 2026-08-12 (.research/watches/novelty-log.md). Два новых факта,
+# которых у RR-013 на входе не было: у Galileo Agent Control обнаружен публичный код
+# (RR-013 работал по соседям без него), и в окне родился ещё один сосед — mestre-yoda.
+schema_version: 1
+kind: research.request
+id: RR-014
+title: "Соседи по жанру, продолжение: читаемый код Galileo Agent Control и mestre-yoda против вывода EV-673"
+requested_by:
+  system: human
+  layer: product
+decision_to_support:
+  description: >
+    Решить, остаётся ли верным уточнённый вывод EV-673 («цепочка воспроизведена соседом,
+    но кит остаётся единственным по совокупности») после того, как к выборке добавились
+    два источника: публичный Apache-2.0 код Galileo Agent Control (не читался ни разу —
+    прошлые записи опирались на маркетинговую страницу) и сосед mestre-yoda, родившийся
+    внутри окна 08-05…08-12 и заявляющий гейты, evidence и человеческий контроль доставки.
+  decision_maker: human
+questions:
+  - "Что Galileo Agent Control делает ПО КОДУ (agentcontrol/agent-control, Apache-2.0, v8.4.0): это runtime-guardrails для агентов вообще — или там есть привязка к артефактам доставки (gate-результаты, evidence на SHA, транзакция доставки)? Ось пересечения с китом определить по коду, а не по описанию."
+  - "Воспроизводит ли mestre-yoda (MIT, TypeScript) цепочку кита по факту: что стоит за словами enforceable gates / auditable evidence / human-controlled delivery — исполняемые проверки и машиночитаемые артефакты или инструкции агенту в markdown?"
+  - "Меняет ли добавление этих двух источников формулировку EV-673, или он остаётся в силе с расширенной выборкой?"
+constraints:
+  - evidence_over_reputation
+  - one_source_one_evidence
+  - negative_claims_qualified
+  - self_evidence_flagged
+  - same_criterion_applies_to_us
+workflow_hint: quick
+memory_check:
+  performed: true
+  related_requests: [RR-008, RR-013]
+  related_decisions: [DP-107, DP-109]
+  summary: >
+    RR-013 закрыт (answered): EV-673 суперсидит EV-660 — «связной цепочки не обнаружено»
+    больше не действует, multi-agents-control-plane (EV-670) воспроизводит её по коду.
+    EV-663 упоминал Galileo Agent Control как жанрового соседа по маркетинговому описанию;
+    публичный код тогда не читался. EV-1101 (этот прогон) фиксирует, что код есть и открыт.
+    EV-672 (ratchet) помечен stale — источник исчез вместе с аккаунтом владельца (EV-1102),
+    поэтому вопрос RR-013 про in-session-гейт в этот RR НЕ переносится: механизм больше
+    не читается в первоисточнике, живой аналог отдельно не искали.
+required_confidence: medium
+deadline: "2026-08-28"
+status: draft
+created_at: "2026-08-12"
