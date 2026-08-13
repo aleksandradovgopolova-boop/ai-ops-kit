@@ -323,6 +323,46 @@ def test_not_admitted_work_is_not_reported_as_unannounced():
     assert "бюджет" in out.lower() or "within_budget" in str(msg["technical_details"]["payload"])
 
 
+def test_work_in_progress_is_not_reported_as_unannounced():
+    """Идущая работа не имеет права звучать как «работа пока не объявлена».
+
+    Замер на самом ките (13.08.2026): `next .` печатал человеку «Готовой к работе задачи сейчас
+    нет. Это не значит, что всё сделано: работа пока не объявлена», а `next . --json` в ту же
+    секунду показывал `in_progress: [second-brownfield-run]`. Ведро `in_progress` не имело своей
+    ветки и сливалось с «плана нет» — перевод менял не язык, а ФАКТЫ, то есть ровно запрещённый
+    класс: вывод статуса вместо объявленного и заявление шире полученного.
+    """
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "blocked": [], "not_ready": [], "ready": [], "parallel_with": [],
+           "parallel_skipped": [], "next_best": None,
+           "in_progress": [{"id": "second-brownfield-run",
+                            "title": "Провести установку до verified PR"}]}
+    msg = PR.from_next_work(rep)
+    out = PR.render(msg, audience="product")
+    assert "работа не объявлена" not in out
+    assert "не объявлена" not in out
+    # Факт назван: и что работа идёт, и КАКАЯ именно.
+    assert "Провести установку до verified PR" in out
+    # `blocked` означает «продолжать нельзя» — про идущую работу это неправда.
+    assert msg["status"] != "blocked"
+    assert "Пока не могу продолжить" not in out
+    assert msg["technical_details"]["payload"]["in_progress"] == "second-brownfield-run"
+
+
+def test_unannounced_work_still_says_so_when_nothing_is_declared():
+    """Обратная половина: когда работы ДЕЙСТВИТЕЛЬНО нет, честный текст остаётся прежним.
+
+    Без этого теста исправление выше могло бы «починить» сообщение, выключив правдивую ветку.
+    """
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "in_progress": [], "blocked": [], "not_ready": [], "ready": [],
+           "parallel_with": [], "parallel_skipped": [], "next_best": None}
+    out = PR.render(PR.from_next_work(rep), audience="product")
+    assert "работа пока не объявлена" in out
+
+
 def test_unreadable_repo_is_not_described_as_understood():
     """Класс UNKNOWN не имеет права звучать как «я разобрался»."""
     rep = {"classification": {"class": "UNKNOWN", "confidence": "none", "reasons": []},
