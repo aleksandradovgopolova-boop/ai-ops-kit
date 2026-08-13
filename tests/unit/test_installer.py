@@ -531,15 +531,46 @@ def test_entry_point_honours_explicit_interpreter(installed):
     # был найден дефект: успешная команда роняла 11 `.pyc` в checksummed managed-слой.
     env = {"PATH": str(installed / "no-python-here"), "HOME": os.environ.get("HOME", "/tmp"),
            "AI_OPS_PYTHON": sys.executable}
+
+    # side-effect proof: кит не сорит в чужом репозитории. `.gitignore` установщик в дочку не
+    # пишет, поэтому байткод в managed уехал бы в коммит владельца по `git add -A`.
+    # R-39: замеряем ТОЛЬКО эффект своей команды — снимок до/до сравнивается со снимком после.
+    # Фикстура `installed` общая на модуль, и раньше этот assert краснел из-за байткода СОСЕДА,
+    # показывая при этом на обёртку, которая байткод как раз подавляет.
+    def _pyc():
+        return {str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")}
+
+    before = _pyc()
     r = subprocess.run([str(entry), "status"], cwd=str(installed), env=env,
                        capture_output=True, text=True, timeout=120)
     assert r.returncode in (0, 1), (
         f"AI_OPS_PYTHON={sys.executable} не был использован: rc={r.returncode}\n{r.stderr[:400]}")
     assert "идёт" in r.stdout or "не начата" in r.stdout, r.stdout[:300]
-    # side-effect proof: кит не сорит в чужом репозитории. `.gitignore` установщик в дочку не
-    # пишет, поэтому байткод в managed уехал бы в коммит владельца по `git add -A`.
-    pyc = [str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")]
-    assert not pyc, f"команда оставила байткод кита в managed-слое дочки: {pyc[:5]}"
+    left = sorted(_pyc() - before)
+    assert not left, f"команда оставила байткод кита в managed-слое дочки: {left[:5]}"
+
+
+def test_direct_installer_call_leaves_no_bytecode(installed):
+    """R-39: у кита ДВА документированных входа, а защита стояла на одном.
+
+    Обёртка `./ai-ops` экспортирует `PYTHONDONTWRITEBYTECODE=1` с ревизии 11.08, но прямой вызов
+    `python3 ~/ai-ops-kit/installer/ai_ops.py doctor` описан наравне с ней — и оставлял байткод.
+    Замер до правки: 19 файлов `.pyc` в checksummed `.ai/managed` за одну команду. Так и должно
+    быть по устройству: `doctor` намеренно импортирует доставленную копию из managed, а не свою.
+    """
+    import subprocess
+
+    def _pyc():
+        return {str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")}
+
+    before = _pyc()
+    r = subprocess.run([sys.executable, str(INSTALLER), "doctor"], cwd=str(installed),
+                       capture_output=True, text=True, timeout=180)
+    assert "Traceback" not in (r.stdout + r.stderr), (r.stdout + r.stderr)[-400:]
+    left = sorted(_pyc() - before)
+    assert not left, (
+        f"прямой вызов установщика оставил байткод в checksummed managed-слое: {left[:5]} "
+        f"(всего {len(left)}); `.gitignore` в дочку не пишется — это уедет в коммит владельца")
 
 
 def test_hints_point_to_something_runnable(installed, ai_ops):
