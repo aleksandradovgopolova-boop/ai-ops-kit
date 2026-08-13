@@ -1,0 +1,44 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1102
+request_id: RR-014
+statement: >
+  Источник EV-672 исчез: репозиторий 0xwilliamortiz/ratchet и ВЕСЬ аккаунт владельца
+  недоступны — GitHub API отдаёт 404 и на /repos/0xwilliamortiz/ratchet, и на
+  /users/0xwilliamortiz; прямой HTTP по обоим адресам — 404; второй репозиторий того же
+  владельца (openclaw-improved), видимый в поисковой выдаче, тоже 404. Поиск по дословной
+  формулировке описания («Your agent reads the rules» в in:description) даёт 0 результатов —
+  переименованного репозитория или форка-наследника под тем же описанием нет; одноимённые
+  проекты в выдаче (Neerav-Gupta/Ratchet, пакет npm ratchet-cc) — другие продукты с другим
+  описанием. На 2026-08-05 репозиторий имел 431 звезду и был верифицирован чтением кода.
+  Следствие: механизм in-session gate из EV-672 больше не воспроизводим по первоисточнику.
+evidence_type: documented_fact
+source:
+  title: "GitHub API + прямой HTTP: 0xwilliamortiz/ratchet, /users/0xwilliamortiz"
+  url: "https://github.com/0xwilliamortiz/ratchet"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "GET /repos/0xwilliamortiz/ratchet → 404; GET /users/0xwilliamortiz → 404; curl -L https://github.com/0xwilliamortiz/ratchet → 404; search in:description «Your agent reads the rules» → total_count 0"
+  quote: "GET https://api.github.com/users/0xwilliamortiz -> 404 Not Found (аккаунт владельца, а не только репозиторий)"
+captured_at: "2026-08-12"
+captured_by: "novelty-Watch (scheduled task, прогон 2026-08-12)"
+freshness:
+  volatile: true
+  expires_at: "2026-09-12"
+reliability:
+  level: high
+  rationale: >
+    Отрицательное утверждение, но проверено четырьмя независимыми способами (API репозитория,
+    API пользователя, прямой HTTP с редиректами, поиск по дословному описанию) в одном прогоне
+    2026-08-12. Ограничение: причина исчезновения (удаление владельцем, переименование аккаунта,
+    блокировка платформой) НЕ установлена и по внешним данным не устанавливается.
+conflicts_with:
+  - evidence_id: EV-672
+    claim: "EV-672 описывает механизм ratchet как читаемый в первоисточнике (код верифицирован 2026-08-05)."
+    source: "https://github.com/0xwilliamortiz/ratchet"
+    status: resolved
+    note: "EV-672 переведён в status: stale — на 2026-08-05 утверждение было верным, с 2026-08-12 источник недоступен и перепроверке не подлежит."
+status: active
+superseded_by: null
