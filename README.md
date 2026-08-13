@@ -35,7 +35,7 @@ cd /path/to/project
 | Слой | Содержимое |
 |------|-----------|
 | **Execution Engine** | `ai-ops run` — единый движок «задача → draft PR» |
-| **Quality Gates** | 34 <!-- claim:gates-total --> гейта объявлено; на конкретной задаче оценивается её набор (QUICK — 3) |
+| **Quality Gates** | 35 <!-- claim:gates-total --> гейта объявлено; на конкретной задаче оценивается её набор (QUICK — 3) |
 | **Agents** | 51 роль объявлена в реестре; движок вызывает по имени 10, остальные — контракты владения и ревью |
 | **Registry** | Модели, провайдеры, workflow — machine-readable SoT |
 | **Security** | 12 доменов, детерминированный scan, human-in-the-loop |

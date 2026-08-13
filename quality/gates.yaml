@@ -82,7 +82,11 @@ gates:
     blocking: false          # advisory до обкатки на child-репозиториях (правило движения по roadmap)
     responsible_role: architecture-reviewer
     review_mode: read-only
-    validator: validate-product-model        # runnable: tools/contours.py + validate_product_model.py
+    # Путь второго исполнителя был `validate_product_model.py` — от корня он не резолвился с v3.34,
+    # когда валидаторы переехали в `ai_ops_kit/validation/`. Указатель на исполнитель живёт в
+    # комментарии, поэтому `validate_references` (читает YAML) его не видел; нашёл
+    # `validate_own_medicine.py`.
+    validator: validate-product-model        # runnable: tools/contours.py + ai_ops_kit/validation/validate_product_model.py
     human_approval: false
     applicability: [ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]
     required_evidence: [affects, changed_files, verdict]   # verdict ∈ ok|inconsistent
@@ -91,6 +95,33 @@ gates:
     never: >
       `not_changed` НЕ требует обновления документов — бюрократия «восемь документов на задачу»
       запрещена явно; незатронутый контур закрывается сам собой.
+
+  own_medicine:
+    id: own_medicine
+    purpose: >
+      Кит применяет к СЕБЕ ту культуру, которую доставляет дочкам. Перечень берётся из кода
+      доставки (`deliver_assets` / `cmd_init`, разбор AST), а не переписывается руками, поэтому
+      отстать от доставки может только заметно. По каждому пункту один из честных исходов:
+      выполнено / не применимо с НАЗВАННОЙ причиной / не выполнено; «не проверено» отдельной
+      меткой, потому что `unavailable != 0`. Здесь же проверяется, что правила, оплаченные полем
+      (`rules/core/field-lessons.yaml`), подкреплены резолвящейся ссылкой на место в репозитории:
+      правило без основания — лозунг. Класс: «требуем от других того, чего не делаем сами» —
+      релиз 3.36.9 закрывал такие находки по одной, глазами, и следующая порция нашлась бы так же.
+    stage: verify
+    blocking: false          # advisory: сначала полевые доказательства, потом блокировка
+    responsible_role: final-verifier
+    review_mode: read-only
+    validator: validate-own-medicine        # runnable: ai_ops_kit/validation/validate_own_medicine.py
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT, CRITICAL]
+    required_evidence: [self_application_measured, gaps_declared_with_reason]
+    # ПРИМЕЧАНИЕ: гейт осмыслен на репозитории, который САМ доставляет культуру (кит и его форки).
+    # Обычная дочка культуру получает, а не раздаёт: у неё `deliver_assets` не вызывается, и
+    # проверять самоприменение нечему. Отсюда узкая applicability и advisory-статус.
+    exemption_policy: >
+      Разрыв, объявленный в `KNOWN_GAPS` валидатора с причиной, гейт не роняет — он ходит
+      ратчетом: НОВЫЙ разрыв и разрыв, закрытый без списания, краснеют оба. Пустая причина
+      исходом не является.
 
   event_contract_consistency:
     id: event_contract_consistency
