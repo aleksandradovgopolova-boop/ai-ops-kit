@@ -156,6 +156,58 @@ def test_a_probe_without_a_reason_is_rejected():
     assert any("why" in e for e in errors), errors
 
 
+def test_a_mechanism_with_guards_but_no_seam_probe_is_rejected():
+    """ТРЕБОВАНИЕ ПРИЁМКИ: у механизма с охранными пробами обязана быть проба ШВА.
+
+    Охранная проба доказывает, что проверка ВНУТРИ механизма чем-то проверяется. Она не доказывает,
+    что механизм кто-то ЗОВЁТ. Оба дефекта дня были именно такими: сверки критериев не существовало, а
+    отчёт сообщал `delivered`; после разноса плана `ai-ops next` перестал советовать работу, потому что
+    историю не подали потребителю. Механизм в обоих случаях был исправен — шов нет.
+    """
+    only_guards = {"schema_version": 1, "kind": "mutation-probes", "probes": [
+        {"id": "g", "kind": "guard", "file": "mech.py", "find": "a", "replace_with": "b",
+         "tests": ["t"], "why": "охрана"}]}
+
+    errors = vmp.check(only_guards)
+
+    assert any("НЕТ пробы шва" in e and "mech.py" in e for e in errors), errors
+
+
+def test_a_seam_probe_in_the_consumer_covers_the_mechanism():
+    """Шовная проба живёт в ПОТРЕБИТЕЛЕ и называет, вызов чего защищает (`covers`).
+
+    Иначе правило требовало бы ломать вызов внутри самого механизма — то есть ровно не то, что нужно
+    проверить: вызов приходит извне.
+    """
+    ok = {"schema_version": 1, "kind": "mutation-probes", "probes": [
+        {"id": "g", "kind": "guard", "file": "mech.py", "find": "a", "replace_with": "b",
+         "tests": ["t"], "why": "охрана"},
+        {"id": "s", "kind": "seam", "covers": ["mech.py"], "file": "consumer.py",
+         "find": "call(", "replace_with": "skip(", "tests": ["t2"], "why": "шов"}]}
+
+    assert [e for e in vmp.check(ok) if "шва" in e] == []
+
+    # Шов без `covers` — ошибка: он ломается в ПОТРЕБИТЕЛЕ, а защищает другой механизм, и без
+    # `covers` реестр не отвечает, вызов чего именно проверяется.
+    no_covers = {"schema_version": 1, "kind": "mutation-probes", "probes": [
+        {"id": "s", "kind": "seam", "file": "consumer.py", "find": "a", "replace_with": "b",
+         "tests": ["t"], "why": "шов"}]}
+    assert any("без covers" in e for e in vmp.check(no_covers)), vmp.check(no_covers)
+    wrong = {"schema_version": 1, "kind": "mutation-probes", "probes": [
+        {"id": "g", "kind": "guard", "covers": ["mech.py"], "file": "mech.py", "find": "a",
+         "replace_with": "b", "tests": ["t"], "why": "охрана"}]}
+    assert any("covers указан при kind=guard" in e for e in vmp.check(wrong)), vmp.check(wrong)
+
+
+def test_an_unknown_probe_kind_is_rejected():
+    """Вид пробы вне словаря — не «наверное guard», а ошибка: тихое приведение скрыло бы опечатку."""
+    errors = vmp.check({"schema_version": 1, "kind": "mutation-probes", "probes": [
+        {"id": "p", "kind": "shov", "file": "m.py", "find": "a", "replace_with": "b",
+         "tests": ["t"], "why": "почему"}]})
+
+    assert any("kind 'shov'" in e for e in errors), errors
+
+
 def test_a_mutation_that_changes_nothing_is_rejected():
     """`replace_with` == `find`: такой мутант «убит» всегда, и проба лжёт о защите."""
     errors = vmp.check({"schema_version": 1, "kind": "mutation-probes", "probes": [

@@ -30,6 +30,8 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 PROBES_REL = "quality/mutation-probes.yaml"
 KIND = "mutation-probes"
 REQUIRED = ("id", "file", "find", "replace_with", "tests", "why")
+#: `guard` — охрана внутри механизма; `seam` — вызов механизма ИЗ потребителя.
+PROBE_KINDS = ("guard", "seam")
 
 
 def check(data: dict, root=None) -> list:
@@ -81,6 +83,52 @@ def check(data: dict, root=None) -> list:
                 elif hits > 1:
                     errors.append(f"проба '{pid}': образец встречается {hits} раз(а) в "
                                   f"{p.get('file')} — мутация неоднозначна")
+    errors += _seam_coverage_errors(probes)
+    return errors
+
+
+def _seam_coverage_errors(probes) -> list:
+    """У механизма с охранными пробами обязана быть проба ШВА (требование приёмки, 2026-08-14).
+
+    ЗАЧЕМ. Охранная проба доказывает, что проверка внутри механизма чем-то проверяется. Она НЕ
+    доказывает, что механизм кто-то зовёт: модульные тесты остаются зелёными, когда конвейер до
+    механизма не доходит, — именно так дефект и жил (B2-14: сверки не существовало, а отчёт бодро
+    сообщал `delivered`; разнос плана: `ai-ops next` перестал советовать работу, потому что историю
+    не подали потребителю). Поэтому на каждый файл с `guard`-пробами должна быть хотя бы одна
+    `seam`-проба, которая ломает ВЫЗОВ и требует падения интеграционного теста.
+
+    Шовная проба обычно живёт в ДРУГОМ файле — в потребителе, — поэтому она называет `covers`:
+    какие механизмы её падение защищает. `covers` без `seam` бессмысленен и тоже называется.
+    """
+    errors = []
+    guarded, seams = set(), {}
+    for p in probes:
+        if not isinstance(p, dict):
+            continue
+        kind = str(p.get("kind") or "guard").strip().lower()
+        pid = p.get("id") or "<без id>"
+        if kind not in PROBE_KINDS:
+            errors.append(f"проба '{pid}': kind '{p.get('kind')}' не в {list(PROBE_KINDS)}")
+            continue
+        if kind == "guard":
+            if p.get("file"):
+                guarded.add(str(p["file"]))
+            if p.get("covers"):
+                errors.append(f"проба '{pid}': covers указан при kind=guard — это поле шовной пробы")
+        else:
+            # `covers` у шва ОБЯЗАТЕЛЕН, а не выводится из `file`. Вывод по умолчанию делал ветку
+            # почти недостижимой (у пробы и так обязателен `file`) и прятал главный вопрос: шов
+            # ломается в потребителе, а защищает ДРУГОЙ механизм, и это должно быть написано.
+            covers = p.get("covers") or []
+            if not covers:
+                errors.append(f"проба '{pid}': kind=seam без covers — непонятно, вызов ЧЕГО она "
+                              f"защищает (укажите файл механизма, даже если он тот же)")
+            for c in covers:
+                seams.setdefault(str(c), []).append(pid)
+    for f in sorted(guarded - set(seams)):
+        errors.append(f"у механизма '{f}' есть охранные пробы, но НЕТ пробы шва: снятие охраны "
+                      f"поймается, а отключённый ВЫЗОВ механизма — нет. Модульные тесты остаются "
+                      f"зелёными, когда до механизма не доходит конвейер, и именно так дефект живёт")
     return errors
 
 
