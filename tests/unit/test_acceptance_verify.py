@@ -131,6 +131,37 @@ def test_a_horizontal_rule_is_not_a_criterion():
     assert av.parse_criteria("# Заголовок\n***\n") == []
 
 
+def test_mixed_markers_lose_nothing():
+    """Второе ревью PR #118: `- один` + `*два` — и второй критерий ИСЧЕЗАЛ.
+
+    Требование пробела после маркера (правка первого ревью) породило свой класс потерь: строка без
+    пробела пунктом не считалась, а один найденный пункт выключал прозаический разбор. Отчёт
+    показывал `count: 1` — «выполнен по умолчанию» через новую дверь.
+    """
+    got = [c["text"] for c in av.parse_criteria("- крит один\n*крит два\n-крит три")]
+
+    assert got == ["крит один", "крит два", "крит три"], got
+
+
+def test_a_multiline_list_item_keeps_its_tail():
+    """Хвост многострочного пункта (`- |` в YAML) не теряется, а продолжает свой критерий."""
+    got = [c["text"] for c in av.parse_criteria(
+        "- в README нет строк с public/media\n  и структура описана верно\n- второй критерий")]
+
+    assert got == ["в README нет строк с public/media и структура описана верно", "второй критерий"]
+
+
+def test_spaced_horizontal_rules_are_not_criteria():
+    """Второе ревью: `* * *` и `- - -` становились пунктами `* *` / `- -`.
+
+    Неопровержимый псевдопункт -> честный `undetermined` -> `verified=False` навсегда: одна
+    декоративная строка обнуляла сверку. Тот же дефект, что `---`, только в разнесённом варианте.
+    """
+    assert [c["text"] for c in av.parse_criteria("- крит один\n* * *\n- крит два")] == [
+        "крит один", "крит два"]
+    assert [c["text"] for c in av.parse_criteria("- крит\n- - -\n")] == ["крит"]
+
+
 def test_criteria_are_parsed_without_losing_items():
     """Разбор не теряет критерии: списки, чекбоксы, нумерация, проза — всё становится пунктами.
 
@@ -166,6 +197,37 @@ def test_every_shape_of_the_spec_section_is_read(tmp_path, section, expected):
     assert problem is None, problem
     assert len(items) == expected, f"разобрано {items} из раздела {section!r}"
     assert text
+
+
+@pytest.mark.parametrize("section,expect_problem", [
+    ("acceptance_criteria:\n    status: complete\n    note: нет строк с public/media\n", True),
+    ("acceptance_criteria:\n    status: missing\n", False),          # не заполнен НАМЕРЕННО
+    ("acceptance_criteria:\n    AC-1: нет строк с public/media\n    AC-2: структура верна\n", False),
+    ("acceptance_criteria:\n    AC-1:\n      вложено: глубже\n", True),   # ни одного текста
+])
+def test_an_unrecognised_mapping_never_returns_to_silence(tmp_path, section, expect_problem):
+    """Второе ревью PR #118: мэппинг без `content` снова давал «» и problem=None — то есть тишину.
+
+    `spec_levels` считает такой раздел `complete`, а прогон не печатал НИ СЛОВА: та же связка
+    «`spec-coverage: complete` + молчание», ради которой всё писалось. Теперь нераспознанная форма
+    называет проблему; `AC-1: текст` читается как критерии; молчание оставлено ровно за разделом,
+    не заполненным намеренно (`missing`/`declined`/`not_applicable`).
+    """
+    (tmp_path / "features" / "w").mkdir(parents=True)
+    (tmp_path / "features" / "w" / "spec.yaml").write_text(
+        f"schema_version: 1\nkind: FeatureSpec\nworkitem_id: w\nsections:\n  {section}",
+        encoding="utf-8")
+
+    text, items, problem = av.criteria_from_spec(tmp_path, "w")
+
+    if expect_problem:
+        assert problem, "нераспознанная форма раздела вернулась к молчанию"
+    else:
+        assert problem is None, problem
+        if "AC-1" in section:
+            assert len(items) == 2, items
+        else:
+            assert (text, items) == ("", []), "намеренно не заполненный раздел не выдумывает критерии"
 
 
 def test_an_unreadable_spec_is_named_not_silently_empty(tmp_path):
@@ -252,7 +314,7 @@ def test_a_quote_from_a_deleted_line_cannot_prove_the_result(tmp_path):
     все». Заземление обязано смотреть на состояние ПОСЛЕ правки, иначе оно доказывает прошлое.
     """
     (tmp_path / "README.md").write_text("# Проект\n\nмедиа в проекте нет\n", encoding="utf-8")
-    diff = ("Unified-дифф ревизии:\n--- a/README.md\n+++ b/README.md\n"
+    diff = ("Unified-дифф ревизии:\n--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n"
             "-public/media/ — медиафайлы проекта\n+медиа в проекте нет\n")
     crit = [{"id": "AC-1", "text": "в README нет строк с `public/media`"}]
     prov = _provider([_read(), _verdict([
@@ -266,6 +328,89 @@ def test_a_quote_from_a_deleted_line_cannot_prove_the_result(tmp_path):
     assert "УДАЛЁННОЙ" in rep["criteria"][0]["reason"], rep["criteria"][0]["reason"]
 
 
+def test_a_commit_message_is_not_evidence(tmp_path):
+    """fail-closed #2d (второе ревью PR #118): судья цитировал СООБЩЕНИЕ КОММИТА писателя.
+
+    Дыру создала правка про диапазон base..head: в контекст попал `git log --oneline`, а сообщение
+    коммита — это `ai-ops: <текст задачи>`, то есть пересказ критерия. Цитата находилась, основание
+    «подтверждалось», отчёт печатал «выполнены все». Содержимым считается только тело ханка —
+    ни журнал коммитов, ни `--stat`, ни проза вокруг диффа.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n\npublic/media/ — каталог медиа\n", encoding="utf-8")
+    ctx = ("ИНТЕГРИРОВАННЫЙ дифф последовательности aaaaaaa..bbbbbbb:\ngit diff --stat:\n"
+           " README.md | 2 +-\n\nКоммиты диапазона (по пакетам):\n"
+           "bbbbbbb ai-ops: в README больше нет строк с public/media\n\n"
+           "Combined unified-дифф base..head:\ndiff --git a/README.md b/README.md\n"
+           "--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n"
+           "-public/media/ — медиафайлы проекта\n+public/media/ — каталог медиа\n")
+
+    ok, why = av._ground_quote("в README больше нет строк с public/media", ctx, tmp_path, "README.md")
+    assert ok is False, "сообщение коммита принято за основание"
+    assert av._ground_quote(" README.md | 2 +-", ctx, tmp_path, "README.md")[0] is False, (
+        "строка статистики диффа принята за содержимое")
+    # а настоящее содержимое ханка по-прежнему заземляется
+    assert av._ground_quote("public/media/ — каталог медиа", ctx, tmp_path, "README.md")[0] is True, why
+
+
+def test_absence_is_provable_and_a_masked_removal_is_caught(tmp_path):
+    """Критерий об ОТСУТСТВИИ доказуем — и доказательство сильнее прежнего (второе ревью PR #118).
+
+    До этого при чистом удалении единственным дословным свидетельством была удалённая строка, а её
+    заземление справедливо отвергает: критерий уходил в `undetermined`, и прогон печатал «критерии
+    НЕ сверялись» при том что всё выполнено. `evidence=absent` проверяется чтением файла — и тот же
+    механизм ловит ЗАМАСКИРОВАННОЕ удаление, на котором и родился B2-14.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n\nмедиа в проекте нет\n", encoding="utf-8")
+    ctx = ("diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n"
+           "-public/media/ — медиафайлы проекта\n+медиа в проекте нет\n")
+    crit = [{"id": "AC-1", "text": "в README больше нет строк с `public/media`"}]
+
+    # (а) честное удаление: отсутствие подтверждено чтением файла
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent", "quote": "public/media",
+         "source": "README.md"}])])
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
+    assert rep["verified"] is True and rep["met_all"] is True, rep["reason"]
+
+    # (б) замаскированное удаление: строка осталась в другом виде — основание ОПРОВЕРГНУТО чтением
+    (tmp_path / "README.md").write_text("# Проект\n\npublic/media/ — каталог медиа\n", encoding="utf-8")
+    prov2 = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent", "quote": "public/media",
+         "source": "README.md"}])])
+    rep2 = av.verify(tmp_path, crit, prov2, revision="abc", change_context=ctx)
+    assert rep2["verified"] is False and rep2["undetermined"] == ["AC-1"]
+    assert "В ФАЙЛЕ ЕСТЬ" in rep2["criteria"][0]["reason"], rep2["criteria"][0]["reason"]
+
+
+def test_absence_without_a_source_is_not_proof(tmp_path):
+    """`absent` без файла — «нигде не нашёл», а это не доказательство. Контракт такое не пропускает."""
+    crit = [{"id": "AC-1", "text": "в README нет строк с public/media"}]
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent", "quote": "public/media"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context="@@ -1 +1 @@\n+текст\n")
+
+    assert rep["verified"] is False
+    assert "evidence=absent требует quote и source" in rep["reason"], rep["reason"]
+
+
+def test_a_removed_line_starting_with_dashes_is_still_recognised(tmp_path):
+    """Второе ревью, низкий приоритет: удалённая строка на `--` считалась заголовком диффа.
+
+    Она не попадала ни в результат, ни в удалённые — и информативная причина «цитата только в
+    УДАЛЁННОЙ строке» деградировала до общей «не найдена». Причина, потерявшая конкретику,
+    отправляет читающего искать не там.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")
+    ctx = ("diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1,2 +1 @@\n"
+           "---старый разделитель\n+# Проект\n")
+
+    ok, why = av._ground_quote("--старый разделитель", ctx, tmp_path, "README.md")
+
+    assert ok is False
+    assert "УДАЛЁННОЙ" in why, why
+
+
 def test_a_moved_line_is_still_grounded_if_it_lives_in_the_file(tmp_path):
     """Границы того же правила: перенесённая строка выглядит удалённой, но живёт в файле.
 
@@ -273,7 +418,8 @@ def test_a_moved_line_is_still_grounded_if_it_lives_in_the_file(tmp_path):
     «этого больше нет» от «это переехало», иначе её научатся обходить как шумную.
     """
     (tmp_path / "README.md").write_text("# Проект\n\nsrc/ — исходный код\n", encoding="utf-8")
-    diff = ("--- a/README.md\n+++ b/README.md\n-src/ — исходный код\n+## Структура\n")
+    diff = ("--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n"
+            "-src/ — исходный код\n+## Структура\n")
     crit = [{"id": "AC-1", "text": "структура описана"}]
     prov = _provider([_read(), _verdict([
         {"id": "AC-1", "status": "met", "quote": "src/ — исходный код", "source": "README.md"}])])

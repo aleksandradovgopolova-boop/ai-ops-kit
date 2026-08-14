@@ -29,6 +29,10 @@ import sys
 from pathlib import Path
 
 CRITERION_STATUS = {"met", "unmet", "undetermined"}
+# Вид основания (второе ревью PR #118): `present` — цитата ЕСТЬ в результате; `absent` — её В ФАЙЛЕ
+# НЕТ, и это доказательство для критериев об отсутствии. Второй вид требует source по построению:
+# отсутствие подтверждается только чтением файла, «нигде не нашёл» доказательством не является.
+EVIDENCE_KINDS = {"present", "absent"}
 
 
 def check(data: dict, criterion_ids=None) -> list:
@@ -68,6 +72,12 @@ def check(data: dict, criterion_ids=None) -> list:
             errors.append(f"{cid}: status=met без quote — «выполнен» без основания не проверяем")
         if st == "met" and not source:
             errors.append(f"{cid}: status=met без source — непонятно, где искать цитату")
+        ev = str(c.get("evidence") or "present").strip().lower()
+        if ev not in EVIDENCE_KINDS:
+            errors.append(f"{cid}: evidence '{c.get('evidence')}' не в {sorted(EVIDENCE_KINDS)}")
+        elif ev == "absent" and not (quote and source):
+            errors.append(f"{cid}: evidence=absent требует quote и source — отсутствие "
+                          f"подтверждается только чтением файла")
         if st in ("unmet", "undetermined") and not (reason or quote):
             errors.append(f"{cid}: status={st} требует reason или quote (вердикт без причины)")
 
