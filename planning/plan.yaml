@@ -70,6 +70,49 @@ goals:
       ci_lint_job_green: true
       evidence_scope_named_not_implied: true
 
+  # ─── этап Product OS (решение владельца 14.08.2026, ep-2026-08-14-product-os) ───────────────
+  - id: qualification-closeout
+    status: active
+    outcome:
+      # Семь чисел прогона + перечень внутренних сущностей, которые пришлось понимать человеку.
+      real_task_reaches_verified_pr_without_patching_the_kit: false
+      repeated_on_two_different_live_repos: false
+      # Добавлено по замеру, а не по мнению: 36 находок за 5 кругов ревью на PR #118, ни одной не
+      # поймали 11 джоб CI. Пока контур не ловит этот класс, новые циклы поедут так же.
+      contour_catches_declared_but_not_executed: false
+
+  - id: plan-as-control-plane
+    status: active
+    outcome:
+      open_pr_cannot_coexist_with_todo: false
+      done_requires_verified_result_not_merged_pr: false
+      closed_investigations_leave_the_active_plan: false
+
+  - id: product-decision-loop
+    status: active
+    outcome:
+      # Четыре объекта вместо новых документов: Opportunity Brief, Product Decision Record,
+      # Outcome Contract, Outcome Readout.
+      decision_names_alternatives_and_what_is_not_done: false
+      feature_has_baseline_target_and_guardrails: false
+
+  - id: storybook-as-visual-contract
+    status: active
+    outcome:
+      # Сторона evidence уже построена (UIEvidenceBundle); достраивается сторона создания.
+      required_stories_derived_from_contract_by_code: false
+      experience_options_offered_with_tradeoffs: false
+
+  - id: owner-speaks-product-not-pipeline
+    status: active
+    outcome:
+      owner_never_edits_yaml_or_knows_feature_id: false
+
+  - id: outcome-and-analytics-loop
+    status: active
+    outcome:
+      events_verified_in_runtime_not_declared: false
+
 work:
   # ─── checks-that-run ────────────────────────────────────────────────────────────────────────
   - id: swallowed-exceptions-audit
@@ -970,3 +1013,153 @@ work:
     #      агентам, решение о ней за владельцем);
     #   `gitignore` (`.ai/usage/*.jsonl` и `.ai/reevaluate-evidence-*.json` не скрыты у самого кита).
     # Гейт advisory до полевых доказательств — блокировку включать отдельным решением.
+
+  # ─── этап Product OS: работа под новыми целями ────────────────────────────────────────────────
+  # ОТКУДА ВЗЯТА. Ревью владельца 14.08.2026 -> `decisions/registry.yaml → ep-2026-08-14-product-os`
+  # (там же три поправки по фактам репозитория). Ничего не придумано: каждая работа названа в
+  # решении владельца либо выведена из замера, указанного рядом.
+  - id: contour-catches-declared-not-executed
+    title: Контур ловит класс «объявлено — не исполняется», а не только поломки
+    type: quality
+    goal: qualification-closeout
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    write_scope: [tests/, ai_ops_kit/validation/, .github/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # ПОВОД — ЗАМЕР ДНЯ, не мнение: PR #118 прошёл ПЯТЬ кругов свежего ревью, 36 находок, из них 6
+    # уровня HIGH, и НИ ОДНУ не поймали 11 обязательных джоб CI (включая coverage, python39-compat,
+    # clean-install и четыре группы quality). Три HIGH были ложным green ВНУТРИ механизма, который
+    # ложный green и чинит; дважды дыру создавала правка предыдущего круга.
+    # ЧТО ИМЕННО НЕ РАБОТАЕТ. Тесты проверяют, что код делает то, что написано, и молчат о том, что
+    # проверка ничего не проверяет. Мутация ловит это за минуты: восемь правок дня были «покрыты
+    # тестами» и не проверялись ничем — снятие проверки оставляло тесты зелёными.
+    # ПРЕДЛОЖЕНИЕ (решать при взятии): (а) мутационная проверка как ТРЕБОВАНИЕ приёмки работы, а не
+    # личная привычка исполнителя — снятие каждой новой проверки обязано ронять свой тест, и это
+    # называется в отчёте; (б) тесты ШВОВ и ПОРЯДКА для каждого нового механизма (модульный тест
+    # остаётся зелёным, если конвейер механизм не звал — так дефект и жил); (в) `field-lessons.yaml`
+    # уже содержит правило про мутацию — сделать его исполняемым, а не прозой.
+    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: добавлять джобу, которая гоняет то же, что уже гоняется. Класс не в
+    # объёме прогонов, а в том, что зелёное не означает проверенного.
+
+  - id: plan-split-active-from-history
+    title: Разнести план на активную работу, находки, решения и историю
+    type: quality
+    goal: plan-as-control-plane
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    write_scope: [planning/, findings/, history/, ai_ops_kit/planning/]
+    value: high
+    affects: {planning_execution: true, delivery_operations: true}
+    # ПОВОД. `planning/plan.yaml` — одновременно план, бэклог, журнал расследований, changelog и
+    # отчёт квалификации. Для археологии это ценно, для управления — нет: чтобы ответить «что идёт
+    # сейчас и что заблокировано», приходится читать разбор десятков уже закрытых дефектов.
+    # ЧТО ДЕЛАЕМ: активная и ближайшая работа остаётся в плане; расследования уходят в `findings/`,
+    # решения и trade-offs — в `decisions/`, доказательства прогонов — в `qualification/`,
+    # завершённое — в `history/`. Правила связи: открытый PR не сосуществует со статусом `todo`,
+    # merged PR сам по себе не даёт `done` (нужен проверенный результат), каждая работа связана с
+    # целью, PR, веткой, evidence и решением владельца, если оно требовалось.
+    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: терять разбор. Комментарии закрытых работ — оплаченное знание; они
+    # переезжают, а не удаляются, и ссылка из истории обязана резолвиться (`validate_references`).
+
+  - id: four-product-objects
+    title: Свернуть продуктовые шаблоны в четыре управляющих объекта
+    type: product
+    goal: product-decision-loop
+    status: todo
+    owner_role: product
+    depends_on: [plan-split-active-from-history]
+    write_scope: [templates/product/, workflows/, schemas/, ai_ops_kit/planning/]
+    value: high
+    affects: {product_strategy: true, planning_execution: true}
+    # РЕШЕНИЕ ВЛАДЕЛЬЦА: новых агентов и документов НЕ плодить. Существующие шаблоны (Problem
+    # Statement, JTBD, Personas, Hypotheses, Opportunity Solution Tree, Experiment, Launch/Adoption
+    # Plan, Post-launch Review, Feedback Loop, Product Analytics Plan) сворачиваются в четыре
+    # объекта: Opportunity Brief, Product Decision Record, Outcome Contract, Outcome Readout.
+    # ЧТО ПРОВЕРЯЕТСЯ КОДОМ, а не наличием файла: у решения названы рассмотренные альтернативы и то,
+    # что сознательно НЕ делаем; у функции есть baseline, target, guardrails и условие пересмотра;
+    # после релиза есть readout. Иначе получится хорошо оформленный, но слабый продуктовый пакет —
+    # это уже названный риск (`plan.yaml` -> spec-coverage: `complete` = «раздел заполнен»).
+    # УРОК PR #118, переносимый сюда: утверждение обязано НАЗЫВАТЬ СИЛУ своего основания. Поле
+    # «evidence: есть» без указания, чем подтверждено, — будущий ложный green той же формы.
+
+  - id: experience-contract-drives-stories
+    title: Обязательные stories выводятся из Experience Contract кодом, а не объявляются прозой
+    type: visual
+    goal: storybook-as-visual-contract
+    status: todo
+    owner_role: frontend
+    depends_on: [four-product-objects]
+    write_scope: [templates/visual/, ai_ops_kit/ui/, schemas/, workflows/]
+    value: high
+    affects: {engineering_quality_security: true, product_strategy: true}
+    # ЧТО УЖЕ ЕСТЬ (поправка по фактам репозитория, 14.08.2026): сторона EVIDENCE построена —
+    # `ui/storybook_adapter.py` собирает UIEvidenceBundle (build/interaction/a11y/visual/
+    # design_system/state_coverage с required-состояниями), `validate_storybook_evidence.py` не даёт
+    # выдать «нет данных» за «чисто» и запрещает pass при непустых числах нарушений.
+    # ЧЕГО НЕТ: стороны СОЗДАНИЯ. Нужен Experience Contract (задача пользователя, flow, экраны,
+    # состояния, роли, тексты, responsive, accessibility, компоненты, токены, события аналитики,
+    # нерешённые вопросы, осознанные компромиссы), из которого список обязательных stories
+    # ВЫВОДИТСЯ КОДОМ. Объявленный вручную список — то же, что capability без реализации.
+    # ПЛЮС: `ui-ux-designer` предлагает два-три варианта опыта с trade-offs и вопросами владельцу,
+    # а не один «правильный» макет. Дизайн становится решением, а не генерацией.
+    # ГРАНИЦА: гейты остаются advisory до обкатки на child (правило dp-002). Storybook сам по себе
+    # не доказательство хорошего UX — он рабочая поверхность, где дизайн виден и проверяем.
+
+  - id: storybook-profile-measured
+    title: Профиль Storybook в модели репозитория — по замеру, а не по package.json
+    type: engineering
+    goal: storybook-as-visual-contract
+    status: todo
+    owner_role: frontend
+    depends_on: []
+    write_scope: [ai_ops_kit/planning/, ai_ops_kit/ui/, tests/]
+    value: medium
+    affects: {engineering_quality_security: true, planning_execution: true}
+    # `ai-ops model` должен знать: установлен ли Storybook, версия, конфигурация, команды запуска и
+    # сборки, где лежат stories, addons, дизайн-система, доступные токены, число компонентов,
+    # покрытие stories, СОБИРАЕТСЯ ли Storybook, есть ли accessibility/interaction тесты и visual
+    # regression. Ключевое слово — ИЗМЕРЕНО: вывод из одного `package.json` — это предположение, а
+    # предположение, выданное за факт модели, ровно тот класс, на котором горел F-019 (доказательство
+    # CI указывало на каталог, в который кит сам пишет).
+
+  - id: cockpit-vertical-slice
+    title: Одна вертикальная функция Cockpit целиком — от проблемы до измеренного результата
+    type: product
+    goal: owner-speaks-product-not-pipeline
+    status: todo
+    owner_role: product
+    depends_on: [experience-contract-drives-stories, contour-catches-declared-not-executed]
+    write_scope: [qualification/]
+    value: high
+    affects: {product_strategy: true, delivery_operations: true, analytics_learning: true}
+    # ПОЛИГОН ВЫБРАН ВЛАДЕЛЬЦЕМ: `ai-ops-cockpit` — интерфейс самого кита, там особенно заметны
+    # термины и команды, и кит улучшает собственный интерфейс собственным процессом.
+    # ПЕРВАЯ РАБОТА — НЕ «улучшить дизайн», а одна функция: экран активной работы, на котором
+    # владелец без знания feature id, гейтов и runtime понимает, что делает система, почему она
+    # остановилась, что требуется от него и что будет дальше.
+    # ПУТЬ ЦЕЛИКОМ: Opportunity Brief -> Product Decision Record -> Experience Contract -> Story
+    # Requirements -> прототипы в Storybook -> решение владельца -> UX review -> реализация ->
+    # Storybook build -> interaction tests -> accessibility -> visual verification -> verified PR ->
+    # Outcome Contract -> проверка после использования.
+    # СЛЕПОЕ ПЯТНО ПОЛИГОНА, названное заранее: владелец там сам себе пользователь, поэтому
+    # «ноль технических вмешательств» самопроверкой не мерится. Нужен либо сторонний человек на
+    # первом прогоне, либо сценарий владельца, записанный ДО прогона и исполняемый буквально.
+
+  - id: events-verified-in-runtime
+    title: События аналитики проверяются в рантайме, а не объявляются в плане
+    type: engineering
+    goal: outcome-and-analytics-loop
+    status: todo
+    owner_role: analytics
+    depends_on: [four-product-objects]
+    write_scope: [ai_ops_kit/intelligence/, templates/analytics/, tests/]
+    value: medium
+    affects: {analytics_learning: true, product_strategy: true}
+    # Цепочка: Outcome Contract -> Tracking Plan -> реализация -> ПРОВЕРКА ПОСТУПЛЕНИЯ событий ->
+    # Product Health -> инсайты -> следующий discovery. Существующие workflow ANALYTICS и INSIGHTS
+    # дают основу; их нужно включить в ОДИН вертикальный сценарий, а не развивать изолированно.
+    # Ключевое: «события объявлены» и «события доезжают» — разные факты, и второй проверяется
+    # рантаймом. Тот же инвариант, что `unavailable != 0`.
