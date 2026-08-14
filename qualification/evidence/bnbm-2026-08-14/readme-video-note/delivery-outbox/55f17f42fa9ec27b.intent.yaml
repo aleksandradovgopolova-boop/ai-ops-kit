@@ -1,0 +1,10 @@
+schema_version: 1
+kind: DeliveryIntent
+delivery_id: 55f17f42fa9ec27b
+workitem_id: readme-video-note
+repository: aleksandradovgopolova-boop/bolshe-ne-budu-menshe
+branch: ai-ops/readme-video-note
+base_ref: main
+base_sha: 0cd5bb07dd277cc8c6d513842c3454d86a38b958
+commit_sha: cbef7a7dc086d6dae7db49aba139620bdb249a05
+status: completed
