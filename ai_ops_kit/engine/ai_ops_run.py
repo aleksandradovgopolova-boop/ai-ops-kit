@@ -1561,6 +1561,13 @@ def _print_pipeline(r):
         print(f"  освобождены (не применимо): {', '.join(r['exemptions'])}")
     if r.get("tests_warn"):
         print(f"  ⚠ {r['tests_warn']}")
+    # B2-14: «доставлено» не должно читаться как «критерии выполнены». Прогон на живом продукте отдал
+    # PR со `sha_verified: True`, а критерий приёмки остался невыполненным — и в отчёте об этом не
+    # было ни строки. Непроверенное называется непроверенным ЗДЕСЬ, в том же выводе, где стоит
+    # «готово», а не только в JSON.
+    _ac = r.get("acceptance_criteria") or {}
+    if _ac.get("declared") and not _ac.get("verified"):
+        print(f"  ⚠ критерии приёмки НЕ сверялись с результатом: {_ac.get('reason')}")
     print(f"  гейты: оценено {len(gates.get('evaluated') or [])} · "
           f"не закрыто {gates.get('unmet') or []} · блокирует: {gates.get('blocked')}")
     lc = r.get("lifecycle")

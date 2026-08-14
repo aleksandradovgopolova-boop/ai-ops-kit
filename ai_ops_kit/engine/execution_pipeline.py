@@ -782,6 +782,43 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         spec_incomplete = [f"<spec-assess-failed: {type(_e).__name__}>"]
     spec_complete_ok = not spec_incomplete
 
+    # КРИТЕРИИ ПРИЁМКИ НЕ СВЕРЯЮТСЯ С РЕЗУЛЬТАТОМ (B2-14, живой прогон 14.08.2026).
+    #
+    # ЗАМЕР, а не опасение. Прогон на реальном продукте отдал владельцу draft PR со
+    # `sha_verified: True` и `overall_status: delivered`, тогда как критерий приёмки требовал
+    # дословно «в README нет строк с `public/media`» — а в доставленном тексте эта строка осталась,
+    # только описание стало расплывчатым. Ложное утверждение о проекте (каталога не существует) не
+    # ушло, а замаскировалось. `spec-coverage` при этом сообщал `acceptance_criteria: complete`.
+    #
+    # `complete` В SPEC-COVERAGE ОЗНАЧАЕТ «РАЗДЕЛ ЗАПОЛНЕН», А НЕ «КРИТЕРИЙ ВЫПОЛНЕН». Разница в
+    # одном слове, а цена — ложный green на последнем шаге: владелец получает работу, помеченную
+    # проверенной, и приёмка перекладывается на него без предупреждения.
+    #
+    # ЧЕГО ЭТА ПРАВКА НЕ ДЕЛАЕТ: она НЕ сверяет критерии. Сверка требует независимого ревьюера,
+    # который читает дифф против критериев и выносит вердикт по каждому, — это объявлено отдельной
+    # работой (`acceptance-criteria-verified-by-reviewer`), потому что делать её наспех значило бы
+    # заменить один необоснованный вердикт другим.
+    # ЧТО ОНА ДЕЛАЕТ: перестаёт выдавать непроверенное за проверенное. Непроверенное называется
+    # непроверенным — тот же инвариант, что `unavailable != 0` и «сверять нечего» в контурах.
+    _ac_text = ""
+    try:
+        import yaml as _yaml
+        _sp = _sl._spec_path(child_root, wid)
+        if _sp.is_file():
+            _spec_doc = _yaml.safe_load(_sp.read_text(encoding="utf-8")) or {}
+            _ac_text = str((((_spec_doc.get("sections") or {}).get("acceptance_criteria") or {})
+                            .get("content") or "")).strip()
+    except Exception:  # noqa: BLE001 — не смогли прочитать спеку: это «не знаю», а не «критериев нет»
+        _ac_text = ""
+    acceptance_criteria = {
+        "declared": bool(_ac_text),
+        "verified": False,
+        "verifier": None,
+        "reason": ("критерии объявлены, но с результатом НЕ сверялись: механизма сверки нет "
+                   "(`spec-coverage: complete` означает «раздел заполнен», а не «критерий выполнен»)"
+                   if _ac_text else "критерии приёмки не объявлены — сверять нечего"),
+    }
+
     # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
     # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
     # превышении context budget выполнение блокируется или задача дробится"). Мягкие оси
@@ -1040,6 +1077,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                     "invalid": [e.get("gate") for e in spec_prestage_bad],
                                     "implementation_skipped": bool(spec_prestage_bad)}},
         "context_overflow": context_overflow,
+        "acceptance_criteria": acceptance_criteria,   # B2-14: сверялись ли критерии с результатом
         # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + spec-depth +
         # не-overflow + (all-green: гейты не блокируют | no-regressions: нет новых провалов И blocking-гейты пройдены)
         "ready_for_pr": ready,
