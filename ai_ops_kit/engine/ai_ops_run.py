@@ -36,7 +36,7 @@ import yaml
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.engine import run_plan          # noqa: E402
-from ai_ops_kit.engine.pipeline_helpers import work_produced   # noqa: E402
+from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending   # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work       # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
@@ -1433,6 +1433,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _st, _why = "blocked", f"гейты не закрыты: {', '.join(_unmet) or 'см. отчёт'}"
         else:
             _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
+        # B2-20 (повтор B2-12, живой прогон 14.08.2026): `resume` завершённой-но-НЕДОСТАВЛЕННОЙ работы
+        # заново звал писателя, получал ноль правок — потому что делать уже нечего — и хоронил готовый
+        # READY_FOR_PR в `blocked: код не написан`. Работа с коммитом на ветке пропадала из активного
+        # состояния, и владелец видел «кит не справился» там, где кит справился и ждал доставки.
+        # Продолжение поверх существующей ветки без новых правок — это НЕ «код не написан».
+        if _st == "blocked" and delivery_pending(rep):
+            print("  работа прошлого прогона на ветке, дописывать нечего — нужна ДОСТАВКА, а не "
+                  "повторный прогон: запусти с open_pr (и GITHUB_TOKEN), либо открой PR из ветки сам")
+            with contextlib.redirect_stdout(sys.stderr):
+                active_work.finish_cmd(aw_path, fid, status="blocked",
+                                       reason="ждёт доставки: работа готова на ветке, новых правок нет")
+            _ls.merge_bookkeeping_losses(rep)
+            return rep
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
         _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
@@ -1583,6 +1596,13 @@ def _print_pipeline(r):
     # выполненного было бы тем же смешением, что и «доставлено» = «выполнено»: сверка, нашедшая
     # невыполненный критерий, обязана назвать ЕГО, а не сообщить, что она состоялась.
     _ac = r.get("acceptance_criteria") or {}
+    # B2-18 (живой прогон 14.08.2026): когда критериев НЕ БЫЛО вовсе, вывод молчал о них совсем — и
+    # `delivered` читалось как «проверено». Урок B2-14 («доставлено ≠ выполнено») был закрыт только
+    # для случая, когда критерии есть. Отсутствие критериев — тоже факт о работе, и владелец узнаёт
+    # о нём в том же выводе, где стоит «готово».
+    if not _ac.get("declared") and r.get("ready_for_pr"):
+        print("  ⚠ критериев приёмки не было объявлено — проверять было нечего; «готово» здесь "
+              "означает «изменение внесено и гейты закрыты», а не «результат сверен с ожиданием»")
     if _ac.get("declared") and not _ac.get("verified"):
         print(f"  ⚠ критерии приёмки НЕ сверялись с результатом: {_ac.get('reason')}")
     elif _ac.get("declared") and not _ac.get("met_all"):
