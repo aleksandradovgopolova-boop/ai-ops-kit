@@ -144,6 +144,17 @@ _register({
 })
 
 _register({
+    "id": "INV-DELIVERY-004",
+    "description": "DeliveryReceipt with checks_verified=True must have checks_total >= 1",
+    "severity": "critical",
+    # R-41: вердикт «доставку проверяли» нельзя выдать при нуле прогонов. Инвариант закрывает не
+    # ошибку записи, а соблазн: единственный способ получить checks_verified=True — реальные прогоны.
+    "check": lambda checks_verified=None, checks_total=None, **kw: (
+        not checks_verified
+    ) or (isinstance(checks_total, int) and checks_total >= 1),
+})
+
+_register({
     "id": "INV-DELIVERY-003",
     "description": "DeliveryIntent always has commit_sha and branch",
     "severity": "critical",

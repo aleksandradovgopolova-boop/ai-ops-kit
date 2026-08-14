@@ -103,7 +103,9 @@ def compute(child_root: str) -> dict:
       kit          — общая сводка (version, child_root)
       cost         — стоимость: total, by_task_type, by_provider, by_role, honesty flags
       workitems    — задачи: count, by_status, by_lifecycle, by_workflow
-      delivery     — доставка: total, sha_verified, merged, not_delivered, mismatch
+      delivery     — доставка: total, sha_verified, merged, not_delivered, mismatch,
+                     а также (R-41) checks_verified / checks_absent / checks_unknown — доставку
+                     кто-то проверял / прогонов не было / неизвестно (старые расписки, недоступный API)
       models       — модели: by_provider, by_model, measured vs unavailable
     """
     root = Path(child_root)
@@ -137,6 +139,11 @@ def compute(child_root: str) -> dict:
             "not_delivered": 0,
             "mismatch": 0,
             "unavailable": 0,
+            # R-41: доставка, которую НИКТО не проверял. Отдельным числом, а не внутри sha_verified:
+            # «наш коммит доехал» и «его кто-то проверил» — разные утверждения, и второго раньше не было.
+            "checks_absent": 0,
+            "checks_verified": 0,
+            "checks_unknown": 0,
         },
         "models": {
             "by_provider": {},
@@ -208,6 +215,15 @@ def compute(child_root: str) -> dict:
                 report["delivery"]["mismatch"] += 1
             elif st == "unavailable":
                 report["delivery"]["unavailable"] += 1
+            # Расписки до R-41 полей о проверках не имеют — это не «проверок не было», это
+            # «мы не знаем»: считаем их отдельно, чтобы старые данные не красили статистику.
+            cs = rc.get("checks_status")
+            if cs == "absent":
+                report["delivery"]["checks_absent"] += 1
+            elif rc.get("checks_verified"):
+                report["delivery"]["checks_verified"] += 1
+            else:
+                report["delivery"]["checks_unknown"] += 1
 
     # --- Derived metrics ---
     if report["cost"]["total_calls"] > 0:
