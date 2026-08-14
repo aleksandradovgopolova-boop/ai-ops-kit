@@ -102,6 +102,7 @@ NEEDS_ARTIFACT = [
     "validate_knowledge_graph",
     "validate_loop_policy",
     "validate_plan_artifact",
+    "validate_product_objects",
     "validate_requirements_artifact",
     "validate_reviewer_result",
     "validate_run_handoff",

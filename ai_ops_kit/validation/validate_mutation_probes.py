@@ -70,7 +70,10 @@ def check(data: dict, root=None) -> list:
             errors.append(f"проба '{pid}': tests должен быть списком"); tests = []
         if root is not None:
             for t in tests:
-                if not (Path(root) / str(t)).is_file():
+                # Допускается node-id (`файл.py::test_имя`): целый файл в пробе годится не всегда —
+                # если в нём есть тест, красный по окружению, базовый прогон будет красным, и проба
+                # честно вернёт `not_verified` вместо проверки. Существование проверяем по файлу.
+                if not (Path(root) / str(t).split("::", 1)[0]).is_file():
                     errors.append(f"проба '{pid}': тест '{t}' не существует")
             f = Path(root) / str(p.get("file") or "")
             if not f.is_file():
