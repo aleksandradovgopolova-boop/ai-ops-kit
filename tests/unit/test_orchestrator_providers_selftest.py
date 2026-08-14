@@ -115,6 +115,35 @@ def test_orchestrator_providers_selftest():
         print("PASS claude-cli: read-only (Read/Grep/Glob) -> Claude читает, но НЕ мутирует/не исполняет")
     else:
         ok = False; print("FAIL claude-cli: инструменты не ограничены read-only (риск прямого действия Claude в обход кита)")
+    # Регрессия живого прогона (2026-08-14): промпт роли начинается с `---` (YAML-фронтматтер).
+    # До фикса он стоял в argv ДО ключей, CLI разбирал его как опцию и падал `unknown option '---…'`
+    # на всех 5 попытках -> --review/--author/--reevaluate-only были недоступны с claude-cli.
+    _fm_prompt = "---\nid: intake-classifier\ntype: agent\n---\n\n## Задача\nОписать контур"
+    _fm_seen = {}
+    def _fm_runner(cmd):
+        _fm_seen["cmd"] = cmd
+        return _FakeResult(stdout=_test_json.dumps({"result": "VERDICT", "usage": {}}))
+    _fm_out = make_claude_cli_provider(runner=_fm_runner)(_fm_prompt)
+    _fm_cmd = _fm_seen.get("cmd") or []
+    _sep = _fm_cmd.index("--") if "--" in _fm_cmd else -1
+    # side-effect proof: промпт лежит ПОСЛЕ разделителя и НИ РАЗУ не встречается до него —
+    # иначе CLI снова получит текст с `---` в позиции опции.
+    _prompt_after_sep = _sep >= 0 and _fm_prompt in _fm_cmd[_sep + 1:]
+    _prompt_before_sep = _sep >= 0 and _fm_prompt in _fm_cmd[:_sep]
+    if _fm_out == "VERDICT" and _prompt_after_sep and not _prompt_before_sep:
+        print("PASS claude-cli: промпт с YAML-фронтматтером уходит после `--` (не разбирается как опция)")
+    else:
+        ok = False
+        print("FAIL claude-cli: промпт с `---` попадает в позицию опции — "
+              f"sep={_sep}, after={_prompt_after_sep}, before={_prompt_before_sep}, out={_fm_out!r}")
+    # fail-closed: разделитель обязан быть ПОСЛЕ всех ключей, иначе `--allowedTools`/`--model`
+    # уедут в позиционные аргументы и read-only ограничение перестанет применяться.
+    _flags_before_sep = _sep >= 0 and all(f in _fm_cmd[:_sep] for f in ("--output-format", "--allowedTools"))
+    if _flags_before_sep:
+        print("PASS claude-cli: ключи стоят до разделителя (read-only политика применяется)")
+    else:
+        ok = False
+        print(f"FAIL claude-cli: ключи оказались после `--` — cmd={_fm_cmd}")
     if callable(make_provider("claude-cli")):
         print("PASS claude-cli: зарегистрирован как first-class провайдер")
     else:

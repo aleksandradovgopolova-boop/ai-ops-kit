@@ -1787,7 +1787,10 @@ def main(argv):
                     print(f"  следующий шаг: {pf['next_action']}")
                 if pf["can_resume"]:
                     reval = pf.get("revalidation_needed")
-                    print(f"  продолжить: ai-ops resume {a.child_root} {a.feature} --execute"
+                    # Подсказка обязана быть исполнимой ТЕМ ЖЕ `./ai-ops`, которым человек сюда попал
+                    # (живой прогон на child, 2026-08-14): форма `resume <root> <feature>` разбиралась
+                    # intent-CLI как task="." -> workitem_id "." -> ValueError со стеком в лицо.
+                    print(f"  продолжить: ai-ops resume {a.child_root} --feature {a.feature} --execute"
                           f"{' --force' if reval else ''}   (worktree/ветка переиспользуются; "
                           f"{'нужна ревалидация -> --force' if reval else 'база актуальна'})")
             return 0 if pf["can_resume"] else 1
