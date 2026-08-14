@@ -44,14 +44,29 @@ SECRET_PATTERNS = [
 _PLACEHOLDER = re.compile(r"(?i)(x{6,}|\$\{?[a-z_]+\}?|<[a-z_ -]+>|your[_-]?|example|changeme|placeholder|env\[)")
 
 INJECTION_PATTERNS = [
-    ("eval_or_exec", re.compile(r"\b(?:eval|exec)\s*\(")),
+    # R-40: было `\b(?:eval|exec)\s*\(` — граница слова стоит между точкой и `e`, поэтому паттерн
+    # ловил `.exec(`, то есть ШТАТНЫЙ JS-API регулярок (`/re/.exec(s)`). Писался он под Python, где
+    # `exec(` — встроенная функция. Цена ошибки замерена в поле (ии-среда): две находки на
+    # `RegExp.exec` подняли ТРИ домена сразу (input_validation, network_ssrf, ai_prompt_injection)
+    # и заблокировали security-гейт; в продукте 15 файлов используют `.exec(`.
+    # Теперь: `eval(` и `exec(` ловятся как самостоятельные вызовы, `.eval(` — тоже (у него нет
+    # безобидного смысла: `window.eval`/`global.eval` — тот же eval), а `.exec(` сам по себе — нет.
+    # ЧЕСТНО про то, что при этом НЕ теряется: сам импорт `child_process` ловился и раньше
+    # правилом `node_child_process` (строка ниже), то есть домен поднимался в любом случае. Новое
+    # правило `node_child_process_exec` добавляет не факт опасности, а её АДРЕС — строку, где
+    # команда реально исполняется, — и закрывает пропуск старого паттерна: префикс `node:`
+    # (`require("node:child_process")`) он не матчил вовсе.
+    ("eval_or_exec", re.compile(r"(?:(?<![.\w])(?:eval|exec)\s*\(|\.\s*eval\s*\()")),
     ("subprocess_shell_true", re.compile(r"(?:subprocess\.\w+|Popen)\s*\([^)]*shell\s*=\s*True")),
     ("os_system", re.compile(r"\bos\.system\s*\(")),
     ("pickle_loads", re.compile(r"\bpickle\.loads?\s*\(")),
     ("yaml_unsafe_load", re.compile(r"\byaml\.load\s*\((?![^)]*Loader)")),
     ("sql_fstring_execute", re.compile(r"(?i)\bexecute(?:many)?\s*\(\s*f['\"]")),
     ("react_dangerous_html", re.compile(r"dangerouslySetInnerHTML")),
-    ("node_child_process", re.compile(r"require\(['\"]child_process['\"]\)|from ['\"]child_process['\"]")),
+    # R-40: добавлен префикс `node:` — современная форма импорта (`require("node:child_process")`,
+    # `from "node:child_process"`) не матчилась вовсе, то есть в новом коде правило молчало.
+    ("node_child_process",
+     re.compile(r"require\(\s*['\"](?:node:)?child_process['\"]\s*\)|from\s+['\"](?:node:)?child_process['\"]")),
     ("dom_innerhtml_assign", re.compile(r"\.innerHTML\s*=")),
 ]
 
@@ -78,12 +93,28 @@ def scan_secrets(files):
     return res
 
 
+# R-40: исполнение команд в Node. Отличить `/re/.exec(s)` от `child_process.exec("rm -rf /")` одной
+# построчной регуляркой нельзя — обе строки выглядят как `.exec(`. Различает ПОЛУЧАТЕЛЬ вызова, а он
+# объявлен в другом месте файла (import/require), поэтому правило работает на уровне файла, а не строки.
+_CHILD_PROCESS_IMPORT = re.compile(
+    r"""(?:require\s*\(\s*['"](?:node:)?child_process['"]|"""
+    r"""from\s+['"](?:node:)?child_process['"]|"""
+    r"""import\s+[^\n;]*['"](?:node:)?child_process['"])""")
+_NODE_EXEC_CALL = re.compile(r"\b(?:exec|execSync|execFile|execFileSync)\s*\(")
+
+
 def scan_injection(files):
     """Флаги injection-surface (ВХОД для судьи, не автоприёмка) -> [{path, id, line}]."""
     res = []
     for path, text in files.items():
         for f in _scan(text, INJECTION_PATTERNS):
             res.append({"path": path, **f})
+        # Файл тянет child_process -> любой exec-вызов в нём считаем исполнением команды.
+        # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.
+        if _CHILD_PROCESS_IMPORT.search(text):
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if _NODE_EXEC_CALL.search(line):
+                    res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
     return res
 
 
