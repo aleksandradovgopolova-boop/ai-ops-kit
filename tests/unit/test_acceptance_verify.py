@@ -254,9 +254,13 @@ def test_every_shape_of_the_spec_section_is_read(tmp_path, section, expected):
     ("acceptance_criteria:\n    status: needs_human\n", True, 0),
     # мэппинг `AC-N: текст` — читаемая форма, в том числе рядом со `status` (третье ревью)
     ("acceptance_criteria:\n    AC-1: нет строк с public/media\n    AC-2: структура верна\n", False, 2),
-    # непустой `content` НЕ отменяет соседние ключи (четвёртое ревью): иначе два критерия исчезали
-    ("acceptance_criteria:\n    status: complete\n    content: 'Критерии:'\n"
-     "    AC-1: нет public/media\n    AC-2: структура верна\n", False, 2),
+    # ПЯТОЕ ревью отменило аддитивность четвёртого: содержимое есть -> оно и есть раздел, соседи —
+    # метаданные. Иначе любой авторский ключ (`refs`, `verified_by`) становился фантомным критерием
+    # либо давал ложное «критерии НЕ прочитаны» на разделе, прочитанном целиком.
+    ("acceptance_criteria:\n    status: complete\n    content: '- нет public/media'\n"
+     "    refs: []\n    verified_by: agent\n", False, 1),
+    # все три ключа содержимого читаются, а не первый непустой (пятое ревью)
+    ("acceptance_criteria:\n    content: '- AC-1 первый'\n    text: '- AC-2 второй'\n", False, 2),
     ("acceptance_criteria:\n    status: complete\n    AC-1: нет public/media\n    AC-2: верно\n",
      False, 2),
     ("acceptance_criteria:\n    AC-1:\n      text: вложенный критерий\n", False, 1),
@@ -568,6 +572,89 @@ def test_diff_content_that_looks_like_a_file_header_survives(tmp_path):
 
     assert "select 2" in post and "public/media added here" in post, f"тело ханка потеряно: {post!r}"
     assert "- old sql comment" in removed
+
+
+def test_an_added_line_starting_with_pluses_is_not_a_file_header(tmp_path):
+    """Пятое ревью PR #118: зеркало регрессии `--- ` — добавленная строка на `++ `.
+
+    Она рендерится как `+++ …`, читалась заголовком файла, убивала остаток ханка И сама исчезала из
+    результата. Судья, цитирующий её, получал «цитата выдумана» -> `undetermined` -> «критерии НЕ
+    сверялись» на выполненной работе. В коде рядом стоял комментарий, прямо запрещающий такую
+    проверку внутри ханка, — и я повторил её для `+`.
+    """
+    ctx = ("diff --git a/f.md b/f.md\n--- a/f.md\n+++ b/f.md\n@@ -1 +1,3 @@\n"
+           " было\n++ note\n+важная строка критерия\n")
+
+    by_file = av._diff_by_file(ctx)
+
+    assert set(by_file) == {"f.md"}, f"выдуманный путь из тела ханка: {sorted(by_file)}"
+    assert "важная строка критерия" in by_file["f.md"][0], f"строка критерия потеряна: {by_file}"
+    assert "+ note" in by_file["f.md"][0]
+
+
+def test_a_refuted_absence_claim_confirms_unmet_instead_of_erasing_it(tmp_path):
+    """Пятое ревью PR #118: опровергнутое отсутствие обнуляло ВЕРНЫЙ `unmet`.
+
+    Судья говорит «строки public/media в README нет», код читает файл и видит её — то есть критерий
+    НЕ ВЫПОЛНЕН, и это ровно поимка B2-14. Прежний код считал такую цитату выдуманной и печатал
+    «критерии НЕ сверялись» вместо «НЕ ВЫПОЛНЕНО 1 из 1»: сверка, поймавшая дефект, отчитывалась
+    как несостоявшаяся. Цитата настоящая — опровергнуто ЗАЯВЛЕНИЕ, а не она.
+    """
+    (tmp_path / "README.md").write_text("# Проект\npublic/media/ — каталог медиа\n", encoding="utf-8")
+    ctx = ("diff --git a/README.md b/README.md\n@@ -1,2 +1,2 @@\n"
+           "-public/media/ — медиафайлы проекта\n+public/media/ — каталог медиа\n")
+    crit = [{"id": "AC-1", "text": "в README нет строк с `public/media`"}]
+
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "unmet", "evidence": "absent", "quote": "public/media",
+         "source": "README.md", "reason": "строка осталась"}])])
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
+
+    assert rep["verified"] is True, f"сверка объявлена несостоявшейся: {rep['reason']}"
+    assert rep["met_all"] is False and rep["unmet"] == ["AC-1"]
+    assert rep["criteria"][0]["grounded"] is True, "опровергнутое отсутствие — сильное основание"
+
+    # а `met` против прочитанного файла — это и есть B2-14, и он по-прежнему не принимается
+    prov2 = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent", "quote": "public/media",
+         "source": "README.md"}])])
+    rep2 = av.verify(tmp_path, crit, prov2, revision="abc", change_context=ctx)
+    assert rep2["verified"] is False and rep2["undetermined"] == ["AC-1"]
+    assert "В ФАЙЛЕ ЕСТЬ" in rep2["criteria"][0]["reason"]
+
+
+def test_a_source_path_variant_does_not_lose_the_proof(tmp_path):
+    """Пятое ревью: `./README.md` терял `absence-proof` и получал НЕВЕРНУЮ причину.
+
+    Причина говорила «эта строка не удалялась в этом изменении», хотя она удалялась. Неверная
+    причина хуже отсутствующей: владелец идёт проверять не туда.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")
+    ctx = ("diff --git a/README.md b/README.md\n@@ -1,2 +1 @@\n"
+           "-public/media/ — медиафайлы проекта\n+# Проект\n")
+
+    for src in ("README.md", "./README.md", "b/README.md"):
+        basis, why = av._ground_quote("public/media", ctx, tmp_path, src, "absent")
+        assert basis == "absence-proof", f"{src}: основание потеряно ({basis}, {why})"
+
+
+def test_owner_check_required_is_in_the_report_not_only_in_stdout(tmp_path):
+    """Пятое ревью: «выполнены все» при нуле подтверждённых оснований жило только в терминале.
+
+    Любая другая поверхность — PR, расписка о доставке, наблюдаемость — читала такой отчёт как
+    проверенный. Факт «это надо посмотреть самому» обязан быть В ДАННЫХ, иначе он не доедет.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")
+    ctx = "diff --git a/app.py b/app.py\n@@ -1 +1 @@\n-import os\n+import sys\n"
+    crit = [{"id": "AC-1", "text": "эндпоинт /health отвечает 200"}]
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent",
+         "quote": "сервис не отвечает на /health", "source": "README.md"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
+
+    assert rep["met_all"] is True and rep["quote_verified"] == 0
+    assert rep["owner_check_required"] is True, "слабое «выполнено» не помечено в отчёте"
 
 
 def test_a_removed_line_starting_with_dashes_is_still_recognised(tmp_path):

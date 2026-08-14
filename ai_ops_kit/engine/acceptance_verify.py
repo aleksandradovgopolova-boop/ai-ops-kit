@@ -201,18 +201,23 @@ def _section_text(node) -> tuple:
         #     молчал при `spec-coverage: complete`. Пустое значение проваливается дальше;
         # (б) `{status: complete, AC-1: …, AC-2: …}` раньше отвергался по статусу, хотя критерии
         #     лежат рядом: отказ с причиной, противоречащей файлу, хуже отсутствия причины.
-        head = ""
+        head = []
         for key in ("content", "text", "value"):
             text, problem = _section_text(node.get(key))
             if problem:
                 return "", problem
             if text:
-                head = text
-                break
-        # СОДЕРЖИМОЕ И СОСЕДНИЕ КЛЮЧИ СКЛАДЫВАЮТСЯ, а не заменяют друг друга (четвёртое ревью
-        # PR #118): прежде непустой `content` возвращался сразу, и лежащие рядом `AC-1`/`AC-2`
-        # исчезали молча — та же потеря части критериев, которую этот же разбор обязан называть.
-        parts, skipped = ([head] if head else []), []
+                head.append(text)   # ВСЕ три, а не первый непустой: иначе `text` рядом с `content`
+                                    # терялся молча (пятое ревью PR #118)
+        if head:
+            # СОДЕРЖИМОЕ ЕСТЬ — оно и есть раздел. Соседние ключи в этом случае НЕ читаются как
+            # критерии и не считаются потерянными: это метаданные раздела (`refs`, `verified_by`,
+            # что угодно авторское). Четвёртый круг сделал их аддитивными, и пятый показал цену:
+            # любой лишний ключ превращался либо в фантомный критерий, либо в ложное «критерии НЕ
+            # прочитаны» на разделе, который прочитан целиком. Разбирать соседей имеет смысл только
+            # там, где содержимого нет вовсе.
+            return "\n".join(head), None
+        parts, skipped = [], []
         for k, v in node.items():
             if str(k).strip().lower() in ("status", "note", "owner", "updated_at",
                                           "content", "text", "value"):
@@ -325,23 +330,23 @@ def _diff_by_file(change_context) -> dict:
                 path = m.group(1)
                 out.setdefault(path, ([], []))
             continue
-        if ln.startswith("+++ "):
-            in_hunk = False
-            cand = ln[4:].strip()
-            if cand.startswith("b/"):
-                cand = cand[2:]
-            if cand and cand != "/dev/null":
-                path = cand
-                out.setdefault(path, ([], []))
-            continue
         if ln.startswith("@@"):
             in_hunk = path is not None
             continue
         if not in_hunk:
-            # Вне ханка не бывает содержимого: заголовки (`--- a/файл`, `index …`), `--stat`, журнал
-            # коммитов и любая проза просто пропускаются. Отдельной проверки на `--- ` ЗДЕСЬ БЫТЬ НЕ
-            # ДОЛЖНО — она стоила регрессии: удалённая строка `-- комментарий` рендерится как
-            # `--- …`, и внутри ханка такая проверка убивала остаток файла (третье ревью, находка 6).
+            # ВНЕ ханка — только здесь и разбираются заголовки файла (`+++ b/…`, `--- a/…`,
+            # `index …`), `--stat`, журнал коммитов и проза. ВНУТРИ ханка проверок по этим
+            # префиксам быть не должно: пятое ревью PR #118 нашло зеркало той же регрессии —
+            # добавленная строка, чей текст начинается с `++ `, рендерится как `+++ …`, читалась
+            # заголовком и убивала остаток ханка вместе с самой строкой критерия. Ровно то, о чём
+            # предупреждал комментарий про `--- ` (третье ревью, находка 6), — и я это повторил.
+            if ln.startswith("+++ "):
+                cand = ln[4:].strip()
+                if cand.startswith("b/"):
+                    cand = cand[2:]
+                if cand and cand != "/dev/null":
+                    path = cand
+                    out.setdefault(path, ([], []))
             continue
         if ln == _NO_NEWLINE:
             continue                 # маркер git между вариантами последней строки — не содержимое
@@ -358,27 +363,50 @@ def _diff_by_file(change_context) -> dict:
     return {p: ("\n".join(k), "\n".join(r)) for p, (k, r) in out.items()}
 
 
+def _rel_path(path) -> str:
+    """Путь к виду, в котором его печатает git: без `./`, без `a/`|`b/`, с прямыми слэшами.
+
+    Пятое ревью PR #118: сравнение `source` судьи с путями диффа шло дословно, поэтому `./README.md`
+    и `b/README.md` теряли `absence-proof` — и владелец получал причину «эта строка не удалялась в
+    этом изменении», которая ПРОСТО НЕВЕРНА. Неверная причина хуже отсутствующей: она отправляет
+    проверять не туда.
+    """
+    p = str(path or "").strip().replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    if p.startswith(("a/", "b/")):
+        p = p[2:]
+    return p.strip("/")
+
+
 def _read_source(work_root, source) -> tuple:
     """(содержимое файла | None, причина если не прочитан). Путь обязан лежать в рабочем дереве."""
     src = str(source or "").strip()
     if not src:
         return None, "source не назван"
     root = Path(work_root).resolve()
-    try:
-        p = (root / src).resolve()
-        if not p.is_relative_to(root):
-            return None, f"source вне рабочего дерева: {src}"
-        if not p.is_file():
-            return None, f"source не найден: {src}"
-        if p.stat().st_size > _MAX_SOURCE_BYTES:
-            return None, f"source больше {_MAX_SOURCE_BYTES} Б — не читался"
-        return p.read_text(encoding="utf-8", errors="replace"), None
-    except OSError as e:
-        return None, f"source не прочитан ({type(e).__name__})"
+    # Сперва путь КАК НАЗВАН, потом — приведённый к виду git (`b/README.md` -> `README.md`): судья
+    # часто копирует путь прямо из заголовка диффа. Порядок именно такой, чтобы настоящий каталог
+    # `b/` нельзя было подменить нормализацией (пятое ревью PR #118).
+    candidates = [src] + ([_rel_path(src)] if _rel_path(src) != src else [])
+    last = f"source не найден: {src}"
+    for cand in candidates:
+        try:
+            p = (root / cand).resolve()
+            if not p.is_relative_to(root):
+                return None, f"source вне рабочего дерева: {src}"
+            if not p.is_file():
+                continue
+            if p.stat().st_size > _MAX_SOURCE_BYTES:
+                return None, f"source больше {_MAX_SOURCE_BYTES} Б — не читался"
+            return p.read_text(encoding="utf-8", errors="replace"), None
+        except OSError as e:
+            last = f"source не прочитан ({type(e).__name__})"
+    return None, last
 
 
 #: Основания, при которых вердикт опирается на ПРОВЕРЕННУЮ цитату из результата правки.
-STRONG_BASIS = {"absence-proof", "post-state", "file"}
+STRONG_BASIS = {"absence-proof", "post-state", "file", "absence-refuted"}
 
 
 def _ground_quote(quote, change_context, work_root, source, evidence="present") -> tuple:
@@ -398,9 +426,9 @@ def _ground_quote(quote, change_context, work_root, source, evidence="present") 
     if len(q) < 4:
         return None, "цитата короче 4 символов — подтвердить нечем"
     body, read_problem = _read_source(work_root, source)
-    by_file = _diff_by_file(change_context)
+    by_file = {_rel_path(p): v for p, v in _diff_by_file(change_context).items()}
     src = str(source or "").strip()
-    own_post, own_removed = by_file.get(src, ("", ""))
+    own_post, own_removed = by_file.get(_rel_path(src), ("", ""))
     any_post = "\n".join(v[0] for v in by_file.values())
     any_removed = "\n".join(v[1] for v in by_file.values())
 
@@ -410,8 +438,13 @@ def _ground_quote(quote, change_context, work_root, source, evidence="present") 
         if body is not None and q not in _norm(body) and q in _norm(own_removed):
             return "absence-proof", None
         if body is not None and q in _norm(body):
-            return None, (f"объявлено отсутствие, но цитата В ФАЙЛЕ ЕСТЬ ({src}) — основание "
-                          f"опровергнуто чтением")
+            # Заявление об отсутствии ОПРОВЕРГНУТО чтением — но цитата при этом настоящая, и это
+            # НЕ выдумка (пятое ревью PR #118). Прежний `None` обнулял вердикт целиком, и верный
+            # `unmet` — то есть ровно поимка B2-14 — печатался как «критерии НЕ сверялись» вместо
+            # «НЕ ВЫПОЛНЕНО 1 из 1». Опровергнутое отсутствие — это подтверждение НАЛИЧИЯ: для
+            # `unmet` оно сильное основание, для `met` (ниже, в сборке вердикта) — противоречие.
+            return "absence-refuted", (f"объявлено отсутствие, но цитата В ФАЙЛЕ ЕСТЬ ({src}) — "
+                                       f"основание опровергнуто чтением")
         # Доказать не удалось — но вердикт судьи НЕ отвергается (четвёртое ревью PR #118): требование
         # «удалённая строка обязательна» противоречило промпту и делало выполненный критерий об
         # отсутствии недоказуемым по построению (удаления может не быть вовсе, дифф может быть
@@ -486,7 +519,7 @@ def _unverified(criteria, reason, declared=None, **extra):
     out = {"declared": bool(criteria) if declared is None else bool(declared),
            "count": len(criteria or []), "verified": False, "verifier": None,
            "met_all": None, "quote_verified": 0, "judge_only": [],
-           "unmet": [], "undetermined": [],
+           "owner_check_required": False, "unmet": [], "undetermined": [],
            "criteria": [{"id": c["id"], "text": c["text"], "status": "undetermined",
                          "basis": None, "grounded": False}
                         for c in (criteria or [])],
@@ -551,6 +584,11 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
             # сторону: он не стоит ни на чём. Симметрия честности сохранена: так же отвергается и
             # `met`, и `unmet`. Слабое, но НАСТОЯЩЕЕ основание вердикт не обнуляет — оно называется.
             status, reason = "undetermined", f"основание не подтверждено: {why}"
+        elif status == "met" and basis == "absence-refuted":
+            # «Выполнено» против прочитанного файла: код видит цитату там, где судья объявил её
+            # отсутствие. Это и есть форма B2-14, поэтому вердикт не принимается.
+            status = "undetermined"
+            reason = why
         elif status == "met" and basis == "removed-line" and evidence != "absent":
             # СВЯЗНОСТЬ ВЕРДИКТА И ОСНОВАНИЯ — проверка формы, а не смысла: «выполнено» не может
             # опираться на строку, которой в результате НЕТ. Именно так выглядел B2-14 — судья
@@ -591,6 +629,11 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
             "verifier": (f"independent-reviewer @ {(revision or 'HEAD')[:12]}" if verified else None),
             "met_all": met_all if verified else None,
             "quote_verified": len(strong), "judge_only": weak,
+            # ФЛАГ В ОТЧЁТЕ, а не только в терминале (пятое ревью PR #118): «выполнены все» при нуле
+            # машинно подтверждённых оснований — это работа, которую владелец обязан посмотреть сам.
+            # Пока такой факт живёт только в stdout, любая другая поверхность (PR, расписка,
+            # наблюдаемость) читает его как проверенный.
+            "owner_check_required": bool(met_all and not strong),
             "unmet": unmet, "undetermined": undet, "criteria": out,
             "reads": reads, "denied": denied, "reason": reason}
 
