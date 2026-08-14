@@ -48,7 +48,16 @@ MAX_READS = 8
 # Потолок чтения файла при проверке цитаты. Цитата — короткая строка; читать гигабайты, чтобы её
 # подтвердить, незачем, а молча читать неограниченно — способ повесить прогон.
 _MAX_SOURCE_BYTES = 2_000_000
-_BULLET = re.compile(r"^\s*(?:[-*•]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s+)(.+)$")
+# Пробел после маркера ОБЯЗАТЕЛЕН (ревью PR #118). Без него `\s*` делал пунктом любую строку,
+# начинающуюся с `*` или `-`: жирный заголовок `**Критерии приёмки**` становился единственным
+# «критерием», непустой список отключал прозаический разбор — и настоящие критерии ИСЧЕЗАЛИ, а
+# отчёт показывал `count: 1`. Ровно тот класс, против которого написан модуль.
+_BULLET = re.compile(r"^\s*(?:[-*•][ \t]+(?:\[[ xX]\][ \t]*)?|\d+[.)][ \t]+)(.+)$")
+# Разделитель (`---`, `***`, `___`) и заголовок (`# …`, `**…**`, `Критерии:`) — не критерии.
+# Псевдопункт неопровержим: судья честно отвечает `undetermined`, и вся сверка становится неполной
+# из-за одной декоративной строки.
+_RULE = re.compile(r"^\s*([-*_])\1{2,}\s*$")
+_HEADING = re.compile(r"^\s*(?:#{1,6}\s|\*\*[^*]+\*\*\s*$|__[^_]+__\s*$)")
 
 
 def parse_criteria(text) -> list:
@@ -69,31 +78,66 @@ def parse_criteria(text) -> list:
         if m:
             body = m.group(1).strip()
             if body:
+                # Фильтра декора здесь НЕТ намеренно: пункт списка написан человеком осознанно,
+                # и выбрасывать его за жирный шрифт — терять критерий, то есть ошибаться в худшую
+                # сторону. Декор живёт в прозе, там фильтр и стоит.
                 items.append(body)
     if not items:
-        # списка нет — берём смысловые строки. Заголовок вида «Критерии:» пунктом не считаем:
-        # он не проверяем, а вердикт по непроверяемому пункту обесценивает всю сверку.
+        # списка нет — берём смысловые строки. Заголовок («Критерии:», `# …`, `**…**`) и
+        # разделитель пунктами не считаем: они непроверяемы, а вердикт по непроверяемому пункту
+        # обесценивает всю сверку (`verified` держится на отсутствии `undetermined`).
         items = [ln.strip() for ln in lines
-                 if ln.strip() and not ln.strip().endswith(":") and len(ln.strip()) >= 3]
+                 if ln.strip() and not ln.strip().endswith(":") and len(ln.strip()) >= 3
+                 and not _RULE.match(ln) and not _HEADING.match(ln)]
     return [{"id": f"AC-{i}", "text": t} for i, t in enumerate(items, start=1)]
 
 
+def _section_text(node) -> str:
+    """Раздел спеки -> текст. Форма раздела в ките НЕ одна (ревью PR #118).
+
+    `spec_levels.provided_from_artifacts` принимает раздел и мэппингом (`{status, content}`), и
+    ПРОСТОЙ СТРОКОЙ; список пунктов в YAML тоже естественен. Прежний разбор знал только мэппинг:
+    на строке `.get` бросал `AttributeError`, тот гасился, и функция возвращала «критериев нет» —
+    при том что `spec-coverage` для того же файла говорил `complete`. То есть отчёт молчал ровно
+    в том случае, ради которого модуль написан. Форму раздела теперь разбираем целиком.
+    """
+    if node is None:
+        return ""
+    if isinstance(node, str):
+        return node.strip()
+    if isinstance(node, (list, tuple)):
+        return "\n".join(f"- {_section_text(x)}" for x in node if _section_text(x)).strip()
+    if isinstance(node, dict):
+        for key in ("content", "text", "value"):
+            if key in node:
+                return _section_text(node[key])
+        return ""
+    return str(node).strip()
+
+
 def criteria_from_spec(child_root, wid) -> tuple:
-    """(текст раздела, критерии) из features/<wid>/spec.yaml. Не смогли прочитать — («», [])."""
+    """(текст раздела, критерии, проблема) из features/<wid>/spec.yaml.
+
+    ТРИ ИСХОДА, И ТРЕТИЙ НЕ РАВЕН ВТОРОМУ (ревью PR #118): спеки нет («», [], None) — сверять
+    нечего; раздел разобран (текст, пункты, None); спека ЕСТЬ, но её не удалось прочитать или
+    разобрать («», [], причина) — это «не знаю», и вызывающий обязан сказать «не сверялись» с
+    причиной, а не промолчать. Прежняя двойка исходов делала нечитаемую спеку неотличимой от
+    отсутствия критериев — и вывод прогона не печатал ничего.
+    """
     try:
         import yaml as _yaml
         from ai_ops_kit.gates import spec_levels as _sl
         sp = _sl._spec_path(Path(child_root), wid)
         if not sp.is_file():
-            return "", []
+            return "", [], None
         doc = _yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
-        text = str((((doc.get("sections") or {}).get("acceptance_criteria") or {})
-                    .get("content") or "")).strip()
-        return text, parse_criteria(text)
-    except Exception:  # noqa: BLE001 — не прочитали спеку: это «не знаю», а не «критериев нет».
-        # Направление отказа fail-closed: без критериев сверка объявляется несостоявшейся ниже,
-        # а не состоявшейся и успешной.
-        return "", []
+        sections = doc.get("sections")
+        if sections is not None and not isinstance(sections, dict):
+            return "", [], f"sections в spec.yaml имеет форму {type(sections).__name__}, ожидался мэппинг"
+        text = _section_text((sections or {}).get("acceptance_criteria"))
+        return text, parse_criteria(text), None
+    except Exception as e:  # noqa: BLE001 — спека есть, но не прочитана: fail-closed С ПРИЧИНОЙ.
+        return "", [], f"spec.yaml не разобран ({type(e).__name__}: {e})"[:200]
 
 
 def _norm(s) -> str:
@@ -105,16 +149,42 @@ def _norm(s) -> str:
     return re.sub(r"\s+", " ", str(s or "")).strip().lower().lstrip("+-")
 
 
+def _post_state(change_context) -> tuple:
+    """Дифф -> (состояние ПОСЛЕ правки, только удалённые строки).
+
+    Заземление обязано смотреть на состояние ПОСЛЕ, а не «где-нибудь в диффе» (ревью PR #118).
+    Иначе критерий «в README нет строк с public/media» подтверждался цитатой из УДАЛЁННОЙ строки:
+    судья ставит `met`, `grounded=True`, отчёт печатает «выполнены все» — тот же ложный green,
+    только теперь с формальным основанием. Удалённые строки держим отдельно, чтобы причина отказа
+    называла, ЧТО произошло, а не «цитата не найдена».
+    """
+    kept, removed = [], []
+    for ln in str(change_context or "").splitlines():
+        if ln.startswith("---"):
+            continue                      # заголовок диффа `--- a/файл`
+        if ln.startswith("-"):
+            removed.append(ln[1:])
+            continue
+        kept.append(ln[1:] if ln.startswith("+") and not ln.startswith("+++") else ln)
+    return "\n".join(kept), "\n".join(removed)
+
+
 def _ground_quote(quote, change_context, work_root, source) -> tuple:
-    """(найдена ли цитата, причина если нет). Ищем в диффе, затем в названном файле."""
+    """(найдена ли цитата, причина если нет). Ищем в состоянии ПОСЛЕ правки, затем в файле."""
     q = _norm(quote)
     if len(q) < 4:
         return False, "цитата короче 4 символов — подтвердить нечем"
-    if q in _norm(change_context):
+    post, removed = _post_state(change_context)
+    if q in _norm(post):
         return True, None
+    # «Только в удалённой строке» — вердикт ПОСЛЕ проверки файла, а не вместо неё: перенесённая
+    # строка выглядит удалённой в диффе и при этом живёт в файле. Иначе честная цитата отвергалась бы.
+    only_removed = q in _norm(removed)
     src = str(source or "").strip()
     if not src:
-        return False, "цитаты нет в диффе, а source не назван — проверить негде"
+        return False, ("цитата найдена только в УДАЛЁННОЙ строке диффа (состояние ДО правки), "
+                       "source не назван — проверить нечем" if only_removed else
+                       "цитаты нет в результате правки, а source не назван — проверить негде")
     root = Path(work_root).resolve()
     try:
         p = (root / src).resolve()
@@ -129,7 +199,10 @@ def _ground_quote(quote, change_context, work_root, source) -> tuple:
         return False, f"source не прочитан ({type(e).__name__}) — цитата не проверялась"
     if q in _norm(body):
         return True, None
-    return False, f"цитата не найдена ни в диффе, ни в {src}"
+    if only_removed:
+        return False, (f"цитата есть только в УДАЛЁННОЙ строке диффа и отсутствует в {src} — "
+                       f"она описывает состояние ДО правки, а вердикт выносится о результате")
+    return False, f"цитата не найдена ни в результате правки, ни в {src}"
 
 
 def make_acceptance_proposer(provider, criteria, revision=None):

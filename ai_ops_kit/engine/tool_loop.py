@@ -180,8 +180,12 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             context += f"\n--- {ev.get('target')} ---\n{ev.get('output_tail')}\n--- конец ---"
         elif not ev["allowed"]:
             denied.append({"op": ev.get("op"), "reason": ev["reason"]})
+            # Вид вердикта здесь тоже параметр (ревью PR #118): судья сверки приёмки, получив
+            # отказ брокера, читал «верни reviewer-result» — то есть подсказку вернуть вердикт
+            # ЧУЖОЙ формы, который не пройдёт терминальную проверку. Это путь, на который он
+            # попадает при попытке записи, — ровно там подсказка должна быть верной.
             context += (f"\n[ревью] действие {ev.get('op')} ОТКЛОНЕНО (ты read-only судья, не автор): "
-                        f"{ev['reason']}. Верни read или reviewer-result.")
+                        f"{ev['reason']}. Верни read или {terminal_kind}.")
         else:
             context += f"\n[ревью] {ev.get('op')} -> {ev.get('reason')}"
     return {"result": None, "stopped": stopped, "reads": reads, "denied": denied}

@@ -72,6 +72,9 @@ def _writer(_ctx):
             "behavior_unchanged": "правка документации, поведение кода не меняется"}
 
 
+PROMPTS = []
+
+
 def _judge(prompt):
     """Судья по роли: сверка приёмки — своя ветка, обычные ai-review гейты — своя.
 
@@ -79,6 +82,7 @@ def _judge(prompt):
     порядка стадий и проверял бы не шов, а расписание.
     """
     if "ревьюер приёмки" in prompt:
+        PROMPTS.append(prompt)
         if "--- README.md ---" not in prompt:
             return json.dumps({"op": "read", "path": "README.md"})
         return json.dumps({"kind": "acceptance-result", "criteria": [
@@ -106,6 +110,86 @@ def test_pipeline_runs_the_acceptance_check_and_reports_the_unmet_criterion(repo
     assert ac.get("unmet") == ["AC-1"]
     assert ac["criteria"][0]["grounded"] is True, "цитата ревьюера не подтверждена кодом"
     assert ac.get("reads"), "судья вынес вердикт, не прочитав ни одного файла"
+
+
+def test_the_judge_sees_the_whole_branch_not_the_last_commit(repo):
+    """Ревью PR #118: судье подавался дифф ПОСЛЕДНЕГО коммита, а критерии описывают изменение целиком.
+
+    На `resume` и `reevaluate_only` ветка несёт несколько коммитов: критерий, выполненный в
+    предыдущем, в дифф не попадал — и судья честно отвечал `unmet` о сделанной работе либо
+    `undetermined`, обнуляя сверку. Рядом в конвейере seam_scan берёт диапазон ровно по этой причине.
+    """
+    PROMPTS.clear()
+    _writer.done = False
+
+    execution_pipeline.run_pipeline(
+        task="убрать из README упоминание public/media",
+        signals={"task_type": "QUICK"}, child_root=repo, proposer=_writer,
+        feature=WID, commit=True, review=True, reviewer_proposer=_judge,
+        install_deps=False, baseline_diff=False)
+
+    assert PROMPTS, "судья приёмки не вызывался — проверять нечего"
+    assert "ИНТЕГРИРОВАННЫЙ дифф последовательности" in PROMPTS[0], (
+        "судье подан дифф одного коммита, а не диапазона base..head")
+
+
+def test_a_plain_string_section_is_verified_too(tmp_path):
+    """ШОВ для находки ревью PR #118: раздел критериев ПРОСТОЙ СТРОКОЙ доходит до сверки.
+
+    Раньше на такой спеке прогон молчал: разбор возвращал «критериев нет», предупреждение не
+    печаталось, а `spec-coverage` считал раздел заполненным. Это был бы B2-14 внутри механизма,
+    который его чинит, — поэтому проверяется прогоном, а не только разбором.
+    """
+    root = tmp_path / "child"
+    (root / "features" / WID).mkdir(parents=True)
+    (root / "features" / WID / "spec.yaml").write_text(
+        "schema_version: 1\nkind: FeatureSpec\nworkitem_id: acc-seam\nsections:\n"
+        "  acceptance_criteria: в README нет строк с `public/media`\n", encoding="utf-8")
+    (root / "README.md").write_text(
+        "# Проект\n\npublic/media/ — медиафайлы проекта\nsrc/ — исходный код\n", encoding="utf-8")
+    for a in (["init", "-b", "main"], ["config", "user.email", "t@t"],
+              ["config", "user.name", "T"], ["add", "."], ["commit", "-m", "init"]):
+        _git(root, *a)
+    _writer.done = False
+
+    report = execution_pipeline.run_pipeline(
+        task="убрать из README упоминание public/media",
+        signals={"task_type": "QUICK"}, child_root=root, proposer=_writer,
+        feature=WID, commit=True, review=True, reviewer_proposer=_judge,
+        install_deps=False, baseline_diff=False)
+
+    ac = report.get("acceptance_criteria") or {}
+    assert ac.get("count") == 1, f"раздел строкой не доехал до сверки: {ac}"
+    assert ac.get("verified") is True and ac.get("unmet") == ["AC-1"], ac.get("reason")
+
+
+def test_a_section_without_a_single_checkable_item_says_so(tmp_path):
+    """Заполненный раздел без проверяемых пунктов -> declared=True, count=0 и НЕПРОТИВОРЕЧИВАЯ причина.
+
+    Прежде `declared` брался из текста, а причина — из пустого списка пунктов, и отчёт печатал
+    «критерии НЕ сверялись: критерии приёмки не объявлены» — два взаимоисключающих утверждения в
+    одной строке. Читающий не может понять, что делать.
+    """
+    root = tmp_path / "child"
+    (root / "features" / WID).mkdir(parents=True)
+    (root / "features" / WID / "spec.yaml").write_text(
+        "sections:\n  acceptance_criteria: |\n    **Критерии приёмки**\n    ---\n", encoding="utf-8")
+    (root / "README.md").write_text("# Проект\n", encoding="utf-8")
+    for a in (["init", "-b", "main"], ["config", "user.email", "t@t"],
+              ["config", "user.name", "T"], ["add", "."], ["commit", "-m", "init"]):
+        _git(root, *a)
+    _writer.done = False
+
+    report = execution_pipeline.run_pipeline(
+        task="правка", signals={"task_type": "QUICK"}, child_root=root, proposer=_writer,
+        feature=WID, commit=True, review=True, reviewer_proposer=_judge,
+        install_deps=False, baseline_diff=False)
+
+    ac = report.get("acceptance_criteria") or {}
+    assert ac.get("declared") is True and ac.get("count") == 0
+    assert "не объявлены" not in ac.get("reason", ""), (
+        f"причина противоречит declared=True: {ac.get('reason')}")
+    assert "проверяемого пункта" in ac.get("reason", "")
 
 
 def test_without_a_judge_the_report_says_not_verified(repo):

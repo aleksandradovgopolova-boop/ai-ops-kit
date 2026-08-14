@@ -107,6 +107,30 @@ def test_the_bnbm_case_is_caught_unmet_criterion_is_named(tree):
     assert "НЕ ВЫПОЛНЕНО" in rep["reason"]
 
 
+def test_a_bold_heading_does_not_eat_the_real_criteria():
+    """Ревью PR #118: `**Заголовок**` считался пунктом, и настоящие критерии ИСЧЕЗАЛИ.
+
+    Маркер списка без пробела делал пунктом любую строку на `*`/`-`. Непустой список отключал
+    прозаический разбор — отчёт показывал `count: 1` по декоративной строке, а два реальных
+    критерия не проверялись вовсе. Это тот же ложный green, только изнутри самого механизма.
+    """
+    got = [c["text"] for c in av.parse_criteria(
+        "**Критерии приёмки**\nв README нет строк с public/media\nструктура описана верно")]
+
+    assert got == ["в README нет строк с public/media", "структура описана верно"], got
+
+
+def test_a_horizontal_rule_is_not_a_criterion():
+    """Ревью PR #118: `---` становился пунктом `--` — неопровержимым, а значит вечно undetermined.
+
+    Один разделитель в разделе навсегда превращал сверку в «неполную»: `verified` держится на
+    отсутствии `undetermined`, и декоративная строка обнуляла бы работу механизма.
+    """
+    assert [c["text"] for c in av.parse_criteria("- крит один\n\n---\n\n- крит два")] == [
+        "крит один", "крит два"]
+    assert av.parse_criteria("# Заголовок\n***\n") == []
+
+
 def test_criteria_are_parsed_without_losing_items():
     """Разбор не теряет критерии: списки, чекбоксы, нумерация, проза — всё становится пунктами.
 
@@ -117,6 +141,52 @@ def test_criteria_are_parsed_without_losing_items():
     assert [c["id"] for c in av.parse_criteria("одна строка\nдругая строка")] == ["AC-1", "AC-2"]
     assert av.parse_criteria("Критерии:") == [], "заголовок пунктом не является"
     assert av.parse_criteria("") == [] and av.parse_criteria(None) == []
+
+
+@pytest.mark.parametrize("section,expected", [
+    ("acceptance_criteria:\n    status: complete\n    content: |\n      - нет public/media\n", 1),
+    ("acceptance_criteria: нет строк с public/media\n", 1),                       # раздел СТРОКОЙ
+    ("acceptance_criteria:\n  - нет public/media\n  - структура верна\n", 2),     # раздел СПИСКОМ
+])
+def test_every_shape_of_the_spec_section_is_read(tmp_path, section, expected):
+    """Ревью PR #118: раздел спеки бывает мэппингом, строкой и списком — читались только мэппинги.
+
+    На строке `.get('content')` бросал AttributeError, тот гасился, и функция отвечала «критериев
+    нет». При этом `spec_levels` тот же файл считает заполненным. Итог был бы худшим из возможных:
+    `spec-coverage: complete`, а прогон не печатает о критериях НИ СЛОВА — ровно B2-14, только
+    воспроизведённый механизмом, который его чинит.
+    """
+    (tmp_path / "features" / "w").mkdir(parents=True)
+    (tmp_path / "features" / "w" / "spec.yaml").write_text(
+        f"schema_version: 1\nkind: FeatureSpec\nworkitem_id: w\nsections:\n  {section}",
+        encoding="utf-8")
+
+    text, items, problem = av.criteria_from_spec(tmp_path, "w")
+
+    assert problem is None, problem
+    assert len(items) == expected, f"разобрано {items} из раздела {section!r}"
+    assert text
+
+
+def test_an_unreadable_spec_is_named_not_silently_empty(tmp_path):
+    """Спека есть, но не разобрана -> «не знаю» С ПРИЧИНОЙ, а не «критериев нет».
+
+    Третий исход не равен второму (тот же инвариант, что `unknown != not_changed` в контурах):
+    молчание тут неотличимо от «критериев не объявляли», и владелец не узнаёт, что сверки не было.
+    """
+    (tmp_path / "features" / "w").mkdir(parents=True)
+    (tmp_path / "features" / "w" / "spec.yaml").write_text("sections: [это, не, мэппинг]\n",
+                                                           encoding="utf-8")
+
+    text, items, problem = av.criteria_from_spec(tmp_path, "w")
+
+    assert (text, items) == ("", [])
+    assert problem and "мэппинг" in problem, problem
+
+
+def test_no_spec_at_all_is_not_a_problem(tmp_path):
+    """Границы: спеки нет — это «сверять нечего», а не поломка. Иначе предупреждение обесценится."""
+    assert av.criteria_from_spec(tmp_path, "нет-такого") == ("", [], None)
 
 
 # ─── fail-closed ───────────────────────────────────────────────────────────────────────────────
@@ -172,6 +242,45 @@ def test_a_one_letter_quote_grounds_in_anything_and_is_rejected(tree):
     assert rep["verified"] is False
     assert rep["undetermined"] == ["AC-1"]
     assert "короче" in rep["criteria"][0]["reason"]
+
+
+def test_a_quote_from_a_deleted_line_cannot_prove_the_result(tmp_path):
+    """fail-closed #2c (ревью PR #118): цитата из УДАЛЁННОЙ строки обосновывала `met`.
+
+    Критерий «в README нет строк с public/media» подтверждался цитатой ровно той строки, которую
+    правка удалила: она есть в диффе, значит «основание подтверждено» — и отчёт печатал «выполнены
+    все». Заземление обязано смотреть на состояние ПОСЛЕ правки, иначе оно доказывает прошлое.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n\nмедиа в проекте нет\n", encoding="utf-8")
+    diff = ("Unified-дифф ревизии:\n--- a/README.md\n+++ b/README.md\n"
+            "-public/media/ — медиафайлы проекта\n+медиа в проекте нет\n")
+    crit = [{"id": "AC-1", "text": "в README нет строк с `public/media`"}]
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "quote": "public/media/ — медиафайлы проекта",
+         "source": "README.md"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=diff)
+
+    assert rep["verified"] is False
+    assert rep["undetermined"] == ["AC-1"]
+    assert "УДАЛЁННОЙ" in rep["criteria"][0]["reason"], rep["criteria"][0]["reason"]
+
+
+def test_a_moved_line_is_still_grounded_if_it_lives_in_the_file(tmp_path):
+    """Границы того же правила: перенесённая строка выглядит удалённой, но живёт в файле.
+
+    Отвергать её значило бы краснеть на честной цитате — проверка основания должна отделять
+    «этого больше нет» от «это переехало», иначе её научатся обходить как шумную.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n\nsrc/ — исходный код\n", encoding="utf-8")
+    diff = ("--- a/README.md\n+++ b/README.md\n-src/ — исходный код\n+## Структура\n")
+    crit = [{"id": "AC-1", "text": "структура описана"}]
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "quote": "src/ — исходный код", "source": "README.md"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=diff)
+
+    assert rep["verified"] is True and rep["met_all"] is True, rep["reason"]
 
 
 def test_met_without_a_quote_breaks_the_contract(tree):
@@ -256,3 +365,32 @@ def test_judge_runs_read_only_and_cannot_touch_the_tree(tree):
     assert sorted(p.name for p in tree.iterdir()) == ["README.md"], "судья создал файлы"
     # и только теперь — реакция на вердикт
     assert rep["verified"] is True and rep["unmet"] == ["AC-1"]
+
+
+def test_the_denial_nudge_asks_for_the_right_kind_of_verdict(tree):
+    """Ревью PR #118: отказ брокера советовал судье приёмки вернуть ЧУЖОЙ вид вердикта.
+
+    Четыре нуджа петли параметризованы, а этот остался с зашитым `reviewer-result`. Судья, честно
+    послушавшийся подсказки, вернул бы вердикт без `criteria` — терминальную проверку он не
+    проходит, шаги сгорают, исход «ревьюер не вынес вердикт». Подсказка неверна ровно там, куда
+    судья попадает при попытке записи, — то есть в ветке отказа, как B2-10/B2-11.
+    """
+    seen = []
+
+    def watching_provider(prompt):
+        seen.append(prompt)
+        if len(seen) == 1:
+            return json.dumps({"op": "write", "path": "README.md", "content": "правлю сам"})
+        if len(seen) == 2:
+            return json.dumps(_read())
+        return json.dumps(_verdict([
+            {"id": "AC-1", "status": "met", "quote": "public/media/ — каталог медиа",
+             "source": "README.md"},
+            {"id": "AC-2", "status": "met", "quote": "src/ — исходный код", "source": "README.md"}]))
+
+    av.verify(tree, CRITERIA, watching_provider, revision="abc", change_context=DIFF)
+
+    after_denial = seen[1]
+    assert "ОТКЛОНЕНО" in after_denial, "тест смотрит не на тот шаг — отказа в контексте нет"
+    assert "acceptance-result" in after_denial.split("ОТКЛОНЕНО", 1)[1], (
+        "после отказа судью просят вернуть вердикт чужой формы")

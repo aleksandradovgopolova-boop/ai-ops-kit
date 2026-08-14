@@ -802,16 +802,34 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # качества вердиктов, и только потом блокировка. Гейт, включённый до замера, останавливал бы все
     # прогоны на непроверенном вердикте — и его научились бы обходить.
     from ai_ops_kit.engine import acceptance_verify as _av
-    _ac_text, _ac_items = _av.criteria_from_spec(child_root, wid)
+    _ac_text, _ac_items, _ac_problem = _av.criteria_from_spec(child_root, wid)
     if _ac_items and review and reviewer_proposer is not None and committed_sha:
         try:
+            # Контекст судьи — ВЕСЬ диапазон base..head, а не последний коммит (ревью PR #118).
+            # Критерии приёмки описывают изменение целиком; на resume и reevaluate_only ветка
+            # несёт несколько коммитов, и критерий, выполненный в предыдущем, не попал бы в дифф —
+            # судья честно ответил бы `unmet`/`undetermined` о работе, которая сделана. Тот же
+            # довод, по которому диапазон берёт seam_scan выше.
             acceptance_criteria = _av.verify(
                 work_root, _ac_items, reviewer_proposer, revision=committed_sha,
-                change_context=_change_context(work_root, committed_sha), budget=budget)
+                change_context=_change_context_range(work_root, base_sha, committed_sha),
+                budget=budget)
         except Exception as _e:  # noqa: BLE001 — FAIL-CLOSED: сбой сверки = «не сверено» с названной
             # причиной, а не отсутствие блока (пустой блок читался бы как «претензий нет»).
             acceptance_criteria = _av._unverified(
                 _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300])
+    elif _ac_problem:
+        # Спека ЕСТЬ, но не разобрана: это «не знаю», а не «критериев нет». Молчание здесь было бы
+        # тем же ложным green — `spec-coverage` для того же файла говорит `complete`.
+        acceptance_criteria = _av._unverified(
+            [], f"критерии приёмки НЕ прочитаны: {_ac_problem} — сверка невозможна, проверь вручную",
+            declared=True)
+    elif _ac_text and not _ac_items:
+        # Раздел заполнен, но проверяемых пунктов из него не извлеклось (одни заголовки/разделители).
+        acceptance_criteria = _av._unverified(
+            [], "раздел критериев заполнен, но ни одного проверяемого пункта в нём не найдено — "
+                "сверять нечего по существу (проверь формат: пункты списка или строки)",
+            declared=True)
     else:
         acceptance_criteria = _av._unverified(
             _ac_items,
@@ -819,7 +837,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
              "(нужны --execute с коммитом и провайдер судьи); `spec-coverage: complete` означает "
              "«раздел заполнен», а не «критерий выполнен»"
              if _ac_items else "критерии приёмки не объявлены — сверять нечего"),
-            declared=bool(_ac_text))
+            declared=bool(_ac_items))
 
     # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
     # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
