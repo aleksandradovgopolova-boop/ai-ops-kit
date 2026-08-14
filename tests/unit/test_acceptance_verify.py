@@ -162,6 +162,29 @@ def test_spaced_horizontal_rules_are_not_criteria():
     assert [c["text"] for c in av.parse_criteria("- крит\n- - -\n")] == ["крит"]
 
 
+def test_an_unindented_line_after_a_bullet_is_its_own_criterion():
+    """Третье ревью PR #118: правило продолжения СКЛЕИВАЛО два независимых критерия.
+
+    Любая неразмеченная строка после пункта прилипала к нему, и судья выносил ОДИН вердикт на два
+    требования — мог честно сказать `met`, когда выполнена лишь первая половина. Продолжением
+    считается только строка с отступом: именно так размечается многострочный YAML-пункт.
+    """
+    got = [c["text"] for c in av.parse_criteria(
+        "- в README нет public/media\nэндпоинт /health отвечает 200")]
+
+    assert got == ["в README нет public/media", "эндпоинт /health отвечает 200"], got
+
+
+def test_bold_markup_is_not_eaten_as_a_list_marker():
+    """Третье ревью: `**AC-1**: …` терял первую звёздочку — критерий доезжал искажённым.
+
+    Не потеря, но текст, который судья и владелец читают как критерий, обязан совпадать с тем, что
+    написал человек: иначе вердикт выносится по подпорченной формулировке.
+    """
+    assert [c["text"] for c in av.parse_criteria("**AC-1**: нет public/media")] == [
+        "**AC-1**: нет public/media"]
+
+
 def test_criteria_are_parsed_without_losing_items():
     """Разбор не теряет критерии: списки, чекбоксы, нумерация, проза — всё становится пунктами.
 
@@ -199,19 +222,29 @@ def test_every_shape_of_the_spec_section_is_read(tmp_path, section, expected):
     assert text
 
 
-@pytest.mark.parametrize("section,expect_problem", [
-    ("acceptance_criteria:\n    status: complete\n    note: нет строк с public/media\n", True),
-    ("acceptance_criteria:\n    status: missing\n", False),          # не заполнен НАМЕРЕННО
-    ("acceptance_criteria:\n    AC-1: нет строк с public/media\n    AC-2: структура верна\n", False),
-    ("acceptance_criteria:\n    AC-1:\n      вложено: глубже\n", True),   # ни одного текста
+@pytest.mark.parametrize("section,expect_problem,expect_items", [
+    # мэппинг без содержимого -> проблема НАЗВАНА (второе ревью)
+    ("acceptance_criteria:\n    status: complete\n    note: нет строк с public/media\n", True, 0),
+    # `content: ''` — ровно то, что пишет `spec_levels.create_spec`; молчание возвращалось (третье ревью)
+    ("acceptance_criteria:\n    status: complete\n    content: ''\n    note: критерии тут\n", True, 0),
+    # ключ без читаемого текста — потерянный критерий, назвать (третье ревью)
+    ("acceptance_criteria:\n    AC-1: нет public/media\n    AC-2: []\n", True, 0),
+    # намеренно не заполненные разделы: молчание честно
+    ("acceptance_criteria:\n    status: missing\n", False, 0),
+    ("acceptance_criteria:\n    status: needs_human\n", False, 0),
+    # мэппинг `AC-N: текст` — читаемая форма, в том числе рядом со `status` (третье ревью)
+    ("acceptance_criteria:\n    AC-1: нет строк с public/media\n    AC-2: структура верна\n", False, 2),
+    ("acceptance_criteria:\n    status: complete\n    AC-1: нет public/media\n    AC-2: верно\n",
+     False, 2),
+    ("acceptance_criteria:\n    AC-1:\n      text: вложенный критерий\n", False, 1),
 ])
-def test_an_unrecognised_mapping_never_returns_to_silence(tmp_path, section, expect_problem):
-    """Второе ревью PR #118: мэппинг без `content` снова давал «» и problem=None — то есть тишину.
+def test_a_mapping_section_never_returns_to_silence(tmp_path, section, expect_problem, expect_items):
+    """Второе и третье ревью PR #118: молчание возвращалось через каждую непредусмотренную форму.
 
     `spec_levels` считает такой раздел `complete`, а прогон не печатал НИ СЛОВА: та же связка
-    «`spec-coverage: complete` + молчание», ради которой всё писалось. Теперь нераспознанная форма
-    называет проблему; `AC-1: текст` читается как критерии; молчание оставлено ровно за разделом,
-    не заполненным намеренно (`missing`/`declined`/`not_applicable`).
+    «`spec-coverage: complete` + тишина», ради которой всё писалось. Теперь читаемая форма читается
+    (в том числе рядом со `status` и с вложенным текстом), нечитаемая — НАЗЫВАЕТ проблему, а
+    молчание оставлено ровно за разделом, не заполненным намеренно.
     """
     (tmp_path / "features" / "w").mkdir(parents=True)
     (tmp_path / "features" / "w" / "spec.yaml").write_text(
@@ -220,14 +253,10 @@ def test_an_unrecognised_mapping_never_returns_to_silence(tmp_path, section, exp
 
     text, items, problem = av.criteria_from_spec(tmp_path, "w")
 
-    if expect_problem:
-        assert problem, "нераспознанная форма раздела вернулась к молчанию"
-    else:
-        assert problem is None, problem
-        if "AC-1" in section:
-            assert len(items) == 2, items
-        else:
-            assert (text, items) == ("", []), "намеренно не заполненный раздел не выдумывает критерии"
+    assert bool(problem) is expect_problem, f"problem={problem!r} при разборе {section!r}"
+    assert len(items) == expect_items, items
+    if not expect_problem and not expect_items:
+        assert text == "", "намеренно не заполненный раздел не выдумывает критерии"
 
 
 def test_an_unreadable_spec_is_named_not_silently_empty(tmp_path):
@@ -382,6 +411,29 @@ def test_absence_is_provable_and_a_masked_removal_is_caught(tmp_path):
     assert "В ФАЙЛЕ ЕСТЬ" in rep2["criteria"][0]["reason"], rep2["criteria"][0]["reason"]
 
 
+def test_absent_cannot_close_a_criterion_the_change_never_touched(tmp_path):
+    """fail-closed #2e (третье ревью PR #118): `evidence=absent` был УНИВЕРСАЛЬНЫМ ОБХОДОМ.
+
+    Заземление отсутствия проверяло только «в файле этого нет» — то есть закрывало любой критерий
+    цитатой строки, которой в файле нет и никогда не было: «эндпоинт /health отвечает 200»
+    доказывался тем, что этих слов в README не встречается. Один лишний ключ — и ложный green
+    возвращался. Доказательство удаления — это удалённая строка ПЛЮС её отсутствие в файле: чего
+    дифф не удалял, того он и не убрал.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")
+    ctx = "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-старое\n+# Проект\n"
+    crit = [{"id": "AC-1", "text": "эндпоинт /health отвечает 200"}]
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent",
+         "quote": "эндпоинт /health отвечает 200", "source": "README.md"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
+
+    assert rep["verified"] is False, "критерий о НАЛИЧИИ закрыт доказательством отсутствия"
+    assert rep["undetermined"] == ["AC-1"]
+    assert "среди УДАЛЁННЫХ" in rep["criteria"][0]["reason"], rep["criteria"][0]["reason"]
+
+
 def test_absence_without_a_source_is_not_proof(tmp_path):
     """`absent` без файла — «нигде не нашёл», а это не доказательство. Контракт такое не пропускает."""
     crit = [{"id": "AC-1", "text": "в README нет строк с public/media"}]
@@ -392,6 +444,39 @@ def test_absence_without_a_source_is_not_proof(tmp_path):
 
     assert rep["verified"] is False
     assert "evidence=absent требует quote и source" in rep["reason"], rep["reason"]
+
+
+def test_a_no_newline_marker_does_not_hide_the_added_line(tmp_path):
+    """Третье ревью PR #118: `\\ No newline at end of file` обрывал ханк.
+
+    Git ставит эту строку МЕЖДУ удалённым и добавленным вариантом последней строки файла. Прежний
+    разбор считал неизвестный префикс концом ханка — и добавленная строка становилась невидимой для
+    заземления: судья лишался основного пути подтверждения, а сверка объявлялась неполной на
+    работе, которая сделана.
+    """
+    ctx = ("diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1,2 +1,2 @@\n"
+           " оставили\n-старый хвост\n\\ No newline at end of file\n+новый хвост здесь\n")
+
+    post, removed = av._post_state(ctx)
+
+    assert "новый хвост здесь" in post, f"добавленная строка потеряна: {post!r}"
+    assert "старый хвост" in removed
+
+
+def test_diff_content_that_looks_like_a_file_header_survives(tmp_path):
+    """Третье ревью: удалённая строка `-- комментарий` рендерится как `--- …` и убивала ханк.
+
+    Отсекать заголовки по префиксу можно только ВНЕ ханка: внутри ханка `--- ` — это удалённая
+    строка, чей текст начинается с `-- ` (например SQL-комментарий). Прежняя проверка выбрасывала
+    её вместе с остатком ханка, то есть теряла и добавленные строки.
+    """
+    ctx = ("diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1,2 +1,2 @@\n"
+           " select 1\n--- old sql comment\n+select 2\n+public/media added here\n")
+
+    post, removed = av._post_state(ctx)
+
+    assert "select 2" in post and "public/media added here" in post, f"тело ханка потеряно: {post!r}"
+    assert "- old sql comment" in removed
 
 
 def test_a_removed_line_starting_with_dashes_is_still_recognised(tmp_path):

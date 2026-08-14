@@ -57,7 +57,7 @@ _BULLET = re.compile(r"^\s*(?:[-*•][ \t]+(?:\[[ xX]\][ \t]*)?|\d+[.)][ \t]+)(.
 # (`- один`, `*два`) строка без пробела не была пунктом, а непустой список отключал прозаический
 # разбор, и критерий ИСЧЕЗАЛ. Поэтому маркер без пробела — тоже пункт (автор явно размечал список),
 # а разбор стал построчным автоматом: потерять пункт он не может по построению.
-_TIGHT_BULLET = re.compile(r"^\s*[-*•](?=\S)(.+)$")
+_TIGHT_BULLET = re.compile(r"^\s*[-*•](?![-*•])(?=\S)(.+)$")
 # Разделитель (`---`, `***`, `___`, а также `* * *` и `- - -`) и заголовок (`# …`, `**…**`,
 # `Критерии:`) — не критерии. Псевдопункт неопровержим: судья честно отвечает `undetermined`, и вся
 # сверка становится неполной из-за одной декоративной строки.
@@ -65,7 +65,7 @@ _RULE = re.compile(r"^\s*([-*_])(?:[ \t]*\1){2,}[ \t]*$")
 _HEADING = re.compile(r"^\s*(?:#{1,6}\s|\*\*[^*]+\*\*\s*$|__[^_]+__\s*$)")
 # Разделы, которые НЕ заполнены намеренно (словарь `spec_levels.SECTION_STATUSES`): молчание по ним
 # честно — критериев нет, а не «не прочитали».
-_NOT_PROVIDED = {"missing", "declined", "not_applicable"}
+_NOT_PROVIDED = {"missing", "declined", "not_applicable", "needs_human"}
 
 
 def parse_criteria(text) -> list:
@@ -98,8 +98,13 @@ def parse_criteria(text) -> list:
                 items.append(body)
                 in_list_item = True
             continue
-        if in_list_item:
-            items[-1] = f"{items[-1]} {s}"     # продолжение многострочного пункта
+        if in_list_item and ln[:1].isspace():
+            # ПРОДОЛЖЕНИЕ пункта — только строка С ОТСТУПОМ (третье ревью PR #118). Без этого
+            # условия любая неразмеченная строка после пункта прилипала к нему, и ДВА независимых
+            # критерия склеивались в один: судья выносил один вердикт на два требования и мог
+            # честно сказать `met`, когда выполнена лишь первая половина. Именно так `_section_text`
+            # и размечает многострочный YAML-пункт — отступом.
+            items[-1] = f"{items[-1]} {s}"
             continue
         if len(s) >= 3 and not s.endswith(":"):
             items.append(s)                    # проза: строка и есть критерий
@@ -135,20 +140,48 @@ def _section_text(node) -> tuple:
                 parts.append(("- " if i == 0 else "  ") + ln.strip())
         return "\n".join(parts), None
     if isinstance(node, dict):
+        # ПОРЯДОК ВАЖЕН (третье ревью PR #118) и он такой: сначала непустое содержимое, потом
+        # мэппинг критериев, и только потом отказ по статусу.
+        # (а) `content: ""` — это НЕ содержимое: `spec_levels.create_spec` создаёт разделы именно
+        #     так, поэтому пустая строка возвращала «критериев нет» без проблемы, и прогон снова
+        #     молчал при `spec-coverage: complete`. Пустое значение проваливается дальше;
+        # (б) `{status: complete, AC-1: …, AC-2: …}` раньше отвергался по статусу, хотя критерии
+        #     лежат рядом: отказ с причиной, противоречащей файлу, хуже отсутствия причины.
         for key in ("content", "text", "value"):
-            if key in node:
-                return _section_text(node[key])
-        status = str(node.get("status") or "").strip().lower()
-        if status:
-            if status in _NOT_PROVIDED:
-                return "", None
-            return "", (f"раздел объявлен '{status}', но содержимого нет "
-                        f"(ключи: {', '.join(sorted(map(str, node)))})")
-        # мэппинг `AC-1: текст` — естественная форма; читаем как список пунктов
-        parts = [f"- {k}: {v}" for k, v in node.items()
-                 if isinstance(v, (str, int, float)) and str(v).strip()]
+            text, problem = _section_text(node.get(key))
+            if problem:
+                return "", problem
+            if text:
+                return text, None
+        parts, skipped = [], []
+        for k, v in node.items():
+            if str(k).strip().lower() in ("status", "note", "owner", "updated_at",
+                                          "content", "text", "value"):
+                continue      # служебные поля и уже проверенные выше пустые content/text/value
+            t, problem = _section_text(v)
+            if problem:
+                return "", problem
+            if t:
+                # хвост вложенного пункта размечается отступом — как в списке, иначе продолжение
+                # склеится с соседним критерием или потеряется
+                lines = [l.strip() for l in str(t).splitlines() if l.strip()]
+                parts.append(f"- {k}: {lines[0]}")
+                parts += [f"  {l}" for l in lines[1:]]
+            else:
+                skipped.append(str(k))
+        if skipped:
+            # Пропущенный ключ — потерянный критерий, то есть «выполнен по умолчанию». Молча
+            # отбрасывать нельзя даже часть: сверка неполна, и это обязано быть названо.
+            return "", (f"в разделе есть ключи без читаемого текста: {', '.join(sorted(skipped))} — "
+                        f"часть критериев была бы потеряна")
         if parts:
             return "\n".join(parts), None
+        status = str(node.get("status") or "").strip().lower()
+        if status in _NOT_PROVIDED:
+            return "", None                    # раздел не заполнен НАМЕРЕННО — молчание честно
+        if status:
+            return "", (f"раздел объявлен '{status}', но содержимого нет "
+                        f"(ключи: {', '.join(sorted(map(str, node)))})")
         return "", (f"раздел — мэппинг без content/text/value и без текстовых значений "
                     f"(ключи: {', '.join(sorted(map(str, node)))})")
     return str(node).strip(), None
@@ -209,10 +242,14 @@ def _post_state(change_context) -> tuple:
         if ln.startswith("@@"):
             in_hunk = True
             continue
-        if ln.startswith(("diff --git", "--- ", "+++ ", "index ")):
-            in_hunk = False          # заголовки файла — не содержимое
+        if ln.startswith(("diff --git", "index ")):
+            in_hunk = False          # начался другой файл
             continue
         if not in_hunk:
+            # Заголовки `--- a/файл` / `+++ b/файл` встречаются ТОЛЬКО вне ханка (третье ревью
+            # PR #118). Отсекать их по префиксу внутри ханка нельзя: удалённая строка, чей текст
+            # начинается с `-- ` (SQL-комментарий), выглядит как `--- …` — и прежняя проверка
+            # выбрасывала её вместе с остатком ханка.
             continue
         if ln.startswith("-"):
             removed.append(ln[1:])
@@ -220,8 +257,10 @@ def _post_state(change_context) -> tuple:
             kept.append(ln[1:])
         elif ln.startswith(" ") or not ln:
             kept.append(ln[1:] if ln else ln)
-        else:
-            in_hunk = False          # строка не из ханка (усечение диффа, проза) — ханк кончился
+        # Неизвестный префикс внутри ханка (`\ No newline at end of file`) ПРОПУСКАЕТСЯ, а не
+        # закрывает ханк: git ставит эту строку между удалённым и добавленным вариантом последней
+        # строки, и прежний `in_hunk = False` терял добавленную строку целиком — судья лишался
+        # основного пути заземления, а сверка объявлялась неполной на выполненной работе.
     return "\n".join(kept), "\n".join(removed)
 
 
@@ -261,6 +300,7 @@ def _ground_quote(quote, change_context, work_root, source, evidence="present") 
     if len(q) < 4:
         return False, "цитата короче 4 символов — подтвердить нечем"
     body, read_problem = _read_source(work_root, source)
+    post, removed = _post_state(change_context)
 
     if evidence == "absent":
         if body is None:
@@ -268,9 +308,17 @@ def _ground_quote(quote, change_context, work_root, source, evidence="present") 
         if q in _norm(body):
             return False, (f"объявлено отсутствие, но цитата В ФАЙЛЕ ЕСТЬ ({source}) — "
                            f"основание опровергнуто чтением")
+        # ОТСУТСТВИЕ ОБЯЗАНО БЫТЬ СВЯЗАНО С ЭТИМ ИЗМЕНЕНИЕМ (третье ревью PR #118). Без этой
+        # проверки `absent` был универсальным обходом: любой критерий закрывался цитатой строки,
+        # которой в файле нет и никогда не было — «эндпоинт /health отвечает 200» доказывался тем,
+        # что этих слов в README не встречается. Доказательство удаления — это удалённая строка
+        # плюс её отсутствие в файле; чего дифф не удалял, того он и не убрал.
+        if q not in _norm(removed):
+            return False, ("объявлено отсутствие, но этой строки нет и среди УДАЛЁННЫХ строк "
+                           "диффа — изменение её не убирало, значит и доказывать нечего "
+                           "(для критерия о НАЛИЧИИ используй evidence=\"present\")")
         return True, None
 
-    post, removed = _post_state(change_context)
     if q in _norm(post):
         return True, None
     # «Только в удалённой строке» — вердикт ПОСЛЕ проверки файла, а не вместо неё: перенесённая
