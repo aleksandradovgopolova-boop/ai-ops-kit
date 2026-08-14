@@ -118,7 +118,11 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     # destructive не является security-доменом -> требуем отдельный ApprovalRecord "destructive"
     if signals.get("destructive"):
         recs = approvals.load_approvals(child_root, wid)
-        has_destructive = any(r.get("approval") == "destructive" and approvals._record_valid(r) for r in recs)
+        # v3.37: plan_hash передаём ЯВНО. Без него `_record_valid` не сверял привязку вовсе — то есть
+        # самый опасный домен (деструктивное действие) проверялся слабее остальных, хотя выглядел так же.
+        _ph = approvals.plan_binding_hash(child_root, wid)
+        has_destructive = any(r.get("approval") == "destructive"
+                              and approvals._record_valid(r, plan_hash=_ph) for r in recs)
         if not has_destructive:
             missing = missing + [{"domain": "destructive", "condition": "деструктивное действие",
                                   "trigger": "destructive", "reason": "нет валидного ApprovalRecord"}]
