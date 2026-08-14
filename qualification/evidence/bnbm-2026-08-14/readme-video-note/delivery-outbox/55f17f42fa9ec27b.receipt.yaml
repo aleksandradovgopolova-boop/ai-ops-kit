@@ -1,0 +1,13 @@
+schema_version: 1
+kind: DeliveryReceipt
+delivery_id: 55f17f42fa9ec27b
+workitem_id: readme-video-note
+repository: aleksandradovgopolova-boop/bolshe-ne-budu-menshe
+branch: ai-ops/readme-video-note
+commit_sha: cbef7a7dc086d6dae7db49aba139620bdb249a05
+base_ref: main
+status: opened
+remote_sha: cbef7a7dc086d6dae7db49aba139620bdb249a05
+sha_verified: true
+pr_url: https://github.com/aleksandradovgopolova-boop/bolshe-ne-budu-menshe/pull/110
+pr_number: 110

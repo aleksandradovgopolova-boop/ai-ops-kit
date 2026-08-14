@@ -1,0 +1,13 @@
+schema_version: 1
+kind: DeliveryReceipt
+delivery_id: e5ba453a627c253c
+workitem_id: readme-media-line-removed
+repository: aleksandradovgopolova-boop/bolshe-ne-budu-menshe
+branch: ai-ops/readme-media-line-removed
+commit_sha: 1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466
+base_ref: main
+status: opened
+remote_sha: 1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466
+sha_verified: true
+pr_url: https://github.com/aleksandradovgopolova-boop/bolshe-ne-budu-menshe/pull/111
+pr_number: 111
