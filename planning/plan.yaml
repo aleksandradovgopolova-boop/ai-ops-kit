@@ -414,7 +414,9 @@ work:
     title: Свернуть продуктовые шаблоны в четыре управляющих объекта
     type: product
     goal: product-decision-loop
-    status: todo
+    status: in_progress
+    branch: engops/four-product-objects-2026-08-14
+    evidence: templates/product/OpportunityBrief.md
     owner_role: product
     depends_on: [plan-split-active-from-history]
     write_scope: [templates/product/, workflows/, schemas/, ai_ops_kit/planning/]
@@ -430,6 +432,15 @@ work:
     # это уже названный риск (`plan.yaml` -> spec-coverage: `complete` = «раздел заполнен»).
     # УРОК PR #118, переносимый сюда: утверждение обязано НАЗЫВАТЬ СИЛУ своего основания. Поле
     # «evidence: есть» без указания, чем подтверждено, — будущий ложный green той же формы.
+    # СДЕЛАНО 2026-08-14 (контракт объектов): четыре объекта machine-checked —
+    # `validate_product_objects.py` (76-й валидатор) проверяет СУЩЕСТВО: утверждение называет
+    # основание либо назван `evidence_gap`; вариантов решения ≥2 и у каждого есть минусы;
+    # `not_doing` и `revisit_when` обязательны; baseline требует даты и источника; контракт —
+    # guardrails и правил continue/change/stop ДО работы; readout сверяется с контрактом, и
+    # умолчание о заранее объявленном guardrail ловится (`cross_check`). Шаблоны в
+    # `templates/product/` — вход и объяснение, существующие discovery-шаблоны остаются входом.
+    # ОСТАЛОСЬ: провести ОДНУ настоящую функцию через все четыре объекта (полигон — cockpit) и
+    # только потом решать, делать ли их обязательными в workflow PRODUCT.
 
   - id: experience-contract-drives-stories
     title: Обязательные stories выводятся из Experience Contract кодом, а не объявляются прозой

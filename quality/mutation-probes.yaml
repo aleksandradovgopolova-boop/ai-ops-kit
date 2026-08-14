@@ -107,3 +107,34 @@ probes:
   why: 'Разнос плана на активное и закрытое даёт правду только если историю видят ВСЕ потребители. Именно
     этот шов сломался 14.08.2026: `ai-ops next` отказался советовать работу, потому что `depends_on` смотрел
     на работу, уехавшую в историю. Механизм был исправен, шов — нет.'
+- id: product-options-are-required
+  kind: guard
+  file: ai_ops_kit/validation/validate_product_objects.py
+  find: '    if not isinstance(opts, list) or len(opts) < 2:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_product_objects.py
+  why: Решение с одним вариантом — оформление уже принятого. Снять эту охрану значит вернуть продуктовый
+    пакет, который выглядит обоснованным и им не является.
+- id: product-readout-crosscheck-guardrails
+  kind: guard
+  file: ai_ops_kit/validation/validate_product_objects.py
+  find: '    missing = sorted(declared - reported)'
+  replace_with: '    missing = []'
+  tests:
+  - tests/unit/test_product_objects.py
+  why: Умолчание о заранее объявленном guardrail читается как «всё в порядке» — сверка readout с контрактом
+    единственное, что это ловит.
+- id: product-objects-validator-is-under-contract
+  kind: seam
+  covers:
+  - ai_ops_kit/validation/validate_product_objects.py
+  file: tests/unit/test_validator_contract.py
+  find: '    "validate_product_objects",'
+  replace_with: '    # снят из контракта'
+  tests:
+  - tests/unit/test_validator_contract.py::test_list_matches_reality
+  why: 'ШОВ регистрации: валидатор со швом `check(data)`, не внесённый в контракт, остаётся вне проверок
+    — «объявлено, но не исполняется». Первая версия этой пробы ВЫЖИЛА и показала, что снятие из рантайм-списка
+    ничего не ломает: валидатор держался вторым списком. Несущий шов — именно контракт `check(data)`,
+    и проба теперь ломает его.'

@@ -659,6 +659,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/validation/validate_openspec_change.py`
 - `ai_ops_kit/validation/validate_presets.py`
 - `ai_ops_kit/validation/validate_references.py`
+- `ai_ops_kit/validation/validate_product_objects.py` — четыре управляющих объекта продукта: утверждение называет основание, решение имеет альтернативы и условие пересмотра, baseline — дату и источник, readout сверяется с контрактом (2026-08-14)
 - `ai_ops_kit/validation/validate_mutation_probes.py` — реестр охранных проверок: образец охраны обязан существовать РОВНО один раз, иначе проба молча ничего не проверяет (2026-08-14)
 - `ai_ops_kit/validation/validate_acceptance_result.py` — вердикт сверки критериев приёмки: вердикт по КАЖДОМУ критерию, `met` требует цитаты и источника (B2-14, 2026-08-14)
 - `ai_ops_kit/validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
