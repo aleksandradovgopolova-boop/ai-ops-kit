@@ -236,8 +236,15 @@ def compute(child_root, budget_left=None):
                        f"Впишите свою работу и снимите строку `template: true`; советовать из "
                        f"примера кит не станет."}
 
-    val = _plan.validate(plan, model)
-    res = _plan.resolve(plan, child_root, model)
+    # ИСТОРИЯ ПОДАЁТСЯ И ЗДЕСЬ. Разнос плана на активное и закрытое (`plan-as-control-plane`) даёт
+    # правду только если её видят ВСЕ потребители плана: этот шов кит нашёл на себе сам — `next`
+    # отказался советовать работу, потому что `depends_on` смотрел на работу, уехавшую в историю.
+    try:
+        closed = _plan.load_history(child_root)
+    except _plan.PlanCorrupt:
+        closed = []       # причину назовёт валидатор истории; падать здесь незачем, молчать — нельзя
+    val = _plan.validate(plan, model, closed=closed, root=child_root)
+    res = _plan.resolve(plan, child_root, model, closed=closed)
     ws = _plan.items(plan)
     by_id = {w["id"]: w for w in ws if w.get("id")}
     caps_known = _known_capabilities()
