@@ -183,6 +183,25 @@ def test_bold_markup_is_not_eaten_as_a_list_marker():
     """
     assert [c["text"] for c in av.parse_criteria("**AC-1**: нет public/media")] == [
         "**AC-1**: нет public/media"]
+    # одиночная звёздочка — то же искажение, другое начертание (четвёртое ревью PR #118)
+    assert [c["text"] for c in av.parse_criteria("*AC-1*: нет public/media")] == [
+        "*AC-1*: нет public/media"]
+    # а `*` как настоящий маркер списка по-прежнему работает
+    assert [c["text"] for c in av.parse_criteria("*крит один\n*крит два")] == [
+        "крит один", "крит два"]
+
+
+def test_a_uniformly_indented_block_is_not_one_glued_criterion():
+    """Четвёртое ревью PR #118: равномерный отступ склеивал все критерии в один.
+
+    `_section_text` снимал отступ только у первой строки, поэтому соседние выглядели её
+    продолжением — и судья выносил ОДИН вердикт на три требования. Общий отступ снимается со всего
+    блока; настоящее продолжение (более глубокий отступ) по-прежнему приклеивается.
+    """
+    got = [c["text"] for c in av.parse_criteria(
+        "    - AC-1: первое\n    AC-2: второе\n    AC-3: третье")]
+
+    assert got == ["AC-1: первое", "AC-2: второе", "AC-3: третье"], got
 
 
 def test_criteria_are_parsed_without_losing_items():
@@ -231,9 +250,13 @@ def test_every_shape_of_the_spec_section_is_read(tmp_path, section, expected):
     ("acceptance_criteria:\n    AC-1: нет public/media\n    AC-2: []\n", True, 0),
     # намеренно не заполненные разделы: молчание честно
     ("acceptance_criteria:\n    status: missing\n", False, 0),
-    ("acceptance_criteria:\n    status: needs_human\n", False, 0),
+    # `needs_human` — долг, а не отказ: молчать нельзя, но и «не прочитано» неверно (четвёртое ревью)
+    ("acceptance_criteria:\n    status: needs_human\n", True, 0),
     # мэппинг `AC-N: текст` — читаемая форма, в том числе рядом со `status` (третье ревью)
     ("acceptance_criteria:\n    AC-1: нет строк с public/media\n    AC-2: структура верна\n", False, 2),
+    # непустой `content` НЕ отменяет соседние ключи (четвёртое ревью): иначе два критерия исчезали
+    ("acceptance_criteria:\n    status: complete\n    content: 'Критерии:'\n"
+     "    AC-1: нет public/media\n    AC-2: структура верна\n", False, 2),
     ("acceptance_criteria:\n    status: complete\n    AC-1: нет public/media\n    AC-2: верно\n",
      False, 2),
     ("acceptance_criteria:\n    AC-1:\n      text: вложенный критерий\n", False, 1),
@@ -257,6 +280,46 @@ def test_a_mapping_section_never_returns_to_silence(tmp_path, section, expect_pr
     assert len(items) == expect_items, items
     if not expect_problem and not expect_items:
         assert text == "", "намеренно не заполненный раздел не выдумывает критерии"
+
+
+def test_a_section_awaiting_a_human_says_exactly_that(tmp_path):
+    """`needs_human` — долг, а не отказ, и диагноз обязан быть верным (третье и четвёртое ревью).
+
+    Третий круг сделал его молчаливым — вернулась связка «spec-coverage ready + прогон молчит»
+    (`assess` на `needs_human` не блокирует, и список `needs_human` не читает никто). Четвёртый это
+    поймал. Но и «критерии НЕ прочитаны, проверь вручную» — неверная причина: раздел не сломан, он
+    ждёт человека. Проверяется именно ФОРМУЛИРОВКА: причина, отправляющая читающего не туда, — это
+    та же цена, что причина отсутствующая.
+    """
+    (tmp_path / "features" / "w").mkdir(parents=True)
+    (tmp_path / "features" / "w" / "spec.yaml").write_text(
+        "sections:\n  acceptance_criteria:\n    status: needs_human\n", encoding="utf-8")
+
+    _text, items, problem = av.criteria_from_spec(tmp_path, "w")
+
+    assert items == []
+    assert problem and "ждёт человека" in problem, problem
+    assert "не прочитан" not in problem, f"неверный диагноз: {problem}"
+
+
+def test_prose_after_a_truncated_diff_is_not_evidence(tmp_path):
+    """Четвёртое ревью PR #118: инвариант «основанием может быть только тело ханка» должен держаться КОДОМ.
+
+    Правка про `\\ No newline` убрала закрытие ханка на неизвестном префиксе — и проза после
+    усечённого диффа снова становилась «содержимым». Сегодня оба сборщика контекста кладут дифф
+    последним, поэтому дыра не эксплуатировалась; инвариант, который держится порядком рендеринга,
+    а не проверкой, — это отложенный дефект.
+    """
+    ctx = ("diff --git a/f.txt b/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n"
+           "-старое\n+новое\n"
+           "... [дифф усечён на 14000 симв.]\n"
+           "-это не дифф\n+и это не дифф\n")
+
+    post, removed = av._post_state(ctx)
+
+    assert "новое" in post and "старое" in removed, "тело ханка потеряно"
+    assert "и это не дифф" not in post, f"проза после усечения стала содержимым: {post!r}"
+    assert "это не дифф" not in removed, f"проза после усечения стала удалённой строкой: {removed!r}"
 
 
 def test_an_unreadable_spec_is_named_not_silently_empty(tmp_path):
@@ -335,12 +398,15 @@ def test_a_one_letter_quote_grounds_in_anything_and_is_rejected(tree):
     assert "короче" in rep["criteria"][0]["reason"]
 
 
-def test_a_quote_from_a_deleted_line_cannot_prove_the_result(tmp_path):
-    """fail-closed #2c (ревью PR #118): цитата из УДАЛЁННОЙ строки обосновывала `met`.
+def test_met_cannot_stand_on_a_line_that_no_longer_exists(tmp_path):
+    """fail-closed #2c: `met` с цитатой УДАЛЁННОЙ строки — это и есть форма B2-14.
 
-    Критерий «в README нет строк с public/media» подтверждался цитатой ровно той строки, которую
-    правка удалила: она есть в диффе, значит «основание подтверждено» — и отчёт печатал «выполнены
-    все». Заземление обязано смотреть на состояние ПОСЛЕ правки, иначе оно доказывает прошлое.
+    Судья цитировал прежнюю строку про `public/media` и ставил «выполнено». Проверка здесь — О
+    ФОРМЕ, а не о смысле: «выполнено» не может опираться на текст, которого в результате нет.
+    Критерий об ОТСУТСТВИИ этой проверкой не задет — у него `evidence="absent"` и своё
+    доказательство (см. тест про доказуемое отсутствие ниже). Именно это разделение и позволило
+    закрыть класс: три круга ревью до него проверка либо принимала прошлое за результат, либо
+    отвергала честный вердикт об отсутствии.
     """
     (tmp_path / "README.md").write_text("# Проект\n\nмедиа в проекте нет\n", encoding="utf-8")
     diff = ("Unified-дифф ревизии:\n--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n"
@@ -354,7 +420,7 @@ def test_a_quote_from_a_deleted_line_cannot_prove_the_result(tmp_path):
 
     assert rep["verified"] is False
     assert rep["undetermined"] == ["AC-1"]
-    assert "УДАЛЁННОЙ" in rep["criteria"][0]["reason"], rep["criteria"][0]["reason"]
+    assert "УДАЛЁННУЮ" in rep["criteria"][0]["reason"], rep["criteria"][0]["reason"]
 
 
 def test_a_commit_message_is_not_evidence(tmp_path):
@@ -373,12 +439,14 @@ def test_a_commit_message_is_not_evidence(tmp_path):
            "--- a/README.md\n+++ b/README.md\n@@ -1,3 +1,3 @@\n"
            "-public/media/ — медиафайлы проекта\n+public/media/ — каталог медиа\n")
 
-    ok, why = av._ground_quote("в README больше нет строк с public/media", ctx, tmp_path, "README.md")
-    assert ok is False, "сообщение коммита принято за основание"
-    assert av._ground_quote(" README.md | 2 +-", ctx, tmp_path, "README.md")[0] is False, (
+    basis, why = av._ground_quote("в README больше нет строк с public/media", ctx, tmp_path,
+                                  "README.md")
+    assert basis is None, f"сообщение коммита принято за основание ({basis})"
+    assert av._ground_quote(" README.md | 2 +-", ctx, tmp_path, "README.md")[0] is None, (
         "строка статистики диффа принята за содержимое")
     # а настоящее содержимое ханка по-прежнему заземляется
-    assert av._ground_quote("public/media/ — каталог медиа", ctx, tmp_path, "README.md")[0] is True, why
+    assert av._ground_quote("public/media/ — каталог медиа", ctx, tmp_path,
+                            "README.md")[0] in av.STRONG_BASIS, why
 
 
 def test_absence_is_provable_and_a_masked_removal_is_caught(tmp_path):
@@ -411,17 +479,21 @@ def test_absence_is_provable_and_a_masked_removal_is_caught(tmp_path):
     assert "В ФАЙЛЕ ЕСТЬ" in rep2["criteria"][0]["reason"], rep2["criteria"][0]["reason"]
 
 
-def test_absent_cannot_close_a_criterion_the_change_never_touched(tmp_path):
-    """fail-closed #2e (третье ревью PR #118): `evidence=absent` был УНИВЕРСАЛЬНЫМ ОБХОДОМ.
+def test_an_unproven_absence_claim_is_named_not_silently_accepted(tmp_path):
+    """ГРАНИЦА МЕХАНИЗМА, названная прямо (четвёртое ревью PR #118).
 
-    Заземление отсутствия проверяло только «в файле этого нет» — то есть закрывало любой критерий
-    цитатой строки, которой в файле нет и никогда не было: «эндпоинт /health отвечает 200»
-    доказывался тем, что этих слов в README не встречается. Один лишний ключ — и ложный green
-    возвращался. Доказательство удаления — это удалённая строка ПЛЮС её отсутствие в файле: чего
-    дифф не удалял, того он и не убрал.
+    Третий круг требовал, чтобы `absent` подтверждался удалённой строкой, — и тем сделал выполненный
+    критерий об отсутствии НЕДОКАЗУЕМЫМ: удаления могло не быть вовсе, дифф мог быть усечён, а
+    промпт судьи прямо запрещал цитировать удалённое. Отвергать честный вердикт нельзя: сломанную
+    проверку выключают.
+
+    Поэтому недоказанное отсутствие вердикт НЕ отменяет, но и не выдаётся за проверенное: основание
+    называется `judge-only`, критерий попадает в `judge_only`, `quote_verified` его не считает, и
+    вывод прогона прямо просит владельца проверить эти критерии самому. Это ЧЕСТНАЯ, но более слабая
+    гарантия, чем «код доказал», — и именно так она и записана.
     """
     (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")
-    ctx = "diff --git a/README.md b/README.md\n@@ -1 +1 @@\n-старое\n+# Проект\n"
+    ctx = "diff --git a/app.py b/app.py\n@@ -1 +1 @@\n-import os\n+import sys\n"
     crit = [{"id": "AC-1", "text": "эндпоинт /health отвечает 200"}]
     prov = _provider([_read(), _verdict([
         {"id": "AC-1", "status": "met", "evidence": "absent",
@@ -429,9 +501,28 @@ def test_absent_cannot_close_a_criterion_the_change_never_touched(tmp_path):
 
     rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
 
-    assert rep["verified"] is False, "критерий о НАЛИЧИИ закрыт доказательством отсутствия"
-    assert rep["undetermined"] == ["AC-1"]
-    assert "среди УДАЛЁННЫХ" in rep["criteria"][0]["reason"], rep["criteria"][0]["reason"]
+    assert rep["verified"] is True, "вердикт судьи отвергнут — механизм снова ломается на честной работе"
+    assert rep["quote_verified"] == 0, "недоказанное отсутствие посчитано подтверждённым цитатой"
+    assert rep["judge_only"] == ["AC-1"]
+    assert rep["criteria"][0]["basis"] == "judge-only"
+    assert rep["criteria"][0]["grounded"] is False
+    assert "только суждением судьи" in rep["reason"], rep["reason"]
+
+
+def test_a_removed_line_from_another_file_does_not_prove_absence(tmp_path):
+    """Обход, отодвинутый третьим кругом: удалённая строка ИЗ ДРУГОГО файла (четвёртое ревью).
+
+    `removed` был объединением всех удалённых строк диффа, поэтому отсутствие в README
+    «доказывалось» строкой, удалённой из `app.py`. Доказательство теперь пофайловое: сильным
+    основанием считается только удаление ИЗ ТОГО ЖЕ файла, о котором говорит вердикт.
+    """
+    (tmp_path / "README.md").write_text("# Проект\nсм. public/media/logo.png\n", encoding="utf-8")
+    ctx = "diff --git a/app.py b/app.py\n@@ -1 +1 @@\n-import os\n+import sys\n"
+
+    basis, why = av._ground_quote("import os", ctx, tmp_path, "README.md", "absent")
+
+    assert basis not in av.STRONG_BASIS, f"чужое удаление принято за доказательство ({basis})"
+    assert basis == "judge-only" and "не удалялась" in why, why
 
 
 def test_absence_without_a_source_is_not_proof(tmp_path):
@@ -490,10 +581,11 @@ def test_a_removed_line_starting_with_dashes_is_still_recognised(tmp_path):
     ctx = ("diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1,2 +1 @@\n"
            "---старый разделитель\n+# Проект\n")
 
-    ok, why = av._ground_quote("--старый разделитель", ctx, tmp_path, "README.md")
+    basis, why = av._ground_quote("--старый разделитель", ctx, tmp_path, "README.md")
 
-    assert ok is False
-    assert "УДАЛЁННОЙ" in why, why
+    assert basis == "removed-line", f"удалённая строка не распознана: {basis} ({why})"
+    assert basis not in av.STRONG_BASIS, "основание о состоянии ДО правки не может быть сильным"
+    assert "ДО" in why, why
 
 
 def test_a_moved_line_is_still_grounded_if_it_lives_in_the_file(tmp_path):

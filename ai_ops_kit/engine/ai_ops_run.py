@@ -1590,8 +1590,15 @@ def _print_pipeline(r):
             if c.get("reason"):
                 print(f"        основание ревьюера: {str(c['reason'])[:140]}")
     elif _ac.get("declared"):
+        # Сила основания названа и здесь: «выполнены все» с подтверждённой цитатой и то же самое на
+        # слове судьи — разные факты. Смешать их значило бы вернуть ложный green с другого конца.
+        _weak = _ac.get("judge_only") or []
         print(f"  критерии приёмки сверены с результатом: выполнены все {_ac.get('count')} "
+              f"· подтверждено цитатой {_ac.get('quote_verified')} "
               f"({_ac.get('verifier')}, прочитано файлов: {len(_ac.get('reads') or [])})")
+        if _weak:
+            print(f"      ⚠ только суждение судьи, без машинного подтверждения: {', '.join(_weak)}"
+                  f" — эти критерии проверь сам")
     print(f"  гейты: оценено {len(gates.get('evaluated') or [])} · "
           f"не закрыто {gates.get('unmet') or []} · блокирует: {gates.get('blocked')}")
     lc = r.get("lifecycle")

@@ -10,18 +10,37 @@
 
 ЧТО ДЕЛАЕТ ЭТОТ МОДУЛЬ. Независимый read-only ревьюер (writer ≠ judge) читает дифф ревизии против
 КАЖДОГО объявленного критерия и выносит вердикт met/unmet/undetermined с ЦИТАТОЙ как основанием.
-Цитата не принимается на слово: `_ground_quote` ищет её в диффе, а если не нашла — в названном
-файле. Не нашла нигде -> вердикт по критерию становится `undetermined`, а вся сверка —
-несостоявшейся. Это единственная защита от вердикта, красиво написанного и ни на чём не стоящего;
-проверка цитаты кодом — тот же приём, что «evidence как источник значений» в `rules/core/
-field-lessons.yaml`.
+Цитата не принимается на слово: код ищет её в изменении и в названном файле.
 
-ДВА РАЗНЫХ ФАКТА, И ИХ НЕЛЬЗЯ СМЕШИВАТЬ:
-  `verified` — сверка СОСТОЯЛАСЬ и её основания проверены;
-  `met_all`  — критерии ВЫПОЛНЕНЫ.
-Ложный green B2-14 родился именно из смешения: «доставлено» прочиталось как «выполнено». Поэтому
-`verified=True` при `met_all=False` — нормальный и полезный исход: сверка сработала и нашла
-невыполненное.
+ЧЕГО КОД ПРОВЕРИТЬ НЕ МОЖЕТ — И ЭТО ГЛАВНЫЙ УРОК ЧЕТЫРЁХ КРУГОВ РЕВЬЮ (PR #118).
+Первые три круга пытались сделать заземление цитаты доказательством ВЫПОЛНЕНИЯ критерия. Каждый
+круг находил в нём один и тот же класс дефекта, и каждая правка меняла одну ошибку на обратную:
+проверка либо принимала то, чего не должна (цитата из удалённой строки, из сообщения коммита, любая
+строка, которой в файле нет), либо отвергала честный вердикт (критерий об отсутствии становился
+недоказуемым, и сверка объявлялась неполной на выполненной работе). Это признак неверной опоры, а
+не недостающих частных случаев: поиск подстроки решает вопрос «есть ли такой текст», а критерий
+приёмки — вопрос смысла, и подменять второе первым нельзя.
+
+ПОЭТОМУ ЗАЗЕМЛЕНИЕ ОТВЕЧАЕТ РОВНО НА ОДИН ВОПРОС: настоящая ли цитата. Найдена в изменении или в
+названном файле — вердикт опирается на реальный текст; не найдена НИГДЕ — цитата выдумана, и такой
+вердикт не принимается ни в какую сторону. Сила основания при этом НАЗЫВАЕТСЯ по каждому критерию
+(`basis`), а не выдаётся за доказательство:
+  `absence-proof` — самое сильное: фрагмент удалён ИЗ ЭТОГО файла и в файле его больше нет;
+  `post-state` / `file` — цитата есть в результате правки;
+  `removed-line` — цитата описывает состояние ДО правки: вердикт остаётся суждением судьи;
+  `judge-only` — машинного подтверждения нет вовсе.
+Отчёт и вывод прогона называют, сколько вердиктов подтверждено цитатой, а сколько держится только
+на слове судьи. Это честнее и полезнее, чем и «проверено», и «не сверялись»: владелец видит, где
+именно смотреть самому. Слабое основание НЕ обнуляет сверку — иначе механизм ломался бы на самом
+частом классе задач (удаление), а сломанную проверку выключают.
+
+ТРИ РАЗНЫХ ФАКТА, И ИХ НЕЛЬЗЯ СМЕШИВАТЬ:
+  `verified`        — сверка СОСТОЯЛАСЬ: вердикт есть по каждому критерию и ни одна цитата не выдумана;
+  `met_all`         — критерии ВЫПОЛНЕНЫ (по вердиктам судьи);
+  `quote_verified`  — сколько вердиктов опираются на подтверждённую цитату.
+Ложный green B2-14 родился из смешения первых двух: «доставлено» прочиталось как «выполнено».
+Поэтому `verified=True` при `met_all=False` — нормальный и полезный исход, а `met_all=True` при
+`quote_verified=0` обязано быть ВИДНО.
 
 ЧЕГО МОДУЛЬ НЕ ДЕЛАЕТ: не блокирует `ready`. Порядок обязателен — сначала advisory и полевые
 доказательства качества вердиктов, только потом блокировка (иначе гейт остановит все прогоны на
@@ -31,6 +50,7 @@ from __future__ import annotations
 
 import re
 import sys
+import textwrap
 from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
@@ -57,7 +77,12 @@ _BULLET = re.compile(r"^\s*(?:[-*•][ \t]+(?:\[[ xX]\][ \t]*)?|\d+[.)][ \t]+)(.
 # (`- один`, `*два`) строка без пробела не была пунктом, а непустой список отключал прозаический
 # разбор, и критерий ИСЧЕЗАЛ. Поэтому маркер без пробела — тоже пункт (автор явно размечал список),
 # а разбор стал построчным автоматом: потерять пункт он не может по построению.
-_TIGHT_BULLET = re.compile(r"^\s*[-*•](?![-*•])(?=\S)(.+)$")
+_TIGHT_BULLET = re.compile(r"^\s*([-*•])(?![-*•])(?=\S)(.+)$")
+# Маркер `\ No newline at end of file` — единственная строка внутри ханка, которая не является ни
+# содержимым, ни концом ханка. Всё остальное неизвестное ханк ЗАКРЫВАЕТ: иначе проза после усечённого
+# диффа снова стала бы «содержимым», а именно этим и держится запрет на сообщения коммитов в
+# основании (четвёртое ревью PR #118).
+_NO_NEWLINE = "\\ No newline at end of file"
 # Разделитель (`---`, `***`, `___`, а также `* * *` и `- - -`) и заголовок (`# …`, `**…**`,
 # `Критерии:`) — не критерии. Псевдопункт неопровержим: судья честно отвечает `undetermined`, и вся
 # сверка становится неполной из-за одной декоративной строки.
@@ -65,7 +90,32 @@ _RULE = re.compile(r"^\s*([-*_])(?:[ \t]*\1){2,}[ \t]*$")
 _HEADING = re.compile(r"^\s*(?:#{1,6}\s|\*\*[^*]+\*\*\s*$|__[^_]+__\s*$)")
 # Разделы, которые НЕ заполнены намеренно (словарь `spec_levels.SECTION_STATUSES`): молчание по ним
 # честно — критериев нет, а не «не прочитали».
-_NOT_PROVIDED = {"missing", "declined", "not_applicable", "needs_human"}
+_NOT_PROVIDED = {"missing", "declined", "not_applicable"}
+# `needs_human` — НЕ отказ от критериев, а долг: они ещё будут. Молчать о нём нельзя (четвёртое
+# ревью: `spec_levels.assess` на нём не блокирует и списка `needs_human` не читает никто, так что
+# тишина здесь дала бы ровно связку «spec-coverage ready + прогон молчит»). Но и «не прочитано,
+# проверь вручную» — неверный диагноз. Поэтому у состояния своя формулировка.
+_AWAITING_HUMAN = "needs_human"
+
+
+def _bullet_body(line) -> str | None:
+    """Текст пункта списка, либо None — строка пунктом не является.
+
+    Маркер без пробела считается пунктом (смешанное форматирование не должно терять критерии), но
+    `*` в этой роли принимается только если в остатке строки нет второй `*`: иначе `*AC-1*: …` и
+    `**AC-1**: …` теряли звёздочку, и вердикт выносился по искажённой формулировке (третье и
+    четвёртое ревью PR #118 — одна и та же порча, два разных начертания).
+    """
+    m = _BULLET.match(line)
+    if m:
+        return m.group(1).strip()
+    m = _TIGHT_BULLET.match(line)
+    if not m:
+        return None
+    marker, body = m.group(1), m.group(2)
+    if marker == "*" and "*" in body:
+        return None                      # это выделение, а не список
+    return body.strip()
 
 
 def parse_criteria(text) -> list:
@@ -85,15 +135,19 @@ def parse_criteria(text) -> list:
     raw = (text or "")
     if not isinstance(raw, str):
         raw = str(raw)
+    # ОБЩИЙ ОТСТУП СНИМАЕТСЯ (четвёртое ревью PR #118). Иначе на равномерно отбитом блоке (markdown,
+    # сырой отступ — не `content: |`, который дедентит загрузчик) первая строка теряла отступ, а все
+    # соседние выглядели её продолжением: три независимых критерия склеивались в один, и судья
+    # выносил один вердикт на три требования.
+    raw = textwrap.dedent(raw)
     items, in_list_item = [], False
     for ln in raw.splitlines():
         s = ln.strip()
         if not s or _RULE.match(s) or _HEADING.match(s):
             in_list_item = False          # декор и пустая строка закрывают пункт
             continue
-        m = _BULLET.match(ln) or _TIGHT_BULLET.match(ln)
-        if m:
-            body = m.group(1).strip()
+        body = _bullet_body(ln)
+        if body is not None:
             if body:
                 items.append(body)
                 in_list_item = True
@@ -147,13 +201,18 @@ def _section_text(node) -> tuple:
         #     молчал при `spec-coverage: complete`. Пустое значение проваливается дальше;
         # (б) `{status: complete, AC-1: …, AC-2: …}` раньше отвергался по статусу, хотя критерии
         #     лежат рядом: отказ с причиной, противоречащей файлу, хуже отсутствия причины.
+        head = ""
         for key in ("content", "text", "value"):
             text, problem = _section_text(node.get(key))
             if problem:
                 return "", problem
             if text:
-                return text, None
-        parts, skipped = [], []
+                head = text
+                break
+        # СОДЕРЖИМОЕ И СОСЕДНИЕ КЛЮЧИ СКЛАДЫВАЮТСЯ, а не заменяют друг друга (четвёртое ревью
+        # PR #118): прежде непустой `content` возвращался сразу, и лежащие рядом `AC-1`/`AC-2`
+        # исчезали молча — та же потеря части критериев, которую этот же разбор обязан называть.
+        parts, skipped = ([head] if head else []), []
         for k, v in node.items():
             if str(k).strip().lower() in ("status", "note", "owner", "updated_at",
                                           "content", "text", "value"):
@@ -169,6 +228,12 @@ def _section_text(node) -> tuple:
                 parts += [f"  {l}" for l in lines[1:]]
             else:
                 skipped.append(str(k))
+        status = str(node.get("status") or "").strip().lower()
+        # СТАТУС «НЕ ЗАПОЛНЕНО НАМЕРЕННО» ЧИТАЕТСЯ ПЕРВЫМ (четвёртое ревью PR #118): у отклонённого
+        # раздела пустые служебные ключи — норма, и жалоба «часть критериев была бы потеряна»
+        # выдавала бы поломку там, где владелец сознательно отказался от критериев.
+        if not parts and status in _NOT_PROVIDED:
+            return "", None
         if skipped:
             # Пропущенный ключ — потерянный критерий, то есть «выполнен по умолчанию». Молча
             # отбрасывать нельзя даже часть: сверка неполна, и это обязано быть названо.
@@ -176,9 +241,9 @@ def _section_text(node) -> tuple:
                         f"часть критериев была бы потеряна")
         if parts:
             return "\n".join(parts), None
-        status = str(node.get("status") or "").strip().lower()
-        if status in _NOT_PROVIDED:
-            return "", None                    # раздел не заполнен НАМЕРЕННО — молчание честно
+        if status == _AWAITING_HUMAN:
+            return "", ("раздел критериев ждёт человека (status: needs_human) — критериев ещё нет, "
+                        "сверять нечего, и это НЕ проверено")
         if status:
             return "", (f"раздел объявлен '{status}', но содержимого нет "
                         f"(ключи: {', '.join(sorted(map(str, node)))})")
@@ -237,31 +302,60 @@ def _post_state(change_context) -> tuple:
     только то, что лежит ВНУТРИ ханка (`@@ …`): ни статистика, ни журнал коммитов, ни проза
     вокруг диффа основанием быть не могут.
     """
-    kept, removed, in_hunk = [], [], False
+    by_file = _diff_by_file(change_context)
+    kept = "\n".join(v[0] for v in by_file.values() if v[0])
+    removed = "\n".join(v[1] for v in by_file.values() if v[1])
+    return kept, removed
+
+
+def _diff_by_file(change_context) -> dict:
+    """Дифф -> {путь: (содержимое ПОСЛЕ правки, удалённые строки)} — ПО ФАЙЛАМ.
+
+    По файлам, а не общей кучей (четвёртое ревью PR #118): доказательство удаления обязано
+    относиться к тому файлу, о котором говорит вердикт. Пока `removed` был объединением всех
+    удалённых строк диффа, критерий об отсутствии в README закрывался строкой, удалённой из
+    другого файла — обход не закрылся, а отодвинулся на шаг.
+    """
+    out, path, in_hunk = {}, None, False
     for ln in str(change_context or "").splitlines():
-        if ln.startswith("@@"):
-            in_hunk = True
+        if ln.startswith("diff --git"):
+            in_hunk, path = False, None
+            m = re.search(r" b/(\S+)$", ln)
+            if m:
+                path = m.group(1)
+                out.setdefault(path, ([], []))
             continue
-        if ln.startswith(("diff --git", "index ")):
-            in_hunk = False          # начался другой файл
+        if ln.startswith("+++ "):
+            in_hunk = False
+            cand = ln[4:].strip()
+            if cand.startswith("b/"):
+                cand = cand[2:]
+            if cand and cand != "/dev/null":
+                path = cand
+                out.setdefault(path, ([], []))
+            continue
+        if ln.startswith("@@"):
+            in_hunk = path is not None
             continue
         if not in_hunk:
-            # Заголовки `--- a/файл` / `+++ b/файл` встречаются ТОЛЬКО вне ханка (третье ревью
-            # PR #118). Отсекать их по префиксу внутри ханка нельзя: удалённая строка, чей текст
-            # начинается с `-- ` (SQL-комментарий), выглядит как `--- …` — и прежняя проверка
-            # выбрасывала её вместе с остатком ханка.
+            # Вне ханка не бывает содержимого: заголовки (`--- a/файл`, `index …`), `--stat`, журнал
+            # коммитов и любая проза просто пропускаются. Отдельной проверки на `--- ` ЗДЕСЬ БЫТЬ НЕ
+            # ДОЛЖНО — она стоила регрессии: удалённая строка `-- комментарий` рендерится как
+            # `--- …`, и внутри ханка такая проверка убивала остаток файла (третье ревью, находка 6).
             continue
+        if ln == _NO_NEWLINE:
+            continue                 # маркер git между вариантами последней строки — не содержимое
         if ln.startswith("-"):
-            removed.append(ln[1:])
+            out[path][1].append(ln[1:])
         elif ln.startswith("+"):
-            kept.append(ln[1:])
+            out[path][0].append(ln[1:])
         elif ln.startswith(" ") or not ln:
-            kept.append(ln[1:] if ln else ln)
-        # Неизвестный префикс внутри ханка (`\ No newline at end of file`) ПРОПУСКАЕТСЯ, а не
-        # закрывает ханк: git ставит эту строку между удалённым и добавленным вариантом последней
-        # строки, и прежний `in_hunk = False` терял добавленную строку целиком — судья лишался
-        # основного пути заземления, а сверка объявлялась неполной на выполненной работе.
-    return "\n".join(kept), "\n".join(removed)
+            out[path][0].append(ln[1:] if ln else ln)
+        else:
+            # Неизвестный префикс закрывает ханк: так держится запрет считать основанием прозу
+            # после усечённого диффа, сообщения коммитов и `--stat`.
+            in_hunk = False
+    return {p: ("\n".join(k), "\n".join(r)) for p, (k, r) in out.items()}
 
 
 def _read_source(work_root, source) -> tuple:
@@ -283,8 +377,12 @@ def _read_source(work_root, source) -> tuple:
         return None, f"source не прочитан ({type(e).__name__})"
 
 
+#: Основания, при которых вердикт опирается на ПРОВЕРЕННУЮ цитату из результата правки.
+STRONG_BASIS = {"absence-proof", "post-state", "file"}
+
+
 def _ground_quote(quote, change_context, work_root, source, evidence="present") -> tuple:
-    """(подтверждено ли основание, причина если нет).
+    """(basis | None, причина). `None` = цитата выдумана — вердикт не принимается ни в какую сторону.
 
     ДВА ВИДА ОСНОВАНИЯ (второе ревью PR #118). `present` — цитата ЕСТЬ в результате правки (тело
     ханка, затем названный файл). `absent` — цитаты В ФАЙЛЕ НЕТ, и это proof для критериев об
@@ -298,43 +396,43 @@ def _ground_quote(quote, change_context, work_root, source, evidence="present") 
     """
     q = _norm(quote)
     if len(q) < 4:
-        return False, "цитата короче 4 символов — подтвердить нечем"
+        return None, "цитата короче 4 символов — подтвердить нечем"
     body, read_problem = _read_source(work_root, source)
-    post, removed = _post_state(change_context)
+    by_file = _diff_by_file(change_context)
+    src = str(source or "").strip()
+    own_post, own_removed = by_file.get(src, ("", ""))
+    any_post = "\n".join(v[0] for v in by_file.values())
+    any_removed = "\n".join(v[1] for v in by_file.values())
 
     if evidence == "absent":
-        if body is None:
-            return False, (f"вердикт об ОТСУТСТВИИ проверяется только чтением файла: {read_problem}")
-        if q in _norm(body):
-            return False, (f"объявлено отсутствие, но цитата В ФАЙЛЕ ЕСТЬ ({source}) — "
-                           f"основание опровергнуто чтением")
-        # ОТСУТСТВИЕ ОБЯЗАНО БЫТЬ СВЯЗАНО С ЭТИМ ИЗМЕНЕНИЕМ (третье ревью PR #118). Без этой
-        # проверки `absent` был универсальным обходом: любой критерий закрывался цитатой строки,
-        # которой в файле нет и никогда не было — «эндпоинт /health отвечает 200» доказывался тем,
-        # что этих слов в README не встречается. Доказательство удаления — это удалённая строка
-        # плюс её отсутствие в файле; чего дифф не удалял, того он и не убрал.
-        if q not in _norm(removed):
-            return False, ("объявлено отсутствие, но этой строки нет и среди УДАЛЁННЫХ строк "
-                           "диффа — изменение её не убирало, значит и доказывать нечего "
-                           "(для критерия о НАЛИЧИИ используй evidence=\"present\")")
-        return True, None
+        # САМОЕ СИЛЬНОЕ основание, какое здесь вообще возможно: фрагмент удалён ИЗ ЭТОГО файла и в
+        # файле его больше нет. Оно ловит и замаскированное удаление — то, на котором родился B2-14.
+        if body is not None and q not in _norm(body) and q in _norm(own_removed):
+            return "absence-proof", None
+        if body is not None and q in _norm(body):
+            return None, (f"объявлено отсутствие, но цитата В ФАЙЛЕ ЕСТЬ ({src}) — основание "
+                          f"опровергнуто чтением")
+        # Доказать не удалось — но вердикт судьи НЕ отвергается (четвёртое ревью PR #118): требование
+        # «удалённая строка обязательна» противоречило промпту и делало выполненный критерий об
+        # отсутствии недоказуемым по построению (удаления может не быть вовсе, дифф может быть
+        # усечён). Слабое основание НАЗЫВАЕТСЯ, а не обнуляет сверку.
+        return "judge-only", (f"отсутствие не подтверждено машинно: {read_problem}" if body is None
+                              else "отсутствие в файле подтверждено, но эта строка не удалялась "
+                                   "в этом изменении — связь с правкой не доказана")
 
-    if q in _norm(post):
-        return True, None
-    # «Только в удалённой строке» — вердикт ПОСЛЕ проверки файла, а не вместо неё: перенесённая
-    # строка выглядит удалённой в диффе и при этом живёт в файле. Иначе честная цитата отвергалась бы.
-    only_removed = q in _norm(removed)
-    if body is None:
-        return False, ("цитата найдена только в УДАЛЁННОЙ строке диффа (состояние ДО правки), "
-                       f"а проверить нечем: {read_problem}" if only_removed else
-                       f"цитаты нет в результате правки, и проверить негде: {read_problem}")
-    if q in _norm(body):
-        return True, None
-    if only_removed:
-        return False, (f"цитата есть только в УДАЛЁННОЙ строке диффа и отсутствует в {source} — "
-                       f"она описывает состояние ДО правки. Для критерия об отсутствии передай "
-                       f"evidence=\"absent\" с фрагментом, которого быть не должно")
-    return False, f"цитата не найдена ни в результате правки, ни в {source}"
+    if q in _norm(own_post) or (not src and q in _norm(any_post)):
+        return "post-state", None
+    if body is not None and q in _norm(body):
+        return "file", None
+    if q in _norm(own_removed) or q in _norm(any_removed):
+        # Цитата настоящая, но описывает состояние ДО правки: вердикт остаётся суждением судьи.
+        return "removed-line", ("основание — УДАЛЁННАЯ строка диффа: она описывает состояние ДО "
+                                "правки, а не результат")
+    if q in _norm(any_post):
+        return "post-state-other-file", (f"цитата найдена в изменении, но не в {src or 'названном файле'}")
+    # Не найдена НИГДЕ — вот это и есть выдуманная цитата, и только она обнуляет вердикт.
+    return None, (f"цитата не найдена ни в изменении, ни в {src}" if src else
+                  f"цитата не найдена в изменении, а source не назван ({read_problem})")
 
 
 def make_acceptance_proposer(provider, criteria, revision=None):
@@ -360,14 +458,15 @@ def make_acceptance_proposer(provider, criteria, revision=None):
             "Правила:\n"
             "* вердикт нужен по КАЖДОМУ критерию из списка, ни одного не пропускай;\n"
             "* status=met ТРЕБУЕТ дословной quote и source: цитата ПРОВЕРЯЕТСЯ КОДОМ — в теле "
-            "диффа и в названном файле. Выдуманная или пересказанная цитата обнуляет вердикт по "
-            "критерию (станет «не установлено»), и сверка будет считаться несостоявшейся. "
-            "Сообщения коммитов и статистика диффа основанием НЕ считаются;\n"
+            "диффа и в названном файле. Цитата, которой нет НИГДЕ, считается выдуманной и обнуляет "
+            "вердикт по критерию (станет «не установлено»). Сообщения коммитов и статистика диффа "
+            "основанием НЕ считаются — цитируй содержимое файлов;\n"
             "* КРИТЕРИЙ ОБ ОТСУТСТВИИ («в README нет строк с X») доказывается наоборот: "
             'evidence="absent", quote — фрагмент, которого быть НЕ должно (например "public/media"), '
-            "source — файл, где его не должно быть. Код прочитает файл и подтвердит отсутствие. "
-            "Цитировать УДАЛЁННУЮ строку диффа для этого нельзя: она описывает состояние ДО правки, "
-            "а замаскированное удаление (строка осталась в другом виде) так и осталось бы незамеченным;\n"
+            "source — файл, где его не должно быть. Код прочитает файл и подтвердит отсутствие; если "
+            "этот фрагмент вдобавок удалён из того же файла в этом изменении, основание считается "
+            "самым сильным. Не удалось подтвердить машинно — вердикт останется твоим суждением и "
+            "будет так и НАЗВАН в отчёте, но отвергнут не будет: не подгоняй цитату под проверку;\n"
             "* status=unmet и undetermined требуют reason (или quote) — конкретно, чего не хватает; "
             "нашёл X, которого не должно быть — unmet и цитируй найденное (evidence=present);\n"
             "* честность симметрична: не выдумывай ни met, ни unmet. Не хватило прочитанного — "
@@ -386,8 +485,10 @@ def _unverified(criteria, reason, declared=None, **extra):
     """
     out = {"declared": bool(criteria) if declared is None else bool(declared),
            "count": len(criteria or []), "verified": False, "verifier": None,
-           "met_all": None, "unmet": [], "undetermined": [],
-           "criteria": [{"id": c["id"], "text": c["text"], "status": "undetermined"}
+           "met_all": None, "quote_verified": 0, "judge_only": [],
+           "unmet": [], "undetermined": [],
+           "criteria": [{"id": c["id"], "text": c["text"], "status": "undetermined",
+                         "basis": None, "grounded": False}
                         for c in (criteria or [])],
            "reads": [], "reason": reason}
     out.update(extra)
@@ -443,17 +544,28 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
         source = str(v.get("source") or "").strip()
         reason = str(v.get("reason") or "").strip()
         evidence = str(v.get("evidence") or "present").strip().lower()
-        grounded, why = (True, None)
-        if quote:
-            grounded, why = _ground_quote(quote, ctx, work_root, source, evidence)
-            if not grounded:
-                # Основание не подтвердилось -> вердикт по этому критерию НЕ принимается ни в
-                # какую сторону. Симметрия: выдуманная цитата не должна ни закрывать критерий,
-                # ни объявлять его провалённым — оба вердикта стояли бы на воздухе.
-                status, reason = "undetermined", f"основание не подтверждено: {why}"
+        basis, why = ("judge-only", "цитата не приведена") if not quote else \
+            _ground_quote(quote, ctx, work_root, source, evidence)
+        if quote and basis is None:
+            # ВЫДУМАННАЯ цитата — единственный случай, когда вердикт не принимается ни в какую
+            # сторону: он не стоит ни на чём. Симметрия честности сохранена: так же отвергается и
+            # `met`, и `unmet`. Слабое, но НАСТОЯЩЕЕ основание вердикт не обнуляет — оно называется.
+            status, reason = "undetermined", f"основание не подтверждено: {why}"
+        elif status == "met" and basis == "removed-line" and evidence != "absent":
+            # СВЯЗНОСТЬ ВЕРДИКТА И ОСНОВАНИЯ — проверка формы, а не смысла: «выполнено» не может
+            # опираться на строку, которой в результате НЕТ. Именно так выглядел B2-14 — судья
+            # цитировал прежнюю строку про `public/media` и ставил `met`. Критерий об отсутствии
+            # этой проверкой не задет: у него `evidence="absent"` и своя логика доказательства.
+            status = "undetermined"
+            reason = ("вердикт «выполнено» опирается на УДАЛЁННУЮ строку — её в результате нет. "
+                      "Для критерия об отсутствии нужен evidence=\"absent\" с фрагментом, "
+                      "которого быть не должно")
+        elif why and not reason:
+            reason = why
         out.append({"id": c["id"], "text": c["text"], "status": status, "evidence": evidence,
                     "quote": quote or None, "source": source or None,
-                    "grounded": bool(quote) and grounded, "reason": reason or None})
+                    "basis": basis, "grounded": basis in STRONG_BASIS,
+                    "reason": reason or None})
         if status == "unmet":
             unmet.append(c["id"])
         elif status == "undetermined":
@@ -461,15 +573,24 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
 
     verified = not undet
     met_all = verified and not unmet
-    if verified:
-        reason = ("все критерии выполнены и основания подтверждены в диффе/файлах" if met_all
-                  else f"сверка состоялась: НЕ ВЫПОЛНЕНО {len(unmet)} из {len(criteria)}")
-    else:
+    strong = [c["id"] for c in out if c["basis"] in STRONG_BASIS]
+    weak = [c["id"] for c in out if c["status"] != "undetermined" and c["basis"] not in STRONG_BASIS]
+    if not verified:
         reason = (f"вердикт не установлен по {len(undet)} критериям из {len(criteria)} "
                   f"({', '.join(undet)}) — сверка неполна")
+    elif not met_all:
+        reason = f"сверка состоялась: НЕ ВЫПОЛНЕНО {len(unmet)} из {len(criteria)}"
+    elif weak:
+        # Сила основания НАЗЫВАЕТСЯ и в успешном исходе: «выполнены все» на слове судьи и «выполнены
+        # все» с подтверждённой цитатой — разные факты, и владелец обязан видеть, который перед ним.
+        reason = (f"все критерии выполнены; подтверждено цитатой {len(strong)} из {len(criteria)}, "
+                  f"только суждением судьи — {len(weak)} ({', '.join(weak)})")
+    else:
+        reason = f"все критерии выполнены, основания подтверждены цитатой ({len(strong)})"
     return {"declared": True, "count": len(criteria), "verified": verified,
             "verifier": (f"independent-reviewer @ {(revision or 'HEAD')[:12]}" if verified else None),
             "met_all": met_all if verified else None,
+            "quote_verified": len(strong), "judge_only": weak,
             "unmet": unmet, "undetermined": undet, "criteria": out,
             "reads": reads, "denied": denied, "reason": reason}
 
