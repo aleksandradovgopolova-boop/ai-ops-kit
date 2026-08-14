@@ -607,8 +607,26 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v2.83/v3.7.12: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова);
         # при router-режиме — по возможности ДРУГАЯ модель/вендор (полная независимость судьи).
         rev_prop = reviewer_proposer
-        if review and rev_prop is None and provider_name != "mock":
-            rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model), "code_review", "review", _rname)
+        # СУДЬЯ ГОТОВИТСЯ ВСЕГДА, КОГДА ЕСТЬ ЖИВОЙ ПРОВАЙДЕР (полевой замер 14.08.2026). Прежде он
+        # создавался только при `review=True`, а этот флаг ставится автоподбором по классу задачи:
+        # для QUICK он False. Значит на правке документа — том самом классе, где родился B2-14, —
+        # сверять критерии было НЕКОМУ, и механизм молчал не потому, что всё хорошо. Создание
+        # обёртки провайдера ничего не стоит: вызовы происходят, только если кто-то судью позовёт.
+        # Ревью ГЕЙТОВ по-прежнему под флагом `review` — отвязана именно сверка критериев.
+        if rev_prop is None and provider_name != "mock":
+            if review:
+                # путь ревью гейтов: недоступный провайдер судьи — ошибка прогона, как и было
+                rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model),
+                                 "code_review", "review", _rname)
+            else:
+                # путь сверки критериев: судья ЖЕЛАТЕЛЕН, но его отсутствие не повод ронять прогон —
+                # сверка честно скажет «независимый ревьюер недоступен». Ронять здесь значило бы
+                # ломать прогоны, которым судья и не нужен (в т.ч. с фиктивными провайдерами тестов).
+                try:
+                    rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model),
+                                     "code_review", "review", _rname)
+                except (SystemExit, Exception):   # noqa: BLE001 — «судьи нет» называется в отчёте сверки
+                    rev_prop = None
         # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
         auth_prop = author_proposer
         if author and auth_prop is None and provider_name != "mock":

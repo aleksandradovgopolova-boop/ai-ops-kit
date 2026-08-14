@@ -216,6 +216,12 @@ def run_loop(proposer, root, policy, budget=None, max_steps=20, base_context="",
             bud.charge_call()                       # каждый запрос к модели — под потолком
         except _budget_mod.BudgetExceeded as e:
             stopped = f"budget: {e}"; break
+        # B2-22 (пере-прогон 14.08.2026): прогон молчал. Один и тот же пустой экран означал и
+        # «работает», и «повисло»: живой вызов модели занимал от секунд до трёх минут, и владелец
+        # либо ждал вслепую, либо прерывал работающий прогон. Отличить я смог только через `ps` —
+        # владелец так делать не станет. Данные для честной строки у нас уже есть: номер шага,
+        # потолок и что мы сейчас ждём. Пишем в stderr, чтобы не портить машиночитаемый stdout.
+        print(f"  · шаг {step + 1}/{max_steps}: жду ответа модели…", file=sys.stderr, flush=True)
         action = proposer(context)
         if not isinstance(action, dict) or action.get("error"):
             bad_streak += 1

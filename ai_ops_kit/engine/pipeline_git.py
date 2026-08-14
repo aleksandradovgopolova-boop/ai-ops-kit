@@ -215,6 +215,27 @@ def _verify_remote_base(root, base_ref, base_sha):
     return {"verdict": "verified-moved", "remote_sha": remote_sha}
 
 
+def delivery_preflight(root, base_ref, base_sha, open_pr) -> dict | None:
+    """Предупреждение о невозможной доставке ДО работы. -> dict или None, если предупреждать не о чем.
+
+    B2-23 (пере-прогон 14.08.2026): доставка проверяла remote-базу ПОСЛЕ работы. Прогон отработал
+    13.5 минуты живой модели и ~$3.5 и только в конце сказал «remote base сдвинулась — PR не открыт».
+    Отказ верный, момент — нет: база резолвится ДО первого вызова модели, и предупредить можно
+    бесплатно. Прогон при этом НЕ останавливается: работа сама по себе может быть нужна, а решение
+    «платить или нет» остаётся за владельцем — ему лишь возвращают факт вовремя.
+    """
+    if not open_pr or not base_sha:
+        return None
+    rv = _verify_remote_base(root, base_ref, base_sha) or {}
+    if rv.get("verdict") == "verified-equal":
+        return None
+    return {"verdict": rv.get("verdict"), "base_ref": base_ref, "base_sha": base_sha,
+            "remote_sha": rv.get("remote_sha"),
+            "warning": (f"доставка запрошена, но база '{base_ref}' на remote не совпадает "
+                        f"({rv.get('verdict')}): PR открыть не удастся, пока база не отправлена. "
+                        f"Сказано ДО работы — прогон продолжается, но заявки в конце не будет")}
+
+
 def _change_context(work_root, revision, max_chars=12000):
     """v3.0-rc9 (finding живого прогона kimi): детерминированно собрать КОНТЕКСТ ИЗМЕНЕНИЯ для
     независимого ревьюера — полный список изменённых файлов (`git show --stat`, всегда целиком) +
