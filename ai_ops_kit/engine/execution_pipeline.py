@@ -472,6 +472,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             exempt.discard("tests_passed")   # тесты обязательны -> гейт заблокирует
             tests_warn = "нет тестов, а require_tests -> implementation_verification блокирует"
     not_applicable = {"implementation_verification": exempt}
+    # Причина освобождения едет ВМЕСТЕ с ним (B2-08): без неё отчёт называет «нет инструмента в
+    # стеке» даже там, где инструмент есть и просто не нужен — изменение только документации.
+    exempt_reason = {"implementation_verification": coll.get("not_applicable_reason")}
 
     # 6d. v2.83 Full RunPlan: постадийный НЕЗАВИСИМЫЙ ревью для ai-review гейтов плана
     #     (code_review, ux_review, security-non-human, ...). writer ≠ judge: ревьюер — отдельный
@@ -707,7 +710,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         _gate_ids.append("security")
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
-                                   signals=signals, not_applicable=not_applicable)
+                                   signals=signals, not_applicable=not_applicable,
+                                   exempt_reason=exempt_reason)
 
     # v3.8.3: персистим ПРОЙДЕННОЕ gate-evidence билда (кроме security) по committed_sha в worktree/.ai —
     # чтобы последующий reevaluate (после человеко-approval) переиспользовал model-вердикт code_review и

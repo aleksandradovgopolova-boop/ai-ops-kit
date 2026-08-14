@@ -333,7 +333,7 @@ def _unmet_reason(kind: str, gate: dict) -> str:
 
 
 def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None, signals=None,
-                  not_applicable=None) -> dict:
+                  not_applicable=None, exempt_reason=None) -> dict:
     """Один гейт -> machine-readable gate-result (schemas/gate-result.schema.json).
 
     Дисциплина evidence (v2.16): бездоказательного pass не существует — если гейт
@@ -387,7 +387,13 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
             covered = real_covered | exempt
             used_exempt = [k for k in required if k in exempt and k not in real_covered]
             if used_exempt:
-                warnings = warnings + [f"освобождено (нет инструмента в стеке): {', '.join(used_exempt)}"]
+                # ПРИЧИНА ОСВОБОЖДЕНИЯ НАЗЫВАЕТСЯ, А НЕ ПОДРАЗУМЕВАЕТСЯ. Прежде текст был жёстко
+                # «нет инструмента в стеке» — единственная причина, которая существовала в v2.61.
+                # Освобождение по другому поводу (изменение только документации) писало бы в отчёт
+                # ЧУЖУЮ причину: владелец читал бы «нет инструмента» там, где инструмент есть и
+                # просто не нужен. Ложное основание хуже отсутствующего — по нему принимают решения.
+                warnings = warnings + [f"освобождено ({exempt_reason or 'нет инструмента в стеке'}): "
+                                       f"{', '.join(used_exempt)}"]
             missing = [k for k in required if k not in covered]
             if missing:
                 msg = f"бездоказательный pass: не подтверждены required_evidence: {', '.join(missing)}"
@@ -443,7 +449,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     return result
 
 
-def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None, signals=None, not_applicable=None) -> dict:
+def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate_ids=None, signals=None, not_applicable=None, exempt_reason=None) -> dict:
     """Оценить quality_gates. По умолчанию — гейты контракта; если передан gate_ids (напр.
     агрегированные гейты RunPlan: base_workflow + треки), оцениваются именно они. Так прогон
     проверяет ТО, ЧТО спланировал (finding аудита: треки планировались, но не оценивались).
@@ -463,7 +469,8 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
             raise SystemExit(f"workflow {workflow_id}: гейт '{gid}' отсутствует в quality/gates.yaml")
         kinds[gid] = classify(gate, signals)
         r = evaluate_gate(gid, gate, evidence, tested_revision, signals=signals,
-                          not_applicable=(not_applicable or {}).get(gid))
+                          not_applicable=(not_applicable or {}).get(gid),
+                          exempt_reason=(exempt_reason or {}).get(gid))
         results.append(r)
         overridden = override_effective(gate, r.get("override"))
         if r["blocking"] and r["status"] == "fail" and not overridden:

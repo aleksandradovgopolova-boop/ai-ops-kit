@@ -81,16 +81,32 @@ def collect(profile, root, policy, changed_files=None):
 
         # v3.27.3 WP4: skip tier — docs-only, не запускаем product build/test
         if tier == "skip":
+            # ПРОПУСК ОБЯЗАН БЫТЬ ОСВОБОЖДЕНИЕМ, А НЕ ПУСТЫМ `pass` (B2-08, живой прогон 14.08).
+            #
+            # Прежде эта ветка возвращала `status: pass` с единственным флагом `skip_verification`,
+            # которого НЕТ в `required_evidence`, и `not_applicable: []`. Дальше `gate_executor`
+            # честно не находил ни одного из пяти обязательных флагов и превращал такой pass в
+            # БЛОКИРУЮЩИЙ отказ «бездоказательный pass». То есть ветка, созданная чтобы пропустить
+            # проверку, сама её и заваливала — на ЛЮБОМ репозитории, включая кит: воспроизведено на
+            # полном наборе команд, отсутствие тестов у продукта тут ни при чём.
+            # Цена: ни одно изменение только документации не могло дойти до владельца.
+            #
+            # Теперь флаги объявлены НЕПРИМЕНИМЫМИ с названной причиной, и `gate_executor` пишет
+            # это в warnings: проверка не выдумана, она явно не делалась и сказано почему.
+            # `tested_revision` в освобождение НЕ входит — ревизия известна, это настоящее
+            # доказательство, и подменять его освобождением значило бы прятать факт за отговоркой.
             return {
                 "schema_version": 1, "kind": "evidence-collection",
                 "revision": revision, "checks": {},
                 "schema_evidence": {},
                 "gate_evidence": {"implementation_verification": {
                     "status": "pass",
-                    "provided": ["skip_verification"],
-                    "evidence": [f"skip_reason:{impact_status}"],
+                    "provided": ["skip_verification", "tested_revision"],
+                    "evidence": [f"skip_reason:{impact_status}", f"revision:{revision}"],
                 }},
-                "not_applicable": [],
+                "not_applicable": ["build_passed", "lint_passed", "typecheck_passed",
+                                   "tests_passed"],
+                "not_applicable_reason": "изменение только документации — продуктовые проверки не применимы",
                 "tests_absent": False,
                 "verification": verification_info,
             }
