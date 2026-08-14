@@ -1574,9 +1574,24 @@ def _print_pipeline(r):
     # PR со `sha_verified: True`, а критерий приёмки остался невыполненным — и в отчёте об этом не
     # было ни строки. Непроверенное называется непроверенным ЗДЕСЬ, в том же выводе, где стоит
     # «готово», а не только в JSON.
+    #
+    # ВТОРАЯ ПОЛОВИНА: теперь сверка есть, и у неё ТРИ исхода, а не один. «Сверено» без разбора
+    # выполненного было бы тем же смешением, что и «доставлено» = «выполнено»: сверка, нашедшая
+    # невыполненный критерий, обязана назвать ЕГО, а не сообщить, что она состоялась.
     _ac = r.get("acceptance_criteria") or {}
     if _ac.get("declared") and not _ac.get("verified"):
         print(f"  ⚠ критерии приёмки НЕ сверялись с результатом: {_ac.get('reason')}")
+    elif _ac.get("declared") and not _ac.get("met_all"):
+        _un = [c for c in (_ac.get("criteria") or []) if c.get("status") == "unmet"]
+        print(f"  ⚠ критерии приёмки сверены: НЕ ВЫПОЛНЕНО {len(_ac.get('unmet') or [])} "
+              f"из {_ac.get('count')} ({', '.join(_ac.get('unmet') or [])})")
+        for c in _un[:5]:
+            print(f"      · {c['id']}: {c['text'][:110]}")
+            if c.get("reason"):
+                print(f"        основание ревьюера: {str(c['reason'])[:140]}")
+    elif _ac.get("declared"):
+        print(f"  критерии приёмки сверены с результатом: выполнены все {_ac.get('count')} "
+              f"({_ac.get('verifier')}, прочитано файлов: {len(_ac.get('reads') or [])})")
     print(f"  гейты: оценено {len(gates.get('evaluated') or [])} · "
           f"не закрыто {gates.get('unmet') or []} · блокирует: {gates.get('blocked')}")
     lc = r.get("lifecycle")

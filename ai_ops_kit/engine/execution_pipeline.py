@@ -794,30 +794,32 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # одном слове, а цена — ложный green на последнем шаге: владелец получает работу, помеченную
     # проверенной, и приёмка перекладывается на него без предупреждения.
     #
-    # ЧЕГО ЭТА ПРАВКА НЕ ДЕЛАЕТ: она НЕ сверяет критерии. Сверка требует независимого ревьюера,
-    # который читает дифф против критериев и выносит вердикт по каждому, — это объявлено отдельной
-    # работой (`acceptance-criteria-verified-by-reviewer`), потому что делать её наспех значило бы
-    # заменить один необоснованный вердикт другим.
-    # ЧТО ОНА ДЕЛАЕТ: перестаёт выдавать непроверенное за проверенное. Непроверенное называется
-    # непроверенным — тот же инвариант, что `unavailable != 0` и «сверять нечего» в контурах.
-    _ac_text = ""
-    try:
-        import yaml as _yaml
-        _sp = _sl._spec_path(child_root, wid)
-        if _sp.is_file():
-            _spec_doc = _yaml.safe_load(_sp.read_text(encoding="utf-8")) or {}
-            _ac_text = str((((_spec_doc.get("sections") or {}).get("acceptance_criteria") or {})
-                            .get("content") or "")).strip()
-    except Exception:  # noqa: BLE001 — не смогли прочитать спеку: это «не знаю», а не «критериев нет»
-        _ac_text = ""
-    acceptance_criteria = {
-        "declared": bool(_ac_text),
-        "verified": False,
-        "verifier": None,
-        "reason": ("критерии объявлены, но с результатом НЕ сверялись: механизма сверки нет "
-                   "(`spec-coverage: complete` означает «раздел заполнен», а не «критерий выполнен»)"
-                   if _ac_text else "критерии приёмки не объявлены — сверять нечего"),
-    }
+    # ПЕРВАЯ ПОЛОВИНА (14.08, #111): непроверенное перестало выглядеть проверенным.
+    # ВТОРАЯ ПОЛОВИНА (здесь): появилась САМА СВЕРКА. Независимый read-only судья (writer ≠ judge)
+    # читает дифф против КАЖДОГО критерия и выносит вердикт с цитатой; цитата проверяется кодом в
+    # диффе и в названном файле, иначе вердикт не принимается — `ai_ops_kit/engine/acceptance_verify.py`.
+    # СВЕРКА НЕ БЛОКИРУЕТ ready. Порядок из плана обязателен: advisory + полевые доказательства
+    # качества вердиктов, и только потом блокировка. Гейт, включённый до замера, останавливал бы все
+    # прогоны на непроверенном вердикте — и его научились бы обходить.
+    from ai_ops_kit.engine import acceptance_verify as _av
+    _ac_text, _ac_items = _av.criteria_from_spec(child_root, wid)
+    if _ac_items and review and reviewer_proposer is not None and committed_sha:
+        try:
+            acceptance_criteria = _av.verify(
+                work_root, _ac_items, reviewer_proposer, revision=committed_sha,
+                change_context=_change_context(work_root, committed_sha), budget=budget)
+        except Exception as _e:  # noqa: BLE001 — FAIL-CLOSED: сбой сверки = «не сверено» с названной
+            # причиной, а не отсутствие блока (пустой блок читался бы как «претензий нет»).
+            acceptance_criteria = _av._unverified(
+                _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300])
+    else:
+        acceptance_criteria = _av._unverified(
+            _ac_items,
+            ("критерии объявлены, но с результатом НЕ сверялись: независимый ревьюер не запускался "
+             "(нужны --execute с коммитом и провайдер судьи); `spec-coverage: complete` означает "
+             "«раздел заполнен», а не «критерий выполнен»"
+             if _ac_items else "критерии приёмки не объявлены — сверять нечего"),
+            declared=bool(_ac_text))
 
     # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
     # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при

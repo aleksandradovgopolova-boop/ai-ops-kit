@@ -595,9 +595,9 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/context/` (9) — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
   `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `repo_graph`,
   `semantic_lite`
-- `ai_ops_kit/engine/` (18) — исполнение: `ai_ops_run`, `execution_pipeline` (+`pipeline_*`),
+- `ai_ops_kit/engine/` (19) — исполнение: `ai_ops_run`, `execution_pipeline` (+`pipeline_*`),
   `tool_broker`, `tool_loop`, `worktree`, `gitio`, `run_plan`, `run_handoff`, `budget`,
-  `atomic_planner`, `workpackage_executor`, `parallel_{planner,executor,live}`
+  `acceptance_verify`, `atomic_planner`, `workpackage_executor`, `parallel_{planner,executor,live}`
 - `ai_ops_kit/gates/` (13) — гейты и допуск: `gate_executor`, `gate_policy`, `gate_runtime`,
   `gate_result_v2`, `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
   `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
@@ -658,6 +658,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/validation/validate_openspec_change.py`
 - `ai_ops_kit/validation/validate_presets.py`
 - `ai_ops_kit/validation/validate_references.py`
+- `ai_ops_kit/validation/validate_acceptance_result.py` — вердикт сверки критериев приёмки: вердикт по КАЖДОМУ критерию, `met` требует цитаты и источника (B2-14, 2026-08-14)
 - `ai_ops_kit/validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
 - `ai_ops_kit/validation/validate_security_posture.py`
 - `ai_ops_kit/validation/validate_stale_gates.py`
@@ -710,6 +711,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `packages/layering.yaml` — слои 12 пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
+- `tools/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
 - `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
 - `tools/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)

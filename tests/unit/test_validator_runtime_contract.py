@@ -91,6 +91,7 @@ STANDALONE = [
 
 # Валидаторы, которым нужен путь к артефакту.
 NEEDS_ARTIFACT = [
+    "validate_acceptance_result",
     "validate_architecture_decision",
     "validate_context_architecture",
     "validate_context_bundle",
