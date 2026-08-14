@@ -112,7 +112,8 @@ def make_reviewer_proposer(provider, gate_id, checklist="", required_evidence=No
 
 
 def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_context="",
-               required_evidence=None, reviewed_revision=None):
+               required_evidence=None, reviewed_revision=None,
+               terminal_kind="reviewer-result", terminal_field=None):
     """Один независимый ревью-проход под READ-ONLY политикой -> reviewer-result (dict) + трейс.
 
     Ревьюер может читать файлы (write/shell брокер отклонит — capability-независимость от писателя),
@@ -125,7 +126,14 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
     осталось последнее чтение; (2) выделенный ФОРС-ХОД вердикта после исчерпания чтений — читать
     больше нельзя, принимается только reviewer-result. Вердикт НЕ фабрикуется: если ревьюер и на
     форс-ходе не заключает — честный no-verdict (fail). Мы лишь ограничиваем фазу чтения и требуем
-    заключить по прочитанному — ровно то, что обязан делать компетентный судья."""
+    заключить по прочитанному — ровно то, что обязан делать компетентный судья.
+
+    B2-14 (2026-08-14): вид терминального вердикта стал ПАРАМЕТРОМ. Петля read-only судьи нужна не
+    только гейтам: сверка критериев приёмки — тот же шов (независимый судья, те же нуджи, тот же
+    форс-ход, тот же брокер), но её вердикт — `acceptance-result` с вердиктом по каждому критерию,
+    а не один `status` на гейт. Значения по умолчанию оставлены прежними, поэтому путь
+    `reviewer-result` не меняется ни на байт; `terminal_field` называет поле, по которому вердикт
+    узнаётся, когда модель не проставила `kind`."""
     root = Path(root)
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     context = base_context
@@ -138,27 +146,32 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             stopped = f"budget: {e}"; break
         force_verdict = len(reads) >= max_reads     # бюджет чтений исчерпан -> только вердикт
         if force_verdict:
-            context += ("\n[ревью] ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН. Больше не читай. Верни СЛЕДУЮЩИМ РОВНО один "
-                        "reviewer-result по уже прочитанному (status=fail с конкретными blockers, если "
-                        "чего-то не хватило для pass). НЕ выдумывай.")
+            context += (f"\n[ревью] ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН. Больше не читай. Верни СЛЕДУЮЩИМ РОВНО один "
+                        f"{terminal_kind} по уже прочитанному (чего не подтвердил чтением — то и "
+                        f"скажи конкретно). НЕ выдумывай.")
         elif len(reads) == max_reads - 1:
-            context += ("\n[ревью] остаётся последнее чтение до лимита — прочти только самое нужное, "
-                        "затем верни reviewer-result.")
+            context += (f"\n[ревью] остаётся последнее чтение до лимита — прочти только самое нужное, "
+                        f"затем верни {terminal_kind}.")
         action = reviewer(context)
         if not isinstance(action, dict) or action.get("error"):
-            context += "\n[ревью] верни РОВНО один JSON: read-действие или reviewer-result."
+            context += f"\n[ревью] верни РОВНО один JSON: read-действие или {terminal_kind}."
             continue
-        # терминальный вердикт: reviewer-result (по kind/status)
-        if action.get("kind") == "reviewer-result" or (action.get("status") and "op" not in action):
+        # терминальный вердикт: по kind, по названному полю вердикта либо (для reviewer-result) по status
+        _terminal = (action.get("kind") == terminal_kind
+                     or (terminal_field is not None and action.get(terminal_field) is not None
+                         and "op" not in action)
+                     or (terminal_field is None and action.get("status") and "op" not in action))
+        if _terminal:
             action.setdefault("schema_version", 1)
-            action.setdefault("kind", "reviewer-result")
-            action.setdefault("gate", gate_id)
+            action.setdefault("kind", terminal_kind)
+            if gate_id is not None:
+                action.setdefault("gate", gate_id)
             if reviewed_revision:
                 action.setdefault("reviewed_revision", reviewed_revision)
             return {"result": action, "stopped": "verdict", "reads": reads, "denied": denied}
         # на форс-ходе чтения запрещены: не исполняем, повторно требуем вердикт
         if force_verdict:
-            context += "\n[ревью] чтение отклонено: лимит исчерпан. Нужен reviewer-result, не read."
+            context += f"\n[ревью] чтение отклонено: лимит исчерпан. Нужен {terminal_kind}, не read."
             continue
         # иначе — действие через брокер (read-only Policy: write/shell -> DENIED)
         ev = tool_broker.execute(action, root, policy)
@@ -167,8 +180,12 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             context += f"\n--- {ev.get('target')} ---\n{ev.get('output_tail')}\n--- конец ---"
         elif not ev["allowed"]:
             denied.append({"op": ev.get("op"), "reason": ev["reason"]})
+            # Вид вердикта здесь тоже параметр (ревью PR #118): судья сверки приёмки, получив
+            # отказ брокера, читал «верни reviewer-result» — то есть подсказку вернуть вердикт
+            # ЧУЖОЙ формы, который не пройдёт терминальную проверку. Это путь, на который он
+            # попадает при попытке записи, — ровно там подсказка должна быть верной.
             context += (f"\n[ревью] действие {ev.get('op')} ОТКЛОНЕНО (ты read-only судья, не автор): "
-                        f"{ev['reason']}. Верни read или reviewer-result.")
+                        f"{ev['reason']}. Верни read или {terminal_kind}.")
         else:
             context += f"\n[ревью] {ev.get('op')} -> {ev.get('reason')}"
     return {"result": None, "stopped": stopped, "reads": reads, "denied": denied}

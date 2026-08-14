@@ -59,6 +59,40 @@ def test_absent_criteria_do_not_produce_a_scary_warning(capsys):
         f"предупреждение сработало там, где сверять нечего:\n{out}")
 
 
+def test_verified_check_that_found_an_unmet_criterion_names_it(capsys):
+    """Вторая половина (B2-14): сверка состоялась и НАШЛА невыполненное — вывод обязан назвать ЕГО.
+
+    «Сверено» без разбора выполненного было бы тем же смешением, что «доставлено» = «выполнено»:
+    владелец прочитал бы факт проверки как факт успеха. Ровно на этом шаге и родился ложный green.
+    """
+    out = _out(capsys, {"acceptance_criteria": {
+        "declared": True, "verified": True, "met_all": False, "count": 2, "unmet": ["AC-1"],
+        "criteria": [{"id": "AC-1", "status": "unmet", "text": "в README нет строк с `public/media`",
+                      "reason": "строка с public/media осталась в README"},
+                     {"id": "AC-2", "status": "met", "text": "структура описана верно"}],
+        "reason": "сверка состоялась: НЕ ВЫПОЛНЕНО 1 из 2"}})
+
+    assert "НЕ ВЫПОЛНЕНО 1 из 2" in out, f"невыполненное не названо числом:\n{out}"
+    assert "AC-1" in out and "public/media" in out, "не сказано, КАКОЙ критерий не выполнен"
+    assert "основание ревьюера" in out, "вердикт без основания читающему не проверить"
+
+
+def test_verified_and_met_output_names_the_verifier_and_the_reads(capsys):
+    """Успешный исход тоже обязан быть проверяемым: кто сверял и сколько файлов прочитал.
+
+    «Сверено» без судьи и без чтений — заявление шире полученного; рубер-штамп конвейер отклоняет,
+    но вывод должен позволять это увидеть, а не просто радовать.
+    """
+    out = _out(capsys, {"acceptance_criteria": {
+        "declared": True, "verified": True, "met_all": True, "count": 2, "unmet": [],
+        "verifier": "independent-reviewer @ abc123456789", "reads": ["README.md"],
+        "criteria": [], "reason": "все критерии выполнены"}})
+
+    assert "сверены с результатом: выполнены все 2" in out
+    assert "independent-reviewer @ abc123456789" in out
+    assert "прочитано файлов: 1" in out
+
+
 def test_verified_flag_cannot_be_faked_by_absence(capsys):
     """side-effect proof: молчание = НЕ подтверждение.
 
