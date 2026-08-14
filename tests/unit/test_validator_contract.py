@@ -43,6 +43,7 @@ UNIFORM_CHECK_VALIDATORS = [
     "validate_memory_governance",
     "validate_model_qualification",
     "validate_model_roles",
+    "validate_mutation_probes",
     "validate_plan_artifact",
     "validate_post_release_readout",
     "validate_product_model",

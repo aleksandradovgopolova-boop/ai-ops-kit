@@ -59,6 +59,7 @@ STANDALONE = [
     "validate_memory_governance",
     "validate_model_qualification",
     "validate_model_roles",
+    "validate_mutation_probes",
     "validate_openspec_change",
     "validate_own_medicine",
     "validate_package_boundaries",

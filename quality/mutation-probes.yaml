@@ -1,0 +1,87 @@
+# quality/mutation-probes.yaml — ОХРАННЫЕ проверки механизмов и тесты, обязанные их защищать.
+#
+# ПОВОД — ЗАМЕР. PR #118 прошёл пять кругов свежего ревью: 36 находок, шесть уровня HIGH, и ни одну
+# не поймали 11 обязательных джоб CI. Восемь правок того дня были «покрыты тестами» и не проверялись
+# ничем: снятие проверки оставляло тесты зелёными. Правило «мутируй исправление» в
+# `rules/core/field-lessons.yaml` существовало — но как ПРОЗА, и потому исполнялось ровно настолько,
+# насколько исполнитель о нём помнил.
+#
+# ЧТО ЗДЕСЬ. Для каждой охранной проверки — ради которой механизм и существует — названы: файл,
+# дословный образец охраны, чем её нейтрализовать, тесты, которые ОБЯЗАНЫ покраснеть, и ЗАЧЕМ она
+# нужна. Прогон: `python3 tools/mutation_probe.py .` (медленный, отдельная джоба);
+# быстрая половина — `validate_mutation_probes.py`, она держит реестр от отставания от кода.
+#
+# ИСХОДЫ ПРОГОНА ТРИ, И ТРЕТИЙ НЕ РАВЕН ВТОРОМУ: `killed` (тест покраснел — так и надо),
+# `survived` (охрана снята, тесты зелёные — ДЕФЕКТ КОНТУРА), `not_verified` (базовый прогон красный,
+# образец не найден или неоднозначен — неизвестность, и она не выдаётся за успех).
+#
+# КАК ДОБАВЛЯТЬ. Новый механизм -> новая проба на его главную охрану. Если образец пришлось менять,
+# потому что код переписан, — это нормально; если проба исчезла вместе с охраной, объясните в
+# CHANGELOG, что теперь защищает механизм.
+schema_version: 1
+kind: mutation-probes
+probes:
+- id: acceptance-fabricated-quote-nullifies
+  file: ai_ops_kit/engine/acceptance_verify.py
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  find: '        if quote and basis is None:'
+  replace_with: '        if False:'
+  why: 'Выдуманная цитата обязана обнулять вердикт: это единственная строгая защита сверки. Снять её —
+    вернуть B2-14, где «выполнено» стояло ни на чём.'
+- id: acceptance-met-not-on-removed-line
+  file: ai_ops_kit/engine/acceptance_verify.py
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  find: '        elif status == "met" and basis == "removed-line" and evidence != "absent":'
+  replace_with: '        elif False:'
+  why: «Выполнено» не может опираться на строку, которой в результате нет. Это проверка СВЯЗНОСТИ вердикта
+    и основания — форма исходного ложного green B2-14.
+- id: acceptance-absence-tied-to-same-file
+  file: ai_ops_kit/engine/acceptance_verify.py
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  find: '        if body is not None and q not in _norm(body) and q in _norm(own_removed):'
+  replace_with: '        if body is not None and q not in _norm(body) and q in _norm(any_removed):'
+  why: 'Доказательство отсутствия обязано относиться к ТОМУ ЖЕ файлу: с объединением всех удалённых строк
+    обход не закрывался, а отодвигался на шаг (третье и четвёртое ревью PR #118).'
+- id: acceptance-rubber-stamp-rejected
+  file: ai_ops_kit/engine/acceptance_verify.py
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  find: '    if not reads:'
+  replace_with: '    if False:'
+  why: Вердикт без единого чтения — рубер-штамп; принимать его опаснее всего именно в приёмке.
+- id: acceptance-seam-pipeline-calls-check
+  file: ai_ops_kit/engine/acceptance_verify.py
+  tests:
+  - tests/unit/test_acceptance_verify_seam.py
+  find: def verify(work_root, criteria, provider, revision=None, change_context=None, budget=None,
+  replace_with: def verify_DISABLED(work_root, criteria, provider, revision=None, change_context=None,
+    budget=None,
+  why: 'ШОВ: модульные тесты механизма остаются зелёными, если конвейер его не зовёт — именно так дефект
+    и жил. Тест шва обязан краснеть, когда точка входа исчезает.'
+- id: plan-closed-work-not-in-active
+  file: ai_ops_kit/planning/delivery_plan.py
+  tests:
+  - tests/unit/test_plan_control_plane.py
+  find: '        elif st in CLOSED_DECLARABLE:'
+  replace_with: '        elif False:'
+  why: Закрытая работа в активном плане возвращает то состояние, из-за которого план перестал быть управляющим
+    файлом (21 работа из 32 была `done`).
+- id: plan-history-feeds-status-derivation
+  file: ai_ops_kit/planning/delivery_plan.py
+  tests:
+  - tests/unit/test_plan_control_plane.py
+  find: '    for w in closed or []:'
+  replace_with: '    for w in []:'
+  why: 'История обязана доезжать до вывода статусов: иначе каждая зависимость от завершённой работы становится
+    «неизвестной» и блокирует весь план.'
+- id: plan-done-needs-a-place-to-recheck
+  file: ai_ops_kit/planning/delivery_plan.py
+  tests:
+  - tests/unit/test_plan_control_plane.py
+  find: '        if w.get("status") == "done" and not any(w.get(k) for k in ("pr", "commit", "evidence",
+    "finding")):'
+  replace_with: '        if False:'
+  why: '`done` — это не «PR смержен»: без места перепроверки история становится списком галочек.'
