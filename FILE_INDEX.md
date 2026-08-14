@@ -605,6 +605,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`
 - `ai_ops_kit/lifecycle/` (6) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
   `active_work`, `run_report`, `merge_memory`
+- `ai_ops_kit/planning/staleness.py` — две проверки на ПРОТУХАНИЕ: описание ссылается на то, чего нет, и план отстал от истории (14.08.2026)
 - `ai_ops_kit/planning/` (5) — контур Planning & Execution модели продуктового репозитория (v3.35):
   `contours` (состояние контуров + связность изменения с источниками истины; `unknown != not_changed`),
   `delivery_plan` (`planning/plan.yaml`, вывод статуса из графа/гейтов/активной работы),
@@ -715,6 +716,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
 - `tools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
+- `tools/staleness.py` — проверки протухания: мёртвые ссылки описания и отставание плана от истории (14.08.2026)
 - `tools/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
 - `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
 - `tools/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
