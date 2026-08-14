@@ -203,10 +203,19 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
             results.append({"delivery_id": did, "status": "mismatch" if _w.get("ok")
                             else "receipt-write-failed", "remote_sha": rc.get("head_sha")})
             continue
+        # R-41: `sha_verified` отвечает на вопрос «это наш коммит», и только на него. Отдельно
+        # записываем, ПРОВЕРЯЛ ли доставку кто-нибудь: ноль прогонов больше не выглядит как зелёный.
+        # Поля-факты (`checks_status`/`total`/`failed`) и поле-вердикт (`checks_verified`) пишутся из
+        # одного источника — `pr_open.checks_verified()`, чтобы вердикт нельзя было проставить мимо фактов.
+        _chk = rc.get("checks") or {"status": "unavailable"}
         _w = _ls.durable_write(rp, {**_base, "status": "reconciled", "remote_sha": rc.get("head_sha"),
                                     "sha_verified": True, "pr_url": rc.get("url"),
                                     "pr_number": rc.get("number"), "pr_state": rc.get("pr_state"),
-                                    "merged": rc.get("merged")},
+                                    "merged": rc.get("merged"),
+                                    "checks_status": _chk.get("status"),
+                                    "checks_total": _chk.get("total"),
+                                    "checks_failed": _chk.get("failed"),
+                                    "checks_verified": pr_open.checks_verified(_chk)},
                                require_keys=("kind", "delivery_id", "status"), keep_backup=True)
         if not _w.get("ok"):
             results.append({"delivery_id": did, "status": "receipt-write-failed"})   # НЕ рапортуем успех
