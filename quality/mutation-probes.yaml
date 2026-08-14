@@ -22,66 +22,88 @@ schema_version: 1
 kind: mutation-probes
 probes:
 - id: acceptance-fabricated-quote-nullifies
+  kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
-  tests:
-  - tests/unit/test_acceptance_verify.py
   find: '        if quote and basis is None:'
   replace_with: '        if False:'
+  tests:
+  - tests/unit/test_acceptance_verify.py
   why: 'Выдуманная цитата обязана обнулять вердикт: это единственная строгая защита сверки. Снять её —
     вернуть B2-14, где «выполнено» стояло ни на чём.'
 - id: acceptance-met-not-on-removed-line
+  kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
-  tests:
-  - tests/unit/test_acceptance_verify.py
   find: '        elif status == "met" and basis == "removed-line" and evidence != "absent":'
   replace_with: '        elif False:'
+  tests:
+  - tests/unit/test_acceptance_verify.py
   why: «Выполнено» не может опираться на строку, которой в результате нет. Это проверка СВЯЗНОСТИ вердикта
     и основания — форма исходного ложного green B2-14.
 - id: acceptance-absence-tied-to-same-file
+  kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
-  tests:
-  - tests/unit/test_acceptance_verify.py
   find: '        if body is not None and q not in _norm(body) and q in _norm(own_removed):'
   replace_with: '        if body is not None and q not in _norm(body) and q in _norm(any_removed):'
+  tests:
+  - tests/unit/test_acceptance_verify.py
   why: 'Доказательство отсутствия обязано относиться к ТОМУ ЖЕ файлу: с объединением всех удалённых строк
     обход не закрывался, а отодвигался на шаг (третье и четвёртое ревью PR #118).'
 - id: acceptance-rubber-stamp-rejected
+  kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
-  tests:
-  - tests/unit/test_acceptance_verify.py
   find: '    if not reads:'
   replace_with: '    if False:'
+  tests:
+  - tests/unit/test_acceptance_verify.py
   why: Вердикт без единого чтения — рубер-штамп; принимать его опаснее всего именно в приёмке.
 - id: acceptance-seam-pipeline-calls-check
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/acceptance_verify.py
   file: ai_ops_kit/engine/acceptance_verify.py
-  tests:
-  - tests/unit/test_acceptance_verify_seam.py
   find: def verify(work_root, criteria, provider, revision=None, change_context=None, budget=None,
   replace_with: def verify_DISABLED(work_root, criteria, provider, revision=None, change_context=None,
     budget=None,
+  tests:
+  - tests/unit/test_acceptance_verify_seam.py
   why: 'ШОВ: модульные тесты механизма остаются зелёными, если конвейер его не зовёт — именно так дефект
     и жил. Тест шва обязан краснеть, когда точка входа исчезает.'
 - id: plan-closed-work-not-in-active
+  kind: guard
   file: ai_ops_kit/planning/delivery_plan.py
-  tests:
-  - tests/unit/test_plan_control_plane.py
   find: '        elif st in CLOSED_DECLARABLE:'
   replace_with: '        elif False:'
+  tests:
+  - tests/unit/test_plan_control_plane.py
   why: Закрытая работа в активном плане возвращает то состояние, из-за которого план перестал быть управляющим
     файлом (21 работа из 32 была `done`).
 - id: plan-history-feeds-status-derivation
+  kind: guard
   file: ai_ops_kit/planning/delivery_plan.py
-  tests:
-  - tests/unit/test_plan_control_plane.py
   find: '    for w in closed or []:'
   replace_with: '    for w in []:'
+  tests:
+  - tests/unit/test_plan_control_plane.py
   why: 'История обязана доезжать до вывода статусов: иначе каждая зависимость от завершённой работы становится
     «неизвестной» и блокирует весь план.'
 - id: plan-done-needs-a-place-to-recheck
+  kind: guard
   file: ai_ops_kit/planning/delivery_plan.py
-  tests:
-  - tests/unit/test_plan_control_plane.py
   find: '        if w.get("status") == "done" and not any(w.get(k) for k in ("pr", "commit", "evidence",
     "finding")):'
   replace_with: '        if False:'
+  tests:
+  - tests/unit/test_plan_control_plane.py
   why: '`done` — это не «PR смержен»: без места перепроверки история становится списком галочек.'
+- id: plan-seam-next-work-feeds-history
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '        closed = _plan.load_history(child_root)'
+  replace_with: '        closed = []'
+  tests:
+  - tests/unit/test_plan_history_seam.py
+  why: 'Разнос плана на активное и закрытое даёт правду только если историю видят ВСЕ потребители. Именно
+    этот шов сломался 14.08.2026: `ai-ops next` отказался советовать работу, потому что `depends_on` смотрел
+    на работу, уехавшую в историю. Механизм был исправен, шов — нет.'
