@@ -139,8 +139,14 @@ def test_preflight_selftest():
                        work_pkg={"should_decompose": False})
         expect("preflight: secret_boundary без ApprovalRecord -> blocked (человек не пройден)",
                pf_ap["blocked"] and any("human-approval" in r for r in pf_ap["reasons"]))
+        # v3.37: привязка обязана быть СВЕРЯЕМОЙ. Прежде здесь стояло binds_to="p" при отсутствии плана
+        # на диске — сверять было не с чем, и проверка молча пропускала запись. Кладём план и связываем
+        # с его реальным хэшем: сценарий тот же, но теперь он проверяет то, что обещает.
+        _fdir = root / "features" / "w"
+        _fdir.mkdir(parents=True, exist_ok=True)
+        (_fdir / "run-plan.yaml").write_text("base_workflow: ENGINEERING\ngates: [a]\n", encoding="utf-8")
         approvals.write_record(root, "w", "secrets", "u@x", "config", "согласовано", created_at="2026-07-18",
-                               binds_to="p", expires_at="2027-01-01T00:00:00Z", risk="secret", source="user")
+                               expires_at="2027-01-01T00:00:00Z", risk="secret", source="user")
         pf_ap2 = assess({"task_type": "ENGINEERING", "secret_boundary": True}, root, "w",
                         payload=good_payload, spec_cov={"spec_artifact": False, "blocking_missing": []},
                         work_pkg={"should_decompose": False})

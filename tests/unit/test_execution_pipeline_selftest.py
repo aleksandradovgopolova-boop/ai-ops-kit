@@ -443,10 +443,17 @@ def test_execution_pipeline_selftest():
                      install_deps=False, review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
         _nrq = _sp_re.run_pack(str(root / ".ai" / "worktrees" / "reeval-fn"), base=None,
                                signals=sig_q).get("needs_review") or ["rate_limiting"]
+        # v3.37: план кладём НА ДИСК и связываем одобрение с его настоящим хэшем. Прежде здесь стояло
+        # binds_to="reeval-fn-plan" — выдуманная строка, которую никто не сверял: плана не было, и
+        # проверка молча пропускала запись. То есть тест назывался «plan-bound approval валиден», а
+        # привязки не существовало. Теперь она есть, и именно она проверяется.
+        _rf = root / "features" / "reeval-fn"
+        _rf.mkdir(parents=True, exist_ok=True)
+        (_rf / "run-plan.yaml").write_text("base_workflow: QUICK\ngates: [security]\n", encoding="utf-8")
         for _d in _nrq:
             _appr_re.write_record(root, "reeval-fn", approval=_d, approved_by="human@owner",
                                   scope=f"security {_d}", reason="человек одобрил (reeval тест)",
-                                  created_at="2026-07-29", binds_to="reeval-fn-plan", expires_at="2026-12-31",
+                                  created_at="2026-07-29", expires_at="2026-12-31",
                                   risk="medium", source="human")
         rep_re = run_pipeline("quick api sec", sig_q, root, lambda c: {"done": True}, policy=pol,
                               budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
@@ -1001,14 +1008,19 @@ def test_execution_pipeline_selftest():
                any("которого нет среди реально прочитанных" in e
                    for e in _security_verdict_errors(_dom_ev([{"type": "code-read", "path": "src/prod/config.py"}]),
                                                      "abc123", _one, _vrr2, reviewer_reads=["tests/config.py"])))
-        # v3.0.11 (finding аудита P1): destructive-approval теперь валидируется STRICT (как в run_pipeline).
-        # Legacy-«рыхлая» запись (без binds_to/expires_at/risk/trusted source) проходила по дефолтам,
-        # но strict её отвергает — ровно та разница, на которую опирается фикс.
+        # v3.0.11 (finding аудита P1): destructive-approval валидируется STRICT (как в run_pipeline).
+        # v3.37: разница «non-strict пропускает / strict отвергает» БОЛЬШЕ НЕ СУЩЕСТВУЕТ — рыхлую
+        # запись без привязки отвергают ОБА режима. Проверяем именно это: strict больше не
+        # единственная защита, а последний рубеж.
         import approvals as _a4
         _loose_destr = {"approval": "destructive", "approved_by": "u@x", "scope": ".", "reason": "ok"}
-        expect("v3.0.11 destructive-strict: legacy-запись non-strict-валидна, но STRICT-невалидна",
-               _a4._record_valid(_loose_destr) is True
+        expect("v3.37 destructive: рыхлая запись без привязки невалидна и БЕЗ strict",
+               _a4._record_valid(_loose_destr, now=_a4._now_iso(), plan_hash="x") is False
                and _a4._record_valid(_loose_destr, now=_a4._now_iso(), plan_hash="x", strict=True) is False)
+        _bound_destr = {**_loose_destr, "binds_to": "x"}
+        expect("v3.37 destructive: привязанная запись проходит non-strict, но strict всё равно требует большего",
+               _a4._record_valid(_bound_destr, now=_a4._now_iso(), plan_hash="x") is True
+               and _a4._record_valid(_bound_destr, now=_a4._now_iso(), plan_hash="x", strict=True) is False)
 
         # v3.0-rc20 (finding аудита P0): high-risk домен, применимый ПО ПУТЯМ, требует ApprovalRecord
         # (reviewer не закрывает). Dockerfile/CI -> deployment_config; обычный src -> ничего; catch-all
@@ -1052,9 +1064,16 @@ def test_execution_pipeline_selftest():
 
         # v3.0.1 (P0): high-risk approval — legacy «рыхлая» запись (без binds_to/expires_at/risk/source)
         # НЕ закрывает high-risk домен (strict). Кладём такую запись и всё равно uncovered.
-        import approvals as _appr3
-        # рыхлая запись: без binds_to/expires_at/risk/source -> для high-risk strict-невалидна
-        _appr3.write_record(str(root), "no-wi", "deployment_config", "u@x", ".", "ok")
+        import approvals as _appr3  # noqa: F401 — модуль нужен соседним проверкам блока
+        # Рыхлая запись: без binds_to/expires_at/risk/source -> high-risk домен ею не закрывается.
+        # v3.37: кладём YAML напрямую — `write_record` такую запись больше не создаёт (привязка
+        # безусловна), но на дисках дочек до этой версии она лежит, и проверять надо именно её.
+        import yaml as _y3
+        _ad3 = root / "features" / "no-wi" / "approvals"
+        _ad3.mkdir(parents=True, exist_ok=True)
+        (_ad3 / "deployment_config.yaml").write_text(_y3.safe_dump(
+            {"schema_version": 1, "kind": "ApprovalRecord", "approval": "deployment_config",
+             "approved_by": "u@x", "scope": ".", "reason": "ok"}, allow_unicode=True), encoding="utf-8")
         expect("v3.0.1 strict-approval: legacy рыхлый ApprovalRecord НЕ закрывает high-risk deployment_config",
                "deployment_config" in _human_approval_domains_uncovered(str(root), "no-wi", ["Dockerfile"]))
 
