@@ -17,7 +17,6 @@ pass». Ветка, созданная чтобы пропустить пров�
 """
 from __future__ import annotations
 
-from evidence_collector import collect            # noqa: F401  (шов проверяется ниже)
 from gate_executor import evaluate
 
 GATE = "implementation_verification"
