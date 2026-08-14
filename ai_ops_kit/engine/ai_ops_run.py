@@ -662,8 +662,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                         "error": (f"resume заблокирован: base {_kind} с прошлого прогона — старую работу "
                                   "нельзя выдать за проверенную против новой базы (worktree форкнут от "
                                   "старой базы и не интегрирован с новой). Ни force_resume, ни replan это "
-                                  "НЕ снимают. Нужен СВЕЖИЙ прогон от новой базы (без --resume; --discard "
-                                  "для замены устаревшей ветки). " + "; ".join(pf["reasons"])),
+                                  # B2-10: здесь назывались флаги ВНУТРЕННЕЙ точки входа (`--resume`,
+                                  # `--discard`), которых у `ai-ops` нет вовсе. Человек читает это
+                                  # сообщение, работая через `ai-ops`, и набирает несуществующее.
+                                  "НЕ снимают. Нужен СВЕЖИЙ прогон от новой базы: удалите ветку "
+                                  f"прошлого прогона (`git branch -D ai-ops/{fid}`) и запустите "
+                                  f"`ai-ops run . --feature {fid} --execute`. " + "; ".join(pf["reasons"])),
                         "resume": {"requested": True, "resumed": False,
                                    "base_rewritten": bool(pf.get("base_rewritten")),
                                    "base_moved": bool(pf.get("base_moved")),
