@@ -38,6 +38,11 @@ _PATHISH = re.compile(r"`([\w./-]+/[\w./-]+|[\w-]+\.(?:py|js|jsx|ts|tsx|sh|yaml|
 #: Абсолютные пути (`/tmp/...`, `/Users/runner`) — примеры из чужих машин, а не ссылки
 #: на этот репозиторий; URL, плейсхолдеры и чужие пакеты — тем более.
 _SKIP = re.compile(r"^(https?:|<|@|/|node_modules/|\.\.)")
+#: Документ ЗАКОННО перечисляет то, чего нет: «удалено», «legacy», «больше не поддерживается».
+#: Полевая проверка на `ai-product-quest`: раздел «Legacy Removed» перечислял удалённые файлы, и
+#: проверка объявила их мёртвыми ссылками. Жаловаться на документ за то, что он документирует
+#: удаление, — верный способ научить владельца пролистывать раздел.
+_REMOVAL = re.compile(r"(удал|removed|legacy|deprecat|больше не|устарел|deleted)", re.I)
 
 
 def _docs(root: Path):
@@ -77,13 +82,26 @@ def dead_references(root, limit=5) -> list:
             parts = rel.split("/")
             for i in range(len(parts)):
                 tails.add("/".join(parts[i:]))
+    # ССЫЛКОЙ НА РЕПОЗИТОРИЙ считается только путь, чей ПЕРВЫЙ сегмент существует в корне
+    # (полевая проверка на `ai-product-quest`: три из пяти находок были ложными). `motion/react` —
+    # путь импорта пакета, `.tmp/qa-screens/` документ сам объявляет отсутствующим,
+    # `owner/repo` — имя чужого репозитория. Ни одно из них не про наши файлы, и жаловаться на них
+    # значит учить владельца пролистывать раздел.
+    tops = {p.name for p in root.iterdir()} if root.is_dir() else set()
     out = []
     for doc in _docs(root):
         try:
             lines = doc.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
+        # ближайший предшествующий заголовок — контекст строки: раздел «Legacy Removed» объявляет
+        # отсутствие своим названием, и это относится ко всем его пунктам.
+        heading = ""
         for i, line in enumerate(lines, 1):
+            if line.lstrip().startswith("#"):
+                heading = line
+            if _REMOVAL.search(line) or _REMOVAL.search(heading):
+                continue
             for script in _NPM.findall(line):
                 if pkg.is_file() and script not in scripts:
                     out.append({"doc": doc.relative_to(root).as_posix(), "line": i,
@@ -96,6 +114,8 @@ def dead_references(root, limit=5) -> list:
                     continue
                 if _SKIP.match(ref) or (root / cand).exists() or cand in tails:
                     continue
+                if cand.split("/")[0] not in tops:
+                    continue                      # не про этот репозиторий (см. комментарий выше)
                 out.append({"doc": doc.relative_to(root).as_posix(), "line": i,
                             "ref": ref, "kind": "путь"})
             if len(out) >= limit:

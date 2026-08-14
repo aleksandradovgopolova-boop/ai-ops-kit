@@ -234,3 +234,27 @@ def test_delivery_preflight_is_wired_before_the_model_call():
     assert src.index("_delivery_preflight(") < src.index("tool_loop.run_loop"), (
         "предупреждение о базе стоит после вызова модели — то есть после траты, как и было")
     assert '"preflight": delivery_pf' in src, "предупреждение не доехало до отчёта"
+
+
+# ─── второй brownfield (`ai-product-quest`, 15.08.2026) ────────────────────────────────────────
+
+def test_the_transcript_records_what_was_executed(tmp_path):
+    """След прогона называет КОМАНДУ и ФАЙЛ, а не только вид операции.
+
+    Полевой замер: три прогона подряд дали «шагов 10 · правок 0», и разобрать было нечем — транскрипт
+    хранил вид операции и вердикт брокера, но не команду и не путь. Владелец видит «кит не справился»
+    без единой зацепки, а сам кит объясняет это неверной причиной («нужен живой провайдер» при
+    работающем провайдере).
+    """
+    from ai_ops_kit.engine import tool_loop, tool_broker
+
+    (tmp_path / "a.txt").write_text("ок\n", encoding="utf-8")
+    steps = iter([{"op": "read", "path": "a.txt"},
+                  {"done": True, "summary": "прочитал", "behavior_unchanged": "тест"}])
+
+    rep = tool_loop.run_loop(lambda _c: next(steps), tmp_path,
+                             tool_broker.Policy(level="read-only", child_root=str(tmp_path)),
+                             max_steps=4)
+    tr = [t for t in rep["transcript"] if t.get("op")]
+
+    assert tr and tr[0].get("what") == "a.txt", tr
