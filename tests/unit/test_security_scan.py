@@ -154,3 +154,58 @@ class TestSecurityEvidence:
         injections = [{"path": "a.py", "id": "eval_or_exec", "line": 1}]
         ev = security_scan.security_evidence([], injections, [])
         assert ev["no_injection_surface"]["status"] == "fail"
+
+
+@pytest.mark.unit
+@pytest.mark.critical_path
+class TestExecDetectorDistinguishesRegexFromCommand:
+    """R-40: `.exec(` в JS — это регулярка, а не исполнение кода.
+
+    Найдено в поле (ии-среда, 2026-08-14): паттерн `\\b(?:eval|exec)\\s*\\(` матчил `/re/.exec(s)`,
+    из-за чего ДВЕ находки на регулярках подняли ТРИ домена сразу и заблокировали security-гейт на
+    работе, где уязвимости не было. Здесь зафиксированы обе стороны границы: ложное срабатывание
+    снято, настоящее исполнение команд по-прежнему ловится.
+    """
+
+    JS_REGEX = 'const m = /^\\/api\\/files\\/([^/]+)$/.exec(pathname);\n'
+
+    def test_js_regex_exec_is_not_code_execution(self):
+        """Тот самый вектор из поля: строка 512 server/index.mjs."""
+        assert security_scan.scan_injection({"server/index.mjs": self.JS_REGEX}) == []
+
+    @pytest.mark.parametrize("path,src", [
+        pytest.param("a.py", "exec(code)\n", id="python-exec"),
+        pytest.param("a.mjs", "eval(userInput);\n", id="js-eval"),
+        pytest.param("a.mjs", "window.eval(payload);\n", id="window-eval"),
+    ])
+    def test_real_eval_exec_still_flagged(self, path, src):
+        """Сужение не должно превратиться в глухоту: настоящий eval/exec ловится."""
+        assert any(f["id"] == "eval_or_exec" for f in security_scan.scan_injection({path: src}))
+
+    @pytest.mark.parametrize("src,ident", [
+        pytest.param('const cp = require("child_process");\ncp.exec("rm -rf /");\n',
+                     "require", id="require-child_process"),
+        pytest.param('import { exec } from "node:child_process";\nexec(cmd);\n',
+                     "node-prefix", id="import-node-child_process"),
+        pytest.param('const cp = require("node:child_process");\ncp.execSync(cmd);\n',
+                     "node-prefix-require", id="require-node-child_process"),
+    ])
+    def test_node_command_execution_is_flagged_with_call_site(self, src, ident):
+        """Опасный случай ловится, и находка указывает на СТРОКУ вызова, а не только на импорт."""
+        findings = security_scan.scan_injection({"a.mjs": src})
+        calls = [f for f in findings if f["id"] == "node_child_process_exec"]
+        assert calls, f"исполнение команд не помечено ({ident}): {findings}"
+        assert calls[0]["line"] == 2, f"находка указывает не на строку вызова: {calls}"
+
+    def test_regex_exec_in_file_with_child_process_is_flagged_deliberately(self):
+        """Пере-срабатывание здесь ОСОЗНАННОЕ: получателя вызова текстом не различить, а лишний
+        needs_review безопасен, тогда как пропуск исполнения команды — нет."""
+        src = 'const cp = require("child_process");\nconst m = /x/.exec(v);\n'
+        assert any(f["id"] == "node_child_process_exec"
+                   for f in security_scan.scan_injection({"a.mjs": src}))
+
+    def test_sql_execute_pattern_untouched(self):
+        """Соседнее правило не задето: `cursor.execute(f"…")` по-прежнему своё."""
+        findings = security_scan.scan_injection({"a.py": 'cursor.execute(f"SELECT {x}")\n'})
+        assert any(f["id"] == "sql_fstring_execute" for f in findings)
+        assert not any(f["id"] == "eval_or_exec" for f in findings)
