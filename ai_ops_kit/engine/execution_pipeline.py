@@ -49,6 +49,7 @@ from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _git, _has_changes, _head_advanced, _tree_clean, _TOOL_CACHE_RE, _tree_clean_after_checks,
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
     _verify_remote_base, _change_context, _change_context_range,
+    delivery_preflight as _delivery_preflight,
 )
 from ai_ops_kit.engine.pipeline_failure import (  # noqa: E402,F401
     _ENV_SYMPTOMS, _check_has_env_symptom, _env_proven_ok, _env_unqualified,
@@ -150,6 +151,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
                     "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
                     "reason": _br.get("reason")}
+    # B2-23 (пере-прогон 14.08.2026): доставка проверяла remote-базу ПОСЛЕ работы. Прогон отработал
+    # 13.5 минуты живой модели и ~$3.5 и только на шаге доставки сказал «remote base сдвинулась —
+    # PR не открыт». Отказ верный, момент — нет: база известна ЗДЕСЬ, до первого вызова модели, и
+    # предупредить можно бесплатно. Прогон не останавливаем (работа сама по себе может быть нужна),
+    # но говорим ЗАРАНЕЕ и в тех же словах, что скажет доставка.
+    delivery_pf = _delivery_preflight(child_root, base_ref, base_sha, open_pr)
+    if delivery_pf:
+        print(f"  ⚠ {delivery_pf['warning']}")
     # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
     # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
     if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
@@ -803,7 +812,12 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # прогоны на непроверенном вердикте — и его научились бы обходить.
     from ai_ops_kit.engine import acceptance_verify as _av
     _ac_text, _ac_items, _ac_problem = _av.criteria_from_spec(child_root, wid)
-    if _ac_items and review and reviewer_proposer is not None and committed_sha:
+    # СВЕРКА НЕ ЗАВИСИТ ОТ ФЛАГА `review` (полевой замер 14.08.2026, пере-прогон BNBM). Судья
+    # включается автоподбором по классу задачи: для QUICK `review=False`. Правка документа — это
+    # QUICK, и именно на правке документа родился B2-14. То есть механизм против ложного green не
+    # работал ровно на том классе, где ложный green и случился: за весь живой прогон сверка не
+    # запустилась НИ РАЗУ. Критерии, если они объявлены, сверяются всегда, когда есть кому судить.
+    if _ac_items and reviewer_proposer is not None and committed_sha:
         try:
             # Контекст судьи — ВЕСЬ диапазон base..head, а не последний коммит (ревью PR #118).
             # Критерии приёмки описывают изменение целиком; на resume и reevaluate_only ветка
@@ -952,6 +966,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                          "wid": wid, "task": task, "base_binding": base_binding}
     else:
         delivery = {"requested": bool(open_pr), "base_binding": base_binding,
+                    "preflight": delivery_pf,
                     "status": ("not-requested" if not open_pr
                                else ("not-attempted" if not ready else None))}
     # ready есть, доставка НЕ выполнена в pipeline: overall — «готово к доставке» (контроллер финализирует).

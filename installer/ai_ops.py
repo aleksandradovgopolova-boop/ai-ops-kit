@@ -578,8 +578,23 @@ def write_report(report):
 def cmd_status():
     inst, avail = installed_version(), pkg_version()
     drift = detect_drift() or []
-    print(f"установлено: {inst or '—'}   пакет: {avail}   "
-          f"{'✓ актуально' if inst == avail else '⟳ доступно обновление'}")
+    # B2-17 (пере-прогон 14.08.2026): сравнение ТОЛЬКО номеров говорило «✓ актуально», а `diff` тут
+    # же перечислял 20 изменений — версия не менялась, менялось СОДЕРЖИМОЕ. Владелец, поверивший
+    # первому ответу, не получал ничего из влитой работы. Два ответа одной CLI об одном состоянии
+    # расходились; теперь `status` считает то же, что показывает `diff`.
+    try:
+        pending = len(build_diff())
+    except Exception:                                  # noqa: BLE001 — сравнить содержимое не вышло:
+        pending = None                                 #   это «не знаю», а не «чисто»
+    if inst != avail:
+        verdict = "⟳ доступно обновление"
+    elif pending is None:
+        verdict = "версии совпадают; содержимое сравнить НЕ УДАЛОСЬ"
+    elif pending:
+        verdict = f"⟳ версия та же, но содержимое разошлось: {pending} изменени(й) — нужен update"
+    else:
+        verdict = "✓ актуально"
+    print(f"установлено: {inst or '—'}   пакет: {avail}   {verdict}")
     print(f"целостность managed: {'ДРИФТ (' + str(len(drift)) + ' файлов)' if drift else 'OK'}")
     for d in drift[:10]:
         print(f"  - {d['kind']}: {d['path']}")

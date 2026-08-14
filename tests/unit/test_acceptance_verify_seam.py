@@ -208,3 +208,26 @@ def test_without_a_judge_the_report_says_not_verified(repo):
     assert "НЕ сверялись" in ac.get("reason", "")
     assert "«раздел заполнен»" in ac.get("reason", ""), (
         "причина обязана называть источник ложного green — spec-coverage: complete")
+
+
+def test_criteria_are_verified_even_when_gate_review_is_off(repo):
+    """ПОЛЕВОЙ ЗАМЕР 14.08.2026: сверка не должна зависеть от флага `review`.
+
+    Судья включается автоподбором по классу задачи: для QUICK `review=False`. Правка документа —
+    это QUICK, и ровно на правке документа родился B2-14. То есть механизм против ложного green не
+    работал на том классе, где ложный green и случился: за весь живой прогон сверка не запустилась
+    ни разу. Здесь `review=False` и при этом критерии обязаны быть сверены — судья есть.
+    """
+    _writer.done = False
+
+    report = execution_pipeline.run_pipeline(
+        task="убрать из README упоминание public/media",
+        signals={"task_type": "QUICK"}, child_root=repo, proposer=_writer,
+        feature=WID, commit=True, review=False, reviewer_proposer=_judge,
+        install_deps=False, baseline_diff=False)
+
+    ac = report.get("acceptance_criteria") or {}
+    assert ac.get("verified") is True, (
+        f"при review=False сверка не состоялась — механизм снова молчит на QUICK: {ac.get('reason')}")
+    assert ac.get("unmet") == ["AC-1"], ac
+    assert report.get("reviews") in (None, []), "ревью ГЕЙТОВ должно остаться выключенным"

@@ -141,3 +141,96 @@ def test_the_run_uses_the_predicate_and_names_the_waiting_state():
 
     assert 'if _st == "blocked" and delivery_pending(rep):' in src, "предикат не подключён к решению"
     assert "ждёт доставки: работа готова на ветке, новых правок нет" in src
+
+
+# ─── B2-17 / B2-19 (вторая порция пере-прогона) ────────────────────────────────────────────────
+
+def test_status_compares_content_not_only_version_numbers():
+    """`status` и `diff` обязаны отвечать про ОДНО состояние.
+
+    B2-17: `status` сравнивал только номера и говорил «✓ актуально», пока `diff` перечислял 20
+    изменений — версия не менялась, менялось содержимое. Владелец, поверивший первому ответу, не
+    получал ничего из влитой работы.
+    """
+    src = INSTALLER.read_text(encoding="utf-8")
+    head = src[src.index("def cmd_status():"):src.index("def cmd_diff():")]
+
+    assert "build_diff()" in head, "status снова не смотрит на содержимое"
+    assert "содержимое разошлось" in head
+    assert "содержимое сравнить НЕ УДАЛОСЬ" in head, "«не знаю» не отличается от «чисто»"
+
+
+def test_every_installer_command_is_routed_by_the_wrapper():
+    """Команда установщика, не перечисленная в обёртке, недостижима из дочки.
+
+    B2-19: `usage` объявлена в справке установщика, но обёртка отправляла её в интент-CLI —
+    `invalid choice: 'usage'`. Список в обёртке отставал от кода молча; теперь расхождение краснеет.
+    Пересечения (`status`, `onboard`) отданы интент-CLI осознанно: у владельца это вопросы к работе,
+    а не к киту, и для состояния кита есть отдельная команда `kit-status`.
+    """
+    import re
+
+    installer_cmds = set(re.findall(r'cmd == "([a-z-]+)"', INSTALLER.read_text(encoding="utf-8")))
+    wrapper = WRAPPER.read_text(encoding="utf-8")
+    routed = set()
+    for line in wrapper.splitlines():
+        m = re.match(r"\s{2}([a-z|-]+)\)\s*$", line)
+        if m:
+            routed |= set(m.group(1).split("|"))
+    intent_owned = {"status", "onboard"}          # осознанные пересечения, см. комментарий в обёртке
+
+    missing = sorted(installer_cmds - routed - intent_owned)
+    assert not missing, f"команды установщика недостижимы из дочки: {missing}"
+
+
+# ─── B2-22 / B2-23 (третья порция пере-прогона) ────────────────────────────────────────────────
+
+def test_the_loop_reports_progress_so_a_human_can_tell_work_from_a_hang(capsys):
+    """Каждый шаг называет себя: «шаг N/M — жду ответа модели».
+
+    B2-22: прогон шёл девять минут без единой строки. Один и тот же пустой экран означал и
+    «работает», и «повисло»; отличить удалось только через `ps`. Строка идёт в stderr — stdout
+    остаётся машиночитаемым.
+    """
+    from ai_ops_kit.engine import tool_loop, tool_broker
+
+    calls = {"n": 0}
+
+    def proposer(_ctx):
+        calls["n"] += 1
+        return {"done": True, "summary": "готово", "behavior_unchanged": "тест"}
+
+    tool_loop.run_loop(proposer, PKG, tool_broker.Policy(level="read-only", child_root=str(PKG)),
+                       max_steps=3)
+    err = capsys.readouterr().err
+
+    assert "шаг 1/3" in err and "жду ответа модели" in err, err
+    assert calls["n"] == 1, "тест смотрит не на тот прогон"
+
+
+@pytest.mark.parametrize("open_pr,expect", [(False, False), (True, True)])
+def test_delivery_preflight_warns_before_spending(tmp_path, open_pr, expect):
+    """B2-23: о невозможной доставке говорится ДО работы, а не после полной траты.
+
+    Прогон отработал 13.5 минуты живой модели и ~$3.5 и только на шаге доставки сообщил, что база на
+    remote сдвинулась. Отказ верный, момент — нет: база резолвится до первого вызова модели.
+    Предупреждение НЕ останавливает прогон: решение «платить или нет» остаётся за владельцем, ему
+    лишь возвращают факт вовремя.
+    """
+    from ai_ops_kit.engine.pipeline_git import delivery_preflight
+
+    out = delivery_preflight(tmp_path, "main", "abc123", open_pr)
+
+    assert bool(out) is expect, out
+    if expect:
+        assert "PR открыть не удастся" in out["warning"]
+        assert "Сказано ДО работы" in out["warning"]
+
+
+def test_delivery_preflight_is_wired_before_the_model_call():
+    """ШОВ: предупреждение стоит в конвейере ДО петли, иначе оно приходит после траты."""
+    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+
+    assert src.index("_delivery_preflight(") < src.index("tool_loop.run_loop"), (
+        "предупреждение о базе стоит после вызова модели — то есть после траты, как и было")
+    assert '"preflight": delivery_pf' in src, "предупреждение не доехало до отчёта"

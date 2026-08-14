@@ -90,7 +90,12 @@ case "$cmd" in
     echo "Укажите: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops kit-status" >&2
     exit 2
     ;;
-  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof)
+  # B2-19 (пере-прогон 14.08.2026): список отставал от установщика — `usage` объявлена в его
+  # справке («честная стоимость/токены задачи и продукта»), но обёртка отправляла её в
+  # интент-CLI, где такого интента нет: `invalid choice: 'usage'`. Документированная команда
+  # была недостижима по документированному пути. Список сверяется тестом с реальными
+  # командами установщика, чтобы отставание больше не было молчаливым.
+  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|session|subsession|engops|method)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi

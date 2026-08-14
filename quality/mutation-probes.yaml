@@ -60,6 +60,7 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/engine/acceptance_verify.py
+  - ai_ops_kit/engine/execution_pipeline.py
   file: ai_ops_kit/engine/acceptance_verify.py
   find: def verify(work_root, criteria, provider, revision=None, change_context=None, budget=None,
   replace_with: def verify_DISABLED(work_root, criteria, provider, revision=None, change_context=None,
@@ -67,7 +68,9 @@ probes:
   tests:
   - tests/unit/test_acceptance_verify_seam.py
   why: 'ШОВ: модульные тесты механизма остаются зелёными, если конвейер его не зовёт — именно так дефект
-    и жил. Тест шва обязан краснеть, когда точка входа исчезает.'
+    и жил. Тест шва обязан краснеть, когда точка входа исчезает. Проба закрывает шов С ОБЕИХ сторон: у
+    механизма исчезает точка входа, и это же ломает ВЫЗОВ из конвейера — поэтому она названа покрытием
+    и для `execution_pipeline.py`, где живут охранные пробы сверки.'
 - id: plan-closed-work-not-in-active
   kind: guard
   file: ai_ops_kit/planning/delivery_plan.py
@@ -138,3 +141,24 @@ probes:
     — «объявлено, но не исполняется». Первая версия этой пробы ВЫЖИЛА и показала, что снятие из рантайм-списка
     ничего не ломает: валидатор держался вторым списком. Несущий шов — именно контракт `check(data)`,
     и проба теперь ломает его.'
+- id: acceptance-not-gated-by-review-flag
+  kind: guard
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '    if _ac_items and reviewer_proposer is not None and committed_sha:'
+  replace_with: '    if _ac_items and review and reviewer_proposer is not None and committed_sha:'
+  tests:
+  - tests/unit/test_acceptance_verify_seam.py
+  why: 'Полевой замер 14.08: судья включается автоподбором, для QUICK review=False — и сверка не работала
+    на классе задач, где родился B2-14. Возврат условия под флаг снова выключит механизм на самом частом
+    пути.'
+- id: owner-path-wrapper-passes-path-before-flags
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  file: templates/runtime/ai-ops-entry.sh
+  find: '    exec "$py" "$managed/tools/ai_ops_cli.py" "$intent" "$here" "$@"'
+  replace_with: '    exec "$py" "$managed/tools/ai_ops_cli.py" "$@" "$here"'
+  tests:
+  - tests/unit/test_field_findings_bnbm_rerun.py
+  why: 'ШОВ пути владельца: пока путь дописывался последним, `./ai-ops run "текст" --execute` падал сырым
+    argparse — исполнить задачу через обёртку было нельзя вовсе.'
