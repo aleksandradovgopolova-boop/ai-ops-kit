@@ -56,9 +56,11 @@ mvp_blocking_count: 8
 #      на РЕАЛЬНОЙ порче своего источника правды;
 #  9 — штучные тесты (security_domains, spec_coverage, workflow_gates, installer-группа и др.);
 #  +1 — validate_layering (v3.32.0): граф импортов между пакетами против layering.yaml.
-# 2026-08-14: +1 — validate_acceptance_result (сверка критериев приёмки, B2-14).
-validators_count: 74
-validators_externally_tested: 74
+# 2026-08-14: +1 — validate_acceptance_result (сверка критериев приёмки, B2-14);
+#             +1 — validate_mutation_probes (реестр охранных проверок; прогон проб — отдельная
+#                  джоба, валидатор держит реестр от отставания от кода).
+validators_count: 75
+validators_externally_tested: 75
 # Связность ядра: ДЕРИВИРУЕТСЯ из packages/layering.yaml (см. derived_layering_counts).
 # Появились 2026-08-13: числа жили в прозе и не сверялись ничем, поэтому документы кита
 # говорили 12/210 при фактическом ратчете 7/52 — и CI был зелёным.

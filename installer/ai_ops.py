@@ -305,6 +305,7 @@ DEV_ONLY_TOOLS = frozenset({
     "changelog_gen",                                       # генератор CHANGELOG кита
     "qual_run", "promotion_qual",                          # харнессы квалификации (данные — qualification/)
     "kit_observability",                                   # наблюдаемость самого кита
+    "mutation_probe",                                      # мутационные пробы охран кита
 })
 
 # Валидаторы, которые РЕАЛЬНО вызываются в child-репозитории. Источники (проверяемо grep'ом):

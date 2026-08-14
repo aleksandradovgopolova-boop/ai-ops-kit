@@ -623,9 +623,10 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `presenter` (Human Communication Layer v3.35: контракт `UserMessage` и три аудитории; наружу
   выходит смысл, а не внутреннее состояние)
 - `ai_ops_kit/cli/` (1) — `ai_ops_cli`
-- `ai_ops_kit/devtools/` (8) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
+- `ai_ops_kit/devtools/` (9) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
   (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
-  `kit_observability`, `model_comparison`, `promotion_qual`, `qual_run`, `retrieval_bench`
+  `kit_observability`, `model_comparison`, `mutation_probe`, `promotion_qual`, `qual_run`,
+  `retrieval_bench`
 
 ## validation/
 
@@ -658,6 +659,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/validation/validate_openspec_change.py`
 - `ai_ops_kit/validation/validate_presets.py`
 - `ai_ops_kit/validation/validate_references.py`
+- `ai_ops_kit/validation/validate_mutation_probes.py` — реестр охранных проверок: образец охраны обязан существовать РОВНО один раз, иначе проба молча ничего не проверяет (2026-08-14)
 - `ai_ops_kit/validation/validate_acceptance_result.py` — вердикт сверки критериев приёмки: вердикт по КАЖДОМУ критерию, `met` требует цитаты и источника (B2-14, 2026-08-14)
 - `ai_ops_kit/validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
 - `ai_ops_kit/validation/validate_security_posture.py`
@@ -711,6 +713,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `packages/layering.yaml` — слои 12 пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
+- `tools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
 - `tools/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
 - `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
 - `tools/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
