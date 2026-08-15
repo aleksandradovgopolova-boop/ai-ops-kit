@@ -223,3 +223,23 @@ probes:
   - tests/unit/test_field_findings_cockpit.py::TestSpecifyPathAddsSections
   why: 'ШОВ пути человека к механизму уровней спеки: модульная проверка `create_spec` остаётся зелёной,
     когда до механизма не доходит `ai-ops specify` — а дефект F-029 жил именно так, между командой и файлом.'
+- id: staleness-dead-references-reported
+  kind: guard
+  file: ai_ops_kit/planning/staleness.py
+  find: '    return {"commits": n, "since": sha[:12], "plan_rel": plan_rel} if n else None'
+  replace_with: '    return None'
+  tests:
+  - tests/unit/test_staleness_and_provenance.py
+  why: '«План отстал от истории» — половина ответа на пассивность кита: без неё он снова будет молчать
+    о том, что работа идёт мимо объявленного.'
+- id: staleness-reaches-the-answer
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/staleness.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '    return {"schema_version": 1, "plan_present": True, "staleness": stale,'
+  replace_with: '    return {"schema_version": 1, "plan_present": True,'
+  tests:
+  - tests/unit/test_staleness_and_provenance.py
+  why: 'ШОВ: механизм существовал и раньше по духу — не хватало того, чтобы человек его ВИДЕЛ. Проверка,
+    не доехавшая до ответа, равна отсутствующей.'

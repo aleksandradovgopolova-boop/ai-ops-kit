@@ -341,11 +341,20 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     а не после 3 фиксированных пауз — один невосстановленный 529 больше не роняет весь многошаговый прогон.
     Синтетический конверт claude `is_error:true` на rc==0 (напр. 529: `input_tokens:0, stop_reason:stop_sequence`)
     распознаётся и НЕ выдаётся за валидный результат. Полный человекочитаемый текст ошибки сохраняется
-    (парсинг `content[].text`/`error`), а не режется до 200 символов (F-011a — обрезка прятала «529 Overloaded»)."""
-    cmd = ["claude", "-p", prompt, "--output-format", "json",
+    (парсинг `content[].text`/`error`), а не режется до 200 символов (F-011a — обрезка прятала «529 Overloaded»).
+
+    Промпт передаётся ПОСЛЕДНИМ, после разделителя `--` (находка живого прогона на child-репозитории,
+    2026-08-14). Промпты ролей — markdown с YAML-фронтматтером, то есть начинаются с `---`; в позиции
+    до разделителя CLI разбирал их как ключ и падал с `unknown option '---…'` на КАЖДОЙ из 5 попыток.
+    Ломалось не всё подряд: tool-loop строит промпт с текста, а run_workflow подаёт документ роли как
+    есть — поэтому `--review`/`--author`/`--reevaluate-only` были недоступны с провайдером claude-cli,
+    а обычный прогон работал. Разделитель снимает класс целиком: после `--` любой текст — позиционный
+    аргумент, чем бы он ни начинался."""
+    cmd = ["claude", "-p", "--output-format", "json",
            "--allowedTools", "Read", "Grep", "Glob"]
     if model:
         cmd += ["--model", model]
+    cmd += ["--", prompt]
     import subprocess
     import json as _json
     import time

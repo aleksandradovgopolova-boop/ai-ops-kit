@@ -295,7 +295,17 @@ def compute(child_root, budget_left=None):
     if len(ready) > 1:
         parallel, par_skipped = _parallel_set(ready[1:], by_id, anchor=next_best)
 
-    return {"schema_version": 1, "plan_present": True,
+    # ПРОТУХАНИЕ — часть ответа «что дальше» (наблюдение владельца 14.08.2026). Кит отвечал честно
+    # на заданные вопросы и молчал обо всём, о чём не спросили: рядом жили документация про мёртвый
+    # продукт и план, отставший на 31 изменение. Оба факта дешёвые и проверяемые, поэтому кит
+    # называет их сам — но именно как разговор, а не как гейт: проверка, останавливающая прогон на
+    # каждом устаревшем абзаце, обучает себя обходить.
+    try:
+        from ai_ops_kit.planning import staleness as _stale
+        stale = _stale.assess(child_root, plan_rel)
+    except Exception:                                   # noqa: BLE001 — обзор не обязан ронять ответ
+        stale = {"dead_references": [], "plan_behind": None, "error": "проверка протухания не выполнена"}
+    return {"schema_version": 1, "plan_present": True, "staleness": stale,
             "plan_errors": val["errors"], "plan_warnings": val["warnings"],
             "roadmap": {"errors": rm["errors"], "warnings": rm["warnings"]},
             "where_are_we": where, "in_progress": in_progress, "blocked": blocked,
@@ -369,6 +379,23 @@ def render(rep) -> str:
             L.append(f"      {s['id']} одновременно НЕ брать: {s['reason']}")
     for w in rep["plan_warnings"] + rep["roadmap"]["warnings"]:
         L.append(f"  ⚠ {w}")
+
+    # 5. ПРОТУХШЕЕ — то, о чём не спросили. Раздел появляется, только если есть что сказать:
+    # пустой раздел на каждом ответе обесценил бы его за неделю.
+    st = rep.get("staleness") or {}
+    dead, behind = st.get("dead_references") or [], st.get("plan_behind")
+    if dead or behind:
+        L.append("5. ЧЕГО НИКТО НЕ СПРАШИВАЛ")
+        if behind:
+            L.append(f"  план отстал от истории: {behind['commits']} изменени(й) влито после "
+                     f"последней правки {behind['plan_rel']} — работа идёт мимо объявленного")
+        for d in dead[:5]:
+            L.append(f"  описание ссылается на то, чего нет: {d['doc']}:{d['line']} — "
+                     f"{d['kind']} «{d['ref']}»")
+        if dead:
+            L.append("      это факт, а не оценка: ссылка не резолвится. Если речь о другом "
+                     "репозитории — так и напишите в документе, тогда проверка замолчит")
+
     return "\n".join(L)
 
 

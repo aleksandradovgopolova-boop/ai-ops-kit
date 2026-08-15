@@ -633,6 +633,12 @@ def main(argv):
 
     if intent == "resume":
         from ai_ops_kit.engine import ai_ops_run
+        # `ai-ops resume . <feature>` — путь репозитория ПЕРВЫМ позиционным (живой прогон на child,
+        # 2026-08-14). Разбор каталога в хвосте эту форму не ловит: "." уезжал в task, оттуда в
+        # workitem_id -> ValueError со стеком. Здесь она разбирается явно, и только когда за
+        # каталогом реально стоит второй позиционный — обычный `resume "текст задачи"` не задет.
+        if task and rest and Path(task).is_dir():
+            child_root, task = task, rest.pop(0)
         # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
         # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе

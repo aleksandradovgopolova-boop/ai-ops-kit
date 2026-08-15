@@ -222,6 +222,44 @@ class TestOnboardIntent:
 
 
 @pytest.mark.unit
+class TestResumePositionalRoot:
+    """`ai-ops resume . <feature>` — форма из подсказки движка.
+
+    Живой прогон на child-репозитории (2026-08-14): подсказка после блокирующих гейтов предлагала
+    ровно эту строку, а intent-CLI разбирал "." как текст задачи -> workitem_id "." ->
+    ValueError со стеком вместо ответа. Каталог в ХВОСТЕ разбирался, в голове — нет.
+    """
+
+    def _capture(self, monkeypatch):
+        from ai_ops_kit.engine import ai_ops_run
+        seen = {}
+
+        def _fake_main(argv):
+            seen["argv"] = argv
+            return 0
+
+        monkeypatch.setattr(ai_ops_run, "main", _fake_main)
+        return seen
+
+    def test_leading_dir_is_root_not_task(self, child_root, monkeypatch):
+        seen = self._capture(monkeypatch)
+        rc = ai_ops_cli.main(["resume", str(child_root), "describe-planning-execution"])
+        assert rc == 0
+        argv = seen["argv"]
+        assert argv[1] == str(child_root), "каталог репозитория не распознан в первой позиции"
+        assert argv[2] == "describe-planning-execution", \
+            f"workitem_id взят не из второго позиционного: {argv[2]!r}"
+
+    def test_task_text_still_wins_without_second_positional(self, child_root, monkeypatch):
+        """Обычный `resume "текст"` не задет: без второго позиционного текст остаётся текстом."""
+        seen = self._capture(monkeypatch)
+        ai_ops_cli.main(["resume", "продолжить работу", str(child_root)])
+        argv = seen["argv"]
+        assert argv[1] == str(child_root)
+        assert argv[2] == "продолжить работу"
+
+
+@pytest.mark.unit
 class TestDegradedContextIsVisible:
     """Проглоченное исключение не должно выглядеть нормальным результатом.
 
