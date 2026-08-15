@@ -677,18 +677,35 @@ def from_plan_built(workitem_id, workflow, spec_level, packages, context_error=N
         technical=tech)
 
 
-def from_specification(path, created, level_name, sections, blocking_missing, next_command) -> dict:
-    """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа."""
+def from_specification(path, created, level_name, sections, blocking_missing, next_command,
+                       added=None, add_error=None) -> dict:
+    """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
+
+    F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
+    сообщение звучало «заготовка уже была; заполнить нужно 9 разделов», а в файле лежало 6 разделов
+    прошлого уровня — заполнять было нечего. `add_error` — честная причина, если дописать не вышло
+    (битый spec.yaml не переписываем: описанное человеком дороже незакрытого гейта)."""
     n_missing = len(blocking_missing or [])
+    n_added = len(added or [])
     tech = {"spec": str(path), "уровень": level_name, "разделов": len(sections or []),
             "не заполнено": ", ".join(blocking_missing or []) or "—",
-            "создана": bool(created)}
+            "создана": bool(created), "дописано": ", ".join(added or []) or "—"}
+    if add_error:
+        tech["дописать не удалось"] = str(add_error)
+    if created:
+        _origin = "создана"
+    elif n_added:
+        _origin = (f"уже была, дописано {n_added} "
+                   f"{_q(n_added, 'раздел', 'раздела', 'разделов')} под {level_name}")
+    else:
+        _origin = "уже была"
     if n_missing:
         return message(
             status="needs_input",
-            summary=("Заготовка описания задачи " + ("создана" if created else "уже была")
+            summary=("Заготовка описания задачи " + _origin
                      + f"; заполнить нужно {n_missing} "
-                       f"{_q(n_missing, 'раздел', 'раздела', 'разделов')}."),
+                       f"{_q(n_missing, 'раздел', 'раздела', 'разделов')}."
+                     + (f" Дописать разделы не удалось: {add_error}." if add_error else "")),
             why_it_matters="Заполнять их за тебя я не буду: это как раз то, что из кода не "
                            "выводится, — зачем задача и как поймём, что получилось.",
             next_steps=[f"заполни разделы в {path}", f"потом запускай: {next_command}"],

@@ -95,6 +95,82 @@ def resolve_provider_for_run(explicit, child_root, execute=False, quiet=False):
     return res
 
 
+def live_provider_refusal(res, explicit):
+    """F-026 (поле 2026-08-15, дочка ai-ops-cockpit): исполняющий прогон с заглушкой — ложный green.
+
+    `resume --execute` уходил в `mock`: правок продукта ноль, а отчёт говорил `resumed=True`, и
+    отличить это от работы можно было только в `--json` («provider»: «mock»). Печати решения мало:
+    прогон, который НЕ ВЫЗЫВАЕТ модель, не должен доводиться до вердикта и коммита служебных файлов.
+    Поэтому: живого нашли — идём; не нашли — ОТКАЗ с названной причиной. Офлайн остаётся доступен,
+    но становится осознанным (`--provider mock`).
+
+    Отказ только для случая `source == "fallback"` — автовыбор реально искал и не нашёл. Явный
+    выбор человека и выключенный автовыбор (`AI_OPS_PROVIDER_AUTORESOLVE=0`, pytest/CI —
+    офлайн-детерминизм) остаются как были. -> текст отказа или None."""
+    if explicit or not isinstance(res, dict):
+        return None
+    if res.get("provider") != "mock" or res.get("source") != "fallback":
+        return None
+    checked = "; ".join(res.get("checked") or []) or "проверять было нечего"
+    return ("живого провайдера не нашлось, а с заглушкой (mock) прогон не вызывает модель и правок "
+            "не делает — отчёт об успехе был бы ложным. Проверено: " + checked
+            + ". Дайте живого: ключ провайдера в окружении и `providers.default` в .ai-ops.yaml, "
+              "либо локальный `claude` в PATH. Нужен именно офлайн — попросите его прямо: "
+              "`--provider mock`.")
+
+
+# --- продуктовая задача при продолжении (F-027) -------------------------------------------------
+# Тексты, которые кит генерирует САМ как «следующий шаг» (build_handoff). На продолжении они
+# оказывались ЗАДАЧЕЙ исполнителя: автор честно писал требования про гейты кита вместо продукта,
+# а продуктовая спека оставалась цела — потому и выглядело осмысленно.
+_SERVICE_TASK_MARKERS = (
+    "закрыть незакрытые гейты",
+    "открыть/обновить draft PR",
+    "продолжить реализацию (петля остановилась",
+    "проверить отчёт и решить следующий шаг",
+    "продолжить работу",
+)
+
+
+def is_service_text(text):
+    """Похоже ли на служебный next_action кита (а не на продуктовую задачу)."""
+    t = (text or "").strip().lower()
+    return bool(t) and any(t.startswith(m.lower()) for m in _SERVICE_TASK_MARKERS)
+
+
+def product_task_for_resume(child_root, wid, features_dir=None):
+    """F-027: восстановить ПРОДУКТОВУЮ задачу для продолжения. -> {"task": str|None, "source": str}.
+
+    Порядок источников: run-settings исходного прогона (contract прогона) -> workitem.yaml ->
+    раздел `goal` спеки. Служебные тексты кита отбрасываются на каждом источнике: workitem.yaml
+    прошлого resume мог быть уже испорчен ими (так и было в поле). Ничего не нашли — говорим
+    прямо, а не подставляем «что осталось»: задача исполнителя обязана оставаться продуктовой."""
+    import yaml
+    root = Path(child_root)
+    fdir = Path(features_dir) if features_dir else root / "features"
+    candidates = []
+    try:
+        _s = yaml.safe_load((fdir / str(wid) / "run-settings.yaml").read_text(encoding="utf-8")) or {}
+        candidates.append(("run-settings", (_s.get("task") if isinstance(_s, dict) else None)))
+    except (OSError, yaml.YAMLError):
+        pass
+    try:
+        _w = yaml.safe_load((fdir / str(wid) / "workitem.yaml").read_text(encoding="utf-8")) or {}
+        candidates.append(("workitem", (_w.get("task") if isinstance(_w, dict) else None)))
+    except (OSError, yaml.YAMLError):
+        pass
+    try:
+        _sp = yaml.safe_load((fdir / str(wid) / "spec.yaml").read_text(encoding="utf-8")) or {}
+        _goal = ((_sp.get("sections") or {}).get("goal") or {}) if isinstance(_sp, dict) else {}
+        candidates.append(("spec:goal", _goal.get("content") if isinstance(_goal, dict) else None))
+    except (OSError, yaml.YAMLError):
+        pass
+    for source, text in candidates:
+        if isinstance(text, str) and text.strip() and not is_service_text(text):
+            return {"task": " ".join(text.split()), "source": source}
+    return {"task": None, "source": "не найдено"}
+
+
 def _stacks_human(profile):
     """['python (pip)', 'node (pnpm)'] из профиля любой формы: словари detect() или строки-языки."""
     out = []
@@ -381,6 +457,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # per-package resume executor'а (каждый пакет — своя подсистема/affected_areas, поверх общей
         # ветки) НЕ является сменой классификации: executor сам управляет policy пакета. Помечен
         # _sequence_internal -> пропускаем drift-проверку и restore run-settings.
+        _saved_task = None    # F-027: продуктовая задача исходного прогона (переживает продолжение)
         if resume and feature and not signals.get("_sequence_internal"):
             _sp = features_dir / feature / "run-settings.yaml"
             # v3.0.12 (finding аудита блок B): FAIL-CLOSED чтение. Прежде safe_load(...) or {} трактовал
@@ -398,6 +475,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             if _g["state"] == "ok":
                 _saved = _g["data"]
                 _ss, _pp = (_saved.get("signals") or {}), (_saved.get("policy") or {})
+                if isinstance(_saved.get("task"), str) and _saved["task"].strip():
+                    _saved_task = _saved["task"]
                 # v3.0-rc4 (P0.1) IMMUTABLE resume: resume НЕ меняет классификацию/policy. Если новый
                 # вызов пытается переопределить routing-сигнал (task_type/risk/size/affected_areas) или
                 # write_scope значением, отличным от сохранённого — это НЕ resume, а replan: требуется
@@ -431,6 +510,25 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     # v3.0.2/v3.0.9 (P0): base восстанавливается из saved BaseBinding (точная база исходного
                     # запуска), с фолбэком на плоское поле base (совместимость со старыми run-settings).
                     base = ((_pp.get("base_binding") or {}).get("base_ref")) or _pp.get("base", base)
+            # F-027: задача исполнителя на продолжении обязана остаться ПРОДУКТОВОЙ. Служебный
+            # next_action кита («закрыть незакрытые гейты: …») сюда доезжал как task_text — и автор
+            # честно писал требования про гейты кита, заводил под них openspec-изменение и
+            # validate_gates.py. Продуктовая спека при этом цела, потому и выглядело осмысленно.
+            # Проверка стоит в движке, а не только в CLI: путь resume есть и у прямых вызывающих.
+            if is_service_text(task_text):
+                _pt = product_task_for_resume(child_root, feature, features_dir)
+                if not _pt["task"]:
+                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature,
+                            "status": "error", "ready_for_pr": False,
+                            "error": ("продолжение получило служебный текст кита вместо продуктовой "
+                                      f"задачи («{(task_text or '')[:60]}…»), а восстановить исходную "
+                                      "не из чего (нет ни task в run-settings, ни задачи в "
+                                      "workitem.yaml, ни раздела goal в спеке). Назовите задачу явно: "
+                                      "--task \"<что делаем для продукта>\". Служебное «что осталось» "
+                                      "задачей исполнителя не бывает."),
+                            "resume": {"requested": True, "resumed": False}}
+                task_text = _pt["task"]
+                signals["task_text"] = task_text
         # v3.0.8 (finding аудита P0.1): base РАЗРЕШАЕТСЯ В КОНКРЕТНУЮ ВЕТКУ ОДИН РАЗ здесь (до resume_preflight
         # и до записи run-settings). Иначе fresh auto-run сохранял base=null -> resume передавал None в
         # git rev-parse -> TypeError. На resume уже восстановлен сохранённый base (выше); для fresh —
@@ -724,6 +822,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         if execute:
             _settings = {
                 "schema_version": 1, "kind": "run-settings", "workitem_id": fid,
+                # F-027: ПРОДУКТОВАЯ задача прогона хранится явно и переживает продолжение. Раньше
+                # её не было нигде: signals пишутся без task_text, RunHandoff несёт только
+                # next_action — и resume брал задачей служебное «что осталось». На продолжении
+                # сохранённая задача не переписывается: она — идентичность работы, а не аргумент вызова.
+                "task": (_saved_task if (resume and _saved_task) else task_text),
                 "signals": {k: v for k, v in signals.items() if k != "task_text"},
                 "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
                            "author": author, "review": review, "open_pr": open_pr,
@@ -1859,17 +1962,54 @@ def main(argv):
                           f"{'нужна ревалидация -> --force' if reval else 'база актуальна'})")
             return 0 if pf["can_resume"] else 1
         # РЕАЛЬНОЕ продолжение (v2.109)
-        task = a.task or (pf.get("next_action") if pf.get("can_resume") else None) or "продолжить работу"
+        # F-027: задачей продолжения берём ПРОДУКТОВУЮ задачу исходного прогона, а не next_action
+        # кита. next_action остаётся контекстом («что осталось») и печатается человеку — но задачей
+        # исполнителя он не становится ни на одном заходе.
+        _pt = product_task_for_resume(a.child_root, a.feature)
+        task = a.task or _pt["task"]
+        if not task:
+            _err = ("нечего продолжать как продуктовую задачу: исходная задача не найдена "
+                    "(ни task в run-settings, ни задача в workitem.yaml, ни раздел goal в спеке). "
+                    "Назовите её явно: --task \"<что делаем для продукта>\".")
+            if a.json:
+                print(json.dumps({"kind": "resume", "status": "error", "error": _err,
+                                  "resume": {"requested": True, "resumed": False}},
+                                 ensure_ascii=False, indent=2))
+            else:
+                print(f"ai-ops resume {a.feature}: ОТКАЗ — {_err}")
+            return 2
+        # F-026: провайдер выбирается ТЕМ ЖЕ автовыбором, что у `run --execute`, и решение печатается
+        # ДО прогона. Раньше resume молча уходил в mock: модель не вызывалась, правок ноль, а отчёт
+        # говорил resumed=True — увидеть подмену можно было только в --json.
+        _pres = resolve_provider_for_run(a.provider, Path(a.child_root), execute=True, quiet=a.json)
+        _refusal = live_provider_refusal(_pres, a.provider)
+        if _refusal:
+            if a.json:
+                print(json.dumps({"kind": "resume", "status": "error",
+                                  "error": f"resume --execute: {_refusal}",
+                                  "provider_resolution": _pres,
+                                  "resume": {"requested": True, "resumed": False}},
+                                 ensure_ascii=False, indent=2))
+            else:
+                print(f"ai-ops resume {a.feature}: ОТКАЗ — {_refusal}")
+            return 2
         report = run(task, json.loads(a.signals), Path(a.child_root),
-                     provider_name=a.provider or "mock", model=a.model, engine="pipeline",
+                     provider_name=_pres["provider"], model=a.model, engine="pipeline",
                      execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
-                     replan=a.replan)
+                     replan=a.replan,
+                     provider_resolution={k: _pres.get(k) for k in
+                                          ("provider", "source", "reason", "warning")})
         rinfo = report.get("resume") or {}
         if a.json:
             print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         else:
             print(f"ai-ops resume {a.feature}: status={report.get('status') or report.get('overall_status')} · "
-                  f"resumed={rinfo.get('resumed')} · reused_branch={rinfo.get('reused_branch')}")
+                  f"resumed={rinfo.get('resumed')} · reused_branch={rinfo.get('reused_branch')} · "
+                  f"провайдер={_pres['provider']}")
+            # F-026/F-027: чем продолжали и откуда взята задача — видно БЕЗ --json.
+            print(f"  задача: {task}  (источник: {'--task' if a.task else _pt['source']})")
+            if pf.get("next_action"):
+                print(f"  что осталось по мнению кита: {pf['next_action']} — это контекст, не задача")
             if report.get("error"):
                 print(f"  · {report['error']}")
             if report.get("ready_for_pr") is not None:
@@ -1883,6 +2023,18 @@ def main(argv):
         # провайдер не вызывается вовсе, поэтому остаётся офлайн-дефолт mock.
         prov = resolve_provider_for_run(a.provider, Path(a.child_root), execute=a.execute,
                                         quiet=a.json)
+        # F-026 (то же правило, что у resume): исполняющий прогон без живого провайдера — фикция.
+        # Здесь решение хотя бы печаталось, но вердикт всё равно выносился по прогону, в котором
+        # модель не вызывалась ни разу. Офлайн остаётся, но как явный выбор человека.
+        _refusal = live_provider_refusal(prov, a.provider) if a.execute else None
+        if _refusal:
+            if a.json:
+                print(json.dumps({"kind": "run", "status": "error",
+                                  "error": f"run --execute: {_refusal}",
+                                  "provider_resolution": prov}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ОТКАЗ: {_refusal}")
+            return 2
         report = run(a.task, json.loads(a.signals), Path(a.child_root), a.features_dir,
                      a.runtime, prov["provider"], a.session, a.execute, feature=a.feature,
                      engine=a.engine, open_pr=a.open_pr, model=a.model,

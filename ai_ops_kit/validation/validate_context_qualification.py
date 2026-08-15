@@ -146,7 +146,7 @@ def run_scenarios():
         root = _repo(td, {"f": "x"})
         import yaml
         sig_pr = {"task_type": "PRODUCT", "affected_areas": ["core"]}
-        sp, created = spec_levels.create_spec(root, "sp1", sig_pr)
+        sp, created, _ = spec_levels.create_spec(root, "sp1", sig_pr)
         cov_empty = spec_levels.assess_from_artifacts(sig_pr, root, "sp1")
         # заполняем реальный файл
         doc = yaml.safe_load(sp.read_text(encoding="utf-8"))
