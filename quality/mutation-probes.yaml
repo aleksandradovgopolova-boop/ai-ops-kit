@@ -162,3 +162,64 @@ probes:
   - tests/unit/test_field_findings_bnbm_rerun.py
   why: 'ШОВ пути владельца: пока путь дописывался последним, `./ai-ops run "текст" --execute` падал сырым
     argparse — исполнить задачу через обёртку было нельзя вовсе.'
+- id: resume-refuses-without-live-provider
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    if explicit or not isinstance(res, dict):'
+  replace_with: '    if True:'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py
+  why: 'F-026 (поле 15.08, «Окошко»): исполняющий прогон с заглушкой не вызывает модель и не делает правок,
+    а отчитывался `resumed=True` — ложный green, видимый только в `--json`. Снять отказ — вернуть ровно
+    тот заход, который владелец приняла за работу.'
+- id: resume-task-stays-product-task
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '        task = a.task or _pt["task"]'
+  replace_with: '        task = a.task or (pf.get("next_action") if pf.get("can_resume") else None)'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py
+  why: 'F-027 (поле 15.08, «Окошко»): задачей продолжения становился служебный next_action кита, и автор
+    честно писал требования ПРО ГЕЙТЫ КИТА вместо продукта. Продуктовая спека при этом цела — потому
+    подмена и выглядела осмысленной работой.'
+- id: engine-refuses-service-task-on-resume
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '            if is_service_text(task_text):'
+  replace_with: '            if False:'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py::TestProductTaskSurvivesResume::test_engine_refuses_service_task_even_from_a_direct_caller
+  why: 'Та же охрана, что и предыдущая, но В ДВИЖКЕ: путь resume есть не только у CLI. Проверка в одном
+    слое означала бы, что прямой вызывающий по-прежнему может авторить служебную задачу.'
+- id: owner-path-does-not-declare-mock-for-the-human
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        if a.provider:'
+  replace_with: '        if a.provider or True:'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py::TestLiveProviderOrRefusal::test_user_cli_does_not_declare_mock_for_the_human
+  why: 'ШОВ пути человека: `ai-ops resume` объявлял `--provider mock` ЗА владельца, поэтому автовыбор живого
+    провайдера в движке не мог сработать в принципе — сколько бы его там ни чинили.'
+- id: specify-adds-sections-for-raised-level
+  kind: guard
+  file: ai_ops_kit/gates/spec_levels.py
+  find: '        return _add_missing_sections(sp, cls)'
+  replace_with: '        return sp, False, {"added": [], "error": None}'
+  tests:
+  - tests/unit/test_spec_levels.py
+  why: 'F-029 (поле 15.08, повтор находки другой дочки): кит звал заполнить 9 разделов, а в файле лежало 6
+    разделов прошлого уровня — заполнять было нечего, и `run` блокировался на разделах, которых шаблон не
+    создавал. Ранний выход возвращает ровно этот тупик.'
+- id: specify-path-reaches-the-spec-file
+  kind: seam
+  covers:
+  - ai_ops_kit/gates/spec_levels.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        sp, created, spec_rep = spec_levels.create_spec(Path(child_root), wid, signals,'
+  replace_with: '        sp, created, spec_rep = (spec_levels._spec_path(Path(child_root), wid), False, {"added": [], "error": None}); _unused = (lambda *a, **k: None)('
+  tests:
+  - tests/unit/test_field_findings_cockpit.py::TestSpecifyPathAddsSections
+  why: 'ШОВ пути человека к механизму уровней спеки: модульная проверка `create_spec` остаётся зелёной,
+    когда до механизма не доходит `ai-ops specify` — а дефект F-029 жил именно так, между командой и файлом.'

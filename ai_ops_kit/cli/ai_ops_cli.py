@@ -383,10 +383,11 @@ def _run_intent(intent, task, child_root, signals, a):
         # человека и настоящая связь уровней. Нет элемента — поле остаётся пустым, и гейт называет
         # затронутые контуры информацией, а не расхождением.
         _copy_affects_from_plan(child_root, wid)
-        sp, created = spec_levels.create_spec(child_root, wid, signals)
+        sp, created, spec_rep = spec_levels.create_spec(child_root, wid, signals)
         if js:
             print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
-                              "spec": str(sp), "spec_created": created}, ensure_ascii=False, indent=2))
+                              "spec": str(sp), "spec_created": created,
+                              "spec_added": spec_rep["added"]}, ensure_ascii=False, indent=2))
         else:
             _say(child_root, "from_new_feature", wid, task or wid, created,
                  f"./ai-ops specify \"{task or '<задача>'}\" --feature {wid}")
@@ -636,7 +637,12 @@ def main(argv):
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
         # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
         # `ai-ops resume --provider X --model Y` молча уходил в mock (политика/провайдер терялись).
-        argv2 += ["--provider", a.provider or "mock", "--signals", a.signals]
+        # F-026: провайдера НЕ подставляем. Здесь стояло `a.provider or "mock"` — то есть путь
+        # человека всегда объявлял заглушку ЯВНО, и автовыбор живого провайдера в движке не мог
+        # сработать в принципе. Не задан — пусть решает та же логика, что у `run --execute`.
+        argv2 += ["--signals", a.signals]
+        if a.provider:
+            argv2 += ["--provider", a.provider]
         if a.model:
             argv2 += ["--model", a.model]
         if getattr(a, "replan", False):
@@ -656,10 +662,14 @@ def main(argv):
         if not signals.get("task_type"):
             signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
         wid = a.feature or run_plan.build_plan(dict(signals, task_text=task or ""))["workitem_id"]
-        sp, created = spec_levels.create_spec(Path(child_root), wid, signals, overwrite=a.force)
+        # F-029: create_spec ДОПИСЫВАЕТ разделы, если уровень поднялся с прошлого раза. Раньше здесь
+        # приходило «уже существует», а сообщение звало заполнить разделы, которых в файле не было.
+        sp, created, spec_rep = spec_levels.create_spec(Path(child_root), wid, signals,
+                                                        overwrite=a.force)
         cov = spec_levels.assess_from_artifacts(signals, Path(child_root), wid)
         if a.json:
-            print(json.dumps({"path": str(sp), "created": created, "coverage": cov},
+            print(json.dumps({"path": str(sp), "created": created, "added": spec_rep["added"],
+                              "add_error": spec_rep["error"], "coverage": cov},
                              ensure_ascii=False, indent=2))
         else:
             try:
@@ -668,7 +678,8 @@ def main(argv):
                 shown = sp
             _say(Path(child_root), "from_specification", shown, created, cov["level_name"],
                  cov["sections"], cov["blocking_missing"],
-                 f"./ai-ops run \"{task or '<задача>'}\" --feature {wid} --execute")
+                 f"./ai-ops run \"{task or '<задача>'}\" --feature {wid} --execute",
+                 spec_rep["added"], spec_rep["error"])
         return 0
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
@@ -724,6 +735,17 @@ def main(argv):
         # ветки (sequential/обычная) — иначе автовыбор терялся бы по дороге, как уже было в v2.120/v3.0-rc2.
         _pres = ai_ops_run.resolve_provider_for_run(a.provider, Path(child_root), execute=True,
                                                     quiet=a.json)
+        # F-026: прогон, в котором модель не вызывается, не доводится до вердикта — отказ с причиной
+        # (офлайн доступен, но как явный выбор: `--provider mock`).
+        _refusal = ai_ops_run.live_provider_refusal(_pres, a.provider)
+        if _refusal:
+            if a.json:
+                print(json.dumps({"kind": "run", "status": "error", "exit": 2,
+                                  "error": _refusal, "provider_resolution": _pres},
+                                 ensure_ascii=False, indent=2))
+            else:
+                print(f"ОТКАЗ: {_refusal}")
+            return 2
         provider = _pres["provider"]
         # v3.22: `do` форсирует флаги автономного прогона
         if intent == "do":
