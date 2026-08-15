@@ -485,11 +485,37 @@ def write_checksums(root=None):
     return len(files)
 
 
+def source_identity(pkg_root=None) -> dict:
+    """Откуда кит себя ставит: путь, ветка, коммит и ВЫПУСК ли это. -> dict.
+
+    ПОВОД (наблюдение владельца 14.08.2026). Кит ставился в дочку из локальной копии, стоявшей на
+    ЧЕРНОВОЙ ветке, а не на выпуске, — и не сказал об этом ни слова, хотя знает, откуда себя берёт:
+    в провенансе стояла литеральная заглушка `git+<ai-ops-kit-repo-url>`. Практическое следствие уже
+    случилось: у дочки не оказалось правил игнорирования, и первый же коммит утащил в историю три
+    десятка служебных файлов. «Работает и работает» — не оправдание: владелец вправе знать, что у
+    него стоит непроверенная версия.
+    """
+    root = Path(pkg_root or PKG)
+    def _git(*a):
+        try:
+            r = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, timeout=10)
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+    sha = _git("rev-parse", "HEAD")
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    tag = _git("describe", "--exact-match", "--tags", "HEAD")
+    return {"path": str(root), "sha": sha[:12], "branch": branch or None, "tag": tag or None,
+            "is_release": bool(tag), "origin": _git("remote", "get-url", "origin") or None}
+
+
 def write_provenance(version, root=None, note=""):
     if root is None:
         root = MANAGED
+    src = source_identity()
     doc = {"schema_version": 1, "package": "ai-first-system",
-           "source": "git+<ai-ops-kit-repo-url>", "installed_version": version,
+           "source": (src.get("origin") or src["path"]), "source_identity": src,
+           "installed_version": version,
            "installed_at": None, "managed_root": ".ai/managed", "presets": [],
            "checksums_file": ".checksums.json",
            "note": note or "Installed/updated by ai-ops CLI."}
@@ -1688,6 +1714,20 @@ def cmd_doctor(argv=()):
     elif inst != avail:
         _dprint(f"источник {PKG} СТАРШЕ установленного ({avail} < {inst}) — это не повод для "
                 f"update: понижение версии обновлением не является")
+    # ОТКУДА ПОСТАВЛЕНО — говорится ВСЛУХ (наблюдение владельца 14.08.2026). Кит ставился из копии
+    # на черновой ветке и молчал об этом, хотя знает источник. Владелец вправе знать, что у него
+    # стоит непроверенная версия: «работает и работает» — не то же самое, что «объявлено готовым».
+    _src = source_identity()
+    if _src.get("is_release"):
+        _dprint(f"источник: {_src['path']} · выпуск {_src['tag']} ({_src['sha']})")
+    else:
+        _dprint(f"источник: {_src['path']} · ветка {_src.get('branch') or '—'} ({_src['sha']}) "
+                f"— ЭТО НЕ ВЫПУСК")
+        # НЕ замечание, а ФАКТ в отчёте. Владелец назвал цену молчания точно: «само по себе не
+        # страшно — плохо, что кит об этом не сказал». Делать из этого замечание значило бы красить
+        # каждую установку из рабочей копии, и предупреждение обесценилось бы за неделю.
+        _dprint("  это версия, которую никто не объявлял готовой: работать можно, но при разборе "
+                "странного поведения учитывайте, что перед вами не выпуск")
     for zone in ("managed", "project", "custom", "generated", "runtime"):
         exists = (AI_DIR / zone).exists()
         _dprint(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")

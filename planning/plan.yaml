@@ -84,18 +84,24 @@ goals:
     status: active
     outcome:
       # Семь чисел прогона + перечень внутренних сущностей, которые пришлось понимать человеку.
+      # ПЕРЕ-ПРОГОН 14.08 (вечер): 4 вмешательства, 0 ложных green, 1 ложный red, 0 придуманных
+      # фактов, $9.71 измерено, verified PR = 0 (qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-14.md).
       real_task_reaches_verified_pr_without_patching_the_kit: false
       repeated_on_two_different_live_repos: false
-      # Добавлено по замеру, а не по мнению: 36 находок за 5 кругов ревью на PR #118, ни одной не
-      # поймали 11 джоб CI. Пока контур не ловит этот класс, новые циклы поедут так же.
-      contour_catches_declared_but_not_executed: false
+      # ЗАКРЫТ 14.08: `quality/mutation-probes.yaml` + `devtools/mutation_probe.py` +
+      # `validate_mutation_probes` (75-й валидатор) + требование пробы ШВА на каждый механизм с
+      # охранными пробами. Замер: 14 проб, 0 выживших, 0 непроверенных; правило шва нашло разрыв в
+      # той же работе, где было введено.
+      contour_catches_declared_but_not_executed: true
 
   - id: plan-as-control-plane
     status: active
     outcome:
-      open_pr_cannot_coexist_with_todo: false
-      done_requires_verified_result_not_merged_pr: false
-      closed_investigations_leave_the_active_plan: false
+      # ВСЕ ТРИ ЗАКРЫТЫ 14.08 (PR #120) и проверяются кодом, а не соглашением:
+      # `delivery_plan.validate` и `validate_history`, 11 тестов, 10 мутаций — 10 красных.
+      open_pr_cannot_coexist_with_todo: true
+      done_requires_verified_result_not_merged_pr: true
+      closed_investigations_leave_the_active_plan: true
 
   - id: product-decision-loop
     status: active
