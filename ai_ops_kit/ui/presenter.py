@@ -1214,6 +1214,75 @@ def from_process_spend(check: dict, continue_command: str = None,
                    "решение": check.get("decision_ref")})
 
 
+def from_kit_feedback_recorded(path, created, errors, has_evidence, declared_class) -> dict:
+    """Наблюдение о ките записано (или не записано) -> UserMessage.
+
+    Отказ здесь — не бюрократия: «дефект» без улики попал бы в кит утверждением, за которое некому
+    отвечать. Поэтому сообщение НЕ ругает человека, а называет, что именно приложить.
+    """
+    if errors:
+        return message(
+            status="needs_input", headline="Записать не могу — не на что опереться",
+            summary="Ты говоришь, что я сделал что-то не так, и я хочу это запомнить. Но как "
+                    "дефект это уйдёт ко мне утверждением без доказательства, а такие я сам же и "
+                    "учусь не производить.",
+            why_it_matters="Достаточно одной опоры: файл и строка из него — или команда и то, что "
+                           "она напечатала. Если опоры нет, скажи это как трение или вопрос — их я "
+                           "принимаю без доказательств.",
+            next_steps=["добавить файл со строкой или команду с выводом",
+                        "либо записать как трение: то же самое со словом «мешает», без улик"],
+            technical={"почему не записано": "; ".join(errors)})
+    if not created:
+        return message(
+            status="ok", headline="Это я уже записал",
+            summary="Такое наблюдение у меня уже есть — второй раз не завожу, чтобы не считать одно "
+                    "и то же дважды.",
+            next_steps=["посмотреть судьбу сказанного: ./ai-ops feedback"],
+            technical={"файл": path})
+    return message(
+        status="ok", headline="Записал — и это дойдёт до меня самого",
+        summary="Твоё замечание сохранено в проекте вместе с тем, чем оно подтверждено."
+                + ("" if has_evidence else " Улик нет, поэтому дефектом я это не называю."),
+        why_it_matters="Раньше такое доезжало до меня только пересказом — то есть если человек "
+                       "вспомнит. Теперь это данные: их видно, у них будет ответ.",
+        next_steps=["посмотреть судьбу сказанного: ./ai-ops feedback"],
+        technical={"файл": path, "класс": declared_class or "выведен из улик",
+                   "улики": "есть" if has_evidence else "нет"})
+
+
+def from_kit_feedback_status(rep: dict) -> dict:
+    """Судьба наблюдений этой дочки -> UserMessage. Ответ обязан быть виден, иначе канал умрёт."""
+    total = rep.get("total") or 0
+    waiting, decided = rep.get("waiting") or [], rep.get("decided") or []
+    if not total:
+        return message(
+            status="ok", headline="Замечаний ко мне пока нет",
+            summary="Ты ещё ничего мне не говорила о моей работе в этом проекте.",
+            next_steps=['сказать так: ./ai-ops feedback "что было не так"'])
+    if rep.get("errors"):
+        return message(
+            status="degraded", headline="Часть замечаний я не читаю",
+            summary=f"Записано {total}, но {len(rep['errors'])} из них не разбираются.",
+            why_it_matters="Пока это так, я не могу обещать, что до меня дойдёт всё сказанное.",
+            technical={"ошибки": rep["errors"]})
+    if waiting and not decided:
+        return message(
+            status="ok", headline="Сказанное ждёт ответа",
+            summary=f"Замечаний {total}, ответа пока нет ни на одно.",
+            why_it_matters="Ответ приходит, когда я разбираю их у себя: каждое станет работой или "
+                           "будет отклонено с причиной. Молча они не исчезнут.",
+            next_steps=[w["statement"] for w in waiting[:2]],
+            technical=rep.get("by_state"))
+    return message(
+        status="ok", headline="Вот что стало с твоими замечаниями",
+        summary=f"Замечаний {total}: с ответом {len(decided)}, ждут ответа {len(waiting)}.",
+        next_steps=[f"«{d.get('statement') or d['id']}» — "
+                    f"{d.get('state_name') or d['state']}"
+                    + (f": {d['reason']}" if d.get("reason") else "")
+                    for d in decided[:2]],
+        technical=rep.get("by_state"))
+
+
 # Состояние строки doctor -> насколько это плохо. Порядок важен: вердикт следует за ХУДШЕЙ строкой.
 _DOCTOR_RANK = {"ok": 0, "info": 0, "unknown": 1, "gap": 1, "warn": 1, "fail": 2, "blocked": 2}
 

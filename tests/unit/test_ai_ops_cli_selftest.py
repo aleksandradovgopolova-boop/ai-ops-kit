@@ -27,13 +27,16 @@ def test_ai_ops_cli_selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("15 intent-команд", len(INTENTS) == 15
+    expect("16 intent-команд", len(INTENTS) == 16
            and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "advise", "resume", "review",
                 "status", "health",
                 # v3.35 Product Operating Model: план продукта и понимание репозитория.
                 "next", "model",
                 # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
-                "bootstrap"} == set(INTENTS))
+                "bootstrap",
+                # 2026-08-17: наблюдения о САМОМ ките из продуктового репозитория — данные, а не
+                # пересказ человека (три работы плана кита пришли «сообщением параллельной сессии»).
+                "feedback"} == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
     fq = resolve_flags({"task_type": "QUICK"})

@@ -23,8 +23,9 @@ class TestIntentsRegistry:
     """Tests for INTENTS — the intent registry."""
 
     def test_intents_count(self):
-        """INTENTS should have exactly 15 intents (v3.35: +next, +model; v3.35.2: +bootstrap)."""
-        assert len(ai_ops_cli.INTENTS) == 15
+        """INTENTS should have exactly 16 intents (v3.35: +next, +model; v3.35.2: +bootstrap;
+        2026-08-17: +feedback — наблюдения о ките из продуктового репозитория)."""
+        assert len(ai_ops_cli.INTENTS) == 16
 
     def test_intents_contain_expected(self):
         """INTENTS should contain all expected intent names."""
@@ -33,7 +34,9 @@ class TestIntentsRegistry:
                     # v3.35 Product Operating Model: план продукта и понимание репозитория.
                     "next", "model",
                     # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
-                    "bootstrap"}
+                    "bootstrap",
+                    # 2026-08-17: канал наблюдений о ките из дочки — данные, а не пересказ.
+                    "feedback"}
         assert set(ai_ops_cli.INTENTS.keys()) == expected
 
     def test_each_intent_has_required_fields(self):
