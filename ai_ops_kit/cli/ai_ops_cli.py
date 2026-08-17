@@ -47,6 +47,11 @@ INTENTS = {
     # умолчанию: запись в чужой репозиторий он обязан увидеть до того, как она произошла.
     "bootstrap": ("создать первое направление и план из фактов репозитория (--apply — записать)",
                   "bootstrap", False),
+    # 2026-08-17: наблюдения о САМОМ КИТЕ из продуктового репозитория. Раньше они доезжали только
+    # пересказом человека — три работы плана кита ссылаются на «сообщение параллельной сессии».
+    # Без текста — показать судьбу уже записанных (канал обязан быть двусторонним).
+    "feedback": ("рассказать киту, что он сделал не так (без текста — судьба уже сказанного)",
+                 "feedback", True),
 }
 
 
@@ -119,7 +124,9 @@ def build_preview(intent, task, child_root, signals):
                       "discuss": "заведу черновик обсуждения: какую боль решаем и как поймём, "
                                  "что помогло",
                       "new": "заведу место для новой работы",
-                      "resume": "продолжу с последнего подтверждённого шага"}.get(
+                      "resume": "продолжу с последнего подтверждённого шага",
+                      "feedback": "запишу твоё замечание о моей работе так, чтобы его можно было "
+                                  "проверить"}.get(
                           intent, "выполню намерение"))
 
     return {
@@ -209,6 +216,38 @@ def _run_intent(intent, task, child_root, signals, a):
         else:
             _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
         return 0
+
+    if intent == "feedback":
+        # Наблюдение о ките — данные, а не пересказ. Без текста команда показывает судьбу уже
+        # сказанного: канал в одну сторону перестают наполнять, поэтому ответ обязан быть виден.
+        from ai_ops_kit.engops import kit_feedback
+        if not (task or "").strip():
+            rep = kit_feedback.status(child_root)
+            if js:
+                print(json.dumps(rep, ensure_ascii=False, indent=2))
+            else:
+                _say(child_root, "from_kit_feedback_status", rep)
+                if _audience(child_root) != "product":
+                    print()
+                    print(kit_feedback.render_status(rep))
+            return 1 if rep["errors"] else 0
+        ev = kit_feedback.evidence_from_args(getattr(a, "evidence_file", None),
+                                             getattr(a, "evidence_command", None),
+                                             getattr(a, "evidence_note", None))
+        p, created, errors = kit_feedback.record(
+            child_root, task, evidence=ev, severity=getattr(a, "severity", None),
+            observation_class=getattr(a, "observation_class", None))
+        if js:
+            print(json.dumps({"path": str(p), "created": created, "errors": errors},
+                             ensure_ascii=False, indent=2))
+        else:
+            try:
+                shown = p.relative_to(child_root)
+            except ValueError:
+                shown = p
+            _say(child_root, "from_kit_feedback_recorded", str(shown), created, errors,
+                 bool(ev), getattr(a, "observation_class", None))
+        return 1 if errors else 0
 
     if intent == "status":
         from ai_ops_kit.lifecycle import active_work
@@ -674,6 +713,19 @@ def main(argv):
     ap.add_argument("--spend-ok", action="store_true",
                     help="discuss/specify/plan: продолжить разбор, зная что потолок траты на "
                          "описание до первой правки кода уже пробит")
+    # Улики для `feedback`: наблюдение класса «дефект» без улики не записывается — иначе канал
+    # производил бы дефекты из впечатлений.
+    ap.add_argument("--evidence-file", action="append", metavar="ПУТЬ=ЦИТАТА",
+                    help="feedback: файл и строка из него как основание наблюдения")
+    ap.add_argument("--evidence-command", action="append", metavar="КОМАНДА=ВЫВОД",
+                    help="feedback: команда и её вывод как основание наблюдения")
+    ap.add_argument("--evidence-note", action="append", metavar="ТЕКСТ",
+                    help="feedback: пояснение к наблюдению (уликой не считается)")
+    ap.add_argument("--severity", choices=["p0", "p1", "p2"],
+                    help="feedback: насколько это мешает")
+    ap.add_argument("--class", dest="observation_class",
+                    choices=["defect", "friction", "question", "idea"],
+                    help="feedback: дефект / трение / вопрос / идея (по умолчанию выводится из улик)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -767,7 +819,8 @@ def main(argv):
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
     if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss",
-                                       "review", "advise", "next", "model", "bootstrap"):
+                                       "review", "advise", "next", "model", "bootstrap",
+                                       "feedback"):
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc
