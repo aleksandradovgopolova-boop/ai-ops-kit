@@ -1,0 +1,27 @@
+# Ловушка copier, которая у ЭТОГО репозитория уже случалась — с другим инструментом.
+#       Записана отдельно, потому что дважды одна и та же ошибка дороже одной.
+schema_version: 1
+kind: research.evidence
+id: EV-1131
+request_id: RR-015
+statement: "copier берёт ПОСЛЕДНИЙ ТЕГ шаблона, а не HEAD: при грязном локальном шаблоне с тегами v1/v2 команда copier copy ./src ./dst молча возьмёт v2.0.0, для HEAD нужен явный -r HEAD (это описано в FAQ докaв как отдельный вопрос). Для кита это в точности воспроизведённая старая ошибка: локальный источник ~/ai-ops-kit стоял на неслитой ветке, и установка молча поставила её состояние. То есть переход на copier не устраняет класс 'источник установки не тот, что думает владелец', а МЕНЯЕТ его форму — с ветки на тег. Кроме того _migrations и tasks требуют --trust или записи trust: в ~/.config/copier/settings.yml, иначе выход с кодом 4; для кита, вся ценность которого в миграциях, это обязательный шаг онбординга у каждой дочки."
+evidence_type: documented_fact
+source:
+  title: "copier — FAQ и документация settings/configuring"
+  url: "https://github.com/copier-org/copier/blob/master/docs/faq.md"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "copier docs/faq.md — вопрос 'While developing, why doesn't the template include dirty changes?'; docs/settings.md — trust:; docs/configuring.md — требование --trust/--UNSAFE и код выхода 4"
+  quote: "While developing, why doesn't the template include dirty changes?"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация проекта, прочитана 17.08.2026. Сопоставление со старой ошибкой репозитория — вывод, а не утверждение докaв."
+status: active
+superseded_by: null

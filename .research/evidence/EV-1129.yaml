@@ -1,0 +1,27 @@
+# Предел схем — принципиальный, а не недоделка. Это главное ограничение на выигрыш от
+#       внешнего исполнителя схем.
+schema_version: 1
+kind: research.evidence
+id: EV-1129
+request_id: RR-015
+statement: "Кросс-файловые инварианты и ссылочная целостность схемой JSON Schema не выражаются в принципе: $ref черновика 2020-12 композирует СХЕМЫ, а не данные, а check-jsonschema валидирует каждый файл независимо. Yamale тоже нет — его include это переиспользование схемы. То есть правила вида 'id уникальны по каталогу', 'write_scope указывает на живой путь', 'ссылка из плана существует в реестре' останутся кодом при любом переходе на схемы. Отдельно официальные доки jsonschema сами признают слабость сообщений на union-типах: для anyOf/oneOf 'The error messages in this situation are not very helpful on their own' — читаемость придётся дожимать через context и best_match."
+evidence_type: documented_fact
+source:
+  title: "jsonschema — официальная документация раздела errors; check-jsonschema usage"
+  url: "https://python-jsonschema.readthedocs.io/en/stable/errors/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "python-jsonschema.readthedocs.io/en/stable/errors/ — раздел про anyOf/oneOf и best_match; check-jsonschema usage.html — валидация инстансов по одному"
+  quote: "The error messages in this situation are not very helpful on their own"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация, прочитана 17.08.2026; ограничение процитировано дословно, а не выведено."
+status: active
+superseded_by: null

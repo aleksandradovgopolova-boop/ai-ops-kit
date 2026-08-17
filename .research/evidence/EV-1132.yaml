@@ -1,0 +1,26 @@
+# Почему cruft отвергается, хотя формально умеет нужный гейт.
+schema_version: 1
+kind: research.evidence
+id: EV-1132
+request_id: RR-015
+statement: "cruft 2.16.0 умеет то, что нужно (cruft check отдаёт код 1, если проект отстал от шаблона; cruft diff --exit-code; cruft link для привязки существующего проекта), но заморожен: последний релиз и последний коммит — 25.12.2024, 94 открытых заявки, в classifiers PyPI нет ни одной строки о поддержке версий Python 3.x, зависимость cookiecutter>=1.7 без верхней границы. Миграций между версиями шаблона у него нет вовсе, а механизм наложения правок в документации не описан. Отдельно: cookiecutter 2.7.1 обновлять существующие проекты не умеет и не планирует — это подтверждено и со стороны copier, где в официальной таблице сравнения у Cookiecutter 'Can update projects' = нет."
+evidence_type: documented_fact
+source:
+  title: "PyPI и GitHub API: cruft; документация cruft; таблица сравнения copier"
+  url: "https://cruft.github.io/cruft/"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "pypi.org/pypi/cruft/json (2.16.0, 2024-12-25; classifiers без Python 3.x); api.github.com/repos/cruft/cruft (последний коммит 2024-12-25, 94 открытых issue); cruft.github.io/cruft (check, diff, link); copier.readthedocs.io/en/stable/comparisons/"
+  quote: "if the project is out-of-date an error and exit code 1 will be returned"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-17"
+reliability:
+  level: high
+  rationale: "Первичные данные PyPI/GitHub API и документация обоих проектов, снято 17.08.2026."
+status: active
+superseded_by: null

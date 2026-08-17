@@ -1,0 +1,29 @@
+# Что стоит подсмотреть у django-миграций для СВОЕГО механизма миграций кита (он уже есть,
+#       EV-1119): гейт нужен в двух местах, а не в одном.
+schema_version: 1
+kind: research.evidence
+id: EV-1139
+request_id: RR-015
+statement: "Django (6.1, 05.08.2026, BSD-3-Clause) даёт два разных официальных гейта миграций, и разделение прямо применимо к киту: makemigrations --check — 'Makes makemigrations exit with a non-zero status when model changes without migrations are detected. Implies --dry-run' (это гейт в CI РОДИТЕЛЯ: формат конфига поменяли, миграцию не написали), и migrate --check — 'Makes migrate exit with a non-zero status when unapplied migrations are detected' (гейт в CI ДОЧКИ: состояние отстало от версии инструмента). У alembic (1.19.1, 08.08.2026, MIT) полезны две другие идеи: версия применённого состояния хранится В ЦЕЛИ, а не в пакете, и есть команда 'принять текущее состояние как применённое, ничего не выполняя' (alembic stamp; у Django это migrate --fake) — без неё существующие дочки с уже накопированным деревом не подхватить. Прямо релевантное ограничение: автогенерация alembic НЕ детектирует переименования (видит их как add+drop) — значит переименования ключей в YAML придётся писать руками явной операцией rename, иначе значения владельца потеряются."
+evidence_type: documented_fact
+source:
+  title: "Django — ref/django-admin и topics/migrations; alembic — tutorial и autogenerate"
+  url: "https://docs.djangoproject.com/en/stable/ref/django-admin/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "docs.djangoproject.com/en/stable/ref/django-admin/ — makemigrations --check и migrate --check (обе формулировки процитированы); alembic.sqlalchemy.org tutorial.html (alembic_version в цели, stamp), autogenerate.html (переименования не детектируются)"
+  quote: "Makes migrate exit with a non-zero status when unapplied migrations are detected"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация обоих проектов, прочитана 17.08.2026; формулировки гейтов процитированы дословно."
+derived_from:
+  - EV-1119
+status: active
+superseded_by: null

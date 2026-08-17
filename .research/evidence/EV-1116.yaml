@@ -1,0 +1,24 @@
+# Ревью не является узким местом. Замер по GitHub API — время жизни заявки и доля отклонённых.
+schema_version: 1
+kind: research.evidence
+id: EV-1116
+request_id: RR-015
+statement: "141 заявка за историю кита: 139 слито, 1 закрыта без слияния, 1 открыта. Медианное время жизни слитой заявки — 0.2 часа (12 минут), 86% слито быстрее двух часов, среднее 1.6 часа. Медианный размер — 221 строка правок, средний 1209 (пять заявок крупнее 5000 строк). Вывод замера: задержки на ревью в этом репозитории НЕТ, и отклонение как фильтр практически не работает (1 из 141) — значит искать ускорение в скорости ревью бессмысленно, а вот 'ревью не отсеивает' — отдельный вопрос, замером здесь не закрытый."
+evidence_type: measured_result
+source:
+  title: "GitHub API repos/aleksandradovgopolova-boop/ai-ops-kit/pulls (все состояния, 141 заявка)"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "gh pr list --state all --limit 200 --json number,state,createdAt,mergedAt,additions,deletions; медиана по (mergedAt - createdAt)"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичные данные API, снято 17.08.2026. Оговорка: короткое время жизни заявки НЕ доказывает отсутствия ревью — в этом репозитории ревью идёт до открытия заявки (пять кругов ревью PR #118 задокументированы в quality/mutation-probes.yaml), и в такой схеме время жизни заявки измеряет только доставку, а не проверку."
+status: active
+superseded_by: null

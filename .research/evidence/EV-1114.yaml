@@ -1,0 +1,25 @@
+# Схемы у кита уже есть — и рядом с ними написан свой исполнитель схем. Замер сделан
+#       прежде, чем предлагать внешний исполнитель, по правилу dp-001 (дубли построенного отклоняем).
+schema_version: 1
+kind: research.evidence
+id: EV-1114
+request_id: RR-015
+statement: "У кита 50 файлов JSON Schema (schemas/*.schema.json, черновик 2020-12), на них ссылаются 20 из 76 валидаторов. Библиотека jsonschema не импортируется НИ РАЗУ (0 совпадений на 'import jsonschema' по всему дереву) — вместо неё в репозитории написаны два своих исполнителя подмножества черновика: ai_ops_kit/validation/validate_research_artifacts.py (233 строки, покрывает required/const/enum/pattern/minLength/minItems/types/additionalProperties + if/then) и .research/tools/check_research.py (105 строк, то же подмножество). Причина не в незнании: правило AGENTS.md:39 запрещает новые зависимости без решения владельца, а кит копируется в чужие репозитории вместе со своими зависимостями."
+evidence_type: measured_result
+source:
+  title: "schemas/, ai_ops_kit/validation/, .research/tools/, AGENTS.md, pyproject.toml"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "ls schemas/ -> 50; grep -rl 'schemas/' ai_ops_kit/validation/ -> 20; grep -rn 'import jsonschema' -> 0; pyproject.toml dependencies = [\"pyyaml\"]; AGENTS.md строка 39"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прямой замер дерева 17.08.2026. Оговорка: 'покрывает подмножество' — состав ключевых слов взят из docstring'а самих модулей и подтверждён чтением их функции check(); полнота относительно черновика 2020-12 не измерялась."
+status: active
+superseded_by: null

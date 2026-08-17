@@ -1,0 +1,25 @@
+# Охват собственного мутационного механизма. Проба — рукописная запись с ДОСЛОВНЫМ образцом
+#       строки кода; отсюда и потолок роста, и цена содержания.
+schema_version: 1
+kind: research.evidence
+id: EV-1113
+request_id: RR-015
+statement: "Мутационный механизм кита исполняется (проба гоняется тестом с маркером slow в группах CI selftests-a/m — то есть класс 'объявлено и не исполняется' к нему НЕ относится), но охват мал: 25 проб (17 охранных, 8 шовных) закрывают 12 файлов из 207 модулей пакета ai_ops_kit — 5.8%. Каждая проба содержит дословный образец строки кода, который обязан встречаться в файле ровно один раз (это стережёт validate_mutation_probes.py), поэтому запись живёт до первой переписи этого места. Реестр родился 14.08.2026, ему три дня."
+evidence_type: measured_result
+source:
+  title: "quality/mutation-probes.yaml + .github/ci-groups/*.sh + ai_ops_kit/devtools/mutation_probe.py"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "quality/mutation-probes.yaml -> 25 проб, 12 уникальных значений поля file; ls ai_ops_kit/**/*.py -> 207; tests/unit/test_mutation_probe.py::test_every_declared_probe_of_the_kit_kills_its_mutant с @pytest.mark.slow, группы selftests-a/m гоняют -m slow"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прямое чтение реестра, скриптов групп CI и теста 17.08.2026. Первая версия этой записи утверждала, что механизм в CI не исполняется вовсе — проверка по .github/ci-groups/ это ОПРОВЕРГЛА (пробы идут внутри pytest как slow), и утверждение снято до публикации."
+status: active
+superseded_by: null

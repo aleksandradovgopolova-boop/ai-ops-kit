@@ -1,0 +1,26 @@
+# Что у pipx стоит подсмотреть ИДЕЕЙ, не беря зависимость: файл состояния установки.
+schema_version: 1
+kind: research.evidence
+id: EV-1134
+request_id: RR-015
+statement: "pipx хранит состояние каждой установки в $PIPX_HOME/venvs/<env>/pipx_metadata.json с полем pipx_metadata_version (сейчас '0.12'): по докам pipx пишет его после каждой операции и читает, чтобы обслуживать list/upgrade/reinstall/uninstall, файл считается принадлежащим pipx, перезаписывается атомарно и вправе менять форму между версиями. Это готовый образец того, чего киту не хватает в дочке: версия ПРИМЕНЁННОГО состояния отдельно от версии пакета, со своей версией формата. Ту же идею copier реализует иначе — в answers-файл автоматически пишутся _commit (git describe) и _src_path."
+evidence_type: documented_fact
+source:
+  title: "pipx — reference/metadata; copier — configuring"
+  url: "https://pipx.pypa.io/latest/reference/metadata.html"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "pipx.pypa.io/latest/reference/metadata.html — pipx_metadata.json, pipx_metadata_version '0.12', атомарная перезапись; copier configuring.md — _commit и _src_path в answers-файле"
+  quote: "pipx rewrites it atomically"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-17"
+reliability:
+  level: high
+  rationale: "Первичная документация обоих проектов, прочитана 17.08.2026."
+status: active
+superseded_by: null

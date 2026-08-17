@@ -1,0 +1,30 @@
+# Чего НЕ умеет ни один архитектурный инструмент — и это ровно тот инвариант, который киту
+#       нужен чаще всего.
+schema_version: 1
+kind: research.evidence
+id: EV-1127
+request_id: RR-015
+statement: "Ни один из четырёх рассмотренных архитектурных инструментов (import-linter, pytest-archon, PyTestArch, deptry) не умеет выразить правило 'модуль X не должен ЧИТАТЬ файл Y' — все четыре работают исключительно с графом импортов; PyTestArch говорит это в докax прямо ('extracts only the information about module imports from the AST'). Для кита это существенно: его собственные инварианты чаще про доступ к артефактам (кто вправе писать в .ai/managed, кто читает реестр), а не про импорты. Такую проверку придётся держать своей — как AST-тест на open/Path.read_text/yaml.safe_load либо как рантайм-перехват в conftest."
+evidence_type: inference
+source:
+  title: "документация import-linter, pytest-archon, PyTestArch, deptry"
+  url: "https://zyskarch.github.io/pytestarch/latest/features/general/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "PyTestArch docs, раздел features/general ('extracts only the information about module imports from the AST'); отсутствие такого типа контракта в contract_types.html import-linter и в README pytest-archon"
+  quote: "extracts only the information about module imports from the AST"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Вывод отрицательный и потому ограничен способом проверки: он получен чтением перечней возможностей четырёх инструментов, а не исчерпывающим поиском. Отсутствие в документации не равно невозможности расширения — у pytest-archon есть предикат .should(fn), но и он получает карты импортов, а не обращения к файловой системе."
+derived_from:
+  - EV-1125
+  - EV-1126
+status: active
+superseded_by: null
