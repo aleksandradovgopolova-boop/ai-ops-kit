@@ -129,6 +129,30 @@ def _new_session_cmds(repo_path, next_task):
             f'# затем:\nai-ops do "{nxt}"')
 
 
+def _handoff_note(repo_path, session_id):
+    """ПРАВДА о сессионном handoff, а не заявление о нём. -> (текст, путь или None).
+
+    ЗАМЕР 17.08.2026, живая сессия кита `88c802ae`: обе фразы про handoff в этом файле были
+    БЕЗУСЛОВНЫМИ («Handoff/решения сохранены в репозитории», «handoff сохранён»), а сессионного
+    handoff в ките не существовало ни одного. То есть рекомендация уйти в новую сессию успокаивала
+    ровно там, где обязана предупредить: уходи, всё записано — при пустом месте записи.
+
+    Отсутствие пути тоже названо словами: «проверить нечем» ≠ «не сохранён». Вызывающий, не
+    передавший `repo_path`, не даёт повода утверждать ни то, ни другое.
+    """
+    if not repo_path:
+        return "handoff сессии проверить нечем: путь репозитория не передан", None
+    try:
+        from ai_ops_kit.engops import session_handoff
+        p = session_handoff.latest(repo_path, session_id=session_id)
+    except Exception:  # noqa: BLE001 — не смогли посмотреть -> так и говорим, а не «сохранён»
+        return "handoff сессии проверить не удалось — считать несохранённым", None
+    if p:
+        return f"handoff сессии сохранён: {p}", str(p)
+    return ("handoff сессии НЕ сохранён — записать перед уходом, иначе контекст этой сессии "
+            "потеряется вместе с ней"), None
+
+
 def recommend(snapshot, policy=None, next_relation="new_independent_task",
               next_task=None, at_safe_boundary=True, task_done=True, repo_path=None):
     """4 исхода + defer. Приоритет: гигиена сессии/контекста > продолжение/новизна задачи.
@@ -144,9 +168,13 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
                  else f"{_tok(spent)} из {_tok(p.get('session_token_budget'))} [{spend_state}]")
     # Каждый исход несёт оба числа: рекомендация, показывающая только контекст, скрывала бы ровно
     # тот случай, ради которого потолок сессии и появился (контекст после компакции нормальный).
+    handoff_txt, handoff_path = _handoff_note(repo_path, snapshot.get("session_id"))
     base = {"context_state": state, "context": ctx_txt,
             "spend_state": spend_state, "session_spend": spend_txt,
-            "measurement": snapshot.get("context_source") or snapshot.get("context_status")}
+            "measurement": snapshot.get("context_source") or snapshot.get("context_status"),
+            # Состояние handoff несут ВСЕ исходы, а не только те, что советуют уйти: на `continue`
+            # оно тоже правда о сессии, и молчание о нём читалось бы как «всё записано».
+            "handoff": handoff_txt, "handoff_path": handoff_path}
 
     def out(outcome, reason, command=None):
         return dict(base, outcome=outcome, reason=reason, command=command)
@@ -168,8 +196,7 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
                        "на безопасной границе.",
                        _compact_cmd(wid))
         return out("new_session",
-                   f"{why}; не начинать новый блок работы здесь. "
-                   "Handoff/решения сохранены в репозитории.",
+                   f"{why}; не начинать новый блок работы здесь. {handoff_txt}.",
                    _new_session_cmds(repo_path, next_task))
 
     if same:
@@ -190,22 +217,30 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
     if p.get("one_task_per_session", True):
         return out("clear",
                    f"новая независимая задача (one-task-per-session); продолжение здесь заставит "
-                   f"перечитывать нерелевантную историю ({ctx_txt}). Задача закрыта, handoff сохранён.",
+                   f"перечитывать нерелевантную историю ({ctx_txt}). Задача закрыта. {handoff_txt}.",
                    _clear_cmds(wid, next_task))
     return out("continue", "cross-task-сессии разрешены политикой (allow_cross_task_session=true).")
 
 
 def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, checks=None,
                       next_relation="new_independent_task", next_task=None,
-                      at_safe_boundary=True, handoff_saved=True, decisions_recorded=True,
+                      at_safe_boundary=True, decisions_recorded=True,
                       committed=True, repo_path=None):
-    """WP5: обязательный ритуал завершения WorkItem -> отчёт + usage + SessionRecommendation + NextCommand."""
+    """WP5: обязательный ритуал завершения WorkItem -> отчёт + usage + SessionRecommendation + NextCommand.
+
+    ПАРАМЕТР `handoff_saved` УБРАН 17.08.2026, и это не переименование. Он имел значение по
+    умолчанию `True`, ни один из двух вызывающих (`engine/ai_ops_run.py`, `ai-ops session`) его не
+    передавал, и пункт `handoff_created` означал ровно «автор функции написал True». Замер на живой
+    сессии кита: `ai-ops session` печатал «Что сохранено: … handoff_created …» при полном отсутствии
+    сессионного handoff в природе. Теперь пункт ВЫВОДИТСЯ из наличия файла и соврать им нельзя —
+    вернуть параметр значит вернуть ложный пункт в ритуале, который сам же проверяет честность.
+    """
     p = policy or SESSION_ECONOMY_DEFAULTS
     rec = recommend(snapshot, p, next_relation=next_relation, next_task=next_task,
                     at_safe_boundary=at_safe_boundary, task_done=True, repo_path=repo_path)
     checklist = {
         "result_achieved": True, "checks_passed": bool(checks),
-        "state_saved": True, "handoff_created": handoff_saved,
+        "state_saved": True, "handoff_created": rec.get("handoff_path") is not None,
         "decisions_recorded": decisions_recorded, "commit_or_pr": bool(pr) or committed,
         "usage_counted": snapshot.get("turns", 0) > 0,
     }
@@ -257,6 +292,9 @@ def render_block(ritual):
          f"Контекст сессии: {ctx_txt}, ходов: {us['turns']}",
          f"Расход сессии всего: {rec.get('session_spend', 'н/д')}",
          f"Что сохранено: {', '.join(saved) or '—'}",
+         # Состояние handoff названо ОТДЕЛЬНОЙ строкой, а не только галочкой в списке: галочку
+         # читают как формальность, а потеря контекста сессии — это потеря труда.
+         f"Handoff сессии: {rec.get('handoff') or 'н/д'}",
          f"Рекомендация: {rec['outcome'].upper()} — {rec['reason']}"]
     if rec.get("command"):
         L += ["", "Точная команда:", rec["command"]]

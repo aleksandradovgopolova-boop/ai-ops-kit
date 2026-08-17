@@ -593,6 +593,18 @@ def _session_guard_before_start(child_root, task, signals, feature=None):
         # подключает вызывающий (см. session_launcher.spawn, шов usage_hooks). Печатаем, только когда
         # рекомендация уже говорит о смене сессии: иначе строка была бы шумом на каждом прогоне.
         if rec.get("outcome") in ("new_session", "clear"):
+            # 3б. ПОДГОТОВКА ПЕРЕХОДА, а не только совет о нём. Замер 17.08.2026: совет «уйди в
+            # новую сессию» существовал и был верен, но уходить было НЕ С ЧЕМ — сессионного handoff
+            # кит не писал нигде, при этом текст рекомендации утверждал, что handoff сохранён.
+            # Пишем ровно на тех исходах, где переход советуется: писать на каждом прогоне значило бы
+            # заводить файл там, где никто никуда не уходит.
+            from ai_ops_kit.engops import session_handoff
+            try:
+                _h = session_handoff.write(
+                    child_root, session_handoff.build(child_root, snap, rec, goal=task))
+                print(f"  handoff сессии записан: {_h}")
+            except Exception as _he:  # noqa: BLE001 — не смогли записать: говорим, а не молчим
+                print(f"⚠ handoff сессии НЕ записан: {_he}")
             from ai_ops_kit.engops import session_launcher
             dec = session_launcher.decide(str(child_root), snap, next_relation=relation,
                                           next_task=task, task_done=False)
