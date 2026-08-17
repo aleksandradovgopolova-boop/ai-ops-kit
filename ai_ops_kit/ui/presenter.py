@@ -976,6 +976,9 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
             "ходов": turns, "источник ходов": snapshot.get("turns_source") or "—",
             "расход сессии": spend, "состояние расхода": (rec or {}).get("spend_state") or "—",
             "исход": outcome, "причина": (rec or {}).get("reason") or "—",
+            # Путь — В ДЕТАЛЯХ (наружу путям хода нет), но САМ ФАКТ идёт в текст ниже: уйти из
+            # сессии, не записав её состояние, — это потеря труда, а не деталь реализации.
+            "handoff сессии": (rec or {}).get("handoff") or "—",
             "последняя компакция": snapshot.get("last_compaction_at") or "не обнаружена"}
 
     if status == "unavailable":
@@ -1007,7 +1010,10 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
                       "recommendation": advice,
                       "on_approve": "выполни команду ниже и повтори задачу",
                       "on_reject": "продолжу здесь — решение твоё, я не блокирую"},
-            next_steps=[(rec or {}).get("command") or "продолжаю здесь"],
+            # Состояние handoff — ПЕРВЫЙ шаг, а не приписка: если состояние сессии не записано,
+            # уходить из неё нечем, и это важнее самой команды выхода.
+            next_steps=[(rec or {}).get("handoff") or "состояние сессии не проверено",
+                        (rec or {}).get("command") or "продолжаю здесь"],
             technical=tech)
     # `attention` — не «всё хорошо»: сказать «история дешёвая» при растущем счёте значило бы
     # успокаивать там, где кит как раз обязан предупредить.

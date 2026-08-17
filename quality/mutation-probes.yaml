@@ -232,6 +232,40 @@ probes:
   - tests/unit/test_staleness_and_provenance.py
   why: '«План отстал от истории» — половина ответа на пассивность кита: без неё он снова будет молчать
     о том, что работа идёт мимо объявленного.'
+- id: handoff-claim-derived-not-asserted
+  kind: guard
+  file: ai_ops_kit/engops/session_guardrails.py
+  find: '        "state_saved": True, "handoff_created": rec.get("handoff_path") is not None,'
+  replace_with: '        "state_saved": True, "handoff_created": True,'
+  tests:
+  - tests/unit/test_session_handoff.py::test_claim_is_derived_from_the_artifact
+  why: 'Замер 17.08.2026 на живой сессии кита: `ai-ops session` печатал «Что сохранено: … handoff_created …»
+    при полном отсутствии сессионного handoff — пункт был значением параметра по умолчанию. Возврат
+    константы возвращает ложную галочку в ритуал, который сам же проверяет честность закрытия работы.'
+- id: handoff-absence-is-called-absence
+  kind: guard
+  file: ai_ops_kit/engops/session_guardrails.py
+  find: '    return ("handoff сессии НЕ сохранён — записать перед уходом, иначе контекст этой сессии "'
+  replace_with: '    return ("handoff сессии сохранён (предположительно) — контекст этой сессии "'
+  tests:
+  - tests/unit/test_session_handoff.py::test_missing_handoff_is_called_missing
+  why: 'Вторая половина той же неправды: текст рекомендации «уйди в новую сессию» БЕЗУСЛОВНО утверждал
+    «Handoff/решения сохранены в репозитории». Совет уходить успокаивал ровно там, где обязан предупредить,
+    — а уходить было не с чем.'
+- id: handoff-seam-guard-writes-what-it-advises
+  kind: seam
+  covers:
+  - ai_ops_kit/engops/session_guardrails.py
+  - ai_ops_kit/engops/session_handoff.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '                _h = session_handoff.write('
+  replace_with: '                _h = None; _skip = (lambda *a, **k: None)('
+  tests:
+  - tests/unit/test_session_handoff_seam.py::test_guard_writes_the_handoff_it_advises
+  why: 'ШОВ пути человека: модуль handoff можно написать и покрыть тестами, и он останется мёртвым —
+    так уже было с `from_doctor` и со всей политикой экономии сессии (v3.16.0+v3.22 были «объявлены
+    и мертвы» до 13.08.2026). Совет сменить сессию существовал и был верен; записи состояния не делал
+    никто. Проба ломает ровно вызов из стража, а не форму артефакта.'
 - id: staleness-reaches-the-answer
   kind: seam
   covers:
