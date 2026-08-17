@@ -297,6 +297,17 @@ def filter_by_packages(pairs, selected, ownership):
 DEV_ONLY_PREFIXES = (
     "qualification/",   # пакет живых сценариев квалификации движка — данные разработки кита
     "containers/",      # эталонный контейнер изоляции движка (P0.2 jail) — ассет parent-репозитория
+    # 2026-08-17: НАЙДЕНО НОВОЙ ПРОВЕРКОЙ ПОСТАВКИ, не чтением кода. `devtools` — инструменты
+    # разработки САМОГО кита (бенчмарки, харнессы квалификации, мутационные пробы). Их исключение
+    # существовало (DEV_ONLY_TOOLS ниже), но проверялось ТОЛЬКО для путей `tools/` — а в v3.30 код
+    # переехал в пакеты, и в `tools/` остались тонкие алиасы. Итог: алиасы отсекались, а сам код
+    # `ai_ops_kit/devtools/*.py` уезжал в дочку целиком, вместе с импортом валидатора, которого в
+    # поставке нет (`promotion_qual` -> `validate_promotion_qualification`) — то есть в дочке лежал
+    # мёртвый груз с гарантированным ImportError.
+    # Ровно тот класс, что и F-032: переезд дал новые пути, а фильтр остался на старых.
+    # Безопасно по построению: слой `entrypoints` продуктовый код импортировать не вправе, и это
+    # проверяет `validate_layering` (правило no-product-depends-on-devtools).
+    "ai_ops_kit/devtools/",
 )
 
 DEV_ONLY_TOOLS = frozenset({
@@ -333,6 +344,13 @@ RUNTIME_VALIDATORS = frozenset({
     "validate_surface_wiring", "validate_scenario_evidence", "validate_event_catalog",
     "validate_openspec_change", "validate_engops_policy", "validate_duties",
     "validate_knowledge_graph", "validate_storybook_evidence",
+    # F-033 (поле 15.08.2026): сверка критериев приёмки с результатом — механизм ПРОТИВ ложного
+    # green, построенный 14.08 и починенный 15.08, — в дочке не исполнялся НИКОГДА: его зовёт
+    # `engine/acceptance_verify` (строка `from ai_ops_kit.validation import
+    # validate_acceptance_result`), а в поставку он не попадал, потому что имя не внесли сюда.
+    # Список был памятью автора, а не проверяемым фактом; теперь его сторожит
+    # `test_delivered_engine_does_not_import_undelivered_validators`.
+    "validate_acceptance_result",
 })
 
 
@@ -663,8 +681,9 @@ def _draftify(text, today):
 
 
 def _backfill_required_context(today=None, dry=False):
-    """Создать ОТСУТСТВУЮЩИЕ обязательные документы контекста репозитория из шаблонов
-    (managed/context, при отсутствии — из шаблонов кита PKG/context). Пишет в .ai/project/context/
+    """Создать ОТСУТСТВУЮЩИЕ обязательные документы контекста репозитория из шаблонов КИТА
+    (PKG/context, при отсутствии — из managed-слоя ребёнка; порядок — см. `_delivery_source`).
+    Пишет в .ai/project/context/
     как черновик (status: draft). НЕ трогает уже существующие документы. -> список {doc, action}."""
     import datetime as _dt
     today = today or _dt.date.today().isoformat()
@@ -674,9 +693,7 @@ def _backfill_required_context(today=None, dry=False):
         dst = proj_ctx / doc
         if dst.exists() or (AI_DIR / "custom" / "context" / doc).exists():
             continue                                   # уже заполнено репозиторием — не трогаем
-        src = MANAGED / "context" / doc
-        if not src.is_file():
-            src = PKG / "context" / doc                # fallback: свежий шаблон кита
+        src = _delivery_source("context", doc)       # кит первым: см. _delivery_source (F-032)
         if not src.is_file():
             out.append({"doc": doc, "action": "skipped-no-template"}); continue
         if not dry:
@@ -726,6 +743,30 @@ def _seed_planning_contour(root: Path, dry=False):
     return out
 
 
+def _delivery_source(*rel):
+    """Откуда брать доставляемый шаблон: ИЗ КИТА, и только потом из managed-слоя ребёнка.
+
+    F-032 (поле 15.08.2026, подтверждён трижды, третий раз на ЧИСТОЙ установке 17.08.2026).
+    Порядок здесь был ОБРАТНЫЙ — `MANAGED` первым, `PKG` как fallback, — и это ровно та причина, по
+    которой `./ai-ops` в дочке «не обновлялся». Механика: шаги доставки выполняются ДО замены
+    managed-файлов (так объявлено в `deliver_assets`), поэтому чтение managed-слоя давало шаблон
+    ПРЕДЫДУЩЕЙ версии. Точка входа отставала ровно на один релиз — то есть исправление, влитое в
+    кит, доезжало до владельца через обновление ПОСЛЕ следующего, а до тех пор в дочке лежали обе
+    версии: свежий шаблон в managed и старая обёртка в корне.
+    Функция `deliver_assets` при этом ОБЪЯВЛЯЛА обратное: «читают ИСХОДНИК кита (templates/, docs/,
+    registry/), а не managed-слой ребёнка». Утверждение было верным для всех шагов, кроме трёх,
+    и именно эти три доставляли то, что владелец видит первым.
+
+    Fallback на managed оставлен и не бесполезен: установщик запускают и из распакованного
+    managed-слоя (`.ai/managed/installer` в старых дочках), где `PKG` указывает не туда.
+    """
+    for base in (PKG, MANAGED):
+        cand = base.joinpath(*rel)
+        if cand.is_file():
+            return cand
+    return PKG.joinpath(*rel)
+
+
 ENTRY_NAME = "ai-ops"
 
 
@@ -740,9 +781,7 @@ def _install_entry_point(root: Path, dry=False):
     Обёртка, а не запись в PATH: PATH не наша зона, а `./ai-ops` работает сразу и переживает clone.
     -> {"action": created|updated|unchanged|skipped-no-template, "path": str|None}
     """
-    src = MANAGED / "templates" / "runtime" / "ai-ops-entry.sh"
-    if not src.is_file():
-        src = PKG / "templates" / "runtime" / "ai-ops-entry.sh"
+    src = _delivery_source("templates", "runtime", "ai-ops-entry.sh")
     if not src.is_file():
         return {"action": "skipped-no-template", "path": None}
     body = src.read_text(encoding="utf-8")
@@ -776,9 +815,7 @@ def _install_communication_adapter(root: Path, dry=False):
     шаблон: правишь политику -> `./ai-ops update` -> блок обновлён, остальное на месте.
     -> {"action": created|updated|unchanged|skipped-no-template, "path": str}
     """
-    src = MANAGED / "templates" / "runtime" / "claude-communication.md"
-    if not src.is_file():
-        src = PKG / "templates" / "runtime" / "claude-communication.md"
+    src = _delivery_source("templates", "runtime", "claude-communication.md")
     if not src.is_file():
         return {"action": "skipped-no-template", "path": None}
     body = src.read_text(encoding="utf-8").strip()

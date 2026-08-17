@@ -13,6 +13,7 @@
                       потом смотрим на код возврата и печать.
 """
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -646,6 +647,13 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
     # кита (класс F-030/F-032, самый дорогой из найденных полем). Плоские алиасы в потолок не идут.
     # Запас оставлен видимым (5 файлов), а не в один файл: 887 байт запаса уже дважды роняли этот
     # тест на первой же следующей работе.
+    # 2026-08-17, ПОЗЖЕ В ТОТ ЖЕ ДЕНЬ: замер УПАЛ, и это записано, а не оставлено про себя.
+    # Новая проверка поставки (`test_delivered_engine_does_not_import_undelivered_validators`)
+    # показала, что в дочку едет `ai_ops_kit/devtools/` — инструменты разработки самого кита.
+    # Исключение существовало, но проверялось только для путей `tools/`, а код переехал в пакеты.
+    # После исключения: 563 файла, 462 содержательных, 3.4515 МБ (было 470 и 3.5257 МБ).
+    # Потолки НЕ опускаю до нового замера намеренно: 3.5 оставило бы 50 КиБ, а этот файл дважды
+    # ронялся ровно из-за такого запаса. 475/3.7 держат смысл (baseline монолита 503 не тронут).
     assert substantive < 475, f"содержательных файлов в managed: {substantive} (потолок 475)"
     assert alias_bytes < 200 * 1024, f"алиасы разрослись: {alias_bytes / 1024:.0f} КиБ (потолок 200)"
     # 2026-08-13: потолок объёма ПОДНЯТ 3.2 -> 3.3 МБ осознанно, и это замер, а не округление.
@@ -967,3 +975,46 @@ def test_fresh_install_is_not_a_code_change(installed):
             "правка кода продукта в той же дочке не замечена — исключения съели всё"
     finally:
         _git(installed, "checkout", "--", "src/calc.py")
+
+
+def test_delivered_engine_does_not_import_undelivered_validators(installed):
+    """Что поставка ЗОВЁТ, то она обязана и СОДЕРЖАТЬ (F-033, поле 15.08.2026).
+
+    Белый список `RUNTIME_VALIDATORS` — память автора, а не проверяемый факт. Цена этого уже
+    заплачена: `validate_acceptance_result` (механизм против ложного green, построенный 14.08 и
+    починенный 15.08) в дочке падал `ImportError` и не исполнялся НИКОГДА, потому что имя в список
+    не внесли. Механизм был зелёным в ките и отсутствующим у владельца.
+
+    Проверка идёт по УСТАНОВЛЕННОЙ копии, а не по репозиторию кита, — иначе она снова мерила бы кит.
+    Из этого свойство получается бесплатно: `devtools/` в дочку не едет, поэтому его импорты сюда и
+    не попадают, а исключать их вручную не нужно.
+    """
+    managed = installed / ".ai" / "managed"
+    delivered = {p.stem for p in (managed / "ai_ops_kit" / "validation").glob("*.py")}
+    assert delivered, "в поставке нет ни одного валидатора — измерять нечего"
+
+    wanted = {}
+    for py in sorted(managed.rglob("*.py")):
+        rel = py.relative_to(managed).as_posix()
+        if rel.startswith("ai_ops_kit/validation/"):
+            continue                     # валидатор, зовущий валидатора, — их внутреннее дело
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="ignore"), filename=rel)
+        except SyntaxError:               # синтаксис поставки стережёт отдельная проверка
+            continue
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.ImportFrom) and (node.module or "").endswith(
+                    "ai_ops_kit.validation"):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.Import):
+                names = [a.name.rsplit(".", 1)[-1] for a in node.names
+                         if a.name.startswith("validate_")]
+            for n in names:
+                if n.startswith("validate_") or n == "ai_managed_checksums":
+                    wanted.setdefault(n, rel)
+
+    missing = {n: where for n, where in sorted(wanted.items()) if n not in delivered}
+    assert not missing, (
+        "поставка зовёт валидаторы, которых в ней нет — механизм будет падать ImportError "
+        "у владельца: " + "; ".join(f"{n} (из {w})" for n, w in missing.items()))
