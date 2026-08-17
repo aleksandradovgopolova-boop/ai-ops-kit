@@ -1,0 +1,30 @@
+# Что документировано КАК РАБОТАЮЩЕЕ вместо гарантии: выбор состава окружения, а не
+#       переменной. Прямо применимо к пяти вечно красным тестам (EV-1117).
+schema_version: 1
+kind: research.evidence
+id: EV-1136
+request_id: RR-015
+statement: "Развилка документирована и она бинарная: либо тесты гоняются против УСТАНОВЛЕННОГО пакета — pytest: 'It will run tests against the installed package and not against your source code checkout, helping to detect packaging glitches', для чего нужен не-editable (tox package = wheel или sdist-wheel; uv --no-editable), — либо против ДЕРЕВА: без editable, src-layout и PYTHONPATH=src. Смешивать нельзя. Критично для кита: ini-опция pytest pythonpath правит sys.path внутри процесса pytest и НА ПОДПРОЦЕСС НЕ НАСЛЕДУЕТСЯ — на подпроцессы влияет только переменная окружения. Ещё: 'pytest' и 'python -m pytest' не эквивалентны — второй добавляет текущий каталог в sys.path. Режим --import-mode=importlib рекомендован для новых проектов, потому что тогда 'pytest will not change sys.path at all'."
+evidence_type: documented_fact
+source:
+  title: "pytest — goodpractices, pythonpath, reference (confval-pythonpath); tox — reference/config"
+  url: "https://docs.pytest.org/en/stable/explanation/goodpractices.html"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "docs.pytest.org/en/stable/explanation/goodpractices.html (тесты против установленного пакета); .../explanation/pythonpath.html (import modes, python -m pytest, importlib); .../reference/reference.html#confval-pythonpath (sys.path внутри процесса); tox.wiki reference/config.html (package = wheel | sdist-wheel)"
+  quote: "It will run tests against the installed package and not against your source code checkout"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация pytest и tox, прочитана 17.08.2026; ключевые формулировки процитированы."
+derived_from:
+  - EV-1117
+  - EV-1135
+status: active
+superseded_by: null

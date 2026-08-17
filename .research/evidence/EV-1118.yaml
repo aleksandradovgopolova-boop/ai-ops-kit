@@ -1,0 +1,26 @@
+# Что у кита уже есть под другим именем: durable-состояние. Замер сделан ДО того, как
+#       предлагать durable-движок, иначе рекомендация была бы дублем.
+schema_version: 1
+kind: research.evidence
+id: EV-1118
+request_id: RR-015
+statement: "Возобновляемость долгого прогона у кита реализована и названа своими словами: RunHandoff (файл передачи между попытками), LifecycleStore (источник правды прогона), durable_write_json (атомарная запись с fsync и перечитыванием), resume_preflight с fail-closed на битом или пустом чтении, чекпоинт report.json на пакет с hard-stop цепочки при сбое записи, attempt_id на событиях (resume — новая попытка), validate_run_handoff.py как проверка. Реестр рантаймов объявляет это как проверенное: resumability status verified, 'file-based (RunHandoff); resume+fix-loop доказаны live на реальной задаче'. Предлагать киту durable-движок как новую сущность — значит дублировать построенное."
+evidence_type: measured_result
+source:
+  title: "manifest/ai-ops-manifest.yaml (батчи v3.0.8/v3.0.12), registry/runtimes.yaml, ai_ops_kit/validation/validate_run_handoff.py"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "registry/runtimes.yaml строка 190; manifest/ai-ops-manifest.yaml разделы fixed_v3_0_12_hardening_batch_b_durable_resume и записи про LifecycleStore/durable_write_json"
+  quote: "file-based (RunHandoff); resume+fix-loop доказаны live на реальной задаче"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прямое чтение реестров и манифеста 17.08.2026. Оговорка охвата: проверено СУЩЕСТВОВАНИЕ и объявленная проверенность механизма, а не его качество под обрывом сессии — живого замера 'сессия оборвалась, работа возобновилась' в этой заявке не делалось, и находка B2-26 (транскрипт не записывал, ЧТО исполнялось) показывает, что записанного следа хватало не всегда."
+status: active
+superseded_by: null

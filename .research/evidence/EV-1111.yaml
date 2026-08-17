@@ -1,0 +1,26 @@
+# Где переделывают одно место. Замер по git-истории с исключением служебных файлов
+#       (CHANGELOG, VERSION, манифест, FILE_INDEX, ROADMAP, README, AGENTS, release-claims, план,
+#       история плана) — без исключения их касается каждый коммит и замер вырождается.
+schema_version: 1
+kind: research.evidence
+id: EV-1111
+request_id: RR-015
+statement: "Самое переделываемое место кита — шов доставки. installer/ai_ops.py: 56 коммитов, из них 21 с префиксом fix (38%) — наивысшая доля исправлений среди крупных файлов кита (для сравнения: tools/execution_pipeline.py — 6 из 89, 7%; .github/workflows/package-quality.yml — 13 из 150, 9%). Он же на первом месте по правкам поверх собственной правки моложе суток: 18 раз, следом .github/workflows/package-quality.yml (12) и tests/unit/test_installer.py (11). Всего кода/конфига коммитов 500, из них 114 fix (23%), и 99 из 114 (87%) трогают файл, изменённый менее суток назад."
+evidence_type: measured_result
+source:
+  title: "git log репозитория ai-ops-kit, 714 коммитов за 08.07-17.08.2026"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "git log --no-merges --name-only; агрегация по файлу и префиксу subject; окно переделки 24 часа"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Механический замер по первичной истории. Оговорка про 87%: показатель высок отчасти потому, что темп разработки высокий (в среднем 18 коммитов в день, пик 76), и суточное окно захватывает нормальную последовательную работу. Поэтому вывод сделан не из 87%, а из РАЗНИЦЫ между файлами: 38% исправлений у установщика против 7% у конвейера — это разница в природе места, а не в темпе."
+status: active
+superseded_by: null

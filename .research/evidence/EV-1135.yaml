@@ -1,0 +1,27 @@
+# Боль 'локально красное ≠ CI зелёное': ответ первоисточника — гарантии НЕТ. Это отменяет
+#       целый класс возможных решений, поэтому записано отдельно.
+schema_version: 1
+kind: research.evidence
+id: EV-1135
+request_id: RR-015
+statement: "Официально документированного механизма, который ГАРАНТИРУЕТ, что подпроцесс pytest увидит текущее рабочее дерево, а не editable-установку из другого каталога, не существует: setuptools в разделе Limitations режима разработки говорит прямо противоположное — 'There is no guarantee that the editable installation will be performed using a specific technique', 'File system entries in the current working directory whose names coincidentally match installed packages may take precedence in Python's import system' и 'If you have a particular order in sys.path or some specific import precedence that needs to be respected, the editable installation as supported by Setuptools might not be able to fulfil this requirement'. Причина техническая: одна из трёх допустимых техник editable — динамический .pth, ставящий собственный MetaPathFinder, а sys.meta_path опрашивается ДО просмотра sys.path. Значит никакой PYTHONPATH и никакая ini-опция достаточной гарантией быть не могут."
+evidence_type: documented_fact
+source:
+  title: "setuptools — Development Mode, раздел Limitations"
+  url: "https://setuptools.pypa.io/en/latest/userguide/development_mode.html"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "setuptools.pypa.io/en/latest/userguide/development_mode.html — раздел Limitations, три процитированных предложения; docs.python.org/3/reference/import.html — sys.meta_path опрашивается до sys.path"
+  quote: "There is no guarantee that the editable installation will be performed using a specific technique"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация setuptools и CPython, прочитаны 17.08.2026; ключевые утверждения процитированы дословно."
+status: active
+superseded_by: null

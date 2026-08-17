@@ -1,0 +1,25 @@
+# Локальное красное против зелёного CI — замер, а не воспоминание. Сделан на СВЕЖЕМ worktree
+#       от origin/main, без каких-либо правок.
+schema_version: 1
+kind: research.evidence
+id: EV-1117
+request_id: RR-015
+statement: "Полный локальный прогон на origin/main (e1004e1) в чистом worktree даёт 5 failed, 2405 passed, 10 skipped за 8 минут; тот же коммит в CI зелёный. Красные — test_evidence_scope::test_script_announces_the_scope_it_actually_gives, test_validator_bootstrap::test_missing_bootstrap_is_caught, test_validator_runtime_contract::test_standalone_validator_is_green_from_a_copy[validate_context_qualification] и ::test_corrupted_source_of_truth_is_caught[registry/providers.yaml, registry/workflows.yaml]. Причина названа в плане кита (local-run-must-mirror-ci): editable-установка в рабочем venv отдаёт пакет из ~/ai-ops-kit любому подпроцессу, поэтому проба, копирующая валидатор в отдельный каталог и портящая там источник правды, читает не свою копию. Цена: на машине владельца пять проверок не дают сигнала НИКОГДА, и 17.08.2026 в эту пятёрку попал настоящий красный тест новой работы — отличать пришлось отдельным прогоном по origin/main."
+evidence_type: measured_result
+source:
+  title: "прогон pytest на worktree от origin/main e1004e1 + planning/plan.yaml -> local-run-must-mirror-ci"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "PYTHONPATH=<worktree> PYTHONDONTWRITEBYTECODE=1 python -m pytest tests/ -q -> '5 failed, 2405 passed, 10 skipped in 481.77s'; комментарий работы local-run-must-mirror-ci в planning/plan.yaml"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прогон выполнен в рамках этой заявки 17.08.2026 на отдельном worktree; список красных совпал с зафиксированным в плане пятью днями ранее — то есть состояние устойчивое, а не случайное."
+status: active
+superseded_by: null

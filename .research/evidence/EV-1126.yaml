@@ -1,0 +1,25 @@
+# Архитектурная проверка, которая живёт внутри pytest, — и её незрелость.
+schema_version: 1
+kind: research.evidence
+id: EV-1126
+request_id: RR-015
+statement: "pytest-archon 0.0.7 (19.09.2025, Apache-2.0, 89 звёзд) выражает архитектурные правила как обычные pytest-тесты и даёт то, чего нет у import-linter: произвольный предикат .should(fn), где fn получает модуль и карты прямых и транзитивных импортов. Для кита это означает, что новое архитектурное правило попадает в существующий прогон само, без новой джобы. Цена: версия 0.0.x, 89 звёзд, последний коммит — дата релиза (19.09.2025), то есть год без изменений; для проверки, которая должна блокировать, это риск владельца, а не техническая деталь."
+evidence_type: documented_fact
+source:
+  title: "pytest-archon — README проекта"
+  url: "https://github.com/jwbargsten/pytest-archon"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "github.com/jwbargsten/pytest-archon: README (archrule, .should(fn), таблица опций check); PyPI 0.0.7 от 19.09.2025"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичный README и PyPI, прочитаны 17.08.2026. Дословной цитаты нет намеренно: источник — структурные данные (PyPI JSON / GitHub API / файл хуков), прозы для цитирования в нём нет; предупреждение quote-grounding для этой записи ожидаемо."
+status: active
+superseded_by: null

@@ -1,0 +1,25 @@
+# Что у кита уже есть под другим именем: генеративные тесты. Проверено, потому что hypothesis
+#       уже стоит в зависимостях разработки, и вопрос был — используется ли по делу.
+schema_version: 1
+kind: research.evidence
+id: EV-1120
+request_id: RR-015
+statement: "hypothesis у кита установлен (test/dev-зависимости pyproject.toml, ставится в джобах CI) и используется РЕАЛЬНО, но узко: 41 декоратор @given в двух файлах из 271 — tests/unit/test_invariants.py и tests/unit/test_property_based.py. То есть инструмент не декоративный, но и не применён к тому слою, где живут находки поля (разбор аргументов командной строки, тексты отказов, шов установки)."
+evidence_type: measured_result
+source:
+  title: "pyproject.toml + дерево tests/ репозитория ai-ops-kit"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "grep -rl 'from hypothesis' tests/ -> 2 файла; grep -rho '@given' tests/ | wc -l -> 41; pyproject.toml optional-dependencies test"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прямой замер 17.08.2026. Замер про 'не применён к слою находок' — из отсутствия @given в тестах установщика и CLI; это отрицательное утверждение по grep'у, и оно ограничено: свойство могло быть проверено обычным параметризованным тестом без hypothesis."
+status: active
+superseded_by: null
