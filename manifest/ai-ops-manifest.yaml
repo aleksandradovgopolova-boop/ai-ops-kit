@@ -1039,6 +1039,10 @@ package_migrations:
   # v3.34: валидаторы переехали в ai_ops_kit/validation/ — раскладка child зеркалит кит.
   chain:
     - 3.33-to-3.34
+    # F-030: правило «закрытая работа живёт в history» пришло к дочкам БЕЗ миграции, и обновление
+    # ломало им ответ «что дальше» (замер на ИИ-Среде 17.08.2026: `next` отказывался отвечать и
+    # печатал 32 ошибки). Перенос — по решению владельца, с пометкой «результат не записан».
+    - 3.36-to-3.37-plan-history
 
 contracts_dir: schemas/
 compatibility_check: python3 ai_ops_kit/validation/validate_ai_first_registry.py
