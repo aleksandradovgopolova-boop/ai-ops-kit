@@ -49,6 +49,7 @@ from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _git, _has_changes, _head_advanced, _tree_clean, _TOOL_CACHE_RE, _tree_clean_after_checks,
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
     _verify_remote_base, _change_context, _change_context_range,
+    delivery_preflight as _delivery_preflight,
 )
 from ai_ops_kit.engine.pipeline_failure import (  # noqa: E402,F401
     _ENV_SYMPTOMS, _check_has_env_symptom, _env_proven_ok, _env_unqualified,
@@ -150,6 +151,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
                     "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
                     "reason": _br.get("reason")}
+    # B2-23 (пере-прогон 14.08.2026): доставка проверяла remote-базу ПОСЛЕ работы. Прогон отработал
+    # 13.5 минуты живой модели и ~$3.5 и только на шаге доставки сказал «remote base сдвинулась —
+    # PR не открыт». Отказ верный, момент — нет: база известна ЗДЕСЬ, до первого вызова модели, и
+    # предупредить можно бесплатно. Прогон не останавливаем (работа сама по себе может быть нужна),
+    # но говорим ЗАРАНЕЕ и в тех же словах, что скажет доставка.
+    delivery_pf = _delivery_preflight(child_root, base_ref, base_sha, open_pr)
+    if delivery_pf:
+        print(f"  ⚠ {delivery_pf['warning']}")
     # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
     # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
     if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
@@ -472,6 +481,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
             exempt.discard("tests_passed")   # тесты обязательны -> гейт заблокирует
             tests_warn = "нет тестов, а require_tests -> implementation_verification блокирует"
     not_applicable = {"implementation_verification": exempt}
+    # Причина освобождения едет ВМЕСТЕ с ним (B2-08): без неё отчёт называет «нет инструмента в
+    # стеке» даже там, где инструмент есть и просто не нужен — изменение только документации.
+    exempt_reason = {"implementation_verification": coll.get("not_applicable_reason")}
 
     # 6d. v2.83 Full RunPlan: постадийный НЕЗАВИСИМЫЙ ревью для ai-review гейтов плана
     #     (code_review, ux_review, security-non-human, ...). writer ≠ judge: ревьюер — отдельный
@@ -707,7 +719,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         _gate_ids.append("security")
     gates = gate_executor.evaluate(plan["base_workflow"], gate_ev,
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
-                                   signals=signals, not_applicable=not_applicable)
+                                   signals=signals, not_applicable=not_applicable,
+                                   exempt_reason=exempt_reason)
 
     # v3.8.3: персистим ПРОЙДЕННОЕ gate-evidence билда (кроме security) по committed_sha в worktree/.ai —
     # чтобы последующий reevaluate (после человеко-approval) переиспользовал model-вердикт code_review и
@@ -777,6 +790,68 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # реализацию. Теперь ошибка оценки спеки = блокирующий незакрытый пункт (не тихий пропуск).
         spec_incomplete = [f"<spec-assess-failed: {type(_e).__name__}>"]
     spec_complete_ok = not spec_incomplete
+
+    # КРИТЕРИИ ПРИЁМКИ НЕ СВЕРЯЮТСЯ С РЕЗУЛЬТАТОМ (B2-14, живой прогон 14.08.2026).
+    #
+    # ЗАМЕР, а не опасение. Прогон на реальном продукте отдал владельцу draft PR со
+    # `sha_verified: True` и `overall_status: delivered`, тогда как критерий приёмки требовал
+    # дословно «в README нет строк с `public/media`» — а в доставленном тексте эта строка осталась,
+    # только описание стало расплывчатым. Ложное утверждение о проекте (каталога не существует) не
+    # ушло, а замаскировалось. `spec-coverage` при этом сообщал `acceptance_criteria: complete`.
+    #
+    # `complete` В SPEC-COVERAGE ОЗНАЧАЕТ «РАЗДЕЛ ЗАПОЛНЕН», А НЕ «КРИТЕРИЙ ВЫПОЛНЕН». Разница в
+    # одном слове, а цена — ложный green на последнем шаге: владелец получает работу, помеченную
+    # проверенной, и приёмка перекладывается на него без предупреждения.
+    #
+    # ПЕРВАЯ ПОЛОВИНА (14.08, #111): непроверенное перестало выглядеть проверенным.
+    # ВТОРАЯ ПОЛОВИНА (здесь): появилась САМА СВЕРКА. Независимый read-only судья (writer ≠ judge)
+    # читает дифф против КАЖДОГО критерия и выносит вердикт с цитатой; цитата проверяется кодом в
+    # диффе и в названном файле, иначе вердикт не принимается — `ai_ops_kit/engine/acceptance_verify.py`.
+    # СВЕРКА НЕ БЛОКИРУЕТ ready. Порядок из плана обязателен: advisory + полевые доказательства
+    # качества вердиктов, и только потом блокировка. Гейт, включённый до замера, останавливал бы все
+    # прогоны на непроверенном вердикте — и его научились бы обходить.
+    from ai_ops_kit.engine import acceptance_verify as _av
+    _ac_text, _ac_items, _ac_problem = _av.criteria_from_spec(child_root, wid)
+    # СВЕРКА НЕ ЗАВИСИТ ОТ ФЛАГА `review` (полевой замер 14.08.2026, пере-прогон BNBM). Судья
+    # включается автоподбором по классу задачи: для QUICK `review=False`. Правка документа — это
+    # QUICK, и именно на правке документа родился B2-14. То есть механизм против ложного green не
+    # работал ровно на том классе, где ложный green и случился: за весь живой прогон сверка не
+    # запустилась НИ РАЗУ. Критерии, если они объявлены, сверяются всегда, когда есть кому судить.
+    if _ac_items and reviewer_proposer is not None and committed_sha:
+        try:
+            # Контекст судьи — ВЕСЬ диапазон base..head, а не последний коммит (ревью PR #118).
+            # Критерии приёмки описывают изменение целиком; на resume и reevaluate_only ветка
+            # несёт несколько коммитов, и критерий, выполненный в предыдущем, не попал бы в дифф —
+            # судья честно ответил бы `unmet`/`undetermined` о работе, которая сделана. Тот же
+            # довод, по которому диапазон берёт seam_scan выше.
+            acceptance_criteria = _av.verify(
+                work_root, _ac_items, reviewer_proposer, revision=committed_sha,
+                change_context=_change_context_range(work_root, base_sha, committed_sha),
+                budget=budget)
+        except Exception as _e:  # noqa: BLE001 — FAIL-CLOSED: сбой сверки = «не сверено» с названной
+            # причиной, а не отсутствие блока (пустой блок читался бы как «претензий нет»).
+            acceptance_criteria = _av._unverified(
+                _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300])
+    elif _ac_problem:
+        # Спека ЕСТЬ, но не разобрана: это «не знаю», а не «критериев нет». Молчание здесь было бы
+        # тем же ложным green — `spec-coverage` для того же файла говорит `complete`.
+        acceptance_criteria = _av._unverified(
+            [], f"критерии приёмки НЕ прочитаны: {_ac_problem} — сверка невозможна, проверь вручную",
+            declared=True)
+    elif _ac_text and not _ac_items:
+        # Раздел заполнен, но проверяемых пунктов из него не извлеклось (одни заголовки/разделители).
+        acceptance_criteria = _av._unverified(
+            [], "раздел критериев заполнен, но ни одного проверяемого пункта в нём не найдено — "
+                "сверять нечего по существу (проверь формат: пункты списка или строки)",
+            declared=True)
+    else:
+        acceptance_criteria = _av._unverified(
+            _ac_items,
+            ("критерии объявлены, но с результатом НЕ сверялись: независимый ревьюер не запускался "
+             "(нужны --execute с коммитом и провайдер судьи); `spec-coverage: complete` означает "
+             "«раздел заполнен», а не «критерий выполнен»"
+             if _ac_items else "критерии приёмки не объявлены — сверять нечего"),
+            declared=bool(_ac_items))
 
     # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
     # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
@@ -891,6 +966,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                          "wid": wid, "task": task, "base_binding": base_binding}
     else:
         delivery = {"requested": bool(open_pr), "base_binding": base_binding,
+                    "preflight": delivery_pf,
                     "status": ("not-requested" if not open_pr
                                else ("not-attempted" if not ready else None))}
     # ready есть, доставка НЕ выполнена в pipeline: overall — «готово к доставке» (контроллер финализирует).
@@ -1036,6 +1112,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                     "invalid": [e.get("gate") for e in spec_prestage_bad],
                                     "implementation_skipped": bool(spec_prestage_bad)}},
         "context_overflow": context_overflow,
+        "acceptance_criteria": acceptance_criteria,   # B2-14: сверялись ли критерии с результатом
         # honest: «готово к PR» = петля done + коммит + evidence на SHA + prepare_ok + spec-depth +
         # не-overflow + (all-green: гейты не блокируют | no-regressions: нет новых провалов И blocking-гейты пройдены)
         "ready_for_pr": ready,

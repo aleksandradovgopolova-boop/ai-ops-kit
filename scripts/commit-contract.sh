@@ -64,4 +64,21 @@ if ! "$PYTHON" -c 'import yaml' 2>/dev/null; then
   exit 1
 fi
 
+# ПЕРЕСЕЧЕНИЕ С ЧУЖОЙ ЗАЯВКОЙ. Замер 26 коммитов дня показал, чем плохой коммит отличался от
+# законных: НЕ шириной. Под `broad_scope` попали четыре, и по делу — только один (`4a231ae`, куда
+# `git add -A` унёс чужую работу); остальные три были правками «код + тесты + запись находки».
+# Поэтому ширина осталась советом, а проверяется то, что действительно различало случаи: попали ли
+# в коммит файлы из области, которую заявила ДРУГАЯ сессия. Ответ у кита есть — реестр активных
+# работ. Предупреждение, не блокировка: заявка может быть протухшей, а хук, который мешает без
+# основания, обходят `--no-verify`, и тогда не работает уже ничего.
+if [ -z "${COMMIT_CONTRACT_SKIP_CLAIMS:-}" ]; then
+  _REG=$("$PYTHON" -c 'from ai_ops_kit.lifecycle import active_work as a; print(a.shared_registry_path())' 2>/dev/null || true)
+  if [ -n "$_REG" ] && [ -f "$_REG" ]; then
+    # области = верхнеуровневые каталоги проиндексированного (реестр ведётся в этих терминах)
+    _AREAS=$(printf '%s\n' "${FILES[@]}" | awk -F/ '{print (NF>1 ? $1"/" : $1)}' | sort -u | paste -sd, -)
+    "$PYTHON" -m ai_ops_kit.lifecycle.active_work check "$_REG" --areas "$_AREAS" 2>/dev/null \
+      | grep -v "пересечений по зонам" || true
+  fi
+fi
+
 "$PYTHON" ai_ops_kit/engops/commit_policy.py . --files "${FILES[@]}" --message "$MESSAGE"

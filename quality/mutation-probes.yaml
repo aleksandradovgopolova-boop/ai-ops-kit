@@ -1,0 +1,245 @@
+# quality/mutation-probes.yaml — ОХРАННЫЕ проверки механизмов и тесты, обязанные их защищать.
+#
+# ПОВОД — ЗАМЕР. PR #118 прошёл пять кругов свежего ревью: 36 находок, шесть уровня HIGH, и ни одну
+# не поймали 11 обязательных джоб CI. Восемь правок того дня были «покрыты тестами» и не проверялись
+# ничем: снятие проверки оставляло тесты зелёными. Правило «мутируй исправление» в
+# `rules/core/field-lessons.yaml` существовало — но как ПРОЗА, и потому исполнялось ровно настолько,
+# насколько исполнитель о нём помнил.
+#
+# ЧТО ЗДЕСЬ. Для каждой охранной проверки — ради которой механизм и существует — названы: файл,
+# дословный образец охраны, чем её нейтрализовать, тесты, которые ОБЯЗАНЫ покраснеть, и ЗАЧЕМ она
+# нужна. Прогон: `python3 tools/mutation_probe.py .` (медленный, отдельная джоба);
+# быстрая половина — `validate_mutation_probes.py`, она держит реестр от отставания от кода.
+#
+# ИСХОДЫ ПРОГОНА ТРИ, И ТРЕТИЙ НЕ РАВЕН ВТОРОМУ: `killed` (тест покраснел — так и надо),
+# `survived` (охрана снята, тесты зелёные — ДЕФЕКТ КОНТУРА), `not_verified` (базовый прогон красный,
+# образец не найден или неоднозначен — неизвестность, и она не выдаётся за успех).
+#
+# КАК ДОБАВЛЯТЬ. Новый механизм -> новая проба на его главную охрану. Если образец пришлось менять,
+# потому что код переписан, — это нормально; если проба исчезла вместе с охраной, объясните в
+# CHANGELOG, что теперь защищает механизм.
+schema_version: 1
+kind: mutation-probes
+probes:
+- id: acceptance-fabricated-quote-nullifies
+  kind: guard
+  file: ai_ops_kit/engine/acceptance_verify.py
+  find: '        if quote and basis is None:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  why: 'Выдуманная цитата обязана обнулять вердикт: это единственная строгая защита сверки. Снять её —
+    вернуть B2-14, где «выполнено» стояло ни на чём.'
+- id: acceptance-met-not-on-removed-line
+  kind: guard
+  file: ai_ops_kit/engine/acceptance_verify.py
+  find: '        elif status == "met" and basis == "removed-line" and evidence != "absent":'
+  replace_with: '        elif False:'
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  why: «Выполнено» не может опираться на строку, которой в результате нет. Это проверка СВЯЗНОСТИ вердикта
+    и основания — форма исходного ложного green B2-14.
+- id: acceptance-absence-tied-to-same-file
+  kind: guard
+  file: ai_ops_kit/engine/acceptance_verify.py
+  find: '        if body is not None and q not in _norm(body) and q in _norm(own_removed):'
+  replace_with: '        if body is not None and q not in _norm(body) and q in _norm(any_removed):'
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  why: 'Доказательство отсутствия обязано относиться к ТОМУ ЖЕ файлу: с объединением всех удалённых строк
+    обход не закрывался, а отодвигался на шаг (третье и четвёртое ревью PR #118).'
+- id: acceptance-rubber-stamp-rejected
+  kind: guard
+  file: ai_ops_kit/engine/acceptance_verify.py
+  find: '    if not reads:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_acceptance_verify.py
+  why: Вердикт без единого чтения — рубер-штамп; принимать его опаснее всего именно в приёмке.
+- id: acceptance-seam-pipeline-calls-check
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/acceptance_verify.py
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/acceptance_verify.py
+  find: def verify(work_root, criteria, provider, revision=None, change_context=None, budget=None,
+  replace_with: def verify_DISABLED(work_root, criteria, provider, revision=None, change_context=None,
+    budget=None,
+  tests:
+  - tests/unit/test_acceptance_verify_seam.py
+  why: 'ШОВ: модульные тесты механизма остаются зелёными, если конвейер его не зовёт — именно так дефект
+    и жил. Тест шва обязан краснеть, когда точка входа исчезает. Проба закрывает шов С ОБЕИХ сторон: у
+    механизма исчезает точка входа, и это же ломает ВЫЗОВ из конвейера — поэтому она названа покрытием
+    и для `execution_pipeline.py`, где живут охранные пробы сверки.'
+- id: plan-closed-work-not-in-active
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        elif st in CLOSED_DECLARABLE:'
+  replace_with: '        elif False:'
+  tests:
+  - tests/unit/test_plan_control_plane.py
+  why: Закрытая работа в активном плане возвращает то состояние, из-за которого план перестал быть управляющим
+    файлом (21 работа из 32 была `done`).
+- id: plan-history-feeds-status-derivation
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '    for w in closed or []:'
+  replace_with: '    for w in []:'
+  tests:
+  - tests/unit/test_plan_control_plane.py
+  why: 'История обязана доезжать до вывода статусов: иначе каждая зависимость от завершённой работы становится
+    «неизвестной» и блокирует весь план.'
+- id: plan-done-needs-a-place-to-recheck
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if w.get("status") == "done" and not any(w.get(k) for k in ("pr", "commit", "evidence",
+    "finding")):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_plan_control_plane.py
+  why: '`done` — это не «PR смержен»: без места перепроверки история становится списком галочек.'
+- id: plan-seam-next-work-feeds-history
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '        closed = _plan.load_history(child_root)'
+  replace_with: '        closed = []'
+  tests:
+  - tests/unit/test_plan_history_seam.py
+  why: 'Разнос плана на активное и закрытое даёт правду только если историю видят ВСЕ потребители. Именно
+    этот шов сломался 14.08.2026: `ai-ops next` отказался советовать работу, потому что `depends_on` смотрел
+    на работу, уехавшую в историю. Механизм был исправен, шов — нет.'
+- id: product-options-are-required
+  kind: guard
+  file: ai_ops_kit/validation/validate_product_objects.py
+  find: '    if not isinstance(opts, list) or len(opts) < 2:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_product_objects.py
+  why: Решение с одним вариантом — оформление уже принятого. Снять эту охрану значит вернуть продуктовый
+    пакет, который выглядит обоснованным и им не является.
+- id: product-readout-crosscheck-guardrails
+  kind: guard
+  file: ai_ops_kit/validation/validate_product_objects.py
+  find: '    missing = sorted(declared - reported)'
+  replace_with: '    missing = []'
+  tests:
+  - tests/unit/test_product_objects.py
+  why: Умолчание о заранее объявленном guardrail читается как «всё в порядке» — сверка readout с контрактом
+    единственное, что это ловит.
+- id: product-objects-validator-is-under-contract
+  kind: seam
+  covers:
+  - ai_ops_kit/validation/validate_product_objects.py
+  file: tests/unit/test_validator_contract.py
+  find: '    "validate_product_objects",'
+  replace_with: '    # снят из контракта'
+  tests:
+  - tests/unit/test_validator_contract.py::test_list_matches_reality
+  why: 'ШОВ регистрации: валидатор со швом `check(data)`, не внесённый в контракт, остаётся вне проверок
+    — «объявлено, но не исполняется». Первая версия этой пробы ВЫЖИЛА и показала, что снятие из рантайм-списка
+    ничего не ломает: валидатор держался вторым списком. Несущий шов — именно контракт `check(data)`,
+    и проба теперь ломает его.'
+- id: acceptance-not-gated-by-review-flag
+  kind: guard
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '    if _ac_items and reviewer_proposer is not None and committed_sha:'
+  replace_with: '    if _ac_items and review and reviewer_proposer is not None and committed_sha:'
+  tests:
+  - tests/unit/test_acceptance_verify_seam.py
+  why: 'Полевой замер 14.08: судья включается автоподбором, для QUICK review=False — и сверка не работала
+    на классе задач, где родился B2-14. Возврат условия под флаг снова выключит механизм на самом частом
+    пути.'
+- id: owner-path-wrapper-passes-path-before-flags
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  file: templates/runtime/ai-ops-entry.sh
+  find: '    exec "$py" "$managed/tools/ai_ops_cli.py" "$intent" "$here" "$@"'
+  replace_with: '    exec "$py" "$managed/tools/ai_ops_cli.py" "$@" "$here"'
+  tests:
+  - tests/unit/test_field_findings_bnbm_rerun.py
+  why: 'ШОВ пути владельца: пока путь дописывался последним, `./ai-ops run "текст" --execute` падал сырым
+    argparse — исполнить задачу через обёртку было нельзя вовсе.'
+- id: resume-refuses-without-live-provider
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    if explicit or not isinstance(res, dict):'
+  replace_with: '    if True:'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py
+  why: 'F-026 (поле 15.08, «Окошко»): исполняющий прогон с заглушкой не вызывает модель и не делает правок,
+    а отчитывался `resumed=True` — ложный green, видимый только в `--json`. Снять отказ — вернуть ровно
+    тот заход, который владелец приняла за работу.'
+- id: resume-task-stays-product-task
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '        task = a.task or _pt["task"]'
+  replace_with: '        task = a.task or (pf.get("next_action") if pf.get("can_resume") else None)'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py
+  why: 'F-027 (поле 15.08, «Окошко»): задачей продолжения становился служебный next_action кита, и автор
+    честно писал требования ПРО ГЕЙТЫ КИТА вместо продукта. Продуктовая спека при этом цела — потому
+    подмена и выглядела осмысленной работой.'
+- id: engine-refuses-service-task-on-resume
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '            if is_service_text(task_text):'
+  replace_with: '            if False:'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py::TestProductTaskSurvivesResume::test_engine_refuses_service_task_even_from_a_direct_caller
+  why: 'Та же охрана, что и предыдущая, но В ДВИЖКЕ: путь resume есть не только у CLI. Проверка в одном
+    слое означала бы, что прямой вызывающий по-прежнему может авторить служебную задачу.'
+- id: owner-path-does-not-declare-mock-for-the-human
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        if a.provider:'
+  replace_with: '        if a.provider or True:'
+  tests:
+  - tests/unit/test_field_findings_cockpit.py::TestLiveProviderOrRefusal::test_user_cli_does_not_declare_mock_for_the_human
+  why: 'ШОВ пути человека: `ai-ops resume` объявлял `--provider mock` ЗА владельца, поэтому автовыбор живого
+    провайдера в движке не мог сработать в принципе — сколько бы его там ни чинили.'
+- id: specify-adds-sections-for-raised-level
+  kind: guard
+  file: ai_ops_kit/gates/spec_levels.py
+  find: '        return _add_missing_sections(sp, cls)'
+  replace_with: '        return sp, False, {"added": [], "error": None}'
+  tests:
+  - tests/unit/test_spec_levels.py
+  why: 'F-029 (поле 15.08, повтор находки другой дочки): кит звал заполнить 9 разделов, а в файле лежало 6
+    разделов прошлого уровня — заполнять было нечего, и `run` блокировался на разделах, которых шаблон не
+    создавал. Ранний выход возвращает ровно этот тупик.'
+- id: specify-path-reaches-the-spec-file
+  kind: seam
+  covers:
+  - ai_ops_kit/gates/spec_levels.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        sp, created, spec_rep = spec_levels.create_spec(Path(child_root), wid, signals,'
+  replace_with: '        sp, created, spec_rep = (spec_levels._spec_path(Path(child_root), wid), False, {"added": [], "error": None}); _unused = (lambda *a, **k: None)('
+  tests:
+  - tests/unit/test_field_findings_cockpit.py::TestSpecifyPathAddsSections
+  why: 'ШОВ пути человека к механизму уровней спеки: модульная проверка `create_spec` остаётся зелёной,
+    когда до механизма не доходит `ai-ops specify` — а дефект F-029 жил именно так, между командой и файлом.'
+- id: staleness-dead-references-reported
+  kind: guard
+  file: ai_ops_kit/planning/staleness.py
+  find: '    return {"commits": n, "since": sha[:12], "plan_rel": plan_rel} if n else None'
+  replace_with: '    return None'
+  tests:
+  - tests/unit/test_staleness_and_provenance.py
+  why: '«План отстал от истории» — половина ответа на пассивность кита: без неё он снова будет молчать
+    о том, что работа идёт мимо объявленного.'
+- id: staleness-reaches-the-answer
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/staleness.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '    return {"schema_version": 1, "plan_present": True, "staleness": stale,'
+  replace_with: '    return {"schema_version": 1, "plan_present": True,'
+  tests:
+  - tests/unit/test_staleness_and_provenance.py
+  why: 'ШОВ: механизм существовал и раньше по духу — не хватало того, чтобы человек его ВИДЕЛ. Проверка,
+    не доехавшая до ответа, равна отсутствующей.'

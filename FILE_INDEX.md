@@ -595,9 +595,9 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/context/` (9) — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
   `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `repo_graph`,
   `semantic_lite`
-- `ai_ops_kit/engine/` (18) — исполнение: `ai_ops_run`, `execution_pipeline` (+`pipeline_*`),
+- `ai_ops_kit/engine/` (19) — исполнение: `ai_ops_run`, `execution_pipeline` (+`pipeline_*`),
   `tool_broker`, `tool_loop`, `worktree`, `gitio`, `run_plan`, `run_handoff`, `budget`,
-  `atomic_planner`, `workpackage_executor`, `parallel_{planner,executor,live}`
+  `acceptance_verify`, `atomic_planner`, `workpackage_executor`, `parallel_{planner,executor,live}`
 - `ai_ops_kit/gates/` (13) — гейты и допуск: `gate_executor`, `gate_policy`, `gate_runtime`,
   `gate_result_v2`, `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
   `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
@@ -605,6 +605,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`
 - `ai_ops_kit/lifecycle/` (6) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
   `active_work`, `run_report`, `merge_memory`
+- `ai_ops_kit/planning/staleness.py` — две проверки на ПРОТУХАНИЕ: описание ссылается на то, чего нет, и план отстал от истории (14.08.2026)
 - `ai_ops_kit/planning/` (5) — контур Planning & Execution модели продуктового репозитория (v3.35):
   `contours` (состояние контуров + связность изменения с источниками истины; `unknown != not_changed`),
   `delivery_plan` (`planning/plan.yaml`, вывод статуса из графа/гейтов/активной работы),
@@ -623,9 +624,10 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `presenter` (Human Communication Layer v3.35: контракт `UserMessage` и три аудитории; наружу
   выходит смысл, а не внутреннее состояние)
 - `ai_ops_kit/cli/` (1) — `ai_ops_cli`
-- `ai_ops_kit/devtools/` (8) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
+- `ai_ops_kit/devtools/` (9) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
   (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
-  `kit_observability`, `model_comparison`, `promotion_qual`, `qual_run`, `retrieval_bench`
+  `kit_observability`, `model_comparison`, `mutation_probe`, `promotion_qual`, `qual_run`,
+  `retrieval_bench`
 
 ## validation/
 
@@ -658,6 +660,9 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/validation/validate_openspec_change.py`
 - `ai_ops_kit/validation/validate_presets.py`
 - `ai_ops_kit/validation/validate_references.py`
+- `ai_ops_kit/validation/validate_product_objects.py` — четыре управляющих объекта продукта: утверждение называет основание, решение имеет альтернативы и условие пересмотра, baseline — дату и источник, readout сверяется с контрактом (2026-08-14)
+- `ai_ops_kit/validation/validate_mutation_probes.py` — реестр охранных проверок: образец охраны обязан существовать РОВНО один раз, иначе проба молча ничего не проверяет (2026-08-14)
+- `ai_ops_kit/validation/validate_acceptance_result.py` — вердикт сверки критериев приёмки: вердикт по КАЖДОМУ критерию, `met` требует цитаты и источника (B2-14, 2026-08-14)
 - `ai_ops_kit/validation/validate_reviewer_result.py` — структурный результат ревьюера (v2.33)
 - `ai_ops_kit/validation/validate_security_posture.py`
 - `ai_ops_kit/validation/validate_stale_gates.py`
@@ -710,6 +715,9 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `packages/layering.yaml` — слои 12 пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
 - `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
+- `tools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
+- `tools/staleness.py` — проверки протухания: мёртвые ссылки описания и отставание плана от истории (14.08.2026)
+- `tools/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
 - `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
 - `tools/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
 - `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)

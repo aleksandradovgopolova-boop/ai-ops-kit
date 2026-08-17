@@ -65,6 +65,17 @@ def advise(signals, snapshot=None, child_root=None):
         elif state == "unknown":
             add(1, "session_hygiene", "объём контекста неизвестен — передайте `--context N` из /context рантайма "
                                       "для точной оценки")
+        # Потолок РАСХОДА СЕССИИ, а не только текущего контекста (2026-08-13). Названо отдельной
+        # строкой намеренно: после компакции контекст возвращается в «норму», и совет по контексту
+        # молчит — а сессия к этому моменту уже оплатила перечитывание истории десятки раз.
+        spend = _sg.classify_session_spend((snapshot or {}).get("session_total_tokens"), pol)
+        if spend == "over_budget":
+            add(1, "session_hygiene", "сессия исчерпала потолок расхода (session_token_budget) — "
+                                      "новый блок работы начинать в чистой сессии; `ai-ops session` "
+                                      "даст точную команду")
+        elif spend == "attention":
+            add(1, "session_hygiene", "расход сессии подходит к потолку — следующую независимую "
+                                      "задачу лучше начать в новой сессии")
     except Exception as _e:  # noqa: BLE001 — совет не роняет прогон; пропуск НАЗЫВАЕТСЯ, см. skipped()
         skipped(1, "session_hygiene", _e)
 

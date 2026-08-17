@@ -1,0 +1,44 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1105
+request_id: RR-014
+statement: >
+  САМО-EVIDENCE (о собственном коде кита — помечено для спот-чека судьи). Прямое сравнение по
+  одному механизму, где сосед сильнее: привязка человеческого одобрения к содержимому.
+  У кита `ApprovalRecord` (ai_ops_kit/gates/approvals.py) хранит approval-домен, approved_by,
+  scope, reason, created_at и поддерживает `binds_to` (хеш плана/спеки), `expires_at`, `risk` и
+  `source` из доверенного контекста. Но полнота связывания УСЛОВНА: `binds_to`/`expires_at`/`risk`
+  обязательны только при strict=True, то есть для доменов с severity high/critical и для
+  destructive; для остальных доменов они «проверяются при наличии поля», а CLI-запись по
+  умолчанию ставит revision='-'. У mestre-yoda (EV-1104) связывание БЕЗУСЛОВНО: prdDigest,
+  specDigest и challenge — required-поля схемы для любого одобрения.
+  Обратное тоже верно и в пользу кита: у него есть срок годности одобрения (`expires_at`),
+  ранжирование по риску и требование, чтобы identity приходил из доверенного источника, а не
+  из произвольной строки модели, — ничего из этого в схеме соседа нет (approver там просто id).
+  То есть ни одна сторона не доминирует; заимствуемая идея одна и конкретная — сделать привязку
+  к содержимому безусловной, а не привилегией high-risk доменов.
+evidence_type: inference
+derived_from: [EV-1104]
+source:
+  title: "ai_ops_kit/gates/approvals.py + schemas/state/approval.v1.schema.json (сосед)"
+  url: ""
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "approvals.py:233-253 (_record_reason_invalid, ветка strict), approvals.py:307/350 (write_record, revision='-' по умолчанию); approval.v1.schema.json (список required)"
+  quote: "high-risk одобрение требует связывания (schema v2)"
+captured_at: "2026-08-13"
+captured_by: "research-модуль, прогон RR-014 (self-evidence, требует спот-чека)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-13"
+reliability:
+  level: medium
+  rationale: >
+    Обе стороны прочитаны в исходниках, но это self-evidence о ките: сравнение проводит тот же,
+    кто заинтересован в выводе, поэтому reliability не выше medium — по правилу центра
+    (negative/self-claims не выше medium). Не проверялось: как часто binds_to заполняется на
+    практике в реальных прогонах — это вопрос замера, а не чтения кода.
+status: active
+superseded_by: null

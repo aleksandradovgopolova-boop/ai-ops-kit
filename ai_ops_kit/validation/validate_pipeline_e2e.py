@@ -3,7 +3,8 @@
 
 CI кита раньше гонял в основном selftest-модули и статические валидаторы. Этот харнесс закрывает
 разрыв ДЕТЕРМИНИРОВАННО, без живой модели: поднимает настоящий git-репозиторий из python-фикстуры,
-прогоняет ПОЛНЫЙ путь контроллера `ai-ops run --engine pipeline --execute` со scripted-proposer
+прогоняет ПОЛНЫЙ путь контроллера `ai_ops_run.py run … --engine pipeline --execute` со
+scripted-proposer (`--engine` — флаг внутренней точки входа; у `ai-ops` его нет)
 (вместо LLM) и проверяет всю цепочку в одной транзакции (v2.94):
 
   task -> RunPlan -> WorkItem -> active-work -> pipeline (detect -> tool-loop -> commit на ветке ->

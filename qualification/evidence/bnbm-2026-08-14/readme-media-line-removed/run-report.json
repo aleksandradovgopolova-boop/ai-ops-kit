@@ -1,0 +1,617 @@
+{
+  "schema_version": 1,
+  "kind": "execution-pipeline",
+  "workitem_id": "readme-media-line-removed",
+  "child_root": ".",
+  "base_workflow": "QUICK",
+  "profile": {
+    "stacks": [
+      "node"
+    ],
+    "display": [
+      "node (npm)"
+    ],
+    "undetermined": [
+      "node: не выведены команды lint, typecheck, test — нет доказательства в репозитории (конфиг инструмента / скрипт / Makefile-цель / шаг CI); задать вручную/подтвердить"
+    ]
+  },
+  "containment": {
+    "sandbox": true,
+    "shell_mode": "allowlist",
+    "block_push": true,
+    "allow_network": true,
+    "shell_path_guard": true,
+    "shell_scope_guard": false,
+    "shell_path_violations": 0,
+    "note": "enforceable-подмножество на уровне брокера: пути закрыты на обоих каналах (write — до, shell — пост-фактум с откатом); запись вне корня репозитория, сеть и не-git деревья — по-прежнему нет; полная FS/сеть/ресурс-изоляция — контейнерный runtime"
+  },
+  "loop": {
+    "stopped": "done",
+    "steps": 4,
+    "applied_writes": 1,
+    "denied": 0,
+    "denied_reasons": [],
+    "transcript": [
+      {
+        "step": 0,
+        "op": "read",
+        "allowed": true,
+        "ok": true,
+        "reason": "чтение в пределах репозитория"
+      },
+      {
+        "step": 1,
+        "op": "write",
+        "allowed": true,
+        "ok": true,
+        "reason": "запись в пределах write_scope"
+      },
+      {
+        "step": 2,
+        "op": "shell",
+        "allowed": true,
+        "ok": true,
+        "reason": "shell в пределах уровня execution"
+      },
+      {
+        "step": 3,
+        "done": true
+      }
+    ]
+  },
+  "isolation": {
+    "worktree": ".ai/worktrees/readme-media-line-removed"
+  },
+  "base_binding": {
+    "base_ref": "main",
+    "base_sha": "0cd5bb07dd277cc8c6d513842c3454d86a38b958",
+    "mode": "auto",
+    "source": "current-branch"
+  },
+  "resume": null,
+  "prepare": [
+    {
+      "language": "node",
+      "command": "npm ci",
+      "allowed": true,
+      "ok": true,
+      "exit_code": 0,
+      "output_tail": "cripts   fsevents@2.3.3 (install: (install scripts present))\nnpm warn install-scripts\nnpm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.\n"
+    }
+  ],
+  "prepare_ok": true,
+  "env_qualified": true,
+  "prepare_mutated_tree": false,
+  "commit": {
+    "branch": "ai-ops/readme-media-line-removed",
+    "sha": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+    "evidence_revision": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+    "evidence_on_exact_sha": true,
+    "changed_files": [
+      "README.md"
+    ],
+    "produced_by": "broker",
+    "tree_clean_before_checks": true,
+    "tree_clean_after_checks": true
+  },
+  "regression": {
+    "kind": "RegressionEvidence",
+    "status": "not_applicable",
+    "base_sha": "0cd5bb07dd277cc8c6d513842c3454d86a38b958",
+    "head_sha": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+    "checks": [],
+    "tests_changed": [],
+    "code_changed": [],
+    "docs_changed": [
+      "README.md"
+    ],
+    "reason": "правок кода нет (только тесты и/или документация) — доказывать нечего"
+  },
+  "checks": {},
+  "exemptions": [
+    "build_passed",
+    "lint_passed",
+    "tests_passed",
+    "typecheck_passed"
+  ],
+  "tests_warn": null,
+  "gates": {
+    "evaluated": [
+      "intake_completeness",
+      "concurrency_preflight",
+      "implementation_verification"
+    ],
+    "unmet": [],
+    "blocked": false,
+    "other_blocking_unmet": [],
+    "gate_results": [
+      {
+        "schema_version": 1,
+        "gate": "intake_completeness",
+        "status": "pass",
+        "blocking": true,
+        "checks": [],
+        "blockers": [],
+        "warnings": [],
+        "evidence": [
+          "intake из сигналов: classified_type, size, risk"
+        ],
+        "tested_revision": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+        "owner": "intake-classifier",
+        "review_mode": "writer",
+        "created_at": null,
+        "expires_at": null,
+        "override": null
+      },
+      {
+        "schema_version": 1,
+        "gate": "concurrency_preflight",
+        "status": "warn",
+        "blocking": false,
+        "checks": [],
+        "blockers": [],
+        "warnings": [
+          "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+        ],
+        "evidence": [],
+        "tested_revision": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+        "owner": "intake-classifier",
+        "review_mode": "writer",
+        "created_at": null,
+        "expires_at": null,
+        "override": null
+      },
+      {
+        "schema_version": 1,
+        "gate": "implementation_verification",
+        "status": "pass",
+        "blocking": true,
+        "checks": [],
+        "blockers": [],
+        "warnings": [
+          "освобождено (изменение только документации — продуктовые проверки не применимы): build_passed, lint_passed, typecheck_passed, tests_passed"
+        ],
+        "evidence": [
+          "skip_reason:docs_only",
+          "revision:1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466"
+        ],
+        "tested_revision": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+        "owner": "final-verifier",
+        "review_mode": "read-only",
+        "created_at": null,
+        "expires_at": null,
+        "override": null
+      }
+    ],
+    "tested_revision": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466"
+  },
+  "approval_recheck": {
+    "ok": true,
+    "uncovered": []
+  },
+  "contour_consistency": {
+    "status": "pass",
+    "provided": [
+      "affects",
+      "changed_files",
+      "verdict"
+    ],
+    "evidence": [
+      "изменённых путей 1 · вердикт ok",
+      "контуров без сигнальных путей (состояние не определяется): research_decisions, system_architecture, analytics_learning"
+    ],
+    "report": {
+      "comparable": true,
+      "derived": {
+        "product_strategy": {
+          "state": "not_changed",
+          "matched": [],
+          "signals": 2,
+          "reason": "сигнальные пути контура в репозитории есть и не затронуты"
+        },
+        "research_decisions": {
+          "state": "unknown",
+          "matched": [],
+          "signals": 4,
+          "reason": "ни один сигнальный путь контура в репозитории не найден — кит не умеет видеть этот контур здесь (доопределить: .ai-ops.yaml -> product_operating_model)"
+        },
+        "planning_execution": {
+          "state": "not_changed",
+          "matched": [],
+          "signals": 1,
+          "reason": "сигнальные пути контура в репозитории есть и не затронуты"
+        },
+        "system_architecture": {
+          "state": "unknown",
+          "matched": [],
+          "signals": 6,
+          "reason": "ни один сигнальный путь контура в репозитории не найден — кит не умеет видеть этот контур здесь (доопределить: .ai-ops.yaml -> product_operating_model)"
+        },
+        "data_contracts": {
+          "state": "not_changed",
+          "matched": [],
+          "signals": 9,
+          "reason": "сигнальные пути контура в репозитории есть и не затронуты"
+        },
+        "engineering_quality_security": {
+          "state": "not_changed",
+          "matched": [],
+          "signals": 4,
+          "reason": "сигнальные пути контура в репозитории есть и не затронуты"
+        },
+        "delivery_operations": {
+          "state": "not_changed",
+          "matched": [],
+          "signals": 7,
+          "reason": "сигнальные пути контура в репозитории есть и не затронуты"
+        },
+        "analytics_learning": {
+          "state": "unknown",
+          "matched": [],
+          "signals": 5,
+          "reason": "ни один сигнальный путь контура в репозитории не найден — кит не умеет видеть этот контур здесь (доопределить: .ai-ops.yaml -> product_operating_model)"
+        }
+      },
+      "declared": {},
+      "findings": [
+        {
+          "id": "unknown_contour",
+          "contour": "research_decisions",
+          "severity": "info",
+          "detail": "ни один сигнальный путь контура в репозитории не найден — кит не умеет видеть этот контур здесь (доопределить: .ai-ops.yaml -> product_operating_model)"
+        },
+        {
+          "id": "unknown_contour",
+          "contour": "system_architecture",
+          "severity": "info",
+          "detail": "ни один сигнальный путь контура в репозитории не найден — кит не умеет видеть этот контур здесь (доопределить: .ai-ops.yaml -> product_operating_model)"
+        },
+        {
+          "id": "unknown_contour",
+          "contour": "analytics_learning",
+          "severity": "info",
+          "detail": "ни один сигнальный путь контура в репозитории не найден — кит не умеет видеть этот контур здесь (доопределить: .ai-ops.yaml -> product_operating_model)"
+        }
+      ],
+      "verdict": "ok"
+    }
+  },
+  "reviews": null,
+  "ui_evidence": null,
+  "seam_scan": {
+    "mode": "advisory",
+    "would_block": false,
+    "blockers": [],
+    "advisories": [],
+    "findings": []
+  },
+  "security_scan": {
+    "overall": "clear",
+    "applicable_domains": [
+      "secrets"
+    ],
+    "blocking": [],
+    "needs_review": []
+  },
+  "authored": null,
+  "baseline": {
+    "checks": {
+      "build": "pass",
+      "lint": "not_run",
+      "typecheck": "not_run",
+      "test": "not_run"
+    },
+    "regressions": [],
+    "fixed": [],
+    "no_regressions": true
+  },
+  "ready_criterion": "no-regressions",
+  "spec_depth": {
+    "level": 0,
+    "missing": [],
+    "ok": true
+  },
+  "spec_first": {
+    "artifact_present": true,
+    "incomplete_sections": [],
+    "ok": true,
+    "prestage": {
+      "ran": false,
+      "invalid": [],
+      "implementation_skipped": false
+    }
+  },
+  "context_overflow": false,
+  "ready_for_pr": true,
+  "delivery": {
+    "requested": true,
+    "base_binding": {
+      "base_ref": "main",
+      "base_sha": "0cd5bb07dd277cc8c6d513842c3454d86a38b958",
+      "mode": "explicit",
+      "resolved": true,
+      "source": "explicit-local",
+      "reason": null
+    },
+    "status": "opened",
+    "pr": {
+      "status": "opened",
+      "url": "https://github.com/aleksandradovgopolova-boop/bolshe-ne-budu-menshe/pull/111",
+      "number": 111,
+      "draft": true,
+      "base": "main",
+      "repository": "aleksandradovgopolova-boop/bolshe-ne-budu-menshe",
+      "head_sha": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466"
+    },
+    "delivery_id": "e5ba453a627c253c",
+    "remote_sha": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+    "sha_verified": true,
+    "receipt": "features/readme-media-line-removed/delivery-outbox/e5ba453a627c253c.receipt.yaml"
+  },
+  "delivery_plan": {
+    "ready_for_delivery": true,
+    "work_root": ".ai/worktrees/readme-media-line-removed",
+    "work_branch": "ai-ops/readme-media-line-removed",
+    "base_ref": "main",
+    "base_sha": "0cd5bb07dd277cc8c6d513842c3454d86a38b958",
+    "committed_sha": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+    "wid": "readme-media-line-removed",
+    "task": "удалить из README строку про каталог public/media",
+    "base_binding": {
+      "base_ref": "main",
+      "base_sha": "0cd5bb07dd277cc8c6d513842c3454d86a38b958",
+      "mode": "explicit",
+      "resolved": true,
+      "source": "explicit-local",
+      "reason": null
+    }
+  },
+  "overall_status": "delivered",
+  "draft_pr": null,
+  "not_yet": [],
+  "runtime": "claude-code",
+  "engine": "pipeline",
+  "provider": "claude-cli",
+  "provider_resolution": {
+    "provider": "claude-cli",
+    "source": "claude-cli-in-path",
+    "reason": "claude CLI найден в PATH (локальная сессия, API-ключ не нужен)",
+    "warning": null
+  },
+  "model": null,
+  "model_resolution": {
+    "kind": "ModelResolution",
+    "plan": {
+      "implementation": {
+        "kind": "ModelResolutionResult",
+        "resolved": true,
+        "role": "implementation",
+        "model_id": "deepseek-v4-flash",
+        "provider": "deepseek",
+        "revision": "deepseek-v4-flash",
+        "status": "conditional",
+        "cost_basis": "money",
+        "qualification_evidence": "deepseek-v4-flash@deepseek-v4-flash/implementation#live-qual-2026-07-28-N6",
+        "estimated_cost": 0.0115,
+        "cost_currency": "USD",
+        "reason": "cheapest-eligible (conditional, money)",
+        "fallback": {
+          "model_id": "qwen3-coder-plus",
+          "revision": "qwen3-coder-plus",
+          "provider": "qwen",
+          "status": "conditional"
+        },
+        "escalation_ladder": [
+          {
+            "model_id": "kimi-k2.7-code-highspeed",
+            "provider": "kimi",
+            "revision": "kimi-k2.7-code-highspeed",
+            "status": "conditional",
+            "basis": "higher_observed_success_rate",
+            "observed_success_rate": 1.0,
+            "corpus_version": "live-qual-2026-07-28-N6"
+          },
+          {
+            "model_id": "qwen3-coder-plus",
+            "provider": "qwen",
+            "revision": "qwen3-coder-plus",
+            "status": "conditional",
+            "basis": "higher_observed_success_rate",
+            "observed_success_rate": 0.833,
+            "corpus_version": "live-qual-2026-07-28-N6"
+          }
+        ]
+      },
+      "code_review": {
+        "kind": "ModelResolutionResult",
+        "resolved": false,
+        "role": "code_review",
+        "reason": "нет допущенной модели для роли (qualified∨conditional при false_green=0)",
+        "required_class": [
+          "balanced",
+          "high-reasoning"
+        ],
+        "escalation": {
+          "needs": "qualified∨conditional model в требуемом классе / человек",
+          "escalate_scope": "review_only"
+        }
+      },
+      "security_review": {
+        "kind": "ModelResolutionResult",
+        "resolved": false,
+        "role": "security_review",
+        "reason": "нет QUALIFIED судьи для роли (строгая роль: conditional НЕ годится, safety over economy)",
+        "required_class": [
+          "high-reasoning"
+        ],
+        "escalation": {
+          "needs": "qualified судья / человек",
+          "escalate_scope": "review_only"
+        }
+      },
+      "integration_judge": {
+        "kind": "ModelResolutionResult",
+        "resolved": false,
+        "role": "integration_judge",
+        "reason": "нет QUALIFIED судьи для роли (строгая роль: conditional НЕ годится, safety over economy)",
+        "required_class": [
+          "high-reasoning"
+        ],
+        "escalation": {
+          "needs": "qualified судья / человек",
+          "escalate_scope": "review_only"
+        }
+      },
+      "preferred_writer_tier": {
+        "tier": "cheap-api",
+        "provider_hint": "money-mode",
+        "reason": "task_type=QUICK -> дешёвый qualified writer (money-mode)"
+      },
+      "role_constraints_applied": [],
+      "writer_ne_judge_by_model": false
+    },
+    "applied": false,
+    "mode": "router",
+    "notes": []
+  },
+  "preflight": {
+    "schema_version": 1,
+    "kind": "PreflightTruth",
+    "ok": true,
+    "blocked": false,
+    "task_type": "QUICK",
+    "checks": {
+      "classification": {
+        "ok": true,
+        "task_type": "QUICK"
+      },
+      "context_payload": {
+        "ok": true,
+        "built": true
+      },
+      "spec": {
+        "ok": true,
+        "artifact_present": true,
+        "missing": [],
+        "required_for_heavy": false,
+        "author_stage": false
+      },
+      "atomic": {
+        "ok": true,
+        "should_decompose": false,
+        "selected_package": null,
+        "selected_valid": false
+      },
+      "context_budget": {
+        "ok": true,
+        "overflow": false
+      },
+      "approvals": {
+        "ok": true,
+        "required": [],
+        "missing": []
+      },
+      "lifecycle": {
+        "ok": true,
+        "errors": []
+      },
+      "economic_budget": {
+        "ok": true,
+        "verdict": "proceed",
+        "estimate_status": "measured_history",
+        "cost_median": 1.675957,
+        "cost_max": 3.979588,
+        "sample_tasks": 4,
+        "advisories": []
+      }
+    },
+    "reasons": []
+  },
+  "lifecycle": {
+    "workitem": "features/readme-media-line-removed/workitem.yaml",
+    "run_plan": "features/readme-media-line-removed/run-plan.yaml",
+    "context_bundle": "features/readme-media-line-removed/context-bundle.yaml",
+    "context_payload": "features/readme-media-line-removed/context-payload.yaml",
+    "spec_coverage": "features/readme-media-line-removed/spec-coverage.yaml",
+    "work_package": "features/readme-media-line-removed/work-package.yaml",
+    "active_work": ".ai/runtime/active-work.yaml",
+    "run_report": "features/readme-media-line-removed/run-report.json",
+    "run_handoff": "features/readme-media-line-removed/run-handoff.yaml",
+    "concurrency_preflight": {
+      "conflicts": [
+        {
+          "kind": "area",
+          "id": "status-doc-matches-reality",
+          "branch": "ai-ops/status-doc-matches-reality",
+          "owner_session": "cli",
+          "detail": [
+            "unspecified"
+          ]
+        },
+        {
+          "kind": "area",
+          "id": "readme-matches-reality",
+          "branch": "ai-ops/readme-matches-reality",
+          "owner_session": "cli",
+          "detail": [
+            "unspecified"
+          ]
+        }
+      ]
+    }
+  },
+  "context_bundle": {
+    "estimated_tokens": 9627,
+    "context_budget": 120000,
+    "overflow": false,
+    "agents": [
+      "documentation-steward",
+      "final-verifier",
+      "implementation-integrator",
+      "intake-classifier"
+    ],
+    "rules": [
+      "core",
+      "engineering"
+    ],
+    "excluded_count": 56
+  },
+  "context_payload": {
+    "payload_tokens": 7120,
+    "payload_budget": 72000,
+    "context_budget": 120000,
+    "included_items": 22,
+    "excluded_for_budget": 0,
+    "fed_to_model": true
+  },
+  "spec_coverage": {
+    "level": 0,
+    "level_name": "L0 QUICK",
+    "escalated_from": null,
+    "blocking_missing": [],
+    "needs_human": [],
+    "spec_artifact": true,
+    "covered_sections": [
+      "acceptance_criteria",
+      "affected_files",
+      "constraints",
+      "expected_behavior",
+      "goal",
+      "scope"
+    ],
+    "provided_sources": {}
+  },
+  "work_package": {
+    "atomic": true,
+    "should_decompose": false,
+    "decomposition_axes": [],
+    "decomposition_reasons": [],
+    "primary_axis": null,
+    "work_packages": []
+  },
+  "handoff": {
+    "next_action": "открыть/обновить draft PR (--open-pr) либо передать на ревью человеку",
+    "resume_from_revision": "1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466",
+    "open_questions": []
+  }
+}

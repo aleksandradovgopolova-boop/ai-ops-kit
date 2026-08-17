@@ -184,7 +184,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                          f"{existing.get('workflow')} != {workflow_id}. Используйте --fresh.")
 
     # execution budget (v2.38): жёсткий потолок вызовов модели; enforcement ДО вызова
-    from ai_ops_kit.engine import budget as _budget_mod
+    from ai_ops_kit.shared import budget as _budget_mod
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     budget_exceeded = None
 

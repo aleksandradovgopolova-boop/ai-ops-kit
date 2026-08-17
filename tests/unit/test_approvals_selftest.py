@@ -23,6 +23,27 @@ from approvals import (  # noqa: F401 — имена, которые испол�
 )
 
 
+def _plant_plan(root, wid, body="base_workflow: ENGINEERING\ngates: [a]\n"):
+    """План на диске — предусловие ЛЮБОГО одобрения с v3.37: привязка к содержимому безусловна,
+    поэтому связывать одобрение не с чем, пока нет run-plan.yaml/spec.yaml."""
+    fdir = Path(root) / "features" / str(wid)
+    fdir.mkdir(parents=True, exist_ok=True)
+    (fdir / "run-plan.yaml").write_text(body, encoding="utf-8")
+    return fdir
+
+
+def _plant_legacy_record(root, wid, approval, **fields):
+    """Запись БЕЗ binds_to — такие лежат на дисках дочек с версий до v3.37. Пишем YAML напрямую:
+    `write_record` создать её больше не может, а проверять поведение на ней надо."""
+    import yaml
+    d = Path(root) / "features" / str(wid) / "approvals"
+    d.mkdir(parents=True, exist_ok=True)
+    rec = {"schema_version": 1, "kind": "ApprovalRecord", "approval": approval,
+           "approved_by": "u@x", "scope": "package.json", "reason": "legacy",
+           "created_at": "2026-07-05T00:00:00Z", **fields}
+    (d / f"{approval}.yaml").write_text(yaml.safe_dump(rec, allow_unicode=True), encoding="utf-8")
+
+
 @pytest.mark.slow
 def test_approvals_selftest():
     import tempfile
@@ -70,6 +91,7 @@ def test_approvals_selftest():
            covers_dependency({"covers_packages": ["requests@9.9.9"]}, _f) is False)
     with tempfile.TemporaryDirectory() as _tdd:
         _r = Path(_tdd)
+        _plant_plan(_r, "wd")
         rc_no = recheck_dependencies(_r, "wd", [_f])
         expect("v3.0-rc5: recheck_dependencies — нет approval для пакета -> uncovered",
                rc_no["ok"] is False and rc_no["uncovered"][0]["name"] == "requests")
@@ -86,6 +108,7 @@ def test_approvals_selftest():
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
+        _plant_plan(root, "wi")
         # базовые + binding-механики (v2.121) тестируем на MEDIUM-risk домене (dependencies): он аддитивен
         # (binding не обязателен). strict schema v2 для HIGH-risk — отдельным блоком ниже.
         sig = {"dependency_addition": True}
@@ -140,6 +163,7 @@ def test_approvals_selftest():
         # ── v2.121 (P1.2 п.4): recheck после диффа — scope обязан покрыть изменённые пути ─────────
         with tempfile.TemporaryDirectory() as td2:
             r2 = Path(td2)
+            _plant_plan(r2, "w2")
             write_record(r2, "w2", "dependencies", "u@x", "package.json", "деп",
                          created_at="2026-07-05T00:00:00Z")
             rc_cov = recheck_after_diff(r2, "w2", ["package.json"], signals=sig, now="2026-07-05T00:00:00Z")
@@ -154,25 +178,59 @@ def test_approvals_selftest():
         expect("v2.121: covers_paths — путь вне scope НЕ покрыт",
                covers_paths({"scope": "src/auth"}, ["src/billing/pay.py"]) is False)
 
-        # аддитивность (medium домен): старая запись без binds_to/expires_at валидна как раньше
+        # ── v3.37: привязка к содержимому БЕЗУСЛОВНА (отменяет аддитивность v2.121) ────────────────
+        # Раньше здесь стояло обратное утверждение: «medium-домен без binds_to валиден (нет
+        # регрессии)». Решение владельца 13.08.2026 по RR-014/EV-1105: одобрение без привязки не
+        # отвечает на вопрос, ЧТО одобрено, и не принимается ни в одном домене.
         with tempfile.TemporaryDirectory() as td3:
             r3 = Path(td3)
-            write_record(r3, "w3", "dependencies", "u@x", "package.json", "деп", created_at="2026-07-05T00:00:00Z")
-            c_old = check(sig, r3, "w3", now="2026-07-18T00:00:00Z", plan_hash="anything")
-            expect("v2.121: medium-домен без binds_to/expires_at валиден (аддитивно, нет регрессии)",
-                   c_old["ok"] is True)
+            _plant_plan(r3, "w3")
+            _plant_legacy_record(r3, "w3", "dependencies")           # запись с дисков до v3.37
+            c_legacy = check(sig, r3, "w3", now="2026-07-18T00:00:00Z")
+            expect("v3.37: medium-домен без binds_to БОЛЬШЕ НЕ валиден (привязка безусловна)",
+                   c_legacy["ok"] is False and "не привязано к содержимому" in c_legacy["missing"][0]["reason"])
+
+            # связанная запись в том же домене принимается — правило про привязку, не про домен
+            write_record(r3, "w3", "dependencies", "u@x", "package.json", "деп",
+                         created_at="2026-07-05T00:00:00Z")
+            expect("v3.37: та же запись со связыванием -> принята",
+                   check(sig, r3, "w3", now="2026-07-18T00:00:00Z")["ok"] is True)
+
+            # привязка есть, но сверить её не с чем -> отказ (прежде такой вызов молча пропускал)
+            c_unverifiable = check(sig, r3, "w3", now="2026-07-18T00:00:00Z", plan_hash="")
+            expect("v3.37: привязку не с чем сверить -> запись отклонена, а не принята молча",
+                   c_unverifiable["ok"] is False
+                   and "не с чем сверить" in c_unverifiable["missing"][0]["reason"])
+
+        # несвязываемое одобрение не СОЗДАЁТСЯ: отказ на записи, а не отложенный отказ на проверке
+        with tempfile.TemporaryDirectory() as td3b:
+            r3b = Path(td3b)
+            try:
+                write_record(r3b, "w3b", "dependencies", "u@x", "package.json", "деп",
+                             created_at="2026-07-05T00:00:00Z")
+                refused = False
+            except ValueError as e:
+                refused = "нечем связать" in str(e)
+            expect("v3.37: без плана/спеки запись одобрения ОТКЛОНЕНА (не создаём заведомо невалидную)",
+                   refused)
 
         # ── v2.123 (Approval schema v2): HIGH-risk (secrets) требует ПОЛНОГО binding + доверенный source ──
         with tempfile.TemporaryDirectory() as td4:
             r4 = Path(td4)
+            _plant_plan(r4, "w4")
             hsig = {"secret_boundary": True}
             expect("v2.123: _is_high_risk(secrets)=True, dependencies=False (medium)",
                    _is_high_risk("secrets") and not _is_high_risk("dependencies"))
             # legacy: нет binding/source -> high-risk БОЛЬШЕ НЕ принимается
-            write_record(r4, "w4", "secrets", "u@x", "config/s.py", "ротация", created_at="2026-07-05T00:00:00Z")
+            _plant_legacy_record(r4, "w4", "secrets", scope="config/s.py")
             c_legacy = check(hsig, r4, "w4", now="2026-07-05T00:00:00Z", plan_hash="P")
-            expect("v2.123: high-risk legacy-запись без binding -> НЕ принята",
-                   c_legacy["ok"] is False and "schema v2" in c_legacy["missing"][0]["reason"])
+            expect("v3.37: high-risk legacy-запись без binding -> НЕ принята (теперь общим правилом)",
+                   c_legacy["ok"] is False and "не привязано к содержимому" in c_legacy["missing"][0]["reason"])
+            # strict-ветка не растворилась в общем правиле: привязка ЕСТЬ, но нет expires_at/risk/source
+            _plant_legacy_record(r4, "w4", "secrets", scope="config/s.py", binds_to="P")
+            c_partial = check(hsig, r4, "w4", now="2026-07-05T00:00:00Z", plan_hash="P")
+            expect("v2.123: high-risk со связыванием, но без expires_at/risk/source -> НЕ принята",
+                   c_partial["ok"] is False and "schema v2" in c_partial["missing"][0]["reason"])
             # полностью связанная + доверенный source -> принята
             write_record(r4, "w4", "secrets", "u@x", "config/s.py", "ротация",
                          created_at="2026-07-05T00:00:00Z", binds_to="P",

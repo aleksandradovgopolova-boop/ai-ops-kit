@@ -13,6 +13,7 @@
                       потом смотрим на код возврата и печать.
 """
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -305,10 +306,16 @@ def test_doctor_ok_on_fresh_install(installed, tmp_path):
     assert "Traceback" not in out
     assert "пути окружения: ✓" in out, out[-2000:]
     # Вердикт печатает человекочитаемый слой (v3.35.2), поэтому проверяем СМЫСЛ, а не строку
-    # `doctor: OK`: код возврата и отсутствие замечаний — то, что этот тест защищает.
+    # `doctor: OK`: код возврата и отсутствие БЛОКЕРОВ — то, что этот тест защищает.
     assert "Всё в порядке" in out, out[-2000:]
     assert "замечани" not in out.lower(), out[-2000:]
     assert r.returncode == 0, out[-2000:]
+    # НОВОЕ ТРЕБОВАНИЕ (14.08.2026): doctor обязан НАЗЫВАТЬ источник установки. В поле кит поставился
+    # из черновой ветки и промолчал, хотя знает, откуда себя берёт; у дочки не оказалось правил
+    # игнорирования, и первый коммит утащил в историю три десятка служебных файлов. Это ФАКТ в
+    # отчёте, а не замечание: делать из него замечание значило бы красить каждую dev-установку.
+    assert "источник:" in out, f"doctor не называет, откуда поставлен кит: {out[-2000:]}"
+    assert ("выпуск" in out or "НЕ ВЫПУСК" in out), out[-2000:]
 
 
 def test_doctor_blocks_on_residual_path_belt(installed, tmp_path):
@@ -531,15 +538,76 @@ def test_entry_point_honours_explicit_interpreter(installed):
     # был найден дефект: успешная команда роняла 11 `.pyc` в checksummed managed-слой.
     env = {"PATH": str(installed / "no-python-here"), "HOME": os.environ.get("HOME", "/tmp"),
            "AI_OPS_PYTHON": sys.executable}
+
+    # side-effect proof: кит не сорит в чужом репозитории. `.gitignore` установщик в дочку не
+    # пишет, поэтому байткод в managed уехал бы в коммит владельца по `git add -A`.
+    # R-39: замеряем ТОЛЬКО эффект своей команды — снимок до/до сравнивается со снимком после.
+    # Фикстура `installed` общая на модуль, и раньше этот assert краснел из-за байткода СОСЕДА,
+    # показывая при этом на обёртку, которая байткод как раз подавляет.
+    def _pyc():
+        return {str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")}
+
+    before = _pyc()
     r = subprocess.run([str(entry), "status"], cwd=str(installed), env=env,
                        capture_output=True, text=True, timeout=120)
     assert r.returncode in (0, 1), (
         f"AI_OPS_PYTHON={sys.executable} не был использован: rc={r.returncode}\n{r.stderr[:400]}")
     assert "идёт" in r.stdout or "не начата" in r.stdout, r.stdout[:300]
-    # side-effect proof: кит не сорит в чужом репозитории. `.gitignore` установщик в дочку не
-    # пишет, поэтому байткод в managed уехал бы в коммит владельца по `git add -A`.
-    pyc = [str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")]
-    assert not pyc, f"команда оставила байткод кита в managed-слое дочки: {pyc[:5]}"
+    left = sorted(_pyc() - before)
+    assert not left, f"команда оставила байткод кита в managed-слое дочки: {left[:5]}"
+
+
+def test_direct_installer_call_leaves_no_bytecode(installed):
+    """R-39: у кита ДВА документированных входа, а защита стояла на одном.
+
+    Обёртка `./ai-ops` экспортирует `PYTHONDONTWRITEBYTECODE=1` с ревизии 11.08, но прямой вызов
+    `python3 ~/ai-ops-kit/installer/ai_ops.py doctor` описан наравне с ней — и оставлял байткод.
+    Замер до правки: 19 файлов `.pyc` в checksummed `.ai/managed` за одну команду. Так и должно
+    быть по устройству: `doctor` намеренно импортирует доставленную копию из managed, а не свою.
+    """
+    import subprocess
+
+    def _pyc():
+        return {str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")}
+
+    before = _pyc()
+    r = subprocess.run([sys.executable, str(INSTALLER), "doctor"], cwd=str(installed),
+                       capture_output=True, text=True, timeout=180)
+    assert "Traceback" not in (r.stdout + r.stderr), (r.stdout + r.stderr)[-400:]
+    left = sorted(_pyc() - before)
+    assert not left, (
+        f"прямой вызов установщика оставил байткод в checksummed managed-слое: {left[:5]} "
+        f"(всего {len(left)}); `.gitignore` в дочку не пишется — это уедет в коммит владельца")
+
+
+@pytest.mark.parametrize("script", [
+    pytest.param("ai_ops_kit/validation/validate_ai_ops_child.py", id="валидатор"),
+    pytest.param("tools/ai_ops_cli.py", id="плоский-алиас"),
+])
+def test_running_from_managed_leaves_no_bytecode(installed, script):
+    """R-39, третий и четвёртый входы: человек зовёт код ИЗ managed напрямую.
+
+    Так это описано в документации и так родился F-025. Обёртка `./ai-ops` тут не участвует,
+    поэтому защита живёт в самих `_bootstrap` — условно, только когда корень оказался
+    managed-слоем дочки. В дереве самого кита байткод остаётся нормой.
+
+    Переменную `PYTHONDONTWRITEBYTECODE` из окружения СНИМАЕМ намеренно: её ставят группы CI, и
+    без снятия тест был бы зелёным в CI по чужой причине, ничего не проверяя.
+    """
+    import subprocess
+
+    def _pyc():
+        return {str(p.relative_to(installed)) for p in (installed / ".ai" / "managed").rglob("*.pyc")}
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
+    before = _pyc()
+    r = subprocess.run([sys.executable, str(installed / ".ai" / "managed" / script)],
+                       cwd=str(installed), capture_output=True, text=True, timeout=300, env=env)
+    left = sorted(_pyc() - before)
+    assert not left, (
+        f"запуск `{script}` из managed оставил байткод в checksummed-слое: {left[:5]} "
+        f"(всего {len(left)}); слой сверяется контрольными суммами — кит примет это за правку "
+        f"владельца (F-025). rc={r.returncode}")
 
 
 def test_hints_point_to_something_runnable(installed, ai_ops):
@@ -571,9 +639,77 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
     # шаблона и скилл — 14 содержательных файлов, замерено, а не оценено. Смысл потолка сохранён:
     # baseline монолита 503, и 456 по-прежнему ощутимо меньше. Поднимать его молча нельзя — это то
     # же число класса DERIVED, что и замеры слоёв.
-    assert substantive < 470, f"содержательных файлов в managed: {substantive} (потолок 470)"
+    # 2026-08-17: потолок ПОДНЯТ 470 -> 475 осознанно, замер — 470 содержательных файлов. Причина
+    # ровно та же, что у поднятия 3.35, и она содержательная, а не «нужен запас»: короткий путь для
+    # уже описанной работы (`planning/short_path`) и потолок траты на описание до первой правки кода
+    # (`engops/process_spend`) РАБОТАЮТ В ПРОДУКТОВОМ РЕПОЗИТОРИИ — это два файла, которые обязаны
+    # доехать до дочки, иначе решение владельца 2026-08-17 останется механизмом, зелёным только у
+    # кита (класс F-030/F-032, самый дорогой из найденных полем). Плоские алиасы в потолок не идут.
+    # Запас оставлен видимым (5 файлов), а не в один файл: 887 байт запаса уже дважды роняли этот
+    # тест на первой же следующей работе.
+    # 2026-08-17, ПОЗЖЕ В ТОТ ЖЕ ДЕНЬ: замер УПАЛ, и это записано, а не оставлено про себя.
+    # Новая проверка поставки (`test_delivered_engine_does_not_import_undelivered_validators`)
+    # показала, что в дочку едет `ai_ops_kit/devtools/` — инструменты разработки самого кита.
+    # Исключение существовало, но проверялось только для путей `tools/`, а код переехал в пакеты.
+    # После исключения: 563 файла, 462 содержательных, 3.4515 МБ (было 470 и 3.5257 МБ).
+    # Потолки НЕ опускаю до нового замера намеренно: 3.5 оставило бы 50 КиБ, а этот файл дважды
+    # ронялся ровно из-за такого запаса. 475/3.7 держат смысл (baseline монолита 503 не тронут).
+    assert substantive < 475, f"содержательных файлов в managed: {substantive} (потолок 475)"
     assert alias_bytes < 200 * 1024, f"алиасы разрослись: {alias_bytes / 1024:.0f} КиБ (потолок 200)"
-    assert total < 3.2 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ"
+    # 2026-08-13: потолок объёма ПОДНЯТ 3.2 -> 3.3 МБ осознанно, и это замер, а не округление.
+    # Запаса не оставалось вовсе: на базе e71a0c2 поставка занимала 3 354 556 Б при потолке
+    # 3 355 443 Б — 887 БАЙТ, то есть следующий доставляемый файл любого размера уронил бы тест
+    # независимо от того, нужен он дочке или нет.
+    # ПОВОД БЫЛ ДВОЙНОЙ — две работы одного дня упёрлись в один и тот же потолок, и обе причины
+    # настоящие (не сглаживаю до одной при слиянии):
+    #   * измерение расхода сессии по транскрипту рантайма (+26 КиБ в пяти модулях) — код обязан
+    #     ехать в дочку, потому что политику экономии сессии применяют в продуктовом репозитории;
+    #   * `rules/core/field-lessons.yaml` (12.8 КиБ) — шесть правил, оплаченных полем, с
+    #     основаниями; без доставки они остались бы культурой одного репозитория.
+    # Замер после: 3.2171 МБ (554 файла, 459 содержательных).
+    # Смысл потолка сохранён: baseline монолита — ориентир по ЧИСЛУ файлов (503), он не тронут;
+    # объём стережёт «раздувание незаметно», и 3.3 оставляет ~85 КиБ видимого запаса вместо 887 байт.
+    # Молча поднимать нельзя — это число класса DERIVED, как и замеры слоёв.
+    #
+    # 2026-08-13, ТОТ ЖЕ ДЕНЬ: потолок ПОДНЯТ 3.3 -> 3.5 МБ, и повод — не одна правка, а замер.
+    # Запас в 72 КиБ, оставленный поднятием выше, был съеден ЗА СУТКИ. Замерено по коммитам (тот же
+    # тест, значение вместо потолка), а не оценено:
+    #   567f963 (само поднятие 3.2->3.3)  3 386 631 Б   запас 73 670
+    #   c9ca718 (#96..#99: подсессия, самоприменение, точка входа автономии)  3 452 769   +66 138
+    #   a497a50 (#101 канонизация путей в брокере)       3 458 306   +5 537
+    #   0b63041 (#100 деривируемые числа связности)      3 460 003   +1 697
+    #   086b9df, 9700179 (документация и план)           3 460 003   +0
+    # Итог: на main оставалось 297 БАЙТ. Ровно то состояние, которое абзац выше описывает про
+    # прошлый раз («887 байт — следующий доставляемый файл любого размера уронил бы тест»), то есть
+    # история повторилась через один цикл.
+    #
+    # ПОЧЕМУ ЭТО НЕ «ПОДНЯТЬ, ЧТОБЫ ПРОШЛО». Правка, упёршаяся в потолок (перенос комментариев
+    # владельца, F-020, +6 520 Б в `repo_audit.py`), даёт 2% прироста; 90% съели уже смерженные
+    # работы, и ни одна из них об этом не узнала — тест краснеет только на СЛЕДУЮЩЕМ коммите.
+    # Наказывать за это того, кто пришёл последним, значит мерить очередь, а не размер.
+    # Замер после: 3 466 523 Б (3.3062 МБ); 3.5 оставляет ~199 КиБ видимого запаса.
+    # Смысл потолка сохранён: baseline монолита по ЧИСЛУ файлов (503) не тронут.
+    #
+    # НАЗВАННАЯ ГРАНИЦА: потолок ловит раздувание ПОСЛЕ пробоя и не умеет предупреждать до него —
+    # поэтому дрейф в 72 КиБ прошёл незамеченным через четыре PR. Это объявлено работой
+    # (`planning/plan.yaml` -> delivery-size-warns-before-breach), а не оставлено «на подумать».
+    #
+    # R-39 (та же дата, отдельная работа): защита «байткода в managed быть не должно» живёт в
+    # ДОСТАВЛЯЕМОМ дереве — три `_bootstrap` — и стоит 1746 Б (замер: 3 460 003 -> 3 461 749 на
+    # базе до подъёма). Своего подъёма она НЕ потребовала: при потолке 3.5 запас есть. Строка
+    # здесь не ради истории, а ради ленты замеров выше — она должна оставаться полной.
+    #
+    # 2026-08-17: потолок ПОДНЯТ 3.5 -> 3.7 МБ, и это снова ЗАМЕР, а не округление.
+    #   origin/main до работы     3 640 091 Б (3.4715 МБ)   запас до 3.5 — 28 261 Б
+    #   короткий путь + потолок   3 697 009 Б (3.5257 МБ)   +56 918 Б
+    # Доставляется по существу: `planning/short_path` и `engops/process_spend` применяются В
+    # продуктовом репозитории (решение владельца 2026-08-17), и оставить их у кита значило бы
+    # повторить самый дорогой класс находок поля — механизм зелёный у нас, отсутствующий у дочки.
+    # 3.7 оставляет ~178 КиБ видимого запаса.
+    # ЗАМЕР ПОДТВЕРЖДАЕТ УЖЕ ОБЪЯВЛЕННУЮ РАБОТУ: на базе оставалось 28 КиБ — то есть предупреждать
+    # «до пробоя» этот потолок по-прежнему не умеет, и очередная работа снова узнала о нём падением.
+    # Это `delivery-size-warns-before-breach` в плане, и она не выдумана задним числом.
+    assert total < 3.7 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ (потолок 3.7)"
 
 
 def test_managed_set_excludes_are_declared_not_implicit(ai_ops):
@@ -814,3 +950,71 @@ def test_first_install_still_delivers_the_workflow(child, ai_ops):
     r = _run_cli(child, "init", ".")
     assert r.returncode == 0, r.stdout[-400:]
     assert _record_path(child).exists(), "первая установка перестала ставить рекордер"
+
+
+# ------------------------------------------- 12. установка не выглядит началом работы
+
+def test_fresh_install_is_not_a_code_change(installed):
+    """Свежая установка НЕ читается как «код уже правится» (проба шва 2026-08-17).
+
+    Потолок траты на описание применяется только пока код не тронут, а «тронут» выводится из
+    `git status`. Пока список путей кита состоял из трёх каталогов, свежеустановленная дочка давала
+    `code_changed=True` — и потолок не срабатывал НИКОГДА. Ни один тест этого не видел: все они
+    мерили репозиторий кита, где своей же поставки в `git status` нет. Поймалось установкой в пустую
+    дочку, и проверка живёт ЗДЕСЬ — рядом с установкой, а не рядом с механизмом.
+    """
+    from ai_ops_kit.engops import process_spend
+    assert process_spend.code_changed(installed) is False, \
+        "поставка кита принята за правку кода: " + subprocess.run(
+            ["git", "-C", str(installed), "status", "--porcelain"],
+            capture_output=True, text=True, check=False).stdout
+
+    (installed / "src" / "calc.py").write_text("def add(a, b):\n    return b + a\n", encoding="utf-8")
+    try:
+        assert process_spend.code_changed(installed) is True, \
+            "правка кода продукта в той же дочке не замечена — исключения съели всё"
+    finally:
+        _git(installed, "checkout", "--", "src/calc.py")
+
+
+def test_delivered_engine_does_not_import_undelivered_validators(installed):
+    """Что поставка ЗОВЁТ, то она обязана и СОДЕРЖАТЬ (F-033, поле 15.08.2026).
+
+    Белый список `RUNTIME_VALIDATORS` — память автора, а не проверяемый факт. Цена этого уже
+    заплачена: `validate_acceptance_result` (механизм против ложного green, построенный 14.08 и
+    починенный 15.08) в дочке падал `ImportError` и не исполнялся НИКОГДА, потому что имя в список
+    не внесли. Механизм был зелёным в ките и отсутствующим у владельца.
+
+    Проверка идёт по УСТАНОВЛЕННОЙ копии, а не по репозиторию кита, — иначе она снова мерила бы кит.
+    Из этого свойство получается бесплатно: `devtools/` в дочку не едет, поэтому его импорты сюда и
+    не попадают, а исключать их вручную не нужно.
+    """
+    managed = installed / ".ai" / "managed"
+    delivered = {p.stem for p in (managed / "ai_ops_kit" / "validation").glob("*.py")}
+    assert delivered, "в поставке нет ни одного валидатора — измерять нечего"
+
+    wanted = {}
+    for py in sorted(managed.rglob("*.py")):
+        rel = py.relative_to(managed).as_posix()
+        if rel.startswith("ai_ops_kit/validation/"):
+            continue                     # валидатор, зовущий валидатора, — их внутреннее дело
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="ignore"), filename=rel)
+        except SyntaxError:               # синтаксис поставки стережёт отдельная проверка
+            continue
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.ImportFrom) and (node.module or "").endswith(
+                    "ai_ops_kit.validation"):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.Import):
+                names = [a.name.rsplit(".", 1)[-1] for a in node.names
+                         if a.name.startswith("validate_")]
+            for n in names:
+                if n.startswith("validate_") or n == "ai_managed_checksums":
+                    wanted.setdefault(n, rel)
+
+    missing = {n: where for n, where in sorted(wanted.items()) if n not in delivered}
+    assert not missing, (
+        "поставка зовёт валидаторы, которых в ней нет — механизм будет падать ImportError "
+        "у владельца: " + "; ".join(f"{n} (из {w})" for n, w in missing.items()))

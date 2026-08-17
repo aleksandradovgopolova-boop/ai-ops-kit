@@ -8,7 +8,9 @@ repos:
   # ни разу. Набор правил объявлен в `pyproject.toml -> [tool.ruff.lint]` и по нему сейчас ноль,
   # поэтому охват можно расширить, не превращая коммит в правку 912 замечаний.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
+    # Одна версия с CI (`package-quality.yml`): расхождение делало «локально чисто»
+    # и «чисто в CI» утверждениями про разные линтеры — замер 12.08.2026.
+    rev: v0.16.2
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]

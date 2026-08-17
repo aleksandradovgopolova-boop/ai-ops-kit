@@ -225,6 +225,12 @@ class DeliveryReceipt(TypedDict, total=False):
     pr_state: Optional[str]
     merged: Optional[bool]
     reconciled: bool
+    # R-41: проверки на том же SHA. `sha_verified` отвечает «это наш коммит», эти поля — «его кто-то
+    # проверял». Раньше второго вопроса не существовало, и «прогонов не было» читалось как «зелено».
+    checks_status: Optional[str]         # found|absent|unavailable — «нет» и «не знаю» РАЗНЫЕ
+    checks_total: Optional[int]
+    checks_failed: Optional[int]
+    checks_verified: Optional[bool]      # True только при found + 0 упавших + 0 незавершённых
 
 
 # ============================================================================

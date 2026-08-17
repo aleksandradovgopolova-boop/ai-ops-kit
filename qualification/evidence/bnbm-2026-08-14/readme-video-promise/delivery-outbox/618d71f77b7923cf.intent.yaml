@@ -1,0 +1,10 @@
+schema_version: 1
+kind: DeliveryIntent
+delivery_id: 618d71f77b7923cf
+workitem_id: readme-video-promise
+repository: aleksandradovgopolova-boop/bolshe-ne-budu-menshe
+branch: ai-ops/readme-video-promise
+base_ref: main
+base_sha: 7a32afa2f7187ee3484816ef6b135aa7afc85d31
+commit_sha: c5c261a962afba3398734f9b8202009ae1703ab2
+status: completed

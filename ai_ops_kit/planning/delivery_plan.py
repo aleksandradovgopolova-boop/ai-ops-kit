@@ -41,10 +41,21 @@ from ai_ops_kit.planning import contours as _contours
 
 PLAN_REL = "planning/plan.yaml"
 KIND = "delivery-plan"
+HISTORY_REL = "history/plan-history.yaml"
+HISTORY_KIND = "delivery-plan-history"
 
 DECLARABLE = ("todo", "in_progress", "done", "dropped")
 DERIVED = ("ready", "blocked", "waiting")
 VALUE = ("high", "medium", "low")
+# АКТИВНЫЙ план содержит только незакрытую работу (`plan-as-control-plane`, 2026-08-14). Закрытая
+# уезжает в `history/plan-history.yaml`. Повод — замер: план кита стал одновременно планом, бэклогом,
+# журналом расследований и отчётом квалификации, 20 из 25 работ были `done`, и чтобы ответить «что
+# идёт сейчас», приходилось читать разбор давно закрытых дефектов. Управляющий файл, в котором
+# управление занимает пятую часть, управляющим быть перестаёт.
+ACTIVE_DECLARABLE = ("todo", "in_progress")
+CLOSED_DECLARABLE = ("done", "dropped")
+# Поля-связки: чем работа привязана к реальности. Не обязательны, но их СМЫСЛ проверяется ниже.
+LINK_KEYS = ("pr", "branch", "commit", "evidence", "decision", "finding")
 
 # Поля, называющие КОНКРЕТНОГО исполнителя. Запрещены не слова, а ПОЛЯ: «OpenAI» в заголовке
 # работы — законная часть продукта, а `runtime: claude-code` в плане — привязка плана к вендору.
@@ -121,6 +132,71 @@ def load(child_root, path=None):
     return data
 
 
+def history_path(child_root) -> Path:
+    """Где лежит история завершённой работы. Рядом с планом — тот же корень объявления."""
+    return Path(child_root) / HISTORY_REL
+
+
+def load_history(child_root):
+    """Закрытая работа -> список элементов. Файла нет — пустой список (история необязательна).
+
+    ОТКАЗ ЧТЕНИЯ НЕ МОЛЧИТ. Битую историю нельзя считать пустой: `resolve` закрывает зависимости по
+    ней, и «истории не прочитали» превратилось бы в «зависимость не закрыта» — то есть в блокировку
+    всей работы с невнятной причиной. Поэтому разбор падает `PlanCorrupt`, как и у самого плана.
+    """
+    p = history_path(child_root)
+    if not p.is_file():
+        return []
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as e:
+        raise PlanCorrupt(f"{HISTORY_REL} не разобран ({type(e).__name__}) — "
+                          f"история закрытой работы недостоверна") from e
+    if doc.get("kind") != HISTORY_KIND:
+        raise PlanCorrupt(f"{HISTORY_REL}: kind должен быть '{HISTORY_KIND}', "
+                          f"получен '{doc.get('kind')}'")
+    out = doc.get("work") or []
+    if not isinstance(out, list):
+        raise PlanCorrupt(f"{HISTORY_REL}: work должен быть списком")
+    return [w for w in out if isinstance(w, dict)]
+
+
+def validate_history(closed, plan=None) -> dict:
+    """Контракт истории. -> {"errors": [...], "warnings": [...]}.
+
+    ГЛАВНОЕ ПРАВИЛО: `done` — это не «PR смержен». Закрытая работа обязана назвать РЕЗУЛЬТАТ
+    (`result`) и хотя бы одно место, где его можно перепроверить (`pr`/`evidence`/`finding`).
+    Иначе история станет списком галочек: merged PR при незакрытом гейте — ровно тот ложный green,
+    против которого стоит весь остальной контур.
+    """
+    errors, warns = [], []
+    ids = [w.get("id") for w in closed]
+    dup = sorted({i for i in ids if i and ids.count(i) > 1})
+    if dup:
+        errors.append(f"{HISTORY_REL}: дубли id закрытых работ: {dup}")
+    plan_ids = {w.get("id") for w in items(plan or {})}
+    for w in closed:
+        wid = w.get("id")
+        where = f"история '{wid or '<без id>'}'"
+        if not wid:
+            errors.append(f"{HISTORY_REL}: элемент без id"); continue
+        if wid in plan_ids:
+            errors.append(f"{where}: работа одновременно в активном плане и в истории — "
+                          f"два состояния одной работы")
+        if w.get("status") not in CLOSED_DECLARABLE:
+            errors.append(f"{where}: status '{w.get('status')}' — в истории только "
+                          f"{list(CLOSED_DECLARABLE)}")
+        if not str(w.get("result") or "").strip():
+            errors.append(f"{where}: нет result — «сделано» без названного результата не проверить "
+                          f"(merged PR сам по себе результатом не является)")
+        if w.get("status") == "done" and not any(w.get(k) for k in ("pr", "commit", "evidence", "finding")):
+            errors.append(f"{where}: done без pr/commit/evidence/finding — результат негде "
+                          f"перепроверить")
+        if not w.get("closed_at"):
+            warns.append(f"{where}: нет closed_at — история без даты не читается как история")
+    return {"errors": errors, "warnings": warns}
+
+
 def is_template(plan) -> bool:
     """Это ещё заготовка кита, а не план продукта?
 
@@ -172,14 +248,20 @@ def _cycles(by_id: dict) -> list:
     return sorted(k for k, v in indeg.items() if v > 0) if seen != len(by_id) else []
 
 
-def validate(plan, model=None):
+def validate(plan, model=None, closed=None, root=None):
     """Структура + семантика плана. -> {"errors": [...], "warnings": [...]}.
 
     errors   — план недостоверен, по нему нельзя считать next work;
     warnings — план работоспособен, но говорит то, что обязан решать граф (расхождение), либо
                недоговаривает (нет `write_scope` -> параллельность недоказуема).
+
+    `closed` — работы из `history/plan-history.yaml`: `depends_on` резолвится и по ним, иначе разнос
+    плана на активное и закрытое сделал бы каждую зависимость от завершённой работы «нерезолвимой».
+    `root` — корень репозитория: нужен, чтобы проверить, что пути в `evidence`/`finding` существуют.
     """
     model = model or _contours.load_model()
+    closed = list(closed or [])
+    closed_ids = {w.get("id") for w in closed if w.get("id")}
     errors, warns = [], []
     if (plan or {}).get("kind") != KIND:
         errors.append(f"kind должен быть '{KIND}', получен '{(plan or {}).get('kind')}'")
@@ -232,9 +314,28 @@ def validate(plan, model=None):
         if st in DERIVED:
             warns.append(f"{where}: статус '{st}' ВЫВОДИМЫЙ — объявлять его нельзя, он считается "
                          f"из зависимостей/гейтов; объявляйте {list(DECLARABLE)}")
-        elif st not in DECLARABLE:
-            errors.append(f"{where}: status '{st}' вне словаря ({list(DECLARABLE)} объявляемые, "
-                          f"{list(DERIVED)} выводимые)")
+        elif st in CLOSED_DECLARABLE:
+            errors.append(f"{where}: статус '{st}' — закрытая работа живёт в {HISTORY_REL}, "
+                          f"а не в активном плане. Активный план отвечает на вопрос «что идёт и что "
+                          f"взять следующим»; когда закрытое остаётся в нём, ответ приходится "
+                          f"вычитывать из архива (замер: 20 из 25 работ были `done`)")
+        elif st not in ACTIVE_DECLARABLE:
+            errors.append(f"{where}: status '{st}' вне словаря активного плана "
+                          f"({list(ACTIVE_DECLARABLE)}); закрытое — в {HISTORY_REL}")
+        # СВЯЗЬ С РЕАЛЬНОСТЬЮ. Открытый PR и статус `todo` — противоречие: PR существует, значит
+        # работа начата. Проверяется ФОРМА (в файле есть `pr`), а не состояние GitHub: объявленное
+        # состояние чужой системы стареет молча, а форма — нет.
+        if w.get("pr") and st == "todo":
+            errors.append(f"{where}: указан pr, но статус 'todo' — PR существует, значит работа "
+                          f"начата; поставьте 'in_progress' либо уберите ссылку на PR")
+        if st == "in_progress" and not (w.get("pr") or w.get("branch")):
+            warns.append(f"{where}: работа идёт, но не названы ни pr, ни branch — состояние работы "
+                         f"негде посмотреть")
+        for k in ("evidence", "finding"):
+            rel = w.get(k)
+            if rel and root is not None and not (Path(root) / str(rel)).exists():
+                errors.append(f"{where}: {k} '{rel}' не резолвится от корня репозитория — "
+                              f"ссылка на доказательство, которого нет, хуже её отсутствия")
         deps = w.get("depends_on") or []
         if not isinstance(deps, list):
             errors.append(f"{where}: depends_on должен быть списком")
@@ -242,8 +343,9 @@ def validate(plan, model=None):
         if wid in deps:
             errors.append(f"{where}: зависит от себя")
         for d in deps:
-            if d not in by_id:
-                errors.append(f"{where}: depends_on '{d}' не резолвится в id работы плана")
+            if d not in by_id and d not in closed_ids:
+                errors.append(f"{where}: depends_on '{d}' не резолвится ни в работу плана, "
+                              f"ни в закрытую работу истории")
         g = w.get("goal") or (gids[0] if len(gids) == 1 else None)
         if not g:
             errors.append(f"{where}: не указан goal, а целей в плане несколько — "
@@ -374,7 +476,7 @@ def _scope_conflict(scope, active, exclude_id=None):
     return sorted(set(hits))
 
 
-def resolve(plan, child_root, model=None, active=None):
+def resolve(plan, child_root, model=None, active=None, closed=None):
     """Выведенные статусы элементов плана.
 
     -> {id: {"status": …, "declared": …, "source": …, "reasons": [...], "unblocks": N,
@@ -407,7 +509,25 @@ def resolve(plan, child_root, model=None, active=None):
             stack.extend(children.get(n) or [])
         return seen
 
+    # ЗАКРЫТАЯ РАБОТА ПОДАЁТСЯ В ВЫВОД ПЕРВОЙ. Ниже зависимость, которой нет в `out`, считается
+    # блокирующей — и это верно («неизвестную зависимость закрытой считать нельзя»). Но после
+    # разноса плана на активное и закрытое каждая зависимость от завершённой работы стала бы
+    # неизвестной, и весь план оказался бы заблокирован с невнятной причиной. История — это факт
+    # закрытия, и она обязана доехать до вывода, иначе разнос ломает `next`.
+    if closed is None:
+        try:
+            closed = load_history(child_root)
+        except PlanCorrupt:
+            # Битая история НЕ превращается в «зависимостей нет»: пусть блокирует честно, а причину
+            # назовёт валидатор истории. Молча пустой список здесь был бы ложным green.
+            closed = []
     out = {}
+    for w in closed or []:
+        cid = w.get("id")
+        if cid and cid not in by_id:
+            out[cid] = {"status": w.get("status") or "done", "declared": w.get("status"),
+                        "source": "history", "reasons": [f"закрыта в {HISTORY_REL}"],
+                        "unblocks": 0, "blocked_by": [], "conflicts_with": [], "drift": None}
     for wid in _topo_order(by_id):
         w = by_id[wid]
         declared = w.get("status")
@@ -528,7 +648,16 @@ def main(argv=None):
         return 1
 
     if ns.cmd == "validate":
-        rep = validate(plan)
+        # История проверяется ВМЕСТЕ с планом: они одно состояние работы, разнесённое по двум
+        # файлам. Отдельная команда означала бы, что одну половину можно не проверить.
+        try:
+            closed = load_history(root)
+            hrep = validate_history(closed, plan)
+        except PlanCorrupt as e:
+            closed, hrep = [], {"errors": [str(e)], "warnings": []}
+        rep = validate(plan, closed=closed, root=root)
+        rep = {"errors": rep["errors"] + hrep["errors"],
+               "warnings": rep["warnings"] + hrep["warnings"]}
         if ns.json:
             print(json.dumps(rep, ensure_ascii=False, indent=2))
         else:

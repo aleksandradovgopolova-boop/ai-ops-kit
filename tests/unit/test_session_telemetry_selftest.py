@@ -15,13 +15,27 @@ from session_telemetry import (  # noqa: F401 — имена, которые и�
 
 
 @pytest.mark.slow
-def test_session_telemetry_selftest():
+def test_session_telemetry_selftest(monkeypatch, tmp_path):
+    """Проверяет ветку ОЦЕНКИ по ledger — значит живая сессия рантайма должна быть не видна.
+
+    ИЗОЛЯЦИЯ ДОБАВЛЕНА 2026-08-13. С момента, когда `snapshot()` начал ИЗМЕРЯТЬ расход сессии по
+    транскрипту рантайма, этот селфтест на машине разработчика проверял не то, что заявляет: id
+    сессии приходил из ENV, транскрипт находился, и контекст становился `measured` вместо
+    `estimated`. В CI он проходил (там нет ни `~/.claude`, ни переменной) — то есть тест держался на
+    том, чего на машине нет. Ровно тот класс скрытой зависимости, который здесь запрещён: пройденная
+    проверка не должна означать разное на разных машинах.
+    """
     ok = True
 
     def expect(name, cond):
         nonlocal ok
         ok = ok and bool(cond)
         print(f"{'PASS' if cond else 'FAIL'} {name}")
+
+    from ai_ops_kit.engops import session_telemetry_provider as _p
+    for key in (*_p.ENV_SESSION_ID_KEYS, *_p.ENV_PROJECT_DIR_KEYS):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "no-runtime-home"))   # Path.home() -> без ~/.claude
 
     import tempfile
     with tempfile.TemporaryDirectory() as td:

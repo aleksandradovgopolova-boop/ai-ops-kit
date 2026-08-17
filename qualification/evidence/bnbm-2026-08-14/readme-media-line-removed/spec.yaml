@@ -1,0 +1,38 @@
+schema_version: 1
+kind: spec
+workitem_id: readme-media-line-removed
+level: 0
+level_name: L0 QUICK
+level_reason:
+- task_type=QUICK -> базовый L0 QUICK
+section_statuses:
+- complete
+- declined
+- missing
+- needs_human
+- not_applicable
+sections:
+  goal:
+    status: complete
+    content: 'README не должен перечислять каталог, которого в проекте нет: читающий идёт искать public/media и не находит его.'
+    note: null
+  scope:
+    status: complete
+    content: Только README.md, только строка про public/media в разделе «Структура».
+    note: null
+  expected_behavior:
+    status: complete
+    content: Строка про public/media удалена из README целиком. Остальные пункты списка структуры не тронуты.
+    note: null
+  acceptance_criteria:
+    status: complete
+    content: '1) `grep -c ''public/media'' README.md` возвращает 0 — ни одной строки, ни в каком виде. 2) Остальные пункты структуры на месте: public/pages, public/fonts, public/icons, docs, supabase/migrations, scripts. 3) Переименование описания вместо удаления строки НЕ считается выполнением: каталога нет, и любое его описание остаётся ложным.'
+    note: null
+  constraints:
+    status: complete
+    content: Не менять src/, public/, supabase/, .github/, docs/. Ничего кроме этой строки из README не удалять.
+    note: null
+  affected_files:
+    status: complete
+    content: README.md
+    note: null

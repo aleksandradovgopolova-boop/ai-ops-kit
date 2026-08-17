@@ -160,8 +160,80 @@ class TestUnrecognisedSectionStatus:
 
     def test_created_spec_carries_the_vocabulary(self, tmp_path):
         """Словарь статусов должен быть в самом файле — его заполняет агент без исходников кита."""
-        path, created = spec_levels.create_spec(tmp_path, "wi-1", {"task_type": "QUICK"})
+        path, created, _ = spec_levels.create_spec(tmp_path, "wi-1", {"task_type": "QUICK"})
         assert created
         text = path.read_text(encoding="utf-8")
         for status in spec_levels.SECTION_STATUSES - {"missing"}:
             assert status in text, f"в шаблоне спеки нет статуса {status}"
+
+
+@pytest.mark.unit
+class TestRaisedLevelAddsSections:
+    """F-029 (поле 2026-08-15, дочка ai-ops-cockpit; повтор находки другой дочки).
+
+    `specify` с сигналами более высокого уровня говорил «заполнить нужно 9 разделов», а в
+    features/<wid>/spec.yaml оставались 6 разделов L0 — заполнять было нечего, и `run` блокировался
+    на разделах, которых шаблон не создавал. Инвариант: КАЖДЫЙ раздел, который кит называет
+    незаполненным, обязан существовать в файле."""
+
+    QUICK = {"task_type": "QUICK"}
+    PRODUCT = {"task_type": "PRODUCT"}
+
+    def _doc(self, path):
+        import yaml
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    def test_missing_sections_are_added_when_level_rises(self, tmp_path):
+        path, created, _ = spec_levels.create_spec(tmp_path, "wi-1", self.QUICK)
+        assert created and self._doc(path)["level"] == 0
+
+        path2, created2, rep = spec_levels.create_spec(tmp_path, "wi-1", self.PRODUCT)
+        assert path2 == path and created2 is False
+        assert rep["error"] is None
+        doc = self._doc(path)
+        assert doc["level"] == 2 and doc["level_name"] == "L2 PRODUCT"
+        for sid in spec_levels.required_sections(2):
+            assert sid in doc["sections"], f"раздел {sid} уровня L2 не дописан"
+        assert set(rep["added"]) == set(spec_levels.required_sections(2)) - set(
+            spec_levels.required_sections(0))
+
+    def test_every_blocking_section_exists_in_the_file(self, tmp_path):
+        """Ровно то, что видел владелец: список «не заполнено» против содержимого файла."""
+        spec_levels.create_spec(tmp_path, "wi-1", self.QUICK)
+        path, _, _ = spec_levels.create_spec(tmp_path, "wi-1", self.PRODUCT)
+        cov = spec_levels.assess_from_artifacts(self.PRODUCT, tmp_path, "wi-1")
+        doc = self._doc(path)
+        assert cov["blocking_missing"], "спека пуста — список незаполненного не должен быть пустым"
+        for sid in cov["blocking_missing"]:
+            assert sid in doc["sections"], (
+                f"кит зовёт заполнить {sid}, а раздела в файле нет — заполнять нечего")
+
+    def test_described_sections_are_never_touched(self, tmp_path):
+        import yaml
+        path, _, _ = spec_levels.create_spec(tmp_path, "wi-1", self.QUICK)
+        doc = self._doc(path)
+        doc["sections"]["goal"] = {"status": "complete", "content": "живой текст владельца",
+                                   "note": None}
+        path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+        spec_levels.create_spec(tmp_path, "wi-1", self.PRODUCT)
+        goal = self._doc(path)["sections"]["goal"]
+        assert goal["status"] == "complete" and goal["content"] == "живой текст владельца"
+
+    def test_level_is_never_lowered_and_sections_stay(self, tmp_path):
+        spec_levels.create_spec(tmp_path, "wi-1", self.PRODUCT)
+        path, created, rep = spec_levels.create_spec(tmp_path, "wi-1", self.QUICK)
+        doc = self._doc(path)
+        assert created is False and rep["added"] == []
+        assert doc["level"] == 2, "уровень нельзя понизить молча"
+        assert "success_metrics" in doc["sections"], "разделы прошлого уровня не удаляются"
+
+    def test_broken_spec_is_not_rewritten_and_says_so(self, tmp_path):
+        path = tmp_path / "features" / "wi-1" / "spec.yaml"
+        path.parent.mkdir(parents=True)
+        path.write_text("это не спека, а обрывок текста\n", encoding="utf-8")
+
+        _, created, rep = spec_levels.create_spec(tmp_path, "wi-1", self.PRODUCT)
+        assert created is False and rep["added"] == []
+        assert rep["error"], "молчаливый отказ дописать неотличим от успеха"
+        assert path.read_text(encoding="utf-8") == "это не спека, а обрывок текста\n"

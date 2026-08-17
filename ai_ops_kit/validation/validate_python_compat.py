@@ -100,21 +100,23 @@ def _union_annotation_lines(tree):
     return sorted(set(lines))
 
 
-def check_source(src, floor=None):
+def check_source(src, floor=None, filename=None):
     """-> список номеров строк с проблемными union-аннотациями (пусто = ок).
 
     Импорты stdlib новее пола проверяет check_imports: отдельная функция, потому что
     future-import их не спасает — модуля на старом python просто нет.
     """
-    tree = ast.parse(src)
+    # Имя файла — часть сообщения интерпретатора (F-022): без него предупреждение
+    # подписывается `<unknown>`, и владелец не может понять, чей файл его вызвал.
+    tree = ast.parse(src, filename=filename or "<unknown>")
     if _has_future_annotations(tree):
         return []
     return _union_annotation_lines(tree)
 
 
-def check_imports(src, floor):
+def check_imports(src, floor, filename=None):
     """-> [(строка, модуль, версия)] импортов stdlib, которых на объявленном поле нет."""
-    return _too_new_imports(ast.parse(src), floor)
+    return _too_new_imports(ast.parse(src, filename=filename or "<unknown>"), floor)
 
 
 def scan(root):
@@ -128,10 +130,10 @@ def scan(root):
             if "__pycache__" in p.parts:
                 continue
             src = p.read_text(encoding="utf-8")
-            for ln in check_source(src):
+            for ln in check_source(src, filename=str(p)):
                 errors.append(f"{p.relative_to(root)}:{ln}: union-аннотация `X | Y` без "
                               f"`from __future__ import annotations` — сломает Python <3.10")
-            for ln, mod, since in check_imports(src, floor):
+            for ln, mod, since in check_imports(src, floor, filename=str(p)):
                 errors.append(f"{p.relative_to(root)}:{ln}: `{mod}` появился в stdlib с {since}, "
                               f"а объявленный пол — {floor[0]}.{floor[1]} -> ModuleNotFoundError")
     return errors

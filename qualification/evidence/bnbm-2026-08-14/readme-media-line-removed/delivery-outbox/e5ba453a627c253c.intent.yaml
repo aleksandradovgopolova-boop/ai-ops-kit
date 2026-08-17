@@ -1,0 +1,10 @@
+schema_version: 1
+kind: DeliveryIntent
+delivery_id: e5ba453a627c253c
+workitem_id: readme-media-line-removed
+repository: aleksandradovgopolova-boop/bolshe-ne-budu-menshe
+branch: ai-ops/readme-media-line-removed
+base_ref: main
+base_sha: 0cd5bb07dd277cc8c6d513842c3454d86a38b958
+commit_sha: 1b9e14d4eaa7db9c96eae6ff4713faf8f05e6466
+status: completed

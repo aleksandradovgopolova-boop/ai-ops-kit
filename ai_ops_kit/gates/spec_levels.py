@@ -223,14 +223,23 @@ def assess_from_artifacts(signals, child_root, wid, work_root=None):
 
 def create_spec(child_root, wid, signals, overwrite=False):
     """v2.110: РЕАЛЬНО создать spec-артефакт нужной глубины (features/<wid>/spec.yaml) со всеми
-    обязательными разделами уровня (заготовки status=missing). -> (path, created). Не перезаписывает
-    существующий без overwrite (не теряем описанное)."""
+    обязательными разделами уровня (заготовки status=missing). -> (path, created, added).
+    Не перезаписывает существующий без overwrite (не теряем описанное).
+
+    F-029 (поле 2026-08-15, дочка ai-ops-cockpit; ПОВТОР находки другой дочки): здесь стоял ранний
+    выход `return sp, False` — существующий файл не трогали вовсе. Если уровень с прошлого раза
+    поднялся (сигналы стали продуктовыми/рисковыми), `assess` считал разделы по НОВОМУ уровню, а в
+    файле оставались разделы старого: `specify` говорил «заполнить нужно 9 разделов», а заполнять
+    было нечего — их там не было, и `run` блокировался на разделах, которых шаблон не создавал.
+    Теперь недостающие разделы ДОПИСЫВАЮТСЯ заготовками (`missing`), уже описанные не трогаются, а
+    уровень в файле поднимается до расчётного. Понижения нет: разделы прошлого уровня не удаляются
+    и `level` вниз не переписывается — уровень нельзя понизить молча (инвариант модуля)."""
     import yaml
     sp = _spec_path(child_root, wid)
     cls = classify(signals)
     level = cls["level"]
     if sp.is_file() and not overwrite:
-        return sp, False
+        return _add_missing_sections(sp, cls)
     sections = {sid: {"status": "missing", "content": "", "note": None}
                 for sid in required_sections(level)}
     doc = {"schema_version": 1, "kind": "spec", "workitem_id": str(wid),
@@ -242,11 +251,48 @@ def create_spec(child_root, wid, signals, overwrite=False):
            "section_statuses": sorted(SECTION_STATUSES),
            "sections": sections}
     sp.parent.mkdir(parents=True, exist_ok=True)
-    sp.write_text(
-        "# status раздела: " + " | ".join(sorted(SECTION_STATUSES - {"missing"}))
-        + "\n# declined требует note с объяснением.\n"
-        + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
-    return sp, True
+    sp.write_text(_render_spec(doc), encoding="utf-8")
+    return sp, True, {"added": sorted(sections), "error": None}
+
+
+def _render_spec(doc):
+    """Текст spec.yaml: шапка со словарём статусов + сам документ. Один вид у создания и дописывания."""
+    import yaml
+    return ("# status раздела: " + " | ".join(sorted(SECTION_STATUSES - {"missing"}))
+            + "\n# declined требует note с объяснением.\n"
+            + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
+
+
+def _add_missing_sections(sp, cls):
+    """F-029: дописать в существующий spec.yaml разделы, которых требует расчётный уровень.
+    -> (path, created=False, {"added": [...], "error": None|str}). Заполненное не трогается;
+    разделы не удаляются.
+
+    Битый/непрочитанный файл НЕ переписываем: молча заменить описанное заготовками — потеря работы
+    человека, а это дороже незакрытого гейта. Тогда added пуст, и вызывающий сообщает правду
+    («дописать не удалось»), а не выдаёт непроведённую правку за проведённую."""
+    import yaml
+    level = cls["level"]
+    try:
+        doc = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001 — см. про import yaml в provided_from_artifacts
+        return sp, False, {"added": [], "error": f"{type(exc).__name__}: {exc}"}
+    if not isinstance(doc, dict) or not isinstance(doc.get("sections"), dict):
+        return sp, False, {"added": [], "error": "spec.yaml не содержит карты разделов (sections)"}
+    sections = doc["sections"]
+    added = [sid for sid in required_sections(level) if sid not in sections]
+    if not added:
+        return sp, False, {"added": [], "error": None}
+    for sid in added:
+        sections[sid] = {"status": "missing", "content": "", "note": None}
+    # Уровень поднимаем до расчётного и говорим ПОЧЕМУ; вниз не переписываем (нельзя понизить молча).
+    if int(doc.get("level") or 0) < level:
+        doc["level"] = level
+        doc["level_name"] = cls["level_name"]
+        doc["level_reason"] = cls["reason"]
+    doc["section_statuses"] = sorted(SECTION_STATUSES)
+    sp.write_text(_render_spec(doc), encoding="utf-8")
+    return sp, False, {"added": added, "error": None}
 
 
 def validate_spec(child_root, wid, signals, work_root=None):
@@ -276,14 +322,19 @@ def main(argv):
     vd.add_argument("--signals", default="{}"); vd.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "create":
-        sp, created = create_spec(Path(a.child_root), a.wid, json.loads(a.signals), overwrite=a.overwrite)
+        sp, created, rep = create_spec(Path(a.child_root), a.wid, json.loads(a.signals),
+                                       overwrite=a.overwrite)
         cov = assess_from_artifacts(json.loads(a.signals), Path(a.child_root), a.wid)
         if a.json:
-            print(json.dumps({"path": str(sp), "created": created, "coverage": cov},
+            print(json.dumps({"path": str(sp), "created": created, "added": rep["added"],
+                              "add_error": rep["error"], "coverage": cov},
                              ensure_ascii=False, indent=2))
         else:
-            print(f"SPECIFY: {'создан' if created else 'уже существует'} {sp} · {cov['level_name']} · "
-                  f"обязательных разделов {len(cov['sections'])} · не хватает {len(cov['blocking_missing'])}")
+            _what = "создан" if created else (
+                f"дописано разделов {len(rep['added'])}" if rep["added"] else "уже существует")
+            print(f"SPECIFY: {_what} {sp} · {cov['level_name']} · "
+                  f"обязательных разделов {len(cov['sections'])} · не хватает {len(cov['blocking_missing'])}"
+                  + (f" · ДОПИСАТЬ НЕ УДАЛОСЬ: {rep['error']}" if rep["error"] else ""))
         return 0
     if a.cmd == "validate":
         cov = validate_spec(Path(a.child_root), a.wid, json.loads(a.signals))

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 def _git(root, *a):
-    from ai_ops_kit.engine import gitio
+    from ai_ops_kit.shared import gitio
     return gitio.git(root, *a)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
@@ -76,7 +76,7 @@ def _durable_write_yaml(path, data, require_keys=()):
     lifecycle-артефакта. Делегирует ЕДИНОМУ durable-контракту lifecycle_store.durable_write (tmp ->
     flush+fsync(файл) -> atomic rename -> fsync(КАТАЛОГ) -> перечитать+провалидировать). Прежде здесь была
     отдельная копия БЕЗ fsync каталога — теперь один источник истины для всех durable-записей."""
-    from ai_ops_kit.lifecycle import lifecycle_store
+    from ai_ops_kit.shared import lifecycle_store
     return lifecycle_store.durable_write(path, data, require_keys=require_keys)
 
 
@@ -865,7 +865,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                         "status": status})
         # v3.0.14 (#3): event journal — package_end (Run->Package->Gate: gates_unmet + статус пакета)
         try:
-            from ai_ops_kit.lifecycle import lifecycle_store as _lsj
+            from ai_ops_kit.shared import lifecycle_store as _lsj
             _lsj.journal_append(features_dir / wid / "lifecycle-journal.jsonl",
                                 {"kind": "package_end", "run_id": wid, "workitem_id": wid,
                                  "package_id": pid, "pkg_hash": _pkg_hash(pkg), "sha": sha,
@@ -964,7 +964,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
            "aggregate": aggregate, "delivery": delivery, "draft_pr": pr,
            "resumed_from": resume_from}
     # v3.0.14 (finding аудита #2): sequence-report — durable (атомарно); сбой фиксируем в отчёте, не молчим
-    from ai_ops_kit.lifecycle import lifecycle_store as _ls2
+    from ai_ops_kit.shared import lifecycle_store as _ls2
     # Срез engine ратчета 2026-08-12: пропущенные записи журнала называются в ОТЧЁТЕ, а не только в
     # возврате, который никто не читал. Слив ДО durable_write — иначе на диске лёг бы отчёт, из
     # которого утрата исчезла. Слив обнуляет накопитель: та же утрата не приедет во второй отчёт.

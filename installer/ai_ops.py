@@ -16,6 +16,8 @@
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
+  subsession           — взять ли работу в отдельную сессию самому: решение + потолок автономной
+                         траты; сухо по умолчанию, тратит только с `--spawn`
   method               — экономичный способ работы: советы по приоритетам (гигиена/делегирование/runtime; v3.18.0)
   engops [branch|commit|env|deploy|cost] — операционная гигиена: актуальность ветки vs база, вердикт
                          по коммиту (v3.19.0), карта окружений и зрелость поставки (v3.20.0),
@@ -45,6 +47,24 @@ import tempfile
 from pathlib import Path
 
 import yaml
+
+# БАЙТКОД НЕ ПИШЕМ В ЧУЖОЙ РЕПОЗИТОРИЙ — ВТОРОЙ ВХОД (R-39).
+#
+# Обёртка `./ai-ops` закрыла это ещё ревизией 11.08 (`export PYTHONDONTWRITEBYTECODE=1`), но входов
+# ДВА: прямой вызов `python3 ~/ai-ops-kit/installer/ai_ops.py init|doctor` документирован наравне
+# с обёрткой, а защиты на нём не было. При этом doctor намеренно предпочитает копию ИЗ `.ai/managed`
+# дочки (см. `_path_hygiene`, `ui_readiness`): он обязан проверять доставленный код, а не свой.
+# Замер до правки: `doctor` из дочки оставлял 19 файлов `.pyc` в checksummed-слое, а `.gitignore`
+# установщик в дочку не пишет — значит `git add -A` у владельца унёс бы их как свои исходники.
+#
+# Одна строка, а не две. Пояс `os.environ["PYTHONDONTWRITEBYTECODE"]="1"` для подпроцессов здесь
+# был и УБРАН осознанно: мутационная проверка показала, что его снятие не роняет ни один тест —
+# то есть он ничего не сторожил. Причина: все подпроцессы установщика запускаются из дерева КИТА
+# (`CI = PKG / "ai_ops_kit" / "validation"`, `PKG / "migrations"`), где байткод нормален и
+# заигнорен, а не из `.ai/managed` дочки. Объявленная и неисполняемая защита — тот самый класс,
+# против которого стоят R-31/R-33/R-36. Если подпроцесс из managed однажды появится, защита ему
+# нужна в ДОСТАВЛЯЕМОМ дереве (`_bootstrap`), а не здесь.
+sys.dont_write_bytecode = True
 
 HERE = Path(__file__).resolve()
 PKG = HERE.parents[1]                      # корень пакета (repo root)
@@ -277,6 +297,17 @@ def filter_by_packages(pairs, selected, ownership):
 DEV_ONLY_PREFIXES = (
     "qualification/",   # пакет живых сценариев квалификации движка — данные разработки кита
     "containers/",      # эталонный контейнер изоляции движка (P0.2 jail) — ассет parent-репозитория
+    # 2026-08-17: НАЙДЕНО НОВОЙ ПРОВЕРКОЙ ПОСТАВКИ, не чтением кода. `devtools` — инструменты
+    # разработки САМОГО кита (бенчмарки, харнессы квалификации, мутационные пробы). Их исключение
+    # существовало (DEV_ONLY_TOOLS ниже), но проверялось ТОЛЬКО для путей `tools/` — а в v3.30 код
+    # переехал в пакеты, и в `tools/` остались тонкие алиасы. Итог: алиасы отсекались, а сам код
+    # `ai_ops_kit/devtools/*.py` уезжал в дочку целиком, вместе с импортом валидатора, которого в
+    # поставке нет (`promotion_qual` -> `validate_promotion_qualification`) — то есть в дочке лежал
+    # мёртвый груз с гарантированным ImportError.
+    # Ровно тот класс, что и F-032: переезд дал новые пути, а фильтр остался на старых.
+    # Безопасно по построению: слой `entrypoints` продуктовый код импортировать не вправе, и это
+    # проверяет `validate_layering` (правило no-product-depends-on-devtools).
+    "ai_ops_kit/devtools/",
 )
 
 DEV_ONLY_TOOLS = frozenset({
@@ -285,6 +316,7 @@ DEV_ONLY_TOOLS = frozenset({
     "changelog_gen",                                       # генератор CHANGELOG кита
     "qual_run", "promotion_qual",                          # харнессы квалификации (данные — qualification/)
     "kit_observability",                                   # наблюдаемость самого кита
+    "mutation_probe",                                      # мутационные пробы охран кита
 })
 
 # Валидаторы, которые РЕАЛЬНО вызываются в child-репозитории. Источники (проверяемо grep'ом):
@@ -312,6 +344,13 @@ RUNTIME_VALIDATORS = frozenset({
     "validate_surface_wiring", "validate_scenario_evidence", "validate_event_catalog",
     "validate_openspec_change", "validate_engops_policy", "validate_duties",
     "validate_knowledge_graph", "validate_storybook_evidence",
+    # F-033 (поле 15.08.2026): сверка критериев приёмки с результатом — механизм ПРОТИВ ложного
+    # green, построенный 14.08 и починенный 15.08, — в дочке не исполнялся НИКОГДА: его зовёт
+    # `engine/acceptance_verify` (строка `from ai_ops_kit.validation import
+    # validate_acceptance_result`), а в поставку он не попадал, потому что имя не внесли сюда.
+    # Список был памятью автора, а не проверяемым фактом; теперь его сторожит
+    # `test_delivered_engine_does_not_import_undelivered_validators`.
+    "validate_acceptance_result",
 })
 
 
@@ -464,11 +503,37 @@ def write_checksums(root=None):
     return len(files)
 
 
+def source_identity(pkg_root=None) -> dict:
+    """Откуда кит себя ставит: путь, ветка, коммит и ВЫПУСК ли это. -> dict.
+
+    ПОВОД (наблюдение владельца 14.08.2026). Кит ставился в дочку из локальной копии, стоявшей на
+    ЧЕРНОВОЙ ветке, а не на выпуске, — и не сказал об этом ни слова, хотя знает, откуда себя берёт:
+    в провенансе стояла литеральная заглушка `git+<ai-ops-kit-repo-url>`. Практическое следствие уже
+    случилось: у дочки не оказалось правил игнорирования, и первый же коммит утащил в историю три
+    десятка служебных файлов. «Работает и работает» — не оправдание: владелец вправе знать, что у
+    него стоит непроверенная версия.
+    """
+    root = Path(pkg_root or PKG)
+    def _git(*a):
+        try:
+            r = subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, timeout=10)
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+    sha = _git("rev-parse", "HEAD")
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    tag = _git("describe", "--exact-match", "--tags", "HEAD")
+    return {"path": str(root), "sha": sha[:12], "branch": branch or None, "tag": tag or None,
+            "is_release": bool(tag), "origin": _git("remote", "get-url", "origin") or None}
+
+
 def write_provenance(version, root=None, note=""):
     if root is None:
         root = MANAGED
+    src = source_identity()
     doc = {"schema_version": 1, "package": "ai-first-system",
-           "source": "git+<ai-ops-kit-repo-url>", "installed_version": version,
+           "source": (src.get("origin") or src["path"]), "source_identity": src,
+           "installed_version": version,
            "installed_at": None, "managed_root": ".ai/managed", "presets": [],
            "checksums_file": ".checksums.json",
            "note": note or "Installed/updated by ai-ops CLI."}
@@ -557,8 +622,23 @@ def write_report(report):
 def cmd_status():
     inst, avail = installed_version(), pkg_version()
     drift = detect_drift() or []
-    print(f"установлено: {inst or '—'}   пакет: {avail}   "
-          f"{'✓ актуально' if inst == avail else '⟳ доступно обновление'}")
+    # B2-17 (пере-прогон 14.08.2026): сравнение ТОЛЬКО номеров говорило «✓ актуально», а `diff` тут
+    # же перечислял 20 изменений — версия не менялась, менялось СОДЕРЖИМОЕ. Владелец, поверивший
+    # первому ответу, не получал ничего из влитой работы. Два ответа одной CLI об одном состоянии
+    # расходились; теперь `status` считает то же, что показывает `diff`.
+    try:
+        pending = len(build_diff())
+    except Exception:                                  # noqa: BLE001 — сравнить содержимое не вышло:
+        pending = None                                 #   это «не знаю», а не «чисто»
+    if inst != avail:
+        verdict = "⟳ доступно обновление"
+    elif pending is None:
+        verdict = "версии совпадают; содержимое сравнить НЕ УДАЛОСЬ"
+    elif pending:
+        verdict = f"⟳ версия та же, но содержимое разошлось: {pending} изменени(й) — нужен update"
+    else:
+        verdict = "✓ актуально"
+    print(f"установлено: {inst or '—'}   пакет: {avail}   {verdict}")
     print(f"целостность managed: {'ДРИФТ (' + str(len(drift)) + ' файлов)' if drift else 'OK'}")
     for d in drift[:10]:
         print(f"  - {d['kind']}: {d['path']}")
@@ -601,8 +681,9 @@ def _draftify(text, today):
 
 
 def _backfill_required_context(today=None, dry=False):
-    """Создать ОТСУТСТВУЮЩИЕ обязательные документы контекста репозитория из шаблонов
-    (managed/context, при отсутствии — из шаблонов кита PKG/context). Пишет в .ai/project/context/
+    """Создать ОТСУТСТВУЮЩИЕ обязательные документы контекста репозитория из шаблонов КИТА
+    (PKG/context, при отсутствии — из managed-слоя ребёнка; порядок — см. `_delivery_source`).
+    Пишет в .ai/project/context/
     как черновик (status: draft). НЕ трогает уже существующие документы. -> список {doc, action}."""
     import datetime as _dt
     today = today or _dt.date.today().isoformat()
@@ -612,9 +693,7 @@ def _backfill_required_context(today=None, dry=False):
         dst = proj_ctx / doc
         if dst.exists() or (AI_DIR / "custom" / "context" / doc).exists():
             continue                                   # уже заполнено репозиторием — не трогаем
-        src = MANAGED / "context" / doc
-        if not src.is_file():
-            src = PKG / "context" / doc                # fallback: свежий шаблон кита
+        src = _delivery_source("context", doc)       # кит первым: см. _delivery_source (F-032)
         if not src.is_file():
             out.append({"doc": doc, "action": "skipped-no-template"}); continue
         if not dry:
@@ -664,6 +743,30 @@ def _seed_planning_contour(root: Path, dry=False):
     return out
 
 
+def _delivery_source(*rel):
+    """Откуда брать доставляемый шаблон: ИЗ КИТА, и только потом из managed-слоя ребёнка.
+
+    F-032 (поле 15.08.2026, подтверждён трижды, третий раз на ЧИСТОЙ установке 17.08.2026).
+    Порядок здесь был ОБРАТНЫЙ — `MANAGED` первым, `PKG` как fallback, — и это ровно та причина, по
+    которой `./ai-ops` в дочке «не обновлялся». Механика: шаги доставки выполняются ДО замены
+    managed-файлов (так объявлено в `deliver_assets`), поэтому чтение managed-слоя давало шаблон
+    ПРЕДЫДУЩЕЙ версии. Точка входа отставала ровно на один релиз — то есть исправление, влитое в
+    кит, доезжало до владельца через обновление ПОСЛЕ следующего, а до тех пор в дочке лежали обе
+    версии: свежий шаблон в managed и старая обёртка в корне.
+    Функция `deliver_assets` при этом ОБЪЯВЛЯЛА обратное: «читают ИСХОДНИК кита (templates/, docs/,
+    registry/), а не managed-слой ребёнка». Утверждение было верным для всех шагов, кроме трёх,
+    и именно эти три доставляли то, что владелец видит первым.
+
+    Fallback на managed оставлен и не бесполезен: установщик запускают и из распакованного
+    managed-слоя (`.ai/managed/installer` в старых дочках), где `PKG` указывает не туда.
+    """
+    for base in (PKG, MANAGED):
+        cand = base.joinpath(*rel)
+        if cand.is_file():
+            return cand
+    return PKG.joinpath(*rel)
+
+
 ENTRY_NAME = "ai-ops"
 
 
@@ -678,9 +781,7 @@ def _install_entry_point(root: Path, dry=False):
     Обёртка, а не запись в PATH: PATH не наша зона, а `./ai-ops` работает сразу и переживает clone.
     -> {"action": created|updated|unchanged|skipped-no-template, "path": str|None}
     """
-    src = MANAGED / "templates" / "runtime" / "ai-ops-entry.sh"
-    if not src.is_file():
-        src = PKG / "templates" / "runtime" / "ai-ops-entry.sh"
+    src = _delivery_source("templates", "runtime", "ai-ops-entry.sh")
     if not src.is_file():
         return {"action": "skipped-no-template", "path": None}
     body = src.read_text(encoding="utf-8")
@@ -714,9 +815,7 @@ def _install_communication_adapter(root: Path, dry=False):
     шаблон: правишь политику -> `./ai-ops update` -> блок обновлён, остальное на месте.
     -> {"action": created|updated|unchanged|skipped-no-template, "path": str}
     """
-    src = MANAGED / "templates" / "runtime" / "claude-communication.md"
-    if not src.is_file():
-        src = PKG / "templates" / "runtime" / "claude-communication.md"
+    src = _delivery_source("templates", "runtime", "claude-communication.md")
     if not src.is_file():
         return {"action": "skipped-no-template", "path": None}
     body = src.read_text(encoding="utf-8").strip()
@@ -1641,8 +1740,31 @@ def cmd_doctor(argv=()):
             ok = _blocker("окружение подменяет пути импорта — проверки могут быть зелёными ложно")
     _dprint(f"версии: установлено {inst or '—'} / пакет {avail} "
           f"{'✓' if inst == avail else '⟳ нужен update'}")
-    if inst != avail:
-        ok = _blocker(f"установлена версия {inst or '—'}, а рядом лежит {avail} — нужен update")
+    # B2-16 (живой прогон 14.08.2026): здесь стояло `inst != avail`, и работа блокировалась, когда
+    # СОСЕДНЯЯ копия СТАРШЕ установленной. На машине разработчика `$HOME/ai-ops-kit` — рабочее дерево,
+    # оно легко стоит на слитой ветке; дочка с 3.36.10 получала «нужен update» против 3.36.8, и
+    # выполнение совета ПОНИЗИЛО бы её. Понижение — не обновление. Плюс путь называется: «рядом»
+    # без адреса не позволяет понять, о какой копии речь.
+    if parse_version(inst or "0") < parse_version(avail):
+        ok = _blocker(f"установлена версия {inst or '—'}, а в источнике {PKG} лежит {avail} — "
+                      f"нужен update")
+    elif inst != avail:
+        _dprint(f"источник {PKG} СТАРШЕ установленного ({avail} < {inst}) — это не повод для "
+                f"update: понижение версии обновлением не является")
+    # ОТКУДА ПОСТАВЛЕНО — говорится ВСЛУХ (наблюдение владельца 14.08.2026). Кит ставился из копии
+    # на черновой ветке и молчал об этом, хотя знает источник. Владелец вправе знать, что у него
+    # стоит непроверенная версия: «работает и работает» — не то же самое, что «объявлено готовым».
+    _src = source_identity()
+    if _src.get("is_release"):
+        _dprint(f"источник: {_src['path']} · выпуск {_src['tag']} ({_src['sha']})")
+    else:
+        _dprint(f"источник: {_src['path']} · ветка {_src.get('branch') or '—'} ({_src['sha']}) "
+                f"— ЭТО НЕ ВЫПУСК")
+        # НЕ замечание, а ФАКТ в отчёте. Владелец назвал цену молчания точно: «само по себе не
+        # страшно — плохо, что кит об этом не сказал». Делать из этого замечание значило бы красить
+        # каждую установку из рабочей копии, и предупреждение обесценилось бы за неделю.
+        _dprint("  это версия, которую никто не объявлял готовой: работать можно, но при разборе "
+                "странного поведения учитывайте, что перед вами не выпуск")
     for zone in ("managed", "project", "custom", "generated", "runtime"):
         exists = (AI_DIR / zone).exists()
         _dprint(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")
@@ -1992,6 +2114,90 @@ def cmd_session(argv):
     return session_guardrails.main(["."] + [a for a in argv[2:]])
 
 
+def cmd_subsession(argv):
+    """`ai-ops subsession` — может ли кит взять работу в ОТДЕЛЬНУЮ сессию сам, и разрешено ли ему
+    тратить. По умолчанию только РЕШЕНИЕ (ничего не тратится); тратит `--spawn`.
+
+    ПОЧЕМУ КОМПОЗИЦИЯ ЖИВЁТ ЗДЕСЬ, А НЕ В МОДУЛЕ. `session_launcher` принимает исполнителя и учёт
+    расхода швами (`provider`, `usage_hooks`) и сам их не импортирует: слой моделей уже импортирует
+    слой сессий, и обратный импорт дал бы восьмую взаимную пару (ратчет `test_layering` это ловит).
+    Собрать их вместе может только то, что выше обоих, — точка входа.
+
+    ПОЧЕМУ ЭТА КОМАНДА ПОЯВИЛАСЬ ТОЛЬКО СЕЙЧАС. Правило репозитория — сначала полевое
+    доказательство, потом разводка. Прогон 2026-08-13 записан в
+    `qualification/FIELD-RUN-AUTONOMY-2026-08-13.md`: подсессия открыта, потрачено $0.3945 из
+    объявленных $3.17, расход измерен и записан в ledger, потолок пересчитан после траты.
+    """
+    args = [a for a in argv[2:]]
+    root = "."
+    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
+        if (_cand / "session_launcher.py").is_file() and str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+    import session_launcher as _sl
+    from ai_ops_kit.engops import session_telemetry as _st
+    from ai_ops_kit.ui import presenter as _pr
+
+    ctx = None
+    if "--context" in args:
+        _i = args.index("--context")
+        if _i + 1 < len(args) and args[_i + 1].isdigit():
+            ctx = int(args[_i + 1])
+    task = None
+    if "--next" in args:
+        _i = args.index("--next")
+        if _i + 1 < len(args):
+            task = args[_i + 1]
+    wid = None
+    if "--workitem" in args:
+        _i = args.index("--workitem")
+        if _i + 1 < len(args):
+            wid = args[_i + 1]
+
+    snap = _st.snapshot(root, workitem_id=wid, context_current=ctx)
+    dec = _sl.decide(root, snap, next_task=task, at_safe_boundary="--unsafe" not in args)
+    print(_pr.render(_pr.from_subsession_decision(dec),
+                     audience="technical" if "--details" in args else "product"))
+    if "--spawn" not in args:
+        # Сухо по умолчанию: команда, которая тратит деньги от одного слова, — не инструмент,
+        # а ловушка. Тратить нужно попросить явно.
+        return 0
+    if dec["action"] != "spawn_subsession":
+        return 0
+
+    class _Hooks:
+        """Учёт расхода: `_record_call` только накапливает в памяти, дренирует вызывающий. Без этого
+        шага автономная трата не попала бы в ledger, и СЛЕДУЮЩИЙ потолок считался бы по неполной
+        сумме — то есть потолок тихо перестал бы работать."""
+
+        def __init__(self):
+            from ai_ops_kit.providers import orchestrator_usage as _ou
+            self._ou = _ou
+
+        def set_context(self, **kw):
+            self._ou.set_call_context(**kw)
+
+        def drain(self):
+            self._ou.clear_call_context()
+            return self._ou.drain_call_stats()
+
+    from ai_ops_kit.providers.orchestrator_providers import make_claude_cli_provider
+    brief = _sl.build_brief(workitem_id=wid, title=task, repo_path=str(REPO_ROOT))
+    res = _sl.spawn(root, brief, snap, provider=make_claude_cli_provider(),
+                    usage_hooks=_Hooks(), workitem_id=wid, decision=dec)
+    if not res["spawned"]:
+        print(_pr.render(_pr.from_subsession_decision(res["decision"]), audience="product"))
+        return 0
+    after = res["spend_after"]
+    print(f"\nПотрачено самостоятельно: ${after['cost']:.4f} (вызовов {after['calls']}).")
+    if res.get("ceiling_crossed_by"):
+        # Потраченного не вернуть; честная половина — назвать перерасход, а не спрятать его.
+        print(f"⚠ разрешённая сумма превышена на ${res['ceiling_crossed_by']:.4f} — "
+              "дальше сам не продолжаю.")
+    print("\nЧто предлагает отдельная сессия:\n")
+    print(res.get("result") or "(пусто)")
+    return 0
+
+
 def cmd_engops(argv):
     """v3.19.0 Engineering Operating Model (срез 1): операционная гигиена коммита и ветки.
     `ai-ops engops` — политика + актуальность текущей ветки; `engops branch [--base X]` — вердикт
@@ -2298,6 +2504,8 @@ def _dispatch(argv):
         return cmd_audit(argv)
     if cmd == "session":
         return cmd_session(argv)
+    if cmd == "subsession":
+        return cmd_subsession(argv)
     if cmd == "method":
         return cmd_method(argv)
     if cmd == "engops":

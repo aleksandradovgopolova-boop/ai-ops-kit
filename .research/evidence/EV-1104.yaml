@@ -1,0 +1,47 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1104
+request_id: RR-014
+statement: >
+  mestre-yoda (MIT, TypeScript) держит заявленное КОНТРАКТАМИ, а не инструкциями агенту, но
+  продуктом ещё не является. Проверено на клоне HEAD e3ae471 (2026-08-13). Что реально есть:
+  JSON-Schema + сгенерированные типы, где `Evidence = {kind: artifact|event|approval|test|
+  observation, ref, sha256?}`; `ApprovalV1` («content-bound approval») ТРЕБУЕТ по схеме
+  prdDigest, specDigest и challenge — все sha256, плюс policyVersion, approver, decision
+  (approved|rejected), runId и gate; универсальный результат операции — размеченное объединение
+  success|failure|blocked с exitCode, reasonCode, why[], evidence[], stateChanged, retryable,
+  recovery; транзакции файловых мутаций с `PathFingerprint` (kind file/directory/missing + size +
+  sha256), фазовыми переходами (`assertPhaseTransition`) и решением о восстановлении; девять
+  state-схем (approval, event, evidence, lock, migration, project-config, snapshot,
+  transaction-manifest, transaction-progress). Дисциплина видна и в мелочах: git-раннер гасит
+  пользовательский gitconfig, потому что чужой `status.showUntrackedFiles=no` «молча изменил бы
+  набор изменений, который оценивает гейт». 97 тестовых файлов.
+  ЧЕГО НЕТ (границы, важные для сравнения): проект сам объявляет себя Experimental и «not
+  installable» — промоушен по evidence, не по датам; пакет adapters — файл в 3 строки, то есть
+  интеграций с харнессами нет; у CLI разобраны только help/version, списка команд нет; git
+  используется на чтение (наблюдение статуса), создания веток, коммитов и PR в коде не найдено;
+  каталога гейтов нет — `gate` присутствует как идентификатор в одобрении, а не как реестр.
+evidence_type: documented_fact
+source:
+  title: "thiagocorreanet/mestre-yoda — README на закреплённом HEAD e3ae471"
+  url: "https://raw.githubusercontent.com/thiagocorreanet/mestre-yoda/e3ae471/README.md"
+  type: source_repository
+  published_at: "2026-08-05"
+  is_primary: true
+citation:
+  locator: "schemas/state/approval.v1.schema.json (required), packages/contracts/src/generated/contracts.ts:99 (Evidence), packages/runtime/src/domain/transactions/model.ts (PathFingerprint), packages/runtime/src/infra/node/git.ts, ROADMAP.md, README.md"
+  quote: "the deterministic toolchain and standalone bundle. The project is not ready for production."
+captured_at: "2026-08-13"
+captured_by: "research-модуль, прогон RR-014 (факты — из кода и схем клона; цитата — из README, где объявлена зрелость)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-13"
+reliability:
+  level: high
+  rationale: >
+    Первичные исходники на конкретном HEAD; положительные утверждения сняты с определений типов
+    и обязательных полей схем. Отрицательные ограничены охватом: поиск по packages/**/*.ts и
+    schemas/**; отсутствие PR-контура означает «в этом коде не найдено», а не «невозможно» —
+    проект в активной разработке, эпики заявлены публично.
+status: active
+superseded_by: null

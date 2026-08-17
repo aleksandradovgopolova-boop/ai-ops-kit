@@ -1,0 +1,15 @@
+schema_version: 1
+kind: workitem
+id: readme-media-line-removed
+task: удалить из README строку про каталог public/media
+workflow: QUICK
+route_reasons:
+- default routing
+human_approval_required: false
+paths:
+  blueprint: features/readme-media-line-removed/blueprint.yaml
+  run_state: .ai/runtime/workitems/readme-media-line-removed/TaskState.yaml
+  workitem: features/readme-media-line-removed/workitem.yaml
+status: draft
+lifecycle_intent: discovery
+affects: {}

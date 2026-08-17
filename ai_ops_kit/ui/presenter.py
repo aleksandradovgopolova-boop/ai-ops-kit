@@ -329,6 +329,29 @@ def from_next_work(rep: dict) -> dict:
                   "Работа объявлена, но не прошла проверку готовности."
         elif blocked:
             why = f"Это не значит, что всё сделано: {len(blocked)} задач ждут снятия блокировки."
+        elif active:
+            # РАБОТА ОБЪЯВЛЕНА И ИДЁТ — и это ФАКТ, который сообщение обязано назвать. Прежде эта
+            # ветка сливалась со следующей, и `next` на самом ките печатал человеку «работа пока не
+            # объявлена», тогда как `--json` рядом показывал её в `in_progress`. Перевод менял не
+            # язык, а факты: отрицал объявленную работу — тот же класс, что потерянное ведро
+            # `not_ready` строкой выше и `unknown`, выброшенный в `from_contour_consistency`.
+            # Статус здесь `ok`, а не `blocked`: продолжение НЕ невозможно (blocked означает именно
+            # это) — работа идёт, от человека ничего не нужно. Ярлык задаёт `headline`.
+            n = len(active)
+            titles = "; ".join(f"«{a.get('title') or a['id']}»" for a in active)
+            return message(
+                status="ok", headline="Работа идёт",
+                summary=f"Свободной задачи сейчас нет: {n} "
+                        f"{_q(n, 'работа', 'работы', 'работ')} уже в работе — {titles}.",
+                # Формулировка НЕ повторяет ложное утверждение даже в опровержении: тест стережёт
+                # именно строку «работа не объявлена», и цитата в отрицании обошла бы стража.
+                why_it_matters="Это не «всё сделано»: начатая работа не закончена. Взять "
+                               "параллельно тоже нечего — ни готовых, ни заблокированных задач в "
+                               "плане не осталось.",
+                next_steps=["продолжу то, что уже в работе",
+                            "или покажу, чем закрывается каждая из этих работ"],
+                technical={"in_progress": ", ".join(a["id"] for a in active),
+                           "ready": "—", "blocked": "—", "not_admitted": "—"})
         else:
             why = "Это не значит, что всё сделано: работа пока не объявлена."
         return message(
@@ -654,18 +677,35 @@ def from_plan_built(workitem_id, workflow, spec_level, packages, context_error=N
         technical=tech)
 
 
-def from_specification(path, created, level_name, sections, blocking_missing, next_command) -> dict:
-    """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа."""
+def from_specification(path, created, level_name, sections, blocking_missing, next_command,
+                       added=None, add_error=None) -> dict:
+    """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
+
+    F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
+    сообщение звучало «заготовка уже была; заполнить нужно 9 разделов», а в файле лежало 6 разделов
+    прошлого уровня — заполнять было нечего. `add_error` — честная причина, если дописать не вышло
+    (битый spec.yaml не переписываем: описанное человеком дороже незакрытого гейта)."""
     n_missing = len(blocking_missing or [])
+    n_added = len(added or [])
     tech = {"spec": str(path), "уровень": level_name, "разделов": len(sections or []),
             "не заполнено": ", ".join(blocking_missing or []) or "—",
-            "создана": bool(created)}
+            "создана": bool(created), "дописано": ", ".join(added or []) or "—"}
+    if add_error:
+        tech["дописать не удалось"] = str(add_error)
+    if created:
+        _origin = "создана"
+    elif n_added:
+        _origin = (f"уже была, дописано {n_added} "
+                   f"{_q(n_added, 'раздел', 'раздела', 'разделов')} под {level_name}")
+    else:
+        _origin = "уже была"
     if n_missing:
         return message(
             status="needs_input",
-            summary=("Заготовка описания задачи " + ("создана" if created else "уже была")
+            summary=("Заготовка описания задачи " + _origin
                      + f"; заполнить нужно {n_missing} "
-                       f"{_q(n_missing, 'раздел', 'раздела', 'разделов')}."),
+                       f"{_q(n_missing, 'раздел', 'раздела', 'разделов')}."
+                     + (f" Дописать разделы не удалось: {add_error}." if add_error else "")),
             why_it_matters="Заполнять их за тебя я не буду: это как раз то, что из кода не "
                            "выводится, — зачем задача и как поймём, что получилось.",
             next_steps=[f"заполни разделы в {path}", f"потом запускай: {next_command}"],
@@ -799,6 +839,190 @@ def from_advice(result: dict) -> dict:
         next_steps=["покажу список целиком, если нужно"], technical=tech)
 
 
+def from_subsession_decision(decision: dict) -> dict:
+    """SubsessionDecision -> UserMessage: может ли кит взять работу в отдельную сессию САМ.
+
+    Читатель — владелец, а не инженер, поэтому здесь нет ни «подсессии», ни имён полей конфига в
+    тексте: есть «беру сам» / «нужно твоё слово» и одно понятное действие. Внутренние имена
+    (`session_economy.max_autonomous_spend_usd`, коды отказов) остаются В ДЕТАЛЯХ — по ним
+    отлаживают, но наружу они не идут.
+
+    Почему отказ не сводится к одной фразе «нельзя»: у семи отказов разное ЛЕЧЕНИЕ. «Потолок не
+    объявлен» лечится одной строкой согласия, «потолок достигнут» — решением потратить ещё,
+    «не могу доказать расход» — вообще не деньгами. Свести их в одно значило бы сказать человеку
+    «нельзя» там, где на самом деле «скажи да».
+    """
+    n = (decision or {}).get("numbers") or {}
+    action = (decision or {}).get("action")
+    code = (decision or {}).get("refusal")
+    ceiling, spent = n.get("ceiling_usd"), n.get("spent_usd")
+    tech = {"решение": action, "код отказа": code or "—",
+            "потолок $": ceiling if ceiling is not None else "не объявлен",
+            "потрачено самостоятельно $": spent if spent is not None else "—",
+            "подсессий использовано": n.get("subsessions_used", "—"),
+            "состояние контекста": n.get("context_state"),
+            "сессия": n.get("session_id") or "не опознана",
+            "причина": (decision or {}).get("reason") or "—"}
+
+    if action == "spawn_subsession":
+        left = None if ceiling is None or spent is None else round(float(ceiling) - float(spent), 4)
+        return message(
+            status="ok", headline="Эту работу возьму отдельно и сам",
+            summary="Начну её с чистого листа, чтобы не платить за перечитывание нашей истории."
+                    + (f" В пределах разрешённого остаётся ${left}." if left is not None else ""),
+            why_it_matters="Чем длиннее переписка, тем дороже каждый следующий запрос, а пользы от "
+                           "старой части уже нет.",
+            next_steps=["ничего не нужно — расскажу, что получилось"], technical=tech)
+
+    if action == "continue_here":
+        return message(
+            status="ok", headline="Отдельная сессия пока не нужна",
+            summary=(decision or {}).get("reason") or "Продолжаю здесь.",
+            next_steps=["продолжаю"], technical=tech)
+
+    # Отказы. Формулировка зависит от кода: разное лечение — разные слова.
+    if code == "no_ceiling":
+        # Спрашивать «сколько можно потратить» и не предлагать числа значило бы требовать решения,
+        # для которого у человека нет данных: цену вызова видел только кит. Поэтому вопрос идёт
+        # ВМЕСТЕ с посчитанной суммой и её основанием — владельцу остаётся согласиться.
+        sug = n.get("suggested_usd")
+        why = n.get("suggestion_reason")
+        tech["предложено $"] = sug if sug is not None else "нет замера"
+        tech["основание предложения"] = n.get("suggestion_basis") or "—"
+        if sug:
+            return message(
+                status="blocked", headline=f"Могу дальше сам — нужно твоё «да» на ${sug}",
+                summary=f"Я посчитал, сколько прошу: ${sug}. {why}",
+                why_it_matters="Работать без названной границы значит тратить без границы. Пока "
+                               "суммы нет, я не трачу ничего — даже когда вижу, что стоило бы.",
+                decision={"question": f"разрешить мне тратить самостоятельно до ${sug}?",
+                          "recommendation": f"да, ${sug} — это посчитано по реальной цене работы, "
+                                            "не выбрано на глаз",
+                          "on_approve": "буду брать подходящую работу отдельно и остановлюсь на "
+                                        "этой сумме сам",
+                          "on_reject": "останусь здесь и буду только советовать"},
+                next_steps=["скажи «да» — запишу сумму в настройки проекта",
+                            "или назови свою, если эта кажется большой"], technical=tech)
+        return message(
+            status="blocked", headline="Сам продолжить не могу — нечем обосновать сумму",
+            summary="Я мог бы вести эту работу отдельно, но сумму назвать не могу: "
+                    + (why or "у меня нет замеров стоимости в этом проекте")
+                    + " Придумывать число я не буду.",
+            why_it_matters="Названная от себя сумма выглядела бы расчётом, не будучи им. Лучше "
+                           "честно попросить решение, чем подсунуть догадку.",
+            decision={"question": "сколько мне можно потратить самостоятельно?",
+                      "recommendation": "назначь небольшую сумму на пробу — после первых работ я "
+                                        "посчитаю точнее сам",
+                      "on_approve": "буду брать подходящую работу отдельно, не выходя за неё",
+                      "on_reject": "останусь здесь и буду только советовать"},
+            next_steps=["назови сумму — я запишу её в настройки проекта"], technical=tech)
+    if code == "over_ceiling":
+        return message(
+            status="blocked", headline="Разрешённая сумма израсходована",
+            summary=f"Самостоятельно потрачено ${spent} из ${ceiling}. Дальше — только с твоим словом.",
+            why_it_matters="Это и есть та граница, о которой договаривались: дальше я не иду сам.",
+            decision={"question": "продолжать самостоятельно?",
+                      "recommendation": "решай по результату — что уже получено, видно",
+                      "on_approve": "подними сумму, и я продолжу",
+                      "on_reject": "останусь здесь"},
+            next_steps=["подними разрешённую сумму или продолжим вместе"], technical=tech)
+    if code == "spend_unprovable":
+        return message(
+            status="degraded", headline="Не могу доказать, сколько уже потратил",
+            summary="Среди сделанных запросов есть такие, чья стоимость неизвестна, поэтому мой "
+                    "подсчёт неполон.",
+            why_it_matters="Сказать «я в пределах суммы» по неполному счёту значило бы пообещать "
+                           "больше, чем я знаю. Поэтому не трачу.",
+            next_steps=["продолжим здесь — я на виду"], technical=tech)
+    if code == "session_unidentified":
+        return message(
+            status="degraded", headline="Не понимаю, к какому разговору отнести расход",
+            summary="Пока я не опознаю текущий разговор, я не могу связать с ним трату.",
+            why_it_matters="Иначе я потратил бы «в никуда»: проверить, остался ли я в пределах "
+                           "суммы, было бы нечем.",
+            next_steps=["продолжим здесь"], technical=tech)
+    if code == "unsafe_boundary":
+        return message(
+            status="degraded", headline="Сейчас не время переключаться",
+            summary="Работа в середине шага, который нельзя обрывать.",
+            why_it_matters="Прерваться здесь дороже, чем дойти до безопасной точки.",
+            next_steps=["дойду до безопасной точки и вернусь к этому решению"], technical=tech)
+    return message(
+        status="degraded", headline="Сам продолжить не могу",
+        summary=(decision or {}).get("reason") or "Нет условий, чтобы взять работу отдельно.",
+        next_steps=["продолжим здесь"], technical=tech)
+
+
+def from_session_economy(snapshot: dict, rec: dict) -> dict:
+    """Снимок сессии + SessionRecommendation -> UserMessage. Говорится ДО траты, а не после.
+
+    ДВА ДЕФЕКТА ОДНОГО МЕСТА (найдено полем 2026-08-13). Первый: расход назывался только в ритуале
+    ЗАВЕРШЕНИЯ WorkItem — то есть решение «здесь новую сессию не начинаем» человек мог принять лишь
+    после того, как уже потратил. Второй: страж перед старом печатал что-либо только при исходах
+    `new_session`/`compact`, а поскольку контекст всегда был `unknown` (транскрипт не читался
+    никогда), этих исходов не наступало и страж молчал всегда. Молчание читалось как «всё в порядке».
+
+    Поэтому здесь расход называется ВСЕГДА, и «не измерено» — отдельный, видимый ответ, а не тишина.
+    """
+    ctx = snapshot.get("context_current")
+    status = snapshot.get("context_status")
+    outcome = (rec or {}).get("outcome")
+    spend = (rec or {}).get("session_spend") or "н/д"
+    turns = snapshot.get("turns")
+    # Внутренняя причина остаётся В ДЕТАЛЯХ: в ней живут имена вроде `WorkItem`, которым наружу
+    # хода нет, а отлаживать по ней надо.
+    tech = {"контекст": ctx, "статус измерения": status,
+            "источник": snapshot.get("context_source") or "—",
+            "ходов": turns, "источник ходов": snapshot.get("turns_source") or "—",
+            "расход сессии": spend, "состояние расхода": (rec or {}).get("spend_state") or "—",
+            "исход": outcome, "причина": (rec or {}).get("reason") or "—",
+            "последняя компакция": snapshot.get("last_compaction_at") or "не обнаружена"}
+
+    if status == "unavailable":
+        why = snapshot.get("session_unavailable_reason")
+        tech["почему не измерено"] = why or "—"
+        return message(
+            status="degraded", headline="Расход этой сессии я не вижу",
+            summary="Сколько сессия уже прочитала — не измерено."
+                    + (f" Причина: {why}" if why else ""),
+            why_it_matters="Это не «мало»: без числа я не могу вовремя сказать, что пора начинать "
+                           "новую сессию, и работа будет идти дороже молча.",
+            next_steps=["покажи `/context` и передай число как `--context N`"],
+            technical=tech)
+
+    human_ctx = f"{ctx / 1000:.0f}k" if ctx else "н/д"
+    measured = "измерено" if status == "measured" else "оценка"
+    head = f"Сессия читает {human_ctx} на каждом запросе ({measured}); прочитала всего {spend}"
+
+    if outcome in ("new_session", "compact", "clear"):
+        advice = {"new_session": "начать чистую сессию",
+                  "compact": "сжать историю на этой безопасной границе",
+                  "clear": "очистить историю — следующая работа не связана с прошлой"}[outcome]
+        return message(
+            status="degraded", headline="Прежде чем тратить — стоит сменить сессию",
+            summary=f"{head}.",
+            why_it_matters="Каждый следующий запрос заново оплачивает перечитывание этой истории. "
+                           "Дальше будет только дороже, а пользы от старой переписки уже нет.",
+            decision={"question": "начинать работу здесь или в чистой сессии?",
+                      "recommendation": advice,
+                      "on_approve": "выполни команду ниже и повтори задачу",
+                      "on_reject": "продолжу здесь — решение твоё, я не блокирую"},
+            next_steps=[(rec or {}).get("command") or "продолжаю здесь"],
+            technical=tech)
+    # `attention` — не «всё хорошо»: сказать «история дешёвая» при растущем счёте значило бы
+    # успокаивать там, где кит как раз обязан предупредить.
+    growing = "attention" in ((rec or {}).get("context_state"), (rec or {}).get("spend_state"))
+    return message(
+        status="ok",
+        headline="Счёт растёт, но сессию менять пока рано" if growing else "Сессию менять не нужно",
+        summary=f"{head} — работаю здесь.",
+        why_it_matters=("Расход подходит к порогу: следующую независимую задачу лучше начать "
+                        "в чистой сессии, а эту — довести до конца здесь." if growing else
+                        "Пока история дешёвая, собранное знание выгоднее переиспользовать, "
+                        "чем начинать с нуля."),
+        technical=tech)
+
+
 def from_bootstrap(rep: dict, applied=False) -> dict:
     """`bootstrap.plan()` / `bootstrap.apply()` -> UserMessage. Онбординг заканчивается РАБОТОЙ.
 
@@ -901,6 +1125,162 @@ def from_intake_gap(missing, hint_command=None) -> dict:
         next_steps=steps or ["скажи размер и риск задачи"],
         technical={m.get("signal"): " | ".join(m.get("allowed") or []) or "значение"
                    for m in miss})
+
+
+def from_short_path(decision: dict, trace: dict = None, next_command: str = None) -> dict:
+    """Решение о коротком пути -> UserMessage. Три случая, и они РАЗНЫЕ для человека.
+
+    Короткий путь взят — говорим, что описание не переписываем и что от него осталось в следе.
+    Заявлено, но минимума нет — называем ровно то, чего не хватает: это единственное, что человеку
+    нужно сделать, чтобы получить короткий путь. Не заявлено — сообщения нет вовсе: кит не
+    предлагает владельцу выключить собственные проверки.
+    """
+    names = decision.get("human_names") or {}
+    keys = list(names)
+    if decision.get("short_path"):
+        tr = trace or {}
+        declined = len(tr.get("declined") or [])
+        return message(
+            status="ok", headline="Работа уже описана — иду сразу делать",
+            summary="Описание у тебя есть: понятно, чего добиваемся, как поймём, что готово, и где "
+                    "править. Заново расспрашивать и планировать не буду.",
+            why_it_matters="Я останусь в этой работе как след: что решено, по каким признакам это "
+                           "видно и что я пропустил — записано, и это можно проверить позже."
+                           + (f" Разделов, которые я не требую, {declined} — у каждого написано, "
+                              f"почему." if declined else ""),
+            next_steps=[f"делаю: {next_command}"] if next_command else ["беру работу в исполнение"],
+            technical={"признаки": {names[k]: decision["minimum"][k]["detail"] for k in keys},
+                       "заявлено": decision.get("declared_by"),
+                       "пропущено": ", ".join(decision.get("skipped_steps") or []) or "—",
+                       "решение": decision.get("decision_ref"),
+                       "след": str((trace or {}).get("record") or "—")})
+    if decision.get("unknown"):
+        return message(
+            status="degraded", headline="Похоже, описание есть, но я его не читаю",
+            summary="Ты сказала, что работа описана, но проверить это я не могу: "
+                    + "; ".join(decision["minimum"][k]["detail"] for k in decision["unknown"]),
+            why_it_matters="Пойти коротким путём на непрочитанном описании — то же самое, что "
+                           "поверить на слово. Поэтому иду обычным путём, а не притворяюсь, что "
+                           "проверил.",
+            next_steps=["поправить описание, чтобы оно читалось, — и короткий путь включится сам"],
+            technical={"не прочитано": decision["unknown"]})
+    return message(
+        status="needs_input", headline="Чтобы идти сразу делать, не хватает малого",
+        summary="Ты сказала, что работа описана. Чего я в описании не нашёл: "
+                + ", ".join(decision.get("missing_names") or []) + ".",
+        why_it_matters="Это тот самый минимум, по которому потом можно сказать «готово» и не "
+                       "обмануться. Без него я не пропускаю разбор — иначе проверять результат "
+                       "будет нечем.",
+        next_steps=["дописать это в описание — дальше пойду коротким путём без вопросов"],
+        technical={names.get(k, k): decision["minimum"][k]["detail"]
+                   for k in (decision.get("missing") or [])})
+
+
+def from_process_spend(check: dict, continue_command: str = None,
+                       run_command: str = None) -> dict:
+    """Потолок траты на описание до первой правки кода -> UserMessage (решение владельца 2026-08-17).
+
+    Это ВОПРОС, а не отказ: владелец решила предупреждать и спрашивать, а не останавливать молча.
+    Поэтому у сообщения есть и рекомендация, и то, что будет при обоих ответах.
+    """
+    spent, limit = check.get("spent_on_process"), check.get("ceiling")
+
+    def _t(n):
+        return "н/д" if n is None else (f"{n / 1000:.0f} тысяч" if n >= 1000 else str(n))
+
+    if check.get("state") == "unknown":
+        return message(
+            status="degraded", headline="Сколько уходит на разбор — не вижу",
+            summary="Потолок траты на описание я применить не могу: расход этой сессии не измеряется.",
+            why_it_matters="Называть это нормой было бы неправдой: я не знаю числа, а не знаю, что "
+                           "оно маленькое.",
+            technical={"причина": check.get("reason")})
+    return message(
+        status="needs_input", headline="Разбор уже дороже, чем ты разрешила",
+        summary=f"На то, чтобы разобраться и описать, ушло {_t(spent)} токенов, а кода я ещё не "
+                f"тронул. Твой потолок на это — {_t(limit)}.",
+        why_it_matters="Ровно так уже сгорели две сессии: описание уточнялось, а работа не "
+                       "начиналась. Дальше решаешь ты.",
+        decision={"question": "продолжать разбор или идти делать по тому, что уже есть?",
+                  "recommendation": "идти делать: если чего-то не хватит, это станет видно на "
+                                    "проверках, а не в разговоре",
+                  "on_approve": f"делаю: {run_command}" if run_command else "беру работу в исполнение",
+                  "on_reject": f"продолжаю разбор: {continue_command}" if continue_command
+                               else "продолжаю разбор"},
+        next_steps=[c for c in (run_command, continue_command) if c],
+        technical={"потрачено на описание": spent, "потолок": limit,
+                   "шаги описания": ", ".join(check.get("process_steps") or []) or "—",
+                   "расход сессии всего": check.get("session_total_tokens"),
+                   "решение": check.get("decision_ref")})
+
+
+def from_kit_feedback_recorded(path, created, errors, has_evidence, declared_class) -> dict:
+    """Наблюдение о ките записано (или не записано) -> UserMessage.
+
+    Отказ здесь — не бюрократия: «дефект» без улики попал бы в кит утверждением, за которое некому
+    отвечать. Поэтому сообщение НЕ ругает человека, а называет, что именно приложить.
+    """
+    if errors:
+        return message(
+            status="needs_input", headline="Записать не могу — не на что опереться",
+            summary="Ты говоришь, что я сделал что-то не так, и я хочу это запомнить. Но как "
+                    "дефект это уйдёт ко мне утверждением без доказательства, а такие я сам же и "
+                    "учусь не производить.",
+            why_it_matters="Достаточно одной опоры: файл и строка из него — или команда и то, что "
+                           "она напечатала. Если опоры нет, скажи это как трение или вопрос — их я "
+                           "принимаю без доказательств.",
+            next_steps=["добавить файл со строкой или команду с выводом",
+                        "либо записать как трение: то же самое со словом «мешает», без улик"],
+            technical={"почему не записано": "; ".join(errors)})
+    if not created:
+        return message(
+            status="ok", headline="Это я уже записал",
+            summary="Такое наблюдение у меня уже есть — второй раз не завожу, чтобы не считать одно "
+                    "и то же дважды.",
+            next_steps=["посмотреть судьбу сказанного: ./ai-ops feedback"],
+            technical={"файл": path})
+    return message(
+        status="ok", headline="Записал — и это дойдёт до меня самого",
+        summary="Твоё замечание сохранено в проекте вместе с тем, чем оно подтверждено."
+                + ("" if has_evidence else " Улик нет, поэтому дефектом я это не называю."),
+        why_it_matters="Раньше такое доезжало до меня только пересказом — то есть если человек "
+                       "вспомнит. Теперь это данные: их видно, у них будет ответ.",
+        next_steps=["посмотреть судьбу сказанного: ./ai-ops feedback"],
+        technical={"файл": path, "класс": declared_class or "выведен из улик",
+                   "улики": "есть" if has_evidence else "нет"})
+
+
+def from_kit_feedback_status(rep: dict) -> dict:
+    """Судьба наблюдений этой дочки -> UserMessage. Ответ обязан быть виден, иначе канал умрёт."""
+    total = rep.get("total") or 0
+    waiting, decided = rep.get("waiting") or [], rep.get("decided") or []
+    if not total:
+        return message(
+            status="ok", headline="Замечаний ко мне пока нет",
+            summary="Ты ещё ничего мне не говорила о моей работе в этом проекте.",
+            next_steps=['сказать так: ./ai-ops feedback "что было не так"'])
+    if rep.get("errors"):
+        return message(
+            status="degraded", headline="Часть замечаний я не читаю",
+            summary=f"Записано {total}, но {len(rep['errors'])} из них не разбираются.",
+            why_it_matters="Пока это так, я не могу обещать, что до меня дойдёт всё сказанное.",
+            technical={"ошибки": rep["errors"]})
+    if waiting and not decided:
+        return message(
+            status="ok", headline="Сказанное ждёт ответа",
+            summary=f"Замечаний {total}, ответа пока нет ни на одно.",
+            why_it_matters="Ответ приходит, когда я разбираю их у себя: каждое станет работой или "
+                           "будет отклонено с причиной. Молча они не исчезнут.",
+            next_steps=[w["statement"] for w in waiting[:2]],
+            technical=rep.get("by_state"))
+    return message(
+        status="ok", headline="Вот что стало с твоими замечаниями",
+        summary=f"Замечаний {total}: с ответом {len(decided)}, ждут ответа {len(waiting)}.",
+        next_steps=[f"«{d.get('statement') or d['id']}» — "
+                    f"{d.get('state_name') or d['state']}"
+                    + (f": {d['reason']}" if d.get("reason") else "")
+                    for d in decided[:2]],
+        technical=rep.get("by_state"))
 
 
 # Состояние строки doctor -> насколько это плохо. Порядок важен: вердикт следует за ХУДШЕЙ строкой.

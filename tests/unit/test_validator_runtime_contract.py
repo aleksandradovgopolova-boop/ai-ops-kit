@@ -59,7 +59,9 @@ STANDALONE = [
     "validate_memory_governance",
     "validate_model_qualification",
     "validate_model_roles",
+    "validate_mutation_probes",
     "validate_openspec_change",
+    "validate_own_medicine",
     "validate_package_boundaries",
     "validate_pipeline_e2e",
     "validate_post_release_readout",
@@ -90,6 +92,7 @@ STANDALONE = [
 
 # Валидаторы, которым нужен путь к артефакту.
 NEEDS_ARTIFACT = [
+    "validate_acceptance_result",
     "validate_architecture_decision",
     "validate_context_architecture",
     "validate_context_bundle",
@@ -99,6 +102,7 @@ NEEDS_ARTIFACT = [
     "validate_knowledge_graph",
     "validate_loop_policy",
     "validate_plan_artifact",
+    "validate_product_objects",
     "validate_requirements_artifact",
     "validate_reviewer_result",
     "validate_run_handoff",

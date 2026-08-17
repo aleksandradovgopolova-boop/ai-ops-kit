@@ -81,15 +81,16 @@ def test_spec_levels_selftest():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         sig_eng = {"task_type": "ENGINEERING", "affected_areas": ["core"]}
-        sp, created = create_spec(root, "sf", sig_eng)
+        sp, created, _rep = create_spec(root, "sf", sig_eng)
         expect("v2.110 create_spec: артефакт создан на диске", created and sp.is_file())
         doc = yaml.safe_load(sp.read_text(encoding="utf-8"))
         expect("v2.110 create_spec: разделы уровня L1 в артефакте (заготовки missing)",
                "requirements" in doc["sections"] and doc["sections"]["goal"]["status"] == "missing"
                and doc["level"] == 1)
         # повторный create без overwrite не перезаписывает (не теряем описанное)
-        _, created2 = create_spec(root, "sf", sig_eng)
+        _, created2, rep2 = create_spec(root, "sf", sig_eng)
         expect("v2.110 create_spec: без overwrite не перезаписывает", created2 is False)
+        expect("F-029 create_spec: уровень тот же -> дописывать нечего", rep2["added"] == [])
 
         # пустой spec (всё missing) -> assess_from_artifacts НЕ готов, spec_artifact=True
         cov0 = assess_from_artifacts(sig_eng, root, "sf")

@@ -49,7 +49,7 @@ def _install_dependencies(profile, root, policy):
 def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
     """v3.0-rc14 (finding живой квалификации kimi): author-вызов ретраится при невалидном/пустом
     артефакте."""
-    from ai_ops_kit.engine import budget as _budget_mod
+    from ai_ops_kit.shared import budget as _budget_mod
     prompt = base_prompt
     data, errs = None, ["author не вызван"]
     for attempt in range(attempts):
@@ -115,7 +115,7 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
 def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, budget,
                    openspec_validate=None):
     """v2.86 Product Authoring: движок производит артефакты requirements/plan."""
-    from ai_ops_kit.engine import budget as _budget_mod
+    from ai_ops_kit.shared import budget as _budget_mod
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     out_dir = Path(work_root) / ".ai" / "runplan" / wid
     gate_ev = dict(gate_ev)

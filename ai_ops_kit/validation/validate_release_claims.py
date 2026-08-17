@@ -57,6 +57,31 @@ def derived_counts(pkg=PKG):
     return checks, agents
 
 
+def derived_layering_counts(pkg=PKG):
+    """(mutual_pairs, cycles_longer_than_two) из `packages/layering.yaml` — источника ратчета.
+
+    ЗАЧЕМ (находка ревью 2026-08-13). Числа связности жили в прозе продуктового контекста и не
+    сверялись ничем: ратчет опустился 12 -> 7 и 210 -> 52, а документы кита продолжали говорить
+    старое при зелёном CLAIMS-OK. Проверка чисел покрывала пять файлов, среди которых этих двух не
+    было, и claim'а для связности не существовало вовсе — то есть проверять было НЕЧЕМ, а не «забыли».
+    Отсутствие файла — ошибка, а не «замечаний нет»: ослепшая проверка хуже отсутствующей.
+    """
+    p = Path(pkg) / "packages" / "layering.yaml"
+    if not p.is_file():
+        return None, None
+    try:
+        d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return None, None
+    # Числа живут в `baseline` — это и есть потолок ратчета (`test_layering` сверяет с ним замер).
+    # Имя ключа НЕ угадывается списком-веером: перебор «а может тут» однажды нашёл бы похожий блок в
+    # другом файле и сверял не то. Ключ один, и его отсутствие — ошибка выше.
+    block = d.get("baseline")
+    if not isinstance(block, dict):
+        return None, None
+    return block.get("mutual_pairs"), block.get("cycles_longer_than_two")
+
+
 def derived_gate_counts(pkg=PKG):
     """(gates_count, mvp_blocking_count) из quality/gates.yaml.
 
@@ -148,8 +173,16 @@ def authoritative_version_errors(data, pkg=PKG):
     """
     import re
     e, ver = [], (pkg / "VERSION").read_text(encoding="utf-8").strip()
+    # `{channel}` в шаблоне подставляется из реестра: канал живёт в одном месте, а не дублируется
+    # в каждой регулярке. Дубль уже стоил слепоты — см. комментарий у `authoritative_version`.
+    chan = re.escape(str(data.get("channel") or "").strip())
     for rule in (data.get("authoritative_version") or []):
         name, pat = rule.get("file"), rule.get("pattern")
+        if pat and "{channel}" in str(pat):
+            if not chan:
+                e.append(f"{name}: шаблон ссылается на {{channel}}, а `channel` в реестре не объявлен")
+                continue
+            pat = str(pat).replace("{channel}", chan)
         p = pkg / str(name)
         if not p.is_file():
             e.append(f"{name}: файл из authoritative_version не найден")
@@ -162,6 +195,55 @@ def authoritative_version_errors(data, pkg=PKG):
         if m.group(1) != ver:
             e.append(f"{name}: объявлена текущая версия {m.group(1)}, а в VERSION {ver} — "
                      f"публичная поверхность утверждает не то, что выпущено")
+    return e
+
+
+def channel_errors(data):
+    """Канал ЗАРАБОТАН, а не объявлен. -> список ошибок.
+
+    F-030 (внешнее ревью 12.08.2026). Поле `channel` было самообъявлением: его не проверял никто, и
+    слово `stable` стоило ровно столько, сколько стоит слово. Цена замерена в тот же день — тег
+    v3.36.9 вышел как `stable` и содержал P1 (F-022: политика обновлений не исполнялась),
+    исправленный через час после релиза; дочки при этом получили именно тег.
+
+    Проверяется не «канал правильный», а СОГЛАСОВАННОСТЬ канала с его же объявленными критериями:
+    критерии живут в `channels` рядом, машиночитаемо. `field_evidence` — записи «эта версия доехала
+    до этого репозитория, и результат известен»; считаются только записи ТЕКУЩЕЙ версии и только
+    РАЗНЫЕ репозитории, потому что два прогона на одной дочке — это одно доказательство, а не два.
+
+    Пустое `field_evidence` на свежем патче — нормальное состояние и честный `qualification`, а не
+    повод промолчать.
+    """
+    e = []
+    chan = str(data.get("channel") or "").strip()
+    defs = data.get("channels") or {}
+    if not chan:
+        return ["channel не объявлен — публичный статус релиза неизвестен"]
+    if not defs:
+        return [f"channel: {chan}, но блока `channels` с критериями нет — заявление непроверяемо"]
+    if chan not in defs:
+        return [f"channel: {chan} не описан в `channels` ({', '.join(sorted(defs))}) — "
+                f"канал без объявленных критериев проверить нельзя"]
+    spec = defs[chan] or {}
+    requires = list(spec.get("requires") or [])
+    version = str(data.get("version") or "").strip()
+
+    if "field_evidence" in requires:
+        need = int(spec.get("field_evidence_min_repos") or 1)
+        rows = [r for r in (data.get("field_evidence") or []) if isinstance(r, dict)]
+        for r in rows:
+            for field in ("repo", "version", "outcome"):
+                if not str(r.get(field) or "").strip():
+                    e.append(f"field_evidence: запись без обязательного поля '{field}': {r} — "
+                             f"доказательство, которое нельзя проверить, доказательством не считается")
+        for_version = {str(r.get("repo")).strip() for r in rows
+                       if str(r.get("version") or "").strip() == version
+                       and str(r.get("outcome") or "").strip() == "ok"}
+        if len(for_version) < need:
+            e.append(f"channel: {chan} требует полевых доказательств минимум на {need} разных "
+                     f"репозиториях для версии {version}, а есть {len(for_version)} "
+                     f"({', '.join(sorted(for_version)) or 'ни одного'}). Канал не заработан: "
+                     f"поставьте `qualification`, пока обкатки нет — либо запишите доказательства.")
     return e
 
 
@@ -252,6 +334,30 @@ def check(data, pkg=PKG):
     if data.get("mvp_blocking_count") != mvp:
         e.append(f"claims.mvp_blocking_count={data.get('mvp_blocking_count')} != "
                  f"mvp_blocking_gates в quality/gates.yaml={mvp}")
+    # Сверяем то, что ОБЪЯВЛЕНО. Ключ отсутствует -> сверять нечего, и это НЕ молчаливое «всё
+    # хорошо»: правило из `derived_numbers_in_docs`, ссылающееся на несуществующий claim, тут же
+    # падает («в тексте 7, а claim ...=None»). То есть незаявленное число не проходит мимо, просто
+    # ошибку даёт другая, более точная проверка.
+    #
+    # Почему не «нет ключа = ошибка»: этот валидатор запускают и на СИНТЕТИЧЕСКИХ реестрах
+    # (селфтест строит минимальный набор полей), и требование полноты превратило бы «набор без этого
+    # поля» в дрейф. Замер: два случая селфтеста краснели именно так — в CI, при зелёном локальном
+    # быстром охвате, потому что эта группа идёт под маркером `slow`.
+    declared = [k for k in ("layering_mutual_pairs", "layering_cycles_longer_than_two") if k in data]
+    if declared:
+        lay_pairs, lay_cycles = derived_layering_counts(pkg)
+        if lay_pairs is None:
+            e.append("claims объявляют числа связности, а packages/layering.yaml не прочитан — "
+                     "проверить их нечем (это ошибка, а не «замечаний нет»)")
+        else:
+            if "layering_mutual_pairs" in data and data["layering_mutual_pairs"] != lay_pairs:
+                e.append(f"claims.layering_mutual_pairs={data['layering_mutual_pairs']} != "
+                         f"ратчета в packages/layering.yaml={lay_pairs}")
+            if ("layering_cycles_longer_than_two" in data
+                    and data["layering_cycles_longer_than_two"] != lay_cycles):
+                e.append(f"claims.layering_cycles_longer_than_two="
+                         f"{data['layering_cycles_longer_than_two']} != ратчета в "
+                         f"packages/layering.yaml={lay_cycles}")
     vtotal, vtested = derived_verification_counts(pkg)
     if data.get("validators_count") != vtotal:
         e.append(f"claims.validators_count={data.get('validators_count')} != валидаторов в validation/={vtotal}")
@@ -280,6 +386,7 @@ def check(data, pkg=PKG):
     e += evidence_scope_errors(data, pkg)
     e += authoritative_version_errors(data, pkg)
     e += derived_number_errors(data, pkg)
+    e += channel_errors(data)
     _scan = list(data.get("stale_marker_files") or data.get("docs_must_reference_version") or [])
     for marker in (data.get("forbidden_stale_markers") or []):
         for name in _scan:

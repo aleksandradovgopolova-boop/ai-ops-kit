@@ -259,3 +259,65 @@ def test_protocol_document_does_not_teach_the_broken_form():
             continue                     # объяснение, ПОЧЕМУ так нельзя, — не инструкция
         assert "python3 ai_ops_kit/lifecycle/active_work.py" not in stripped, (
             f"документ снова предлагает нерабочий запуск: {stripped}")
+
+
+# ─── пересечение с чужой заявкой называется в коммите ────────────────────────────────────────────
+# ЗАМЕР 26 коммитов дня (2026-08-12): под `broad_scope` попали четыре, и по делу — ОДИН (`4a231ae`,
+# куда `git add -A` унёс чужую работу). Остальные три были законными правками «код + тесты + запись
+# находки», включая исправление F-022. Три ложных на одно верное — значит ширина остаётся СОВЕТОМ:
+# хук, который мешает без основания, обходят `--no-verify`, и тогда не работает уже ничего (этот
+# репозиторий уже проходил это с `ruff-format`: «мёртвый хук хуже отсутствующего»).
+#
+# Различало случаи не число файлов, а ЧЬИ это файлы. Ответ у кита есть — реестр активных работ.
+def _hook(tmp_path, files, python=None, extra_env=None):
+    msg = tmp_path / "COMMIT_EDITMSG"
+    msg.write_text("test: проверка предупреждения о пересечении\n", encoding="utf-8")
+    env = {**os.environ, "PYTHON": python or sys.executable, "COMMIT_CONTRACT_FILES": files}
+    env.update(extra_env or {})
+    return subprocess.run(["/bin/bash", str(HOOK), str(msg)],
+                          capture_output=True, text=True, timeout=180, env=env)
+
+
+@pytest.fixture
+def foreign_claim():
+    """Заявка ДРУГОЙ сессии в общем реестре этого репозитория — и уборка за собой."""
+    import active_work
+
+    reg = active_work.shared_registry_path(KIT)
+    existed = reg.read_text(encoding="utf-8") if reg.exists() else None
+    active_work.register(reg, "тест-чужая-работа", "engops/foreign",
+                         ["installer/"], "другая-сессия")
+    yield reg
+    if existed is None:
+        reg.unlink(missing_ok=True)
+    else:
+        reg.write_text(existed, encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_hook_names_the_other_session_on_overlap(tmp_path, foreign_claim):
+    """Пересечение обязано быть НАЗВАНО: с кем, по какой зоне и в какой ветке."""
+    r = _hook(tmp_path, "installer/ai_ops.py")
+    out = r.stdout + r.stderr
+    assert "тест-чужая-работа" in out, f"пересечение с чужой заявкой не названо:\n{out[:500]}"
+    assert "installer/" in out and "другая-сессия" in out, out[:500]
+    assert r.returncode == 0, "предупреждение о пересечении не должно блокировать коммит"
+
+
+@pytest.mark.unit
+def test_hook_is_silent_without_overlap(tmp_path, foreign_claim):
+    """Обратная сторона: не пересеклись — молчим.
+
+    Без неё предупреждение можно было бы «получить», печатая его всегда, и его перестали бы читать.
+    """
+    out = _hook(tmp_path, "quality/gates.yaml").stdout
+    assert "тест-чужая-работа" not in out, out[:400]
+    assert "CONFLICT-FORECAST" not in out, f"шум при отсутствии пересечения:\n{out[:400]}"
+
+
+@pytest.mark.unit
+def test_hook_works_without_registry_at_all(tmp_path):
+    """Нет реестра — хук не спотыкается: координация опциональна, контракт коммита нет."""
+    r = _hook(tmp_path, "quality/gates.yaml", extra_env={"COMMIT_CONTRACT_SKIP_CLAIMS": "1"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "commit:" in r.stdout, "контракт коммита перестал исполняться"

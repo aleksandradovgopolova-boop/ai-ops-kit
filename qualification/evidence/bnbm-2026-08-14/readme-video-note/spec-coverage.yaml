@@ -1,0 +1,40 @@
+schema_version: 1
+kind: SpecCoverage
+level: 0
+level_name: L0 QUICK
+level_reason:
+- task_type=QUICK -> базовый L0 QUICK
+escalated_from: null
+sections:
+- id: goal
+  status: complete
+  note: null
+- id: scope
+  status: complete
+  note: null
+- id: expected_behavior
+  status: complete
+  note: null
+- id: acceptance_criteria
+  status: complete
+  note: null
+- id: constraints
+  status: complete
+  note: null
+- id: affected_files
+  status: complete
+  note: null
+blocking_missing: []
+invalid_status: []
+needs_human: []
+ready_to_implement: true
+form_errors: []
+spec_artifact: true
+provided_sources: {}
+covered_sections:
+- acceptance_criteria
+- affected_files
+- constraints
+- expected_behavior
+- goal
+- scope

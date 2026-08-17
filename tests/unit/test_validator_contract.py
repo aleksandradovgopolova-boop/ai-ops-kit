@@ -27,6 +27,7 @@ PKG = Path(__file__).resolve().parents[2]
 
 # Валидаторы со швом check(data) / check(data, pkg). Держать по алфавиту.
 UNIFORM_CHECK_VALIDATORS = [
+    "validate_acceptance_result",
     "validate_access_filter",
     "validate_architecture_decision",
     "validate_bootstrap_qualification",
@@ -42,9 +43,11 @@ UNIFORM_CHECK_VALIDATORS = [
     "validate_memory_governance",
     "validate_model_qualification",
     "validate_model_roles",
+    "validate_mutation_probes",
     "validate_plan_artifact",
     "validate_post_release_readout",
     "validate_product_model",
+    "validate_product_objects",
     "validate_promotion_qualification",
     "validate_provider_residency",
     "validate_qualification",

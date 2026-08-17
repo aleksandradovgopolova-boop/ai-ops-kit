@@ -90,7 +90,12 @@ case "$cmd" in
     echo "Укажите: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops kit-status" >&2
     exit 2
     ;;
-  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof)
+  # B2-19 (пере-прогон 14.08.2026): список отставал от установщика — `usage` объявлена в его
+  # справке («честная стоимость/токены задачи и продукта»), но обёртка отправляла её в
+  # интент-CLI, где такого интента нет: `invalid choice: 'usage'`. Документированная команда
+  # была недостижима по документированному пути. Список сверяется тестом с реальными
+  # командами установщика, чтобы отставание больше не было молчаливым.
+  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|session|subsession|engops|method)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi
@@ -105,6 +110,13 @@ case "$cmd" in
     # Интенты движка: next, model, plan, run, specify, review, status, health, new, discuss, …
     # Каталог репозитория подставляем сами, если человек его не назвал — незачем помнить лишний
     # аргумент, когда мы и так стоим в его репозитории.
-    exec "$py" "$managed/tools/ai_ops_cli.py" "$@" "$here"
+    #
+    # ПУТЬ ИДЁТ ПОСЛЕ ИНТЕНТА, А НЕ В КОНЕЦ (B2-15, живой прогон 14.08.2026). Прежде он дописывался
+    # последним, и любая опция вместе с задачей ломала разбор: `run "текст" --execute` давало
+    # `error: unrecognized arguments: <путь>` и код 2, то есть ИСПОЛНИТЬ задачу через обёртку было
+    # нельзя вовсе — работал только сухой прогон. Причина в argparse: позиционные `intent` + `rest`
+    # набираются одной непрерывной группой, и хвостовой аргумент после флагов в неё уже не попадает.
+    intent="$1"; shift
+    exec "$py" "$managed/tools/ai_ops_cli.py" "$intent" "$here" "$@"
     ;;
 esac

@@ -174,10 +174,16 @@ def test_ratchet_sees_the_real_graph(spec):
     base = vl.cyclic_counts(edges)
     assert base["mutual_pairs"] > 0 and base["cycles_longer_than_two"] > 0, base
 
-    without = {e: w for e, w in edges.items() if e != ("gates", "providers")}
+    # РЕБРО ВЫБИРАЕТСЯ ИЗ ГРАФА, а не вписано именем. Здесь стояло `("gates", "providers")`, и
+    # тест упал, когда эту пару развязали (`usage_ledger` переехал в `shared`, 2026-08-12) — то есть
+    # охранник мешал ровно той работе, ради которой стоит. Берём любое ребро, участвующее во взаимной
+    # паре: предмет проверки — «счётчик реагирует на реальный граф», а не «эта пара существует».
+    victim = next((e for e in edges if (e[1], e[0]) in edges), None)
+    assert victim is not None, "во графе нет ни одной взаимной пары — проверять реакцию нечем"
+    without = {e: w for e, w in edges.items() if e != victim}
     after = vl.cyclic_counts(without)
     assert after["mutual_pairs"] == base["mutual_pairs"] - 1, (
-        f"снятие реального ребра не изменило замер: {base} -> {after}")
+        f"снятие реального ребра {victim} не изменило замер: {base} -> {after}")
     assert after["cycles_longer_than_two"] < base["cycles_longer_than_two"]
 
 

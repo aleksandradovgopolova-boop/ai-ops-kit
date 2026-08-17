@@ -40,6 +40,21 @@ def work_produced(rep) -> bool:
     return ((rep.get("loop") or {}).get("applied_writes") or 0) > 0
 
 
+def delivery_pending(rep) -> bool:
+    """Работа готова на ветке, а новых правок в этом прогоне нет. -> bool.
+
+    B2-20 (повтор незакрытой B2-12, живой прогон 14.08.2026): `resume` завершённой-но-НЕДОСТАВЛЕННОЙ
+    работы снова звал писателя, получал ноль правок — делать уже нечего — и хоронил готовый
+    READY_FOR_PR в `blocked: код не написан`. Работа с коммитом на ветке исчезала из активного
+    состояния, и владелец видел «кит не справился» там, где кит справился и ждал доставки.
+
+    Предикат отвечает ровно на этот вопрос и живёт рядом с `work_produced`, потому что это его
+    обратная сторона: там «работа произведена СЕЙЧАС», здесь «произведена РАНЬШЕ и ждёт заявки».
+    """
+    rep = rep or {}
+    return bool((rep.get("resume") or {}).get("reused_branch")) and not work_produced(rep)
+
+
 def _profile_summary(profile):
     stacks = profile.get("stacks") or []
     langs = ", ".join(s.get("language", "?") for s in stacks) or "не определён"

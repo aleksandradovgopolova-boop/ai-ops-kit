@@ -259,3 +259,109 @@ class TestResolutionIsAnnouncedAndCarried:
         assert rep["provider_resolution"]["source"] == "fallback"
         assert rep["provider_resolution"]["warning"] == op.NO_LIVE_PROVIDER_WARNING, \
             "причина скатывания в mock не доехала до отчёта — постфактум её не проверить"
+
+
+class _Result:
+    """Минимальный ответ subprocess.run для инъекции runner (офлайн, без вызова CLI)."""
+
+    def __init__(self, stdout="", returncode=0, stderr=""):
+        self.stdout, self.returncode, self.stderr = stdout, returncode, stderr
+
+
+def _ok_result():
+    import json as _json
+    return _Result(stdout=_json.dumps({"result": "ок", "usage": {}, "model": "claude-x"}))
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+class TestLaunchSaysWhatIsMissing:
+    """Поле 13.08 и 15.08.2026, дочка ИИ-Среда: `run --execute` падал `FileNotFoundError: 'claude'`
+    при живом claude в терминале. Дефект был не в адаптере, а в ШВЕ: присутствие проверял
+    `resolve_provider` через `which`, а запуск подставлял короткое имя — два разных решения, и между
+    ними помещалось расхождение PATH. Плюс по сырому трейсбеку нельзя было отличить «бинаря нет» от
+    «бинарь не в PATH этого процесса», а от этого зависит, что делать владельцу.
+    """
+
+    def test_missing_binary_says_what_and_where_instead_of_traceback(self, monkeypatch):
+        monkeypatch.setattr(op.shutil, "which", _no_cli)
+        monkeypatch.setenv("PATH", "/usr/bin:/bin")
+        monkeypatch.delenv(op.CLAUDE_BIN_ENV, raising=False)
+        with pytest.raises(RuntimeError) as e:
+            op.make_claude_cli_provider()("промпт")
+        text = str(e.value)
+        assert "claude" in text and "где искали" in text, f"причина не названа: {text}"
+        assert "/usr/bin:/bin" in text, f"не сказано, ГДЕ искали — это и был весь дефект: {text}"
+        assert "--provider mock" in text, "не назван выход для офлайна"
+
+    def test_absent_binary_stops_before_any_launch_attempt(self, monkeypatch):
+        """ПРОВЕРКА ДО ЗАПУСКА, а не объяснение после него — мутационная проба 17.08.2026.
+
+        Соседний тест (текст причины) этого НЕ сторожил: если снять предпроверку, падение всё равно
+        перехватывается на запуске и сообщение выходит похожим. Разница видна только здесь — по
+        факту попытки. Она содержательна: отсутствие бинаря известно ДО того, как что-либо
+        запущено, и сообщение не сочиняет «путь исчез до запуска», чего не было.
+        """
+        attempts = []
+
+        def _spy(cmd, **kw):
+            attempts.append(cmd)
+            raise FileNotFoundError(2, "No such file or directory")
+
+        monkeypatch.setattr(op.shutil, "which", _no_cli)
+        monkeypatch.delenv(op.CLAUDE_BIN_ENV, raising=False)
+        monkeypatch.setattr(subprocess, "run", _spy)
+        with pytest.raises(RuntimeError) as e:
+            op.make_claude_cli_provider()("промпт")
+        assert not attempts, f"запуск был предпринят, хотя бинаря нет: {attempts}"
+        assert "исчез до запуска" not in str(e.value), \
+            f"сообщение придумывает исчезновение вместо отсутствия: {e.value}"
+
+    def test_owner_can_name_the_binary_explicitly(self, tmp_path, monkeypatch):
+        """AI_OPS_CLAUDE_BIN сильнее PATH: единственный способ починки, доступный владельцу без
+        правки окружения кита."""
+        fake = tmp_path / "claude"
+        fake.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake.chmod(0o755)
+        monkeypatch.setattr(op.shutil, "which", _no_cli)
+        monkeypatch.setenv(op.CLAUDE_BIN_ENV, str(fake))
+        assert op.claude_binary() == str(fake)
+
+        seen = {}
+
+        def _runner(cmd):
+            seen["cmd"] = cmd
+            return _ok_result()
+
+        op._claude_cli_call("промпт", runner=_runner)
+        assert seen["cmd"][0] == "claude", "инъекция runner не должна требовать бинарь"
+
+    def test_binary_that_vanished_before_launch_is_explained(self, monkeypatch):
+        """Между проверкой и запуском проходит время. Здесь бинарь «есть» по which и исчезает при
+        запуске — владелец обязан получить причину, а не трейсбек, и повтора быть не должно."""
+        monkeypatch.setattr(op.shutil, "which", lambda n: "/nowhere/claude" if n == "claude" else None)
+        monkeypatch.delenv(op.CLAUDE_BIN_ENV, raising=False)
+        calls = []
+
+        def _vanished(cmd):
+            calls.append(cmd)
+            raise FileNotFoundError(2, "No such file or directory")
+
+        with pytest.raises(RuntimeError) as e:
+            op._claude_cli_call("промпт", runner=_vanished)
+        assert "исчез до запуска" in str(e.value), str(e.value)
+        assert len(calls) == 1, f"запуск, который не состоялся, ретраить нечего: попыток {len(calls)}"
+
+    def test_explicit_provider_without_binary_is_warned_before_the_run(self, tmp_path):
+        """Явный выбор человека не оспаривается, но и не остаётся непроверенным: об отсутствии
+        сказано ДО прогона, а не после разбора, плана и подготовки дерева."""
+        res = op.resolve_provider(explicit="claude-cli", root=tmp_path, env={"PATH": "/usr/bin"},
+                                  which=_no_cli)
+        assert res["provider"] == "claude-cli" and res["source"] == "explicit", \
+            "слово человека о провайдере не должно меняться"
+        assert res["warning"] and "не найден" in res["warning"], res
+        lines = []
+        op.print_provider_resolution(res, printer=lines.append)
+        assert lines and "claude-cli" in lines[0], \
+            f"предупреждение назвало не тот провайдер, которым пойдёт прогон: {lines}"
+        assert "mock" not in lines[0].split("—")[0], f"жёсткое «mock» в шапке: {lines}"

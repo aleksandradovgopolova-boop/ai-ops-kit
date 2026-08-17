@@ -1,0 +1,15 @@
+schema_version: 1
+kind: workitem
+id: readme-video-promise
+task: убрать из README обещание вступительного видео
+workflow: QUICK
+route_reasons:
+- default routing
+human_approval_required: false
+paths:
+  blueprint: features/readme-video-promise/blueprint.yaml
+  run_state: .ai/runtime/workitems/readme-video-promise/TaskState.yaml
+  workitem: features/readme-video-promise/workitem.yaml
+status: draft
+lifecycle_intent: discovery
+affects: {}

@@ -23,7 +23,7 @@ from ai_ops_kit.engine import worktree as _wt             # noqa: E402
 
 
 def _git(root, *a):
-    from ai_ops_kit.engine import gitio
+    from ai_ops_kit.shared import gitio
     return gitio.git(root, *a)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
