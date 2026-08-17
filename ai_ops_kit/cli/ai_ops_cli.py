@@ -570,6 +570,67 @@ def _session_guard_before_start(child_root, task, signals, feature=None):
         print(f"⚠ session guard: {e}")
 
 
+def _process_gate(intent, task, child_root, signals, a, preview_mode):
+    """Два механизма ПЕРЕД процессным шагом. -> код возврата (шаг делать не надо) или None.
+
+    Решение владельца 2026-08-17 по работе `kit-as-first-step-or-as-trace`. Порядок здесь —
+    содержательный, не случайный:
+
+    1. КОРОТКИЙ ПУТЬ (`planning/short_path`). Если работа уже описана, описывать её заново незачем,
+       и потолок траты на описание к ней применять тоже незачем — повода тратить просто нет.
+    2. ПОТОЛОК ПРОЦЕССНОЙ ФАЗЫ (`engops/process_spend`). Ловит противоположный случай: описания нет,
+       разбор идёт, кода всё ещё нет. Замер поля — две сессии по 200+ тысяч токенов.
+
+    Превью не задето: оно ничего не делает и ничего не тратит, а короткий путь — это ДЕЙСТВИЕ.
+    """
+    from ai_ops_kit.engops import process_spend
+    if preview_mode or intent not in process_spend.PROCESS_INTENTS:
+        return None
+    from ai_ops_kit.planning import short_path
+    child_root = Path(child_root)
+    wid = a.feature or _wid_for(task, signals, a.feature)
+
+    if not getattr(a, "full_process", False):
+        d = short_path.assess(task, signals, child_root, wid)
+        if d["short_path"]:
+            tr = short_path.trace(child_root, wid, signals, d)
+            run_cmd = f'./ai-ops run "{task or "<задача>"}" --feature {wid} --execute'
+            if a.json:
+                print(json.dumps({"kind": "short-path", "decision": d,
+                                  "spec": str(tr.get("spec")), "record": str(tr.get("record")),
+                                  "sections_filled": tr.get("filled"),
+                                  "sections_declined": tr.get("declined"),
+                                  "trace_error": tr.get("error"),
+                                  "next_command": run_cmd}, ensure_ascii=False, indent=2))
+            else:
+                _say(child_root, "from_short_path", d, tr, run_cmd)
+                if _audience(child_root) != "product":
+                    print()
+                    print(short_path.render(d))
+            # След не записался — это не короткий путь, а пропуск проверок без записи о нём.
+            # Отдаём тот же код, что у незакрытого гейта: молча продолжать нельзя.
+            return 1 if tr.get("error") else 0
+        if d["declared"] and not a.json:
+            # Заявлено, но не подтверждено: называем, чего не хватает, и идём ОБЫЧНЫМ путём.
+            _say(child_root, "from_short_path", d, None, None)
+
+    check = process_spend.assess(child_root, wid, intent)
+    if check["blocks"] and not getattr(a, "spend_ok", False):
+        run_cmd = f'./ai-ops run "{task or "<задача>"}" --feature {wid} --execute'
+        cont_cmd = f'./ai-ops {intent} "{task or "<задача>"}" --feature {wid} --spend-ok'
+        if a.json:
+            print(json.dumps({"kind": "process-spend-ceiling", "exit": 2, "check": check,
+                              "run_command": run_cmd, "continue_command": cont_cmd},
+                             ensure_ascii=False, indent=2))
+        else:
+            _say(child_root, "from_process_spend", check, cont_cmd, run_cmd)
+        return 2
+    if check["state"] == "unknown" and not a.json and _audience(child_root) != "product":
+        # «Не знаю» не выдаём за норму — но и не тревожим владельца тем, что мерить нечем.
+        _say(child_root, "from_process_spend", check, None, None)
+    return None
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="ai_ops_cli.py")
     ap.add_argument("intent", choices=list(INTENTS) + ["preview"])
@@ -605,6 +666,14 @@ def main(argv):
     ap.add_argument("--apply", action="store_true",
                     help="bootstrap: РЕАЛЬНО создать отсутствующие направление и план "
                          "(без флага — сухой прогон: показать, что будет создано)")
+    # Решение владельца 2026-08-17: короткий путь для уже описанной работы + потолок траты на
+    # описание. Оба флага — осознанный выход из автоматики, а не режим по умолчанию.
+    ap.add_argument("--full-process", action="store_true",
+                    help="discuss/specify/plan: пройти полный путь даже на уже описанной работе "
+                         "(короткий путь не применять)")
+    ap.add_argument("--spend-ok", action="store_true",
+                    help="discuss/specify/plan: продолжить разбор, зная что потолок траты на "
+                         "описание до первой правки кода уже пробит")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
@@ -630,6 +699,13 @@ def main(argv):
     signals = json.loads(a.signals)
     if a.feature:
         signals["feature"] = a.feature
+
+    # ПЕРЕД процессным шагом: уже описанная работа идёт коротким путём, залипший разбор
+    # останавливается вопросом владельцу. Место выбрано так, что ни один процессный шаг мимо не
+    # проходит: ниже команды расходятся по ветвям, и проверку пришлось бы повторять в каждой.
+    _gate_rc = _process_gate(intent, task, child_root, signals, a, preview_mode)
+    if _gate_rc is not None:
+        return _gate_rc
 
     if intent == "resume":
         from ai_ops_kit.engine import ai_ops_run
