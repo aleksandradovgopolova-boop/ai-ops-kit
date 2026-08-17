@@ -210,6 +210,49 @@ PROVIDER_KEY_ENV = {
 NO_LIVE_PROVIDER_WARNING = ("живой провайдер не настроен → правок не будет; "
                             "задайте ANTHROPIC_API_KEY или установите claude CLI")
 
+CLAUDE_BIN_ENV = "AI_OPS_CLAUDE_BIN"
+
+
+def claude_binary(env=None, which=None):
+    """Абсолютный путь к `claude` или None. Явное слово владельца (AI_OPS_CLAUDE_BIN) сильнее PATH.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, а не `shutil.which` по месту: проверка присутствия и запуск обязаны
+    смотреть в ОДНО И ТО ЖЕ. Прежде выбор провайдера звал `which("claude")`, а запуск подставлял
+    короткое имя `claude` — то есть два разных решения, и между ними успевало помещаться расхождение
+    (поле 13.08 и 15.08.2026, дочка ИИ-Среда: `FileNotFoundError: 'claude'` при живом claude в
+    терминале). Здесь путь вычисляется один раз и им же исполняется.
+    """
+    env = os.environ if env is None else env
+    which = shutil.which if which is None else which
+    named = str(env.get(CLAUDE_BIN_ENV) or "").strip()
+    if named:
+        return named if (os.path.isfile(named) and os.access(named, os.X_OK)) else None
+    return which("claude")
+
+
+def claude_missing_message(env=None, extra=""):
+    """Человеческая причина вместо `FileNotFoundError: 'claude'` — с ЗАМЕРОМ, а не с догадкой.
+
+    Поле 13.08 и 15.08.2026 (ИИ-Среда): прогон падал этой строкой, и по ней нельзя было отличить
+    «бинаря нет» от «бинарь есть, но не в PATH этого процесса» — а различие определяет, что делать.
+    Поэтому сообщение называет: что искали, ГДЕ искали (реальный PATH процесса кита) и куда смотреть.
+    """
+    env = os.environ if env is None else env
+    named = str(env.get(CLAUDE_BIN_ENV) or "").strip()
+    entries = [p for p in (env.get("PATH") or "").split(os.pathsep) if p]
+    where = (f"{CLAUDE_BIN_ENV}={named} — файла нет или он не исполняемый"
+             if named else
+             f"PATH процесса кита, записей {len(entries)}: {os.pathsep.join(entries)}")
+    return ("не найден исполняемый файл `claude`, поэтому исполняющий прогон не начат"
+            + (f" ({extra})" if extra else "") + ".\n"
+            f"  где искали: {where}\n"
+            "  почему это бывает при живом claude в терминале: PATH интерактивной оболочки "
+            "(.zshrc/.zprofile) в процесс кита не попадает — например при запуске из другого "
+            "окружения, из venv или из планировщика.\n"
+            f"  что сделать (одно из трёх): назвать путь явно — {CLAUDE_BIN_ENV}=/путь/к/claude; "
+            "добавить каталог claude в PATH того окружения, из которого запускаете кит; "
+            "или попросить офлайн прямо — `--provider mock` (модель не вызывается, правок не будет).")
+
 
 def autoresolve_enabled(env=None) -> bool:
     """Разрешён ли автовыбор провайдера. Явный AI_OPS_PROVIDER_AUTORESOLVE побеждает всегда;
@@ -269,8 +312,19 @@ def resolve_provider(explicit=None, root=None, env=None, which=None):
     checked = []
 
     if explicit:
+        # ЯВНЫЙ ВЫБОР ЧЕЛОВЕКА НЕ ОСПАРИВАЕТСЯ, НО И НЕ ОСТАЁТСЯ НЕПРОВЕРЕННЫМ (поле 13.08 и
+        # 15.08.2026, ИИ-Среда). Прежде здесь не проверялось ничего: `--provider claude-cli` без
+        # бинаря доводил прогон до вызова модели и ронял его сырым `FileNotFoundError`, уже после
+        # разбора, плана и подготовки дерева. Провайдер остаётся тем, что назвал человек — меняется
+        # только то, что об отсутствии сказано ДО прогона, а не трейсбеком посреди него.
+        warning = None
+        if explicit == "claude-cli" and not claude_binary(env=env, which=which):
+            warning = ("выбран claude-cli, но исполняемый файл `claude` не найден — прогон дойдёт "
+                       "до вызова модели и остановится. " + claude_missing_message(env=env))
+            checked.append("claude CLI не найден (провайдер задан явно)")
         return {"provider": explicit, "source": "explicit", "autoresolve": False,
-                "reason": f"задан явно: --provider {explicit}", "warning": None, "checked": checked}
+                "reason": f"задан явно: --provider {explicit}", "warning": warning,
+                "checked": checked}
 
     if not autoresolve_enabled(env):
         return {"provider": "mock", "source": "autoresolve-disabled", "autoresolve": False,
@@ -311,7 +365,11 @@ def print_provider_resolution(res, printer=print):
     if not isinstance(res, dict):
         return
     if res.get("warning"):
-        printer(f"⚠ провайдер: mock — {res['warning']}")
+        # ИМЯ ПРОВАЙДЕРА БЕРЁТСЯ ИЗ РЕШЕНИЯ, а не вписано «mock» намертво: предупреждение бывает и
+        # у живого выбора (явный claude-cli без бинаря), и тогда жёсткая строка сообщала владельцу
+        # неправду о том, чем пойдёт прогон. Для прежнего случая (fallback) провайдер и есть mock,
+        # поэтому вывод там не изменился.
+        printer(f"⚠ провайдер: {res.get('provider')} — {res['warning']}")
         for c in res.get("checked") or []:
             printer(f"  · {c}")
     elif res.get("source") not in (None, "explicit"):
@@ -350,7 +408,18 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     есть — поэтому `--review`/`--author`/`--reevaluate-only` были недоступны с провайдером claude-cli,
     а обычный прогон работал. Разделитель снимает класс целиком: после `--` любой текст — позиционный
     аргумент, чем бы он ни начинался."""
-    cmd = ["claude", "-p", "--output-format", "json",
+    # ИСПОЛНЯЕМ ТЕМ ЖЕ, ЧТО ПРОВЕРЯЛИ (поле 13.08 и 15.08.2026, ИИ-Среда). Здесь стояло короткое имя
+    # `claude`, а присутствие проверял `resolve_provider` через `which` — два разных решения, между
+    # которыми помещалось расхождение PATH: прогон падал сырым `FileNotFoundError: 'claude'`, и по
+    # нему нельзя было отличить «бинаря нет» от «бинарь не в PATH этого процесса». Теперь путь
+    # вычисляется один раз и им же исполняется, а отсутствие — названная причина, не трейсбек.
+    # Инъекция runner (офлайн-selftest) в бинаре не нуждается и имя не меняет: там запуска нет.
+    binary = "claude"
+    if runner is None:
+        binary = claude_binary()
+        if not binary:
+            raise RuntimeError(claude_missing_message())
+    cmd = [binary, "-p", "--output-format", "json",
            "--allowedTools", "Read", "Grep", "Glob"]
     if model:
         cmd += ["--model", model]
@@ -398,6 +467,17 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
             if _attempt + 1 >= max_attempts:
                 break
             _backoff(_attempt); continue
+        # ЗАПУСК НЕ СОСТОЯЛСЯ — это НЕ транзиент и ретраить нечего: файл не появится от повтора.
+        # Ловим здесь, а не только до цикла, потому что между проверкой и запуском проходит время
+        # (обновление claude, смена PATH, съёмный диск), и владелец в этом случае получал трейсбек.
+        except FileNotFoundError:
+            raise RuntimeError(claude_missing_message(
+                extra=f"путь был проверен и исчез до запуска: {cmd[0]}")) from None
+        except OSError as exc:                # права, битый симлинк, не тот формат бинаря
+            raise RuntimeError(
+                f"`claude` найден ({cmd[0]}), но не запускается: {exc}. Проверьте права на файл "
+                f"и что это исполняемый бинарь, а не обёртка оболочки (alias/function)."
+            ) from None
         if r.returncode == 0:
             try:
                 d = _json.loads(r.stdout)
