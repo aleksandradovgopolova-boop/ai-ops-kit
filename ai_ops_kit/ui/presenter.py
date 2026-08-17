@@ -1127,6 +1127,93 @@ def from_intake_gap(missing, hint_command=None) -> dict:
                    for m in miss})
 
 
+def from_short_path(decision: dict, trace: dict = None, next_command: str = None) -> dict:
+    """Решение о коротком пути -> UserMessage. Три случая, и они РАЗНЫЕ для человека.
+
+    Короткий путь взят — говорим, что описание не переписываем и что от него осталось в следе.
+    Заявлено, но минимума нет — называем ровно то, чего не хватает: это единственное, что человеку
+    нужно сделать, чтобы получить короткий путь. Не заявлено — сообщения нет вовсе: кит не
+    предлагает владельцу выключить собственные проверки.
+    """
+    names = decision.get("human_names") or {}
+    keys = list(names)
+    if decision.get("short_path"):
+        tr = trace or {}
+        declined = len(tr.get("declined") or [])
+        return message(
+            status="ok", headline="Работа уже описана — иду сразу делать",
+            summary="Описание у тебя есть: понятно, чего добиваемся, как поймём, что готово, и где "
+                    "править. Заново расспрашивать и планировать не буду.",
+            why_it_matters="Я останусь в этой работе как след: что решено, по каким признакам это "
+                           "видно и что я пропустил — записано, и это можно проверить позже."
+                           + (f" Разделов, которые я не требую, {declined} — у каждого написано, "
+                              f"почему." if declined else ""),
+            next_steps=[f"делаю: {next_command}"] if next_command else ["беру работу в исполнение"],
+            technical={"признаки": {names[k]: decision["minimum"][k]["detail"] for k in keys},
+                       "заявлено": decision.get("declared_by"),
+                       "пропущено": ", ".join(decision.get("skipped_steps") or []) or "—",
+                       "решение": decision.get("decision_ref"),
+                       "след": str((trace or {}).get("record") or "—")})
+    if decision.get("unknown"):
+        return message(
+            status="degraded", headline="Похоже, описание есть, но я его не читаю",
+            summary="Ты сказала, что работа описана, но проверить это я не могу: "
+                    + "; ".join(decision["minimum"][k]["detail"] for k in decision["unknown"]),
+            why_it_matters="Пойти коротким путём на непрочитанном описании — то же самое, что "
+                           "поверить на слово. Поэтому иду обычным путём, а не притворяюсь, что "
+                           "проверил.",
+            next_steps=["поправить описание, чтобы оно читалось, — и короткий путь включится сам"],
+            technical={"не прочитано": decision["unknown"]})
+    return message(
+        status="needs_input", headline="Чтобы идти сразу делать, не хватает малого",
+        summary="Ты сказала, что работа описана. Чего я в описании не нашёл: "
+                + ", ".join(decision.get("missing_names") or []) + ".",
+        why_it_matters="Это тот самый минимум, по которому потом можно сказать «готово» и не "
+                       "обмануться. Без него я не пропускаю разбор — иначе проверять результат "
+                       "будет нечем.",
+        next_steps=["дописать это в описание — дальше пойду коротким путём без вопросов"],
+        technical={names.get(k, k): decision["minimum"][k]["detail"]
+                   for k in (decision.get("missing") or [])})
+
+
+def from_process_spend(check: dict, continue_command: str = None,
+                       run_command: str = None) -> dict:
+    """Потолок траты на описание до первой правки кода -> UserMessage (решение владельца 2026-08-17).
+
+    Это ВОПРОС, а не отказ: владелец решила предупреждать и спрашивать, а не останавливать молча.
+    Поэтому у сообщения есть и рекомендация, и то, что будет при обоих ответах.
+    """
+    spent, limit = check.get("spent_on_process"), check.get("ceiling")
+
+    def _t(n):
+        return "н/д" if n is None else (f"{n / 1000:.0f} тысяч" if n >= 1000 else str(n))
+
+    if check.get("state") == "unknown":
+        return message(
+            status="degraded", headline="Сколько уходит на разбор — не вижу",
+            summary="Потолок траты на описание я применить не могу: расход этой сессии не измеряется.",
+            why_it_matters="Называть это нормой было бы неправдой: я не знаю числа, а не знаю, что "
+                           "оно маленькое.",
+            technical={"причина": check.get("reason")})
+    return message(
+        status="needs_input", headline="Разбор уже дороже, чем ты разрешила",
+        summary=f"На то, чтобы разобраться и описать, ушло {_t(spent)} токенов, а кода я ещё не "
+                f"тронул. Твой потолок на это — {_t(limit)}.",
+        why_it_matters="Ровно так уже сгорели две сессии: описание уточнялось, а работа не "
+                       "начиналась. Дальше решаешь ты.",
+        decision={"question": "продолжать разбор или идти делать по тому, что уже есть?",
+                  "recommendation": "идти делать: если чего-то не хватит, это станет видно на "
+                                    "проверках, а не в разговоре",
+                  "on_approve": f"делаю: {run_command}" if run_command else "беру работу в исполнение",
+                  "on_reject": f"продолжаю разбор: {continue_command}" if continue_command
+                               else "продолжаю разбор"},
+        next_steps=[c for c in (run_command, continue_command) if c],
+        technical={"потрачено на описание": spent, "потолок": limit,
+                   "шаги описания": ", ".join(check.get("process_steps") or []) or "—",
+                   "расход сессии всего": check.get("session_total_tokens"),
+                   "решение": check.get("decision_ref")})
+
+
 # Состояние строки doctor -> насколько это плохо. Порядок важен: вердикт следует за ХУДШЕЙ строкой.
 _DOCTOR_RANK = {"ok": 0, "info": 0, "unknown": 1, "gap": 1, "warn": 1, "fail": 2, "blocked": 2}
 
