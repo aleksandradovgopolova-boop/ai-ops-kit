@@ -238,6 +238,49 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
     }
 
 
+# ─── проекция вердикта в отчёт (заявка #139, вторая половина) ────────────────────────────────────
+# ЗАМЕР 18.08.2026 на 3.36.12 и на живом отчёте дочки ИИ-Среда от 17.08: в `run-report.json` попадали
+# ровно четыре поля (overall/applicable_domains/blocking/needs_review), а `domain_results` — где лежат
+# САМИ находки и `applies_because` — не попадали ВОВСЕ. Гейт при этом говорит человеку «блокирующие
+# домены (critical/high находки)» и отправляет его в отчёт. В отчёте находок нет — значит утверждение
+# гейта НЕПРОВЕРЯЕМО из того артефакта, на который он сам ссылается. Именно отсюда родилась заявка
+# «блокирует без единой находки»: человек прочитал отчёт и находок не увидел.
+#
+# ПОЧЕМУ ПРОЕКЦИЯ, А НЕ ПРОСТО `results` ЦЕЛИКОМ. Находка — это ПУТЬ, СТРОКА И КЛАСС, но никогда не
+# значение: отчёт лежит в репозитории и уезжает в PR, поэтому секрет в нём был бы вынесенным секретом.
+# Список полей — БЕЛЫЙ (не «удалим лишнее»): новое поле находки, если оно однажды принесёт значение,
+# в отчёт не попадёт само по себе — его придётся внести здесь осознанно.
+FINDING_REPORT_FIELDS = ("type", "path", "line", "id", "name", "version", "manifest", "operation")
+
+
+def for_report(result):
+    """Вердикт пака -> то, что кладётся в `run-report.json`. Без содержимого файлов и значений
+    секретов; с находками, основаниями применимости домена и охватом скана. None -> None."""
+    if not result:
+        return None
+    # .get, а не [] — на путях деградации вердикт бывает формы {"overall": "error"}, и проекция
+    # обязана донести ЭТО, а не упасть: упавшая проекция вернула бы отчёт вообще без security.
+    return {
+        "overall": result.get("overall"),
+        "applicable_domains": result.get("applicable_domains") or [],
+        "blocking": result.get("blocking") or [],
+        "needs_review": result.get("needs_review") or [],
+        # охват рядом с вердиктом (`absent-base-is-resolved-or-refused`): вердикт без охвата
+        # непроверяем — «clear» по пустому дифу и «clear» по проверенному дифу выглядят одинаково
+        "scan_scope": result.get("scan_scope"),
+        "domain_results": [{
+            "domain": r["domain"],
+            "status": r["status"],
+            "severity": r["severity"],
+            # ПОЧЕМУ домен вообще применён — иначе непонятно, откуда взялся блокирующий домен
+            "applies_because": r.get("applies_because") or [],
+            "findings": [{k: f[k] for k in FINDING_REPORT_FIELDS if k in f}
+                         for f in (r.get("findings") or [])],
+            "remediation": r.get("remediation"),
+        } for r in (result.get("results") or [])],
+    }
+
+
 def main(argv):
     ap = argparse.ArgumentParser(prog="security_pack.py")
     ap.add_argument("child_root", nargs="?", default=".")
