@@ -4,6 +4,8 @@
 Команды:
   status               — установленная vs доступная версия, целостность managed-слоя
   diff                 — что изменит обновление (add/replace/remove), без применения
+  check-update         — ГЕЙТ для CI: код 2 — копия отстала, 1 — проверить не удалось, 0 — актуальна
+                         ([--quiet] молчит при успехе, [--json] — машиночитаемо)
   update [--force]     — обновить managed-слой из пакета (алгоритм ниже); --force игнорирует drift
   init <path>          — установить систему в новый child (создать .ai/, конфиг-заготовку)
   validate             — прогнать связанные валидаторы (child, registry, workflows, providers)
@@ -643,6 +645,133 @@ def cmd_status():
     for d in drift[:10]:
         print(f"  - {d['kind']}: {d['path']}")
     return 0 if not drift else 1
+
+
+LAG_BEHIND_RC = 2       # «дочка отстала» — отдельный код, чтобы CI отличал его от поломки самой команды
+LAG_UNKNOWN_RC = 1      # «не знаю» — тоже НЕ успех: непроверенное не имеет права выглядеть проверенным
+
+
+def lag_report():
+    """Отстала ли установленная копия от пакета. -> dict (решение и его основания).
+
+    ПОВОД — ЗАМЕР (EV-1110): второй по размеру класс находок поля — «исправление живёт в ките и не
+    доезжает до установленной копии»: 8 находок из 48. F-032 показал форму точнее всего: в дочке
+    лежали ОБЕ версии точки входа, а отчёт обновления об этом молчал.
+    ЧЕГО НЕ ХВАТАЛО ИМЕННО: не механизма обновления (он есть) и не миграций (есть с 17.08), а ГЕЙТА —
+    команды, которая ПАДАЕТ, когда копия отстала. `status` считает то же самое, но возвращает 0 при
+    любой разнице версий: отчёт, который никого не останавливает, надеется на внимание человека.
+
+    ТРИ ОСНОВАНИЯ, И ОНИ РАЗНЫЕ ПО СМЫСЛУ:
+      · declared_vs_managed — объявленная в `.ai-ops.yaml` версия против ФАКТИЧЕСКИ установленного
+        managed-слоя (расхождение в любую сторону — это расхождение, а не «новее значит лучше»);
+      · pending — содержимое разошлось при ТЕХ ЖЕ номерах версий (B2-17: `status` говорил «актуально»,
+        а `diff` тут же перечислял 20 изменений);
+      · drift — managed-слой правили на месте, и обновление поверх него затрёт правку молча.
+
+    «Не знаю» отделено от «актуально» намеренно: нет конфига, нет чек-сумм, сравнение не удалось —
+    всё это `unknown`, а не `ok`.
+    """
+    out = {"schema_version": 1, "kind": "lag-report", "verdict": "ok",
+           "declared": None, "managed": None, "pending": None, "drift": None, "reasons": [],
+           "unknown": []}
+    # ЭТО ВООБЩЕ УСТАНОВЛЕННАЯ КОПИЯ? Кит НЕ ставится в себя (копия в `.ai/managed/` дала бы рекурсию
+    # и вечный дрейф чек-сумм), поэтому в самом ките сравнивать нечего: `build_diff` там честно
+    # показывает все 565 файлов пакета как «ещё не установленные», и без этой проверки гейт объявлял
+    # бы «ОТСТАЛА» на репозитории, который отставать не может. Такой ответ — не строгость, а шум:
+    # гейт, который краснеет всегда, отключают целиком.
+    # ЗАПУЩЕНО ИЗ САМОЙ УСТАНОВЛЕННОЙ КОПИИ? Тогда сравнивать не с чем: пакет и копия — один и тот
+    # же каталог, `build_diff` даст ноль, и гейт объявил бы «актуально» ВСЕГДА. Это была бы худшая из
+    # возможных форм — зелёный гейт вместо отсутствующего. Честный ответ: «не знаю» и как узнать.
+    try:
+        _inside_managed = MANAGED.resolve() in (PKG.resolve(), *PKG.resolve().parents)
+    except OSError:
+        _inside_managed = False
+    if _inside_managed:
+        out["verdict"] = "unknown"
+        out["unknown"].append(
+            "гейт запущен из установленной копии (.ai/managed) — сравнивать её саму с собой "
+            "бессмысленно. Запустите гейт из клона кита: "
+            "`python3 <клон-кита>/installer/ai_ops.py check-update` в корне этого репозитория")
+        return out
+    if not CHILD_CONFIG.exists() or not MANAGED.exists():
+        out["verdict"] = "not_installed"
+        out["unknown"].append(
+            "это не установленная копия AI Ops (нет .ai-ops.yaml и/или .ai/managed/) — "
+            "отставать нечему; гейт предназначен для репозитория, куда кит установлен")
+        return out
+    try:
+        out["declared"] = installed_version() or None
+    except ChildConfigError as e:
+        out["unknown"].append(f"конфиг не читается: {e}")
+    try:
+        out["managed"] = pkg_version()
+    except OSError as e:
+        out["unknown"].append(f"версия установленного слоя не читается: {e}")
+
+    if out["declared"] and out["managed"] and out["declared"] != out["managed"]:
+        out["reasons"].append(
+            f"объявлена версия {out['declared']}, установлена {out['managed']} — копия и её описание "
+            "разошлись")
+    elif not out["declared"]:
+        out["unknown"].append("в .ai-ops.yaml нет parent.installed_version — сравнивать нечего")
+
+    try:
+        pend = build_diff()
+        out["pending"] = len(pend)
+        if pend:
+            out["reasons"].append(
+                f"содержимое разошлось на {len(pend)} файл(ов) при том же номере версии — "
+                "нужен `ai-ops update`")
+    except Exception as e:                             # noqa: BLE001 — сравнить не вышло: это «не знаю»
+        out["unknown"].append(f"сравнение содержимого не выполнено: {type(e).__name__}: {e}")
+
+    drift = detect_drift()
+    if drift is None:
+        out["unknown"].append("нет .ai/managed/.checksums.json — целостность копии не проверена")
+    else:
+        out["drift"] = len(drift)
+        if drift:
+            out["reasons"].append(
+                f"managed-слой правили на месте: {len(drift)} файл(ов) — обновление затрёт правку")
+
+    out["verdict"] = "behind" if out["reasons"] else ("unknown" if out["unknown"] else "ok")
+    return out
+
+
+def render_lag(rep, quiet=False):
+    """Человеческие строки отчёта отставания. Молчим только когда ВСЁ в порядке."""
+    if rep["verdict"] == "ok":
+        return [] if quiet else [f"✓ копия актуальна (версия {rep['managed']}, дрейфа нет)"]
+    lines = []
+    if rep["verdict"] == "behind":
+        lines.append("ОТСТАЛА: установленная копия AI Ops не соответствует пакету.")
+        lines += [f"  · {r}" for r in rep["reasons"]]
+        lines.append("  что сделать: `ai-ops update` (при политике pr — откроет запрос на слияние).")
+    elif rep["verdict"] == "not_installed":
+        lines.append("Здесь нечего проверять: кит в этот репозиторий не установлен.")
+    else:
+        lines.append("НЕ ЗНАЮ, отстала ли копия — проверить не удалось, и это не «всё в порядке».")
+    lines += [f"  ? {u}" for u in rep["unknown"]]
+    return lines
+
+
+def cmd_check_update(argv=()):
+    """Гейт для CI дочки: код 2 — отстала, 1 — не знаю, 0 — актуальна.
+
+    Код 2 выбран не случайно: у внешних шаблонизаторов (`copier check-update --quiet`, EV-1130) это
+    уже принятое значение «состояние отстало», и оно ОТЛИЧАЕТСЯ от кода 1, которым команда сообщает о
+    своей собственной поломке. CI, который не различает эти два случая, однажды примет сломанный гейт
+    за пройденный.
+    """
+    quiet = "--quiet" in (argv or [])
+    rep = lag_report()
+    if "--json" in (argv or []):
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        for line in render_lag(rep, quiet=quiet):
+            print(line)
+    return {"ok": 0, "behind": LAG_BEHIND_RC,
+            "unknown": LAG_UNKNOWN_RC, "not_installed": LAG_UNKNOWN_RC}[rep["verdict"]]
 
 
 def cmd_diff():
@@ -2542,6 +2671,8 @@ def _dispatch(argv):
         return cmd_status()
     if cmd == "diff":
         return cmd_diff()
+    if cmd in ("check-update", "check_update"):
+        return cmd_check_update(argv[2:])
     if cmd == "update":
         # --refresh-ci: перезаписать и те kit-owned workflow, которые правил владелец. Отдельный
         # флаг, а не поведение по умолчанию: чужие правки молча не теряются.
