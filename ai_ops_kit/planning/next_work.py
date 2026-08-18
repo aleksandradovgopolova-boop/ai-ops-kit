@@ -337,6 +337,18 @@ def compute(child_root, budget_left=None, me=None):
     # непересечение кит считал и раньше; отсутствовало ровно одно — вопрос УЧАСТНИКА «что взять МНЕ».
     # Держателя называет реестр рантайма, а не план: правило «роль, а не исполнитель» остаётся, и
     # поля `assignee` в плане по-прежнему нет.
+    # ЗАМОРОЗКА УМЕНИЙ ВЫЧИТАЕТСЯ ИЗ ГОТОВОГО (работа `capability-freeze-enforced`). 18.08.2026 кит
+    # сам предложил взять `watch-contract-for-night-review` — работу из замороженной цели: решение
+    # владельца существовало ЗАПИСЬЮ и ничем не сверялось. Совет, противоречащий решению, хуже
+    # отсутствия совета: он выглядит как санкция.
+    frozen = _plan.frozen_work(plan)
+    frozen_rows = []
+    if frozen:
+        frozen_rows = [{"id": r["id"], "title": (by_id.get(r["id"]) or {}).get("title"),
+                        "reason": frozen[r["id"]]}
+                       for r in ready if r["id"] in frozen]
+        ready = [r for r in ready if r["id"] not in frozen]
+
     held_by_others, held_by_me, holders_reach = _holders(child_root, me)
     if held_by_others:
         _ids = {h["id"] for h in held_by_others}
@@ -371,7 +383,8 @@ def compute(child_root, budget_left=None, me=None):
             "ready": ready, "next_best": next_best, "parallel_with": parallel,
             "parallel_skipped": par_skipped, "not_ready": not_ready,
             "held_by_others": held_by_others, "held_by_me": held_by_me,
-            "holders_reach": holders_reach, "asked_by": me}
+            "holders_reach": holders_reach, "asked_by": me,
+            "frozen": frozen_rows, "freeze": _plan.freeze_state(plan)}
 
 
 def render(rep) -> str:
