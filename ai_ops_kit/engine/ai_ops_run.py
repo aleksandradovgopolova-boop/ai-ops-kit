@@ -38,7 +38,8 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.engine import run_plan          # noqa: E402
 from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending   # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
-from ai_ops_kit.lifecycle import active_work       # noqa: E402
+from ai_ops_kit.lifecycle import active_work
+from ai_ops_kit.engine import work_areas as _work_areas       # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
@@ -993,7 +994,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     "error": (f"active-work реестр повреждён ({_awg['reason']}) — прогон не начат, чтобы не "
                               "потерять координацию параллельных сессий (пустая карта скрыла бы коллизии). "
                               "Нужна явная recovery .ai/runtime/active-work.yaml.")}
-        areas = signals.get("affected_areas") or ["unspecified"]
+        # ЗАЯВКА #138: здесь стояло `or ["unspecified"]`, а `affected_areas` на одиночном пути в
+        # сигналы не кладёт НИКТО — поэтому пересечение зон находилось со ВСЕМИ активными записями
+        # сразу (неизвестность считалась совпадением). Зоны выводятся из `write_scope` тем же
+        # правилом, что на пакетном пути (`work_areas` — одна формула на оба пути).
+        areas = _work_areas.areas_for(signals, write_scope)
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
         # активной работой (тихо, через classify — без печати и без себя). Advisory в отчёт.
         try:
@@ -1594,7 +1599,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
     # 5. регистрация активной работы (координация параллельных сессий)
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
-    areas = signals.get("affected_areas") or ["unspecified"]
+    areas = _work_areas.areas_for(signals, write_scope)   # #138: вывод, а не заглушка (см. work_areas)
     active_work.register(aw_path, fid, f"feature/{fid}", areas, session,
                          workitem=f"features/{fid}/workitem.yaml",
                          child_root=child_root,

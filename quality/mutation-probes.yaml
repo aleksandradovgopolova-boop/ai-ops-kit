@@ -485,3 +485,41 @@ probes:
   why: 'Второй путь ответа — последовательный (WorkPackages): агрегатный вердикт отдавал наружу только
     `security_overall`, и находки не доезжали. Починить один путь и оставить второй значит завести две
     разные правды об одном вопросе, причём вторая молчит.'
+- id: areas-unknown-is-not-a-match
+  kind: guard
+  file: ai_ops_kit/engine/work_areas.py
+  find: '    return [z for z in (zones or []) if z and z != UNSPECIFIED]'
+  replace_with: '    return list(zones or [])'
+  tests:
+  - tests/unit/test_work_areas_derived_not_declared.py
+  why: 'Неизвестность не является пересечением. Снять эту охрану — вернуть заявку #138: две работы без
+    зон «пересекались» друг с другом, и кит советовал человеку не трогать те же файлы, не зная ни
+    одного файла. Класс «не знаю выдано за факт», и он дороже молчания. ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ
+    ВЫЖИЛА: фильтр стоял на обеих сторонах сравнения, и снятие одной строки оставляло тесты зелёными —
+    поэтому фильтр сведён в `_named`, одно несущее место.'
+- id: areas-seam-registry-gets-derived-zones
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/work_areas.py
+  - ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    areas = _work_areas.areas_for(signals, write_scope)   # #138: вывод, а не заглушка (см. work_areas)'
+  replace_with: '    areas = signals.get("affected_areas") or ["unspecified"]'
+  tests:
+  - tests/unit/test_work_areas_derived_not_declared.py
+  why: 'ШОВ на пути ЧЕЛОВЕКА: вывод зон что-то значит только если он доезжает до РЕЕСТРА. Мутация
+    возвращает дословно прежнюю строку — механизм остаётся написанным и модульно «работает», а в
+    `.ai/runtime/active-work.yaml` снова попадает `unspecified`, и пересекается всё со всем.'
+- id: areas-overlap-used-by-classify
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/engine/work_areas.py
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        shared_areas = _work_areas.areas_overlap(areas, w.get("affected_areas"))'
+  replace_with: '        shared_areas = sorted(set(areas) & set(w.get("affected_areas") or []))'
+  tests:
+  - tests/unit/test_work_areas_derived_not_declared.py
+  why: 'ШОВ между зонами и предупреждением: сравнение зон живёт в `work_areas`, но отвечает человеку
+    `classify`. Мутация возвращает прежнее пересечение множеств — и `unspecified` снова совпадает с
+    `unspecified`, а вложенность каталогов перестаёт считаться конфликтом.'
