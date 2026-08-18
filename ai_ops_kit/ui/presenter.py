@@ -445,7 +445,7 @@ def from_contour_consistency(rep: dict) -> dict:
                    technical={"findings": len(findings)})
 
 
-def from_active_work(rep: dict, published: bool = False) -> dict:
+def from_active_work(rep: dict, published: bool = False, reconciled: int = 0) -> dict:
     """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
 
     Прежде `status` печатал `STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)` — путь к
@@ -457,8 +457,14 @@ def from_active_work(rep: dict, published: bool = False) -> dict:
     не идёт» читается как факт о команде, хотя это факт об одной машине. Дефолт False — самый
     безопасный: он никогда не выдаёт локальное состояние за координацию.
     """
+    # #137: снятое СВЕРКОЙ с базой — не идущая работа. Прежде фильтровался только `done`, поэтому
+    # влитая работа считалась идущей и человеку советовали не трогать те же файлы.
     active = [a for a in (rep or {}).get("active") or []
-              if (a.get("status") or "") != "done"]
+              if (a.get("status") or "") not in ("done", "superseded")]
+    # Снятое сверкой НАЗЫВАЕТСЯ, а не исчезает молча: человек должен видеть, почему список короче.
+    recon_note = (f"Снято сверкой с базой: {reconciled} "
+                  f"{_q(reconciled, 'запись', 'записи', 'записей')} — изменения уже влиты."
+                  if reconciled else None)
     # Одна фраза человеку, без слов `.ai-ops.yaml` и `team_coordination` — их место в technical.
     reach_h = ("вижу заявки всех машин команды (публикация включена)" if published
                else "вижу только ЭТУ машину — заявки других участников сюда не попадают")
@@ -466,7 +472,7 @@ def from_active_work(rep: dict, published: bool = False) -> dict:
     if not active:
         return message(
             status="ok", headline="Сейчас ничего не идёт",
-            summary="Работа не начата.",
+            summary="Работа не начата." if not recon_note else recon_note,
             why_it_matters=("«Не начата» — про эту машину: " + reach_h + "." if not published else None),
             next_steps=["скажи, что взять, или спроси «что дальше» — предложу с обоснованием"],
             technical={"active": 0, "досягаемость": "команда" if published else "эта машина"})
@@ -476,6 +482,8 @@ def from_active_work(rep: dict, published: bool = False) -> dict:
         (a.get("title") or a.get("workitem") or a.get("id") or "работа")
         for a in active[:3])
     why = f"{reach_cap}."
+    if recon_note:
+        why = recon_note + " " + why
     if not published:
         why += (" Пересечения по файлам ниже — про параллельные сессии здесь, не про команду; "
                 "координация команды включается публикацией отдельно.")

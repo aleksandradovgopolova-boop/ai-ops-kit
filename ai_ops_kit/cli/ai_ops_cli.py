@@ -278,8 +278,12 @@ def _run_intent(intent, task, child_root, signals, a):
         # Общая карта: локальные заявки + опубликованные заявки ДРУГИХ машин (если публикация
         # включена). Так «работа идёт» становится фактом о команде, а не об одной машине.
         team = active_work.team_view(child_root, data.get("active") or [], pub)
-        print(presenter.render(presenter.from_active_work({"active": team}, published=pub),
-                               audience=aud))
+        # #137: СВЕРКА С БАЗОЙ на чтении. Поле 17.08.2026: три записи из четырёх относились к работе,
+        # давно влитой в main, а `status` отвечал «Работа идёт» и советовал не трогать те же файлы.
+        team = active_work.reconcile_with_base(team, child_root)
+        reconciled = active_work.persist_reconciliation(awp, team) if awp.is_file() else 0
+        print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
+                                                          reconciled=reconciled), audience=aud))
         return 0
 
     if intent == "next":
