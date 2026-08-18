@@ -1,0 +1,35 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-18-гейт-security-блокирует--87d77fd2
+at: '2026-08-18T21:45:34+00:00'
+statement: 'Гейт security блокирует безобидное изменение и закрыть его на уровне QUICK
+  нечем: он требует независимого security-ревьюера по доменам authorization_idol,
+  deployment_config, input_validation, rate_limiting, которых диф не касается (изменены
+  scripts/check-contents.mjs, package.json, docs/implementation-status.md), а на QUICK
+  судья выключен автоподбором — то есть путь к ready_for_pr закрыт по построению.'
+observation_class: defect
+severity: p1
+kit_version: 3.36.12
+child:
+  name: bnbm
+  path: /private/tmp/claude-501/-Users-sasad/56c78252-35c5-4e6f-b9c7-83635828ebae/scratchpad/bnbm
+  commit: 4b8f695a8b51
+evidence:
+- kind: command
+  command: cat .ai/worktrees/contents-check/features/status-doc-matches-reality/run-report.json
+    | jq .gates
+  output: 'нужен независимый security-reviewer/человек по доменам: authorization_idol,
+    deployment_config, input_validation, rate_limiting; checks: [], evidence: [],
+    status: fail, blocking: true'
+- kind: note
+  text: 'Диф: 3 файла (node-скрипт проверки, package.json, документ статуса). Домены
+    подняты по совпадению содержимого — это осознанный fail-closed, но цена измерена:
+    безопасная правка не доходит до результата.'
+state: became_work
+state_reason: 'Проверено замером на живом продукте 19.08.2026, запись прогона: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md.
+  Заведено работой security-gate-closable-on-quick.'
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-18T21:45:59+00:00'
+decided_at: '2026-08-18T21:48:08+00:00'
+became_work: security-gate-closable-on-quick
