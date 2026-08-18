@@ -270,9 +270,15 @@ def _run_intent(intent, task, child_root, signals, a):
                     audience=presenter.audience_from_config(child_root)))
                 return 1
         if js:
-            return active_work.list_cmd(awp, as_json=True) if awp.is_file() else 0
+            # Досягаемость видна и в JSON — потребитель ответа не должен угадывать её сам.
+            return (active_work.list_cmd(awp, as_json=True,
+                                         published=active_work.publication_enabled(child_root))
+                    if awp.is_file() else 0)
         aud = presenter.audience_from_config(child_root)
-        print(presenter.render(presenter.from_active_work(data), audience=aud))
+        # Досягаемость реестра решает, правду о команде мы говорим или об одной машине
+        # (ep-2026-08-18-claim-medium-hybrid). Без этого «работа идёт» читается как факт о команде.
+        pub = active_work.publication_enabled(child_root)
+        print(presenter.render(presenter.from_active_work(data, published=pub), audience=aud))
         return 0
 
     if intent == "next":
