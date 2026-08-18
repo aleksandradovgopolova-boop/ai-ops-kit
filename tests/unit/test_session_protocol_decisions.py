@@ -114,6 +114,21 @@ class TestSessionStartRitualKnowsAboutLimits:
         assert NEW in text and "ep-2026-08-13" in text, \
             "ритуал ссылается на правила без номеров решений — проверить их происхождение нечем"
 
+    def test_the_ritual_is_wired_where_the_runtime_looks(self):
+        """ШОВ: ритуал существует, только если его КТО-ТО зовёт. Проверку потребовал сам кит
+        (`validate_mutation_probes`: «есть охранные пробы, но НЕТ пробы шва»), и он прав: команду
+        исполняет рантайм, находя её через манифест, — снятие этой привязки не поймал бы ни один тест
+        выше, и ритуал стал бы документом, который никто не открывает.
+
+        Границу кит объявляет честно сам: самозапуск — привязка рантайма, не гарантия кита. Поэтому
+        проверяется ровно то, за что кит отвечает: команда объявлена там, где рантайм её ищет."""
+        man = yaml.safe_load((KIT / "manifest" / "ai-ops-manifest.yaml").read_text(encoding="utf-8"))
+        flat = yaml.safe_dump(man, allow_unicode=True)
+        assert "commands/task/ai-session-start.md" in flat, \
+            "ритуал старта не объявлен в манифесте — рантайму нечего исполнять"
+        assert flat.count("commands/task/ai-session-start.md") >= 2, \
+            "исчезла одна из двух привязок (session_bootstrap / read_first_in) — ритуал зовут в двух местах"
+
     def test_steps_are_numbered_without_gaps(self, text):
         import re
         nums = [int(m.group(1)) for m in re.finditer(r"^(\d+)\. \*\*", text, re.M)]
