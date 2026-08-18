@@ -221,7 +221,16 @@ def _run_intent(intent, task, child_root, signals, a):
         # Наблюдение о ките — данные, а не пересказ. Без текста команда показывает судьбу уже
         # сказанного: канал в одну сторону перестают наполнять, поэтому ответ обязан быть виден.
         from ai_ops_kit.engops import kit_feedback
-        if not (task or "").strip():
+        # ПУТЬ РЕПОЗИТОРИЯ — НЕ НАБЛЮДЕНИЕ (проба канала на живой дочке, 18.08.2026). Обёртка
+        # `./ai-ops` подставляет абсолютный путь сразу после интента, а человек по привычке от всех
+        # остальных команд дописывает `.` — и второй позиционный уезжал в ТЕКСТ. `./ai-ops feedback .`
+        # (ровно та команда, которую кит сам печатает как «посмотреть судьбу сказанного», плюс точка)
+        # записывала наблюдение с содержанием «.», возвращала «записал» и судьбу не показывала.
+        # Здесь путь читается как путь: человек просил показать судьбу, а не сообщать про каталог.
+        _txt = (task or "").strip()
+        if _txt and Path(_txt).is_dir():
+            _txt = ""
+        if not _txt:
             rep = kit_feedback.status(child_root)
             if js:
                 print(json.dumps(rep, ensure_ascii=False, indent=2))
@@ -235,7 +244,7 @@ def _run_intent(intent, task, child_root, signals, a):
                                              getattr(a, "evidence_command", None),
                                              getattr(a, "evidence_note", None))
         p, created, errors = kit_feedback.record(
-            child_root, task, evidence=ev, severity=getattr(a, "severity", None),
+            child_root, _txt, evidence=ev, severity=getattr(a, "severity", None),
             observation_class=getattr(a, "observation_class", None))
         if js:
             print(json.dumps({"path": str(p), "created": created, "errors": errors},

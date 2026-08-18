@@ -611,3 +611,50 @@ probes:
     в случае, когда PATH не спрашивали вовсе: провайдер выбран верно, но человек читает про PATH — и
     при разборе следующего сбоя ищет причину не там, где она есть. Это тот же класс «печатаемый текст
     ничем не проверен», крупнейший по ресерчу 17.08.'
+- id: feedback-path-is-not-an-observation
+  kind: guard
+  file: ai_ops_kit/engops/kit_feedback.py
+  find: '    elif _looks_like_path(st):'
+  replace_with: '    elif False:'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'Найдено пробой канала на ЖИВОЙ дочке 18.08.2026: `./ai-ops feedback .` записала наблюдение с
+    содержанием «.» и ответила «записал». Мутация снимает отказ в МОДУЛЕ — канал снова принимает путь
+    за наблюдение при вызове мимо CLI, а запись, которой нельзя верить, попадает в сборку и тратит
+    решение по себе. Отказ обязан жить у записи, а не только у разбора аргументов.'
+- id: feedback-seam-command-shows-fate
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/engops/kit_feedback.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        if _txt and Path(_txt).is_dir():'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'ШОВ на пути человека: `feedback` — единственная команда, где второй позиционный аргумент несёт
+    ТЕКСТ, а обёртка `./ai-ops` уже подставила путь первым. Мутация возвращает прежнее поведение:
+    привычная точка снова уезжает в наблюдение, человек читает «записал» вместо судьбы сказанного, а
+    модульный отказ остаётся зелёным — потому что путь до него доходит уже как «текст».'
+- id: child-feedback-hidden-from-child-history
+  kind: guard
+  file: installer/ai_ops.py
+  find: '.ai/kit-feedback/'
+  replace_with: '.ai/kit-feedback-DISABLED/'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'Первая запись канала легла в дерево дочки НЕотслеживаемой и НЕигнорируемой — худшее из
+    состояний: git-гигиене не видно, а чужой `git add -A` унесёт в посторонний коммит (так уже
+    терялись правки 12.08.2026). Мутация снимает строку ignore. Проверяется вместе с тем, что дописка
+    в `.gitignore` владельца НАЗВАНА в отчёте установки: менять чужой документ молча нельзя.'
+- id: broken-record-does-not-silence-the-fate
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '            next_steps=fates or None,'
+  replace_with: '            next_steps=None,'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'Одна битая запись глушила ВЕСЬ ответ о судьбе замечаний — человек видел «часть я не читаю» и ни
+    слова о том, что стало с настоящим наблюдением, по которому решение уже принято. Это тот самый
+    отказ, от которого канал умирает молча: ответа не видно -> писать перестают. Мутация возвращает
+    тишину.'
