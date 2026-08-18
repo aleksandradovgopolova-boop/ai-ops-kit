@@ -31,7 +31,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import socket
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -39,6 +41,58 @@ import yaml
 from ai_ops_kit.shared import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
 
 STATUS = {"in-progress", "review", "blocked", "done"}
+
+CONFIG_REL = ".ai-ops.yaml"
+
+
+def publication_enabled(child_root) -> bool:
+    """Публикуется ли реестр заявок за пределы ЭТОЙ машины. По умолчанию — НЕТ.
+
+    Решение владельца 18.08.2026 (`ep-2026-08-18-claim-medium-hybrid`): заявка живёт локально, а
+    публикация в общий носитель — только по ЯВНОМУ включению `team_coordination.publish: true` в
+    `.ai-ops.yaml`. Дефолт False выбран не для удобства, а как самый безопасный: он НИКОГДА не
+    выдаёт локальное состояние за координацию команды. Любая неоднозначность (нет файла, битый yaml,
+    yaml недоступен) читается как «не опубликовано» — то же самое соображение.
+    """
+    if yaml is None or child_root is None:
+        return False
+    p = Path(child_root) / CONFIG_REL
+    if not p.is_file():
+        return False
+    try:
+        cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return False
+    tc = cfg.get("team_coordination") or {}
+    return bool(tc.get("publish", False))
+
+
+def reach_note(published: bool) -> str:
+    """Одна честная строка о ДОСЯГАЕМОСТИ реестра (ep-2026-08-18-claim-medium-hybrid, условие 3).
+
+    Смысл: локальное состояние не должно читаться как координация команды. Пока публикация выключена,
+    кит обязан сказать, что видит только свою машину, — а не подавать пересечения так, будто видит
+    заявки других участников. Это ровно тот ложный green, против которого стоит весь контур.
+    """
+    if published:
+        return ("Реестр публикуется: кит видит заявки других машин команды. При публикации уезжают "
+                "id работы, ветка, машина, время, сессия — НЕ содержимое файлов.")
+    return ("Это заявки ТОЛЬКО этой машины: работу других участников кит здесь не видит — публикация "
+            "выключена (team_coordination.publish в .ai-ops.yaml). Пересечения, если они ниже есть, — "
+            "про параллельные сессии на этой машине, а не про команду.")
+
+
+def _machine() -> str:
+    """Имя машины — часть заявки: «кто держит» без «где» не разобрать при инциденте."""
+    try:
+        return socket.gethostname() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
 
 
 def shared_registry_path(start=None):
@@ -201,7 +255,7 @@ def _forecast_lines(confs):
 
 
 def register(path, wid, branch, areas, session, workitem=None, status="in-progress",
-             depends=None, contracts=None, at=None):
+             depends=None, contracts=None, at=None, published=False):
     if branch in (None, "", "main", "master"):
         print("ОШИБКА: работа не должна вестись в main/master — задайте ветку/worktree.")
         return 1
@@ -215,16 +269,18 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
     # перезаписать нашу регистрацию — last-writer-wins — и concurrency-forecast увидел бы неполную карту).
     with _locked(path):
         data = load(path)
+        # Заявка = кто (сессия) + где (машина) + когда (время) + что (ветка/зоны). Машина и время
+        # добавлены 18.08.2026: без «где» и «когда» инцидент параллельных сессий не разобрать
+        # (заявка #150: атрибуция была невозможна). Поля аддитивны — прежние записи без них валидны.
         entry = {"id": wid, "branch": branch, "status": status,
-                 "affected_areas": list(areas), "owner_session": session}
+                 "affected_areas": list(areas), "owner_session": session,
+                 "machine": _machine(), "started_at": at or _now_iso()}
         if workitem:
             entry["workitem"] = workitem
         if depends:
             entry["depends_on"] = list(depends)
         if contracts:
             entry["shared_contracts"] = list(contracts)
-        if at:
-            entry["started_at"] = at
         # цикл зависимостей — это ошибка, а не предупреждение
         cycle = find_cycle(data["active"], entry)
         if cycle:
@@ -234,20 +290,26 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         confs = classify(data["active"], entry)
         data["active"] = [w for w in data["active"] if w.get("id") != wid] + [entry]
         save(path, data)
-    print(f"ACTIVE-WORK: зарегистрирована работа '{wid}' (ветка {branch}, сессия {session}).")
+    print(f"ACTIVE-WORK: зарегистрирована работа '{wid}' "
+          f"(ветка {branch}, сессия {session}, машина {entry['machine']}).")
     for line in _forecast_lines(confs):
         print(line)
+    # Честная фраза о досягаемости — ВСЕГДА, а не только при пересечениях: иначе «пересечений нет»
+    # на локальном реестре читается как «команда свободна», хотя других машин кит не видит.
+    print("  " + reach_note(published))
     return 0
 
 
-def list_cmd(path, as_json=False):
+def list_cmd(path, as_json=False, published=False):
     data = load(path)
     if as_json:
+        data = dict(data, published=published)   # досягаемость видна и в JSON, не только в тексте
         print(json.dumps(data, ensure_ascii=False, indent=2))
         return 0
     act = [w for w in data["active"] if w.get("status") != "done"]
     if not act:
         print("ACTIVE-WORK: активных работ нет.")
+        print("  " + reach_note(published))
         return 0
     print(f"ACTIVE-WORK: {len(act)} активных работ:")
     for w in act:
@@ -258,6 +320,7 @@ def list_cmd(path, as_json=False):
             extra += f" контракты: {', '.join(w['shared_contracts'])};"
         print(f"  - {w.get('id')} [{w.get('status')}] ветка {w.get('branch')} "
               f"зоны: {', '.join(w.get('affected_areas') or [])} (сессия {w.get('owner_session')}){extra}")
+    print("  " + reach_note(published))
     return 0
 
 
@@ -326,9 +389,11 @@ def main(argv):
     r.add_argument("--depends", help="id задач-зависимостей через запятую")
     r.add_argument("--contracts", help="пути общих контрактов через запятую")
     r.add_argument("--at")
+    r.add_argument("--repo", help="корень репозитория для чтения team_coordination (по умолчанию cwd)")
 
     l = sub.add_parser("list")
     l.add_argument("file"); l.add_argument("--json", action="store_true")
+    l.add_argument("--repo", help="корень репозитория для чтения team_coordination (по умолчанию cwd)")
 
     c = sub.add_parser("check")
     c.add_argument("file"); c.add_argument("--areas", required=True)
@@ -340,10 +405,13 @@ def main(argv):
 
     a = ap.parse_args(argv)
     if a.cmd == "register":
+        pub = publication_enabled(getattr(a, "repo", None) or Path.cwd())
         return register(Path(a.file), a.id, a.branch, _split(a.areas), a.session,
-                        a.workitem, a.status, _split(a.depends), _split(a.contracts), a.at)
+                        a.workitem, a.status, _split(a.depends), _split(a.contracts), a.at,
+                        published=pub)
     if a.cmd == "list":
-        return list_cmd(Path(a.file), a.json)
+        pub = publication_enabled(getattr(a, "repo", None) or Path.cwd())
+        return list_cmd(Path(a.file), a.json, published=pub)
     if a.cmd == "check":
         return check_cmd(Path(a.file), _split(a.areas), _split(a.depends),
                         _split(a.contracts), a.exclude, a.json)

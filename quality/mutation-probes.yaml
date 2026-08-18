@@ -277,3 +277,37 @@ probes:
   - tests/unit/test_staleness_and_provenance.py
   why: 'ШОВ: механизм существовал и раньше по духу — не хватало того, чтобы человек его ВИДЕЛ. Проверка,
     не доехавшая до ответа, равна отсутствующей.'
+- id: publication-defaults-to-local
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    return bool(tc.get("publish", False))'
+  replace_with: '    return True'
+  tests:
+  - tests/unit/test_local_claim_honest_reach.py
+  why: 'Дефолт публикации ОБЯЗАН быть локальным: включить его по умолчанию — значит выдавать локальное
+    состояние за координацию команды и, для закрытого продукта, начать слать имена задач наружу без
+    решения владельца (ep-2026-08-18-claim-medium-hybrid).'
+- id: claim-records-the-machine
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '                 "machine": _machine(), "started_at": at or _now_iso()}'
+  replace_with: '                 "started_at": at or _now_iso()}'
+  tests:
+  - tests/unit/test_local_claim_honest_reach.py
+  why: 'Без машины в заявке «кто держит» теряет «где» — ровно то, из-за чего атрибуция инцидента
+    параллельных сессий была невозможна (заявка #150).'
+- id: reach-honesty-seam-status-asks-publication
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/ui/presenter.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        pub = active_work.publication_enabled(child_root)'
+  replace_with: '        pub = False  # SEAM MUTATION'
+  tests:
+  - tests/unit/test_local_claim_honest_reach.py
+  why: 'ШОВ: честная фраза о досягаемости доходит до человека, только если `status` реально СПРАШИВАЕТ
+    публикацию и проводит её в презентер. Презентер можно сделать честным и не позвать — тогда он
+    останется мёртвым, как уже было с политикой экономии сессии. Мутация подменяет живой вызов на
+    константу; тест сценария status обязан заметить, что ответ перестал зависеть от конфигурации.'
