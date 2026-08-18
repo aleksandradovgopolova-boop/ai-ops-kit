@@ -14,7 +14,8 @@ required_evidence целиком покрыто пройденными дете�
 Использование:
   security_pack.py <child_root> [--base <sha>] [--signals '{...}'] [--json]
   security_pack.py --selftest
-Возврат 0 — блокеров нет; 1 — есть блокирующие находки (или ошибка).
+Возврат 0 — блокеров нет; 1 — есть блокирующие находки (или ошибка); 2 — скан НЕ ВЫПОЛНЕН и
+причина названа (без базы сравнения охват неопределим: см. `_scan_scope`).
 """
 from __future__ import annotations
 
@@ -99,27 +100,76 @@ def _applies(domain, signals, files_content):
     return reasons
 
 
+def _root_commit_files(root, base):
+    """ЕДИНСТВЕННЫЙ законный случай неразрешимой базы: `<sha>~1`, где `<sha>` — КОРНЕВОЙ коммит.
+    Родителя нет ПО ПОСТРОЕНИЮ, и охват тогда — файлы самого коммита, а не весь репозиторий.
+    -> список путей; None, если случай другой (тогда вызывающий обязан отказаться)."""
+    import subprocess
+    m = re.fullmatch(r"(.+)~1", str(base))
+    if not m:
+        return None
+    sha = m.group(1)
+    # родителя нет -> это корень; у любого другого коммита `<sha>^` разрешается
+    if subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"{sha}^"],
+                      capture_output=True, text=True).returncode == 0:
+        return None
+    r = subprocess.run(["git", "-C", str(root), "diff-tree", "--root", "--no-commit-id",
+                        "--name-only", "-r", sha], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    return [ln for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def _scan_scope(child_root, base):
+    """Файлы для скана и НАЗВАННЫЙ охват. -> (files, scope) или RuntimeError с причиной.
+
+    ПОЛЕ 17-18.08.2026 (заявка #139, ИИ-Среда): при `base=None` здесь брался ВЕСЬ репозиторий
+    (`git ls-files`), и прогон блокировался находкой в ДАВНЕМ файле, которого правка не касалась.
+    Замер с контролем на пробном репозитории: правка одного безобидного файла -> без базы
+    `overall=blocked` (домен input_validation, находка в чужом legacy), с базой -> `clear`.
+    Заявка читалась как «блокирует без находок» именно поэтому: находки были настоящие, но
+    принадлежали чужому коду — врал не вердикт, а ОХВАТ.
+
+    ПОЭТОМУ ОТСУТСТВИЕ БАЗЫ — РЕШЕНИЕ, А НЕ ПУСТОЕ ЗНАЧЕНИЕ, и оба молчаливых варианта запрещены:
+    весь репозиторий превращает любой прогон в аудит чужого legacy, а пустой диф дал бы ложное
+    `clear` (скан без единого файла — не «чисто», а «не проверено»). Отказ называет причину."""
+    if base is None:
+        raise RuntimeError(
+            "security-скан без базы сравнения: fail-closed. Весь репозиторий сканировать нельзя "
+            "(находка в файле, которого правка не касалась, блокирует чужой работой — заявка #139), "
+            "пустой диф нельзя выдавать за 'clear'. Передай base=<sha|ветка> тем, кто вызывает "
+            "run_pack, или задай --base у security_pack.py")
+    changed = security_scan._git_changed_files(child_root, base)
+    if changed is not None:
+        return changed, {"mode": "diff", "base": str(base)}
+    root_files = _root_commit_files(child_root, base)
+    if root_files is not None:
+        # первый коммит репозитория: сравнивать не с чем, и охват «файлы этого коммита» — точный,
+        # а не «весь репозиторий по случайности совпал».
+        return root_files, {"mode": "initial-commit", "base": str(base)}
+    # v3.0.11 (finding аудита P1): git-энумерация упала -> FAIL-CLOSED (raise), НЕ changed=[].
+    # Прежде rc!=0 -> [] -> нет находок -> overall='clear': реальная правка при git-сбое
+    # признавалась чистой. Исключение ловит вызывающий (_security_scan_error -> security=fail).
+    raise RuntimeError(
+        f"база сравнения '{base}' не разрешается в {child_root}: диф не получен, и это не первый "
+        f"коммит — файлы для security-скана определить нечем — fail-closed")
+
+
 def run_pack(child_root=None, base=None, signals=None, files_content=None):
-    """Доменный security-вердикт. files_content: {path: text} для offline-теста; иначе — из git diff."""
+    """Доменный security-вердикт. files_content: {path: text} для offline-теста; иначе — из git diff.
+
+    `scan_scope` в результате называет, ЧТО сравнивалось (diff/initial-commit/переданная карта):
+    вердикт без охвата непроверяем — см. `_scan_scope`."""
     signals = dict(signals or {})
     domains, allowed = load_domains()
 
     # источник изменённых файлов: переданная карта (тест) или git diff коммита
+    scan_scope = {"mode": "given", "base": None}
     if files_content is None:
         files_content = {}
+        scan_scope = {"mode": "empty", "base": None}
         if child_root is not None:
-            changed = security_scan._git_changed_files(child_root, base) if base else None
-            if changed is None:
-                import subprocess
-                r = subprocess.run(["git", "-C", str(child_root), "ls-files"], capture_output=True, text=True)
-                # v3.0.11 (finding аудита P1): git-энумерация упала -> FAIL-CLOSED (raise), НЕ changed=[].
-                # Прежде rc!=0 -> [] -> нет находок -> overall='clear': реальная правка при git-сбое
-                # признавалась чистой. Исключение ловит вызывающий (_security_scan_error -> security=fail).
-                if r.returncode != 0:
-                    raise RuntimeError(
-                        f"git ls-files rc={r.returncode} в {child_root}: не удалось определить файлы для "
-                        f"security-скана ({(r.stderr or '').strip()[:160]}) — fail-closed")
-                changed = [ln for ln in r.stdout.splitlines() if ln.strip()]
+            changed, scan_scope = _scan_scope(child_root, base)
             files_content = security_scan._read_files(child_root, changed)
 
     # детерминированные находки (один раз)
@@ -181,6 +231,9 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         "blocking": sorted(set(blocking)),
         "needs_review": sorted(set(needs_review)),
         "overall": ("blocked" if blocking else ("needs_review" if needs_review else "clear")),
+        # ОХВАТ РЯДОМ С ВЕРДИКТОМ: что сравнивалось. Вердикт без охвата непроверяем — заявка #139
+        # читалась как «блокирует без находок» именно потому, что охват был не назван нигде.
+        "scan_scope": scan_scope,
         "allowed_evidence_sources": allowed,
     }
 
@@ -192,12 +245,19 @@ def main(argv):
     ap.add_argument("--signals", default="{}")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
-    res = run_pack(Path(a.child_root), base=a.base, signals=json.loads(a.signals))
+    # ОТКАЗ НАЗЫВАЕТ ПРИЧИНУ, а не показывает человеку стек: без базы охват определить нечем.
+    try:
+        res = run_pack(Path(a.child_root), base=a.base, signals=json.loads(a.signals))
+    except RuntimeError as e:
+        print(f"SECURITY-PACK: скан не выполнен — {e}", file=sys.stderr)
+        return 2
     if a.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
     else:
+        _sc = res.get("scan_scope") or {}
         print(f"SECURITY-PACK: overall={res['overall']} · применимо доменов {len(res['applicable_domains'])} · "
-              f"блокеров {len(res['blocking'])} · needs_review {len(res['needs_review'])}")
+              f"блокеров {len(res['blocking'])} · needs_review {len(res['needs_review'])} · "
+              f"охват {_sc.get('mode')}" + (f" против {_sc.get('base')}" if _sc.get("base") else ""))
         for r in res["results"]:
             mark = {"fail": "✗", "pass": "✓", "needs_review": "?"}.get(r["status"], "·")
             print(f"  {mark} {r['domain']} [{r['severity']}] {r['status']}"

@@ -441,7 +441,10 @@ def test_execution_pipeline_selftest():
         run_pipeline("quick api sec", sig_q, root, lambda c: next(it_q1), policy=pol,
                      budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
                      install_deps=False, review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
-        _nrq = _sp_re.run_pack(str(root / ".ai" / "worktrees" / "reeval-fn"), base=None,
+        # Здесь нужны ИМЕНА доменов, требующих ревью при этих signals, а не скан репозитория.
+        # Прежде стоял `base=None` — то есть охват «весь репозиторий» (заявка #139); теперь охват
+        # без базы — названный отказ, и правильный способ спросить домены — подать карту файлов.
+        _nrq = _sp_re.run_pack(files_content={"rq.py": "def rq():\n    return 1\n"},
                                signals=sig_q).get("needs_review") or ["rate_limiting"]
         # v3.37: план кладём НА ДИСК и связываем одобрение с его настоящим хэшем. Прежде здесь стояло
         # binds_to="reeval-fn-plan" — выдуманная строка, которую никто не сверял: плана не было, и
