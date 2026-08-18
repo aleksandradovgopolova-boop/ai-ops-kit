@@ -60,6 +60,7 @@ from ai_ops_kit.providers.orchestrator_providers import (
     mock_provider, DEFAULT_MODELS, _MAX_TOKENS,
     _anthropic_call, _openai_call, _claude_cli_call,
     make_provider, make_claude_cli_provider, make_openai_provider,
+    claude_binary, claude_lookup, claude_found_reason,
 )
 
 

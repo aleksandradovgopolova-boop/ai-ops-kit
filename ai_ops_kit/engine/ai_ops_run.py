@@ -594,8 +594,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     # (локальная сессия). Escalation-ladder чистим: некуда «эскалировать» сильного вниз на kimi/qwen.
                     _tier = _plan.get("preferred_writer_tier") or {}
                     if _tier.get("tier") == "strong-executor":
-                        import shutil as _sh
-                        if _sh.which("claude"):
+                        # СПРАШИВАЕМ ТЕМ ЖЕ, ЧЕМ ЗАПУСТИМ (замер 18.08.2026). Здесь стоял голый
+                        # `shutil.which("claude")`, а `make_claude_cli_provider()` запускает то, что
+                        # найдёт `claude_lookup` — то есть путь, названный владельцем в
+                        # AI_OPS_CLAUDE_BIN, сильнее PATH. Расхождение давало ровно тот класс, из-за
+                        # которого функция и заводилась: рабочий исполнитель назван, но не в PATH ->
+                        # «strong executor недоступен» и тихий откат на дешёвого writer'а; битый
+                        # названный путь при claude в PATH -> writer выбран, а первый же вызов модели
+                        # отказывается работать посреди начатого прогона.
+                        if orchestrator.claude_binary():
                             _writer_model = "claude-code-local"
                             _writer_prov = orchestrator.make_claude_cli_provider()
                             _model_resolution["effective_model"] = "claude-code-local"
@@ -609,9 +616,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                 "complexity-aware: сложный класс -> writer=claude-cli (сильный executor) сразу")
                         else:
                             _model_resolution["strong_executor_unavailable"] = True
+                            _look = orchestrator.claude_lookup()
                             _model_resolution["notes"].append(
                                 "complexity-aware: класс требует strong-executor, но локальный claude CLI "
-                                "недоступен -> честный fallback на money-mode дешёвый writer")
+                                "недоступен ("
+                                + ("назван путь AI_OPS_CLAUDE_BIN, файла нет или он не исполняемый"
+                                   if _look["where"] == "named" else "в PATH процесса кита не найден")
+                                + ") -> честный fallback на money-mode дешёвый writer")
                     # reviewer — JIT trust отдельного провайдера (writer≠judge по модели).
                     # v3.9.0-rc3: сравниваем с ЭФФЕКТИВНЫМ writer'ом (_writer_model), а не с registry-impl —
                     # иначе при complexity-override (writer=claude-cli) deepseek-ревьюер ложно считался

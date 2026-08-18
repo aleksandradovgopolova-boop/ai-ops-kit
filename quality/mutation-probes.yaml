@@ -573,3 +573,41 @@ probes:
   why: 'Второй путь, где реестр отвечает: прогноз пересечений при РЕГИСТРАЦИИ. Если карта не сверена,
     влитая работа предупреждает о себе — и предупреждение о «тех же файлах» приходит от работы, которой
     уже нет. Это ровно та цена, которую поле назвало: реестр как список страшилок.'
+- id: autoresolve-asks-what-it-will-launch
+  kind: guard
+  file: ai_ops_kit/providers/orchestrator_providers.py
+  find: '    if _look["path"]:'
+  replace_with: '    if which("claude"):'
+  tests:
+  - tests/unit/test_provider_decision_equals_launch.py
+  why: 'Возврат ВТОРОГО ВЗГЛЯДА на пути автовыбора — ровно того, из-за которого поле 13.08 и 15.08.2026
+    получило `FileNotFoundError: ''claude''` посреди начатого прогона. Мутация ставит обратно голый
+    `which`: названный владельцем рабочий путь снова игнорируется (mock, «правок не будет» при живом
+    исполнителе), а битый названный путь снова выбирает claude-cli без предупреждения — работа
+    зарегистрирована, дерево готово, первый вызов модели отказывается.'
+- id: strong-executor-decided-by-the-launcher
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/providers/orchestrator_providers.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '                        if orchestrator.claude_binary():'
+  replace_with: '                        if __import__("shutil").which("claude"):'
+  tests:
+  - tests/unit/test_provider_decision_equals_launch.py
+  why: 'ШОВ между решением движка и запуском: выбор сильного writer''а идёт СВОИМ путём, не через
+    `resolve_provider`, поэтому одного исправления автовыбора мало — класс возвращался дважды именно
+    так, каждый новый вызывающий писал `which("claude")` заново. Мутация возвращает второй взгляд в
+    движок; структурный запрет обязан это увидеть, иначе «исправлено» останется верным только для
+    одного из двух путей.'
+- id: found-reason-names-where-it-looked
+  kind: guard
+  file: ai_ops_kit/providers/orchestrator_providers.py
+  find: '        return (f"claude CLI взят из {CLAUDE_BIN_ENV}={lookup[''path'']} "'
+  replace_with: '        return ("claude CLI найден в PATH (локальная сессия, API-ключ не нужен) "'
+  tests:
+  - tests/unit/test_provider_decision_equals_launch.py
+  why: 'Причина обязана называть, ОТКУДА взят исполнитель. Мутация возвращает прежнюю строку про PATH
+    в случае, когда PATH не спрашивали вовсе: провайдер выбран верно, но человек читает про PATH — и
+    при разборе следующего сбоя ищет причину не там, где она есть. Это тот же класс «печатаемый текст
+    ничем не проверен», крупнейший по ресерчу 17.08.'

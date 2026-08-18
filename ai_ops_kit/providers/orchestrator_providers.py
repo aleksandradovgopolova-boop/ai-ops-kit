@@ -213,21 +213,47 @@ NO_LIVE_PROVIDER_WARNING = ("живой провайдер не настроен
 CLAUDE_BIN_ENV = "AI_OPS_CLAUDE_BIN"
 
 
-def claude_binary(env=None, which=None):
-    """Абсолютный путь к `claude` или None. Явное слово владельца (AI_OPS_CLAUDE_BIN) сильнее PATH.
+def claude_lookup(env=None, which=None):
+    """Где искали `claude` и что нашли -> {"path": str|None, "where": "named"|"path"}.
 
     ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, а не `shutil.which` по месту: проверка присутствия и запуск обязаны
     смотреть в ОДНО И ТО ЖЕ. Прежде выбор провайдера звал `which("claude")`, а запуск подставлял
     короткое имя `claude` — то есть два разных решения, и между ними успевало помещаться расхождение
     (поле 13.08 и 15.08.2026, дочка ИИ-Среда: `FileNotFoundError: 'claude'` при живом claude в
     терминале). Здесь путь вычисляется один раз и им же исполняется.
+
+    ЗАЧЕМ ЕЩЁ И `where` (замер 18.08.2026): одного пути мало — решение о провайдере обязано
+    называть, ОТКУДА взялся исполнитель. Автовыбор печатал «claude CLI найден в PATH» и в том
+    случае, когда путь пришёл словом владельца, то есть говорил про PATH неправду; а на живом
+    прогоне с битым `AI_OPS_CLAUDE_BIN` при claude в PATH — печатал ту же строку, выбирал
+    claude-cli без предупреждения и умирал на первом вызове модели, уже зарегистрировав работу
+    и подготовив рабочее дерево.
+
+    `which` по умолчанию берёт PATH ИЗ ПЕРЕДАННОГО env, а не из окружения процесса: иначе замер с
+    подменённым PATH молча смотрел бы в настоящий PATH и показывал ложную картину.
     """
     env = os.environ if env is None else env
-    which = shutil.which if which is None else which
+    if which is None:
+        def which(name, _path=env.get("PATH")):
+            return shutil.which(name, path=_path)
     named = str(env.get(CLAUDE_BIN_ENV) or "").strip()
     if named:
-        return named if (os.path.isfile(named) and os.access(named, os.X_OK)) else None
-    return which("claude")
+        ok = os.path.isfile(named) and os.access(named, os.X_OK)
+        return {"path": named if ok else None, "where": "named"}
+    return {"path": which("claude"), "where": "path"}
+
+
+def claude_binary(env=None, which=None):
+    """Абсолютный путь к `claude` или None. Явное слово владельца (AI_OPS_CLAUDE_BIN) сильнее PATH."""
+    return claude_lookup(env=env, which=which)["path"]
+
+
+def claude_found_reason(lookup):
+    """Человеческая причина «чем пойдём» — по ФАКТУ находки, а не по догадке о её источнике."""
+    if lookup["where"] == "named":
+        return (f"claude CLI взят из {CLAUDE_BIN_ENV}={lookup['path']} "
+                "(путь назван явно; PATH не спрашивался)")
+    return "claude CLI найден в PATH (локальная сессия, API-ключ не нужен)"
 
 
 def claude_missing_message(env=None, extra=""):
@@ -349,14 +375,32 @@ def resolve_provider(explicit=None, root=None, env=None, which=None):
         else:
             checked.append(f".ai-ops.yaml providers.default={default}: {key_env} отсутствует в env")
 
-    if which("claude"):
-        return {"provider": "claude-cli", "source": "claude-cli-in-path", "autoresolve": True,
-                "reason": "claude CLI найден в PATH (локальная сессия, API-ключ не нужен)",
-                "warning": None, "checked": checked}
-    checked.append("claude CLI не найден в PATH")
+    # АВТОВЫБОР СПРАШИВАЕТ ТО ЖЕ, ЧЕМ БУДЕТ ЗАПУСКАТЬ (замер 18.08.2026). Здесь стоял голый
+    # `which("claude")` — тот самый второй взгляд, который `claude_lookup` заводился устранить, и
+    # расхождение осталось живым ровно на пути автовыбора (явный `--provider claude-cli` проверялся
+    # с 17.08, PR #141). Замерено два направления, и оба врали человеку:
+    #   · назван рабочий путь, claude вне PATH (запуск из venv/планировщика) -> `which` пусто ->
+    #     «живого провайдера не нашлось» и mock, то есть «правок не будет» при живом исполнителе;
+    #   · claude в PATH, назван битый путь -> `which` есть -> claude-cli без предупреждения, работа
+    #     зарегистрирована, дерево подготовлено, и прогон умирает на первом вызове модели.
+    _look = claude_lookup(env=env, which=which)
+    if _look["path"]:
+        return {"provider": "claude-cli",
+                "source": "claude-cli-named" if _look["where"] == "named" else "claude-cli-in-path",
+                "reason": claude_found_reason(_look),
+                "autoresolve": True, "warning": None, "checked": checked}
+    checked.append(f"{CLAUDE_BIN_ENV}={env.get(CLAUDE_BIN_ENV)} — файла нет или он не исполняемый"
+                   if _look["where"] == "named" else "claude CLI не найден в PATH")
 
+    # СОВЕТ ПО ПРИЧИНЕ, А НЕ ОДИН НА ВСЕ СЛУЧАИ: «установите claude CLI» человеку, у которого CLI
+    # стоит и назван, а сломан путь, отправляет чинить не то. Названный путь сильнее PATH осознанно
+    # (иначе кит молча пошёл бы другим исполнителем, чем ему сказали), поэтому здесь именно отказ с
+    # причиной — до прогона, а не посреди него.
+    warning = (f"назван {CLAUDE_BIN_ENV}={env.get(CLAUDE_BIN_ENV)}, но файла нет или он не "
+               "исполняемый → правок не будет; поправьте путь или уберите переменную, чтобы "
+               "искать claude в PATH") if _look["where"] == "named" else NO_LIVE_PROVIDER_WARNING
     return {"provider": "mock", "source": "fallback", "autoresolve": True,
-            "reason": "живого провайдера не нашлось", "warning": NO_LIVE_PROVIDER_WARNING,
+            "reason": "живого провайдера не нашлось", "warning": warning,
             "checked": checked}
 
 
