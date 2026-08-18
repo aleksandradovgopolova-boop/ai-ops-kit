@@ -8,13 +8,17 @@ statement: 'Copilot в Power BI требовал ёмкость Fabric F64 (~$5,
   дашборд-Copilot лицензируется ОТДЕЛЬНО от M365 Copilot.'
 evidence_type: documented_fact
 source:
-  title: Microsoft Fabric blog — Copilot and AI for all paid SKUs
-  url: https://blog.fabric.microsoft.com/ja-jp/blog/copilot-and-ai-capabilities-now-accessible-to-all-paid-skus-in-microsoft-fabric/
+  title: Microsoft Learn — Enable and configure Copilot in Microsoft Fabric
+  url: https://learn.microsoft.com/en-us/fabric/fundamentals/copilot-enable-fabric
   type: official_documentation
   published_at: null
   is_primary: true
 citation:
-  locator: анонс в официальном блоге Fabric
+  locator: 'вводный абзац (порог F2) и раздел Prerequisites (F2+/P1+, Pro и PPU не поддерживаются
+    напрямую). Первоисточник анонса — блог Fabric «Copilot and AI capabilities now accessible
+    to all paid SKUs in Microsoft Fabric» (blog.fabric.microsoft.com/.../copilot-and-ai-capabilities-now-accessible-to-all-paid-skus-in-microsoft-fabric/),
+    но он закрыт бот-защитой и цитированию недоступен'
+  quote: Although Copilot is enabled by default for tenants with paid Fabric capacities (F2 or higher)
 captured_at: '2026-07-23'
 captured_by: scout-agent (market bar corp assistants, RR-007)
 freshness:
@@ -22,8 +26,12 @@ freshness:
   expires_at: '2026-10-23'
 reliability:
   level: medium
-  rationale: Официальный блог Microsoft, но verbatim-цитата не снята — страница отдаёт
-    403 при прямом чтении (повторная попытка 2026-07-23); факт из поисковой выдачи по
-    официальному источнику, дату 30.04.2026 перепроверить перед решениями на ней.
+  rationale: 'Ревизия quote-grounding 2026-08-14: блог Fabric остаётся недоступен (403 через
+    urllib и WebFetch, в браузере — бот-защита Cloudflare, обходить не стали), поэтому источник
+    перевязан на официальную документацию Microsoft Learn, где порог цитируется дословно.
+    ВАЖНО: Learn подтверждает только действующий порог F2+ (и что Pro/PPU не поддерживают Copilot
+    напрямую). Он НЕ подтверждает две части statement — дату 30.04.2026 и прежнее требование
+    F64/~$5,250 в месяц; они по-прежнему опираются на непроверенный анонс, перед решениями на
+    самой дате её нужно подтвердить отдельно. Statement не правился.'
 status: active
 superseded_by: null
