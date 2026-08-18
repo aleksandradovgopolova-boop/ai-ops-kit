@@ -129,6 +129,21 @@ Python, та, что стоит у тебя. Объявленный пол `requ
 
 ## Релизный процесс
 
+**ВОРОТА (с 18.08.2026, работа `release-has-a-gate`).** Три проверки, каждая с кодом возврата:
+- **запись для CHANGELOG добавлена в этой ветке** — `towncrier check --compare-with origin/main` в
+  обязательной джобе `lint`. Фрагмент — файл `newsfragments/<что-это>.<feat|fix|quality|chore>.md`
+  (инструкция — в `newsfragments/README.md`). `towncrier build` НЕ запускается нигде: старый
+  `CHANGELOG.md` остаётся как есть;
+- **формат новых коммитов** — `cz check` от точки включения
+  (`pyproject.toml -> [tool.ai_ops.release_gates] commit_format_enforced_after`). Только НОВЫЕ:
+  в истории 72 коммита без conventional-префикса из 594, и переписывать её не будем;
+- **выпуск без раздела CHANGELOG для своей версии ОТКАЗЫВАЕТСЯ** (`release.yml`). Прежде он выходил
+  «с краткими записками», то есть с пустой историей.
+
+Согласованность версии (`VERSION` ↔ манифест ↔ `registry/release-claims.yaml`) уже проверяют
+`validate_ai_first_registry` (п. 7) и `validate_release_claims` (п. 1) — второй механизм на то же
+место был бы второй правдой.
+
 1. Обновить `VERSION`, `manifest/ai-ops-manifest.yaml -> ai_ops.package_version`
    и добавить раздел `## [X.Y.Z] — дата` в `CHANGELOG.md`.
 2. Коммит `release: AI Ops Kit vX.Y.Z` в `main`.

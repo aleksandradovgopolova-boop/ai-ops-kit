@@ -805,3 +805,27 @@ probes:
     ОТДАЁТ дочке: команда остаётся рабочей и модульно зелёной, а на пути дочки её нет. Тест берёт шаг
     из УСТАНОВЛЕННОГО workflow и исполняет его на отставшей копии — иначе проверялся бы шаблон, а не
     то, что доехало.'
+- id: release-refuses-without-changelog-section
+  kind: guard
+  file: .github/workflows/release.yml
+  find: '            exit 1'
+  replace_with: '            echo "AI Ops Kit $TAG" > /tmp/notes.md'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'Здесь стояло «записки будут краткими» — выпуск выходил С ПУСТОЙ историей, и никто об этом не
+    узнавал. При темпе 236 версий за 40 дней (EV-1112) это не исключение, а способ по умолчанию.
+    Мутация возвращает пожимание плечами; отказ дешёвый и обратимый — тег ещё не создан.'
+- id: changelog-fragment-gate-is-called
+  kind: seam
+  covers:
+  - .github/workflows/package-quality.yml
+  - pyproject.toml
+  file: .github/workflows/package-quality.yml
+  find: '        run: towncrier check --compare-with origin/main'
+  replace_with: '        run: echo "гейт не вызывается"'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'ШОВ: гейт «в этой ветке добавлена запись» существует только пока его зовут, и зовут ИМЕННО в
+    уже обязательной джобе — новая джоба не входит в обязательные статусы защиты ветки без действия
+    владельца, то есть исполнялась бы «по желанию». Мутация оставляет конфигурацию towncrier на месте и
+    убирает вызов: всё объявлено, ничего не исполняется.'
