@@ -277,6 +277,40 @@ probes:
   - tests/unit/test_staleness_and_provenance.py
   why: 'ШОВ: механизм существовал и раньше по духу — не хватало того, чтобы человек его ВИДЕЛ. Проверка,
     не доехавшая до ответа, равна отсутствующей.'
+- id: gitattributes-marker-keeps-it-idempotent
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    if _GITATTRIBUTES_MARK in current:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_journals_merge_union.py
+  why: 'Маркер — единственная защита документа владельца от повторной дописки: `init` и `update` зовут
+    функцию свободно, и без него каждый вызов клал бы блок заново. Ровно так `.gitignore` дочки и
+    распухал бы.'
+- id: journal-duplicates-do-not-inflate-runs
+  kind: guard
+  file: ai_ops_kit/intelligence/effect_metrics.py
+  find: '            if key in seen:'
+  replace_with: '            if False:'
+  tests:
+  - tests/unit/test_journals_merge_union.py
+  why: 'Цена `merge=union` — строка может прийти с двух сторон слияния. `runs = len(entries)`, и
+    `problem_rate` делит на это число: без снятия дублей мы обменяли бы видимый конфликт на молча
+    искажённую метрику, а `sufficient` мог бы стать true на одних повторах.'
+- id: gitattributes-seam-delivery-calls-it
+  kind: seam
+  covers:
+  - installer/ai_ops.py
+  - ai_ops_kit/intelligence/effect_metrics.py
+  file: installer/ai_ops.py
+  find: '        "gitattributes": ensure_gitattributes(root),'
+  replace_with: '        "gitattributes": "present",'
+  tests:
+  - tests/unit/test_journals_merge_union.py
+  why: 'ШОВ: правило доезжает до дочки только потому, что его зовёт `deliver_assets` — общая точка
+    `init` и `update`. Функцию можно написать и покрыть тестами, оставив мёртвой: так уже было с
+    `from_doctor` и со всей политикой экономии сессии до 13.08.2026. Здесь цена шва выше обычной —
+    существующие дочки получают правило ТОЛЬКО обновлением.'
 - id: publication-defaults-to-local
   kind: guard
   file: ai_ops_kit/lifecycle/active_work.py

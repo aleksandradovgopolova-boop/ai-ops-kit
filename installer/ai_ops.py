@@ -1168,6 +1168,9 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         # случилась, — не получили бы правило никогда. Функция идемпотентна, повторный update
         # молчит.
         "gitignore": ensure_gitignore(root),
+        # Рядом с `gitignore` и по той же причине: существующие дочки — те, на которых находка
+        # и случилась, — получают правило обновлением, а не переустановкой.
+        "gitattributes": ensure_gitattributes(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         "planning_seeded": _seed_planning_contour(root),
@@ -1192,6 +1195,13 @@ def _assets_report_line(assets: dict) -> str:
                 + ": служебное состояние кита (.ai/worktrees/, runtime-локи и active-work,"
                   " локальный учёт стоимости, кеши, байткод) скрыто от git."
                   " Продуктовые артефакты кита не затронуты.")
+    # Та же причина, что у `.gitignore`: дописка в документ владельца обязана быть в отчёте.
+    if assets.get("gitattributes") in ("created", "appended"):
+        out += (" `.gitattributes` " + ("создан" if assets["gitattributes"] == "created"
+                                        else "дополнен")
+                + ": журналы отчётов (.ai/project/report-history/*.jsonl) сводятся при слиянии"
+                  " сами — они дописываются, а не переписываются. Структурные файлы не"
+                  " затронуты: там склейка строк дала бы битый документ.")
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += (" Политика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
@@ -1241,6 +1251,21 @@ _GITIGNORE_MARK = "# --- AI Ops Kit: служебное состояние (не
 # в коммит владельца (находка ии-среды 2026-08-12, F-021), либо то, что кит уже спрятал у себя
 # (`.ai/repository-profile.yaml` — R-11 ревизии 2026-08-11), либо объявленная граница репозитория
 # (байткод в checksummed managed-слое — tests/unit/test_installer.py).
+_GITATTRIBUTES_MARK = "# --- AI Ops Kit: журналы дописываются, а не переписываются ---"
+
+_GITATTRIBUTES_RULES = """
+# ЗАМЕР ПОТРЕБИТЕЛЯ (заявка #148, ИИ-Среда, 17.08.2026): `.ai/project/report-history/<фича>.jsonl`
+# правился 12 раз за неделю и давал РУЧНОЙ конфликт при слиянии — при том что файл append-only по
+# построению: `run_report --record` дописывает одну строку среза и никогда не меняет прежние
+# (`lifecycle/run_report.py -> record_report`, режим "a"). Для таких файлов git умеет сводить сам,
+# если ему это сказать. Разбивка по фичам уже была — не хватало ровно этой строки.
+#
+# ПОЧЕМУ ТОЛЬКО JSONL-ЖУРНАЛЫ. `union` склеивает СТРОКИ, а не структуру: на `planning/plan.yaml` или
+# `decisions/registry.yaml` он дал бы синтаксически битый или удвоенный документ. Структурные файлы
+# кита здесь не перечислены сознательно — их конфликт решается разбивкой, а не стратегией слияния.
+.ai/project/report-history/*.jsonl merge=union
+"""
+
 _GITIGNORE_RULES = """
 # Кит ставится в чужой репозиторий и обязан не сорить в его истории. Ниже — только то, что
 # наблюдалось уезжающим в коммит, и только служебное: рабочее состояние прогона, локальные
@@ -1309,6 +1334,36 @@ def ensure_gitignore(root: Path = None):
         return "created"
     current = path.read_text(encoding="utf-8")
     if _GITIGNORE_MARK in current:
+        return "present"
+    sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
+    path.write_text(current + sep + block, encoding="utf-8")
+    return "appended"
+
+
+def ensure_gitattributes(root: Path = None):
+    """Сказать git, что журналы кита дописываются. -> "created" | "appended" | "present".
+
+    ПОЧЕМУ ЭТО ДЕЛАЕТ УСТАНОВЩИК. Файл append-only, а конфликт при слиянии — ручной: у потребителя
+    один и тот же конфликт разрешался пять раз за час, по разу на каждую задетую ветку (#148, #150).
+    Кит сам создаёт эти журналы и сам знает их природу, поэтому и сказать о ней должен он, а не
+    владелец, который о `merge=union` узнаёт в момент конфликта.
+
+    Правила ДОПИСЫВАЮТСЯ отмеченным блоком и никогда не переписывают чужой файл: `.gitattributes` —
+    документ владельца, как и `.gitignore`. Повторный вызов ничего не делает (маркер уже есть),
+    поэтому `init` и `update` могут звать функцию свободно.
+
+    ГРАНИЦА, НАЗВАННАЯ ЯВНО: `union` перечислен ТОЛЬКО для JSONL-журналов. Он склеивает строки, и на
+    структурном YAML (`planning/plan.yaml`) дал бы битый документ — там конфликт лечится разбивкой
+    (`derived-state-out-of-tracked-files`), а не стратегией слияния.
+    """
+    root = Path(root or REPO_ROOT)
+    path = root / ".gitattributes"
+    block = f"{_GITATTRIBUTES_MARK}\n{_GITATTRIBUTES_RULES.strip()}\n"
+    if not path.exists():
+        path.write_text(block, encoding="utf-8")
+        return "created"
+    current = path.read_text(encoding="utf-8")
+    if _GITATTRIBUTES_MARK in current:
         return "present"
     sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
     path.write_text(current + sep + block, encoding="utf-8")
