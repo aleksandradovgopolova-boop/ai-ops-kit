@@ -320,7 +320,10 @@ def _run_intent(intent, task, child_root, signals, a):
         from ai_ops_kit.planning import delivery_plan as _plan
         from ai_ops_kit.planning import contours as _contours
         try:
-            rep = next_work.compute(child_root, budget_left=getattr(a, "budget", None))
+            # Личность спрашивающего — чтобы «что взять» отвечалось участнику, а не
+            # репозиторию: своя работа отделяется от чужой той же меркой, что и в реестре.
+            rep = next_work.compute(child_root, budget_left=getattr(a, "budget", None),
+                                    me=_session_identity(child_root))
         except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
             print(f"ОШИБКА: {e}")
             return 1
@@ -595,6 +598,30 @@ def _copy_affects_from_plan(child_root, wid):
     data["affects_source"] = f"planning/plan.yaml -> {wid}"
     wp.write_text(_yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return declared
+
+
+def _session_identity(child_root) -> str:
+    """КТО держит работу — измеренная личность, а не константа.
+
+    ЗАМЕР 18.08.2026: `session` по всему пути прогона имел значение по умолчанию `cli`, то есть ВСЕ
+    параллельные сессии на машине выглядели одним держателем. Из этого следовало сразу два следствия
+    заявки потребителя #150: отказ второй сессии не мог сработать в принципе (держатель «тот же»), и
+    атрибуция инцидента была невозможна — в записях стояло `cli` у всех.
+
+    Личность берётся из ТОГО ЖЕ измерения, которым кит уже считает расход сессии
+    (`engops.session_telemetry`): идентификатор рантайма живёт дольше процесса, поэтому повторный
+    прогон в той же сессии — тот же держатель, а не новый. Не измерилось — честный `pid:<pid>`: это
+    «вот этот процесс», а не «все мы вместе»; мёртвый pid заявку не держит (`active_work`).
+    """
+    try:
+        from ai_ops_kit.engops import session_telemetry
+        sid = (session_telemetry.snapshot(str(child_root)) or {}).get("session_id")
+    except Exception:      # noqa: BLE001 — телеметрия недоступна: личность НЕ теряется, см. ниже
+        sid = None
+    if sid:
+        return f"session:{str(sid)[:8]}"
+    import os as _os
+    return f"pid:{_os.getpid()}"
 
 
 def _session_guard_before_start(child_root, task, signals, feature=None):
@@ -1015,6 +1042,7 @@ def main(argv):
         # v3.22: `do` добавляет review_fix_attempts=2 (авторазрешение блокировщиков)
         review_fix = 2 if intent == "do" else getattr(a, "review_fix_attempts", 0)
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
+                             session=_session_identity(child_root),
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
                              author=flags["author"], provider_name=provider, model=a.model,

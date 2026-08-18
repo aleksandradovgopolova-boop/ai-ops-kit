@@ -684,3 +684,99 @@ probes:
   why: 'Расхождение плана с заявками обязано быть НАЗВАНО и не подано как норма: `ok` здесь — форма
     ложного green в самом частом вопросе управления («что идёт сейчас»). Цена уже заплачена: семь
     закрытых работ простояли `in_progress` четыре дня, и сказать об этом было некому.'
+- id: second-session-is-refused-not-warned
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if blocking and not takeover:'
+  replace_with: '        if False and not takeover:'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'Заявка потребителя #150: сессия B открыла второй PR на ту же ветку и слила, первый остался
+    закрытым пустым дублем — половина работы по описанию выброшена. Мутация возвращает прежнее
+    поведение: печатается «⚠ это ДУБЛЬ», возвращается 0, чужая заявка затирается. Предупреждение,
+    которое ничего не останавливает, в параллельной работе равно его отсутствию.'
+- id: run-stops-when-work-is-held
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '        if _reg_rc:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'ШОВ: отказ реестра обязан останавливать ПРОГОН. До 18.08.2026 код возврата `register`
+    отбрасывался в обеих точках вызова — отказать он мог и раньше (цикл зависимостей, работа в main,
+    нет зон), а прогон шёл дальше. Мутация снимает чтение кода возврата: механизм отказа остаётся
+    написанным и модульно зелёным, а работа всё равно начинается.'
+- id: holder-identity-is-measured
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        return f"session:{str(sid)[:8]}"'
+  replace_with: '        return "cli"'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'Личность держателя по умолчанию была константой `cli` — все параллельные сессии выглядели ОДНИМ
+    держателем, поэтому отказ не мог сработать в принципе, а атрибуция инцидента (следствие 3 заявки
+    #150) была невозможна. Мутация возвращает константу: реестр остаётся, отказ остаётся, и оба
+    бесполезны.'
+- id: planning-run-stops-when-work-is-held
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    if _reg_rc2:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'Вторая точка регистрации — планирующий путь: он тоже занимает ветку и заводит артефакты работы,
+    поэтому охраняется отдельно. Пробы на ДВА пути нужны обе: первая версия тестов ходила только
+    планирующим путём, и проба на pipeline-путь ВЫЖИЛА — тест не доходил до охраны.'
+- id: next-subtracts-work-held-elsewhere
+  kind: guard
+  file: ai_ops_kit/planning/next_work.py
+  find: '    if held_by_others:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'Вычитание нагружено ровно на МЕЖМАШИННОМ случае: локальная карта `_active_map` читает только
+    свой файл, поэтому опубликованная заявка другой машины в `resolve` не попадает вовсе — без
+    вычитания кит предложит взятое, имея все данные, чтобы этого не делать. ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ
+    ВЫЖИЛА: тесты ходили только по своей машине, где claim и так виден через `resolve`. Добавлен тест с
+    публикацией и чужой машиной — только после этого проба стала убивать.'
+- id: everything-held-is-said-not-hidden
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '        if held_others:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'Если всё нужное держат другие, кит обязан сказать это ПРЯМО и назвать держателей, а не отдать
+    следующую строку списка и не свести ответ к «работа идёт» без имён. Мутация возвращает безымянный
+    ответ: участник снова не знает, кого ждать и у кого спросить (следствие 3 заявки #150 —
+    атрибуция).'
+- id: dead-claim-does-not-hide-work-from-plan
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if active_work.holder_is_gone(a):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'Две правды об одном: `status` научился отпускать заявку мёртвого процесса, а карта активных
+    работ продолжала считать её живой — и `next` прятал работу от всех. Мутация возвращает расхождение
+    между двумя ответами на один вопрос.'
+- id: next-seam-identity-reaches-selection
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/planning/next_work.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '                                    me=_session_identity(child_root))'
+  replace_with: '                                    me=None)'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'ШОВ между командой и отбором работы. Указан САМИМ КИТОМ: `validate_mutation_probes` заметил, что
+    у механизма есть охранные пробы и нет пробы шва — модульные тесты зовут `compute` напрямую и личность
+    передают сами, поэтому отключённый вызов остался бы зелёным. Мутация обрывает личность: «моё» и
+    «чужое» сливаются, и участник снова ждёт сам себя.'

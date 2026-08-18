@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import contextlib
 import json
 import socket
@@ -280,6 +281,35 @@ def _locked(path: Path):
 _CLOSED_STATUSES = ("done", "superseded")   # #137: снятое сверкой — не идущая работа
 
 
+def holder_is_gone(entry, machine=None) -> bool:
+    """Держатель заявки уже не существует? -> True только когда это ДОКАЗАНО.
+
+    Личность сессии бывает двух видов. Измеренный идентификатор рантайма (`session:ab12cd34`) живёт
+    дольше процесса — по нему «жив ли держатель» не проверить, и мы НЕ угадываем. Личность вида
+    `pid:1234` — это конкретный процесс на конкретной машине: если его нет, заявку держать некому.
+    Без этой проверки честный отказ второй сессии превратился бы в помеху одиночной работе: обычный
+    повторный прогон той же работы получал бы «её держит другой» от процесса, которого нет.
+    """
+    holder = str(entry.get("owner_session") or "")
+    if not holder.startswith("pid:"):
+        return False
+    if (entry.get("machine") or "") != (machine or _machine()):
+        return False           # чужая машина: её процессы отсюда не видны, значит не знаем
+    try:
+        pid = int(holder.split(":", 1)[1])
+    except (ValueError, IndexError):
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False           # процесс есть, просто чужой
+    except OSError:
+        return False
+    return False
+
+
 def _active_others(active, exclude_id):
     return [w for w in active if w.get("status") not in _CLOSED_STATUSES and w.get("id") != exclude_id]
 
@@ -421,7 +451,7 @@ def classify(active, entry):
     if probe_has_identity:
         # «Та же работа у другого держателя» — считаем ДО фильтра по id (иначе своя id спрячет чужую).
         for w in active:
-            if w.get("status") == "done":
+            if w.get("status") in _CLOSED_STATUSES:
                 continue
             if w.get("id") == wid and (w.get("machine"), w.get("owner_session")) != my_holder:
                 out.append({"kind": "same-work", "id": w.get("id"), "branch": w.get("branch"),
@@ -504,7 +534,8 @@ def _forecast_lines(confs):
 
 
 def register(path, wid, branch, areas, session, workitem=None, status="in-progress",
-             depends=None, contracts=None, at=None, published=False, child_root=None):
+             depends=None, contracts=None, at=None, published=False, child_root=None,
+             takeover=False, takeover_reason=None):
     if branch in (None, "", "main", "master"):
         print("ОШИБКА: работа не должна вестись в main/master — задайте ветку/worktree.")
         return 1
@@ -544,6 +575,44 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         if child_root:
             against = reconcile_with_base(against, child_root)
         confs = classify(against, entry)
+        # ОТКАЗ, А НЕ ПРЕДУПРЕЖДЕНИЕ (замер 18.08.2026, заявка потребителя #150). Прежде на «ту же
+        # работу» и «ту же ветку» кит печатал `⚠ это ДУБЛЬ, не начинайте второй раз`, ВОЗВРАЩАЛ 0 и
+        # ЗАТИРАЛ чужую заявку своей: держателя больше нет ни в реестре, ни в предупреждении, и
+        # разобрать инцидент нечем. В поле это дало два PR на одну ветку, закрытый пустой дубль и
+        # выброшенную половину работы по описанию.
+        # Перенять заявку можно — но ЯВНО и с причиной: тогда прежний держатель остаётся записан в
+        # `taken_over_from`, то есть атрибуция не теряется (заявка #150, следствие 3).
+        blocking = [c for c in confs if c.get("kind") in ("same-work", "branch")]
+        # Мёртвый процесс заявку не держит. Отпускаем НАЗЫВАЯ это: тихое снятие чужой заявки — то же
+        # затирание, от которого работа и заводилась.
+        _by_id = {w.get("id"): w for w in data["active"]}
+        released = []
+        for c in list(blocking):
+            w = _by_id.get(c.get("id")) or {}
+            if holder_is_gone(w, entry.get("machine")):
+                blocking.remove(c)
+                released.append(c)
+        for c in released:
+            print(f"ЗАЯВКА ОСВОБОЖДЕНА: держатель {c.get('owner_session')} на этой машине уже не "
+                  f"существует (работа {c.get('id')}, ветка {c.get('branch')}) — заявка не держит.")
+        if blocking and not takeover:
+            for c in blocking:
+                what = ("ту же работу" if c["kind"] == "same-work" else f"ту же ветку {c.get('detail')}")
+                print(f"ОТКАЗ: не начинаю — {what} уже держит другой: сессия "
+                      f"{c.get('owner_session') or '?'} на машине {c.get('machine') or '?'} "
+                      f"(работа {c.get('id')}, ветка {c.get('branch')}).")
+            print("  " + reach_note(published))
+            print("  что можно сделать: дождаться держателя; взять другую работу "
+                  "(`ai-ops next` предложит незанятую); или ПЕРЕНЯТЬ заявку осознанно — "
+                  "`active_work.py register … --takeover --takeover-reason \"почему\"`, "
+                  "прежний держатель останется записан.")
+            return 1
+        if takeover and blocking:
+            prev = blocking[0]
+            entry["taken_over_from"] = {"owner_session": prev.get("owner_session"),
+                                        "machine": prev.get("machine"),
+                                        "at": entry["started_at"],
+                                        "reason": (takeover_reason or "причина не названа")}
         data["active"] = [w for w in data["active"] if w.get("id") != wid] + [entry]
         save(path, data)
         # Опубликованная копия — отдельным файлом на работу, только при включённой публикации.
@@ -671,6 +740,11 @@ def main(argv):
     r.add_argument("--contracts", help="пути общих контрактов через запятую")
     r.add_argument("--at")
     r.add_argument("--repo", help="корень репозитория для чтения team_coordination (по умолчанию cwd)")
+    # Перенять чужую заявку можно только СЛОВАМИ, а не молчанием: флаг + причина. Прежний держатель
+    # записывается в заявку, иначе перенос выглядел бы как «работу никто не держал».
+    r.add_argument("--takeover", action="store_true",
+                   help="перенять заявку, которую держит другая сессия (осознанно)")
+    r.add_argument("--takeover-reason", help="почему заявка перенимается (уходит в запись)")
 
     l = sub.add_parser("list")
     l.add_argument("file"); l.add_argument("--json", action="store_true")
@@ -692,7 +766,9 @@ def main(argv):
         pub = publication_enabled(repo)
         return register(Path(a.file), a.id, a.branch, _split(a.areas), a.session,
                         a.workitem, a.status, _split(a.depends), _split(a.contracts), a.at,
-                        published=pub, child_root=repo)
+                        published=pub, child_root=repo,
+                        takeover=getattr(a, "takeover", False),
+                        takeover_reason=getattr(a, "takeover_reason", None))
     if a.cmd == "list":
         repo = getattr(a, "repo", None) or Path.cwd()
         return list_cmd(Path(a.file), a.json, published=publication_enabled(repo), child_root=repo)

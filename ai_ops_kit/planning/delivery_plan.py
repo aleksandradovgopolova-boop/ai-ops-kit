@@ -494,6 +494,10 @@ def _active_map(child_root):
     data = active_work.load(p)
     out = {}
     for a in data.get("active") or []:
+        # Мёртвый процесс работу не держит — иначе `next` прятал бы её от всех, а `status` уже
+        # научился такую заявку отпускать (18.08.2026). Две правды об одном тут недопустимы.
+        if active_work.holder_is_gone(a):
+            continue
         # `workitem` движок пишет ПУТЁМ (`features/<id>/workitem.yaml`), а не id: см.
         # `engine/ai_ops_run.py` -> active_work.register(..., workitem=f"features/{fid}/…").
         # Прежде здесь ждали id, поэтому карта активных работ индексировалась путями и НИКОГДА не

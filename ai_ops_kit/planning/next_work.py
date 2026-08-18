@@ -201,7 +201,54 @@ def _parallel_set(candidates, by_id, anchor=None):
     return chosen, skipped
 
 
-def compute(child_root, budget_left=None):
+def _holders(child_root, me=None):
+    """Кто держит работы сейчас. -> (держат другие, держу я, досягаемость).
+
+    ЗАЧЕМ ЭТО ЗДЕСЬ. `next` уже считал важность и непересечение по `write_scope`, но отвечал на
+    вопрос РЕПОЗИТОРИЯ («какая работа следующая»), а не участника («что взять МНЕ»). Заявка
+    потребителя #150: сессия B взяла работу, которую уже держала сессия A, и половина труда ушла в
+    закрытый пустой дубль.
+
+    ДОСЯГАЕМОСТЬ НАЗЫВАЕТСЯ, А НЕ ПОДРАЗУМЕВАЕТСЯ: пока публикация заявок выключена, видно только
+    свою машину — и «никем не держится» в этом случае проверено лишь для неё. Молчаливое «свободных
+    работ нет» при непрочитанном реестре запрещено тем же правилом, что и в `status`: «не знаю» — не
+    «нет».
+
+    Личность спрашивающего (`me`) обязательна для РАЗДЕЛЕНИЯ «моё/чужое». Не передали — считаем все
+    заявки чужими (fail-closed: не предлагать работу, которую может кто-то держать) и говорим об этом
+    полем `identity` в досягаемости.
+    """
+    from ai_ops_kit.lifecycle import active_work
+    p = Path(child_root) / ".ai" / "runtime" / "active-work.yaml"
+    published = active_work.publication_enabled(child_root)
+    local = []
+    registry_read = False
+    if p.is_file():
+        try:
+            local = active_work.load(p).get("active") or []
+            registry_read = True
+        except active_work.ActiveWorkCorrupt:
+            registry_read = False        # причину назовёт `status`; здесь важно НЕ выдать «свободно»
+    entries = active_work.team_view(child_root, local, published)
+    entries = active_work.reconcile_with_base(entries, child_root)
+    others, mine = [], []
+    for e in entries:
+        if (e.get("status") or "") in ("done", "superseded"):
+            continue
+        if active_work.holder_is_gone(e):
+            continue                     # мёртвый процесс работу не держит
+        wid = _plan._workitem_key(e)
+        row = {"id": wid, "title": None, "branch": e.get("branch"),
+               "owner_session": e.get("owner_session"), "machine": e.get("machine"),
+               "since": e.get("started_at")}
+        (mine if (me and e.get("owner_session") == me) else others).append(row)
+    reach = {"published": published, "registry_read": registry_read,
+             "identity": bool(me),
+             "note": active_work.reach_note(published)}
+    return others, mine, reach
+
+
+def compute(child_root, budget_left=None, me=None):
     """Ответ на четыре вопроса. -> dict (машиночитаемо; печать — в `render`).
 
     Отсутствие плана — законное состояние, а не ошибка: ответ называет пробел и говорит, чем его
@@ -286,6 +333,18 @@ def compute(child_root, budget_left=None):
                 row["blocked_by_admission"] = [c["id"] for c in checks if not c["ok"]]
                 not_ready.append(row)
 
+    # ВЫЧИТАНИЕ ТОГО, ЧТО ДЕРЖАТ ДРУГИЕ (работа `next-offers-work-nobody-holds`). Важность и
+    # непересечение кит считал и раньше; отсутствовало ровно одно — вопрос УЧАСТНИКА «что взять МНЕ».
+    # Держателя называет реестр рантайма, а не план: правило «роль, а не исполнитель» остаётся, и
+    # поля `assignee` в плане по-прежнему нет.
+    held_by_others, held_by_me, holders_reach = _holders(child_root, me)
+    if held_by_others:
+        _ids = {h["id"] for h in held_by_others}
+        ready = [r for r in ready if r["id"] not in _ids]
+        for h in held_by_others:
+            if h["id"] in by_id:
+                h["title"] = by_id[h["id"]].get("title") or h["id"]
+
     ready.sort(key=lambda r: (-r["score"], r["id"]))
     in_progress.sort(key=lambda r: r["id"])
     blocked.sort(key=lambda r: r["id"])
@@ -310,7 +369,9 @@ def compute(child_root, budget_left=None):
             "roadmap": {"errors": rm["errors"], "warnings": rm["warnings"]},
             "where_are_we": where, "in_progress": in_progress, "blocked": blocked,
             "ready": ready, "next_best": next_best, "parallel_with": parallel,
-            "parallel_skipped": par_skipped, "not_ready": not_ready}
+            "parallel_skipped": par_skipped, "not_ready": not_ready,
+            "held_by_others": held_by_others, "held_by_me": held_by_me,
+            "holders_reach": holders_reach, "asked_by": me}
 
 
 def render(rep) -> str:

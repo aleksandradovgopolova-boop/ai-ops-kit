@@ -306,6 +306,7 @@ def from_next_work(rep: dict) -> dict:
             technical={f"ошибка {i + 1}": x for i, x in enumerate(plan_errors + rm_errors)})
 
     nb = rep.get("next_best")
+    held_others = rep.get("held_by_others") or []
     active = rep.get("in_progress") or []
     blocked = rep.get("blocked") or []
     if not nb:
@@ -321,7 +322,26 @@ def from_next_work(rep: dict) -> dict:
             "no_human_decision": "ждёт решения человека",
             "deps_done": "ждёт незакрытые зависимости",
         }
-        if not_ready:
+        if held_others:
+            # ПРЯМОЙ ОТВЕТ ВМЕСТО ПЕРВОЙ СВОБОДНОЙ СТРОКИ (работа `next-offers-work-nobody-holds`).
+            # Заявка потребителя #150: участник взял работу, которую уже держала другая сессия, и
+            # половина труда ушла в закрытый пустой дубль. Кит обязан сказать «всё нужное держат
+            # другие», а не выдать следующую строку списка.
+            k = len(held_others)
+            who = "; ".join(f"«{h.get('title') or h['id']}» — {h.get('owner_session') or 'кто-то'}"
+                            for h in held_others[:3])
+            return message(
+                status="ok", headline="Свободной работы нет: нужное держат другие",
+                summary=f"{k} {_q(k, 'работа', 'работы', 'работ')} уже взяты: {who}.",
+                why_it_matters=("Брать взятое — это дубль: в поле так вышло два запроса на одну "
+                                "ветку и половина труда ушла в пустой. "
+                                + ((rep.get("holders_reach") or {}).get("note") or "")),
+                next_steps=["подожду освобождения или возьму работу, которой ещё нет в плане",
+                            "или скажи, что важнее — пересоберу порядок"],
+                technical={"держат другие": ", ".join(h["id"] for h in held_others),
+                           "держу я": ", ".join(h["id"] for h in (rep.get("held_by_me") or [])) or "—",
+                           "досягаемость": (rep.get("holders_reach") or {})})
+        elif not_ready:
             causes = sorted({_ADMISSION_RU.get(c, c)
                              for r in not_ready for c in (r.get("blocked_by_admission") or [])})
             why = ("Работа объявлена, но взять её сейчас нельзя: "
