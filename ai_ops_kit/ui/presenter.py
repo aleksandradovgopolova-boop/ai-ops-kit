@@ -306,6 +306,7 @@ def from_next_work(rep: dict) -> dict:
             technical={f"ошибка {i + 1}": x for i, x in enumerate(plan_errors + rm_errors)})
 
     nb = rep.get("next_best")
+    held_others = rep.get("held_by_others") or []
     active = rep.get("in_progress") or []
     blocked = rep.get("blocked") or []
     if not nb:
@@ -321,7 +322,26 @@ def from_next_work(rep: dict) -> dict:
             "no_human_decision": "ждёт решения человека",
             "deps_done": "ждёт незакрытые зависимости",
         }
-        if not_ready:
+        if held_others:
+            # ПРЯМОЙ ОТВЕТ ВМЕСТО ПЕРВОЙ СВОБОДНОЙ СТРОКИ (работа `next-offers-work-nobody-holds`).
+            # Заявка потребителя #150: участник взял работу, которую уже держала другая сессия, и
+            # половина труда ушла в закрытый пустой дубль. Кит обязан сказать «всё нужное держат
+            # другие», а не выдать следующую строку списка.
+            k = len(held_others)
+            who = "; ".join(f"«{h.get('title') or h['id']}» — {h.get('owner_session') or 'кто-то'}"
+                            for h in held_others[:3])
+            return message(
+                status="ok", headline="Свободной работы нет: нужное держат другие",
+                summary=f"{k} {_q(k, 'работа', 'работы', 'работ')} уже взяты: {who}.",
+                why_it_matters=("Брать взятое — это дубль: в поле так вышло два запроса на одну "
+                                "ветку и половина труда ушла в пустой. "
+                                + ((rep.get("holders_reach") or {}).get("note") or "")),
+                next_steps=["подожду освобождения или возьму работу, которой ещё нет в плане",
+                            "или скажи, что важнее — пересоберу порядок"],
+                technical={"держат другие": ", ".join(h["id"] for h in held_others),
+                           "держу я": ", ".join(h["id"] for h in (rep.get("held_by_me") or [])) or "—",
+                           "досягаемость": (rep.get("holders_reach") or {})})
+        elif not_ready:
             causes = sorted({_ADMISSION_RU.get(c, c)
                              for r in not_ready for c in (r.get("blocked_by_admission") or [])})
             why = ("Работа объявлена, но взять её сейчас нельзя: "
@@ -445,7 +465,8 @@ def from_contour_consistency(rep: dict) -> dict:
                    technical={"findings": len(findings)})
 
 
-def from_active_work(rep: dict, published: bool = False, reconciled: int = 0) -> dict:
+def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
+                     crosscheck: dict = None) -> dict:
     """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
 
     Прежде `status` печатал `STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)` — путь к
@@ -469,13 +490,42 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0) ->
     reach_h = ("вижу заявки всех машин команды (публикация включена)" if published
                else "вижу только ЭТУ машину — заявки других участников сюда не попадают")
     reach_cap = reach_h[0].upper() + reach_h[1:]   # для начала предложения, без рассинхрона лица
+    # СВЕРКА С ПЛАНОМ (замер 18.08.2026 на самом ките). Ответ строился ТОЛЬКО по реестру рантайма, и
+    # при семи работах со статусом `in_progress` в плане печатал «Сейчас ничего не идёт. Работа не
+    # начата.» — утвердительно, без оговорки. Отсутствие реестра — это «не знаю, что идёт», а не
+    # «ничего не идёт»; для ИСПОРЧЕННОГО реестра тот же код уже отвечает `blocked`, а для
+    # отсутствующего вывод не был сделан. Расхождение теперь НАЗЫВАЕТСЯ, а не сглаживается.
+    stale = (crosscheck or {}).get("only_in_plan") or []
+    stale_names = "; ".join((w.get("title") or w.get("id") or "работа") for w in stale[:3])
     if not active:
+        if stale:
+            k = len(stale)
+            return message(
+                status="degraded", headline="План и заявки расходятся",
+                summary=(f"Заявок на работу нет, но в плане {k} "
+                         + _q(k, "работа объявлена идущей", "работы объявлены идущими",
+                              "работ объявлено идущими") + "."),
+                why_it_matters="Значит одно из двух, и оба требуют решения: работа брошена или она "
+                               "давно закончена, а в плане это не отмечено. Пока расхождение живо, "
+                               "плану верить нельзя — а по нему выбирают, что делать дальше.",
+                next_steps=[f"сверить и закрыть или продолжить: {stale_names}"],
+                technical={"active": 0, "объявлено идущими в плане": k,
+                           "id": ", ".join(str(w.get("id")) for w in stale),
+                           "реестр существует": (crosscheck or {}).get("registry_exists"),
+                           "досягаемость": "команда" if published else "эта машина"})
         return message(
             status="ok", headline="Сейчас ничего не идёт",
             summary="Работа не начата." if not recon_note else recon_note,
-            why_it_matters=("«Не начата» — про эту машину: " + reach_h + "." if not published else None),
+            # Основание ответа названо: это не «я всё осмотрел», а «заявок нет и в плане идущей
+            # работы не объявлено» — два конкретных факта, которые человек может перепроверить.
+            why_it_matters=("Сужу по двум вещам: заявок на работу нет и в плане идущей работы не "
+                            "объявлено. " + reach_cap + "." if not published else
+                            "Сужу по двум вещам: заявок на работу нет и в плане идущей работы не "
+                            "объявлено."),
             next_steps=["скажи, что взять, или спроси «что дальше» — предложу с обоснованием"],
-            technical={"active": 0, "досягаемость": "команда" if published else "эта машина"})
+            technical={"active": 0, "объявлено идущими в плане": 0,
+                       "реестр существует": (crosscheck or {}).get("registry_exists"),
+                       "досягаемость": "команда" if published else "эта машина"})
 
     n = len(active)
     what = "; ".join(
@@ -489,8 +539,15 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0) ->
                 "координация команды включается публикацией отдельно.")
     else:
         why += " Работу, трогающую те же файлы, лучше не начинать — иначе две сессии перепишут одно место."
+    if stale:
+        # Половина расхождения видна и при живой работе: заявки есть на одно, а план объявляет
+        # идущим ещё что-то. Молчать об этом значит показывать половину картины.
+        why += (f" В плане объявлено идущими ещё {len(stale)} "
+                f"{_q(len(stale), 'работа', 'работы', 'работ')} без заявки: {stale_names} — "
+                "либо брошено, либо закончено и не отмечено.")
     return message(
-        status="ok", headline="Работа идёт",
+        status="degraded" if stale else "ok",
+        headline="Работа идёт" if not stale else "Работа идёт, но план расходится с заявками",
         summary=f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}.",
         why_it_matters=why,
         next_steps=["спроси «что дальше», если нужно чем-то заняться параллельно"],

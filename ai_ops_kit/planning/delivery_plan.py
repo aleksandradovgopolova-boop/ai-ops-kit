@@ -387,6 +387,44 @@ def validate(plan, model=None, closed=None, root=None):
 GLOBAL_SCOPE = "*"          # маркер «пишет всюду»: конфликтует с любой областью
 
 
+def declared_running(plan) -> list:
+    """Работы, ОБЪЯВЛЕННЫЕ идущими (факт человека, не вывод из графа). -> список работ плана."""
+    return [w for w in items(plan) if (w.get("status") or "") == "in_progress"]
+
+
+def crosscheck_running(child_root, registry_active, *, registry_exists, plan=None) -> dict:
+    """Сверить «что идёт» по ДВУМ источникам: реестр рантайма и план.
+
+    ЗАМЕР 18.08.2026 НА САМОМ КИТЕ. `ai-ops status` печатал «Сейчас ничего не идёт. Работа не
+    начата.» при СЕМИ работах в статусе `in_progress` в плане. Проба: одной работе поставили
+    `in_progress` с веткой — ответ не изменился ни одним словом. Причина — два источника правды об
+    одном вопросе, которые не встречались: `status` читал только реестр рантайма, а `in_progress` в
+    плане не видел ни `status`, ни `next`.
+    Цена уже заплачена: семь закрытых работ простояли `in_progress` четыре дня (14–18.08), и сказать
+    об этом было некому.
+
+    ОТСУТСТВИЕ РЕЕСТРА — НЕ «РАБОТЫ НЕТ». На соседней ветке того же кода кит рассуждает правильно:
+    для ИСПОРЧЕННОГО реестра ответ становится `blocked` («битый реестр — не „работы нет“»). Для
+    ОТСУТСТВУЮЩЕГО тот же вывод не был сделан, и «не знаю» выдавалось за «нет» — форма ложного
+    green в самом частом вопросе управления.
+
+    Третьего места, где живёт «что идёт», НЕ ЗАВОДИМ: здесь только сверка двух существующих.
+    Расхождение НАЗЫВАЕТСЯ, а не сглаживается: список работ, объявленных идущими и не подтверждённых
+    ни одной заявкой, — это либо брошенная работа, либо закрытая и не закрытая в плане.
+    """
+    plan = plan if plan is not None else load(child_root)
+    declared = declared_running(plan)
+    ids_in_registry = {str(a.get("workitem") or a.get("id") or "") for a in (registry_active or [])}
+    only_in_plan = [w for w in declared if str(w.get("id")) not in ids_in_registry]
+    return {
+        "plan_exists": plan is not None,
+        "registry_exists": bool(registry_exists),
+        "declared": [{"id": w.get("id"), "title": w.get("title")} for w in declared],
+        "only_in_plan": [{"id": w.get("id"), "title": w.get("title")} for w in only_in_plan],
+        "registry_count": len(registry_active or []),
+    }
+
+
 def scope_prefix(glob) -> str:
     """Область записи -> нормализованный префикс. Глобальная область -> GLOBAL_SCOPE.
 
@@ -456,6 +494,10 @@ def _active_map(child_root):
     data = active_work.load(p)
     out = {}
     for a in data.get("active") or []:
+        # Мёртвый процесс работу не держит — иначе `next` прятал бы её от всех, а `status` уже
+        # научился такую заявку отпускать (18.08.2026). Две правды об одном тут недопустимы.
+        if active_work.holder_is_gone(a):
+            continue
         # `workitem` движок пишет ПУТЁМ (`features/<id>/workitem.yaml`), а не id: см.
         # `engine/ai_ops_run.py` -> active_work.register(..., workitem=f"features/{fid}/…").
         # Прежде здесь ждали id, поэтому карта активных работ индексировалась путями и НИКОГДА не
