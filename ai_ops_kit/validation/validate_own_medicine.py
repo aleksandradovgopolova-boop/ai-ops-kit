@@ -258,6 +258,58 @@ def check_gitignore(root, mod):
     return APPLIED, f"все {len(paths)} служебных путей скрыты от git (проверен эффект, не текст)", ""
 
 
+def _gitattributes_union_paths(mod):
+    """Пути, которым установщик назначает `merge=union`. -> список шаблонов (без комментариев)."""
+    out = []
+    for line in getattr(mod, "_GITATTRIBUTES_RULES", "").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and line.endswith("merge=union"):
+            out.append(line.rsplit(" ", 1)[0].strip())
+    return out
+
+
+def _merge_attr(root: Path, rel: str):
+    """Как git РЕЗОЛВИТ атрибут merge для пути в этом репозитории. -> строка | None (спросить не смог).
+
+    Проверяется ЭФФЕКТ, а не текст `.gitattributes`: правило может быть записано иначе, важно, что
+    git отдаёт `union` для журнала. `None` (нет git) — честная неизвестность, не «применено»."""
+    try:
+        r = subprocess.run(["git", "-C", str(root), "check-attr", "merge", "--", rel],
+                           capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    # формат: "<path>: merge: <value>"
+    tail = r.stdout.rsplit(":", 1)
+    return tail[1].strip() if len(tail) == 2 else None
+
+
+def check_gitattributes(root, mod):
+    """Кит применяет к СЕБЕ культуру, которую доставляет дочке: журналы-дописки сводятся `merge=union`.
+
+    Тот же класс, что `check_gitignore`: правило доставляется дочкам и производит эффект в этом же
+    репозитории (движок пишет `report-history`), поэтому кит обязан применять его к себе."""
+    paths = _gitattributes_union_paths(mod)
+    if not paths:
+        return UNKNOWN, "в блоке установщика нет ни одного правила merge=union — читать нечего", ""
+    unknown, missing = [], []
+    for pat in paths:
+        val = _merge_attr(root, _probe_path(pat))
+        if val is None:
+            unknown.append(pat)
+        elif val != "union":
+            missing.append(pat)
+    if unknown and not missing:
+        return UNKNOWN, (f"git не ответил про {len(unknown)} из {len(paths)} правил "
+                         f"(каталог не git-репозиторий или git недоступен) — «применено» из этого "
+                         f"не следует"), ""
+    if missing:
+        return NOT_APPLIED, (f"кит НЕ свёл свои же журналы-дописки merge=union: {', '.join(missing)} "
+                             f"(правило доставляется дочкам и производится прогонами движка здесь же)"), ""
+    return APPLIED, f"все {len(paths)} журналов-дописок сводятся merge=union (проверен эффект)", ""
+
+
 def check_entry_point(root, mod):
     dst = root / mod.ENTRY_NAME
     if not dst.is_file():
@@ -299,6 +351,7 @@ DELIVERY_CHECKS = {
     "ci_workflows": check_ci_workflows,
     "zone_markers": check_zone_markers,
     "gitignore": check_gitignore,
+    "gitattributes": check_gitattributes,
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
     "planning_seeded": check_planning_seeded,
