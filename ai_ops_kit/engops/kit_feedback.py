@@ -129,13 +129,36 @@ def build(child_root, statement, *, evidence=None, severity=None, observation_cl
     }
 
 
+def _looks_like_path(statement):
+    """Похоже ли утверждение на путь, а не на наблюдение.
+
+    Узко намеренно: длину наблюдения здесь НЕ проверяем. Короткое замечание («тормозит») законно, и
+    отказ по длине отшивал бы настоящую обратную связь — а это дороже, чем один мусорный файл.
+    """
+    s = statement.strip()
+    if s in (".", "..", "./", "../"):
+        return True
+    if any(c in s for c in (" ", "\n", "\t")):     # фраза, а не путь
+        return False
+    return (s.startswith(("/", "./", "../", "~/")) or s.endswith("/")) and Path(s).expanduser().exists()
+
+
 def check(obs):
     """Валидация наблюдения. -> список ошибок. Главная из них — дефект без улики."""
     e = []
     if not isinstance(obs, dict) or obs.get("kind") != "KitObservation":
         return ["kind должен быть KitObservation"]
-    if not str(obs.get("statement") or "").strip():
+    st = str(obs.get("statement") or "").strip()
+    if not st:
         e.append("statement пуст: наблюдение без утверждения — это не наблюдение")
+    elif _looks_like_path(st):
+        # ПРОБА КАНАЛА НА ЖИВОЙ ДОЧКЕ (18.08.2026): `./ai-ops feedback .` записала наблюдение с
+        # содержанием «.» и ответила «записал». Разбор позиционных отдал путь репозитория в текст, а
+        # запись его приняла. Отказ живёт ЗДЕСЬ, а не только в CLI: канал наполняют и модулем, и
+        # командой, а запись, которой нельзя верить, хуже отсутствующей — она попадает в сборку,
+        # тратит решение по себе и учит не доверять каналу.
+        e.append(f"statement похож на путь, а не на наблюдение ({st!r}): "
+                 "скажите, ЧТО кит сделал не так — путь репозитория он подставляет сам")
     cls = obs.get("observation_class")
     if cls not in OBSERVATION_CLASSES:
         e.append(f"observation_class ∉ {OBSERVATION_CLASSES} (got {cls!r})")
