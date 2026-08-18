@@ -306,6 +306,7 @@ def from_next_work(rep: dict) -> dict:
             technical={f"ошибка {i + 1}": x for i, x in enumerate(plan_errors + rm_errors)})
 
     nb = rep.get("next_best")
+    frozen = rep.get("frozen") or []
     held_others = rep.get("held_by_others") or []
     active = rep.get("in_progress") or []
     blocked = rep.get("blocked") or []
@@ -394,12 +395,23 @@ def from_next_work(rep: dict) -> dict:
     return message(
         status="ok", headline="Что взять следующим",
         summary=f"Следующей имеет смысл взять «{nb['title']}».",
-        why_it_matters="Потому что " + "; ".join(nb["why"]) + ".",
+        why_it_matters="Потому что " + "; ".join(nb["why"]) + "."
+                       # ЗАМОРОЗКА НАЗЫВАЕТСЯ, А НЕ ПРЯЧЕТСЯ. Работы, которых кит больше не
+                       # предлагает, не исчезают из плана — и человек обязан знать, что они не
+                       # предложены по ЕГО решению, а не потерялись. Молчание здесь читалось бы как
+                       # «в плане их нет».
+                       + (f" Ещё {len(frozen)} "
+                          + _q(len(frozen), "работа", "работы", "работ")
+                          + " не предлагаю: они помечены как расширение умений, а твоё решение "
+                            "держит их до второго живого проекта."
+                          if frozen else ""),
         next_steps=steps,
         technical={"id": nb["id"], "owner_role": nb["owner_role"], "score": nb["score"],
                    "unblocks": nb["unblocks"],
                    "parallel_with": ", ".join(p["id"] for p in par) or "—",
-                   "blocked_count": len(blocked)})
+                   "blocked_count": len(blocked),
+                   "заморожено": ", ".join(f["id"] for f in frozen) or "—",
+                   "решение о заморозке": (rep.get("freeze") or {}).get("decision") or "—"})
 
 
 def from_contour_consistency(rep: dict) -> dict:

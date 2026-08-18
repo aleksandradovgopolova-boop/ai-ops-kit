@@ -23,9 +23,33 @@ schema_version: 1
 kind: delivery-plan
 
 goals:
+  # ЗАМОРОЗКА УМЕНИЙ (`freeze_relation`, работа `capability-freeze-enforced`, 19.08.2026).
+  # Решение владельца `ep-2026-08-17-capability-freeze-until-second-brownfield`: новое умение не
+  # принимается, пока исход `owner_reaches_verified_pr_without_patching_the_kit` не стал верным.
+  # Оговорка: работа, которая снижает цену процесса, замыкает обратную связь из поля или закрывает
+  # найденный полем дефект, новым умением НЕ считается.
+  #
+  # ПОЧЕМУ ПОМЕТКА НА ЦЕЛИ, А НЕ НА РАБОТЕ: сама оговорка сказана про НАЗНАЧЕНИЕ работы, и
+  # проверять её по формулировке заявки — значит открыть лазейку через слова (это названо в самом
+  # решении). Цель — уровень, где назначение уже объявлено владельцем и не переписывается под
+  # задачу. Работа может запросить исключение только явно (`freeze_exception: <причина>`), и
+  # причина обязательна — молчаливого обхода нет.
+  #
+  # КЛАССИФИКАЦИЯ ВЫВЕДЕНА ИЗ ТРЁХ ОГОВОРОК РЕШЕНИЯ, а не из вкуса; она ОБРАТИМА (`two-way`) и
+  # правится владельцем одной строкой. Пять целей помечены `extension` — их работы кит перестаёт
+  # предлагать, пока заморозка держится: `advisory-gates-obkatka`, `storybook-as-visual-contract`,
+  # `owner-speaks-product-not-pipeline`, `nightly-product-review`, `outcome-and-analytics-loop`.
+  # ПОВОД БЫЛ ЖИВОЙ: 18.08 кит сам предложил взять `watch-contract-for-night-review` — работу из
+  # замороженной цели, — потому что решение существовало записью и ничем не сверялось.
+  #
+  # СНЯТИЕ ЗАМОРОЗКИ — НЕ ДАТА И НЕ ФЛАГ: тот самый исход, ставший верным. Проверка читает его из
+  # цели `second-real-brownfield`, поэтому «разморозить вручную» технически нечем.
+  #
   # Порядок = приоритет. Те же id и тот же порядок, что под «Сейчас» и «Следующий результат»
   # в ROADMAP.md: расхождение кит покажет сам (`ai-ops next`).
   - id: real-product-qualification
+    # заморозка: сама петля квалификации: прогон, находки, закрытие
+    freeze_relation: run_condition
     # ДОСТИГНУТА в своей первой части (2026-08-14): первый живой brownfield пройден, находки
     # прогона закрыты (`history/plan-history.yaml`). Продолжение живёт под `qualification-closeout`
     # и `second-real-brownfield`: держать цель активной без активной работы значило бы объявлять
@@ -37,6 +61,8 @@ goals:
       findings_from_first_run_closed: true
 
   - id: checks-that-run
+    # заморозка: ловит класс «объявлено — не исполняется», найденный полем
+    freeze_relation: run_condition
     status: active
     outcome:
       # Замеры — в docs/audit-report.md §1. Первые три закрыты ревизией.
@@ -46,6 +72,8 @@ goals:
       swallowed_exceptions_reviewed: true
 
   - id: advisory-gates-obkatka
+    # заморозка: обкатка новых гейтов расширяет умения; цель на паузе
+    freeze_relation: extension
     # ПРИОСТАНОВЛЕНА 2026-08-14, и это честнее, чем «активна»: 14 из 35 гейтов по-прежнему
     # advisory, но обкатку сейчас никто не ведёт — приоритет ушёл в Product OS. Цель убрана из
     # «Сейчас» в ROADMAP; вернётся вместе с работой, а не раньше.
@@ -55,11 +83,15 @@ goals:
       advisory_gates_have_field_evidence: true
 
   - id: second-real-brownfield
+    # заморозка: это и есть тот прогон, ради которого правило введено
+    freeze_relation: run_condition
     status: active
     outcome:
       owner_reaches_verified_pr_without_patching_the_kit: false
 
   - id: session-autonomy-under-ceiling
+    # заморозка: снижает цену процесса владельца (потолок траты)
+    freeze_relation: run_condition
     # ДОСТИГНУТА 2026-08-14: все объявленные исходы верны (потолок, различимость отказов,
     # измерение сессии), работа закрыта и лежит в истории.
     status: achieved
@@ -74,6 +106,8 @@ goals:
       session_is_identified_and_measured: true
 
   - id: green-means-checked
+    # заморозка: ложный green — класс, из-за которого прогоны не сходились
+    freeze_relation: run_condition
     status: active
     outcome:
       ci_lint_job_green: true
@@ -81,6 +115,8 @@ goals:
 
   # ─── этап Product OS (решение владельца 14.08.2026, ep-2026-08-14-product-os) ───────────────
   - id: qualification-closeout
+    # заморозка: закрытие находок прогонов
+    freeze_relation: run_condition
     status: active
     outcome:
       # Семь чисел прогона + перечень внутренних сущностей, которые пришлось понимать человеку.
@@ -95,6 +131,8 @@ goals:
       contour_catches_declared_but_not_executed: true
 
   - id: team-works-in-parallel
+    # заморозка: закрывает заявку поля #150 и снижает цену процесса
+    freeze_relation: run_condition
     # РЕШЕНИЕ ВЛАДЕЛЬЦА 18.08.2026 (ep-2026-08-18-team-works-in-parallel): вариант «считать конфликты
     # нормальной ценой параллельной работы» ОТКЛОНЁН. Цель стоит третьей, сразу за closeout: она не
     # обгоняет единицу надёжности, но идёт раньше всего остального.
@@ -121,6 +159,8 @@ goals:
       owner_does_not_design_the_parallelism: false
 
   - id: plan-as-control-plane
+    # заморозка: план как управление — цена процесса владельца
+    freeze_relation: run_condition
     status: active
     outcome:
       # ВСЕ ТРИ ЗАКРЫТЫ 14.08 (PR #120) и проверяются кодом, а не соглашением:
@@ -130,6 +170,8 @@ goals:
       closed_investigations_leave_the_active_plan: true
 
   - id: product-decision-loop
+    # заморозка: решения владельца о процессе, не новое умение кита
+    freeze_relation: run_condition
     status: active
     outcome:
       # Четыре объекта вместо новых документов: Opportunity Brief, Product Decision Record,
@@ -138,6 +180,8 @@ goals:
       feature_has_baseline_target_and_guardrails: false
 
   - id: storybook-as-visual-contract
+    # заморозка: визуальные контракты — новое умение
+    freeze_relation: extension
     status: active
     outcome:
       # Сторона evidence уже построена (UIEvidenceBundle); достраивается сторона создания.
@@ -145,11 +189,15 @@ goals:
       experience_options_offered_with_tradeoffs: false
 
   - id: owner-speaks-product-not-pipeline
+    # заморозка: вертикальный срез Окошка — новый продукт
+    freeze_relation: extension
     status: active
     outcome:
       owner_never_edits_yaml_or_knows_feature_id: false
 
   - id: nightly-product-review
+    # заморозка: ночной обзор — новое умение целиком
+    freeze_relation: extension
     status: active
     outcome:
       # v0 — только наблюдение и предложение; класс автофикса пуст, пока точность не измерена.
@@ -158,6 +206,8 @@ goals:
       false_positive_rate_is_named: false
 
   - id: outcome-and-analytics-loop
+    # заморозка: аналитика исходов — новое умение
+    freeze_relation: extension
     status: active
     outcome:
       events_verified_in_runtime_not_declared: false
@@ -807,38 +857,6 @@ work:
     # ЗАОДНО ПРОВЕРИТЬ, СУЩЕСТВУЮТ ЛИ вообще числа автономии подсессий (потолок траты на подсессию и
     # их количество): в разборе 17.08 они названы, в коде я их не нашла. Если их нет — запись о них
     # тоже не появится (см. ep-2026-08-13-session-ceiling-and-context-thresholds).
-
-  # ─── ПРАВИЛО ВЛАДЕЛЬЦА 17.08.2026 ЖДЁТ ИСПОЛНЕНИЯ МЕХАНИЗМОМ ────────────────────────────────
-  - id: capability-freeze-enforced
-    title: Заморозка новых умений до второго brownfield исполняется проверкой, а не памятью
-    type: engineering
-    goal: second-real-brownfield
-    status: todo
-    owner_role: engineer
-    depends_on: []
-    write_scope: [ai_ops_kit/planning/, ai_ops_kit/validation/, tests/, decisions/]
-    value: high
-    affects: {planning_execution: true, delivery_operations: true}
-    # РЕШЕНИЕ ВЛАДЕЛЬЦА ЕСТЬ (ep-2026-08-17-capability-freeze-until-second-brownfield): новое умение
-    # не принимается, пока исход `owner_reaches_verified_pr_without_patching_the_kit` не стал верным.
-    # Оговорка: работа, которая снижает цену процесса, замыкает обратную связь из поля или закрывает
-    # найденный полем дефект, новым умением НЕ считается — она условие того самого прогона.
-    #
-    # ПОЧЕМУ ЭТО ОТДЕЛЬНАЯ РАБОТА, А НЕ «УЖЕ СДЕЛАНО ЗАПИСЬЮ. Кит требует от других «правило без
-    # исполнения — пожелание» и сам ловит «объявлено, но не исполняется». Запись в реестре решений
-    # правилом не является: следующая работа заводится текстом заявки, и ничто не сверяет её с
-    # заморозкой. Выдавать решение за механизм — ровно тот класс, против которого стоит контур.
-    #
-    # ЧТО НУЖНО СДЕЛАТЬ (проверяемо, без новых сущностей там, где можно):
-    #   1. работа в плане объявляет, чем она является по отношению к заморозке — расширением умений
-    #      или условием прогона; поле обязательно только для НОВЫХ работ, старые не переписывать;
-    #   2. проверка плана краснеет, если работа-расширение заведена/взята при неверном исходе
-    #      `owner_reaches_verified_pr_without_patching_the_kit`, и называет решение владельца;
-    #   3. оговорка сверяется с ЦЕЛЬЮ, на которую работа ссылается, а не с формулировкой заявки —
-    #      иначе оговорка превратится в лазейку через слова;
-    #   4. снятие заморозки — не дата и не ручной флаг, а тот самый исход, ставший верным.
-    # МУТАЦИОННЫЙ ЗАМЕР ОБЯЗАТЕЛЕН (урок 17.08): проверка обязана краснеть под мутацией И быть
-    # зелёной без неё.
 
   # ─── метрика кривой, а не одного прогона ────────────────────────────────────────────────────
   - id: fixes-between-attempts-measured
