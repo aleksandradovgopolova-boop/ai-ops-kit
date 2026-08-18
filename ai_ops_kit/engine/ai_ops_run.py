@@ -1012,7 +1012,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         with contextlib.redirect_stdout(sys.stderr):
             try:
                 active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
-                                     workitem=f"features/{fid}/workitem.yaml")
+                                     workitem=f"features/{fid}/workitem.yaml",
+                                     child_root=child_root,
+                                     published=active_work.publication_enabled(child_root))
             except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
                 lifecycle_errors.append(f"active-work register: {_e}")
 
@@ -1594,7 +1596,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
     areas = signals.get("affected_areas") or ["unspecified"]
     active_work.register(aw_path, fid, f"feature/{fid}", areas, session,
-                         workitem=f"features/{fid}/workitem.yaml")
+                         workitem=f"features/{fid}/workitem.yaml",
+                         child_root=child_root,
+                         published=active_work.publication_enabled(child_root))
 
     # 6. исполнение
     status, run_state = "planned", f".ai/runtime/workitems/{fid}/TaskState.yaml"
