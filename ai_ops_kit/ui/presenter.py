@@ -761,6 +761,11 @@ def from_review(rep: dict) -> dict:
             "основание": readiness.get("reason") or "—",
             "гейтов на ревью": len(rep.get("reviewable") or []),
             "изменено файлов": changed,
+            # БАЗА РЯДОМ С ЧИСЛОМ: «изменено файлов 0» без базы неотличимо от «база не выбрана»
+            # (заявка #136 — там же справка обещала автоподбор, которого не было).
+            "база дифа": (rep.get("base") or "не выбрана")
+                         + (f" ({rep['base_source']})" if rep.get("base_source") and rep.get("base") else "")
+                         + (f" — {rep['base_note']}" if rep.get("base_note") else ""),
             "по гейтам": "; ".join(f"{r.get('gate')}: {r.get('status') or 'без вердикта'}"
                                    for r in reviews) or "—",
             "evidence": rep.get("evidence_path") or "—", "note": rep.get("note") or "—"}

@@ -386,3 +386,63 @@ probes:
   why: 'ШОВ: заявка другой машины доходит до человека, только если `status` строит ОБЩУЮ карту через
     team_view. Подмена на локальные заявки прячет чужие — механизм публикации есть, а на пути, который
     человек и смотрит, он мёртв. Ровно тот класс «объявлено — не исполняется».'
+- id: security-scan-refuses-without-base
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    if base is None:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'Отсутствие базы обязано быть ОТКАЗОМ С НАЗВАННОЙ ПРИЧИНОЙ. Снять эту охрану — вернуть заявку
+    #139: скан уходил на весь репозиторий, и находка в чужом legacy блокировала правку одного
+    безобидного файла («блокирует без находок» — врал охват, не вердикт). Пустой охват тоже запрещён:
+    ноль просканированных файлов это «не проверено», а не «clear».'
+- id: security-scan-initial-commit-scope-is-precise
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    if not m:'
+  replace_with: '    if m:'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'Единственный законный случай неразрешимой базы — `<sha>~1` у КОРНЕВОГО коммита: родителя нет
+    по построению. Охват тогда — файлы того коммита, и это ТОЧНЫЙ ответ, а не «весь репозиторий по
+    случайности совпал». Снять распознавание — либо отказать на первом коммите, либо вернуться к
+    аудиту чужого кода.'
+- id: security-scan-scope-decided-in-run-pack
+  kind: seam
+  covers:
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/security/security_pack.py
+  find: '            changed, scan_scope = _scan_scope(child_root, base)'
+  replace_with: '            changed, scan_scope = (security_scan._git_changed_files(child_root, base)
+    or []), {"mode": "diff", "base": str(base)}'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'ШОВ: решение об охвате что-то значит только если его зовёт САМ run_pack. Подмена на прежнюю
+    молчаливую энумерацию даёт ровно тот ложный green, из-за которого дефект и жил: база не
+    разрешилась -> пустой список -> ни одной находки -> `overall=clear`. Механизм отказа при этом
+    остался бы на месте и модульно «работал».'
+- id: review-auto-base-not-the-reviewed-branch
+  kind: guard
+  file: ai_ops_kit/delivery/review_branch.py
+  find: '        if r.get("base_ref") == branch:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'Автоподбор берёт текущую ветку — а человек, ревьюя работу, часто стоит именно на ней. Диф
+    против себя пуст, и молча отдать «изменений нет» значит выдать невыбранную базу за проверенный
+    пустой диф. Охрана превращает это в названный отказ.'
+- id: review-seam-cli-passes-resolved-base
+  kind: seam
+  covers:
+  - ai_ops_kit/delivery/review_branch.py
+  - ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)'
+  replace_with: '        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base="main")'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'ШОВ на пути ЧЕЛОВЕКА (`ai-ops review`): автоподбор обязан доехать до механизма через CLI.
+    Мутация возвращает прежнюю тихую подстановку `main` — на репозитории с веткой `master` она даёт
+    неразрешённую базу и «изменённых файлов ноль», то есть справка снова обещает автоподбор, которого
+    на этом пути нет (заявка #136, родня printed-commands-are-runnable).'
