@@ -94,6 +94,95 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# ── публикация заявки: файл на работу в git (ep-2026-08-18-published-carrier-file-per-work) ──────
+CLAIMS_DIR_REL = Path(".ai") / "claims"
+
+# ТОЛЬКО эти поля уезжают при публикации (условие 4 гибридного решения). Содержимое файлов и
+# что-либо сверх списка сюда не попадает — публикация это явная отправка данных, а не «всё, что есть».
+PUBLISHED_FIELDS = ("id", "branch", "machine", "owner_session", "started_at", "status")
+
+
+def _claim_slug(machine: str, wid: str) -> str:
+    """Имя файла заявки. Файл на ПАРУ (машина, работа) — потому не пересекается с чужим (в отличие
+    от одного общего файла, отклонённого решением). Небезопасные для пути символы заменяются."""
+    def safe(s):
+        return "".join(c if (c.isalnum() or c in "-_.") else "-" for c in str(s or "unknown"))
+    return f"{safe(machine)}__{safe(wid)}.yaml"
+
+
+def publish_claim(child_root, entry: dict) -> Path | None:
+    """Записать опубликованную копию заявки отдельным отслеживаемым файлом. -> путь или None.
+
+    Только объявленные поля (`PUBLISHED_FIELDS`). Идемпотентно: своя пара (машина, работа)
+    перезаписывается, чужие не трогаются. Каталог `.ai/claims/` НЕ в .gitignore — он и есть носитель,
+    который доезжает к команде через git."""
+    if child_root is None:
+        return None
+    d = Path(child_root) / CLAIMS_DIR_REL
+    d.mkdir(parents=True, exist_ok=True)
+    payload = {k: entry.get(k) for k in PUBLISHED_FIELDS if entry.get(k) is not None}
+    payload["schema_version"] = 1
+    payload["kind"] = "published-claim"
+    p = d / _claim_slug(entry.get("machine"), entry.get("id"))
+    p.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=True), encoding="utf-8")
+    return p
+
+
+def unpublish_claim(child_root, machine: str, wid: str) -> bool:
+    """Снять опубликованную заявку (работа закрыта). -> True если файл был и удалён."""
+    if child_root is None:
+        return False
+    p = Path(child_root) / CLAIMS_DIR_REL / _claim_slug(machine, wid)
+    if p.is_file():
+        p.unlink()
+        return True
+    return False
+
+
+def load_published_claims(child_root, exclude_machine: str | None = None) -> list:
+    """Прочитать заявки, опубликованные (в т.ч. другими машинами и доехавшие через git). -> список.
+
+    Битый файл заявки ПРОПУСКАЕТСЯ, а не роняет чтение: чужая недокачанная заявка не должна делать
+    невидимой всю карту (то же соображение fail-safe, что у локального реестра — но здесь мягче:
+    источник внешний). exclude_machine — чтобы не считать свою же опубликованную копию дважды."""
+    out = []
+    if child_root is None:
+        return out
+    d = Path(child_root) / CLAIMS_DIR_REL
+    if not d.is_dir():
+        return out
+    for p in sorted(d.glob("*.yaml")):
+        try:
+            rec = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError):
+            continue
+        if not isinstance(rec, dict) or not rec.get("id"):
+            continue
+        if exclude_machine and rec.get("machine") == exclude_machine:
+            continue
+        rec["_published"] = True   # пометка происхождения: это заявка с носителя, не локальная
+        out.append(rec)
+    return out
+
+
+def team_view(child_root, local_active: list, published: bool) -> list:
+    """Общая карта «кто что держит»: локальные заявки + опубликованные заявки, которых нет локально.
+    При выключенной публикации возвращает только локальные — честно, без чужих (которых и неоткуда
+    взять). -> список записей.
+
+    ДЕДУП ПО ПАРЕ (машина, работа), А НЕ ПО ИМЕНИ МАШИНЫ. Замер 18.08.2026 на живом прогоне: два
+    клона на ОДНОМ физическом хосте имеют одинаковое имя машины, и дедуп «исключить свою машину»
+    прятал заявку соседнего клона целиком. Своя опубликованная копия — это ровно (машина, id) моих
+    локальных заявок; её и вычитаем, а чужие работы того же хоста остаются видны."""
+    if not published:
+        return list(local_active)
+    local_keys = {(w.get("machine"), w.get("id")) for w in local_active}
+    others = [r for r in load_published_claims(child_root)
+              if (r.get("machine"), r.get("id")) not in local_keys]
+    return list(local_active) + others
+
+
+
 
 def shared_registry_path(start=None):
     """Путь к реестру, ОБЩЕМУ для всех worktree одного репозитория. -> Path.
@@ -191,15 +280,39 @@ def _active_others(active, exclude_id):
 
 def classify(active, entry):
     """Классифицировать пересечения новой/проверяемой работы с активными.
-    entry: dict с id, affected_areas, depends_on, shared_contracts. Возвращает список
-    находок с полем kind ∈ {area, contract, dependency}."""
+    entry: dict с id, affected_areas, depends_on, shared_contracts, branch, machine, owner_session.
+    Возвращает список находок с полем kind ∈ {area, contract, dependency, branch, same-work}.
+
+    branch и same-work добавлены 18.08.2026 — это ровно два случая из заявки #150, которые ломали
+    команду: двойная работа на ОДНОЙ ветке и двойная работа над ОДНОЙ работой из разных сессий. Они
+    видны и МЕЖДУ машинами, потому что опубликованная заявка несёт branch и id (team_view их подаёт)."""
     wid = entry.get("id")
     areas = set(entry.get("affected_areas") or [])
     deps = set(entry.get("depends_on") or [])
     contracts = set(entry.get("shared_contracts") or [])
-    others = _active_others(active, wid)
+    my_branch = entry.get("branch")
+    my_holder = (entry.get("machine"), entry.get("owner_session"))
+    # Ветку и дубль работы флагуем ТОЛЬКО когда у пробы есть личность (машина или сессия): проба без
+    # личности — это самопроверка/форкаст без актора, и объявлять её «другим держателем» нельзя
+    # (иначе classify считал бы работу саму против себя — селфтест это и стережёт).
+    probe_has_identity = bool(entry.get("machine") or entry.get("owner_session"))
     out = []
+    if probe_has_identity:
+        # «Та же работа у другого держателя» — считаем ДО фильтра по id (иначе своя id спрячет чужую).
+        for w in active:
+            if w.get("status") == "done":
+                continue
+            if w.get("id") == wid and (w.get("machine"), w.get("owner_session")) != my_holder:
+                out.append({"kind": "same-work", "id": w.get("id"), "branch": w.get("branch"),
+                            "owner_session": w.get("owner_session"), "machine": w.get("machine"),
+                            "detail": wid})
+    others = _active_others(active, wid)
     for w in others:
+        if probe_has_identity and my_branch and w.get("branch") == my_branch and \
+                (w.get("machine"), w.get("owner_session")) != my_holder:
+            out.append({"kind": "branch", "id": w.get("id"), "branch": w.get("branch"),
+                        "owner_session": w.get("owner_session"), "machine": w.get("machine"),
+                        "detail": my_branch})
         shared_areas = sorted(areas & set(w.get("affected_areas") or []))
         if shared_areas:
             out.append({"kind": "area", "id": w.get("id"), "branch": w.get("branch"),
@@ -236,6 +349,12 @@ def find_cycle(active, entry):
     return dfs(start, [start]) or []
 
 
+def _holder(c):
+    """Кто держит: машина + сессия, если машина известна (опубликованная заявка её несёт)."""
+    m = c.get("machine")
+    return f"машина {m}, сессия {c.get('owner_session')}" if m else f"сессия {c.get('owner_session')}"
+
+
 def _forecast_lines(confs):
     lines = []
     label = {"area": "зона", "contract": "контракт", "dependency": "зависимость"}
@@ -243,11 +362,17 @@ def _forecast_lines(confs):
         k = c["kind"]
         if k == "dependency":
             lines.append(f"  ⚠ зависимость: '{c['id']}' ещё в работе (статус {c['detail']}, "
-                         f"ветка {c['branch']}, сессия {c['owner_session']})")
+                         f"ветка {c['branch']}, {_holder(c)})")
+        elif k == "same-work":
+            lines.append(f"  ⚠ та же работа: '{c['id']}' уже держит другой ({_holder(c)}, "
+                         f"ветка {c['branch']}) — это ДУБЛЬ, не начинайте второй раз")
+        elif k == "branch":
+            lines.append(f"  ⚠ ветка: '{c['detail']}' уже занята работой '{c['id']}' ({_holder(c)}) "
+                         f"— два PR на одну ветку затирают друг друга")
         else:
             what = "зоны" if k == "area" else "контракты"
             lines.append(f"  ⚠ {label[k]}: пересечение с '{c['id']}' (ветка {c['branch']}, "
-                         f"сессия {c['owner_session']}): общие {what} {', '.join(c['detail'])}")
+                         f"{_holder(c)}): общие {what} {', '.join(c['detail'])}")
     if confs:
         lines.append("  Варианты: дождаться · перенести зависимость · объединить задачи · "
                      "зафиксировать общий контракт · работать в разных слоях.")
@@ -255,7 +380,7 @@ def _forecast_lines(confs):
 
 
 def register(path, wid, branch, areas, session, workitem=None, status="in-progress",
-             depends=None, contracts=None, at=None, published=False):
+             depends=None, contracts=None, at=None, published=False, child_root=None):
     if branch in (None, "", "main", "master"):
         print("ОШИБКА: работа не должна вестись в main/master — задайте ветку/worktree.")
         return 1
@@ -287,9 +412,15 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
             print(f"ОШИБКА: циклическая зависимость задач: {' -> '.join(cycle)}. "
                   f"Разорвите цикл (одна задача не может транзитивно зависеть от себя).")
             return 1
-        confs = classify(data["active"], entry)
+        # Пересечения ищем по ОБЩЕЙ карте: локальные + опубликованные заявки других машин. При
+        # выключенной публикации team_view вернёт только локальные — чужих неоткуда взять, и честно.
+        against = team_view(child_root, data["active"], published)
+        confs = classify(against, entry)
         data["active"] = [w for w in data["active"] if w.get("id") != wid] + [entry]
         save(path, data)
+        # Опубликованная копия — отдельным файлом на работу, только при включённой публикации.
+        if published:
+            publish_claim(child_root, entry)
     print(f"ACTIVE-WORK: зарегистрирована работа '{wid}' "
           f"(ветка {branch}, сессия {session}, машина {entry['machine']}).")
     for line in _forecast_lines(confs):
@@ -297,16 +428,22 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
     # Честная фраза о досягаемости — ВСЕГДА, а не только при пересечениях: иначе «пересечений нет»
     # на локальном реестре читается как «команда свободна», хотя других машин кит не видит.
     print("  " + reach_note(published))
+    if published:
+        # Условие 4 гибридного решения: включённая публикация ОТПРАВЛЯЕТ данные — назвать какие,
+        # в момент отправки, а не только в общем пояснении.
+        print("  опубликовано в .ai/claims/: " + ", ".join(PUBLISHED_FIELDS)
+              + " — содержимое файлов не уходит.")
     return 0
 
 
-def list_cmd(path, as_json=False, published=False):
+def list_cmd(path, as_json=False, published=False, child_root=None):
     data = load(path)
+    team = team_view(child_root, data["active"], published)
     if as_json:
-        data = dict(data, published=published)   # досягаемость видна и в JSON, не только в тексте
+        data = dict(data, published=published, team=team)  # досягаемость и общая карта — и в JSON
         print(json.dumps(data, ensure_ascii=False, indent=2))
         return 0
-    act = [w for w in data["active"] if w.get("status") != "done"]
+    act = [w for w in team if w.get("status") != "done"]
     if not act:
         print("ACTIVE-WORK: активных работ нет.")
         print("  " + reach_note(published))
@@ -324,25 +461,31 @@ def list_cmd(path, as_json=False, published=False):
     return 0
 
 
-def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_json=False):
+def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_json=False,
+              branch=None, child_root=None, published=False):
     data = load(path)
-    probe = {"id": exclude_id, "affected_areas": list(areas),
+    probe = {"id": exclude_id, "affected_areas": list(areas), "branch": branch,
+             "machine": _machine(), "owner_session": None,
              "depends_on": list(depends or []), "shared_contracts": list(contracts or [])}
-    confs = classify(data["active"], probe)
+    against = team_view(child_root, data["active"], published)
+    confs = classify(against, probe)
     if as_json:
         print(json.dumps({"schema_version": 1, "kind": "conflict-forecast",
-                          "areas": list(areas), "conflicts": confs}, ensure_ascii=False, indent=2))
+                          "areas": list(areas), "conflicts": confs, "published": published},
+                         ensure_ascii=False, indent=2))
         return 0
     if not confs:
         print(f"CONFLICT-FORECAST: пересечений по зонам {', '.join(areas)} нет — можно стартовать.")
+        print("  " + reach_note(published))
         return 0
     print(f"CONFLICT-FORECAST: возможны пересечения:")
     for line in _forecast_lines(confs):
         print(line)
+    print("  " + reach_note(published))
     return 0
 
 
-def finish_cmd(path, wid, status="done", reason=None):
+def finish_cmd(path, wid, status="done", reason=None, child_root=None, published=False):
     """Снять работу с учёта. status — из STATUS; 'done' ТОЛЬКО когда работа действительно закончена.
 
     v3.28.x (F-012, находка живой квалификации на niti): прогон помечал работу `done` независимо
@@ -365,7 +508,12 @@ def finish_cmd(path, wid, status="done", reason=None):
         if not found:
             print(f"ACTIVE-WORK: работа '{wid}' не найдена.")
             return 1
+        entry = next((w for w in data["active"] if w.get("id") == wid), None)
         save(path, data)
+        # Закрытая работа снимается и с носителя — иначе опубликованная заявка «висит» у команды
+        # после завершения. Снимаем только СВОЮ пару (машина, работа).
+        if status == "done" and entry is not None:
+            unpublish_claim(child_root, entry.get("machine") or _machine(), wid)
     print(f"ACTIVE-WORK: работа '{wid}' помечена {status}"
           f"{' — ' + reason if reason else ''}.")
     return 0
@@ -399,24 +547,32 @@ def main(argv):
     c.add_argument("file"); c.add_argument("--areas", required=True)
     c.add_argument("--depends"); c.add_argument("--contracts")
     c.add_argument("--exclude"); c.add_argument("--json", action="store_true")
+    c.add_argument("--branch"); c.add_argument("--repo")
 
     f = sub.add_parser("finish")
     f.add_argument("file"); f.add_argument("id")
+    f.add_argument("--status", default="done"); f.add_argument("--repo")
 
     a = ap.parse_args(argv)
     if a.cmd == "register":
-        pub = publication_enabled(getattr(a, "repo", None) or Path.cwd())
+        repo = getattr(a, "repo", None) or Path.cwd()
+        pub = publication_enabled(repo)
         return register(Path(a.file), a.id, a.branch, _split(a.areas), a.session,
                         a.workitem, a.status, _split(a.depends), _split(a.contracts), a.at,
-                        published=pub)
+                        published=pub, child_root=repo)
     if a.cmd == "list":
-        pub = publication_enabled(getattr(a, "repo", None) or Path.cwd())
-        return list_cmd(Path(a.file), a.json, published=pub)
+        repo = getattr(a, "repo", None) or Path.cwd()
+        return list_cmd(Path(a.file), a.json, published=publication_enabled(repo), child_root=repo)
     if a.cmd == "check":
+        repo = getattr(a, "repo", None) or Path.cwd()
         return check_cmd(Path(a.file), _split(a.areas), _split(a.depends),
-                        _split(a.contracts), a.exclude, a.json)
+                         _split(a.contracts), a.exclude, a.json,
+                         branch=getattr(a, "branch", None), child_root=repo,
+                         published=publication_enabled(repo))
     if a.cmd == "finish":
-        return finish_cmd(Path(a.file), a.id)
+        repo = getattr(a, "repo", None) or Path.cwd()
+        return finish_cmd(Path(a.file), a.id, status=getattr(a, "status", "done"),
+                          child_root=repo, published=publication_enabled(repo))
     return 1
 
 

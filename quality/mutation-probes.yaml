@@ -345,3 +345,44 @@ probes:
     публикацию и проводит её в презентер. Презентер можно сделать честным и не позвать — тогда он
     останется мёртвым, как уже было с политикой экономии сессии. Мутация подменяет живой вызов на
     константу; тест сценария status обязан заметить, что ответ перестал зависеть от конфигурации.'
+- id: publish-only-declared-fields
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    payload = {k: entry.get(k) for k in PUBLISHED_FIELDS if entry.get(k) is not None}'
+  replace_with: '    payload = dict(entry)'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'Публикация ОТПРАВЛЯЕТ данные наружу репозитория-носителя. Публиковать весь entry вместо
+    объявленных полей — утечка (affected_areas, workitem, а завтра и лишнее) без решения владельца.
+    Условие 4 гибридного решения: уезжает ровно названный список.'
+- id: publish-off-writes-nothing
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if published:'
+  replace_with: '        if True:'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'Дефолт локальный — святое: публиковать при выключенной публикации значит отправлять данные
+    закрытого продукта без явного решения владельца (родительское решение ep-2026-08-18-claim-medium-hybrid).'
+- id: team-view-off-shows-only-local
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    if not published:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'При выключенной публикации показывать чужие заявки — выдать за координацию то, чего кит видеть
+    не должен (чужие заявки приехали бы, но режим локальный). Честность досягаемости.'
+- id: publish-seam-status-surfaces-team
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        team = active_work.team_view(child_root, data.get("active") or [], pub)'
+  replace_with: '        team = data.get("active") or []'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'ШОВ: заявка другой машины доходит до человека, только если `status` строит ОБЩУЮ карту через
+    team_view. Подмена на локальные заявки прячет чужие — механизм публикации есть, а на пути, который
+    человек и смотрит, он мёртв. Ровно тот класс «объявлено — не исполняется».'

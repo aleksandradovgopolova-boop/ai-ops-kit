@@ -462,6 +462,7 @@ def from_active_work(rep: dict, published: bool = False) -> dict:
     # Одна фраза человеку, без слов `.ai-ops.yaml` и `team_coordination` — их место в technical.
     reach_h = ("вижу заявки всех машин команды (публикация включена)" if published
                else "вижу только ЭТУ машину — заявки других участников сюда не попадают")
+    reach_cap = reach_h[0].upper() + reach_h[1:]   # для начала предложения, без рассинхрона лица
     if not active:
         return message(
             status="ok", headline="Сейчас ничего не идёт",
@@ -474,7 +475,7 @@ def from_active_work(rep: dict, published: bool = False) -> dict:
     what = "; ".join(
         (a.get("title") or a.get("workitem") or a.get("id") or "работа")
         for a in active[:3])
-    why = f"Кит {reach_h}."
+    why = f"{reach_cap}."
     if not published:
         why += (" Пересечения по файлам ниже — про параллельные сессии здесь, не про команду; "
                 "координация команды включается публикацией отдельно.")
