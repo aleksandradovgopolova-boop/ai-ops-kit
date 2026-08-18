@@ -780,3 +780,28 @@ probes:
     у механизма есть охранные пробы и нет пробы шва — модульные тесты зовут `compute` напрямую и личность
     передают сами, поэтому отключённый вызов остался бы зелёным. Мутация обрывает личность: «моё» и
     «чужое» сливаются, и участник снова ждёт сам себя.'
+- id: lag-gate-returns-nonzero
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    return {"ok": 0, "behind": LAG_BEHIND_RC,'
+  replace_with: '    return 0 or {"ok": 0, "behind": 0,'
+  tests:
+  - tests/unit/test_child_lag_gate.py
+  why: 'Вся работа была ровно в КОДЕ ВОЗВРАТА: `status` считает то же самое и возвращает 0, поэтому
+    отставание оставалось отчётом, который надеется на внимание человека. Мутация возвращает нуль на
+    вердикте «отстала» — механизм считается, печатается и никого не останавливает. Второй по размеру
+    класс находок поля (8 из 48) жил именно так.'
+- id: lag-gate-is-called-by-child-ci
+  kind: seam
+  covers:
+  - templates/ci/ai-ops-validate.yml
+  - installer/ai_ops.py
+  file: templates/ci/ai-ops-validate.yml
+  find: '        run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py check-update --quiet'
+  replace_with: '        run: echo "гейт не вызывается"'
+  tests:
+  - tests/unit/test_child_lag_gate.py
+  why: 'ШОВ: гейт, которого никто не зовёт, — это отчёт. Мутация убирает вызов из CI, который кит
+    ОТДАЁТ дочке: команда остаётся рабочей и модульно зелёной, а на пути дочки её нет. Тест берёт шаг
+    из УСТАНОВЛЕННОГО workflow и исполняет его на отставшей копии — иначе проверялся бы шаблон, а не
+    то, что доехало.'
