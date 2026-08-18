@@ -658,3 +658,29 @@ probes:
     слова о том, что стало с настоящим наблюдением, по которому решение уже принято. Это тот самый
     отказ, от которого канал умирает молча: ответа не видно -> писать перестают. Мутация возвращает
     тишину.'
+- id: status-asks-the-plan-too
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/planning/delivery_plan.py
+  - ai_ops_kit/ui/presenter.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '            cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())'
+  replace_with: '            cross = None'
+  tests:
+  - tests/unit/test_running_answered_from_both.py
+  why: 'ШОВ, которым эта работа и объявлена в приёмке: `status` обязан спрашивать ПЛАН, а не только
+    реестр рантайма. Замер 18.08.2026 на самом ките: при семи работах `in_progress` в плане ответ был
+    «Сейчас ничего не идёт. Работа не начата.», и проба с одной работой не меняла ответ ни одним
+    словом. Мутация снимает второй источник — сверка остаётся написанной и модульно зелёной, а на пути
+    человека мертва.'
+- id: divergence-is-not-presented-as-normal
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '        if stale:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_running_answered_from_both.py
+  why: 'Расхождение плана с заявками обязано быть НАЗВАНО и не подано как норма: `ok` здесь — форма
+    ложного green в самом частом вопросе управления («что идёт сейчас»). Цена уже заплачена: семь
+    закрытых работ простояли `in_progress` четыре дня, и сказать об этом было некому.'

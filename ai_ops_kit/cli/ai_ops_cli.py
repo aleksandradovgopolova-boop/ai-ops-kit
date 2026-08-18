@@ -291,8 +291,27 @@ def _run_intent(intent, task, child_root, signals, a):
         # давно влитой в main, а `status` отвечал «Работа идёт» и советовал не трогать те же файлы.
         team = active_work.reconcile_with_base(team, child_root)
         reconciled = active_work.persist_reconciliation(awp, team) if awp.is_file() else 0
+        # ВТОРОЙ ИСТОЧНИК ПРАВДЫ СПРАШИВАЕТСЯ ЗДЕСЬ, а не заводится третьим (замер 18.08.2026):
+        # реестр говорит, что исполняется на этой машине, план — что объявлено идущим. Сверка живёт в
+        # `planning` осознанно: `lifecycle` не вправе его импортировать (слои), а отвечает человеку
+        # entrypoint — он и складывает два ответа в один.
+        from ai_ops_kit.planning import delivery_plan as _dp
+        try:
+            cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())
+        except _dp.PlanCorrupt as e:
+            # Битый план — не «в плане ничего не объявлено»: это ровно тот случай, где «не знаю»
+            # нельзя выдать за «нет». Ответ про реестр остаётся, а про план говорим прямо.
+            print(presenter.render(presenter.message(
+                status="degraded",
+                summary="Про заявки на работу отвечу, а про план — нет: файл плана не разбирается.",
+                why_it_matters="Пока план не читается, я не могу сказать, не объявлена ли идущей "
+                               "работа, которой никто не занимается.",
+                next_steps=["починить файл плана и повторить"],
+                technical={"ошибка": str(e)}), audience=aud))
+            cross = None
         print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
-                                                          reconciled=reconciled), audience=aud))
+                                                          reconciled=reconciled, crosscheck=cross),
+                               audience=aud))
         return 0
 
     if intent == "next":
