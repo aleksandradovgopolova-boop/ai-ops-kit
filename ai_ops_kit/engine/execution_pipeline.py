@@ -98,6 +98,13 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
     return delivery
 
 
+def _security_pack_for_report(security_pack_result):
+    """Вердикт security-пака -> в отчёт через ПРОЕКЦИЮ пака (белый список полей), а не срезом на месте.
+    Срез на месте и был дефектом: четыре поля выбирались здесь, и находки терялись по дороге."""
+    from ai_ops_kit.security import security_pack as _sp_report
+    return _sp_report.for_report(security_pack_result)
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
@@ -1088,11 +1095,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v2.95: детерминированный security-скан (секреты/новые зависимости/injection-флаги). None,
         # если гейта security нет в плане или не коммитили. Закрывает no_secrets/deps_approved (факты);
         # no_injection_surface — судье. Находка -> security блокирует.
-        "security_scan": ({"overall": security_pack_result["overall"],
-                           "applicable_domains": security_pack_result["applicable_domains"],
-                           "blocking": security_pack_result["blocking"],
-                           "needs_review": security_pack_result["needs_review"]}
-                          if security_pack_result else None),
+        # ЗАЯВКА #139 (вторая половина): здесь стояли ровно четыре поля, и `domain_results` — где
+        # лежат САМИ находки (path/line/класс) и `applies_because` — в отчёт не попадали вовсе.
+        # Гейт отправляет человека в этот артефакт со словами «блокирующие домены (critical/high
+        # находки)», поэтому отчёт без находок делает утверждение гейта непроверяемым. Проекция
+        # `security_pack.for_report` — белый список полей: значения секретов и содержимое файлов в
+        # отчёт не уезжают (он лежит в репозитории и попадает в PR).
+        "security_scan": _security_pack_for_report(security_pack_result),
         # v2.86 Product Authoring: трейс произведённых артефактов (requirements/plan) — что
         # авторизовано, валидна ли форма, какие required_evidence закрыты. None -> без --author.
         "authored": authored,

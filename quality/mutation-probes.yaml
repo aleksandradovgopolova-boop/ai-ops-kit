@@ -446,3 +446,42 @@ probes:
     Мутация возвращает прежнюю тихую подстановку `main` — на репозитории с веткой `master` она даёт
     неразрешённую базу и «изменённых файлов ноль», то есть справка снова обещает автоподбор, которого
     на этом пути нет (заявка #136, родня printed-commands-are-runnable).'
+- id: security-report-findings-are-whitelisted
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '            "findings": [{k: f[k] for k in FINDING_REPORT_FIELDS if k in f}'
+  replace_with: '            "findings": [dict(f)'
+  tests:
+  - tests/unit/test_security_verdict_shows_its_findings.py
+  why: 'Находка в отчёте — путь, строка и класс, но НИКОГДА значение: `run-report.json` лежит в
+    репозитории и уезжает в PR, поэтому секрет в нём был бы вынесенным секретом. Список полей БЕЛЫЙ
+    именно поэтому — при сквозном копировании новое поле находки, однажды принесшее значение, уехало
+    бы в отчёт само, без единого решения.'
+- id: security-report-seam-pipeline-uses-projection
+  kind: seam
+  covers:
+  - ai_ops_kit/security/security_pack.py
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '        "security_scan": _security_pack_for_report(security_pack_result),'
+  replace_with: '        "security_scan": ({"overall": security_pack_result["overall"], "blocking":
+    security_pack_result["blocking"]} if security_pack_result else None),'
+  tests:
+  - tests/unit/test_security_verdict_shows_its_findings.py
+  why: 'ШОВ и ровно та форма дефекта, которой была заявка #139: срез полей НА МЕСТЕ вместо проекции.
+    Проекция при этом остаётся написанной и модульно «работает» — а человек, которого гейт отправил в
+    отчёт со словами «блокирующие домены (critical/high находки)», находок там не видит, и утверждение
+    гейта становится непроверяемым из артефакта, на который он сам ссылается.'
+- id: security-report-sequential-carries-findings
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/workpackage_executor.py
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/engine/workpackage_executor.py
+  find: '                "security_scan": _sp2.for_report(agg_sec),'
+  replace_with: '                "security_scan": None,'
+  tests:
+  - tests/unit/test_security_verdict_shows_its_findings.py
+  why: 'Второй путь ответа — последовательный (WorkPackages): агрегатный вердикт отдавал наружу только
+    `security_overall`, и находки не доезжали. Починить один путь и оставить второй значит завести две
+    разные правды об одном вопросе, причём вторая молчит.'

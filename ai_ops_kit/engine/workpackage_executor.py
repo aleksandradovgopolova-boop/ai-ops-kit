@@ -516,6 +516,11 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
                 "evidence_revision_ok": (coll.get("revision") == final_sha),
                 "security_overall": (agg_sec or {}).get("overall"), "security_ok": agg_sec_ok,
                 "security_reviewer_status": (agg_sec or {}).get("reviewer_status"),
+                # ТА ЖЕ БОЛЕЗНЬ НА ПОСЛЕДОВАТЕЛЬНОМ ПУТИ (заявка #139): наружу уходил только
+                # `overall`, и человек, которому гейт назвал блокирующие домены, не мог увидеть ни
+                # одной находки. Проекция та же, что у одиночного прогона — одна правда об охвате и
+                # находках, а не два разных ответа на один вопрос.
+                "security_scan": _sp2.for_report(agg_sec),
                 "code_review_ok": agg_code_ok, "code_reviews": agg_code_reviews,
                 "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
     except Exception as e:  # noqa: BLE001
