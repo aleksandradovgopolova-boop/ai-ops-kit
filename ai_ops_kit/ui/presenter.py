@@ -445,33 +445,48 @@ def from_contour_consistency(rep: dict) -> dict:
                    technical={"findings": len(findings)})
 
 
-def from_active_work(rep: dict) -> dict:
+def from_active_work(rep: dict, published: bool = False) -> dict:
     """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
 
     Прежде `status` печатал `STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)` — путь к
     внутреннему файлу вместо ответа, и одинаково на всех трёх аудиториях: настройка «с кем ты
     говоришь» на эту команду не влияла вовсе. Три независимых ревью нашли это как один дефект.
+
+    `published` (18.08.2026, ep-2026-08-18-claim-medium-hybrid): реестр локален для этой машины, если
+    публикация не включена. Пока она выключена, ответ обязан это СКАЗАТЬ — иначе «работа идёт»/«ничего
+    не идёт» читается как факт о команде, хотя это факт об одной машине. Дефолт False — самый
+    безопасный: он никогда не выдаёт локальное состояние за координацию.
     """
     active = [a for a in (rep or {}).get("active") or []
               if (a.get("status") or "") != "done"]
+    # Одна фраза человеку, без слов `.ai-ops.yaml` и `team_coordination` — их место в technical.
+    reach_h = ("вижу заявки всех машин команды (публикация включена)" if published
+               else "вижу только ЭТУ машину — заявки других участников сюда не попадают")
     if not active:
         return message(
             status="ok", headline="Сейчас ничего не идёт",
             summary="Работа не начата.",
+            why_it_matters=("«Не начата» — про эту машину: " + reach_h + "." if not published else None),
             next_steps=["скажи, что взять, или спроси «что дальше» — предложу с обоснованием"],
-            technical={"active": 0})
+            technical={"active": 0, "досягаемость": "команда" if published else "эта машина"})
 
     n = len(active)
     what = "; ".join(
         (a.get("title") or a.get("workitem") or a.get("id") or "работа")
         for a in active[:3])
+    why = f"Кит {reach_h}."
+    if not published:
+        why += (" Пересечения по файлам ниже — про параллельные сессии здесь, не про команду; "
+                "координация команды включается публикацией отдельно.")
+    else:
+        why += " Работу, трогающую те же файлы, лучше не начинать — иначе две сессии перепишут одно место."
     return message(
         status="ok", headline="Работа идёт",
         summary=f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}.",
-        why_it_matters=("Пока она не закончена, работу, которая трогает те же файлы, лучше не "
-                        "начинать — иначе две сессии перепишут одно место." if n else None),
+        why_it_matters=why,
         next_steps=["спроси «что дальше», если нужно чем-то заняться параллельно"],
         technical={"работ": n, "детали": what,
+                   "досягаемость": "команда" if published else "эта машина",
                    "области": ", ".join(sorted({x for a in active
                                                 for x in (a.get("affected_areas")
                                                           or a.get("areas") or [])})) or "—",
