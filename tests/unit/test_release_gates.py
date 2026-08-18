@@ -16,17 +16,38 @@
 показал, что её уже проверяют `validate_ai_first_registry` (п. 7) и `validate_release_claims` (п. 1).
 Второй механизм на то же место был бы второй правдой.
 """
+import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
 
 KIT = Path(__file__).resolve().parents[2]
-GATES = tomllib.loads((KIT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ai_ops"]["release_gates"]
+
+
+def _toml_table(text, table):
+    """Значения одной таблицы pyproject без `tomllib`.
+
+    ПОЧЕМУ НЕ `tomllib`: он в stdlib только с 3.11, а объявленный пол репозитория — 3.9, и это ловит
+    собственная проверка `validate_python_compat`. Локально (3.11) тест был зелёным, CI на 3.9 упал
+    `ModuleNotFoundError` — тот же класс «локально зелено, в CI красно», из-за которого версии
+    инструментов здесь пинуются. Значения таблицы простые (строка/число), поэтому разбор строкой
+    честнее новой зависимости."""
+    body = text.split(f"[{table}]", 1)[1].split("\n[", 1)[0]
+    out = {}
+    for line in body.splitlines():
+        m = re.match(r'\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$', line)
+        if not m or line.lstrip().startswith("#"):
+            continue
+        raw = m.group(2)
+        out[m.group(1)] = int(raw) if raw.isdigit() else raw.strip('"\'')
+    return out
+
+
+GATES = _toml_table((KIT / "pyproject.toml").read_text(encoding="utf-8"), "tool.ai_ops.release_gates")
 
 pytestmark = pytest.mark.unit
 
@@ -94,8 +115,8 @@ class TestChangelogFragmentsAreConfigured:
         """Гейт строгий (решение владельца), поэтому у служебных изменений — плана, истории, реестра
         решений — обязан быть свой тип. Иначе строгий гейт заставляет придумывать «новость» там, где
         её нет, и его начинают обходать."""
-        cfg = tomllib.loads((KIT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["towncrier"]
-        dirs = {t["directory"] for t in cfg["type"]}
+        text = (KIT / "pyproject.toml").read_text(encoding="utf-8")
+        dirs = set(re.findall(r'\[\[tool\.towncrier\.type\]\]\s*\ndirectory = "([^"]+)"', text))
         assert {"feat", "fix", "quality", "chore"} <= dirs, dirs
 
     def test_fragments_directory_exists_with_instructions(self):
@@ -196,6 +217,21 @@ class TestReleaseRefusesWithoutChangelogSection:
         assert r.returncode == 0, r.stdout + r.stderr
         notes = (tmp_path / "notes.md").read_text(encoding="utf-8")
         assert "что изменилось" in notes and "старое" not in notes, notes
+
+    def test_the_release_step_is_actually_wired(self):
+        """ШОВ: ворота на выпуске существуют, только если шаг ВЫЗЫВАЕТСЯ. Проверку потребовал сам кит
+        (`validate_mutation_probes`: «есть охранные пробы, но НЕТ пробы шва»), и он прав — снятие
+        условия шага не поймал бы ни один тест выше."""
+        wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
+        job = wf["jobs"]["release"]
+        step = next(s for s in job["steps"]
+                    if "CHANGELOG" in str(s.get("name", "")) and s.get("run"))
+        assert str(step.get("if")) == "steps.check_release.outputs.needed == 'true'", \
+            f"шаг выпуска перестал быть условным на своей проверке: {step.get('if')!r}"
+        # `on` в YAML разбирается как True (ключ-булево) — берём оба варианта ключа
+        trig = wf.get("on") or wf.get(True) or {}
+        assert "workflow_run" in trig, "выпуск больше не привязан к успешному прогону проверок"
+        assert "package-quality" in str(trig["workflow_run"].get("workflows")), trig["workflow_run"]
 
     def test_the_old_shrug_is_gone(self):
         """Проверяем ИСПОЛНЯЕМЫЕ строки, а не текст файла: первая версия этого теста поймала мой же
