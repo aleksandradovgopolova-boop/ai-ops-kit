@@ -523,3 +523,53 @@ probes:
   why: 'ШОВ между зонами и предупреждением: сравнение зон живёт в `work_areas`, но отвечает человеку
     `classify`. Мутация возвращает прежнее пересечение множеств — и `unspecified` снова совпадает с
     `unspecified`, а вложенность каталогов перестаёт считаться конфликтом.'
+- id: registry-merged-work-detected-by-content
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor",'
+  replace_with: '        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor2",'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'Влитость определяется СОДЕРЖАНИЕМ (коммиты ветки содержатся в базе), а не числом расхождения:
+    в поле нашлась ветка впереди базы на 1 и позади на 241, и проверка по одному направлению давала
+    «не влито» на давно закрытой задаче. Снять эту проверку — вернуть заявку #137: реестр держит
+    влитые работы, `status` отвечает «Работа идёт», и человек либо переделывает готовое, либо
+    перестаёт верить реестру.'
+- id: registry-superseded-is-not-running
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '              if (a.get("status") or "") not in ("done", "superseded")]'
+  replace_with: '              if (a.get("status") or "") != "done"]'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'Снятое сверкой обязано перестать считаться идущей работой в ОТВЕТЕ человеку. Мутация возвращает
+    прежний фильтр (только `done`) — сверка работает, запись помечена, а `status` по-прежнему говорит
+    «Работа идёт» на влитой работе: механизм есть, а на пути, который человек и смотрит, он мёртв.'
+- id: registry-seam-status-reconciles
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        team = active_work.reconcile_with_base(team, child_root)'
+  replace_with: '        team = team'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'ШОВ на пути человека: сверка что-то значит только если её зовёт `ai-ops status` — команда, из
+    которой и пришла жалоба поля. Без вызова реестр снова отвечает «Работа идёт» на влитой работе, а
+    сама функция сверки остаётся написанной и модульно зелёной.'
+- id: registry-seam-forecast-uses-reconciled-map
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '            against = reconcile_with_base(against, child_root)'
+  replace_with: '            against = list(against)'
+  note: 'ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ ВЫЖИЛА: названный тест звал `reconcile_with_base` сам и до
+    `register` не доходил — то есть проверял функцию, а не ШОВ. Добавлены тесты через `register`
+    и через `check_cmd`, и только после этого проба стала убивать.'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'Второй путь, где реестр отвечает: прогноз пересечений при РЕГИСТРАЦИИ. Если карта не сверена,
+    влитая работа предупреждает о себе — и предупреждение о «тех же файлах» приходит от работы, которой
+    уже нет. Это ровно та цена, которую поле назвало: реестр как список страшилок.'

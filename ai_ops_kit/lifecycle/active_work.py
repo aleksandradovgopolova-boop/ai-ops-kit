@@ -40,7 +40,10 @@ import yaml
 
 from ai_ops_kit.shared import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
 
-STATUS = {"in-progress", "review", "blocked", "done"}
+STATUS = {"in-progress", "review", "blocked", "done", "superseded"}
+# `superseded` (18.08.2026, заявка #137): работа, изменения которой УЖЕ В БАЗЕ. Это не «done»
+# (никто её не закрывал) и не «brought» — это запись, которую сняла СВЕРКА, и её причина
+# названа замером, а не догадкой (`reconcile_with_base`).
 
 CONFIG_REL = ".ai-ops.yaml"
 
@@ -274,8 +277,125 @@ def _locked(path: Path):
         f.close()
 
 
+_CLOSED_STATUSES = ("done", "superseded")   # #137: снятое сверкой — не идущая работа
+
+
 def _active_others(active, exclude_id):
-    return [w for w in active if w.get("status") != "done" and w.get("id") != exclude_id]
+    return [w for w in active if w.get("status") not in _CLOSED_STATUSES and w.get("id") != exclude_id]
+
+
+def _divergence(child_root, branch, base):
+    """Расхождение ветки и базы В ОБЕ СТОРОНЫ. -> (ahead, behind) или (None, None), если не измерено.
+
+    ПОЛЕ 17.08.2026: в дочке нашлась ветка ВПЕРЕДИ base на 1 коммит и ПОЗАДИ на 241 — проверка
+    «содержится в base» по ОДНОМУ направлению давала «не влито» на давно закрытой задаче. Поэтому
+    оба числа считаются и оба показываются: одно из них без другого вводит в заблуждение."""
+    import subprocess
+    r = subprocess.run(["git", "-C", str(child_root), "rev-list", "--left-right", "--count",
+                        f"{base}...{branch}"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None, None
+    parts = (r.stdout or "").split()
+    if len(parts) != 2:
+        return None, None
+    try:
+        behind, ahead = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None, None
+    return ahead, behind
+
+
+def reconcile_with_base(entries, child_root, base=None):
+    """Сверить записи реестра с базой. -> новый список записей (исходные НЕ мутируются).
+
+    ЗАЯВКА #137, поле 17.08.2026 (дочка ИИ-Среда): реестр держал четыре записи незакрытыми, и ТРИ ИЗ
+    ЧЕТЫРЁХ относились к работе, давно влитой в main. Настоящий хвост был один. Подтверждено замером
+    на 3.36.12: ветка работы влита обычным merge, запись оставлена `blocked`, и `ai-ops status`
+    отвечает «Работа идёт» и советует не трогать те же файлы. Сверки с базой не было НИКАКОЙ: ни
+    `merged`, ни `is-ancestor`, ни `superseded`.
+
+    ЦЕНА, НАЗВАННАЯ ПОЛЕМ: реестр превращается в список страшилок — либо переделываешь готовое (в
+    дочке почти начали доделывать задачу, закрытую месяц назад), либо перестаёшь ему верить, и тогда
+    он не нужен.
+
+    ЧТО ЗДЕСЬ. Для каждой записи с веткой: база берётся тем же резолвером, что у `run`/`review`
+    (`pipeline_git._resolve_base` — автоподбор, а не хардкод `main`); считаются ОБА числа
+    расхождения; если коммиты ветки уже содержатся в базе (`merge-base --is-ancestor`), запись
+    помечается `superseded` с названной причиной и ДАТОЙ замера. Не измерили — говорим `None` и
+    называем почему; отсутствие сверки не выдаётся за «не влито»."""
+    import subprocess
+    out = []
+    src = list(entries or [])
+    if not src:
+        return out
+    from ai_ops_kit.engine import pipeline_git as _pg   # локально: engine импортирует lifecycle
+    resolved = _pg._resolve_base(child_root, base)
+    base_ref = resolved.get("base_ref") if resolved.get("resolved") else None
+    note = None if base_ref else (resolved.get("reason") or "база не определена")
+    at = _now_iso()
+    for w in src:
+        e = dict(w)
+        branch = e.get("branch")
+        if not branch or e.get("status") == "done":
+            out.append(e)
+            continue
+        if not base_ref:
+            e["reconcile_note"] = f"сверка с базой не выполнена: {note}"
+            e["merged_into_base"] = None
+            out.append(e)
+            continue
+        e["base_ref"] = base_ref
+        if subprocess.run(["git", "-C", str(child_root), "rev-parse", "--verify", "--quiet", branch],
+                          capture_output=True, text=True).returncode != 0:
+            # ветки нет локально: сказать это, а не молча считать работу идущей
+            e["merged_into_base"] = None
+            e["reconcile_note"] = f"ветки '{branch}' нет в этом репозитории — сверка невозможна"
+            out.append(e)
+            continue
+        ahead, behind = _divergence(child_root, branch, base_ref)
+        e["ahead"], e["behind"] = ahead, behind
+        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor",
+                                 branch, base_ref], capture_output=True, text=True).returncode == 0
+        e["merged_into_base"] = merged
+        if merged:
+            e["status"] = "superseded"
+            e["status_reason"] = (f"изменения ветки '{branch}' уже в базе '{base_ref}' "
+                                  f"(впереди {ahead}, позади {behind}) — запись сняла сверка")
+            e["status_reason_at"] = at
+        out.append(e)
+    return out
+
+
+def persist_reconciliation(path, reconciled):
+    """Записать снятые сверкой статусы в реестр. -> число снятых записей.
+
+    ПОЧЕМУ ЗАПИСЫВАЕМ, А НЕ ТОЛЬКО ПОКАЗЫВАЕМ: сверка на чтении исправляет ОТВЕТ, но не реестр — и
+    та же ложь возвращается при следующем чтении, а `register` продолжает считать влитую работу
+    активной и предупреждать о ней. Пишем ТОЛЬКО переход в `superseded` и только для своей машины:
+    чужая опубликованная заявка — не наша запись, снимать её за другого нельзя."""
+    changed = {w["id"]: w for w in (reconciled or [])
+               if w.get("status") == "superseded" and w.get("id")}
+    if not changed:
+        return 0
+    mine = _machine()
+    n = 0
+    with _locked(path):
+        data = load(path)
+        for w in data.get("active", []):
+            upd = changed.get(w.get("id"))
+            if not upd or w.get("status") in _CLOSED_STATUSES:
+                continue
+            if (w.get("machine") or mine) != mine:
+                continue
+            w["status"] = "superseded"
+            w["status_reason"] = upd.get("status_reason")
+            w["status_reason_at"] = upd.get("status_reason_at")
+            w["base_ref"] = upd.get("base_ref")
+            w["ahead"], w["behind"] = upd.get("ahead"), upd.get("behind")
+            n += 1
+        if n:
+            save(path, data)
+    return n
 
 
 def classify(active, entry):
@@ -419,6 +539,10 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         # Пересечения ищем по ОБЩЕЙ карте: локальные + опубликованные заявки других машин. При
         # выключенной публикации team_view вернёт только локальные — чужих неоткуда взять, и честно.
         against = team_view(child_root, data["active"], published)
+        # #137: сверяем карту с базой ДО прогноза — иначе влитая работа предупреждает о себе, и
+        # человек либо переделывает готовое, либо перестаёт верить реестру (и тогда он не нужен).
+        if child_root:
+            against = reconcile_with_base(against, child_root)
         confs = classify(against, entry)
         data["active"] = [w for w in data["active"] if w.get("id") != wid] + [entry]
         save(path, data)
@@ -472,6 +596,8 @@ def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_jso
              "machine": _machine(), "owner_session": None,
              "depends_on": list(depends or []), "shared_contracts": list(contracts or [])}
     against = team_view(child_root, data["active"], published)
+    if child_root:   # #137: прогноз считается по СВЕРЕННОЙ карте и здесь — это третий путь ответа
+        against = reconcile_with_base(against, child_root)
     confs = classify(against, probe)
     if as_json:
         print(json.dumps({"schema_version": 1, "kind": "conflict-forecast",
@@ -507,7 +633,10 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
             if w.get("id") == wid:
                 w["status"] = status
                 if reason:
+                    # #137: причина ДАТИРУЕТСЯ. Без даты «код не написан — правок 0» читается как
+                    # утверждение о настоящем, хотя относится к одному давнему прогону.
                     w["status_reason"] = reason
+                    w["status_reason_at"] = _now_iso()
                 found = True
         if not found:
             print(f"ACTIVE-WORK: работа '{wid}' не найдена.")
