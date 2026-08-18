@@ -62,7 +62,10 @@ STATES = ("normal", "attention", "over_ceiling", "code_started", "unknown")
 # работы или настройка, а мерится здесь «начали ли ДЕЛАТЬ». Правка плана — не начало работы.
 _KIT_PREFIXES = (".ai/", ".claude/", ".github/", "features/", "planning/", "history/")
 _KIT_FILES = (".ai-ops.yaml", "ai-ops", "AI-OPS-ONBOARDING.md", "CLAUDE.md", "ROADMAP.md",
-              ".gitignore")
+              # `.gitattributes` добавлен 18.08.2026 вместе с его установкой: `ensure_gitattributes`
+              # пишет его в дочку, значит свежая поставка НЕ должна читаться как правка кода — ровно
+              # тот же случай, что был с `.gitignore` (проба шва test_fresh_install_is_not_a_code_change).
+              ".gitignore", ".gitattributes")
 
 
 def _is_kit_path(path):
