@@ -286,8 +286,9 @@ def classify(active, entry):
     branch и same-work добавлены 18.08.2026 — это ровно два случая из заявки #150, которые ломали
     команду: двойная работа на ОДНОЙ ветке и двойная работа над ОДНОЙ работой из разных сессий. Они
     видны и МЕЖДУ машинами, потому что опубликованная заявка несёт branch и id (team_view их подаёт)."""
+    from ai_ops_kit.engine import work_areas as _work_areas   # локально: engine импортирует lifecycle
     wid = entry.get("id")
-    areas = set(entry.get("affected_areas") or [])
+    areas = list(entry.get("affected_areas") or [])
     deps = set(entry.get("depends_on") or [])
     contracts = set(entry.get("shared_contracts") or [])
     my_branch = entry.get("branch")
@@ -313,7 +314,10 @@ def classify(active, entry):
             out.append({"kind": "branch", "id": w.get("id"), "branch": w.get("branch"),
                         "owner_session": w.get("owner_session"), "machine": w.get("machine"),
                         "detail": my_branch})
-        shared_areas = sorted(areas & set(w.get("affected_areas") or []))
+        # ЗАЯВКА #138: было `areas & set(...)` — то есть `unspecified` совпадал с `unspecified`, и две
+        # работы без зон «пересекались» друг с другом. Неизвестность не является пересечением; заодно
+        # считается ВЛОЖЕННОСТЬ каталогов (работа, объявившая пакет целиком, держит и его подсистемы).
+        shared_areas = _work_areas.areas_overlap(areas, w.get("affected_areas"))
         if shared_areas:
             out.append({"kind": "area", "id": w.get("id"), "branch": w.get("branch"),
                         "owner_session": w.get("owner_session"), "detail": shared_areas})

@@ -114,6 +114,9 @@ def _github_remote(child_root):
     return url if (r.returncode == 0 and ("github.com" in url or url.endswith(".git"))) else None
 
 
+from ai_ops_kit.engine import work_areas as _work_areas   # noqa: E402 — #138: одна формула зон
+
+
 def _pkg_signals(base_signals, pkg):
     """#1: package-specific view сигналов — write_scope/affected_areas/shared_contracts/capability/budget
     из объявления пакета WorkGraph. НЕ шлём одинаковые signals всем пакетам."""
@@ -121,7 +124,10 @@ def _pkg_signals(base_signals, pkg):
     ws = pkg.get("write_scope")
     if ws:
         sig["write_scope"] = ws
-        sig["affected_areas"] = pkg.get("affected_areas") or sorted({p.split("/")[0] for p in ws if "/" in p})
+        # #138: формула вывода зон теперь ОДНА на оба пути (`work_areas`). Прежняя копия жила здесь и
+        # брала первый сегмент пути, теряя записи без слэша (`quality`) — и расходилась бы с
+        # одиночным путём, где вывода не было вовсе.
+        sig["affected_areas"] = pkg.get("affected_areas") or _work_areas.from_write_scope(ws)
     elif pkg.get("affected_areas"):
         sig["affected_areas"] = pkg["affected_areas"]
     for k in ("shared_contracts", "capability", "budget"):
