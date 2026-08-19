@@ -1,0 +1,139 @@
+# Плоские имена модулей — слой совместимости, объявленный УХОДЯЩИМ.
+#
+# Уровень поверхности — `deprecated` (см. docs/api/public-surface.md).
+#
+# ЧТО ЭТО. До v3.30 весь код движка лежал плоско в `tools/`. Код переехал в пакеты
+# `ai_ops_kit/*`, а в `tools/` остались тонкие алиасы через подмену `sys.modules` — один объект
+# модуля, не копия. Они держат внешние вызовы, которые ещё пишут плоское имя: точки входа
+# установщика, документацию, дочку.
+#
+# ПОЧЕМУ РЕЕСТР. `AGENTS.md` запрещает заводить новые алиасы, но запрет без проверки — это текст.
+# Реестр делает его исполняемым: список заперт и ходит ТОЛЬКО ВНИЗ. Новый файл в `tools/`, которого
+# здесь нет, краснеет; удалённый обязан уйти отсюда. Модуль, родившийся в пакете, алиаса не
+# получает — ему незачем догонять совместимость с тем, чего никогда не было.
+#
+# Охрана — tests/unit/test_package_surface.py.
+#
+# ЗАМЕР на момент запирания (19.08.2026): 113 файлов в `tools/`, из них 112 алиасов и один
+# настоящий модуль — `_bootstrap.py` (он обязан существовать в каждом каталоге, откуда запускают
+# код, потому что кладёт пути ДО того, как станет возможен любой импорт).
+schema_version: 1
+kind: ai-ops-deprecated-surface
+
+# `_bootstrap` — не алиас, а настоящий код; в реестре он ради полноты описи каталога.
+real_code:
+  - _bootstrap
+
+flat_module_aliases:
+  - acceptance_verify
+  - active_work
+  - ai_ops_cli
+  - ai_ops_run
+  - ai_route
+  - approvals
+  - architecture_baseline
+  - atomic_planner
+  - bench_lite
+  - bench_performance
+  - branch_policy
+  - budget
+  - changelog_gen
+  - commit_policy
+  - concurrency_preflight
+  - context_compiler
+  - context_cost
+  - context_engine
+  - context_hybrid
+  - context_promotion_gate
+  - context_retrieval
+  - context_shadow
+  - contours
+  - contracts
+  - cost_account
+  - cost_method
+  - data_classification
+  - delegation_advisor
+  - delivery_plan
+  - deploy_readiness
+  - economic_preflight
+  - effect_metrics
+  - engineering_advisor
+  - environment_map
+  - evidence_collector
+  - evolution_triggers
+  - execution_pipeline
+  - gate_executor
+  - gate_policy
+  - gate_result_v2
+  - gate_runtime
+  - generate_artifacts
+  - generate_runtime
+  - gitio
+  - invariants
+  - kit_feedback
+  - kit_observability
+  - lifecycle_intent
+  - lifecycle_store
+  - merge_memory
+  - model_comparison
+  - model_router
+  - mutation_probe
+  - next_work
+  - orchestrator_http
+  - orchestrator_providers
+  - orchestrator_usage
+  - orchestrator
+  - parallel_executor
+  - parallel_live
+  - parallel_planner
+  - path_hygiene
+  - pipeline_evidence
+  - pipeline_failure
+  - pipeline_git
+  - pipeline_helpers
+  - pr_open
+  - preflight
+  - presenter
+  - process_spend
+  - product_bootstrap
+  - product_health
+  - project_detector
+  - promotion_qual
+  - provider_endpoints
+  - qual_run
+  - regression_evidence
+  - repo_audit
+  - repo_graph
+  - retrieval_bench
+  - review_branch
+  - roadmap
+  - run_handoff
+  - run_plan
+  - run_report
+  - seam_scan
+  - security_enforcement
+  - security_pack
+  - security_review_cascade
+  - security_scan
+  - semantic_lite
+  - session_boundary
+  - session_guardrails
+  - session_handoff
+  - session_launcher
+  - session_telemetry_provider
+  - session_telemetry
+  - short_path
+  - spec_levels
+  - staleness
+  - storybook_adapter
+  - storybook_query
+  - tool_broker
+  - tool_loop
+  - ui_evidence_collect
+  - ui_readiness
+  - usage_ledger
+  - verification_tiers
+  - work_areas
+  - workitem
+  - workpackage_executor
+  - worktree
