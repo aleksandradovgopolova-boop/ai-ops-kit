@@ -187,6 +187,17 @@ def test_every_installer_command_is_routed_by_the_wrapper():
     #     перечислено, чтобы проверка не требовала вернуть его установщику.
     intent_owned = {"status", "onboard", "session"}
 
+    # НЕ ДЛЯ ВЛАДЕЛЬЦА — и это отдельная категория, а не «забыли». Команда обслуживает МАШИНУ и
+    # работает на клоне parent'а, а не в дочке; вести её через обёртку дочки было бы неправдой о
+    # том, где она исполняется. Каждая запись обязана нести причину — иначе категория превратится
+    # в место, куда прячут забытое.
+    machine_only = {
+        "resolve-ref": "зовётся из templates/ci/ai-ops-update.yml на клоне parent'а: какую "
+                       "ревизию брать под объявленный канал. Владелец её не запускает",
+    }
+    assert all(v.strip() for v in machine_only.values()), \
+        "запись в machine_only без причины — тихий обход проверки маршрутов"
+
     # ДВЕ СТОРОНЫ, А НЕ ОДНА. Слева — команда установщика без маршрута (недостижима). Справа —
     # имя, объявленное «за движком», которого движок не знает: тогда команда пропала бы совсем.
     import sys as _sys
@@ -196,7 +207,7 @@ def test_every_installer_command_is_routed_by_the_wrapper():
     assert not orphan, (f"объявлено, что команду обслуживает движок, но такого интента нет: "
                         f"{orphan} — команда исчезла бы для владельца")
 
-    missing = sorted(installer_cmds - routed - intent_owned)
+    missing = sorted(installer_cmds - routed - intent_owned - set(machine_only))
     assert not missing, f"команды установщика недостижимы из дочки: {missing}"
 
 

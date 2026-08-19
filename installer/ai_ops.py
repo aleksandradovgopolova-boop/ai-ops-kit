@@ -236,6 +236,142 @@ def channel_gap(pkg_root=None):
                         f"который вы действительно готовы принимать")}
 
 
+def tag_channels(repo_dir=None, limit=60):
+    """{тег: объявленный им канал} по последним тегам, новые первыми. -> list[(tag, channel)].
+
+    Канал читается ИЗ САМОГО ТЕГА (`git show <tag>:registry/release-claims.yaml`), а не из рабочего
+    дерева: иначе выбор «дай мне stable» опирался бы на то, что объявляет HEAD, — то есть ровно на
+    ту версию, от которой канал и должен защищать.
+    Теги без поля `channel` пропускаются молча: их выпускали до того, как канал стал
+    зарабатываться (F-030), и считать их каким-либо каналом было бы догадкой.
+    """
+    root = str(repo_dir or PKG)
+    r = subprocess.run(["git", "-C", root, "tag", "--sort=-v:refname"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return []
+    out = []
+    for tag in [t.strip() for t in r.stdout.splitlines() if t.strip()][:limit]:
+        show = subprocess.run(["git", "-C", root, "show", f"{tag}:registry/release-claims.yaml"],
+                              capture_output=True, text=True)
+        if show.returncode != 0:
+            continue
+        try:
+            doc = yaml.safe_load(show.stdout) or {}
+        except yaml.YAMLError:
+            continue                      # битый файл в теге — не канал, а повреждение
+        ch = str(doc.get("channel") or "").strip().lower()
+        if ch in CHANNEL_ORDER:
+            out.append((tag, earned_channel(doc), str(doc.get("version") or "")))
+    return out
+
+
+def earned_channel(claims: dict) -> str:
+    """Канал, который тег ЗАРАБОТАЛ по своим же требованиям, а не объявил. -> str.
+
+    ЗАМЕР 19.08.2026: теги v3.36.7…v3.36.10 объявляют `channel: stable` при ПУСТОМ
+    `field_evidence` — то есть не выполняют требование `channels.stable.requires`, записанное в
+    том же файле. Это ровно та самообъявленность, из-за которой канал и стали зарабатывать
+    (F-030, v3.36.11 честно опустился до `qualification`).
+
+    Наивный выбор «новейший тег с channel: stable» отправил бы дочку НАЗАД, на v3.36.10 — старее
+    установленного и с тем самым дефектом. Поэтому объявление проверяется требованиями самого тега:
+    `field_evidence` пуст -> `stable` не заработан, тег считается `qualification`.
+    Требования читаются ИЗ ТЕГА: словарь мог меняться, и мерить старый выпуск сегодняшней линейкой
+    значило бы судить его правилом, которого тогда не было.
+    """
+    declared = str(claims.get("channel") or "").strip().lower()
+    if declared not in CHANNEL_ORDER:
+        return "edge"
+    vocab = claims.get("channels") or {}
+    if declared not in vocab:
+        # ТЕГ НЕ НЕСЁТ СВОИХ ТРЕБОВАНИЙ — проверить объявление НЕЧЕМ. Замер: v3.36.7…v3.36.10
+        # объявляют `stable`, а раздела `channels` в них нет вовсе; он появился в v3.36.11 вместе
+        # с правилом «канал зарабатывается» (F-030), и именно тогда версия честно опустилась до
+        # `qualification`. Принять такое объявление на веру значило бы отправить дочку НАЗАД, на
+        # выпуск, чья `stable` и была тем самым самообъявлением.
+        # «Не смогли проверить» — не «заработал»: потолок `qualification`, тег был выпущен, но
+        # полевых доказательств за ним не стоит ничего проверяемого.
+        cap = CHANNEL_ORDER.index("qualification")
+        return CHANNEL_ORDER[min(CHANNEL_ORDER.index(declared), cap)]
+    reqs = (vocab.get(declared) or {}).get("requires") or []
+    if "field_evidence" in reqs:
+        ev = claims.get("field_evidence") or []
+        need = (vocab.get(declared) or {}).get("field_evidence_min_repos", 1)
+        repos = {str((e or {}).get("repo") or e) for e in ev} if isinstance(ev, list) else set()
+        if len(repos) < int(need or 1):
+            # Не заработан — опускаем на один канал вниз, а не до edge: собственный контур
+            # (own_ci_green) тег всё же прошёл, иначе он не был бы выпущен.
+            return CHANNEL_ORDER[max(0, CHANNEL_ORDER.index(declared) - 1)]
+    return declared
+
+
+def resolve_update_ref(channel, repo_dir=None):
+    """Какую ревизию брать под запрошенный канал. -> dict.
+
+    {"ref": str|None, "kind": "tag"|"branch"|None, "channel": str, "reason": str}
+
+    ПОЧЕМУ ЭТО НУЖНО (аудит 19.08.2026). `templates/ci/ai-ops-update.yml` делал
+    `git clone --depth 1 <repo>` — то есть брал HEAD ветки по умолчанию, канал `edge`, — тогда как
+    дочка объявляла `stable`. Объявление и источник были не связаны ничем.
+
+    ОТКАЗ ВМЕСТО ТИХОГО ОТКАТА НА HEAD. Если под запрошенный канал тега нет, функция возвращает
+    `ref=None, kind=None` и НАЗЫВАЕТ причину. Молчаливый фолбэк на ветку воспроизвёл бы исходный
+    дефект: дочка просила бы `stable` и получала `edge`, только теперь через новый механизм.
+    """
+    ch = str(channel or "").strip().lower()
+    if ch not in CHANNEL_ORDER:
+        return {"ref": None, "kind": None, "channel": ch,
+                "reason": f"канал '{channel}' вне словаря {list(CHANNEL_ORDER)}"}
+    if ch == "edge":
+        return {"ref": None, "kind": "branch", "channel": ch,
+                "reason": "канал edge — это ветка по умолчанию, тег не выбирается"}
+    want = CHANNEL_ORDER.index(ch)
+    pairs = tag_channels(repo_dir)
+    # ПОНИЖЕНИЕ ОБНОВЛЕНИЕМ НЕ ЯВЛЯЕТСЯ — то же правило, что у `doctor` (B2-16). Без него запрос
+    # `stable` увёл бы дочку с 3.36.12 на 3.36.10: старее и с дефектом, ради которого канал ввели.
+    floor = installed_version() or "0"
+    for tag, tag_ch, ver in pairs:
+        if CHANNEL_ORDER.index(tag_ch) < want:
+            continue
+        if ver and parse_version(ver) <= parse_version(floor):
+            return {"ref": None, "kind": None, "channel": ch,
+                    "reason": (f"ближайший тег канала '{ch}' — {tag} ({ver}), а установлено "
+                               f"{floor}: это понижение, а не обновление. Обновление не выполняется")}
+        return {"ref": tag, "kind": "tag", "channel": ch,
+                "reason": f"{tag} ЗАРАБОТАЛ канал '{tag_ch}' — не слабее запрошенного '{ch}'"}
+    seen = ", ".join(f"{t}={c}" for t, c, _v in pairs[:3]) or "ни один тег не объявляет канал"
+    return {"ref": None, "kind": None, "channel": ch,
+            "reason": (f"под канал '{ch}' подходящего тега нет ({seen}). Обновление НЕ выполняется: "
+                       f"взять ветку по умолчанию значило бы дать '{CHANNEL_ORDER[0]}' там, где "
+                       f"просили '{ch}'")}
+
+
+def cmd_resolve_ref(argv):
+    """`ai-ops resolve-ref [--channel X] [--repo DIR] [--json]` — какую ревизию брать под канал.
+
+    Зовётся из `templates/ci/ai-ops-update.yml` после клона parent'а. Печатает ref в stdout (пусто
+    при отказе), причину — в stderr; код 0 — ревизия найдена, 2 — под канал брать нечего.
+    """
+    ch, repo, js = None, None, False
+    it = iter(argv[2:])
+    for a in it:
+        if a == "--channel":
+            ch = next(it, None)
+        elif a == "--repo":
+            repo = next(it, None)
+        elif a == "--json":
+            js = True
+    res = resolve_update_ref(ch or child_update_channel(), repo)
+    if js:
+        print(json.dumps(res, ensure_ascii=False))
+        return 0 if (res["ref"] or res["kind"] == "branch") else 2
+    if res["ref"]:
+        print(res["ref"])
+    print(res["reason"], file=sys.stderr)
+    return 0 if (res["ref"] or res["kind"] == "branch") else 2
+
+
 def parent_source():
     """URL parent-репозитория для parent.source ('git+<url>'), из git remote пакета.
     userinfo (креды) вырезается — секреты в конфиг не попадают. None, если remote недоступен."""
@@ -2842,6 +2978,8 @@ def _dispatch(argv):
         return cmd_validate()
     if cmd == "doctor":
         return cmd_doctor(argv)
+    if cmd == "resolve-ref":
+        return cmd_resolve_ref(argv)
     if cmd == "migrate":
         return cmd_migrate()
     if cmd == "verify-capabilities":
