@@ -172,6 +172,206 @@ def child_update_policy():
     return val if val in ("pr", "manual") else "pr"
 
 
+# ПОРЯДОК КАНАЛОВ — ОТ СЛАБОГО К СИЛЬНОМУ. Тот же словарь, что в registry/release-claims.yaml;
+# расхождение словарей ловит `validate_release_claims` на стороне пакета.
+CHANNEL_ORDER = ("edge", "qualification", "stable")
+
+
+def child_update_channel():
+    """`parent.update_channel` из .ai-ops.yaml. -> str.
+
+    ЗАМЕР 19.08.2026 (аудит): поле ОБЯЗАТЕЛЬНО по схеме, `init` пишет его в КАЖДУЮ дочку со
+    значением `stable` — и не читала ни одна строка кода (`grep -rn update_channel` давал только
+    схему и пример). Одновременно `ai-ops-update.yml` делает `git clone --depth 1` ветки по
+    умолчанию, то есть приносит канал `edge`. Дочка объявляла самый строгий канал и получала самый
+    слабый, молча. Ровно тот же класс, что F-022 у `update_policy`, найденный месяцем раньше.
+
+    ОТСУТСТВИЕ ЧИТАЕТСЯ КАК САМЫЙ СТРОГИЙ канал, а не как «любой сойдёт»: конфиг без обязательного
+    поля — старая или повреждённая установка, и делать из самого подозрительного состояния самый
+    мягкий вывод здесь уже дорого обошлось.
+    """
+    cfg = _read_child_cfg()
+    val = str((cfg.get("parent") or {}).get("update_channel", "") or "").strip().lower()
+    return val if val in CHANNEL_ORDER else "stable"
+
+
+def package_channel(pkg_root=None):
+    """Канал, который ЗАРАБОТАЛ пакет (release-claims.yaml -> channel). -> str | None.
+
+    None означает «не прочитали», и это НЕ то же, что «edge»: непрочитанный реестр не должен
+    выглядеть как честно объявленный слабый канал.
+    """
+    p = Path(pkg_root or PKG) / "registry" / "release-claims.yaml"
+    if not p.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    ch = str(doc.get("channel") or "").strip().lower()
+    return ch if ch in CHANNEL_ORDER else None
+
+
+def channel_gap(pkg_root=None):
+    """Дочка просит канал X, пакет заработал Y. -> dict.
+
+    {"asked": X, "offers": Y|None, "satisfied": bool|None, "message": str}
+    `satisfied is None` — состояние не прочитано; это отдельный ответ, а не «нет».
+    """
+    asked = child_update_channel()
+    offers = package_channel(pkg_root)
+    if offers is None:
+        return {"asked": asked, "offers": None, "satisfied": None,
+                "message": (f"канал обновлений: репозиторий просит '{asked}', а канал пакета "
+                            f"прочитать не удалось (registry/release-claims.yaml) — "
+                            f"это «не знаю», а не «подходит»")}
+    ok = CHANNEL_ORDER.index(offers) >= CHANNEL_ORDER.index(asked)
+    if ok:
+        return {"asked": asked, "offers": offers, "satisfied": True,
+                "message": f"канал обновлений: просят '{asked}', пакет даёт '{offers}'"}
+    return {"asked": asked, "offers": offers, "satisfied": False,
+            "message": (f"канал обновлений: репозиторий просит '{asked}', а пакет заработал только "
+                        f"'{offers}'. Обновление принесёт то, что есть, — не то, что объявлено. "
+                        f"Либо дождитесь '{asked}', либо объявите в .ai-ops.yaml тот канал, "
+                        f"который вы действительно готовы принимать")}
+
+
+def tag_channels(repo_dir=None, limit=60):
+    """{тег: объявленный им канал} по последним тегам, новые первыми. -> list[(tag, channel)].
+
+    Канал читается ИЗ САМОГО ТЕГА (`git show <tag>:registry/release-claims.yaml`), а не из рабочего
+    дерева: иначе выбор «дай мне stable» опирался бы на то, что объявляет HEAD, — то есть ровно на
+    ту версию, от которой канал и должен защищать.
+    Теги без поля `channel` пропускаются молча: их выпускали до того, как канал стал
+    зарабатываться (F-030), и считать их каким-либо каналом было бы догадкой.
+    """
+    root = str(repo_dir or PKG)
+    r = subprocess.run(["git", "-C", root, "tag", "--sort=-v:refname"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return []
+    out = []
+    for tag in [t.strip() for t in r.stdout.splitlines() if t.strip()][:limit]:
+        show = subprocess.run(["git", "-C", root, "show", f"{tag}:registry/release-claims.yaml"],
+                              capture_output=True, text=True)
+        if show.returncode != 0:
+            continue
+        try:
+            doc = yaml.safe_load(show.stdout) or {}
+        except yaml.YAMLError:
+            continue                      # битый файл в теге — не канал, а повреждение
+        ch = str(doc.get("channel") or "").strip().lower()
+        if ch in CHANNEL_ORDER:
+            out.append((tag, earned_channel(doc), str(doc.get("version") or "")))
+    return out
+
+
+def earned_channel(claims: dict) -> str:
+    """Канал, который тег ЗАРАБОТАЛ по своим же требованиям, а не объявил. -> str.
+
+    ЗАМЕР 19.08.2026: теги v3.36.7…v3.36.10 объявляют `channel: stable` при ПУСТОМ
+    `field_evidence` — то есть не выполняют требование `channels.stable.requires`, записанное в
+    том же файле. Это ровно та самообъявленность, из-за которой канал и стали зарабатывать
+    (F-030, v3.36.11 честно опустился до `qualification`).
+
+    Наивный выбор «новейший тег с channel: stable» отправил бы дочку НАЗАД, на v3.36.10 — старее
+    установленного и с тем самым дефектом. Поэтому объявление проверяется требованиями самого тега:
+    `field_evidence` пуст -> `stable` не заработан, тег считается `qualification`.
+    Требования читаются ИЗ ТЕГА: словарь мог меняться, и мерить старый выпуск сегодняшней линейкой
+    значило бы судить его правилом, которого тогда не было.
+    """
+    declared = str(claims.get("channel") or "").strip().lower()
+    if declared not in CHANNEL_ORDER:
+        return "edge"
+    vocab = claims.get("channels") or {}
+    if declared not in vocab:
+        # ТЕГ НЕ НЕСЁТ СВОИХ ТРЕБОВАНИЙ — проверить объявление НЕЧЕМ. Замер: v3.36.7…v3.36.10
+        # объявляют `stable`, а раздела `channels` в них нет вовсе; он появился в v3.36.11 вместе
+        # с правилом «канал зарабатывается» (F-030), и именно тогда версия честно опустилась до
+        # `qualification`. Принять такое объявление на веру значило бы отправить дочку НАЗАД, на
+        # выпуск, чья `stable` и была тем самым самообъявлением.
+        # «Не смогли проверить» — не «заработал»: потолок `qualification`, тег был выпущен, но
+        # полевых доказательств за ним не стоит ничего проверяемого.
+        cap = CHANNEL_ORDER.index("qualification")
+        return CHANNEL_ORDER[min(CHANNEL_ORDER.index(declared), cap)]
+    reqs = (vocab.get(declared) or {}).get("requires") or []
+    if "field_evidence" in reqs:
+        ev = claims.get("field_evidence") or []
+        need = (vocab.get(declared) or {}).get("field_evidence_min_repos", 1)
+        repos = {str((e or {}).get("repo") or e) for e in ev} if isinstance(ev, list) else set()
+        if len(repos) < int(need or 1):
+            # Не заработан — опускаем на один канал вниз, а не до edge: собственный контур
+            # (own_ci_green) тег всё же прошёл, иначе он не был бы выпущен.
+            return CHANNEL_ORDER[max(0, CHANNEL_ORDER.index(declared) - 1)]
+    return declared
+
+
+def resolve_update_ref(channel, repo_dir=None):
+    """Какую ревизию брать под запрошенный канал. -> dict.
+
+    {"ref": str|None, "kind": "tag"|"branch"|None, "channel": str, "reason": str}
+
+    ПОЧЕМУ ЭТО НУЖНО (аудит 19.08.2026). `templates/ci/ai-ops-update.yml` делал
+    `git clone --depth 1 <repo>` — то есть брал HEAD ветки по умолчанию, канал `edge`, — тогда как
+    дочка объявляла `stable`. Объявление и источник были не связаны ничем.
+
+    ОТКАЗ ВМЕСТО ТИХОГО ОТКАТА НА HEAD. Если под запрошенный канал тега нет, функция возвращает
+    `ref=None, kind=None` и НАЗЫВАЕТ причину. Молчаливый фолбэк на ветку воспроизвёл бы исходный
+    дефект: дочка просила бы `stable` и получала `edge`, только теперь через новый механизм.
+    """
+    ch = str(channel or "").strip().lower()
+    if ch not in CHANNEL_ORDER:
+        return {"ref": None, "kind": None, "channel": ch,
+                "reason": f"канал '{channel}' вне словаря {list(CHANNEL_ORDER)}"}
+    if ch == "edge":
+        return {"ref": None, "kind": "branch", "channel": ch,
+                "reason": "канал edge — это ветка по умолчанию, тег не выбирается"}
+    want = CHANNEL_ORDER.index(ch)
+    pairs = tag_channels(repo_dir)
+    # ПОНИЖЕНИЕ ОБНОВЛЕНИЕМ НЕ ЯВЛЯЕТСЯ — то же правило, что у `doctor` (B2-16). Без него запрос
+    # `stable` увёл бы дочку с 3.36.12 на 3.36.10: старее и с дефектом, ради которого канал ввели.
+    floor = installed_version() or "0"
+    for tag, tag_ch, ver in pairs:
+        if CHANNEL_ORDER.index(tag_ch) < want:
+            continue
+        if ver and parse_version(ver) <= parse_version(floor):
+            return {"ref": None, "kind": None, "channel": ch,
+                    "reason": (f"ближайший тег канала '{ch}' — {tag} ({ver}), а установлено "
+                               f"{floor}: это понижение, а не обновление. Обновление не выполняется")}
+        return {"ref": tag, "kind": "tag", "channel": ch,
+                "reason": f"{tag} ЗАРАБОТАЛ канал '{tag_ch}' — не слабее запрошенного '{ch}'"}
+    seen = ", ".join(f"{t}={c}" for t, c, _v in pairs[:3]) or "ни один тег не объявляет канал"
+    return {"ref": None, "kind": None, "channel": ch,
+            "reason": (f"под канал '{ch}' подходящего тега нет ({seen}). Обновление НЕ выполняется: "
+                       f"взять ветку по умолчанию значило бы дать '{CHANNEL_ORDER[0]}' там, где "
+                       f"просили '{ch}'")}
+
+
+def cmd_resolve_ref(argv):
+    """`ai-ops resolve-ref [--channel X] [--repo DIR] [--json]` — какую ревизию брать под канал.
+
+    Зовётся из `templates/ci/ai-ops-update.yml` после клона parent'а. Печатает ref в stdout (пусто
+    при отказе), причину — в stderr; код 0 — ревизия найдена, 2 — под канал брать нечего.
+    """
+    ch, repo, js = None, None, False
+    it = iter(argv[2:])
+    for a in it:
+        if a == "--channel":
+            ch = next(it, None)
+        elif a == "--repo":
+            repo = next(it, None)
+        elif a == "--json":
+            js = True
+    res = resolve_update_ref(ch or child_update_channel(), repo)
+    if js:
+        print(json.dumps(res, ensure_ascii=False))
+        return 0 if (res["ref"] or res["kind"] == "branch") else 2
+    if res["ref"]:
+        print(res["ref"])
+    print(res["reason"], file=sys.stderr)
+    return 0 if (res["ref"] or res["kind"] == "branch") else 2
+
+
 def parent_source():
     """URL parent-репозитория для parent.source ('git+<url>'), из git remote пакета.
     userinfo (креды) вырезается — секреты в конфиг не попадают. None, если remote недоступен."""
@@ -312,6 +512,38 @@ DEV_ONLY_PREFIXES = (
     "ai_ops_kit/devtools/",
 )
 
+# НЕ ПОДКЛЮЧЁННОЕ НЕ ЕДЕТ (19.08.2026, разбор после аудита).
+#
+# Двенадцать модулей, добавленных 19.08, уезжали в дочку и были там НЕДОСТИЖИМЫ: ни один
+# поставляемый модуль их не импортирует, ни один реестр, гейт, workflow или команда не называет,
+# и ни один документ кита о них не упоминает. Замер на свежей установке: 0 импортов из поставки
+# (единственная ссылка — внутри самой группы: watch_contract -> nightly_review), 0 упоминаний в
+# registry/quality/config/commands/workflows, 0 в README.md и docs/.
+#
+# Цена была видна сразу: потолок поставки пробит — 479 содержательных файлов при 475 и 3.7449 МБ
+# при 3.7. Поднимать потолок здесь было бы неправдой: он поднимается, когда в дочку едет то, что
+# в дочке РАБОТАЕТ (так его поднимали в v3.35 и 17.08), а не то, что до неё просто дотянулось.
+#
+# ЭТО НЕ ПРИГОВОР МОДУЛЯМ. Они задуманы работать именно в продуктовом репозитории; им не хватает
+# подключения — интента, гейта или записи в реестре. Как только подключение появится, модуль
+# обязан уехать обратно, и об этом скажет не память автора, а проверка: тест
+# `test_unwired_modules_are_really_unwired` краснеет, если имя из этого списка кто-то начал звать.
+# Список вправе только СОКРАЩАТЬСЯ — как ратчет слоёв и как потолок поставки.
+UNWIRED_MODULES = frozenset({
+    "ai_ops_kit/engops/delivery_size.py",
+    "ai_ops_kit/engops/merge_lifecycle.py",
+    "ai_ops_kit/engops/refusal_paths.py",
+    "ai_ops_kit/engops/session_thresholds.py",
+    "ai_ops_kit/intelligence/artifact_reality_check.py",
+    "ai_ops_kit/intelligence/decision_loop.py",
+    "ai_ops_kit/intelligence/nightly_review.py",
+    "ai_ops_kit/intelligence/outcome_analytics.py",
+    "ai_ops_kit/intelligence/refactoring_advisor.py",
+    "ai_ops_kit/intelligence/session_watch.py",
+    "ai_ops_kit/intelligence/watch_contract.py",
+    "ai_ops_kit/ui/experience_contract.py",
+})
+
 DEV_ONLY_TOOLS = frozenset({
     "bench_lite", "bench_performance", "retrieval_bench",  # бенчмарки самого движка/ретрива
     "model_comparison",                                    # сравнение моделей (исследование кита)
@@ -364,6 +596,8 @@ RUNTIME_VALIDATORS = frozenset({
 def is_runtime_asset(rel):
     """Едет ли файл managed_set в child-репозиторий? False — ассет разработки кита."""
     if rel.startswith(DEV_ONLY_PREFIXES):
+        return False
+    if rel in UNWIRED_MODULES:          # построено, но в дочке недостижимо — см. UNWIRED_MODULES
         return False
     stem = rel.rsplit("/", 1)[-1][:-3] if rel.endswith(".py") else None
     if rel.startswith("tools/") and stem in DEV_ONLY_TOOLS:
@@ -1150,6 +1384,14 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # рабочее дерево; `manual` -> владелец сам решает, когда обновляться, применение на месте
     # легитимно. `--in-place` — явное согласие или CI-путь (`templates/ci/ai-ops-update.yml`
     # применяет и САМ открывает PR, поэтому там политика соблюдена другим способом).
+    # КАНАЛ НАЗЫВАЕТСЯ ДО ПРИМЕНЕНИЯ, А НЕ ПОСЛЕ (19.08.2026, аудит). Здесь цена молчания выше,
+    # чем в `doctor`: `doctor` спрашивают, а обновление приезжает само по расписанию. Дочка
+    # объявляла `stable` и молча принимала то, что лежит в ветке по умолчанию.
+    # НЕ БЛОКИРУЕМ: пакет сегодня честно стоит на `qualification`, и блокировка заморозила бы
+    # каждую дочку. Сказать — обязанность кита; решить — право владельца.
+    _chan = channel_gap()
+    if _chan["satisfied"] is not True:
+        print(f"⚠ {_chan['message']}")
     if not in_place and child_update_policy() == "pr":
         return _deferred_update(inst, target, force=force, refresh_ci=refresh_ci)
     report = {"schema_version": 1, "command": "update", "from_version": inst,
@@ -1806,6 +2048,15 @@ def cmd_init(target_dir):
         psrc = parent_source()
         if psrc:
             text = re.sub(r"(^\s*source:\s*)\S+", rf"\g<1>{psrc}", text, count=1, flags=re.M)
+        # КАНАЛ ПИШЕМ ТОТ, ЧТО РЕАЛЬНО ОТДАЁМ (19.08.2026, аудит). В заготовке стоит `stable`, и
+        # он попадал в КАЖДУЮ установку — при том, что сам пакет заработал `qualification`, а
+        # ежедневный workflow приносит ветку по умолчанию, то есть `edge`. Владелец получал
+        # объявление строже реальности и никак об этом не узнавал.
+        # Поднять канал — одна строка в `.ai-ops.yaml`, и `doctor` скажет, выполнимо ли это
+        # сегодня. Писать за владельца обещание, которого мы не держим, — нельзя.
+        _pc = package_channel()
+        if _pc:
+            text = re.sub(r"(^\s*update_channel:\s*)\S+", rf"\g<1>{_pc}", text, count=1, flags=re.M)
         cfg.write_text(text, encoding="utf-8")
         edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
         print(f"создана заготовка {cfg} (версия {pkg_version()}; "
@@ -1952,6 +2203,21 @@ def cmd_doctor(argv=()):
     elif inst != avail:
         _dprint(f"источник {PKG} СТАРШЕ установленного ({avail} < {inst}) — это не повод для "
                 f"update: понижение версии обновлением не является")
+    # КАНАЛ ГОВОРИТСЯ ВСЛУХ (19.08.2026, аудит). Поле `parent.update_channel` обязательно по схеме,
+    # пишется в каждую дочку и до этой правки не читалось НИ ОДНОЙ строкой кода, тогда как
+    # `ai-ops-update.yml` приносит ветку по умолчанию, то есть канал `edge`. Дочка объявляла
+    # `stable` и получала `edge` — молча. Здесь это перестаёт быть молчаливым.
+    # Обновление НЕ блокируется: сегодня пакет честно стоит на `qualification`, и блокировка
+    # заморозила бы каждую дочку. Замечание — да; запрет — решение владельца, не установщика.
+    _chan = channel_gap()
+    if _chan["satisfied"] is False:
+        _dprint(f"⚠ {_chan['message']}")
+        ok = False
+    elif _chan["satisfied"] is None:
+        _dprint(f"⚠ {_chan['message']}")
+        ok = False
+    else:
+        _dprint(f"{_chan['message']} ✓")
     # ОТКУДА ПОСТАВЛЕНО — говорится ВСЛУХ (наблюдение владельца 14.08.2026). Кит ставился из копии
     # на черновой ветке и молчал об этом, хотя знает источник. Владелец вправе знать, что у него
     # стоит непроверенная версия: «работает и работает» — не то же самое, что «объявлено готовым».
@@ -2712,6 +2978,8 @@ def _dispatch(argv):
         return cmd_validate()
     if cmd == "doctor":
         return cmd_doctor(argv)
+    if cmd == "resolve-ref":
+        return cmd_resolve_ref(argv)
     if cmd == "migrate":
         return cmd_migrate()
     if cmd == "verify-capabilities":

@@ -55,8 +55,13 @@ def _load_effect_metrics(root: Path) -> dict:
         from ai_ops_kit.intelligence import effect_metrics
         result = effect_metrics.build(hist_dir)
         return result
-    except Exception:
-        return {"features": 0, "runs": 0, "error": "effect_metrics failed"}
+    # Узкий тип: модуль может не импортироваться, история — не читаться, запись — быть битой.
+    # Причина НАЗЫВАЕТСЯ; голое "effect_metrics failed" не давало понять, чинить установку или
+    # данные. ГРАНИЦА, КОТОРУЮ НАДО ЗНАТЬ: `features`/`runs` здесь остаются нулями, то есть сбор
+    # неотличим от «ничего не было» по самим числам — читать `error` обязательно.
+    except (ImportError, OSError, ValueError, KeyError, TypeError) as e:
+        return {"features": 0, "runs": 0,
+                "error": f"метрики эффекта не собраны ({type(e).__name__}: {e})"}
 
 
 def _filter_by_period(records: list[dict], period: str) -> list[dict]:
@@ -250,10 +255,15 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
-        print("SELFTEST: outcome_analytics.py")
-        print("  - collect_analytics: OK")
-        print("  - format_report: OK")
-        print("SELFTEST PASSED")
+        # ЧЕСТНЫЙ --selftest (фаза 0, 19.08.2026). Здесь печаталась строка о пройденном
+        # селфтесте и три строки «... : OK» — без единого вызова проверяемых функций. То есть
+        # модуль УТВЕРЖДАЛ проверку, которой не было: ровно класс «объявлено, но не
+        # исполняется», против которого стоит весь кит (ср. R-31/R-32 — две фиктивные проверки
+        # в валидаторах). Образец честной формы — devtools/mutation_probe.py: модуль объясняет
+        # себя и называет, где лежат его настоящие проверки. Правило репозитория (AGENTS.md):
+        # тест модуля живёт в tests/, а не в продакшн-модуле, который едет в child-репозиторий.
+        print(__doc__)
+        print("Проверки модуля — в tests/unit/ (AGENTS.md: selftest не живёт в продакшн-модуле).")
         return 0
 
     root = Path(args.root).resolve()

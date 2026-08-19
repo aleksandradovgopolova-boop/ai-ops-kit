@@ -336,6 +336,34 @@ def validate(plan, model=None, closed=None, root=None):
                           f"необязательным для этой цели")
         elif rel not in FREEZE_RELATIONS:
             errors.append(f"цель '{g['id']}': freeze_relation '{rel}' вне {list(FREEZE_RELATIONS)}")
+    # СНЯТИЕ ОБЯЗАНО ССЫЛАТЬСЯ НА СУЩЕСТВУЮЩЕЕ РЕШЕНИЕ. Иначе новое поле стало бы тем самым
+    # «разморозить вручную», от которого механизм и защищал: строка `freeze_lifted_by: почему-то`
+    # снимала бы правило без следа. Решение должно лежать в `decisions/registry.yaml` — там, где
+    # его увидит человек и переживёт сессия.
+    _lift = str((_fz or {}).get("lifted_by") or "").strip()
+    if _lift and root is not None:
+        _reg = Path(root) / "decisions" / "registry.yaml"
+        _known = False
+        if _reg.is_file():
+            try:
+                _doc = yaml.safe_load(_reg.read_text(encoding="utf-8")) or {}
+            except (OSError, yaml.YAMLError) as _e:
+                errors.append(f"заморозка снята решением '{_lift}', но decisions/registry.yaml "
+                              f"не разобран ({type(_e).__name__}) — сослаться не на что")
+                _doc = None
+            if _doc is not None:
+                _items = _doc.get("decisions") or _doc.get("episodes") or _doc.get("registry") or []
+                if isinstance(_items, dict):
+                    _known = _lift in _items
+                elif isinstance(_items, list):
+                    _known = any(str((d or {}).get("id")) == _lift for d in _items if isinstance(d, dict))
+                if not _known:
+                    errors.append(
+                        f"заморозка снята решением '{_lift}', которого нет в decisions/registry.yaml — "
+                        f"снятие без записанного решения это тихий обход правила, а не решение")
+        else:
+            errors.append(f"заморозка снята решением '{_lift}', но decisions/registry.yaml нет — "
+                          f"сослаться не на что")
     # Статус цели ТЕПЕРЬ ВЛИЯЕТ НА ПРИОРИТЕТ (`goal_priority`), поэтому опечатка в нём молча
     # переставляла бы весь план. Проверяем здесь — единственное место, где она видна человеку.
     for g in gl:
@@ -466,6 +494,22 @@ FREEZE_DECISION = "ep-2026-08-17-capability-freeze-until-second-brownfield"
 FREEZE_GOAL = "second-real-brownfield"
 FREEZE_OUTCOME = "owner_reaches_verified_pr_without_patching_the_kit"
 FREEZE_RELATIONS = ("run_condition", "extension")
+# СНЯТИЕ РЕШЕНИЕМ — ОТДЕЛЬНОЕ ПОЛЕ, А НЕ ИСХОД (19.08.2026, разбор плана после аудита).
+#
+# Заморозка снималась единственным способом — исходом, ставшим верным; так и задумано, чтобы
+# «разморозить вручную технически нечем». 19.08 владелец решил снять её ДО достижения условия
+# (`ep-2026-08-19-freeze-lifted`), и снятие записали единственным доступным способом: поставили
+# `owner_reaches_verified_pr_without_patching_the_kit: true`. Комментарий рядом честно говорил,
+# что условие не достигнуто, — но ЧИТАЕТ-ТО КОД ЗНАЧЕНИЕ, а не комментарий.
+#
+# ЦЕНА БЫЛА НЕ В ЗАМОРОЗКЕ. Этот же исход стережёт канал `stable`: пока он `true`, и `next`, и
+# любая проверка считают второй brownfield пройденным, а `verified PR = 0` и `field_evidence`
+# пуст. То есть решение о процессе молча переписало ФАКТ о продукте.
+#
+# Развязка: снятие объявляется своим полем на цели и обязано ссылаться на существующее решение
+# (проверяет `validate`), а исход остаётся тем, что он есть. Оба намерения сохранены и видны
+# порознь: заморозка снята явно, гейт stable честен.
+FREEZE_LIFT_FIELD = "freeze_lifted_by"
 
 
 def freeze_state(plan) -> dict:
@@ -490,6 +534,18 @@ def freeze_state(plan) -> dict:
         return {"frozen": False, "applies": False, "readable": True, "decision": FREEZE_DECISION,
                 "reason": f"в этом плане нет цели '{FREEZE_GOAL}' — заморозка умений относится к "
                           f"репозиторию кита, а не к плану продукта"}
+    lifted = str(g.get(FREEZE_LIFT_FIELD) or "").strip()
+    if lifted:
+        # Снято решением человека, а не достижением исхода. Исход при этом НЕ трогаем и
+        # возвращаем как есть: «правило больше не держит» и «условие выполнено» — разные факты,
+        # и путать их значит потерять второй.
+        reached = bool((g.get("outcome") or {}).get(FREEZE_OUTCOME))
+        return {"frozen": False, "applies": True, "readable": True, "decision": FREEZE_DECISION,
+                "lifted_by": lifted, "outcome_reached": reached,
+                "reason": (f"заморозка снята решением {lifted}"
+                           + ("" if reached else
+                              f"; исход {FREEZE_OUTCOME} при этом ещё НЕ достигнут — "
+                              f"снято решением, а не результатом"))}
     if not isinstance(g.get("outcome"), dict) or FREEZE_OUTCOME not in g["outcome"]:
         # ЦЕЛЬ ЕСТЬ, А ИСХОДА НЕТ — это НЕ «заморозки нет»: иначе правило снималось бы удалением
         # одной строки в том же файле, который оно охраняет.
@@ -498,6 +554,7 @@ def freeze_state(plan) -> dict:
                           f"состояние заморозки не прочитано, поэтому считается держащейся"}
     reached = bool(g["outcome"][FREEZE_OUTCOME])
     return {"frozen": not reached, "applies": True, "readable": True, "decision": FREEZE_DECISION,
+            "lifted_by": None, "outcome_reached": reached,
             "reason": (f"исход {FREEZE_OUTCOME} верен — заморозка снята" if reached else
                        f"исход {FREEZE_OUTCOME} ещё не верен — новые умения не принимаются")}
 

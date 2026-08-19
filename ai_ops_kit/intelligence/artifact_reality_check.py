@@ -227,10 +227,15 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
-        print("SELFTEST: artifact_reality_check.py")
-        print("  - check_artifacts: OK")
-        print("  - format_report: OK")
-        print("SELFTEST PASSED")
+        # ЧЕСТНЫЙ --selftest (фаза 0, 19.08.2026). Здесь печаталась строка о пройденном
+        # селфтесте и три строки «... : OK» — без единого вызова проверяемых функций. То есть
+        # модуль УТВЕРЖДАЛ проверку, которой не было: ровно класс «объявлено, но не
+        # исполняется», против которого стоит весь кит (ср. R-31/R-32 — две фиктивные проверки
+        # в валидаторах). Образец честной формы — devtools/mutation_probe.py: модуль объясняет
+        # себя и называет, где лежат его настоящие проверки. Правило репозитория (AGENTS.md):
+        # тест модуля живёт в tests/, а не в продакшн-модуле, который едет в child-репозиторий.
+        print(__doc__)
+        print("Проверки модуля — в tests/unit/ (AGENTS.md: selftest не живёт в продакшн-модуле).")
         return 0
 
     root = Path(args.root).resolve()

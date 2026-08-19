@@ -60,6 +60,16 @@ CONTINUE_RELATIONS = ("same_task", "continuation")
 NEW_RELATIONS = ("new_independent_task", "new_product")
 
 
+# Виды артефактов модуля. Объявлены КОНСТАНТАМИ, потому что по ним идёт разводка проверки:
+# строковый литерал в двух местах — ровно то, чем ошибка «kind должен быть CompletionRitual»
+# и жила.
+RITUAL_KIND = "CompletionRitual"
+RECOMMENDATION_KIND = "SessionRecommendation"
+OUTCOMES = ("continue", "compact", "clear", "new_session", "defer")
+# Исходы, которые велят человеку уйти отсюда: они обязаны нести точную команду.
+COMMANDED_OUTCOMES = ("compact", "clear", "new_session")
+
+
 def load_policy(child_root):
     """SessionEconomyPolicy из .ai-ops.yaml (session_economy), поверх дефолтов."""
     pol = dict(SESSION_ECONOMY_DEFAULTS)
@@ -169,7 +179,8 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
     # Каждый исход несёт оба числа: рекомендация, показывающая только контекст, скрывала бы ровно
     # тот случай, ради которого потолок сессии и появился (контекст после компакции нормальный).
     handoff_txt, handoff_path = _handoff_note(repo_path, snapshot.get("session_id"))
-    base = {"context_state": state, "context": ctx_txt,
+    base = {"kind": RECOMMENDATION_KIND, "schema_version": 1,
+            "context_state": state, "context": ctx_txt,
             "spend_state": spend_state, "session_spend": spend_txt,
             "measurement": snapshot.get("context_source") or snapshot.get("context_status"),
             # Состояние handoff несут ВСЕ исходы, а не только те, что советуют уйти: на `continue`
@@ -245,7 +256,7 @@ def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, check
         "usage_counted": snapshot.get("turns", 0) > 0,
     }
     return {
-        "kind": "CompletionRitual", "schema_version": 1,
+        "kind": RITUAL_KIND, "schema_version": 1,
         "workitem_id": workitem_id or snapshot.get("workitem_id"),
         "completion_report": {"pr": pr, "checks": checks},
         "usage_summary": {
@@ -263,17 +274,67 @@ def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, check
     }
 
 
-def check(r):
+def check_recommendation(rec):
+    """Валидация SessionRecommendation — СОБСТВЕННАЯ, а не заимствованная у ритуала.
+
+    ПОВОД (найдено лентой A 19.08.2026 на чистой установке). `./ai-ops session` печатал в stderr
+    «kind должен быть CompletionRitual» при КАЖДОМ запуске: на рекомендации звался `check()`,
+    который проверяет ДРУГОЙ артефакт. Работа `session-ritual-validators-are-dead` объявила
+    «check() зовётся на каждом produced-артефакте» и для одного из двух артефактов позвала чужой —
+    то есть проверка была, и она не проверяла ничего, кроме собственного несовпадения.
+
+    Проверяется то, ради чего рекомендация существует: исход из закрытого набора, причина, по
+    которой человек может решить, и ТОЧНАЯ команда там, где исход велит уйти. Рекомендация «уйди»
+    без команды заставляет человека вспоминать синтаксис ровно в тот момент, когда у него кончился
+    контекст.
+    """
+    if not isinstance(rec, dict):
+        return [f"SessionRecommendation должен быть словарём, получен {type(rec).__name__}"]
+    if rec.get("kind") != RECOMMENDATION_KIND:
+        return [f"kind должен быть {RECOMMENDATION_KIND}, получен {rec.get('kind')!r}"]
+    e = []
+    outcome = rec.get("outcome")
+    if outcome not in OUTCOMES:
+        e.append(f"недопустимый outcome: {outcome!r} (допустимы {', '.join(sorted(OUTCOMES))})")
+    if not str(rec.get("reason") or "").strip():
+        e.append(f"исход {outcome!r} без причины — совет, который нельзя ни принять, ни отвергнуть")
+    if outcome in COMMANDED_OUTCOMES and not rec.get("command"):
+        e.append(f"исход {outcome} обязан нести точную команду (NextCommand)")
+    # Оба числа — часть контракта: рекомендация, показывающая только контекст, скрывала бы ровно
+    # тот случай, ради которого потолок сессии и появился (контекст после компакции нормальный).
+    for field in ("context_state", "spend_state"):
+        if not str(rec.get(field) or "").strip():
+            e.append(f"нет поля {field}: рекомендация обязана называть оба состояния, а не одно")
+    return e
+
+
+def check_ritual(r):
     """Валидация ритуала: 4 допустимых исхода(+defer), рекомендация присутствует, команда есть кроме continue."""
     e = []
-    if not isinstance(r, dict) or r.get("kind") != "CompletionRitual":
-        return ["kind должен быть CompletionRitual"]
+    if not isinstance(r, dict) or r.get("kind") != RITUAL_KIND:
+        return [f"kind должен быть {RITUAL_KIND}"]
     rec = r.get("session_recommendation") or {}
-    if rec.get("outcome") not in ("continue", "compact", "clear", "new_session", "defer"):
+    if rec.get("outcome") not in OUTCOMES:
         e.append(f"недопустимый outcome: {rec.get('outcome')}")
-    if rec.get("outcome") in ("compact", "clear", "new_session") and not rec.get("command"):
+    if rec.get("outcome") in COMMANDED_OUTCOMES and not rec.get("command"):
         e.append(f"исход {rec.get('outcome')} обязан нести точную команду (NextCommand)")
     return e
+
+
+def check(r):
+    """Единый шов модуля: артефакт проверяется тем, что проверяет ЕГО, а не соседа.
+
+    Раньше `check` знал один артефакт из двух, и вызов на втором давал вечную ошибку о kind.
+    Разводка по `kind` — не удобство: она делает невозможным то же самое повторение, потому что
+    неизвестный вид теперь называется неизвестным, а не выдаётся за нарушение формы ритуала.
+    """
+    kind = r.get("kind") if isinstance(r, dict) else None
+    if kind == RECOMMENDATION_KIND:
+        return check_recommendation(r)
+    if kind == RITUAL_KIND:
+        return check_ritual(r)
+    return [f"неизвестный артефакт session_guardrails: kind={kind!r} "
+            f"(ожидается {RITUAL_KIND} или {RECOMMENDATION_KIND})"]
 
 
 def render_block(ritual):
@@ -336,6 +397,13 @@ def main(argv):
     rit = completion_ritual(snap, pol, workitem_id=wid, pr=pr, checks=checks,
                             next_relation=nrel or "new_independent_task", next_task=nxt,
                             at_safe_boundary=not unsafe, repo_path=str(Path(root).resolve()))
+    # ПРОВЕРКА НА СОБСТВЕННОМ ПУТИ, а не только в тестах. Работа `session-ritual-validators-are-dead`
+    # объявила «check() зовётся на каждом produced-артефакте», и это была правда для тестов и
+    # неправда для команды: `./ai-ops session` идёт СЮДА (через установщик), и здесь ритуал печатался
+    # непроверенным. Ошибка — предупреждение, а не отказ: команда read-only, и владелец должен
+    # увидеть проблему, а не потерять ответ.
+    for err in check(rit) + check_recommendation(rit.get("session_recommendation")):
+        print(f"session-check: {err}", file=sys.stderr)
     print(json.dumps(rit, ensure_ascii=False, indent=2) if "--json" in argv else render_block(rit))
     return 0
 

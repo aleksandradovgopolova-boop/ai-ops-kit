@@ -42,8 +42,13 @@ def _run_gh(*args, cwd=None) -> tuple[int, str, str]:
             timeout=30,
         )
         return result.returncode, result.stdout, result.stderr
-    except Exception as e:
-        return 1, "", str(e)
+    # Узкий тип (фаза 0, 19.08.2026): запуск может не состояться (нет бинаря, права, битый
+    # симлинк) или не уложиться в timeout. Любое ДРУГОЕ исключение здесь — дефект вызова, и он
+    # обязан всплыть, а не превратиться в «rc=1» и молча стать «команда не сработала».
+    # Тип ошибки НАЗЫВАЕТСЯ в тексте: «не смогли запустить» и «команда вернула ошибку» —
+    # разные ответы, и по голому str(e) их не различить.
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", f"{type(e).__name__}: {e}"
 
 
 def check_required_checks(root: Path) -> dict:
@@ -224,11 +229,15 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
-        print("SELFTEST: merge_lifecycle.py")
-        print("  - check_required_checks: OK")
-        print("  - check_pr_status: OK")
-        print("  - format_status: OK")
-        print("SELFTEST PASSED")
+        # ЧЕСТНЫЙ --selftest (фаза 0, 19.08.2026). Здесь печаталась строка о пройденном
+        # селфтесте и три строки «... : OK» — без единого вызова проверяемых функций. То есть
+        # модуль УТВЕРЖДАЛ проверку, которой не было: ровно класс «объявлено, но не
+        # исполняется», против которого стоит весь кит (ср. R-31/R-32 — две фиктивные проверки
+        # в валидаторах). Образец честной формы — devtools/mutation_probe.py: модуль объясняет
+        # себя и называет, где лежат его настоящие проверки. Правило репозитория (AGENTS.md):
+        # тест модуля живёт в tests/, а не в продакшн-модуле, который едет в child-репозиторий.
+        print(__doc__)
+        print("Проверки модуля — в tests/unit/ (AGENTS.md: selftest не живёт в продакшн-модуле).")
         return 0
 
     root = Path(args.root).resolve()

@@ -80,6 +80,7 @@ STANDALONE = [
     "validate_release_claims",
     "validate_research_artifacts",
     "validate_runtime_surface",
+    "validate_sandbox_boundary",
     "validate_scenario_evidence",
     "validate_security_domains",
     "validate_security_posture",
