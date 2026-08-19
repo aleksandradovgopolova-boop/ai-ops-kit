@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1143
+request_id: RR-016
+statement: >-
+  ЗАМЕР СВЯЗЕЙ на собственном плане кита (dogfood, 19.08.2026): вперёд цепочка сомкнута, назад —
+  почти нет. Из 42 закрытых работ (history/plan-history.yaml) 42 имеют цель (goal), 42 — названный
+  результат (result), 42 — проверяемое место исхода (pr 24 / evidence 13 / commit 12, объединение
+  42/42). Обратную связь «на каком основании это взято» машиночитаемо не несёт НИ ОДНА: поля
+  because_of / decision / research в схеме работы нет, а решение или исследование (ep-*, DP-*,
+  RR-*, ADR-*) упоминается хоть в каком-нибудь ПОЛЕ лишь у 5 из 42 закрытых и у 1 из 28 активных
+  работ. При этом основание в файлах ЕСТЬ — прозой в комментариях: 748 комментариев из 1182 строк
+  активного плана и 906 из 1923 строк истории. Вывод замера: кит уже пишет «почему», но пишет это
+  в форме, которую его собственный код прочитать не может.
+evidence_type: measured_result
+source:
+  title: "ai-ops-kit — planning/plan.yaml и history/plan-history.yaml, разбор YAML + подсчёт (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "yaml.safe_load обоих файлов: closed=42 (goal 42, result 42, pr 24, evidence 13, commit 12, finding 0), active=28 (evidence 7); regex ep-|DP-|RR-|ADR- → 5/42 и 1/28; grep -c '^\\s*#' → 748/1182 и 906/1923"
+  quote: "у `done` есть место, где результат перепроверяется"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-19"
+reliability:
+  level: high
+  rationale: "Числа получены разбором самих файлов программой, а не чтением глазами; воспроизводится одной командой."
+status: active
+superseded_by: null

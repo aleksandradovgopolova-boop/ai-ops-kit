@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1153
+request_id: RR-016
+statement: >-
+  Для AI-специфичной части предложения (типы prompt и model) в индустрии сложилась форма не
+  «тип коммита», а ВЕРСИОНИРУЕМЫЙ РЕЕСТР АРТЕФАКТОВ: MLflow Prompt Registry описывает себя как
+  централизованное хранилище шаблонов промптов, где каждое изменение получает версию с сообщением
+  коммита, метаданными и временем, версия помечается алиасом окружения (production / staging) и
+  продвигается через evaluation. Аналогично устроен Langfuse. Значение для решения: изменение
+  промпта или модели уместно фиксировать как новую версию именованной сущности, привязанную к
+  оценке, а не как префикс сообщения коммита — иначе теряется главное, ЧТО показала оценка этой
+  версии.
+evidence_type: documented_fact
+source:
+  title: "MLflow — Prompt Registry for LLMs & Agents"
+  url: "https://mlflow.org/prompt-registry"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "определение реестра и раздел про версионирование/алиасы/оценку"
+  quote: "It tracks every change to a prompt template with commit messages, timestamps, and metadata."
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; web_fetch)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-19"
+reliability:
+  level: medium
+  rationale: "Первоисточник вендора о собственном продукте (vendor-страница): факт наличия механики достоверен, оценочные формулировки о преимуществах не принимаются."
+status: active
+superseded_by: null

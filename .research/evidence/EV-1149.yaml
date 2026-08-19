@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1149
+request_id: RR-016
+statement: >-
+  Внешний стандарт словаря сущностей жизненного цикла существует и живёт с 2009 года: OSLC (Open
+  Services for Lifecycle Collaboration), с 2013 под управлением OASIS. Он делит жизненный цикл на
+  доменные спецификации — Requirements Management 2.1, Change Management 3.0, Quality Management
+  2.1, Architecture Management 3.0, Asset Management 2.0, Automation 2.0, Performance Monitoring
+  2.0 — и строится на REST + RDF + Linked Data, связывая артефакты РАЗНЫХ инструментов ссылками
+  без дублирования данных. Значение для решения: разбиение «требование / изменение / проверка /
+  архитектура» с обязательной трассируемостью — не изобретение, а зрелый отраслевой словарь; при
+  этом OSLC решает задачу связывания ИНСТРУМЕНТОВ между собой, а не хранения истины в репозитории.
+evidence_type: documented_fact
+source:
+  title: "OSLC — Specifications (open-services.net, OASIS)"
+  url: "https://open-services.net/specifications/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел активных публикаций: перечень доменных спецификаций"
+  quote: "Defines the OSLC services and vocabulary for the Change Management domain."
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; web_fetch)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первоисточник — страница спецификаций самого стандарта; названия доменов процитированы дословно."
+status: active
+superseded_by: null

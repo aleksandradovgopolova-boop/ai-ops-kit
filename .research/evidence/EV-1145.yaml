@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1145
+request_id: RR-016
+statement: >-
+  Research-контур изолирован намеренно и это ограничивает форму будущей цепочки: research/README.md
+  объявляет пять правил изоляции, третье прямо запрещает импортировать доменные сущности
+  Product/Technology, оставляя только строковые ссылки; данные дочки живут в отдельной .research/.
+  Проверено фактом: ни в одной из трёх подключённых дочек (~/ii-sreda, ~/Desktop/niti, ~/Code/niti)
+  каталога .research/ нет — установка исследовательского контура в дочку осознанно отложена до v0.3
+  (research/ACCEPTANCE.md, раздел «Отложено осознанно»). Следствие для модели: связь
+  Research → Decision у дочек сегодня физически не может быть ссылкой на объект — только строкой.
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — research/README.md, research/ACCEPTANCE.md + проверка дочерних репозиториев"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "research/README.md «Пять правил изоляции», п.3 и п.5; ACCEPTANCE.md «Отложено осознанно (не входит в v0.2): … установка .research/ в child-репозиториях (v0.3)»; ls .research в трёх дочках → отсутствует"
+  quote: "Research не импортирует доменные сущности Product/Technology"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-19"
+reliability:
+  level: high
+  rationale: "Правило процитировано дословно из README; отсутствие .research/ в дочках проверено прямым ls по трём путям."
+status: active
+superseded_by: null

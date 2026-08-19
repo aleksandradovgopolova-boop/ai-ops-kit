@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1140
+request_id: RR-016
+statement: >-
+  Модель продуктового репозитория у кита УЖЕ машиночитаема и УЖЕ замкнута в цикл:
+  registry/product-operating-model.yaml (444 строки) объявляет восемь контуров
+  (product_strategy, research_decisions, planning_execution, system_architecture, data_contracts,
+  engineering_quality_security, delivery_operations, analytics_learning), у каждого — вопрос, на
+  который он обязан отвечать, источник истины путями, сигналы изменения и роль-владелец; цикл
+  замыкается обратно в product_strategy. Семь состояний артефакта (verified / user_confirmed /
+  inferred / partial / stale / missing / unknown) отделяют «увидел» от «предположил» и от «не умею
+  видеть». Модель имеет потребителей в коде: ai_ops_kit/planning/{contours,roadmap,repo_audit,
+  delivery_plan}.py, validation/{validate_product_model,validate_own_medicine}.py, а гейт
+  contour_consistency ИСПОЛНЯЕТСЯ в engine/execution_pipeline.py:914. То есть предложенный
+  владельцем слой «репозиторий описывает не только код» реализован не как проза, а как реестр.
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — registry/product-operating-model.yaml + вызовы в ai_ops_kit/ (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "registry/product-operating-model.yaml: cycle (стр. ~27-40), artifact_states (~44-55), contours (142+); ai_ops_kit/engine/execution_pipeline.py:914"
+  quote: "Цикл замкнут: analytics_learning порождает insight, insight меняет приоритет в"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-19"
+reliability:
+  level: high
+  rationale: "Прямое чтение реестра и мест вызова в коде на версии 3.36.12; проверяется повторным grep."
+status: active
+superseded_by: null

@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1142
+request_id: RR-016
+statement: >-
+  Измерено, что происходит с сущностью без потребителя. Единственная дочка, где knowledge/graph.yaml
+  вообще заведён, — ИИ-Среда (~/ii-sreda). Последнее изменение файла — 30.07.2026; с того дня в
+  репозитории 667 коммитов, и ни один графа не коснулся. В графе 13 узлов типа feature при 31
+  каталоге в features/, а 86 ADR из docs/architecture/decisions/ в нём не представлены вовсе.
+  То есть граф не «отстал» — он перестал быть моделью и стал архивом одного дня. Это ровно тот
+  исход, о котором предупреждает сам product-operating-model: разрыв превращает модель в
+  документацию.
+evidence_type: measured_result
+source:
+  title: "~/ii-sreda — git log и содержимое knowledge/graph.yaml, features/, docs/architecture/decisions/"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "git log -1 -- knowledge/graph.yaml → 2026-07-30; git log --since=2026-07-30 | wc -l → 667; grep -c 'type: feature' → 13; ls features | wc -l → 31; ls docs/architecture/decisions | wc -l → 86"
+  quote: "Разрыв в любом месте превращает модель в документацию — репозиторий описывает продукт, но не управляет им."
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; замер на живой дочке)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-19"
+reliability:
+  level: high
+  rationale: "Числа получены прямыми командами на рабочем дереве дочки и воспроизводимы; цитата взята из реестра кита, не из графа."
+status: active
+superseded_by: null

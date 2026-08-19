@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1144
+request_id: RR-016
+statement: >-
+  Связи между сущностями отсутствуют не по недосмотру, а по устройству схем. schemas/workitem.schema.json
+  не имеет ни одного поля-ссылки на решение или исследование (schema_version, kind, id, task, workflow,
+  route_reasons, human_approval_required, paths, status, lifecycle_intent). В decisions-registry
+  эпизод решения обязан иметь question/decision/reason/reversibility/date, а связь с работой —
+  только необязательное свободнотекстовое `source`. В feature-blueprint блок links допускает
+  goal/initiative/epic/stories/experiments — решения и исследования там нет. ЕДИНСТВЕННЫЙ сомкнутый
+  мост в ките — FeatureLearning: schemas/feature-learning.schema.json несёт feature,
+  decision_package, decision, reused_evidence, research_gap одновременно, и FL-001 фактически
+  связывает DP-108 → стратегию → ADR-001. То есть цепочка, которую предлагает владелец,
+  реализована ровно в одной сущности из девяти.
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — schemas/{workitem,decisions-registry,feature-blueprint,feature-learning}.schema.json + product-learning/FL-001.yaml"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "properties перечислены разбором json каждой схемы; FL-001.yaml строки 1-20 (feature, decision_package: DP-108, follow_up: ADR-001)"
+  quote: "Связи с другими сущностями (предвестник Knowledge Graph, Ф4)."
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-19"
+reliability:
+  level: high
+  rationale: "Поля прочитаны из самих файлов схем машинно; FL-001 прочитан целиком."
+status: active
+superseded_by: null

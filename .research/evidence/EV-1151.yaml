@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1151
+request_id: RR-016
+statement: >-
+  Backstage Software Catalog — самый массовый живой пример каталога сущностей разработки — держит
+  НАМЕРЕННО МАЛЫЙ канон: Component, API, Resource как ядро плюс System и Domain для группировки и
+  User/Group для людей; связи выражаются глаголами provide / consume / depend on. Существенно для
+  решения не число типов, а причина их жизни: каждая сущность каталога существует потому, что её
+  ЧИТАЮТ плагины (страница сервиса, TechDocs, scaffolder), то есть у типа есть потребитель по
+  построению. Каталог без потребителя в этой архитектуре не предусмотрен.
+evidence_type: documented_fact
+source:
+  title: "Backstage — Software Catalog: The System Model"
+  url: "https://backstage.io/docs/features/software-catalog/system-model"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел The System Model: Component / API / Resource и группировки System, Domain"
+  quote: "infrastructure a component needs to operate at runtime, like BigTable databases, Pub/Sub topics, S3 buckets or CDNs"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; web_fetch)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-19"
+reliability:
+  level: medium
+  rationale: "Первоисточник документации; утверждение «тип существует ради потребителя» — прочтение архитектуры каталога, а не дословная формулировка Backstage, поэтому не high."
+status: active
+superseded_by: null

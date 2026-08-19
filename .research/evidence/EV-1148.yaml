@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1148
+request_id: RR-016
+statement: >-
+  Что дочка наследует ФАКТИЧЕСКИ (проверено на трёх подключённых репозиториях 19.08.2026):
+  planning/plan.yaml, ROADMAP.md, features/ и .ai/managed есть у всех трёх (~/ii-sreda,
+  ~/Desktop/niti, ~/Code/niti). НЕ наследуется ничего из контура знания: decisions/registry.yaml
+  отсутствует у всех трёх (при том что модель объявляет его required для контура
+  research_decisions), product-learning/ нет ни у одной, .research/ нет ни у одной,
+  knowledge/graph.yaml есть только у ИИ-Среды и заведён вручную. То есть сегодня дочка наследует
+  ПЛАН и НАПРАВЛЕНИЕ, но не наследует ПАМЯТЬ: ни решений, ни исследований, ни выученного.
+evidence_type: measured_result
+source:
+  title: "Проверка трёх дочерних репозиториев: ~/ii-sreda, ~/Desktop/niti, ~/Code/niti"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "ls по путям decisions/registry.yaml, knowledge/graph.yaml, planning/plan.yaml, product-learning, .research, ROADMAP.md, features в каждом из трёх репозиториев"
+  quote: "- {path: decisions/registry.yaml, required: true, note: \"значимые решения; эпизоды ADR\"}"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; замер на живых дочках)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-19"
+reliability:
+  level: high
+  rationale: "Прямая проверка файловой системы трёх установок; цитата — из реестра кита, объявляющего требование."
+status: active
+superseded_by: null

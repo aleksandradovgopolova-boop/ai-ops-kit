@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1141
+request_id: RR-016
+statement: >-
+  Словарь сущностей и связей у кита ТОЖЕ уже есть — registry/entities.yaml объявляет 15 типов
+  узлов (goal, initiative, epic, feature, story, design, api, analytics, dashboard, documentation,
+  release, metric, incident, experiment, insight) и 21 допустимую связь (contains, specified-by,
+  measured-by, delivered-by, observed-by, caused, affects, validates, derived-from, feeds и др.),
+  а schemas/knowledge-graph.schema.json задаёт форму графа. НО у этого словаря нет ни одного
+  потребителя в продуктовом пути: в проверенном охвате (.github/workflows/, quality/gates.yaml,
+  registry/workflows.yaml, весь ai_ops_kit/) validate_knowledge_graph.py не вызывается ниоткуда —
+  ссылки на него есть только в tests/unit/, docs/QUICKSTART.md, FILE_INDEX.md и CHANGELOG.
+  Ни один workflow не перечисляет граф в quality_gates, ни один гейт не называет его валидатором.
+  Оговорка охвата: утверждение отрицательное, проверено grep'ом по перечисленным путям 19.08.2026;
+  «не найдено» здесь означает «не найдено в этих путях», а не «невозможно».
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — registry/entities.yaml, quality/gates.yaml, registry/workflows.yaml, grep по дереву (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "registry/entities.yaml (47 строк: entity_types + relations); grep -rn 'validate_knowledge_graph' → только tests/, docs/, FILE_INDEX.md, CHANGELOG.md"
+  quote: "Определяет ТИПЫ сущностей и допустимые СВЯЗИ между ними."
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-19"
+reliability:
+  level: medium
+  rationale: "Позитивная часть (словарь существует) проверена чтением; негативная часть (потребителей нет) — отрицательное утверждение с названным охватом, поэтому не выше medium."
+status: active
+superseded_by: null

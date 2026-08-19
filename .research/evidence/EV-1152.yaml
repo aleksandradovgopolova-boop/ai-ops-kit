@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1152
+request_id: RR-016
+statement: >-
+  Продуктовая сторона (discovery) имеет собственный устоявшийся словарь, отличный от инженерного:
+  opportunity solution tree Терезы Торрес (2016, Continuous Discovery Habits) — четыре уровня:
+  Desired Outcome (корень), Opportunity Space (потребности и боли пользователей), Solution Space
+  (решения-кандидаты), Assumption Tests (проверки допущений). Значение для решения: между «целью»
+  и «фичей» отраслевая практика ставит ДВА промежуточных уровня — возможность и проверяемое
+  допущение, — и именно они отвечают на вопрос «почему мы это построили». В словаре кита
+  (registry/entities.yaml) есть goal, feature, experiment и insight, но нет узла «возможность»
+  и нет узла «допущение».
+evidence_type: documented_fact
+source:
+  title: "Product Talk — Opportunity Solution Tree (глоссарий Teresa Torres)"
+  url: "https://www.producttalk.org/glossary-discovery-opportunity-solution-tree/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "раздел с четырьмя уровнями дерева: Desired Outcome / Opportunity Space / Solution Space / Assumption Tests"
+  quote: "a simple way of visually representing the paths you might take to reach a desired outcome"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; web_fetch)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: medium
+  rationale: "Первоисточник автора концепции; сопоставление со словарём кита — вывод исследователя, а не утверждение источника."
+status: active
+superseded_by: null

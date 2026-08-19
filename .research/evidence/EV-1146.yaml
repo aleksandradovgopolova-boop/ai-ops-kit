@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1146
+request_id: RR-016
+statement: >-
+  Словаря типов коммитов в ките нет вообще: grep по rules/, docs/, registry/, templates/ на
+  'conventional commit', 'commit_type', 'тип коммита' 19.08.2026 не дал ни одного совпадения.
+  То есть предложение владельца пересобрать список префиксов не конкурирует с действующим
+  правилом — правила нет; при этом сама работа кита уже размечается по контурам, ролям и целям,
+  и именно там живёт классификация изменений. Оговорка охвата: проверены четыре названных дерева
+  на текущей версии 3.36.12; в шаблонах CI дочек отдельная проверка не проводилась.
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — grep по rules/ docs/ registry/ templates/ (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "grep -rniE 'conventional.?commit|commit_type|commit-prefix|тип коммита' rules docs registry templates → 0 совпадений"
+  quote: "Статус — только тот, которого код не знает: todo / in_progress / done / dropped."
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-19"
+reliability:
+  level: medium
+  rationale: "Отрицательное утверждение с названным охватом четырёх деревьев; за пределами охвата не проверялось."
+status: active
+superseded_by: null

@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1147
+request_id: RR-016
+statement: >-
+  Закон наследования у кита уже выведен полем и оплачен дважды, обе цены названы в самом реестре.
+  (1) Кит объявлял `**/entities/**` сигналом модели данных; в проекте на Feature-Sliced Design
+  (обкатка niti) `entities` — слой интерфейса, и это дало 6 ложных находок из 9. Лечение — не
+  правка кита, а право дочки спорить: change_signals_remove и change_signals_replace в
+  .ai-ops.yaml (v3.35.2). (2) Кит объявлял decisions/registry.yaml источником истины контура
+  решений; в ИИ-Среде решения лежат в docs/architecture/decisions/, объявленного китом файла нет —
+  и находка «истина не обновлена» срабатывала вечно: 12 находок из 41. Лечение — право дочки
+  объявить СВОЙ source_of_truth. Общее правило, подтверждённое двумя замерами: baseline, который
+  нельзя переопределить, производит не дисциплину, а ложные срабатывания.
+evidence_type: documented_fact
+source:
+  title: "ai-ops-kit — registry/product-operating-model.yaml, комментарий блока contours (self-evidence)"
+  url: ""
+  type: internal_data
+  published_at: "2026-08-19"
+  is_primary: true
+citation:
+  locator: "registry/product-operating-model.yaml, комментарий перед `contours:` (строки ~118-141): случай niti (6 из 9) и случай ii-sreda (12 из 41), поля change_signals_remove/replace и paths.plan/paths.roadmap"
+  quote: "и это дало 6 ложных находок из 9"
+captured_at: "2026-08-19"
+captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-19"
+reliability:
+  level: high
+  rationale: "Оба случая зафиксированы в самом реестре с числами и приведены как причина конкретных полей конфигурации, которые в схеме присутствуют."
+status: active
+superseded_by: null
