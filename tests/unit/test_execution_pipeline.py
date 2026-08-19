@@ -2059,7 +2059,10 @@ class TestRunPipelineSecurityPack:
 
     def test_security_secret_blocks(self, child_root):
         _init_git(child_root)
-        _aws = "AKIA" + "IOSFODNN7EXAMPLE"
+        # Не канонический пример AWS: `AKIAIOSFODNN7EXAMPLE` — публичный образец, и
+        # детектор с 19.08.2026 его не считает утечкой. Позитивной фикстуре нужен ключ,
+        # похожий на настоящий.
+        _aws = "AKIA" + "QRSTUVWX9012YZAB"
         sig = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
         import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
