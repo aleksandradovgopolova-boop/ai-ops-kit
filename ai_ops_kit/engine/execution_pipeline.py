@@ -613,13 +613,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                                 for m in _appr_missing],
                                    "approvals_missing": _appr_missing,
                                    "pack": {"applicable": security_pack_result["applicable_domains"]}}
-        elif overall == "clear":
+        elif overall in ("clear", "advisory"):
+            # `advisory` — домены, поднятые ТОЛЬКО совпадением по содержимому и БЕЗ находок
+            # (`security_pack._content_only`). Гейт их не держит, но и не молчит: список уезжает в
+            # evidence и в run-report, иначе «проверено чисто» и «проверять было нечего» слились бы.
+            _adv = security_pack_result.get("advisory") or []
             gate_ev["security"] = {"status": "pass",
                                    "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                   "advisory": _adv,
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
-                                            "note": "все применимые security-домены закрыты детерминированным evidence"}}
+                                            "advisory": _adv,
+                                            "note": ("все применимые security-домены закрыты детерминированным evidence"
+                                                     if not _adv else
+                                                     "детерминированные проверки чисты; домены "
+                                                     + ", ".join(_adv) + " подняты только совпадением по "
+                                                     "содержимому и без находок — предупреждение, не ворота")}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and review and committed_sha and not strict_judge_qualified
+              and committed_sha and not (strict_judge_qualified and review)
               and not (signals or {}).get("_sequence_internal")):
             # v3.7.3 (#5) STRICT SECURITY JUDGE: security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ
             # security-судья (strict_judge_qualified) ЛИБО ЧЕЛОВЕК (ApprovalRecord). Общий code reviewer НЕ
@@ -645,11 +655,14 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                                 "note": "нет qualified security-судьи -> needs_review закрыт "
                                                         "человеком (валидный ApprovalRecord)"}}
             else:
+                _why_no_judge = ("судья на этом уровне задачи выключен автоподбором"
+                                 if not review else "нет QUALIFIED security-судьи")
                 gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
-                                       "blockers": ["нет QUALIFIED security-судьи: needs_review домены "
+                                       "blockers": [_why_no_judge + ": needs_review домены "
                                                     "закрывает ТОЛЬКО квалифицированный судья или человек "
-                                                    "(ApprovalRecord); общий code reviewer НЕ закрывает "
-                                                    "security: " + ", ".join(security_pack_result["needs_review"])],
+                                                    "(ApprovalRecord, `ai-ops` approve по домену); общий code "
+                                                    "reviewer НЕ закрывает security: "
+                                                    + ", ".join(security_pack_result["needs_review"])],
                                        "pack": {"applicable": security_pack_result["applicable_domains"],
                                                 "needs_review": security_pack_result["needs_review"]}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]

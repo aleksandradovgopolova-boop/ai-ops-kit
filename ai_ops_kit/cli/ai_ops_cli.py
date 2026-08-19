@@ -731,7 +731,31 @@ def _process_gate(intent, task, child_root, signals, a, preview_mode):
             # Заявлено, но не подтверждено: называем, чего не хватает, и идём ОБЫЧНЫМ путём.
             _say(child_root, "from_short_path", d, None, None)
 
+    # ПОВТОРНЫЙ `specify` ПОД ПОДНЯВШИЙСЯ УРОВЕНЬ — НЕ РАЗБОР (B2-26, поле 19.08.2026).
+    # Потолок ловит «описание уточняется, кода нет, деньги текут». Дописывание недостающих разделов
+    # ни того, ни другого не делает: шаг детерминированный, конечный и модель не зовёт вовсе. Отказ
+    # экономической причиной здесь не просто лишний — он ВРЁТ: человек читает про деньги, а дело в
+    # разделах, и уровень в файле так и остаётся прежним.
+    top_up = {"missing": []}
+    if intent == "specify":
+        from ai_ops_kit.gates import spec_levels
+        top_up = spec_levels.pending_sections(child_root, wid, signals)
+
     check = process_spend.assess(child_root, wid, intent)
+    if check["blocks"] and top_up["missing"]:
+        _lvl = f"{top_up.get('level_in_file')} -> {top_up['level_now']} ({top_up['level_name']})"
+        if a.json:
+            print(json.dumps({"kind": "spec-top-up-exempt", "check": check,
+                              "level": _lvl, "sections_to_add": top_up["missing"]},
+                             ensure_ascii=False, indent=2))
+        else:
+            # печатается ОБЕИМ аудиториям намеренно: владелец видел на этом месте отказ про деньги,
+            # и заменить его молчанием значило бы починить только техническую половину
+            print(f"· уровень описания поднялся ({_lvl}): дописываю разделы "
+                  f"{', '.join(top_up['missing'])}. Это конечный шаг без обращения к модели — "
+                  f"потолок траты на разбор к нему не применяю.")
+        return None
+
     if check["blocks"] and not getattr(a, "spend_ok", False):
         run_cmd = f'./ai-ops run "{task or "<задача>"}" --feature {wid} --execute'
         cont_cmd = f'./ai-ops {intent} "{task or "<задача>"}" --feature {wid} --spend-ok'

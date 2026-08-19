@@ -233,56 +233,6 @@ goals:
 
 work:
   # ─── находки второго живого brownfield (прогон 19.08.2026, копия bolshe-ne-budu-menshe) ──────
-  - id: security-gate-closable-on-quick
-    title: Гейт безопасности либо закрывается на уровне задачи, либо не блокирует её
-    type: engineering
-    goal: green-means-checked
-    status: todo
-    owner_role: engineer
-    depends_on: []
-    write_scope: [ai_ops_kit/security/, ai_ops_kit/engine/, tests/, quality/]
-    value: high
-    affects: {engineering_quality_security: true, delivery_operations: true}
-    evidence: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md
-    # ЗАМЕР 19.08.2026 на живом продукте (копия `bolshe-ne-budu-menshe`, прогон QUICK). Диф — три
-    # файла: node-скрипт проверки оглавления, `package.json`, документ статуса. Гейт `security`
-    # вернул fail с блокером «нужен независимый security-reviewer/человек по доменам:
-    # authorization_idol, deployment_config, input_validation, rate_limiting» при `checks: []` и
-    # `evidence: []`. Домены подняты совпадением ПО СОДЕРЖИМОМУ (`security_pack._applies`) — это
-    # осознанный fail-closed, и он описан в коде.
-    # ЦЕНА ЭТОГО FAIL-CLOSED ИЗМЕРЕНА, и она не в шуме: на уровне QUICK судья ВЫКЛЮЧЕН автоподбором
-    # (`resolve_flags`: review только для ENGINEERING/PRODUCT/CRITICAL/AI_FEATURE/RESEARCH), то есть
-    # закрыть требование гейта на этом уровне НЕЧЕМ — путь к `ready_for_pr` закрыт по построению, а
-    # не по находке. Тот же класс уже записан прогоном 14.08 («сверка не запускается на QUICK»).
-    # РАЗВИЛКА, КОТОРУЮ НАДО РЕШИТЬ, А НЕ ЗАМАЗАТЬ: либо на QUICK поднимается security-судья (цена —
-    # деньги и время на каждой мелкой задаче), либо домены, поднятые ТОЛЬКО совпадением по
-    # содержимому и без находок, не блокируют, а предупреждают (цена — окно для настоящего дефекта в
-    # файле, чей путь не матчит). Выбор — замером на наборе реальных дифов, а не вкусом.
-    # ЧЕГО НЕ ДЕЛАТЬ: снимать блокировку домена, у которого есть НАХОДКИ (critical/high) — это
-    # инвариант, он уже стоит и он верный.
-
-  - id: specify-tops-up-sections-for-a-raised-level
-    title: Повторный specify дописывает разделы под возросший уровень, а не оставляет прежний
-    type: engineering
-    goal: green-means-checked
-    status: todo
-    owner_role: engineer
-    depends_on: []
-    write_scope: [ai_ops_kit/gates/, ai_ops_kit/cli/, tests/]
-    value: high
-    affects: {planning_execution: true, delivery_operations: true}
-    evidence: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md
-    # ЗАМЕР 19.08.2026 (и ПОВТОР находки 15.08, записанной в памяти проекта ИИ-Среды — на 3.36.12
-    # живо): `specify` с `size=medium` на существующем описании оставил файл на уровне L0 QUICK с
-    # шестью разделами; прогон уровня ENGINEERING останавливается на `spec-prestage-failed`, требуя
-    # полного набора. Владельцу приходится догадаться, что разделы нужно дописать руками — в выводе
-    # этого нет.
-    # ЧТО ИМЕННО СДЕЛАТЬ: либо `specify` дописывает недостающие разделы под новый уровень (сохраняя
-    # заполненное), либо прямо говорит «уровень вырос: не хватает разделов X, Y — допишите вот здесь».
-    # Второе дешевле и уже честно; первое удобнее. Молчание — единственный недопустимый вариант.
-    # ПОПУТНО ЗАМЕРЕНО: причиной отказа повторного `specify` стал экономический потолок разбора
-    # («на описание ушло больше, чем разрешено»), и он НЕ отличает «разбор дорогой» от «уровень
-    # вырос, нужно дописать» — человек читает про деньги там, где дело в разделах.
 
   # ─── second-real-brownfield ─────────────────────────────────────────────────────────────────
   - id: second-brownfield-run

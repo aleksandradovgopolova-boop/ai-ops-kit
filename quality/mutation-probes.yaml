@@ -961,3 +961,83 @@ probes:
   - tests/unit/test_doctor_requires_a_real_project_name.py
   why: '«Не прочитал» и «заготовок нет» — разные вещи, и подмена первого вторым это молчание,
     против которого стоит весь doctor. Мутация выдаёт нечитаемый конфиг за проверенный и чистый.'
+- id: top-up-exemption-is-narrow
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '    if check["blocks"] and top_up["missing"]:'
+  replace_with: '    if check["blocks"]:'
+  tests:
+  - tests/unit/test_specify_tops_up_sections.py
+  why: 'Освобождение от потолка держится ровно на «дописывать ЕСТЬ ЧТО». Мутация снимает условие, и
+    потолок перестаёт ловить то, ради чего заведён, — разбор по кругу без единой правки кода
+    (замер поля: две сессии по 200+ тысяч токенов). Цена ошибки здесь — деньги владельца, поэтому
+    широкое освобождение хуже, чем отсутствие правки.'
+- id: specify-consults-pending-sections
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/gates/spec_levels.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        top_up = spec_levels.pending_sections(child_root, wid, signals)'
+  replace_with: '        top_up = {"missing": []}'
+  tests:
+  - tests/unit/test_specify_tops_up_sections.py
+  why: 'ШОВ: `pending_sections` может сколько угодно правильно считать недостающие разделы — до
+    механизма дописывания управление доходит только там, где ПРОЦЕССНЫЙ ГЕЙТ его спрашивает. Мутация
+    оставляет функцию на месте и убирает вызов: ровно то состояние, в котором находка B2-26 и жила —
+    механизм F-029 работал, а до него не доходило.'
+- id: pending-sections-names-the-gap
+  kind: guard
+  file: ai_ops_kit/gates/spec_levels.py
+  find: '    out["missing"] = [sid for sid in required_sections(cls["level"]) if sid not in doc["sections"]]'
+  replace_with: '    out["missing"] = []'
+  tests:
+  - tests/unit/test_specify_tops_up_sections.py
+  why: 'Пустой ответ «дописывать нечего» — самый правдоподобный способ сломать эту правку тихо:
+    гейт снова отказывает экономической причиной, и выглядит это как работающий потолок. Мутация
+    делает функцию вечно-пустой.'
+- id: content-only-guess-is-not-a-gate
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    return bool(rs) and all(str(r).startswith("содержимое ") for r in rs)'
+  replace_with: '    return True'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Вся правка держится на различении «домен подняли догадкой по подстроке» и «домен подняли путём
+    или сигналом». Мутация стирает различие: воротами перестаёт быть ВСЁ, включая правку Dockerfile и
+    заявленный сигнал задачи. Это ровно тот ложный зелёный, ценой которого нельзя было платить за тишину.'
+- id: advisory-is-not-clear
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '                     ("advisory" if advisory else "clear"))),'
+  replace_with: '                     "clear")),'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: '«Проверено и чисто» и «домен подняли догадкой, проверять было нечего» — разные состояния, и
+    выдать второе за первое означает вернуть дефект другой стороной: человек прочитает `clear` и решит,
+    что домен смотрели. Мутация сливает их в один вердикт.'
+- id: gate-lets-advisory-through
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/execution_pipeline.py
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '        elif overall in ("clear", "advisory"):'
+  replace_with: '        elif overall == "clear":'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'ШОВ: пак может сколько угодно называть домен предупреждением — путь открывается только там, где
+    ГЕЙТ это читает. Мутация оставляет новый вердикт на месте и отключает его признание: снаружи всё
+    объявлено, а прогон стоит там же, где стоял 19.08.'
+- id: human-can-close-when-judge-is-off
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '              and committed_sha and not (strict_judge_qualified and review)'
+  replace_with: '              and review and committed_sha and not strict_judge_qualified'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Вторая половина работы: ворота обязаны быть ЗАКРЫВАЕМЫ там, где судьи нет вовсе. Мутация
+    возвращает прежнее условие — ветка человека требует `review`, которого на QUICK не бывает, и прогон
+    снова падает в общий отказ, называющий нужным того, кого на этом уровне не запускают.'
