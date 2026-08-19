@@ -50,6 +50,7 @@ from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
     _verify_remote_base, _change_context, _change_context_range,
     delivery_preflight as _delivery_preflight,
+    managed_drift_preflight as _managed_drift_preflight,
 )
 from ai_ops_kit.engine.pipeline_failure import (  # noqa: E402,F401
     _ENV_SYMPTOMS, _check_has_env_symptom, _env_proven_ok, _env_unqualified,
@@ -166,6 +167,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     delivery_pf = _delivery_preflight(child_root, base_ref, base_sha, open_pr)
     if delivery_pf:
         print(f"  ⚠ {delivery_pf['warning']}")
+    # B2-27 (прогон 19.08.2026): update --in-place оставляет managed-файлы в рабочем дереве,
+    # но worktree создаётся от HEAD — прогон идёт на старом ките. Предупреждаем ДО изоляции.
+    managed_pf = _managed_drift_preflight(child_root)
+    if managed_pf:
+        print(f"  ⚠ {managed_pf['warning']}")
     # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
     # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
     if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
