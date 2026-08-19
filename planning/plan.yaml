@@ -806,7 +806,7 @@ work:
     title: Прогон доводит задачу или прямо говорит, что не довёл — и не сужает тест до сделанного
     type: engineering
     goal: qualification-closeout
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/engine/, ai_ops_kit/gates/, quality/, tests/]

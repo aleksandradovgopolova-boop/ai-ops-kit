@@ -964,17 +964,24 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # недостижим). Остальные условия base_ok (committed_sha/revision/tree/env/approvals) по-прежнему строги.
     base_ok = (loop["stopped"] in ("done", "reevaluate-only")) and (committed_sha is not None) \
         and revision_matches and tree_ok and env_qualified and approvals_cover_ok
+    # B2-30 (run-finishes-the-task): если сверка критериев СОСТОЯЛАСЬ (verified=True) и есть
+    # невыполненные критерии (unmet не пуст) — прогон НЕ доводит задачу. Блокируем ready, чтобы
+    # модель не могла объявить успех при незакрытой основной части задачи. Если сверка не состоялась
+    # (verified=False) — не блокируем (advisory, как было).
+    acceptance_unmet_block = False
+    if acceptance_criteria.get("verified") and acceptance_criteria.get("unmet"):
+        acceptance_unmet_block = True
     if baseline_diff:
         # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
         # fix-задач): дополнительно требуем, чтобы правка РЕАЛЬНО починила падавшую проверку.
-        ready = base_ok and no_regressions and (not other_blocking_unmet) \
+        ready = base_ok and not acceptance_unmet_block and no_regressions and (not other_blocking_unmet) \
             and (not require_fix or len(fixed) > 0) and spec_depth_ok and (not context_overflow) \
             and spec_complete_ok
         ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
-        ready = base_ok and (not gates["blocked"]) and spec_depth_ok and (not context_overflow) \
-            and spec_complete_ok
+        ready = base_ok and not acceptance_unmet_block and (not gates["blocked"]) and spec_depth_ok \
+            and (not context_overflow) and spec_complete_ok
         ready_criterion = "all-green"
 
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
