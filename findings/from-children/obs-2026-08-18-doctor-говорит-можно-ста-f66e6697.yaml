@@ -1,0 +1,30 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-18-doctor-говорит-можно-ста-f66e6697
+at: '2026-08-18T21:45:50+00:00'
+statement: 'Doctor говорит «можно ставить задачу» при незаполненном имени проекта:
+  в .ai-ops.yaml с момента установки стоит заготовка project.name: <project-name>,
+  и ни один механизм этого не требует — то есть кит просит владельца отредактировать
+  файл и не проверяет, сделано ли это.'
+observation_class: defect
+severity: p2
+kit_version: 3.36.12
+child:
+  name: bnbm
+  path: /private/tmp/claude-501/-Users-sasad/56c78252-35c5-4e6f-b9c7-83635828ebae/scratchpad/bnbm
+  commit: 4b8f695a8b51
+evidence:
+- kind: file
+  path: .ai-ops.yaml
+  quote: 'name: <project-name>'
+- kind: command
+  command: python3 installer/ai_ops.py doctor
+  output: 'код возврата 0, последняя строка «Дальше: можно ставить задачу»'
+state: became_work
+state_reason: 'Проверено замером на живом продукте 19.08.2026, запись прогона: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md.
+  Заведено работой doctor-requires-a-real-project-name.'
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-18T21:45:59+00:00'
+decided_at: '2026-08-18T21:48:08+00:00'
+became_work: doctor-requires-a-real-project-name
