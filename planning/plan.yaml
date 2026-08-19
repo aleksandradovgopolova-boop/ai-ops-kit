@@ -366,7 +366,7 @@ work:
     title: Потолок объёма поставки предупреждает до пробоя, а не только после
     type: quality
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [tests/unit/test_installer.py, ai_ops_kit/validation/]
@@ -968,7 +968,7 @@ work:
     # Работа осталась на закрытой цели по недосмотру — и ровно из-за этого `next` три раза подряд
     # советовал её как «работу цели первого приоритета», обходя P1-находки живого прогона.
     goal: qualification-closeout
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [templates/, installer/, ai_ops_kit/cli/, tests/]
@@ -1208,7 +1208,7 @@ work:
     # то есть класс воспроизводится и в свежем коде, а не только в старом.
     type: quality
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: [printed-commands-are-runnable]
     evidence: .research/evidence/EV-1110.yaml
