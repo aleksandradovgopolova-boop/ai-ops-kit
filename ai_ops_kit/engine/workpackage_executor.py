@@ -505,7 +505,9 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
             agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review,
             security_reviewer_proposer=security_reviewer_proposer,
             strict_judge_qualified=strict_judge_qualified, wid=wid, child_root=child_root)
-        agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
+        # `advisory` наравне с `clear`: домены, поднятые только совпадением по содержимому и без
+        # находок, не держат агрегат — тот же выбор, что и на гейте (`security_pack._content_only`).
+        agg_sec_ok = (agg_sec or {}).get("overall") in ("clear", "advisory")
         agg_code_ok, agg_code_reviews = _aggregate_code_review(
             vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
         return {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
