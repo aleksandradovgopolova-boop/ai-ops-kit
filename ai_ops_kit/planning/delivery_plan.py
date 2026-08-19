@@ -289,10 +289,26 @@ def validate(plan, model=None, closed=None, root=None):
     dup_g = sorted({g for g in gids if gids.count(g) > 1})
     if dup_g:
         errors.append(f"дубли id целей: {dup_g}")
+    # ЗАМОРОЗКА УМЕНИЙ ИСПОЛНЯЕТСЯ ПРОВЕРКОЙ, А НЕ ПАМЯТЬЮ (работа `capability-freeze-enforced`).
+    # Решение владельца существовало записью с 17.08 и ничем не сверялось: 18.08 кит сам предложил
+    # взять работу из замороженной цели. Отношение цели к заморозке — обязательное объявление:
+    # необъявленная цель означала бы «правило не про меня», то есть тихий обход.
+    _fz = freeze_state(plan)
+    for g in (gl if _fz.get("applies") else []):
+        rel = g.get("freeze_relation")
+        if rel is None:
+            errors.append(f"цель '{g['id']}': не объявлено freeze_relation "
+                          f"({list(FREEZE_RELATIONS)}) — заморозка умений (решение {FREEZE_DECISION}) "
+                          f"проверяется по назначению цели, и необъявленное назначение делает правило "
+                          f"необязательным для этой цели")
+        elif rel not in FREEZE_RELATIONS:
+            errors.append(f"цель '{g['id']}': freeze_relation '{rel}' вне {list(FREEZE_RELATIONS)}")
 
     ws = items(plan)
     if not ws:
         warns.append("в плане нет ни одного элемента работы — направление объявлено, работа нет")
+    _frozen = frozen_work(plan)
+    _frozen_ids = set(_frozen)
     ids = [w.get("id") for w in ws]
     dup = sorted({i for i in ids if i and ids.count(i) > 1})
     if dup:
@@ -339,6 +355,17 @@ def validate(plan, model=None, closed=None, root=None):
         # СВЯЗЬ С РЕАЛЬНОСТЬЮ. Открытый PR и статус `todo` — противоречие: PR существует, значит
         # работа начата. Проверяется ФОРМА (в файле есть `pr`), а не состояние GitHub: объявленное
         # состояние чужой системы стареет молча, а форма — нет.
+        # ЗАМОРОЗКА: замороженную работу нельзя ВЕСТИ. Объявлять её в плане можно — иначе план
+        # перестал бы описывать продукт, — но взятие в работу при держащейся заморозке противоречит
+        # решению владельца, и проверка называет его номером, а не пересказом.
+        _fex = str(w.get("freeze_exception") or "").strip()
+        if st == "in_progress" and w.get("id") in _frozen_ids:
+            errors.append(f"{where}: работа взята в дело, но заморожена решением {FREEZE_DECISION} — "
+                          f"{_frozen[w.get('id')]}. Либо дождитесь исхода, либо объявите исключение "
+                          f"явно: `freeze_exception: <почему эта работа — условие прогона>`")
+        if "freeze_exception" in w and not _fex:
+            errors.append(f"{where}: freeze_exception объявлено пустым — исключение из решения "
+                          f"{FREEZE_DECISION} без причины это тихий обход, а не исключение")
         if w.get("pr") and st == "todo":
             errors.append(f"{where}: указан pr, но статус 'todo' — PR существует, значит работа "
                           f"начата; поставьте 'in_progress' либо уберите ссылку на PR")
@@ -385,6 +412,76 @@ def validate(plan, model=None, closed=None, root=None):
 # ── Вывод статуса ─────────────────────────────────────────────────────────────────────────────
 
 GLOBAL_SCOPE = "*"          # маркер «пишет всюду»: конфликтует с любой областью
+
+
+FREEZE_DECISION = "ep-2026-08-17-capability-freeze-until-second-brownfield"
+FREEZE_GOAL = "second-real-brownfield"
+FREEZE_OUTCOME = "owner_reaches_verified_pr_without_patching_the_kit"
+FREEZE_RELATIONS = ("run_condition", "extension")
+
+
+def freeze_state(plan) -> dict:
+    """Держится ли заморозка новых умений. -> {"frozen": bool, "reason": str, ...}.
+
+    Решение владельца `ep-2026-08-17-capability-freeze-until-second-brownfield`: новое умение не
+    принимается, пока исход `owner_reaches_verified_pr_without_patching_the_kit` не стал верным.
+
+    СНЯТИЕ — НЕ ДАТА И НЕ ФЛАГ, а тот самый исход: он читается из цели, поэтому «разморозить
+    вручную» технически нечем. Если цели или исхода в плане нет — это НЕ «заморозки нет»: считаем
+    заморозку держащейся и говорим, что состояние не прочиталось (fail-closed: иначе достаточно
+    удалить строку, чтобы правило исчезло).
+    """
+    g = next((x for x in goals(plan) if x.get("id") == FREEZE_GOAL), None)
+    # ПРАВИЛО ОТНОСИТСЯ К РЕПОЗИТОРИЮ КИТА, А НЕ К ПРОДУКТАМ ДОЧЕК. Заморозка — внутреннее решение о
+    # развитии кита; требовать её классификацию от плана чужого продукта значило бы экспортировать
+    # свою политику в чужой CI. Поймано первым же полным прогоном: обязательный признак уронил 12
+    # проверок, включая планы, которые кит СОЗДАЁТ дочке (`bootstrap`) и шаблон плана.
+    # Признак применимости — наличие САМОЙ ЦЕЛИ заморозки в плане: она есть только там, где решение
+    # принято.
+    if not g:
+        return {"frozen": False, "applies": False, "readable": True, "decision": FREEZE_DECISION,
+                "reason": f"в этом плане нет цели '{FREEZE_GOAL}' — заморозка умений относится к "
+                          f"репозиторию кита, а не к плану продукта"}
+    if not isinstance(g.get("outcome"), dict) or FREEZE_OUTCOME not in g["outcome"]:
+        # ЦЕЛЬ ЕСТЬ, А ИСХОДА НЕТ — это НЕ «заморозки нет»: иначе правило снималось бы удалением
+        # одной строки в том же файле, который оно охраняет.
+        return {"frozen": True, "applies": True, "readable": False, "decision": FREEZE_DECISION,
+                "reason": f"исход {FREEZE_GOAL}.{FREEZE_OUTCOME} не найден в плане — "
+                          f"состояние заморозки не прочитано, поэтому считается держащейся"}
+    reached = bool(g["outcome"][FREEZE_OUTCOME])
+    return {"frozen": not reached, "applies": True, "readable": True, "decision": FREEZE_DECISION,
+            "reason": (f"исход {FREEZE_OUTCOME} верен — заморозка снята" if reached else
+                       f"исход {FREEZE_OUTCOME} ещё не верен — новые умения не принимаются")}
+
+
+def goal_freeze_relation(plan) -> dict:
+    """{id цели: run_condition|extension|None}. Отношение объявлено НА ЦЕЛИ намеренно: оговорка
+    решения сказана про назначение работы, а проверять её по формулировке заявки — открыть лазейку
+    через слова (это названо в самом решении)."""
+    return {g["id"]: g.get("freeze_relation") for g in goals(plan)}
+
+
+def frozen_work(plan, single_goal=None) -> dict:
+    """{id работы: причина} для работ, которые заморозка не пускает в дело.
+
+    Заморожена работа цели `extension`, пока держится заморозка, — КРОМЕ работы с явным
+    `freeze_exception: <причина>`: исключение существует, но только словами и с причиной, потому что
+    молчаливый обход правила и есть то, от чего правило не работает.
+    """
+    st = freeze_state(plan)
+    if not st["frozen"]:
+        return {}
+    rel = goal_freeze_relation(plan)
+    out = {}
+    for w in items(plan):
+        goal = w.get("goal") or single_goal
+        if rel.get(goal) != "extension":
+            continue
+        if str(w.get("freeze_exception") or "").strip():
+            continue
+        out[w.get("id")] = (f"цель '{goal}' помечена как расширение умений, а заморозка держится "
+                            f"({st['reason']}; решение {st['decision']})")
+    return out
 
 
 def declared_running(plan) -> list:
