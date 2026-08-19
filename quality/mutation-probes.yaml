@@ -847,6 +847,43 @@ probes:
     пока его кто-то зовёт: рантайм находит команду через манифест. Мутация снимает привязку —
     содержимое ритуала остаётся идеальным и никем не читается. Границу кит объявляет честно: самозапуск
     это привязка рантайма, поэтому проверяется ровно то, за что кит отвечает, — объявление на месте.'
+- id: release-refuses-without-changelog-section
+  kind: guard
+  file: .github/workflows/release.yml
+  find: '            exit 1'
+  replace_with: '            echo "AI Ops Kit $TAG" > /tmp/notes.md'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'Здесь стояло «записки будут краткими» — выпуск выходил С ПУСТОЙ историей, и никто об этом не
+    узнавал. При темпе 236 версий за 40 дней (EV-1112) это не исключение, а способ по умолчанию.
+    Мутация возвращает пожимание плечами; отказ дешёвый и обратимый — тег ещё не создан.'
+- id: changelog-fragment-gate-is-called
+  kind: seam
+  covers:
+  - .github/workflows/package-quality.yml
+  - pyproject.toml
+  file: .github/workflows/package-quality.yml
+  find: '        run: towncrier check --compare-with origin/main'
+  replace_with: '        run: echo "гейт не вызывается"'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'ШОВ: гейт «в этой ветке добавлена запись» существует только пока его зовут, и зовут ИМЕННО в
+    уже обязательной джобе — новая джоба не входит в обязательные статусы защиты ветки без действия
+    владельца, то есть исполнялась бы «по желанию». Мутация оставляет конфигурацию towncrier на месте и
+    убирает вызов: всё объявлено, ничего не исполняется.'
+- id: release-step-is-wired
+  kind: seam
+  covers:
+  - .github/workflows/release.yml
+  file: .github/workflows/release.yml
+  find: "        if: steps.check_release.outputs.needed == 'true'"
+  replace_with: '        if: false'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'ШОВ, которого потребовал сам кит: `validate_mutation_probes` сказал «у механизма есть охранные
+    пробы, но НЕТ пробы шва» — и был прав. Ворота на выпуске существуют, только пока шаг вызывается;
+    мутация отключает вызов, оставляя всю логику на месте. Ровно так дефект и живёт: механизм написан,
+    конвейер до него не доходит.'
 - id: freeze-state-is-fail-closed
   kind: guard
   file: ai_ops_kit/planning/delivery_plan.py
