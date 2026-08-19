@@ -144,3 +144,39 @@ def test_json_form_is_machine_readable(installed):
     doc = json.loads(r.stdout)
     assert doc["kind"] == "ChildDoctorReport"
     assert doc["checks"] and "not_covered" in doc
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_a_remark_is_not_a_refusal(installed):
+    """«Допишите имя проекта» и «кит сломан» — разные ответы, и код возврата их различает.
+
+    ПОВОД: первая редакция возвращала 1 на ЛЮБОЙ несошедшийся пункт, и СВЕЖАЯ установка сразу
+    давала ненулевой код — `project.name` в ней по построению ещё заготовка. Поймал сквозной тест
+    пути владельца. Полный `doctor` установщика так не делает: «Работать можно, но есть замечания».
+    """
+    cfg = installed / ".ai-ops.yaml"
+    before = cfg.read_text(encoding="utf-8")
+    cfg.write_text(before.replace("name: demo", "name: <project-name>"), encoding="utf-8")
+    try:
+        rep = child_doctor.assess(installed)
+        bad = [c for c in rep["checks"] if c["ok"] is False]
+        assert bad, "заготовка в конфиге перестала быть замечанием — проверка ослепла"
+        assert not rep["blocking"], f"замечание засчитано блокером: {rep['blocking']}"
+        assert "работать можно" in rep["verdict"], rep["verdict"]
+    finally:
+        cfg.write_text(before, encoding="utf-8")
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_a_broken_install_really_blocks(installed):
+    """Обратная сторона: сломанная целостность обязана БЛОКИРОВАТЬ, а не стать замечанием."""
+    victim = installed / ".ai" / "managed" / "VERSION"
+    before = victim.read_text(encoding="utf-8")
+    victim.write_text("9.9.9\n", encoding="utf-8")
+    try:
+        rep = child_doctor.assess(installed)
+        assert rep["blocking"], "нарушенная целостность managed не заблокировала работу"
+        assert "работать нельзя" in rep["verdict"], rep["verdict"]
+    finally:
+        victim.write_text(before, encoding="utf-8")

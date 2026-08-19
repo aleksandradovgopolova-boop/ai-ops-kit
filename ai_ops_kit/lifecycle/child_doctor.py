@@ -36,6 +36,15 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 
 ZONES = ("managed", "project", "custom", "generated", "runtime")
 
+# ЗАМЕЧАНИЕ — НЕ ОТКАЗ (правка 19.08.2026, поймано сквозным тестом пути владельца).
+# Первая редакция возвращала 1 на ЛЮБОЙ несошедшийся пункт, и свежая установка сразу давала
+# ненулевой код: `project.name` в ней по построению ещё заготовка. Полный `doctor` установщика так
+# не делает и говорит «Работать можно, но есть замечания» — смешивать «кит сломан» и «допишите имя
+# проекта» значит обесценить оба ответа.
+# Блокирует только то, после чего кит НЕ РАБОТАЕТ; остальное — замечание, видимое и не мешающее.
+BLOCKING = {"зона managed", "версия установленной копии", "точка входа ./ai-ops",
+            "ai_managed_checksums", "validate_ai_ops_child"}
+
 # Пункты, которых в child-подмножестве нет, и почему. Список ОБЪЯВЛЕН, а не подразумевается:
 # молчаливое отсутствие пункта неотличимо от пройденного пункта.
 NEEDS_THE_KIT = {
@@ -110,16 +119,20 @@ def assess(child_root) -> dict:
     checks.append(_run_validator(root, "validate_child_config_filled"))
 
     bad = [c for c in checks if c["ok"] is False]
+    blockers = [c for c in bad if c["check"] in BLOCKING]
     unknown = [c for c in checks if c["ok"] is None]
-    if bad:
-        verdict = f"есть замечания: {len(bad)}"
+    if blockers:
+        verdict = (f"работать нельзя: {len(blockers)} — "
+                   + "; ".join(c["check"] for c in blockers[:3]))
+    elif bad:
+        verdict = f"работать можно, но есть замечания: {len(bad)}"
     elif unknown:
         verdict = f"работать можно; не проверено пунктов: {len(unknown)} — это не «в порядке»"
     else:
         verdict = "установка в порядке по тем пунктам, которые видны изнутри репозитория"
     return {"schema_version": 1, "kind": "ChildDoctorReport", "root": str(root),
             "installed": True, "checks": checks, "not_covered": NEEDS_THE_KIT,
-            "verdict": verdict}
+            "blocking": [c["check"] for c in blockers], "verdict": verdict}
 
 
 def render(report: dict) -> str:
@@ -147,7 +160,7 @@ def main(argv):
             break
     rep = assess(root)
     print(json.dumps(rep, ensure_ascii=False, indent=2) if js else render(rep))
-    return 0 if not [c for c in rep.get("checks", []) if c["ok"] is False] else 1
+    return 1 if rep.get("blocking") else 0
 
 
 if __name__ == "__main__":

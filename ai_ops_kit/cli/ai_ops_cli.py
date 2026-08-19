@@ -470,7 +470,8 @@ def _run_intent(intent, task, child_root, signals, a):
             print(json.dumps(rep, ensure_ascii=False, indent=2))
         else:
             print(child_doctor.render(rep))
-        return 0 if not [c for c in rep.get("checks", []) if c["ok"] is False] else 1
+        # Ненулевой код — ТОЛЬКО на блокерах: замечание («допишите имя проекта») не отказ.
+        return 1 if rep.get("blocking") else 0
 
     if intent == "session":
         from ai_ops_kit.engops import session_guardrails, session_telemetry
