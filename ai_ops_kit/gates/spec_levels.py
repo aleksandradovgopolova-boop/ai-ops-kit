@@ -295,6 +295,39 @@ def _add_missing_sections(sp, cls):
     return sp, False, {"added": added, "error": None}
 
 
+def pending_sections(child_root, wid, signals):
+    """Каких разделов не хватает СУЩЕСТВУЮЩЕЙ спеке под уровень, посчитанный по текущим сигналам.
+
+    ЧИСТОЕ ЧТЕНИЕ, БЕЗ ЗАПИСИ: этим вопросом решают, применять ли потолок траты, — а решение о
+    применении потолка не имеет права само менять артефакт.
+
+    ЗАЧЕМ (поле 19.08.2026, находка B2-26 второго brownfield, повтор находки 15.08). Повторный
+    `specify` под поднявшийся уровень — не «ещё один заход разбора», а КОНЕЧНОЕ дописывание
+    заготовок, и модель он не зовёт вовсе. Но процессный потолок видел «ещё один процессный шаг без
+    кода» и отказывал ЭКОНОМИЧЕСКОЙ причиной: человек читал про деньги там, где дело было в
+    разделах, а уровень в файле оставался прежним.
+
+    -> {"spec_exists", "level_now", "level_in_file", "level_name", "missing": [...]}.
+    Спеки нет — `missing` пуст: дописывать нечего, там обычный первый разбор.
+    """
+    import yaml
+    sp = _spec_path(child_root, wid)
+    cls = classify(signals)
+    out = {"spec_exists": bool(sp.is_file()), "level_now": cls["level"],
+           "level_name": cls["level_name"], "level_in_file": None, "missing": []}
+    if not sp.is_file():
+        return out
+    try:
+        doc = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — битый файл: чинит `create_spec`, здесь молчим, а не гадаем
+        return out
+    if not isinstance(doc, dict) or not isinstance(doc.get("sections"), dict):
+        return out
+    out["level_in_file"] = doc.get("level")
+    out["missing"] = [sid for sid in required_sections(cls["level"]) if sid not in doc["sections"]]
+    return out
+
+
 def validate_spec(child_root, wid, signals, work_root=None):
     """v2.110: провалидировать реальный spec-артефакт против обязательных разделов уровня.
     -> SpecCoverage (assess_from_artifacts) + флаг spec_artifact. Если spec.yaml нет — честно
