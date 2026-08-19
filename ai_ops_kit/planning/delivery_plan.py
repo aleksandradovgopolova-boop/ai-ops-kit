@@ -409,6 +409,14 @@ def validate(plan, model=None, closed=None, root=None):
         if w.get("pr") and st == "todo":
             errors.append(f"{where}: указан pr, но статус 'todo' — PR существует, значит работа "
                           f"начата; поставьте 'in_progress' либо уберите ссылку на PR")
+        # closed-defect-closes-its-issue: работа, закрывающая дефект, обязана довести сигнал до
+        # носителя (GitHub issue). Поле issue — опциональное, но если объявлено, обязано быть int.
+        # Проверка формы (есть ли поле), а не состояния GitHub: состояние чужой системы стареет.
+        if "issue" in w:
+            iss = w.get("issue")
+            if not isinstance(iss, int) or iss <= 0:
+                errors.append(f"{where}: issue должен быть положительным int (номер заявки), "
+                              f"получен {iss!r}")
         if st == "in_progress" and not (w.get("pr") or w.get("branch")):
             warns.append(f"{where}: работа идёт, но не названы ни pr, ни branch — состояние работы "
                          f"негде посмотреть")

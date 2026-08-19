@@ -1071,7 +1071,7 @@ work:
     title: Исправленный дефект закрывает свою заявку, иначе снаружи он выглядит открытым
     type: engineering
     goal: plan-as-control-plane
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/delivery/, ai_ops_kit/lifecycle/, tests/]
@@ -1093,6 +1093,7 @@ work:
     type: engineering
     goal: green-means-checked
     status: todo
+    issue: 161
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/cli/, tests/]

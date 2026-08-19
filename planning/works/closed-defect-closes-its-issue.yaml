@@ -3,7 +3,7 @@ work:
   title: Исправленный дефект закрывает свою заявку, иначе снаружи он выглядит открытым
   type: engineering
   goal: plan-as-control-plane
-  status: todo
+  status: done
   owner_role: engineer
   depends_on: []
   write_scope:

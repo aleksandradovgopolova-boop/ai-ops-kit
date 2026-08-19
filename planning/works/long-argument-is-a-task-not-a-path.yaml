@@ -5,6 +5,7 @@ work:
   type: engineering
   goal: green-means-checked
   status: todo
+  issue: 161
   owner_role: engineer
   depends_on: []
   write_scope:
