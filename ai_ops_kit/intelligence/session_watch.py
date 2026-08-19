@@ -45,7 +45,10 @@ def _load_policy(root: Path) -> dict:
     try:
         from ai_ops_kit.engops.session_guardrails import load_policy
         return load_policy(root)
-    except Exception:
+    # Узкий тип: `load_policy` свои ошибки чтения гасит сам и всегда возвращает словарь, поэтому
+    # реально сюда доходит только несостоявшийся импорт (модуль не поставлен). Дефолты ниже —
+    # ОБЪЯВЛЕННЫЙ запасной вариант, а не маскировка сбоя.
+    except ImportError:
         return {
             "session_token_budget": 20_000_000,
             "compact_recommended_at": 250_000,
@@ -168,10 +171,15 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
-        print("SELFTEST: session_watch.py")
-        print("  - check_session_health: OK")
-        print("  - format_watch: OK")
-        print("SELFTEST PASSED")
+        # ЧЕСТНЫЙ --selftest (фаза 0, 19.08.2026). Здесь печаталась строка о пройденном
+        # селфтесте и три строки «... : OK» — без единого вызова проверяемых функций. То есть
+        # модуль УТВЕРЖДАЛ проверку, которой не было: ровно класс «объявлено, но не
+        # исполняется», против которого стоит весь кит (ср. R-31/R-32 — две фиктивные проверки
+        # в валидаторах). Образец честной формы — devtools/mutation_probe.py: модуль объясняет
+        # себя и называет, где лежат его настоящие проверки. Правило репозитория (AGENTS.md):
+        # тест модуля живёт в tests/, а не в продакшн-модуле, который едет в child-репозиторий.
+        print(__doc__)
+        print("Проверки модуля — в tests/unit/ (AGENTS.md: selftest не живёт в продакшн-модуле).")
         return 0
 
     root = Path(args.root).resolve()

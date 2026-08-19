@@ -203,23 +203,81 @@ class TestNextDoesNotOfferFrozenWork:
         msg = presenter.from_next_work(rep)
         assert "не предлагаю" not in (msg.get("why_it_matters") or "")
 
-    def test_real_repo_no_longer_offers_the_frozen_work(self):
-        """На настоящем плане: та самая работа, которую кит предложил 18.08, больше не предлагается,
-        а остальные предложения остались."""
+    def test_nothing_frozen_is_ever_offered(self):
+        """На настоящем плане: что заморозка вычла, то не предлагается — сколько бы этого ни было.
+
+        ПЕРЕПИСАН 19.08.2026. Прежде тест требовал, чтобы на настоящем плане была КОНКРЕТНАЯ
+        замороженная работа (`watch-contract-for-night-review`). Заморозку сняли решением
+        владельца 19.08, работу закрыли — и тест стал падать не потому, что механизм сломан, а
+        потому, что был привязан к состоянию плана на один день. Инвариант же не в том, что
+        что-то заморожено, а в том, что ЗАМОРОЖЕННОЕ НЕ ПРЕДЛАГАЕТСЯ. Его и проверяем; сила
+        механизма на непустом множестве доказана отдельно, на фикстуре.
+        """
         from ai_ops_kit.planning import next_work
         rep = next_work.compute(".", me="session:test")
         offered = {(rep["next_best"] or {}).get("id")} | {p["id"] for p in rep["parallel_with"]}
         frozen_ids = {f["id"] for f in rep["frozen"]}
-        assert "watch-contract-for-night-review" in frozen_ids, rep["frozen"]
         assert not (offered & frozen_ids), f"замороженное всё ещё предлагается: {offered & frozen_ids}"
         assert rep["next_best"] is not None, "вычитание съело весь ответ"
 
 
 class TestLiftingIsTheOutcomeNotAnEdit:
+    """Снять заморозку можно ДВУМЯ способами, и они не подменяют друг друга.
+
+    (1) исход стал верным — так задумано изначально;
+    (2) решение человека, названное явно (`freeze_lifted_by`) — добавлено 19.08.2026, потому что
+        владелец снял заморозку до достижения условия, и записать это было НЕЧЕМ, кроме как
+        поставив исход верным. Исход при этом стережёт канал `stable`, то есть решение о процессе
+        молча переписывало факт о продукте.
+    Проверяется на ФИКСТУРЕ, а не на настоящем плане: настоящий план меняется каждый день, и тест,
+    привязанный к его сегодняшнему состоянию, ломается от честной работы.
+    """
+
+    def _frozen_plan(self):
+        return {"schema_version": 1, "kind": dp.KIND,
+                "goals": [{"id": dp.FREEZE_GOAL, "freeze_relation": "run_condition",
+                           "outcome": {dp.FREEZE_OUTCOME: False}},
+                          {"id": "g-ext", "freeze_relation": "extension"}],
+                "work": [{"id": "wi-new-skill", "goal": "g-ext", "status": "todo"}]}
+
     def test_flipping_the_outcome_unfreezes_everything(self):
-        plan = copy.deepcopy(dp.load("."))
-        goal = next(g for g in plan["goals"] if g["id"] == dp.FREEZE_GOAL)
-        assert dp.frozen_work(plan), "на настоящем плане заморозка не держится — проверять нечего"
-        goal["outcome"][dp.FREEZE_OUTCOME] = True
+        plan = copy.deepcopy(self._frozen_plan())
+        assert dp.frozen_work(plan), "фикстура не заморожена — проверять нечего"
+        next(g for g in plan["goals"] if g["id"] == dp.FREEZE_GOAL)["outcome"][dp.FREEZE_OUTCOME] = True
         assert dp.frozen_work(plan) == {}, \
             "исход стал верным, а работы остались заморожены — снятие не связано с исходом"
+
+    def test_an_explicit_decision_lifts_the_freeze_without_touching_the_outcome(self):
+        plan = copy.deepcopy(self._frozen_plan())
+        goal = next(g for g in plan["goals"] if g["id"] == dp.FREEZE_GOAL)
+        goal[dp.FREEZE_LIFT_FIELD] = "ep-2026-08-19-freeze-lifted"
+        st = dp.freeze_state(plan)
+        assert st["frozen"] is False, "решение названо, а заморозка держится"
+        assert st["lifted_by"] == "ep-2026-08-19-freeze-lifted"
+        assert st["outcome_reached"] is False, "исход подменён снятием — ровно то, что развязывали"
+        assert "НЕ достигнут" in st["reason"], \
+            "снятие решением не отличимо от достигнутого исхода в человеческом ответе"
+        assert goal["outcome"][dp.FREEZE_OUTCOME] is False, "снятие переписало факт"
+
+    def test_the_real_plan_does_not_claim_an_outcome_it_has_not_reached(self):
+        """Настоящий план: если заморозка снята решением — исход обязан остаться фактом.
+
+        Это и есть та ошибка, ради которой поле заведено: 19.08 исход стоял `true` при
+        `verified PR = 0` и пустом `field_evidence`, а он стережёт канал `stable`.
+        """
+        plan = dp.load(".")
+        st = dp.freeze_state(plan)
+        if st.get("lifted_by"):
+            assert st["outcome_reached"] is False or _outcome_has_evidence(), (
+                "исход объявлен достигнутым вместе со снятием решением — если он ДЕЙСТВИТЕЛЬНО "
+                "достигнут, заполните registry/release-claims.yaml -> field_evidence")
+
+
+def _outcome_has_evidence():
+    """Достигнутый исход обязан иметь полевое доказательство — иначе это объявление."""
+    import yaml as _y
+    from pathlib import Path as _P
+    p = _P("registry/release-claims.yaml")
+    if not p.is_file():
+        return False
+    return bool((_y.safe_load(p.read_text(encoding="utf-8")) or {}).get("field_evidence"))

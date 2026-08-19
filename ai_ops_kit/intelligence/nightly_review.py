@@ -22,6 +22,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+
+import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -37,8 +39,13 @@ def _git(root: Path, *args) -> tuple[int, str, str]:
             timeout=30,
         )
         return result.returncode, result.stdout, result.stderr
-    except Exception as e:
-        return 1, "", str(e)
+    # Узкий тип (фаза 0, 19.08.2026): запуск может не состояться (нет бинаря, права, битый
+    # симлинк) или не уложиться в timeout. Любое ДРУГОЕ исключение здесь — дефект вызова, и он
+    # обязан всплыть, а не превратиться в «rc=1» и молча стать «команда не сработала».
+    # Тип ошибки НАЗЫВАЕТСЯ в тексте: «не смогли запустить» и «команда вернула ошибку» —
+    # разные ответы, и по голому str(e) их не различить.
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", f"{type(e).__name__}: {e}"
 
 
 def _get_recent_commits(root: Path, since: str | None = None) -> list[dict]:
@@ -97,8 +104,7 @@ def _check_plan_status(root: Path) -> dict:
         return {"exists": False}
 
     try:
-        import yaml
-        with open(plan_path) as f:
+        with open(plan_path, encoding="utf-8") as f:
             plan = yaml.safe_load(f)
         work = plan.get("work", [])
         by_status = {}
@@ -106,8 +112,11 @@ def _check_plan_status(root: Path) -> dict:
             s = w.get("status", "unknown")
             by_status[s] = by_status.get(s, 0) + 1
         return {"exists": True, "total": len(work), "by_status": by_status}
-    except Exception:
-        return {"exists": True, "error": "parse failed"}
+    # Узкий тип: файл может не читаться, YAML — не разбираться, а пустой документ даёт None и
+    # падает на `.get`. Причина НАЗЫВАЕТСЯ: «план не прочитали» и «работ нет» — разные ответы,
+    # и обзор, который их путает, отчитается о тишине там, где была поломка.
+    except (OSError, yaml.YAMLError, AttributeError) as e:
+        return {"exists": True, "error": f"план не разобран ({type(e).__name__}: {e})"}
 
 
 def _check_ci_status(root: Path) -> dict:
@@ -132,9 +141,13 @@ def _check_open_prs(root: Path) -> dict:
         if result.returncode == 0:
             prs = json.loads(result.stdout)
             return {"open_prs": len(prs), "prs": prs[:5]}  # First 5
-    except Exception:
-        pass
-    return {"open_prs": -1}  # Unknown
+        return {"open_prs": None, "unavailable": f"gh вернул код {result.returncode}"}
+    # Узкий тип: gh может отсутствовать, не уложиться в timeout или отдать не-JSON.
+    # Здесь стоял `pass`, и причина исчезала совсем; отсутствие данных выглядело так же, как
+    # «открытых PR нет». `None` вместо `-1` — тот же инвариант, что и у usage: unavailable не
+    # число и не ноль, а отдельное состояние, и оно названо в `unavailable`.
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return {"open_prs": None, "unavailable": f"{type(e).__name__}: {e}"}
 
 
 def collect_delta(root: Path, since: str | None = None) -> dict:
@@ -166,8 +179,13 @@ def format_brief(delta: dict, root: Path) -> str:
     # 2. Что требует решения
     lines.append("\n## Требует решения\n")
     prs = delta.get("prs", {})
-    open_prs = prs.get("open_prs", 0)
-    if open_prs > 0:
+    open_prs = prs.get("open_prs")
+    # ТРИ СОСТОЯНИЯ, И ТРЕТЬЕ НЕ РАВНО ВТОРОМУ (инвариант кита, фаза 0). Прежде «не смогли
+    # спросить gh» давало -1, сравнение `-1 > 0` было ложным, и обзор печатал «нет открытых
+    # вопросов» — то есть отсутствие данных выдавалось за отсутствие работы.
+    if open_prs is None:
+        lines.append(f"- Открытые PR: не знаю ({prs.get('unavailable', 'причина не названа')}).")
+    elif open_prs > 0:
         lines.append(f"- Открытых PR: {open_prs}")
         for pr in prs.get("prs", [])[:3]:
             lines.append(f"  - #{pr['number']}: {pr['title']}")
@@ -182,7 +200,7 @@ def format_brief(delta: dict, root: Path) -> str:
 
     # 4. Рекомендация дня
     lines.append("\n## Рекомендация дня\n")
-    if open_prs > 3:
+    if open_prs is not None and open_prs > 3:
         lines.append("Разобрать очередь PR — накопилось больше 3 открытых.")
     elif commits:
         lines.append("Проверить последние коммиты и убедиться, что все изменения запланированы.")
@@ -202,10 +220,15 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
-        print("SELFTEST: nightly_review.py")
-        print("  - collect_delta: OK")
-        print("  - format_brief: OK")
-        print("SELFTEST PASSED")
+        # ЧЕСТНЫЙ --selftest (фаза 0, 19.08.2026). Здесь печаталась строка о пройденном
+        # селфтесте и три строки «... : OK» — без единого вызова проверяемых функций. То есть
+        # модуль УТВЕРЖДАЛ проверку, которой не было: ровно класс «объявлено, но не
+        # исполняется», против которого стоит весь кит (ср. R-31/R-32 — две фиктивные проверки
+        # в валидаторах). Образец честной формы — devtools/mutation_probe.py: модуль объясняет
+        # себя и называет, где лежат его настоящие проверки. Правило репозитория (AGENTS.md):
+        # тест модуля живёт в tests/, а не в продакшн-модуле, который едет в child-репозиторий.
+        print(__doc__)
+        print("Проверки модуля — в tests/unit/ (AGENTS.md: selftest не живёт в продакшн-модуле).")
         return 0
 
     root = Path(args.root).resolve()

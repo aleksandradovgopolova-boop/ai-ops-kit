@@ -148,46 +148,58 @@ def generate_design_options(contract: dict) -> list[dict]:
 
     UI-UX designer предлагает варианты, а не один «правильный» макет.
     """
-    options = []
-    user_goal = contract.get("user_goal", "")
-    flow = contract.get("flow", [])
+    # ВАРИАНТ ОБЯЗАН БЫТЬ ПРО ЭТОТ КОНТРАКТ (фаза 0, 19.08.2026). Здесь `user_goal` и `flow`
+    # читались и НЕ использовались ни разу — функция возвращала три одинаковых текста на любой
+    # вход. Это поймал линтер (F841: «имя обещает логику, которой нет»), и находка настоящая:
+    # «предложить варианты для контракта» и «напечатать три заготовки» — разные обещания, а
+    # подпись функции и её докстрока обещали первое.
+    user_goal = str(contract.get("user_goal") or "").strip()
+    flow = contract.get("flow") or []
+    goal = user_goal or "цель пользователя в контракте не названа"
+    steps = len(flow)
+    # Шаги называем словами контракта, а не выдумываем: без них вопрос остаётся общим и это видно.
+    step_names = [str(s.get("name") or s.get("step") or s) if isinstance(s, dict) else str(s)
+                  for s in flow]
 
-    # Option 1: Minimal (focus on core task)
-    options.append({
-        "id": "minimal",
-        "name": "Minimal",
-        "description": "Минимальный интерфейс, фокус на основной задаче",
-        "tradeoffs": {
-            "pros": ["Быстрое освоение", "Меньше когнитивной нагрузки"],
-            "cons": ["Меньше функций видимо", "Может потребовать больше кликов"],
+    def _q_hidden():
+        if steps <= 1:
+            return "Поток в контракте не расписан — какие шаги есть на самом деле?"
+        return (f"В потоке {steps} шаг(ов) ({', '.join(step_names[:4])}) — "
+                f"какие показывать сразу, какие раскрывать по требованию?")
+
+    options = [
+        {
+            "id": "minimal",
+            "name": "Minimal",
+            "description": f"Минимальный интерфейс: на экране только то, что ведёт к «{goal}»",
+            "tradeoffs": {
+                "pros": ["Быстрое освоение", "Меньше когнитивной нагрузки"],
+                "cons": ["Меньше функций видимо", "Может потребовать больше кликов"],
+            },
+            "questions": [f"Достаточно ли этого для power users, если цель — «{goal}»?"],
         },
-        "questions": ["Достаточно ли этого для power users?"],
-    })
-
-    # Option 2: Progressive disclosure
-    options.append({
-        "id": "progressive",
-        "name": "Progressive Disclosure",
-        "description": "Сложность раскрывается по мере необходимости",
-        "tradeoffs": {
-            "pros": ["Подходит новичкам и экспертам", "Чистый интерфейс"],
-            "cons": ["Сложнее реализовать", "Может скрыть важные функции"],
+        {
+            "id": "progressive",
+            "name": "Progressive Disclosure",
+            "description": f"Сложность раскрывается по мере необходимости; ядро — «{goal}»",
+            "tradeoffs": {
+                "pros": ["Подходит новичкам и экспертам", "Чистый интерфейс"],
+                "cons": ["Сложнее реализовать", "Может скрыть важные функции"],
+            },
+            "questions": [_q_hidden()],
         },
-        "questions": ["Какие функции показывать сразу, какие скрывать?"],
-    })
-
-    # Option 3: Dashboard-style
-    options.append({
-        "id": "dashboard",
-        "name": "Dashboard",
-        "description": "Всё на одном экране, максимум информации",
-        "tradeoffs": {
-            "pros": ["Всё видно сразу", "Для power users"],
-            "cons": ["Высокая когнитивная нагрузка", "Сложно для новичков"],
+        {
+            "id": "dashboard",
+            "name": "Dashboard",
+            "description": (f"Всё на одном экране: {steps} шаг(ов) потока видны сразу"
+                            if steps else "Всё на одном экране (поток в контракте не расписан)"),
+            "tradeoffs": {
+                "pros": ["Всё видно сразу", "Для power users"],
+                "cons": ["Высокая когнитивная нагрузка", "Сложно для новичков"],
+            },
+            "questions": [f"Какие метрики критичны, чтобы судить о «{goal}»?"],
         },
-        "questions": ["Какие метрики критичны для отображения?"],
-    })
-
+    ]
     return options
 
 
@@ -279,11 +291,15 @@ def main():
     args = ap.parse_args()
 
     if args.selftest:
-        print("SELFTEST: experience_contract.py")
-        print("  - validate_contract: OK")
-        print("  - generate_stories: OK")
-        print("  - generate_design_options: OK")
-        print("SELFTEST PASSED")
+        # ЧЕСТНЫЙ --selftest (фаза 0, 19.08.2026). Здесь печаталась строка о пройденном
+        # селфтесте и три строки «... : OK» — без единого вызова проверяемых функций. То есть
+        # модуль УТВЕРЖДАЛ проверку, которой не было: ровно класс «объявлено, но не
+        # исполняется», против которого стоит весь кит (ср. R-31/R-32 — две фиктивные проверки
+        # в валидаторах). Образец честной формы — devtools/mutation_probe.py: модуль объясняет
+        # себя и называет, где лежат его настоящие проверки. Правило репозитория (AGENTS.md):
+        # тест модуля живёт в tests/, а не в продакшн-модуле, который едет в child-репозиторий.
+        print(__doc__)
+        print("Проверки модуля — в tests/unit/ (AGENTS.md: selftest не живёт в продакшн-модуле).")
         return 0
 
     if not args.contract:
