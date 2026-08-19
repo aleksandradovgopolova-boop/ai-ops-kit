@@ -1180,3 +1180,101 @@ work:
     # МУТАЦИОННАЯ ПРОБА ОБЯЗАТЕЛЬНА: снятие каждой новой проверки обязано ронять свой тест, и это
     # называется в отчёте (`quality/mutation-probes.yaml`, правило dp-002).
 
+
+  # ── МОДЕЛЬ ПРОДУКТОВОЙ РАЗРАБОТКИ (исследование RR-016, пакет DP-115, 19.08.2026) ─────────────
+  # Владелец предложила зафиксировать «репозиторий — источник истины продукта, AI Ops — операционная
+  # система разработки» с моделью сущностей и цепочкой Research → Decision → Feature → Release → Eval.
+  # Исследование показало, что модель в ките уже есть, а три вещи, которые писатель объявил
+  # отсутствующими, существуют: поля-связки `decision`/`finding` (delivery_plan.py:58), словарь типов
+  # коммитов (pyproject.toml:206, ворота с 18.08.2026) и потребитель графа знаний (run_report.py:54).
+  # Все три опровержения нашёл независимый судья и подтвердила перепроверка. Поэтому работы ниже —
+  # не стройка, а ВКЛЮЧЕНИЕ уже объявленного, и каждая ждёт решения владельца.
+  # Пакет решения: .research/decisions/DP-115.yaml (draft, вердикт раунда 1 — needs_work, правки
+  # внесены), отчёт судьи целиком: .research/decisions/DP-115-review-round1.md.
+
+  - id: work-names-its-basis
+    title: >-
+      У закрываемой работы есть названное основание: включить проверку уже объявленных полей
+      `decision` / `finding`, а не заводить новое
+    type: engineering
+    goal: product-decision-loop
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    human_decision: >-
+      ШАГ 0 ИССЛЕДОВАНИЯ, без него работа не начинается: подтвердить саму потребность. Ни одно
+      доказательство DP-115 не показывает, что владельцу нужен ответ «почему это построили», а
+      принцип dp-004 требует сокращать расстояние от намерения до результата — обязательное поле
+      его скорее удлиняет. Проверка — разговор на десять минут на собственном материале: взять три
+      закрытые работы кита и сказать, возникает ли вопрос «почему мы это сделали» и в каких
+      ситуациях. Не возникает или разрешается быстрее чтением истории — работа снимается целиком.
+      Второе решение того же разговора: включать ли правило как блокирующее сразу или non-blocking
+      (по принципу dp-002 — non-blocking, пока не обкатано).
+    evidence: .research/decisions/DP-115.yaml
+    write_scope:
+      - ai_ops_kit/planning/
+      - tests/unit/
+    value: medium
+    affects: {planning_execution: true, research_decisions: true}
+
+  - id: knowledge-graph-required-or-retired
+    title: >-
+      Граф знаний либо получает требующего потребителя, либо снимается с обязательной части модели
+    type: quality
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    human_decision: >-
+      Решение владельца, а не вывод исследования. Сегодня граф читается необязательным флагом
+      отчёта прогона (run_report.py:54, `--graph`), не требуется ни одним гейтом, а его валидатор
+      не вызывается ниоткуда, кроме тестов и документации. Измеренная цена этого промежуточного
+      положения: в ИИ-Среде граф простоял 645 коммитов без единого изменения — 13 узлов-фич при 31
+      каталоге фич и ни одного из 86 принятых там решений. Два честных исхода: сделать сверку с
+      графом требуемой (и оплатить его ведение) или снять граф с обязательных и не притворяться.
+    evidence: .research/decisions/DP-115.yaml
+    write_scope:
+      - quality/gates.yaml
+      - registry/entities.yaml
+      - ai_ops_kit/lifecycle/
+    value: medium
+    affects: {engineering_quality_security: true, research_decisions: true}
+
+  - id: commit-carries-the-link-and-reaches-the-child
+    title: >-
+      Коммит несёт ссылку на решение, а правило формата доезжает до дочки
+    type: delivery
+    goal: plan-as-control-plane
+    status: todo
+    owner_role: delivery
+    depends_on: [work-names-its-basis]
+    human_decision: >-
+      Два вопроса владельцу. Первый: добавлять ли к сообщению коммита строку-ссылку на решение или
+      работу («Решение: ep-…»), читаемую в обе стороны — от коммита к решению и от решения ко всем
+      его коммитам. Расширять сам словарь типов НЕ предлагается: он принят 17.08 и исполняется
+      воротами с 18.08, а типов вида `decision`/`research` общепринятая спецификация не содержит,
+      потому что коммит классифицирует изменение кода, а не продуктовое событие. Второй: едет ли
+      правило формата в дочку — сегодня commitizen живёт в воротах родителя и не поставляется
+      (зафиксировано в DP-114).
+    evidence: .research/decisions/DP-115.yaml
+    write_scope:
+      - pyproject.toml
+      - templates/
+      - installer/
+    value: medium
+    affects: {delivery_operations: true, planning_execution: true}
+
+  - id: dp-115-second-judge-round
+    title: >-
+      Пакет DP-115 доводится до вердикта: второй судейский раунд по исправленной редакции
+    type: quality
+    goal: product-decision-loop
+    status: todo
+    owner_role: engineer
+    depends_on: []
+    evidence: .research/decisions/DP-115-review-round1.md
+    write_scope:
+      - .research/decisions/
+      - .research/evidence/
+    value: medium
+    affects: {research_decisions: true}
