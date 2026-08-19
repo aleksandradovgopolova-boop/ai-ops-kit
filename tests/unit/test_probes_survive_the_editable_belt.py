@@ -87,3 +87,23 @@ def test_third_party_list_is_explicit():
     """Список зависимостей ЯВНЫЙ: подкладывать «всё, что найдём» значило бы вернуть тот же ambient
     другим путём — только теперь молча и от имени проб."""
     assert ambient.THIRD_PARTY == ("yaml",), ambient.THIRD_PARTY
+
+
+# ─────────── охрана, не зависящая от машины (в CI пояса нет — поведение там не различается) ───────────
+
+def test_isolation_flag_is_declared_in_the_command():
+    """Объявление изоляции проверяется САМО.
+
+    Поведенческая пара выше работает только там, где пояс есть. В CI его нет, и снятие `-S` там
+    ничего не меняет — охрана оказалась бы машинно-зависимой, то есть тем же дефектом, который эта
+    работа чинит. Здесь проверяется факт: интерпретатор получает `-S` первым аргументом."""
+    cmd = ambient.command(["x.py", "--flag"])
+    assert cmd[0] == sys.executable and cmd[1] == ambient.ISOLATION_FLAG, cmd
+    assert cmd[2:] == ["x.py", "--flag"], cmd
+
+
+def test_isolated_env_carries_its_own_dependencies(tmp_path):
+    """И вторая половина: PYTHONPATH указывает на СВОЙ каталог зависимостей, а не пуст."""
+    e = ambient.env(tmp_path)
+    assert e["PYTHONPATH"] == str(ambient.deps_dir(tmp_path)), e.get("PYTHONPATH")
+    assert (Path(e["PYTHONPATH"]) / "yaml").exists(), "зависимости не подложены"

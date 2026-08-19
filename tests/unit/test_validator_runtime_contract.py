@@ -300,3 +300,20 @@ def test_module_description_is_a_real_docstring(rel):
     assert ast.get_docstring(ast.parse(src)) is not None, (
         f"{rel}: описание не является докстрингом (__doc__ = None) — "
         f"перенеси его ВЫШЕ `from __future__ import annotations`")
+
+
+@pytest.mark.unit
+def test_validator_run_goes_through_the_isolated_runner(monkeypatch, tmp_path):
+    """ШОВ, машинно-независимо: запуск валидатора обязан идти ЧЕРЕЗ `ambient.run`.
+
+    Поведением это не проверить там, где пояса нет (в CI его нет), а «инструмент есть, вызова нет» —
+    ровно тот способ, которым дефект и жил. Поэтому проверяется сам вызов."""
+    seen = {}
+
+    def _spy(args, cwd, base, timeout=300, text=True, **kw):
+        seen["args"] = [str(a) for a in args]
+        return subprocess.CompletedProcess(args, 0, b"", b"")
+
+    monkeypatch.setattr(ambient, "run", _spy)
+    _run(tmp_path, "validate_claims")
+    assert seen and seen["args"][0].endswith("validate_claims.py"), seen

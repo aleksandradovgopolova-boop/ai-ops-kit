@@ -1121,8 +1121,8 @@ probes:
 - id: probes-run-without-site
   kind: guard
   file: tests/ambient.py
-  find: '    return subprocess.run([sys.executable, "-S", *[str(a) for a in args]],'
-  replace_with: '    return subprocess.run([sys.executable, *[str(a) for a in args]],'
+  find: '    return [sys.executable, ISOLATION_FLAG, *[str(a) for a in args]]'
+  replace_with: '    return [sys.executable, *[str(a) for a in args]]'
   tests:
   - tests/unit/test_probes_survive_the_editable_belt.py
   why: 'Изоляция держится ровно на `-S`: пояс editable-установки живёт в `.pth` site-packages, и ни
@@ -1175,7 +1175,7 @@ probes:
   # `test_standalone_validator_is_green_from_a_copy[validate_release_claims]` там краснеет по
   # посторонней причине — «мутант убит» перестало бы что-либо значить. Берём ровно тот тест,
   # который этот шов и охраняет.
-  - tests/unit/test_validator_runtime_contract.py::test_corrupted_source_of_truth_is_caught
+  - tests/unit/test_validator_runtime_contract.py::test_validator_run_goes_through_the_isolated_runner
   why: 'ШОВ, которого потребовал собственный валидатор проб: механизм изоляции может быть сколь
     угодно правильным — он работает только там, где его ЗОВУТ. Мутация возвращает прежний запуск в
     одном из трёх переведённых мест, и проба «испортить реестр в копии» снова читает рабочий клон.

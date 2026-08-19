@@ -55,10 +55,23 @@ def env(base: Path, **extra) -> dict:
     return e
 
 
+ISOLATION_FLAG = "-S"
+
+
+def command(args) -> list:
+    """Командная строка изолированного запуска. ОТДЕЛЬНОЙ ФУНКЦИЕЙ НАМЕРЕННО.
+
+    Поведенческая проверка изоляции возможна только там, где пояс ЕСТЬ: в CI editable-установки
+    нет, и снятие `-S` там ничего не меняет — проба «убрать флаг» выжила бы, то есть охрана
+    оказалась бы машинно-зависимой. Ровно тот дефект, который эта работа и чинит, только этажом
+    выше. Поэтому объявление изоляции проверяется САМО, независимо от машины.
+    """
+    return [sys.executable, ISOLATION_FLAG, *[str(a) for a in args]]
+
+
 def run(args, cwd, base: Path, timeout=300, text=True, **extra_env):
     """Запустить python-скрипт так, как его видит чужой репозиторий: без пояса и без PYTHONPATH."""
-    return subprocess.run([sys.executable, "-S", *[str(a) for a in args]],
-                          cwd=str(cwd), env=env(base, **extra_env),
+    return subprocess.run(command(args), cwd=str(cwd), env=env(base, **extra_env),
                           capture_output=True, text=text, timeout=timeout)
 
 
