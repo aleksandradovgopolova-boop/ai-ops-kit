@@ -62,8 +62,8 @@ strict security → `security_decision.py`; доставка single/parallel →
 
 ## Отложено
 
-`tools/dev_check.py` (`quality-fast`) — статические профили `--core/--parallel/--security`
-из 8–12 критичных self-test ядра (ai_ops_run, execution_pipeline, workpackage_executor,
+Инструмент `dev_check` (профиль `quality-fast`) — НЕ СОЗДАН, это идея: статические профили
+`--core/--parallel/--security` из 8–12 критичных self-test ядра (ai_ops_run, execution_pipeline, workpackage_executor,
 parallel_executor, parallel_live, lifecycle_store, pr_open, security_enforcement, model_router,
 provider_endpoints). Не заменяет CI — быстрый ответ в разработке. Без анализа изменённых
 файлов/dependency-graph сейчас.
