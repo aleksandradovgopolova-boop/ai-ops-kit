@@ -4,7 +4,7 @@ work:
     заходом
   type: quality
   goal: green-means-checked
-  status: todo
+  status: done
   owner_role: engineer
   depends_on: []
   evidence: .research/decisions/DP-114.yaml
