@@ -176,7 +176,10 @@ goals:
     outcome:
       # Четыре объекта вместо новых документов: Opportunity Brief, Product Decision Record,
       # Outcome Contract, Outcome Readout.
-      decision_names_alternatives_and_what_is_not_done: false
+      # ЗАКРЫТО 19.08.2026: три решения владельца по внешнему ревью (ep-2026-08-19-*) —
+      # North Star принят (dp-005), brownfield не ужесточён (сказано что НЕ делаем),
+      # anti-matryoshka принят (dp-006). Каждое решение называет альтернативу и отказ.
+      decision_names_alternatives_and_what_is_not_done: true
       feature_has_baseline_target_and_guardrails: false
 
   - id: storybook-as-visual-contract
@@ -1133,7 +1136,7 @@ work:
     title: Пакет решений владельца по внешнему ревью 19.08.2026
     type: product
     goal: product-decision-loop
-    status: todo
+    status: done
     owner_role: product
     depends_on: []
     human_decision: >

@@ -3,7 +3,7 @@ work:
   title: Пакет решений владельца по внешнему ревью 19.08.2026
   type: product
   goal: product-decision-loop
-  status: todo
+  status: done
   owner_role: product
   depends_on: []
   human_decision: 'Три пункта ревью меняют не механизм, а решение о продукте, и решать
