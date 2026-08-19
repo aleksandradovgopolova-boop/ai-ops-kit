@@ -38,6 +38,7 @@ nav:
     - Contracts:
       - TypedDict Contracts: api/contracts.md
       - Invariants: api/invariants.md
+      - Public Surface: api/public-surface.md
     - Operations:
       - Kit Observability: api/kit-observability.md
   - Guides:
