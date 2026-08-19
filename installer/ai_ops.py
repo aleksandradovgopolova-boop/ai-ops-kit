@@ -1098,7 +1098,8 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
             return 0
         msg = (f"chore(ai-ops): обновление кита {inst or '—'} -> {target}\n\n"
                f"Подготовлено `ai-ops update` при `parent.update_policy: pr`: применено в отдельной "
-               f"ветке, рабочее дерево не тронуто. Отчёт — .ai/runtime/last-update-report.json.\n")
+               f"ветке, рабочее дерево не тронуто (кроме .ai/runtime/last-update-report.json — "
+               f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n")
         c = subprocess.run(["git", "-C", str(wt),
                             "-c", "user.name=ai-ops-updater",
                             "-c", "user.email=ai-ops-updater@users.noreply.github.com",
@@ -1124,7 +1125,8 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
                      "pull_request": branch, "human_approval_required": True,
                      "update_policy": "pr",
                      "report": (f"Обновление {inst or '—'} -> {target} подготовлено в ветке {branch} "
-                                f"({len(staged)} файлов); рабочее дерево не тронуто. "
+                                f"({len(staged)} файлов); рабочее дерево не тронуто "
+                                f"(кроме .ai/runtime/last-update-report.json — в gitignore). "
                                 f"Откройте PR: git push -u origin {branch} && gh pr create --fill")})
         write_report(_rep)
     finally:
@@ -1135,7 +1137,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
     print(f"\n`parent.update_policy: pr` — обновление {inst or '—'} -> {target} подготовлено В ВЕТКЕ, "
           f"на месте НЕ применено.\n"
           f"  ветка:          {branch} ({len(staged)} файлов)\n"
-          f"  рабочее дерево: не тронуто\n"
+          f"  рабочее дерево: не тронуто (кроме .ai/runtime/last-update-report.json — в gitignore)\n"
           f"  открыть PR:     git push -u origin {branch} && gh pr create --fill\n"
           f"  посмотреть:     git diff {_base}..{branch} --stat\n"
           f"Чтобы применить на месте осознанно: `ai-ops update --in-place`.")
