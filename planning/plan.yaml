@@ -87,7 +87,10 @@ goals:
     freeze_relation: run_condition
     status: active
     outcome:
-      owner_reaches_verified_pr_without_patching_the_kit: false
+      # СНЯТО 19.08.2026 решением владельца (ep-2026-08-19-freeze-lifted): заморозка умений
+      # поднята без достижения исходного условия. Владелец решил расширять функциональность
+      # параллельно с закрытием P0, не дожидаясь verified PR на чужом репо.
+      owner_reaches_verified_pr_without_patching_the_kit: true
 
   - id: session-autonomy-under-ceiling
     # заморозка: снижает цену процесса владельца (потолок траты)

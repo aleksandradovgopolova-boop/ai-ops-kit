@@ -718,6 +718,27 @@ episodes:
     source: решение владельца по внешнему ревью 19.08.2026
     supersedes: null
 
+  - id: ep-2026-08-19-freeze-lifted
+    question: >
+      Снимать ли заморозку умений (ep-2026-08-17-capability-freeze-until-second-brownfield)
+      до достижения исходного условия (verified PR на чужом репо)?
+    decision: >
+      Да, снять. Заморозка умений поднята решением владельца без достижения исходного условия.
+      Владелец решил расширять функциональность параллельно с закрытием P0, не дожидаясь
+      verified PR на чужом репозитории. Исход owner_reaches_verified_pr_without_patching_the_kit
+      установлен в true в цели second-real-brownfield.
+    reason: >
+      Владелец устал от инфраструктурной работы и хочет расширять функциональность.
+      4 цели с freeze_relation: extension (storybook, cockpit, night-review, outcome-analytics)
+      разблокированы для взятия работ.
+    context: >
+      Сессия 19.08.2026: закрыто 9 работ за сессию, все доступные работы без заморозки исчерпаны.
+      Оставшиеся 4 работы — под замороженными целями.
+    reversibility: two-way
+    date: 2026-08-19
+    source: прямое указание владельца «размораживай остальное»
+    supersedes: null
+
 outcomes:
   - decision: ep-2026-07-13-systems
     outcome: Оба скилла выпущены (v2.8), проводка в INSIGHTS/PRODUCT/ENGINEERING; обкатка в ии-среде предстоит.
