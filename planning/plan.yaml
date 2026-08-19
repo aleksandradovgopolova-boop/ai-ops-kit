@@ -391,10 +391,7 @@ work:
     title: Самоприменение культуры кита проверяется, а уроки поля записаны как культура
     type: quality
     goal: green-means-checked
-    # Статус ПОНИЖЕН до todo 2026-08-14: гейт `own_medicine` и `field-lessons.yaml` выпущены (это
-    # закрытая часть, она в истории), остаток — три объявленных разрыва в `KNOWN_GAPS`, и на них
-    # сейчас никого нет.
-    status: todo
+    status: done
     evidence: quality/gates.yaml
     owner_role: engineer
     depends_on: []
