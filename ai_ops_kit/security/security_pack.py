@@ -66,6 +66,28 @@ def _is_prose(path: str) -> bool:
     return p.endswith(PROSE_SUFFIXES) or any(seg in p for seg in PROSE_DIRS)
 
 
+# ЗАМЕР 19.08.2026 (180 настоящих коммитов трёх живых продуктов: niti, ii-sreda, msh_news_bot_v2).
+# Класс «домен применим, находок ноль, закрыть нечем» — 126 прогонов из 180. Из них в 95 (53% ВСЕХ
+# прогонов) КАЖДЫЙ такой домен поднят ТОЛЬКО совпадением по содержимому: подстрока без границ слова
+# в файле, чей путь домену не соответствует. Это не находка и не сигнал — это догадка.
+#
+# РАЗВИЛКА БЫЛА НАЗВАНА В ОТЧЁТЕ ПРОГОНА (B2-24) И РЕШЕНА ЗАМЕРОМ, А НЕ ВКУСОМ:
+#   (а) поднимать security-судью на QUICK — цена: судья на 7 из 10 мелких правок (126/180);
+#   (б) домен, поднятый ТОЛЬКО содержимым и БЕЗ находок, предупреждает, а не блокирует — цена:
+#       окно для настоящего дефекта в файле, чей путь не матчит.
+# Выбрано (б). Окно ограничено и названо: детерминированные проверки (secret/injection/dependency)
+# объявлены шаблоном `.*` и применимы ВСЕГДА, поэтому секрет и инъекция в таком файле ловятся
+# по-прежнему. Теряется только требование СУЖДЕНИЯ по домену, который никто не подтвердил ничем,
+# кроме подстроки.
+#
+# ИНВАРИАНТ НЕ ТРОНУТ: домен с находками critical/high блокирует. Домен, поднятый ПУТЁМ или
+# СИГНАЛОМ, остаётся needs_review — там основание настоящее (правка Dockerfile это правка Dockerfile).
+def _content_only(reasons) -> bool:
+    """Домен применён ТОЛЬКО совпадением по содержимому — ни пути, ни сигнала, ни «всегда»."""
+    rs = list(reasons or [])
+    return bool(rs) and all(str(r).startswith("содержимое ") for r in rs)
+
+
 def load_domains():
     p = PKG / "security" / "security-domains.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8")) if p.is_file() else {}
@@ -181,7 +203,7 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
     # перехода на `new_deps_detailed` в v3.0-rc5 — считался лишний проход по манифестам.
     new_deps_detailed = security_scan.new_dependencies_detailed(before, mani)   # v3.0-rc5 (P1.2): fingerprint
 
-    results, blocking, needs_review = [], [], []
+    results, blocking, needs_review, advisory = [], [], [], []
     for d in domains:
         reasons = _applies(d, signals, files_content)
         if not reasons:
@@ -214,6 +236,10 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         elif req and req <= DETERMINISTIC:
             # всё required_evidence — детерминированное и прошло чисто -> можно авто-закрыть
             status = "pass"
+        elif _content_only(reasons):
+            # догадка по подстроке, ничем не подтверждённая -> предупреждение, а не ворота (замер выше)
+            status = "advisory"
+            advisory.append(d["id"])
         else:
             status = "needs_review"           # нужен security_reviewer/человек (не закрываем сами)
             needs_review.append(d["id"])
@@ -230,7 +256,12 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         "results": results,
         "blocking": sorted(set(blocking)),
         "needs_review": sorted(set(needs_review)),
-        "overall": ("blocked" if blocking else ("needs_review" if needs_review else "clear")),
+        # ПРЕДУПРЕЖДЕНИЕ — ОТДЕЛЬНЫЙ ВЕРДИКТ, А НЕ `clear`: «проверено и чисто» и «домен подняли
+        # догадкой, проверять было нечего» обязаны выглядеть по-разному, иначе это ложный зелёный.
+        "advisory": sorted(set(advisory)),
+        "overall": ("blocked" if blocking else
+                    ("needs_review" if needs_review else
+                     ("advisory" if advisory else "clear"))),
         # ОХВАТ РЯДОМ С ВЕРДИКТОМ: что сравнивалось. Вердикт без охвата непроверяем — заявка #139
         # читалась как «блокирует без находок» именно потому, что охват был не назван нигде.
         "scan_scope": scan_scope,
@@ -265,6 +296,7 @@ def for_report(result):
         "applicable_domains": result.get("applicable_domains") or [],
         "blocking": result.get("blocking") or [],
         "needs_review": result.get("needs_review") or [],
+        "advisory": result.get("advisory") or [],
         # охват рядом с вердиктом (`absent-base-is-resolved-or-refused`): вердикт без охвата
         # непроверяем — «clear» по пустому дифу и «clear» по проверенному дифу выглядят одинаково
         "scan_scope": result.get("scan_scope"),

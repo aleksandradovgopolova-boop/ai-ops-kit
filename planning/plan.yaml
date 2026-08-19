@@ -233,34 +233,6 @@ goals:
 
 work:
   # ─── находки второго живого brownfield (прогон 19.08.2026, копия bolshe-ne-budu-menshe) ──────
-  - id: security-gate-closable-on-quick
-    title: Гейт безопасности либо закрывается на уровне задачи, либо не блокирует её
-    type: engineering
-    goal: green-means-checked
-    status: todo
-    owner_role: engineer
-    depends_on: []
-    write_scope: [ai_ops_kit/security/, ai_ops_kit/engine/, tests/, quality/]
-    value: high
-    affects: {engineering_quality_security: true, delivery_operations: true}
-    evidence: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md
-    # ЗАМЕР 19.08.2026 на живом продукте (копия `bolshe-ne-budu-menshe`, прогон QUICK). Диф — три
-    # файла: node-скрипт проверки оглавления, `package.json`, документ статуса. Гейт `security`
-    # вернул fail с блокером «нужен независимый security-reviewer/человек по доменам:
-    # authorization_idol, deployment_config, input_validation, rate_limiting» при `checks: []` и
-    # `evidence: []`. Домены подняты совпадением ПО СОДЕРЖИМОМУ (`security_pack._applies`) — это
-    # осознанный fail-closed, и он описан в коде.
-    # ЦЕНА ЭТОГО FAIL-CLOSED ИЗМЕРЕНА, и она не в шуме: на уровне QUICK судья ВЫКЛЮЧЕН автоподбором
-    # (`resolve_flags`: review только для ENGINEERING/PRODUCT/CRITICAL/AI_FEATURE/RESEARCH), то есть
-    # закрыть требование гейта на этом уровне НЕЧЕМ — путь к `ready_for_pr` закрыт по построению, а
-    # не по находке. Тот же класс уже записан прогоном 14.08 («сверка не запускается на QUICK»).
-    # РАЗВИЛКА, КОТОРУЮ НАДО РЕШИТЬ, А НЕ ЗАМАЗАТЬ: либо на QUICK поднимается security-судья (цена —
-    # деньги и время на каждой мелкой задаче), либо домены, поднятые ТОЛЬКО совпадением по
-    # содержимому и без находок, не блокируют, а предупреждают (цена — окно для настоящего дефекта в
-    # файле, чей путь не матчит). Выбор — замером на наборе реальных дифов, а не вкусом.
-    # ЧЕГО НЕ ДЕЛАТЬ: снимать блокировку домена, у которого есть НАХОДКИ (critical/high) — это
-    # инвариант, он уже стоит и он верный.
-
   - id: doctor-requires-a-real-project-name
     title: Кит не говорит «можно ставить задачу», пока в конфиге стоит заготовка
     type: engineering
