@@ -1,0 +1,18 @@
+work:
+- id: cockpit-vertical-slice
+  title: Одна вертикальная функция Cockpit целиком — от проблемы до измеренного результата
+  type: product
+  goal: owner-speaks-product-not-pipeline
+  status: todo
+  owner_role: product
+  depends_on:
+  - experience-contract-drives-stories
+  - contour-catches-declared-not-executed
+  - four-product-objects
+  write_scope:
+  - qualification/
+  value: high
+  affects:
+    product_strategy: true
+    delivery_operations: true
+    analytics_learning: true

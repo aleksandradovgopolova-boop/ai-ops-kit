@@ -1,0 +1,16 @@
+work:
+- id: artifacts-checked-against-repo-facts
+  title: Кит сверяет свои артефакты с фактами репозитория, а не только сами с собой
+  type: quality
+  goal: qualification-closeout
+  status: done
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - ai_ops_kit/planning/
+  - ai_ops_kit/ui/
+  - tests/
+  value: high
+  affects:
+    engineering_quality_security: true
+    product_strategy: true

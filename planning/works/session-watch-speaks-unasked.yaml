@@ -1,0 +1,16 @@
+work:
+- id: session-watch-speaks-unasked
+  title: Кит сам замечает подход сессии к пределу, а не только когда его позвали
+  type: engineering
+  goal: green-means-checked
+  status: todo
+  owner_role: engineer
+  depends_on:
+  - session-handoff-written-not-declared
+  write_scope:
+  - ai_ops_kit/cli/
+  - ai_ops_kit/engops/
+  - tests/
+  value: high
+  affects:
+    delivery_operations: true

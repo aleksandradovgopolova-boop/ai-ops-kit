@@ -1,0 +1,18 @@
+work:
+- id: own-medicine-checked
+  title: Самоприменение культуры кита проверяется, а уроки поля записаны как культура
+  type: quality
+  goal: green-means-checked
+  status: done
+  evidence: quality/gates.yaml
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - ai_ops_kit/validation/
+  - rules/core/
+  - quality/gates.yaml
+  - tests/
+  value: high
+  affects:
+    engineering_quality_security: true
+    delivery_operations: true

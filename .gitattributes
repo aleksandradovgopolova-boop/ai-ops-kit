@@ -9,3 +9,16 @@
 # `decisions/registry.yaml` он дал бы синтаксически битый или удвоенный документ. Структурные файлы
 # кита здесь не перечислены сознательно — их конфликт решается разбивкой, а не стратегией слияния.
 .ai/project/report-history/*.jsonl merge=union
+
+# ЗАМЕР 19.08.2026 (сессия Qwen): за неделю 146 коммитов в три файла, все конфликты ручные.
+# `history/plan-history.yaml` — append-only журнал закрытых работ (новые записи добавляются, старые
+# не меняются). `quality/mutation-probes.yaml` — реестр мутационных проб (новые пробы добавляются,
+# старые не меняются). Оба файла append-only по построению, конфликты — цена параллельной работы.
+history/plan-history.yaml merge=union
+quality/mutation-probes.yaml merge=union
+
+# РАЗБИВКА ПЛАНА (19.08.2026, derived-state-out-of-tracked-files): `planning/plan.yaml` разбит на
+# файлы по работам в `planning/works/<id>.yaml`. Каждый файл — одна работа, append-only по построению
+# (работа добавляется один раз, статус меняется редко). Конфликты при параллельной работе исчезают.
+# Сборщик: `python3 tools/assemble_plan.py` собирает единый `planning/plan.yaml` из файлов.
+planning/works/*.yaml merge=union

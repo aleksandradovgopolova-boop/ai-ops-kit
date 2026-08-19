@@ -1,0 +1,15 @@
+work:
+- id: session-ritual-validators-are-dead
+  title: Валидаторы контракта сессионных артефактов действительно вызываются
+  type: quality
+  goal: qualification-closeout
+  status: todo
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - ai_ops_kit/engops/
+  - ai_ops_kit/validation/
+  - tests/
+  value: medium
+  affects:
+    engineering_quality_security: true

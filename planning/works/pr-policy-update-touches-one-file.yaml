@@ -1,0 +1,14 @@
+work:
+- id: pr-policy-update-touches-one-file
+  title: '`update` при политике pr пишет отчёт в рабочее дерево, обещая его не трогать'
+  type: engineering
+  goal: green-means-checked
+  status: todo
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - installer/
+  - tests/
+  value: medium
+  affects:
+    delivery_operations: true

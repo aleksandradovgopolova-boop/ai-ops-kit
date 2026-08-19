@@ -1,0 +1,18 @@
+work:
+- id: retry-only-when-failure-is-deterministic
+  title: Повтор не назначается там, где отказ структурный, — он делает систему только
+    медленнее
+  type: engineering
+  goal: qualification-closeout
+  status: done
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - ai_ops_kit/providers/
+  - ai_ops_kit/engine/
+  - tests/
+  value: high
+  affects:
+    delivery_operations: true
+    engineering_quality_security: true
+  evidence: qualification/EXTERNAL-REVIEW-2026-08-19.md

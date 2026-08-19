@@ -1,0 +1,19 @@
+work:
+- id: merge-and-deploy-are-named-steps
+  title: Слияние и выкатка — названные шаги с условием, а не то, что происходит само
+  type: engineering
+  goal: green-means-checked
+  status: todo
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - rules/core/
+  - installer/
+  - ai_ops_kit/engops/
+  - ai_ops_kit/engine/
+  - docs/
+  - tests/
+  value: high
+  affects:
+    delivery_operations: true
+    engineering_quality_security: true

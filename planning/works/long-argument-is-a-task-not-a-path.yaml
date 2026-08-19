@@ -1,0 +1,16 @@
+work:
+- id: long-argument-is-a-task-not-a-path
+  title: Длинный текст задачи остаётся задачей, а не проверяется как путь файловой
+    системы
+  type: engineering
+  goal: green-means-checked
+  status: todo
+  owner_role: engineer
+  depends_on: []
+  write_scope:
+  - ai_ops_kit/cli/
+  - tests/
+  value: medium
+  affects:
+    delivery_operations: true
+  evidence: qualification/EXTERNAL-REVIEW-2026-08-19.md
