@@ -3,7 +3,7 @@ work:
   title: События аналитики проверяются в рантайме, а не объявляются в плане
   type: engineering
   goal: outcome-and-analytics-loop
-  status: todo
+  status: done
   owner_role: analytics
   depends_on:
   - four-product-objects

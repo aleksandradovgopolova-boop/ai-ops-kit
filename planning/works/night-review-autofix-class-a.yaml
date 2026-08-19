@@ -3,7 +3,7 @@ work:
   title: Класс A правок исполняется в worktree и собирается в один draft PR за ночь
   type: engineering
   goal: nightly-product-review
-  status: todo
+  status: done
   owner_role: engineer
   depends_on:
   - night-review-v0-read-only

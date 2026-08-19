@@ -3,7 +3,7 @@ work:
   title: Профиль Storybook в модели репозитория — по замеру, а не по package.json
   type: engineering
   goal: storybook-as-visual-contract
-  status: todo
+  status: done
   owner_role: frontend
   depends_on: []
   write_scope:

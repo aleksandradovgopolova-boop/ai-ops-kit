@@ -462,7 +462,7 @@ work:
     title: Профиль Storybook в модели репозитория — по замеру, а не по package.json
     type: engineering
     goal: storybook-as-visual-contract
-    status: todo
+    status: done
     owner_role: frontend
     depends_on: []
     write_scope: [ai_ops_kit/planning/, ai_ops_kit/ui/, tests/]
@@ -544,7 +544,7 @@ work:
     title: События аналитики проверяются в рантайме, а не объявляются в плане
     type: engineering
     goal: outcome-and-analytics-loop
-    status: todo
+    status: done
     owner_role: analytics
     depends_on: [four-product-objects]
     write_scope: [ai_ops_kit/intelligence/, templates/analytics/, tests/]
@@ -608,7 +608,7 @@ work:
     title: Класс A правок исполняется в worktree и собирается в один draft PR за ночь
     type: engineering
     goal: nightly-product-review
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: [night-review-v0-read-only]
     human_decision: >
