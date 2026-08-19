@@ -919,3 +919,45 @@ probes:
   why: 'Совет — половина правила; вторая половина в том, что взятую замороженную работу проверка
     краснит и называет решение НОМЕРОМ, а не пересказом. Мутация оставляет вычитание в `next` и
     снимает проверку: обойти правило можно, взяв работу мимо совета.'
+- id: doctor-asks-about-the-config
+  kind: seam
+  covers:
+  - installer/ai_ops.py
+  - ai_ops_kit/validation/validate_child_config_filled.py
+  file: installer/ai_ops.py
+  find: '        _dprint(_cfgfill.summary_line(str(REPO_ROOT)))'
+  replace_with: '        pass'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: 'ШОВ: валидатор может сколько угодно правильно находить заготовку — человек узнаёт об этом
+    только там, где `doctor` его СПРАШИВАЕТ. Мутация оставляет валидатор на месте и убирает вопрос:
+    ровно то состояние, в котором находка B2-25 и жила — проверить было чем, никто не проверял.'
+- id: config-check-reaches-the-child
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    "validate_child_config_filled",'
+  replace_with: '    "validate_child_config_filled_not_delivered",'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: '`doctor` исполняется У ДОЧКИ, а в поставку едут только валидаторы из белого списка. Имя не
+    внесено — кит починен, дочка нет: ровно F-033, где механизм против ложного green не исполнялся
+    в дочке НИКОГДА, потому что имя не внесли. Мутация возвращает это состояние.'
+- id: placeholder-is-the-whole-value
+  kind: guard
+  file: ai_ops_kit/validation/validate_child_config_filled.py
+  find: 'PLACEHOLDER = re.compile(r"^<[^<>]+>$")'
+  replace_with: 'PLACEHOLDER = re.compile(r".*<[^<>]+>.*")'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: 'Заготовка — это ЗНАЧЕНИЕ ЦЕЛИКОМ. Мутация делает проверку подстрочной, и краснеть начинают
+    описания вроде «работает с <legacy> API». Проверка, срабатывающая на прозе, обесценивается так
+    же, как гейт, срабатывающий всегда, — и это уже случалось с матчем по содержимому (B2-09).'
+- id: unreadable-config-is-not-clean
+  kind: guard
+  file: ai_ops_kit/validation/validate_child_config_filled.py
+  find: '        return {"config_exists": True, "readable": False, "placeholders": [],'
+  replace_with: '        return {"config_exists": True, "readable": True, "placeholders": [],'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: '«Не прочитал» и «заготовок нет» — разные вещи, и подмена первого вторым это молчание,
+    против которого стоит весь doctor. Мутация выдаёт нечитаемый конфиг за проверенный и чистый.'

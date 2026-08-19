@@ -261,25 +261,6 @@ work:
     # ЧЕГО НЕ ДЕЛАТЬ: снимать блокировку домена, у которого есть НАХОДКИ (critical/high) — это
     # инвариант, он уже стоит и он верный.
 
-  - id: doctor-requires-a-real-project-name
-    title: Кит не говорит «можно ставить задачу», пока в конфиге стоит заготовка
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    depends_on: []
-    write_scope: [installer/, ai_ops_kit/validation/, tests/]
-    value: medium
-    affects: {delivery_operations: true}
-    evidence: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md
-    # ЗАМЕР 19.08.2026: в живом продукте с 14.08 стоит `project.name: <project-name>` — заготовка,
-    # которую установка просит заменить. `doctor` возвращает 0 и печатает «Дальше: можно ставить
-    # задачу»; ни один валидатор этого не требует. То есть кит просит человека отредактировать файл
-    # и не проверяет, сделано ли это, — а сам же требует от других «правило без исполнения —
-    # пожелание».
-    # ДЕШЕВО И БЕССПОРНО: заготовка отличается от настоящего значения ровно тем, что кит её и написал.
-    # Проверять «имя осмысленно» не надо и нельзя — надо проверять, что оно не равно заготовке.
-
   - id: specify-tops-up-sections-for-a-raised-level
     title: Повторный specify дописывает разделы под возросший уровень, а не оставляет прежний
     type: engineering

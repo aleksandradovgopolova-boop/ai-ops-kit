@@ -296,15 +296,34 @@ def test_broken_child_config_reports_clear_error(child, command):
 
 # ---------------------------------------------------------------- 6. doctor на свежей установке
 
-def test_doctor_ok_on_fresh_install(installed, tmp_path):
-    """positive: сразу после init диагностика зелёная (rc=0), без трейсбеков.
+def test_doctor_ok_on_fresh_install(installed_copy, tmp_path):
+    """positive: сразу после init диагностика без трейсбеков и без блокеров (rc=0), а единственное
+    замечание — то, о чём установка САМА просит человека: заполнить имя проекта.
+
+    ИЗМЕНЕНО 19.08.2026 (B2-25, `doctor-requires-a-real-project-name`). Прежде тест требовал
+    «Всё в порядке» сразу после init — и это было верно ровно до тех пор, пока кит не проверял свои
+    же заготовки: в живом продукте `project.name: <project-name>` простоял пять дней при зелёном
+    вердикте. Утверждение не ослаблено, а усилено: теперь тест доказывает, что заготовка имени —
+    ЕДИНСТВЕННОЕ, что отделяет свежую установку от зелёного, и что после её замены зелёный настаёт.
 
     Окружение изолировано (см. `_isolated_env`) — иначе тест мерил бы чистоту site-packages
     разработчика, а не свежую установку."""
-    r = _run_cli(installed, "doctor", env=_isolated_env(tmp_path))
+    env = _isolated_env(tmp_path)
+    r = _run_cli(installed_copy, "doctor", env=env)
     out = r.stdout + r.stderr
     assert "Traceback" not in out
     assert "пути окружения: ✓" in out, out[-2000:]
+    assert "конфиг дочки: ✗" in out, f"кит не заметил своей же заготовки: {out[-2000:]}"
+    assert "можно ставить задачу" not in out, out[-2000:]
+    assert r.returncode == 0, out[-2000:]
+
+    # делаем ровно то, о чём просит установка, — и больше замечаний быть не должно
+    cfg = installed_copy / ".ai-ops.yaml"
+    doc = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+    doc["project"]["name"] = "Демо-продукт"
+    cfg.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    r = _run_cli(installed_copy, "doctor", env=env)
+    out = r.stdout + r.stderr
     # Вердикт печатает человекочитаемый слой (v3.35.2), поэтому проверяем СМЫСЛ, а не строку
     # `doctor: OK`: код возврата и отсутствие БЛОКЕРОВ — то, что этот тест защищает.
     assert "Всё в порядке" in out, out[-2000:]
