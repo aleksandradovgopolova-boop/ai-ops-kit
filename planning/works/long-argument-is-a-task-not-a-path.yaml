@@ -4,7 +4,7 @@ work:
     системы
   type: engineering
   goal: green-means-checked
-  status: todo
+  status: done
   issue: 161
   owner_role: engineer
   depends_on: []

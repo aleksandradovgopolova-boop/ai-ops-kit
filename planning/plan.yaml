@@ -900,7 +900,7 @@ work:
     title: Сколько раз кит пришлось починить между попытками — измеряется, а не ощущается
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [qualification/, ai_ops_kit/engops/, tests/, docs/]
@@ -1092,7 +1092,7 @@ work:
     title: Длинный текст задачи остаётся задачей, а не проверяется как путь файловой системы
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     issue: 161
     owner_role: engineer
     depends_on: []
@@ -1116,7 +1116,7 @@ work:
     # второй: 46 очков против 45. Классификация не имеет права переставлять приоритеты, поэтому
     # работа стоит там, где её предмет: обещание обязано совпадать с тем, что проверено.
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/validation/, docs/, rules/core/, tests/]
