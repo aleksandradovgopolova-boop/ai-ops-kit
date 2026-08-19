@@ -954,3 +954,48 @@ probes:
   why: 'Пустой ответ «дописывать нечего» — самый правдоподобный способ сломать эту правку тихо:
     гейт снова отказывает экономической причиной, и выглядит это как работающий потолок. Мутация
     делает функцию вечно-пустой.'
+- id: content-only-guess-is-not-a-gate
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    return bool(rs) and all(str(r).startswith("содержимое ") for r in rs)'
+  replace_with: '    return True'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Вся правка держится на различении «домен подняли догадкой по подстроке» и «домен подняли путём
+    или сигналом». Мутация стирает различие: воротами перестаёт быть ВСЁ, включая правку Dockerfile и
+    заявленный сигнал задачи. Это ровно тот ложный зелёный, ценой которого нельзя было платить за тишину.'
+- id: advisory-is-not-clear
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '                     ("advisory" if advisory else "clear"))),'
+  replace_with: '                     "clear")),'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: '«Проверено и чисто» и «домен подняли догадкой, проверять было нечего» — разные состояния, и
+    выдать второе за первое означает вернуть дефект другой стороной: человек прочитает `clear` и решит,
+    что домен смотрели. Мутация сливает их в один вердикт.'
+- id: gate-lets-advisory-through
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/execution_pipeline.py
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '        elif overall in ("clear", "advisory"):'
+  replace_with: '        elif overall == "clear":'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'ШОВ: пак может сколько угодно называть домен предупреждением — путь открывается только там, где
+    ГЕЙТ это читает. Мутация оставляет новый вердикт на месте и отключает его признание: снаружи всё
+    объявлено, а прогон стоит там же, где стоял 19.08.'
+- id: human-can-close-when-judge-is-off
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '              and committed_sha and not (strict_judge_qualified and review)'
+  replace_with: '              and review and committed_sha and not strict_judge_qualified'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Вторая половина работы: ворота обязаны быть ЗАКРЫВАЕМЫ там, где судьи нет вовсе. Мутация
+    возвращает прежнее условие — ветка человека требует `review`, которого на QUICK не бывает, и прогон
+    снова падает в общий отказ, называющий нужным того, кого на этом уровне не запускают.'
