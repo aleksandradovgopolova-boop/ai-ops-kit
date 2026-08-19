@@ -22,7 +22,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import tempfile
+
 import pytest
+
+import ambient
 import yaml
 
 from ai_ops_kit.engops import commit_policy
@@ -237,9 +241,11 @@ def test_documented_entry_point_actually_runs():
     assert good.returncode == 0, f"документированная форма не работает:\n{good.stderr[-400:]}"
     assert "register" in good.stdout, good.stdout[:200]
 
-    bad = subprocess.run([sys.executable, "ai_ops_kit/lifecycle/active_work.py", "--help"],
-                         cwd=str(KIT), capture_output=True, text=True, timeout=120,
-                         env={k: v for k, v in env.items() if k != "PYTHONPATH"})
+    # БЕЗ ПОЯСА editable-установки: 19.08.2026 этот запуск «заработал» и тест обвинил документ в
+    # устаревании — на самом деле `ai_ops_kit` отдавал meta-path finder рабочего клона, а у
+    # пользователя дочки его нет. Проверять надо то, что видит он.
+    bad = ambient.run(["ai_ops_kit/lifecycle/active_work.py", "--help"],
+                      cwd=KIT, base=Path(tempfile.mkdtemp()), timeout=120)
     assert bad.returncode != 0, (
         "запуск по пути к файлу заработал — тогда предупреждение в документе устарело и вводит "
         "в заблуждение; обнови документ вместе с этим тестом")
