@@ -1118,3 +1118,14 @@ probes:
     схемы. Мутация уводит поле из схемы, оставляя код на месте — то есть отчёт начинает нести поле,
     которого его собственный контракт не знает. Именно так поле и терялось раньше: контракт
     фиксированный, а факт жил рядом с ним.'
+- id: refusal-names-a-command-that-exists
+  kind: guard
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "'
+  replace_with: '                                                    "ai-ops approve "'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Совет, который нельзя выполнить, ХУЖЕ отсутствия совета: человек считает, что путь есть.
+    Первая редакция этого отказа (#176) звала `ai-ops approve` — такого intent в CLI нет, и живой
+    прогон 19.08 это показал. Мутация возвращает несуществующую команду; тест обязан заметить, что
+    названного пути нет на диске.'
