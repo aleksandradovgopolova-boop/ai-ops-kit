@@ -1118,3 +1118,65 @@ probes:
     схемы. Мутация уводит поле из схемы, оставляя код на месте — то есть отчёт начинает нести поле,
     которого его собственный контракт не знает. Именно так поле и терялось раньше: контракт
     фиксированный, а факт жил рядом с ним.'
+- id: probes-run-without-site
+  kind: guard
+  file: tests/ambient.py
+  find: '    return subprocess.run([sys.executable, "-S", *[str(a) for a in args]],'
+  replace_with: '    return subprocess.run([sys.executable, *[str(a) for a in args]],'
+  tests:
+  - tests/unit/test_probes_survive_the_editable_belt.py
+  why: 'Изоляция держится ровно на `-S`: пояс editable-установки живёт в `.pth` site-packages, и ни
+    чистка PYTHONPATH, ни `-E`, ни `-I` его не снимают. Мутация убирает флаг — и проба снова читает
+    рабочий клон вместо своей копии, то есть возвращается состояние «пять красных всегда».'
+- id: isolated-run-still-has-its-dependencies
+  kind: guard
+  file: tests/ambient.py
+  find: '    e["PYTHONPATH"] = str(deps_dir(base))'
+  replace_with: '    e.pop("PYTHONPATH", None)'
+  tests:
+  - tests/unit/test_probes_survive_the_editable_belt.py
+  why: 'Цена `-S` — вместе с site исчезают сторонние пакеты. Мутация убирает каталог симлинков, и
+    проба начинает падать на `import yaml`, то есть по ПОСТОРОННЕЙ причине: красная, но ничего не
+    проверяющая. Это худший исход, чем зелёная и слепая, — он ещё и выглядит как находка.'
+- id: check-full-refuses-interpreter-without-pytest
+  kind: guard
+  file: scripts/check-full.sh
+  find: '  exit 2'
+  replace_with: '  true'
+  tests:
+  - tests/unit/test_evidence_scope.py
+  why: 'На машине владельца `python3` из PATH — homebrew без pytest, и документированная точка входа
+    «полный контур» падала трассировкой модуля вместо ответа, что делать. Мутация возвращает
+    продолжение после негодного интерпретатора: скрипт объявит охват и умрёт на импорте.'
+- id: scope-is-announced-for-the-interpreter-used
+  kind: seam
+  covers:
+  - scripts/check-full.sh
+  - tests/unit/test_evidence_scope.py
+  file: scripts/check-full.sh
+  find: '"$PYTHON" -m pytest tests/ -q "$@"'
+  replace_with: 'python3 -m pytest tests/ -q "$@"'
+  tests:
+  - tests/unit/test_evidence_scope.py
+  why: 'ШОВ между объявлением охвата и тем, чем прогон реально идёт. Мутация оставляет объявление по
+    выбранному интерпретатору, а тесты гонит другим: «ОХВАТ: full-current-python — CPython 3.11»
+    печатается, а результат получен на 3.14. Ровно тот класс, ради которого словарь охватов и
+    заведён, — заявление шире полученного.'
+- id: probes-actually-call-the-isolated-runner
+  kind: seam
+  covers:
+  - tests/ambient.py
+  - tests/unit/test_validator_runtime_contract.py
+  file: tests/unit/test_validator_runtime_contract.py
+  find: '    return ambient.run([copy / "ai_ops_kit" / "validation" / f"{name}.py", *args],'
+  replace_with: '    return _plain_run([copy / "ai_ops_kit" / "validation" / f"{name}.py", *args],'
+  tests:
+  # УЗЕЛ, А НЕ ФАЙЛ: базовый прогон проб идёт в копии БЕЗ `.git`, и соседний
+  # `test_standalone_validator_is_green_from_a_copy[validate_release_claims]` там краснеет по
+  # посторонней причине — «мутант убит» перестало бы что-либо значить. Берём ровно тот тест,
+  # который этот шов и охраняет.
+  - tests/unit/test_validator_runtime_contract.py::test_corrupted_source_of_truth_is_caught
+  why: 'ШОВ, которого потребовал собственный валидатор проб: механизм изоляции может быть сколь
+    угодно правильным — он работает только там, где его ЗОВУТ. Мутация возвращает прежний запуск в
+    одном из трёх переведённых мест, и проба «испортить реестр в копии» снова читает рабочий клон.
+    Именно так дефект и жил: инструмент был, вызова не было.'

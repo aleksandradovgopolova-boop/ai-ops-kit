@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+import ambient
+
 PKG = Path(__file__).resolve().parents[2]
 
 # Валидаторы, запускаемые без аргументов (сканируют репозиторий).
@@ -194,19 +196,30 @@ def repo_copy(tmp_path_factory):
     return dst
 
 
+def _plain_run(args, cwd, base=None, timeout=300, text=False):
+    """Прежний запуск — БЕЗ изоляции. Оставлен исполнимым НАМЕРЕННО: проба шва обязана мутировать
+    вызов в работающий код, иначе она поймает синтаксис, а не поведение."""
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    return subprocess.run([sys.executable, *[str(a) for a in args]], cwd=str(cwd),
+                          capture_output=True, env=env, timeout=timeout, text=text)
+
+
 def _run(copy, name, *args, timeout=300):
-    """Запуск валидатора так, как его запускает пользователь: БЕЗ PYTHONPATH.
+    """Запуск валидатора так, как его запускает пользователь: без PYTHONPATH И БЕЗ ПОЯСА.
 
     v3.31: прежде здесь ставился `PYTHONPATH=<copy>/tools:<copy>/ai_ops_kit/validation`, и из-за него тест
     «валидатор зелёный из копии репозитория» не мог поймать дефект, ради которого написан: десять
     валидаторов не находили `_bootstrap` нигде, кроме окружения с этим поясом. Проверка, которая
     сама себе стелет путь, проверяет не то, что обещает.
+
+    19.08.2026: чистки `PYTHONPATH` ОКАЗАЛОСЬ МАЛО. Editable-установка кита ставит meta-path finder
+    через `.pth` в site-packages, и он отдаёт `ai_ops_kit` любому процессу этого интерпретатора —
+    поэтому проба «испортить реестр в КОПИИ и посмотреть, кто покраснеет» читала рабочий клон, а не
+    копию, и сообщала «порчу не заметили». Ровно то же, что она обвиняла в других. Запуск переведён
+    на `tests/ambient.run` (`-S` + каталог симлинков на зависимости): пояс не устанавливается вовсе.
     """
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
-    return subprocess.run(
-        [sys.executable, str(copy / "ai_ops_kit" / "validation" / f"{name}.py"), *args],
-                          cwd=str(copy), capture_output=True, env=env, timeout=timeout)
+    return ambient.run([copy / "ai_ops_kit" / "validation" / f"{name}.py", *args],
+                       cwd=copy, base=copy.parent, timeout=timeout, text=False)
 
 
 @pytest.mark.slow
