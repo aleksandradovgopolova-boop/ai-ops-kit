@@ -433,7 +433,7 @@ work:
     title: Обязательные stories выводятся из Experience Contract кодом, а не объявляются прозой
     type: visual
     goal: storybook-as-visual-contract
-    status: todo
+    status: done
     owner_role: frontend
     depends_on: [four-product-objects]
     write_scope: [templates/visual/, ai_ops_kit/ui/, schemas/, workflows/]
@@ -473,7 +473,7 @@ work:
     title: Кит сверяет свои артефакты с фактами репозитория, а не только сами с собой
     type: quality
     goal: qualification-closeout
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/planning/, ai_ops_kit/ui/, tests/]
@@ -555,7 +555,7 @@ work:
     title: Контракт наблюдения — WatchDefinition, прогон, находка, класс действия
     type: contract
     goal: nightly-product-review
-    status: todo
+    status: done
     owner_role: architect
     depends_on: [plan-split-active-from-history]
     write_scope: [schemas/, .research/, ai_ops_kit/intelligence/]
