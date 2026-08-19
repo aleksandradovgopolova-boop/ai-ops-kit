@@ -694,6 +694,11 @@ work:
     status: todo
     owner_role: engineer
     depends_on: []
+    # ЦЕННОСТЬ ПОДНЯТА С `medium` ДО `high` 19.08.2026 ЗАМЕРОМ, А НЕ ОЩУЩЕНИЕМ. За одну сессию цена
+    # заплачена ЧЕТЫРЕ раза: PR #172, #174, #177 и #178 приехали `CONFLICTING` — и КАЖДЫЙ раз
+    # конфликт был ровно в трёх файлах (`history/plan-history.yaml`, `quality/mutation-probes.yaml`,
+    # `planning/plan.yaml`), ни разу в коде. Разрешать приходилось вручную, с пересчётом id до и
+    # после, потому что диф удаления соседних записей выглядит как правка одного места.
     # РЕШЕНИЕ ВЛАДЕЛЬЦА 18.08.2026 (ep-2026-08-18-team-works-in-parallel): вариант «в» — оставить как
     # есть и считать конфликты нормальной ценой — ОТКЛОНЁН. Развилка сузилась до механизма, и он
     # выбирается НЕ вкусом:
@@ -709,7 +714,7 @@ work:
     # (`next`, `status`, `validate`), но СБОРКА ОБЯЗАНА появиться вместе с разбивкой, а не после:
     # разбить и оставить владельца без единого вида — значит решить свою проблему за её счёт.
     write_scope: [installer/, templates/, ai_ops_kit/planning/, tests/]
-    value: medium
+    value: high
     affects: {delivery_operations: true, planning_execution: true}
     # ЗАМЕР ПОТРЕБИТЕЛЯ (заявка #148, ИИ-Среда, частота правок по git за 10-17.08):
     #   * `planning/plan.yaml` — 25 коммитов за неделю, САМЫЙ ПРАВИМЫЙ файл кита: его меняет каждый
@@ -989,7 +994,11 @@ work:
   - id: session-command-reaches-the-child
     title: Спросить кита про лимит сессии можно из установленной дочки, а не только из кита
     type: engineering
-    goal: real-product-qualification
+    # ПЕРЕВЕШЕНА 19.08.2026 с `real-product-qualification`. Та цель `achieved`, и её собственный
+    # комментарий говорит, где живёт продолжение: `qualification-closeout` и `second-real-brownfield`.
+    # Работа осталась на закрытой цели по недосмотру — и ровно из-за этого `next` три раза подряд
+    # советовал её как «работу цели первого приоритета», обходя P1-находки живого прогона.
+    goal: qualification-closeout
     status: todo
     owner_role: engineer
     depends_on: []

@@ -237,8 +237,41 @@ def goals(plan) -> list:
     return [g for g in gs if isinstance(g, dict) and g.get("id")]
 
 
+# Живость цели -> насколько её работы вправе идти первыми. Порядок в файле остаётся приоритетом,
+# но ТОЛЬКО СРЕДИ ЦЕЛЕЙ ОДНОЙ ЖИВОСТИ.
+#
+# ЗАМЕР 19.08.2026. Первой целью плана стоит `real-project-qualification` со `status: achieved`, и
+# `next` три раза подряд советовал её работу — обходя P1-находки живого прогона, заведённые в тот
+# же день. Причина: приоритет считался ИНДЕКСОМ цели в файле, а `status` читался только для показа
+# (`where_are_we`). Достигнутая цель — это не «самое важное направление», это направление, которое
+# больше никуда не ведёт.
+#
+# РАБОТА ПОД ДОСТИГНУТОЙ ЦЕЛЬЮ НЕ ИСЧЕЗАЕТ, а опускается: исчезновение было бы тем же молчанием,
+# которое запрещено заморозке умений («замороженное не исчезает молча»). Она остаётся кандидатом и
+# получает вслух названную причину низкого приоритета.
+GOAL_STATUSES = ("active", "paused", "achieved")
+_GOAL_LIVENESS = {"active": 0, "paused": 1, "achieved": 2}
+
+
 def goal_priority(plan) -> dict:
-    return {g["id"]: i for i, g in enumerate(goals(plan))}
+    """Приоритет целей: живые в объявленном порядке, потом приостановленные, потом достигнутые.
+
+    Неизвестный статус считается живым НАМЕРЕННО: молча опустить цель из-за опечатки значило бы
+    переставить весь план и никому об этом не сказать. Опечатку ловит `validate` ошибкой — там она
+    видна, здесь была бы невидима.
+    """
+    gs = list(goals(plan))
+    order = sorted(range(len(gs)),
+                   key=lambda i: (_GOAL_LIVENESS.get(gs[i].get("status") or "active", 0), i))
+    return {gs[i]["id"]: rank for rank, i in enumerate(order)}
+
+
+def goal_is_live(plan, gid) -> bool:
+    """Ведёт ли цель куда-то ещё. Достигнутая и приостановленная — нет."""
+    for g in goals(plan):
+        if g.get("id") == gid:
+            return _GOAL_LIVENESS.get(g.get("status") or "active", 0) == 0
+    return True                      # цели нет в плане — это ловит validate, не молчим здесь
 
 
 def _cycles(by_id: dict) -> list:
@@ -303,6 +336,13 @@ def validate(plan, model=None, closed=None, root=None):
                           f"необязательным для этой цели")
         elif rel not in FREEZE_RELATIONS:
             errors.append(f"цель '{g['id']}': freeze_relation '{rel}' вне {list(FREEZE_RELATIONS)}")
+    # Статус цели ТЕПЕРЬ ВЛИЯЕТ НА ПРИОРИТЕТ (`goal_priority`), поэтому опечатка в нём молча
+    # переставляла бы весь план. Проверяем здесь — единственное место, где она видна человеку.
+    for g in gl:
+        st = g.get("status")
+        if st is not None and st not in GOAL_STATUSES:
+            errors.append(f"цель '{g['id']}': status '{st}' вне {list(GOAL_STATUSES)} — "
+                          f"от статуса зависит приоритет работ этой цели")
 
     ws = items(plan)
     if not ws:

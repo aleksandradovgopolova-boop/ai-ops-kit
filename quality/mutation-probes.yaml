@@ -1041,3 +1041,46 @@ probes:
   why: 'Вторая половина работы: ворота обязаны быть ЗАКРЫВАЕМЫ там, где судьи нет вовсе. Мутация
     возвращает прежнее условие — ветка человека требует `review`, которого на QUICK не бывает, и прогон
     снова падает в общий отказ, называющий нужным того, кого на этом уровне не запускают.'
+- id: goal-liveness-outranks-file-order
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '                   key=lambda i: (_GOAL_LIVENESS.get(gs[i].get("status") or "active", 0), i))'
+  replace_with: '                   key=lambda i: (0, i))'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'Вся правка — в том, что порядок в файле остаётся приоритетом ТОЛЬКО среди целей одной
+    живости. Мутация возвращает чистый индекс, и достигнутая цель снова становится «целью первого
+    приоритета»: ровно то состояние, в котором `next` три раза подряд обходил P1-находки живого
+    прогона.'
+- id: goal-is-live-tells-the-truth
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '            return _GOAL_LIVENESS.get(g.get("status") or "active", 0) == 0'
+  replace_with: '            return True'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'На этом ответе держатся и причина низкого приоритета, и гигиена плана. Мутация делает его
+    вечно-утвердительным: закрытых целей как будто нет, и забытая под ними работа снова невидима.'
+- id: unknown-goal-status-is-an-error
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if st is not None and st not in GOAL_STATUSES:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'Статус цели теперь влияет на приоритет, поэтому опечатка в нём переставляет план. Она
+    намеренно НЕ опускает цель молча — цена этого решения в том, что ошибку обязан назвать
+    `validate`. Мутация снимает проверку, и опечатка снова становится невидимой.'
+- id: advice-names-the-closed-goal
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/next_work.py
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '    if not _plan.goal_is_live(plan, gid):'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'ШОВ: `delivery_plan` может сколько угодно знать, что цель закрыта, — человек узнаёт об этом
+    только там, где СОВЕТ это произносит. Мутация опускает работу молча, и человек не понимает, куда
+    делся вчерашний совет: молчаливое исчезновение запрещено тем же правилом, что и у заморозки.'
