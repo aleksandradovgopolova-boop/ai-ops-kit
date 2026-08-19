@@ -3,32 +3,34 @@ kind: research.evidence
 id: EV-1143
 request_id: RR-016
 statement: >-
-  ЗАМЕР СВЯЗЕЙ на собственном плане кита (dogfood, 19.08.2026): вперёд цепочка сомкнута, назад —
-  почти нет. Из 42 закрытых работ (history/plan-history.yaml) 42 имеют цель (goal), 42 — названный
-  результат (result), 42 — проверяемое место исхода (pr 24 / evidence 13 / commit 12, объединение
-  42/42). Обратную связь «на каком основании это взято» машиночитаемо не несёт НИ ОДНА: поля
-  because_of / decision / research в схеме работы нет, а решение или исследование (ep-*, DP-*,
-  RR-*, ADR-*) упоминается хоть в каком-нибудь ПОЛЕ лишь у 5 из 42 закрытых и у 1 из 28 активных
-  работ. При этом основание в файлах ЕСТЬ — прозой в комментариях: 748 комментариев из 1182 строк
-  активного плана и 906 из 1923 строк истории. Вывод замера: кит уже пишет «почему», но пишет это
-  в форме, которую его собственный код прочитать не может.
+  ЗАМЕР СВЯЗЕЙ на собственном плане кита (dogfood, 19.08.2026) и ЕГО ПРАВИЛЬНОЕ ПРОЧТЕНИЕ.
+  Из 42 закрытых работ (history/plan-history.yaml): 42 имеют цель (goal), 42 — названный результат,
+  42 — место перепроверки (pr 24 / evidence 13 / commit 12, объединение 42/42). Поля-связки
+  decision и finding заполнены 0 раз из 42. Среди 28 активных: goal 28/28, affects 28/28,
+  evidence 7/28. РЕШАЮЩЕЕ НАБЛЮДЕНИЕ, без которого числа читаются неверно: полнота заполнения
+  совпадает не с направлением связи, а с наличием проверки. ai_ops_kit/planning/delivery_plan.py
+  требует ошибкой goal (:389-395), result и место перепроверки у закрытой работы (:196-207),
+  существование контура в affects (:400-402) и резолвимость пути в evidence/finding (:375-379).
+  Поля decision и finding ОБЪЯВЛЕНЫ в том же файле (:58 LINK_KEYS) и не требуются ничем — и они
+  пусты. То есть заполняется ровно то, что проверяется. Первая редакция утверждала, что поля для
+  основания в схеме работы нет вовсе; это опровергнуто судьёй и здесь исправлено.
 evidence_type: measured_result
 source:
-  title: "ai-ops-kit — planning/plan.yaml и history/plan-history.yaml, разбор YAML + подсчёт (self-evidence)"
+  title: "ai-ops-kit — planning/plan.yaml, history/plan-history.yaml, ai_ops_kit/planning/delivery_plan.py (self-evidence)"
   url: ""
   type: internal_data
   published_at: "2026-08-19"
   is_primary: true
 citation:
-  locator: "yaml.safe_load обоих файлов: closed=42 (goal 42, result 42, pr 24, evidence 13, commit 12, finding 0), active=28 (evidence 7); regex ep-|DP-|RR-|ADR- → 5/42 и 1/28; grep -c '^\\s*#' → 748/1182 и 906/1923"
-  quote: "у `done` есть место, где результат перепроверяется"
+  locator: "yaml.safe_load обоих файлов: closed=42 (goal 42, result 42, pr 24, evidence 13, commit 12, decision 0, finding 0), active=28 (goal 28, affects 28, evidence 7); delivery_plan.py:58, :196-207, :375-379, :389-395, :400-402"
+  quote: "Поля-связки: чем работа привязана к реальности. Не обязательны, но их СМЫСЛ проверяется ниже."
 captured_at: "2026-08-19"
-captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+captured_by: "claude (RR-016; self-evidence; пересчитано независимым судьёй — числа совпали, прочтение исправлено по находкам M-1, M-2, M-4)"
 freshness:
   volatile: true
   expires_at: "2026-11-19"
 reliability:
   level: high
-  rationale: "Числа получены разбором самих файлов программой, а не чтением глазами; воспроизводится одной командой."
+  rationale: "Числа получены разбором файлов программой и независимо воспроизведены судьёй до последней единицы; места проверок прочитаны в коде обеими сторонами."
 status: active
 superseded_by: null

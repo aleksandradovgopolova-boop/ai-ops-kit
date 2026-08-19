@@ -3,34 +3,33 @@ kind: research.evidence
 id: EV-1141
 request_id: RR-016
 statement: >-
-  Словарь сущностей и связей у кита ТОЖЕ уже есть — registry/entities.yaml объявляет 15 типов
-  узлов (goal, initiative, epic, feature, story, design, api, analytics, dashboard, documentation,
-  release, metric, incident, experiment, insight) и 21 допустимую связь (contains, specified-by,
-  measured-by, delivered-by, observed-by, caused, affects, validates, derived-from, feeds и др.),
-  а schemas/knowledge-graph.schema.json задаёт форму графа. НО у этого словаря нет ни одного
-  потребителя в продуктовом пути: в проверенном охвате (.github/workflows/, quality/gates.yaml,
-  registry/workflows.yaml, весь ai_ops_kit/) validate_knowledge_graph.py не вызывается ниоткуда —
-  ссылки на него есть только в tests/unit/, docs/QUICKSTART.md, FILE_INDEX.md и CHANGELOG.
-  Ни один workflow не перечисляет граф в quality_gates, ни один гейт не называет его валидатором.
-  Оговорка охвата: утверждение отрицательное, проверено grep'ом по перечисленным путям 19.08.2026;
-  «не найдено» здесь означает «не найдено в этих путях», а не «невозможно».
+  Словарь сущностей и связей у кита есть — registry/entities.yaml объявляет 15 типов узлов и
+  20 допустимых связей, schemas/knowledge-graph.schema.json задаёт форму графа. Потребитель у
+  графа СУЩЕСТВУЕТ, но необязательный: ai_ops_kit/lifecycle/run_report.py:54 (graph_findings)
+  читает knowledge/graph.yaml и добавляет находки в отчёт прогона, причём граф подаётся
+  необязательным флагом --graph; registry/workflows.yaml:215 и :277 называют граф в
+  archive_criteria. Чего у графа НЕТ — обязательности: валидатор validate_knowledge_graph.py
+  в проверенном охвате (.github/workflows/, quality/gates.yaml, registry/workflows.yaml,
+  ai_ops_kit/) не вызывается ниоткуда, кроме тестов и документации, и ни один гейт не называет
+  граф своим источником истины. Первая редакция этого доказательства утверждала «нет ни одного
+  потребителя» — утверждение опровергнуто независимым судьёй и здесь исправлено.
 evidence_type: documented_fact
 source:
-  title: "ai-ops-kit — registry/entities.yaml, quality/gates.yaml, registry/workflows.yaml, grep по дереву (self-evidence)"
+  title: "ai-ops-kit — registry/entities.yaml, ai_ops_kit/lifecycle/run_report.py, registry/workflows.yaml (self-evidence)"
   url: ""
   type: internal_data
   published_at: "2026-08-19"
   is_primary: true
 citation:
-  locator: "registry/entities.yaml (47 строк: entity_types + relations); grep -rn 'validate_knowledge_graph' → только tests/, docs/, FILE_INDEX.md, CHANGELOG.md"
+  locator: "registry/entities.yaml (yaml.safe_load: entity_types 15, relations 20); run_report.py:54 graph_findings + :17 интерфейс --graph; workflows.yaml:215, :277"
   quote: "Определяет ТИПЫ сущностей и допустимые СВЯЗИ между ними."
 captured_at: "2026-08-19"
-captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+captured_by: "claude (RR-016; self-evidence; исправлено по находке M-5 независимого судьи)"
 freshness:
   volatile: true
   expires_at: "2026-11-19"
 reliability:
   level: medium
-  rationale: "Позитивная часть (словарь существует) проверена чтением; негативная часть (потребителей нет) — отрицательное утверждение с названным охватом, поэтому не выше medium."
+  rationale: "Позитивная часть проверена чтением кода дважды — писателем и судьёй; негативная часть (валидатор не обязателен) — отрицательное утверждение с названным охватом, поэтому не выше medium."
 status: active
 superseded_by: null

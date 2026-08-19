@@ -4,8 +4,10 @@ id: EV-1144
 request_id: RR-016
 statement: >-
   Связи между сущностями отсутствуют не по недосмотру, а по устройству схем. schemas/workitem.schema.json
-  не имеет ни одного поля-ссылки на решение или исследование (schema_version, kind, id, task, workflow,
-  route_reasons, human_approval_required, paths, status, lifecycle_intent). В decisions-registry
+  (сущность ПРОГОНА, не запись плана — их не следует смешивать) не имеет ни одного поля-ссылки
+  на решение или исследование (schema_version, kind, id, task, workflow, route_reasons,
+  human_approval_required, paths, status, lifecycle_intent); поля-связки записи ПЛАНА живут не в
+  схеме, а в delivery_plan.py (см. EV-1143). В decisions-registry
   эпизод решения обязан иметь question/decision/reason/reversibility/date, а связь с работой —
   только необязательное свободнотекстовое `source`. В feature-blueprint блок links допускает
   goal/initiative/epic/stories/experiments — решения и исследования там нет. ЕДИНСТВЕННЫЙ сомкнутый
@@ -21,7 +23,7 @@ source:
   published_at: "2026-08-19"
   is_primary: true
 citation:
-  locator: "properties перечислены разбором json каждой схемы; FL-001.yaml строки 1-20 (feature, decision_package: DP-108, follow_up: ADR-001)"
+  locator: "цитата — schemas/feature-blueprint.schema.json, properties.links.description; properties остальных схем перечислены разбором json; FL-001.yaml строки 1-20 (feature, decision_package: DP-108, follow_up: ADR-001)"
   quote: "Связи с другими сущностями (предвестник Knowledge Graph, Ф4)."
 captured_at: "2026-08-19"
 captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"

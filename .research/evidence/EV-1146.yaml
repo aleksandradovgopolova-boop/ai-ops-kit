@@ -3,29 +3,34 @@ kind: research.evidence
 id: EV-1146
 request_id: RR-016
 statement: >-
-  Словаря типов коммитов в ките нет вообще: grep по rules/, docs/, registry/, templates/ на
-  'conventional commit', 'commit_type', 'тип коммита' 19.08.2026 не дал ни одного совпадения.
-  То есть предложение владельца пересобрать список префиксов не конкурирует с действующим
-  правилом — правила нет; при этом сама работа кита уже размечается по контурам, ролям и целям,
-  и именно там живёт классификация изменений. Оговорка охвата: проверены четыре названных дерева
-  на текущей версии 3.36.12; в шаблонах CI дочек отдельная проверка не проводилась.
+  Словарь типов коммитов в ките УЖЕ ПРИНЯТ и уже исполняется, причём за день до этого
+  исследования. pyproject.toml:206 объявляет [tool.commitizen] name = "cz_conventional_commits";
+  секция [tool.ai_ops.release_gates] задаёт точку включения commit_format_enforced_after =
+  "62cefc1", дата 2026-08-18; CI кита (.github/workflows/package-quality.yml:110-126) исполняет
+  `cz check --rev-range` от этой точки, считая код 3 («в диапазоне нет коммитов») законным
+  результатом. Решение владельца 17.08.2026 ограничило правило только НОВЫМИ коммитами: в истории
+  72 коммита без conventional-префикса из 594, и правило, требующее переписать историю, не введут
+  никогда. В дочерние репозитории этот инструмент не едет — DP-114 фиксирует, что commitizen
+  живёт в CI родителя. Первая редакция утверждала «словаря типов коммитов в ките нет вовсе»;
+  утверждение опровергнуто независимым судьёй — grep писателя покрывал rules/docs/registry/
+  templates/ и не мог увидеть pyproject.toml.
 evidence_type: documented_fact
 source:
-  title: "ai-ops-kit — grep по rules/ docs/ registry/ templates/ (self-evidence)"
+  title: "ai-ops-kit — pyproject.toml, .github/workflows/package-quality.yml, .research/decisions/DP-114.yaml (self-evidence)"
   url: ""
   type: internal_data
   published_at: "2026-08-19"
   is_primary: true
 citation:
-  locator: "grep -rniE 'conventional.?commit|commit_type|commit-prefix|тип коммита' rules docs registry templates → 0 совпадений"
-  quote: "Статус — только тот, которого код не знает: todo / in_progress / done / dropped."
+  locator: "pyproject.toml:206-218 ([tool.commitizen], commit_format_enforced_after=62cefc1, дата 2026-08-18); package-quality.yml:110-126 (шаг «формат новых коммитов»); DP-114 строка 109"
+  quote: "ТОЛЬКО НОВЫЕ КОММИТЫ — решение владельца 17.08.2026: в истории 72 коммита без"
 captured_at: "2026-08-19"
-captured_by: "claude (RR-016; self-evidence — требует спот-чека judge)"
+captured_by: "claude (RR-016; self-evidence; переснято по находке M-3 независимого судьи)"
 freshness:
   volatile: true
   expires_at: "2026-11-19"
 reliability:
-  level: medium
-  rationale: "Отрицательное утверждение с названным охватом четырёх деревьев; за пределами охвата не проверялось."
+  level: high
+  rationale: "Прочитано в трёх независимых местах — конфигурация, шаг CI и прошлый пакет решения того же центра; проверено после опровержения, а не до."
 status: active
 superseded_by: null
