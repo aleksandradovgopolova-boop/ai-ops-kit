@@ -1084,3 +1084,37 @@ probes:
   why: 'ШОВ: `delivery_plan` может сколько угодно знать, что цель закрыта, — человек узнаёт об этом
     только там, где СОВЕТ это произносит. Мутация опускает работу молча, и человек не понимает, куда
     делся вчерашний совет: молчаливое исчезновение запрещено тем же правилом, что и у заморозки.'
+- id: awaiting-human-is-computed-not-constant
+  kind: guard
+  file: ai_ops_kit/gates/gate_executor.py
+  find: '        "awaiting_human": bool(ev.get("pending_human") or ev.get("human_handoff")),'
+  replace_with: '        "awaiting_human": False,'
+  tests:
+  - tests/unit/test_gate_says_when_the_move_is_humans.py
+  why: 'Признак существует, только пока он ВЫЧИСЛЯЕТСЯ из evidence. Мутация делает его вечно-ложным:
+    поле в отчёте есть, схема довольна, а различить «гейт нашёл дефект» и «гейт ждёт человека»
+    по-прежнему нельзя. Это самый правдоподобный способ сломать правку тихо.'
+- id: honest-skip-answers-the-question-too
+  kind: guard
+  file: ai_ops_kit/gates/gate_executor.py
+  find: '            "awaiting_human": False,'
+  replace_with: '            "scope_placeholder_removed": False,'
+  tests:
+  - tests/unit/test_gate_says_when_the_move_is_humans.py
+  why: 'Ранний возврат неприменимого гейта — тоже результат. Мутация убирает у него поле, и
+    отсутствие читается как «не знаю», что здесь неотличимо от «нет». Ровно та подмена, против
+    которой стоит остальной контур.'
+- id: gate-result-shape-is-guarded
+  kind: seam
+  covers:
+  - ai_ops_kit/gates/gate_executor.py
+  - schemas/gate-result.schema.json
+  file: schemas/gate-result.schema.json
+  find: '    "awaiting_human": { "type": "boolean"'
+  replace_with: '    "awaiting_human_unused": { "type": "boolean"'
+  tests:
+  - tests/unit/test_gate_says_when_the_move_is_humans.py
+  why: 'ШОВ между кодом и схемой: набор полей результата сторожит `_ALLOWED_KEYS`, выведенный из
+    схемы. Мутация уводит поле из схемы, оставляя код на месте — то есть отчёт начинает нести поле,
+    которого его собственный контракт не знает. Именно так поле и терялось раньше: контракт
+    фиксированный, а факт жил рядом с ним.'
