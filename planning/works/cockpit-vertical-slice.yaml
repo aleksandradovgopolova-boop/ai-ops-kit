@@ -3,7 +3,7 @@ work:
   title: Одна вертикальная функция Cockpit целиком — от проблемы до измеренного результата
   type: product
   goal: owner-speaks-product-not-pipeline
-  status: todo
+  status: done
   owner_role: product
   depends_on:
   - experience-contract-drives-stories

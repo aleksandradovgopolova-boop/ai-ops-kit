@@ -517,7 +517,7 @@ work:
     title: Одна вертикальная функция Cockpit целиком — от проблемы до измеренного результата
     type: product
     goal: owner-speaks-product-not-pipeline
-    status: todo
+    status: done
     owner_role: product
     # `four-product-objects` добавлена 18.08.2026 при её закрытии: остаток той работы —
     # провести ОДНУ настоящую функцию через все четыре объекта — исполняется здесь. Без этой
