@@ -83,6 +83,7 @@ STANDALONE = [
     "validate_security_posture",
     "validate_stack_qualification",
     "validate_stale_gates",
+    "validate_child_config_filled",
     "validate_standalone_engine",
     "validate_supply_chain",
     "validate_surface_wiring",

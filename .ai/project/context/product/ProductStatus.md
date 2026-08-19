@@ -31,7 +31,7 @@ PR, который меняет реальность, — а не «когда-�
 |---|---|---|
 | Движок исполнения (WorkItem → pipeline → evidence → gates → delivery) | **готово** | 119 модулей в 16 пакетах; 1923 теста собираются, 1915 проходят, 11 skipped |
 | Quality gates | **готово** | 35 <!-- claim:gates-total --> гейтов, из них 21 блокирующий (`quality/gates.yaml`); 14 advisory — обкатка идёт |
-| Валидаторы (машинная проверка инвариантов) | **готово** | 76 <!-- claim:validators-total --> валидатора в `ai_ops_kit/validation/`, каждый запускается извне (`test_validator_runtime_contract`) |
+| Валидаторы (машинная проверка инвариантов) | **готово** | 77 <!-- claim:validators-total --> валидатора в `ai_ops_kit/validation/`, каждый запускается извне (`test_validator_runtime_contract`) |
 | Установщик и обновление child-репозиториев | **готово** | `init`/`update`/`doctor`/`diff`/`migrate` + 10 команд; транзакционный откат по backup, миграции исполняются по-настоящему |
 | Политика обновлений `update_policy: pr` | **готово с 3.36.9+** | F-022: локальный `update` при `policy: pr` уходит в ветку `ai-ops/update-v<версия>`, рабочее дерево владельца не трогается. В теге 3.36.9 ещё НЕ исполнялась — исправление влито после релиза (PR #84) |
 | Провайдеры | **частично** | реализованы 3 адаптера: `anthropic`, `openai`, `openai-compatible` (+ `claude-cli`, `mock`). В `registry/providers.yaml` объявлено 10 — остальные помечены `DECLARED_NOT_IMPLEMENTED` с причиной, не молчат |
