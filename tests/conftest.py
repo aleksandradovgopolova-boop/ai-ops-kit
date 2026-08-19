@@ -25,7 +25,10 @@ PKG_ROOT = Path(__file__).resolve().parents[1]
 TOOLS_DIR = PKG_ROOT / "tools"
 VALIDATION_DIR = PKG_ROOT / "ai_ops_kit" / "validation"
 TESTS_DIR = PKG_ROOT / "tests"          # общие инструменты проб (`ambient.py`) импортируются по имени
-for p in (TOOLS_DIR, VALIDATION_DIR, TESTS_DIR):
+# session-ritual-validators-are-dead: session-модули в engops/ импортируют ai_ops_kit.shared,
+# поэтому PKG_ROOT обязан быть на пути. Валидаторам это не нужно (они на плоском имени), но и
+# не мешает — пакет уже существует.
+for p in (PKG_ROOT, TOOLS_DIR, VALIDATION_DIR, TESTS_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 

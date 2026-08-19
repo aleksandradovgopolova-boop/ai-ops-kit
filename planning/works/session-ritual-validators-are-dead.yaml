@@ -3,7 +3,7 @@ work:
   title: Валидаторы контракта сессионных артефактов действительно вызываются
   type: quality
   goal: qualification-closeout
-  status: todo
+  status: done
   owner_role: engineer
   depends_on: []
   write_scope:

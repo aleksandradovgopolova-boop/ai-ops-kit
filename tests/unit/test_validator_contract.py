@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,20 @@ OTHER_SEAMS = {
     "validate_security_posture": "check(data, root) — требует корень репозитория",
 }
 
+# Сессионные модули в engops/ — тот же шов check(data), но живут вне каталога validation/.
+# ЗАЧЕМ ЭТОТ СПИСОК (session-ritual-validators-are-dead): замер 17.08 показал, что 5 модулей
+# session_* имеют check(), но НИ ОДНА не вызывается из production-кода — только из собственных
+# тестов. Включение в контракт делает их видимыми: новый session-модуль с check() обязан попасть
+# в список осознанно, а пропажа — ловится тестом.
+SESSION_CONTRACT_CHECKS = [
+    "ai_ops_kit.engops.session_boundary",
+    "ai_ops_kit.engops.session_guardrails",
+    "ai_ops_kit.engops.session_handoff",
+    "ai_ops_kit.engops.session_launcher",
+    "ai_ops_kit.engops.session_telemetry",
+    "ai_ops_kit.engops.session_telemetry_provider",
+]
+
 # Заведомо чужой артефакт: ни один валидатор не должен признать его своим.
 ALIEN = {"kind": "совершенно-не-тот-артефакт", "registry_type": "мусор",
          "schema_version": 999, "нет": "ничего осмысленного"}
@@ -87,6 +102,16 @@ def _seam_of(path: Path):
 
 
 def _check(name):
+    """Импорт check() по имени модуля. Поддерживает плоские имена (validate_*) и полные пути."""
+    if "." in name:
+        # Полный путь: ai_ops_kit.engops.session_boundary — загрузка по файлу, без sys.path.
+        parts = name.split(".")
+        rel = Path(*parts[1:])  # от корня пакета: engops/session_boundary
+        fpath = PKG / "ai_ops_kit" / (rel.with_suffix(".py"))
+        spec = importlib.util.spec_from_file_location(name, fpath)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.check
     return importlib.import_module(name).check
 
 
@@ -102,6 +127,21 @@ def test_list_matches_reality():
     missing = sorted(discovered - listed)
     stale = sorted(set(UNIFORM_CHECK_VALIDATORS) - discovered)
     assert not missing, f"валидаторы со швом check(data) вне контракта: {missing}"
+    assert not stale, f"в списке есть исчезнувшие/сменившие шов: {stale}"
+
+
+@pytest.mark.unit
+def test_session_checks_match_reality():
+    """Session-модуль с check() в engops/, не внесённый в список, остался бы вне контракта."""
+    discovered = set()
+    for p in sorted((PKG / "ai_ops_kit" / "engops").glob("session_*.py")):
+        seam = _seam_of(p)
+        if seam and seam[1] == 1:
+            discovered.add(f"ai_ops_kit.engops.{p.stem}")
+    listed = set(SESSION_CONTRACT_CHECKS)
+    missing = sorted(discovered - listed)
+    stale = sorted(listed - discovered)
+    assert not missing, f"session-модули со швом check() вне контракта: {missing}"
     assert not stale, f"в списке есть исчезнувшие/сменившие шов: {stale}"
 
 
@@ -131,3 +171,25 @@ class TestUniformCheckContract:
 def test_other_seams_still_exist(name, reason):
     """Исключение на исчезнувший валидатор — мёртвая запись, она маскирует потерю покрытия."""
     assert (PKG / "ai_ops_kit" / "validation" / f"{name}.py").is_file(), f"{name} не найден ({reason})"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("module_name", SESSION_CONTRACT_CHECKS)
+class TestSessionCheckContract:
+    """Контракт session check-функций — тот же шов, что у валидаторов (session-ritual-validators-are-dead)."""
+
+    def test_returns_list_of_strings(self, module_name):
+        """check() возвращает список строк — не bool/None/исключение."""
+        out = _check(module_name)(dict(ALIEN))
+        assert isinstance(out, list), f"{module_name}.check вернул {type(out).__name__}"
+        assert all(isinstance(x, str) for x in out), f"{module_name}: в списке не только строки"
+
+    def test_fail_closed_on_alien_artifact(self, module_name):
+        """Session-модуль, молча принимающий чужой артефакт, зелёный вхолостую."""
+        out = _check(module_name)(dict(ALIEN))
+        assert out, f"{module_name}: чужой артефакт принят без единой ошибки"
+
+    def test_messages_are_actionable(self, module_name):
+        """Пустая строка вместо причины — тишина с ненулевым кодом."""
+        out = _check(module_name)(dict(ALIEN))
+        assert all(len(x.strip()) >= 8 for x in out), f"{module_name}: есть пустые/обрывочные сообщения"

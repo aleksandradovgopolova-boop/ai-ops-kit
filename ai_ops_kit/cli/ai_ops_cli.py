@@ -457,6 +457,15 @@ def _run_intent(intent, task, child_root, signals, a):
         snap = session_telemetry.snapshot(str(child_root))
         pol = session_guardrails.load_policy(child_root)
         rec = session_guardrails.recommend(snap, pol)
+        # session-ritual-validators-are-dead: check() вызывается на каждом produced-артефакте,
+        # а не только в собственных тестах. Ошибка валидации — warning, не блок: команда session
+        # read-only, и владелец должен увидеть проблему, а не получить отказ.
+        snap_errors = session_telemetry.check(snap)
+        ritual_errors = session_guardrails.check(rec)
+        if snap_errors or ritual_errors:
+            import sys as _sys
+            for e in snap_errors + ritual_errors:
+                print(f"session-check: {e}", file=_sys.stderr)
         if js:
             print(json.dumps({"snapshot": snap, "recommendation": rec}, ensure_ascii=False, indent=2))
         else:
