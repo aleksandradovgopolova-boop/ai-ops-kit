@@ -895,6 +895,22 @@ probes:
     держащимся. Мутация делает «не прочитано» равным «снято»: тогда правило снимается удалением одной
     строки в том же файле, который оно охраняет. Это ровно класс «не знаю выдано за нет», против
     которого стоит весь контур.'
+- id: managed-drift-seam-pipeline-warns-before-isolation
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/pipeline_git.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '    managed_pf = _managed_drift_preflight(child_root)'
+  replace_with: '    managed_pf = None'
+  tests:
+  - tests/unit/test_managed_drift_reaches_the_run.py
+  why: 'ШОВ, которого не было: у pipeline_git.py стояла охранная проба и ни одной шовной, и
+    собственный валидатор кита говорил об этом прямо — снятие охраны поймается, а отключённый
+    ВЫЗОВ механизма нет. Цена молчания названа замером B2-27: `update --in-place` оставляет
+    managed-файлы в рабочем дереве, прогон изолируется в worktree от HEAD, незакоммиченное туда
+    не попадает — прогон идёт на СТАРОМ ките, а doctor говорит «версии ✓». Мутация оставляет
+    проверку написанной и отключает её вызов: снаружи всё объявлено, а владелец снова получает
+    поведение прежней версии без единого слова о причине.'
 - id: next-does-not-offer-frozen-work
   kind: seam
   covers:
@@ -904,6 +920,10 @@ probes:
   find: '        ready = [r for r in ready if r["id"] not in frozen]'
   replace_with: '        pass'
   tests:
+  # 19.08.2026: проба ВЫЖИВАЛА на прежнем тесте. Он проверял вычитание на настоящем плане, а после
+  # снятия заморозки замороженных работ не осталось — утверждение «предложенное не пересекается с
+  # замороженным» стало истинным впустую. Новый файл ставит непустое множество сам.
+  - tests/unit/test_next_work_subtracts_frozen.py
   - tests/unit/test_capability_freeze_enforced.py
   why: 'ШОВ, ради которого работа и заведена: 18.08.2026 кит САМ предложил взять
     `watch-contract-for-night-review` — работу из замороженной цели, — потому что решение владельца
