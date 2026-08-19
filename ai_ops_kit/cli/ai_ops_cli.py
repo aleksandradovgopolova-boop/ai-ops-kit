@@ -39,6 +39,10 @@ INTENTS = {
     "review":  ("независимый ревью произведённого", "review", True),
     "status":  ("статус активной работы", "status", False),
     "health":  ("здоровье продукта", "health", False),
+    # v3.36.13 (session-command-reaches-the-child): команда session перенесена из установщика в CLI,
+    # чтобы работала из установленной дочки. Показывает снимок телеметрии сессии и рекомендацию.
+    "session": ("снимок телеметрии сессии + рекомендация (continue/compact/clear/new_session)",
+                "session", False),
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
@@ -444,6 +448,25 @@ def _run_intent(intent, task, child_root, signals, a):
             from ai_ops_kit.ui import presenter
             aud = presenter.audience_from_config(child_root)
             print(presenter.render(presenter.from_product_health(report), audience=aud))
+        return 0
+
+    # v3.36.13 (session-command-reaches-the-child): команда session перенесена из установщика в CLI,
+    # чтобы работала из установленной дочки. Показывает снимок телеметрии сессии и рекомендацию.
+    if intent == "session":
+        from ai_ops_kit.engops import session_guardrails, session_telemetry
+        snap = session_telemetry.snapshot(str(child_root))
+        pol = session_guardrails.load_policy(child_root)
+        rec = session_guardrails.recommend(snap, pol)
+        if js:
+            print(json.dumps({"snapshot": snap, "recommendation": rec}, ensure_ascii=False, indent=2))
+        else:
+            # Простой текстовый вывод без presenter (функция from_session_snapshot не реализована)
+            print("Session Snapshot:")
+            for k, v in snap.items():
+                print(f"  {k}: {v}")
+            print("\nRecommendation:")
+            for k, v in rec.items():
+                print(f"  {k}: {v}")
         return 0
 
     if intent == "new":
