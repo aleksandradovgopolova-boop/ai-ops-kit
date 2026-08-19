@@ -18,27 +18,28 @@ theme:
     - search.suggest
     - content.code.copy
 
+# НАВИГАЦИЯ НАЗЫВАЕТ ТОЛЬКО СУЩЕСТВУЮЩЕЕ (19.08.2026). Прежде здесь стояли шесть страниц, которых
+# нет ни одной: api/orchestrator, api/execution-pipeline, api/preflight, api/tool-loop,
+# api/usage-ledger, api/benchmarks. Сборка документации не запускалась нигде, поэтому обещание
+# шести разделов держалось ровно до первой попытки собрать. Заглушки на их месте были бы хуже:
+# страница, которая существует и ничего не говорит, тратит время читателя дважды.
+#
+# `QUICKSTART.md` — регистр как у файла. На macOS и Windows расхождение не видно, на Linux сборка
+# падает: тот же класс, что «у меня работает».
 nav:
   - Home: index.md
-  - Quickstart: quickstart.md
+  - Quickstart: QUICKSTART.md
   - Architecture:
     - Overview: architecture/overview.md
     - Execution Engine: architecture/execution-engine.md
     - Quality Gates: architecture/quality-gates.md
     - Registry: architecture/registry.md
   - API Reference:
-    - Core:
-      - Orchestrator: api/orchestrator.md
-      - Execution Pipeline: api/execution-pipeline.md
-      - Preflight: api/preflight.md
-      - Tool Loop: api/tool-loop.md
     - Contracts:
       - TypedDict Contracts: api/contracts.md
       - Invariants: api/invariants.md
     - Operations:
       - Kit Observability: api/kit-observability.md
-      - Usage Ledger: api/usage-ledger.md
-      - Benchmarks: api/benchmarks.md
   - Guides:
     - Installation: guides/installation.md
     - Child Repository: guides/child-repo.md
