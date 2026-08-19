@@ -39,7 +39,11 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 # v3.34: валидаторы переехали в пакет. Путь один на модуль — чтобы следующий перенос правился
 # в одном месте, а не в каждом вызове подпроцесса.
 VALIDATION = PKG / "ai_ops_kit" / "validation"
-_EVIDENCE_KEYS = {"status", "provided", "checks", "evidence", "warnings", "blockers", "override"}
+# `pending_human`/`human_handoff` — часть формы evidence, а не приписка сбоку: гейт, который ждёт
+# ЧЕЛОВЕКА, отличается от гейта, который нашёл дефект. Без объявления здесь такой признак в
+# загруженном evidence считался бы «неизвестным полем».
+_EVIDENCE_KEYS = {"status", "provided", "checks", "evidence", "warnings", "blockers", "override",
+                  "pending_human", "human_handoff"}
 
 
 def validate_evidence(evidence) -> list:
@@ -237,7 +241,7 @@ def _freshness_run(base=None):
 
 # ключи, разрешённые схемой gate-result (additionalProperties: false)
 _ALLOWED_KEYS = {
-    "schema_version", "gate", "status", "blocking", "scope", "checks", "blockers",
+    "schema_version", "gate", "status", "blocking", "awaiting_human", "scope", "checks", "blockers",
     "warnings", "evidence", "affected_files", "affected_artifacts", "tested_revision",
     "artifact_hashes", "owner", "review_mode", "created_at", "expires_at", "override",
     "suggested_next",
@@ -353,6 +357,9 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     if rw and not any((signals or {}).get(s) for s in rw):
         return {
             "schema_version": 1, "gate": gate_id, "status": "pass", "blocking": False,
+            # признак обязан быть у КАЖДОГО результата, включая честный пропуск: отсутствие поля
+            # читается как «не знаю», а здесь это неотличимо от «нет»
+            "awaiting_human": False,
             "scope": ["not_applicable"], "checks": [], "blockers": [],
             "warnings": [f"гейт неприменим: нет ни одного сигнала {rw} — не оценивался (honest skip)"],
             "evidence": [], "tested_revision": tested_revision,
@@ -433,6 +440,19 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
         "gate": gate_id,
         "status": status,
         "blocking": blocking,
+        # ХОД ЗА ЧЕЛОВЕКОМ — ОТДЕЛЬНЫЙ ФАКТ, А НЕ ОТТЕНОК ТЕКСТА БЛОКЕРА (наблюдение 19.08.2026,
+        # работа `security-gate-closable-on-quick`). Конвейер уже ставил `pending_human` в evidence
+        # гейта, но сюда признак не доезжал: результат собирается из фиксированного набора полей, и
+        # всё остальное терялось при уплощении. В `run-report.json` его не было НИ РАЗУ.
+        #
+        # ПОЧЕМУ ЭТО НЕ КОСМЕТИКА. «Гейт нашёл дефект» и «гейт ждёт решения человека» требуют разных
+        # действий: первое чинит агент, второе он не может сделать в принципе. Читая отчёт, оба
+        # случая выглядели одинаково — как «работа не готова», — и ожидание человека молча
+        # засчитывалось в неудачу прогона.
+        #
+        # ВСЕГДА bool, НИКОГДА не отсутствует: пропущенное поле читается как «не знаю», а «не знаю»
+        # здесь неотличимо от «нет» — ровно та подмена, против которой стоит остальной контур.
+        "awaiting_human": bool(ev.get("pending_human") or ev.get("human_handoff")),
         "checks": checks,
         "blockers": blockers,
         "warnings": warnings,
