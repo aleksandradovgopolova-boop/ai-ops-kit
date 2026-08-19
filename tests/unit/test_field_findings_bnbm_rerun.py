@@ -177,7 +177,24 @@ def test_every_installer_command_is_routed_by_the_wrapper():
         m = re.match(r"\s{2}([a-z|-]+)\)\s*$", line)
         if m:
             routed |= set(m.group(1).split("|"))
-    intent_owned = {"status", "onboard"}          # осознанные пересечения, см. комментарий в обёртке
+    # ОСОЗНАННЫЕ ПЕРЕСЕЧЕНИЯ: команда есть и у установщика, и у движка, и в дочке её обслуживает
+    # ДВИЖОК — потому что установщик в поставку не едет, а движок едет.
+    #   status/onboard — у владельца это вопросы к работе, а не к киту (для состояния кита есть
+    #     отдельная `kit-status`);
+    #   session (19.08.2026) — интент перенесён в CLI работой `session-command-reaches-the-child`
+    #     ровно ради дочки, но маршрут остался на установщике, и `./ai-ops session` в дочке без
+    #     клона парента отвечал «исходник рядом не найден». Маршрут исправлен; здесь имя
+    #     перечислено, чтобы проверка не требовала вернуть его установщику.
+    intent_owned = {"status", "onboard", "session"}
+
+    # ДВЕ СТОРОНЫ, А НЕ ОДНА. Слева — команда установщика без маршрута (недостижима). Справа —
+    # имя, объявленное «за движком», которого движок не знает: тогда команда пропала бы совсем.
+    import sys as _sys
+    _sys.path.insert(0, str(PKG / "tools"))
+    import ai_ops_cli as _cli
+    orphan = sorted(n for n in intent_owned if n not in _cli.INTENTS)
+    assert not orphan, (f"объявлено, что команду обслуживает движок, но такого интента нет: "
+                        f"{orphan} — команда исчезла бы для владельца")
 
     missing = sorted(installer_cmds - routed - intent_owned)
     assert not missing, f"команды установщика недостижимы из дочки: {missing}"
