@@ -59,6 +59,13 @@ INTENTS = {
 }
 
 
+# Интенты, которые ИСПОЛНЯЮТСЯ, а не показывают превью. Список обязан совпадать с тем, что умеет
+# `_run_intent`: расхождение означает «обработчик есть, до него не доходит» — молчаливый no-op с
+# кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
+DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
+                  "next", "model", "bootstrap", "feedback", "session")
+
+
 def resolve_flags(signals):
     """Авто-подбор внутренних флагов по классу задачи (preset). Пользователь их не задаёт вручную."""
     tt = (signals.get("task_type") or "QUICK").upper()
@@ -460,11 +467,20 @@ def _run_intent(intent, task, child_root, signals, a):
         # session-ritual-validators-are-dead: check() вызывается на каждом produced-артефакте,
         # а не только в собственных тестах. Ошибка валидации — warning, не блок: команда session
         # read-only, и владелец должен увидеть проблему, а не получить отказ.
+        #
+        # ЗДЕСЬ БЫЛ ВЫЗВАН ВАЛИДАТОР ЧУЖОГО АРТЕФАКТА (снято 19.08.2026). Стояло
+        # `session_guardrails.check(rec)`, но эта функция проверяет `CompletionRitual` — результат
+        # ДРУГОЙ функции (`completion_ritual`), а `recommend()` возвращает рекомендацию без `kind`.
+        # Итог: КАЖДЫЙ запуск `./ai-ops session` печатал в stderr «kind должен быть
+        # CompletionRitual» — замерено на чистой установке. Проверка не проверяла ничего и при этом
+        # обучала владельца игнорировать строки `session-check:`.
+        # Своего валидатора у `SessionRecommendation` нет вовсе; заводить его здесь нельзя — это
+        # `ai_ops_kit/engops/`, территория второй ленты. Передано ей работой
+        # `session-recommendation-has-a-validator`.
         snap_errors = session_telemetry.check(snap)
-        ritual_errors = session_guardrails.check(rec)
-        if snap_errors or ritual_errors:
+        if snap_errors:
             import sys as _sys
-            for e in snap_errors + ritual_errors:
+            for e in snap_errors:
                 print(f"session-check: {e}", file=_sys.stderr)
         if js:
             print(json.dumps({"snapshot": snap, "recommendation": rec}, ensure_ascii=False, indent=2))
@@ -971,9 +987,12 @@ def main(argv):
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
-    if not preview_mode and intent in ("onboard", "status", "health", "plan", "new", "discuss",
-                                       "review", "advise", "next", "model", "bootstrap",
-                                       "feedback"):
+    # 2026-08-19: +session. Обработчик в `_run_intent` был написан, интент объявлен в INTENTS, а
+    # сюда имя не внесли — и команда МОЛЧА печатала общую заглушку с кодом 0. То есть работа
+    # `session-command-reaches-the-child` довела команду до дочки и не довела до исполнения.
+    # Расхождение этого списка с тем, что реально умеет `_run_intent`, теперь краснеет тестом
+    # `test_direct_intents_match_the_handler` — рукой список больше не забудут.
+    if not preview_mode and intent in DIRECT_INTENTS:
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc

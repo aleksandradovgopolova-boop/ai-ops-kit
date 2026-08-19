@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import pytest
 
+from test_ai_ops_cli import EXPECTED_INTENTS
+
 from ai_ops_cli import (  # noqa: F401 — имена, которые использует тело
     INTENTS,
     Path,
@@ -27,16 +29,11 @@ def test_ai_ops_cli_selftest():
         ok = ok and cond
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
-    expect("16 intent-команд", len(INTENTS) == 16
-           and {"new", "onboard", "discuss", "specify", "plan", "run", "do", "advise", "resume", "review",
-                "status", "health",
-                # v3.35 Product Operating Model: план продукта и понимание репозитория.
-                "next", "model",
-                # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
-                "bootstrap",
-                # 2026-08-17: наблюдения о САМОМ ките из продуктового репозитория — данные, а не
-                # пересказ человека (три работы плана кита пришли «сообщением параллельной сессии»).
-                "feedback"} == set(INTENTS))
+    # СПИСОК НЕ ДУБЛИРУЕТСЯ (сведено 19.08.2026): здесь стояла третья копия набора интентов и
+    # числа 16, поэтому один новый интент красил три теста, не сообщая ничего нового. Источник
+    # один — EXPECTED_INTENTS в test_ai_ops_cli.py, где он объявлен поимённо и с поводами.
+    expect(f"{len(EXPECTED_INTENTS)} intent-команд",
+           len(INTENTS) == len(EXPECTED_INTENTS) and EXPECTED_INTENTS == set(INTENTS))
 
     # preset: QUICK -> без review/author; ENGINEERING -> review+author; всегда sandbox+baseline
     fq = resolve_flags({"task_type": "QUICK"})

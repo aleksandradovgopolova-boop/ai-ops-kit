@@ -95,7 +95,13 @@ case "$cmd" in
   # интент-CLI, где такого интента нет: `invalid choice: 'usage'`. Документированная команда
   # была недостижима по документированному пути. Список сверяется тестом с реальными
   # командами установщика, чтобы отставание больше не было молчаливым.
-  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|session|subsession|engops|method)
+  # `session` УБРАН ИЗ ЭТОГО СПИСКА 19.08.2026, и это доделка работы `session-command-reaches-the-child`.
+  # Она перенесла `session` из установщика в CLI ровно ради того, чтобы команда работала из
+  # установленной дочки, — но маршрут остался прежним, и в дочке без клона парента `./ai-ops session`
+  # отвечал «исходник рядом не найден». То есть работа сделала половину: интент появился и был
+  # недостижим по документированному пути. Класс F-033 — механизм починен у кита и не доехал до дочки.
+  # Поведение то же: интент CLI зовёт те же session_telemetry + session_guardrails.
+  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|subsession|engops|method)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi

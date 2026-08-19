@@ -17,27 +17,47 @@ sys.path.insert(0, str(PKG_ROOT / "tools"))
 import ai_ops_cli
 
 
+# ОБЪЯВЛЕННАЯ ПОВЕРХНОСТЬ ИНТЕНТОВ — ОДИН ИСТОЧНИК (сведено 19.08.2026).
+#
+# Прежде один и тот же список жил в ТРЁХ местах: число 16 в `test_intents_count`, набор имён в
+# `test_intents_contain_expected` и копия обоих в `tests/unit/test_ai_ops_cli_selftest.py`.
+# Поэтому добавление ОДНОГО интента (`session`, перенесён из установщика в CLI, чтобы работать из
+# установленной дочки) покрасило ТРИ теста, и ни один из них не сказал ничего нового: они
+# проверяли одно утверждение трижды, а стоили тройного сопровождения.
+#
+# Здесь список один, а число выводится из него. Контракт не ослаб: набор по-прежнему пинится
+# поимённо, и новый интент по-прежнему обязан быть объявлен ЗДЕСЬ, а не появиться молча.
+# Когда лента B соберёт `docs/api/public-surface.md`, источником станет он, а этот список —
+# его проверкой.
+EXPECTED_INTENTS = {
+    "new", "onboard", "discuss", "specify", "plan", "run",
+    "do", "advise", "resume", "review", "status", "health",
+    # v3.35 Product Operating Model: план продукта и понимание репозитория.
+    "next", "model",
+    # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
+    "bootstrap",
+    # 2026-08-17: канал наблюдений о ките из дочки — данные, а не пересказ.
+    "feedback",
+    # 2026-08-19 (session-command-reaches-the-child): `session` переехал из установщика в CLI —
+    # установщик в поставку не едет, поэтому из дочки команда была недостижима.
+    "session",
+}
+
+
 @pytest.mark.critical_path
 @pytest.mark.unit
+
+
 class TestIntentsRegistry:
     """Tests for INTENTS — the intent registry."""
 
     def test_intents_count(self):
-        """INTENTS should have exactly 16 intents (v3.35: +next, +model; v3.35.2: +bootstrap;
-        2026-08-17: +feedback — наблюдения о ките из продуктового репозитория)."""
-        assert len(ai_ops_cli.INTENTS) == 16
+        """Число интентов совпадает с объявленным набором — считается, а не вписывается рукой."""
+        assert len(ai_ops_cli.INTENTS) == len(EXPECTED_INTENTS)
 
     def test_intents_contain_expected(self):
         """INTENTS should contain all expected intent names."""
-        expected = {"new", "onboard", "discuss", "specify", "plan", "run",
-                    "do", "advise", "resume", "review", "status", "health",
-                    # v3.35 Product Operating Model: план продукта и понимание репозитория.
-                    "next", "model",
-                    # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
-                    "bootstrap",
-                    # 2026-08-17: канал наблюдений о ките из дочки — данные, а не пересказ.
-                    "feedback"}
-        assert set(ai_ops_cli.INTENTS.keys()) == expected
+        assert set(ai_ops_cli.INTENTS.keys()) == EXPECTED_INTENTS
 
     def test_each_intent_has_required_fields(self):
         """Each intent should have (description, action, needs_task_text)."""

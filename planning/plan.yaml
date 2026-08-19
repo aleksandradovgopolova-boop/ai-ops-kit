@@ -247,6 +247,63 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  # ─── разбор внешнего аудита 19.08.2026 (две параллельные сессии) ─────────────────────────────
+  #
+  # Работы заведены ПОТОМУ, ЧТО ИХ ВЕДУТ. До этого две сессии правили репозиторий, а план о них не
+  # знал и советовал брать `second-brownfield-run` — то самое расхождение «план и исполнение
+  # показывают разное состояние», ради которого существует цель `plan-as-control-plane`.
+  # `write_scope` здесь не украшение: по нему `ai-ops next` считает, какие работы можно вести
+  # одновременно, и именно он разводит ленты по территории. Реестр активных работ лежит в
+  # игнорируемых файлах и между машинами не координирует — значит границы держит план.
+  - id: audit-phase-0-green
+    title: Собственный контур снова что-то значит — красное разобрано как находки, а не покрашено
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    branch: fix/phase-0-green
+    owner_role: engineer
+    write_scope: [planning/, history/, installer/, registry/, schemas/, templates/,
+                  ai_ops_kit/cli/, ai_ops_kit/planning/, .github/workflows/]
+    value: high
+    affects: {delivery_operations: true}
+    # Проверяемо: ruff 0; падения из аудита разобраны с названной причиной, а не заглушены;
+    # `./ai-ops next` отвечает; поставка под потолком без его поднятия; обязательные поля конфига
+    # дочки читаются кодом. Не входит: публичная граница и охраны — это вторая лента.
+  - id: session-recommendation-has-a-validator
+    title: У рекомендации сессии есть своя проверка, а не чужая
+    type: quality
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    write_scope: [ai_ops_kit/engops/]
+    value: medium
+    affects: {delivery_operations: true}
+    # НАЙДЕНО ЛЕНТОЙ A 19.08.2026 на чистой установке, ОТДАНО ЛЕНТЕ B (территория `engops`).
+    # `./ai-ops session` печатал в stderr «kind должен быть CompletionRitual» при КАЖДОМ запуске:
+    # вызывался `session_guardrails.check(rec)`, который проверяет `CompletionRitual` — результат
+    # другой функции, — а `recommend()` возвращает рекомендацию вообще без поля `kind`. Вызов снят
+    # (место вызова в `ai_ops_kit/cli/` — территория A), но своего валидатора у
+    # `SessionRecommendation` нет вовсе, и это остаток работы `session-ritual-validators-are-dead`:
+    # она объявила «check() зовётся на каждом produced-артефакте» и для одного из двух артефактов
+    # позвала чужой.
+    # Проверяемо: у рекомендации есть `kind` и валидатор её формы; `./ai-ops session` на чистой
+    # установке не печатает ни одной строки `session-check:`.
+
+  - id: audit-public-surface-and-guards
+    title: Объявлена публичная граница, и охраны кита проверены на самом ките
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    branch: lane-b
+    owner_role: engineer
+    write_scope: [docs/, mkdocs.yml, quality/, tools/, AGENTS.md,
+                  ai_ops_kit/validation/, ai_ops_kit/devtools/, ai_ops_kit/security/,
+                  ai_ops_kit/gates/, ai_ops_kit/engine/, ai_ops_kit/ui/]
+    value: high
+    affects: {delivery_operations: true}
+    # Проверяемо: есть docs/api/public-surface.md с четырьмя уровнями и тест, который краснеет на
+    # расхождении; определено, что такое breaking change; ни один валидатор не молчит; ни одна
+    # объявленная проба не остаётся непроверенной; у каждого гейта названо, кто его закрывает.
   # ─── находки второго живого brownfield (прогон 19.08.2026, копия bolshe-ne-budu-menshe) ──────
 
   # ─── second-real-brownfield ─────────────────────────────────────────────────────────────────
