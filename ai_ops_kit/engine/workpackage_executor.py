@@ -537,7 +537,9 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                      security_reviewer_proposer=None, strict_judge_qualified=True):
     """Исполнить список WorkPackages последовательно. proposer_for(pkg)->proposer; signals_for(pkg)->
     доп. сигналы пакета (опц.); write_scope_for(pkg)->список путей write-scope пакета (опц.).
-    v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути (containment не теряется);
+    v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути — containment не
+    теряется. Containment здесь означает политику брокера (allowlist, write_scope, запрет push),
+    а не изоляцию исполнения: сеть и ресурсы им не ограничены;
     open_pr применяется к финальному пакету (интегрированная ветка). -> {kind, workitem_id, packages,
     completed, stopped_at, executed_all, ready_all, final_sha, sequential_chain}."""
     from ai_ops_kit.engine import ai_ops_run
