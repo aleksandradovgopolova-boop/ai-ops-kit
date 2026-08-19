@@ -240,6 +240,7 @@ work:
     type: delivery
     goal: second-real-brownfield
     evidence: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-14.md
+    status: done
     # Статус ПОНИЖЕН до todo 2026-08-14 при разносе плана: прогон 14.08 состоялся и записан
     # (`qualification/REAL-PRODUCT-BNBM-2026-08-14.md`), но `verified PR = 0` и сейчас на этой работе
     # никого нет.
@@ -778,7 +779,7 @@ work:
     title: Гейт verify требует доказательства, что проверка ИСПОЛНЯЛАСЬ, а не что она существует
     type: quality
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/gates/, ai_ops_kit/validation/, quality/, tests/]
@@ -1052,7 +1053,7 @@ work:
     title: Повтор не назначается там, где отказ структурный, — он делает систему только медленнее
     type: engineering
     goal: qualification-closeout
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [ai_ops_kit/providers/, ai_ops_kit/engine/, tests/]
