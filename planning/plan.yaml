@@ -687,7 +687,7 @@ work:
     title: Производное и append-only состояние не конфликтует при параллельной работе
     type: engineering
     goal: team-works-in-parallel
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     # ЦЕННОСТЬ ПОДНЯТА С `medium` ДО `high` 19.08.2026 ЗАМЕРОМ, А НЕ ОЩУЩЕНИЕМ. За одну сессию цена
