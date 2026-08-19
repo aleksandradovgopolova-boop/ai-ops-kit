@@ -847,3 +847,38 @@ probes:
     пока его кто-то зовёт: рантайм находит команду через манифест. Мутация снимает привязку —
     содержимое ритуала остаётся идеальным и никем не читается. Границу кит объявляет честно: самозапуск
     это привязка рантайма, поэтому проверяется ровно то, за что кит отвечает, — объявление на месте.'
+- id: freeze-state-is-fail-closed
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        return {"frozen": True, "applies": True, "readable": False, "decision": FREEZE_DECISION,'
+  replace_with: '        return {"frozen": False, "applies": True, "readable": False, "decision": FREEZE_DECISION,'
+  tests:
+  - tests/unit/test_capability_freeze_enforced.py
+  why: 'Заморозка читается из ИСХОДА цели, и если исход не прочитан — правило обязано считаться
+    держащимся. Мутация делает «не прочитано» равным «снято»: тогда правило снимается удалением одной
+    строки в том же файле, который оно охраняет. Это ровно класс «не знаю выдано за нет», против
+    которого стоит весь контур.'
+- id: next-does-not-offer-frozen-work
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/next_work.py
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '        ready = [r for r in ready if r["id"] not in frozen]'
+  replace_with: '        pass'
+  tests:
+  - tests/unit/test_capability_freeze_enforced.py
+  why: 'ШОВ, ради которого работа и заведена: 18.08.2026 кит САМ предложил взять
+    `watch-contract-for-night-review` — работу из замороженной цели, — потому что решение владельца
+    существовало записью в реестре и ничем не сверялось. Мутация возвращает совет, противоречащий
+    решению; такой совет хуже отсутствия совета, потому что выглядит как санкция.'
+- id: taking-frozen-work-is-an-error
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if st == "in_progress" and w.get("id") in _frozen_ids:'
+  replace_with: '        if False and w.get("id") in _frozen_ids:'
+  tests:
+  - tests/unit/test_capability_freeze_enforced.py
+  why: 'Совет — половина правила; вторая половина в том, что взятую замороженную работу проверка
+    краснит и называет решение НОМЕРОМ, а не пересказом. Мутация оставляет вычитание в `next` и
+    снимает проверку: обойти правило можно, взяв работу мимо совета.'

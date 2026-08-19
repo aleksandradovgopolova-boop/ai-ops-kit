@@ -1,0 +1,30 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-18-уровень-описания-задачи--04b04fef
+at: '2026-08-18T21:45:50+00:00'
+statement: 'Уровень описания задачи не поднимается повторным specify: после specify
+  с size=medium файл features/contents-check/spec.yaml остался L0 QUICK с шестью разделами,
+  а прогон уровня ENGINEERING требует полного набора и останавливается на spec-prestage.
+  Владельцу приходится догадываться, что разделы надо дописать руками.'
+observation_class: defect
+severity: p1
+kit_version: 3.36.12
+child:
+  name: bnbm
+  path: /private/tmp/claude-501/-Users-sasad/56c78252-35c5-4e6f-b9c7-83635828ebae/scratchpad/bnbm
+  commit: 4b8f695a8b51
+evidence:
+- kind: command
+  command: python3 -c yaml-читалка spec.yaml
+  output: 'уровень: 0 L0 QUICK | разделов: 6 | незаполненных: []'
+- kind: note
+  text: Тот же класс наблюдался 15.08.2026 и записан в памяти проекта ИИ-Среды; на
+    3.36.12 живо.
+state: became_work
+state_reason: 'Проверено замером на живом продукте 19.08.2026, запись прогона: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md.
+  Заведено работой specify-tops-up-sections-for-a-raised-level.'
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-18T21:45:59+00:00'
+decided_at: '2026-08-18T21:48:08+00:00'
+became_work: specify-tops-up-sections-for-a-raised-level
