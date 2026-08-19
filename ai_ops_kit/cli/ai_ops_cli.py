@@ -43,6 +43,10 @@ INTENTS = {
     # чтобы работала из установленной дочки. Показывает снимок телеметрии сессии и рекомендацию.
     "session": ("снимок телеметрии сессии + рекомендация (continue/compact/clear/new_session)",
                 "session", False),
+    # 19.08.2026 (аудит): диагностика установки СИЛАМИ ДОЧКИ. Полный `doctor` живёт в установщике,
+    # а он в поставку не едет — значит в дочке без клона кита команда отвечала «исходник рядом не
+    # найден». Этот интент покрывает то, что видно изнутри репозитория, и НАЗЫВАЕТ, чего не видно.
+    "doctor":  ("проверить установку изнутри репозитория (полная проверка — у кита)", "doctor", False),
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
@@ -63,7 +67,7 @@ INTENTS = {
 # `_run_intent`: расхождение означает «обработчик есть, до него не доходит» — молчаливый no-op с
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
-                  "next", "model", "bootstrap", "feedback", "session")
+                  "next", "model", "bootstrap", "feedback", "session", "doctor")
 
 
 def resolve_flags(signals):
@@ -459,6 +463,15 @@ def _run_intent(intent, task, child_root, signals, a):
 
     # v3.36.13 (session-command-reaches-the-child): команда session перенесена из установщика в CLI,
     # чтобы работала из установленной дочки. Показывает снимок телеметрии сессии и рекомендацию.
+    if intent == "doctor":
+        from ai_ops_kit.lifecycle import child_doctor
+        rep = child_doctor.assess(child_root)
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2))
+        else:
+            print(child_doctor.render(rep))
+        return 0 if not [c for c in rep.get("checks", []) if c["ok"] is False] else 1
+
     if intent == "session":
         from ai_ops_kit.engops import session_guardrails, session_telemetry
         snap = session_telemetry.snapshot(str(child_root))
