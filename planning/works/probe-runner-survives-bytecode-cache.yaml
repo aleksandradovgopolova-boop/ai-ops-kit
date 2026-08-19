@@ -3,7 +3,7 @@ work:
   title: Прогон проб не обманывается кэшем байткода
   type: engineering
   goal: green-means-checked
-  status: todo
+  status: done
   owner_role: engineer
   depends_on: []
   write_scope:

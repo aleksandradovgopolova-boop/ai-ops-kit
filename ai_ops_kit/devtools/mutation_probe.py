@@ -60,9 +60,12 @@ def load_probes(root=None) -> list:
 def _pytest(root, tests, python=None, timeout=900):
     """Прогон названных тестов в дереве `root`. -> (rc, хвост вывода)."""
     cmd = [python or sys.executable, "-m", "pytest", *tests, "-q", "-p", "no:cacheprovider"]
+    # probe-runner-survives-bytecode-cache: мутация той же длины в ту же секунду не перекомпилирует
+    # .pyc (mtime+size), и интерпретатор исполняет старый байткод. Подавляем запись байткода.
     try:
         r = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, timeout=timeout,
-                           env={**__import__("os").environ, "PYTHONPATH": str(root)})
+                           env={**__import__("os").environ, "PYTHONPATH": str(root),
+                                "PYTHONDONTWRITEBYTECODE": "1"})
     except subprocess.TimeoutExpired:
         return 124, "прогон превысил таймаут"
     return r.returncode, (r.stdout or "")[-400:]
