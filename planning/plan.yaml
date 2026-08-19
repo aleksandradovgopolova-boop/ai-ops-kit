@@ -577,7 +577,7 @@ work:
     title: Ночной delta-обзор и утренний бриф — БЕЗ автоматических изменений
     type: delivery
     goal: nightly-product-review
-    status: todo
+    status: done
     owner_role: delivery
     depends_on: [watch-contract-for-night-review, contour-catches-declared-not-executed]
     write_scope: [ai_ops_kit/intelligence/, runtime/robin/, .research/]
