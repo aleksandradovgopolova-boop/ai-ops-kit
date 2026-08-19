@@ -1021,7 +1021,7 @@ work:
     title: Обновление кита доезжает до прогона, а не остаётся в незакоммиченном дереве
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: done
     owner_role: engineer
     depends_on: []
     write_scope: [installer/, ai_ops_kit/engine/, tests/]

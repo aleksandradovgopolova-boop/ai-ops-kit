@@ -1129,6 +1129,16 @@ probes:
     Первая редакция этого отказа (#176) звала `ai-ops approve` — такого intent в CLI нет, и живой
     прогон 19.08 это показал. Мутация возвращает несуществующую команду; тест обязан заметить, что
     названного пути нет на диске.'
+- id: managed-drift-checks-the-right-path
+  kind: guard
+  file: ai_ops_kit/engine/pipeline_git.py
+  find: '    rc, out, _ = _git(root, "status", "--porcelain", "--", ".ai/managed/", ".ai-ops.yaml")'
+  replace_with: '    rc, out, _ = _git(root, "status", "--porcelain", "--", ".ai/nonexistent/", ".ai-ops.yaml")'
+  tests:
+  - tests/unit/test_managed_drift_preflight.py
+  why: 'B2-27: update --in-place оставляет managed-файлы в рабочем дереве, но worktree создаётся
+    от HEAD. Если проверка ищет не в .ai/managed/, а в другом месте, прогон молча пойдёт на старом
+    ките. Мутация сдвигает путь; тест обязан заметить, что .ai/managed/ VERSION изменён.'
 - id: probes-run-without-site
   kind: guard
   file: tests/ambient.py
