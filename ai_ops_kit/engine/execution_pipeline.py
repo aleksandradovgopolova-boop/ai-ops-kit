@@ -660,9 +660,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
                                        "blockers": [_why_no_judge + ": needs_review домены "
                                                     "закрывает ТОЛЬКО квалифицированный судья или человек "
-                                                    "(ApprovalRecord, `ai-ops` approve по домену); общий code "
-                                                    "reviewer НЕ закрывает security: "
-                                                    + ", ".join(security_pack_result["needs_review"])],
+                                                    "(валидный ApprovalRecord); общий code reviewer НЕ "
+                                                    "закрывает security. Домены: "
+                                                    + ", ".join(security_pack_result["needs_review"])
+                                                    + ". Человеку закрыть так: python3 "
+                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "
+                                                    + str(wid) + " --approval <домен> --by <кто> "
+                                                    "--scope <что> --reason <почему>"],
                                        "pack": {"applicable": security_pack_result["applicable_domains"],
                                                 "needs_review": security_pack_result["needs_review"]}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]

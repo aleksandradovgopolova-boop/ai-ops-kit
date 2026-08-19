@@ -25,6 +25,7 @@ msh_news_bot_v2, bolshe-ne-budu-menshe), а не вкусом:
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -159,7 +160,14 @@ def test_quick_run_with_a_real_reason_says_how_to_close_it(tmp_path):
     sec_gate = next(g for g in (report["gates"]["gate_results"] or []) if g.get("gate") == "security")
     assert sec_gate["status"] == "fail", sec_gate
     text = json.dumps(sec_gate, ensure_ascii=False)
-    assert "ApprovalRecord" in text, f"отказ не называет, чем закрыть ворота: {text}"
+    # НАЗВАННАЯ КОМАНДА ОБЯЗАНА СУЩЕСТВОВАТЬ. Первая редакция этого отказа (PR #176) советовала
+    # `ai-ops approve по домену` — такого intent в CLI НЕТ, и живой прогон 19.08 это показал. Совет,
+    # которого нельзя выполнить, хуже отсутствия совета: человек считает, что путь есть.
+    assert "approvals.py record" in text, f"отказ не называет, чем закрыть ворота: {text}"
+    _named = re.search(r"python3 (\S+approvals\.py)", text)
+    assert _named, text
+    assert (PKG_ROOT / _named.group(1).replace(".ai/managed/", "")).is_file(), (
+        f"отказ называет путь, которого нет: {_named.group(1)}")
     assert "выключен автоподбором" in text, (
         "причина отказа врёт про судью: на QUICK его не «нет квалифицированного», "
         f"его нет вовсе — {text}")
