@@ -77,6 +77,53 @@ find_installer() {
   return 1
 }
 
+# ПОСЛЕДНИЙ ТУПИК ДОЧКИ ЗАКРЫТ (аудит 19.08.2026). Установщик в поставку не едет — он обновляет
+# сам кит, и ставить его в дочку значило бы дать ей себя же обновлять. Из-за этого `./ai-ops update`
+# без клона кита рядом отвечал «исходник рядом не найден»: чтобы обновиться, чужая команда была
+# обязана воспроизвести раскладку каталогов автора.
+#
+# Но адрес кита у дочки ЕСТЬ — `parent.source` в `.ai-ops.yaml`, и ежедневный workflow ровно им и
+# пользуется. То есть в CI путь был, а у человека — нет; одна и та же операция умела делаться
+# машиной и не умела руками.
+#
+# КЛОН НЕ МОЛЧАЛИВЫЙ: сеть — не то, что делают за спиной. Печатаем адрес и куда клонируем, и
+# удаляем временный клон после. Ревизию выбирает САМ КИТ по объявленному каналу (`resolve-ref`) —
+# та же логика, что в workflow, а не вторая её копия.
+fetch_installer() {
+  src=$("$py" -c "import yaml,sys
+try:
+    s = yaml.safe_load(open('.ai-ops.yaml'))['parent']['source']
+except Exception as e:
+    print('', end=''); sys.exit(0)
+print(s[4:] if s.startswith('git+') else s, end='')" 2>/dev/null)
+  [ -n "$src" ] || { echo "в .ai-ops.yaml не назван parent.source — откуда брать кит, неизвестно" >&2; return 1; }
+  command -v git >/dev/null 2>&1 || { echo "нужен git, чтобы получить кит по адресу $src" >&2; return 1; }
+  tmp=$(mktemp -d) || return 1
+  echo "кита рядом нет — беру по адресу из .ai-ops.yaml: $src" >&2
+  echo "  временный клон: $tmp (будет удалён после команды)" >&2
+  if ! git clone --quiet --filter=blob:none "$src" "$tmp/kit" 2>/dev/null; then
+    echo "не удалось склонировать $src — проверьте адрес и доступ к сети" >&2
+    rm -rf "$tmp"; return 1
+  fi
+  chan=$("$py" -c "import yaml
+try: print(yaml.safe_load(open('.ai-ops.yaml'))['parent'].get('update_channel','stable'), end='')
+except Exception: print('stable', end='')" 2>/dev/null)
+  # Ревизию под канал выбирает кит; отказ («под этот канал брать нечего») — законный ответ,
+  # и он НЕ подменяется веткой по умолчанию.
+  if ref=$("$py" "$tmp/kit/installer/ai_ops.py" resolve-ref --channel "$chan" --repo "$tmp/kit"); then
+    [ -n "$ref" ] && git -C "$tmp/kit" checkout -q "$ref" 2>/dev/null
+    echo "  канал '$chan' -> ${ref:-ветка по умолчанию}" >&2
+  else
+    echo "  под канал '$chan' брать нечего — обновление не выполняется" >&2
+    rm -rf "$tmp"; return 1
+  fi
+  # ПУТЬ САМ НЕСЁТ, ЧТО УБИРАТЬ. Здесь стояло `FETCHED_TMP="$tmp"` — и переменная наружу НЕ
+  # выходила: функция вызывается в подстановке команды `inst=$(fetch_installer)`, то есть в
+  # подоболочке. Временный клон оставался на диске после каждой команды; поймано прогоном, а не
+  # чтением. Каталог теперь выводится из самого пути к установщику, и догадываться не о чем.
+  echo "$tmp/kit/installer/ai_ops.py"
+}
+
 cmd=${1:-}
 case "$cmd" in
   # `status` СОЗНАТЕЛЬНО не здесь: у владельца «status» — это «что идёт прямо сейчас», продуктовый
@@ -118,6 +165,22 @@ case "$cmd" in
   init|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|subsession|engops|method)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
+    fi
+    # Клон по адресу — только для `update`: остальные команды установщика либо не про эту дочку,
+    # либо требуют решений, которые нельзя принимать, скачав кит на лету.
+    if [ "$cmd" = update ]; then
+      if inst=$(fetch_installer); then
+        # `<tmp>/kit/installer/ai_ops.py` -> `<tmp>`. Убираем и при прерывании: клон кита в /tmp,
+        # переживший Ctrl-C, — мусор, о котором человек не узнает.
+        tmpdir=${inst%/kit/installer/ai_ops.py}
+        trap 'rm -rf "$tmpdir"' EXIT INT TERM
+        "$py" "$inst" "$@"; rc=$?
+        rm -rf "$tmpdir"; trap - EXIT INT TERM
+        exit $rc
+      fi
+      # Причину уже назвал `fetch_installer` — дописывать сверху «исходник рядом не найден»
+      # значило бы заменить конкретный ответ общим и стереть то, что человек может починить.
+      exit 2
     fi
     echo "Команда '$cmd' обслуживает сам кит, а его исходник рядом не найден." >&2
     echo "Укажите, где он лежит: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops $cmd" >&2
