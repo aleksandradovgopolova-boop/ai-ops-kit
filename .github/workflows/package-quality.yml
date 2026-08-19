@@ -178,6 +178,24 @@ jobs:
       - name: "Установка в чистый репозиторий без кита рядом"
         run: bash scripts/check-clean-install.sh
 
+  # 19.08.2026 (аудит): ОБНОВЛЕНИЕ — самый частый сценарий дочки, и он не проверялся ничем.
+  # `clean-install` смотрит на установку С НУЛЯ, а с нуля дочка ставится один раз; обновляется она
+  # каждый день (`ai-ops-update.yml` включён по умолчанию). Именно на этом пути жили самые дорогие
+  # находки поля — F-030 (после обновления `next` переставал отвечать), F-032 (точка входа
+  # отставала на релиз), гейт отставания (версия и содержимое разошлись на 49 файлов).
+  # Отдельная джоба, а не тест в группе, по той же причине, что и clean-install: нужно чистое
+  # окружение и настоящая установка, а не имитация.
+  upgrade-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}          # нужны ТЕГИ: обновляемся с предыдущего выпуска
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml         # РОВНО рантайм-зависимость, как у пользователя
+      - name: "Обновление предыдущий выпуск -> рабочее дерево"
+        run: bash scripts/check-upgrade-path.sh
+
   # v3.28.0 P3-15: Python 3.9 compatibility — critical path on minimum supported version
   python39-compat:
     runs-on: ubuntu-latest
