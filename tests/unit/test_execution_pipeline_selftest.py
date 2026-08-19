@@ -343,7 +343,10 @@ def test_execution_pipeline_selftest():
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями
         # (ENGINEERING-план содержит security). Не ложный green: секрет -> security в unmet.
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
-        _aws_fx = "AKIA" + "IOSFODNN7EXAMPLE"   # v3.0.4: собрано в рантайме (без статического секрет-литерала)
+        # Не канонический пример AWS: `AKIAIOSFODNN7EXAMPLE` — публичный образец, и
+        # детектор с 19.08.2026 его не считает утечкой. Позитивной фикстуре нужен ключ,
+        # похожий на настоящий.
+        _aws_fx = "AKIA" + "QRSTUVWX9012YZAB"   # v3.0.4: собрано в рантайме (без статического секрет-литерала)
         it_sec = iter([{"op": "write", "path": "src/leak.py",
                         "content": f'API_KEY = "{_aws_fx}"\n'}, {"done": True}])
         rep_sec = run_pipeline("добавить конфиг", sig_eng, root, lambda c: next(it_sec),

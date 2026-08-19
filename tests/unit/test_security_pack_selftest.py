@@ -48,7 +48,10 @@ def test_security_pack_selftest():
 
     # секрет -> домен secrets fail + блок (critical), всегда применим
     # v3.0.4: секрет-фикстура собрана в рантайме (без статического литерала — downstream-сканеры не флагуют)
-    _aws = "AKIA" + "IOSFODNN7EXAMPLE"
+    # Не канонический пример AWS: `AKIAIOSFODNN7EXAMPLE` — публичный образец, и
+    # детектор с 19.08.2026 его не считает утечкой. Позитивной фикстуре нужен ключ,
+    # похожий на настоящий.
+    _aws = "AKIA" + "QRSTUVWX9012YZAB"
     sec = run_pack(files_content={"config.py": f'API_KEY = "{_aws}"\n'}, signals={})
     expect("secrets всегда применим", "secrets" in sec["applicable_domains"])
     expect("секрет -> secrets fail + overall blocked",
