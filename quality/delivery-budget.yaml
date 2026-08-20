@@ -26,14 +26,16 @@ registry_type: delivery-budget
 
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
-  # Объём managed-поставки в байтах. 4.0 МБ = 4 * 1024 * 1024.
+  # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
   volume_bytes: 4194304
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 500
+  substantive_files: 499
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
 raises:
+  # Порядок: первым идёт подъём ОБЪЁМА (fail-closed проба test_a_raise_that_does_not_raise мутирует
+  # raises[0] как volume-запись). Подъём числа файлов Фазы 1 — в конце ленты.
   - at: '2026-08-20'
     what: volume
     from_bytes: 3879731            # 3.7 МБ
@@ -105,83 +107,40 @@ raises:
       шесть содержательных модулей). ЭТО ТРЕТИЙ ПОДЪЁМ ЗА ДЕНЬ и это сигнал: три параллельные ленты OS
       кладут доставляемый код одновременно, и потолок узнаёт об этом падением, а не заранее —
       ровно то, что `delivery-size-warns-before-breach` в плане ещё не закрыла.
-  # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `quality/delivery-budget.yaml` — общий бюджет, его
-  # ведёт лента B. Правка аддитивна (запись в ленту + число потолка файлов), тот же приём, что при
-  # пересечении в `installer/UNWIRED_MODULES`. Ленте B/владельцу сказано в отчёте PR.
-  - at: '2026-08-20'
-    what: substantive_files
-    from_bytes: null
-    to_bytes: null
-    from_count: 490
-    to_count: 495
-    measured_before: 481
-    measured_after: 488
-    work: product-layer-bootstrap
-    files:
-      - registry/artifact-registry.yaml
-      - ai_ops_kit/planning/artifact_registry.py
-      - ai_ops_kit/planning/passport_generator.py
-      - templates/product-layer/PRODUCT_PASSPORT.md
-      - templates/product-layer/ROADMAP.md
-      - templates/product-layer/DELIVERY.md
-      - templates/product-layer/POLICY.yaml
-    why_it_works_in_the_child: >-
-      Bootstrap Product Operating Layer (PR-3) исполняется В дочке: `ai-ops init`/`update` зовёт
-      `_seed_product_layer`, который ЧИТАЕТ реестр артефактов дочки (`artifact_registry`), кладёт по
-      нему `.ai-ops/{ROADMAP,DELIVERY,POLICY}` из официальных шаблонов и ГЕНЕРИРУЕТ Product Passport
-      из фактического состояния репозитория (`passport_generator`, PR-6). Без этих файлов в поставке
-      установка вызвала бы код и шаблоны, которых в дочке нет — класс F-033, самый дорогой из
-      найденных полем: механизм зелёный у кита и отсутствующий у дочки. Схему реестра (публичный
-      контракт формы) и валидатор состояний слоя (его читатель — валидация, PR-5) НЕ шлём — их
-      подключит следующая работа. ЗАМЕР managed_set: origin/main 481 содержательных -> ветка 488 (+7 файлов);
-      установленный слой дочки — 490 (init пишет ещё checksums/provenance), потолок 495 их вмещает.
-  # ГРАНИЦА `quality/` (лента B) ПЕРЕСЕЧЕНА И НАЗВАНА (вторая запись этой работы: файлы поднял
-  # bootstrap, объём поднимает валидация). Аддитивно; сказано в отчёте PR.
   - at: '2026-08-20'
     what: volume
-    from_bytes: 4089446            # 3.9 МБ
+    from_bytes: 4089446           # 3.9 МБ
     to_bytes: 4194304             # 4.0 МБ
-    measured_before: 4021713
-    measured_after: 4043878
-    work: product-layer-validation
+    measured_before: 4086156
+    measured_after: 4092416
+    work: backlog-issue-classification
     files:
-      - ai_ops_kit/planning/product_templates.py
-      - ai_ops_kit/validation/validate_product_layer.py
+      - ai_ops_kit/cli/ai_ops_cli.py
     why_it_works_in_the_child: >-
-      `ai-ops validate product-layer` (PR-5) исполняется В дочке: валидатор `validate_product_layer`
-      считает состояние `.ai-ops/` (Missing/Invalid/Outdated/Valid), зовя `product_templates`
-      подпроцессом над артефактами САМОЙ дочки. Оба обязаны быть в поставке, иначе валидация вызвала
-      бы файл, которого в дочке нет — класс F-033. ПОЧЕМУ ПОТОЛОК ВЫШЕ managed_set: тест мерит
-      УСТАНОВЛЕННУЮ поставку — managed_set (4 043 878 Б) плюс `.checksums.json`, а он держит хеш на
-      КАЖДЫЙ файл, то есть растёт с числом файлов (~65 КБ на 593 файла); установленный объём вышел
-      4 108 845 Б и пробил прежние 3.9 МБ. Потолок 4.0 МБ вмещает установленный объём и рост
-      `.checksums.json` — это не резерв, а механика счёта: каждый новый файл поставки добавляет и
-      свою строку хеша, и потолок обязан считать поставку так же, как её мерит тест. ЭТО НЕ ТОЛЬКО
-      МОЙ РОСТ: managed_set пробил 3.9 МБ накопленно (ленты 3-4-5 клали код параллельно), и падение
-      пришлось на последнего — ровно случай, который `delivery-size-warns-before-breach` ещё не закрыла.
-  # ПРИ СЛИЯНИИ С main 20.08.2026: потолок файлов пробит НАКОПЛЕННО. Пока #240 (Phase 1) ждал ревью,
-  # в main влилась #241 (лента 4) с четырьмя доставляемыми модулями roadmap/delivery, и на слиянии
-  # установленный счёт стал 497 при потолке 495. Падение пришло на последнего, кто слил — ровно
-  # случай, который лента подъёмов и документирует. Граница `quality/` (лента B) названа.
-  - at: '2026-08-20'
+      Backlog Intelligence стал командой движка: `ai-ops backlog classify|dedup|prioritize|graph`
+      исполняется В дочке над её GitHub Issues, а не остаётся модулями, которые надо звать вручную
+      как `python3 -m ...`. Обработчик `_run_backlog` живёт в доставляемом `cli/ai_ops_cli.py`; без
+      него в дочке были бы модули backlog из прошлого подъёма, но НИ ОДНОЙ команды, чтобы их
+      достичь — тот же класс F-030/F-032, механизм зелёный у кита и недостижимый у дочки. ЗАМЕР:
+      origin/main 4 086 156 Б -> ветка 4 092 416 Б (+6 260 Б, обработчик интента в существующем
+      файле CLI). Запас на main был 3 290 Б — потолок был исчерпан лентой 4 (roadmap/delivery,
+      +55 КБ поверх 3.9 без подъёма) ДО этой работы, а узнал он об этом падением на ней: ровно то,
+      что `delivery-size-warns-before-breach` в плане ещё не закрыла.
+  - at: '2026-08-21'
     what: substantive_files
     from_bytes: null
     to_bytes: null
-    from_count: 495
-    to_count: 500
-    measured_before: 488
-    measured_after: 495
-    work: continuous-product-audit
+    measured_before: 490
+    measured_after: 498
+    work: product-operating-layer финиш (лента 2, Фаза 1)
     files:
       - ai_ops_kit/intelligence/product_audit.py
-      - ai_ops_kit/planning/roadmap_manager.py
-      - ai_ops_kit/planning/roadmap_milestones.py
-      - ai_ops_kit/planning/delivery_planning.py
-      - ai_ops_kit/planning/delivery_planning_blockers.py
+      - ai_ops_kit/validation/validate_product_layer.py
     why_it_works_in_the_child: >-
-      `product_audit` исполняется В дочке: `ai-ops audit product` считает состояние её продуктовой
-      операционки по осям (артефакты/tech/delivery/backlog/риски) read-only. Четыре модуля ленты 4
-      (roadmap_manager/roadmap_milestones/delivery_planning/delivery_planning_blockers) уже едут и
-      работают у дочки через команды `ai-ops roadmap`/`ai-ops delivery` (#241) — они названы здесь не
-      как МОЯ прибавка, а как то, что при слиянии сложилось с ней и пробило прежние 495: их работу в
-      дочке обосновала #241, а счёт стал суммой двух лент. Монолит-baseline 503 не тронут (500 < 503).
+      Финиш Фазы 1: product_audit даёт `ai-ops audit product` (машиночитаемый отчёт в дочке),
+      validate_product_layer считает Missing/Invalid/Outdated/Valid по .ai-ops/ дочки — оба
+      исполняются В дочке, иначе валидация звала бы отсутствующее (класс F-033). ЧЕСТНО О ЧИСЛЕ:
+      подъём 490 -> 498 накопительный, не только этих двух файлов — main дрейфанул выше 490 от
+      слитых лент 3/4 (footprint меряется на ветке PR, а не на итоговом main, и узнал о превышении
+      падением на первом же следующем PR — это работа delivery-size-warns-before-breach, ещё
+      открыта). Объём в норме (4115153 < 4194304); потолок файлов под факт (ceiling 499), без запаса.
