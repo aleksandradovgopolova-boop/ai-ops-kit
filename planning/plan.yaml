@@ -848,3 +848,81 @@ work:
     # `validate_product_model`); неизвестность (ветки нет, ствола нет) — предупреждение словами, а не
     # молчаливый зелёный; ствол берётся явным списком, а не `_resolve_base` (в рабочей копии работы
     # тот отдаёт саму ветку — замер 20.08); 11 тестов, три пробы, три красных мутанта.
+
+  # ── Phase 3: Roadmap & Delivery (лента 4) ──
+  # Декомпозиция цели roadmap-and-delivery в работы под её четыре исхода (OS-LANES.md, LANE-BRIEF.md).
+  # Территория: НОВЫЕ модули ai_ops_kit/planning/roadmap_*, ai_ops_kit/planning/delivery_planning_*;
+  # НЕ delivery_plan.py (внутренний план кита, лента B). Roadmap описывает НАПРАВЛЕНИЯ и OUTCOMES
+  # (Now/Next/Later), а не дублирует backlog ленты 3. Delivery forecast — ОЦЕНКА, называется оценкой.
+
+  - id: roadmap-now-next-later
+    title: Roadmap Now/Next/Later — направления и ожидаемые OUTCOMES, автоведение и отклонения
+    type: engineering
+    goal: roadmap-and-delivery
+    status: in_progress
+    branch: lane-4-work
+    depends_on: [product-layer-bootstrap]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, templates/product-layer/, tests/]
+    value: high
+    affects: {product_strategy: true, delivery_operations: true}
+    # PR-7: Roadmap описывает направления и ожидаемые результаты, НЕ дублирует backlog. Минимальная
+    # структура Now / Next / Later. AI Ops: создаёт roadmap, декомпозирует направления на outcomes,
+    # отслеживает прогресс, выявляет отклонения, автоматически актуализирует. Модуль
+    # ai_ops_kit/planning/roadmap_manager.py читает цели/исходы плана, строит три горизонта, отмечает
+    # отклонение. Тесты на СВОЁМ плане-фикстуре, не на живом (урок 20.08: проверка, зависящая от
+    # живого плана, тихо перестаёт проверять).
+    # Готово, когда: `ai-ops roadmap` из фикстуры строит Now/Next/Later с outcomes и краснеет при
+    # расхождении заявленного горизонта с фактическим состоянием исходов; шаблон ROADMAP.md наполнен
+    # логикой ведения, а не пустой рыбой.
+
+  - id: milestones-linked-to-backlog
+    title: Связь roadmap ↔ milestones ↔ backlog по контракту данных ленты 3
+    type: engineering
+    goal: roadmap-and-delivery
+    status: todo
+    depends_on: [roadmap-now-next-later, backlog-issue-classification]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, tests/]
+    value: high
+    affects: {delivery_operations: true, product_strategy: true}
+    # PR-7 (связывание): roadmap-направление ↔ milestone ↔ задачи backlog. Backlog читается из ленты 3
+    # ПО КОНТРАКТУ (форма задачи: type, area, milestone, dependencies), в её модули не лезем. Пока
+    # контракт не зафиксирован — согласовать в общем чате; связывание строится поверх стабильной формы.
+    # Отсутствие milestone у направления — третье состояние (не привязано ≠ пусто), а не молчаливый ноль.
+    # Готово, когда: на фикстуре backlog+roadmap каждое направление Now имеет прослеживаемую цепочку
+    # направление→milestone→задачи, а разрыв цепочки виден в отчёте, а не проглатывается.
+
+  - id: delivery-plan-with-confidence
+    title: Backlog → исполнимый delivery-план с прогнозом и delivery-risk (оценка, не факт)
+    type: engineering
+    goal: roadmap-and-delivery
+    status: todo
+    depends_on: [milestones-linked-to-backlog]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, tests/]
+    value: high
+    affects: {delivery_operations: true}
+    # PR-10: AI Ops превращает backlog в исполнимый delivery plan: выбор задач под milestone с учётом
+    # зависимостей и capacity, последовательность, прогноз deadline, выявление delivery risk. Модуль
+    # ai_ops_kit/planning/delivery_planning_*.py (НЕ delivery_plan.py — это внутренний план кита).
+    # Forecast — ОЦЕНКА: называется оценкой, не выдаётся за факт (третье состояние); при неизвестной
+    # capacity/зависимостях — честный отказ от прогноза, а не выдуманная дата.
+    # Готово, когда: на фикстуре backlog+milestone план даёт последовательность с учётом зависимостей,
+    # прогноз помечен как оценка с основанием, а недостаток данных даёт «прогноз невозможен», не число.
+
+  - id: blockers-detected-early
+    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
+    type: engineering
+    goal: roadmap-and-delivery
+    status: todo
+    depends_on: [delivery-plan-with-confidence]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, tests/]
+    value: medium
+    affects: {delivery_operations: true, analytics_learning: true}
+    # PR-15: Здоровье delivery отдельно от здоровья продукта: выполнение milestone, velocity,
+    # blocked/overdue tasks, PR cycle time, release frequency, отклонение от плана. Ранние блокеры —
+    # до срыва срока, а не постфактум. Метрика без данных — unavailable, а не 0 (третье состояние).
+    # Готово, когда: на фикстуре delivery-плана отчёт называет блокирующие задачи и отклонение от
+    # плана ДО дедлайна; отсутствующая метрика помечена unavailable, а не подменена нулём.
