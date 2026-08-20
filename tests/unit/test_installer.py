@@ -786,7 +786,53 @@ def test_delivery_footprint_is_smaller_than_legacy(installed):
     # был бы зелёным у кита и отсутствующим у дочки — класс F-030/F-032.
     # СНАЧАЛА УРЕЗАНО, ПОТОМ МЕРЕНО: из добавленных комментариев срезано 4 534 Б повтора (один замер
     # был записан в шести местах). В потолок идёт только то, что несёт код.
+    #
+    # 2026-08-20, ЛЕНТА B: работа `release-claims-stays-in-the-kit` ОТДАЛА объём. Замер:
+    #   заявка доезжает до рабочих копий      3 955 764 Б (3.7723 МБ)  запас до 3.8 — 28 824 Б
+    #   релизная проза осталась у кита        3 895 521 Б (3.7150 МБ)  -60 243 Б, запас 89 067 Б
+    # Уехал НЕ файл, а его балласт: `registry/release-claims.yaml` весил 82 214 Б и ехал в каждую
+    # дочку, из них 61 336 Б (75%) — ключ `patch_note`, одна строка на 37 080 символов. В дочке его
+    # не читает НИКТО (единственный потребитель `validate_release_claims` не в RUNTIME_VALIDATORS).
+    # Сам claims остался в поставке, потому что у него ЕСТЬ читатель в дочке: `package_channel`
+    # смотрит `channel` (18 Б) из `init`/`update`/`doctor`. Первоначальный замер аудита («файл кодом
+    # в дочке не читается») этим опровергнут, и потому убран балласт, а не файл.
+    # Потолок НЕ опускаю до следующего независимого замера: 3.8 поднят другой лентой сегодня, и
+    # опускать его в тот же день значило бы дёргать число класса DERIVED дважды за сутки.
     assert total < 3.8 * 1024 * 1024, f"объём managed: {total / 1024 / 1024:.2f} МБ (потолок 3.8)"
+
+
+def test_release_prose_does_not_ship_but_the_channel_does(installed, ai_ops):
+    """ЗАМЕР 20.08.2026 (`release-claims-stays-in-the-kit`) — доказано на НАСТОЯЩЕЙ установке.
+
+    `registry/release-claims.yaml` весил 82 214 Б и ехал в каждую дочку; 61 336 Б (75%) — ключ
+    `patch_note`, одна строка релизной прозы на 37 080 символов, которую в дочке не читает НИКТО:
+    единственный потребитель `validate_release_claims` не входит в RUNTIME_VALIDATORS.
+
+    ПАРА, А НЕ ПОЛОВИНА. Проза НЕ доехала — и при этом доехало то, что дочка ЧИТАЕТ: ключ `channel`,
+    по которому `package_channel` отвечает, заработал ли пакет запрошенный канал. Первоначальный
+    замер аудита («файл кодом в дочке не читается») этим и опровергнут — поэтому уехал балласт, а не
+    файл.
+    """
+    managed = installed / ".ai" / "managed"
+    assert not (managed / "registry" / "release-notes.yaml").exists(), (
+        "релизная проза доехала до дочки — 61 КБ, которые там никто не читает")
+    claims = managed / "registry" / "release-claims.yaml"
+    assert claims.is_file(), "claims не доехал — сломан ответ про канал обновлений"
+    doc = yaml.safe_load(claims.read_text(encoding="utf-8"))
+    assert "patch_note" not in doc, f"проза всё ещё в поставленном claims: {len(str(doc['patch_note']))} симв."
+    assert doc.get("channel"), "в поставленном claims нет канала — `package_channel` вернёт «не знаю»"
+
+
+def test_the_channel_answer_still_works_in_the_child(installed, ai_ops):
+    """ШОВ: тот единственный ключ, ради которого файл остался в поставке, обязан ЧИТАТЬСЯ оттуда.
+
+    Проверяется не наличие строки, а ответ функции, которую зовут `init`/`update`/`doctor`."""
+    ch = ai_ops.package_channel(installed / ".ai" / "managed")
+    assert ch in ai_ops.CHANNEL_ORDER, (
+        f"канал пакета из поставки не прочитался ({ch!r}) — а «не прочитали» кит обязан отличать от "
+        f"честно объявленного слабого канала")
+    gap = ai_ops.channel_gap(installed / ".ai" / "managed")
+    assert gap["satisfied"] is not None, f"досягаемость канала стала «не знаю»: {gap}"
 
 
 def test_managed_set_excludes_are_declared_not_implicit(ai_ops):
@@ -796,6 +842,10 @@ def test_managed_set_excludes_are_declared_not_implicit(ai_ops):
     rels = {rel for _, rel in pairs}
     assert not any(r.startswith("qualification/") for r in rels)
     assert not any(r.startswith("containers/") for r in rels)
+    # Отдельные файлы исключаются тем же правилом, что каталоги: явным списком, а не побочно.
+    assert ai_ops.DEV_ONLY_FILES, "список dev-only файлов пуст"
+    assert not (rels & ai_ops.DEV_ONLY_FILES), \
+        f"объявленное исключение всё равно едет в дочку: {rels & ai_ops.DEV_ONLY_FILES}"
     assert "tools/ai_ops_run.py" in rels
     assert "ai_ops_kit/engine/ai_route.py" in rels
 

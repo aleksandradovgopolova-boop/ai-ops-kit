@@ -49,17 +49,60 @@ def test_both_scopes_are_declared(claims):
             f"{name} без границы — охват, который «покрывает всё», это снова «полный»")
 
 
-def test_full_claim_without_a_scope_is_caught(claims):
+def _pkg_with_note(tmp_path, claims, note, version=None):
+    """Копия пакета, где релизная проза — та, что нужна тесту. -> корень.
+
+    ПРОЗА ПЕРЕЕХАЛА В СВОЙ ФАЙЛ (20.08.2026, `release-claims-stays-in-the-kit`): 61 336 Б — 75%
+    release-claims.yaml — ехали в каждую дочку, где их не читает ни одна строка кода. Тесты поэтому
+    больше не подсовывают `patch_note` в словарь: проверка читает ФАЙЛ, и подмена словарём проверяла
+    бы путь, которого больше нет. Заодно это честнее — прогоняется тот же код, что в релизе.
+    """
+    (tmp_path / "registry").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "registry" / "release-notes.yaml").write_text(
+        yaml.safe_dump({"schema_version": 1, "registry_type": "release-notes",
+                        "version": version if version is not None else claims["version"],
+                        "patch_note": note}, allow_unicode=True), encoding="utf-8")
+    # `obtained_by` со ссылкой на файл проверяется по этому же корню — стаб нужен, иначе тест ловил бы
+    # отсутствие файла вместо предмета проверки.
+    (tmp_path / "scripts").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts" / "check-full.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_full_claim_without_a_scope_is_caught(claims, tmp_path):
     """fail-closed: ровно то заявление, которое сделал PR #38, обязано краснеть."""
-    errors = vrc.evidence_scope_errors(
-        dict(claims, patch_note="3.34 — полный контур зелёный, релиз готов."))
+    pkg = _pkg_with_note(tmp_path, claims, "3.34 — полный контур зелёный, релиз готов.")
+    errors = vrc.evidence_scope_errors(claims, pkg=pkg)
     assert any("не называя охват" in e for e in errors), errors
 
 
-def test_scoped_claim_passes(claims):
+def test_scoped_claim_passes(claims, tmp_path):
     """То же заявление с названным охватом проходит: проверка бьёт по подмене, не по слову."""
-    ok = dict(claims, patch_note="3.34 — охват full-current-python зелёный целиком.")
-    assert not vrc.evidence_scope_errors(ok), vrc.evidence_scope_errors(ok)
+    pkg = _pkg_with_note(tmp_path, claims, "3.34 — охват full-current-python зелёный целиком.")
+    assert not vrc.evidence_scope_errors(claims, pkg=pkg), \
+        vrc.evidence_scope_errors(claims, pkg=pkg)
+
+
+def test_prose_in_the_claims_file_is_refused(claims, tmp_path):
+    """Два места для одного текста разъедутся молча — поэтому старый адрес объявлен ошибкой."""
+    pkg = _pkg_with_note(tmp_path, claims, "3.34 — охват full-current-python зелёный целиком.")
+    errors = vrc.evidence_scope_errors(dict(claims, patch_note="что-то"), pkg=pkg)
+    assert any("остался в release-claims" in e for e in errors), errors
+
+
+def test_note_for_another_release_is_refused(claims, tmp_path):
+    """Версия дублируется намеренно и обязана сверяться: иначе проза относится к другому выпуску."""
+    pkg = _pkg_with_note(tmp_path, claims, "охват full-current-python зелёный", version="0.0.1")
+    errors = vrc.evidence_scope_errors(claims, pkg=pkg)
+    assert any("другому выпуску" in e for e in errors), errors
+
+
+def test_missing_note_file_is_an_error_not_a_pass(claims, tmp_path):
+    """«Нечего проверять» на месте заявления о выпуске — это и было бы ослаблением правила."""
+    (tmp_path / "scripts").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts" / "check-full.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    errors = vrc.evidence_scope_errors(claims, pkg=tmp_path)
+    assert any("отсутствует" in e for e in errors), errors
 
 
 @pytest.mark.parametrize("broken,expect", [
