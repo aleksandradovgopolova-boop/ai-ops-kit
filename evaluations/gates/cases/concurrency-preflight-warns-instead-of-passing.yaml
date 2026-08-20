@@ -1,0 +1,18 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: concurrency-preflight-warns-instead-of-passing
+gate: concurrency_preflight
+case_kind: no_judge
+validator_control: true
+summary: |
+  Контрольный кейс машинного гейта: незапущенный валидатор даёт warn с ИМЕНЕМ валидатора — не pass и не безымянное красное. Так видно, чем «зелёное» машины отличается от «зелёного» мнения.
+origin:
+  source: qualification/evidence/bnbm-2026-08-14/*/run-report.json
+  provenance: verbatim_run_report
+notes: |
+  В трёх сохранённых run-report.json живого прогона 14.08.2026 гейт стоит ровно так: status "warn", warnings ["валидатор 'validate-concurrency' не запущен или evidence не предоставлен"]. Кейс контрольный: он не про судью, а про то, что причина невыполнения у машинного гейта звучит ИНАЧЕ, чем у судейского («нет заключения reviewer»). Если однажды обе формулировки сольются, отчёт перестанет отличать «нечем проверить» от «некому судить», и разница между двумя видами «зелёного» исчезнет из вывода, оставшись только в реестре.
+signals: {}
+expected:
+  status: warn
+  reason_matches:
+  - валидатор 'validate-concurrency' не запущен
