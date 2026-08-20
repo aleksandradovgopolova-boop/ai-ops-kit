@@ -151,7 +151,9 @@ class TestARaiseWithoutGroundsIsRefused:
 
     def test_a_ceiling_raised_without_a_record_is_refused(self, ai_ops, budget):
         """Ровно случай, из которого работа и выросла: число поднято, записи нет."""
-        bad = dict(budget, ceilings=dict(budget["ceilings"], volume_bytes=4 * 1024 * 1024))
+        # 5 МБ — заведомо не совпадает ни с одной записью ленты (4.0 МБ теперь ЗАКОННЫЙ потолок,
+        # поднятый работой product-layer-validation; брать его значило бы мутировать в реальное значение).
+        bad = dict(budget, ceilings=dict(budget["ceilings"], volume_bytes=5 * 1024 * 1024))
         probs = ai_ops.delivery_budget_errors(bad, _shipped(ai_ops), _exists)
         assert any("БЕЗ записи" in x for x in probs), probs
 

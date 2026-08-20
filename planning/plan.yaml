@@ -714,7 +714,8 @@ work:
     title: "Валидация артефактов: Missing / Invalid / Outdated / Valid с отчётом"
     type: quality
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
     owner_role: engineer
     write_scope: [ai_ops_kit/validation/, tests/]

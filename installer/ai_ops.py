@@ -572,10 +572,10 @@ UNWIRED_MODULES = frozenset({
     # читает реестр артефактов и генерирует Product Passport из фактического состояния дочки при
     # `ai-ops init`/`update` — значит оба обязаны быть в поставке, иначе установка вызовет файл,
     # которого в дочке нет (класс F-033). Список сократился фактом подключения, не решением автора.
-    # `planning/product_templates.py` — версионные шаблоны слоя и состояние Missing/Invalid/Outdated/
-    # Valid (PR-5). ПОСТРОЕН, но в дочке его читатель — валидация `product-layer-validation`
-    # (CLI `ai-ops validate product-layer`) — ещё не сделан. Уедет фактом подключения с валидацией.
-    "ai_ops_kit/planning/product_templates.py",
+    # `planning/product_templates.py` УБРАН ИЗ СПИСКА 20.08.2026 (работа `product-layer-validation`):
+    # он ПОДКЛЮЧЁН. `validate_product_layer` зовёт его подпроцессом при `ai-ops validate product-layer`
+    # В дочке, чтобы посчитать состояние Missing/Invalid/Outdated/Valid по её артефактам. Без него в
+    # поставке валидация вызвала бы файл, которого в дочке нет (F-033). Список сокращён фактом подключения.
     # `planning/roadmap_manager.py` — автоведение roadmap Now/Next/Later (лента 4, PR-7). ПОСТРОЕНО,
     # но в дочке пока НЕДОСТИЖИМО: ни одна команда/реестр/док его не зовёт (авторскую сторону
     # по-прежнему ведёт подключённый `roadmap.py`). Пока не появится команда `ai-ops roadmap`,
@@ -638,6 +638,10 @@ RUNTIME_VALIDATORS = frozenset({
     # дочку — тот же класс, что F-033. Поймано не рассуждением, а тестом на НАСТОЯЩЕЙ установке:
     # `doctor` в свежепоставленной копии печатал «НЕ ПРОВЕРЕНО (cannot import name …)».
     "validate_child_config_filled",
+    # 20.08.2026, работа `product-layer-validation` (PR-5): `ai-ops validate product-layer`
+    # исполняется У ДОЧКИ — считает состояние `.ai-ops/` (Missing/Invalid/Outdated/Valid). Не внести
+    # имя сюда значило бы починить кит и не починить дочку (F-033), как было с validate_acceptance_result.
+    "validate_product_layer",
 })
 
 
@@ -2396,7 +2400,18 @@ def _onboarding_summary(onboarding_path):
     )
 
 
-def cmd_validate():
+def cmd_validate(argv=()):
+    # `ai-ops validate product-layer` (PR-5): отчёт Missing/Invalid/Outdated/Valid по `.ai-ops/`
+    # ЭТОЙ дочки. Отдельная под-команда: общий `validate` проверяет установку кита, а этот —
+    # продуктовые артефакты репозитория, и смешивать их вывод значило бы прятать одно за другим.
+    if argv and argv[0] == "product-layer":
+        for root in (AI_DIR / "managed", PKG):
+            if (root / "ai_ops_kit" / "validation" / "validate_product_layer.py").is_file():
+                if str(root) not in sys.path:
+                    sys.path.insert(0, str(root))
+                break
+        from ai_ops_kit.validation import validate_product_layer as _vpl
+        return _vpl.main([str(REPO_ROOT), *[a for a in argv[1:] if a.startswith("--")]])
     checks = [["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
               ["validate_ai_first_workflows.py"], ["validate_ai_first_providers.py"],
               ["validate_openspec_change.py"]]
@@ -3261,7 +3276,7 @@ def _dispatch(argv):
     if cmd == "delivery-proof":
         return cmd_delivery_proof(argv)
     if cmd == "validate":
-        return cmd_validate()
+        return cmd_validate(argv[2:])
     if cmd == "doctor":
         return cmd_doctor(argv)
     if cmd == "resolve-ref":
