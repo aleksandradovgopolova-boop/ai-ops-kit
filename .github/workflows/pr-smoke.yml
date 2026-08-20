@@ -22,6 +22,20 @@ jobs:
       # addopts требовал пакет от ЛЮБОГО запуска, и джобы падали с «unrecognized arguments».
       - run: pip install pyyaml pytest hypothesis
 
+      # ЗАГОЛОВОК PR — ЭТО ТЕМА БУДУЩЕГО КОММИТА. Замер 20.08.2026: PR #211 влит squash'ем, и его
+      # человекочитаемый заголовок стал темой коммита на main. `cz check` в ветке смотрел коммиты
+      # ВЕТКИ, где всё было по формату, и о заголовке не знал ничего; после мержа main покраснел, а
+      # переписать защищённую ветку нельзя.
+      #
+      # Проверка идёт ЧЕРЕЗ PYTEST, а не строкой в workflow: инвариант кита — проверка обязана быть
+      # запускаемой локально и покрытой пробами. Первая редакция этой правки нарушила его инлайновым
+      # python-скриптом, и собственный контур её на этом поймал.
+      - name: "заголовок PR — тема будущего коммита, формат обязателен"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE_CHECK: "1"   # признак «ворота запущены» ставит ТОТ, КТО ЗОВЁТ
+        run: python3 -m pytest tests/contracts/test_pr_title_is_conventional.py -q
+
       - name: Pytest — critical path + contracts
         run: |
           python3 -m pytest tests/contracts/ -v -m critical_path --tb=short
