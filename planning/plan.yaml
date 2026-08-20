@@ -341,6 +341,34 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  - id: reviewer-prompt-uses-xml-anchors-measured
+    title: >-
+      Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
+      принято на веру
+    type: engineering
+    goal: green-means-checked
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [ai_ops_kit/engine/, ai_ops_kit/gates/, tests/]
+    reason: >-
+      Повод — разбор с владельцем 20.08.2026 (статья про XML vs JSON в контексте LLM). РАЗВЕДЕНЫ два
+      вопроса: формат данных НА ДИСКЕ (наши 50 JSON-схем — машинные контракты, модель их не читает,
+      не трогаем) и структура ПРОМПТА, подаваемого модели. Утверждение статьи про промпт: чёткие
+      секционные якори (XML-теги) держат точность на длинном контексте, тогда как сплошной блок
+      деградирует. НАПРАВЛЕНИЕ верное и совпадает с прямой рекомендацией Anthropic (Claude обучен на
+      XML-теги); КОНКРЕТНЫЕ ЦИФРЫ статьи (99.5%, −30%) — блогерский пересказ без воспроизводимого
+      бенчмарка, на веру не берём. Замер поля по нашему коду: промпты кита разделяют секции
+      маркерами `=== ЗАДАЧА ===`, XML-тегов нет; самое чувствительное место — промпт СУДЬИ/РЕВЬЮЕРА
+      на длинном контексте (дифф + evidence + критерии). Готово, когда: секции промпта ревьюера
+      обёрнуты в XML-якори (`<diff>`, `<criteria>`, `<evidence>`, `<task>`), и это ИЗМЕРЕНО на
+      корпусе судейских вердиктов, построенном линией C (#216, C1): те же дифы дают вердикт не менее
+      стабильный, чем сейчас. Если замер не показал выигрыша — фиксируем это как факт и НЕ меняем
+      ради моды (вывод остаётся JSON/structured output — там форму обеспечивает провайдер, это
+      правильно и уже делается). Границы: НЕ трогаем JSON-схемы на диске; не меняем формат ВЫВОДА;
+      речь только о разметке ВХОДА судейского промпта. Территория пересекается с линией C —
+      согласовать, чтобы не столкнуться в промпте ревьюера.
+
   - id: stable-gate-includes-product-layer
     title: >-
       Машинный гейт stable не даёт объявить канал, пока продуктовый слой не реализован
@@ -386,48 +414,21 @@ work:
       ступором. Готово, когда no-verdict даёт названную причину и не оставляет работу висеть;
       проверено на кейсе этого прогона.
 
-  - id: errors-reach-the-human-not-as-tracebacks
-    title: >-
-      Отказ провайдера и ошибка вызова доходят до человека фразой, а не трейсбеком
-    type: engineering
-    goal: owner-speaks-product-not-pipeline
-    status: todo
-    owner_role: engineer
-    value: high
-    finding: findings/from-children/obs-2026-08-20-когда-у-провайдера-claud-99aa67ef.yaml
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/intelligence/, tests/]
-    reason: >-
-      НАХОДКА ПОЛЯ, прогон ⌘K в ai-ops-cockpit 20.08.2026 (obs 99aa67ef, 346c4324). В ДВУХ местах
-      кит выбрасывает человеку голый питоновский трейсбек вместо сообщения: (1) при исчерпании
-      лимита сессии claude-cli (HTTP 429) — RuntimeError после пяти попыток, хотя делать надо всего
-      лишь подождать или сменить провайдера; (2) `review` без `--base` — TypeError, потому что
-      автоопределение базы возвращает None и уходит прямо в git rev-parse, тогда как справка обещает
-      автоопределение. Оба — прямое нарушение communication policy (product-уровень): ошибка
-      объясняется через последствие и что делать, а не через место в коде. Готово, когда оба пути
-      дают человекочитаемое сообщение и код возврата, и это покрыто пробами на обе ветки.
-  - id: resume-hint-is-a-runnable-command
-    title: >-
-      Кит печатает `--resume` — команду, которую сам же не принимает
-    type: engineering
-    goal: owner-speaks-product-not-pipeline
-    status: todo
-    owner_role: engineer
-    value: medium
-    finding: findings/from-children/obs-2026-08-20-кит-останавливает-повтор-2dbfc337.yaml
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/cli/, tests/]
-    reason: >-
-      НАХОДКА ПОЛЯ (obs 2dbfc337). Остановив повторный прогон, кит советует «передай --resume», но
-      argparse принимает `--resume` как сокращение `--resume-from` и падает «expected one argument».
-      Кит печатает команду, которую сам не понимает — ровно тот класс, против которого сделана
-      обёртка ./ai-ops (B2-15/3.35.1). Работает отдельная команда `resume`; подсказка обязана
-      печатать её. Готово, когда напечатанная китом команда продолжения исполняется как есть, и это
-      покрыто пробой.
   - id: the-plan-tells-the-truth-about-the-run
     title: >-
       План прогона называет все гейты и не отключает треки причинами о ещё не написанном коде
     type: engineering
     goal: owner-speaks-product-not-pipeline
-    status: todo
+    status: in_progress
+    branch: lane-a-plan-truth
+    # ПРОГРЕСС 20.08.2026 (PR lane-a-plan-truth): ЗАКРЫТЫ две из трёх частей —
+    #  · треки больше не отключаются причинами в прошедшем времени о ненаписанном коде:
+    #    skip_reason переформулирован про ЗАЯВКУ/сигнал (obs 64a4840a/d48fd639, tracks.yaml);
+    #  · подсказка после specify ведёт на `plan`, а не сразу на `run --execute` (obs e09fe515).
+    # ОСТАЁТСЯ: «план называет ВСЕ гейты» (obs 64a4840a первая половина). Тот же корень, что
+    # obs 8a891ce7: уровень/workflow определяется ПОЗЖЕ выдачи плана, поэтому план на L0 (3
+    # гейта) не совпадает с прогоном на L1 (11). Это флоу-правка resolve-уровня до плана —
+    # делается отдельно, не бол том.
     owner_role: engineer
     value: high
     finding: findings/from-children/obs-2026-08-20-run-plan-yaml-для-работы-64a4840a.yaml
@@ -694,7 +695,8 @@ work:
     title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     owner_role: engineer
     write_scope: [schemas/, registry/, ai_ops_kit/planning/]
     value: high
@@ -707,7 +709,8 @@ work:
     title: Шаблоны артефактов с версиями, обязательными разделами и миграциями
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [artifact-registry-as-data]
     owner_role: engineer
     write_scope: [templates/product-layer/, ai_ops_kit/planning/, migrations/]
@@ -721,7 +724,8 @@ work:
     title: Product Passport генерируется и обновляется из фактического состояния репозитория
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
     owner_role: engineer
     write_scope: [ai_ops_kit/planning/, ai_ops_kit/context/, templates/product-layer/]
@@ -781,30 +785,76 @@ work:
     title: Классификация GitHub Issues по типу, области, приоритету, milestone
     type: engineering
     goal: backlog-intelligence
-    status: todo
-    depends_on: [product-layer-bootstrap]
+    status: in_progress
+    branch: lane-3-work
+    depends_on: []
     owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, ai_ops_kit/intelligence/]
+    write_scope: [ai_ops_kit/integrations/, ai_ops_kit/planning/]
     value: high
     affects: {delivery_operations: true, product_strategy: true}
-    # PR-8: Типы: feature, bug, research, improvement, technical debt, experiment, infrastructure.
-    # Атрибуты: type, priority, status, area, milestone, impact, urgency, effort, confidence,
-    # strategic alignment, dependencies. Требует GitHub API (Issues, Labels, Milestones).
-    # Готово, когда: `ai-ops backlog classify` на репо с Issues возвращает структурированный отчёт.
+    # PR-8/PR-11. Зависимость на product-layer-bootstrap СНЯТА замером: GitHub Issues существуют
+    # независимо от артефактного слоя, реализация не импортирует ничего из ленты 2 (OS-LANES).
+    # Сначала GitHub-интеграция (PR-11): `ai_ops_kit/integrations/github.py` на `gh`/`urllib` без
+    # новой зависимости, с честным третьим состоянием (не проверено ≠ задач нет). На ней —
+    # классификатор: типы feature/bug/research/improvement/tech-debt/experiment/infrastructure;
+    # атрибуты type/area/status/priority/milestone/impact/urgency/effort/confidence/strategic/deps.
+    # Каждый вывод ОБЪЯСНИМ (evidence), unknown честен (не выдаёт себя за средний).
+    # Готово, когда: `backlog_classify` на живом репо возвращает структурированный отчёт с
+    # объяснениями (проверено живьём на 11 Issues aleksandradovgopolova-boop/ai-ops-kit).
 
   - id: backlog-deduplication
-    title: Дедупликация задач — нахождение и объединение дубликатов
+    title: Дедупликация задач — нахождение и предложение объединения дубликатов
     type: engineering
     goal: backlog-intelligence
-    status: todo
+    status: in_progress
+    branch: lane-3-work
     depends_on: [backlog-issue-classification]
     owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, ai_ops_kit/intelligence/]
+    write_scope: [ai_ops_kit/planning/]
     value: medium
     affects: {delivery_operations: true}
-    # PR-8: Нахождение дубликатов по заголовку, описанию, меткам. Предложение объединения.
-    # Учёт устаревших задач. Связывание с roadmap.
-    # Готово, когда: `ai-ops backlog dedup` на репо с 50+ Issues находит реальные дубликаты.
+    # PR-8 (+PR-19/20). Похожесть по заголовку/телу/меткам (Jaccard, взвешенно) с объяснением; учёт
+    # устаревших по updated_at (опорная дата детерминирована). ПРЕДЛАГАЕТ, не сливает молча:
+    # action=suggest_merge, слияние требует одобрения человека (Suggest→…→Require approval).
+    # Готово, когда: `backlog_dedup` на репо с дубликатами находит пары и помечает устаревшие.
+
+  # ── Phase 2 (додекомпозиция ленты 3): приоритизация и граф зависимостей ──
+
+  - id: backlog-ai-prioritization
+    title: AI-приоритизация backlog с объяснением вердикта и учётом override человека
+    type: engineering
+    goal: backlog-intelligence
+    status: in_progress
+    branch: lane-3-work
+    depends_on: [backlog-issue-classification]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/]
+    value: high
+    affects: {delivery_operations: true, product_strategy: true}
+    # PR-9/PR-20. Приоритет из impact/urgency/cost/strategic/confidence/deps; для КАЖДОЙ задачи
+    # объяснено ПОЧЕМУ (factors + explanation) — мнение без объяснения непроверяемо, как вердикт
+    # судьи. unknown понижает confidence рекомендации и это НАЗВАНО (не высокий приоритет с видом
+    # уверенности). Override человека (PR-20) хранится в реестре `.ai/backlog-overrides.yaml`,
+    # учитывается ВПРЕДЬ, при расхождении с расчётом показывает и решение человека, и расчёт.
+    # Готово, когда: `backlog_prioritize` ранжирует задачи с объяснением и применяет override
+    # (проверено живьём; на backlog без меток честно возвращает low-confidence, а не выдумку).
+
+  - id: backlog-dependency-graph
+    title: Граф зависимостей задач — блокирующие, критический путь, скрытые, циклы
+    type: engineering
+    goal: backlog-intelligence
+    status: in_progress
+    branch: lane-3-work
+    depends_on: [backlog-issue-classification]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/]
+    value: medium
+    affects: {delivery_operations: true}
+    # PR-17. Строит граф из зависимостей классификатора (A→B: A зависит от B). Находит блокирующие
+    # (сколько задач зависят), критический путь (самая длинная цепочка), циклы (доставить нельзя),
+    # скрытые транзитивные зависимости, ссылки вне набора (dangling). Каждый пункт объясним рёбрами.
+    # Готово, когда: `backlog_depgraph` на графе с цепочками/циклами возвращает верные блокирующие,
+    # критический путь и циклы (проверено юнит-тестами на синтетических графах + живьём на репо).
   - id: release-claims-stays-in-the-kit
     title: Релизная проза кита не едет в каждую дочку
     type: quality
@@ -1052,3 +1102,34 @@ work:
     # сходятся четыре ленты. Заблокировано зависимостями выше.
     # Готово, когда: цикл на фикстуре проходит все восемь шагов, реплан меняет план по сигналам,
     # каждое действие — через policy; тест на полный проход и на сохранение human control.
+  # ── Phase 3: Roadmap & Delivery (лента 4) — ПОСТРОЕНА ─────────────────────────────────────────
+  # Четыре работы построены и влиты (#226 roadmap, #231 milestones, #233 delivery+blockers) и
+  # закрыты в history/plan-history.yaml. ИСХОДЫ цели roadmap-and-delivery ОСТАЮТСЯ false осознанно:
+  # модули собраны, покрыты тестами и мёржены, но объявлены неподключёнными (installer.UNWIRED_MODULES)
+  # — в дочке их пока не зовёт ни одна команда. Исход — это КАПABILITY, достижимая в продукте, а не
+  # «код написан». Флипнуть их в true до подключения команды `ai-ops roadmap`/`delivery` значило бы
+  # выдать построенное за работающее — ровно ложный green, против которого стоит весь контур. Флип —
+  # отдельным шагом (проводка CLI), это уже общая территория командного слоя, не ленты 4.
+
+  - id: delivery-budget-is-declared
+    title: Потолок поставки перестаёт быть только числом
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    branch: lane-b-delivery-budget-is-declared
+    owner_role: engineer
+    depends_on: [plan-agrees-with-git]
+    write_scope: [quality/, installer/, tests/, planning/]
+    value: medium
+    affects: {delivery_operations: true}
+    # ЗАМЕР 20.08.2026, три находки одного дня — все про механизм, не про число:
+    #   * потолок был исчерпан ДО работы, которая его уронила (запас 12 783 Б, работа 15 751 Б);
+    #   * записи о подъёмах жили в ДВУХ блоках одного файла, и я сама назвала чужой подъём молчаливым,
+    #     не найдя записи в том блоке, куда посмотрела, — а она была в другом;
+    #   * число в записи устарело за полдня: замер до слияния остался в ленте как текущий.
+    # Проверяемо: потолки читаются ИЗ РЕЕСТРА (`quality/delivery-budget.yaml`), а не вписаны числом;
+    # подъём без названных файлов, без причины «почему работает в дочке» или с файлом, которого нет в
+    # поставке, ОТКЛОНЯЕТСЯ; при пробое печатается состав поставки по каталогам и крупнейшие файлы.
+    # Побочная находка, которую дала сама разбивка: `manifest/ai-ops-manifest.yaml` — 252 581 Б,
+    # 6.6% поставки в ОДНОМ файле, вчетверо больше релизной прозы, из-за которой велась отдельная
+    # работа. Заведено наблюдением, не правкой: сокращать манифест — отдельное решение.

@@ -1,0 +1,107 @@
+# quality/delivery-budget.yaml — потолки поставки и ЛЕНТА ПОДЪЁМОВ, проверяемая машиной.
+#
+# ПОВОД — ЗАМЕР 20.08.2026, три находки одного дня.
+#
+# 1. Потолок объёма был исчерпан ДО работы, которая его уронила: запас на main — 12 783 Б, работа
+#    весила 15 751 Б. Об исчерпании узнают падением; «наказывать того, кто пришёл последним, значит
+#    мерить очередь, а не размер» (записано в самом тесте ещё 13.08 и с тех пор повторилось четырежды).
+# 2. Записи о подъёмах жили в ДВУХ разных блоках комментариев одного файла — по объёму и по числу
+#    файлов. На вопрос «записан ли этот подъём» нельзя было ответить, посмотрев в одно место: я сама
+#    прочитала блок объёма, не увидела там записи ленты A о 3.7 -> 3.8 и назвала подъём молчаливым,
+#    хотя запись была — в блоке файлов.
+# 3. Число в записи устарело за полдня: замер, сделанный до слияния с main, остался в ленте как
+#    текущий. Дата у записи это лечит, отсутствие даты — нет.
+#
+# ЧТО ЗДЕСЬ. Потолки — ЧИСЛАМИ (их читает тест, а не хардкод) и лента подъёмов — ЗАПИСЯМИ, у каждой
+# обязательны: дата, что поднято, откуда/куда, замеры до и после, КАКИЕ ФАЙЛЫ добавлены и ПОЧЕМУ они
+# работают в дочке. Проверяет `tests/unit/test_delivery_budget.py`: перечисленные файлы обязаны
+# существовать И реально ехать в поставку. «Нужен запас» причиной не считается и никогда не считался —
+# теперь это не только правило в прозе: причина без названных файлов не проходит проверку.
+#
+# ИСТОРИЯ ДО 20.08.2026 остаётся прозой в `tests/unit/test_installer.py` — она написана как
+# повествование, и переписывать её в поля значило бы потерять смысл ради формы. Новые подъёмы идут
+# СЮДА; проверка требует, чтобы последняя запись совпадала с действующим потолком.
+schema_version: 1
+registry_type: delivery-budget
+
+# Действующие потолки. Меняются только вместе с записью в `raises` ниже.
+ceilings:
+  # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
+  volume_bytes: 4089446
+  # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
+  substantive_files: 490
+  # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
+  alias_bytes: 204800
+
+raises:
+  - at: '2026-08-20'
+    what: volume
+    from_bytes: 3879731            # 3.7 МБ
+    to_bytes: 3932160              # 3.75 МБ
+    measured_before: 3866948
+    measured_after: 3882693
+    work: experience-contract-drives-stories
+    files:
+      - ai_ops_kit/ui/experience_contract.py
+      - schemas/experience-contract.schema.json
+    why_it_works_in_the_child: >-
+      Сторона доказательства (`ui/storybook_adapter`) ЧИТАЕТ Experience Contract дочки и берёт из
+      него обязательные состояния. Без модуля в поставке это был бы вызов файла, которого там нет —
+      класс F-033, самый дорогой из найденных полем: механизм зелёный у кита и отсутствующий у дочки.
+  - at: '2026-08-20'
+    what: volume
+    from_bytes: 3932160            # 3.75 МБ
+    to_bytes: 3984588              # 3.8 МБ
+    measured_before: 3893000
+    measured_after: 3940013
+    work: night-review-v0-read-only
+    files:
+      - ai_ops_kit/intelligence/nightly_review.py
+      - ai_ops_kit/intelligence/event_arrival.py
+      - commands/maintenance/night-review.md
+      - templates/analytics/EventArrivalEvidence.json
+    why_it_works_in_the_child: >-
+      Ночной обзор зовут команда рантайма и Robin В продуктовом репозитории; проверку поступления
+      событий зовёт сам обзор; маршрут рантайма и форма выгрузки нужны там же. Второй подъём за один
+      день — сам по себе сигнал, и он назван в прозе теста, а не сглажен.
+  - at: '2026-08-20'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 475
+    to_count: 490
+    measured_before: 471
+    measured_after: 475
+    work: night-review-v0-read-only
+    files:
+      - ai_ops_kit/intelligence/nightly_review.py
+      - ai_ops_kit/intelligence/event_arrival.py
+      - commands/maintenance/night-review.md
+      - templates/analytics/EventArrivalEvidence.json
+    why_it_works_in_the_child: >-
+      Те же четыре файла: они исполняются в дочке, а не лежат в ней. Потолок файлов держит смысл —
+      baseline монолита 503 не тронут.
+  - at: '2026-08-20'
+    what: volume
+    from_bytes: 3984588            # 3.8 МБ
+    to_bytes: 4089446             # 3.9 МБ
+    measured_before: 3966471
+    measured_after: 4030487
+    work: backlog-issue-classification
+    files:
+      - ai_ops_kit/integrations/github.py
+      - ai_ops_kit/integrations/__init__.py
+      - ai_ops_kit/planning/backlog_classify.py
+      - ai_ops_kit/planning/backlog_dedup.py
+      - ai_ops_kit/planning/backlog_prioritize.py
+      - ai_ops_kit/planning/backlog_depgraph.py
+    why_it_works_in_the_child: >-
+      Backlog Intelligence (лента 3, Фаза 2 OS) читает GitHub Issues САМОЙ дочки как операционную
+      единицу: `backlog_classify`/`dedup`/`prioritize`/`depgraph` запускаются В продуктовом
+      репозитории над его Issues через `integrations/github` (gh или urllib, без новой зависимости).
+      Оставить их у кита значило бы отдать дочке команды над её же backlog, которых в её поставке нет
+      — тот же класс F-030/F-032, что уже оплачен полем: механизм зелёный у кита, отсутствующий у
+      дочки. ЗАМЕР: origin/main 3 966 471 Б (managed_set под потолком) -> ветка 4 030 487 Б (+64 016 Б,
+      шесть содержательных модулей). ЭТО ТРЕТИЙ ПОДЪЁМ ЗА ДЕНЬ и это сигнал: три параллельные ленты OS
+      кладут доставляемый код одновременно, и потолок узнаёт об этом падением, а не заранее —
+      ровно то, что `delivery-size-warns-before-breach` в плане ещё не закрыла.

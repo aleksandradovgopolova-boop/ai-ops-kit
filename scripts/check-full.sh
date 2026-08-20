@@ -3,7 +3,7 @@
 # перечислялось в пре-коммит-чеклисте построчно (201 команда на пике), — это тесты.
 #
 # v3.34: скрипт называет СВОЙ охват сам. «Полный» здесь значит «весь pytest», а не «вся
-# поддерживаемая матрица»: PR #38 написал «полный контур зелёный», и джоба python39-compat
+# поддерживаемая матрица»: PR #38 написал «полный контур зелёный», и compatibility-matrix
 # опровергла это в том же релизе. Охват объявляется до и после прогона — ровно в тот момент,
 # когда возникает искушение сформулировать результат шире, чем он получен.
 set -euo pipefail
@@ -34,7 +34,7 @@ CURRENT=$("$PYTHON" -c 'import platform, sys; print(f"{platform.python_implement
 
 echo "ОХВАТ: full-current-python — ${CURRENT}."
 echo "НЕ входит: объявленный пол requires-python ${FLOOR:-?} и установка в чистое окружение —"
-echo "это compatibility-matrix, её дают только джобы CI python39-compat / pipeline-e2e / clean-install."
+echo "это compatibility-matrix, её дают только джобы CI pipeline-e2e / clean-install / upgrade-path."
 echo
 
 # Линтер — ДО тестов: F821 (вызов несуществующего имени) находится за секунды, а тремя минутами

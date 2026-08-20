@@ -95,9 +95,13 @@ def test_writer_closed_gates_are_named_and_do_not_grow_silently():
     осознанное согласие на самозаявление.
     """
     writer_closed = sorted(gid for gid, g in GATES.items() if g["closed_by"] == "writer")
-    assert writer_closed == ["documentation_drift", "documentation_updated"], (
+    # 2026-08-20 (C3): список СОКРАТИЛСЯ — `documentation_updated` переведён в машинный
+    # (`ai_ops_kit/gates/documentation_evidence.py`), потому что оба его доказательства оказались
+    # фактами о дифе, а не суждением. Ратчет ходит вниз: сюда можно только убавлять.
+    assert writer_closed == ["documentation_drift"], (
         f"список самозаявляющихся гейтов изменился: {writer_closed}. Если гейт добавлен осознанно "
-        f"— обновите этот замер и rules/quality/gate-closure-map.md вместе с ним")
+        f"— обновите этот замер и rules/quality/gate-closure-map.md вместе с ним; если убавился — "
+        f"это ратчет вниз, и он приветствуется")
 
 
 # ─── side-effect proof ─────────────────────────────────────────────────────────────────────────

@@ -3629,4 +3629,153 @@ work:
     #     # Проверяемо: у рекомендации есть `kind` и валидатор её формы; `./ai-ops session` на чистой
     #     # установке не печатает ни одной строки `session-check:`.
     #
+  - id: errors-reach-the-human-not-as-tracebacks
+    title: >-
+    status: done
+    closed_at: '2026-08-20'
+    evidence: tests/unit/test_provider_limit_is_human.py
+    result: >-
+      ЗАКРЫТО 20.08.2026. ДВА пути ошибки к человеку исправлены. (1) Лимит сессии/квоты claude-cli
+      (obs 99aa67ef): текст несёт «429» и попадал в _transient — кит делал 5 повторов с backoff и
+      падал трейсбеком. Введён отдельный класс `ProviderLimitError`: лимит распознаётся ПЕРВЫМ (до
+      транзиента) в обеих ветках (is_error rc=0 и rc!=0), поднимается СРАЗУ (повтор бессмыслен: сброс
+      — минуты/часы, backoff ≤30с), несёт время сброса и совет сменить провайдера; граница CLI
+      (_main_guarded) печатает фразу и код возврата 3, а не трейсбек. ГРАНИЦА F-011 сохранена пробой:
+      транзиентный 529 по-прежнему повторяется. (2) `review` без --base (obs 346c4324): УЖЕ исправлено
+      в main до этой работы (_base_for_review, заявка #136) — тег 3.36.12 фикса не содержал, поэтому
+      кокпит и упал; покрыто tests/unit/test_absent_base_is_resolved_or_refused.py. ЗАМЕР: 5 новых
+      проб (обе ветки, время сброса, регрессия 529, граница CLII), 171 тест провайдеров/CLI зелёный,
+      ruff 0.
+    # РАЗБОР, как он был записан в плане:
+    #   - id: errors-reach-the-human-not-as-tracebacks
+    #     title: >-
+    #       Отказ провайдера и ошибка вызова доходят до человека фразой, а не трейсбеком
+    #     type: engineering
+    #     goal: owner-speaks-product-not-pipeline
+    #     status: todo
+    #     owner_role: engineer
+    #     value: high
+    #     finding: findings/from-children/obs-2026-08-20-когда-у-провайдера-claud-99aa67ef.yaml
+    #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/intelligence/, tests/]
+    #     reason: >-
+    #       НАХОДКА ПОЛЯ, прогон ⌘K в ai-ops-cockpit 20.08.2026 (obs 99aa67ef, 346c4324). В ДВУХ местах
+    #       кит выбрасывает человеку голый питоновский трейсбек вместо сообщения: (1) при исчерпании
+    #       лимита сессии claude-cli (HTTP 429) — RuntimeError после пяти попыток, хотя делать надо всего
+    #       лишь подождать или сменить провайдера; (2) `review` без `--base` — TypeError, потому что
+    #       автоопределение базы возвращает None и уходит прямо в git rev-parse, тогда как справка обещает
+    #       автоопределение. Оба — прямое нарушение communication policy (product-уровень): ошибка
+    #       объясняется через последствие и что делать, а не через место в коде. Готово, когда оба пути
+    #       дают человекочитаемое сообщение и код возврата, и это покрыто пробами на обе ветки.
+  - id: resume-hint-is-a-runnable-command
+    title: >-
+    status: done
+    closed_at: '2026-08-20'
+    evidence: tests/unit/test_printed_commands_are_runnable.py
+    result: >-
+      ЗАКРЫТО 20.08.2026. Сообщение блокировки повторного прогона печатало ВНУТРЕННИЕ параметры движка
+      `resume=True (--resume)` / `discard_previous=True (--discard)`; `--resume` argparse принимает за
+      сокращение `--resume-from` и падает, а продолжение — это ИНТЕНТ `resume`. Теперь печатаются
+      РЕАЛЬНЫЕ команды (`ai-ops resume . --feature <wid> --execute`; перезапись через `git branch -D`
+      + `ai-ops run`). Дефект выжил, потому что проба `test_printed_commands_are_runnable` смотрела
+      только формы `ai-ops <intent> --flag`, а фейковый флаг стоял голым в скобках — слепое пятно
+      закрыто пробой на форму `kwarg=True (несущ.флаг)`. ЗАМЕР: селфтест pipeline и printed-commands
+      зелёные.
+    # РАЗБОР:
+    #   - id: resume-hint-is-a-runnable-command
+    #     title: >-
+    #       Кит печатает `--resume` — команду, которую сам же не принимает
+    #     type: engineering
+    #     goal: owner-speaks-product-not-pipeline
+    #     status: todo
+    #     owner_role: engineer
+    #     value: medium
+    #     finding: findings/from-children/obs-2026-08-20-кит-останавливает-повтор-2dbfc337.yaml
+    #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/cli/, tests/]
+    #     reason: >-
+    #       НАХОДКА ПОЛЯ (obs 2dbfc337). Остановив повторный прогон, кит советует «передай --resume», но
+    #       argparse принимает `--resume` как сокращение `--resume-from` и падает «expected one argument».
+    #       Кит печатает команду, которую сам не понимает — ровно тот класс, против которого сделана
+    #       обёртка ./ai-ops (B2-15/3.35.1). Работает отдельная команда `resume`; подсказка обязана
+    #       печатать её. Готово, когда напечатанная китом команда продолжения исполняется как есть, и это
+    #       покрыто пробой.
 
+  # ── Фаза 3 (лента 4): Roadmap & Delivery — четыре работы построены и влиты 20.08.2026 ──────────
+  # ИСХОДЫ цели roadmap-and-delivery оставлены false осознанно: модули собраны и мёржены, но
+  # объявлены неподключёнными (installer.UNWIRED_MODULES) — в дочке их пока не зовёт команда. Закрыт
+  # ПОСТРОЙ-РЕЗУЛЬТАТ работы, а не капability продукта; флип исходов — за проводкой CLI.
+  - id: roadmap-now-next-later
+    title: Roadmap Now/Next/Later — направления и ожидаемые OUTCOMES, автоведение и отклонения
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 226
+    evidence: tests/unit/test_roadmap_manager.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (PR #226). Модуль ai_ops_kit/planning/roadmap_manager.py ВЫВОДИТ горизонты
+      Now/Next/Later из плана: направление = цель с её исходами, горизонт считается по состоянию
+      исходов и работ (shipped/now/next/later), ROADMAP.md собирается из плана, отклонение авторского
+      файла от выведенного краснеет (declared-vs-derived). Шов с существующим roadmap.py: тот
+      разбирает АВТОРСКИЙ файл, этот ВЫВОДИТ — второй правды об одном горизонте нет, генерация читается
+      его же парсером. ЗАМЕР: 6 тестов на фикстуре (positive/fail-closed/side-effect), ruff 0, живьём
+      на плане кита roadmap-and-delivery корректно попал в «Следующий», check нашёл 10 реальных
+      отклонений в ROADMAP.md кита. Модуль в UNWIRED_MODULES — footprint не растёт.
+    # РАЗБОР (как стоял в плане):
+    #   goal: roadmap-and-delivery; PR-7; write_scope: [ai_ops_kit/planning/, templates/product-layer/, tests/]
+    #   Готово, когда: `ai-ops roadmap` из фикстуры строит Now/Next/Later с outcomes и краснеет при
+    #   расхождении заявленного горизонта с фактическим состоянием исходов.
+  - id: milestones-linked-to-backlog
+    title: Связь roadmap ↔ milestones ↔ backlog по контракту данных ленты 3
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 231
+    evidence: tests/unit/test_roadmap_milestones.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (PR #231). Модуль ai_ops_kit/planning/roadmap_milestones.py связывает
+      направление→milestone→задачи по КОНТРАКТУ ДАННЫХ ленты 3 (не читает GitHub, не трогает её
+      модули; форма задачи — в докстроке). milestone привязан к направлению через roadmap-ссылку или
+      задачи в нём; задача — напрямую или через milestone. Разрыв цепочки (Now без milestone,
+      milestone без задач, висячая ссылка, сирота) — находка отчёта, не молчаливый ноль. Третье
+      состояние: «источник backlog не подключён» ≠ «backlog пуст». ЗАМЕР: 5 тестов на фикстуре, ruff 0,
+      живьём ghost-milestone пойман сиротой. Модуль в UNWIRED_MODULES.
+    # РАЗБОР: goal: roadmap-and-delivery; PR-7 (связывание); depends_on: [roadmap-now-next-later,
+    #   backlog-issue-classification]. Готово, когда цепочка направление→milestone→задачи прослеживается,
+    #   а разрыв виден в отчёте.
+  - id: delivery-plan-with-confidence
+    title: Backlog → исполнимый delivery-план с прогнозом и delivery-risk (оценка, не факт)
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 233
+    evidence: tests/unit/test_delivery_planning.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (PR #233). Модуль ai_ops_kit/planning/delivery_planning.py (НЕ delivery_plan.py):
+      выбор открытых задач milestone, топологический порядок по зависимостям (цикл — риск), прогноз
+      срока, delivery-риски (зависимость вне milestone, срыв дедлайна). ГЛАВНЫЙ ИНВАРИАНТ: прогноз —
+      ОЦЕНКА, не факт: без capacity или без effort хотя бы одной задачи отказывается считать
+      (available=false с причиной), а не выдумывает дату и не подставляет ноль; помечен kind=estimate.
+      Дата старта — аргумент, не системные часы. ЗАМЕР: 5 тестов на фикстуре, ruff 0. Модуль в
+      UNWIRED_MODULES.
+    # РАЗБОР: goal: roadmap-and-delivery; PR-10; depends_on: [milestones-linked-to-backlog].
+    #   Готово, когда план даёт последовательность с учётом зависимостей, прогноз помечен оценкой с
+    #   основанием, а недостаток данных даёт «прогноз невозможен», не число.
+  - id: blockers-detected-early
+    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 233
+    evidence: tests/unit/test_delivery_planning_blockers.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (влито в main через PR #233; свой PR #234 был смержен в ветку lane-4-delivery
+      прежде, чем та вошла в main — стопка, ветка сама влита, поэтому ничего не потеряно). Модуль
+      ai_ops_kit/planning/delivery_planning_blockers.py находит ранние блокеры по графу зависимостей
+      (транзитивные зависимые, ранжирование по влиянию — узкое место видно ДО срыва срока) и
+      ПРОИЗВОДИТ выгрузку .ai-ops/delivery-signals.yaml в форме, что читает health_delivery ЛЕНТЫ 5
+      (milestone.done/total, overdue.count). ГРАНИЦА С ЛЕНТОЙ 5: band Green/Yellow/Red считает она,
+      здесь только сигналы — двух правд об одном числе нет. Третье состояние: просрочку без «сегодня»/due
+      и velocity без closed_at не выдаём числом. ЗАМЕР: 7 тестов на фикстуре, ruff 0. Модуль в
+      UNWIRED_MODULES.
+    # РАЗБОР: goal: roadmap-and-delivery; PR-15; depends_on: [delivery-plan-with-confidence].
+    #   Готово, когда отчёт называет блокирующие задачи ДО дедлайна, а отсутствующая метрика помечена
+    #   unavailable, не нулём.
