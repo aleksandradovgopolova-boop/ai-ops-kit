@@ -592,21 +592,12 @@ UNWIRED_MODULES = frozenset({
     # (PR-6, работа `product-passport-auto-generation`). Построен, но в дочке не подключён: команду
     # `ai-ops passport generate` заведёт bootstrap (`product-layer-bootstrap`). Уедет с ним.
     "ai_ops_kit/planning/passport_generator.py",
-    # `planning/roadmap_manager.py` — автоведение roadmap Now/Next/Later (лента 4, PR-7). ПОСТРОЕНО,
-    # но в дочке пока НЕДОСТИЖИМО: ни одна команда/реестр/док его не зовёт (авторскую сторону
-    # по-прежнему ведёт подключённый `roadmap.py`). Пока не появится команда `ai-ops roadmap`,
-    # ставить его в поставку значило бы платить объёмом дочки за то, что там не работает — ровно
-    # класс, ради которого этот список и заведён. Уедет отсюда фактом подключения, не решением.
-    "ai_ops_kit/planning/roadmap_manager.py",
-    # `planning/roadmap_milestones.py` — связь roadmap↔milestones↔backlog (лента 4, PR-7). Та же
-    # причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
-    "ai_ops_kit/planning/roadmap_milestones.py",
-    # `planning/delivery_planning.py` — delivery-план из backlog под milestone (лента 4, PR-10). Та
-    # же причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
-    "ai_ops_kit/planning/delivery_planning.py",
-    # `planning/delivery_planning_blockers.py` — ранние блокеры + выгрузка delivery-сигналов для
-    # health_delivery ленты 5 (лента 4, PR-15). Та же причина: построено, в дочке пока недостижимо.
-    "ai_ops_kit/planning/delivery_planning_blockers.py",
+    # 2026-08-20: ЧЕТЫРЕ модуля ленты 4 УБРАНЫ ИЗ СПИСКА — они ПОДКЛЮЧЕНЫ. Команды `ai-ops roadmap`
+    # и `ai-ops delivery` (ai_ops_kit/cli/ai_ops_cli.py, DIRECT_INTENTS) зовут их в дочке:
+    # roadmap_manager (roadmap), roadmap_milestones + delivery_planning + delivery_planning_blockers
+    # (delivery). Не поставить их теперь значило бы дать дочке команду, ссылающуюся на отсутствующий
+    # файл (класс F-033). Сокращение списка — фактом подключения, а не решением: об этом сказал тест
+    # `test_unwired_modules_are_really_unwired` (краснел бы, останься имя, раз cli его зовёт).
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого

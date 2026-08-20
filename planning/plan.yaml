@@ -292,13 +292,20 @@ goals:
   - id: roadmap-and-delivery
     # заморозка: roadmap + delivery planning — новое умение
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТА 2026-08-20. Четыре модуля построены, влиты и ПОДКЛЮЧЕНЫ командами `ai-ops roadmap`
+    # и `ai-ops delivery` (DIRECT_INTENTS, убраны из UNWIRED_MODULES — едут в дочку). Исходы
+    # флипнуты не «код написан», а ЖИВЫМ ЗАМЕРОМ: `ai-ops roadmap .` строит Now/Next/Later из плана
+    # и называет отклонения от ROADMAP.md; `ai-ops delivery . --backlog <фикстура> --milestone m1`
+    # даёт порядок задач, прогноз-ОЦЕНКУ (10 ед./2 в день = 5 дн.) и ранжированные блокеры.
+    # Отсутствие источника backlog — честное третье состояние, а не пустой план.
+    status: achieved
     outcome:
-      # Phase 3: roadmap Now/Next/Later, milestones, delivery plan, forecasting.
-      roadmap_auto_maintained: false
-      milestones_linked_to_backlog: false
-      delivery_plan_with_confidence: false
-      blockers_detected_early: false
+      # Phase 3: roadmap Now/Next/Later, milestones, delivery plan, forecasting. ВСЕ достигнуты
+      # подключением команд и проверены живым прогоном (не декларацией).
+      roadmap_auto_maintained: true
+      milestones_linked_to_backlog: true
+      delivery_plan_with_confidence: true
+      blockers_detected_early: true
 
   - id: ai-product-operations
     # заморозка: автономная продуктовая операционка — новое умение
