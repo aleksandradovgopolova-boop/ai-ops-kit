@@ -19,6 +19,69 @@ kind: delivery-plan-history
 
 
 work:
+  - id: artifact-registry-as-data
+    title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-20'
+    pr: 227
+    evidence: tests/unit/test_artifact_registry_selftest.py
+    result: >-
+      ЗАКРЫТО 2026-08-20 (PR #227). Состав Product Operating Layer (`.ai-ops/`) описан ДАННЫМИ:
+      `registry/artifact-registry.yaml` + `schemas/artifact-registry.schema.json`, читает
+      `ai_ops_kit/planning/artifact_registry.py`. `load` — fail-closed; `check` — инварианты +
+      ссылочная целостность `owner_role`/`source_contour` к `product-operating-model.yaml`;
+      `divergence` — сверка версий шаблонов с файлами. Лестница состояний Missing→Invalid→Outdated→
+      Valid. РЕЗУЛЬТАТ ПЕРЕПРОВЕРЯЕМ: 14 тестов; расхождение реестра с реальностью краснеет —
+      подмена роли в реестре роняет shipped-инвариант, восстановление возвращает зелёный.
+    # РАЗБОР (как в плане):
+    #   type: engineering; owner_role: engineer; value: high
+    #   write_scope: [schemas/, registry/, ai_ops_kit/planning/]
+    #   PR-4: ID, назначение, обязательность, путь, версия шаблона, обязательные поля, правила
+    #   валидации/обновления, источник, владелец, AI actions. Готово: реестр читается кодом, тест
+    #   краснеет при расхождении реестра с реальностью.
+
+  - id: product-layer-templates-versioned
+    title: Шаблоны артефактов с версиями, обязательными разделами и миграциями
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-20'
+    pr: 227
+    evidence: tests/unit/test_product_templates_selftest.py
+    result: >-
+      ЗАКРЫТО 2026-08-20 (PR #227). `templates/product-layer/{PRODUCT_PASSPORT,ROADMAP,DELIVERY}.md`
+      + `POLICY.yaml` — каждый с маркером версии и обязательными разделами/полями из реестра.
+      `ai_ops_kit/planning/product_templates.py`: `check` — покрытие реестра, совпадение версий,
+      наличие обязательных разделов/полей, обязательность миграции при подъёме версии; `state_of` —
+      состояние экземпляра Missing/Invalid/Outdated/Valid, читает СОДЕРЖИМОЕ, а не факт файла
+      (F-018/F-027). Миграции версий — `migrations/product-layer-templates/`. ПЕРЕПРОВЕРЯЕМ:
+      13 тестов; снятие раздела из реального шаблона роняет `check`, возврат — зелёный.
+    # РАЗБОР (как в плане):
+    #   type: engineering; depends_on: [artifact-registry-as-data]; value: high
+    #   write_scope: [templates/product-layer/, ai_ops_kit/planning/, migrations/]
+    #   PR-5: версия шаблона, обязательные разделы/поля, миграция, машинная валидация; четыре
+    #   состояния. Готово: каждый артефакт реестра имеет шаблон; тест проверяет наличие и валидность.
+
+  - id: product-passport-auto-generation
+    title: Product Passport генерируется и обновляется из фактического состояния репозитория
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-20'
+    pr: 227
+    evidence: tests/unit/test_passport_generator_selftest.py
+    result: >-
+      ЗАКРЫТО 2026-08-20 (PR #227). `ai_ops_kit/planning/passport_generator.py` собирает паспорт из
+      ФАКТОВ репозитория (VERSION, свежий git-тег по дате, стек/CI/тесты через `repo_audit.discover`,
+      класс зрелости через `classify`), а не из шаблона-заготовки. Недоказуемое из кода (аудитория,
+      Problem/JTBD, владелец, продуктовые риски) → честный `unknown`, не выдумка; `is_filled` ловит
+      паспорт из одних заголовков (Invalid, не Valid). ПЕРЕПРОВЕРЯЕМ: 7 тестов; прогнан живьём на
+      этом репо (name/версия/релиз/tech-health из фактов, аудитория/владелец честно unknown).
+    # РАЗБОР (как в плане):
+    #   type: engineering; depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
+    #   write_scope: [ai_ops_kit/planning/, ai_ops_kit/context/, templates/product-layer/]; value: high
+    #   PR-6: паспорт из состояния репо и delivery. Готово: `ai-ops passport generate` создаёт
+    #   валидный passport из реального репо (генератор готов; CLI подключит bootstrap).
+
   - id: swallowed-exceptions-audit
     title: >-
       Разобрать 49 мест, где исключение гасится молча (26 try/except/pass + 23 голых except)

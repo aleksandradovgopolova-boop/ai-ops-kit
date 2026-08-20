@@ -691,50 +691,9 @@ work:
 
   # ── Phase 1: Product Operating Layer ──
 
-  - id: artifact-registry-as-data
-    title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
-    type: engineering
-    goal: product-operating-layer
-    status: in_progress
-    branch: lane-2-work
-    owner_role: engineer
-    write_scope: [schemas/, registry/, ai_ops_kit/planning/]
-    value: high
-    affects: {product_strategy: true, delivery_operations: true}
-    # PR-4: Для каждого артефакта: ID, название, назначение, обязательность, путь, версия шаблона,
-    # структура, обязательные поля, правила валидации, обновления, источник данных, владелец, AI actions.
-    # Готово, когда: реестр читается кодом, тест краснеет при расхождении реестра с реальностью.
-
-  - id: product-layer-templates-versioned
-    title: Шаблоны артефактов с версиями, обязательными разделами и миграциями
-    type: engineering
-    goal: product-operating-layer
-    status: in_progress
-    branch: lane-2-work
-    depends_on: [artifact-registry-as-data]
-    owner_role: engineer
-    write_scope: [templates/product-layer/, ai_ops_kit/planning/, migrations/]
-    value: high
-    affects: {product_strategy: true}
-    # PR-5: Единая структура, обязательные разделы и поля, версия шаблона, обратная совместимость
-    # или миграция, машинная валидация. AI Ops определяет Missing → Invalid → Outdated → Valid.
-    # Готово, когда: каждый артефакт из реестра имеет шаблон; тест проверяет наличие и валидность.
-
-  - id: product-passport-auto-generation
-    title: Product Passport генерируется и обновляется из фактического состояния репозитория
-    type: engineering
-    goal: product-operating-layer
-    status: in_progress
-    branch: lane-2-work
-    depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, ai_ops_kit/context/, templates/product-layer/]
-    value: high
-    affects: {product_strategy: true, delivery_operations: true}
-    # PR-6: Passport содержит: название, описание, аудиторию, Problem/JTBD, repository, production/demo,
-    # owner, team, статус, зрелость, здоровье продукта/технологий/разработки, версию, метрики,
-    # milestone, прогресс, риски, зависимости. Обновляется из состояния репо и delivery.
-    # Готово, когда: `ai-ops passport generate` создаёт валидный passport из реального репо.
+  # ЗАКРЫТЫ 20.08.2026 в history/plan-history.yaml (PR #227, слит в main):
+  #   artifact-registry-as-data (PR-4), product-layer-templates-versioned (PR-5),
+  #   product-passport-auto-generation (PR-6). Место закрытой работы — в истории, не здесь.
 
   - id: product-layer-bootstrap
     title: "ai-ops init создаёт Product Operating Layer в новом репозитории"
