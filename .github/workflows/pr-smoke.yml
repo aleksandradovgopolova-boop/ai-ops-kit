@@ -14,6 +14,32 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
+      # ЗАГОЛОВОК PR — ЭТО ТЕМА БУДУЩЕГО КОММИТА. Замер 20.08.2026: PR #211 влит squash'ем, и его
+      # человекочитаемый заголовок стал темой коммита на main. `cz check` в ветке смотрел коммиты
+      # ВЕТКИ, где всё было по формату, и пропустил его; после мержа main оказался красным, а
+      # переписать защищённую ветку нельзя. Правило существовало и не могло быть исполнено там,
+      # где решалось, — то есть не работало.
+      #
+      # Проверяем ровно тем же образцом, что и `cz check`: два источника одного правила разошлись
+      # бы молча.
+      - name: "заголовок PR обязан быть conventional — squash сделает его темой коммита"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, re, sys
+          title = os.environ["PR_TITLE"]
+          pattern = r"^(build|bump|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(\S+\))?!?: .+"
+          if re.match(pattern, title):
+              print(f"OK: {title}")
+              sys.exit(0)
+          print(f"Заголовок PR не по формату Conventional Commits:\n  {title}\n")
+          print("При squash-мерже он СТАНЕТ темой коммита на main, и main покраснеет на lint —")
+          print("а переписать защищённую ветку нельзя. Исправьте заголовок PR, например:")
+          print("  fix(validation): пути манифеста проверяются там, где они существуют")
+          sys.exit(1)
+          PYEOF
+
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
