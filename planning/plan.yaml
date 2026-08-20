@@ -694,7 +694,8 @@ work:
     title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     owner_role: engineer
     write_scope: [schemas/, registry/, ai_ops_kit/planning/]
     value: high
