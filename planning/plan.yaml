@@ -945,7 +945,8 @@ work:
     title: Авто-статус команды — прогресс milestone, изменения, блокеры, риски, ближайшие задачи
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     depends_on: [risks-identified-with-mitigation]
     write_scope: [ai_ops_kit/intelligence/, tests/]
