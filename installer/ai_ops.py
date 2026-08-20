@@ -598,6 +598,9 @@ UNWIRED_MODULES = frozenset({
     # ставить его в поставку значило бы платить объёмом дочки за то, что там не работает — ровно
     # класс, ради которого этот список и заведён. Уедет отсюда фактом подключения, не решением.
     "ai_ops_kit/planning/roadmap_manager.py",
+    # `planning/roadmap_milestones.py` — связь roadmap↔milestones↔backlog (лента 4, PR-7). Та же
+    # причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
+    "ai_ops_kit/planning/roadmap_milestones.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
