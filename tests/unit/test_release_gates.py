@@ -260,8 +260,10 @@ def test_the_pr_title_is_gated_by_the_same_pattern_as_commits():
     """
     wf = (KIT / ".github" / "workflows" / "pr-smoke.yml").read_text(encoding="utf-8")
     assert "pull_request.title" in wf, "заголовок PR не проверяется — squash пронесёт его на main"
-    types = ("build|bump|chore|ci|docs|feat|fix|perf|refactor|revert|style|test")
-    assert types in wf, "образец в воротах разошёлся с образцом cz — два источника одного правила"
+    assert "test_pr_title_is_conventional.py" in wf, (
+        "шаг не зовёт пробу: проверка объявлена в workflow и не исполняется")
+    probe = KIT / "tests" / "contracts" / "test_pr_title_is_conventional.py"
+    assert probe.is_file(), "ворота ссылаются на пробу, которой нет"
 
 
 @pytest.mark.unit
