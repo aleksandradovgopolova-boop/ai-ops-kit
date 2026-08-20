@@ -222,7 +222,7 @@ def generate(repo_root: Path, evidence: dict | None = None, reg: dict | None = N
     """Собрать PRODUCT_PASSPORT.md из фактического состояния репозитория. -> markdown-текст.
 
     Совпадает по структуре со своим шаблоном (`product_passport`): маркер версии + все обязательные
-    разделы. Версия берётся из реестра, чтобы `product_templates.state_of` дал Valid, а не Outdated.
+    разделы. Версия берётся из реестра, чтобы проверка состояния дала Valid, а не Outdated.
     """
     reg = reg or AR.load()
     art = AR.artifact(reg, "product_passport") or {}

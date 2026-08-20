@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
   volume_bytes: 4089446
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 490
+  substantive_files: 495
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -105,3 +105,33 @@ raises:
       шесть содержательных модулей). ЭТО ТРЕТИЙ ПОДЪЁМ ЗА ДЕНЬ и это сигнал: три параллельные ленты OS
       кладут доставляемый код одновременно, и потолок узнаёт об этом падением, а не заранее —
       ровно то, что `delivery-size-warns-before-breach` в плане ещё не закрыла.
+  # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `quality/delivery-budget.yaml` — общий бюджет, его
+  # ведёт лента B. Правка аддитивна (запись в ленту + число потолка файлов), тот же приём, что при
+  # пересечении в `installer/UNWIRED_MODULES`. Ленте B/владельцу сказано в отчёте PR.
+  - at: '2026-08-20'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 490
+    to_count: 495
+    measured_before: 481
+    measured_after: 488
+    work: product-layer-bootstrap
+    files:
+      - registry/artifact-registry.yaml
+      - ai_ops_kit/planning/artifact_registry.py
+      - ai_ops_kit/planning/passport_generator.py
+      - templates/product-layer/PRODUCT_PASSPORT.md
+      - templates/product-layer/ROADMAP.md
+      - templates/product-layer/DELIVERY.md
+      - templates/product-layer/POLICY.yaml
+    why_it_works_in_the_child: >-
+      Bootstrap Product Operating Layer (PR-3) исполняется В дочке: `ai-ops init`/`update` зовёт
+      `_seed_product_layer`, который ЧИТАЕТ реестр артефактов дочки (`artifact_registry`), кладёт по
+      нему `.ai-ops/{ROADMAP,DELIVERY,POLICY}` из официальных шаблонов и ГЕНЕРИРУЕТ Product Passport
+      из фактического состояния репозитория (`passport_generator`, PR-6). Без этих файлов в поставке
+      установка вызвала бы код и шаблоны, которых в дочке нет — класс F-033, самый дорогой из
+      найденных полем: механизм зелёный у кита и отсутствующий у дочки. Схему реестра (публичный
+      контракт формы) и валидатор состояний слоя (его читатель — валидация, PR-5) НЕ шлём — их
+      подключит следующая работа. ЗАМЕР managed_set: origin/main 481 содержательных -> ветка 488 (+7 файлов);
+      установленный слой дочки — 490 (init пишет ещё checksums/provenance), потолок 495 их вмещает.

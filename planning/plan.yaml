@@ -699,7 +699,8 @@ work:
     title: "ai-ops init создаёт Product Operating Layer в новом репозитории"
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [product-layer-templates-versioned, product-passport-auto-generation]
     owner_role: engineer
     write_scope: [installer/ai_ops.py, templates/product-layer/, manifest/]
