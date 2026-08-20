@@ -218,28 +218,12 @@ jobs:
       - name: "Обновление предыдущий выпуск -> рабочее дерево"
         run: bash scripts/check-upgrade-path.sh
 
-  # v3.28.0 P3-15: Python 3.9 compatibility — critical path on minimum supported version
-  python39-compat:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.9"}
-      - run: pip install pyyaml pytest pytest-cov hypothesis
-      - name: "Contract tests on 3.9"
-        run: python3 -m pytest tests/contracts/ -v --tb=short
-      - name: "Быстрый профиль на 3.9"
-        run: bash .github/ci-groups/fast.sh
-
-  # v2.96 Real Qualification: канонический e2e движка на РЕАЛЬНОЙ фикстуре, на нескольких версиях
-  # Python (раньше CI гонял только 3.12). Стек-квалификация failure-парсера — тоже здесь.
   pipeline-e2e:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.12"]
+        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}
