@@ -145,6 +145,7 @@ internal:
     - gates
     - integrations
     - intelligence
+    - governance
     - lifecycle
     - planning
     - providers
