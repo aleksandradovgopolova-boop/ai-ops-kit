@@ -1292,3 +1292,39 @@ probes:
     второй сессии не срабатывал, а `status` говорил, что работа не идёт. Кит сам ставит дочку в такую
     копию (`worktree.add` -> `.ai/worktrees/<работа>`), значит место штатное. Мутация возвращает
     сравнение ветки с самой собой.'
+- id: release-prose-does-not-ship
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    if rel.startswith(DEV_ONLY_PREFIXES) or rel in DEV_ONLY_FILES:'
+  replace_with: '    if rel.startswith(DEV_ONLY_PREFIXES):'
+  tests:
+  - tests/unit/test_installer.py
+  why: 'Замер 20.08.2026: 61 336 Б релизной прозы (75% release-claims.yaml) ехали в КАЖДУЮ дочку, где
+    их не читает ни одна строка кода. Мутация возвращает файл в поставку, оставив объявление
+    исключения на месте, — то есть ровно тот случай, когда список исключений есть, а поставка его не
+    спрашивает.'
+- id: notes-version-must-match-claims
+  kind: guard
+  file: ai_ops_kit/validation/validate_release_claims.py
+  find: '    if str(notes.get("version") or "") != str(data.get("version") or ""):'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_evidence_scope.py
+  why: 'Версия намеренно дублируется в двух файлах (claims и notes), поэтому обязана сверяться: без
+    сверки проза молча относилась бы к другому выпуску, а «заявление шире полученного» — ровно тот
+    дефект, против которого стоит вся эта проверка (опровергнут python39-compat на 3.33.2).'
+- id: release-claims-validator-is-registered
+  kind: seam
+  covers:
+  - ai_ops_kit/validation/validate_release_claims.py
+  - tests/unit/test_validator_contract.py
+  file: tests/unit/test_validator_contract.py
+  find: '    "validate_release_claims",'
+  replace_with: '    # снят из контракта'
+  tests:
+  - tests/unit/test_validator_contract.py::test_list_matches_reality
+  why: 'ШОВ РЕГИСТРАЦИИ, которого потребовал собственный валидатор проб: у механизма с охранными
+    пробами обязана быть проба вызова, иначе снятие охраны поймается, а отключённый ВЫЗОВ — нет.
+    Валидатор релизных заявлений судит то, чем кит объявляет собственную готовность; вне контракта он
+    остаётся «объявлено, но не исполняется» — и тогда охраны выше проверяют текст, который никто не
+    читает.'

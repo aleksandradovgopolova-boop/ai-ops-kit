@@ -473,3 +473,26 @@ work:
     # в чужой территории во время параллельной работы стоила бы дороже, чем ждёт эта неточность.
     # Проверяемо: при нескольких рабочих копиях ответ `status`/`next` называет копии, при одной —
     # не называет (пара, а не одна половина); `copies is None` остаётся «не измерено».
+
+  - id: release-claims-stays-in-the-kit
+    title: Релизная проза кита не едет в каждую дочку
+    type: quality
+    goal: checks-that-run
+    status: in_progress
+    branch: lane-b-release-claims-stays-in-the-kit
+    owner_role: engineer
+    depends_on: [claim-reaches-other-copies]
+    write_scope: [registry/, installer/, ai_ops_kit/validation/, tests/]
+    value: medium
+    affects: {delivery_operations: true}
+    # ЗАМЕР (аудит 20.08.2026, уточнён при исполнении). `registry/release-claims.yaml` — 82 214 Б —
+    # ехал в КАЖДУЮ дочку по шаблону `registry/*.yaml`. Разбор по ключам: `patch_note` 61 336 Б
+    # (75%), одна строка релизной прозы на 37 080 символов; в дочке её не читает НИКТО (единственный
+    # потребитель `validate_release_claims` не входит в RUNTIME_VALIDATORS).
+    # ПЕРВОНАЧАЛЬНЫЙ ЗАМЕР АУДИТА ОПРОВЕРГНУТ ЗАМЕРОМ ИСПОЛНЕНИЯ: «файл кодом в дочке не читается»
+    # неверно — `installer.package_channel` читает `channel` и зовётся из `init`/`update`/`doctor`.
+    # Опасение про основания правил поля НЕ подтвердилось: их резолвит только `validate_own_medicine`,
+    # который в поставку не едет. Поэтому убран балласт, а не файл.
+    # Проверяемо: поставка -60 243 Б на НАСТОЯЩЕЙ установке; `release-notes.yaml` до дочки не доехал;
+    # ответ про канал из поставленного claims по-прежнему читается (шов проверен вызовом, не строкой);
+    # исключение объявлено явным списком `DEV_ONLY_FILES`, а не побочным эффектом.
