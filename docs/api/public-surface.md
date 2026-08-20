@@ -14,13 +14,13 @@ breaking change: любая правка могла оказаться лома�
 | `internal` | Внутренности движка. Импортировать снаружи нельзя — совместимость не обещана вовсе | Свободно |
 | `deprecated` | Ещё работает, но уже уходит. Список вправе только сокращаться | Только удалять |
 
-**Что считается breaking change и каково окно вывода — в [AGENTS.md](../../AGENTS.md), раздел
+**Что считается breaking change и каково окно вывода — в [AGENTS.md](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/AGENTS.md), раздел
 «Публичная граница и breaking change».** Здесь — только перепись поверхностей.
 
 ## Как этот документ не расходится с кодом
 
 Блок ниже — не иллюстрация, а **сама декларация**: его читает
-[`tests/contracts/test_public_surface.py`](../../tests/contracts/test_public_surface.py) и сверяет с
+[`tests/contracts/test_public_surface.py`](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/tests/contracts/test_public_surface.py) и сверяет с
 реальностью. Появился интент, которого здесь нет, — тест красный. Исчез объявленный — красный. В
 `stable`-схему добавили обязательное поле — красный, потому что это и есть breaking change, и он
 обязан быть решением, а не побочным эффектом.

@@ -334,7 +334,12 @@ def resolve_update_ref(channel, repo_dir=None):
     for tag, tag_ch, ver in pairs:
         if CHANNEL_ORDER.index(tag_ch) < want:
             continue
-        if ver and parse_version(ver) <= parse_version(floor):
+        # РАВНАЯ ВЕРСИЯ — НЕ ПОНИЖЕНИЕ (правка 20.08.2026, поймано первым же живым прогоном
+        # обновления без клона). Здесь стояло `<=`, и дочка, стоящая ровно на последнем выпуске
+        # канала, получала отказ со словом «понижение» — то есть нормальное состояние «уже
+        # актуально» подавалось как ошибка. Ревизию отдаём; что версии совпали и делать нечего,
+        # скажет установщик, который это и так проверяет.
+        if ver and parse_version(ver) < parse_version(floor):
             return {"ref": None, "kind": None, "channel": ch,
                     "reason": (f"ближайший тег канала '{ch}' — {tag} ({ver}), а установлено "
                                f"{floor}: это понижение, а не обновление. Обновление не выполняется")}
