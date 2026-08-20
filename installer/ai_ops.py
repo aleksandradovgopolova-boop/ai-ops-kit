@@ -528,6 +528,13 @@ DEV_ONLY_PREFIXES = (
     # Безопасно по построению: слой `entrypoints` продуктовый код импортировать не вправе, и это
     # проверяет `validate_layering` (правило no-product-depends-on-devtools).
     "ai_ops_kit/devtools/",
+    # 20.08.2026, работа `product-layer-templates-versioned` (PR-5). Официальные шаблоны Product
+    # Operating Layer (`.ai-ops/`: PRODUCT_PASSPORT/ROADMAP/DELIVERY/POLICY) построены, но в дочке
+    # их пока никто не раскладывает: bootstrap (`product-layer-bootstrap`) ещё не сделан, а без него
+    # `templates/product-layer/*` в child лежат мёртвым грузом и только съедают потолок поставки.
+    # Уедут в дочку вместе с bootstrap, который заставит их там РАБОТАТЬ, — тогда же поднимется
+    # потолок. Префикс, а не пофайлово: следующие шаблоны слоя не должны просочиться поодиночке.
+    "templates/product-layer/",
 )
 
 # НЕ ПОДКЛЮЧЁННОЕ НЕ ЕДЕТ (19.08.2026, разбор после аудита).
@@ -576,6 +583,11 @@ UNWIRED_MODULES = frozenset({
     # Уедет обратно НЕ решением автора, а фактом подключения: как только его начнут звать из
     # WIRING_DIRS, `test_unwired_modules_are_really_unwired` покраснеет и потребует убрать имя.
     "ai_ops_kit/planning/artifact_registry.py",
+    # `planning/product_templates.py` — версионные шаблоны слоя и состояние Missing/Invalid/Outdated/
+    # Valid (PR-5, работа `product-layer-templates-versioned`). Тот же случай, что реестр выше: код
+    # построен, но в дочке его читатель (валидация `product-layer-validation`, CLI `ai-ops validate
+    # product-layer`) ещё не сделан. Уедет фактом подключения вместе с валидацией.
+    "ai_ops_kit/planning/product_templates.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого

@@ -708,7 +708,8 @@ work:
     title: Шаблоны артефактов с версиями, обязательными разделами и миграциями
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [artifact-registry-as-data]
     owner_role: engineer
     write_scope: [templates/product-layer/, ai_ops_kit/planning/, migrations/]
