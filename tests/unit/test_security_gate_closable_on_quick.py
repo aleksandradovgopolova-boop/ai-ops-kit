@@ -36,7 +36,10 @@ sys.path.insert(0, str(PKG_ROOT / "tools"))
 from ai_ops_kit.engine import execution_pipeline
 from ai_ops_kit.security import security_pack
 
-AWS_KEY = "AKIA" + "IOSFODNN7EXAMPLE"
+# НЕ канонический пример AWS: `AKIAIOSFODNN7EXAMPLE` — документированный публичный
+# образец, и с 19.08.2026 детектор его НЕ считает утечкой (он и не утечка). Позитивная
+# фикстура обязана выглядеть как настоящий ключ, иначе она проверяет не то.
+AWS_KEY = "AKIA" + "QRSTUVWX9012YZAB"
 # файл, чей ПУТЬ ни одному домену не соответствует, а содержимое ловится подстрокой
 CONTENT_ONLY = {"src/reader.js": "const logger = console;\nconst route = '/x';\n"}
 
