@@ -911,7 +911,8 @@ work:
     title: "Drift: расхождения документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт"
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     write_scope: [ai_ops_kit/intelligence/, tests/]
     value: high
