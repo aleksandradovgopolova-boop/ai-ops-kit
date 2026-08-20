@@ -948,7 +948,8 @@ work:
     title: Backlog → исполнимый delivery-план с прогнозом и delivery-risk (оценка, не факт)
     type: engineering
     goal: roadmap-and-delivery
-    status: todo
+    status: in_progress
+    branch: lane-4-delivery
     depends_on: [milestones-linked-to-backlog]
     owner_role: engineer
     write_scope: [ai_ops_kit/planning/, tests/]
