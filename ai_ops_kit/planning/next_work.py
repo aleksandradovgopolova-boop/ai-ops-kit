@@ -219,6 +219,12 @@ def _holders(child_root, me=None):
     работ нет» при непрочитанном реестре запрещено тем же правилом, что и в `status`: «не знаю» — не
     «нет».
 
+    РАБОЧИЕ КОПИИ — ОТДЕЛЬНАЯ ДОСЯГАЕМОСТЬ (замер 20.08.2026). Локальный реестр лежит внутри
+    рабочего дерева, поэтому у каждого worktree он свой: до правки `next` во второй копии одного
+    репозитория предлагал работу, которую держала первая. Заявки соседних копий подаёт `team_view`
+    через носитель в общем каталоге git; сколько копий он покрывает — в `reach["copies"]`, и это
+    ЗАМЕР, а не догадка: не измерили — там None, и об этом сказано словами.
+
     Личность спрашивающего (`me`) обязательна для РАЗДЕЛЕНИЯ «моё/чужое». Не передали — считаем все
     заявки чужими (fail-closed: не предлагать работу, которую может кто-то держать) и говорим об этом
     полем `identity` в досягаемости.
@@ -245,11 +251,16 @@ def _holders(child_root, me=None):
         wid = _plan._workitem_key(e)
         row = {"id": wid, "title": None, "branch": e.get("branch"),
                "owner_session": e.get("owner_session"), "machine": e.get("machine"),
+               # «где именно» на одной машине: имя хоста у всех рабочих копий одно, и без копии
+               # ответ «держит другой на этой машине» никуда участника не отправляет.
+               "worktree": e.get("worktree"),
                "since": e.get("started_at")}
         (mine if (me and e.get("owner_session") == me) else others).append(row)
+    copies = active_work.working_copies(child_root)
     reach = {"published": published, "registry_read": registry_read,
-             "identity": bool(me),
-             "note": active_work.reach_note(published)}
+             "identity": bool(me), "copies": copies,
+             "note": active_work.reach_note(published),
+             "copies_note": active_work.copies_reach_note(copies)}
     return others, mine, reach
 
 
