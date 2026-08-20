@@ -993,9 +993,12 @@ def main(argv):
                 shown = sp.relative_to(Path(child_root))
             except ValueError:
                 shown = sp
+            # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`,
+            # пропуская `plan`. Заявленный путь кита — specify -> plan -> run; человек, идущий по
+            # подсказкам, планирования не видел вовсе. Следующий шаг — `plan`.
             _say(Path(child_root), "from_specification", shown, created, cov["level_name"],
                  cov["sections"], cov["blocking_missing"],
-                 f"./ai-ops run \"{task or '<задача>'}\" --feature {wid} --execute",
+                 f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
                  spec_rep["added"], spec_rep["error"])
         return 0
 
