@@ -1328,3 +1328,37 @@ probes:
     Валидатор релизных заявлений судит то, чем кит объявляет собственную готовность; вне контракта он
     остаётся «объявлено, но не исполняется» — и тогда охраны выше проверяют текст, который никто не
     читает.'
+- id: plan-git-disagreement-reaches-validate
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        grep_ = git_disagreements(plan, root)'
+  replace_with: '        grep_ = {"errors": [], "warnings": [], "measured": False}'
+  tests:
+  - tests/unit/test_plan_agrees_with_git.py
+  why: 'ШОВ: сверка плана с git попадает в CI только через отчёт `validate` — его читает
+    `validate_product_model`. Мутация оставляет механизм на месте, но контур его не спрашивает: план
+    может расходиться с git, а джоба зелёная. Ровно тот класс, которым была сама находка 20.08 —
+    расхождение нашёл человек при аудите, а не проверка.'
+- id: changes-in-base-close-the-work
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        elif state == "in-base" and st != "done":'
+  replace_with: '        elif False:'
+  tests:
+  - tests/unit/test_plan_agrees_with_git.py
+  why: 'Замер 20.08.2026 на плане самого кита: `audit-public-surface-and-guards` объявлена идущей, а
+    её ветка целиком в базе. Работа была сделана и слита, план об этом не знал, и не заметила ни одна
+    проверка — это класс аудита 19.08 («тридцать закрыли, настоящими были 23»), только в другую
+    сторону.'
+- id: unmeasured-plan-state-is-not-agreement
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if state == "absent":'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_plan_agrees_with_git.py
+  why: 'Третье состояние не сворачивается во второе. Ветку удалили после слияния ИЛИ не выкачали —
+    различить нельзя; молчание на этом месте читалось бы как «план согласован», то есть неизвестность
+    выдавалась бы за зелёное.'

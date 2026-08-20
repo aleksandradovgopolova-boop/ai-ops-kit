@@ -480,15 +480,25 @@ gates:
 
   documentation_updated:
     id: documentation_updated
-    closed_by: writer
-    purpose: Документация обновлена вместе с изменением (Definition of Done).
+    closed_by: validator
+    purpose: >
+      Документация обновлена вместе с изменением (Definition of Done). ПЕРЕВЕДЁН ИЗ САМОЗАЯВЛЕНИЯ
+      В МАШИННЫЙ (v3.37, C3): оба доказательства — факты о дифе, а не суждение, и спрашивать о них
+      стадию, которая работу и сделала, было лишним. Разбор — `quality/gate-machinability.yaml`.
+      Ненужность документации по-прежнему закрывается объявлением writer'а с причиной, но громко:
+      причина уходит в warnings и в отчёт.
     stage: result
     blocking: false
     responsible_role: documentation-steward
     review_mode: writer
+    validator: validate-documentation-updated   # runnable: ai_ops_kit/gates/documentation_evidence.py
     applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, ANALYTICS, ADOPTION]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [docs_updated_or_explicit_none, release_notes_entry]
+    exemption_policy: >
+      Изменение, которому документация не нужна, закрывается объявлением writer'а
+      {"docs_not_needed": "<причина>"} — причина попадает в warnings и в отчёт. Каталог фрагментов
+      CHANGELOG, не объявленный репозиторием, даёт unknown по этому доказательству, НЕ «записи нет».
 
   release_safety:
     id: release_safety

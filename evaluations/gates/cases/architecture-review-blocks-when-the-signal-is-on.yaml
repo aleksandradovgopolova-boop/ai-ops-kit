@@ -1,0 +1,17 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: architecture-review-blocks-when-the-signal-is-on
+gate: architecture_review
+case_kind: no_judge
+summary: |
+  При архитектурном сигнале тот же гейт становится блокирующим и требует судью поимённо.
+origin:
+  source: quality/gates.yaml -> architecture_review.required_when (v3.15.0 Architecture Baseline)
+  provenance: contract_invariant
+signals:
+  architecture_change: true
+expected:
+  status: fail
+  reason_matches:
+  - architecture-reviewer
+  - нет заключения reviewer
