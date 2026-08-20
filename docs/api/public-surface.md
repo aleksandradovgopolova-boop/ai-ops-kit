@@ -114,6 +114,9 @@ experimental:
     - feedback
     - roadmap
     - delivery
+    # Backlog Intelligence (Фаза 2): `backlog classify|dedup|prioritize|graph` над GitHub Issues
+    # дочки. Форма вывода и набор атрибутов ещё уточняются — дочка не должна на них опираться.
+    - backlog
   # Advisory-гейты: не блокируют, форма улик и applicability ещё уточняются.
   # Проверяется числом и списком — quality/gates.yaml -> blocking: false.
   advisory_gates:

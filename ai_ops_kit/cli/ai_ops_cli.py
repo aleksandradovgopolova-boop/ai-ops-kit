@@ -64,6 +64,10 @@ INTENTS = {
     # Без текста — показать судьбу уже записанных (канал обязан быть двусторонним).
     "feedback": ("рассказать киту, что он сделал не так (без текста — судьба уже сказанного)",
                  "feedback", True),
+    # Backlog Intelligence (Фаза 2): GitHub Issues как операционная единица. Подкоманда — первым
+    # словом: classify | dedup | prioritize | graph. Без доступа к GitHub отвечает «не проверено»
+    # с причиной, а не пустотой. Форма ещё меняется — интент experimental.
+    "backlog": ("backlog из GitHub Issues: classify | dedup | prioritize | graph", "backlog", True),
 }
 
 
@@ -72,7 +76,7 @@ INTENTS = {
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "model", "bootstrap", "feedback", "session", "doctor",
-                  "roadmap", "delivery")
+                  "roadmap", "delivery", "backlog")
 
 
 def resolve_flags(signals):
@@ -146,7 +150,8 @@ def build_preview(intent, task, child_root, signals):
                       "new": "заведу место для новой работы",
                       "resume": "продолжу с последнего подтверждённого шага",
                       "feedback": "запишу твоё замечание о моей работе так, чтобы его можно было "
-                                  "проверить"}.get(
+                                  "проверить",
+                      "backlog": "разберу GitHub Issues: тип, дубликаты, приоритет, зависимости"}.get(
                           intent, "выполню намерение"))
 
     return {
@@ -219,6 +224,103 @@ def _audience(child_root):
     return presenter.audience_from_config(child_root)
 
 
+_BACKLOG_SUBS = ("classify", "dedup", "prioritize", "graph")
+
+
+def _run_backlog(sub, child_root, signals, js):
+    """Backlog Intelligence через CLI: подкоманда первым словом, репозиторий — `child_root`.
+
+    Читает GitHub Issues САМОЙ дочки. Третье состояние честно: если доступа к GitHub нет, ответ —
+    «не проверено» с причиной и код 2 (блокировано), а НЕ пустой backlog с кодом 0. `graph` —
+    синоним `depgraph`/`deps`. Состояние выборки берётся из --signals '{"state":"all"}' (по
+    умолчанию open)."""
+    sub = (sub or "").strip().lower()
+    if sub in ("depgraph", "deps"):
+        sub = "graph"
+    state = (signals or {}).get("state", "open")
+    root = str(child_root)
+    if sub not in _BACKLOG_SUBS:
+        # Без подкоманды (или с неизвестной) — назвать, что умеет, а не молча вернуть успех.
+        msg = ("backlog: операционный разбор GitHub Issues. Подкоманды:\n"
+               "  classify    — тип/область/приоритет/атрибуты, каждый вывод с объяснением\n"
+               "  dedup       — дубликаты (предлагает объединение) и устаревшие\n"
+               "  prioritize  — приоритет с объяснением и учётом override человека\n"
+               "  graph       — граф зависимостей: блокирующие, критический путь, циклы\n"
+               "Пример: ./ai-ops backlog classify .   (state: --signals '{\"state\":\"all\"}')")
+        if js:
+            print(json.dumps({"ok": False, "reason": f"нет подкоманды backlog: {sub or '—'}",
+                              "subcommands": list(_BACKLOG_SUBS)}, ensure_ascii=False, indent=2))
+        else:
+            print(msg)
+        return 0 if not sub else 2
+
+    if sub == "classify":
+        from ai_ops_kit.planning import backlog_classify as _bc
+        rep = _bc.classify_backlog(root, state=state)
+        if js:
+            print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
+        elif not rep.ok:
+            print(f"backlog не проверен: {rep.reason}")
+        else:
+            print(f"Backlog {rep.repo}: {rep.total} Issues — "
+                  + ", ".join(f"{k} {v}" for k, v in sorted(rep.by_type.items())))
+            for c in rep.items:
+                dep = f", зависит от {c.dependencies}" if c.dependencies else ""
+                print(f"  #{c.number} {c.type}/{c.priority} · {c.area} (увер. {c.confidence}){dep}")
+        return 0 if rep.ok else 2
+
+    if sub == "dedup":
+        from ai_ops_kit.planning import backlog_dedup as _dd
+        from datetime import datetime, timezone
+        rep = _dd.dedup_backlog(root, state=state, now_iso=datetime.now(timezone.utc).isoformat())
+        if js:
+            print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
+        elif not rep.ok:
+            print(f"backlog не проверен: {rep.reason}")
+        else:
+            print(f"Backlog {rep.repo}: {rep.total} Issues · "
+                  f"кандидатов в дубликаты {len(rep.duplicate_pairs)} (ПРЕДЛОЖЕНИЕ, слияние — с "
+                  f"одобрения) · устаревших {len(rep.stale)}")
+            for p in rep.duplicate_pairs:
+                print(f"  #{p.a} ↔ #{p.b}  похожесть {p.score} — {p.evidence}")
+            for s in rep.stale:
+                print(f"  устарел #{s.number} ({s.days_idle}д): {s.title[:60]}")
+        return 0 if rep.ok else 2
+
+    if sub == "prioritize":
+        from ai_ops_kit.planning import backlog_prioritize as _bp
+        rep = _bp.prioritize_backlog(root, state=state)
+        if js:
+            print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
+        elif not rep.ok:
+            print(f"backlog не проверен: {rep.reason}")
+        else:
+            print(f"Приоритеты {rep.repo}: {len(rep.items)} задач")
+            for p in rep.items:
+                mark = " [решение человека]" if p.overridden else ""
+                print(f"  #{p.number} {p.priority}{mark} (score {p.score}, увер. {p.confidence})")
+                print(f"      {p.explanation}")
+        return 0 if rep.ok else 2
+
+    # graph
+    from ai_ops_kit.planning import backlog_depgraph as _dg
+    g = _dg.graph_from_backlog(root, state=state)
+    if js:
+        print(json.dumps(g.to_dict(), ensure_ascii=False, indent=2))
+    elif not g.ok:
+        print(f"backlog не проверен: {g.reason}")
+    else:
+        print(f"Граф зависимостей: {len(g.nodes)} задач, {len(g.edges)} связей")
+        if g.cycles:
+            print(f"  ⚠ циклы (доставить нельзя): {g.cycles}")
+        print("  блокирующие: " + (", ".join(f"#{b['number']}×{b['dependents']}"
+                                              for b in g.blocking) or "нет"))
+        print("  критический путь: " + (" → ".join(f"#{n}" for n in g.critical_path) or "нет"))
+        for t in g.transitive:
+            print(f"  скрытая зависимость: #{t['number']} → {t['hidden']}")
+    return 0 if g.ok else 2
+
+
 def _run_intent(intent, task, child_root, signals, a):
     """v2.112 Intent UX: РЕАЛЬНОЕ действие для намерения. -> код возврата или None (нет спец-действия)."""
     import yaml
@@ -236,6 +338,9 @@ def _run_intent(intent, task, child_root, signals, a):
         else:
             _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
         return 0
+
+    if intent == "backlog":
+        return _run_backlog(task, child_root, signals, js)
 
     if intent == "feedback":
         # Наблюдение о ките — данные, а не пересказ. Без текста команда показывает судьбу уже
