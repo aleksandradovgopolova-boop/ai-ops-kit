@@ -670,6 +670,148 @@ def managed_set():
     return filter_by_packages(pairs, selected_packages(), package_ownership())
 
 
+def delivery_breakdown(top=10):
+    """ЧТО занимает поставку: разбивка по каталогам и крупнейшие файлы. -> dict.
+
+    ЗАЧЕМ (замер 20.08.2026). Потолок объёма ловил РОСТ и не показывал СОСТАВ: четыре подъёма подряд
+    обсуждались числом «3.5 -> 3.7 -> 3.75 -> 3.8», и ни в одном не было видно, что именно лежит в
+    поставке. Первый же взгляд на состав дал находку, которую до этого не называл никто:
+    `manifest/ai-ops-manifest.yaml` — 252 581 Б в ОДНОМ файле, 6.6% поставки, вчетверо больше
+    релизной прозы, из-за которой отдельно велась работа.
+
+    Разбивка считается по тому же списку, что и сама поставка (`managed_set`), поэтому не может
+    разойтись с ней: одна формула, а не два подсчёта.
+    """
+    by_dir, count = {}, {}
+    files = []
+    for src, rel in managed_set():
+        size = src.stat().st_size
+        head = rel.split("/")[0] if "/" in rel else "(корень)"
+        by_dir[head] = by_dir.get(head, 0) + size
+        count[head] = count.get(head, 0) + 1
+        files.append((size, rel))
+    total = sum(by_dir.values())
+    files.sort(reverse=True)
+    return {"total_bytes": total, "file_count": sum(count.values()),
+            "by_dir": [{"dir": k, "bytes": v, "files": count[k],
+                        "share": round(100.0 * v / total, 1) if total else 0.0}
+                       for k, v in sorted(by_dir.items(), key=lambda kv: -kv[1])],
+            "largest": [{"path": r, "bytes": b,
+                         "share": round(100.0 * b / total, 1) if total else 0.0}
+                        for b, r in files[:top]]}
+
+
+def delivery_breakdown_lines(top=10):
+    """Та же разбивка человеку — строками. Печатается там, где потолок пробит: узнав ЧИСЛО, человек
+    первым делом спрашивает «а что там лежит», и ответ должен быть в том же сообщении."""
+    rep = delivery_breakdown(top=top)
+    out = [f"ПОСТАВКА: {rep['total_bytes']} Б в {rep['file_count']} файлах.",
+           "  по каталогам:"]
+    for d in rep["by_dir"]:
+        out.append(f"    {d['bytes']:8d} Б  {d['share']:5.1f}%  {d['files']:4d} файл(ов)  {d['dir']}")
+    out.append(f"  крупнейшие файлы (top {top}):")
+    for f in rep["largest"]:
+        out.append(f"    {f['bytes']:8d} Б  {f['share']:5.1f}%  {f['path']}")
+    return out
+
+
+def delivery_budget(pkg_root=None):
+    """Объявленные потолки поставки и лента подъёмов. -> dict или None (реестра нет).
+
+    Потолки живут В РЕЕСТРЕ, а не числами в тесте: до 20.08.2026 они были вписаны в assert, а записи
+    о подъёмах лежали в двух разных блоках комментариев одного файла — и на вопрос «записан ли этот
+    подъём» нельзя было ответить, посмотрев в одно место."""
+    p = Path(pkg_root or PKG) / "quality" / "delivery-budget.yaml"
+    if not p.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+# «Нужен запас» причиной не считается — правило записано с 13.08.2026 и до 20.08 исполнялось ровно
+# настолько, насколько о нём помнили. Ловится дословно, а не «по духу»: список закрытый и короткий.
+BUDGET_NON_REASONS = ("нужен запас", "чтобы прошло", "для запаса", "на будущее")
+BUDGET_RAISE_REQUIRED = ("at", "what", "measured_before", "measured_after", "files",
+                         "why_it_works_in_the_child")
+
+
+def delivery_budget_errors(doc, shipped=None, exists=None):
+    """Что не так с объявленным бюджетом поставки. -> список проблем (пустой = всё названо).
+
+    ЛОГИКА ЖИВЁТ ЗДЕСЬ, А НЕ В ТЕСТЕ, И ЭТО ЗАМЕР 20.08.2026: первая версия этих охран стояла прямо
+    в тесте и проверяла, что НАСТОЯЩИЙ реестр в порядке. Три мутационные пробы ВЫЖИЛИ — снятие
+    охраны не роняло тест, потому что у проверки не было отрицательного случая. Проверка без «а вот
+    так — нельзя» непробиваема по построению; ровно тот класс, ради которого весь контур проб и стоит.
+
+    `shipped` — множество путей, которые реально едут в дочку; `exists` — предикат существования
+    файла. Оба передаются, чтобы функцию можно было спросить и про выдуманный реестр.
+    """
+    problems = []
+    if not isinstance(doc, dict):
+        return ["реестр бюджета не разобран — проверять нечего"]
+    ceilings = doc.get("ceilings") or {}
+    raises = doc.get("raises") or []
+    for key in ("volume_bytes", "substantive_files", "alias_bytes"):
+        if not isinstance(ceilings.get(key), int):
+            problems.append(f"ceilings.{key} не объявлен числом — потолка нет")
+    vol = [r for r in raises if isinstance(r, dict) and r.get("what") == "volume"]
+    if not vol:
+        problems.append("в ленте нет ни одного подъёма объёма — потолок появился без записи")
+    elif isinstance(ceilings.get("volume_bytes"), int) and \
+            vol[-1].get("to_bytes") != ceilings["volume_bytes"]:
+        problems.append(
+            f"последний подъём объёма ведёт к {vol[-1].get('to_bytes')}, а потолок "
+            f"{ceilings['volume_bytes']} — значит потолок поднят БЕЗ записи")
+    for r in raises:
+        if not isinstance(r, dict):
+            problems.append("запись подъёма не словарь")
+            continue
+        tag = f"{r.get('at')} {r.get('work')}"
+        for k in BUDGET_RAISE_REQUIRED:
+            if not r.get(k):
+                problems.append(f"{tag}: нет обязательного поля '{k}'")
+        at = str(r.get("at") or "")
+        if not (len(at) == 10 and at[4:5] == "-" and at[7:8] == "-"):
+            problems.append(f"{tag}: дата не ISO ({at!r}) — без даты замер выдаёт себя за текущий")
+        for k in ("measured_before", "measured_after"):
+            if k in r and not isinstance(r.get(k), int):
+                problems.append(f"{tag}: {k} не число")
+        why = str(r.get("why_it_works_in_the_child") or "").lower()
+        if any(f in why for f in BUDGET_NON_REASONS):
+            problems.append(f"{tag}: причина подъёма — не причина, а запас: {why[:60]!r}")
+        elif why and len(why) < 80:
+            problems.append(f"{tag}: причина короче 80 символов — она обязана назвать РАБОТУ файла "
+                            f"в дочке, а не факт его добавления")
+        for rel in r.get("files") or []:
+            if exists is not None and not exists(rel):
+                problems.append(f"{tag}: названного файла нет — {rel}")
+            elif shipped is not None and rel not in shipped:
+                problems.append(f"{tag}: файл НЕ едет в дочку, а причина подъёма ссылается на его "
+                                f"работу там — {rel}")
+        if r.get("what") == "volume" and isinstance(r.get("from_bytes"), int) \
+                and isinstance(r.get("to_bytes"), int) and r["to_bytes"] <= r["from_bytes"]:
+            problems.append(f"{tag}: подъём не поднимает ({r['from_bytes']} -> {r['to_bytes']})")
+    return problems
+
+
+def footprint_breach_message(what, actual, ceiling, unit="Б", top=8):
+    """Сообщение о пробитом потолке: число, правило подъёма И СОСТАВ поставки. -> str.
+
+    ЗАМЕР 20.08.2026: четыре подъёма подряд обсуждались одним числом, и состав поставки не смотрел
+    никто. Первый же взгляд дал находку — `manifest/ai-ops-manifest.yaml` 252 581 Б, 6.6% поставки в
+    ОДНОМ файле. Узнав число, человек первым делом спрашивает «а что там лежит»; ответ обязан быть в
+    том же сообщении, иначе его не ищут."""
+    head = f"{what}: {actual} {unit}, потолок {ceiling} {unit}."
+    rule = ("ПОДНЯТЬ ПОТОЛОК МОЖНО ТОЛЬКО ЗАПИСЬЮ в quality/delivery-budget.yaml: дата, замеры до и "
+            "после, КАКИЕ файлы добавлены и ПОЧЕМУ они работают в дочке. «Нужен запас» причиной не "
+            "считается, и проверка это ловит.")
+    return "\n".join([head, rule, "Что занимает поставку сейчас:"] +
+                      delivery_breakdown_lines(top=top))
+
+
 def sha256(p: Path):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
