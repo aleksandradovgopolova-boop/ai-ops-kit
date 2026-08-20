@@ -143,6 +143,7 @@ internal:
     - engine
     - engops
     - gates
+    - integrations
     - intelligence
     - lifecycle
     - planning

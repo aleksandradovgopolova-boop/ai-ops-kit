@@ -123,10 +123,10 @@ child-репозиториев. Здесь разрабатывается сам
 
 **Называй охват, а не говори «полный».** `check-full.sh` — это `full-current-python`: одна версия
 Python, та, что стоит у тебя. Объявленный пол `requires-python` и установку в чистое окружение
-даёт только `compatibility-matrix` — джобы CI `python39-compat`, `pipeline-e2e`, `clean-install`.
+даёт только `compatibility-matrix` — джобы CI `pipeline-e2e`, `clean-install`, `upgrade-path`.
 Оба охвата объявлены в `registry/release-claims.yaml -> evidence_scopes`; заявление о полноте без
 имени охвата отклоняет `validate_release_claims`. Повод: PR #38 написал «полный контур зелёный»,
-и `python39-compat` опроверг это в том же релизе.
+и compatibility-matrix опроверг это в том же релизе.
 
 Построчного чеклиста больше нет: селфтесты модулей, все 72 валидатора и прогоны на примерах
 переехали в pytest — дублировать их значило бы гонять одно и то же дважды. Почему именно так —

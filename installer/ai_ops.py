@@ -528,6 +528,13 @@ DEV_ONLY_PREFIXES = (
     # Безопасно по построению: слой `entrypoints` продуктовый код импортировать не вправе, и это
     # проверяет `validate_layering` (правило no-product-depends-on-devtools).
     "ai_ops_kit/devtools/",
+    # 20.08.2026, работа `product-layer-templates-versioned` (PR-5). Официальные шаблоны Product
+    # Operating Layer (`.ai-ops/`: PRODUCT_PASSPORT/ROADMAP/DELIVERY/POLICY) построены, но в дочке
+    # их пока никто не раскладывает: bootstrap (`product-layer-bootstrap`) ещё не сделан, а без него
+    # `templates/product-layer/*` в child лежат мёртвым грузом и только съедают потолок поставки.
+    # Уедут в дочку вместе с bootstrap, который заставит их там РАБОТАТЬ, — тогда же поднимется
+    # потолок. Префикс, а не пофайлово: следующие шаблоны слоя не должны просочиться поодиночке.
+    "templates/product-layer/",
 )
 
 # НЕ ПОДКЛЮЧЁННОЕ НЕ ЕДЕТ (19.08.2026, разбор после аудита).
@@ -567,14 +574,39 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
     "ai_ops_kit/intelligence/watch_contract.py",
+    # `planning/artifact_registry.py` — реестр стандартных артефактов Product Operating Layer как
+    # данные (PR-4, работа `artifact-registry-as-data`). ПОСТРОЕН, но в дочке пока НЕДОСТИЖИМ:
+    # его читатели — bootstrap (`product-layer-bootstrap`) и валидация (`product-layer-validation`)
+    # — ещё не сделаны, а значит в child нет ни одного вызова. Поднимать потолок поставки ради
+    # файла, который в дочке не РАБОТАЕТ, было бы той самой неправдой, о которой говорит абзац выше
+    # (замер: main оставлял ~24 КБ запаса, три файла среза весят ~36 КБ и пробили бы 3.8 МБ).
+    # Уедет обратно НЕ решением автора, а фактом подключения: как только его начнут звать из
+    # WIRING_DIRS, `test_unwired_modules_are_really_unwired` покраснеет и потребует убрать имя.
+    "ai_ops_kit/planning/artifact_registry.py",
+    # `planning/product_templates.py` — версионные шаблоны слоя и состояние Missing/Invalid/Outdated/
+    # Valid (PR-5, работа `product-layer-templates-versioned`). Тот же случай, что реестр выше: код
+    # построен, но в дочке его читатель (валидация `product-layer-validation`, CLI `ai-ops validate
+    # product-layer`) ещё не сделан. Уедет фактом подключения вместе с валидацией.
+    "ai_ops_kit/planning/product_templates.py",
+    # `planning/passport_generator.py` — генерация Product Passport из фактического состояния репо
+    # (PR-6, работа `product-passport-auto-generation`). Построен, но в дочке не подключён: команду
+    # `ai-ops passport generate` заведёт bootstrap (`product-layer-bootstrap`). Уедет с ним.
+    "ai_ops_kit/planning/passport_generator.py",
     # `planning/roadmap_manager.py` — автоведение roadmap Now/Next/Later (лента 4, PR-7). ПОСТРОЕНО,
     # но в дочке пока НЕДОСТИЖИМО: ни одна команда/реестр/док его не зовёт (авторскую сторону
     # по-прежнему ведёт подключённый `roadmap.py`). Пока не появится команда `ai-ops roadmap`,
     # ставить его в поставку значило бы платить объёмом дочки за то, что там не работает — ровно
     # класс, ради которого этот список и заведён. Уедет отсюда фактом подключения, не решением.
-    # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `installer/` — территория ленты B; правка на одну
-    # строку списка. Ленте B сказано (тот же приём, что при подключении nightly_review).
     "ai_ops_kit/planning/roadmap_manager.py",
+    # `planning/roadmap_milestones.py` — связь roadmap↔milestones↔backlog (лента 4, PR-7). Та же
+    # причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
+    "ai_ops_kit/planning/roadmap_milestones.py",
+    # `planning/delivery_planning.py` — delivery-план из backlog под milestone (лента 4, PR-10). Та
+    # же причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
+    "ai_ops_kit/planning/delivery_planning.py",
+    # `planning/delivery_planning_blockers.py` — ранние блокеры + выгрузка delivery-сигналов для
+    # health_delivery ленты 5 (лента 4, PR-15). Та же причина: построено, в дочке пока недостижимо.
+    "ai_ops_kit/planning/delivery_planning_blockers.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
@@ -642,6 +674,15 @@ DEV_ONLY_FILES = frozenset({
     # claims остался в поставке, потому что у него ЕСТЬ читатель в дочке — `package_channel`
     # смотрит `channel` (18 Б) из `init`/`update`/`doctor`.
     "registry/release-notes.yaml",
+    # 20.08.2026, работа `artifact-registry-as-data` (Product Operating Layer, PR-4). Реестр состава
+    # слоя как данные и его схема-контракт ПОСТРОЕНЫ, но в дочке их пока никто не читает: читатель
+    # реестра — загрузчик `planning/artifact_registry.py` (сам в UNWIRED_MODULES выше), а его, в свою
+    # очередь, зовут только ещё не сделанные bootstrap и validation. Схему кит не читает в рантайме
+    # вовсе (`check` в загрузчике самодостаточен) — это публичный контракт формы. Оба уедут в дочку
+    # вместе с работой, которая заставит их там РАБОТАТЬ (`product-layer-validation`), и тогда же
+    # поднимется потолок поставки — по факту подключения, а не заранее.
+    "registry/artifact-registry.yaml",
+    "schemas/artifact-registry.schema.json",
 })
 
 
@@ -894,7 +935,7 @@ def detect_drift(root=None):
                           "checksum_expected": digest, "checksum_actual": sha256(p)})
     for p in sorted(root.rglob("*")):
         # Байткод не часть managed-слоя: он появляется от любого запуска и дрейфом не является.
-        # Всплыло при переходе групп CI на pytest — прогон на 3.9 создавал __pycache__ внутри
+        # Всплыло при переходе групп CI на pytest — прогон создавал __pycache__ внутри
         # тестовой установки, и проверка целостности рапортовала «ДРИФТ (11 файлов)».
         if "__pycache__" in p.parts or p.suffix in (".pyc", ".pyo"):
             continue
