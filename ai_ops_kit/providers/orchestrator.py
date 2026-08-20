@@ -61,7 +61,9 @@ from ai_ops_kit.providers.orchestrator_providers import (
     _anthropic_call, _openai_call, _claude_cli_call,
     make_provider, make_claude_cli_provider, make_openai_provider,
     claude_binary, claude_lookup, claude_found_reason,
+    for_contract,
 )
+from ai_ops_kit.providers.response_contract import REVIEWER_RESULT, ProviderRefusal
 
 
 # ---------------- state ----------------
@@ -209,7 +211,32 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
             if verbose:
                 print(f"  BUDGET: остановка перед стадией {sid}: {e}")
             break
-        result = provider(prompt)
+        is_judge_stage = stage.get("review_mode") == "read-only"
+        if is_judge_stage:
+            # ТАМ, ГДЕ ОТВЕТ СТАНОВИТСЯ ВЕРДИКТОМ, ФОРМУ ОБЕСПЕЧИВАЕТ ПРОВАЙДЕР (C2, v3.37).
+            # Где механизма нет (claude-cli, mock) — вызов идёт как раньше; режим при этом
+            # записывается словом, а не остаётся умолчанием.
+            judge_fn, shape = for_contract(provider, REVIEWER_RESULT)
+            state.setdefault("verdict_shape", {})[sid] = {
+                "mode": shape.get("mode"), "mechanism": shape.get("mechanism")}
+            try:
+                result = judge_fn(prompt)
+            except ProviderRefusal as refusal:
+                # ОТКАЗ — НЕ ВЕРДИКТ. Прежде здесь возвращалась строка «(пустой ответ модели)»:
+                # она доезжала до разбора, вердикта в ней не находилось, и гейт краснел с
+                # формулировкой «нет заключения reviewer» — правда по существу и ложь по причине.
+                rec = refusal.as_dict()
+                (run_dir / f"stage-{sid}.refusal.json").write_text(
+                    json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
+                result = (f"# Заключения нет\n\nСудья ({owner}) вердикта не вынес: "
+                          f"{rec['reason_text']}"
+                          f"{'. ' + rec['detail'] if rec['detail'] else ''}\n\n"
+                          f"Это ОТКАЗ, а не «пусто»: гейт остаётся незакрытым, и причина названа.\n")
+                state["verdict_shape"][sid]["refusal"] = rec
+                if verbose:
+                    print(f"  stage {sid} [{owner}/judge] -> ОТКАЗ: {rec['reason_text']}")
+        else:
+            result = provider(prompt)
 
         # опубликовать результат стадии (это и есть handoff-артефакт)
         out = run_dir / f"stage-{sid}.md"
@@ -219,7 +246,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         # judge-стадии: извлечь СТРУКТУРНОЕ reviewer-result из ответа (source of truth для гейтов,
         # не regex по прозе — finding аудита). Пишем stage-<sid>.reviewer.json только если он
         # валиден по схеме; иначе остаётся markdown-фолбэк в collect_evidence.
-        if stage.get("review_mode") == "read-only":
+        if is_judge_stage and not (run_dir / f"stage-{sid}.refusal.json").exists():
             _write_reviewer_json(run_dir, sid, result)
 
         # handoff: judge следующей стадии увидит только published
@@ -238,7 +265,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         state["next_action"] = stages[nxt]["id"] if nxt < len(stages) else None
         save_state(run_dir, state)
         if verbose:
-            role = "judge" if stage.get("review_mode") == "read-only" else "writer"
+            role = "judge" if is_judge_stage else "writer"
             print(f"  stage {sid} [{owner}/{role}] -> stage-{sid}.md")
 
     # gate executor: контур замыкается здесь — workflow НЕ done, пока блокирующие

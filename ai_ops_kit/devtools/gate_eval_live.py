@@ -47,6 +47,11 @@ from ai_ops_kit.devtools.gate_evals import (
 from ai_ops_kit.gates.gate_executor import load_gates
 from ai_ops_kit.providers.orchestrator import build_role_prompt
 from ai_ops_kit.providers.orchestrator_providers import make_provider, resolve_provider
+from ai_ops_kit.providers.response_contract import (
+    REVIEWER_RESULT,
+    ProviderRefusal,
+    shape_support,
+)
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
            Path(__file__).resolve().parents[2])
@@ -86,6 +91,11 @@ def run_case_live(case, provider_fn, repeats, gates=None, agents_index=None) -> 
     for i in range(repeats):
         try:
             text = provider_fn(prompt)
+        except ProviderRefusal as refusal:
+            # ОТКАЗ ПО ФОРМЕ — со своей причиной: пусто, обрезано, модель отказалась. Это не
+            # «что-то пошло не так», и человек читает именно то, что случилось.
+            failures.append(f"повтор {i + 1}: вердикта нет — {refusal}")
+            continue
         except Exception as exc:  # noqa: BLE001 — отказ вызова НЕ равен вердикту судьи
             # Третье состояние: вызов не состоялся. Записать это как вердикт значило бы
             # объявить мнением то, чего никто не говорил.
@@ -169,6 +179,10 @@ def format_live(rep) -> str:
     L = [f"GATE-EVAL [live] провайдер: {rep['provider']}"
          f"{' · модель ' + rep['model'] if rep['model'] else ''} · повторов на кейс: "
          f"{rep['repeats']}"]
+    _vs = rep.get("verdict_shape") or {}
+    if _vs:
+        _mech = _vs.get("mechanism") or "механизма нет — разбор постфактум"
+        L.append(f"  форма вердикта: {_vs['mode']} ({_mech})")
     for r in rep["results"]:
         mark = "  ok  " if r["matches_expected"] and r["stable"] else " ПЛЫВЁТ"
         L.append(f"{mark} {r['case']} [{r['gate']}] ожидалось {r['expected']} · "
@@ -214,7 +228,10 @@ def main(argv=None):
         print("провайдер резолвится в mock — живой замер невозможен. "
               f"{res.get('warning') or res.get('reason')}", file=sys.stderr)
         return 1
-    provider_fn = make_provider(provider_name, args.model)
+    # Живой замер идёт ТЕМ ЖЕ путём, что бой: там, где ответ становится вердиктом, форма
+    # запрашивается механизмом провайдера. Где механизма нет — прогон об этом говорит.
+    provider_fn = make_provider(provider_name, args.model, REVIEWER_RESULT)
+    sup = shape_support(provider_name)
 
     gates, agents_index = load_gates(), _agents_index()
     results, skipped = [], []
@@ -231,6 +248,8 @@ def main(argv=None):
 
     rep = {"schema_version": 1, "kind": "gate-eval-report", "mode": "live",
            "provider": provider_name, "model": args.model or "", "repeats": args.repeats,
+           "verdict_shape": {"mode": sup["mode"], "mechanism": sup["mechanism"],
+                             "note": sup["note"]},
            "results": results, "skipped": skipped,
            "clean": all(r["matches_expected"] and r["stable"] for r in results) and bool(results)}
     if args.json:

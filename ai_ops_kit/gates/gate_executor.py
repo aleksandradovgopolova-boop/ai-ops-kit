@@ -173,6 +173,33 @@ def evidence_from_markdown(gate: dict, text: str, source: str):
     return None
 
 
+# Отказ провайдера, у которого причина «человеческая»: модель отказалась отвечать — тут нужен
+# человек. Пустой или обрезанный ответ — не человеческий случай: его чинит повтор с другим
+# потолком, и помечать его ожиданием человека значило бы звать не того.
+_REFUSAL_NEEDS_HUMAN = {"refused_by_model"}
+
+
+def evidence_from_judge_refusal(gate: dict, refusal: dict, source: str):
+    """Отказ судьи -> evidence, которое НАЗЫВАЕТ причину, а не растворяется в «нет заключения».
+
+    Статус повторяет то, что дал бы гейт без evidence (блокирующий -> fail, advisory -> warn):
+    отказ не строже и не мягче отсутствия вердикта — он ровно так же его не даёт. Меняется одно:
+    человек читает, ЧТО именно случилось, вместо «нет заключения reviewer»."""
+    reason = refusal.get("reason_text") or refusal.get("reason") or "причина не названа"
+    detail = refusal.get("detail")
+    who = refusal.get("provider") or "провайдер"
+    text = (f"заключение судьи не получено ({who}): {reason}"
+            f"{'; ' + detail if detail else ''}")
+    ev = {"status": "fail" if gate.get("blocking") else "warn", "evidence": [source]}
+    if gate.get("blocking"):
+        ev["blockers"] = [text]
+    else:
+        ev["warnings"] = [text]
+    if refusal.get("reason") in _REFUSAL_NEEDS_HUMAN:
+        ev["pending_human"] = True
+    return ev
+
+
 def evidence_from_judge_output(gate: dict, text: str, source: str = "judge-output"):
     """Ответ судьи (сырой текст) -> evidence одного гейта. Тот же путь, что в бою:
     структурный reviewer-result имеет приоритет, проза — фолбэк, отсутствие вердикта -> None."""
@@ -199,6 +226,18 @@ def collect_evidence(workflow_id: str, run_dir) -> dict:
                         None)
         if not stage_id:
             continue
+        # ОТКАЗ ЧИТАЕТСЯ ПЕРВЫМ (v3.37, C2): если судья вердикта не вынес и провайдер назвал
+        # причину, эта причина и есть то, что человеку надо знать. Разбирать после отказа нечего —
+        # артефакт стадии содержит объяснение отказа, а не заключение.
+        rfl = run_dir / f"stage-{stage_id}.refusal.json"
+        if rfl.exists():
+            try:
+                rec = json.loads(rfl.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                rec = None
+            if isinstance(rec, dict) and rec.get("kind") == "provider-refusal":
+                ev[gid] = evidence_from_judge_refusal(g, rec, rfl.name)
+                continue
         # v2.33: структурный reviewer-result — ИСТОЧНИК ИСТИНЫ (не regex по markdown).
         # Если рядом со стадией есть stage-<id>.reviewer.json (schemas/reviewer-result.schema.json),
         # берём вердикт/blockers из него; markdown-regex остаётся фолбэком для старых артефактов.
