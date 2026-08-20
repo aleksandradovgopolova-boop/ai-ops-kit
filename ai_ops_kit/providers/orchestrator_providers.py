@@ -22,12 +22,25 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.providers.orchestrator_http import _http_post_json
 from ai_ops_kit.providers import orchestrator_usage          # noqa: E402 — _CALL_STATS читаем ЖИВЫМ (drain пересоздаёт список)
 from ai_ops_kit.providers.orchestrator_usage import _record_call
+from ai_ops_kit.providers.response_contract import (
+    ENFORCED,
+    JSON_ONLY,
+    UNSUPPORTED,
+    ProviderRefusal,
+    shape_support,
+)
 
 
 # --- провайдеры ---
 
 def mock_provider(role_prompt: str) -> str:
-    """Детерминированный офлайн-провайдер: возвращает структурированную заглушку."""
+    """Детерминированный офлайн-провайдер: возвращает структурированную заглушку.
+
+    Контракта формы НЕ принимает намеренно: заглушка вердиктов не выносит. Отдай она валидный по
+    схеме `reviewer-result`, гейт получил бы вердикт от того, кто ничего не читал, — фабрикация,
+    а не офлайн-детерминизм. Путь «форма обеспечена провайдером» проверяется тестами живых
+    адаптеров с подменённым HTTP, а не заглушкой (`tests/unit/test_response_contract_selftest.py`).
+    """
     first = role_prompt.splitlines()[0][:80] if role_prompt else ""
     return (f"[mock-provider] Роль принята: {first}\n"
             f"Результат стадии подготовлен согласно контракту роли.")
@@ -41,38 +54,88 @@ DEFAULT_MODELS = {"anthropic": "claude-sonnet-5", "openai": "gpt-4o"}
 # v3.0-rc7 (finding живого прогона kimi): reasoning-модели (kimi-k3 и т.п.) тратят большой бюджет на
 # внутренний reasoning ПЕРЕД контентом. При 2048 весь бюджет уходил в reasoning -> finish_reason=length,
 # content пустой. 8192 даёт место reasoning + артефакт. Обычные модели стопятся раньше по stop (без вреда).
+#
+# ОДНО ЧИСЛО НА ВСЕ МОДЕЛИ И ВСЕ РОЛИ — это по-прежнему так, и это названо (аудит 19.08.2026). Что
+# изменилось в v3.37 (C2): упереться в него больше НЕ ЗНАЧИТ тихо отдать огрызок за ответ. Там, где
+# ответ становится вердиктом (запрошен контракт формы), `stop_reason=max_tokens` /
+# `finish_reason=length` — это ОТКАЗ с названной причиной, а не полвердикта в разборе.
+# Таблицы «модель -> потолок» здесь нет намеренно: её нельзя написать по памяти, а замера длин
+# ответов по ролям и моделям у нас нет. Выдуманные числа хуже одного честного — они выглядят как
+# знание. Число двинется, когда появится замер, и причина будет записана рядом, как здесь.
 _MAX_TOKENS = 8192
 
 
-def _anthropic_call(prompt, model):
+def _anthropic_call(prompt, model, contract=None):
+    """Messages API. С контрактом форма ответа обеспечивается механизмом провайдера
+    (`output_config.format`), а не разбором прозы; неполученный ответ даёт ОТКАЗ с причиной."""
     import os
     import time
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise SystemExit("ANTHROPIC_API_KEY не задан — живой прогон невозможен. "
                          "Задайте ключ в окружении или используйте --provider mock (офлайн).")
+    body = {"model": model, "max_tokens": _MAX_TOKENS,
+            "messages": [{"role": "user", "content": prompt}]}
+    if contract is not None:
+        # Structured outputs: ответ приходит одним текстовым блоком с валидным по схеме JSON.
+        body["output_config"] = {"format": {"type": "json_schema",
+                                            "schema": contract.wire_schema}}
     _t0 = time.monotonic()
     data = _http_post_json(
         "https://api.anthropic.com/v1/messages",
-        {"x-api-key": key, "anthropic-version": "2023-06-01"},
-        {"model": model, "max_tokens": _MAX_TOKENS,
-         "messages": [{"role": "user", "content": prompt}]})
+        {"x-api-key": key, "anthropic-version": "2023-06-01"}, body)
     _u = data.get("usage") or {}
     _record_call(model, _u.get("input_tokens"), _u.get("output_tokens"), time.monotonic() - _t0)
     parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
-    return "\n".join(parts).strip() or "(пустой ответ модели)"
+    text = "\n".join(parts).strip()
+    stop = data.get("stop_reason")
+    if contract is not None:
+        # ОБРЕЗАННЫЙ ОТВЕТ — НЕ ОТВЕТ. Потолок `max_tokens` один на все модели и все роли (замер
+        # kimi, см. `_MAX_TOKENS`), и вердикт, срезанный на нём, прежде доезжал до разбора куском:
+        # JSON не закрыт, вердикта нет, гейт краснел с формулировкой «нет заключения reviewer» —
+        # правда по существу и ложь по причине.
+        if stop == "max_tokens":
+            raise ProviderRefusal("truncated", f"потолок {_MAX_TOKENS} токенов", "anthropic", model)
+        if stop == "refusal":
+            det = (data.get("stop_details") or {}).get("explanation") or ""
+            raise ProviderRefusal("refused_by_model", det, "anthropic", model)
+        if not text:
+            raise ProviderRefusal("empty_answer", f"stop_reason={stop}", "anthropic", model)
+    return text or "(пустой ответ модели)"
+
+
+def _response_format_for(vendor, contract):
+    """`response_format` под объявленный режим вендора — или None, если механизма нет.
+
+    Три состояния, и третье не сворачивается во второе: `enforced` шлёт схему, `json_only` просит
+    валидный JSON без схемы (её сверит кит), `unsupported` не шлёт ничего и говорит об этом."""
+    if contract is None:
+        return None, UNSUPPORTED
+    mode = shape_support(vendor)["mode"]
+    if mode == ENFORCED:
+        return {"type": "json_schema",
+                "json_schema": {"name": contract.name.replace("-", "_"), "strict": True,
+                                "schema": contract.wire_schema}}, ENFORCED
+    if mode == JSON_ONLY:
+        return {"type": "json_object"}, JSON_ONLY
+    return None, UNSUPPORTED
 
 
 def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/completions",
-                 key_env="OPENAI_API_KEY"):
+                 key_env="OPENAI_API_KEY", contract=None, vendor="openai"):
     """OpenAI Chat Completions и любой OpenAI-совместимый endpoint (DeepSeek, local, …)
-    через base_url + ключ из указанной env. Секрет — только из env, не в репо/логах."""
+    через base_url + ключ из указанной env. Секрет — только из env, не в репо/логах.
+
+    С контрактом форма запрашивается механизмом вендора настолько, насколько вендор её умеет
+    (см. `response_contract.SHAPE_SUPPORT`); чего он не умеет, кит доверяет не обещанию, а
+    собственной сверке — и отказывается вместо того, чтобы отдать пустой вердикт."""
     import os
     key = os.environ.get(key_env)
     if not key:
         raise SystemExit(f"{key_env} не задан — живой прогон невозможен. "
                          "Задайте ключ в окружении или используйте --provider mock (офлайн).")
     import time
+    rf, _mode = _response_format_for(vendor, contract)
     # v3.0-rc5 (finding живого прогона kimi): перегруженный провайдер отдаёт HTTP 200 с ПУСТЫМ content
     # (не 429 — _http_post_json его не ловит). Для author/review это фатально (артефакт «не вернулся»).
     # Ретраим пустой ответ с бэкоффом; часть моделей кладёт текст в reasoning_content — используем и его.
@@ -81,19 +144,28 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
         # v3.0-rc7: reasoning-модели медленные (kimi-k3) — 120с не хватало -> 300с default.
         # v3.6.8: таймаут настраиваем через env OPENAI_COMPATIBLE_TIMEOUT (флагман kimi-k3 бывает >300с).
         _to = int(os.environ.get("OPENAI_COMPATIBLE_TIMEOUT", "300"))
+        _body = {"model": model, "max_tokens": _MAX_TOKENS,
+                 "messages": [{"role": "user", "content": prompt}]}
+        if rf is not None:
+            _body["response_format"] = rf
         data = _http_post_json(
-            base_url, {"authorization": f"Bearer {key}"},
-            {"model": model, "max_tokens": _MAX_TOKENS,
-             "messages": [{"role": "user", "content": prompt}]},
-            timeout=_to)
-        msg = (data.get("choices", [{}])[0] or {}).get("message", {}) or {}
+            base_url, {"authorization": f"Bearer {key}"}, _body, timeout=_to)
+        _choice = (data.get("choices", [{}])[0] or {})
+        msg = _choice.get("message", {}) or {}
         content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
         if content:
             _u = data.get("usage") or {}   # v3.1 trace v0.2: OpenAI-совместимый usage
             _record_call(model, _u.get("prompt_tokens"), _u.get("completion_tokens"), time.monotonic() - _t0)
+            # Обрезанный ответ не отдаём за ответ ТОЛЬКО там, где он становится вердиктом: у
+            # writer-ролей на обрезке стоит своя механика ретрая с нуджем, и ломать её нельзя.
+            if contract is not None and _choice.get("finish_reason") == "length":
+                raise ProviderRefusal("truncated", f"потолок {_MAX_TOKENS} токенов", vendor, model)
             return content
         if attempt < 2:
             time.sleep(2 ** attempt)
+    if contract is not None:
+        raise ProviderRefusal("empty_answer", "три попытки подряд вернули пустой content",
+                              vendor, model)
     return "(пустой ответ модели)"
 
 
@@ -127,20 +199,41 @@ DECLARED_NOT_IMPLEMENTED = {
 }
 
 
-def make_provider(name: str, model: str = None):
+def _tagged(fn, name, model, contract):
+    """Повесить на callable честную метку формы: чем именно обеспечен ответ.
+
+    Метка едет ВМЕСТЕ с провайдером, а не выводится вызывающим по имени: как только «кто закрыл»
+    считают в двух местах, эти два места расходятся (ровно этот класс кит ловит у гейтов)."""
+    sup = shape_support(name)
+    fn.shape = {"provider": name, "model": model,
+                "contract": getattr(contract, "name", None),
+                "mode": sup["mode"] if contract is not None else "not_requested",
+                "mechanism": sup["mechanism"], "note": sup["note"]}
+    return fn
+
+
+def make_provider(name: str, model: str = None, contract=None):
     """Вернуть callable(role_prompt)->text для провайдера.
     'mock' (по умолчанию, офлайн, детерминированный) | 'anthropic' | 'openai' |
     'openai-compatible' | 'claude-cli' | вендоры из OPENAI_COMPATIBLE_VENDORS (qwen/deepseek/kimi).
     Живые провайдеры вызывают реальный API по ключу из env; без ключа — честная ошибка.
-    ВАЖНО: живой путь опционален (opt-in через --provider) — CI/selftest офлайн на mock."""
+    ВАЖНО: живой путь опционален (opt-in через --provider) — CI/selftest офлайн на mock.
+
+    `contract` (v3.37, C2) — форма, которую ответ ОБЯЗАН иметь, когда он становится вердиктом.
+    Где провайдер умеет её обеспечить, она обеспечивается его механизмом; где не умеет — ответ
+    разбирается как раньше, и это НАЗЫВАЕТСЯ, а не подразумевается: у возвращённого callable есть
+    поле `.shape` с режимом (`enforced` / `json_only` / `unsupported` / `not_requested`) и именем
+    механизма. Без контракта поведение не меняется ни на байт — writer-роли и их ретраи не трогаем.
+    """
     if name in (None, "mock"):
-        return mock_provider
+        return _tagged(mock_provider, "mock", model, contract)
     if name == "anthropic":
         m = model or DEFAULT_MODELS["anthropic"]
-        return lambda prompt: _anthropic_call(prompt, m)
+        return _tagged(lambda prompt: _anthropic_call(prompt, m, contract), name, m, contract)
     if name == "openai":
         m = model or DEFAULT_MODELS["openai"]
-        return lambda prompt: _openai_call(prompt, m)
+        return _tagged(lambda prompt: _openai_call(prompt, m, contract=contract, vendor="openai"),
+                       name, m, contract)
     if name == "openai-compatible":
         # DeepSeek / local / любой OpenAI-совместимый: base_url + ключ из env (provider-agnostic).
         base = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
@@ -150,24 +243,54 @@ def make_provider(name: str, model: str = None):
                              "укажите base URL в env.")
         if not model:
             raise SystemExit("--model обязателен для openai-compatible (напр. deepseek-chat).")
-        return lambda prompt: _openai_call(prompt, model, base_url=base,
-                                           key_env="OPENAI_COMPATIBLE_API_KEY")
+        return _tagged(lambda prompt: _openai_call(prompt, model, base_url=base,
+                                                   key_env="OPENAI_COMPATIBLE_API_KEY",
+                                                   contract=contract, vendor=name),
+                       name, model, contract)
     if name in ("claude-cli", "claude-code-local"):
         # v3.9.0 First-class Claude Code Adapter: локальный `claude -p` как СИЛЬНЫЙ writer.
-        return make_claude_cli_provider(model)
+        # Формат ответа CLI не параметризуется: контракт сюда не едет, и метка говорит `unsupported`.
+        return _tagged(make_claude_cli_provider(model), name, model, contract)
     if name in OPENAI_COMPATIBLE_VENDORS:
         # qwen/deepseek/kimi — openai-совместимые вендоры реестра: base_url по умолчанию + ключ
         # СТРОГО из env вендора. Ключа нет -> честная ошибка внутри _openai_call (не тихий mock).
         v = OPENAI_COMPATIBLE_VENDORS[name]
         base = os.environ.get(v["base_url_env"]) or v["base_url"]
-        return lambda prompt: _openai_call(prompt, model or v["default_model"],
-                                           base_url=base, key_env=v["key_env"])
+        m = model or v["default_model"]
+        return _tagged(lambda prompt: _openai_call(prompt, m, base_url=base,
+                                                   key_env=v["key_env"],
+                                                   contract=contract, vendor=name),
+                       name, m, contract)
     if name in DECLARED_NOT_IMPLEMENTED:
         raise SystemExit(f"провайдер '{name}' объявлен в registry/providers.yaml, но не реализован "
                          f"адаптером движка: {DECLARED_NOT_IMPLEMENTED[name]}")
     raise SystemExit(f"неизвестный провайдер '{name}' (есть: mock, anthropic, openai, "
                      f"openai-compatible, claude-cli, "
                      f"{', '.join(sorted(OPENAI_COMPATIBLE_VENDORS))})")
+
+
+def for_contract(provider_fn, contract):
+    """Тот же провайдер, но обязанный отдать ответ ОБЪЯВЛЕННОЙ формы — если он это умеет.
+
+    Пересобираем через `make_provider` по метке `.shape`, которую повесил `_tagged`: имя и модель
+    берутся оттуда, а не угадываются вызывающим. Провайдер без метки (собран в обход фабрики —
+    тесты, обёртки движка) возвращается КАК ЕСТЬ с режимом `unknown`: подменять чужой callable
+    своим было бы тихой заменой исполнителя.
+
+    Механизма нет (`claude-cli`, `mock`, неизвестный вендор) — тоже возвращаем как есть. Это не
+    деградация молчком: режим уезжает в отчёт словом, и `claude-cli` остаётся первоклассным путём,
+    работающим без ключа."""
+    shape = getattr(provider_fn, "shape", None)
+    if not isinstance(shape, dict):
+        return provider_fn, {"mode": "unknown", "mechanism": None,
+                             "note": "провайдер собран в обход make_provider — что он умеет "
+                                     "с формой, отсюда не видно"}
+    name, model = shape.get("provider"), shape.get("model")
+    sup = shape_support(name)
+    if sup["mode"] not in (ENFORCED, JSON_ONLY):
+        return provider_fn, {**sup, "provider": name, "model": model}
+    bound = make_provider(name, model, contract)
+    return bound, {**sup, "provider": name, "model": model, "contract": contract.name}
 
 
 # ---------------- резолв провайдера (v3.28.x, review 2026-08-06, P0-1) ----------------
