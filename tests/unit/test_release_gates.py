@@ -18,6 +18,7 @@
 """
 import re
 import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -109,6 +110,78 @@ class TestGatesAreWiredWhereTheyAreEnforced:
         assert GATES["commit_format_enforced_after"] not in step, \
             "SHA вписан в workflow — конфиг перестал быть единственным источником"
 
+
+class TestTheGateJudgesThisPrAndItsMergeMessage:
+    """ЗАМЕР 20.08.2026, цена прямая. PR #211 слили squash'ем: сообщением коммита стал ЗАГОЛОВОК PR
+    («Ночной обзор v0: …»), без conventional-префикса. `main` покраснел на `664c3f0`, и красное
+    унаследовал КАЖДЫЙ следующий PR — потому что диапазон считался от точки включения до HEAD, то
+    есть включал чужие коммиты, уже лежащие в main. Автор невиновного PR не мог сделать НИЧЕГО:
+    нарушение лежало в его предках. Тот же класс, что у потолка поставки — «мерим очередь, а не
+    размер».
+
+    Вторая половина той же дыры — что коммита, попадающего в main, во время проверок ещё нет (его
+    сообщение это заголовок PR) — закрыта отдельной работой (#215, джоба `pr-smoke` и
+    `tests/contracts/test_pr_title_is_conventional.py`). Здесь она намеренно НЕ проверяется второй
+    раз: два механизма на одну работу — это когда ни одна проба не может доказать, какой работает.
+    """
+
+    def _range_step(self):
+        return next(str(s["run"]) for s in _lint_steps()
+                    if "cz check --rev-range" in str(s.get("run", "")))
+
+    def _measured_range(self, tmp_path, base_sha):
+        """ИСПОЛНИТЬ скрипт шага и вернуть диапазон, который он реально передал `cz`.
+
+        ПЕРВАЯ ВЕРСИЯ ЭТИХ ТЕСТОВ БЫЛА ТЕКСТОВОЙ («в шаге упомянут base.sha») и НЕ ПОКРАСНЕЛА на
+        мутации, вернувшей диапазон к точке включения: строка осталась в условии `if`, а присваивание
+        уже считало другое. Проверка присутствия подстроки не является проверкой поведения — тот же
+        класс, что весь этот файл и стережёт. Поэтому шаг здесь запускается: `${{ }}` подставляется,
+        `cz` подменяется стабом, который печатает полученные аргументы."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        cz = bin_dir / "cz"
+        cz.write_text('#!/bin/sh\necho "CZ_ARGS: $*"\nexit 0\n', encoding="utf-8")
+        cz.chmod(0o755)
+        script = self._range_step().replace(
+            "${{ github.event.pull_request.base.sha }}", base_sha)
+        # ТОЧКА ВКЛЮЧЕНИЯ ПОДСТАВЛЯЕТСЯ, А НЕ ВЫЧИСЛЯЕТСЯ. Шаг берёт её из pyproject через
+        # `tomllib`, а он в stdlib только с 3.11 — при объявленном поле 3.9 запуск скрипта падает
+        # `ModuleNotFoundError`. Так и вышло: локально (3.11) тест был зелёным, джоба
+        # `python39-compat` покраснела — тот же класс, что этот файл документирует про `_toml_table`,
+        # и та же ловушка, в которую кит уже дважды себя ловил. Здесь проверяется ВЫБОР ДИАПАЗОНА;
+        # чтение точки включения из конфига проверяет `test_switch_on_point_is_read_from_config...`,
+        # и дублировать его запуском интерпретатора не нужно.
+        marker = "FROM=$(python3 -c"
+        assert marker in script, (
+            "шаг больше не вычисляет точку включения этой строкой — подстановка ниже молча "
+            f"перестала бы работать, и тест проверял бы не то: {script}")
+        head, _, tail = script.partition("\n")
+        assert marker in head, f"вычисление точки включения не в первой строке шага: {head}"
+        script = 'FROM="%s"\n%s' % (GATES["commit_format_enforced_after"], tail)
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ.get('PATH', '')}")
+        r = subprocess.run(["bash", "-c", script], cwd=str(KIT), capture_output=True,
+                           text=True, env=env)
+        assert r.returncode == 0, f"скрипт шага не исполнился: {r.stderr}"
+        line = next((l for l in r.stdout.splitlines() if l.startswith("CZ_ARGS:")), None)
+        assert line, f"`cz` не был вызван вовсе: {r.stdout}"
+        return line
+
+    def test_pr_is_judged_by_its_own_commits(self, tmp_path):
+        """ЗАПУСК, а не чтение: диапазон, который шаг реально передаёт `cz`, обязан начинаться с базы
+        этого PR. Иначе чужой коммит в main снова сделает красным PR, который гейт не нарушал."""
+        args = self._measured_range(tmp_path, "deadbee")
+        assert "deadbee..HEAD" in args, (
+            f"шаг судит не коммиты этого PR: {args}. Автор невиновного PR не сможет это исправить — "
+            f"нарушение лежит в его предках")
+        assert GATES["commit_format_enforced_after"] not in args, (
+            f"в диапазон PR попала точка включения, то есть чужая история: {args}")
+
+    def test_outside_a_pr_the_switch_on_point_still_rules(self, tmp_path):
+        """КОНТРОЛЬ и вторая половина пары: сужение касается ТОЛЬКО PR. На push в main и ручном
+        запуске HEAD и есть история — там точка включения обязана остаться, иначе это ослабление."""
+        args = self._measured_range(tmp_path, "")
+        assert f"{GATES['commit_format_enforced_after']}..HEAD" in args, (
+            f"вне PR диапазон от точки включения потерян — гейт ослаблен: {args}")
 
 class TestChangelogFragmentsAreConfigured:
     def test_fragment_types_include_service_changes(self):

@@ -161,9 +161,14 @@ goals:
       # заявка одной машины видна другой через git (.ai/claims/), при выключенной кит честно говорит,
       # что видит только свою. Обе половины пары проверены живьём на двух клонах.
       claim_is_visible_to_other_machines: true
-      # `next` уже умеет главное — считает непересечение по `write_scope`. Не хватает вычитания того,
-      # что держат другие.
-      next_excludes_work_others_hold: false
+      # ЗАКРЫТО 20.08.2026 (работа `claim-reaches-other-copies`). Вычитание держателей было написано
+      # 18.08, но проверялось В ОДНОМ каталоге — то есть доказывало формулу, а не досягаемость. Замер
+      # на двух рабочих копиях показал разрыв: `next` в копии B предлагал работу, которую держала
+      # копия A, а `register` той же работы возвращал 0 без отказа. Заявка теперь доезжает двумя
+      # транспортами — носитель в общем каталоге git (все копии одной машины, без коммита) и
+      # опубликованная заявка (другие машины, через git); сходятся в одной карте `team_view`.
+      # Проверено на ДВУХ настоящих копиях (`git worktree` и `git clone`), а не на одной.
+      next_excludes_work_others_hold: true
       # Правки самого кита не создают конфликтов в файлах, которые трогает каждая работа.
       kit_edits_do_not_create_conflicts: false
       # Два условия владельца: она не проектирует эту работу, участник не сомневается в нужности
@@ -255,64 +260,19 @@ work:
   # `write_scope` здесь не украшение: по нему `ai-ops next` считает, какие работы можно вести
   # одновременно, и именно он разводит ленты по территории. Реестр активных работ лежит в
   # игнорируемых файлах и между машинами не координирует — значит границы держит план.
-  - id: audit-phase-0-green
-    title: Собственный контур снова что-то значит — красное разобрано как находки, а не покрашено
-    type: quality
-    goal: checks-that-run
-    status: in_progress
-    branch: fix/phase-0-green
-    owner_role: engineer
-    write_scope: [planning/, history/, installer/, registry/, schemas/, templates/,
-                  ai_ops_kit/cli/, ai_ops_kit/planning/, .github/workflows/]
-    value: high
-    affects: {delivery_operations: true}
-    # Проверяемо: ruff 0; падения из аудита разобраны с названной причиной, а не заглушены;
-    # `./ai-ops next` отвечает; поставка под потолком без его поднятия; обязательные поля конфига
-    # дочки читаются кодом. Не входит: публичная граница и охраны — это вторая лента.
-  - id: session-recommendation-has-a-validator
-    title: У рекомендации сессии есть своя проверка, а не чужая
-    type: quality
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    write_scope: [ai_ops_kit/engops/]
-    value: medium
-    affects: {delivery_operations: true}
-    # НАЙДЕНО ЛЕНТОЙ A 19.08.2026 на чистой установке, ОТДАНО ЛЕНТЕ B (территория `engops`).
-    # `./ai-ops session` печатал в stderr «kind должен быть CompletionRitual» при КАЖДОМ запуске:
-    # вызывался `session_guardrails.check(rec)`, который проверяет `CompletionRitual` — результат
-    # другой функции, — а `recommend()` возвращает рекомендацию вообще без поля `kind`. Вызов снят
-    # (место вызова в `ai_ops_kit/cli/` — территория A), но своего валидатора у
-    # `SessionRecommendation` нет вовсе, и это остаток работы `session-ritual-validators-are-dead`:
-    # она объявила «check() зовётся на каждом produced-артефакте» и для одного из двух артефактов
-    # позвала чужой.
-    # Проверяемо: у рекомендации есть `kind` и валидатор её формы; `./ai-ops session` на чистой
-    # установке не печатает ни одной строки `session-check:`.
-
-  - id: audit-public-surface-and-guards
-    title: Объявлена публичная граница, и охраны кита проверены на самом ките
-    type: quality
-    goal: checks-that-run
-    status: in_progress
-    branch: lane-b
-    owner_role: engineer
-    write_scope: [docs/, mkdocs.yml, quality/, tools/, AGENTS.md,
-                  ai_ops_kit/validation/, ai_ops_kit/devtools/, ai_ops_kit/security/,
-                  ai_ops_kit/gates/, ai_ops_kit/engine/, ai_ops_kit/ui/]
-    value: high
-    affects: {delivery_operations: true}
-    # Проверяемо: есть docs/api/public-surface.md с четырьмя уровнями и тест, который краснеет на
-    # расхождении; определено, что такое breaking change; ни один валидатор не молчит; ни одна
-    # объявленная проба не остаётся непроверенной; у каждого гейта названо, кто его закрывает.
-  # ─── находки второго живого brownfield (прогон 19.08.2026, копия bolshe-ne-budu-menshe) ──────
-
-  # ─── second-real-brownfield ─────────────────────────────────────────────────────────────────
   - id: second-brownfield-run
     title: Провести установку и задачу до verified PR на втором реальном brownfield-репозитории
     type: delivery
     goal: second-real-brownfield
     evidence: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-14.md
-    status: todo
+    status: in_progress
+    # 20.08.2026: владелец начал прогон в ai-ops-cockpit (обновлён до 3.36.12,
+    # роль раннего получателя). Это ВТОРОЕ полевое доказательство из двух,
+    # нужных каналу stable; первое записано в registry/release-claims.yaml.
+    # ПРЕДУПРЕЖДЕНИЕ «ни pr, ни branch» ОСТАВЛЕНО НАМЕРЕННО и верно по существу: состояние
+    # этой работы живёт в ДРУГОМ репозитории, а поля для этого в плане нет. Написать сюда
+    # ветку кита значило бы соврать ради зелёного, а это ровно то, против чего стоит кит.
+    # Гап назван; заводить под него работу — решение владельца, а не моё молчаливое.
     # ВОЗВРАЩЕНО В РАБОТУ 19.08.2026 при разборе плана. Работа была объявлена
     # закрытой без названного результата, и улики говорят обратное:
     #   в самом плане написано «РАБОТА ОСТАЁТСЯ ОТКРЫТОЙ»; verified PR = 0; цель
@@ -441,35 +401,7 @@ work:
     # ПРИЧИНА verified PR = 0 ЗДЕСЬ ДРУГАЯ, чем на niti: не токен, а B2-08 — гейт требует
     # доказательства, которое кит сам объявил несуществующим в этом репозитории.
 
-  - id: experience-contract-drives-stories
-    title: Обязательные stories выводятся из Experience Contract кодом, а не объявляются прозой
-    type: visual
-    goal: storybook-as-visual-contract
-    status: todo
-    # ВОЗВРАЩЕНО В РАБОТУ 19.08.2026 при разборе плана. Работа была объявлена
-    # закрытой без названного результата, и улики говорят обратное:
-    #   generate_design_options игнорировала контракт (F841); модуль без единого теста; фиктивный
-    #   --selftest
-    # Правило кита: закрыть работу — значит назвать результат и место его
-    # перепроверки. Пометка `migrated_without_result` неприменима: она построена
-    # для работ, закрытых ДО правила, а эти закрыты сегодня.
-    owner_role: frontend
-    depends_on: [four-product-objects]
-    write_scope: [templates/visual/, ai_ops_kit/ui/, schemas/, workflows/]
-    value: high
-    affects: {engineering_quality_security: true, product_strategy: true}
-    # ЧТО УЖЕ ЕСТЬ (поправка по фактам репозитория, 14.08.2026): сторона EVIDENCE построена —
-    # `ui/storybook_adapter.py` собирает UIEvidenceBundle (build/interaction/a11y/visual/
-    # design_system/state_coverage с required-состояниями), `validate_storybook_evidence.py` не даёт
-    # выдать «нет данных» за «чисто» и запрещает pass при непустых числах нарушений.
-    # ЧЕГО НЕТ: стороны СОЗДАНИЯ. Нужен Experience Contract (задача пользователя, flow, экраны,
-    # состояния, роли, тексты, responsive, accessibility, компоненты, токены, события аналитики,
-    # нерешённые вопросы, осознанные компромиссы), из которого список обязательных stories
-    # ВЫВОДИТСЯ КОДОМ. Объявленный вручную список — то же, что capability без реализации.
-    # ПЛЮС: `ui-ux-designer` предлагает два-три варианта опыта с trade-offs и вопросами владельцу,
-    # а не один «правильный» макет. Дизайн становится решением, а не генерацией.
-    # ГРАНИЦА: гейты остаются advisory до обкатки на child (правило dp-002). Storybook сам по себе
-    # не доказательство хорошего UX — он рабочая поверхность, где дизайн виден и проверяем.
+  # ─── nightly-product-review (решение владельца 14.08.2026, ep-2026-08-14-nightly-review) ──────
 
   - id: night-review-autofix-class-a
     title: Класс A правок исполняется в worktree и собирается в один draft PR за ночь
@@ -500,3 +432,44 @@ work:
     # зависимостей, прод и внешние системы.
 
   # ─── обещание «рабочее дерево не тронуто» держится не полностью ─────────────────────────────
+  # ─── team-works-in-parallel: заявка догоняет вторую рабочую копию (лента B, 20.08.2026) ────────
+  - id: claim-reaches-other-copies
+    title: Заявка на работу видна другим рабочим копиям, а не только своему дереву
+    type: quality
+    goal: team-works-in-parallel
+    status: in_progress
+    branch: lane-b-claim-reaches-copies
+    owner_role: engineer
+    depends_on: []
+    write_scope: [ai_ops_kit/lifecycle/, ai_ops_kit/planning/, quality/, docs/, planning/, tests/]
+    value: high
+    affects: {delivery_operations: true}
+    # ЗАМЕР 20.08.2026 на ДВУХ копиях, до правки: копия A регистрирует работу — `next` в копии B
+    # предлагает ТУ ЖЕ работу, а `register` той же работы из копии B возвращает 0 без отказа. Третья
+    # находка: `shared_registry_path`, написанная 12.08.2026 ровно против этого, не вызывалась нигде,
+    # кроме тестов, — тот же класс, что «валидатор, не запускавшийся нигде».
+    # Проверяемо (`tests/unit/test_claim_reaches_other_copies.py`, 23 теста на ДВУХ настоящих копиях):
+    # `next` во второй копии уходит на свободную работу; `register` отказывает и называет держателя,
+    # его рабочую копию и время начала; заявка переживает `git clone`; носитель не трогает рабочее
+    # дерево (`git status` пуст) и не отправляет путь копии наружу. Четыре мутации — четыре красных.
+
+  - id: reach-phrase-names-working-copies
+    title: Человеческий ответ называет рабочие копии, а не только машины
+    type: quality
+    goal: team-works-in-parallel
+    status: todo
+    owner_role: engineer
+    write_scope: [ai_ops_kit/ui/]
+    value: low
+    affects: {delivery_operations: true}
+    # НАЙДЕНО ЛЕНТОЙ B 20.08.2026, ОТДАЁТСЯ ЛЕНТЕ A (территория `ui/`).
+    # `presenter.py` строит фразу о досягаемости САМ, строкой в коде: «вижу только ЭТУ машину —
+    # заявки других участников сюда не попадают». После работы `claim-reaches-other-copies` вторая
+    # половина стала грубее правды: заявки соседних рабочих копий приходят (носитель в общем
+    # каталоге git). Точные слова уже есть в машинном ответе — `holders_reach.copies_note`
+    # (`active_work.copies_reach_note`), их надо провести в текст.
+    # ПОЧЕМУ НЕ СРОЧНО И ПОЧЕМУ НЕ ПОЧИНЕНО НА МЕСТЕ: фраза НЕДОГОВАРИВАЕТ, а не переобещает —
+    # безопасная сторона ошибки, координация не выдаётся за существующую там, где её нет. Правка
+    # в чужой территории во время параллельной работы стоила бы дороже, чем ждёт эта неточность.
+    # Проверяемо: при нескольких рабочих копиях ответ `status`/`next` называет копии, при одной —
+    # не называет (пара, а не одна половина); `copies is None` остаётся «не измерено».

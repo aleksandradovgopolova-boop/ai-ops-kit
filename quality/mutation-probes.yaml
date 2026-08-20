@@ -367,8 +367,11 @@ probes:
 - id: team-view-off-shows-only-local
   kind: guard
   file: ai_ops_kit/lifecycle/active_work.py
-  find: '    if not published:'
-  replace_with: '    if False:'
+  # ОБРАЗЕЦ ОБНОВЛЁН 20.08.2026: `team_view` перестал быть «локальные или локальные+чужие» и стал
+  # сложением трёх источников с одним дедупом. Охрана та же и стоит на том же месте — включённая
+  # публикация и ТОЛЬКО она подаёт заявки других машин.
+  find: '    if published:   # заявки других МАШИН — только по явному включению публикации'
+  replace_with: '    if True:   # заявки других МАШИН — только по явному включению публикации'
   tests:
   - tests/unit/test_claim_publication_files.py
   why: 'При выключенной публикации показывать чужие заявки — выдать за координацию то, чего кит видеть
@@ -1221,3 +1224,71 @@ probes:
     угодно правильным — он работает только там, где его ЗОВУТ. Мутация возвращает прежний запуск в
     одном из трёх переведённых мест, и проба «испортить реестр в копии» снова читает рабочий клон.
     Именно так дефект и жил: инструмент был, вызова не было.'
+- id: copies-carrier-is-read-by-the-team-view
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/planning/next_work.py
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    sources = [load_copy_claims(child_root)]'
+  replace_with: '    sources = []'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'ШОВ: заявка соседней рабочей копии доходит до ответа только через общую карту. Мутация
+    оставляет носитель на месте — он пишется, читается и даже проверяется своими тестами, — но в
+    ответ не попадает: `next` во второй копии снова предлагает занятую работу, а `register` снова
+    возвращает 0 без отказа. Ровно тот класс «механизм есть, вызова нет», которым уже была
+    `shared_registry_path`: написана 12.08.2026 против этого дефекта и не вызывалась нигде, кроме
+    тестов, восемь дней.'
+- id: copies-carrier-is-written-on-register
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        claim_to_copies(child_root, entry)'
+  replace_with: '        pass'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Заявка, не положенная на носитель, не существует ни для кого, кроме своего рабочего дерева:
+    локальный реестр лежит внутри worktree и скрыт .gitignore. Замер 20.08.2026 — цена этой
+    невидимости названа полем: две одинаковые интеграционные ветки за один день.'
+- id: refusal-names-since-when
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '                since = c.get("since") or "время начала не записано"'
+  replace_with: '                since = ""'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Отказ без «с какого момента» не даёт решить, ждать держателя или перенимать заявку: заявка
+    минутной давности и заявка недельной требуют разного. Мутация оставляет отказ на месте и вынимает
+    из него единственное, что делает его решаемым.'
+- id: carrier-needs-an-explicit-root
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    if start is None:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Найдено собственным прогоном 20.08.2026 до коммита: без этой охраны носитель брал `Path.cwd()`
+    и вызовы без корня координировали тот репозиторий, где случайно стоял процесс — шесть чужих тестов
+    показали заявки из живого кита. «Держатель назван, но не тот» опаснее, чем «держатель не назван».'
+- id: removed-copy-releases-its-claim
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if wt and not Path(wt).is_dir():'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: '`git worktree remove` заявку с носителя не снимает. Без этой охраны удалённая рабочая копия
+    держала бы работу ВЕЧНО во всех остальных, и снять её было бы нечем — реестр превращается в список
+    страшилок, ради которого его перестают читать (#137).'
+- id: base-equal-to-the-branch-proves-nothing
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if _same_ref(child_root, branch, base_ref):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Замер 20.08.2026: в рабочей копии прогона `_resolve_base` отдаёт саму заявленную ветку, и
+    сверка `ai-ops/w` против `ai-ops/w` («впереди 0, позади 0») объявляла ВСЯКУЮ заявку влитой — отказ
+    второй сессии не срабатывал, а `status` говорил, что работа не идёт. Кит сам ставит дочку в такую
+    копию (`worktree.add` -> `.ai/worktrees/<работа>`), значит место штатное. Мутация возвращает
+    сравнение ветки с самой собой.'
