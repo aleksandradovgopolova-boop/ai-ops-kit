@@ -877,7 +877,8 @@ work:
     title: "Tech Health: CI/тесты/lint/зависимости/security → Green/Yellow/Red с причинами"
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     depends_on: [product-health-explained]
     write_scope: [ai_ops_kit/intelligence/, tests/]
@@ -893,7 +894,8 @@ work:
     title: "Delivery Health: milestone/velocity/blocked/overdue/cycle-time → Green/Yellow/Red"
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     depends_on: [product-health-explained]
     write_scope: [ai_ops_kit/intelligence/, tests/]
