@@ -341,6 +341,35 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  - id: parallel-safety-runs-in-ci
+    title: >-
+      Проверка параллельной безопасности исполняется в CI — кита и дочки
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [.github/, templates/ci/, ai_ops_kit/validation/]
+    reason: >-
+      После обкатки (dp-002) validate_parallel_safety.py включается в CI: в pr-smoke кита и в
+      доставляемый дочке шаблон. Advisory -> blocking по замеру. Территория пересекается с
+      installer/templates — согласовать с лентой B. Готово, когда PR, смешивающий код с
+      координационным файлом, краснит проверку в обоих контурах, а чистый — нет.
+  - id: plan-contributions-via-fragments
+    title: >-
+      Работы добавляются в план ВКЛАДАМИ-фрагментами, а не правкой общего plan.yaml
+    type: engineering
+    goal: plan-as-control-plane
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/planning/, planning/, tests/]
+    reason: >-
+      Полный фикс беговой дорожки: как newsfragments, но для плана. Новая работа кладётся файлом
+      planning/incoming/<id>.yaml; plan.yaml собирается централизованно. Параллельные работы трогают
+      РАЗНЫЕ файлы -> конфликта и DIRTY от плана нет. Территория planning/ (лента B) — согласовать.
+      Готово, когда добавление работы не требует править plan.yaml, а сборка идёт одной командой.
+
   - id: reviewer-prompt-uses-xml-anchors-measured
     title: >-
       Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
