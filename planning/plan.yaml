@@ -729,7 +729,8 @@ work:
     title: Периодический аудит продукта — артефакты, backlog, roadmap, delivery, риски
     type: delivery
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [product-layer-validation, product-layer-bootstrap]
     owner_role: engineer
     write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/validation/]

@@ -661,6 +661,9 @@ DEV_ONLY_FILES = frozenset({
     # слоя и куда его класть; значит реестр обязан ехать в поставку. Схему кит в рантайме не читает
     # (`check` загрузчика самодостаточен) — это публичный контракт формы, и она остаётся dev-only.
     "schemas/artifact-registry.schema.json",
+    # `product-audit.schema.json` — контракт формы отчёта аудита (PR-21). Кит в рантайме её не
+    # читает (форма проверяется в самом `product_audit` и тестом), значит в дочку её слать незачем.
+    "schemas/product-audit.schema.json",
 })
 
 
@@ -3028,8 +3031,18 @@ def cmd_audit(argv):
     ДЕТЕРМИНИРОВАННЫЙ снимок архитектуры на текущем SHA (12 осей); полный AI-review — отдельно
     (гейт architecture_review при архитектурных сигналах). НИЧЕГО не меняет."""
     sub = argv[2] if len(argv) > 2 else ""
+    # `ai-ops audit product` (PR-21): периодический read-only снимок продуктовой операционки дочки —
+    # артефакты слоя, tech, delivery, backlog, риски — одним машиночитаемым отчётом. НИЧЕГО не меняет.
+    if sub == "product":
+        for _root in (AI_DIR / "managed", PKG):
+            if (_root / "ai_ops_kit" / "intelligence" / "product_audit.py").is_file():
+                if str(_root) not in sys.path:
+                    sys.path.insert(0, str(_root))
+                break
+        from ai_ops_kit.intelligence import product_audit
+        return product_audit.main([str(REPO_ROOT), *[a for a in argv[3:] if a.startswith("--")]])
     if sub != "architecture":
-        print("usage: ai-ops audit architecture [--json] [--sha SHA]"); return 2
+        print("usage: ai-ops audit architecture|product [--json]"); return 2
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
         if (_cand / "architecture_baseline.py").is_file() and str(_cand) not in sys.path:
             sys.path.insert(0, str(_cand))
