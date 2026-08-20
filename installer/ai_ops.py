@@ -601,6 +601,12 @@ UNWIRED_MODULES = frozenset({
     # `planning/roadmap_milestones.py` — связь roadmap↔milestones↔backlog (лента 4, PR-7). Та же
     # причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
     "ai_ops_kit/planning/roadmap_milestones.py",
+    # `planning/delivery_planning.py` — delivery-план из backlog под milestone (лента 4, PR-10). Та
+    # же причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
+    "ai_ops_kit/planning/delivery_planning.py",
+    # `planning/delivery_planning_blockers.py` — ранние блокеры + выгрузка delivery-сигналов для
+    # health_delivery ленты 5 (лента 4, PR-15). Та же причина: построено, в дочке пока недостижимо.
+    "ai_ops_kit/planning/delivery_planning_blockers.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
