@@ -17,7 +17,7 @@
 Health tech (CI/тесты/lint) и health delivery (milestone/velocity) — соседние модули; здесь
 только продуктовое измерение, чтобы сигналы одного измерения не растекались в другое.
 
-Использование:  health_product.py <repo_root> [-o report.json]
+Использование:  python3 -m ai_ops_kit.intelligence.health_product <repo_root> [-o report.json]
 Возврат 0 — успех (band любой: отчёт — данные, решение за человеком/риск-движком).
 """
 from __future__ import annotations

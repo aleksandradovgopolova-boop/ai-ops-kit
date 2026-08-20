@@ -17,7 +17,7 @@ CI кит не ходит — тот же принцип, что у events-are-v
 Каждый под-сигнал, которого в выгрузке нет, даёт UNKNOWN с причиной, а НЕ зелёный. Нет
 выгрузки вовсе — все сигналы unknown, итог unknown (не «всё в порядке»).
 
-Использование:  health_tech.py <repo_root> [-o report.json]
+Использование:  python3 -m ai_ops_kit.intelligence.health_tech <repo_root> [-o report.json]
 """
 from __future__ import annotations
 

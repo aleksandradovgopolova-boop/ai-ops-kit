@@ -15,7 +15,7 @@
 Инвариант health_common: чего прочитать не удалось — UNKNOWN с причиной, не зелёный. Нет ни
 плана, ни выгрузки — итог unknown, а не «delivery в порядке».
 
-Использование:  health_delivery.py <repo_root> [-o report.json]
+Использование:  python3 -m ai_ops_kit.intelligence.health_delivery <repo_root> [-o report.json]
 """
 from __future__ import annotations
 

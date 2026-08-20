@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import yaml
 
-import health_product as hp
 from ai_ops_kit.intelligence import health_common as hc
+from ai_ops_kit.intelligence import health_product as hp
 
 
 # ── helpers: собрать фикстуру Product Operating Layer ──
