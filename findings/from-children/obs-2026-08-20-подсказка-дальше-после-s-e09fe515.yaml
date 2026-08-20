@@ -1,0 +1,25 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-подсказка-дальше-после-s-e09fe515
+at: '2026-08-20T09:36:19+00:00'
+statement: Подсказка 'Дальше' после specify ведёт сразу на run --execute и пропускает
+  plan, хотя заявленный путь кита — specify -> plan -> run. Человек, который идёт
+  по подсказкам, планирование не увидит вообще.
+observation_class: friction
+severity: p2
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: command
+  command: ai-ops specify "..." --feature quick-open-palette
+  output: 'Дальше: заполни разделы в features/quick-open-palette/spec.yaml; потом
+    запускай: ./ai-ops run "..." --feature quick-open-palette --execute.  (шаг plan
+    в подсказке не назван)'
+state: became_work
+state_reason: заведена работа the-plan-tells-the-truth-about-the-run (план кита, 20.08.2026)
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'
