@@ -148,3 +148,36 @@ def test_the_real_repository_never_claims_an_unearned_stable():
             capture_output=True, text=True).stdout) or {}
         assert installer.earned_channel(claims) == "stable", (
             f"{res['ref']} выдан как stable, но своих требований не выполняет")
+
+
+@pytest.mark.unit
+def test_a_refusal_names_the_way_out(tmp_path, no_installed):
+    """Правильный «нет», после которого человек застрял, — половина работы.
+
+    ЗАМЕР 20.08.2026, живой репозиторий `ai-ops-cockpit`. Дочка объявляла `stable`, ни один тег
+    `stable` не заработал — и отказ был верным. Но `stable` зарабатывается полевыми
+    доказательствами, а те берутся из дочек, которые обновились; дочка на `stable` обновиться не
+    может. Круг. Разрывает его роль раннего получателя (`qualification`), и пока отказ об этом
+    молчит, владелец видит тупик и идёт чинить теги, в которых всё в порядке.
+    """
+    repo = _repo(tmp_path, [("v1.0.0", _claims("1.0.0", "qualification")),
+                            ("v1.1.0", _claims("1.1.0", "qualification"))])
+    res = installer.resolve_update_ref("stable", repo)
+    assert res["ref"] is None
+    assert res["best_earned"] == "qualification", res
+    assert "update_channel: qualification" in res["reason"], res["reason"]
+    assert "ранним получателем" in res["reason"]
+
+
+@pytest.mark.unit
+def test_no_way_out_is_invented_when_there_is_none(tmp_path, no_installed):
+    """Обратная сторона: тегов нет вовсе — предлагать «поставьте qualification» НЕЧЕГО.
+
+    Совет, который не сработает, хуже молчания: он тратит попытку и подрывает доверие к следующему.
+    """
+    empty = tmp_path / "kit-empty"
+    empty.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(empty)], check=True)
+    res = installer.resolve_update_ref("stable", empty)
+    assert res["best_earned"] is None
+    assert "ранним получателем" not in res["reason"], res["reason"]

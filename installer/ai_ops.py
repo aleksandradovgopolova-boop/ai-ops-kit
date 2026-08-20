@@ -346,10 +346,23 @@ def resolve_update_ref(channel, repo_dir=None):
         return {"ref": tag, "kind": "tag", "channel": ch,
                 "reason": f"{tag} ЗАРАБОТАЛ канал '{tag_ch}' — не слабее запрошенного '{ch}'"}
     seen = ", ".join(f"{t}={c}" for t, c, _v in pairs[:3]) or "ни один тег не объявляет канал"
-    return {"ref": None, "kind": None, "channel": ch,
+    # ОТКАЗ ОБЯЗАН НАЗЫВАТЬ ВЫХОД. Замер 20.08.2026: дочка на `stable` не может обновиться, пока ни
+    # один тег не заработал `stable`; а `stable` зарабатывается полевыми доказательствами, которые
+    # берутся из дочек, которые обновились. Круг разрывается ролью раннего получателя — дочкой на
+    # `qualification`, — но пока об этом не сказано ЗДЕСЬ, владелец видит только тупик и идёт
+    # чинить теги, в которых всё в порядке. Отказ без выхода — половина работы: правильный «нет»,
+    # после которого человек всё равно застрял.
+    best = pairs[0][1] if pairs else None
+    way_out = ""
+    if best and CHANNEL_ORDER.index(best) < want:
+        way_out = (f". Выход: самый свежий тег заработал '{best}'. Если этот репозиторий готов быть "
+                   f"ранним получателем — поставьте `parent.update_channel: {best}` в .ai-ops.yaml; "
+                   f"именно так и добываются полевые доказательства, без которых '{ch}' не наступит "
+                   f"никогда")
+    return {"ref": None, "kind": None, "channel": ch, "best_earned": best,
             "reason": (f"под канал '{ch}' подходящего тега нет ({seen}). Обновление НЕ выполняется: "
                        f"взять ветку по умолчанию значило бы дать '{CHANNEL_ORDER[0]}' там, где "
-                       f"просили '{ch}'")}
+                       f"просили '{ch}'" + way_out)}
 
 
 def cmd_resolve_ref(argv):
@@ -541,7 +554,15 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/engops/session_thresholds.py",
     "ai_ops_kit/intelligence/artifact_reality_check.py",
     "ai_ops_kit/intelligence/decision_loop.py",
-    "ai_ops_kit/intelligence/nightly_review.py",
+    # `intelligence/nightly_review.py` УБРАН 20.08.2026: он подключён. Команда рантайма
+    # `commands/maintenance/night-review.md` зовёт его в дочке, и Robin запускает по расписанию
+    # (`runtime/robin/duties.example.yaml`, обязанность `nightly-review`). Не поставить его
+    # значило бы дать дочке команду, которая ссылается на отсутствующий файл — класс F-033.
+    # Собственных импортов из кита у модуля нет, второй файл он за собой не тянет (проверено).
+    #
+    # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `installer/` — территория ленты B. Правка на одну
+    # строку списка; оставить её несделанной было нельзя, иначе работа ленты A уехала бы в дочку
+    # наполовину. Ленте B сказано.
     "ai_ops_kit/intelligence/outcome_analytics.py",
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
