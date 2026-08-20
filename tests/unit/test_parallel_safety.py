@@ -96,3 +96,46 @@ def test_real_diff_mode_on_a_git_repo(tmp_path):
     git("add", "-A"); git("commit", "-qm", "mixed")
     rep = ps.assess(root, base=base)
     assert (rep.get("diff") or {}).get("mixed") is True, rep
+
+
+@pytest.mark.unit
+def test_render_speaks_each_state(tmp_path):
+    """render даёт человеку строку в каждом состоянии: не проверено / чисто / нарушение."""
+    root = tmp_path / "r"; (root / "registry").mkdir(parents=True)
+    # не проверено (нет реестра)
+    assert "не проверено" in ps.render(ps.assess(tmp_path / "empty"))
+    # чисто
+    (root / "registry" / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [planning/plan.yaml]\n", encoding="utf-8")
+    assert "OK" in ps.render(ps.assess(root))
+    # нарушение
+    bad = {"checked": True, "coordination_files": ["planning/plan.yaml"],
+           "findings": ["PR смешивает код с planning/plan.yaml"]}
+    assert "✗" in ps.render(bad)
+
+
+@pytest.mark.unit
+def test_main_json_and_exit_code(tmp_path, capsys):
+    """main: --json печатает отчёт; --strict даёт код 1 на смешанном диффе, 0 без него."""
+    root = tmp_path / "g"; (root / "registry").mkdir(parents=True)
+    (root / "registry" / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [planning/plan.yaml]\n", encoding="utf-8")
+    rc = ps.main(["x", str(root), "--json"])
+    assert rc == 0
+    assert '"kind": "parallel-safety"' in capsys.readouterr().out
+    # без --base «не проверено» диффа — но strict без нарушения = 0
+    assert ps.main(["x", str(root), "--strict"]) == 0
+
+
+@pytest.mark.unit
+def test_a_broken_registry_is_skipped_not_crashed(tmp_path):
+    """Битый reg-файл не роняет: yaml-ошибка проглатывается, список остаётся из читаемых."""
+    root = tmp_path / "r"; (root / "registry").mkdir(parents=True)
+    (root / "registry" / "coordination-files.yaml").write_text("{битый: yaml: :", encoding="utf-8")
+    assert ps.coordination_paths(root) == []
+
+
+@pytest.mark.unit
+def test_changed_files_returns_none_outside_git(tmp_path):
+    """Вне git-репо changed_files -> None (не пустой список, не падение)."""
+    assert ps.changed_files(tmp_path, "HEAD") is None
