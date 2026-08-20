@@ -32,7 +32,7 @@ find_python() {
     if "$AI_OPS_PYTHON" -c 'import yaml' 2>/dev/null; then echo "$AI_OPS_PYTHON"; return 0; fi
     return 1
   fi
-  for cand in python3 python3.13 python3.12 python3.11 python3.10 python3.9 python; do
+  for cand in python3 python3.14 python3.13 python3.12 python; do
     if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import yaml' 2>/dev/null; then
       echo "$cand"; return 0
     fi
