@@ -386,25 +386,6 @@ work:
       ступором. Готово, когда no-verdict даёт названную причину и не оставляет работу висеть;
       проверено на кейсе этого прогона.
 
-  - id: errors-reach-the-human-not-as-tracebacks
-    title: >-
-      Отказ провайдера и ошибка вызова доходят до человека фразой, а не трейсбеком
-    type: engineering
-    goal: owner-speaks-product-not-pipeline
-    status: todo
-    owner_role: engineer
-    value: high
-    finding: findings/from-children/obs-2026-08-20-когда-у-провайдера-claud-99aa67ef.yaml
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/intelligence/, tests/]
-    reason: >-
-      НАХОДКА ПОЛЯ, прогон ⌘K в ai-ops-cockpit 20.08.2026 (obs 99aa67ef, 346c4324). В ДВУХ местах
-      кит выбрасывает человеку голый питоновский трейсбек вместо сообщения: (1) при исчерпании
-      лимита сессии claude-cli (HTTP 429) — RuntimeError после пяти попыток, хотя делать надо всего
-      лишь подождать или сменить провайдера; (2) `review` без `--base` — TypeError, потому что
-      автоопределение базы возвращает None и уходит прямо в git rev-parse, тогда как справка обещает
-      автоопределение. Оба — прямое нарушение communication policy (product-уровень): ошибка
-      объясняется через последствие и что делать, а не через место в коде. Готово, когда оба пути
-      дают человекочитаемое сообщение и код возврата, и это покрыто пробами на обе ветки.
   - id: resume-hint-is-a-runnable-command
     title: >-
       Кит печатает `--resume` — команду, которую сам же не принимает

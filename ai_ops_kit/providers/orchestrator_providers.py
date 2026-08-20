@@ -543,6 +543,54 @@ def print_provider_resolution(res, printer=print):
         printer(f"провайдер: {res.get('provider')} — {res.get('reason')}")
 
 
+import re as _re
+
+
+class ProviderLimitError(RuntimeError):
+    """Лимит модели/сессии исчерпан — это НЕ транзиентный сбой и НЕ дефект продукта.
+
+    ПОВОД, поле 20.08.2026 (obs 99aa67ef, прогон ⌘K в ai-ops-cockpit). При исчерпании лимита сессии
+    claude-cli («You've hit your session limit», HTTP 429) кит делал пять повторов с backoff и затем
+    ронял `RuntimeError` полным трейсбеком. Человек видел стену питона вместо того, что делать: лимит
+    сам собой за 30 секунд backoff не вернётся — ждать надо до сброса или сменить провайдера.
+
+    Отдельный тип, чтобы граница CLI показала это ФРАЗОЙ и кодом возврата, а не трейсбеком, и чтобы
+    не спутать с транзиентным 529 (F-011): тот повторять НУЖНО, этот — бессмысленно.
+    """
+
+    def __init__(self, provider, detail, reset_hint=None):
+        self.provider = provider
+        self.detail = detail
+        self.reset_hint = reset_hint
+        super().__init__(self.human_message())
+
+    def human_message(self):
+        when = f" вернусь после {self.reset_hint}," if self.reset_hint else ""
+        return (f"Лимит модели ({self.provider}) исчерпан:{when} "
+                f"либо укажи другого провайдера: --provider anthropic|openai|qwen. "
+                f"(подробно: {self.detail})")
+
+
+def _session_limit(text):
+    """Отличить исчерпание ЛИМИТА СЕССИИ/КВОТЫ от транзиентного 5xx/529.
+
+    Лимит сессии часто несёт в тексте и «429», поэтому проверяется ПЕРВЫМ — иначе он попал бы в
+    `_transient` и был бы бессмысленно повторён пять раз (окно backoff ≤30с, а сброс лимита —
+    минуты/часы).
+    """
+    t = (text or "").lower()
+    return any(s in t for s in ("session limit", "hit your", "usage limit", "quota",
+                                "daily limit", "monthly limit", "resets at", "try again at",
+                                "limit reached", "usage_limit"))
+
+
+def _reset_hint(text):
+    """Время сброса из текста, если названо (для человека). -> str|None."""
+    m = _re.search(r"(?:resets? at|try again at|after)\s+([0-9:apm\s\.]{3,20})", text or "",
+                   _re.IGNORECASE)
+    return m.group(1).strip().rstrip(".") if m else None
+
+
 def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
@@ -658,6 +706,9 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
                 return r.stdout
             if d.get("is_error"):   # синтетический конверт claude (rc=0!), напр. 529 Overloaded — НЕ валидный результат
                 last = _human_error(r.stdout)
+                # ЛИМИТ СЕССИИ/КВОТЫ — не транзиент: повтор бессмыслен, отвечаем человеку фразой.
+                if _session_limit(last):
+                    raise ProviderLimitError("claude-cli", last, _reset_hint(last))
                 if _transient(last) and _attempt + 1 < max_attempts:
                     _backoff(_attempt); continue
                 raise RuntimeError("claude -p вернул is_error (rc=0): %s" % last)
@@ -667,6 +718,11 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
                          provider="claude-cli", cost=d.get("total_cost_usd"))
             return d.get("result") or ""
         last = _human_error(r.stderr or r.stdout or "")
+        # ЛИМИТ СЕССИИ/КВОТЫ РАСПОЗНАЁТСЯ ПЕРВЫМ (obs 99aa67ef): его текст несёт «429», и без этой
+        # ветки он попал бы в `_transient` и был бы повторён пять раз впустую, а затем упал бы
+        # трейсбеком. Здесь — немедленная человеческая фраза и код возврата на границе CLI.
+        if _session_limit(last):
+            raise ProviderLimitError("claude-cli", last, _reset_hint(last))
         # ПОВТОР ТОЛЬКО ТАМ, ГДЕ ОТКАЗ ТРАНЗИЕНТНЫЙ (заявка #160, 19.08.2026).
         #
         # Здесь стоял безусловный ретрай: при ЛЮБОМ ненулевом коде делалось пять попыток с
