@@ -695,7 +695,8 @@ work:
     title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     owner_role: engineer
     write_scope: [schemas/, registry/, ai_ops_kit/planning/]
     value: high
@@ -708,7 +709,8 @@ work:
     title: Шаблоны артефактов с версиями, обязательными разделами и миграциями
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [artifact-registry-as-data]
     owner_role: engineer
     write_scope: [templates/product-layer/, ai_ops_kit/planning/, migrations/]
@@ -722,7 +724,8 @@ work:
     title: Product Passport генерируется и обновляется из фактического состояния репозитория
     type: engineering
     goal: product-operating-layer
-    status: todo
+    status: in_progress
+    branch: lane-2-work
     depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
     owner_role: engineer
     write_scope: [ai_ops_kit/planning/, ai_ops_kit/context/, templates/product-layer/]
