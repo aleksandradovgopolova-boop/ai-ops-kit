@@ -330,14 +330,29 @@ def run_checks(root: Path, timeout: int = 120) -> list[dict]:
             out.append({**rec, "ok": None,
                         "detail": f"не запустился ({type(e).__name__}: {e})"})
             continue
-        tail = (r.stdout + r.stderr).strip().splitlines()
-        detail = tail[-1][:220] if tail else f"код {r.returncode}, вывод пуст"
+        full = (r.stdout + r.stderr).strip()
+        lines = full.splitlines()
         # ОШИБКА ВЫЗОВА — НЕ НАХОДКА. Трейсбек или подсказка по использованию означают, что мы
         # позвали не так, а не что продукт сломан. Выдать одно за другое — послать человека
         # чинить исправное.
-        if "Traceback" in (r.stdout + r.stderr) or re.search(r"(?i)использование:|usage:", detail):
+        #
+        # ИСКАТЬ ОБЯЗАНО ВО ВСЁМ ВЫВОДЕ, А НЕ В ПОСЛЕДНЕЙ СТРОКЕ (замер 20.08.2026 на трёх живых
+        # дочках). Прежде маркер искали в `detail`, а `detail` брал ПОСЛЕДНЮЮ строку. Настоящий
+        # отказ валидатора выглядит так:
+        #     ОШИБКА: ожидался путь к файлу заявлений, получено '<каталог>' — это каталог.
+        #     Использование: validate_claims.py [путь/к/claims.yaml] [--json]
+        #     Без аргумента берётся knowledge/claims.yaml пакета.
+        # Маркер стоит во ВТОРОЙ строке, а последняя — безобидная подсказка. Защита не срабатывала,
+        # и обзор сообщал «расхождение: Без аргумента берётся …» — предложение, из которого человек
+        # не поймёт даже, о чём речь. На трёх дочках из трёх это была ПОЛОВИНА всех находок.
+        wrong_call = "Traceback" in full or re.search(r"(?i)использование:|usage:", full)
+        if wrong_call:
+            # Показываем ПЕРВУЮ строку: в отказе по вызову она и есть суть жалобы, а последняя —
+            # хвост подсказки. Раньше человек получал именно хвост.
+            detail = lines[0][:220] if lines else f"код {r.returncode}, вывод пуст"
             out.append({**rec, "ok": None, "detail": f"позвали неверно — {detail}"})
             continue
+        detail = lines[-1][:220] if lines else f"код {r.returncode}, вывод пуст"
         out.append({**rec, "ok": r.returncode == 0, "detail": detail})
 
     # ПОСТУПЛЕНИЕ СОБЫТИЙ — ОТДЕЛЬНЫЙ ВОПРОС, И ЕГО НЕ ЗАКРЫВАЕТ КАТАЛОГ. `validate_event_catalog`

@@ -191,3 +191,45 @@ def test_the_right_kind_is_actually_checked(tmp_path):
     f = next(x for x in nr.run_checks(root) if x["check"] == "план работы")
     assert f["ok"] is False, f"совпавший род не дошёл до запуска: {f}"
     assert "связей не хватает" in f["detail"], f
+
+
+@pytest.mark.unit
+def test_a_usage_hint_below_the_first_line_is_still_a_wrong_call(tmp_path):
+    """ЗАМЕР 20.08.2026 на ТРЁХ живых дочках: половина всех находок обзора была ложной.
+
+    Настоящий отказ валидатора выглядит так (дословно, `validate_claims.py`, вызванный с каталогом):
+
+        ОШИБКА: ожидался путь к файлу заявлений, получено '<каталог>' — это каталог.
+        Использование: validate_claims.py [путь/к/claims.yaml] [--json]
+        Без аргумента берётся knowledge/claims.yaml пакета.
+
+    Маркер «Использование:» стоит во ВТОРОЙ строке, а защита искала его в `detail` — то есть в
+    ПОСЛЕДНЕЙ. Обзор сообщал владельцу «расхождение: Без аргумента берётся knowledge/claims.yaml
+    пакета» — предложение, из которого нельзя понять даже, о чём речь.
+
+    Это второй раз за день, когда защита закрывает тот класс, который я поняла, а не тот, который
+    существует: первый — документ другого рода. Оба нашлись только на настоящем прогоне.
+    """
+    root = tmp_path / "kit"
+    (root / "ai_ops_kit" / "validation").mkdir(parents=True)
+    (root / "ai_ops_kit" / "validation" / "validate_claims.py").write_text(
+        "import sys\n"
+        "print(\"ОШИБКА: ожидался путь к файлу заявлений, получено '.' — это каталог.\")\n"
+        "print('Использование: validate_claims.py [путь/к/claims.yaml] [--json]')\n"
+        "print('Без аргумента берётся knowledge/claims.yaml пакета.')\n"
+        "sys.exit(1)\n", encoding="utf-8")
+    f = next(x for x in nr.run_checks(root) if x["check"] == "заявления")
+    assert f["ok"] is None, f"ошибка вызова снова выдана за расхождение: {f}"
+    assert "ожидался путь" in f["detail"], f"показан хвост подсказки вместо сути жалобы: {f}"
+
+
+@pytest.mark.unit
+def test_a_real_verdict_is_still_taken_from_the_last_line(tmp_path):
+    """Обратная сторона: у НАСТОЯЩЕЙ находки вердикт стоит последним, и его нельзя потерять."""
+    root = tmp_path / "kit"
+    (root / "ai_ops_kit" / "validation").mkdir(parents=True)
+    (root / "ai_ops_kit" / "validation" / "validate_references.py").write_text(
+        "import sys\nprint('сканирую…')\nprint('REFERENCES: 3 ссылки ведут в никуда')\n"
+        "sys.exit(1)\n", encoding="utf-8")
+    f = next(x for x in nr.run_checks(root) if x["check"] == "ссылки")
+    assert f["ok"] is False and "ведут в никуда" in f["detail"], f
