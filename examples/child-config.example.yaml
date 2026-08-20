@@ -5,7 +5,12 @@ parent:
   source: git+<ai-ops-kit-repo-url>
   installed_version: 1.1.0
   allowed_version_range: ">=1.0.0 <2.0.0"
-  update_channel: stable
+  # КАНАЛ — ФАКТ, А НЕ ПОЖЕЛАНИЕ (19.08.2026). Здесь стоял `stable`, и он попадал в каждую
+  # установку, тогда как сам пакет заработал `qualification`. Значение сверяется тестом
+  # `test_the_shipped_example_declares_a_channel_the_package_can_give`: заготовка не вправе
+  # обещать канал сильнее того, что пакет отдаёт. Поднимете свой — `./ai-ops doctor` скажет,
+  # выполнимо ли это сегодня. Словарь: edge | qualification | stable.
+  update_channel: qualification
   update_policy: pr
   auto_update: true   # по умолчанию ВКЛ: ежедневный workflow сам открывает update-PR (не авто-мерж;
                       #   мажорный bump всё равно блокируется). Поставьте false, чтобы отключить (опт-аут).

@@ -54,10 +54,9 @@ def _ai_ops(
     )
 
 
-@pytest.fixture(scope="module")
-def child(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def _fresh_repo(base: Path) -> Path:
     """Чистый git-репозиторий — типовая точка входа владельца."""
-    root = tmp_path_factory.mktemp("owner-full-path") / "product"
+    root = base / "product"
     root.mkdir(parents=True)
     (root / "README.md").write_text("# product\n", encoding="utf-8")
     _git(root, "init", "-q", "-b", "main", ".")
@@ -66,6 +65,12 @@ def child(tmp_path_factory: pytest.TempPathFactory) -> Path:
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "initial")
     return root
+
+
+@pytest.fixture(scope="module")
+def child(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Репозиторий для сквозного пути: установку делает сам тест, шаг за шагом."""
+    return _fresh_repo(tmp_path_factory.mktemp("owner-full-path"))
 
 
 @pytest.mark.slow
@@ -126,9 +131,39 @@ def test_owner_full_path(child: Path) -> None:
     assert st.returncode == 0, f"status упал:\n{st.stdout[-600:]}\n{st.stderr[-400:]}"
 
 
+@pytest.fixture()
+def installed_child(tmp_path: Path) -> Path:
+    """Репозиторий, В КОТОРОМ УСТАНОВКА ДЕЙСТВИТЕЛЬНО ПРОИЗОШЛА.
+
+    СВОЙ РЕПОЗИТОРИЙ, А НЕ ОБЩИЙ: `child` живёт на весь модуль, и повторная установка в него
+    законно отказывает («.ai уже существует — используйте update»). Общее состояние между тестами
+    и породило исходный дефект; лечить его вторым слоем зависимости было бы тем же дефектом.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ФИКСТУРА (20.08.2026, поймано прогоном профиля группы, а не полного набора).
+    `test_entry_point_exists_after_init` проверял, что `./ai-ops` есть ПОСЛЕ установки, — но саму
+    установку делал другой тест (`test_owner_full_path`), а фикстура `child` создаёт лишь пустой
+    git-репозиторий. В полном наборе порядок случайно совпадал, и тест был зелёным; в джобе
+    `selftests-a` фильтр `-k` отбрасывает `test_owner_full_path` (имя не подходит под маску), и
+    проверка падала.
+
+    Класс тот же, что кит ловит везде: **тест утверждал то, чего сам не устанавливал**. Зелёный он
+    был не потому, что предмет проверки исправен, а потому, что рядом случайно оказался сосед.
+    Теперь установка — явная предпосылка, и она принадлежит тесту, а не расписанию.
+    """
+    root = _fresh_repo(tmp_path)
+    r = subprocess.run(
+        [sys.executable, str(INSTALLER), "init", "."],
+        cwd=str(root), capture_output=True, text=True, timeout=600,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    assert r.returncode == 0, f"init упал:\n{r.stdout[-900:]}\n{r.stderr[-600:]}"
+    return root
+
+
 @pytest.mark.slow
-def test_entry_point_exists_after_init(child: Path) -> None:
+def test_entry_point_exists_after_init(installed_child: Path) -> None:
     """F-031: ./ai-ops существует после установки и отвечает на help."""
+    child = installed_child
     entry = child / "ai-ops"
     assert entry.is_file(), "точка входа ./ai-ops не создана при init"
     assert os.access(entry, os.X_OK), "./ai-ops не исполняемый"

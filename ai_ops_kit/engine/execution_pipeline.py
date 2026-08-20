@@ -751,6 +751,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
                                    signals=signals, not_applicable=not_applicable,
                                    exempt_reason=exempt_reason)
+    # КТО ЗАКРЫЛ — ЧЕЛОВЕКУ, А НЕ ТОЛЬКО В JSON. Замер 19.08.2026: 19 гейтов из 35 не имеют
+    # исполняемого валидатора, и в выводе прогона это ничем не отличалось от проверенного машиной.
+    # Строка печатается всегда: молчать о ней там, где мнения нет, значило бы приучать к тому, что
+    # её отсутствие ничего не значит.
+    _cl = gates.get("closure") or {}
+    _cnt = _cl.get("counts") or {}
+    _opinion = _cl.get("judged_or_human") or []
+    print(f"  гейты: проверено машиной {_cnt.get('validator', 0)} из {len(_gate_ids)}"
+          + (f"; остальное — мнение: {', '.join(_opinion)}" if _opinion else "; мнением не закрыт ни один"))
 
     # v3.8.3: персистим ПРОЙДЕННОЕ gate-evidence билда (кроме security) по committed_sha в worktree/.ai —
     # чтобы последующий reevaluate (после человеко-approval) переиспользовал model-вердикт code_review и
@@ -1104,6 +1113,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
                   "blocked": gates["blocked"],
                   "other_blocking_unmet": other_blocking_unmet,   # P0.1: блокирующие ≠ impl_verification
+                  # КТО ЗАКРЫЛ: разбивка validator/judge/writer/human. Без неё отчёт утверждал
+                  # «гейты пройдены» одинаково и там, где считала машина, и там, где высказался
+                  # судья. 19 гейтов из 35 не имеют валидатора вовсе.
+                  "closure": gates.get("closure"),
                   # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
                   "gate_results": gates.get("gate_results"),
                   "tested_revision": committed_sha},

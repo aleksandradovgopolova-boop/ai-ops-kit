@@ -327,6 +327,49 @@ def classify(gate: dict, signals: dict = None) -> str:
     return "writer-check"
 
 
+# КТО ЗАКРЫВАЕТ ГЕЙТ — четыре ответа, а не три (работа `gate-map-says-who-closes-it`).
+#
+# Замер 19.08.2026: из 35 гейтов 19 не имеют исполняемого валидатора. Их «зелёное» — не результат
+# машины, и дочка об этом не знала: в отчёте прогона все гейты выглядели одинаково.
+#
+# ЧЕТВЁРТОЕ ЗНАЧЕНИЕ (`writer`) добавлено НЕ для полноты таксономии. Гейт с `review_mode: writer`
+# и без валидатора закрывает СВОЯ ЖЕ стадия — тот, кто произвёл работу, объявляет её проверенной.
+# Назвать это `judge` значило бы напечатать в отчёте ровно то утверждение, против которого стоит
+# инвариант «writer ≠ judge».
+CLOSED_BY = {
+    "deterministic": "validator",   # машина: детерминированный валидатор
+    "ai-review":     "judge",       # мнение независимого судьи-роли (read-only)
+    "writer-check":  "writer",      # самозаявление стадии, которая работу и сделала
+    "human-approval": "human",      # решение человека
+}
+CLOSED_BY_VALUES = tuple(dict.fromkeys(CLOSED_BY.values()))
+
+
+def closed_by(gate: dict, signals: dict = None) -> str:
+    """Кто закрывает гейт СЕЙЧАС: validator | judge | writer | human.
+
+    Выводится из той же классификации, по которой гейт исполняется, а не объявляется рядом:
+    второе объявление разошлось бы с поведением на первой же правке. Реестр `quality/gates.yaml`
+    несёт то же значение для ДОЧКИ (она читает реестр, а не код), и тест сверяет их между собой.
+    """
+    return CLOSED_BY[classify(gate, signals)]
+
+
+def closure_breakdown(gates: dict, signals: dict = None) -> dict:
+    """Разбивка «кто закрывает» по набору гейтов -> {counts, by_gate, judged_or_human}.
+
+    `judged_or_human` — то, ради чего разбивка существует: список гейтов, чьё «зелёное» является
+    мнением. Человек, читающий отчёт, обязан видеть его как список, а не выводить из чисел.
+    """
+    by_gate = {gid: closed_by(g or {}, signals) for gid, g in (gates or {}).items()}
+    counts = {v: 0 for v in CLOSED_BY_VALUES}
+    for v in by_gate.values():
+        counts[v] = counts.get(v, 0) + 1
+    return {"counts": counts, "by_gate": by_gate,
+            "machine_checked": sorted(g for g, v in by_gate.items() if v == "validator"),
+            "judged_or_human": sorted(g for g, v in by_gate.items() if v != "validator")}
+
+
 def _unmet_reason(kind: str, gate: dict) -> str:
     return {
         "deterministic": f"валидатор '{gate.get('validator')}' не запущен или evidence не предоставлен",
@@ -501,6 +544,10 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
         "workflow": workflow_id,
         "evaluated_gates": gate_ids,
         "gate_kinds": kinds,
+        # КТО ЗАКРЫЛ КАЖДЫЙ ГЕЙТ. Классификация существовала и раньше (`gate_kinds`), но наружу не
+        # выходила: в отчёте прогона все гейты выглядели одинаково, и «зелёное» от валидатора было
+        # неотличимо от «зелёного» по мнению судьи. Дочка, читающая отчёт, обязана видеть разницу.
+        "closure": closure_breakdown({gid: gates[gid] for gid in gate_ids}, signals),
         "gate_results": results,
         "unmet_gates": unmet,
         "blocked": bool(unmet),
