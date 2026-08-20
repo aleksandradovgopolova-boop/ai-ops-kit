@@ -251,7 +251,106 @@ goals:
 # `docs/audit-report.md` (R-01…R-41) плюс отчёты в `qualification/`; заводить второй означало бы
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
+  # ─── этап Product Operating Layer (решение владельца 20.08.2026) ─────────────────────────
+  # Продуктовые требования PR-1..PR-25: AI Ops как операционная система управления продуктовой
+  # разработкой, а не набор инструментов. Превращает Git-репозиторий в AI-managed product workspace.
+  # Цикл: Strategy → Roadmap → Backlog → Prioritization → Delivery → Release → Feedback → Replanning.
+
+  - id: product-operating-layer
+    # заморозка: новый продуктовый слой — новое умение
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Phase 1: обязательные артефакты, реестр, шаблоны, Product Passport, bootstrap, валидация.
+      artifact_registry_exists_as_data: false
+      templates_have_versions_and_migrations: false
+      product_passport_auto_generated: false
+      bootstrap_creates_product_layer: false
+      validation_reports_missing_invalid_outdated_valid: false
+      continuous_audit_runs_periodically: false
+
+  - id: backlog-intelligence
+    # заморозка: работа с GitHub Issues — новое умение
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Phase 2: классификация, дедупликация, приоритизация, зависимости.
+      issues_classified_by_type_and_area: false
+      duplicates_detected_and_merged: false
+      ai_priority_explained_per_task: false
+      dependency_graph_built: false
+
+  - id: roadmap-and-delivery
+    # заморозка: roadmap + delivery planning — новое умение
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Phase 3: roadmap Now/Next/Later, milestones, delivery plan, forecasting.
+      roadmap_auto_maintained: false
+      milestones_linked_to_backlog: false
+      delivery_plan_with_confidence: false
+      blockers_detected_early: false
+
+  - id: ai-product-operations
+    # заморозка: автономная продуктовая операционка — новое умение
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Phase 4: drift detection, risk management, team sync, AI decision log.
+      drift_detected_between_artifacts: false
+      risks_identified_with_mitigation: false
+      team_status_auto_generated: false
+      ai_decisions_logged_with_rationale: false
+
+  - id: autonomous-product-loop
+    # заморозка: полный автономный цикл — новое умение
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Phase 5: Observe → Understand → Plan → Prioritize → Execute → Evaluate → Learn → Replanning.
+      autonomous_replanning_works: false
+      learning_from_human_overrides: false
+      policy_driven_execution: false
+
+# ЧТО ЗДЕСЬ ЛЕЖИТ, А ЧТО НЕТ (`plan-as-control-plane`, 2026-08-14). Активный план — это ответ на
+# четыре вопроса управления: где мы, что идёт сейчас, что блокирует и чем, какую работу взять
+# следующей. Поэтому здесь ТОЛЬКО незакрытая работа (`todo`/`in_progress`); закрытая, вместе со
+# своим разбором, уезжает в `history/plan-history.yaml`. Повод — замер: 21 работа из 32 была `done`,
+# и чтобы ответить «что идёт», приходилось вычитывать разбор давно оплаченных дефектов.
+#
+# ПРАВИЛА ПРОВЕРЯЕТ КОД (`delivery_plan.validate` / `validate_history`), а не соглашение:
+#   * `done`/`dropped` в этом файле — ошибка: место закрытой работы в истории;
+#   * указан `pr` при статусе `todo` — ошибка: PR существует, значит работа начата;
+#   * `in_progress` без `pr`/`branch` — предупреждение: состояние работы негде посмотреть;
+#   * `evidence`/`finding` обязаны резолвиться от корня: ссылка на доказательство, которого нет,
+#     хуже её отсутствия;
+#   * в истории `done` обязан назвать РЕЗУЛЬТАТ и место перепроверки (`pr`/`commit`/`evidence`);
+#     merged PR сам по себе результатом не считается.
+#
+# ЧЕГО ЗДЕСЬ НЕТ ОСОЗНАННО: каталога `findings/`. Реестр находок в ките уже есть —
+# `docs/audit-report.md` (R-01…R-41) плюс отчёты в `qualification/`; заводить второй означало бы
+# развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
+
 work:
+  - id: stable-gate-includes-product-layer
+    title: >-
+      Машинный гейт stable не даёт объявить канал, пока продуктовый слой не реализован
+    type: quality
+    goal: qualification-closeout
+    status: todo
+    owner_role: engineer
+    value: high
+    depends_on: [continuous-product-audit]
+    write_scope: [registry/, ai_ops_kit/validation/, tests/]
+    reason: >-
+      РЕШЕНИЕ ВЛАДЕЛЬЦА ep-2026-08-20-stable-includes-product-operating-layer: stable включает
+      реализацию PR-1..PR-25. Сегодня `channels.stable.requires` в registry/release-claims.yaml —
+      это [own_ci_green, field_evidence], и по нему stable почти достижим; продуктовый слой в гейт
+      не входит. Разрыв опасен: канал можно объявить заработанным, пока кит ещё не умеет вести
+      продуктовую операционку. Готово, когда машинная проверка канала stable краснеет, пока исходы
+      пяти целей (product-operating-layer..autonomous-product-loop) не достигнуты — так же
+      машиночитаемо, как field_evidence сейчас; «канал заработан» и «продукт-как-ОС готов»
+      становятся одним рубежом не на словах, а в валидаторе.
   - id: no-verdict-is-an-honest-refusal-not-a-stall
     title: >-
       Отсутствие вердикта судьи — честный отказ, который можно разобрать, а не молчаливый ступор
@@ -574,6 +673,129 @@ work:
     # Проверяемо: при нескольких рабочих копиях ответ `status`/`next` называет копии, при одной —
     # не называет (пара, а не одна половина); `copies is None` остаётся «не измерено».
 
+
+  # ─── Product Operating Layer (PR-1..PR-25, решение владельца 20.08.2026) ─────────────────
+  # AI Ops как операционная система управления продуктовой разработкой.
+  # Превращает Git-репозиторий в AI-managed product workspace.
+  # Заморожено (extension) до снятия freeze — новые умения после second-brownfield.
+
+  # ── Phase 1: Product Operating Layer ──
+
+  - id: artifact-registry-as-data
+    title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
+    type: engineering
+    goal: product-operating-layer
+    status: todo
+    owner_role: engineer
+    write_scope: [schemas/, registry/, ai_ops_kit/planning/]
+    value: high
+    affects: {product_strategy: true, delivery_operations: true}
+    # PR-4: Для каждого артефакта: ID, название, назначение, обязательность, путь, версия шаблона,
+    # структура, обязательные поля, правила валидации, обновления, источник данных, владелец, AI actions.
+    # Готово, когда: реестр читается кодом, тест краснеет при расхождении реестра с реальностью.
+
+  - id: product-layer-templates-versioned
+    title: Шаблоны артефактов с версиями, обязательными разделами и миграциями
+    type: engineering
+    goal: product-operating-layer
+    status: todo
+    depends_on: [artifact-registry-as-data]
+    owner_role: engineer
+    write_scope: [templates/product-layer/, ai_ops_kit/planning/, migrations/]
+    value: high
+    affects: {product_strategy: true}
+    # PR-5: Единая структура, обязательные разделы и поля, версия шаблона, обратная совместимость
+    # или миграция, машинная валидация. AI Ops определяет Missing → Invalid → Outdated → Valid.
+    # Готово, когда: каждый артефакт из реестра имеет шаблон; тест проверяет наличие и валидность.
+
+  - id: product-passport-auto-generation
+    title: Product Passport генерируется и обновляется из фактического состояния репозитория
+    type: engineering
+    goal: product-operating-layer
+    status: todo
+    depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, ai_ops_kit/context/, templates/product-layer/]
+    value: high
+    affects: {product_strategy: true, delivery_operations: true}
+    # PR-6: Passport содержит: название, описание, аудиторию, Problem/JTBD, repository, production/demo,
+    # owner, team, статус, зрелость, здоровье продукта/технологий/разработки, версию, метрики,
+    # milestone, прогресс, риски, зависимости. Обновляется из состояния репо и delivery.
+    # Готово, когда: `ai-ops passport generate` создаёт валидный passport из реального репо.
+
+  - id: product-layer-bootstrap
+    title: "ai-ops init создаёт Product Operating Layer в новом репозитории"
+    type: engineering
+    goal: product-operating-layer
+    status: todo
+    depends_on: [product-layer-templates-versioned, product-passport-auto-generation]
+    owner_role: engineer
+    write_scope: [installer/ai_ops.py, templates/product-layer/, manifest/]
+    value: high
+    affects: {delivery_operations: true, product_strategy: true}
+    # PR-3: При `ai-ops init` создаётся .ai-ops/ с PRODUCT_PASSPORT.md, ROADMAP.md, DELIVERY.md,
+    # POLICY.yaml, templates/. Переиспользует существующий механизм managed_set + deliver_assets.
+    # Готово, когда: `ai-ops init` на пустом репо создаёт все 5 артефактов валидно.
+
+  - id: product-layer-validation
+    title: "Валидация артефактов: Missing / Invalid / Outdated / Valid с отчётом"
+    type: quality
+    goal: product-operating-layer
+    status: todo
+    depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/validation/, tests/]
+    value: high
+    affects: {engineering_quality_security: true, delivery_operations: true}
+    # PR-5 (validation): Проверка наличия, структуры, актуальности, содержимого.
+    # Четыре состояния вместо двух. Пустая секция ≠ отсутствующая.
+    # Готово, когда: `ai-ops validate product-layer` на живой дочке даёт корректный отчёт.
+
+  - id: continuous-product-audit
+    title: Периодический аудит продукта — артефакты, backlog, roadmap, delivery, риски
+    type: delivery
+    goal: product-operating-layer
+    status: todo
+    depends_on: [product-layer-validation, product-layer-bootstrap]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/validation/]
+    value: medium
+    affects: {analytics_learning: true, delivery_operations: true}
+    # PR-21: Проверка наличия/актуальности артефактов, состояние backlog, качество roadmap,
+    # delivery, техническое состояние, риски, зависимости, соответствие policy.
+    # Результат — машиночитаемый отчёт (Artifacts: 5/5, Backlog: Healthy, Delivery: Yellow, ...).
+    # Готово, когда: `ai-ops audit product` на живой дочке даёт валидный отчёт.
+
+  # ── Phase 2: Backlog Intelligence ──
+
+  - id: backlog-issue-classification
+    title: Классификация GitHub Issues по типу, области, приоритету, milestone
+    type: engineering
+    goal: backlog-intelligence
+    status: todo
+    depends_on: [product-layer-bootstrap]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, ai_ops_kit/intelligence/]
+    value: high
+    affects: {delivery_operations: true, product_strategy: true}
+    # PR-8: Типы: feature, bug, research, improvement, technical debt, experiment, infrastructure.
+    # Атрибуты: type, priority, status, area, milestone, impact, urgency, effort, confidence,
+    # strategic alignment, dependencies. Требует GitHub API (Issues, Labels, Milestones).
+    # Готово, когда: `ai-ops backlog classify` на репо с Issues возвращает структурированный отчёт.
+
+  - id: backlog-deduplication
+    title: Дедупликация задач — нахождение и объединение дубликатов
+    type: engineering
+    goal: backlog-intelligence
+    status: todo
+    depends_on: [backlog-issue-classification]
+    owner_role: engineer
+    write_scope: [ai_ops_kit/planning/, ai_ops_kit/intelligence/]
+    value: medium
+    affects: {delivery_operations: true}
+    # PR-8: Нахождение дубликатов по заголовку, описанию, меткам. Предложение объединения.
+    # Учёт устаревших задач. Связывание с roadmap.
+    # Готово, когда: `ai-ops backlog dedup` на репо с 50+ Issues находит реальные дубликаты.
   - id: release-claims-stays-in-the-kit
     title: Релизная проза кита не едет в каждую дочку
     type: quality
