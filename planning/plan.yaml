@@ -391,7 +391,16 @@ work:
       План прогона называет все гейты и не отключает треки причинами о ещё не написанном коде
     type: engineering
     goal: owner-speaks-product-not-pipeline
-    status: todo
+    status: in_progress
+    branch: lane-a-plan-truth
+    # ПРОГРЕСС 20.08.2026 (PR lane-a-plan-truth): ЗАКРЫТЫ две из трёх частей —
+    #  · треки больше не отключаются причинами в прошедшем времени о ненаписанном коде:
+    #    skip_reason переформулирован про ЗАЯВКУ/сигнал (obs 64a4840a/d48fd639, tracks.yaml);
+    #  · подсказка после specify ведёт на `plan`, а не сразу на `run --execute` (obs e09fe515).
+    # ОСТАЁТСЯ: «план называет ВСЕ гейты» (obs 64a4840a первая половина). Тот же корень, что
+    # obs 8a891ce7: уровень/workflow определяется ПОЗЖЕ выдачи плана, поэтому план на L0 (3
+    # гейта) не совпадает с прогоном на L1 (11). Это флоу-правка resolve-уровня до плана —
+    # делается отдельно, не бол том.
     owner_role: engineer
     value: high
     finding: findings/from-children/obs-2026-08-20-run-plan-yaml-для-работы-64a4840a.yaml
