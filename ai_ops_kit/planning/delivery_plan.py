@@ -295,6 +295,110 @@ def _cycles(by_id: dict) -> list:
     return sorted(k for k, v in indeg.items() if v > 0) if seen != len(by_id) else []
 
 
+# ─── план против того, что говорит git ──────────────────────────────────────────────────────────
+#
+# ЗАЧЕМ. Цель `plan-as-control-plane` требует, чтобы план и состояние работы показывали ОДНО. До сих
+# проверялась только ФОРМА записи, и это было решением: «объявленное состояние чужой системы стареет
+# молча». Но git — не чужая система: он лежит рядом, отвечает мгновенно и не требует сети.
+#
+# ЗАМЕР 20.08.2026, до правки, на плане самого кита: 8 активных работ, ОДНО расхождение, которого не
+# видела ни одна проверка — `audit-public-surface-and-guards` объявлена идущей, а её ветка целиком в
+# базе (впереди 0). Работа была сделана и слита, план об этом не знал. Ровно класс аудита 19.08
+# («тридцать работ объявили закрытыми, настоящими были 23»), только в другую сторону, и заметил его
+# снова не механизм.
+#
+# ВТОРАЯ ПОЛОВИНА ЗАМЕРА: правило «открытый PR не сосуществует с `todo`» существует с 14.08 и
+# СРАБОТАТЬ НЕ МОЖЕТ — оно смотрит поле `pr`, а в плане кита это поле встречается НОЛЬ раз (работы
+# объявляют `branch`). Проверка без входных данных — то же «объявлено, но не исполняется».
+#
+# ТРЕТЬЕ СОСТОЯНИЕ НЕ СВОРАЧИВАЕТСЯ ВО ВТОРОЕ. Ошибкой называется только то, что ИЗМЕРЕНО: ссылка на
+# ветку найдена и git ответил. Ветка удалена после слияния или просто не выкачана — это «не знаю», и
+# оно говорится словами, а не выдаётся за согласованность.
+
+
+def _trunk_ref(root):
+    """Ссылка на СТВОЛ репозитория. -> str или None (не измерено).
+
+    ПОЧЕМУ НЕ `pipeline_git._resolve_base`: он отвечает на другой вопрос — «какая база у ЭТОЙ ветки»,
+    и в рабочей копии работы возвращает саму эту ветку. Замер 20.08.2026: из копии прогона сверка
+    получалась `ai-ops/w` против `ai-ops/w` и объявляла любую заявку влитой. Здесь нужен ствол, и он
+    берётся списком явных кандидатов — без догадок."""
+    import subprocess
+    for cand in ("origin/main", "main", "origin/master", "master"):
+        r = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", cand],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            return cand
+    return None
+
+
+def _branch_state(root, branch, trunk):
+    """Что git говорит о ветке работы. -> (состояние, впереди_на).
+
+    Состояния: `in-base` — коммиты ветки уже в стволе; `ahead` — ветка впереди; `absent` — ссылки нет
+    ни локально, ни на origin (удалена после слияния либо не выкачана — РАЗЛИЧИТЬ НЕЛЬЗЯ, и мы не
+    угадываем)."""
+    import subprocess
+    ref = None
+    for cand in (branch, f"origin/{branch}"):
+        r = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", cand],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            ref = cand
+            break
+    if ref is None:
+        return "absent", None
+    merged = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", ref, trunk],
+                            capture_output=True, text=True).returncode == 0
+    if merged:
+        return "in-base", 0
+    r = subprocess.run(["git", "-C", str(root), "rev-list", "--count", f"{trunk}..{ref}"],
+                       capture_output=True, text=True)
+    try:
+        ahead = int((r.stdout or "").strip())
+    except ValueError:
+        ahead = None
+    return "ahead", ahead
+
+
+def git_disagreements(plan, root):
+    """Расхождения между планом и состоянием работ в git. -> {"errors", "warnings", "measured"}.
+
+    ОШИБКА — только измеренное противоречие:
+      * ветка работы ЦЕЛИКОМ в стволе, а работа не закрыта — изменения уже в базе;
+      * статус `todo`, а ветка впереди ствола — работа начата.
+    ПРЕДУПРЕЖДЕНИЕ — неизвестность, названная словами: ветки не нашли, ствол не нашли.
+    """
+    out = {"errors": [], "warnings": [], "measured": False}
+    trunk = _trunk_ref(root)
+    if trunk is None:
+        out["warnings"].append(
+            "состояние работ в git не измерено: ствол (main/master) не найден — это «не знаю», "
+            "а не «план согласован»")
+        return out
+    out["measured"] = True
+    for w in items(plan):
+        wid, st, br = w.get("id"), (w.get("status") or ""), w.get("branch")
+        if not br:
+            continue
+        state, ahead = _branch_state(root, br, trunk)
+        where = f"work[{wid}]"
+        if state == "absent":
+            out["warnings"].append(
+                f"{where}: ветки '{br}' нет ни локально, ни на origin — удалена после слияния или "
+                f"не выкачана. Состояние работы НЕ ИЗМЕРЕНО (это не «согласовано»)")
+        elif state == "in-base" and st != "done":
+            out["errors"].append(
+                f"{where}: статус '{st}', а коммиты ветки '{br}' УЖЕ в '{trunk}' (впереди 0) — "
+                f"изменения работы в базе, а план держит её открытой. Закройте работу в "
+                f"{HISTORY_REL}, назвав результат, либо укажите ветку следующего среза")
+        elif state == "ahead" and st == "todo":
+            out["errors"].append(
+                f"{where}: статус 'todo', а ветка '{br}' впереди '{trunk}' на {ahead} — работа "
+                f"начата; поставьте 'in_progress'")
+    return out
+
+
 def validate(plan, model=None, closed=None, root=None):
     """Структура + семантика плана. -> {"errors": [...], "warnings": [...]}.
 
@@ -914,8 +1018,12 @@ def main(argv=None):
         except PlanCorrupt as e:
             closed, hrep = [], {"errors": [str(e)], "warnings": []}
         rep = validate(plan, closed=closed, root=root)
-        rep = {"errors": rep["errors"] + hrep["errors"],
-               "warnings": rep["warnings"] + hrep["warnings"]}
+        # ГИТ — ЧАСТЬ ТОГО ЖЕ ОТВЕТА, а не отдельная команда: план и состояние работы это одно
+        # состояние, разнесённое по файлу и по ветке. Отдельная команда означала бы, что одну
+        # половину можно не проверить, — тем же соображением история проверяется здесь же.
+        grep_ = git_disagreements(plan, root)
+        rep = {"errors": rep["errors"] + hrep["errors"] + grep_["errors"],
+               "warnings": rep["warnings"] + hrep["warnings"] + grep_["warnings"]}
         if ns.json:
             print(json.dumps(rep, ensure_ascii=False, indent=2))
         else:
