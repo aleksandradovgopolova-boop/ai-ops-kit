@@ -994,7 +994,8 @@ work:
     title: Human override — сигнал на будущее, а не ошибка; учитывается в решениях
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     depends_on: [policy-engine-suggest-to-approval, ai-decisions-logged-with-rationale]
     write_scope: [ai_ops_kit/governance/, tests/]
