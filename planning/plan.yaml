@@ -977,7 +977,8 @@ work:
     title: "Policy Engine: Suggest → Prepare → Execute → Require approval (исполняемое поведение)"
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     write_scope: [ai_ops_kit/governance/, tests/]
     value: high
