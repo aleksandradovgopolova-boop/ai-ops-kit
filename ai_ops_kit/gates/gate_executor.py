@@ -280,7 +280,22 @@ def deterministic_run(validator):
         return _freshness_run()
     if validator == "validate-deploy-readiness":
         return _deploy_readiness_run()
+    if validator == "validate-documentation-updated":
+        return _documentation_updated_run()
     return None
+
+
+def _documentation_updated_run(base=None):
+    """v3.37 (C3): гейт `documentation_updated` переведён из самозаявления в машинный.
+
+    Оба его доказательства — факты о дифе (документация тронута; запись для CHANGELOG добавлена),
+    и спрашивать о них стадию, которая работу и сделала, было лишним. Непроверяемое даёт warn с
+    причиной, а не pass: гейт advisory, и «нечем проверить» не равно «в порядке»."""
+    from ai_ops_kit.gates import documentation_evidence
+    rep = documentation_evidence.assess(Path(base) if base else Path.cwd())
+    ev = documentation_evidence.gate_evidence(rep)
+    provided = ev.get("provided", [])
+    return ev["status"], ev.get("checks", []), provided
 
 
 def _deploy_readiness_run(base=None):

@@ -68,6 +68,12 @@ def test_coverage_is_reported_as_a_number_not_as_a_word():
     cov = rep["coverage"]
     judged = [g for g, v in GATES.items() if v.get("closed_by") in ("judge", "writer")]
     assert cov["judged_gates_total"] == len(judged)
+    # Число выводится из реестра, а не прибито: 19 на 19.08.2026, 18 после перевода
+    # `documentation_updated` в машинный (C3). Прибитое число заставило бы каждый перевод гейта
+    # чинить этот тест — то есть штрафовало бы ровно за то, ради чего корпус и заведён.
+    assert cov["judged_gates_total"] <= 19, (
+        "гейтов, закрываемых мнением, стало БОЛЬШЕ замера 19.08.2026 — это ратчет, и он "
+        "ходит вниз")
     assert 0 < cov["judged_gates_with_cases"] <= cov["judged_gates_total"]
     assert cov["gates_without_cases"], (
         "если однажды непокрытых не останется — это надо будет ЗАМЕТИТЬ и снять утверждение, "
