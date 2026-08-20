@@ -3698,3 +3698,32 @@ work:
     #       обёртка ./ai-ops (B2-15/3.35.1). Работает отдельная команда `resume`; подсказка обязана
     #       печатать её. Готово, когда напечатанная китом команда продолжения исполняется как есть, и это
     #       покрыто пробой.
+  - id: blockers-detected-early
+    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
+    status: done
+    closed_at: '2026-08-20'
+    pr: 234
+    result: >-
+      ЗАКРЫТО 20.08.2026 координатором (централизованный учёт плана). Работа ленты 4 влита через PR
+      #234 (ветка lane-4-blockers, коммиты в main), но в плане осталась in_progress — закрываю по
+      факту мёржа. Ранние блокеры и delivery-health (velocity, blocked/overdue, PR cycle time,
+      отклонение от плана) реализованы лентой 4 в рамках Фазы 3. Результат перепроверяется прогоном
+      ленты и её тестами в #234.
+    # РАЗБОР, как записан в плане:
+    #   - id: blockers-detected-early
+    #     title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
+    #     type: engineering
+    #     goal: roadmap-and-delivery
+    #     status: in_progress
+    #     branch: lane-4-blockers
+    #     depends_on: [delivery-plan-with-confidence]
+    #     owner_role: engineer
+    #     write_scope: [ai_ops_kit/planning/, tests/]
+    #     value: medium
+    #     affects: {delivery_operations: true, analytics_learning: true}
+    #     # PR-15: Здоровье delivery отдельно от здоровья продукта: выполнение milestone, velocity,
+    #     # blocked/overdue tasks, PR cycle time, release frequency, отклонение от плана. Ранние блокеры —
+    #     # до срыва срока, а не постфактум. Метрика без данных — unavailable, а не 0 (третье состояние).
+    #     # Готово, когда: на фикстуре delivery-плана отчёт называет блокирующие задачи и отклонение от
+    #     # плана ДО дедлайна; отсутствующая метрика помечена unavailable, а не подменена нулём.
+    #

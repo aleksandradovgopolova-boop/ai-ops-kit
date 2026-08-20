@@ -994,23 +994,6 @@ work:
     # Готово, когда: на фикстуре backlog+milestone план даёт последовательность с учётом зависимостей,
     # прогноз помечен как оценка с основанием, а недостаток данных даёт «прогноз невозможен», не число.
 
-  - id: blockers-detected-early
-    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
-    type: engineering
-    goal: roadmap-and-delivery
-    status: in_progress
-    branch: lane-4-blockers
-    depends_on: [delivery-plan-with-confidence]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, tests/]
-    value: medium
-    affects: {delivery_operations: true, analytics_learning: true}
-    # PR-15: Здоровье delivery отдельно от здоровья продукта: выполнение milestone, velocity,
-    # blocked/overdue tasks, PR cycle time, release frequency, отклонение от плана. Ранние блокеры —
-    # до срыва срока, а не постфактум. Метрика без данных — unavailable, а не 0 (третье состояние).
-    # Готово, когда: на фикстуре delivery-плана отчёт называет блокирующие задачи и отклонение от
-    # плана ДО дедлайна; отсутствующая метрика помечена unavailable, а не подменена нулём.
-
   - id: delivery-budget-is-declared
     title: Потолок поставки перестаёт быть только числом
     type: quality
