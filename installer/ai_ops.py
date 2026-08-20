@@ -541,7 +541,15 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/engops/session_thresholds.py",
     "ai_ops_kit/intelligence/artifact_reality_check.py",
     "ai_ops_kit/intelligence/decision_loop.py",
-    "ai_ops_kit/intelligence/nightly_review.py",
+    # `intelligence/nightly_review.py` УБРАН 20.08.2026: он подключён. Команда рантайма
+    # `commands/maintenance/night-review.md` зовёт его в дочке, и Robin запускает по расписанию
+    # (`runtime/robin/duties.example.yaml`, обязанность `nightly-review`). Не поставить его
+    # значило бы дать дочке команду, которая ссылается на отсутствующий файл — класс F-033.
+    # Собственных импортов из кита у модуля нет, второй файл он за собой не тянет (проверено).
+    #
+    # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `installer/` — территория ленты B. Правка на одну
+    # строку списка; оставить её несделанной было нельзя, иначе работа ленты A уехала бы в дочку
+    # наполовину. Ленте B сказано.
     "ai_ops_kit/intelligence/outcome_analytics.py",
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
