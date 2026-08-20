@@ -961,7 +961,8 @@ work:
     title: "AI Decision Log: решение AI, почему, на каких данных, результат, менял ли человек"
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     write_scope: [ai_ops_kit/governance/, decisions/, tests/]
     value: high
