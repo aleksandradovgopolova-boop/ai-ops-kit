@@ -567,6 +567,14 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
     "ai_ops_kit/intelligence/watch_contract.py",
+    # `planning/roadmap_manager.py` — автоведение roadmap Now/Next/Later (лента 4, PR-7). ПОСТРОЕНО,
+    # но в дочке пока НЕДОСТИЖИМО: ни одна команда/реестр/док его не зовёт (авторскую сторону
+    # по-прежнему ведёт подключённый `roadmap.py`). Пока не появится команда `ai-ops roadmap`,
+    # ставить его в поставку значило бы платить объёмом дочки за то, что там не работает — ровно
+    # класс, ради которого этот список и заведён. Уедет отсюда фактом подключения, не решением.
+    # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `installer/` — территория ленты B; правка на одну
+    # строку списка. Ленте B сказано (тот же приём, что при подключении nightly_review).
+    "ai_ops_kit/planning/roadmap_manager.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
