@@ -546,7 +546,11 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
     "ai_ops_kit/intelligence/watch_contract.py",
-    "ai_ops_kit/ui/experience_contract.py",
+    # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
+    # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
+    # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
+    # там нет (класс F-033). Список сокращается только так: не решением, а фактом подключения,
+    # и об этом сказал не автор, а тест `test_unwired_modules_are_really_unwired`.
 })
 
 DEV_ONLY_TOOLS = frozenset({

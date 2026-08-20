@@ -30,6 +30,18 @@ import yaml
 
 
 # Схема Experience Contract
+# ОБЯЗАТЕЛЬНЫЕ СОСТОЯНИЯ — ОДИН ИСТОЧНИК НА ОБЕ СТОРОНЫ МЕХАНИЗМА (20.08.2026).
+#
+# ЗАМЕР. Сторона ДОКАЗАТЕЛЬСТВА (`ui/storybook_adapter.py`) требует покрытия четырёх состояний
+# (`REQUIRED_STATES`: default/loading/empty/error) и не даёт выдать «нет данных» за «чисто».
+# Сторона СОЗДАНИЯ выводила состояния ИЗ КОНТРАКТА — только те, что владелец перечислил. Связи
+# между половинами не было: контракт, в котором не описали `error`, порождал набор stories,
+# который гейт НЕ МОЖЕТ принять никогда, и узнавалось это на гейте, а не при создании.
+#
+# Это ровно тот класс, против которого стоит кит: две правды об одном вопросе. Здесь их сводим —
+# список берётся у стороны доказательства, а не объявляется второй раз.
+from ai_ops_kit.ui.storybook_adapter import REQUIRED_STATES
+
 CONTRACT_SCHEMA = {
     "id": str,              # Уникальный идентификатор
     "title": str,           # Название опыта
@@ -51,14 +63,26 @@ CONTRACT_SCHEMA = {
 
 
 def validate_contract(contract: dict) -> list[str]:
-    """Validate contract against schema."""
+    """Проверить контракт: форма + выполнимость на гейте доказательства. -> список ошибок."""
     errors = []
     for field, expected_type in CONTRACT_SCHEMA.items():
         if field not in contract:
-            errors.append(f"Missing required field: {field}")
+            errors.append(f"нет обязательного поля: {field}")
         elif not isinstance(contract[field], expected_type):
-            errors.append(f"Field {field} must be {expected_type.__name__}")
+            errors.append(f"поле {field} должно быть {expected_type.__name__}")
     return errors
+
+
+def undeclared_required_states(contract: dict) -> list[str]:
+    """Обязательные состояния, которых владелец НЕ описал. -> список имён.
+
+    Это НЕ ошибка контракта: stories для них всё равно будут выведены (см. `generate_stories`),
+    и гейт доказательства их примет. Но заглушка без `condition`/`visual` — это вопрос владельцу,
+    а не решённая задача, и он обязан быть ВИДЕН, а не растворён в сгенерированном списке.
+    Молчаливая заглушка — тот же класс, что «unknown, свёрнутый в not_changed».
+    """
+    declared = {str(st.get("name")) for st in (contract.get("states") or []) if st.get("name")}
+    return [s for s in REQUIRED_STATES if s not in declared]
 
 
 def generate_stories(contract: dict) -> list[dict]:
@@ -89,9 +113,18 @@ def generate_stories(contract: dict) -> list[dict]:
             },
         })
 
-        # Each state
-        for state in states:
-            state_name = state.get("name", "unknown")
+        # ОБЯЗАТЕЛЬНЫЕ СОСТОЯНИЯ ВЫВОДЯТСЯ КОДОМ, а не берутся из того, что вспомнил автор.
+        # Прежде состояния приходили ТОЛЬКО из контракта, и если владелец не описал `error`,
+        # story для него не появлялась — а гейт доказательства его требовал. Работа обещает
+        # «обязательные stories выводятся из контракта КОДОМ»; вывод из перечисления — это не
+        # вывод, это переписывание списка.
+        # Описанное владельцем состояние побеждает: у него есть condition/visual, и он знает про
+        # свой продукт больше. Недостающие добавляются заглушкой с пометкой, ОТКУДА они взялись.
+        declared = {str(st.get("name")): st for st in states if st.get("name")}
+        for req in REQUIRED_STATES:
+            declared.setdefault(req, {"name": req, "derived_from": "REQUIRED_STATES",
+                                      "condition": None, "visual": None})
+        for state_name, state in declared.items():
             stories.append({
                 "id": f"{screen_id}-{state_name}",
                 "title": f"{screen_name} — {state_name}",
