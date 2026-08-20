@@ -1362,3 +1362,56 @@ probes:
   why: 'Третье состояние не сворачивается во второе. Ветку удалили после слияния ИЛИ не выкачали —
     различить нельзя; молчание на этом месте читалось бы как «план согласован», то есть неизвестность
     выдавалась бы за зелёное.'
+- id: raise-must-name-shipping-files
+  kind: guard
+  file: installer/ai_ops.py
+  find: '            elif shipped is not None and rel not in shipped:'
+  replace_with: '            elif False:'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'ГЛАВНАЯ ОХРАНА подъёма потолка: причина «этот файл работает в дочке» проверяема только против
+    поставки. Мутация позволяет обосновать подъём файлом, который в дочку не едет, — то же «заявление
+    шире полученного», из-за которого заведён словарь охватов. Логика в функции, а не в тесте: первая
+    версия стояла в тесте и проба ВЫЖИЛА (позитив без отрицательного случая непробиваем).'
+- id: raise-headroom-is-not-a-reason
+  kind: guard
+  file: installer/ai_ops.py
+  find: '        if any(f in why for f in BUDGET_NON_REASONS):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: '«Нужен запас» причиной не считается — правило записано с 13.08.2026 прозой и исполнялось ровно
+    настолько, насколько о нём помнили. Мутация снимает единственную строку, делающую его проверяемым.'
+- id: ceiling-matches-the-last-raise
+  kind: guard
+  file: installer/ai_ops.py
+  find: '            vol[-1].get("to_bytes") != ceilings["volume_bytes"]:'
+  replace_with: '            False:'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'Ровно случай, из которого работа выросла: потолок поднят числом, записи о подъёме нет. Без
+    этой сверки лента подъёмов и действующий потолок расходятся молча — как разъехались две ленты в
+    двух блоках одного файла.'
+- id: breach-message-shows-what-occupies-delivery
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    return "\n".join([head, rule, "Что занимает поставку сейчас:"] +'
+  replace_with: '    return "\n".join([head, rule] +'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'Замер 20.08.2026: четыре подъёма подряд обсуждались одним числом, и состав поставки не смотрел
+    никто. Первый же взгляд дал находку — manifest на 252 КБ, 6.6% в одном файле. Мутация оставляет в
+    сообщении число и правило, но убирает СОСТАВ: узнав число, человек снова не узнает, что там лежит.'
+- id: budget-checks-read-the-real-registry
+  kind: seam
+  covers:
+  - quality/delivery-budget.yaml
+  - tests/unit/test_delivery_budget.py
+  file: tests/unit/test_delivery_budget.py
+  find: '    return yaml.safe_load((KIT / BUDGET_REL).read_text(encoding="utf-8"))'
+  replace_with: '    return {"ceilings": {"volume_bytes": 4194304, "substantive_files": 999, "alias_bytes": 999999}, "raises": []}'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'ШОВ: охраны подъёма проверяют НАСТОЯЩИЙ реестр, а не заглушку. Мутация оставляет все проверки
+    на месте и подсовывает им выдуманный бюджет с пустой лентой подъёмов — механизм есть, а
+    объявленные потолки им никто не судит. Тот же класс, что «валидатор, не запускавшийся нигде».'

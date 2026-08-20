@@ -993,9 +993,12 @@ def main(argv):
                 shown = sp.relative_to(Path(child_root))
             except ValueError:
                 shown = sp
+            # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`,
+            # пропуская `plan`. Заявленный путь кита — specify -> plan -> run; человек, идущий по
+            # подсказкам, планирования не видел вовсе. Следующий шаг — `plan`.
             _say(Path(child_root), "from_specification", shown, created, cov["level_name"],
                  cov["sections"], cov["blocking_missing"],
-                 f"./ai-ops run \"{task or '<задача>'}\" --feature {wid} --execute",
+                 f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
                  spec_rep["added"], spec_rep["error"])
         return 0
 
@@ -1145,5 +1148,22 @@ def main(argv):
     return 0
 
 
+def _main_guarded(argv):
+    """Граница CLI: отказ провайдера по лимиту — человеку ФРАЗОЙ и кодом, а не трейсбеком.
+
+    ЗАМЕР ПОЛЯ 20.08.2026 (obs 99aa67ef): при исчерпании лимита сессии claude-cli наружу выходил
+    RuntimeError с полным питоновским трейсбеком. Провайдер теперь поднимает типизированный
+    `ProviderLimitError`; здесь он превращается в сообщение и код возврата 3 («модель недоступна»).
+    Ловим ТОЛЬКО этот тип — прочие ошибки по-прежнему всплывают, чтобы дефекты не тонули в тихом
+    отказе.
+    """
+    from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError
+    try:
+        return main(argv)
+    except ProviderLimitError as e:
+        print(e.human_message(), file=sys.stderr)
+        return 3
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(_main_guarded(sys.argv[1:]))

@@ -225,11 +225,18 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 if ahead > 0 and not discard_previous:
                     return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
                             "status": "error",
+                            # obs 2dbfc337 (поле 20.08.2026) + B2-10: здесь назывались ВНУТРЕННИЕ
+                            # параметры движка — `resume=True (--resume)` и `discard_previous=True
+                            # (--discard)`. Человек читает это через `ai-ops`, где `--resume` нет
+                            # вовсе (argparse принимает его за сокращение `--resume-from` и падает),
+                            # а продолжение — это ИНТЕНТ `resume`. Печатаем РЕАЛЬНЫЕ команды.
                             "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
                                      f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
-                                     f"остановлен. Передай resume=True (--resume) чтобы ПРОДОЛЖИТЬ "
-                                     f"поверх них, discard_previous=True (--discard) для перезаписи ИЛИ "
-                                     f"запусти с другим --feature.",
+                                     f"остановлен. Продолжить поверх них: "
+                                     f"`ai-ops resume . --feature {wid} --execute`. Перезаписать: "
+                                     f"`git branch -D {branch}` и "
+                                     f"`ai-ops run . --feature {wid} --execute`. Или возьми другой "
+                                     f"--feature.",
                             "loop": None, "isolation": {"worktree": None}, "gates": None,
                             "ready_for_pr": False, "overall_status": "error"}
                 _wt.remove(child_root, wid, force=True)

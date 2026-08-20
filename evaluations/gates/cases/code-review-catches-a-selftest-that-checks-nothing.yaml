@@ -1,0 +1,52 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: code-review-catches-a-selftest-that-checks-nothing
+gate: code_review
+case_kind: judge_output
+summary: 'Судейский гейт на настоящем дифе, который прошёл ревью зелёным и оказался дефектным: ветка --selftest
+  печатает «SELFTEST PASSED» и три строки «: OK», не вызвав ни одной проверяемой функции.'
+origin:
+  source: 'ai-ops-kit@c9e4a78 (feat(engops): три модуля …), дефект вскрыт сутки спустя в 4aa965d и закреплён
+    tests/contracts/test_no_fake_selftest.py'
+  provenance: verbatim_commit
+notes: 'Кейс ценен тем, что вердикт по нему ИЗВЕСТЕН задним числом и он был неверным: 19.08.2026 изменение
+  прошло, а через сутки аудит фазы 0 нашёл двенадцать таких модулей сразу. Для кита, чья заявленная ценность
+  — «зелёное значит проверенное», это худший класс: модуль отчитывается об успехе, не проверив ничего.
+  Здесь мы не чиним судью — мы меряем, видит ли он это сегодня и говорит ли одно и то же при повторе.'
+signals: {}
+expected:
+  status: fail
+  reason_matches:
+  - selftest
+input:
+  task: |-
+    Независимое ревью кода. Изменение добавляет модуль ai_ops_kit/engops/refusal_paths.py — проверку веток отказа кита: названный в отказе флаг существует, причина верна, сырого traceback нет.
+
+    Правило репозитория (AGENTS.md): «Selftest не живёт в продакшн-модуле. Модули ai_ops_kit/ едут в child-репозиторий; тест модуля — в tests/unit/test_<module>_selftest.py». И шире: объявленная проверка обязана исполняться — модуль не вправе утверждать пройденной проверку, которой не делал.
+
+    Дай заключение по гейту code_review.
+  diff_file: code-review-catches-a-selftest-that-checks-nothing.patch
+stability:
+  measured_at: '2026-08-20T08:52:23+00:00'
+  runs: 3
+  agreement: 3/3
+  verdicts:
+  - fail
+  - fail
+  - fail
+recorded:
+- recorded_at: '2026-08-20T08:52:23+00:00'
+  provider: claude-cli
+  model: ''
+  derived_status: fail
+  transcript: code-review-catches-a-selftest-that-checks-nothing-1.md
+- recorded_at: '2026-08-20T08:52:23+00:00'
+  provider: claude-cli
+  model: ''
+  derived_status: fail
+  transcript: code-review-catches-a-selftest-that-checks-nothing-2.md
+- recorded_at: '2026-08-20T08:52:23+00:00'
+  provider: claude-cli
+  model: ''
+  derived_status: fail
+  transcript: code-review-catches-a-selftest-that-checks-nothing-3.md

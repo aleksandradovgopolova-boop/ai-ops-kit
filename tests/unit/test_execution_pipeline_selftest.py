@@ -159,8 +159,12 @@ def test_execution_pipeline_selftest():
         rep_iso_guard = run_pipeline("в изоляции повторно", sig, root, lambda c: next(it_iso2),
                                      budget={"max_model_calls": 5}, feature="iso-fn",
                                      commit=True, isolate=True, install_deps=False)
+        # obs 2dbfc337 (поле 20.08.2026): сообщение обязано называть РЕАЛЬНУЮ команду продолжения
+        # (интент `ai-ops resume`), а не внутренний `resume=True (--resume)`, которого у `ai-ops` нет.
+        _err_iso = rep_iso_guard.get("error") or ""
         expect("P0.3: повторный прогон без discard -> honest error (работа не потеряна)",
-               rep_iso_guard.get("status") == "error" and "discard" in (rep_iso_guard.get("error") or ""))
+               rep_iso_guard.get("status") == "error" and "ai-ops resume" in _err_iso
+               and "(--resume)" not in _err_iso)
         _git(root, "checkout", "-q", orig_branch)
 
         # P0.3: с discard_previous=True повторный прогон перезаписывает и стартует чисто
