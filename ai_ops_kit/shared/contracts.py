@@ -150,6 +150,9 @@ class RunReportGates(TypedDict, total=False):
     met: list[str]
     unmet: list[str]
     not_applicable: list[str]
+    # Кто закрыл каждый гейт: validator | judge | writer | human. «Зелёное» от машины и «зелёное»
+    # по мнению судьи — разные утверждения, и отчёт обязан их различать.
+    closure: dict[str, Any]
 
 
 class RunReport(TypedDict, total=False):

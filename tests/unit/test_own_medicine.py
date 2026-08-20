@@ -93,14 +93,37 @@ def test_not_applicable_always_names_a_reason(om):
 
 @pytest.mark.unit
 def test_the_gap_is_visible_not_smoothed(om):
-    """Смысл проверки — ПОКАЗАТЬ разрыв. Ноль разрывов при непустом замере означал бы, что
-    валидатор перестал их видеть (или что замер не списан), а не что кит стал идеальным."""
+    """Смысл проверки — ПОКАЗАТЬ разрыв: ни один не появляется молча, мимо замера.
+
+    ЗДЕСЬ БЫЛО ТРЕБОВАНИЕ НЕПУСТОГО ЗАМЕРА (`assert om.KNOWN_GAPS`), и 19.08.2026 оно стало
+    падать: оба известных разрыва закрыли — кит завёл себе `./ai-ops` и получил блок политики
+    общения. То есть проверка требовала, чтобы у кита ВСЕГДА оставался долг, и цель этой самой
+    проверки — ноль разрывов — краснела как поломка.
+
+    Страх, ради которого требование писалось, назван в его же формулировке: «ноль разрывов
+    означал бы, что валидатор перестал их видеть». Но ослепший валидатор ловится не пустым
+    замером, а прямой пробой — `test_a_new_gap_reddens_the_ratchet` ниже создаёт НАСТОЯЩИЙ разрыв
+    в копии репозитория и требует красного. Непустой замер эту способность не доказывал: он
+    доказывал только, что долг ещё есть.
+    """
     rep = om.evaluate(PKG)
     gaps = [it["item"] for it in rep["items"] if it["outcome"] == om.NOT_APPLIED]
     assert set(gaps) <= set(om.KNOWN_GAPS), f"разрыв вне замера: {set(gaps) - set(om.KNOWN_GAPS)}"
-    assert om.KNOWN_GAPS, "замер разрывов пуст — так проверка теряет смысл раньше, чем кит станет чист"
     for item, reason in om.KNOWN_GAPS.items():
         assert reason.strip(), f"разрыв `{item}` в замере без причины, почему он ещё открыт"
+
+
+@pytest.mark.unit
+def test_the_blindness_check_that_replaced_the_non_empty_baseline_exists():
+    """Требование непустого замера снято НЕ молча: его работу делает названная проба.
+
+    Если `test_a_new_gap_reddens_the_ratchet` однажды уедет вместе с рефакторингом, снятие
+    требования останется без замены — и валидатор сможет ослепнуть незамеченным.
+    """
+    src = Path(__file__).read_text(encoding="utf-8")
+    assert "def test_a_new_gap_reddens_the_ratchet(" in src, (
+        "проба «новый разрыв краснеет» исчезла — верните её или верните требование непустого "
+        "замера: без одного из двух ослепший валидатор выглядит как чистый кит")
 
 
 @pytest.mark.unit
@@ -237,17 +260,36 @@ def test_a_closed_gap_left_in_the_baseline_is_caught(repo_copy, tmp_path):
     """Ратчет ходит ТОЛЬКО ВНИЗ: закрытый разрыв обязан быть списан тем же коммитом.
 
     Иначе замер превращается в вечный список «известных проблем», который никто не сокращает.
+
+    ПЕРЕПИСАН 19.08.2026. Прежде тест закрывал в копии НАСТОЯЩИЙ разрыв `entry_point` и ждал
+    красного. Разрыв закрыли по-настоящему, `KNOWN_GAPS` опустел — и тест стал зелёным на пустом
+    месте: закрывать было нечего, списывать нечего, красного не было. Тот же класс, что и
+    `test_nothing_frozen_is_ever_offered`: проверка, привязанная к сегодняшнему состоянию
+    репозитория, умирает от честной работы.
+
+    Теперь тест ставит замер САМ — вписывает в копию разрыв на пункт, который заведомо ВЫПОЛНЕН,
+    — и потому не зависит от того, есть ли у кита долг сегодня.
     """
     work = tmp_path / "closed"
     shutil.copytree(repo_copy, work, ignore=_IGNORE, symlinks=True)
-    # Закрываем разрыв `entry_point` в копии, замер не трогаем.
-    src = work / "templates" / "runtime" / "ai-ops-entry.sh"
-    dst = work / "ai-ops"
-    dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-    dst.chmod(0o755)
+
+    om = _load()
+    applied = sorted(it["item"] for it in om.evaluate(PKG)["items"]
+                     if it["outcome"] == om.APPLIED)
+    assert applied, "нечего объявить закрытым разрывом — валидатор не отдал ни одного APPLIED"
+    item = applied[0]
+
+    validator = work / "ai_ops_kit" / "validation" / "validate_own_medicine.py"
+    text = validator.read_text(encoding="utf-8")
+    assert "KNOWN_GAPS = {" in text
+    validator.write_text(
+        text.replace("KNOWN_GAPS = {",
+                     f'KNOWN_GAPS = {{\n    "{item}": "разрыв, вписанный тестом ратчета",', 1),
+        encoding="utf-8")
+
     r = _run_in(work)
-    assert r.returncode == 1
-    assert "спиши" in r.stdout
+    assert r.returncode == 1, (r.stdout + r.stderr)[-1500:]
+    assert "спиши" in r.stdout and item in r.stdout
 
 
 @pytest.mark.unit
