@@ -1,0 +1,25 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-review-без-base-падает-т-346c4324
+at: '2026-08-20T09:54:47+00:00'
+statement: 'review без --base падает трейсбеком TypeError: expected str, bytes or
+  os.PathLike object, not NoneType (review_branch.py:103 -> gitio.git). В справке
+  сказано, что по умолчанию база определяется автоматически, но значение приходит
+  None и уходит прямо в git rev-parse. Человек видит стену питоновского трейсбека
+  вместо сообщения. Обошла явным --base main.'
+observation_class: defect
+severity: p0
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: command
+  command: ai-ops review --feature quick-open-palette --provider claude-cli
+  output: 'TypeError: expected str, bytes or os.PathLike object, not NoneType в review_branch.py:103'
+state: delivered
+state_reason: null
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'

@@ -1,0 +1,26 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-уточнение-к-прошлому-зам-d48fd639
+at: '2026-08-20T09:54:00+00:00'
+statement: 'Уточнение к прошлому замечанию про gates: code_review и security кит В
+  САМОМ ДЕЛЕ применяет и блокирует ими (в прогоне оценено 11 гейтов, не закрыты code_review
+  и security). Неверен был плановый файл run-plan.yaml: он перечислил только 3 гейта
+  из 11. То есть план обещает меньше проверок, чем прогон делает — человек по плану
+  не может понять, что его ждёт. Остальная часть замечания (треки VISUAL и DOCUMENTATION
+  отключены с причинами в прошедшем времени о ещё не написанном коде) в силе.'
+observation_class: defect
+severity: p2
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: file
+  path: features/quick-open-palette/run-plan.yaml
+  quote: 'gates: [intake_completeness, concurrency_preflight, implementation_verification]'
+state: delivered
+state_reason: null
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'

@@ -1,0 +1,27 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-потолок-траты-на-разбор--487d952b
+at: '2026-08-20T09:36:19+00:00'
+statement: 'Потолок траты на ''разбор'' заблокировал шаг планирования и посчитал против
+  него расход прошлых сессий: показал 559 тысяч при потолке 50 тысяч ещё до того,
+  как я хоть что-то описала в этой задаче. Рекомендация была ''пропусти планирование
+  и иди делать''. То есть счётчик не привязан к работе, а рекомендация уводит с заявленного
+  пути specify -> plan -> run. Пришлось проходить plan с --spend-ok, чтобы не терять
+  шаг.'
+observation_class: defect
+severity: p1
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: command
+  command: ai-ops plan --feature quick-open-palette
+  output: Разбор уже дороже, чем ты разрешила. ... ушло 641 тысяч токенов, а кода
+    я ещё не тронул. Твой потолок на это — 50 тысяч.
+state: delivered
+state_reason: null
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'
