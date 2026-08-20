@@ -332,6 +332,26 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  - id: stable-gate-includes-product-layer
+    title: >-
+      Машинный гейт stable не даёт объявить канал, пока продуктовый слой не реализован
+    type: quality
+    goal: qualification-closeout
+    status: todo
+    owner_role: engineer
+    value: high
+    depends_on: [continuous-product-audit]
+    write_scope: [registry/, ai_ops_kit/validation/, tests/]
+    reason: >-
+      РЕШЕНИЕ ВЛАДЕЛЬЦА ep-2026-08-20-stable-includes-product-operating-layer: stable включает
+      реализацию PR-1..PR-25. Сегодня `channels.stable.requires` в registry/release-claims.yaml —
+      это [own_ci_green, field_evidence], и по нему stable почти достижим; продуктовый слой в гейт
+      не входит. Разрыв опасен: канал можно объявить заработанным, пока кит ещё не умеет вести
+      продуктовую операционку. Готово, когда машинная проверка канала stable краснеет, пока исходы
+      пяти целей (product-operating-layer..autonomous-product-loop) не достигнуты — так же
+      машиночитаемо, как field_evidence сейчас; «канал заработан» и «продукт-как-ОС готов»
+      становятся одним рубежом не на словах, а в валидаторе.
+
   # ─── разбор внешнего аудита 19.08.2026 (две параллельные сессии) ─────────────────────────────
   #
   # Работы заведены ПОТОМУ, ЧТО ИХ ВЕДУТ. До этого две сессии правили репозиторий, а план о них не
