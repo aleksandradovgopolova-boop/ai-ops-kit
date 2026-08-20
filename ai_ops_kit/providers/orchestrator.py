@@ -118,16 +118,12 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
 def _write_reviewer_json(run_dir, sid, text):
     """Из ответа judge-роли достать JSON reviewer-result и, если валиден по схеме, записать
     stage-<sid>.reviewer.json (структурный источник истины). Иначе — ничего (фолбэк на markdown)."""
-    import re as _re
-    m = _re.search(r"\{.*\}", text or "", _re.S)
-    if not m:
-        return False
-    try:
-        obj = json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return False
-    if not (isinstance(obj, dict) and obj.get("kind") == "reviewer-result"
-            and obj.get("status") in ("pass", "warn", "fail")):
+    # Разбор — ОДИН на весь кит (v3.37): `gates.gate_executor.extract_reviewer_json`. Прежде эта
+    # эвристика жила здесь, а корпус gate-евалов мерил бы её копию — то есть мерил бы не то, что
+    # решает вердикт в бою. Схему сверяем ниже, как и раньше: здесь вердикт ПРИНИМАЮТ.
+    from ai_ops_kit.gates.gate_executor import extract_reviewer_json
+    obj = extract_reviewer_json(text)
+    if obj is None:
         return False
     try:
         sys.path.insert(0, str(PKG / "validation"))
