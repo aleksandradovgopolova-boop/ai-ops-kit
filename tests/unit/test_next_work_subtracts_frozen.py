@@ -24,6 +24,9 @@
 """
 from __future__ import annotations
 
+import copy
+import pathlib
+
 import pytest
 
 from ai_ops_kit.planning import delivery_plan as dp
@@ -32,22 +35,49 @@ from ai_ops_kit.planning import next_work
 pytestmark = pytest.mark.unit
 
 
+# ПЛАН ЗДЕСЬ СВОЙ, А НЕ ЖИВОЙ. Замер 20.08.2026: все шесть проверок этого файла оказались
+# ПРОПУЩЕНЫ — «на плане нет готовых работ». В живом плане осталось две работы, одна идёт у
+# владельца, вторая ждёт его решения; готовых нет, вычитать не из чего, и файл, написанный ИМЕННО
+# затем, чтобы шов перестал зависеть от состояния плана, снова от него зависел — просто через
+# `skip` вместо ложной зелени.
+#
+# Цена была измерена в тот же час: проба `next-does-not-offer-frozen-work` перестала убивать своего
+# мутанта. Строку вычитания можно было снести, и весь набор оставался зелёным — ровно то состояние,
+# ради выхода из которого этот файл и заводили. Пропуск не мягче ложной зелени: он так же оставляет
+# шов без охраны, только выглядит аккуратнее.
+PLAN = {
+    "schema_version": 1, "kind": "delivery-plan",
+    "goals": [{"id": "g", "title": "Цель для проверки вычитания", "status": "active"}],
+    "work": [
+        {"id": "w-frozen", "title": "Замороженная работа", "type": "engineering", "goal": "g",
+         "status": "todo", "owner_role": "engineer", "value": "high", "write_scope": ["a/"]},
+        {"id": "w-free", "title": "Свободная работа", "type": "engineering", "goal": "g",
+         "status": "todo", "owner_role": "engineer", "value": "medium", "write_scope": ["b/"]},
+    ],
+}
+
+
 @pytest.fixture
-def ready_ids():
-    """Что кит считает готовым к работе на настоящем плане — БЕЗ заморозки."""
+def ready_ids(monkeypatch):
+    """Готовые работы СВОЕГО плана. Не живого — иначе проверка умирает вместе с ним."""
+    monkeypatch.setattr(next_work._plan, "load", lambda root: copy.deepcopy(PLAN))
+    monkeypatch.setattr(next_work._plan, "load_history", lambda root: [])
     rep = next_work.compute(".", me="session:test-frozen")
     ids = [r["id"] for r in rep["ready"]]
-    if not ids:
-        pytest.skip("на плане нет готовых работ — вычитать не из чего")
+    assert ids, (
+        "свой план не дал ни одной готовой работы — проверка вычитания снова ни от чего не "
+        f"защищает: {rep.get('gap')}")
     return ids
 
 
 def _compute_with_frozen(monkeypatch, frozen_ids):
-    """Прогнать совет так, будто перечисленные работы заморожены.
+    """Прогнать совет по СВОЕМУ плану так, будто перечисленные работы заморожены.
 
     Подменяется ИСТОЧНИК заморозки (`delivery_plan.frozen_work`), а не результат: вычитание, ради
     которого написан тест, остаётся настоящим кодом и исполняется целиком.
     """
+    monkeypatch.setattr(next_work._plan, "load", lambda root: copy.deepcopy(PLAN))
+    monkeypatch.setattr(next_work._plan, "load_history", lambda root: [])
     monkeypatch.setattr(
         next_work._plan, "frozen_work",
         lambda plan: {wid: "цель заморожена решением (фикстура теста)" for wid in frozen_ids})
@@ -111,8 +141,7 @@ def test_freezing_everything_leaves_no_advice(monkeypatch, ready_ids):
 def test_unfrozen_work_survives_the_subtraction(monkeypatch, ready_ids):
     """КОНТРОЛЬ: вычитание убирает ровно замороженное. Иначе тест был бы зелёным и на коде,
     который выбрасывает из совета всё подряд."""
-    if len(ready_ids) < 2:
-        pytest.skip("нужна хотя бы одна незамороженная работа рядом с замороженной")
+    assert len(ready_ids) >= 2, "свой план обязан давать соседнюю незамороженную работу"
     frozen = {ready_ids[0]}
 
     rep = _compute_with_frozen(monkeypatch, frozen)
@@ -128,3 +157,25 @@ def test_without_freeze_the_advice_is_the_plain_one(ready_ids):
     assert rep["next_best"] is not None, "на плане нет совета — предыдущие проверки ничего не значат"
     assert rep["frozen"] == [], rep["frozen"]
     assert dp.freeze_state(dp.load("."))["frozen"] is False
+
+
+def test_the_guard_itself_cannot_quietly_stop_guarding():
+    """Проверка обязана ПАДАТЬ, если ей нечего проверять, а не пропускаться.
+
+    ЗАМЕР 20.08.2026. Все шесть проверок этого файла оказались ПРОПУЩЕНЫ: они брали готовые работы
+    из живого плана, а в нём готовых не осталось. Файл, написанный именно затем, чтобы шов перестал
+    зависеть от состояния плана, снова от него зависел — через `skip` вместо ложной зелени.
+
+    Пропуск не мягче ложной зелени. Итог тот же: мутант `next-does-not-offer-frozen-work` выжил,
+    строку вычитания можно было снести, и весь набор оставался зелёным. Разница лишь в том, что
+    пропуск выглядит аккуратно и потому не вызывает вопросов.
+
+    Отсюда правило, которое эта проба и стережёт: у охраны шва не должно быть ни одного `skip`,
+    зависящего от данных. Нечего проверять — значит проверка сломана.
+    """
+    src = pathlib.Path(__file__).read_text(encoding="utf-8")
+    body = src[src.index("PLAN = {"):]
+    needle = "pytest" + ".skip("          # собираем, иначе проба поймала бы собственный текст
+    assert needle not in body, (
+        "в охране шва появился пропуск: проверка, умеющая тихо ничего не проверять, "
+        "не охрана, а её вид")
