@@ -348,6 +348,96 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  - id: derived-counts-are-computed-not-declared
+    title: >-
+      Счёт валидаторов и потолки считаются автоматически, а не держатся числом, которое каждый PR
+      синхронит
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/validation/, registry/, tests/]
+    finding: docs/parallel-execution-retro.md
+    reason: >-
+      Разбор 20.08 (docs/parallel-execution-retro.md, класс derived-числа): счёт валидаторов в
+      release-claims и потолки в delivery-budget — общая точка, которую каждая лента двигала руками;
+      кто вливался вторым, пересчитывал. Готово, когда число выводится из факта (файлов/замера) и PR
+      не обязан его править — расхождение невозможно by construction.
+  - id: gate-measures-merge-result
+    title: >-
+      coverage и footprint меряются против итога слияния, а не ветки PR
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [.github/, tests/]
+    finding: docs/parallel-execution-retro.md
+    reason: >-
+      Разбор 20.08: гейты меряют ветку PR; код лент, сложенный в main, дрейфует выше порога
+      незаметно и всплывает на первом следующем PR, а не на виновнике (main тихо ушёл 490->498
+      файлов). Готово, когда порог проверяется на результате слияния (merge queue) — дрейф main
+      невозможен.
+  - id: required-contexts-match-jobs
+    title: >-
+      Обязательные статусы защиты ветки сверяются с реально существующими CI-джобами
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [.github/, ai_ops_kit/validation/]
+    finding: docs/parallel-execution-retro.md
+    reason: >-
+      Разбор 20.08 (капкан статусов): удаление джобы python39-compat не убрало её из обязательных
+      контекстов — ВСЕ PR зависли BLOCKED навсегда, потребовалось admin-действие владельца. Готово,
+      когда проверка ловит дрейф «объявленный обязательный статус ↔ существующая джоба» и называет
+      рассинхрон до того, как он повесит очередь.
+  - id: merge-queue-not-handrolled
+    title: >-
+      Слияние идёт родным GitHub merge queue с auto-merge, а не самодельным polling-циклом
+    type: engineering
+    goal: team-works-in-parallel
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [.github/, docs/]
+    finding: docs/parallel-execution-retro.md
+    reason: >-
+      Разбор 20.08: ручной интегратор падал на таймаутах gh, отчитывался «влито» по факту запуска
+      команды, сверял SHA с пустой строкой. Готово, когда green-PR вливается родным merge queue без
+      ручного опроса; DIRTY не возникает (queue батчит и ребейзит сам).
+  - id: local-check-mirrors-ci
+    title: >-
+      Локальная проверка зеркалит блокирующий CI: красное ловится до пуша, а не раундом CI после
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [scripts/, docs/]
+    finding: docs/parallel-execution-retro.md
+    reason: >-
+      Разбор 20.08: регистрация валидатора/пакета, layering, public-surface, footprint,
+      3.9-синтаксис — всё всплывало в CI после пуша, тратя раунд. Готово, когда ./scripts/check-fast
+      прогоняет тот же набор локально и лента видит красное мгновенно.
+  - id: lane-ships-small-prs
+    title: >-
+      Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
+    type: engineering
+    goal: team-works-in-parallel
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [docs/, .github/]
+    finding: docs/parallel-execution-retro.md
+    reason: >-
+      Разбор 20.08: лента 5 сложила всю Фазу 4 в один PR (+2589 строк) с незарегистрированным
+      пакетом и модулями на 0% покрытия; сессия закрылась — долг лёг на координатора серией правок.
+      Готово, когда правило «малый PR, code+tests+newsfragment, green сам» названо и проверяется
+      (размер PR/охват), а закрытие ленты требует влитых ИЛИ переданных с зелёным CI PR.
+
   - id: parallel-safety-runs-in-ci
     title: >-
       Проверка параллельной безопасности исполняется в CI — кита и дочки
