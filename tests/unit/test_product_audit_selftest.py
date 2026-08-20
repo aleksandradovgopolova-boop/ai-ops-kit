@@ -37,8 +37,12 @@ def _repo(tmp_path, ci=True, tests=True, tag=False):
     (tmp_path / "README.md").write_text("# Демо\n\nсервис.\n", encoding="utf-8")
     (tmp_path / "VERSION").write_text("1.0.0\n", encoding="utf-8")
     import subprocess
+    # Явная идентичность в КАЖДОМ коммите: в CI git-identity может быть не настроена, и без неё
+    # commit падает, HEAD не резолвится, а тег не создаётся — тогда delivery честно уходит в unknown.
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=False)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "--allow-empty", "-qm", "init"], check=False)
+    subprocess.run(["git", "-C", str(tmp_path), *ident, "commit", "--allow-empty", "-qm", "init"],
+                   check=False)
     if tests:
         (tmp_path / "tests").mkdir(exist_ok=True)
         (tmp_path / "tests" / "test_x.py").write_text("def test_x():\n    assert 1\n", encoding="utf-8")
@@ -48,7 +52,7 @@ def _repo(tmp_path, ci=True, tests=True, tag=False):
         (gh / "ci.yml").write_text("name: ci\non: [push]\n", encoding="utf-8")
     if tag:
         subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=False)
-        subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "x"], check=False)
+        subprocess.run(["git", "-C", str(tmp_path), *ident, "commit", "-qm", "x"], check=False)
         subprocess.run(["git", "-C", str(tmp_path), "tag", "v1.0.0"], check=False)
     return tmp_path
 
@@ -102,9 +106,12 @@ def test_unknown_is_not_folded_into_the_verdict(installer, tmp_path):
     r = _repo(tmp_path, tag=True)
     installer._seed_product_layer(r)
     rep = PA.audit(r)
-    assert set(rep["unknown"]) == {"backlog", "risk"}
+    # backlog/риски СТРУКТУРНО unknown (их источник — другие ленты); delivery может уйти в unknown в
+    # git-less окружении — это не ломает инвариант, поэтому проверяем ВХОЖДЕНИЕ, а не равенство.
+    assert {"backlog", "risk"} <= set(rep["unknown"])
     assert "backlog" not in rep["evaluated"] and "risk" not in rep["evaluated"]
-    # вердикт считается ТОЛЬКО по оценённым; unknown не участвует
+    # вердикт считается ТОЛЬКО по оценённым осям; ни одна unknown-ось в него не входит
+    assert set(rep["evaluated"]) & set(rep["unknown"]) == set()
     assert rep["verdict"] in (PA.GREEN, PA.YELLOW)
 
 
