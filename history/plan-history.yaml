@@ -3629,4 +3629,72 @@ work:
     #     # Проверяемо: у рекомендации есть `kind` и валидатор её формы; `./ai-ops session` на чистой
     #     # установке не печатает ни одной строки `session-check:`.
     #
-
+  - id: errors-reach-the-human-not-as-tracebacks
+    title: >-
+    status: done
+    closed_at: '2026-08-20'
+    evidence: tests/unit/test_provider_limit_is_human.py
+    result: >-
+      ЗАКРЫТО 20.08.2026. ДВА пути ошибки к человеку исправлены. (1) Лимит сессии/квоты claude-cli
+      (obs 99aa67ef): текст несёт «429» и попадал в _transient — кит делал 5 повторов с backoff и
+      падал трейсбеком. Введён отдельный класс `ProviderLimitError`: лимит распознаётся ПЕРВЫМ (до
+      транзиента) в обеих ветках (is_error rc=0 и rc!=0), поднимается СРАЗУ (повтор бессмыслен: сброс
+      — минуты/часы, backoff ≤30с), несёт время сброса и совет сменить провайдера; граница CLI
+      (_main_guarded) печатает фразу и код возврата 3, а не трейсбек. ГРАНИЦА F-011 сохранена пробой:
+      транзиентный 529 по-прежнему повторяется. (2) `review` без --base (obs 346c4324): УЖЕ исправлено
+      в main до этой работы (_base_for_review, заявка #136) — тег 3.36.12 фикса не содержал, поэтому
+      кокпит и упал; покрыто tests/unit/test_absent_base_is_resolved_or_refused.py. ЗАМЕР: 5 новых
+      проб (обе ветки, время сброса, регрессия 529, граница CLII), 171 тест провайдеров/CLI зелёный,
+      ruff 0.
+    # РАЗБОР, как он был записан в плане:
+    #   - id: errors-reach-the-human-not-as-tracebacks
+    #     title: >-
+    #       Отказ провайдера и ошибка вызова доходят до человека фразой, а не трейсбеком
+    #     type: engineering
+    #     goal: owner-speaks-product-not-pipeline
+    #     status: todo
+    #     owner_role: engineer
+    #     value: high
+    #     finding: findings/from-children/obs-2026-08-20-когда-у-провайдера-claud-99aa67ef.yaml
+    #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/intelligence/, tests/]
+    #     reason: >-
+    #       НАХОДКА ПОЛЯ, прогон ⌘K в ai-ops-cockpit 20.08.2026 (obs 99aa67ef, 346c4324). В ДВУХ местах
+    #       кит выбрасывает человеку голый питоновский трейсбек вместо сообщения: (1) при исчерпании
+    #       лимита сессии claude-cli (HTTP 429) — RuntimeError после пяти попыток, хотя делать надо всего
+    #       лишь подождать или сменить провайдера; (2) `review` без `--base` — TypeError, потому что
+    #       автоопределение базы возвращает None и уходит прямо в git rev-parse, тогда как справка обещает
+    #       автоопределение. Оба — прямое нарушение communication policy (product-уровень): ошибка
+    #       объясняется через последствие и что делать, а не через место в коде. Готово, когда оба пути
+    #       дают человекочитаемое сообщение и код возврата, и это покрыто пробами на обе ветки.
+  - id: resume-hint-is-a-runnable-command
+    title: >-
+    status: done
+    closed_at: '2026-08-20'
+    evidence: tests/unit/test_printed_commands_are_runnable.py
+    result: >-
+      ЗАКРЫТО 20.08.2026. Сообщение блокировки повторного прогона печатало ВНУТРЕННИЕ параметры движка
+      `resume=True (--resume)` / `discard_previous=True (--discard)`; `--resume` argparse принимает за
+      сокращение `--resume-from` и падает, а продолжение — это ИНТЕНТ `resume`. Теперь печатаются
+      РЕАЛЬНЫЕ команды (`ai-ops resume . --feature <wid> --execute`; перезапись через `git branch -D`
+      + `ai-ops run`). Дефект выжил, потому что проба `test_printed_commands_are_runnable` смотрела
+      только формы `ai-ops <intent> --flag`, а фейковый флаг стоял голым в скобках — слепое пятно
+      закрыто пробой на форму `kwarg=True (несущ.флаг)`. ЗАМЕР: селфтест pipeline и printed-commands
+      зелёные.
+    # РАЗБОР:
+    #   - id: resume-hint-is-a-runnable-command
+    #     title: >-
+    #       Кит печатает `--resume` — команду, которую сам же не принимает
+    #     type: engineering
+    #     goal: owner-speaks-product-not-pipeline
+    #     status: todo
+    #     owner_role: engineer
+    #     value: medium
+    #     finding: findings/from-children/obs-2026-08-20-кит-останавливает-повтор-2dbfc337.yaml
+    #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/cli/, tests/]
+    #     reason: >-
+    #       НАХОДКА ПОЛЯ (obs 2dbfc337). Остановив повторный прогон, кит советует «передай --resume», но
+    #       argparse принимает `--resume` как сокращение `--resume-from` и падает «expected one argument».
+    #       Кит печатает команду, которую сам не понимает — ровно тот класс, против которого сделана
+    #       обёртка ./ai-ops (B2-15/3.35.1). Работает отдельная команда `resume`; подсказка обязана
+    #       печатать её. Готово, когда напечатанная китом команда продолжения исполняется как есть, и это
+    #       покрыто пробой.

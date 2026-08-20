@@ -1,0 +1,54 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: code-review-accepts-the-fix-that-removed-the-fake-selftest
+gate: code_review
+case_kind: judge_output
+summary: 'Парный кейс: тот же модуль, честная форма --selftest (модуль объясняет себя и называет, где
+  лежат его настоящие проверки). Судья обязан отличать это от дефекта, а не краснеть на всё подряд.'
+origin:
+  source: 'ai-ops-kit@4aa965d (fix(phase-0): контур говорит правду — 12 фиктивных селфтестов)'
+  provenance: verbatim_commit
+notes: |-
+  Без этой пары корпус мерил бы только чувствительность судьи: судья, который на всё отвечает fail, прошёл бы кейс с фиктивным селфтестом и был бы бесполезен. Здесь замеряется вторая половина — не краснеет ли он там, где правка верна.
+
+  ОЖИДАНИЕ ИСПРАВЛЕНО ПО ЗАМЕРУ, И ВОТ ПОЧЕМУ. Заводя кейс, я поставила ожидаемым `pass`. Живой прогон 20.08.2026 дал устойчивый `warn` 3/3 — и, прочитав основания, я согласилась с судьёй, а не с собой. Судья назвал два содержательных пункта, оба верны на сегодняшнем main: (1) флаг `--selftest` остался в argparse и по-прежнему завершается `return 0` без единой проверки, то есть потребитель, гейтящий по коду возврата, продолжает видеть зелёное; (2) новая строка утверждает «Проверки модуля — в tests/unit/», а файла `tests/unit/test_refusal_paths_selftest.py` в репозитории НЕТ — одно неподтверждённое утверждение заменено другим, того же класса. Блокеров судья не поставил: верную правку он от дефекта отличил, и контроль, ради которого кейс заведён, пройден.
+
+  Заморожен именно `warn`. Если завтра судья скажет `pass`, корпус покраснеет — намеренно: это требование посмотреть глазами, а не молчаливое согласие.
+
+  УСЛОВИЕ ЗАМЕРА. Судья вызывался из нейтрального каталога, то есть без доступа к дереву репозитория: он видел только диф и текст задачи. В бою `claude-cli` получает Read/Grep/Glob по дочке и часть выводов сделал бы иначе. Число относится к замеренным условиям, а не ко всем.
+signals: {}
+expected:
+  status: warn
+  reason_matches: []
+input:
+  task: |-
+    Независимое ревью кода. Изменение убирает из продакшн-модуля ai_ops_kit/engops/refusal_paths.py фиктивную ветку --selftest, которая печатала «SELFTEST PASSED», не вызвав ни одной проверяемой функции, и заменяет её честной формой: модуль печатает свой docstring и называет, где лежат настоящие проверки (tests/unit/).
+
+    Правило репозитория (AGENTS.md): «Selftest не живёт в продакшн-модуле. Модули ai_ops_kit/ едут в child-репозиторий; тест модуля — в tests/unit/test_<module>_selftest.py».
+
+    Дай заключение по гейту code_review.
+  diff_file: code-review-accepts-the-fix-that-removed-the-fake-selftest.patch
+stability:
+  measured_at: '2026-08-20T08:52:23+00:00'
+  runs: 3
+  agreement: 3/3
+  verdicts:
+  - warn
+  - warn
+  - warn
+recorded:
+- recorded_at: '2026-08-20T08:52:23+00:00'
+  provider: claude-cli
+  model: ''
+  derived_status: warn
+  transcript: code-review-accepts-the-fix-that-removed-the-fake-selftest-1.md
+- recorded_at: '2026-08-20T08:52:23+00:00'
+  provider: claude-cli
+  model: ''
+  derived_status: warn
+  transcript: code-review-accepts-the-fix-that-removed-the-fake-selftest-2.md
+- recorded_at: '2026-08-20T08:52:23+00:00'
+  provider: claude-cli
+  model: ''
+  derived_status: warn
+  transcript: code-review-accepts-the-fix-that-removed-the-fake-selftest-3.md
