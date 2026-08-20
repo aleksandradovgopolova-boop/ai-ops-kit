@@ -3629,4 +3629,37 @@ work:
     #     # Проверяемо: у рекомендации есть `kind` и валидатор её формы; `./ai-ops session` на чистой
     #     # установке не печатает ни одной строки `session-check:`.
     #
-
+  - id: resume-hint-is-a-runnable-command
+    title: >-
+    status: done
+    closed_at: '2026-08-20'
+    evidence: tests/unit/test_printed_commands_are_runnable.py
+    result: >-
+      ЗАКРЫТО 20.08.2026. Сообщение блокировки повторного прогона печатало ВНУТРЕННИЕ параметры движка
+      — `resume=True (--resume)` и `discard_previous=True (--discard)`. Человек читает это через
+      `ai-ops`, где `--resume` нет вовсе (argparse принимает за сокращение `--resume-from` и падает),
+      а продолжение — это ИНТЕНТ `resume`. Теперь сообщение печатает РЕАЛЬНЫЕ команды: продолжить —
+      `ai-ops resume . --feature <wid> --execute`; перезаписать — `git branch -D ai-ops/<wid>` и
+      `ai-ops run . --feature <wid> --execute`. ПРИЧИНА, ПОЧЕМУ ДЕФЕКТ ВЫЖИЛ: существующая проба
+      `test_printed_commands_are_runnable` проверяла только формы `ai-ops <intent> --flag`, а фейковый
+      флаг стоял голым в скобках `(--resume)` без интента — слепое пятно. Добавлена проба на эту форму
+      (kwarg=True с несуществующим флагом), судящая тем же мерилом: флаг обязан существовать. ЗАМЕР:
+      селфтест pipeline и printed-commands зелёные, ruff 0.
+    # РАЗБОР, как он был записан в плане:
+    #   - id: resume-hint-is-a-runnable-command
+    #     title: >-
+    #       Кит печатает `--resume` — команду, которую сам же не принимает
+    #     type: engineering
+    #     goal: owner-speaks-product-not-pipeline
+    #     status: todo
+    #     owner_role: engineer
+    #     value: medium
+    #     finding: findings/from-children/obs-2026-08-20-кит-останавливает-повтор-2dbfc337.yaml
+    #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/cli/, tests/]
+    #     reason: >-
+    #       НАХОДКА ПОЛЯ (obs 2dbfc337). Остановив повторный прогон, кит советует «передай --resume», но
+    #       argparse принимает `--resume` как сокращение `--resume-from` и падает «expected one argument».
+    #       Кит печатает команду, которую сам не понимает — ровно тот класс, против которого сделана
+    #       обёртка ./ai-ops (B2-15/3.35.1). Работает отдельная команда `resume`; подсказка обязана
+    #       печатать её. Готово, когда напечатанная китом команда продолжения исполняется как есть, и это
+    #       покрыто пробой.
