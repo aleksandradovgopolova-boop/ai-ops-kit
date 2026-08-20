@@ -930,7 +930,8 @@ work:
     title: Связь roadmap ↔ milestones ↔ backlog по контракту данных ленты 3
     type: engineering
     goal: roadmap-and-delivery
-    status: todo
+    status: in_progress
+    branch: lane-4-milestones
     depends_on: [roadmap-now-next-later, backlog-issue-classification]
     owner_role: engineer
     write_scope: [ai_ops_kit/planning/, tests/]
