@@ -292,13 +292,20 @@ goals:
   - id: roadmap-and-delivery
     # заморозка: roadmap + delivery planning — новое умение
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТА 2026-08-20. Четыре модуля построены, влиты и ПОДКЛЮЧЕНЫ командами `ai-ops roadmap`
+    # и `ai-ops delivery` (DIRECT_INTENTS, убраны из UNWIRED_MODULES — едут в дочку). Исходы
+    # флипнуты не «код написан», а ЖИВЫМ ЗАМЕРОМ: `ai-ops roadmap .` строит Now/Next/Later из плана
+    # и называет отклонения от ROADMAP.md; `ai-ops delivery . --backlog <фикстура> --milestone m1`
+    # даёт порядок задач, прогноз-ОЦЕНКУ (10 ед./2 в день = 5 дн.) и ранжированные блокеры.
+    # Отсутствие источника backlog — честное третье состояние, а не пустой план.
+    status: achieved
     outcome:
-      # Phase 3: roadmap Now/Next/Later, milestones, delivery plan, forecasting.
-      roadmap_auto_maintained: false
-      milestones_linked_to_backlog: false
-      delivery_plan_with_confidence: false
-      blockers_detected_early: false
+      # Phase 3: roadmap Now/Next/Later, milestones, delivery plan, forecasting. ВСЕ достигнуты
+      # подключением команд и проверены живым прогоном (не декларацией).
+      roadmap_auto_maintained: true
+      milestones_linked_to_backlog: true
+      delivery_plan_with_confidence: true
+      blockers_detected_early: true
 
   - id: ai-product-operations
     # заморозка: автономная продуктовая операционка — новое умение
@@ -341,6 +348,35 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  - id: parallel-safety-runs-in-ci
+    title: >-
+      Проверка параллельной безопасности исполняется в CI — кита и дочки
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [.github/, templates/ci/, ai_ops_kit/validation/]
+    reason: >-
+      После обкатки (dp-002) validate_parallel_safety.py включается в CI: в pr-smoke кита и в
+      доставляемый дочке шаблон. Advisory -> blocking по замеру. Территория пересекается с
+      installer/templates — согласовать с лентой B. Готово, когда PR, смешивающий код с
+      координационным файлом, краснит проверку в обоих контурах, а чистый — нет.
+  - id: plan-contributions-via-fragments
+    title: >-
+      Работы добавляются в план ВКЛАДАМИ-фрагментами, а не правкой общего plan.yaml
+    type: engineering
+    goal: plan-as-control-plane
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/planning/, planning/, tests/]
+    reason: >-
+      Полный фикс беговой дорожки: как newsfragments, но для плана. Новая работа кладётся файлом
+      planning/incoming/<id>.yaml; plan.yaml собирается централизованно. Параллельные работы трогают
+      РАЗНЫЕ файлы -> конфликта и DIRTY от плана нет. Территория planning/ (лента B) — согласовать.
+      Готово, когда добавление работы не требует править plan.yaml, а сборка идёт одной командой.
+
   - id: reviewer-prompt-uses-xml-anchors-measured
     title: >-
       Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
@@ -861,84 +897,14 @@ work:
     # молчаливый зелёный; ствол берётся явным списком, а не `_resolve_base` (в рабочей копии работы
     # тот отдаёт саму ветку — замер 20.08); 11 тестов, три пробы, три красных мутанта.
 
-  # ── Phase 3: Roadmap & Delivery (лента 4) ──
-  # Декомпозиция цели roadmap-and-delivery в работы под её четыре исхода (OS-LANES.md, LANE-BRIEF.md).
-  # Территория: НОВЫЕ модули ai_ops_kit/planning/roadmap_*, ai_ops_kit/planning/delivery_planning_*;
-  # НЕ delivery_plan.py (внутренний план кита, лента B). Roadmap описывает НАПРАВЛЕНИЯ и OUTCOMES
-  # (Now/Next/Later), а не дублирует backlog ленты 3. Delivery forecast — ОЦЕНКА, называется оценкой.
-
-  - id: roadmap-now-next-later
-    title: Roadmap Now/Next/Later — направления и ожидаемые OUTCOMES, автоведение и отклонения
-    type: engineering
-    goal: roadmap-and-delivery
-    status: in_progress
-    branch: lane-4-work
-    depends_on: [product-layer-bootstrap]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, templates/product-layer/, tests/]
-    value: high
-    affects: {product_strategy: true, delivery_operations: true}
-    # PR-7: Roadmap описывает направления и ожидаемые результаты, НЕ дублирует backlog. Минимальная
-    # структура Now / Next / Later. AI Ops: создаёт roadmap, декомпозирует направления на outcomes,
-    # отслеживает прогресс, выявляет отклонения, автоматически актуализирует. Модуль
-    # ai_ops_kit/planning/roadmap_manager.py читает цели/исходы плана, строит три горизонта, отмечает
-    # отклонение. Тесты на СВОЁМ плане-фикстуре, не на живом (урок 20.08: проверка, зависящая от
-    # живого плана, тихо перестаёт проверять).
-    # Готово, когда: `ai-ops roadmap` из фикстуры строит Now/Next/Later с outcomes и краснеет при
-    # расхождении заявленного горизонта с фактическим состоянием исходов; шаблон ROADMAP.md наполнен
-    # логикой ведения, а не пустой рыбой.
-
-  - id: milestones-linked-to-backlog
-    title: Связь roadmap ↔ milestones ↔ backlog по контракту данных ленты 3
-    type: engineering
-    goal: roadmap-and-delivery
-    status: in_progress
-    branch: lane-4-milestones
-    depends_on: [roadmap-now-next-later, backlog-issue-classification]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, tests/]
-    value: high
-    affects: {delivery_operations: true, product_strategy: true}
-    # PR-7 (связывание): roadmap-направление ↔ milestone ↔ задачи backlog. Backlog читается из ленты 3
-    # ПО КОНТРАКТУ (форма задачи: type, area, milestone, dependencies), в её модули не лезем. Пока
-    # контракт не зафиксирован — согласовать в общем чате; связывание строится поверх стабильной формы.
-    # Отсутствие milestone у направления — третье состояние (не привязано ≠ пусто), а не молчаливый ноль.
-    # Готово, когда: на фикстуре backlog+roadmap каждое направление Now имеет прослеживаемую цепочку
-    # направление→milestone→задачи, а разрыв цепочки виден в отчёте, а не проглатывается.
-
-  - id: delivery-plan-with-confidence
-    title: Backlog → исполнимый delivery-план с прогнозом и delivery-risk (оценка, не факт)
-    type: engineering
-    goal: roadmap-and-delivery
-    status: todo
-    depends_on: [milestones-linked-to-backlog]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, tests/]
-    value: high
-    affects: {delivery_operations: true}
-    # PR-10: AI Ops превращает backlog в исполнимый delivery plan: выбор задач под milestone с учётом
-    # зависимостей и capacity, последовательность, прогноз deadline, выявление delivery risk. Модуль
-    # ai_ops_kit/planning/delivery_planning_*.py (НЕ delivery_plan.py — это внутренний план кита).
-    # Forecast — ОЦЕНКА: называется оценкой, не выдаётся за факт (третье состояние); при неизвестной
-    # capacity/зависимостях — честный отказ от прогноза, а не выдуманная дата.
-    # Готово, когда: на фикстуре backlog+milestone план даёт последовательность с учётом зависимостей,
-    # прогноз помечен как оценка с основанием, а недостаток данных даёт «прогноз невозможен», не число.
-
-  - id: blockers-detected-early
-    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
-    type: engineering
-    goal: roadmap-and-delivery
-    status: todo
-    depends_on: [delivery-plan-with-confidence]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/, tests/]
-    value: medium
-    affects: {delivery_operations: true, analytics_learning: true}
-    # PR-15: Здоровье delivery отдельно от здоровья продукта: выполнение milestone, velocity,
-    # blocked/overdue tasks, PR cycle time, release frequency, отклонение от плана. Ранние блокеры —
-    # до срыва срока, а не постфактум. Метрика без данных — unavailable, а не 0 (третье состояние).
-    # Готово, когда: на фикстуре delivery-плана отчёт называет блокирующие задачи и отклонение от
-    # плана ДО дедлайна; отсутствующая метрика помечена unavailable, а не подменена нулём.
+  # ── Phase 3: Roadmap & Delivery (лента 4) — ПОСТРОЕНА ─────────────────────────────────────────
+  # Четыре работы построены и влиты (#226 roadmap, #231 milestones, #233 delivery+blockers) и
+  # закрыты в history/plan-history.yaml. ИСХОДЫ цели roadmap-and-delivery ОСТАЮТСЯ false осознанно:
+  # модули собраны, покрыты тестами и мёржены, но объявлены неподключёнными (installer.UNWIRED_MODULES)
+  # — в дочке их пока не зовёт ни одна команда. Исход — это КАПABILITY, достижимая в продукте, а не
+  # «код написан». Флипнуть их в true до подключения команды `ai-ops roadmap`/`delivery` значило бы
+  # выдать построенное за работающее — ровно ложный green, против которого стоит весь контур. Флип —
+  # отдельным шагом (проводка CLI), это уже общая территория командного слоя, не ленты 4.
 
   - id: delivery-budget-is-declared
     title: Потолок поставки перестаёт быть только числом

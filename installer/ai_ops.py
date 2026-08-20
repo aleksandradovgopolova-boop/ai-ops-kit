@@ -576,15 +576,12 @@ UNWIRED_MODULES = frozenset({
     # он ПОДКЛЮЧЁН. `validate_product_layer` зовёт его подпроцессом при `ai-ops validate product-layer`
     # В дочке, чтобы посчитать состояние Missing/Invalid/Outdated/Valid по её артефактам. Без него в
     # поставке валидация вызвала бы файл, которого в дочке нет (F-033). Список сокращён фактом подключения.
-    # `planning/roadmap_manager.py` — автоведение roadmap Now/Next/Later (лента 4, PR-7). ПОСТРОЕНО,
-    # но в дочке пока НЕДОСТИЖИМО: ни одна команда/реестр/док его не зовёт (авторскую сторону
-    # по-прежнему ведёт подключённый `roadmap.py`). Пока не появится команда `ai-ops roadmap`,
-    # ставить его в поставку значило бы платить объёмом дочки за то, что там не работает — ровно
-    # класс, ради которого этот список и заведён. Уедет отсюда фактом подключения, не решением.
-    "ai_ops_kit/planning/roadmap_manager.py",
-    # `planning/roadmap_milestones.py` — связь roadmap↔milestones↔backlog (лента 4, PR-7). Та же
-    # причина: построено, но в дочке недостижимо (источник backlog даёт лента 3, команды пока нет).
-    "ai_ops_kit/planning/roadmap_milestones.py",
+    # 2026-08-20: ЧЕТЫРЕ модуля ленты 4 УБРАНЫ ИЗ СПИСКА — они ПОДКЛЮЧЕНЫ (#241). Команды `ai-ops roadmap`
+    # и `ai-ops delivery` (ai_ops_kit/cli/ai_ops_cli.py, DIRECT_INTENTS) зовут их в дочке:
+    # roadmap_manager (roadmap), roadmap_milestones + delivery_planning + delivery_planning_blockers
+    # (delivery). Не поставить их теперь значило бы дать дочке команду, ссылающуюся на отсутствующий
+    # файл (класс F-033). Сокращение списка — фактом подключения, а не решением: об этом сказал тест
+    # `test_unwired_modules_are_really_unwired` (краснел бы, останься имя, раз cli его зовёт).
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
@@ -916,7 +913,7 @@ def detect_drift(root=None):
                           "checksum_expected": digest, "checksum_actual": sha256(p)})
     for p in sorted(root.rglob("*")):
         # Байткод не часть managed-слоя: он появляется от любого запуска и дрейфом не является.
-        # Всплыло при переходе групп CI на pytest — прогон на 3.9 создавал __pycache__ внутри
+        # Всплыло при переходе групп CI на pytest — прогон создавал __pycache__ внутри
         # тестовой установки, и проверка целостности рапортовала «ДРИФТ (11 файлов)».
         if "__pycache__" in p.parts or p.suffix in (".pyc", ".pyo"):
             continue

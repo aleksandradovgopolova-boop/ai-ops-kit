@@ -50,6 +50,10 @@ INTENTS = {
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
+    # Фаза 3 (лента 4): roadmap Now/Next/Later и delivery-план из backlog.
+    "roadmap": ("roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md", "roadmap", False),
+    "delivery": ("delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры",
+                 "delivery", False),
     # v3.35.2 (тир 4): BOOTSTRAP существовал СТРОКОЙ в реестре — кит не создавал ни направления, ни
     # плана, и владелец после онбординга оставался с пониманием и без работы. Сухой прогон по
     # умолчанию: запись в чужой репозиторий он обязан увидеть до того, как она произошла.
@@ -67,7 +71,8 @@ INTENTS = {
 # `_run_intent`: расхождение означает «обработчик есть, до него не доходит» — молчаливый no-op с
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
-                  "next", "model", "bootstrap", "feedback", "session", "doctor")
+                  "next", "model", "bootstrap", "feedback", "session", "doctor",
+                  "roadmap", "delivery")
 
 
 def resolve_flags(signals):
@@ -459,6 +464,99 @@ def _run_intent(intent, task, child_root, signals, a):
             from ai_ops_kit.ui import presenter
             aud = presenter.audience_from_config(child_root)
             print(presenter.render(presenter.from_product_health(report), audience=aud))
+        return 0
+
+    if intent == "roadmap":
+        # PR-7 (лента 4): roadmap Now/Next/Later ВЫВОДИТСЯ из плана (цели + исходы), а не пишется
+        # руками. Команда read-only: строит три горизонта и сверяет их с авторским ROADMAP.md.
+        # Авторскую сторону разбирает существующий roadmap.py — второй правды об одном горизонте нет.
+        from ai_ops_kit.planning import roadmap_manager
+        from ai_ops_kit.planning import delivery_plan as _plan
+        try:
+            rep = roadmap_manager.check(child_root)
+        except _plan.PlanCorrupt as e:
+            print(f"ОШИБКА: {e}")
+            return 1
+        if rep.get("errors"):
+            for e in rep["errors"]:
+                print(f"  ✗ {e}")
+            return 1
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2))
+            return 0
+        labels = {"now": "СЕЙЧАС", "next": "СЛЕДУЮЩИЙ", "later": "ДАЛЬШЕ"}
+        for h in ("now", "next", "later"):
+            block = rep["roadmap"].get(h) or []
+            print(f"{labels[h]}:")
+            if not block:
+                print("  (пусто)")
+            for d in block:
+                print(f"  • {d['goal']}: исходы {d['reached']}/{d['total']}")
+        if not rep["authored_present"]:
+            print("  · авторского ROADMAP.md нет — сверять с ним нечего (третье состояние)")
+        for dv in rep["deviations"]:
+            print(f"  ⚠ отклонение: {dv}")
+        return 0
+
+    if intent == "delivery":
+        # PR-10/PR-15 (лента 4): backlog под milestone -> исполнимый delivery-план (порядок, прогноз-
+        # ОЦЕНКА, риски) + ранние блокеры. Backlog берётся ПО КОНТРАКТУ ленты 3 из файла
+        # (--backlog или .ai-ops/backlog.yaml); источника нет -> третье состояние, а не пустой план.
+        from ai_ops_kit.planning import roadmap_manager as _rm
+        from ai_ops_kit.planning import roadmap_milestones as _ms
+        from ai_ops_kit.planning import delivery_planning as _dpn
+        from ai_ops_kit.planning import delivery_planning_blockers as _blk
+        from ai_ops_kit.planning import delivery_plan as _plan
+        bl_arg = getattr(a, "backlog", None)
+        bpath = Path(bl_arg) if bl_arg else (child_root / ".ai-ops" / "backlog.yaml")
+        if not bpath.is_file():
+            msg = (f"источник backlog не подключён ({bpath}) — delivery-план строить не из чего. "
+                   f"Его кладёт интеграция ленты 3; форма файла: {{tasks: [...], milestones: [...]}}")
+            if js:
+                print(json.dumps({"connected": False, "note": msg}, ensure_ascii=False, indent=2))
+            else:
+                print(f"  · {msg}")
+            return 0
+        try:
+            plan = _plan.load(child_root)
+            doc = yaml.safe_load(bpath.read_text(encoding="utf-8")) or {}
+        except _plan.PlanCorrupt as e:
+            print(f"ОШИБКА: {e}")
+            return 1
+        if plan is None:
+            print("ОШИБКА: нет planning/plan.yaml — roadmap выводить не из чего")
+            return 1
+        tasks = [t for t in (doc.get("tasks") or []) if isinstance(t, dict)]
+        milestones = [m for m in (doc.get("milestones") or []) if isinstance(m, dict)]
+        capacity, today = doc.get("capacity"), doc.get("today")
+        milestone = getattr(a, "milestone", None)
+        roadmap = _rm.build(plan, _plan.load_history(child_root))
+        result = {"link": _ms.link(roadmap, milestones, tasks),
+                  "blockers": _blk.report(tasks, milestone, today)}
+        if milestone:
+            due = next((m.get("due") for m in milestones if m.get("id") == milestone), None)
+            result["plan"] = _dpn.plan(tasks, milestone, capacity=capacity,
+                                       start=today, due=due).as_dict()
+        if js:
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+            return 0
+        for dl in result["link"]["directions"]:
+            if dl["horizon"] in ("now", "next"):
+                print(f"  • {dl['goal']} [{dl['horizon']}]: "
+                      f"{len(dl['milestones'])} milestone / {len(dl['tasks'])} задач")
+        for s in result["link"]["dangling_links"]:
+            print(f"  ✗ {s}")
+        if "plan" in result:
+            fc = result["plan"]["forecast"]
+            if fc and fc.get("available"):
+                end = f" → {fc.get('estimated_end')}" if fc.get("estimated_end") else ""
+                print(f"  прогноз (ОЦЕНКА): {fc['days']} дн.{end}")
+            elif fc:
+                print(f"  прогноз: НЕДОСТУПЕН — {fc.get('reason')}")
+            for r in result["plan"]["risks"]:
+                print(f"  ⚠ {r}")
+        for b in result["blockers"]["early_blockers"]:
+            print(f"  ⚠ блокер '{b['id']}' держит {b['downstream']} задач")
         return 0
 
     # v3.36.13 (session-command-reaches-the-child): команда session перенесена из установщика в CLI,
@@ -866,6 +964,11 @@ def main(argv):
                     help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
+    ap.add_argument("--backlog", default=None,
+                    help="delivery: файл backlog {tasks, milestones, capacity, today} (лента 3); "
+                         "по умолчанию .ai-ops/backlog.yaml")
+    ap.add_argument("--milestone", default=None,
+                    help="delivery: id milestone, под который строить delivery-план и прогноз")
     ap.add_argument("--apply", action="store_true",
                     help="bootstrap: РЕАЛЬНО создать отсутствующие направление и план "
                          "(без флага — сухой прогон: показать, что будет создано)")

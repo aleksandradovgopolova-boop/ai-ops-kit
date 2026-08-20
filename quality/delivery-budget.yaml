@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах. 4.0 МБ = 4 * 1024 * 1024.
   volume_bytes: 4194304
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 495
+  substantive_files: 500
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -159,3 +159,29 @@ raises:
       свою строку хеша, и потолок обязан считать поставку так же, как её мерит тест. ЭТО НЕ ТОЛЬКО
       МОЙ РОСТ: managed_set пробил 3.9 МБ накопленно (ленты 3-4-5 клали код параллельно), и падение
       пришлось на последнего — ровно случай, который `delivery-size-warns-before-breach` ещё не закрыла.
+  # ПРИ СЛИЯНИИ С main 20.08.2026: потолок файлов пробит НАКОПЛЕННО. Пока #240 (Phase 1) ждал ревью,
+  # в main влилась #241 (лента 4) с четырьмя доставляемыми модулями roadmap/delivery, и на слиянии
+  # установленный счёт стал 497 при потолке 495. Падение пришло на последнего, кто слил — ровно
+  # случай, который лента подъёмов и документирует. Граница `quality/` (лента B) названа.
+  - at: '2026-08-20'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 495
+    to_count: 500
+    measured_before: 488
+    measured_after: 495
+    work: continuous-product-audit
+    files:
+      - ai_ops_kit/intelligence/product_audit.py
+      - ai_ops_kit/planning/roadmap_manager.py
+      - ai_ops_kit/planning/roadmap_milestones.py
+      - ai_ops_kit/planning/delivery_planning.py
+      - ai_ops_kit/planning/delivery_planning_blockers.py
+    why_it_works_in_the_child: >-
+      `product_audit` исполняется В дочке: `ai-ops audit product` считает состояние её продуктовой
+      операционки по осям (артефакты/tech/delivery/backlog/риски) read-only. Четыре модуля ленты 4
+      (roadmap_manager/roadmap_milestones/delivery_planning/delivery_planning_blockers) уже едут и
+      работают у дочки через команды `ai-ops roadmap`/`ai-ops delivery` (#241) — они названы здесь не
+      как МОЯ прибавка, а как то, что при слиянии сложилось с ней и пробило прежние 495: их работу в
+      дочке обосновала #241, а счёт стал суммой двух лент. Монолит-baseline 503 не тронут (500 < 503).
