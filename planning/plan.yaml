@@ -848,3 +848,199 @@ work:
     # `validate_product_model`); неизвестность (ветки нет, ствола нет) — предупреждение словами, а не
     # молчаливый зелёный; ствол берётся явным списком, а не `_resolve_base` (в рабочей копии работы
     # тот отдаёт саму ветку — замер 20.08); 11 тестов, три пробы, три красных мутанта.
+
+  # ── Phase 4: AI Product Operations (лента 5) ──
+  # Декомпозиция цели ai-product-operations из docs/PRODUCT-REQUIREMENTS.md (PR-12..PR-22) +
+  # health (PR-13/14/15), policy (PR-19), override (PR-20). Территория: intelligence/health_*,
+  # intelligence/drift_*, intelligence/risk_*, intelligence/team_sync*, governance/.
+  # Инвариант всех работ: цвет БЕЗ причины бесполезен — health/risk/drift называют ПРИЧИНУ, а
+  # «не проверено» ≠ «в порядке» (третье состояние unknown, не зелёный).
+
+  - id: product-health-explained
+    title: "Product Health: Green/Yellow/Red с названными причинами из состояния репо"
+    type: engineering
+    goal: ai-product-operations
+    status: in_progress
+    branch: lane-5-work
+    owner_role: engineer
+    write_scope: [ai_ops_kit/intelligence/, tests/]
+    value: high
+    affects: {product_strategy: true, analytics_learning: true}
+    # PR-13: здоровье продукта Green/Yellow/Red С ОБЪЯСНЕНИЕМ. Считается сразу, без зависимости от
+    # других лент — читает сигналы, доступные в репо (метрики через существующий product_health.py
+    # если есть их экспорт, свежесть паспорта/roadmap, открытые критичные issue). Отсутствие сигнала —
+    # состояние unknown с причиной, НЕ зелёный. Переиспользует product_health.compute, не дублирует.
+    # Готово, когда: health_product возвращает band + список названных причин; тесты на фикстурах
+    # покрывают green/yellow/red/unknown; пустой сигнал даёт unknown, а не green.
+
+  - id: tech-health-explained
+    title: "Tech Health: CI/тесты/lint/зависимости/security → Green/Yellow/Red с причинами"
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    depends_on: [product-health-explained]
+    write_scope: [ai_ops_kit/intelligence/, tests/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # PR-14: отдельно здоровье технологий — состояние CI/CD, тесты, ошибки, техдолг, зависимости,
+    # security, deployment, архитектурные риски (reuse architecture_baseline). Каждый цвет назван
+    # причиной. Разделяет общий health_common с product-health-explained (band + reasons), не копирует.
+    # Готово, когда: health_tech читает реальные сигналы (последний CI, доля прошедших тестов, lint),
+    # красный/жёлтый называет конкретную причину; тесты на фикстурах.
+
+  - id: delivery-health-explained
+    title: "Delivery Health: milestone/velocity/blocked/overdue/cycle-time → Green/Yellow/Red"
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    depends_on: [product-health-explained]
+    write_scope: [ai_ops_kit/intelligence/, tests/]
+    value: high
+    affects: {delivery_operations: true}
+    # PR-15: отдельно здоровье delivery — выполнение milestone, velocity, blocked/overdue tasks,
+    # PR cycle time, release frequency, отклонение от плана. Мягко опирается на delivery-план ленты 4
+    # ПО КОНТРАКТУ (читает данные, не правит delivery_plan.py — это территория ленты B). Пока данных
+    # ленты 4 нет — читает план кита (planning/plan.yaml) как источник состояния работ.
+    # Готово, когда: health_delivery называет причину цвета из состояния работ; тесты на фикстурах.
+
+  - id: drift-detected-between-artifacts
+    title: "Drift: расхождения документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт"
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    write_scope: [ai_ops_kit/intelligence/, tests/]
+    value: high
+    affects: {product_strategy: true, delivery_operations: true}
+    # PR-22: обнаружение расхождений между артефактами. ПЕРЕИСПОЛЬЗУЕТ существующее (repo_graph,
+    # architecture_baseline) — dp-001: дубли уже построенного отклоняем. Мягко опирается на артефакты
+    # ленты 2 (Passport/roadmap) и backlog ленты 3 ПО КОНТРАКТУ; при их отсутствии — честный unknown
+    # по недоступной паре, а не «дрейфа нет». Каждое расхождение названо: что с чем разошлось.
+    # Готово, когда: detect_drift_between_artifacts даёт список названных расхождений; тесты на
+    # фикстурах с искусственным дрейфом краснеют, без дрейфа — зелёные; недоступная пара — unknown.
+
+  - id: risks-identified-with-mitigation
+    title: "Риски (product/delivery/tech/dependency/resource/strategic) + предложенное действие"
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    depends_on: [product-health-explained, tech-health-explained, delivery-health-explained, drift-detected-between-artifacts]
+    write_scope: [ai_ops_kit/intelligence/, tests/]
+    value: high
+    affects: {product_strategy: true, delivery_operations: true, engineering_quality_security: true}
+    # PR-16: выявление рисков шести категорий с ПРЕДЛОЖЕНИЕМ действия (риск без mitigation —
+    # половина ответа). Выводится из сигналов health и drift, не из отдельного гадания. Каждый риск:
+    # категория, из какого сигнала выведен, severity, предложенное действие.
+    # Готово, когда: risk_register из фикстур health/drift даёт риски с mitigation; пустые сигналы —
+    # пустой список рисков (не выдуманные), а не unknown-как-риск.
+
+  - id: team-status-auto-generated
+    title: Авто-статус команды — прогресс milestone, изменения, блокеры, риски, ближайшие задачи
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    depends_on: [risks-identified-with-mitigation]
+    write_scope: [ai_ops_kit/intelligence/, tests/]
+    value: medium
+    affects: {delivery_operations: true, analytics_learning: true}
+    # PR-12: команда не собирает статус вручную — кит формирует прогресс milestone, изменения,
+    # блокеры, риски, ближайшие задачи, delivery forecast. Агрегирует health + risk + drift + план;
+    # не считает сам, а сводит уже посчитанное (не дублирует калькуляторы).
+    # Готово, когда: team_sync даёт машиночитаемый статус из фикстур health/risk/плана; тесты.
+
+  - id: ai-decisions-logged-with-rationale
+    title: "AI Decision Log: решение AI, почему, на каких данных, результат, менял ли человек"
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    write_scope: [ai_ops_kit/governance/, decisions/, tests/]
+    value: high
+    affects: {analytics_learning: true, delivery_operations: true}
+    # PR-18: значимые решения AI логируются. РАСШИРЯЕТ существующий decisions/registry.yaml (episodes),
+    # а НЕ заводит второй реестр (dp-001). Новый тип эпизода `actor: ai` с полями: решение, reason,
+    # data (на каких данных), outcome (результат), human_overrode (менял ли человек). Файл общий —
+    # согласовано в OS-LANES: пишу через ai_ops_kit/governance/, схему не ломаю.
+    # Готово, когда: log_ai_decision дописывает валидный AI-эпизод в registry; validate_decisions
+    # (существующий) остаётся зелёным; тесты на схему AI-эпизода.
+
+  - id: policy-engine-suggest-to-approval
+    title: "Policy Engine: Suggest → Prepare → Execute → Require approval (исполняемое поведение)"
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    write_scope: [ai_ops_kit/governance/, tests/]
+    value: high
+    affects: {delivery_operations: true, engineering_quality_security: true}
+    # PR-19: политики определяют допустимое поведение по действиям. НЕ пожелание в тексте, а
+    # исполняемый gate: по типу действия policy возвращает уровень (suggest/prepare/execute/
+    # require_approval), и вызывающий обязан ему подчиниться. require_approval блокирует до одобрения.
+    # Готово, когда: policy_engine.decide(action) возвращает уровень из POLICY.yaml; тест
+    # доказывает, что require_approval РЕАЛЬНО не пропускает действие без одобрения (не декларация).
+
+  - id: human-override-as-signal
+    title: Human override — сигнал на будущее, а не ошибка; учитывается в решениях
+    type: engineering
+    goal: ai-product-operations
+    status: todo
+    owner_role: engineer
+    depends_on: [policy-engine-suggest-to-approval, ai-decisions-logged-with-rationale]
+    write_scope: [ai_ops_kit/governance/, tests/]
+    value: medium
+    affects: {analytics_learning: true, product_strategy: true}
+    # PR-20: человек всегда может переопределить приоритет/roadmap/статус/рекомендацию. Override
+    # записывается как СИГНАЛ (в AI Decision Log, human_overrode=true), не как ошибка, и доступен
+    # будущим решениям. Готово, когда: record_override пишет override-сигнал в decision log и
+    # policy/risk его читают; тест доказывает, что override не помечается ошибкой и виден дальше.
+
+  # ── Phase 5: Autonomous Product Loop (капстоун) — ЗАБЛОКИРОВАНО до готовности Phase 4 ──
+  # Собирается, когда health/risk/drift/decision-log/policy/override готовы. Пока только заведено.
+
+  - id: policy-driven-execution
+    title: Исполнение под управлением policy — действия проходят через Suggest→…→Require approval
+    type: engineering
+    goal: autonomous-product-loop
+    status: todo
+    owner_role: engineer
+    depends_on: [policy-engine-suggest-to-approval, human-override-as-signal]
+    write_scope: [ai_ops_kit/governance/, tests/]
+    value: high
+    affects: {delivery_operations: true, engineering_quality_security: true}
+    # PR-23 (часть policy_driven_execution): автономные действия цикла исполняются ТОЛЬКО через
+    # policy engine; require_approval сохраняет human control. Заблокировано до готовности policy+override.
+    # Готово, когда: цикл не может выполнить действие в обход policy; тест на попытку обхода краснеет.
+
+  - id: learning-from-human-overrides
+    title: Обучение на человеческих override — прошлые override меняют будущие рекомендации
+    type: engineering
+    goal: autonomous-product-loop
+    status: todo
+    owner_role: engineer
+    depends_on: [human-override-as-signal, ai-decisions-logged-with-rationale]
+    write_scope: [ai_ops_kit/governance/, ai_ops_kit/intelligence/, tests/]
+    value: high
+    affects: {analytics_learning: true, product_strategy: true}
+    # PR-23 (часть learning_from_overrides): AI учитывает историю override из decision log при
+    # следующих рекомендациях (приоритет/риск). Заблокировано до готовности override+decision-log.
+    # Готово, когда: рекомендация с учётом прошлого override отличается от неё же без него; тест.
+
+  - id: autonomous-replanning-works
+    title: "Автономный цикл: Observe→Understand→Plan→Prioritize→Execute→Evaluate→Learn→Replanning"
+    type: engineering
+    goal: autonomous-product-loop
+    status: todo
+    owner_role: engineer
+    depends_on: [team-status-auto-generated, risks-identified-with-mitigation, policy-driven-execution, learning-from-human-overrides]
+    write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/governance/, tests/]
+    value: high
+    affects: {delivery_operations: true, product_strategy: true, analytics_learning: true}
+    # PR-23: конечная цель — переход от AI assistant к AI operator при сохранении human control.
+    # КАПСТОУН: собирается, когда health/risk/drift/team-sync/decision-log/policy/override готовы и
+    # сходятся четыре ленты. Заблокировано зависимостями выше.
+    # Готово, когда: цикл на фикстуре проходит все восемь шагов, реплан меняет план по сигналам,
+    # каждое действие — через policy; тест на полный проход и на сохранение human control.
