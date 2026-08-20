@@ -27,7 +27,7 @@ layers:
       объявлен отдельно: попытка втянуть сюда гейты или исполнение будет поймана.
       `integrations` (чтение GitHub как operational source of truth) здесь по той же причине:
       зависит только от `shared`, а его потребитель — `planning` (слой выше) — тянет его вниз.
-    packages: [security, ui, integrations]
+    packages: [security, ui, integrations, governance]
 
   - name: capabilities
     purpose: >

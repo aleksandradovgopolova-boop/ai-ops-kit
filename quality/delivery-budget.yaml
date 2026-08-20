@@ -27,9 +27,9 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4194304
+  volume_bytes: 4300000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 499
+  substantive_files: 510
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -144,3 +144,43 @@ raises:
       слитых лент 3/4 (footprint меряется на ветке PR, а не на итоговом main, и узнал о превышении
       падением на первом же следующем PR — это работа delivery-size-warns-before-breach, ещё
       открыта). Объём в норме (4115153 < 4194304); потолок файлов под факт (ceiling 499), без запаса.
+  - at: '2026-08-21'
+    what: volume
+    from_bytes: 4194304
+    to_bytes: 4300000
+    measured_before: 4194304
+    measured_after: 4248917
+    work: ai-product-operations (Фаза 4, лента 5) — объём
+    files:
+      - ai_ops_kit/intelligence/health_product.py
+      - ai_ops_kit/governance/policy_engine.py
+    why_it_works_in_the_child: >-
+      Код Фазы 4 (health/risk/governance) исполняется в дочке и потому едет в поставке; сложенный с
+      Фазой 1 он превысил 4.0 МБ. Подъём под факт (4194304 -> 4248917, ceiling 4300000), без запаса;
+      крупнейший кандидат на вынос по-прежнему release-claims (78 КБ), он у ленты B.
+  # Число файлов Фазы 4 (лента 5) поверх Фазы 1 (лента 2) — в КОНЦЕ raises (первым обязан идти
+  # подъём ОБЪЁМА: fail-closed проба мутирует raises[0] как volume-запись).
+  - at: '2026-08-21'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    measured_before: 499
+    measured_after: 509
+    work: ai-product-operations (Фаза 4, лента 5)
+    files:
+      - ai_ops_kit/intelligence/health_product.py
+      - ai_ops_kit/intelligence/health_tech.py
+      - ai_ops_kit/intelligence/health_delivery.py
+      - ai_ops_kit/intelligence/risk_register.py
+      - ai_ops_kit/intelligence/team_sync.py
+      - ai_ops_kit/intelligence/drift_artifacts.py
+      - ai_ops_kit/governance/policy_engine.py
+      - ai_ops_kit/governance/decision_log.py
+      - ai_ops_kit/governance/human_override.py
+    why_it_works_in_the_child: >-
+      Фаза 4 (AI Product Operations) исполняется В дочке: health продукта/тех/delivery со светофором
+      и объяснением, risk_register выявляет риски с митигацией, team_sync собирает статус,
+      governance/policy_engine определяет допустимое поведение, decision_log копит решения AI,
+      human_override принимает переопределение человека как сигнал. Без модулей в поставке команды
+      health/risk/audit были бы объявлены и недостижимы у дочки (класс F-033). Растёт только счёт
+      файлов (объём в норме), потолок под факт (499 -> 509, ceiling 510).
