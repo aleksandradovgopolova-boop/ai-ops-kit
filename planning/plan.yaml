@@ -520,30 +520,6 @@ work:
     # ГРАНИЦА: гейты остаются advisory до обкатки на child (правило dp-002). Storybook сам по себе
     # не доказательство хорошего UX — он рабочая поверхность, где дизайн виден и проверяем.
 
-  - id: events-verified-in-runtime
-    title: События аналитики проверяются в рантайме, а не объявляются в плане
-    type: engineering
-    goal: outcome-and-analytics-loop
-    status: todo
-    # ВОЗВРАЩЕНО В РАБОТУ 19.08.2026 при разборе плана. Работа была объявлена
-    # закрытой без названного результата, и улики говорят обратное:
-    #   в сообщении о закрытии: «проверка поступления событий — часть outcome-and-analytics loop»,
-    #   то есть не сделана здесь
-    # Правило кита: закрыть работу — значит назвать результат и место его
-    # перепроверки. Пометка `migrated_without_result` неприменима: она построена
-    # для работ, закрытых ДО правила, а эти закрыты сегодня.
-    owner_role: analytics
-    depends_on: [four-product-objects]
-    write_scope: [ai_ops_kit/intelligence/, templates/analytics/, tests/]
-    value: medium
-    affects: {analytics_learning: true, product_strategy: true}
-    # Цепочка: Outcome Contract -> Tracking Plan -> реализация -> ПРОВЕРКА ПОСТУПЛЕНИЯ событий ->
-    # Product Health -> инсайты -> следующий discovery. Существующие workflow ANALYTICS и INSIGHTS
-    # дают основу; их нужно включить в ОДИН вертикальный сценарий, а не развивать изолированно.
-    # Ключевое: «события объявлены» и «события доезжают» — разные факты, и второй проверяется
-    # рантаймом. Тот же инвариант, что `unavailable != 0`.
-
-  # ─── nightly-product-review (решение владельца 14.08.2026, ep-2026-08-14-nightly-review) ──────
   - id: night-review-autofix-class-a
     title: Класс A правок исполняется в worktree и собирается в один draft PR за ночь
     type: engineering

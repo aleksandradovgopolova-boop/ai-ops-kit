@@ -339,6 +339,19 @@ def run_checks(root: Path, timeout: int = 120) -> list[dict]:
             out.append({**rec, "ok": None, "detail": f"позвали неверно — {detail}"})
             continue
         out.append({**rec, "ok": r.returncode == 0, "detail": detail})
+
+    # ПОСТУПЛЕНИЕ СОБЫТИЙ — ОТДЕЛЬНЫЙ ВОПРОС, И ЕГО НЕ ЗАКРЫВАЕТ КАТАЛОГ. `validate_event_catalog`
+    # отвечает «что мы обещали слать»; доехало ли хоть одно — не знает никто. Цепочка продукта
+    # (Outcome Contract -> Tracking Plan -> реализация -> ПОСТУПЛЕНИЕ -> Product Health) рвётся
+    # ровно здесь и рвётся молча: план выглядит выполненным, дашборд пустой.
+    from ai_ops_kit.intelligence import event_arrival
+    rep = event_arrival.assess(root)
+    out.append({
+        "check": "поступление событий",
+        "subject": "объявленные события доезжают в аналитику",
+        "ok": (None if not rep.get("checked") else not rep.get("missing")),
+        "detail": event_arrival.render(rep).replace("\n", "; ")[:220],
+    })
     return out
 
 
