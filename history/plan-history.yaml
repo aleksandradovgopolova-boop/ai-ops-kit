@@ -3698,32 +3698,84 @@ work:
     #       обёртка ./ai-ops (B2-15/3.35.1). Работает отдельная команда `resume`; подсказка обязана
     #       печатать её. Готово, когда напечатанная китом команда продолжения исполняется как есть, и это
     #       покрыто пробой.
-  - id: blockers-detected-early
-    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
+
+  # ── Фаза 3 (лента 4): Roadmap & Delivery — четыре работы построены и влиты 20.08.2026 ──────────
+  # ИСХОДЫ цели roadmap-and-delivery оставлены false осознанно: модули собраны и мёржены, но
+  # объявлены неподключёнными (installer.UNWIRED_MODULES) — в дочке их пока не зовёт команда. Закрыт
+  # ПОСТРОЙ-РЕЗУЛЬТАТ работы, а не капability продукта; флип исходов — за проводкой CLI.
+  - id: roadmap-now-next-later
+    title: Roadmap Now/Next/Later — направления и ожидаемые OUTCOMES, автоведение и отклонения
+    goal: roadmap-and-delivery
     status: done
     closed_at: '2026-08-20'
-    pr: 234
+    pr: 226
+    evidence: tests/unit/test_roadmap_manager.py
     result: >-
-      ЗАКРЫТО 20.08.2026 координатором (централизованный учёт плана). Работа ленты 4 влита через PR
-      #234 (ветка lane-4-blockers, коммиты в main), но в плане осталась in_progress — закрываю по
-      факту мёржа. Ранние блокеры и delivery-health (velocity, blocked/overdue, PR cycle time,
-      отклонение от плана) реализованы лентой 4 в рамках Фазы 3. Результат перепроверяется прогоном
-      ленты и её тестами в #234.
-    # РАЗБОР, как записан в плане:
-    #   - id: blockers-detected-early
-    #     title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
-    #     type: engineering
-    #     goal: roadmap-and-delivery
-    #     status: in_progress
-    #     branch: lane-4-blockers
-    #     depends_on: [delivery-plan-with-confidence]
-    #     owner_role: engineer
-    #     write_scope: [ai_ops_kit/planning/, tests/]
-    #     value: medium
-    #     affects: {delivery_operations: true, analytics_learning: true}
-    #     # PR-15: Здоровье delivery отдельно от здоровья продукта: выполнение milestone, velocity,
-    #     # blocked/overdue tasks, PR cycle time, release frequency, отклонение от плана. Ранние блокеры —
-    #     # до срыва срока, а не постфактум. Метрика без данных — unavailable, а не 0 (третье состояние).
-    #     # Готово, когда: на фикстуре delivery-плана отчёт называет блокирующие задачи и отклонение от
-    #     # плана ДО дедлайна; отсутствующая метрика помечена unavailable, а не подменена нулём.
-    #
+      ЗАКРЫТО 20.08.2026 (PR #226). Модуль ai_ops_kit/planning/roadmap_manager.py ВЫВОДИТ горизонты
+      Now/Next/Later из плана: направление = цель с её исходами, горизонт считается по состоянию
+      исходов и работ (shipped/now/next/later), ROADMAP.md собирается из плана, отклонение авторского
+      файла от выведенного краснеет (declared-vs-derived). Шов с существующим roadmap.py: тот
+      разбирает АВТОРСКИЙ файл, этот ВЫВОДИТ — второй правды об одном горизонте нет, генерация читается
+      его же парсером. ЗАМЕР: 6 тестов на фикстуре (positive/fail-closed/side-effect), ruff 0, живьём
+      на плане кита roadmap-and-delivery корректно попал в «Следующий», check нашёл 10 реальных
+      отклонений в ROADMAP.md кита. Модуль в UNWIRED_MODULES — footprint не растёт.
+    # РАЗБОР (как стоял в плане):
+    #   goal: roadmap-and-delivery; PR-7; write_scope: [ai_ops_kit/planning/, templates/product-layer/, tests/]
+    #   Готово, когда: `ai-ops roadmap` из фикстуры строит Now/Next/Later с outcomes и краснеет при
+    #   расхождении заявленного горизонта с фактическим состоянием исходов.
+  - id: milestones-linked-to-backlog
+    title: Связь roadmap ↔ milestones ↔ backlog по контракту данных ленты 3
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 231
+    evidence: tests/unit/test_roadmap_milestones.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (PR #231). Модуль ai_ops_kit/planning/roadmap_milestones.py связывает
+      направление→milestone→задачи по КОНТРАКТУ ДАННЫХ ленты 3 (не читает GitHub, не трогает её
+      модули; форма задачи — в докстроке). milestone привязан к направлению через roadmap-ссылку или
+      задачи в нём; задача — напрямую или через milestone. Разрыв цепочки (Now без milestone,
+      milestone без задач, висячая ссылка, сирота) — находка отчёта, не молчаливый ноль. Третье
+      состояние: «источник backlog не подключён» ≠ «backlog пуст». ЗАМЕР: 5 тестов на фикстуре, ruff 0,
+      живьём ghost-milestone пойман сиротой. Модуль в UNWIRED_MODULES.
+    # РАЗБОР: goal: roadmap-and-delivery; PR-7 (связывание); depends_on: [roadmap-now-next-later,
+    #   backlog-issue-classification]. Готово, когда цепочка направление→milestone→задачи прослеживается,
+    #   а разрыв виден в отчёте.
+  - id: delivery-plan-with-confidence
+    title: Backlog → исполнимый delivery-план с прогнозом и delivery-risk (оценка, не факт)
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 233
+    evidence: tests/unit/test_delivery_planning.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (PR #233). Модуль ai_ops_kit/planning/delivery_planning.py (НЕ delivery_plan.py):
+      выбор открытых задач milestone, топологический порядок по зависимостям (цикл — риск), прогноз
+      срока, delivery-риски (зависимость вне milestone, срыв дедлайна). ГЛАВНЫЙ ИНВАРИАНТ: прогноз —
+      ОЦЕНКА, не факт: без capacity или без effort хотя бы одной задачи отказывается считать
+      (available=false с причиной), а не выдумывает дату и не подставляет ноль; помечен kind=estimate.
+      Дата старта — аргумент, не системные часы. ЗАМЕР: 5 тестов на фикстуре, ruff 0. Модуль в
+      UNWIRED_MODULES.
+    # РАЗБОР: goal: roadmap-and-delivery; PR-10; depends_on: [milestones-linked-to-backlog].
+    #   Готово, когда план даёт последовательность с учётом зависимостей, прогноз помечен оценкой с
+    #   основанием, а недостаток данных даёт «прогноз невозможен», не число.
+  - id: blockers-detected-early
+    title: Ранние блокеры и delivery health — velocity, blocked/overdue, cycle time, отклонение
+    goal: roadmap-and-delivery
+    status: done
+    closed_at: '2026-08-20'
+    pr: 233
+    evidence: tests/unit/test_delivery_planning_blockers.py
+    result: >-
+      ЗАКРЫТО 20.08.2026 (влито в main через PR #233; свой PR #234 был смержен в ветку lane-4-delivery
+      прежде, чем та вошла в main — стопка, ветка сама влита, поэтому ничего не потеряно). Модуль
+      ai_ops_kit/planning/delivery_planning_blockers.py находит ранние блокеры по графу зависимостей
+      (транзитивные зависимые, ранжирование по влиянию — узкое место видно ДО срыва срока) и
+      ПРОИЗВОДИТ выгрузку .ai-ops/delivery-signals.yaml в форме, что читает health_delivery ЛЕНТЫ 5
+      (milestone.done/total, overdue.count). ГРАНИЦА С ЛЕНТОЙ 5: band Green/Yellow/Red считает она,
+      здесь только сигналы — двух правд об одном числе нет. Третье состояние: просрочку без «сегодня»/due
+      и velocity без closed_at не выдаём числом. ЗАМЕР: 7 тестов на фикстуре, ruff 0. Модуль в
+      UNWIRED_MODULES.
+    # РАЗБОР: goal: roadmap-and-delivery; PR-15; depends_on: [delivery-plan-with-confidence].
+    #   Готово, когда отчёт называет блокирующие задачи ДО дедлайна, а отсутствующая метрика помечена
+    #   unavailable, не нулём.
