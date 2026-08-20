@@ -146,3 +146,48 @@ def test_an_unconfirmed_baseline_is_named_in_the_brief(repo):
     assert "не подтверждённая точка отсчёта" in brief, brief[:600]
     nr.confirm_review(repo)
     assert "не подтверждённая точка отсчёта" not in nr.format_brief(nr.collect_delta(repo), repo)
+
+
+@pytest.mark.unit
+def test_a_document_of_another_kind_is_not_a_finding(tmp_path):
+    """Ошибка вызова ВТОРОГО РОДА: файл есть, валидатор запускается — и проверяет не тот документ.
+
+    ЗАМЕР 20.08.2026. Проверке «план» подали `planning/plan.yaml` (kind: delivery-plan), а
+    `validate_plan_artifact` проверяет RunPlan ФИЧИ (kind: plan-artifact). Он честно ответил
+    «kind должен быть plan-artifact» — а обзор выдал этот ответ за РАСХОЖДЕНИЕ и трижды сообщил
+    владельцу о дефекте, которого нет.
+
+    Первая защита ловила ответ «ты позвал не так» по тексту. Эта разновидность так не ловится:
+    вызов синтаксически верен. Поэтому род документа сверяется ДО запуска — по его же полю `kind`.
+
+    Урок шире самого случая: механизм закрывает тот класс, который ты понял, а не тот, который
+    существует. Ради этого v0 обкатывается на ките, а не сразу в поле: у владельца такая находка
+    отправила бы чинить исправный план, и доверие к утреннему брифу кончилось бы на первой неделе.
+    """
+    root = tmp_path / "kit"
+    (root / "ai_ops_kit" / "validation").mkdir(parents=True)
+    (root / "ai_ops_kit" / "validation" / "validate_plan_artifact.py").write_text(
+        "import sys\nprint('kind должен быть plan-artifact')\nsys.exit(1)\n", encoding="utf-8")
+    (root / "features" / "wi-1").mkdir(parents=True)
+    (root / "features" / "wi-1" / "plan.yaml").write_text(
+        "kind: delivery-plan\n", encoding="utf-8")     # НЕ тот род
+
+    f = next(x for x in nr.run_checks(root) if x["check"] == "план работы")
+    assert f["ok"] is None, f"документ другого рода выдан за расхождение: {f}"
+    assert "рода" in f["detail"] and "plan-artifact" in f["detail"], f
+
+
+@pytest.mark.unit
+def test_the_right_kind_is_actually_checked(tmp_path):
+    """Обратная сторона: род совпал — валидатор ЗАПУСКАЕТСЯ, и его вердикт идёт в бриф."""
+    root = tmp_path / "kit"
+    (root / "ai_ops_kit" / "validation").mkdir(parents=True)
+    (root / "ai_ops_kit" / "validation" / "validate_plan_artifact.py").write_text(
+        "import sys\nprint('PLAN-ARTIFACT: связей не хватает')\nsys.exit(1)\n", encoding="utf-8")
+    (root / "features" / "wi-1").mkdir(parents=True)
+    (root / "features" / "wi-1" / "plan.yaml").write_text(
+        "kind: plan-artifact\n", encoding="utf-8")
+
+    f = next(x for x in nr.run_checks(root) if x["check"] == "план работы")
+    assert f["ok"] is False, f"совпавший род не дошёл до запуска: {f}"
+    assert "связей не хватает" in f["detail"], f

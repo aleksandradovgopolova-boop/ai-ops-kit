@@ -247,10 +247,18 @@ CHECKS = (
      "subject": "связность артефактов между собой"},
     {"title": "заявления", "name": "validate_claims", "how": "none",
      "subject": "публичные числа против кода"},
-    {"title": "план", "name": "validate_plan_artifact", "how": "artifact",
-     "artifact": "planning/plan.yaml", "subject": "план и его связность"},
+    # РОД ДОКУМЕНТА ОБЪЯВЛЕН, И ЭТО НЕ ПЕДАНТИЗМ (замер 20.08.2026). Здесь стояло
+    # `planning/plan.yaml` — и `validate_plan_artifact` честно ответил «kind должен быть
+    # plan-artifact», потому что проверяет RunPlan ФИЧИ, а не delivery-план репозитория.
+    # Обзор выдал этот ответ за РАСХОЖДЕНИЕ и трижды сообщил владельцу о дефекте, которого нет.
+    # Ошибка вызова второго рода: файл существует, валидатор запускается — и проверяет не то.
+    # Поэтому род документа сверяется ДО запуска: не совпал — «не проверено», а не находка.
+    {"title": "план работы", "name": "validate_plan_artifact", "how": "artifact",
+     "artifact": "features/*/plan.yaml", "kind": "plan-artifact",
+     "subject": "RunPlan фичи и его связность"},
     {"title": "события", "name": "validate_event_catalog", "how": "artifact",
-     "artifact": "analytics/events.yaml", "subject": "каталог событий аналитики"},
+     "artifact": "analytics/events.yaml", "kind": None,
+     "subject": "каталог событий аналитики"},
 )
 
 
@@ -258,6 +266,20 @@ def _validation_dir(root: Path) -> Path:
     """Где лежат валидаторы: в дочке — поставка, в самом ките — свой каталог."""
     shipped = Path(root) / ".ai" / "managed" / "ai_ops_kit" / "validation"
     return shipped if shipped.is_dir() else Path(root) / "ai_ops_kit" / "validation"
+
+
+def _artifact_kind(path: Path) -> str | None:
+    """Род документа из его же поля `kind`. -> str | None (не прочитали).
+
+    Нужен, чтобы не звать валидатор на документе другого рода: он честно ответит «не то», а обзор
+    выдаст этот ответ за расхождение продукта. Ровно так 20.08 родилась ложная находка про
+    `write_scope`, о которой владельцу сообщили трижды.
+    """
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    return str(doc.get("kind")) if isinstance(doc, dict) and doc.get("kind") else None
 
 
 def run_checks(root: Path, timeout: int = 120) -> list[dict]:
@@ -281,11 +303,25 @@ def run_checks(root: Path, timeout: int = 120) -> list[dict]:
         elif how == "none":
             argv = []
         else:
-            art = Path(root) / spec["artifact"]
-            if not art.is_file():
+            pattern = spec["artifact"]
+            if "*" in pattern:
+                found = sorted(Path(root).glob(pattern))
+                art = found[0] if found else None
+            else:
+                art = Path(root) / pattern
+                art = art if art.is_file() else None
+            if art is None:
                 out.append({**rec, "ok": None,
-                            "detail": f"артефакта {spec['artifact']} нет — проверять нечего"})
+                            "detail": f"артефакта {pattern} нет — проверять нечего"})
                 continue
+            want = spec.get("kind")
+            if want:
+                got = _artifact_kind(art)
+                if got != want:
+                    out.append({**rec, "ok": None,
+                                "detail": (f"{art.name}: документ рода '{got or 'неизвестен'}', "
+                                           f"а проверка про '{want}' — проверять нечем")})
+                    continue
             argv = [str(art)]
         try:
             r = subprocess.run([sys.executable, str(script), *argv],
