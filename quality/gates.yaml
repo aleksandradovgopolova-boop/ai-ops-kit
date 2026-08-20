@@ -19,6 +19,7 @@ mvp_blocking_gates:
 gates:
   intake_completeness:
     id: intake_completeness
+    closed_by: validator
     purpose: Полнота intake и классификации до старта.
     stage: intake
     blocking: true
@@ -33,6 +34,7 @@ gates:
 
   regression_test_evidence:
     id: regression_test_evidence
+    closed_by: validator
     purpose: >
       Правка ПОДТВЕРЖДЕНА: тест, приехавший вместе с ней, падает на коде ДО правки и проходит
       после. implementation_verification доказывает, что ничего не сломалось; этот гейт — что
@@ -53,6 +55,7 @@ gates:
 
   concurrency_preflight:
     id: concurrency_preflight
+    closed_by: validator
     purpose: >
       До старта проверить коллизии параллельной работы: открытые PR и свежие мержи в base
       по целевым файлам + перепроверка премиссы против актуального main. Класс
@@ -70,6 +73,7 @@ gates:
 
   contour_consistency:
     id: contour_consistency
+    closed_by: validator
     purpose: >
       Связность контуров продукта (v3.35 Product Operating Model): изменение обязано быть
       согласовано с источниками истины тех контуров, которые оно затрагивает. Класс дефекта —
@@ -98,6 +102,7 @@ gates:
 
   own_medicine:
     id: own_medicine
+    closed_by: validator
     purpose: >
       Кит применяет к СЕБЕ ту культуру, которую доставляет дочкам. Перечень берётся из кода
       доставки (`deliver_assets` / `cmd_init`, разбор AST), а не переписывается руками, поэтому
@@ -125,6 +130,7 @@ gates:
 
   event_contract_consistency:
     id: event_contract_consistency
+    closed_by: validator
     purpose: >
       Имена событий согласованы во всех слоях: единый каталог, каноничная грамматика,
       audit/analytics ссылаются на domain через maps_to, domain не подменён AuditEvent.
@@ -140,6 +146,7 @@ gates:
 
   surface_wiring_consistency:
     id: surface_wiring_consistency
+    closed_by: validator
     purpose: >
       Поверхность согласована во всех слоях: каждый путь, который умеет ядро, подключён в КАЖДОЙ
       обёртке (прод/dev/serverless), и каждый путь, который вызывает клиент, кем-то обслуживается.
@@ -159,6 +166,7 @@ gates:
 
   requirements:
     id: requirements
+    closed_by: validator
     purpose: Требования проверяемы, полны, тестируемы.
     stage: requirements-review
     blocking: true
@@ -175,6 +183,7 @@ gates:
 
   specification:
     id: specification
+    closed_by: validator
     purpose: Спецификация полна и тестируема (delta specs валидны).
     stage: specification
     blocking: true
@@ -188,6 +197,7 @@ gates:
 
   plan_readiness:
     id: plan_readiness
+    closed_by: validator
     purpose: План исполним; зависимости и write-scope определены.
     stage: plan-critique
     blocking: true
@@ -201,6 +211,7 @@ gates:
 
   implementation_verification:
     id: implementation_verification
+    closed_by: validator
     purpose: Сборка/линт/тесты пройдены на конкретной ревизии.
     stage: verify
     blocking: true
@@ -232,6 +243,7 @@ gates:
 
   code_review:
     id: code_review
+    closed_by: judge
     purpose: Независимое ревью кода (judge != writer).
     stage: review
     blocking: true
@@ -245,6 +257,7 @@ gates:
 
   security:
     id: security
+    closed_by: judge
     purpose: Проверка безопасности; блокирует рискованные/необратимые изменения.
     stage: review
     blocking: true
@@ -257,6 +270,7 @@ gates:
 
   architecture_review:
     id: architecture_review
+    closed_by: judge
     purpose: >
       Независимая архитектурная проверка (judge != writer) при архитектурно значимых изменениях:
       границы модулей, совместимость API, модель данных/миграции, интеграции, режимы отказа, деплой,
@@ -275,6 +289,7 @@ gates:
 
   deploy_readiness:
     id: deploy_readiness
+    closed_by: validator
     purpose: >
       ЧЕСТНАЯ зрелость поставки при изменении деплоя: лестница absent/configured/runnable/verified
       (tools/deploy_readiness.py). Кит НЕ деплоит — он не даёт врать о готовности. Обязателен ТОЛЬКО
@@ -295,6 +310,7 @@ gates:
 
   spec_synchronization:
     id: spec_synchronization
+    closed_by: validator
     purpose: Delta specs синхронизированы с main specs (детерминированный CLI).
     stage: sync
     blocking: true
@@ -313,6 +329,7 @@ gates:
   # --- non-blocking / для будущих workflow (объявлены) ---
   evidence:
     id: evidence
+    closed_by: judge
     purpose: Каждый существенный вывод имеет источник и статус.
     stage: fact-check
     blocking: true
@@ -322,6 +339,7 @@ gates:
     required_evidence: [source_per_claim, capability_status]
   stakeholder_readiness:
     id: stakeholder_readiness
+    closed_by: judge
     purpose: Материал готов к передаче стейкхолдерам.
     stage: stakeholder-handoff
     blocking: false
@@ -330,6 +348,7 @@ gates:
     applicability: [PRODUCT]
   documentation_drift:
     id: documentation_drift
+    closed_by: writer
     purpose: Документация не отстаёт от кода/поведения (advisory до обкатки).
     stage: result
     blocking: false
@@ -338,6 +357,7 @@ gates:
     applicability: [all]
   archive_readiness:
     id: archive_readiness
+    closed_by: validator
     purpose: Изменение архивируется только если проверено.
     stage: archive
     blocking: true
@@ -357,6 +377,7 @@ gates:
   # они применимы и к QUICK/ENGINEERING — перевод после обкатки в этих workflow.
   discovery_completeness:
     id: discovery_completeness
+    closed_by: judge
     purpose: Discovery завершён — проблема, аудитория, гипотезы и метрики успеха зафиксированы.
     stage: discovery-review
     blocking: true
@@ -368,6 +389,7 @@ gates:
 
   ux_review:
     id: ux_review
+    closed_by: judge
     purpose: UX проверен — flow, состояния Empty/Loading/Error/Success, responsive, copy.
     stage: design-review
     blocking: true
@@ -383,6 +405,7 @@ gates:
 
   accessibility_review:
     id: accessibility_review
+    closed_by: judge
     purpose: Доступность проверена — клавиатура, фокус, контраст (WCAG AA), screen-reader метки, состояния не только цветом.
     stage: accessibility-review
     blocking: true
@@ -397,6 +420,7 @@ gates:
 
   visual_regression:
     id: visual_regression
+    closed_by: judge
     purpose: Изменённые экраны сверены с визуальным baseline — незапланированных регрессий нет.
     stage: verify
     blocking: true
@@ -409,6 +433,7 @@ gates:
 
   design_system_usage:
     id: design_system_usage
+    closed_by: judge
     purpose: Использована дизайн-система — существующие компоненты и токены; новые обоснованы.
     stage: design-system-review
     blocking: true
@@ -422,6 +447,7 @@ gates:
 
   analytics_design_readiness:
     id: analytics_design_readiness
+    closed_by: judge
     purpose: >
       Аналитика спроектирована ДО merge: tracking plan, event schema, product metrics,
       dashboard spec. v3.27.2 WP3: разделён из analytics_readiness — design-часть применяется
@@ -437,6 +463,7 @@ gates:
 
   analytics_runtime_verification:
     id: analytics_runtime_verification
+    closed_by: judge
     purpose: >
       Аналитика проверена ПОСЛЕ deploy: события реально приходят, свойства корректны,
       нет PII, идентификация и cohort работают, dashboard получает данные.
@@ -453,6 +480,7 @@ gates:
 
   documentation_updated:
     id: documentation_updated
+    closed_by: writer
     purpose: Документация обновлена вместе с изменением (Definition of Done).
     stage: result
     blocking: false
@@ -464,6 +492,7 @@ gates:
 
   release_safety:
     id: release_safety
+    closed_by: judge
     purpose: Релиз безопасен — feature flag предусмотрен, rollback описан, rollout спланирован.
     stage: release
     blocking: false
@@ -475,6 +504,7 @@ gates:
 
   ai_eval:
     id: ai_eval
+    closed_by: judge
     purpose: AI-фича прошла eval'ы против success criteria; guardrails и регрессии проверены.
     stage: verify
     blocking: true
@@ -488,6 +518,7 @@ gates:
 
   ai_red_team:
     id: ai_red_team
+    closed_by: judge
     purpose: AI-фича проверена адверсариально — инъекции, jailbreak, утечки PII/промпта, границы агентности.
     stage: red-team
     blocking: true          # Ф0: безопасность AI-фичи — блокирующая по применимости (jailbreak/injection/PII)
@@ -501,6 +532,7 @@ gates:
 
   decision_quality:
     id: decision_quality
+    closed_by: judge
     purpose: Решение принято по recommendation-first; обратимость классифицирована; сверено с принципами.
     stage: decision-review
     blocking: false          # non-blocking до обкатки
@@ -515,6 +547,7 @@ gates:
 
   knowledge_integrity:
     id: knowledge_integrity
+    closed_by: validator
     purpose: Ссылки пакета резолвятся и утверждения документации согласованы с кодом (drift-control).
     stage: sync
     blocking: false          # non-blocking до обкатки; ссылочная часть уже зелёная в CI
@@ -527,6 +560,7 @@ gates:
 
   knowledge_freshness:
     id: knowledge_freshness
+    closed_by: validator
     purpose: Размеченные знания не протухли (класс устаревания из FreshnessPolicy).
     stage: sync
     blocking: false          # advisory: протухший документ — сигнал, не блок
@@ -539,6 +573,7 @@ gates:
 
   observability_readiness:
     id: observability_readiness
+    closed_by: judge
     purpose: Мониторинг определён — логи, метрики, алерты, SLO для нового поведения.
     stage: release
     blocking: false

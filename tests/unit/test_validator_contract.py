@@ -56,6 +56,7 @@ UNIFORM_CHECK_VALIDATORS = [
     "validate_release_claims",
     "validate_requirements_artifact",
     "validate_reviewer_result",
+    "validate_sandbox_boundary",
     "validate_security_domains",
     "validate_spec_artifact",
     "validate_storybook_evidence",

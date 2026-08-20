@@ -428,7 +428,8 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     Claude ЧИТАЕТ репо (информированное предложение), но НЕ может писать/исполнять (нет Write/Edit/Bash/git) ->
     НЕ трогает FS/git/сеть, НЕ пушит, НЕ создаёт PR, НЕ меняет checkout, НЕ владеет исполнением/lifecycle.
     Модель ПРЕДЛАГАЕТ действия ТЕКСТОМ (JSON tool-loop); применяет их КИТ через свой sandbox/broker
-    (scope-enforced, exact-SHA, gates, delivery). AI Ops = control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ
+    (scope-enforced, exact-SHA, gates, delivery) — это policy enforcement, не security isolation:
+    брокер управляет операцией и областью записи, но сеть и ресурсы им не ограничены. AI Ops = control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ
     исполнитель. (Полный tool-less `--tools ""` авторит вслепую -> невалидная спека; read-only даёт контекст
     без права действия — доказано fs-rc3.)
 
@@ -494,9 +495,13 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
 
     def _transient(text):
         t = (text or "").lower()
+        # 19.08.2026 (заявка #160): список стал ЕДИНСТВЕННЫМ основанием повторять, поэтому в нём
+        # обязано быть и само слово. Сообщение, прямо называющее себя транзиентным, повторять
+        # можно; поймано существующим селфтестом провайдеров, чей образец так и звучал.
         return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
                                     "500", "502", "503", "504", "internal server error",
-                                    "temporarily", "server_error", "timeout", "timed out", "connection"))
+                                    "temporarily", "transient", "server_error",
+                                    "timeout", "timed out", "connection"))
 
     def _backoff(n):
         time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
@@ -538,7 +543,26 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
                          u.get("input_tokens"), u.get("output_tokens"), time.monotonic() - _t0,
                          provider="claude-cli", cost=d.get("total_cost_usd"))
             return d.get("result") or ""
-        last = _human_error(r.stderr or r.stdout or "")   # rc!=0 (сеть/5xx/оверлоад) -> ретрай с backoff
+        last = _human_error(r.stderr or r.stdout or "")
+        # ПОВТОР ТОЛЬКО ТАМ, ГДЕ ОТКАЗ ТРАНЗИЕНТНЫЙ (заявка #160, 19.08.2026).
+        #
+        # Здесь стоял безусловный ретрай: при ЛЮБОМ ненулевом коде делалось пять попыток с
+        # экспоненциальным backoff. Замер поля: `claude-cli` внутри активной сессии Claude Code не
+        # работает СТРУКТУРНО — отказ детерминированный, и пятый повтор не делает систему
+        # надёжнее, он делает её медленнее ровно в пять раз плюс сумма пауз (до ~60 секунд).
+        #
+        # ГРАНИЦА, КОТОРУЮ НЕЛЬЗЯ ПЕРЕЙТИ: backoff на транзиентном 529 введён замером поля (F-011,
+        # квалификация 3.27.7), и снимать его нельзя — иначе вернётся дефект, стоивший раунда
+        # квалификации. Поэтому правка ОТЛИЧАЕТ ДВА КЛАССА, а не отменяет повтор: список
+        # транзиентных признаков (`_transient`) остаётся единственным основанием повторять, и 529,
+        # 429, 5xx, таймауты и сетевые сбои в нём есть.
+        #
+        # Тот же признак уже применялся к синтетическому конверту `is_error` выше — ветка rc!=0
+        # просто осталась без него. Расхождение двух веток одного решения и есть дефект.
+        if not _transient(last):
+            raise RuntimeError(
+                "claude -p отказал структурно (код %s), повтор не назначен — он не сделал бы "
+                "систему надёжнее, только медленнее: %s" % (r.returncode, last))
         if _attempt + 1 >= max_attempts:
             break
         _backoff(_attempt)
