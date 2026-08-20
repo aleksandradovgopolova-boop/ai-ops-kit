@@ -623,9 +623,23 @@ RUNTIME_VALIDATORS = frozenset({
 })
 
 
+# ОТДЕЛЬНЫЕ ФАЙЛЫ, А НЕ ПРЕФИКСЫ: исключить каталог целиком нельзя — рядом лежат реестры, которые
+# дочке нужны. Список ЯВНЫЙ по тому же правилу, что DEV_ONLY_PREFIXES: исключение из поставки не
+# должно быть побочным эффектом (`test_managed_set_excludes_are_declared_not_implicit`).
+DEV_ONLY_FILES = frozenset({
+    # 20.08.2026, работа `release-claims-stays-in-the-kit`. Замер: `registry/release-claims.yaml`
+    # весил 82 214 Б и ехал в КАЖДУЮ дочку, из них 61 336 Б (75%) — ключ `patch_note`, одна строка
+    # релизной прозы на 37 080 символов. В дочке его не читает НИКТО: единственный потребитель —
+    # `validate_release_claims`, а он не входит в RUNTIME_VALIDATORS. Проза переехала сюда; сам
+    # claims остался в поставке, потому что у него ЕСТЬ читатель в дочке — `package_channel`
+    # смотрит `channel` (18 Б) из `init`/`update`/`doctor`.
+    "registry/release-notes.yaml",
+})
+
+
 def is_runtime_asset(rel):
     """Едет ли файл managed_set в child-репозиторий? False — ассет разработки кита."""
-    if rel.startswith(DEV_ONLY_PREFIXES):
+    if rel.startswith(DEV_ONLY_PREFIXES) or rel in DEV_ONLY_FILES:
         return False
     if rel in UNWIRED_MODULES:          # построено, но в дочке недостижимо — см. UNWIRED_MODULES
         return False

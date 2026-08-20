@@ -1,0 +1,26 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-кит-останавливает-повтор-2dbfc337
+at: '2026-08-20T11:24:40+00:00'
+statement: 'Кит останавливает повторный прогон и сам пишет: ''Передай resume=True
+  (--resume) чтобы ПРОДОЛЖИТЬ''. Флага --resume у него нет: argparse принимает --resume
+  как сокращение --resume-from и падает с ''error: argument --resume-from: expected
+  one argument''. То есть кит печатает команду, которую сам же не понимает — ровно
+  тот случай, против которого сделана обёртка ./ai-ops. Работает отдельная команда
+  resume.'
+observation_class: defect
+severity: p1
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: command
+  command: ai-ops run --feature quick-open-palette --execute --resume
+  output: 'ai_ops_cli.py: error: argument --resume-from: expected one argument'
+state: became_work
+state_reason: заведена работа resume-hint-is-a-runnable-command (план кита, 20.08.2026)
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'
