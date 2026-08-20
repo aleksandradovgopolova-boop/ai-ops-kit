@@ -29,11 +29,13 @@ ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
   volume_bytes: 4194304
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 490
+  substantive_files: 499
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
 raises:
+  # Порядок: первым идёт подъём ОБЪЁМА (fail-closed проба test_a_raise_that_does_not_raise мутирует
+  # raises[0] как volume-запись). Подъём числа файлов Фазы 1 — в конце ленты.
   - at: '2026-08-20'
     what: volume
     from_bytes: 3879731            # 3.7 МБ
@@ -124,3 +126,21 @@ raises:
       файле CLI). Запас на main был 3 290 Б — потолок был исчерпан лентой 4 (roadmap/delivery,
       +55 КБ поверх 3.9 без подъёма) ДО этой работы, а узнал он об этом падением на ней: ровно то,
       что `delivery-size-warns-before-breach` в плане ещё не закрыла.
+  - at: '2026-08-21'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    measured_before: 490
+    measured_after: 498
+    work: product-operating-layer финиш (лента 2, Фаза 1)
+    files:
+      - ai_ops_kit/intelligence/product_audit.py
+      - ai_ops_kit/validation/validate_product_layer.py
+    why_it_works_in_the_child: >-
+      Финиш Фазы 1: product_audit даёт `ai-ops audit product` (машиночитаемый отчёт в дочке),
+      validate_product_layer считает Missing/Invalid/Outdated/Valid по .ai-ops/ дочки — оба
+      исполняются В дочке, иначе валидация звала бы отсутствующее (класс F-033). ЧЕСТНО О ЧИСЛЕ:
+      подъём 490 -> 498 накопительный, не только этих двух файлов — main дрейфанул выше 490 от
+      слитых лент 3/4 (footprint меряется на ветке PR, а не на итоговом main, и узнал о превышении
+      падением на первом же следующем PR — это работа delivery-size-warns-before-breach, ещё
+      открыта). Объём в норме (4115153 < 4194304); потолок файлов под факт (ceiling 499), без запаса.

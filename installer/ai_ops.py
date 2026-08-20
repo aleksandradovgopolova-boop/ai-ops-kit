@@ -528,13 +528,6 @@ DEV_ONLY_PREFIXES = (
     # Безопасно по построению: слой `entrypoints` продуктовый код импортировать не вправе, и это
     # проверяет `validate_layering` (правило no-product-depends-on-devtools).
     "ai_ops_kit/devtools/",
-    # 20.08.2026, работа `product-layer-templates-versioned` (PR-5). Официальные шаблоны Product
-    # Operating Layer (`.ai-ops/`: PRODUCT_PASSPORT/ROADMAP/DELIVERY/POLICY) построены, но в дочке
-    # их пока никто не раскладывает: bootstrap (`product-layer-bootstrap`) ещё не сделан, а без него
-    # `templates/product-layer/*` в child лежат мёртвым грузом и только съедают потолок поставки.
-    # Уедут в дочку вместе с bootstrap, который заставит их там РАБОТАТЬ, — тогда же поднимется
-    # потолок. Префикс, а не пофайлово: следующие шаблоны слоя не должны просочиться поодиночке.
-    "templates/product-layer/",
 )
 
 # НЕ ПОДКЛЮЧЁННОЕ НЕ ЕДЕТ (19.08.2026, разбор после аудита).
@@ -574,25 +567,16 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
     "ai_ops_kit/intelligence/watch_contract.py",
-    # `planning/artifact_registry.py` — реестр стандартных артефактов Product Operating Layer как
-    # данные (PR-4, работа `artifact-registry-as-data`). ПОСТРОЕН, но в дочке пока НЕДОСТИЖИМ:
-    # его читатели — bootstrap (`product-layer-bootstrap`) и валидация (`product-layer-validation`)
-    # — ещё не сделаны, а значит в child нет ни одного вызова. Поднимать потолок поставки ради
-    # файла, который в дочке не РАБОТАЕТ, было бы той самой неправдой, о которой говорит абзац выше
-    # (замер: main оставлял ~24 КБ запаса, три файла среза весят ~36 КБ и пробили бы 3.8 МБ).
-    # Уедет обратно НЕ решением автора, а фактом подключения: как только его начнут звать из
-    # WIRING_DIRS, `test_unwired_modules_are_really_unwired` покраснеет и потребует убрать имя.
-    "ai_ops_kit/planning/artifact_registry.py",
-    # `planning/product_templates.py` — версионные шаблоны слоя и состояние Missing/Invalid/Outdated/
-    # Valid (PR-5, работа `product-layer-templates-versioned`). Тот же случай, что реестр выше: код
-    # построен, но в дочке его читатель (валидация `product-layer-validation`, CLI `ai-ops validate
-    # product-layer`) ещё не сделан. Уедет фактом подключения вместе с валидацией.
-    "ai_ops_kit/planning/product_templates.py",
-    # `planning/passport_generator.py` — генерация Product Passport из фактического состояния репо
-    # (PR-6, работа `product-passport-auto-generation`). Построен, но в дочке не подключён: команду
-    # `ai-ops passport generate` заведёт bootstrap (`product-layer-bootstrap`). Уедет с ним.
-    "ai_ops_kit/planning/passport_generator.py",
-    # 2026-08-20: ЧЕТЫРЕ модуля ленты 4 УБРАНЫ ИЗ СПИСКА — они ПОДКЛЮЧЕНЫ. Команды `ai-ops roadmap`
+    # `planning/artifact_registry.py` и `planning/passport_generator.py` УБРАНЫ ИЗ СПИСКА 20.08.2026
+    # (работа `product-layer-bootstrap`): они ПОДКЛЮЧЕНЫ. `_seed_product_layer` в этом установщике
+    # читает реестр артефактов и генерирует Product Passport из фактического состояния дочки при
+    # `ai-ops init`/`update` — значит оба обязаны быть в поставке, иначе установка вызовет файл,
+    # которого в дочке нет (класс F-033). Список сократился фактом подключения, не решением автора.
+    # `planning/product_templates.py` УБРАН ИЗ СПИСКА 20.08.2026 (работа `product-layer-validation`):
+    # он ПОДКЛЮЧЁН. `validate_product_layer` зовёт его подпроцессом при `ai-ops validate product-layer`
+    # В дочке, чтобы посчитать состояние Missing/Invalid/Outdated/Valid по её артефактам. Без него в
+    # поставке валидация вызвала бы файл, которого в дочке нет (F-033). Список сокращён фактом подключения.
+    # 2026-08-20: ЧЕТЫРЕ модуля ленты 4 УБРАНЫ ИЗ СПИСКА — они ПОДКЛЮЧЕНЫ (#241). Команды `ai-ops roadmap`
     # и `ai-ops delivery` (ai_ops_kit/cli/ai_ops_cli.py, DIRECT_INTENTS) зовут их в дочке:
     # roadmap_manager (roadmap), roadmap_milestones + delivery_planning + delivery_planning_blockers
     # (delivery). Не поставить их теперь значило бы дать дочке команду, ссылающуюся на отсутствующий
@@ -651,6 +635,10 @@ RUNTIME_VALIDATORS = frozenset({
     # дочку — тот же класс, что F-033. Поймано не рассуждением, а тестом на НАСТОЯЩЕЙ установке:
     # `doctor` в свежепоставленной копии печатал «НЕ ПРОВЕРЕНО (cannot import name …)».
     "validate_child_config_filled",
+    # 20.08.2026, работа `product-layer-validation` (PR-5): `ai-ops validate product-layer`
+    # исполняется У ДОЧКИ — считает состояние `.ai-ops/` (Missing/Invalid/Outdated/Valid). Не внести
+    # имя сюда значило бы починить кит и не починить дочку (F-033), как было с validate_acceptance_result.
+    "validate_product_layer",
 })
 
 
@@ -665,15 +653,14 @@ DEV_ONLY_FILES = frozenset({
     # claims остался в поставке, потому что у него ЕСТЬ читатель в дочке — `package_channel`
     # смотрит `channel` (18 Б) из `init`/`update`/`doctor`.
     "registry/release-notes.yaml",
-    # 20.08.2026, работа `artifact-registry-as-data` (Product Operating Layer, PR-4). Реестр состава
-    # слоя как данные и его схема-контракт ПОСТРОЕНЫ, но в дочке их пока никто не читает: читатель
-    # реестра — загрузчик `planning/artifact_registry.py` (сам в UNWIRED_MODULES выше), а его, в свою
-    # очередь, зовут только ещё не сделанные bootstrap и validation. Схему кит не читает в рантайме
-    # вовсе (`check` в загрузчике самодостаточен) — это публичный контракт формы. Оба уедут в дочку
-    # вместе с работой, которая заставит их там РАБОТАТЬ (`product-layer-validation`), и тогда же
-    # поднимется потолок поставки — по факту подключения, а не заранее.
-    "registry/artifact-registry.yaml",
+    # 20.08.2026: `registry/artifact-registry.yaml` УБРАН отсюда (работа `product-layer-bootstrap`) —
+    # теперь `_seed_product_layer` читает его в дочке при `ai-ops init`/`update`, чтобы знать состав
+    # слоя и куда его класть; значит реестр обязан ехать в поставку. Схему кит в рантайме не читает
+    # (`check` загрузчика самодостаточен) — это публичный контракт формы, и она остаётся dev-only.
     "schemas/artifact-registry.schema.json",
+    # `product-audit.schema.json` — контракт формы отчёта аудита (PR-21). Кит в рантайме её не
+    # читает (форма проверяется в самом `product_audit` и тестом), значит в дочку её слать незачем.
+    "schemas/product-audit.schema.json",
 })
 
 
@@ -1337,6 +1324,73 @@ def _seed_planning_contour(root: Path, dry=False):
     return out
 
 
+def _seed_product_layer(root: Path, dry=False):
+    """PR-3: Product Operating Layer `.ai-ops/` — обязательные артефакты продуктовой операционки.
+
+    Состав объявлен ДАННЫМИ в `registry/artifact-registry.yaml` (PR-4), а не зашит здесь — это и есть
+    смысл «реестр как данные»: bootstrap читает реестр, а не хардкод. Для каждого артефакта:
+      * директория (`.ai-ops/templates/`) — раскладываем КОПИЮ версионных шаблонов кита, чтобы
+        дочка могла сама определять Outdated и мигрировать;
+      * Product Passport — ГЕНЕРИРУЕМ из фактического состояния репозитория (PR-6): паспорт из
+        шаблона-заготовки был бы Invalid (одни заголовки), а PR-6 требует факт;
+      * остальные документы/конфиги — стартовый официальный шаблон (версия + обязательные разделы).
+    Существующие файлы НЕ трогаются никогда — владелец мог заполнить их до установки. Директорию
+    шаблонов обновляем (это копия кита, не контент владельца), документы владельца — нет.
+    -> список {artifact, action}
+    """
+    # PKG (корень пакета: repo кита или `.ai/managed` в дочке) обязан быть на пути — установщик
+    # запускают файлом (`python installer/ai_ops.py`), и тогда `import ai_ops_kit` без этого не
+    # резолвится, а `_seed_product_layer` тихо возвращает skip. Тот же приём, что у cmd_doctor ниже.
+    if str(PKG) not in sys.path:
+        sys.path.insert(0, str(PKG))
+    try:
+        from ai_ops_kit.planning import artifact_registry as _ar
+        reg = _ar.load(PKG / "registry" / "artifact-registry.yaml")
+    except Exception as e:                             # noqa: BLE001 — нет реестра не должно ронять установку
+        return [{"artifact": ".ai-ops/", "action": f"skipped-no-registry:{type(e).__name__}"}]
+
+    out = []
+    for a in reg.get("artifacts") or []:
+        rel = (a.get("path") or "").strip()
+        if not rel:
+            continue
+        dst = root / rel
+        if a.get("kind") == "directory":
+            src_dir = PKG / "templates" / "product-layer"
+            if not dry and src_dir.is_dir():
+                dst.mkdir(parents=True, exist_ok=True)
+                for f in sorted(src_dir.glob("*")):
+                    if f.is_file():
+                        shutil.copy2(f, dst / f.name)
+            out.append({"artifact": rel, "action": "templates-synced"})
+            continue
+        if dst.exists():
+            out.append({"artifact": rel, "action": "exists"})
+            continue
+        if a.get("id") == "product_passport":
+            try:
+                from ai_ops_kit.planning import passport_generator as _pg
+                text = _pg.generate(root, reg=reg)
+            except Exception as e:                     # noqa: BLE001 — сбой генератора не рушит установку
+                out.append({"artifact": rel, "action": f"skipped-passport:{type(e).__name__}"})
+                continue
+            if not dry:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_text(text, encoding="utf-8")
+            out.append({"artifact": rel, "action": "generated"})
+            continue
+        tpl = (a.get("template") or {}).get("path")
+        src = (PKG / tpl) if tpl else None
+        if not src or not src.is_file():
+            out.append({"artifact": rel, "action": "skipped-no-template"})
+            continue
+        if not dry:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)                       # как есть: маркер версии и разделы обязаны уцелеть
+        out.append({"artifact": rel, "action": "created"})
+    return out
+
+
 def _delivery_source(*rel):
     """Откуда брать доставляемый шаблон: ИЗ КИТА, и только потом из managed-слоя ребёнка.
 
@@ -1778,6 +1832,9 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         "planning_seeded": _seed_planning_contour(root),
+        # PR-3: Product Operating Layer `.ai-ops/` (Passport из фактов, ROADMAP/DELIVERY/POLICY из
+        # официальных шаблонов, templates/ — копия версий кита). Читает состав из реестра артефактов.
+        "product_layer_seeded": _seed_product_layer(root),
     }
 
 
@@ -1816,6 +1873,13 @@ def _assets_report_line(assets: dict) -> str:
         out += (" Back-fill модели продукта (черновики, заполнить вам): " + ", ".join(seeded)
                 + ". Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                   "недостающее одним пакетом.")
+    pl = assets.get("product_layer_seeded") or []
+    made = [x["artifact"] for x in pl if x.get("action") in ("created", "generated")]
+    if made:
+        gen = [x["artifact"] for x in pl if x.get("action") == "generated"]
+        out += (" Product Operating Layer создан (`.ai-ops/`): " + ", ".join(made) + "."
+                + (f" Product Passport собран из фактического состояния репозитория; проверьте "
+                   f"разделы, помеченные «неизвестно» — их знает только владелец." if gen else ""))
     return out
 
 
@@ -2336,7 +2400,18 @@ def _onboarding_summary(onboarding_path):
     )
 
 
-def cmd_validate():
+def cmd_validate(argv=()):
+    # `ai-ops validate product-layer` (PR-5): отчёт Missing/Invalid/Outdated/Valid по `.ai-ops/`
+    # ЭТОЙ дочки. Отдельная под-команда: общий `validate` проверяет установку кита, а этот —
+    # продуктовые артефакты репозитория, и смешивать их вывод значило бы прятать одно за другим.
+    if argv and argv[0] == "product-layer":
+        for root in (AI_DIR / "managed", PKG):
+            if (root / "ai_ops_kit" / "validation" / "validate_product_layer.py").is_file():
+                if str(root) not in sys.path:
+                    sys.path.insert(0, str(root))
+                break
+        from ai_ops_kit.validation import validate_product_layer as _vpl
+        return _vpl.main([str(REPO_ROOT), *[a for a in argv[1:] if a.startswith("--")]])
     checks = [["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
               ["validate_ai_first_workflows.py"], ["validate_ai_first_providers.py"],
               ["validate_openspec_change.py"]]
@@ -2953,8 +3028,18 @@ def cmd_audit(argv):
     ДЕТЕРМИНИРОВАННЫЙ снимок архитектуры на текущем SHA (12 осей); полный AI-review — отдельно
     (гейт architecture_review при архитектурных сигналах). НИЧЕГО не меняет."""
     sub = argv[2] if len(argv) > 2 else ""
+    # `ai-ops audit product` (PR-21): периодический read-only снимок продуктовой операционки дочки —
+    # артефакты слоя, tech, delivery, backlog, риски — одним машиночитаемым отчётом. НИЧЕГО не меняет.
+    if sub == "product":
+        for _root in (AI_DIR / "managed", PKG):
+            if (_root / "ai_ops_kit" / "intelligence" / "product_audit.py").is_file():
+                if str(_root) not in sys.path:
+                    sys.path.insert(0, str(_root))
+                break
+        from ai_ops_kit.intelligence import product_audit
+        return product_audit.main([str(REPO_ROOT), *[a for a in argv[3:] if a.startswith("--")]])
     if sub != "architecture":
-        print("usage: ai-ops audit architecture [--json] [--sha SHA]"); return 2
+        print("usage: ai-ops audit architecture|product [--json]"); return 2
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
         if (_cand / "architecture_baseline.py").is_file() and str(_cand) not in sys.path:
             sys.path.insert(0, str(_cand))
@@ -3201,7 +3286,7 @@ def _dispatch(argv):
     if cmd == "delivery-proof":
         return cmd_delivery_proof(argv)
     if cmd == "validate":
-        return cmd_validate()
+        return cmd_validate(argv[2:])
     if cmd == "doctor":
         return cmd_doctor(argv)
     if cmd == "resolve-ref":

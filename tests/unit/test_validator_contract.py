@@ -68,6 +68,8 @@ OTHER_SEAMS = {
     "validate_decisions": "check() возвращает (errors, warnings) — иной контракт",
     "validate_event_catalog": "check() возвращает (errors, warnings) — иной контракт",
     "validate_security_posture": "check(data, root) — требует корень репозитория",
+    "validate_product_layer": "check(repo_root) — валидирует `.ai-ops/` дочки подпроцессом, "
+                              "требует корень репозитория, а не артефакт-словарь",
 }
 
 # Сессионные модули в engops/ — тот же шов check(data), но живут вне каталога validation/.

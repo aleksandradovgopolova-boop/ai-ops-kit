@@ -60,6 +60,25 @@ def _has_section(headers: list, section: str) -> bool:
     return any(s in h for h in headers)
 
 
+def _empty_sections(text: str, sections: list) -> list:
+    """Разделы, которые ПРИСУТСТВУЮТ заголовком, но без содержательного тела. -> список названий.
+
+    Комментарии и пустые строки телом не считаются: `is_file()` != заполнен. Отсутствующие разделы
+    здесь НЕ учитываются — их ловит проверка структуры отдельно (отсутствие != пустота)."""
+    no_comments = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    positions = [(m.group(1).strip(), m.start(), m.end()) for m in _HEADER.finditer(no_comments)]
+    empty = []
+    for sec in sections:
+        idx = next((i for i, (h, _, _) in enumerate(positions) if sec in h), None)
+        if idx is None:
+            continue
+        body_start = positions[idx][2]
+        body_end = positions[idx + 1][1] if idx + 1 < len(positions) else len(no_comments)
+        if not no_comments[body_start:body_end].strip():
+            empty.append(sec)
+    return empty
+
+
 def required_migration_steps(version: int) -> list:
     """Шаги миграции, обязательные для шаблона версии V: (1->2), (2->3), …, (V-1->V). V<=1 -> []."""
     return [(n, n + 1) for n in range(1, int(version or 1))]
@@ -182,7 +201,16 @@ def state_of(repo_root: Path, artifact: dict, reg: dict | None = None) -> dict:
             return {"state": INVALID, "reason": f"нет обязательных разделов: {', '.join(missing_sec[:4])}"}
         if isinstance(declared, int) and version < declared:
             return {"state": OUTDATED, "reason": f"версия шаблона {version} < {declared} — нужна миграция"}
-        return {"state": VALID, "reason": "структура полна, версия актуальна"}
+        # СОДЕРЖИМОЕ, а не только структура: если реестр требует непустых разделов, пустой раздел —
+        # Invalid, а НЕ Valid. Это и есть «пустая секция != отсутствующая, но и != заполненная»
+        # (F-018/F-027): файл на месте, заголовок на месте, а под ним ничего.
+        if "non_empty_sections" in (artifact.get("validation") or []):
+            empty = _empty_sections(text, struct.get("required_sections") or [])
+            if empty:
+                return {"state": INVALID,
+                        "reason": f"разделы присутствуют, но пусты: {', '.join(empty[:4])} — "
+                                  f"пустая секция не равна заполненной"}
+        return {"state": VALID, "reason": "структура полна, содержимое есть, версия актуальна"}
 
     if artifact.get("format") == "yaml":
         try:

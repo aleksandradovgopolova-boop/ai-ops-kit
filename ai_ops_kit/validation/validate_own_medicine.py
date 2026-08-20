@@ -346,6 +346,34 @@ def check_planning_seeded(root, mod):
     return APPLIED, f"{', '.join(required)} на месте и заполнены (не заготовки)", ""
 
 
+def check_product_layer_seeded(root, mod):
+    """Bootstrap Product Operating Layer `.ai-ops/` (PR-3, доставляется `_seed_product_layer`).
+
+    Для САМОГО КИТА это `not_applicable`, и по той же причине, что managed-слой и скиллы: кит —
+    ИСТОЧНИК стандартного слоя, а не его потребитель. Свою продуктовую операционку кит ведёт нативно
+    (`planning/plan.yaml` как delivery-plan + `ROADMAP.md` в корне) — а `.ai-ops/` даёт дочке ровно
+    это в стандартизированной форме. Завести `.ai-ops/` в самом ките значило бы две правды об одном
+    (реестр артефактов породил бы дубль ROADMAP/DELIVERY поверх `planning/`). Проверяем, что ИСТОЧНИК
+    есть: реестр состава слоя читается и непуст — иначе bootstrap дочке класть было бы нечего.
+    """
+    reg_path = Path(root) / "registry" / "artifact-registry.yaml"
+    if not reg_path.is_file():
+        return NOT_APPLIED, "нет registry/artifact-registry.yaml — состав слоя объявить нечем", ""
+    try:
+        reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as e:
+        return NOT_APPLIED, f"реестр артефактов не разбирается: {e}", ""
+    n = len(reg.get("artifacts") or [])
+    if not n:
+        return NOT_APPLIED, "реестр артефактов пуст — bootstrap дочке класть нечего", ""
+    return (NOT_APPLICABLE,
+            "кит — ИСТОЧНИК стандартного слоя `.ai-ops/`, а не его потребитель: свою продуктовую "
+            "операционку он ведёт нативно (`planning/plan.yaml` + `ROADMAP.md` в корне), и `.ai-ops/` "
+            "дублировал бы её. Завести его в самом ките — две правды об одном (тот же класс, что "
+            "managed-слой и скиллы)",
+            f"источник подтверждён: реестр артефактов читается, объявлено артефактов слоя: {n}")
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
@@ -355,6 +383,7 @@ DELIVERY_CHECKS = {
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
     "planning_seeded": check_planning_seeded,
+    "product_layer_seeded": check_product_layer_seeded,
 }
 
 

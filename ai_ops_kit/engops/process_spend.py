@@ -60,7 +60,13 @@ STATES = ("normal", "attention", "over_ceiling", "code_started", "unknown")
 #
 # `planning/`, `ROADMAP.md`, `CLAUDE.md`, `.github/` в списке сознательно: их правка — это описание
 # работы или настройка, а мерится здесь «начали ли ДЕЛАТЬ». Правка плана — не начало работы.
-_KIT_PREFIXES = (".ai/", ".claude/", ".github/", "features/", "planning/", "history/")
+# `.ai-ops/` добавлен 20.08.2026 вместе с bootstrap продуктового слоя (`_seed_product_layer`): кит
+# сам создаёт `.ai-ops/{PRODUCT_PASSPORT,ROADMAP,DELIVERY}.md`, `POLICY.yaml`, `templates/` при
+# `ai-ops init`/`update`, значит свежая поставка НЕ должна читаться как правка кода — тот же шов и
+# тот же случай, что с `.gitignore`/`.gitattributes` (проба `test_fresh_install_is_not_a_code_change`).
+# Правка этих артефактов — описание продукта, а не «начали делать»: та же категория, что `ROADMAP.md`
+# и `planning/`. ГРАНИЦА `engops/` (лента B) ПЕРЕСЕЧЕНА ОСОЗНАННО, правка на одну строку; сказано в PR.
+_KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".github/", "features/", "planning/", "history/")
 _KIT_FILES = (".ai-ops.yaml", "ai-ops", "AI-OPS-ONBOARDING.md", "CLAUDE.md", "ROADMAP.md",
               # `.gitattributes` добавлен 18.08.2026 вместе с его установкой: `ensure_gitattributes`
               # пишет его в дочку, значит свежая поставка НЕ должна читаться как правка кода — ровно
