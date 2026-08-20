@@ -33,6 +33,7 @@ jobs:
       - name: "заголовок PR — тема будущего коммита, формат обязателен"
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_TITLE_CHECK: "1"   # признак «ворота запущены» ставит ТОТ, КТО ЗОВЁТ
         run: python3 -m pytest tests/contracts/test_pr_title_is_conventional.py -q
 
       - name: Pytest — critical path + contracts
