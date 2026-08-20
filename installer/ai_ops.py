@@ -588,6 +588,10 @@ UNWIRED_MODULES = frozenset({
     # построен, но в дочке его читатель (валидация `product-layer-validation`, CLI `ai-ops validate
     # product-layer`) ещё не сделан. Уедет фактом подключения вместе с валидацией.
     "ai_ops_kit/planning/product_templates.py",
+    # `planning/passport_generator.py` — генерация Product Passport из фактического состояния репо
+    # (PR-6, работа `product-passport-auto-generation`). Построен, но в дочке не подключён: команду
+    # `ai-ops passport generate` заведёт bootstrap (`product-layer-bootstrap`). Уедет с ним.
+    "ai_ops_kit/planning/passport_generator.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
