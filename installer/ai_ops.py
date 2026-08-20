@@ -567,6 +567,15 @@ UNWIRED_MODULES = frozenset({
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
     "ai_ops_kit/intelligence/watch_contract.py",
+    # `planning/artifact_registry.py` — реестр стандартных артефактов Product Operating Layer как
+    # данные (PR-4, работа `artifact-registry-as-data`). ПОСТРОЕН, но в дочке пока НЕДОСТИЖИМ:
+    # его читатели — bootstrap (`product-layer-bootstrap`) и валидация (`product-layer-validation`)
+    # — ещё не сделаны, а значит в child нет ни одного вызова. Поднимать потолок поставки ради
+    # файла, который в дочке не РАБОТАЕТ, было бы той самой неправдой, о которой говорит абзац выше
+    # (замер: main оставлял ~24 КБ запаса, три файла среза весят ~36 КБ и пробили бы 3.8 МБ).
+    # Уедет обратно НЕ решением автора, а фактом подключения: как только его начнут звать из
+    # WIRING_DIRS, `test_unwired_modules_are_really_unwired` покраснеет и потребует убрать имя.
+    "ai_ops_kit/planning/artifact_registry.py",
     # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
     # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
     # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
@@ -634,6 +643,15 @@ DEV_ONLY_FILES = frozenset({
     # claims остался в поставке, потому что у него ЕСТЬ читатель в дочке — `package_channel`
     # смотрит `channel` (18 Б) из `init`/`update`/`doctor`.
     "registry/release-notes.yaml",
+    # 20.08.2026, работа `artifact-registry-as-data` (Product Operating Layer, PR-4). Реестр состава
+    # слоя как данные и его схема-контракт ПОСТРОЕНЫ, но в дочке их пока никто не читает: читатель
+    # реестра — загрузчик `planning/artifact_registry.py` (сам в UNWIRED_MODULES выше), а его, в свою
+    # очередь, зовут только ещё не сделанные bootstrap и validation. Схему кит не читает в рантайме
+    # вовсе (`check` в загрузчике самодостаточен) — это публичный контракт формы. Оба уедут в дочку
+    # вместе с работой, которая заставит их там РАБОТАТЬ (`product-layer-validation`), и тогда же
+    # поднимется потолок поставки — по факту подключения, а не заранее.
+    "registry/artifact-registry.yaml",
+    "schemas/artifact-registry.schema.json",
 })
 
 
