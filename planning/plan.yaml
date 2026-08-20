@@ -928,7 +928,8 @@ work:
     title: "Риски (product/delivery/tech/dependency/resource/strategic) + предложенное действие"
     type: engineering
     goal: ai-product-operations
-    status: todo
+    status: in_progress
+    branch: lane-5-work
     owner_role: engineer
     depends_on: [product-health-explained, tech-health-explained, delivery-health-explained, drift-detected-between-artifacts]
     write_scope: [ai_ops_kit/intelligence/, tests/]
