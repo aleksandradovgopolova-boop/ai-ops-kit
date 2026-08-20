@@ -150,8 +150,12 @@ class TestARaiseWithoutGroundsIsRefused:
             assert any(field in x for x in probs), f"{field}: {probs}"
 
     def test_a_ceiling_raised_without_a_record_is_refused(self, ai_ops, budget):
-        """Ровно случай, из которого работа и выросла: число поднято, записи нет."""
-        bad = dict(budget, ceilings=dict(budget["ceilings"], volume_bytes=4 * 1024 * 1024))
+        """Ровно случай, из которого работа и выросла: число поднято, записи нет.
+
+        Сентинел — заведомо НЕзаписанное значение. Было 4*1024*1024, но 4.0 МБ стал настоящим
+        потолком (подъём backlog-reachable-via-ai-ops, 20.08), и запись под него теперь есть —
+        поэтому сентинел поднят до 5 МБ, значения, под которое записи нет."""
+        bad = dict(budget, ceilings=dict(budget["ceilings"], volume_bytes=5 * 1024 * 1024))
         probs = ai_ops.delivery_budget_errors(bad, _shipped(ai_ops), _exists)
         assert any("БЕЗ записи" in x for x in probs), probs
 

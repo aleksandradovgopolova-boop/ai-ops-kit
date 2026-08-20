@@ -27,38 +27,13 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4110000
+  volume_bytes: 4194304
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 495
+  substantive_files: 500
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
 raises:
-  - at: '2026-08-20'
-    what: substantive_files+volume
-    from_bytes: 4089446
-    to_bytes: 4110000
-    measured_before: 490
-    measured_after: 494
-    work: ai-product-operations (Фаза 4, лента 5)
-    files:
-      - ai_ops_kit/governance/policy_engine.py
-      - ai_ops_kit/governance/decision_log.py
-      - ai_ops_kit/governance/human_override.py
-      - ai_ops_kit/intelligence/health_product.py
-      - ai_ops_kit/intelligence/health_tech.py
-      - ai_ops_kit/intelligence/health_delivery.py
-      - ai_ops_kit/intelligence/health_common.py
-      - ai_ops_kit/intelligence/drift_artifacts.py
-      - ai_ops_kit/intelligence/risk_register.py
-      - ai_ops_kit/intelligence/team_sync.py
-      - ai_ops_kit/governance/__init__.py
-    why_it_works_in_the_child: >-
-      Фаза 4 (AI Product Operations) — product/tech/delivery health, drift, risk, team-sync, policy
-      engine, decision log, human override. Каждый модуль исполняется В ДОЧКЕ: команды health/risk/
-      audit достижимы, policy определяет допустимое поведение, decision log копит решения. Без них
-      в поставке это были бы объявленные, но отсутствующие у дочки умения. Потолок поднят ровно под
-      факт (490 -> 494, ceiling 495), без запаса.
   - at: '2026-08-20'
     what: volume
     from_bytes: 3879731            # 3.7 МБ
@@ -130,3 +105,48 @@ raises:
       шесть содержательных модулей). ЭТО ТРЕТИЙ ПОДЪЁМ ЗА ДЕНЬ и это сигнал: три параллельные ленты OS
       кладут доставляемый код одновременно, и потолок узнаёт об этом падением, а не заранее —
       ровно то, что `delivery-size-warns-before-breach` в плане ещё не закрыла.
+  - at: '2026-08-20'
+    what: volume
+    from_bytes: 4089446           # 3.9 МБ
+    to_bytes: 4194304             # 4.0 МБ
+    measured_before: 4086156
+    measured_after: 4092416
+    work: backlog-issue-classification
+    files:
+      - ai_ops_kit/cli/ai_ops_cli.py
+    why_it_works_in_the_child: >-
+      Backlog Intelligence стал командой движка: `ai-ops backlog classify|dedup|prioritize|graph`
+      исполняется В дочке над её GitHub Issues, а не остаётся модулями, которые надо звать вручную
+      как `python3 -m ...`. Обработчик `_run_backlog` живёт в доставляемом `cli/ai_ops_cli.py`; без
+      него в дочке были бы модули backlog из прошлого подъёма, но НИ ОДНОЙ команды, чтобы их
+      достичь — тот же класс F-030/F-032, механизм зелёный у кита и недостижимый у дочки. ЗАМЕР:
+      origin/main 4 086 156 Б -> ветка 4 092 416 Б (+6 260 Б, обработчик интента в существующем
+      файле CLI). Запас на main был 3 290 Б — потолок был исчерпан лентой 4 (roadmap/delivery,
+      +55 КБ поверх 3.9 без подъёма) ДО этой работы, а узнал он об этом падением на ней: ровно то,
+      что `delivery-size-warns-before-breach` в плане ещё не закрыла.
+  # Число файлов Фазы 4 (лента 5) — в КОНЦЕ: первым в raises обязан идти подъём ОБЪЁМА
+  # (fail-closed проба test_a_raise_that_does_not_raise мутирует raises[0] как volume-запись).
+  - at: '2026-08-21'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    measured_before: 490
+    measured_after: 499
+    work: ai-product-operations (Фаза 4, лента 5)
+    files:
+      - ai_ops_kit/intelligence/health_product.py
+      - ai_ops_kit/intelligence/health_tech.py
+      - ai_ops_kit/intelligence/health_delivery.py
+      - ai_ops_kit/intelligence/risk_register.py
+      - ai_ops_kit/intelligence/team_sync.py
+      - ai_ops_kit/intelligence/drift_artifacts.py
+      - ai_ops_kit/governance/policy_engine.py
+      - ai_ops_kit/governance/decision_log.py
+      - ai_ops_kit/governance/human_override.py
+    why_it_works_in_the_child: >-
+      Фаза 4 (AI Product Operations) исполняется В дочке: health продукта/тех/delivery считается со
+      светофором и объяснением, risk_register выявляет риски с митигацией, team_sync собирает статус,
+      governance/policy_engine определяет допустимое поведение, decision_log копит решения AI,
+      human_override принимает переопределение человека как сигнал. Без этих модулей в поставке команды
+      health/risk/audit были бы объявлены и недостижимы у дочки (класс F-033). Объём в норме
+      (4097054 < 4194304); растёт только счёт файлов, потолок под факт (490 -> 499, ceiling 500).

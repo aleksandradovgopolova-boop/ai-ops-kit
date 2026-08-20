@@ -107,8 +107,16 @@ stable:
 
 experimental:
   # Интент канала наблюдений дочка->кит: форма улик ещё меняется.
+  # roadmap/delivery (лента 4, Фаза 3): подключены командами CLI и работают, но форма ещё
+  # устаканивается — delivery читает backlog по контракту ленты 3, который сводится, а вывод
+  # roadmap/delivery ещё может измениться. Дочка вправе пользоваться, зная это.
   cli_intents:
     - feedback
+    - roadmap
+    - delivery
+    # Backlog Intelligence (Фаза 2): `backlog classify|dedup|prioritize|graph` над GitHub Issues
+    # дочки. Форма вывода и набор атрибутов ещё уточняются — дочка не должна на них опираться.
+    - backlog
   # Advisory-гейты: не блокируют, форма улик и applicability ещё уточняются.
   # Проверяется числом и списком — quality/gates.yaml -> blocking: false.
   advisory_gates:

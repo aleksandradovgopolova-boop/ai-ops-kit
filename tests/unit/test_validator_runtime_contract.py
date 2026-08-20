@@ -65,6 +65,7 @@ STANDALONE = [
     "validate_openspec_change",
     "validate_own_medicine",
     "validate_package_boundaries",
+    "validate_parallel_safety",   # 20.08.2026: standalone, читает свой registry/coordination-files.yaml
     "validate_pipeline_e2e",
     "validate_post_release_readout",
     "validate_presets",

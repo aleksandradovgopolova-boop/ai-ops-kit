@@ -44,6 +44,12 @@ EXPECTED_INTENTS = {
     # 2026-08-19 (аудит): `doctor` силами самой дочки. Полная проверка живёт в установщике, а он
     # в поставку не едет — в дочке без клона кита команда отвечала «исходник рядом не найден».
     "doctor",
+    # 2026-08-20 (лента 4, Фаза 3): roadmap Now/Next/Later и delivery-план из backlog. Подключены
+    # командами CLI, модули убраны из UNWIRED_MODULES.
+    "roadmap", "delivery",
+    # 2026-08-20 (лента 3, Фаза 2): Backlog Intelligence — `backlog classify|dedup|prioritize|graph`
+    # над GitHub Issues дочки. Был только модулями (`python3 -m ...`), стал командой движка.
+    "backlog",
 }
 
 
