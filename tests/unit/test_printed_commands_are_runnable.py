@@ -126,3 +126,45 @@ def test_the_extractor_really_sees_flags(sample, expected_flag):
     flags = re.findall(r"--[a-z][a-z-]*", PLACEHOLDER.sub("X", CMD_RE.search(sample).group(0)))
 
     assert expected_flag in flags, flags
+
+
+# ─── blind spot closed 2026-08-20 (obs 2dbfc337) ─────────────────────────────────────────────────
+
+#: Внутренний kwarg движка, поданный человеку как флаг CLI: `resume=True (--resume)`,
+#: `discard_previous=True (--discard)`. Главный тест выше это НЕ ловил: он проверяет только формы
+#: `ai-ops <intent> --flag`, а здесь флаг стоит голым в скобках, без интента. Слепое пятно нашла
+#: живая дочка — сообщение из ветки отказа, куда тесты не ходили.
+#:
+#: НАРУШЕНИЕ — только НЕСУЩЕСТВУЮЩИЙ флаг в скобках. `force_resume=True (--force)` не ловим: `--force`
+#: у `ai-ops` есть и набирается как есть; спорна лишь косметика, а не исполнимость. Ловим ровно то,
+#: что человек НЕ СМОЖЕТ набрать, — тот же критерий, что у главного теста.
+_KWARG_AS_FLAG = re.compile(r"[a-z_]+=(?:True|False)\s*\((--[a-z-]+)\)")
+
+
+def test_no_internal_kwarg_is_printed_with_a_nonexistent_flag():
+    """`resume=True (--resume)` человеку — внутренний параметр с флагом, которого у `ai-ops` нет.
+
+    Замер поля 20.08.2026: `ai-ops resume` останавливал повторный прогон и печатал «Передай
+    resume=True (--resume)». Флага `--resume` у `ai-ops` нет (argparse принимает его за сокращение
+    `--resume-from` и падает); продолжение — интент `resume`. Главный тест этот случай пропускал,
+    потому что флаг не был привязан к `ai-ops <intent>`. Эта проба закрывает слепое пятно, но судит
+    тем же мерилом: флаг обязан СУЩЕСТВОВАТЬ.
+    """
+    known = _known_flags()
+    bad = []
+    for pth in sorted((PKG / "ai_ops_kit").rglob("*.py")):
+        if "__pycache__" in str(pth):
+            continue
+        for lineno, val in _string_constants(pth):
+            for m in _KWARG_AS_FLAG.finditer(val):
+                if m.group(1) not in known:
+                    bad.append((pth.relative_to(PKG).as_posix(), lineno, m.group(0)))
+    assert not bad, "внутренний kwarg с НЕсуществующим флагом подан человеку:\n" + "\n".join(
+        f"  {f}:{ln}: «{v}»" for f, ln, v in bad)
+
+
+def test_the_kwarg_as_flag_detector_actually_matches():
+    """Side-effect proof: детектор извлекает флаг именно из той формы, что была в поле."""
+    assert _KWARG_AS_FLAG.search("Передай resume=True (--resume) чтобы продолжить").group(1) == "--resume"
+    assert _KWARG_AS_FLAG.search("discard_previous=True (--discard)").group(1) == "--discard"
+    assert not _KWARG_AS_FLAG.search("запусти `ai-ops resume . --feature X --execute`")

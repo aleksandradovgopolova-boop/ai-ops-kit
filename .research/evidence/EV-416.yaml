@@ -11,7 +11,8 @@ source:
   published_at: null
   is_primary: true
 citation:
-  locator: "model card: описание, лицензия, префиксы"
+  locator: "model card: раздел Limitations (язык и предел 512 токенов); лицензия — тег «License: mit»; префиксы search_query:/search_document: — раздел Usage; база FRED-T5 — раздел Model Card for FRIDA"
+  quote: "The model is designed to process texts in Russian, the quality in English is unknown. Maximum input text length is limited to 512 tokens."
 captured_at: "2026-07-23"
 captured_by: "scout-agent (RAG-стек, RR-006)"
 freshness:

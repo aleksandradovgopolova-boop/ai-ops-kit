@@ -11,7 +11,8 @@ source:
   published_at: null
   is_primary: true
 citation:
-  locator: "таблица Inference Endpoints GPU; RunPod — gpuvec.com/providers/runpod (вторичный)"
+  locator: "таблица Inference Endpoints → GPU Instances (L4/L40S/A100/H100); A10G $1.00/ч — из другой таблицы той же страницы (Spaces Hardware), не из Inference Endpoints; RunPod — gpuvec.com/providers/runpod (вторичный)"
+  quote: 'GPU Instances NVIDIA T4 aws 1 14GB $0.50 4 56GB $3.00 NVIDIA L4 aws 1 24GB $0.80 4 96GB $3.80 NVIDIA L40S aws 1 48GB $1.80 4 192GB $8.30 8 384GB $23.50 NVIDIA A100 aws 1 80GB $2.50 2 160GB $5.00 4 320GB $10.00 8 640GB $20.00 NVIDIA H100 aws 1 80GB $4.50'
 captured_at: "2026-07-23"
 captured_by: "scout-agent (RAG-стек, RR-006)"
 freshness:

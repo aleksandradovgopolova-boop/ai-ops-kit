@@ -1,0 +1,26 @@
+# Мутационные движки мертвы наполовину: два из четырёх без коммитов годы. Записано, чтобы к
+#       ним не возвращались.
+schema_version: 1
+kind: research.evidence
+id: EV-1124
+request_id: RR-015
+statement: "Из четырёх мутационных инструментов для Python два мертвы: mutatest 3.1.0 — последний релиз 20.02.2022, последний коммит 17.02.2023; pytest-mutagen 1.3 — последний релиз и коммит 24.07.2020, 5 звёзд. При этом модель pytest-mutagen — ближайшая к тому, что нужно киту: мутант объявляется явно и адресно (@mg.mutant_of), к нему привязаны тесты, а --mutagen-stats показывает, СКОЛЬКО тестов поймало каждого мутанта. То есть нужную модель придётся держать своей — реестр проб кита её уже реализует."
+evidence_type: documented_fact
+source:
+  title: "PyPI и GitHub: mutatest, pytest-mutagen"
+  url: "https://github.com/timpaquatte/pytest-mutagen"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "pypi.org/pypi/mutatest/json (3.1.0, 2022-02-20); github.com/EvanKepner/mutatest последний коммит 2023-02-17; github.com/timpaquatte/pytest-mutagen последний коммит 2020-07-24; README pytest-mutagen про @mg.mutant_of и --mutagen-stats"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичные данные PyPI и GitHub API, снято 17.08.2026. Дословной цитаты нет намеренно: источник — структурные данные (PyPI JSON / GitHub API / файл хуков), прозы для цитирования в нём нет; предупреждение quote-grounding для этой записи ожидаемо."
+status: active
+superseded_by: null

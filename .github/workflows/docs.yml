@@ -1,0 +1,39 @@
+# Сборка документации.
+#
+# ЗАЧЕМ ОТДЕЛЬНОЙ ДЖОБОЙ. В шапке `mkdocs.yml` десятый месяц стояла инструкция
+# «pip install mkdocs && mkdocs build» — и не запускалась НИГДЕ. Поэтому конфиг спокойно объявлял
+# шесть страниц, которых нет ни одной, и ссылался на `quickstart.md` при файле `QUICKSTART.md`:
+# на macOS это совпадает, на Linux нет. Обещание держалось ровно до первой попытки собрать, а
+# собрать было некому.
+#
+# `--strict` НЕ УКРАШЕНИЕ: без него mkdocs превращает битую ссылку и отсутствующую страницу в
+# предупреждение, и джоба была бы зелёной ровно на том дефекте, ради которого заведена.
+#
+# ЗАВИСИМОСТИ СТАВЯТСЯ ЗДЕСЬ И ТОЛЬКО ЗДЕСЬ. Инвариант кита — stdlib + pyyaml; mkdocs не входит
+# в рантайм и в поставку дочке не едет. Отдельная джоба держит это разделение видимым.
+name: docs
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Установить mkdocs
+        run: python -m pip install --disable-pip-version-check "mkdocs==1.6.1" "mkdocs-material==9.5.49"
+      # Сборка в --strict: несуществующая страница, битая ссылка и расхождение регистра — ошибка,
+      # а не предупреждение. Регистр проверяется здесь по-настоящему: раннер Linux, файловая
+      # система чувствительна к нему, в отличие от машины разработчика.
+      - name: Собрать документацию
+        run: mkdocs build --strict --site-dir /tmp/site

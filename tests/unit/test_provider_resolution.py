@@ -29,8 +29,13 @@ import orchestrator_providers as op
 LIVE_ENV = {"AI_OPS_PROVIDER_AUTORESOLVE": "1"}
 
 
-def _no_cli(_name):
-    """shutil.which-заглушка: в PATH нет ничего."""
+def _no_cli(_name, path=None):
+    """shutil.which-заглушка: в PATH нет ничего.
+
+    `path` в подписи не для удобства: настоящий `shutil.which` его принимает, и с 18.08.2026
+    поиск claude передаёт PATH ИЗ переданного env явно (иначе замер с подменённым окружением
+    молча смотрел бы в настоящий PATH). Заглушка без этого параметра расходилась бы с тем, что
+    подменяет, — и падала бы там, где код исправен."""
     return None
 
 

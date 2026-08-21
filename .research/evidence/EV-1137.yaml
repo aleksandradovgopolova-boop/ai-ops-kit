@@ -1,0 +1,29 @@
+# Выпуск и changelog: гейт 'а запись вообще добавили?' есть ровно у одного инструмента.
+#       Проверялось против 364 КБ CHANGELOG.md и 236 версий за 40 дней (EV-1112).
+schema_version: 1
+kind: research.evidence
+id: EV-1137
+request_id: RR-015
+statement: "Из шести рассмотренных инструментов выпуска официальный гейт 'в этой ветке добавлена запись для changelog' есть ТОЛЬКО у towncrier: towncrier check берёт git diff --name-only относительно базовой ветки (по умолчанию origin/main, переопределяется --compare-with, --staged добавляет staged), при отсутствии фрагментов печатает 'No new newsfragments found on this branch' и выходит с кодом 1; падает и на невалидном имени фрагмента; изменение самого news-файла считается за проверку и даёт exit 0. Модель фрагментов решает проблему 364 КБ файла структурно: правки идут в разные новые файлы, а не в одну строку общего, и ретро-миграция старого файла НЕ нужна — он остаётся как есть. Цена: towncrier 25.8.0 выпущен 30.08.2025, релизов почти год не было при живом trunk (коммит 15.08.2026); версию он не считает и файлы версий не бампает."
+evidence_type: documented_fact
+source:
+  title: "towncrier — документация (tutorial, cli, configuration) и исходник check.py"
+  url: "https://towncrier.readthedocs.io/en/stable/cli.html"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "towncrier.readthedocs.io: cli.html (towncrier check, --compare-with, --staged), configuration.html (ключ check у типа фрагмента); github.com/twisted/towncrier src/towncrier/check.py (git diff, sys.exit(1)); pypi.org/pypi/towncrier/json (25.8.0, 2025-08-30)"
+  quote: "No new newsfragments found on this branch"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация, исходник и PyPI, прочитаны 17.08.2026. Утверждение 'только у towncrier' ограничено рассмотренной шестёркой (towncrier, commitizen, python-semantic-release, release-please, commitlint, conventional-pre-commit), а не всем рынком."
+derived_from:
+  - EV-1112
+status: active
+superseded_by: null

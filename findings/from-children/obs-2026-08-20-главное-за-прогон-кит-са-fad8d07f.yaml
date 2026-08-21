@@ -1,0 +1,34 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-главное-за-прогон-кит-са-fad8d07f
+at: '2026-08-20T11:43:24+00:00'
+statement: 'Главное за прогон. Кит сам записал требование R8 (''при нуле свободных
+  плиток Enter не открывает ничего — строка остаётся открытой и объясняет, что мест
+  нет'') и требование R10 (''при отказе объект в последнее не записан''), а затем
+  написал код, который делает ровно наоборот: handleQuickPick сначала записывает в
+  историю, потом закрывает строку и зовёт открытие, а компонент QuickOpenPalette вообще
+  не знает числа свободных плиток. Противоречие внутри ОДНОЙ ревизии между собственными
+  требованиями и собственным кодом. Гейт code_review, который обязан такое поймать,
+  оба прогона закончился ''ревьюер не вынес вердикт'' (stopped=no-verdict, valid=false)
+  — то есть механизм, ради которого гейт существует, не срабатывает вообще. Нашла
+  это я чтением кода, не кит. Второй прогон (resume) потратился только на переписывание
+  собственных бумаг: в коммите 402d93b изменены plan.yaml, requirements.yaml, spec.md,
+  tasks.md и ни одного файла продукта.'
+observation_class: defect
+severity: p0
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: file
+  path: src/App.tsx
+  quote: 'setRecent(rememberRecent({ kind: item.kind, id: item.id })); setQuickOpen(false);
+    — запись в историю и закрытие строки БЕЗ проверки свободных плиток'
+state: became_work
+state_reason: заведена работа no-verdict-is-an-honest-refusal-not-a-stall (план кита,
+  20.08.2026)
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'

@@ -11,7 +11,8 @@ source:
   published_at: "2026-04-24"
   is_primary: true
 citation:
-  locator: "model card: параметры, лицензия MIT"
+  locator: "model card, раздел Introduction (параметры и контекст; дублируется таблицей Model Downloads); лицензия — раздел License"
+  quote: "We present a preview version of DeepSeek-V4 series, including two strong Mixture-of-Experts (MoE) language models — DeepSeek-V4-Pro with 1.6T parameters (49B activated) and DeepSeek-V4-Flash with 284B parameters (13B activated) — both supporting a context length of one million tokens"
 captured_at: "2026-07-23"
 captured_by: "scout-agent (RAG-стек, RR-006)"
 freshness:

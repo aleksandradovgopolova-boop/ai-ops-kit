@@ -27,9 +27,14 @@ def test_security_scan_selftest():
     # секреты. v3.0.4: фикстуры-«секреты» СОБИРАЮТСЯ в рантайме из фрагментов, чтобы в исходнике НЕ
     # было статического секрет-подобного литерала (иначе downstream секрет-сканеры (gitleaks/trufflehog)
     # ложно флагуют тесты САМОГО детектора и блокируют PR). Детектор получает полную строку -> тест валиден.
-    _aws = "AKIA" + "IOSFODNN7EXAMPLE"                         # канонический AWS-пример (собран, не литерал)
+    # Не канонический пример AWS: `AKIAIOSFODNN7EXAMPLE` — публичный образец, и
+    # детектор с 19.08.2026 его не считает утечкой. Позитивной фикстуре нужен ключ,
+    # похожий на настоящий.
+    _aws = "AKIA" + "QRSTUVWX9012YZAB"                         # канонический AWS-пример (собран, не литерал)
     _hex = "abcdef0123456789" + "ABCDEF"
-    _pem = "-----BEGIN RSA " + "PRIVATE KEY-----\n"
+    # Тело ключа обязательно: заголовок без материала — упоминание ФОРМАТА, а не утечка
+    # (так он стоит в CHANGELOG и в манифесте). Секрет — байты ключа.
+    _pem = "-----BEGIN RSA " + "PRIVATE KEY-----\n" + "MIIEpAIBAAKCAQEA" + "q" * 40 + "\n"
     s = scan_secrets({"a.py": f'AWS="{_aws}"\napi_key = "{_hex}"\n'})
     expect("secret: AKIA-ключ найден", any(f["id"] == "aws_access_key_id" for f in s))
     expect("secret: generic api_key в кавычках найден", any(f["id"] == "generic_secret_assignment" for f in s))

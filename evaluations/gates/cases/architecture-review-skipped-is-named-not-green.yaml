@@ -1,0 +1,18 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: architecture-review-skipped-is-named-not-green
+gate: architecture_review
+case_kind: no_judge
+summary: |
+  Без архитектурных сигналов гейт неприменим — и это ЗАПИСАНО причиной, а не отдано наружу как обычный pass. «Не проверялось» отличимо от «проверено и в порядке».
+origin:
+  source: quality/gates.yaml -> architecture_review.required_when (v3.15.0 Architecture Baseline)
+  provenance: contract_invariant
+notes: |
+  Пара к architecture-review-blocks-when-the-signal-is-on. Вместе они закрепляют третье состояние: один и тот же гейт при выключенном сигнале даёт non-blocking skip с названной причиной, при включённом — блокирующий fail. Если однажды skip перестанет называть себя, отчёт покажет зелёный гейт там, где не смотрели.
+signals: {}
+expected:
+  status: pass
+  reason_matches:
+  - гейт неприменим
+  - honest skip

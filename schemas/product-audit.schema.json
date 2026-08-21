@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "product-audit",
+  "description": "Машиночитаемый отчёт непрерывного аудита продукта (PR-21). Read-only снимок состояния продуктовой операционки репозитория по осям (артефакты слоя, tech, delivery, backlog, риски). Каждая ось несёт status с ЧЕТВЁРТЫМ состоянием unknown (не проверено != в порядке); unknown в вердикт не сворачивается и объявлен отдельно. Производит ai_ops_kit/intelligence/product_audit.py; контракт формы здесь, рантайм-проверка — в самом модуле.",
+  "type": "object",
+  "required": ["schema_version", "kind", "repository", "dimensions", "evaluated", "unknown", "verdict"],
+  "properties": {
+    "schema_version": {"type": "integer"},
+    "kind": {"const": "product-audit"},
+    "repository": {"type": "string"},
+    "dimensions": {
+      "type": "object",
+      "description": "оси аудита; каждая с status и человекочитаемым detail",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "detail"],
+        "properties": {
+          "status": {"enum": ["green", "yellow", "red", "unknown"]},
+          "detail": {"type": "string"},
+          "counts": {"type": "object"}
+        }
+      }
+    },
+    "evaluated": {"type": "array", "items": {"type": "string"},
+      "description": "оси с реальным статусом (green/yellow/red) — только они формируют вердикт"},
+    "unknown": {"type": "array", "items": {"type": "string"},
+      "description": "оси, которые проход не оценил — объявлены честно, не свёрнуты в green"},
+    "verdict": {"enum": ["green", "yellow", "red"],
+      "description": "худшая из оценённых осей; unknown в вердикт не входит"}
+  }
+}

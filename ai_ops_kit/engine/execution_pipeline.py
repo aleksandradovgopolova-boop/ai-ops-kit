@@ -50,6 +50,7 @@ from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
     _verify_remote_base, _change_context, _change_context_range,
     delivery_preflight as _delivery_preflight,
+    managed_drift_preflight as _managed_drift_preflight,
 )
 from ai_ops_kit.engine.pipeline_failure import (  # noqa: E402,F401
     _ENV_SYMPTOMS, _check_has_env_symptom, _env_proven_ok, _env_unqualified,
@@ -96,6 +97,13 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
                                delivery_id=delivery_id)
     delivery.update(status=(pr or {}).get("status"), pr=pr)
     return delivery
+
+
+def _security_pack_for_report(security_pack_result):
+    """Вердикт security-пака -> в отчёт через ПРОЕКЦИЮ пака (белый список полей), а не срезом на месте.
+    Срез на месте и был дефектом: четыре поля выбирались здесь, и находки терялись по дороге."""
+    from ai_ops_kit.security import security_pack as _sp_report
+    return _sp_report.for_report(security_pack_result)
 
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
@@ -159,6 +167,11 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     delivery_pf = _delivery_preflight(child_root, base_ref, base_sha, open_pr)
     if delivery_pf:
         print(f"  ⚠ {delivery_pf['warning']}")
+    # B2-27 (прогон 19.08.2026): update --in-place оставляет managed-файлы в рабочем дереве,
+    # но worktree создаётся от HEAD — прогон идёт на старом ките. Предупреждаем ДО изоляции.
+    managed_pf = _managed_drift_preflight(child_root)
+    if managed_pf:
+        print(f"  ⚠ {managed_pf['warning']}")
     # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
     # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
     if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
@@ -212,11 +225,18 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 if ahead > 0 and not discard_previous:
                     return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
                             "status": "error",
+                            # obs 2dbfc337 (поле 20.08.2026) + B2-10: здесь назывались ВНУТРЕННИЕ
+                            # параметры движка — `resume=True (--resume)` и `discard_previous=True
+                            # (--discard)`. Человек читает это через `ai-ops`, где `--resume` нет
+                            # вовсе (argparse принимает его за сокращение `--resume-from` и падает),
+                            # а продолжение — это ИНТЕНТ `resume`. Печатаем РЕАЛЬНЫЕ команды.
                             "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
                                      f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
-                                     f"остановлен. Передай resume=True (--resume) чтобы ПРОДОЛЖИТЬ "
-                                     f"поверх них, discard_previous=True (--discard) для перезаписи ИЛИ "
-                                     f"запусти с другим --feature.",
+                                     f"остановлен. Продолжить поверх них: "
+                                     f"`ai-ops resume . --feature {wid} --execute`. Перезаписать: "
+                                     f"`git branch -D {branch}` и "
+                                     f"`ai-ops run . --feature {wid} --execute`. Или возьми другой "
+                                     f"--feature.",
                             "loop": None, "isolation": {"worktree": None}, "gates": None,
                             "ready_for_pr": False, "overall_status": "error"}
                 _wt.remove(child_root, wid, force=True)
@@ -606,13 +626,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                                 for m in _appr_missing],
                                    "approvals_missing": _appr_missing,
                                    "pack": {"applicable": security_pack_result["applicable_domains"]}}
-        elif overall == "clear":
+        elif overall in ("clear", "advisory"):
+            # `advisory` — домены, поднятые ТОЛЬКО совпадением по содержимому и БЕЗ находок
+            # (`security_pack._content_only`). Гейт их не держит, но и не молчит: список уезжает в
+            # evidence и в run-report, иначе «проверено чисто» и «проверять было нечего» слились бы.
+            _adv = security_pack_result.get("advisory") or []
             gate_ev["security"] = {"status": "pass",
                                    "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                   "advisory": _adv,
                                    "pack": {"applicable": security_pack_result["applicable_domains"],
-                                            "note": "все применимые security-домены закрыты детерминированным evidence"}}
+                                            "advisory": _adv,
+                                            "note": ("все применимые security-домены закрыты детерминированным evidence"
+                                                     if not _adv else
+                                                     "детерминированные проверки чисты; домены "
+                                                     + ", ".join(_adv) + " подняты только совпадением по "
+                                                     "содержимому и без находок — предупреждение, не ворота")}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and review and committed_sha and not strict_judge_qualified
+              and committed_sha and not (strict_judge_qualified and review)
               and not (signals or {}).get("_sequence_internal")):
             # v3.7.3 (#5) STRICT SECURITY JUDGE: security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ
             # security-судья (strict_judge_qualified) ЛИБО ЧЕЛОВЕК (ApprovalRecord). Общий code reviewer НЕ
@@ -638,11 +668,18 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                                 "note": "нет qualified security-судьи -> needs_review закрыт "
                                                         "человеком (валидный ApprovalRecord)"}}
             else:
+                _why_no_judge = ("судья на этом уровне задачи выключен автоподбором"
+                                 if not review else "нет QUALIFIED security-судьи")
                 gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
-                                       "blockers": ["нет QUALIFIED security-судьи: needs_review домены "
+                                       "blockers": [_why_no_judge + ": needs_review домены "
                                                     "закрывает ТОЛЬКО квалифицированный судья или человек "
-                                                    "(ApprovalRecord); общий code reviewer НЕ закрывает "
-                                                    "security: " + ", ".join(security_pack_result["needs_review"])],
+                                                    "(валидный ApprovalRecord); общий code reviewer НЕ "
+                                                    "закрывает security. Домены: "
+                                                    + ", ".join(security_pack_result["needs_review"])
+                                                    + ". Человеку закрыть так: python3 "
+                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "
+                                                    + str(wid) + " --approval <домен> --by <кто> "
+                                                    "--scope <что> --reason <почему>"],
                                        "pack": {"applicable": security_pack_result["applicable_domains"],
                                                 "needs_review": security_pack_result["needs_review"]}}
         elif (overall == "needs_review" and not security_pack_result["blocking"]
@@ -721,6 +758,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
                                    signals=signals, not_applicable=not_applicable,
                                    exempt_reason=exempt_reason)
+    # КТО ЗАКРЫЛ — ЧЕЛОВЕКУ, А НЕ ТОЛЬКО В JSON. Замер 19.08.2026: 19 гейтов из 35 не имеют
+    # исполняемого валидатора, и в выводе прогона это ничем не отличалось от проверенного машиной.
+    # Строка печатается всегда: молчать о ней там, где мнения нет, значило бы приучать к тому, что
+    # её отсутствие ничего не значит.
+    _cl = gates.get("closure") or {}
+    _cnt = _cl.get("counts") or {}
+    _opinion = _cl.get("judged_or_human") or []
+    print(f"  гейты: проверено машиной {_cnt.get('validator', 0)} из {len(_gate_ids)}"
+          + (f"; остальное — мнение: {', '.join(_opinion)}" if _opinion else "; мнением не закрыт ни один"))
 
     # v3.8.3: персистим ПРОЙДЕННОЕ gate-evidence билда (кроме security) по committed_sha в worktree/.ai —
     # чтобы последующий reevaluate (после человеко-approval) переиспользовал model-вердикт code_review и
@@ -934,17 +980,24 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # недостижим). Остальные условия base_ok (committed_sha/revision/tree/env/approvals) по-прежнему строги.
     base_ok = (loop["stopped"] in ("done", "reevaluate-only")) and (committed_sha is not None) \
         and revision_matches and tree_ok and env_qualified and approvals_cover_ok
+    # B2-30 (run-finishes-the-task): если сверка критериев СОСТОЯЛАСЬ (verified=True) и есть
+    # невыполненные критерии (unmet не пуст) — прогон НЕ доводит задачу. Блокируем ready, чтобы
+    # модель не могла объявить успех при незакрытой основной части задачи. Если сверка не состоялась
+    # (verified=False) — не блокируем (advisory, как было).
+    acceptance_unmet_block = False
+    if acceptance_criteria.get("verified") and acceptance_criteria.get("unmet"):
+        acceptance_unmet_block = True
     if baseline_diff:
         # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
         # fix-задач): дополнительно требуем, чтобы правка РЕАЛЬНО починила падавшую проверку.
-        ready = base_ok and no_regressions and (not other_blocking_unmet) \
+        ready = base_ok and not acceptance_unmet_block and no_regressions and (not other_blocking_unmet) \
             and (not require_fix or len(fixed) > 0) and spec_depth_ok and (not context_overflow) \
             and spec_complete_ok
         ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
-        ready = base_ok and (not gates["blocked"]) and spec_depth_ok and (not context_overflow) \
-            and spec_complete_ok
+        ready = base_ok and not acceptance_unmet_block and (not gates["blocked"]) and spec_depth_ok \
+            and (not context_overflow) and spec_complete_ok
         ready_criterion = "all-green"
 
     # 8. доставка (P0.4 аудит v2.79): draft PR отделён от ready_for_pr. Если --open-pr запрошен,
@@ -1067,6 +1120,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
                   "blocked": gates["blocked"],
                   "other_blocking_unmet": other_blocking_unmet,   # P0.1: блокирующие ≠ impl_verification
+                  # КТО ЗАКРЫЛ: разбивка validator/judge/writer/human. Без неё отчёт утверждал
+                  # «гейты пройдены» одинаково и там, где считала машина, и там, где высказался
+                  # судья. 19 гейтов из 35 не имеют валидатора вовсе.
+                  "closure": gates.get("closure"),
                   # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
                   "gate_results": gates.get("gate_results"),
                   "tested_revision": committed_sha},
@@ -1088,11 +1145,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         # v2.95: детерминированный security-скан (секреты/новые зависимости/injection-флаги). None,
         # если гейта security нет в плане или не коммитили. Закрывает no_secrets/deps_approved (факты);
         # no_injection_surface — судье. Находка -> security блокирует.
-        "security_scan": ({"overall": security_pack_result["overall"],
-                           "applicable_domains": security_pack_result["applicable_domains"],
-                           "blocking": security_pack_result["blocking"],
-                           "needs_review": security_pack_result["needs_review"]}
-                          if security_pack_result else None),
+        # ЗАЯВКА #139 (вторая половина): здесь стояли ровно четыре поля, и `domain_results` — где
+        # лежат САМИ находки (path/line/класс) и `applies_because` — в отчёт не попадали вовсе.
+        # Гейт отправляет человека в этот артефакт со словами «блокирующие домены (critical/high
+        # находки)», поэтому отчёт без находок делает утверждение гейта непроверяемым. Проекция
+        # `security_pack.for_report` — белый список полей: значения секретов и содержимое файлов в
+        # отчёт не уезжают (он лежит в репозитории и попадает в PR).
+        "security_scan": _security_pack_for_report(security_pack_result),
         # v2.86 Product Authoring: трейс произведённых артефактов (requirements/plan) — что
         # авторизовано, валидна ли форма, какие required_evidence закрыты. None -> без --author.
         "authored": authored,

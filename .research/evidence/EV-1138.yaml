@@ -1,0 +1,27 @@
+# Второй нужный гейт выпуска — согласованность версии по всем местам, где она штампуется.
+#       У кита версия живёт минимум в VERSION, манифесте и managed-копии дочки.
+schema_version: 1
+kind: research.evidence
+id: EV-1138
+request_id: RR-015
+statement: "commitizen 4.17.1 (17.08.2026, MIT) даёт гейт согласованности версии: cz bump --check-consistency проверяет, что версия во всех перечисленных version_files совпадает с конфигом, и при расхождении отдаёт код выхода 17 ('Current version cannot be found in version_files'). Отдельно cz bump --get-next отдаёт код 21, если подходящих для бампа коммитов нет. Поставляемые pre-commit хуки: commitizen (cz check на стадии commit-msg) и commitizen-branch (cz check --rev-range на стадии pre-push). Для сравнения: у release-please гейта нет вообще (--dry-run только печатает план), а у python-semantic-release strict-режим отвечает на вопрос 'есть ли что релизить', а не 'обновлён ли changelog'."
+evidence_type: documented_fact
+source:
+  title: "commitizen — документация (bump, check, exit_codes) и .pre-commit-hooks.yaml"
+  url: "https://commitizen-tools.github.io/commitizen/exit_codes/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "commitizen-tools.github.io/commitizen: commands/bump/ (--check-consistency, --get-next), exit_codes/ (17, 21); .pre-commit-hooks.yaml (commitizen, commitizen-branch); github.com/googleapis/release-please docs/cli.md (--dry-run); python-semantic-release concepts/strict_mode.html"
+  quote: "Current version cannot be found in version_files"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-17"
+reliability:
+  level: high
+  rationale: "Первичная документация трёх проектов и файл хуков, прочитаны 17.08.2026."
+status: active
+superseded_by: null

@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "artifact-registry",
+  "description": "Реестр стандартных артефактов Product Operating Layer (PR-4). Единственный источник истины ФОРМЫ артефактов слоя: id, назначение, обязательность, путь, версия шаблона, обязательные поля/разделы, правила валидации/обновления, источник данных, роль-владелец, AI actions. По нему работают bootstrap (PR-3) и валидация Missing/Invalid/Outdated/Valid (PR-5). Ссылочная целостность: owner_role/source_contour обязаны существовать в registry/product-operating-model.yaml. Рантайм-проверку ведёт ai_ops_kit/planning/artifact_registry.py (check + divergence) — схема здесь публичный контракт, а не единственная проверка.",
+  "type": "object",
+  "required": ["schema_version", "registry_type", "layer_root", "autonomy_levels", "lifecycle_states", "artifacts"],
+  "properties": {
+    "schema_version": {"type": "integer"},
+    "registry_type": {"const": "artifact-registry"},
+    "contract_version": {"type": "integer"},
+    "layer_root": {"type": "string", "description": "корень слоя в дочернем репозитории, напр. .ai-ops/"},
+    "autonomy_levels": {
+      "type": "array", "minItems": 1,
+      "items": {"enum": ["suggest", "prepare", "execute", "require_approval"]},
+      "description": "уровни автономии AI-действий (PR-19)"
+    },
+    "lifecycle_states": {
+      "type": "array", "minItems": 4,
+      "description": "Missing -> Invalid -> Outdated -> Valid (PR-5): четыре состояния, не два",
+      "items": {
+        "type": "object",
+        "required": ["id", "order", "means"],
+        "properties": {
+          "id": {"enum": ["missing", "invalid", "outdated", "valid"]},
+          "order": {"type": "integer"},
+          "means": {"type": "string"}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "purpose", "required", "kind", "format", "path", "owner_role", "source_contour"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "title": {"type": "string"},
+          "purpose": {"type": "string"},
+          "required": {"type": "boolean"},
+          "kind": {"enum": ["document", "config", "directory"]},
+          "format": {"enum": ["markdown", "yaml", "dir"]},
+          "path": {"type": "string"},
+          "template": {
+            "type": "object",
+            "required": ["path", "version"],
+            "properties": {
+              "path": {"type": "string"},
+              "version": {"type": "integer"}
+            },
+            "description": "официальный шаблон и его версия (PR-5); отсутствует для kind: directory"
+          },
+          "owner_role": {"type": "string", "description": "роль из product-operating-model.yaml"},
+          "source_contour": {"type": "string", "description": "контур из product-operating-model.yaml"},
+          "structure": {
+            "type": "object",
+            "properties": {
+              "required_sections": {"type": "array", "items": {"type": "string"}},
+              "required_fields": {"type": "array", "items": {"type": "string"}},
+              "allowed_values": {"type": "object"}
+            }
+          },
+          "validation": {"type": "array", "items": {"type": "string"}},
+          "update": {
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+              "mode": {"enum": ["auto", "ai_assisted", "human"]},
+              "regenerate": {"type": "boolean"},
+              "on": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "source": {"type": "array", "items": {"type": "string"}},
+          "ai_actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["action", "autonomy"],
+              "properties": {
+                "action": {"type": "string"},
+                "autonomy": {"enum": ["suggest", "prepare", "execute", "require_approval"]}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

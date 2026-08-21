@@ -1,0 +1,25 @@
+# Что у кита уже есть под другим именем: миграции поставки. Родились из находки поля F-030
+#       15.08.2026 и, значит, механизм новый — важно не предложить его второй раз.
+schema_version: 1
+kind: research.evidence
+id: EV-1119
+request_id: RR-015
+statement: "Миграции конфигов дочки у кита есть: каталог migrations/ с парами up.py/down.py и шаблоном _template, цепочка объявлена в manifest/ai-ops-manifest.yaml -> package_migrations.chain (сейчас два звена: 3.33-to-3.34 про переезд валидаторов и 3.36-to-3.37-plan-history), исполнитель — installer/ai_ops.py. Второе звено заведено прямо по находке F-030 (обновление кита сделало план дочки невалидным, миграции не было) и слито 17.08.2026 в PR #144. То есть модель alembic (версионированная цепочка с up/down) в ките уже воспроизведена под своим именем — брать её как внешнюю зависимость нечего."
+evidence_type: measured_result
+source:
+  title: "migrations/ + manifest/ai-ops-manifest.yaml -> package_migrations + git log 17.08.2026"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "find migrations -type f; manifest/ai-ops-manifest.yaml ключ package_migrations.chain; коммит 6c6b2f6 'fix(обновление): план дочки переживает обновление' (PR #144)"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прямое чтение дерева и истории 17.08.2026. Оговорка: наличие механизма измерено, ПРОВЕРЕННОСТЬ его на живом обновлении дочки — нет; работа child-plan-migrated-on-update закрыта в тот же день, полем ещё не подтверждена."
+status: active
+superseded_by: null

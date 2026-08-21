@@ -258,6 +258,58 @@ def check_gitignore(root, mod):
     return APPLIED, f"все {len(paths)} служебных путей скрыты от git (проверен эффект, не текст)", ""
 
 
+def _gitattributes_union_paths(mod):
+    """Пути, которым установщик назначает `merge=union`. -> список шаблонов (без комментариев)."""
+    out = []
+    for line in getattr(mod, "_GITATTRIBUTES_RULES", "").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and line.endswith("merge=union"):
+            out.append(line.rsplit(" ", 1)[0].strip())
+    return out
+
+
+def _merge_attr(root: Path, rel: str):
+    """Как git РЕЗОЛВИТ атрибут merge для пути в этом репозитории. -> строка | None (спросить не смог).
+
+    Проверяется ЭФФЕКТ, а не текст `.gitattributes`: правило может быть записано иначе, важно, что
+    git отдаёт `union` для журнала. `None` (нет git) — честная неизвестность, не «применено»."""
+    try:
+        r = subprocess.run(["git", "-C", str(root), "check-attr", "merge", "--", rel],
+                           capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    # формат: "<path>: merge: <value>"
+    tail = r.stdout.rsplit(":", 1)
+    return tail[1].strip() if len(tail) == 2 else None
+
+
+def check_gitattributes(root, mod):
+    """Кит применяет к СЕБЕ культуру, которую доставляет дочке: журналы-дописки сводятся `merge=union`.
+
+    Тот же класс, что `check_gitignore`: правило доставляется дочкам и производит эффект в этом же
+    репозитории (движок пишет `report-history`), поэтому кит обязан применять его к себе."""
+    paths = _gitattributes_union_paths(mod)
+    if not paths:
+        return UNKNOWN, "в блоке установщика нет ни одного правила merge=union — читать нечего", ""
+    unknown, missing = [], []
+    for pat in paths:
+        val = _merge_attr(root, _probe_path(pat))
+        if val is None:
+            unknown.append(pat)
+        elif val != "union":
+            missing.append(pat)
+    if unknown and not missing:
+        return UNKNOWN, (f"git не ответил про {len(unknown)} из {len(paths)} правил "
+                         f"(каталог не git-репозиторий или git недоступен) — «применено» из этого "
+                         f"не следует"), ""
+    if missing:
+        return NOT_APPLIED, (f"кит НЕ свёл свои же журналы-дописки merge=union: {', '.join(missing)} "
+                             f"(правило доставляется дочкам и производится прогонами движка здесь же)"), ""
+    return APPLIED, f"все {len(paths)} журналов-дописок сводятся merge=union (проверен эффект)", ""
+
+
 def check_entry_point(root, mod):
     dst = root / mod.ENTRY_NAME
     if not dst.is_file():
@@ -294,14 +346,44 @@ def check_planning_seeded(root, mod):
     return APPLIED, f"{', '.join(required)} на месте и заполнены (не заготовки)", ""
 
 
+def check_product_layer_seeded(root, mod):
+    """Bootstrap Product Operating Layer `.ai-ops/` (PR-3, доставляется `_seed_product_layer`).
+
+    Для САМОГО КИТА это `not_applicable`, и по той же причине, что managed-слой и скиллы: кит —
+    ИСТОЧНИК стандартного слоя, а не его потребитель. Свою продуктовую операционку кит ведёт нативно
+    (`planning/plan.yaml` как delivery-plan + `ROADMAP.md` в корне) — а `.ai-ops/` даёт дочке ровно
+    это в стандартизированной форме. Завести `.ai-ops/` в самом ките значило бы две правды об одном
+    (реестр артефактов породил бы дубль ROADMAP/DELIVERY поверх `planning/`). Проверяем, что ИСТОЧНИК
+    есть: реестр состава слоя читается и непуст — иначе bootstrap дочке класть было бы нечего.
+    """
+    reg_path = Path(root) / "registry" / "artifact-registry.yaml"
+    if not reg_path.is_file():
+        return NOT_APPLIED, "нет registry/artifact-registry.yaml — состав слоя объявить нечем", ""
+    try:
+        reg = yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as e:
+        return NOT_APPLIED, f"реестр артефактов не разбирается: {e}", ""
+    n = len(reg.get("artifacts") or [])
+    if not n:
+        return NOT_APPLIED, "реестр артефактов пуст — bootstrap дочке класть нечего", ""
+    return (NOT_APPLICABLE,
+            "кит — ИСТОЧНИК стандартного слоя `.ai-ops/`, а не его потребитель: свою продуктовую "
+            "операционку он ведёт нативно (`planning/plan.yaml` + `ROADMAP.md` в корне), и `.ai-ops/` "
+            "дублировал бы её. Завести его в самом ките — две правды об одном (тот же класс, что "
+            "managed-слой и скиллы)",
+            f"источник подтверждён: реестр артефактов читается, объявлено артефактов слоя: {n}")
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
     "zone_markers": check_zone_markers,
     "gitignore": check_gitignore,
+    "gitattributes": check_gitattributes,
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
     "planning_seeded": check_planning_seeded,
+    "product_layer_seeded": check_product_layer_seeded,
 }
 
 
@@ -367,6 +449,11 @@ NOT_CULTURE = {
     "_is_git_worktree": "проверка окружения перед установкой",
     "pkg_version": "чтение версии пакета",
     "parent_source": "чтение git remote для конфига дочки",
+    # 19.08.2026 (лента A, `update-channel-is-read`): чтение канала — это ЧТЕНИЕ фактов о
+    # пакете и о конфиге дочки, а не доставка культуры в репозиторий. Самоприменение здесь
+    # неприменимо по построению: у кита нет `parent`, он и есть parent — ровно та же причина,
+    # по которой в этом списке уже лежит `.ai-ops.yaml`.
+    "package_channel": "чтение канала, который заработал пакет (release-claims.yaml)",
     "compatible_range_for": "вычисление совместимого диапазона версий",
     "write_checksums": "чек-суммы managed-слоя — часть пункта managed_layer",
     "write_provenance": "происхождение managed-слоя — часть пункта managed_layer",
@@ -503,19 +590,8 @@ EXTRA_CHECKS = {
 # Ратчет ходит только вниз. Пункт здесь — признанный долг с причиной, ПОЧЕМУ он ещё открыт;
 # закрылся — обязан уехать отсюда тем же коммитом, иначе валидатор краснеет.
 KNOWN_GAPS = {
-    "entry_point": "Запускаемый `./ai-ops` берёт движок из `.ai/managed/`, которого у кита нет по "
-                   "решению выше, поэтому шаблон в неизменном виде здесь не заработает — нужна "
-                   "своя обёртка на `ai_ops_kit/cli/`. Работа объявлена в planning/plan.yaml.",
-    "communication_adapter": "Блок в CLAUDE.md кита не поставлен ОДНИМ коммитом с этой проверкой "
-                             "намеренно: `CLAUDE.md` в этом репозитории — рабочая инструкция "
-                             "агентам, и вставка управляемого блока меняет её на каждом `update`. "
-                             "Решение о зоне блока — за владельцем; работа объявлена в плане.",
-    # СПИСАНО 2026-08-13 вместе с закрытием разрыва: два служебных пути (`.ai/usage/*.jsonl`,
-    # `.ai/reevaluate-evidence-*.json`) скрыты в `.gitignore` кита теми же паттернами, что уезжают
-    # дочке. Правку предложила первая АВТОНОМНАЯ подсессия самого кита
-    # (`qualification/FIELD-RUN-AUTONOMY-2026-08-13.md`), применил человек. Ратчет ходит только вниз:
-    # закрытый долг обязан уйти из этого словаря тем же коммитом — иначе проверка краснеет, и это
-    # правильно (она так и краснела, пока запись оставалась здесь).
+    # entry_point: ЗАКРЫТ 2026-08-19 — создан ./ai-ops для самого кита (обёртка на ai_ops_kit/cli/)
+    # communication_adapter: ЗАКРЫТ 2026-08-19 — блок политики общения добавлен в CLAUDE.md кита
 }
 
 

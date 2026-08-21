@@ -192,12 +192,20 @@ class TestUsageLedgerHonesty:
 class TestSecurityScanProperties:
     """Invariant properties for the security scanner."""
 
+    # ФИКСТУРЫ СОБИРАЮТСЯ В РАНТАЙМЕ ИЗ ФРАГМЕНТОВ — это решение v3.0.4, и оно здесь потерялось.
+    # Повод был полевой: у потребителя (Гермес) PR-конвейер блокировал публикацию обновления кита,
+    # потому что чужой секрет-сканер флагует фикстуры-«секреты» в тестах САМОГО детектора. Тогда
+    # выбрали правильный путь — не обходить сканер, а убрать статический литерал: в исходнике нет
+    # секрет-подобной строки, а детектор получает собранную и по-прежнему проверяется.
+    #
+    # Здесь литералы вернулись, и собственный сканер кита находил в этом файле четыре «утечки» из
+    # четырёх ложных. Собираем снова.
     @given(
         secret=st.sampled_from([
-            "AKIA1234567890ABCDEF",     # AWS access key (AKIA + 16 uppercase/digits)
-            "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij",  # GitHub PAT (ghp_ + 36 alnum)
-            "xoxb-1234567890-abcdefghij",  # Slack token
-            "AIza1234567890abcdefghijklmnopqrstuvwxy",  # Google API key (AIza + 35 alnum)
+            "AKIA" + "1234567890ABCDEF",                        # AWS access key (AKIA + 16)
+            "ghp" + "_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij",  # GitHub PAT (ghp_ + 36)
+            "xoxb" + "-1234567890-abcdefghij",                  # Slack token
+            "AIza" + "1234567890abcdefghijklmnopqrstuvwxy",     # Google API key (AIza + 35)
         ]),
     )
     @settings(max_examples=50, deadline=2000)

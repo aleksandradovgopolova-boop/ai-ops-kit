@@ -1,0 +1,26 @@
+# Исполнитель схем, готовый к pre-commit. Проверялось как замена рукописным исполнителям
+#       подмножества JSON Schema, которые у кита написаны дважды (EV-1114).
+schema_version: 1
+kind: research.evidence
+id: EV-1128
+request_id: RR-015
+statement: "check-jsonschema 0.38.0 (09.08.2026, организация python-jsonschema — та же, что у самой библиотеки jsonschema) поставляет 29 готовых pre-commit хуков, включая универсальный check-jsonschema. Несколько схем на разные семейства файлов поддержаны штатно — несколькими инстансами хука с разными files: и --schemafile. Инстансы могут быть YAML, JSON, JSON5, TOML; вывод -o TEXT|JSON; удалённые схемы кэшируются. Это dev-инструмент: он живёт в .pre-commit-config.yaml и в CI, а не в поставке кита, поэтому правило AGENTS.md:39 про зависимости он не нарушает."
+evidence_type: documented_fact
+source:
+  title: "check-jsonschema — документация (usage, precommit_usage) и .pre-commit-hooks.yaml"
+  url: "https://check-jsonschema.readthedocs.io/en/latest/precommit_usage.html"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "check-jsonschema.readthedocs.io: precommit_usage.html (пример с files: и --schemafile), usage.html (--schemafile, -o, кэш); .pre-commit-hooks.yaml — 29 хуков"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация проекта и файл хуков, прочитаны 17.08.2026. Оговорка по лицензии: PyPI указывает Apache Software License, GitHub распознаёт как NOASSERTION — расхождение не разрешено, при принятии решения перечитать LICENSE. Дословной цитаты нет намеренно: источник — структурные данные (PyPI JSON / GitHub API / файл хуков), прозы для цитирования в нём нет; предупреждение quote-grounding для этой записи ожидаемо."
+status: active
+superseded_by: null

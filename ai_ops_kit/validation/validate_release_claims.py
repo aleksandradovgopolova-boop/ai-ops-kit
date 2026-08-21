@@ -27,6 +27,8 @@ import yaml
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 DEFAULT = PKG / "registry" / "release-claims.yaml"
+# Релизная проза — отдельный файл и в дочку НЕ едет (installer.DEV_ONLY_FILES).
+NOTES_REL = "registry/release-notes.yaml"
 
 
 def derived_counts(pkg=PKG):
@@ -307,7 +309,36 @@ def evidence_scope_errors(data, pkg=PKG):
         if rel and not (pkg / rel).exists():
             errors.append(f"evidence_scopes.{name}.obtained_by ссылается на {rel} — файла нет")
 
-    note = str(data.get("patch_note") or "").lower()
+    # `patch_note` ЖИВЁТ В ОТДЕЛЬНОМ ФАЙЛЕ с 20.08.2026 (работа `release-claims-stays-in-the-kit`):
+    # 61 336 Б релизной прозы — 75% claims — ехали в каждую дочку, где их не читает ни одна строка.
+    # Правило от этого не ослабло: проверяется тот же текст, просто по своему адресу. ОТСУТСТВИЕ
+    # файла — ОШИБКА, а не «нечего проверять»: молчаливый пропуск и был бы ослаблением.
+    notes_p = pkg / NOTES_REL
+    if not notes_p.is_file():
+        errors.append(f"{NOTES_REL} отсутствует: релизная проза не объявлена, поэтому правило "
+                      "«заявление о полноте называет охват» проверять нечем")
+        return errors
+    try:
+        notes = yaml.safe_load(notes_p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as e:
+        errors.append(f"{NOTES_REL} не разбирается ({e}) — заявление релиза недостоверно")
+        return errors
+    if not isinstance(notes, dict):
+        errors.append(f"{NOTES_REL}: ожидался словарь")
+        return errors
+    # Версия дублируется в двух файлах намеренно, поэтому обязана СВЕРЯТЬСЯ: без этого проза
+    # молча относилась бы к другому выпуску, а «заявление шире полученного» — ровно тот дефект,
+    # против которого стоит вся эта проверка.
+    if str(notes.get("version") or "") != str(data.get("version") or ""):
+        errors.append(f"{NOTES_REL}.version ({notes.get('version')}) не совпадает с "
+                      f"release-claims.version ({data.get('version')}) — проза относится к другому "
+                      "выпуску, чем заявление")
+    if "patch_note" in data:
+        errors.append("patch_note остался в release-claims.yaml: два места для одного текста "
+                      f"разъедутся молча, его адрес — {NOTES_REL}")
+    note = str(notes.get("patch_note") or "").lower()
+    if not note.strip():
+        errors.append(f"{NOTES_REL}.patch_note пуст — выпуск без записанного заявления")
     if any(c in note for c in _FULL_CLAIM) and not any(n in note for n in REQUIRED_SCOPES):
         errors.append("patch_note заявляет полноту проверки, не называя охват "
                       f"({' | '.join(REQUIRED_SCOPES)}) — то же заявление шире полученного, "

@@ -1,14 +1,21 @@
-"""Пакетная поверхность ai_ops_kit — шим перед физическим переносом дерева (v3.30).
+"""Пакетная поверхность ai_ops_kit: дом модуля — пакет, плоское имя — уходящий слой (v3.30-3.37).
 
-Дерево пока плоское. Пакет даёт модулям осмысленные имена и границы, НЕ перемещая файлы: каждый
-подмодуль — алиас через sys.modules. Обычный шим (`from X import *`) создал бы второй объект
-модуля со своим состоянием, и пересоздание глобали (как `drain_call_stats` в orchestrator_usage)
-разъехалось бы между копиями — этот класс дефектов уже стоил отдельной отладки.
+Переезд завершён: настоящий код живёт в `ai_ops_kit/<пакет>/`, а в `tools/` остались тонкие
+алиасы через подмену `sys.modules` — ОДИН объект модуля, не копия. Обычный шим (`from X import *`)
+создал бы второй объект со своим состоянием, и пересоздание глобали (как `drain_call_stats` в
+orchestrator_usage) разъехалось бы между копиями — этот класс дефектов уже стоил отдельной отладки.
+
+РЕШЕНИЕ 19.08.2026 (публичная граница). `AGENTS.md` запрещал новые алиасы, а этот файл требовал
+плоский дом КАЖДОМУ модулю пакета — правило и проверка тянули в разные стороны, и двенадцать
+модулей, родившихся в пакетах, падали ровно на противоречии. Выбрано правило: `tools/` — уровень
+`deprecated` публичной поверхности (docs/api/public-surface.md). Замер, на котором стоит выбор: из
+113 файлов в `tools/` 112 — алиасы, настоящий код остался только в `_bootstrap.py`. Слой заперт
+реестром `quality/deprecated-surface.yaml` и ходит только вниз.
 
 Три обязательных теста на capability (AGENTS.md):
-  * positive     — оба пути импорта дают ОДИН объект; каждый плоский модуль имеет ровно один алиас;
-  * fail-closed  — модуль вне пакетов и модуль в двух пакетах ловятся; dev-only не попадает в
-                   продуктовый пакет;
+  * positive     — оба пути импорта дают ОДИН объект; реестр плоских имён совпадает с `tools/`;
+  * fail-closed  — модуль вне пакетов, модуль в двух пакетах и НОВЫЙ плоский алиас ловятся;
+                   dev-only не попадает в продуктовый пакет;
   * side-effect  — состояние общее: правка через один путь видна через другой.
 """
 from __future__ import annotations
@@ -81,6 +88,8 @@ def test_package_modules_are_the_same_object(pkg):
     for f in sorted((SURFACE / pkg).glob("*.py")):
         if f.name in ("__init__.py", "_bootstrap.py"):
             continue
+        if not (PKG / "tools" / f.name).is_file():
+            continue          # плоского имени нет и не будет — deprecated-слой заперт, см. ниже
         via_pkg = importlib.import_module(f"ai_ops_kit.{pkg}.{f.stem}")
         flat = importlib.import_module(f.stem)
         assert via_pkg is flat, f"{pkg}.{f.stem}: алиас — отдельный объект, состояние разъедется"
@@ -146,7 +155,10 @@ def test_exactly_one_side_is_an_alias():
                 continue
             flat = PKG / "tools" / f.name
             if not flat.is_file():
-                problems.append(f"{d.name}/{f.name}: плоского файла нет вовсе")
+                # Модуль, родившийся в пакете, плоского имени НЕ получает: слой совместимости
+                # объявлен уходящим (`deprecated`) и заперт реестром. Проверка «дом обязан быть
+                # плоским» писалась во время переезда, когда плоское имя было у каждого модуля;
+                # после переезда она требовала бы наращивать совместимость с тем, чего не было.
                 continue
             sides = [is_alias(f), is_alias(flat)]
             if sides.count(True) != 1:
@@ -201,6 +213,63 @@ def test_flat_aliases_are_self_sufficient():
     assert not bad, (
         "алиасы импортируют пакет, не положив корень в sys.path — упадут вне editable-установки: "
         f"{bad[:8]}")
+
+
+# --------------------------------------------------- deprecated-слой: храповик ---
+
+DEPRECATED_REGISTRY = PKG / "quality" / "deprecated-surface.yaml"
+
+
+def _declared_flat_surface():
+    """Реестр плоских имён: {алиасы}, {настоящий код}. Читается без pyyaml-специфики — простой
+    список `  - имя` под своим ключом, чтобы охрана поверхности не зависела от разбора схемы."""
+    import yaml
+    doc = yaml.safe_load(DEPRECATED_REGISTRY.read_text(encoding="utf-8"))
+    return set(doc.get("flat_module_aliases") or []), set(doc.get("real_code") or [])
+
+
+@pytest.mark.unit
+def test_deprecated_flat_surface_matches_the_registry():
+    """fail-closed: новый плоский алиас краснеет, удалённый обязан уйти из реестра.
+
+    Без этого запрет «новые алиасы не заводить» остаётся текстом в AGENTS.md — а объявленная
+    проверка, которая нигде не исполняется, и есть главный класс дефектов этого репозитория.
+    """
+    declared_aliases, declared_real = _declared_flat_surface()
+    real = _flat_modules()
+    declared = declared_aliases | declared_real
+
+    added = sorted(real - declared)
+    assert not added, (
+        f"новые плоские имена в tools/: {added}. Слой совместимости объявлен уходящим "
+        f"(docs/api/public-surface.md, уровень deprecated) и ходит только вниз: модуль, "
+        f"родившийся в пакете, плоского алиаса не получает. Если алиас всё же нужен внешнему "
+        f"вызову — это решение, и оно записывается в {DEPRECATED_REGISTRY.name} с причиной")
+
+    gone = sorted(declared - real)
+    assert not gone, (
+        f"в реестре объявлены плоские имена, которых уже нет: {gone}. Храповик ходит вниз — "
+        f"уберите их из {DEPRECATED_REGISTRY.name}")
+
+
+@pytest.mark.unit
+def test_registry_calls_alias_an_alias_and_code_a_code():
+    """side-effect: реестр обязан говорить правду о том, ЧТО он перечисляет.
+
+    Иначе однажды в `flat_module_aliases` окажется настоящий модуль, храповик его защитит как
+    «совместимость», и код навсегда останется в уходящем слое.
+    """
+    declared_aliases, declared_real = _declared_flat_surface()
+    wrong = []
+    for name in sorted(declared_aliases):
+        src = (PKG / "tools" / f"{name}.py").read_text(encoding="utf-8")
+        if "sys.modules[__name__]" not in src:
+            wrong.append(f"{name}: объявлен алиасом, а внутри настоящий код")
+    for name in sorted(declared_real):
+        src = (PKG / "tools" / f"{name}.py").read_text(encoding="utf-8")
+        if "sys.modules[__name__]" in src:
+            wrong.append(f"{name}: объявлен кодом, а внутри алиас")
+    assert not wrong, wrong
 
 
 # ------------------------------------------------------------- зона-исключение ---

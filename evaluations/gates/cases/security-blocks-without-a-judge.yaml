@@ -1,0 +1,18 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: security-blocks-without-a-judge
+gate: security
+case_kind: no_judge
+summary: |
+  Блокирующий судейский гейт без заключения судьи даёт fail и НАЗЫВАЕТ роль, которой не хватило, а не проезжает зелёным.
+origin:
+  source: qualification/REAL-PRODUCT-BNBM-RERUN-2026-08-19.md
+  provenance: verbatim_run_report
+notes: |
+  Живой прогон на втором brownfield 19.08.2026 дошёл до конца, сделал работу и остановился на гейте `security` с blocking fail: судьи на уровне QUICK не поднимается вовсе (`resolve_flags`), и закрыть гейт было нечем. Отчёт прогона назвал это «ложным red по построению» — и это верно как оценка ЦЕНЫ, но не как оценка вердикта: вердикт был правильным. Кейс закрепляет именно его. Формулировка блокера в том прогоне пришла из `security_pack` («нужен независимый security-reviewer/человек по доменам: …»); здесь проверяется общий путь `evaluate_gate`, и роль в тексте та же — на неё и смотрим.
+signals: {}
+expected:
+  status: fail
+  reason_matches:
+  - security-reviewer
+  - гейт не пройден

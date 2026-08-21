@@ -51,7 +51,7 @@ cd /path/to/project
 
 ## Версия
 
-**v3.36.12 qualification** — Survives The Update
+**v3.37.0 qualification** — Product Operating System
 
 > Канал `qualification`, а не `stable`, и это не осторожность, а правило: `stable` требует полевых
 > доказательств на двух живых дочках для ЭТОЙ версии, и проверяется машиной

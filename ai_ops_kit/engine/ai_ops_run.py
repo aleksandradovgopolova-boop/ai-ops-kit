@@ -38,7 +38,8 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.engine import run_plan          # noqa: E402
 from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending   # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
-from ai_ops_kit.lifecycle import active_work       # noqa: E402
+from ai_ops_kit.lifecycle import active_work
+from ai_ops_kit.engine import work_areas as _work_areas       # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
@@ -593,8 +594,15 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     # (локальная сессия). Escalation-ladder чистим: некуда «эскалировать» сильного вниз на kimi/qwen.
                     _tier = _plan.get("preferred_writer_tier") or {}
                     if _tier.get("tier") == "strong-executor":
-                        import shutil as _sh
-                        if _sh.which("claude"):
+                        # СПРАШИВАЕМ ТЕМ ЖЕ, ЧЕМ ЗАПУСТИМ (замер 18.08.2026). Здесь стоял голый
+                        # `shutil.which("claude")`, а `make_claude_cli_provider()` запускает то, что
+                        # найдёт `claude_lookup` — то есть путь, названный владельцем в
+                        # AI_OPS_CLAUDE_BIN, сильнее PATH. Расхождение давало ровно тот класс, из-за
+                        # которого функция и заводилась: рабочий исполнитель назван, но не в PATH ->
+                        # «strong executor недоступен» и тихий откат на дешёвого writer'а; битый
+                        # названный путь при claude в PATH -> writer выбран, а первый же вызов модели
+                        # отказывается работать посреди начатого прогона.
+                        if orchestrator.claude_binary():
                             _writer_model = "claude-code-local"
                             _writer_prov = orchestrator.make_claude_cli_provider()
                             _model_resolution["effective_model"] = "claude-code-local"
@@ -608,9 +616,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                 "complexity-aware: сложный класс -> writer=claude-cli (сильный executor) сразу")
                         else:
                             _model_resolution["strong_executor_unavailable"] = True
+                            _look = orchestrator.claude_lookup()
                             _model_resolution["notes"].append(
                                 "complexity-aware: класс требует strong-executor, но локальный claude CLI "
-                                "недоступен -> честный fallback на money-mode дешёвый writer")
+                                "недоступен ("
+                                + ("назван путь AI_OPS_CLAUDE_BIN, файла нет или он не исполняемый"
+                                   if _look["where"] == "named" else "в PATH процесса кита не найден")
+                                + ") -> честный fallback на money-mode дешёвый writer")
                     # reviewer — JIT trust отдельного провайдера (writer≠judge по модели).
                     # v3.9.0-rc3: сравниваем с ЭФФЕКТИВНЫМ writer'ом (_writer_model), а не с registry-impl —
                     # иначе при complexity-override (writer=claude-cli) deepseek-ревьюер ложно считался
@@ -993,7 +1005,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                     "error": (f"active-work реестр повреждён ({_awg['reason']}) — прогон не начат, чтобы не "
                               "потерять координацию параллельных сессий (пустая карта скрыла бы коллизии). "
                               "Нужна явная recovery .ai/runtime/active-work.yaml.")}
-        areas = signals.get("affected_areas") or ["unspecified"]
+        # ЗАЯВКА #138: здесь стояло `or ["unspecified"]`, а `affected_areas` на одиночном пути в
+        # сигналы не кладёт НИКТО — поэтому пересечение зон находилось со ВСЕМИ активными записями
+        # сразу (неизвестность считалась совпадением). Зоны выводятся из `write_scope` тем же
+        # правилом, что на пакетном пути (`work_areas` — одна формула на оба пути).
+        areas = _work_areas.areas_for(signals, write_scope)
         # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
         # активной работой (тихо, через classify — без печати и без себя). Advisory в отчёт.
         try:
@@ -1009,12 +1025,28 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             preflight = {"error": f"{type(_pe).__name__}: {_pe}"[:200], "conflicts": None}
         # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
         # stdout оставался чистым для --json.
+        # КОД ВОЗВРАТА РЕГИСТРАЦИИ ЧИТАЕТСЯ (замер 18.08.2026). Прежде он отбрасывался в обеих
+        # точках вызова: `register` мог отказать (цикл зависимостей, работа в main, нет зон) — и
+        # прогон всё равно продолжался. С отказом второй сессии на ту же работу/ветку цена этого
+        # молчания стала прямой: заявка потребителя #150 — два PR на одну ветку и выброшенная
+        # половина работы. Отказ обязан останавливать прогон ДО правок, а не после.
+        _reg_rc = 1
         with contextlib.redirect_stdout(sys.stderr):
             try:
-                active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
-                                     workitem=f"features/{fid}/workitem.yaml")
+                _reg_rc = active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
+                                               workitem=f"features/{fid}/workitem.yaml",
+                                               child_root=child_root,
+                                               published=active_work.publication_enabled(child_root))
             except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
                 lifecycle_errors.append(f"active-work register: {_e}")
+                _reg_rc = 0        # сбой записи реестра уже назван выше — не путать его с отказом
+        if _reg_rc:
+            return {"schema_version": 1, "kind": "run-report", "workitem_id": fid,
+                    "status": "blocked",
+                    "blocked_by": "active-work",
+                    "error": ("работа не начата: заявку на эту работу или ветку держит другая сессия "
+                              "(причина и держатель названы выше). Перенять её можно осознанно — "
+                              "`active_work.py register … --takeover --takeover-reason \"почему\"`.")}
 
         # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
         # останется in-progress навсегда) — гарантируем через except+re-raise.
@@ -1592,9 +1624,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
     # 5. регистрация активной работы (координация параллельных сессий)
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
-    areas = signals.get("affected_areas") or ["unspecified"]
-    active_work.register(aw_path, fid, f"feature/{fid}", areas, session,
-                         workitem=f"features/{fid}/workitem.yaml")
+    areas = _work_areas.areas_for(signals, write_scope)   # #138: вывод, а не заглушка (см. work_areas)
+    _reg_rc2 = active_work.register(aw_path, fid, f"feature/{fid}", areas, session,
+                                    workitem=f"features/{fid}/workitem.yaml",
+                                    child_root=child_root,
+                                    published=active_work.publication_enabled(child_root))
+    if _reg_rc2:
+        # Тот же отказ на планирующем пути: он тоже занимает ветку и заводит артефакты работы.
+        return {"schema_version": 1, "kind": "run-report", "workitem_id": fid, "status": "blocked",
+                "blocked_by": "active-work",
+                "error": ("работа не начата: заявку на эту работу или ветку держит другая сессия "
+                          "(причина и держатель названы выше).")}
 
     # 6. исполнение
     status, run_state = "planned", f".ai/runtime/workitems/{fid}/TaskState.yaml"

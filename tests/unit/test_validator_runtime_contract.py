@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+import ambient
+
 PKG = Path(__file__).resolve().parents[2]
 
 # Валидаторы, запускаемые без аргументов (сканируют репозиторий).
@@ -63,6 +65,7 @@ STANDALONE = [
     "validate_openspec_change",
     "validate_own_medicine",
     "validate_package_boundaries",
+    "validate_parallel_safety",   # 20.08.2026: standalone, читает свой registry/coordination-files.yaml
     "validate_pipeline_e2e",
     "validate_post_release_readout",
     "validate_presets",
@@ -78,11 +81,13 @@ STANDALONE = [
     "validate_release_claims",
     "validate_research_artifacts",
     "validate_runtime_surface",
+    "validate_sandbox_boundary",
     "validate_scenario_evidence",
     "validate_security_domains",
     "validate_security_posture",
     "validate_stack_qualification",
     "validate_stale_gates",
+    "validate_child_config_filled",
     "validate_standalone_engine",
     "validate_supply_chain",
     "validate_surface_wiring",
@@ -193,19 +198,30 @@ def repo_copy(tmp_path_factory):
     return dst
 
 
+def _plain_run(args, cwd, base=None, timeout=300, text=False):
+    """Прежний запуск — БЕЗ изоляции. Оставлен исполнимым НАМЕРЕННО: проба шва обязана мутировать
+    вызов в работающий код, иначе она поймает синтаксис, а не поведение."""
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    return subprocess.run([sys.executable, *[str(a) for a in args]], cwd=str(cwd),
+                          capture_output=True, env=env, timeout=timeout, text=text)
+
+
 def _run(copy, name, *args, timeout=300):
-    """Запуск валидатора так, как его запускает пользователь: БЕЗ PYTHONPATH.
+    """Запуск валидатора так, как его запускает пользователь: без PYTHONPATH И БЕЗ ПОЯСА.
 
     v3.31: прежде здесь ставился `PYTHONPATH=<copy>/tools:<copy>/ai_ops_kit/validation`, и из-за него тест
     «валидатор зелёный из копии репозитория» не мог поймать дефект, ради которого написан: десять
     валидаторов не находили `_bootstrap` нигде, кроме окружения с этим поясом. Проверка, которая
     сама себе стелет путь, проверяет не то, что обещает.
+
+    19.08.2026: чистки `PYTHONPATH` ОКАЗАЛОСЬ МАЛО. Editable-установка кита ставит meta-path finder
+    через `.pth` в site-packages, и он отдаёт `ai_ops_kit` любому процессу этого интерпретатора —
+    поэтому проба «испортить реестр в КОПИИ и посмотреть, кто покраснеет» читала рабочий клон, а не
+    копию, и сообщала «порчу не заметили». Ровно то же, что она обвиняла в других. Запуск переведён
+    на `tests/ambient.run` (`-S` + каталог симлинков на зависимости): пояс не устанавливается вовсе.
     """
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
-    return subprocess.run(
-        [sys.executable, str(copy / "ai_ops_kit" / "validation" / f"{name}.py"), *args],
-                          cwd=str(copy), capture_output=True, env=env, timeout=timeout)
+    return ambient.run([copy / "ai_ops_kit" / "validation" / f"{name}.py", *args],
+                       cwd=copy, base=copy.parent, timeout=timeout, text=False)
 
 
 @pytest.mark.slow
@@ -286,3 +302,20 @@ def test_module_description_is_a_real_docstring(rel):
     assert ast.get_docstring(ast.parse(src)) is not None, (
         f"{rel}: описание не является докстрингом (__doc__ = None) — "
         f"перенеси его ВЫШЕ `from __future__ import annotations`")
+
+
+@pytest.mark.unit
+def test_validator_run_goes_through_the_isolated_runner(monkeypatch, tmp_path):
+    """ШОВ, машинно-независимо: запуск валидатора обязан идти ЧЕРЕЗ `ambient.run`.
+
+    Поведением это не проверить там, где пояса нет (в CI его нет), а «инструмент есть, вызова нет» —
+    ровно тот способ, которым дефект и жил. Поэтому проверяется сам вызов."""
+    seen = {}
+
+    def _spy(args, cwd, base, timeout=300, text=True, **kw):
+        seen["args"] = [str(a) for a in args]
+        return subprocess.CompletedProcess(args, 0, b"", b"")
+
+    monkeypatch.setattr(ambient, "run", _spy)
+    _run(tmp_path, "validate_claims")
+    assert seen and seen["args"][0].endswith("validate_claims.py"), seen

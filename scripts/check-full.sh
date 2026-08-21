@@ -3,7 +3,7 @@
 # перечислялось в пре-коммит-чеклисте построчно (201 команда на пике), — это тесты.
 #
 # v3.34: скрипт называет СВОЙ охват сам. «Полный» здесь значит «весь pytest», а не «вся
-# поддерживаемая матрица»: PR #38 написал «полный контур зелёный», и джоба python39-compat
+# поддерживаемая матрица»: PR #38 написал «полный контур зелёный», и compatibility-matrix
 # опровергла это в том же релизе. Охват объявляется до и после прогона — ровно в тот момент,
 # когда возникает искушение сформулировать результат шире, чем он получен.
 set -euo pipefail
@@ -15,12 +15,26 @@ cd "$(dirname "$0")/.."
 # прогона: узнавать, что «зелёное» ничего не значит, надо не после успеха.
 scripts/warn-path-belt.sh
 
+# ИНТЕРПРЕТАТОР НАЗЫВАЕТСЯ ОДИН РАЗ И ИСПОЛЬЗУЕТСЯ ТОТ ЖЕ (19.08.2026, `local-run-must-mirror-ci`).
+# `python3` из PATH и интерпретатор, которым человек на самом деле работает, — разные вещи: на
+# машине владельца `python3` это homebrew 3.14 БЕЗ pytest, а работа идёт в venv 3.11. Скрипт при
+# этом объявлял охват по первому и падал на `No module named pytest` — то есть документированная
+# точка входа «полный контур» не работала вовсе, а тест об этом молчал, потому что сравнивал
+# объявленную версию со СВОИМ интерпретатором.
+PYTHON="${PYTHON:-python3}"
+if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
+  echo "ОТКАЗ: интерпретатор '${PYTHON}' есть, а pytest в нём нет — прогонять нечем." >&2
+  echo "  $("$PYTHON" -c 'import sys; print(sys.executable)' 2>/dev/null || echo "$PYTHON")" >&2
+  echo "Запустите из своего окружения или назовите его явно: PYTHON=.venv/bin/python $0" >&2
+  exit 2
+fi
+
 FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)
-CURRENT=$(python3 -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
+CURRENT=$("$PYTHON" -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
 
 echo "ОХВАТ: full-current-python — ${CURRENT}."
 echo "НЕ входит: объявленный пол requires-python ${FLOOR:-?} и установка в чистое окружение —"
-echo "это compatibility-matrix, её дают только джобы CI python39-compat / pipeline-e2e / clean-install."
+echo "это compatibility-matrix, её дают только джобы CI pipeline-e2e / clean-install / upgrade-path."
 echo
 
 # Линтер — ДО тестов: F821 (вызов несуществующего имени) находится за секунды, а тремя минутами
@@ -44,7 +58,7 @@ else
   echo
 fi
 
-python3 -m pytest tests/ -q "$@"
+"$PYTHON" -m pytest tests/ -q "$@"
 
 echo
 echo "ЗЕЛЁНЫЙ ОХВАТ: full-current-python (${CURRENT}). Формулируя результат, назови охват:"

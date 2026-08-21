@@ -28,25 +28,25 @@ your-project/
 ### Создать задачу
 
 ```bash
-python3 .ai/managed/tools/ai_ops_cli.py run "описание задачи" . --execute
+./ai-ops run "описание задачи" --execute
 ```
 
 ### Проверить статус
 
 ```bash
-python3 .ai/managed/tools/ai_ops_cli.py status .
+./ai-ops status
 ```
 
 ### Ревью
 
 ```bash
-python3 .ai/managed/tools/ai_ops_cli.py review .
+./ai-ops review
 ```
 
 ### Resume (продолжить прерванную)
 
 ```bash
-python3 .ai/managed/tools/ai_ops_cli.py resume .
+./ai-ops resume
 ```
 
 ## Workflow

@@ -1,0 +1,27 @@
+# Архитектурные проверки: чем import-linter сильнее собственного validate_layering и чем
+#       опасен для ЭТОГО репозитория.
+schema_version: 1
+kind: research.evidence
+id: EV-1125
+request_id: RR-015
+statement: "import-linter 2.13 (03.07.2026, BSD-2-Clause, 1139 звёзд, коммит 11.08.2026) даёт типы контрактов, которых у собственного validate_layering кита нет: protected (модуль нельзя импортировать никому, кроме списка разрешённых) и acyclic_siblings (запрет циклов между соседями с параметром глубины), плюс exhaustive-проверку 'все слои объявлены'. Но: pytest-интеграции у него НЕТ (это CLI), JSON-вывода нет (открытая #291), программного API нет (#246), а кэш графа — по докам 'Caching isn't currently concurrency-safe'. Последнее прямо конфликтует с практикой этого репозитория: несколько сессий работают в одном дереве и параллельных worktree."
+evidence_type: documented_fact
+source:
+  title: "import-linter — документация (contract_types, usage, caching) и трекер"
+  url: "https://import-linter.readthedocs.io/en/v2.7/caching.html"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "import-linter.readthedocs.io: contract_types.html (protected, acyclic_siblings, exhaustive), caching.html (concurrency), usage.html; issues #291, #246"
+  quote: "Caching isn't currently concurrency-safe"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация проекта, прочитана 17.08.2026. Вывод про конфликт с параллельными сессиями — сопоставление цитаты докaв с практикой репозитория, а не утверждение докaв."
+status: active
+superseded_by: null

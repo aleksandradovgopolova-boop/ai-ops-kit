@@ -18,7 +18,13 @@ from session_guardrails import (  # noqa: F401 — имена, которые и
 
 
 @pytest.mark.slow
-def test_session_guardrails_selftest():
+def test_session_guardrails_selftest(tmp_path):
+    """ЧТО ИЗМЕНИЛОСЬ 17.08.2026. Проверка «ритуал complete при всех галочках» стояла на
+    `repo_path="/repo"` — каталоге, которого нет, — и была зелёной, потому что `handoff_created`
+    был константой True. Теперь пункт выводится из наличия файла, поэтому «все галочки» требуется
+    СОЗДАТЬ: handoff записывается в настоящий каталог. Прежний вид проверки утверждал ровно ту
+    неправду, из-за которой `ai-ops session` на живой сессии рапортовал сохранённый handoff при
+    полном его отсутствии."""
     ok = True
 
     def expect(name, cond):
@@ -57,12 +63,21 @@ def test_session_guardrails_selftest():
     expect("небезопасная граница -> defer, без команды",
            r["outcome"] == "defer" and r["command"] is None)
 
+    # «Все галочки» теперь включают РЕАЛЬНО записанный handoff — иначе пункт `handoff_created`
+    # закрыться не может, и это и есть предмет охраны.
+    from ai_ops_kit.engops import session_handoff as _sh
+    _sh.write(tmp_path, _sh.build(tmp_path, snap(318_000), goal="селфтест"))
+
     rit = completion_ritual(snap(318_000), d, workitem_id="WI-1", pr="PR#48", checks="183/183",
                             next_relation="new_independent_task", next_task="Environment Discovery",
-                            repo_path="/repo")
+                            repo_path=str(tmp_path))
     expect("ритуал: исход clear + NextCommand", rit["session_recommendation"]["outcome"] == "clear"
            and rit["next_command"] and check(rit) == [])
     expect("ритуал complete при всех галочках", rit["complete"] is True)
+    # Обратная сторона той же охраны: без файла ритуал закрытым быть НЕ может.
+    rit_no = completion_ritual(snap(318_000), d, workitem_id="WI-1", pr="PR#48", checks="183/183",
+                               next_relation="new_independent_task", repo_path=str(tmp_path / "нет"))
+    expect("нет handoff -> ритуал не complete", rit_no["complete"] is False)
     block = render_block(rit)
     expect("блок содержит PR/стоимость/рекомендацию/команду",
            "PR#48" in block and "Рекомендация" in block and "/clear" in block)

@@ -102,6 +102,56 @@ def _product_ci(root) -> list:
     return found
 
 
+def _measure_storybook(root: Path) -> dict:
+    """Измерить профиль Storybook ЗАМЕРОМ, а не package.json (storybook-profile-measured).
+
+    Возвращает: {present: bool, config: bool, stories: int, build_script: bool, version: str|None}.
+    present = config существует И stories существуют (не только dependency в package.json).
+    """
+    result = {"present": False, "config": False, "stories": 0,
+              "build_script": False, "version": None}
+
+    # Конфигурация: .storybook/ каталог или storybook в package.json scripts
+    config_dir = root / ".storybook"
+    has_config = config_dir.is_dir() and any(config_dir.glob("main.*"))
+    result["config"] = has_config
+
+    # Stories: файлы *.stories.* (измеряем количеством, не наличием)
+    story_count = 0
+    for ext in ("*.stories.tsx", "*.stories.ts", "*.stories.jsx", "*.stories.js",
+                "*.stories.mdx"):
+        story_count += len(list(root.rglob(ext)))
+        if story_count >= 100:  # кап, чтобы не считать вечно
+            break
+    result["stories"] = story_count
+
+    # Build script: storybook в package.json scripts
+    pkg_json = root / "package.json"
+    if pkg_json.is_file():
+        try:
+            import json
+            pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
+            scripts = pkg.get("scripts", {})
+            result["build_script"] = any("storybook" in v for v in scripts.values()
+                                         if isinstance(v, str))
+            # Версия из dependencies
+            for dep_key in ("dependencies", "devDependencies"):
+                deps = pkg.get(dep_key, {})
+                for name in ("@storybook/react", "@storybook/vue", "@storybook/svelte",
+                             "@storybook/web-components", "storybook"):
+                    if name in deps:
+                        result["version"] = deps[name]
+                        break
+                if result["version"]:
+                    break
+        except (OSError, ValueError, KeyError):
+            pass
+
+    # present = config + stories (не только dependency)
+    result["present"] = has_config and story_count > 0
+    return result
+
+
 def discover(child_root) -> dict:
     """DISCOVER — что фактически лежит в репозитории. Только факты + их источник.
 
@@ -185,6 +235,12 @@ def discover(child_root) -> dict:
     ev["architecture_docs"] = _exists("context/system", "docs/architecture", "ARCHITECTURE.md")
     ev["decisions"] = _exists("decisions", "docs/adr")
     ev["env_configs"] = _exists(".env.example", ".env.sample", "config")
+
+    # storybook-profile-measured: профиль Storybook измеряется ЗАМЕРОМ, а не package.json.
+    # F-019 класс: доказательство, указанное китом, указывает на артефакт, который кит сам создал.
+    # Здесь: наличие @storybook/react в package.json — не доказательство работающего Storybook.
+    # Доказательство: конфигурация существует + stories существуют + build-скрипт есть.
+    ev["storybook"] = _measure_storybook(root)
 
     try:
         from ai_ops_kit.shared import project_detector

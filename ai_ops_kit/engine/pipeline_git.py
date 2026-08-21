@@ -236,6 +236,29 @@ def delivery_preflight(root, base_ref, base_sha, open_pr) -> dict | None:
                         f"Сказано ДО работы — прогон продолжается, но заявки в конце не будет")}
 
 
+def managed_drift_preflight(root) -> dict | None:
+    """B2-27 (прогон 19.08.2026): update --in-place оставляет managed-файлы в рабочем дереве,
+    но прогон изолируется в worktree от HEAD (коммита). Незакоммиченные managed-файлы не попадают
+    в worktree — прогон идёт на старом ките, а doctor говорит «версии ✓».
+
+    Проверка: git status --porcelain -- .ai/managed/ .ai-ops.yaml
+    Если есть незакоммиченные изменения — warning, прогон продолжается, но человек предупреждён.
+    Граница: НЕ коммитим автоматически, решение остаётся за человеком.
+    """
+    rc, out, _ = _git(root, "status", "--porcelain", "--", ".ai/managed/", ".ai-ops.yaml")
+    if rc != 0 or not (out or "").strip():
+        return None
+    files = [line.strip() for line in out.strip().splitlines() if line.strip()]
+    sample = ", ".join(f[3:] for f in files[:5])
+    more = f" и ещё {len(files) - 5}" if len(files) > 5 else ""
+    return {
+        "warning": (f"managed-файлы изменены, но не закоммичены ({len(files)} файл(ов)): "
+                    f"прогон пойдёт от HEAD (старое), а не от обновлённого дерева. "
+                    f"Чтобы прогон увидел обновление, закоммитьте изменения. "
+                    f"Файлы: {sample}{more}")
+    }
+
+
 def _change_context(work_root, revision, max_chars=12000):
     """v3.0-rc9 (finding живого прогона kimi): детерминированно собрать КОНТЕКСТ ИЗМЕНЕНИЯ для
     независимого ревьюера — полный список изменённых файлов (`git show --stat`, всегда целиком) +

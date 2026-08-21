@@ -12,6 +12,21 @@ kind: robin-duties
 owner: team-lead
 
 duties:
+  # --- Nightly Product Health Review (v0, read-only) -------------------------
+  - id: nightly-review
+    description: "Ночной delta-обзор: что изменилось, что требует решения, чего не сделал."
+    trigger:
+      type: cron
+      schedule: "0 6 * * *"        # Каждый день в 6:00
+    inputs:
+      - .git/                        # История коммитов
+      - planning/plan.yaml           # Статусы работ
+      - .github/workflows/           # CI-конфигурация
+    output:
+      artifact: nightly-brief
+      destination: team-chat         # Утренний бриф в чат
+    owner: team-lead
+
   # --- Минимально обязательная обязанность: периодический дайджест -------------
   - id: weekly-digest
     description: "Недельный дайджест: что произошло, решения, открытые вопросы."

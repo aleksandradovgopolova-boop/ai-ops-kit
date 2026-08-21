@@ -56,7 +56,7 @@ OPENAI_COMPATIBLE_BASE_URL=... OPENAI_COMPATIBLE_API_KEY=... \
 ## Статус проверки (честно)
 
 - Ассеты (`Dockerfile`, `run-sandboxed.sh`) написаны; jail-флаги приняты docker (flag-parse) и
-  их присутствие стережёт `validation/validate_container_assets.py` (регресс любого флага — ошибка CI).
+  их присутствие стережёт `ai_ops_kit/validation/validate_container_assets.py` (регресс любого флага — ошибка CI).
 - Команда движка, которую оборачивает wrapper (`ai-ops run … --sandbox`), подтверждена живыми
   прогонами.
 - **Сборка образа** (pull базового образа) в CI-песочнице кита закрыта egress-прокси — её

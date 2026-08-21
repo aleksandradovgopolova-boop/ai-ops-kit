@@ -1,0 +1,30 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-когда-у-провайдера-claud-99aa67ef
+at: '2026-08-20T11:21:35+00:00'
+statement: 'Когда у провайдера claude-cli кончается лимит сессии (HTTP 429, ''You''ve
+  hit your session limit''), кит не переводит это в человеческую фразу: наружу выходит
+  RuntimeError и полный питоновский трейсбек через 5 попыток. Человек не понимает
+  ни что случилось, ни что делать — а делать надо всего лишь подождать до указанного
+  в ответе времени или взять другого провайдера. Гейт code_review при этом остаётся
+  незакрытым, и работа стоит. Ожидание: сообщение вида ''лимит модели кончился, вернусь
+  после HH:MM, либо укажи другого провайдера'' и код возврата, а не трейсбек.'
+observation_class: defect
+severity: p0
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: command
+  command: ai-ops review --feature quick-open-palette --provider claude-cli --base
+    main
+  output: 'RuntimeError: claude -p не удался после 5 попыток ... api_error_status:429
+    ''You''ve hit your session limit · resets 2:20pm'''
+state: became_work
+state_reason: заведена работа errors-reach-the-human-not-as-tracebacks (план кита,
+  20.08.2026)
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'

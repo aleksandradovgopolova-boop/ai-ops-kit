@@ -1,0 +1,27 @@
+# Второе ограничение mutmut — прямо по больному месту этого репозитория (editable-установка
+#       уводит прогон в другое дерево, EV-1117).
+schema_version: 1
+kind: research.evidence
+id: EV-1122
+request_id: RR-015
+statement: "mutmut 3.x копирует исходники в каталог ./mutants/ и гоняет тесты оттуда; открытая заявка #486 фиксирует, что это ЛОМАЕТ импорты editable-установки. Кроме того mutmut 3.x не мутирует код вне функций вовсе (README: для этого предлагается mutmut 2 с другой моделью исполнения), и у него нет порога --fail-under и вывода JUnit XML (открытый вопрос #373). У mutmut есть встроенная диагностика на случай, когда тесты импортируют код другим путём: тогда все мутанты молча становятся 'No Tests' — mutmut это ловит и падает с внятным сообщением."
+evidence_type: documented_fact
+source:
+  title: "mutmut — README.rst, ARCHITECTURE.rst, issues #486 и #373"
+  url: "https://github.com/boxed/mutmut/issues/486"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "github.com/boxed/mutmut: ARCHITECTURE.rst (модель ./mutants/), README.rst (мутации вне функций), issue #486 (editable), issue #373 (JUnit XML)"
+  quote: "If you want to mutate code outside of functions, you can try using mutmut 2, which has a different execution model"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-17"
+reliability:
+  level: medium
+  rationale: "Первичные документы проекта, прочитаны 17.08.2026. Уровень medium, а не high: связь заявки #486 с editable-установкой ИМЕННО ЭТОГО репозитория не проверена прогоном — mutmut на ките не запускался. Это первое, что должен показать пилот."
+status: active
+superseded_by: null

@@ -5,7 +5,7 @@
 ## UsageRecord
 
 ```python
-from contracts import UsageRecord
+from ai_ops_kit.shared.contracts import UsageRecord
 
 record: UsageRecord = {
     "run_id": "run-001",
@@ -28,7 +28,7 @@ record: UsageRecord = {
 ## PreflightResult
 
 ```python
-from contracts import PreflightResult
+from ai_ops_kit.shared.contracts import PreflightResult
 
 result: PreflightResult = {
     "kind": "preflight",
@@ -42,7 +42,7 @@ result: PreflightResult = {
 ## GateResultV2
 
 ```python
-from contracts import GateResultV2
+from ai_ops_kit.shared.contracts import GateResultV2
 
 gate: GateResultV2 = {
     "schema_version": 2,
@@ -59,7 +59,7 @@ gate: GateResultV2 = {
 ## RunReport
 
 ```python
-from contracts import RunReport
+from ai_ops_kit.shared.contracts import RunReport
 
 report: RunReport = {
     "workitem_id": "wid-001",

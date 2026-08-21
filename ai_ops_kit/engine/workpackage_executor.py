@@ -505,7 +505,9 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
             agg_sec, vroot, _base_sha, final_sha, signals, reviewer_proposer, review,
             security_reviewer_proposer=security_reviewer_proposer,
             strict_judge_qualified=strict_judge_qualified, wid=wid, child_root=child_root)
-        agg_sec_ok = (agg_sec or {}).get("overall") == "clear"
+        # `advisory` наравне с `clear`: домены, поднятые только совпадением по содержимому и без
+        # находок, не держат агрегат — тот же выбор, что и на гейте (`security_pack._content_only`).
+        agg_sec_ok = (agg_sec or {}).get("overall") in ("clear", "advisory")
         agg_code_ok, agg_code_reviews = _aggregate_code_review(
             vroot, _base_sha, final_sha, signals, reviewer_proposer, review)
         return {"verified": True, "regressions": agg_reg, "no_regressions": not agg_reg,
@@ -516,6 +518,11 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
                 "evidence_revision_ok": (coll.get("revision") == final_sha),
                 "security_overall": (agg_sec or {}).get("overall"), "security_ok": agg_sec_ok,
                 "security_reviewer_status": (agg_sec or {}).get("reviewer_status"),
+                # ТА ЖЕ БОЛЕЗНЬ НА ПОСЛЕДОВАТЕЛЬНОМ ПУТИ (заявка #139): наружу уходил только
+                # `overall`, и человек, которому гейт назвал блокирующие домены, не мог увидеть ни
+                # одной находки. Проекция та же, что у одиночного прогона — одна правда об охвате и
+                # находках, а не два разных ответа на один вопрос.
+                "security_scan": _sp2.for_report(agg_sec),
                 "code_review_ok": agg_code_ok, "code_reviews": agg_code_reviews,
                 "checks": {k: (v or {}).get("status") for k, v in (final_checks or {}).items()}}
     except Exception as e:  # noqa: BLE001
@@ -530,7 +537,9 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                      security_reviewer_proposer=None, strict_judge_qualified=True):
     """Исполнить список WorkPackages последовательно. proposer_for(pkg)->proposer; signals_for(pkg)->
     доп. сигналы пакета (опц.); write_scope_for(pkg)->список путей write-scope пакета (опц.).
-    v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути (containment не теряется);
+    v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути — containment не
+    теряется. Containment здесь означает политику брокера (allowlist, write_scope, запрет push),
+    а не изоляцию исполнения: сеть и ресурсы им не ограничены;
     open_pr применяется к финальному пакету (интегрированная ветка). -> {kind, workitem_id, packages,
     completed, stopped_at, executed_all, ready_all, final_sha, sequential_chain}."""
     from ai_ops_kit.engine import ai_ops_run

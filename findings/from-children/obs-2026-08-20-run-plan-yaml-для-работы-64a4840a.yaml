@@ -1,0 +1,26 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-20-run-plan-yaml-для-работы-64a4840a
+at: '2026-08-20T09:36:19+00:00'
+statement: 'run-plan.yaml для работы, которая целиком состоит из нового экранного
+  элемента, отключил визуальный трек с причиной ''UI не менялся'' и документацию с
+  причиной ''нет пользовательски-заметных изменений''. Причины написаны в прошедшем
+  времени о коде, которого ещё не было: план треков собран до первой правки. Плюс
+  в gates этого прогона нет code_review и security, хотя в .ai-ops.yaml они перечислены
+  как блокирующие.'
+observation_class: defect
+severity: p1
+kit_version: 3.36.12
+child:
+  name: ai-ops-cockpit
+  path: /Users/sasad/ai-ops-cockpit
+  commit: d7d1c81639fa
+evidence:
+- kind: file
+  path: features/quick-open-palette/run-plan.yaml
+  quote: '- track: VISUAL / reason: UI не менялся — визуальный трек не нужен'
+state: became_work
+state_reason: заведена работа the-plan-tells-the-truth-about-the-run (план кита, 20.08.2026)
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-20T12:22:36+00:00'

@@ -1,0 +1,25 @@
+# Замер CI против поля. Считано по GitHub Actions API (repos/.../actions/runs, --paginate,
+#       1208 прогонов за всю историю) и по отчётам живых прогонов в qualification/.
+schema_version: 1
+kind: research.evidence
+id: EV-1107
+request_id: RR-015
+statement: "CI кита за всю историю: 1208 прогонов, 67 падений (5.5%). 44 из 67 падений (66%) пришлись на трёхдневное окно 05-07.08.2026 — дни, когда контур ЧИНИЛИ (включение линтера, правка тестов-пустышек). За 14-17.08.2026 — 163 прогона и НОЛЬ падений; в те же четыре дня живые прогоны на чужих репозиториях дали 34 находки (BNBM 14 + пере-прогон BNBM 14 + Окошко 6), плюс 6 находок 15.08 (F-030..F-035). Вывод замера: CI не является фильтром для того класса дефектов, который стоит денег — он краснеет почти исключительно на своей собственной настройке."
+evidence_type: measured_result
+source:
+  title: "GitHub Actions history репозитория ai-ops-kit + qualification/REAL-PRODUCT-*.md"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "gh api repos/aleksandradovgopolova-boop/ai-ops-kit/actions/runs --paginate; агрегация по conclusion и дате; находки — заголовки в qualification/REAL-PRODUCT-BNBM-2026-08-14.md, -RERUN-, -OKOSHKO-, -OKOSHKO-RERUN-2026-08-15.md"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичные данные: API самого GitHub и файлы этого репозитория, оба перечитаны 17.08.2026. Ограничение охвата названо: 'ноль падений' относится к прогонам на ветках, дошедших до push/PR — прогоны, которых не было (упавшая локальная проверка до пуша), этим замером не видны."
+status: active
+superseded_by: null

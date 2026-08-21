@@ -1,0 +1,27 @@
+# Мутационный движок против рукописного реестра проб: главное ограничение mutmut. Проверялось
+#       потому, что реестр кита НАЗЫВАЕТ тест, который обязан покраснеть, — и вопрос был, сохранится
+#       ли это свойство при переходе на движок.
+schema_version: 1
+kind: research.evidence
+id: EV-1121
+request_id: RR-015
+statement: "mutmut 3.7.0 (31.07.2026, BSD-3-Clause, живой — коммит 09.08.2026) НЕ умеет сказать, какой именно тест убил мутанта: открытая заявка #392 'Unable to Retrieve Failing Test Information for Mutants'. Команда tests_for_mutant даёт лишь КАНДИДАТОВ (кто задевает мутанта), results отдаёт только статус. Значит mutmut не может заменить реестр охранных проб кита, где у каждой пробы названы конкретные тесты, обязанные покраснеть, — он отвечает на другой вопрос: 'есть ли где-то незащищённый код'."
+evidence_type: documented_fact
+source:
+  title: "mutmut — issue #392 и документация CLI"
+  url: "https://github.com/boxed/mutmut/issues/392"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "github.com/boxed/mutmut/issues/392 (открыта); README.rst раздел про tests_for_mutant"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-17"
+reliability:
+  level: high
+  rationale: "Первичный источник: трекер и README самого проекта, прочитаны 17.08.2026. Оговорка: заявка открытая — состояние может измениться, поэтому запись помечена volatile. Дословной цитаты нет: заголовок заявки и таблица статусов — не проза, цитировать нечего; предупреждение quote-grounding ожидаемо."
+status: active
+superseded_by: null

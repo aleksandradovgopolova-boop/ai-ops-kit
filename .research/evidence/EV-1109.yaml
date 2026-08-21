@@ -1,0 +1,24 @@
+# Форма тестовой пирамиды кита. Считано по дереву tests/ на origin/main (e1004e1).
+schema_version: 1
+kind: research.evidence
+id: EV-1109
+request_id: RR-015
+statement: "У кита 271 тестовый файл и 2410 собранных тестов, из них 268 файлов (99%) лежат в tests/unit. Каталоги tests/integration, tests/live и tests/regression содержат ТОЛЬКО README.md — ни одного теста; tests/contracts — 3 файла. То есть слой, на котором живут 48 находок поля (путь владельца от установки до заявки в чужом репозитории), не покрыт ни одним тестом, а 99% усилия вложено в слой, где находок поля не было."
+evidence_type: measured_result
+source:
+  title: "дерево tests/ репозитория ai-ops-kit на origin/main e1004e1"
+  type: internal_data
+  published_at: null
+  is_primary: true
+citation:
+  locator: "find tests -name 'test_*.py' | wc -l -> 271; ls tests/integration tests/live tests/regression -> только README.md; pytest tests/ -q -> 2405 passed, 5 failed, 10 skipped"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Прямой замер дерева и полный прогон 17.08.2026. Оговорка: 'не покрыт ни одним тестом' — про каталоги integration/live/regression; часть путей владельца проверяется юнит-тестами в tests/unit (например test_installer.py, 24 касания), поэтому утверждение узкое: НЕТ теста, который проходит путь целиком в чужом репозитории."
+status: active
+superseded_by: null

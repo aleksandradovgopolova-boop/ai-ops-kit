@@ -232,6 +232,40 @@ probes:
   - tests/unit/test_staleness_and_provenance.py
   why: '«План отстал от истории» — половина ответа на пассивность кита: без неё он снова будет молчать
     о том, что работа идёт мимо объявленного.'
+- id: handoff-claim-derived-not-asserted
+  kind: guard
+  file: ai_ops_kit/engops/session_guardrails.py
+  find: '        "state_saved": True, "handoff_created": rec.get("handoff_path") is not None,'
+  replace_with: '        "state_saved": True, "handoff_created": True,'
+  tests:
+  - tests/unit/test_session_handoff.py::test_claim_is_derived_from_the_artifact
+  why: 'Замер 17.08.2026 на живой сессии кита: `ai-ops session` печатал «Что сохранено: … handoff_created …»
+    при полном отсутствии сессионного handoff — пункт был значением параметра по умолчанию. Возврат
+    константы возвращает ложную галочку в ритуал, который сам же проверяет честность закрытия работы.'
+- id: handoff-absence-is-called-absence
+  kind: guard
+  file: ai_ops_kit/engops/session_guardrails.py
+  find: '    return ("handoff сессии НЕ сохранён — записать перед уходом, иначе контекст этой сессии "'
+  replace_with: '    return ("handoff сессии сохранён (предположительно) — контекст этой сессии "'
+  tests:
+  - tests/unit/test_session_handoff.py::test_missing_handoff_is_called_missing
+  why: 'Вторая половина той же неправды: текст рекомендации «уйди в новую сессию» БЕЗУСЛОВНО утверждал
+    «Handoff/решения сохранены в репозитории». Совет уходить успокаивал ровно там, где обязан предупредить,
+    — а уходить было не с чем.'
+- id: handoff-seam-guard-writes-what-it-advises
+  kind: seam
+  covers:
+  - ai_ops_kit/engops/session_guardrails.py
+  - ai_ops_kit/engops/session_handoff.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '                _h = session_handoff.write('
+  replace_with: '                _h = None; _skip = (lambda *a, **k: None)('
+  tests:
+  - tests/unit/test_session_handoff_seam.py::test_guard_writes_the_handoff_it_advises
+  why: 'ШОВ пути человека: модуль handoff можно написать и покрыть тестами, и он останется мёртвым —
+    так уже было с `from_doctor` и со всей политикой экономии сессии (v3.16.0+v3.22 были «объявлены
+    и мертвы» до 13.08.2026). Совет сменить сессию существовал и был верен; записи состояния не делал
+    никто. Проба ломает ровно вызов из стража, а не форму артефакта.'
 - id: staleness-reaches-the-answer
   kind: seam
   covers:
@@ -243,3 +277,1141 @@ probes:
   - tests/unit/test_staleness_and_provenance.py
   why: 'ШОВ: механизм существовал и раньше по духу — не хватало того, чтобы человек его ВИДЕЛ. Проверка,
     не доехавшая до ответа, равна отсутствующей.'
+- id: gitattributes-marker-keeps-it-idempotent
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    if _GITATTRIBUTES_MARK in current:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_journals_merge_union.py
+  why: 'Маркер — единственная защита документа владельца от повторной дописки: `init` и `update` зовут
+    функцию свободно, и без него каждый вызов клал бы блок заново. Ровно так `.gitignore` дочки и
+    распухал бы.'
+- id: journal-duplicates-do-not-inflate-runs
+  kind: guard
+  file: ai_ops_kit/intelligence/effect_metrics.py
+  find: '            if key in seen:'
+  replace_with: '            if False:'
+  tests:
+  - tests/unit/test_journals_merge_union.py
+  why: 'Цена `merge=union` — строка может прийти с двух сторон слияния. `runs = len(entries)`, и
+    `problem_rate` делит на это число: без снятия дублей мы обменяли бы видимый конфликт на молча
+    искажённую метрику, а `sufficient` мог бы стать true на одних повторах.'
+- id: gitattributes-seam-delivery-calls-it
+  kind: seam
+  covers:
+  - installer/ai_ops.py
+  - ai_ops_kit/intelligence/effect_metrics.py
+  file: installer/ai_ops.py
+  find: '        "gitattributes": ensure_gitattributes(root),'
+  replace_with: '        "gitattributes": "present",'
+  tests:
+  - tests/unit/test_journals_merge_union.py
+  why: 'ШОВ: правило доезжает до дочки только потому, что его зовёт `deliver_assets` — общая точка
+    `init` и `update`. Функцию можно написать и покрыть тестами, оставив мёртвой: так уже было с
+    `from_doctor` и со всей политикой экономии сессии до 13.08.2026. Здесь цена шва выше обычной —
+    существующие дочки получают правило ТОЛЬКО обновлением.'
+- id: publication-defaults-to-local
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    return bool(tc.get("publish", False))'
+  replace_with: '    return True'
+  tests:
+  - tests/unit/test_local_claim_honest_reach.py
+  why: 'Дефолт публикации ОБЯЗАН быть локальным: включить его по умолчанию — значит выдавать локальное
+    состояние за координацию команды и, для закрытого продукта, начать слать имена задач наружу без
+    решения владельца (ep-2026-08-18-claim-medium-hybrid).'
+- id: claim-records-the-machine
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '                 "machine": _machine(), "started_at": at or _now_iso()}'
+  replace_with: '                 "started_at": at or _now_iso()}'
+  tests:
+  - tests/unit/test_local_claim_honest_reach.py
+  why: 'Без машины в заявке «кто держит» теряет «где» — ровно то, из-за чего атрибуция инцидента
+    параллельных сессий была невозможна (заявка #150).'
+- id: reach-honesty-seam-status-asks-publication
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/ui/presenter.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        pub = active_work.publication_enabled(child_root)'
+  replace_with: '        pub = False  # SEAM MUTATION'
+  tests:
+  - tests/unit/test_local_claim_honest_reach.py
+  why: 'ШОВ: честная фраза о досягаемости доходит до человека, только если `status` реально СПРАШИВАЕТ
+    публикацию и проводит её в презентер. Презентер можно сделать честным и не позвать — тогда он
+    останется мёртвым, как уже было с политикой экономии сессии. Мутация подменяет живой вызов на
+    константу; тест сценария status обязан заметить, что ответ перестал зависеть от конфигурации.'
+- id: publish-only-declared-fields
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    payload = {k: entry.get(k) for k in PUBLISHED_FIELDS if entry.get(k) is not None}'
+  replace_with: '    payload = dict(entry)'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'Публикация ОТПРАВЛЯЕТ данные наружу репозитория-носителя. Публиковать весь entry вместо
+    объявленных полей — утечка (affected_areas, workitem, а завтра и лишнее) без решения владельца.
+    Условие 4 гибридного решения: уезжает ровно названный список.'
+- id: publish-off-writes-nothing
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if published:'
+  replace_with: '        if True:'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'Дефолт локальный — святое: публиковать при выключенной публикации значит отправлять данные
+    закрытого продукта без явного решения владельца (родительское решение ep-2026-08-18-claim-medium-hybrid).'
+- id: team-view-off-shows-only-local
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  # ОБРАЗЕЦ ОБНОВЛЁН 20.08.2026: `team_view` перестал быть «локальные или локальные+чужие» и стал
+  # сложением трёх источников с одним дедупом. Охрана та же и стоит на том же месте — включённая
+  # публикация и ТОЛЬКО она подаёт заявки других машин.
+  find: '    if published:   # заявки других МАШИН — только по явному включению публикации'
+  replace_with: '    if True:   # заявки других МАШИН — только по явному включению публикации'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'При выключенной публикации показывать чужие заявки — выдать за координацию то, чего кит видеть
+    не должен (чужие заявки приехали бы, но режим локальный). Честность досягаемости.'
+- id: publish-seam-status-surfaces-team
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        team = active_work.team_view(child_root, data.get("active") or [], pub)'
+  replace_with: '        team = data.get("active") or []'
+  tests:
+  - tests/unit/test_claim_publication_files.py
+  why: 'ШОВ: заявка другой машины доходит до человека, только если `status` строит ОБЩУЮ карту через
+    team_view. Подмена на локальные заявки прячет чужие — механизм публикации есть, а на пути, который
+    человек и смотрит, он мёртв. Ровно тот класс «объявлено — не исполняется».'
+- id: security-scan-refuses-without-base
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    if base is None:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'Отсутствие базы обязано быть ОТКАЗОМ С НАЗВАННОЙ ПРИЧИНОЙ. Снять эту охрану — вернуть заявку
+    #139: скан уходил на весь репозиторий, и находка в чужом legacy блокировала правку одного
+    безобидного файла («блокирует без находок» — врал охват, не вердикт). Пустой охват тоже запрещён:
+    ноль просканированных файлов это «не проверено», а не «clear».'
+- id: security-scan-initial-commit-scope-is-precise
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    if not m:'
+  replace_with: '    if m:'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'Единственный законный случай неразрешимой базы — `<sha>~1` у КОРНЕВОГО коммита: родителя нет
+    по построению. Охват тогда — файлы того коммита, и это ТОЧНЫЙ ответ, а не «весь репозиторий по
+    случайности совпал». Снять распознавание — либо отказать на первом коммите, либо вернуться к
+    аудиту чужого кода.'
+- id: security-scan-scope-decided-in-run-pack
+  kind: seam
+  covers:
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/security/security_pack.py
+  find: '            changed, scan_scope = _scan_scope(child_root, base)'
+  replace_with: '            changed, scan_scope = (security_scan._git_changed_files(child_root, base)
+    or []), {"mode": "diff", "base": str(base)}'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'ШОВ: решение об охвате что-то значит только если его зовёт САМ run_pack. Подмена на прежнюю
+    молчаливую энумерацию даёт ровно тот ложный green, из-за которого дефект и жил: база не
+    разрешилась -> пустой список -> ни одной находки -> `overall=clear`. Механизм отказа при этом
+    остался бы на месте и модульно «работал».'
+- id: review-auto-base-not-the-reviewed-branch
+  kind: guard
+  file: ai_ops_kit/delivery/review_branch.py
+  find: '        if r.get("base_ref") == branch:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'Автоподбор берёт текущую ветку — а человек, ревьюя работу, часто стоит именно на ней. Диф
+    против себя пуст, и молча отдать «изменений нет» значит выдать невыбранную базу за проверенный
+    пустой диф. Охрана превращает это в названный отказ.'
+- id: review-seam-cli-passes-resolved-base
+  kind: seam
+  covers:
+  - ai_ops_kit/delivery/review_branch.py
+  - ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)'
+  replace_with: '        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base="main")'
+  tests:
+  - tests/unit/test_absent_base_is_resolved_or_refused.py
+  why: 'ШОВ на пути ЧЕЛОВЕКА (`ai-ops review`): автоподбор обязан доехать до механизма через CLI.
+    Мутация возвращает прежнюю тихую подстановку `main` — на репозитории с веткой `master` она даёт
+    неразрешённую базу и «изменённых файлов ноль», то есть справка снова обещает автоподбор, которого
+    на этом пути нет (заявка #136, родня printed-commands-are-runnable).'
+- id: security-report-findings-are-whitelisted
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '            "findings": [{k: f[k] for k in FINDING_REPORT_FIELDS if k in f}'
+  replace_with: '            "findings": [dict(f)'
+  tests:
+  - tests/unit/test_security_verdict_shows_its_findings.py
+  why: 'Находка в отчёте — путь, строка и класс, но НИКОГДА значение: `run-report.json` лежит в
+    репозитории и уезжает в PR, поэтому секрет в нём был бы вынесенным секретом. Список полей БЕЛЫЙ
+    именно поэтому — при сквозном копировании новое поле находки, однажды принесшее значение, уехало
+    бы в отчёт само, без единого решения.'
+- id: security-report-seam-pipeline-uses-projection
+  kind: seam
+  covers:
+  - ai_ops_kit/security/security_pack.py
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '        "security_scan": _security_pack_for_report(security_pack_result),'
+  replace_with: '        "security_scan": ({"overall": security_pack_result["overall"], "blocking":
+    security_pack_result["blocking"]} if security_pack_result else None),'
+  tests:
+  - tests/unit/test_security_verdict_shows_its_findings.py
+  why: 'ШОВ и ровно та форма дефекта, которой была заявка #139: срез полей НА МЕСТЕ вместо проекции.
+    Проекция при этом остаётся написанной и модульно «работает» — а человек, которого гейт отправил в
+    отчёт со словами «блокирующие домены (critical/high находки)», находок там не видит, и утверждение
+    гейта становится непроверяемым из артефакта, на который он сам ссылается.'
+- id: security-report-sequential-carries-findings
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/workpackage_executor.py
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/engine/workpackage_executor.py
+  find: '                "security_scan": _sp2.for_report(agg_sec),'
+  replace_with: '                "security_scan": None,'
+  tests:
+  - tests/unit/test_security_verdict_shows_its_findings.py
+  why: 'Второй путь ответа — последовательный (WorkPackages): агрегатный вердикт отдавал наружу только
+    `security_overall`, и находки не доезжали. Починить один путь и оставить второй значит завести две
+    разные правды об одном вопросе, причём вторая молчит.'
+- id: areas-unknown-is-not-a-match
+  kind: guard
+  file: ai_ops_kit/engine/work_areas.py
+  find: '    return [z for z in (zones or []) if z and z != UNSPECIFIED]'
+  replace_with: '    return list(zones or [])'
+  tests:
+  - tests/unit/test_work_areas_derived_not_declared.py
+  why: 'Неизвестность не является пересечением. Снять эту охрану — вернуть заявку #138: две работы без
+    зон «пересекались» друг с другом, и кит советовал человеку не трогать те же файлы, не зная ни
+    одного файла. Класс «не знаю выдано за факт», и он дороже молчания. ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ
+    ВЫЖИЛА: фильтр стоял на обеих сторонах сравнения, и снятие одной строки оставляло тесты зелёными —
+    поэтому фильтр сведён в `_named`, одно несущее место.'
+- id: areas-seam-registry-gets-derived-zones
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/work_areas.py
+  - ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    areas = _work_areas.areas_for(signals, write_scope)   # #138: вывод, а не заглушка (см. work_areas)'
+  replace_with: '    areas = signals.get("affected_areas") or ["unspecified"]'
+  tests:
+  - tests/unit/test_work_areas_derived_not_declared.py
+  why: 'ШОВ на пути ЧЕЛОВЕКА: вывод зон что-то значит только если он доезжает до РЕЕСТРА. Мутация
+    возвращает дословно прежнюю строку — механизм остаётся написанным и модульно «работает», а в
+    `.ai/runtime/active-work.yaml` снова попадает `unspecified`, и пересекается всё со всем.'
+- id: areas-overlap-used-by-classify
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/engine/work_areas.py
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        shared_areas = _work_areas.areas_overlap(areas, w.get("affected_areas"))'
+  replace_with: '        shared_areas = sorted(set(areas) & set(w.get("affected_areas") or []))'
+  tests:
+  - tests/unit/test_work_areas_derived_not_declared.py
+  why: 'ШОВ между зонами и предупреждением: сравнение зон живёт в `work_areas`, но отвечает человеку
+    `classify`. Мутация возвращает прежнее пересечение множеств — и `unspecified` снова совпадает с
+    `unspecified`, а вложенность каталогов перестаёт считаться конфликтом.'
+- id: registry-merged-work-detected-by-content
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor",'
+  replace_with: '        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor2",'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'Влитость определяется СОДЕРЖАНИЕМ (коммиты ветки содержатся в базе), а не числом расхождения:
+    в поле нашлась ветка впереди базы на 1 и позади на 241, и проверка по одному направлению давала
+    «не влито» на давно закрытой задаче. Снять эту проверку — вернуть заявку #137: реестр держит
+    влитые работы, `status` отвечает «Работа идёт», и человек либо переделывает готовое, либо
+    перестаёт верить реестру.'
+- id: registry-superseded-is-not-running
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '              if (a.get("status") or "") not in ("done", "superseded")]'
+  replace_with: '              if (a.get("status") or "") != "done"]'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'Снятое сверкой обязано перестать считаться идущей работой в ОТВЕТЕ человеку. Мутация возвращает
+    прежний фильтр (только `done`) — сверка работает, запись помечена, а `status` по-прежнему говорит
+    «Работа идёт» на влитой работе: механизм есть, а на пути, который человек и смотрит, он мёртв.'
+- id: registry-seam-status-reconciles
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        team = active_work.reconcile_with_base(team, child_root)'
+  replace_with: '        team = team'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'ШОВ на пути человека: сверка что-то значит только если её зовёт `ai-ops status` — команда, из
+    которой и пришла жалоба поля. Без вызова реестр снова отвечает «Работа идёт» на влитой работе, а
+    сама функция сверки остаётся написанной и модульно зелёной.'
+- id: registry-seam-forecast-uses-reconciled-map
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '            against = reconcile_with_base(against, child_root)'
+  replace_with: '            against = list(against)'
+  note: 'ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ ВЫЖИЛА: названный тест звал `reconcile_with_base` сам и до
+    `register` не доходил — то есть проверял функцию, а не ШОВ. Добавлены тесты через `register`
+    и через `check_cmd`, и только после этого проба стала убивать.'
+  tests:
+  - tests/unit/test_registry_reconciles_with_base.py
+  why: 'Второй путь, где реестр отвечает: прогноз пересечений при РЕГИСТРАЦИИ. Если карта не сверена,
+    влитая работа предупреждает о себе — и предупреждение о «тех же файлах» приходит от работы, которой
+    уже нет. Это ровно та цена, которую поле назвало: реестр как список страшилок.'
+- id: autoresolve-asks-what-it-will-launch
+  kind: guard
+  file: ai_ops_kit/providers/orchestrator_providers.py
+  find: '    if _look["path"]:'
+  replace_with: '    if which("claude"):'
+  tests:
+  - tests/unit/test_provider_decision_equals_launch.py
+  why: 'Возврат ВТОРОГО ВЗГЛЯДА на пути автовыбора — ровно того, из-за которого поле 13.08 и 15.08.2026
+    получило `FileNotFoundError: ''claude''` посреди начатого прогона. Мутация ставит обратно голый
+    `which`: названный владельцем рабочий путь снова игнорируется (mock, «правок не будет» при живом
+    исполнителе), а битый названный путь снова выбирает claude-cli без предупреждения — работа
+    зарегистрирована, дерево готово, первый вызов модели отказывается.'
+- id: strong-executor-decided-by-the-launcher
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/providers/orchestrator_providers.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '                        if orchestrator.claude_binary():'
+  replace_with: '                        if __import__("shutil").which("claude"):'
+  tests:
+  - tests/unit/test_provider_decision_equals_launch.py
+  why: 'ШОВ между решением движка и запуском: выбор сильного writer''а идёт СВОИМ путём, не через
+    `resolve_provider`, поэтому одного исправления автовыбора мало — класс возвращался дважды именно
+    так, каждый новый вызывающий писал `which("claude")` заново. Мутация возвращает второй взгляд в
+    движок; структурный запрет обязан это увидеть, иначе «исправлено» останется верным только для
+    одного из двух путей.'
+- id: found-reason-names-where-it-looked
+  kind: guard
+  file: ai_ops_kit/providers/orchestrator_providers.py
+  find: '        return (f"claude CLI взят из {CLAUDE_BIN_ENV}={lookup[''path'']} "'
+  replace_with: '        return ("claude CLI найден в PATH (локальная сессия, API-ключ не нужен) "'
+  tests:
+  - tests/unit/test_provider_decision_equals_launch.py
+  why: 'Причина обязана называть, ОТКУДА взят исполнитель. Мутация возвращает прежнюю строку про PATH
+    в случае, когда PATH не спрашивали вовсе: провайдер выбран верно, но человек читает про PATH — и
+    при разборе следующего сбоя ищет причину не там, где она есть. Это тот же класс «печатаемый текст
+    ничем не проверен», крупнейший по ресерчу 17.08.'
+- id: feedback-path-is-not-an-observation
+  kind: guard
+  file: ai_ops_kit/engops/kit_feedback.py
+  find: '    elif _looks_like_path(st):'
+  replace_with: '    elif False:'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'Найдено пробой канала на ЖИВОЙ дочке 18.08.2026: `./ai-ops feedback .` записала наблюдение с
+    содержанием «.» и ответила «записал». Мутация снимает отказ в МОДУЛЕ — канал снова принимает путь
+    за наблюдение при вызове мимо CLI, а запись, которой нельзя верить, попадает в сборку и тратит
+    решение по себе. Отказ обязан жить у записи, а не только у разбора аргументов.'
+- id: feedback-seam-command-shows-fate
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/engops/kit_feedback.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        if _txt and Path(_txt).is_dir():'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'ШОВ на пути человека: `feedback` — единственная команда, где второй позиционный аргумент несёт
+    ТЕКСТ, а обёртка `./ai-ops` уже подставила путь первым. Мутация возвращает прежнее поведение:
+    привычная точка снова уезжает в наблюдение, человек читает «записал» вместо судьбы сказанного, а
+    модульный отказ остаётся зелёным — потому что путь до него доходит уже как «текст».'
+- id: child-feedback-hidden-from-child-history
+  kind: guard
+  file: installer/ai_ops.py
+  find: '.ai/kit-feedback/'
+  replace_with: '.ai/kit-feedback-DISABLED/'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'Первая запись канала легла в дерево дочки НЕотслеживаемой и НЕигнорируемой — худшее из
+    состояний: git-гигиене не видно, а чужой `git add -A` унесёт в посторонний коммит (так уже
+    терялись правки 12.08.2026). Мутация снимает строку ignore. Проверяется вместе с тем, что дописка
+    в `.gitignore` владельца НАЗВАНА в отчёте установки: менять чужой документ молча нельзя.'
+- id: broken-record-does-not-silence-the-fate
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '            next_steps=fates or None,'
+  replace_with: '            next_steps=None,'
+  tests:
+  - tests/unit/test_kit_feedback_field_probe.py
+  why: 'Одна битая запись глушила ВЕСЬ ответ о судьбе замечаний — человек видел «часть я не читаю» и ни
+    слова о том, что стало с настоящим наблюдением, по которому решение уже принято. Это тот самый
+    отказ, от которого канал умирает молча: ответа не видно -> писать перестают. Мутация возвращает
+    тишину.'
+- id: status-asks-the-plan-too
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/planning/delivery_plan.py
+  - ai_ops_kit/ui/presenter.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '            cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())'
+  replace_with: '            cross = None'
+  tests:
+  - tests/unit/test_running_answered_from_both.py
+  why: 'ШОВ, которым эта работа и объявлена в приёмке: `status` обязан спрашивать ПЛАН, а не только
+    реестр рантайма. Замер 18.08.2026 на самом ките: при семи работах `in_progress` в плане ответ был
+    «Сейчас ничего не идёт. Работа не начата.», и проба с одной работой не меняла ответ ни одним
+    словом. Мутация снимает второй источник — сверка остаётся написанной и модульно зелёной, а на пути
+    человека мертва.'
+- id: divergence-is-not-presented-as-normal
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '        if stale:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_running_answered_from_both.py
+  why: 'Расхождение плана с заявками обязано быть НАЗВАНО и не подано как норма: `ok` здесь — форма
+    ложного green в самом частом вопросе управления («что идёт сейчас»). Цена уже заплачена: семь
+    закрытых работ простояли `in_progress` четыре дня, и сказать об этом было некому.'
+- id: second-session-is-refused-not-warned
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if blocking and not takeover:'
+  replace_with: '        if False and not takeover:'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'Заявка потребителя #150: сессия B открыла второй PR на ту же ветку и слила, первый остался
+    закрытым пустым дублем — половина работы по описанию выброшена. Мутация возвращает прежнее
+    поведение: печатается «⚠ это ДУБЛЬ», возвращается 0, чужая заявка затирается. Предупреждение,
+    которое ничего не останавливает, в параллельной работе равно его отсутствию.'
+- id: run-stops-when-work-is-held
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '        if _reg_rc:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'ШОВ: отказ реестра обязан останавливать ПРОГОН. До 18.08.2026 код возврата `register`
+    отбрасывался в обеих точках вызова — отказать он мог и раньше (цикл зависимостей, работа в main,
+    нет зон), а прогон шёл дальше. Мутация снимает чтение кода возврата: механизм отказа остаётся
+    написанным и модульно зелёным, а работа всё равно начинается.'
+- id: holder-identity-is-measured
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        return f"session:{str(sid)[:8]}"'
+  replace_with: '        return "cli"'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'Личность держателя по умолчанию была константой `cli` — все параллельные сессии выглядели ОДНИМ
+    держателем, поэтому отказ не мог сработать в принципе, а атрибуция инцидента (следствие 3 заявки
+    #150) была невозможна. Мутация возвращает константу: реестр остаётся, отказ остаётся, и оба
+    бесполезны.'
+- id: planning-run-stops-when-work-is-held
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    if _reg_rc2:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_second_session_is_refused.py
+  why: 'Вторая точка регистрации — планирующий путь: он тоже занимает ветку и заводит артефакты работы,
+    поэтому охраняется отдельно. Пробы на ДВА пути нужны обе: первая версия тестов ходила только
+    планирующим путём, и проба на pipeline-путь ВЫЖИЛА — тест не доходил до охраны.'
+- id: next-subtracts-work-held-elsewhere
+  kind: guard
+  file: ai_ops_kit/planning/next_work.py
+  find: '    if held_by_others:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'Вычитание нагружено ровно на МЕЖМАШИННОМ случае: локальная карта `_active_map` читает только
+    свой файл, поэтому опубликованная заявка другой машины в `resolve` не попадает вовсе — без
+    вычитания кит предложит взятое, имея все данные, чтобы этого не делать. ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ
+    ВЫЖИЛА: тесты ходили только по своей машине, где claim и так виден через `resolve`. Добавлен тест с
+    публикацией и чужой машиной — только после этого проба стала убивать.'
+- id: everything-held-is-said-not-hidden
+  kind: guard
+  file: ai_ops_kit/ui/presenter.py
+  find: '        if held_others:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'Если всё нужное держат другие, кит обязан сказать это ПРЯМО и назвать держателей, а не отдать
+    следующую строку списка и не свести ответ к «работа идёт» без имён. Мутация возвращает безымянный
+    ответ: участник снова не знает, кого ждать и у кого спросить (следствие 3 заявки #150 —
+    атрибуция).'
+- id: dead-claim-does-not-hide-work-from-plan
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if active_work.holder_is_gone(a):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'Две правды об одном: `status` научился отпускать заявку мёртвого процесса, а карта активных
+    работ продолжала считать её живой — и `next` прятал работу от всех. Мутация возвращает расхождение
+    между двумя ответами на один вопрос.'
+- id: next-seam-identity-reaches-selection
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/planning/next_work.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '                                    me=_session_identity(child_root))'
+  replace_with: '                                    me=None)'
+  tests:
+  - tests/unit/test_next_offers_unheld_work.py
+  why: 'ШОВ между командой и отбором работы. Указан САМИМ КИТОМ: `validate_mutation_probes` заметил, что
+    у механизма есть охранные пробы и нет пробы шва — модульные тесты зовут `compute` напрямую и личность
+    передают сами, поэтому отключённый вызов остался бы зелёным. Мутация обрывает личность: «моё» и
+    «чужое» сливаются, и участник снова ждёт сам себя.'
+- id: lag-gate-returns-nonzero
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    return {"ok": 0, "behind": LAG_BEHIND_RC,'
+  replace_with: '    return 0 or {"ok": 0, "behind": 0,'
+  tests:
+  - tests/unit/test_child_lag_gate.py
+  why: 'Вся работа была ровно в КОДЕ ВОЗВРАТА: `status` считает то же самое и возвращает 0, поэтому
+    отставание оставалось отчётом, который надеется на внимание человека. Мутация возвращает нуль на
+    вердикте «отстала» — механизм считается, печатается и никого не останавливает. Второй по размеру
+    класс находок поля (8 из 48) жил именно так.'
+- id: lag-gate-is-called-by-child-ci
+  kind: seam
+  covers:
+  - templates/ci/ai-ops-validate.yml
+  - installer/ai_ops.py
+  file: templates/ci/ai-ops-validate.yml
+  find: '        run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py check-update --quiet'
+  replace_with: '        run: echo "гейт не вызывается"'
+  tests:
+  - tests/unit/test_child_lag_gate.py
+  why: 'ШОВ: гейт, которого никто не зовёт, — это отчёт. Мутация убирает вызов из CI, который кит
+    ОТДАЁТ дочке: команда остаётся рабочей и модульно зелёной, а на пути дочки её нет. Тест берёт шаг
+    из УСТАНОВЛЕННОГО workflow и исполняет его на отставшей копии — иначе проверялся бы шаблон, а не
+    то, что доехало.'
+- id: session-start-names-the-limits
+  kind: guard
+  file: commands/task/ai-session-start.md
+  find: '   (продолжать / сжать / очистить / новая сессия). Числа порогов объявлены СТАРТОВЫМИ и подлежат'
+  replace_with: '   Числа порогов объявлены СТАРТОВЫМИ и подлежат'
+  tests:
+  - tests/unit/test_session_protocol_decisions.py
+  note: 'ПЕРВАЯ ВЕРСИЯ ПРОБЫ ВЫЖИЛА: мутировался ЗАГОЛОВОК шага, а проверяемые факты (четыре исхода,
+    «не отказывает», номера решений) лежат в строках НИЖЕ — заголовок можно снять, ничего не сломав.
+    Образец переставлен на строку, которая несёт сам факт.'
+  why: 'Ритуал старта — ЕДИНСТВЕННАЯ команда, которую среда исполняет на старте сессии, и до 19.08 он
+    не упоминал ни порогов, ни четырёх исходов, ни состояния прошлой сессии. То есть протокол сессии
+    жил в решениях и молчал там, где его читают. Мутация убирает названные исходы — человек снова не
+    узнаёт, что кит вообще умеет ответить про предел.'
+- id: narrowed-writing-rule-matches-the-code
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - decisions/registry.yaml
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        if rec.get("outcome") in ("new_session", "clear"):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_session_protocol_decisions.py
+  why: 'ШОВ между решением и кодом: 19.08 владелец сузила правило до «состояние пишется, когда кит
+    советует смену сессии». Мутация обрывает ровно это условие — решение осталось бы записанным, а
+    поведение перестало бы ему соответствовать. Прежняя формулировка (17.08, «обязателен при
+    завершении работы») не исполнилась ни разу за двое суток, и именно поэтому её сузили.'
+- id: session-start-ritual-is-wired
+  kind: seam
+  covers:
+  - commands/task/ai-session-start.md
+  - manifest/ai-ops-manifest.yaml
+  file: manifest/ai-ops-manifest.yaml
+  find: '    command: commands/task/ai-session-start.md   # runtime-исполняемая: читает, не меняет'
+  replace_with: '    command: null   # привязка снята мутацией'
+  tests:
+  - tests/unit/test_session_protocol_decisions.py
+  why: 'ШОВ, которого потребовал сам кит (`validate_mutation_probes`). Ритуал старта существует, только
+    пока его кто-то зовёт: рантайм находит команду через манифест. Мутация снимает привязку —
+    содержимое ритуала остаётся идеальным и никем не читается. Границу кит объявляет честно: самозапуск
+    это привязка рантайма, поэтому проверяется ровно то, за что кит отвечает, — объявление на месте.'
+- id: release-refuses-without-changelog-section
+  kind: guard
+  file: .github/workflows/release.yml
+  find: '            exit 1'
+  replace_with: '            echo "AI Ops Kit $TAG" > /tmp/notes.md'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'Здесь стояло «записки будут краткими» — выпуск выходил С ПУСТОЙ историей, и никто об этом не
+    узнавал. При темпе 236 версий за 40 дней (EV-1112) это не исключение, а способ по умолчанию.
+    Мутация возвращает пожимание плечами; отказ дешёвый и обратимый — тег ещё не создан.'
+- id: changelog-fragment-gate-is-called
+  kind: seam
+  covers:
+  - .github/workflows/package-quality.yml
+  - pyproject.toml
+  file: .github/workflows/package-quality.yml
+  find: '        run: towncrier check --compare-with origin/main'
+  replace_with: '        run: echo "гейт не вызывается"'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'ШОВ: гейт «в этой ветке добавлена запись» существует только пока его зовут, и зовут ИМЕННО в
+    уже обязательной джобе — новая джоба не входит в обязательные статусы защиты ветки без действия
+    владельца, то есть исполнялась бы «по желанию». Мутация оставляет конфигурацию towncrier на месте и
+    убирает вызов: всё объявлено, ничего не исполняется.'
+- id: release-step-is-wired
+  kind: seam
+  covers:
+  - .github/workflows/release.yml
+  file: .github/workflows/release.yml
+  find: "        if: steps.check_release.outputs.needed == 'true'"
+  replace_with: '        if: false'
+  tests:
+  - tests/unit/test_release_gates.py
+  why: 'ШОВ, которого потребовал сам кит: `validate_mutation_probes` сказал «у механизма есть охранные
+    пробы, но НЕТ пробы шва» — и был прав. Ворота на выпуске существуют, только пока шаг вызывается;
+    мутация отключает вызов, оставляя всю логику на месте. Ровно так дефект и живёт: механизм написан,
+    конвейер до него не доходит.'
+- id: freeze-state-is-fail-closed
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        return {"frozen": True, "applies": True, "readable": False, "decision": FREEZE_DECISION,'
+  replace_with: '        return {"frozen": False, "applies": True, "readable": False, "decision": FREEZE_DECISION,'
+  tests:
+  - tests/unit/test_capability_freeze_enforced.py
+  why: 'Заморозка читается из ИСХОДА цели, и если исход не прочитан — правило обязано считаться
+    держащимся. Мутация делает «не прочитано» равным «снято»: тогда правило снимается удалением одной
+    строки в том же файле, который оно охраняет. Это ровно класс «не знаю выдано за нет», против
+    которого стоит весь контур.'
+- id: managed-drift-seam-pipeline-warns-before-isolation
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/pipeline_git.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '    managed_pf = _managed_drift_preflight(child_root)'
+  replace_with: '    managed_pf = None'
+  tests:
+  - tests/unit/test_managed_drift_reaches_the_run.py
+  why: 'ШОВ, которого не было: у pipeline_git.py стояла охранная проба и ни одной шовной, и
+    собственный валидатор кита говорил об этом прямо — снятие охраны поймается, а отключённый
+    ВЫЗОВ механизма нет. Цена молчания названа замером B2-27: `update --in-place` оставляет
+    managed-файлы в рабочем дереве, прогон изолируется в worktree от HEAD, незакоммиченное туда
+    не попадает — прогон идёт на СТАРОМ ките, а doctor говорит «версии ✓». Мутация оставляет
+    проверку написанной и отключает её вызов: снаружи всё объявлено, а владелец снова получает
+    поведение прежней версии без единого слова о причине.'
+- id: next-does-not-offer-frozen-work
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/next_work.py
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '        ready = [r for r in ready if r["id"] not in frozen]'
+  replace_with: '        pass'
+  tests:
+  # 19.08.2026: проба ВЫЖИВАЛА на прежнем тесте. Он проверял вычитание на настоящем плане, а после
+  # снятия заморозки замороженных работ не осталось — утверждение «предложенное не пересекается с
+  # замороженным» стало истинным впустую. Новый файл ставит непустое множество сам.
+  - tests/unit/test_next_work_subtracts_frozen.py
+  - tests/unit/test_capability_freeze_enforced.py
+  why: 'ШОВ, ради которого работа и заведена: 18.08.2026 кит САМ предложил взять
+    `watch-contract-for-night-review` — работу из замороженной цели, — потому что решение владельца
+    существовало записью в реестре и ничем не сверялось. Мутация возвращает совет, противоречащий
+    решению; такой совет хуже отсутствия совета, потому что выглядит как санкция.'
+- id: taking-frozen-work-is-an-error
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if st == "in_progress" and w.get("id") in _frozen_ids:'
+  replace_with: '        if False and w.get("id") in _frozen_ids:'
+  tests:
+  - tests/unit/test_capability_freeze_enforced.py
+  why: 'Совет — половина правила; вторая половина в том, что взятую замороженную работу проверка
+    краснит и называет решение НОМЕРОМ, а не пересказом. Мутация оставляет вычитание в `next` и
+    снимает проверку: обойти правило можно, взяв работу мимо совета.'
+- id: doctor-asks-about-the-config
+  kind: seam
+  covers:
+  - installer/ai_ops.py
+  - ai_ops_kit/validation/validate_child_config_filled.py
+  file: installer/ai_ops.py
+  find: '        _dprint(_cfgfill.summary_line(str(REPO_ROOT)))'
+  replace_with: '        pass'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: 'ШОВ: валидатор может сколько угодно правильно находить заготовку — человек узнаёт об этом
+    только там, где `doctor` его СПРАШИВАЕТ. Мутация оставляет валидатор на месте и убирает вопрос:
+    ровно то состояние, в котором находка B2-25 и жила — проверить было чем, никто не проверял.'
+- id: config-check-reaches-the-child
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    "validate_child_config_filled",'
+  replace_with: '    "validate_child_config_filled_not_delivered",'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: '`doctor` исполняется У ДОЧКИ, а в поставку едут только валидаторы из белого списка. Имя не
+    внесено — кит починен, дочка нет: ровно F-033, где механизм против ложного green не исполнялся
+    в дочке НИКОГДА, потому что имя не внесли. Мутация возвращает это состояние.'
+- id: placeholder-is-the-whole-value
+  kind: guard
+  file: ai_ops_kit/validation/validate_child_config_filled.py
+  find: 'PLACEHOLDER = re.compile(r"^<[^<>]+>$")'
+  replace_with: 'PLACEHOLDER = re.compile(r".*<[^<>]+>.*")'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: 'Заготовка — это ЗНАЧЕНИЕ ЦЕЛИКОМ. Мутация делает проверку подстрочной, и краснеть начинают
+    описания вроде «работает с <legacy> API». Проверка, срабатывающая на прозе, обесценивается так
+    же, как гейт, срабатывающий всегда, — и это уже случалось с матчем по содержимому (B2-09).'
+- id: unreadable-config-is-not-clean
+  kind: guard
+  file: ai_ops_kit/validation/validate_child_config_filled.py
+  find: '        return {"config_exists": True, "readable": False, "placeholders": [],'
+  replace_with: '        return {"config_exists": True, "readable": True, "placeholders": [],'
+  tests:
+  - tests/unit/test_doctor_requires_a_real_project_name.py
+  why: '«Не прочитал» и «заготовок нет» — разные вещи, и подмена первого вторым это молчание,
+    против которого стоит весь doctor. Мутация выдаёт нечитаемый конфиг за проверенный и чистый.'
+- id: top-up-exemption-is-narrow
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '    if check["blocks"] and top_up["missing"]:'
+  replace_with: '    if check["blocks"]:'
+  tests:
+  - tests/unit/test_specify_tops_up_sections.py
+  why: 'Освобождение от потолка держится ровно на «дописывать ЕСТЬ ЧТО». Мутация снимает условие, и
+    потолок перестаёт ловить то, ради чего заведён, — разбор по кругу без единой правки кода
+    (замер поля: две сессии по 200+ тысяч токенов). Цена ошибки здесь — деньги владельца, поэтому
+    широкое освобождение хуже, чем отсутствие правки.'
+- id: specify-consults-pending-sections
+  kind: seam
+  covers:
+  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/gates/spec_levels.py
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        top_up = spec_levels.pending_sections(child_root, wid, signals)'
+  replace_with: '        top_up = {"missing": []}'
+  tests:
+  - tests/unit/test_specify_tops_up_sections.py
+  why: 'ШОВ: `pending_sections` может сколько угодно правильно считать недостающие разделы — до
+    механизма дописывания управление доходит только там, где ПРОЦЕССНЫЙ ГЕЙТ его спрашивает. Мутация
+    оставляет функцию на месте и убирает вызов: ровно то состояние, в котором находка B2-26 и жила —
+    механизм F-029 работал, а до него не доходило.'
+- id: pending-sections-names-the-gap
+  kind: guard
+  file: ai_ops_kit/gates/spec_levels.py
+  find: '    out["missing"] = [sid for sid in required_sections(cls["level"]) if sid not in doc["sections"]]'
+  replace_with: '    out["missing"] = []'
+  tests:
+  - tests/unit/test_specify_tops_up_sections.py
+  why: 'Пустой ответ «дописывать нечего» — самый правдоподобный способ сломать эту правку тихо:
+    гейт снова отказывает экономической причиной, и выглядит это как работающий потолок. Мутация
+    делает функцию вечно-пустой.'
+- id: content-only-guess-is-not-a-gate
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '    return bool(rs) and all(str(r).startswith("содержимое ") for r in rs)'
+  replace_with: '    return True'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Вся правка держится на различении «домен подняли догадкой по подстроке» и «домен подняли путём
+    или сигналом». Мутация стирает различие: воротами перестаёт быть ВСЁ, включая правку Dockerfile и
+    заявленный сигнал задачи. Это ровно тот ложный зелёный, ценой которого нельзя было платить за тишину.'
+- id: advisory-is-not-clear
+  kind: guard
+  file: ai_ops_kit/security/security_pack.py
+  find: '                     ("advisory" if advisory else "clear"))),'
+  replace_with: '                     "clear")),'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: '«Проверено и чисто» и «домен подняли догадкой, проверять было нечего» — разные состояния, и
+    выдать второе за первое означает вернуть дефект другой стороной: человек прочитает `clear` и решит,
+    что домен смотрели. Мутация сливает их в один вердикт.'
+- id: gate-lets-advisory-through
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/execution_pipeline.py
+  - ai_ops_kit/security/security_pack.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '        elif overall in ("clear", "advisory"):'
+  replace_with: '        elif overall == "clear":'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'ШОВ: пак может сколько угодно называть домен предупреждением — путь открывается только там, где
+    ГЕЙТ это читает. Мутация оставляет новый вердикт на месте и отключает его признание: снаружи всё
+    объявлено, а прогон стоит там же, где стоял 19.08.'
+- id: human-can-close-when-judge-is-off
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '              and committed_sha and not (strict_judge_qualified and review)'
+  replace_with: '              and review and committed_sha and not strict_judge_qualified'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Вторая половина работы: ворота обязаны быть ЗАКРЫВАЕМЫ там, где судьи нет вовсе. Мутация
+    возвращает прежнее условие — ветка человека требует `review`, которого на QUICK не бывает, и прогон
+    снова падает в общий отказ, называющий нужным того, кого на этом уровне не запускают.'
+- id: goal-liveness-outranks-file-order
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '                   key=lambda i: (_GOAL_LIVENESS.get(gs[i].get("status") or "active", 0), i))'
+  replace_with: '                   key=lambda i: (0, i))'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'Вся правка — в том, что порядок в файле остаётся приоритетом ТОЛЬКО среди целей одной
+    живости. Мутация возвращает чистый индекс, и достигнутая цель снова становится «целью первого
+    приоритета»: ровно то состояние, в котором `next` три раза подряд обходил P1-находки живого
+    прогона.'
+- id: goal-is-live-tells-the-truth
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '            return _GOAL_LIVENESS.get(g.get("status") or "active", 0) == 0'
+  replace_with: '            return True'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'На этом ответе держатся и причина низкого приоритета, и гигиена плана. Мутация делает его
+    вечно-утвердительным: закрытых целей как будто нет, и забытая под ними работа снова невидима.'
+- id: unknown-goal-status-is-an-error
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if st is not None and st not in GOAL_STATUSES:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'Статус цели теперь влияет на приоритет, поэтому опечатка в нём переставляет план. Она
+    намеренно НЕ опускает цель молча — цена этого решения в том, что ошибку обязан назвать
+    `validate`. Мутация снимает проверку, и опечатка снова становится невидимой.'
+- id: advice-names-the-closed-goal
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/next_work.py
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/next_work.py
+  find: '    if not _plan.goal_is_live(plan, gid):'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_next_skips_achieved_goals.py
+  why: 'ШОВ: `delivery_plan` может сколько угодно знать, что цель закрыта, — человек узнаёт об этом
+    только там, где СОВЕТ это произносит. Мутация опускает работу молча, и человек не понимает, куда
+    делся вчерашний совет: молчаливое исчезновение запрещено тем же правилом, что и у заморозки.'
+- id: awaiting-human-is-computed-not-constant
+  kind: guard
+  file: ai_ops_kit/gates/gate_executor.py
+  find: '        "awaiting_human": bool(ev.get("pending_human") or ev.get("human_handoff")),'
+  replace_with: '        "awaiting_human": False,'
+  tests:
+  - tests/unit/test_gate_says_when_the_move_is_humans.py
+  why: 'Признак существует, только пока он ВЫЧИСЛЯЕТСЯ из evidence. Мутация делает его вечно-ложным:
+    поле в отчёте есть, схема довольна, а различить «гейт нашёл дефект» и «гейт ждёт человека»
+    по-прежнему нельзя. Это самый правдоподобный способ сломать правку тихо.'
+- id: honest-skip-answers-the-question-too
+  kind: guard
+  file: ai_ops_kit/gates/gate_executor.py
+  find: '            "awaiting_human": False,'
+  replace_with: '            "scope_placeholder_removed": False,'
+  tests:
+  - tests/unit/test_gate_says_when_the_move_is_humans.py
+  why: 'Ранний возврат неприменимого гейта — тоже результат. Мутация убирает у него поле, и
+    отсутствие читается как «не знаю», что здесь неотличимо от «нет». Ровно та подмена, против
+    которой стоит остальной контур.'
+- id: gate-result-shape-is-guarded
+  kind: seam
+  covers:
+  - ai_ops_kit/gates/gate_executor.py
+  - schemas/gate-result.schema.json
+  file: schemas/gate-result.schema.json
+  find: '    "awaiting_human": { "type": "boolean"'
+  replace_with: '    "awaiting_human_unused": { "type": "boolean"'
+  tests:
+  - tests/unit/test_gate_says_when_the_move_is_humans.py
+  why: 'ШОВ между кодом и схемой: набор полей результата сторожит `_ALLOWED_KEYS`, выведенный из
+    схемы. Мутация уводит поле из схемы, оставляя код на месте — то есть отчёт начинает нести поле,
+    которого его собственный контракт не знает. Именно так поле и терялось раньше: контракт
+    фиксированный, а факт жил рядом с ним.'
+- id: refusal-names-a-command-that-exists
+  kind: guard
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "'
+  replace_with: '                                                    "ai-ops approve "'
+  tests:
+  - tests/unit/test_security_gate_closable_on_quick.py
+  why: 'Совет, который нельзя выполнить, ХУЖЕ отсутствия совета: человек считает, что путь есть.
+    Первая редакция этого отказа (#176) звала `ai-ops approve` — такого intent в CLI нет, и живой
+    прогон 19.08 это показал. Мутация возвращает несуществующую команду; тест обязан заметить, что
+    названного пути нет на диске.'
+- id: managed-drift-checks-the-right-path
+  kind: guard
+  file: ai_ops_kit/engine/pipeline_git.py
+  find: '    rc, out, _ = _git(root, "status", "--porcelain", "--", ".ai/managed/", ".ai-ops.yaml")'
+  replace_with: '    rc, out, _ = _git(root, "status", "--porcelain", "--", ".ai/nonexistent/", ".ai-ops.yaml")'
+  tests:
+  - tests/unit/test_managed_drift_preflight.py
+  why: 'B2-27: update --in-place оставляет managed-файлы в рабочем дереве, но worktree создаётся
+    от HEAD. Если проверка ищет не в .ai/managed/, а в другом месте, прогон молча пойдёт на старом
+    ките. Мутация сдвигает путь; тест обязан заметить, что .ai/managed/ VERSION изменён.'
+- id: probes-run-without-site
+  kind: guard
+  file: tests/ambient.py
+  find: '    return [sys.executable, ISOLATION_FLAG, *[str(a) for a in args]]'
+  replace_with: '    return [sys.executable, *[str(a) for a in args]]'
+  tests:
+  - tests/unit/test_probes_survive_the_editable_belt.py
+  why: 'Изоляция держится ровно на `-S`: пояс editable-установки живёт в `.pth` site-packages, и ни
+    чистка PYTHONPATH, ни `-E`, ни `-I` его не снимают. Мутация убирает флаг — и проба снова читает
+    рабочий клон вместо своей копии, то есть возвращается состояние «пять красных всегда».'
+- id: isolated-run-still-has-its-dependencies
+  kind: guard
+  file: tests/ambient.py
+  find: '    e["PYTHONPATH"] = str(deps_dir(base))'
+  replace_with: '    e.pop("PYTHONPATH", None)'
+  tests:
+  - tests/unit/test_probes_survive_the_editable_belt.py
+  why: 'Цена `-S` — вместе с site исчезают сторонние пакеты. Мутация убирает каталог симлинков, и
+    проба начинает падать на `import yaml`, то есть по ПОСТОРОННЕЙ причине: красная, но ничего не
+    проверяющая. Это худший исход, чем зелёная и слепая, — он ещё и выглядит как находка.'
+- id: check-full-refuses-interpreter-without-pytest
+  kind: guard
+  file: scripts/check-full.sh
+  find: '  exit 2'
+  replace_with: '  true'
+  tests:
+  - tests/unit/test_evidence_scope.py
+  why: 'На машине владельца `python3` из PATH — homebrew без pytest, и документированная точка входа
+    «полный контур» падала трассировкой модуля вместо ответа, что делать. Мутация возвращает
+    продолжение после негодного интерпретатора: скрипт объявит охват и умрёт на импорте.'
+- id: scope-is-announced-for-the-interpreter-used
+  kind: seam
+  covers:
+  - scripts/check-full.sh
+  - tests/unit/test_evidence_scope.py
+  file: scripts/check-full.sh
+  find: '"$PYTHON" -m pytest tests/ -q "$@"'
+  replace_with: 'python3 -m pytest tests/ -q "$@"'
+  tests:
+  - tests/unit/test_evidence_scope.py
+  why: 'ШОВ между объявлением охвата и тем, чем прогон реально идёт. Мутация оставляет объявление по
+    выбранному интерпретатору, а тесты гонит другим: «ОХВАТ: full-current-python — CPython 3.11»
+    печатается, а результат получен на 3.14. Ровно тот класс, ради которого словарь охватов и
+    заведён, — заявление шире полученного.'
+- id: probes-actually-call-the-isolated-runner
+  kind: seam
+  covers:
+  - tests/ambient.py
+  - tests/unit/test_validator_runtime_contract.py
+  file: tests/unit/test_validator_runtime_contract.py
+  find: '    return ambient.run([copy / "ai_ops_kit" / "validation" / f"{name}.py", *args],'
+  replace_with: '    return _plain_run([copy / "ai_ops_kit" / "validation" / f"{name}.py", *args],'
+  tests:
+  # УЗЕЛ, А НЕ ФАЙЛ: базовый прогон проб идёт в копии БЕЗ `.git`, и соседний
+  # `test_standalone_validator_is_green_from_a_copy[validate_release_claims]` там краснеет по
+  # посторонней причине — «мутант убит» перестало бы что-либо значить. Берём ровно тот тест,
+  # который этот шов и охраняет.
+  - tests/unit/test_validator_runtime_contract.py::test_validator_run_goes_through_the_isolated_runner
+  why: 'ШОВ, которого потребовал собственный валидатор проб: механизм изоляции может быть сколь
+    угодно правильным — он работает только там, где его ЗОВУТ. Мутация возвращает прежний запуск в
+    одном из трёх переведённых мест, и проба «испортить реестр в копии» снова читает рабочий клон.
+    Именно так дефект и жил: инструмент был, вызова не было.'
+- id: copies-carrier-is-read-by-the-team-view
+  kind: seam
+  covers:
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/planning/next_work.py
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    sources = [load_copy_claims(child_root)]'
+  replace_with: '    sources = []'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'ШОВ: заявка соседней рабочей копии доходит до ответа только через общую карту. Мутация
+    оставляет носитель на месте — он пишется, читается и даже проверяется своими тестами, — но в
+    ответ не попадает: `next` во второй копии снова предлагает занятую работу, а `register` снова
+    возвращает 0 без отказа. Ровно тот класс «механизм есть, вызова нет», которым уже была
+    `shared_registry_path`: написана 12.08.2026 против этого дефекта и не вызывалась нигде, кроме
+    тестов, восемь дней.'
+- id: copies-carrier-is-written-on-register
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        claim_to_copies(child_root, entry)'
+  replace_with: '        pass'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Заявка, не положенная на носитель, не существует ни для кого, кроме своего рабочего дерева:
+    локальный реестр лежит внутри worktree и скрыт .gitignore. Замер 20.08.2026 — цена этой
+    невидимости названа полем: две одинаковые интеграционные ветки за один день.'
+- id: refusal-names-since-when
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '                since = c.get("since") or "время начала не записано"'
+  replace_with: '                since = ""'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Отказ без «с какого момента» не даёт решить, ждать держателя или перенимать заявку: заявка
+    минутной давности и заявка недельной требуют разного. Мутация оставляет отказ на месте и вынимает
+    из него единственное, что делает его решаемым.'
+- id: carrier-needs-an-explicit-root
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '    if start is None:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Найдено собственным прогоном 20.08.2026 до коммита: без этой охраны носитель брал `Path.cwd()`
+    и вызовы без корня координировали тот репозиторий, где случайно стоял процесс — шесть чужих тестов
+    показали заявки из живого кита. «Держатель назван, но не тот» опаснее, чем «держатель не назван».'
+- id: removed-copy-releases-its-claim
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if wt and not Path(wt).is_dir():'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: '`git worktree remove` заявку с носителя не снимает. Без этой охраны удалённая рабочая копия
+    держала бы работу ВЕЧНО во всех остальных, и снять её было бы нечем — реестр превращается в список
+    страшилок, ради которого его перестают читать (#137).'
+- id: base-equal-to-the-branch-proves-nothing
+  kind: guard
+  file: ai_ops_kit/lifecycle/active_work.py
+  find: '        if _same_ref(child_root, branch, base_ref):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_claim_reaches_other_copies.py
+  why: 'Замер 20.08.2026: в рабочей копии прогона `_resolve_base` отдаёт саму заявленную ветку, и
+    сверка `ai-ops/w` против `ai-ops/w` («впереди 0, позади 0») объявляла ВСЯКУЮ заявку влитой — отказ
+    второй сессии не срабатывал, а `status` говорил, что работа не идёт. Кит сам ставит дочку в такую
+    копию (`worktree.add` -> `.ai/worktrees/<работа>`), значит место штатное. Мутация возвращает
+    сравнение ветки с самой собой.'
+- id: release-prose-does-not-ship
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    if rel.startswith(DEV_ONLY_PREFIXES) or rel in DEV_ONLY_FILES:'
+  replace_with: '    if rel.startswith(DEV_ONLY_PREFIXES):'
+  tests:
+  - tests/unit/test_installer.py
+  why: 'Замер 20.08.2026: 61 336 Б релизной прозы (75% release-claims.yaml) ехали в КАЖДУЮ дочку, где
+    их не читает ни одна строка кода. Мутация возвращает файл в поставку, оставив объявление
+    исключения на месте, — то есть ровно тот случай, когда список исключений есть, а поставка его не
+    спрашивает.'
+- id: notes-version-must-match-claims
+  kind: guard
+  file: ai_ops_kit/validation/validate_release_claims.py
+  find: '    if str(notes.get("version") or "") != str(data.get("version") or ""):'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_evidence_scope.py
+  why: 'Версия намеренно дублируется в двух файлах (claims и notes), поэтому обязана сверяться: без
+    сверки проза молча относилась бы к другому выпуску, а «заявление шире полученного» — ровно тот
+    дефект, против которого стоит вся эта проверка (опровергнут python39-compat на 3.33.2).'
+- id: release-claims-validator-is-registered
+  kind: seam
+  covers:
+  - ai_ops_kit/validation/validate_release_claims.py
+  - tests/unit/test_validator_contract.py
+  file: tests/unit/test_validator_contract.py
+  find: '    "validate_release_claims",'
+  replace_with: '    # снят из контракта'
+  tests:
+  - tests/unit/test_validator_contract.py::test_list_matches_reality
+  why: 'ШОВ РЕГИСТРАЦИИ, которого потребовал собственный валидатор проб: у механизма с охранными
+    пробами обязана быть проба вызова, иначе снятие охраны поймается, а отключённый ВЫЗОВ — нет.
+    Валидатор релизных заявлений судит то, чем кит объявляет собственную готовность; вне контракта он
+    остаётся «объявлено, но не исполняется» — и тогда охраны выше проверяют текст, который никто не
+    читает.'
+- id: plan-git-disagreement-reaches-validate
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        grep_ = git_disagreements(plan, root)'
+  replace_with: '        grep_ = {"errors": [], "warnings": [], "measured": False}'
+  tests:
+  - tests/unit/test_plan_agrees_with_git.py
+  why: 'ШОВ: сверка плана с git попадает в CI только через отчёт `validate` — его читает
+    `validate_product_model`. Мутация оставляет механизм на месте, но контур его не спрашивает: план
+    может расходиться с git, а джоба зелёная. Ровно тот класс, которым была сама находка 20.08 —
+    расхождение нашёл человек при аудите, а не проверка.'
+- id: changes-in-base-close-the-work
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        elif state == "in-base" and st != "done":'
+  replace_with: '        elif False:'
+  tests:
+  - tests/unit/test_plan_agrees_with_git.py
+  why: 'Замер 20.08.2026 на плане самого кита: `audit-public-surface-and-guards` объявлена идущей, а
+    её ветка целиком в базе. Работа была сделана и слита, план об этом не знал, и не заметила ни одна
+    проверка — это класс аудита 19.08 («тридцать закрыли, настоящими были 23»), только в другую
+    сторону.'
+- id: unmeasured-plan-state-is-not-agreement
+  kind: guard
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        if state == "absent":'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_plan_agrees_with_git.py
+  why: 'Третье состояние не сворачивается во второе. Ветку удалили после слияния ИЛИ не выкачали —
+    различить нельзя; молчание на этом месте читалось бы как «план согласован», то есть неизвестность
+    выдавалась бы за зелёное.'
+- id: raise-must-name-shipping-files
+  kind: guard
+  file: installer/ai_ops.py
+  find: '            elif shipped is not None and rel not in shipped:'
+  replace_with: '            elif False:'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'ГЛАВНАЯ ОХРАНА подъёма потолка: причина «этот файл работает в дочке» проверяема только против
+    поставки. Мутация позволяет обосновать подъём файлом, который в дочку не едет, — то же «заявление
+    шире полученного», из-за которого заведён словарь охватов. Логика в функции, а не в тесте: первая
+    версия стояла в тесте и проба ВЫЖИЛА (позитив без отрицательного случая непробиваем).'
+- id: raise-headroom-is-not-a-reason
+  kind: guard
+  file: installer/ai_ops.py
+  find: '        if any(f in why for f in BUDGET_NON_REASONS):'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: '«Нужен запас» причиной не считается — правило записано с 13.08.2026 прозой и исполнялось ровно
+    настолько, насколько о нём помнили. Мутация снимает единственную строку, делающую его проверяемым.'
+- id: ceiling-matches-the-last-raise
+  kind: guard
+  file: installer/ai_ops.py
+  find: '            vol[-1].get("to_bytes") != ceilings["volume_bytes"]:'
+  replace_with: '            False:'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'Ровно случай, из которого работа выросла: потолок поднят числом, записи о подъёме нет. Без
+    этой сверки лента подъёмов и действующий потолок расходятся молча — как разъехались две ленты в
+    двух блоках одного файла.'
+- id: breach-message-shows-what-occupies-delivery
+  kind: guard
+  file: installer/ai_ops.py
+  find: '    return "\n".join([head, rule, "Что занимает поставку сейчас:"] +'
+  replace_with: '    return "\n".join([head, rule] +'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'Замер 20.08.2026: четыре подъёма подряд обсуждались одним числом, и состав поставки не смотрел
+    никто. Первый же взгляд дал находку — manifest на 252 КБ, 6.6% в одном файле. Мутация оставляет в
+    сообщении число и правило, но убирает СОСТАВ: узнав число, человек снова не узнает, что там лежит.'
+- id: budget-checks-read-the-real-registry
+  kind: seam
+  covers:
+  - quality/delivery-budget.yaml
+  - tests/unit/test_delivery_budget.py
+  file: tests/unit/test_delivery_budget.py
+  find: '    return yaml.safe_load((KIT / BUDGET_REL).read_text(encoding="utf-8"))'
+  replace_with: '    return {"ceilings": {"volume_bytes": 4194304, "substantive_files": 999, "alias_bytes": 999999}, "raises": []}'
+  tests:
+  - tests/unit/test_delivery_budget.py
+  why: 'ШОВ: охраны подъёма проверяют НАСТОЯЩИЙ реестр, а не заглушку. Мутация оставляет все проверки
+    на месте и подсовывает им выдуманный бюджет с пустой лентой подъёмов — механизм есть, а
+    объявленные потолки им никто не судит. Тот же класс, что «валидатор, не запускавшийся нигде».'

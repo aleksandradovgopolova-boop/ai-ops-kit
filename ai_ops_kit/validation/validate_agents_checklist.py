@@ -28,7 +28,12 @@ WORKFLOWS = PKG / ".github" / "workflows"
 ALLOWED = (
     re.compile(r"^python3?\s+-m\s+pytest\b"),
     re.compile(r"^bash\s+\.github/ci-groups/"),
-    re.compile(r"^pip\s+install\b"),
+    # Установка зависимости — не проверка, и это уже было объявлено. Но образец знал только
+    # голое `pip install`, а канонический способ — `python -m pip install`: он ставит пакет
+    # ИМЕННО в тот интерпретатор, которым потом запускают, и потому рекомендован. Первая же
+    # джоба, написанная канонически, объявлялась нарушением инварианта. Правило говорило одно,
+    # образец проверял другое.
+    re.compile(r"^(?:python3?\s+-m\s+)?pip\s+install\b"),
     re.compile(r"^\./scripts/check-(fast|full)\.sh"),
 )
 

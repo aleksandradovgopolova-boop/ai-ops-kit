@@ -20,10 +20,10 @@ AI сопровождает продукт на всём жизненном ци
 python3 <path-to-ai-ops-kit>/installer/ai_ops.py init .
 
 # Задача
-python3 .ai/managed/tools/ai_ops_cli.py run "описание задачи" . --execute
+./ai-ops run "описание задачи" --execute
 
 # Ревью
-python3 .ai/managed/tools/ai_ops_cli.py review
+./ai-ops review
 ```
 
 ## Версия

@@ -4,6 +4,8 @@
 Команды:
   status               — установленная vs доступная версия, целостность managed-слоя
   diff                 — что изменит обновление (add/replace/remove), без применения
+  check-update         — ГЕЙТ для CI: код 2 — копия отстала, 1 — проверить не удалось, 0 — актуальна
+                         ([--quiet] молчит при успехе, [--json] — машиночитаемо)
   update [--force]     — обновить managed-слой из пакета (алгоритм ниже); --force игнорирует drift
   init <path>          — установить систему в новый child (создать .ai/, конфиг-заготовку)
   validate             — прогнать связанные валидаторы (child, registry, workflows, providers)
@@ -170,6 +172,224 @@ def child_update_policy():
     return val if val in ("pr", "manual") else "pr"
 
 
+# ПОРЯДОК КАНАЛОВ — ОТ СЛАБОГО К СИЛЬНОМУ. Тот же словарь, что в registry/release-claims.yaml;
+# расхождение словарей ловит `validate_release_claims` на стороне пакета.
+CHANNEL_ORDER = ("edge", "qualification", "stable")
+
+
+def child_update_channel():
+    """`parent.update_channel` из .ai-ops.yaml. -> str.
+
+    ЗАМЕР 19.08.2026 (аудит): поле ОБЯЗАТЕЛЬНО по схеме, `init` пишет его в КАЖДУЮ дочку со
+    значением `stable` — и не читала ни одна строка кода (`grep -rn update_channel` давал только
+    схему и пример). Одновременно `ai-ops-update.yml` делает `git clone --depth 1` ветки по
+    умолчанию, то есть приносит канал `edge`. Дочка объявляла самый строгий канал и получала самый
+    слабый, молча. Ровно тот же класс, что F-022 у `update_policy`, найденный месяцем раньше.
+
+    ОТСУТСТВИЕ ЧИТАЕТСЯ КАК САМЫЙ СТРОГИЙ канал, а не как «любой сойдёт»: конфиг без обязательного
+    поля — старая или повреждённая установка, и делать из самого подозрительного состояния самый
+    мягкий вывод здесь уже дорого обошлось.
+    """
+    cfg = _read_child_cfg()
+    val = str((cfg.get("parent") or {}).get("update_channel", "") or "").strip().lower()
+    return val if val in CHANNEL_ORDER else "stable"
+
+
+def package_channel(pkg_root=None):
+    """Канал, который ЗАРАБОТАЛ пакет (release-claims.yaml -> channel). -> str | None.
+
+    None означает «не прочитали», и это НЕ то же, что «edge»: непрочитанный реестр не должен
+    выглядеть как честно объявленный слабый канал.
+    """
+    p = Path(pkg_root or PKG) / "registry" / "release-claims.yaml"
+    if not p.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    ch = str(doc.get("channel") or "").strip().lower()
+    return ch if ch in CHANNEL_ORDER else None
+
+
+def channel_gap(pkg_root=None):
+    """Дочка просит канал X, пакет заработал Y. -> dict.
+
+    {"asked": X, "offers": Y|None, "satisfied": bool|None, "message": str}
+    `satisfied is None` — состояние не прочитано; это отдельный ответ, а не «нет».
+    """
+    asked = child_update_channel()
+    offers = package_channel(pkg_root)
+    if offers is None:
+        return {"asked": asked, "offers": None, "satisfied": None,
+                "message": (f"канал обновлений: репозиторий просит '{asked}', а канал пакета "
+                            f"прочитать не удалось (registry/release-claims.yaml) — "
+                            f"это «не знаю», а не «подходит»")}
+    ok = CHANNEL_ORDER.index(offers) >= CHANNEL_ORDER.index(asked)
+    if ok:
+        return {"asked": asked, "offers": offers, "satisfied": True,
+                "message": f"канал обновлений: просят '{asked}', пакет даёт '{offers}'"}
+    return {"asked": asked, "offers": offers, "satisfied": False,
+            "message": (f"канал обновлений: репозиторий просит '{asked}', а пакет заработал только "
+                        f"'{offers}'. Обновление принесёт то, что есть, — не то, что объявлено. "
+                        f"Либо дождитесь '{asked}', либо объявите в .ai-ops.yaml тот канал, "
+                        f"который вы действительно готовы принимать")}
+
+
+def tag_channels(repo_dir=None, limit=60):
+    """{тег: объявленный им канал} по последним тегам, новые первыми. -> list[(tag, channel)].
+
+    Канал читается ИЗ САМОГО ТЕГА (`git show <tag>:registry/release-claims.yaml`), а не из рабочего
+    дерева: иначе выбор «дай мне stable» опирался бы на то, что объявляет HEAD, — то есть ровно на
+    ту версию, от которой канал и должен защищать.
+    Теги без поля `channel` пропускаются молча: их выпускали до того, как канал стал
+    зарабатываться (F-030), и считать их каким-либо каналом было бы догадкой.
+    """
+    root = str(repo_dir or PKG)
+    r = subprocess.run(["git", "-C", root, "tag", "--sort=-v:refname"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return []
+    out = []
+    for tag in [t.strip() for t in r.stdout.splitlines() if t.strip()][:limit]:
+        show = subprocess.run(["git", "-C", root, "show", f"{tag}:registry/release-claims.yaml"],
+                              capture_output=True, text=True)
+        if show.returncode != 0:
+            continue
+        try:
+            doc = yaml.safe_load(show.stdout) or {}
+        except yaml.YAMLError:
+            continue                      # битый файл в теге — не канал, а повреждение
+        ch = str(doc.get("channel") or "").strip().lower()
+        if ch in CHANNEL_ORDER:
+            out.append((tag, earned_channel(doc), str(doc.get("version") or "")))
+    return out
+
+
+def earned_channel(claims: dict) -> str:
+    """Канал, который тег ЗАРАБОТАЛ по своим же требованиям, а не объявил. -> str.
+
+    ЗАМЕР 19.08.2026: теги v3.36.7…v3.36.10 объявляют `channel: stable` при ПУСТОМ
+    `field_evidence` — то есть не выполняют требование `channels.stable.requires`, записанное в
+    том же файле. Это ровно та самообъявленность, из-за которой канал и стали зарабатывать
+    (F-030, v3.36.11 честно опустился до `qualification`).
+
+    Наивный выбор «новейший тег с channel: stable» отправил бы дочку НАЗАД, на v3.36.10 — старее
+    установленного и с тем самым дефектом. Поэтому объявление проверяется требованиями самого тега:
+    `field_evidence` пуст -> `stable` не заработан, тег считается `qualification`.
+    Требования читаются ИЗ ТЕГА: словарь мог меняться, и мерить старый выпуск сегодняшней линейкой
+    значило бы судить его правилом, которого тогда не было.
+    """
+    declared = str(claims.get("channel") or "").strip().lower()
+    if declared not in CHANNEL_ORDER:
+        return "edge"
+    vocab = claims.get("channels") or {}
+    if declared not in vocab:
+        # ТЕГ НЕ НЕСЁТ СВОИХ ТРЕБОВАНИЙ — проверить объявление НЕЧЕМ. Замер: v3.36.7…v3.36.10
+        # объявляют `stable`, а раздела `channels` в них нет вовсе; он появился в v3.36.11 вместе
+        # с правилом «канал зарабатывается» (F-030), и именно тогда версия честно опустилась до
+        # `qualification`. Принять такое объявление на веру значило бы отправить дочку НАЗАД, на
+        # выпуск, чья `stable` и была тем самым самообъявлением.
+        # «Не смогли проверить» — не «заработал»: потолок `qualification`, тег был выпущен, но
+        # полевых доказательств за ним не стоит ничего проверяемого.
+        cap = CHANNEL_ORDER.index("qualification")
+        return CHANNEL_ORDER[min(CHANNEL_ORDER.index(declared), cap)]
+    reqs = (vocab.get(declared) or {}).get("requires") or []
+    if "field_evidence" in reqs:
+        ev = claims.get("field_evidence") or []
+        need = (vocab.get(declared) or {}).get("field_evidence_min_repos", 1)
+        repos = {str((e or {}).get("repo") or e) for e in ev} if isinstance(ev, list) else set()
+        if len(repos) < int(need or 1):
+            # Не заработан — опускаем на один канал вниз, а не до edge: собственный контур
+            # (own_ci_green) тег всё же прошёл, иначе он не был бы выпущен.
+            return CHANNEL_ORDER[max(0, CHANNEL_ORDER.index(declared) - 1)]
+    return declared
+
+
+def resolve_update_ref(channel, repo_dir=None):
+    """Какую ревизию брать под запрошенный канал. -> dict.
+
+    {"ref": str|None, "kind": "tag"|"branch"|None, "channel": str, "reason": str}
+
+    ПОЧЕМУ ЭТО НУЖНО (аудит 19.08.2026). `templates/ci/ai-ops-update.yml` делал
+    `git clone --depth 1 <repo>` — то есть брал HEAD ветки по умолчанию, канал `edge`, — тогда как
+    дочка объявляла `stable`. Объявление и источник были не связаны ничем.
+
+    ОТКАЗ ВМЕСТО ТИХОГО ОТКАТА НА HEAD. Если под запрошенный канал тега нет, функция возвращает
+    `ref=None, kind=None` и НАЗЫВАЕТ причину. Молчаливый фолбэк на ветку воспроизвёл бы исходный
+    дефект: дочка просила бы `stable` и получала `edge`, только теперь через новый механизм.
+    """
+    ch = str(channel or "").strip().lower()
+    if ch not in CHANNEL_ORDER:
+        return {"ref": None, "kind": None, "channel": ch,
+                "reason": f"канал '{channel}' вне словаря {list(CHANNEL_ORDER)}"}
+    if ch == "edge":
+        return {"ref": None, "kind": "branch", "channel": ch,
+                "reason": "канал edge — это ветка по умолчанию, тег не выбирается"}
+    want = CHANNEL_ORDER.index(ch)
+    pairs = tag_channels(repo_dir)
+    # ПОНИЖЕНИЕ ОБНОВЛЕНИЕМ НЕ ЯВЛЯЕТСЯ — то же правило, что у `doctor` (B2-16). Без него запрос
+    # `stable` увёл бы дочку с 3.36.12 на 3.36.10: старее и с дефектом, ради которого канал ввели.
+    floor = installed_version() or "0"
+    for tag, tag_ch, ver in pairs:
+        if CHANNEL_ORDER.index(tag_ch) < want:
+            continue
+        # РАВНАЯ ВЕРСИЯ — НЕ ПОНИЖЕНИЕ (правка 20.08.2026, поймано первым же живым прогоном
+        # обновления без клона). Здесь стояло `<=`, и дочка, стоящая ровно на последнем выпуске
+        # канала, получала отказ со словом «понижение» — то есть нормальное состояние «уже
+        # актуально» подавалось как ошибка. Ревизию отдаём; что версии совпали и делать нечего,
+        # скажет установщик, который это и так проверяет.
+        if ver and parse_version(ver) < parse_version(floor):
+            return {"ref": None, "kind": None, "channel": ch,
+                    "reason": (f"ближайший тег канала '{ch}' — {tag} ({ver}), а установлено "
+                               f"{floor}: это понижение, а не обновление. Обновление не выполняется")}
+        return {"ref": tag, "kind": "tag", "channel": ch,
+                "reason": f"{tag} ЗАРАБОТАЛ канал '{tag_ch}' — не слабее запрошенного '{ch}'"}
+    seen = ", ".join(f"{t}={c}" for t, c, _v in pairs[:3]) or "ни один тег не объявляет канал"
+    # ОТКАЗ ОБЯЗАН НАЗЫВАТЬ ВЫХОД. Замер 20.08.2026: дочка на `stable` не может обновиться, пока ни
+    # один тег не заработал `stable`; а `stable` зарабатывается полевыми доказательствами, которые
+    # берутся из дочек, которые обновились. Круг разрывается ролью раннего получателя — дочкой на
+    # `qualification`, — но пока об этом не сказано ЗДЕСЬ, владелец видит только тупик и идёт
+    # чинить теги, в которых всё в порядке. Отказ без выхода — половина работы: правильный «нет»,
+    # после которого человек всё равно застрял.
+    best = pairs[0][1] if pairs else None
+    way_out = ""
+    if best and CHANNEL_ORDER.index(best) < want:
+        way_out = (f". Выход: самый свежий тег заработал '{best}'. Если этот репозиторий готов быть "
+                   f"ранним получателем — поставьте `parent.update_channel: {best}` в .ai-ops.yaml; "
+                   f"именно так и добываются полевые доказательства, без которых '{ch}' не наступит "
+                   f"никогда")
+    return {"ref": None, "kind": None, "channel": ch, "best_earned": best,
+            "reason": (f"под канал '{ch}' подходящего тега нет ({seen}). Обновление НЕ выполняется: "
+                       f"взять ветку по умолчанию значило бы дать '{CHANNEL_ORDER[0]}' там, где "
+                       f"просили '{ch}'" + way_out)}
+
+
+def cmd_resolve_ref(argv):
+    """`ai-ops resolve-ref [--channel X] [--repo DIR] [--json]` — какую ревизию брать под канал.
+
+    Зовётся из `templates/ci/ai-ops-update.yml` после клона parent'а. Печатает ref в stdout (пусто
+    при отказе), причину — в stderr; код 0 — ревизия найдена, 2 — под канал брать нечего.
+    """
+    ch, repo, js = None, None, False
+    it = iter(argv[2:])
+    for a in it:
+        if a == "--channel":
+            ch = next(it, None)
+        elif a == "--repo":
+            repo = next(it, None)
+        elif a == "--json":
+            js = True
+    res = resolve_update_ref(ch or child_update_channel(), repo)
+    if js:
+        print(json.dumps(res, ensure_ascii=False))
+        return 0 if (res["ref"] or res["kind"] == "branch") else 2
+    if res["ref"]:
+        print(res["ref"])
+    print(res["reason"], file=sys.stderr)
+    return 0 if (res["ref"] or res["kind"] == "branch") else 2
+
+
 def parent_source():
     """URL parent-репозитория для parent.source ('git+<url>'), из git remote пакета.
     userinfo (креды) вырезается — секреты в конфиг не попадают. None, если remote недоступен."""
@@ -310,6 +530,65 @@ DEV_ONLY_PREFIXES = (
     "ai_ops_kit/devtools/",
 )
 
+# НЕ ПОДКЛЮЧЁННОЕ НЕ ЕДЕТ (19.08.2026, разбор после аудита).
+#
+# Двенадцать модулей, добавленных 19.08, уезжали в дочку и были там НЕДОСТИЖИМЫ: ни один
+# поставляемый модуль их не импортирует, ни один реестр, гейт, workflow или команда не называет,
+# и ни один документ кита о них не упоминает. Замер на свежей установке: 0 импортов из поставки
+# (единственная ссылка — внутри самой группы: watch_contract -> nightly_review), 0 упоминаний в
+# registry/quality/config/commands/workflows, 0 в README.md и docs/.
+#
+# Цена была видна сразу: потолок поставки пробит — 479 содержательных файлов при 475 и 3.7449 МБ
+# при 3.7. Поднимать потолок здесь было бы неправдой: он поднимается, когда в дочку едет то, что
+# в дочке РАБОТАЕТ (так его поднимали в v3.35 и 17.08), а не то, что до неё просто дотянулось.
+#
+# ЭТО НЕ ПРИГОВОР МОДУЛЯМ. Они задуманы работать именно в продуктовом репозитории; им не хватает
+# подключения — интента, гейта или записи в реестре. Как только подключение появится, модуль
+# обязан уехать обратно, и об этом скажет не память автора, а проверка: тест
+# `test_unwired_modules_are_really_unwired` краснеет, если имя из этого списка кто-то начал звать.
+# Список вправе только СОКРАЩАТЬСЯ — как ратчет слоёв и как потолок поставки.
+UNWIRED_MODULES = frozenset({
+    "ai_ops_kit/engops/delivery_size.py",
+    "ai_ops_kit/engops/merge_lifecycle.py",
+    "ai_ops_kit/engops/refusal_paths.py",
+    "ai_ops_kit/engops/session_thresholds.py",
+    "ai_ops_kit/intelligence/artifact_reality_check.py",
+    "ai_ops_kit/intelligence/decision_loop.py",
+    # `intelligence/nightly_review.py` УБРАН 20.08.2026: он подключён. Команда рантайма
+    # `commands/maintenance/night-review.md` зовёт его в дочке, и Robin запускает по расписанию
+    # (`runtime/robin/duties.example.yaml`, обязанность `nightly-review`). Не поставить его
+    # значило бы дать дочке команду, которая ссылается на отсутствующий файл — класс F-033.
+    # Собственных импортов из кита у модуля нет, второй файл он за собой не тянет (проверено).
+    #
+    # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `installer/` — территория ленты B. Правка на одну
+    # строку списка; оставить её несделанной было нельзя, иначе работа ленты A уехала бы в дочку
+    # наполовину. Ленте B сказано.
+    "ai_ops_kit/intelligence/outcome_analytics.py",
+    "ai_ops_kit/intelligence/refactoring_advisor.py",
+    "ai_ops_kit/intelligence/session_watch.py",
+    "ai_ops_kit/intelligence/watch_contract.py",
+    # `planning/artifact_registry.py` и `planning/passport_generator.py` УБРАНЫ ИЗ СПИСКА 20.08.2026
+    # (работа `product-layer-bootstrap`): они ПОДКЛЮЧЕНЫ. `_seed_product_layer` в этом установщике
+    # читает реестр артефактов и генерирует Product Passport из фактического состояния дочки при
+    # `ai-ops init`/`update` — значит оба обязаны быть в поставке, иначе установка вызовет файл,
+    # которого в дочке нет (класс F-033). Список сократился фактом подключения, не решением автора.
+    # `planning/product_templates.py` УБРАН ИЗ СПИСКА 20.08.2026 (работа `product-layer-validation`):
+    # он ПОДКЛЮЧЁН. `validate_product_layer` зовёт его подпроцессом при `ai-ops validate product-layer`
+    # В дочке, чтобы посчитать состояние Missing/Invalid/Outdated/Valid по её артефактам. Без него в
+    # поставке валидация вызвала бы файл, которого в дочке нет (F-033). Список сокращён фактом подключения.
+    # 2026-08-20: ЧЕТЫРЕ модуля ленты 4 УБРАНЫ ИЗ СПИСКА — они ПОДКЛЮЧЕНЫ (#241). Команды `ai-ops roadmap`
+    # и `ai-ops delivery` (ai_ops_kit/cli/ai_ops_cli.py, DIRECT_INTENTS) зовут их в дочке:
+    # roadmap_manager (roadmap), roadmap_milestones + delivery_planning + delivery_planning_blockers
+    # (delivery). Не поставить их теперь значило бы дать дочке команду, ссылающуюся на отсутствующий
+    # файл (класс F-033). Сокращение списка — фактом подключения, а не решением: об этом сказал тест
+    # `test_unwired_modules_are_really_unwired` (краснел бы, останься имя, раз cli его зовёт).
+    # `ui/experience_contract.py` УБРАН ИЗ СПИСКА 20.08.2026: он подключён. Сторона доказательства
+    # (`ui/storybook_adapter`) читает Experience Contract дочки и берёт из него обязательные
+    # состояния — значит модуль обязан быть в поставке, иначе у дочки будет вызов файла, которого
+    # там нет (класс F-033). Список сокращается только так: не решением, а фактом подключения,
+    # и об этом сказал не автор, а тест `test_unwired_modules_are_really_unwired`.
+})
+
 DEV_ONLY_TOOLS = frozenset({
     "bench_lite", "bench_performance", "retrieval_bench",  # бенчмарки самого движка/ретрива
     "model_comparison",                                    # сравнение моделей (исследование кита)
@@ -351,12 +630,45 @@ RUNTIME_VALIDATORS = frozenset({
     # Список был памятью автора, а не проверяемым фактом; теперь его сторожит
     # `test_delivered_engine_does_not_import_undelivered_validators`.
     "validate_acceptance_result",
+    # B2-25 (19.08.2026): проверку «в конфиге дочки не осталось заготовок установки» зовёт `doctor`,
+    # который исполняется ИМЕННО У ДОЧКИ. Не внести имя сюда значило бы починить кит и не починить
+    # дочку — тот же класс, что F-033. Поймано не рассуждением, а тестом на НАСТОЯЩЕЙ установке:
+    # `doctor` в свежепоставленной копии печатал «НЕ ПРОВЕРЕНО (cannot import name …)».
+    "validate_child_config_filled",
+    # 20.08.2026, работа `product-layer-validation` (PR-5): `ai-ops validate product-layer`
+    # исполняется У ДОЧКИ — считает состояние `.ai-ops/` (Missing/Invalid/Outdated/Valid). Не внести
+    # имя сюда значило бы починить кит и не починить дочку (F-033), как было с validate_acceptance_result.
+    "validate_product_layer",
+})
+
+
+# ОТДЕЛЬНЫЕ ФАЙЛЫ, А НЕ ПРЕФИКСЫ: исключить каталог целиком нельзя — рядом лежат реестры, которые
+# дочке нужны. Список ЯВНЫЙ по тому же правилу, что DEV_ONLY_PREFIXES: исключение из поставки не
+# должно быть побочным эффектом (`test_managed_set_excludes_are_declared_not_implicit`).
+DEV_ONLY_FILES = frozenset({
+    # 20.08.2026, работа `release-claims-stays-in-the-kit`. Замер: `registry/release-claims.yaml`
+    # весил 82 214 Б и ехал в КАЖДУЮ дочку, из них 61 336 Б (75%) — ключ `patch_note`, одна строка
+    # релизной прозы на 37 080 символов. В дочке его не читает НИКТО: единственный потребитель —
+    # `validate_release_claims`, а он не входит в RUNTIME_VALIDATORS. Проза переехала сюда; сам
+    # claims остался в поставке, потому что у него ЕСТЬ читатель в дочке — `package_channel`
+    # смотрит `channel` (18 Б) из `init`/`update`/`doctor`.
+    "registry/release-notes.yaml",
+    # 20.08.2026: `registry/artifact-registry.yaml` УБРАН отсюда (работа `product-layer-bootstrap`) —
+    # теперь `_seed_product_layer` читает его в дочке при `ai-ops init`/`update`, чтобы знать состав
+    # слоя и куда его класть; значит реестр обязан ехать в поставку. Схему кит в рантайме не читает
+    # (`check` загрузчика самодостаточен) — это публичный контракт формы, и она остаётся dev-only.
+    "schemas/artifact-registry.schema.json",
+    # `product-audit.schema.json` — контракт формы отчёта аудита (PR-21). Кит в рантайме её не
+    # читает (форма проверяется в самом `product_audit` и тестом), значит в дочку её слать незачем.
+    "schemas/product-audit.schema.json",
 })
 
 
 def is_runtime_asset(rel):
     """Едет ли файл managed_set в child-репозиторий? False — ассет разработки кита."""
-    if rel.startswith(DEV_ONLY_PREFIXES):
+    if rel.startswith(DEV_ONLY_PREFIXES) or rel in DEV_ONLY_FILES:
+        return False
+    if rel in UNWIRED_MODULES:          # построено, но в дочке недостижимо — см. UNWIRED_MODULES
         return False
     stem = rel.rsplit("/", 1)[-1][:-3] if rel.endswith(".py") else None
     if rel.startswith("tools/") and stem in DEV_ONLY_TOOLS:
@@ -383,6 +695,148 @@ def managed_set():
                 if is_runtime_asset(rel):
                     pairs.append((src, rel))
     return filter_by_packages(pairs, selected_packages(), package_ownership())
+
+
+def delivery_breakdown(top=10):
+    """ЧТО занимает поставку: разбивка по каталогам и крупнейшие файлы. -> dict.
+
+    ЗАЧЕМ (замер 20.08.2026). Потолок объёма ловил РОСТ и не показывал СОСТАВ: четыре подъёма подряд
+    обсуждались числом «3.5 -> 3.7 -> 3.75 -> 3.8», и ни в одном не было видно, что именно лежит в
+    поставке. Первый же взгляд на состав дал находку, которую до этого не называл никто:
+    `manifest/ai-ops-manifest.yaml` — 252 581 Б в ОДНОМ файле, 6.6% поставки, вчетверо больше
+    релизной прозы, из-за которой отдельно велась работа.
+
+    Разбивка считается по тому же списку, что и сама поставка (`managed_set`), поэтому не может
+    разойтись с ней: одна формула, а не два подсчёта.
+    """
+    by_dir, count = {}, {}
+    files = []
+    for src, rel in managed_set():
+        size = src.stat().st_size
+        head = rel.split("/")[0] if "/" in rel else "(корень)"
+        by_dir[head] = by_dir.get(head, 0) + size
+        count[head] = count.get(head, 0) + 1
+        files.append((size, rel))
+    total = sum(by_dir.values())
+    files.sort(reverse=True)
+    return {"total_bytes": total, "file_count": sum(count.values()),
+            "by_dir": [{"dir": k, "bytes": v, "files": count[k],
+                        "share": round(100.0 * v / total, 1) if total else 0.0}
+                       for k, v in sorted(by_dir.items(), key=lambda kv: -kv[1])],
+            "largest": [{"path": r, "bytes": b,
+                         "share": round(100.0 * b / total, 1) if total else 0.0}
+                        for b, r in files[:top]]}
+
+
+def delivery_breakdown_lines(top=10):
+    """Та же разбивка человеку — строками. Печатается там, где потолок пробит: узнав ЧИСЛО, человек
+    первым делом спрашивает «а что там лежит», и ответ должен быть в том же сообщении."""
+    rep = delivery_breakdown(top=top)
+    out = [f"ПОСТАВКА: {rep['total_bytes']} Б в {rep['file_count']} файлах.",
+           "  по каталогам:"]
+    for d in rep["by_dir"]:
+        out.append(f"    {d['bytes']:8d} Б  {d['share']:5.1f}%  {d['files']:4d} файл(ов)  {d['dir']}")
+    out.append(f"  крупнейшие файлы (top {top}):")
+    for f in rep["largest"]:
+        out.append(f"    {f['bytes']:8d} Б  {f['share']:5.1f}%  {f['path']}")
+    return out
+
+
+def delivery_budget(pkg_root=None):
+    """Объявленные потолки поставки и лента подъёмов. -> dict или None (реестра нет).
+
+    Потолки живут В РЕЕСТРЕ, а не числами в тесте: до 20.08.2026 они были вписаны в assert, а записи
+    о подъёмах лежали в двух разных блоках комментариев одного файла — и на вопрос «записан ли этот
+    подъём» нельзя было ответить, посмотрев в одно место."""
+    p = Path(pkg_root or PKG) / "quality" / "delivery-budget.yaml"
+    if not p.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+# «Нужен запас» причиной не считается — правило записано с 13.08.2026 и до 20.08 исполнялось ровно
+# настолько, насколько о нём помнили. Ловится дословно, а не «по духу»: список закрытый и короткий.
+BUDGET_NON_REASONS = ("нужен запас", "чтобы прошло", "для запаса", "на будущее")
+BUDGET_RAISE_REQUIRED = ("at", "what", "measured_before", "measured_after", "files",
+                         "why_it_works_in_the_child")
+
+
+def delivery_budget_errors(doc, shipped=None, exists=None):
+    """Что не так с объявленным бюджетом поставки. -> список проблем (пустой = всё названо).
+
+    ЛОГИКА ЖИВЁТ ЗДЕСЬ, А НЕ В ТЕСТЕ, И ЭТО ЗАМЕР 20.08.2026: первая версия этих охран стояла прямо
+    в тесте и проверяла, что НАСТОЯЩИЙ реестр в порядке. Три мутационные пробы ВЫЖИЛИ — снятие
+    охраны не роняло тест, потому что у проверки не было отрицательного случая. Проверка без «а вот
+    так — нельзя» непробиваема по построению; ровно тот класс, ради которого весь контур проб и стоит.
+
+    `shipped` — множество путей, которые реально едут в дочку; `exists` — предикат существования
+    файла. Оба передаются, чтобы функцию можно было спросить и про выдуманный реестр.
+    """
+    problems = []
+    if not isinstance(doc, dict):
+        return ["реестр бюджета не разобран — проверять нечего"]
+    ceilings = doc.get("ceilings") or {}
+    raises = doc.get("raises") or []
+    for key in ("volume_bytes", "substantive_files", "alias_bytes"):
+        if not isinstance(ceilings.get(key), int):
+            problems.append(f"ceilings.{key} не объявлен числом — потолка нет")
+    vol = [r for r in raises if isinstance(r, dict) and r.get("what") == "volume"]
+    if not vol:
+        problems.append("в ленте нет ни одного подъёма объёма — потолок появился без записи")
+    elif isinstance(ceilings.get("volume_bytes"), int) and \
+            vol[-1].get("to_bytes") != ceilings["volume_bytes"]:
+        problems.append(
+            f"последний подъём объёма ведёт к {vol[-1].get('to_bytes')}, а потолок "
+            f"{ceilings['volume_bytes']} — значит потолок поднят БЕЗ записи")
+    for r in raises:
+        if not isinstance(r, dict):
+            problems.append("запись подъёма не словарь")
+            continue
+        tag = f"{r.get('at')} {r.get('work')}"
+        for k in BUDGET_RAISE_REQUIRED:
+            if not r.get(k):
+                problems.append(f"{tag}: нет обязательного поля '{k}'")
+        at = str(r.get("at") or "")
+        if not (len(at) == 10 and at[4:5] == "-" and at[7:8] == "-"):
+            problems.append(f"{tag}: дата не ISO ({at!r}) — без даты замер выдаёт себя за текущий")
+        for k in ("measured_before", "measured_after"):
+            if k in r and not isinstance(r.get(k), int):
+                problems.append(f"{tag}: {k} не число")
+        why = str(r.get("why_it_works_in_the_child") or "").lower()
+        if any(f in why for f in BUDGET_NON_REASONS):
+            problems.append(f"{tag}: причина подъёма — не причина, а запас: {why[:60]!r}")
+        elif why and len(why) < 80:
+            problems.append(f"{tag}: причина короче 80 символов — она обязана назвать РАБОТУ файла "
+                            f"в дочке, а не факт его добавления")
+        for rel in r.get("files") or []:
+            if exists is not None and not exists(rel):
+                problems.append(f"{tag}: названного файла нет — {rel}")
+            elif shipped is not None and rel not in shipped:
+                problems.append(f"{tag}: файл НЕ едет в дочку, а причина подъёма ссылается на его "
+                                f"работу там — {rel}")
+        if r.get("what") == "volume" and isinstance(r.get("from_bytes"), int) \
+                and isinstance(r.get("to_bytes"), int) and r["to_bytes"] <= r["from_bytes"]:
+            problems.append(f"{tag}: подъём не поднимает ({r['from_bytes']} -> {r['to_bytes']})")
+    return problems
+
+
+def footprint_breach_message(what, actual, ceiling, unit="Б", top=8):
+    """Сообщение о пробитом потолке: число, правило подъёма И СОСТАВ поставки. -> str.
+
+    ЗАМЕР 20.08.2026: четыре подъёма подряд обсуждались одним числом, и состав поставки не смотрел
+    никто. Первый же взгляд дал находку — `manifest/ai-ops-manifest.yaml` 252 581 Б, 6.6% поставки в
+    ОДНОМ файле. Узнав число, человек первым делом спрашивает «а что там лежит»; ответ обязан быть в
+    том же сообщении, иначе его не ищут."""
+    head = f"{what}: {actual} {unit}, потолок {ceiling} {unit}."
+    rule = ("ПОДНЯТЬ ПОТОЛОК МОЖНО ТОЛЬКО ЗАПИСЬЮ в quality/delivery-budget.yaml: дата, замеры до и "
+            "после, КАКИЕ файлы добавлены и ПОЧЕМУ они работают в дочке. «Нужен запас» причиной не "
+            "считается, и проверка это ловит.")
+    return "\n".join([head, rule, "Что занимает поставку сейчас:"] +
+                      delivery_breakdown_lines(top=top))
 
 
 def sha256(p: Path):
@@ -459,7 +913,7 @@ def detect_drift(root=None):
                           "checksum_expected": digest, "checksum_actual": sha256(p)})
     for p in sorted(root.rglob("*")):
         # Байткод не часть managed-слоя: он появляется от любого запуска и дрейфом не является.
-        # Всплыло при переходе групп CI на pytest — прогон на 3.9 создавал __pycache__ внутри
+        # Всплыло при переходе групп CI на pytest — прогон создавал __pycache__ внутри
         # тестовой установки, и проверка целостности рапортовала «ДРИФТ (11 файлов)».
         if "__pycache__" in p.parts or p.suffix in (".pyc", ".pyo"):
             continue
@@ -645,6 +1099,133 @@ def cmd_status():
     return 0 if not drift else 1
 
 
+LAG_BEHIND_RC = 2       # «дочка отстала» — отдельный код, чтобы CI отличал его от поломки самой команды
+LAG_UNKNOWN_RC = 1      # «не знаю» — тоже НЕ успех: непроверенное не имеет права выглядеть проверенным
+
+
+def lag_report():
+    """Отстала ли установленная копия от пакета. -> dict (решение и его основания).
+
+    ПОВОД — ЗАМЕР (EV-1110): второй по размеру класс находок поля — «исправление живёт в ките и не
+    доезжает до установленной копии»: 8 находок из 48. F-032 показал форму точнее всего: в дочке
+    лежали ОБЕ версии точки входа, а отчёт обновления об этом молчал.
+    ЧЕГО НЕ ХВАТАЛО ИМЕННО: не механизма обновления (он есть) и не миграций (есть с 17.08), а ГЕЙТА —
+    команды, которая ПАДАЕТ, когда копия отстала. `status` считает то же самое, но возвращает 0 при
+    любой разнице версий: отчёт, который никого не останавливает, надеется на внимание человека.
+
+    ТРИ ОСНОВАНИЯ, И ОНИ РАЗНЫЕ ПО СМЫСЛУ:
+      · declared_vs_managed — объявленная в `.ai-ops.yaml` версия против ФАКТИЧЕСКИ установленного
+        managed-слоя (расхождение в любую сторону — это расхождение, а не «новее значит лучше»);
+      · pending — содержимое разошлось при ТЕХ ЖЕ номерах версий (B2-17: `status` говорил «актуально»,
+        а `diff` тут же перечислял 20 изменений);
+      · drift — managed-слой правили на месте, и обновление поверх него затрёт правку молча.
+
+    «Не знаю» отделено от «актуально» намеренно: нет конфига, нет чек-сумм, сравнение не удалось —
+    всё это `unknown`, а не `ok`.
+    """
+    out = {"schema_version": 1, "kind": "lag-report", "verdict": "ok",
+           "declared": None, "managed": None, "pending": None, "drift": None, "reasons": [],
+           "unknown": []}
+    # ЭТО ВООБЩЕ УСТАНОВЛЕННАЯ КОПИЯ? Кит НЕ ставится в себя (копия в `.ai/managed/` дала бы рекурсию
+    # и вечный дрейф чек-сумм), поэтому в самом ките сравнивать нечего: `build_diff` там честно
+    # показывает все 565 файлов пакета как «ещё не установленные», и без этой проверки гейт объявлял
+    # бы «ОТСТАЛА» на репозитории, который отставать не может. Такой ответ — не строгость, а шум:
+    # гейт, который краснеет всегда, отключают целиком.
+    # ЗАПУЩЕНО ИЗ САМОЙ УСТАНОВЛЕННОЙ КОПИИ? Тогда сравнивать не с чем: пакет и копия — один и тот
+    # же каталог, `build_diff` даст ноль, и гейт объявил бы «актуально» ВСЕГДА. Это была бы худшая из
+    # возможных форм — зелёный гейт вместо отсутствующего. Честный ответ: «не знаю» и как узнать.
+    try:
+        _inside_managed = MANAGED.resolve() in (PKG.resolve(), *PKG.resolve().parents)
+    except OSError:
+        _inside_managed = False
+    if _inside_managed:
+        out["verdict"] = "unknown"
+        out["unknown"].append(
+            "гейт запущен из установленной копии (.ai/managed) — сравнивать её саму с собой "
+            "бессмысленно. Запустите гейт из клона кита: "
+            "`python3 <клон-кита>/installer/ai_ops.py check-update` в корне этого репозитория")
+        return out
+    if not CHILD_CONFIG.exists() or not MANAGED.exists():
+        out["verdict"] = "not_installed"
+        out["unknown"].append(
+            "это не установленная копия AI Ops (нет .ai-ops.yaml и/или .ai/managed/) — "
+            "отставать нечему; гейт предназначен для репозитория, куда кит установлен")
+        return out
+    try:
+        out["declared"] = installed_version() or None
+    except ChildConfigError as e:
+        out["unknown"].append(f"конфиг не читается: {e}")
+    try:
+        out["managed"] = pkg_version()
+    except OSError as e:
+        out["unknown"].append(f"версия установленного слоя не читается: {e}")
+
+    if out["declared"] and out["managed"] and out["declared"] != out["managed"]:
+        out["reasons"].append(
+            f"объявлена версия {out['declared']}, установлена {out['managed']} — копия и её описание "
+            "разошлись")
+    elif not out["declared"]:
+        out["unknown"].append("в .ai-ops.yaml нет parent.installed_version — сравнивать нечего")
+
+    try:
+        pend = build_diff()
+        out["pending"] = len(pend)
+        if pend:
+            out["reasons"].append(
+                f"содержимое разошлось на {len(pend)} файл(ов) при том же номере версии — "
+                "нужен `ai-ops update`")
+    except Exception as e:                             # noqa: BLE001 — сравнить не вышло: это «не знаю»
+        out["unknown"].append(f"сравнение содержимого не выполнено: {type(e).__name__}: {e}")
+
+    drift = detect_drift()
+    if drift is None:
+        out["unknown"].append("нет .ai/managed/.checksums.json — целостность копии не проверена")
+    else:
+        out["drift"] = len(drift)
+        if drift:
+            out["reasons"].append(
+                f"managed-слой правили на месте: {len(drift)} файл(ов) — обновление затрёт правку")
+
+    out["verdict"] = "behind" if out["reasons"] else ("unknown" if out["unknown"] else "ok")
+    return out
+
+
+def render_lag(rep, quiet=False):
+    """Человеческие строки отчёта отставания. Молчим только когда ВСЁ в порядке."""
+    if rep["verdict"] == "ok":
+        return [] if quiet else [f"✓ копия актуальна (версия {rep['managed']}, дрейфа нет)"]
+    lines = []
+    if rep["verdict"] == "behind":
+        lines.append("ОТСТАЛА: установленная копия AI Ops не соответствует пакету.")
+        lines += [f"  · {r}" for r in rep["reasons"]]
+        lines.append("  что сделать: `ai-ops update` (при политике pr — откроет запрос на слияние).")
+    elif rep["verdict"] == "not_installed":
+        lines.append("Здесь нечего проверять: кит в этот репозиторий не установлен.")
+    else:
+        lines.append("НЕ ЗНАЮ, отстала ли копия — проверить не удалось, и это не «всё в порядке».")
+    lines += [f"  ? {u}" for u in rep["unknown"]]
+    return lines
+
+
+def cmd_check_update(argv=()):
+    """Гейт для CI дочки: код 2 — отстала, 1 — не знаю, 0 — актуальна.
+
+    Код 2 выбран не случайно: у внешних шаблонизаторов (`copier check-update --quiet`, EV-1130) это
+    уже принятое значение «состояние отстало», и оно ОТЛИЧАЕТСЯ от кода 1, которым команда сообщает о
+    своей собственной поломке. CI, который не различает эти два случая, однажды примет сломанный гейт
+    за пройденный.
+    """
+    quiet = "--quiet" in (argv or [])
+    rep = lag_report()
+    if "--json" in (argv or []):
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        for line in render_lag(rep, quiet=quiet):
+            print(line)
+    return {"ok": 0, "behind": LAG_BEHIND_RC,
+            "unknown": LAG_UNKNOWN_RC, "not_installed": LAG_UNKNOWN_RC}[rep["verdict"]]
+
+
 def cmd_diff():
     changes = build_diff()
     if not changes:
@@ -740,6 +1321,73 @@ def _seed_planning_contour(root: Path, dry=False):
                 text = _draftify(text, _dt.date.today().isoformat())
             dst.write_text(text, encoding="utf-8")
         out.append({"artifact": rel, "action": "created-draft"})
+    return out
+
+
+def _seed_product_layer(root: Path, dry=False):
+    """PR-3: Product Operating Layer `.ai-ops/` — обязательные артефакты продуктовой операционки.
+
+    Состав объявлен ДАННЫМИ в `registry/artifact-registry.yaml` (PR-4), а не зашит здесь — это и есть
+    смысл «реестр как данные»: bootstrap читает реестр, а не хардкод. Для каждого артефакта:
+      * директория (`.ai-ops/templates/`) — раскладываем КОПИЮ версионных шаблонов кита, чтобы
+        дочка могла сама определять Outdated и мигрировать;
+      * Product Passport — ГЕНЕРИРУЕМ из фактического состояния репозитория (PR-6): паспорт из
+        шаблона-заготовки был бы Invalid (одни заголовки), а PR-6 требует факт;
+      * остальные документы/конфиги — стартовый официальный шаблон (версия + обязательные разделы).
+    Существующие файлы НЕ трогаются никогда — владелец мог заполнить их до установки. Директорию
+    шаблонов обновляем (это копия кита, не контент владельца), документы владельца — нет.
+    -> список {artifact, action}
+    """
+    # PKG (корень пакета: repo кита или `.ai/managed` в дочке) обязан быть на пути — установщик
+    # запускают файлом (`python installer/ai_ops.py`), и тогда `import ai_ops_kit` без этого не
+    # резолвится, а `_seed_product_layer` тихо возвращает skip. Тот же приём, что у cmd_doctor ниже.
+    if str(PKG) not in sys.path:
+        sys.path.insert(0, str(PKG))
+    try:
+        from ai_ops_kit.planning import artifact_registry as _ar
+        reg = _ar.load(PKG / "registry" / "artifact-registry.yaml")
+    except Exception as e:                             # noqa: BLE001 — нет реестра не должно ронять установку
+        return [{"artifact": ".ai-ops/", "action": f"skipped-no-registry:{type(e).__name__}"}]
+
+    out = []
+    for a in reg.get("artifacts") or []:
+        rel = (a.get("path") or "").strip()
+        if not rel:
+            continue
+        dst = root / rel
+        if a.get("kind") == "directory":
+            src_dir = PKG / "templates" / "product-layer"
+            if not dry and src_dir.is_dir():
+                dst.mkdir(parents=True, exist_ok=True)
+                for f in sorted(src_dir.glob("*")):
+                    if f.is_file():
+                        shutil.copy2(f, dst / f.name)
+            out.append({"artifact": rel, "action": "templates-synced"})
+            continue
+        if dst.exists():
+            out.append({"artifact": rel, "action": "exists"})
+            continue
+        if a.get("id") == "product_passport":
+            try:
+                from ai_ops_kit.planning import passport_generator as _pg
+                text = _pg.generate(root, reg=reg)
+            except Exception as e:                     # noqa: BLE001 — сбой генератора не рушит установку
+                out.append({"artifact": rel, "action": f"skipped-passport:{type(e).__name__}"})
+                continue
+            if not dry:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_text(text, encoding="utf-8")
+            out.append({"artifact": rel, "action": "generated"})
+            continue
+        tpl = (a.get("template") or {}).get("path")
+        src = (PKG / tpl) if tpl else None
+        if not src or not src.is_file():
+            out.append({"artifact": rel, "action": "skipped-no-template"})
+            continue
+        if not dry:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)                       # как есть: маркер версии и разделы обязаны уцелеть
+        out.append({"artifact": rel, "action": "created"})
     return out
 
 
@@ -964,7 +1612,8 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
             return 0
         msg = (f"chore(ai-ops): обновление кита {inst or '—'} -> {target}\n\n"
                f"Подготовлено `ai-ops update` при `parent.update_policy: pr`: применено в отдельной "
-               f"ветке, рабочее дерево не тронуто. Отчёт — .ai/runtime/last-update-report.json.\n")
+               f"ветке, рабочее дерево не тронуто (кроме .ai/runtime/last-update-report.json — "
+               f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n")
         c = subprocess.run(["git", "-C", str(wt),
                             "-c", "user.name=ai-ops-updater",
                             "-c", "user.email=ai-ops-updater@users.noreply.github.com",
@@ -990,7 +1639,8 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
                      "pull_request": branch, "human_approval_required": True,
                      "update_policy": "pr",
                      "report": (f"Обновление {inst or '—'} -> {target} подготовлено в ветке {branch} "
-                                f"({len(staged)} файлов); рабочее дерево не тронуто. "
+                                f"({len(staged)} файлов); рабочее дерево не тронуто "
+                                f"(кроме .ai/runtime/last-update-report.json — в gitignore). "
                                 f"Откройте PR: git push -u origin {branch} && gh pr create --fill")})
         write_report(_rep)
     finally:
@@ -1001,7 +1651,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
     print(f"\n`parent.update_policy: pr` — обновление {inst or '—'} -> {target} подготовлено В ВЕТКЕ, "
           f"на месте НЕ применено.\n"
           f"  ветка:          {branch} ({len(staged)} файлов)\n"
-          f"  рабочее дерево: не тронуто\n"
+          f"  рабочее дерево: не тронуто (кроме .ai/runtime/last-update-report.json — в gitignore)\n"
           f"  открыть PR:     git push -u origin {branch} && gh pr create --fill\n"
           f"  посмотреть:     git diff {_base}..{branch} --stat\n"
           f"Чтобы применить на месте осознанно: `ai-ops update --in-place`.")
@@ -1014,6 +1664,14 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # рабочее дерево; `manual` -> владелец сам решает, когда обновляться, применение на месте
     # легитимно. `--in-place` — явное согласие или CI-путь (`templates/ci/ai-ops-update.yml`
     # применяет и САМ открывает PR, поэтому там политика соблюдена другим способом).
+    # КАНАЛ НАЗЫВАЕТСЯ ДО ПРИМЕНЕНИЯ, А НЕ ПОСЛЕ (19.08.2026, аудит). Здесь цена молчания выше,
+    # чем в `doctor`: `doctor` спрашивают, а обновление приезжает само по расписанию. Дочка
+    # объявляла `stable` и молча принимала то, что лежит в ветке по умолчанию.
+    # НЕ БЛОКИРУЕМ: пакет сегодня честно стоит на `qualification`, и блокировка заморозила бы
+    # каждую дочку. Сказать — обязанность кита; решить — право владельца.
+    _chan = channel_gap()
+    if _chan["satisfied"] is not True:
+        print(f"⚠ {_chan['message']}")
     if not in_place and child_update_policy() == "pr":
         return _deferred_update(inst, target, force=force, refresh_ci=refresh_ci)
     report = {"schema_version": 1, "command": "update", "from_version": inst,
@@ -1168,9 +1826,15 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         # случилась, — не получили бы правило никогда. Функция идемпотентна, повторный update
         # молчит.
         "gitignore": ensure_gitignore(root),
+        # Рядом с `gitignore` и по той же причине: существующие дочки — те, на которых находка
+        # и случилась, — получают правило обновлением, а не переустановкой.
+        "gitattributes": ensure_gitattributes(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         "planning_seeded": _seed_planning_contour(root),
+        # PR-3: Product Operating Layer `.ai-ops/` (Passport из фактов, ROADMAP/DELIVERY/POLICY из
+        # официальных шаблонов, templates/ — копия версий кита). Читает состав из реестра артефактов.
+        "product_layer_seeded": _seed_product_layer(root),
     }
 
 
@@ -1190,8 +1854,16 @@ def _assets_report_line(assets: dict) -> str:
     if assets.get("gitignore") in ("created", "appended"):
         out += (" `.gitignore` " + ("создан" if assets["gitignore"] == "created" else "дополнен")
                 + ": служебное состояние кита (.ai/worktrees/, runtime-локи и active-work,"
-                  " локальный учёт стоимости, кеши, байткод) скрыто от git."
+                  " локальный учёт стоимости, кеши, байткод, записанные замечания о ките)"
+                  " скрыто от git."
                   " Продуктовые артефакты кита не затронуты.")
+    # Та же причина, что у `.gitignore`: дописка в документ владельца обязана быть в отчёте.
+    if assets.get("gitattributes") in ("created", "appended"):
+        out += (" `.gitattributes` " + ("создан" if assets["gitattributes"] == "created"
+                                        else "дополнен")
+                + ": журналы отчётов (.ai/project/report-history/*.jsonl) сводятся при слиянии"
+                  " сами — они дописываются, а не переписываются. Структурные файлы не"
+                  " затронуты: там склейка строк дала бы битый документ.")
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += (" Политика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
@@ -1201,6 +1873,13 @@ def _assets_report_line(assets: dict) -> str:
         out += (" Back-fill модели продукта (черновики, заполнить вам): " + ", ".join(seeded)
                 + ". Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                   "недостающее одним пакетом.")
+    pl = assets.get("product_layer_seeded") or []
+    made = [x["artifact"] for x in pl if x.get("action") in ("created", "generated")]
+    if made:
+        gen = [x["artifact"] for x in pl if x.get("action") == "generated"]
+        out += (" Product Operating Layer создан (`.ai-ops/`): " + ", ".join(made) + "."
+                + (f" Product Passport собран из фактического состояния репозитория; проверьте "
+                   f"разделы, помеченные «неизвестно» — их знает только владелец." if gen else ""))
     return out
 
 
@@ -1241,6 +1920,21 @@ _GITIGNORE_MARK = "# --- AI Ops Kit: служебное состояние (не
 # в коммит владельца (находка ии-среды 2026-08-12, F-021), либо то, что кит уже спрятал у себя
 # (`.ai/repository-profile.yaml` — R-11 ревизии 2026-08-11), либо объявленная граница репозитория
 # (байткод в checksummed managed-слое — tests/unit/test_installer.py).
+_GITATTRIBUTES_MARK = "# --- AI Ops Kit: журналы дописываются, а не переписываются ---"
+
+_GITATTRIBUTES_RULES = """
+# ЗАМЕР ПОТРЕБИТЕЛЯ (заявка #148, ИИ-Среда, 17.08.2026): `.ai/project/report-history/<фича>.jsonl`
+# правился 12 раз за неделю и давал РУЧНОЙ конфликт при слиянии — при том что файл append-only по
+# построению: `run_report --record` дописывает одну строку среза и никогда не меняет прежние
+# (`lifecycle/run_report.py -> record_report`, режим "a"). Для таких файлов git умеет сводить сам,
+# если ему это сказать. Разбивка по фичам уже была — не хватало ровно этой строки.
+#
+# ПОЧЕМУ ТОЛЬКО JSONL-ЖУРНАЛЫ. `union` склеивает СТРОКИ, а не структуру: на `planning/plan.yaml` или
+# `decisions/registry.yaml` он дал бы синтаксически битый или удвоенный документ. Структурные файлы
+# кита здесь не перечислены сознательно — их конфликт решается разбивкой, а не стратегией слияния.
+.ai/project/report-history/*.jsonl merge=union
+"""
+
 _GITIGNORE_RULES = """
 # Кит ставится в чужой репозиторий и обязан не сорить в его истории. Ниже — только то, что
 # наблюдалось уезжающим в коммит, и только служебное: рабочее состояние прогона, локальные
@@ -1279,6 +1973,15 @@ _GITIGNORE_RULES = """
 .ai/managed/**/__pycache__/
 .ai/**/*.py[co]
 
+# Наблюдения о САМОМ КИТЕ и их состояние. ЗАМЕР (проба канала на живой дочке, 18.08.2026): первая же
+# запись легла неотслеживаемой и НЕигнорируемой — то есть в худшем из состояний: git-гигиене её не
+# видно, а чужой `git add -A` унёс бы её в посторонний коммит (так уже уезжал файл 12.08). Выбрано
+# игнорировать, а не отслеживать: кит обязан не сорить в истории продукта, а доставленная копия
+# наблюдения лежит В КИТЕ (`findings/from-children/`) и там отслеживается — знание не теряется.
+# ЦЕНА НАЗВАНА: записи локальны для машины, на которой их сделали; общая для команды история
+# наблюдений о ките — отдельное решение владельца, как и со строкой про ledger выше.
+.ai/kit-feedback/
+
 # СОЗНАТЕЛЬНО НЕ ВНЕСЕНО: `.ai/generated/` (манифест зовёт его isolated, но некоторым
 # репозиториям сгенерированные команды runtime нужны в истории — это решение владельца) и
 # `.ai/project/report-history/` (её коммитит workflow ai-ops-record: это история эффекта).
@@ -1309,6 +2012,36 @@ def ensure_gitignore(root: Path = None):
         return "created"
     current = path.read_text(encoding="utf-8")
     if _GITIGNORE_MARK in current:
+        return "present"
+    sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
+    path.write_text(current + sep + block, encoding="utf-8")
+    return "appended"
+
+
+def ensure_gitattributes(root: Path = None):
+    """Сказать git, что журналы кита дописываются. -> "created" | "appended" | "present".
+
+    ПОЧЕМУ ЭТО ДЕЛАЕТ УСТАНОВЩИК. Файл append-only, а конфликт при слиянии — ручной: у потребителя
+    один и тот же конфликт разрешался пять раз за час, по разу на каждую задетую ветку (#148, #150).
+    Кит сам создаёт эти журналы и сам знает их природу, поэтому и сказать о ней должен он, а не
+    владелец, который о `merge=union` узнаёт в момент конфликта.
+
+    Правила ДОПИСЫВАЮТСЯ отмеченным блоком и никогда не переписывают чужой файл: `.gitattributes` —
+    документ владельца, как и `.gitignore`. Повторный вызов ничего не делает (маркер уже есть),
+    поэтому `init` и `update` могут звать функцию свободно.
+
+    ГРАНИЦА, НАЗВАННАЯ ЯВНО: `union` перечислен ТОЛЬКО для JSONL-журналов. Он склеивает строки, и на
+    структурном YAML (`planning/plan.yaml`) дал бы битый документ — там конфликт лечится разбивкой
+    (`derived-state-out-of-tracked-files`), а не стратегией слияния.
+    """
+    root = Path(root or REPO_ROOT)
+    path = root / ".gitattributes"
+    block = f"{_GITATTRIBUTES_MARK}\n{_GITATTRIBUTES_RULES.strip()}\n"
+    if not path.exists():
+        path.write_text(block, encoding="utf-8")
+        return "created"
+    current = path.read_text(encoding="utf-8")
+    if _GITATTRIBUTES_MARK in current:
         return "present"
     sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
     path.write_text(current + sep + block, encoding="utf-8")
@@ -1605,6 +2338,15 @@ def cmd_init(target_dir):
         psrc = parent_source()
         if psrc:
             text = re.sub(r"(^\s*source:\s*)\S+", rf"\g<1>{psrc}", text, count=1, flags=re.M)
+        # КАНАЛ ПИШЕМ ТОТ, ЧТО РЕАЛЬНО ОТДАЁМ (19.08.2026, аудит). В заготовке стоит `stable`, и
+        # он попадал в КАЖДУЮ установку — при том, что сам пакет заработал `qualification`, а
+        # ежедневный workflow приносит ветку по умолчанию, то есть `edge`. Владелец получал
+        # объявление строже реальности и никак об этом не узнавал.
+        # Поднять канал — одна строка в `.ai-ops.yaml`, и `doctor` скажет, выполнимо ли это
+        # сегодня. Писать за владельца обещание, которого мы не держим, — нельзя.
+        _pc = package_channel()
+        if _pc:
+            text = re.sub(r"(^\s*update_channel:\s*)\S+", rf"\g<1>{_pc}", text, count=1, flags=re.M)
         cfg.write_text(text, encoding="utf-8")
         edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
         print(f"создана заготовка {cfg} (версия {pkg_version()}; "
@@ -1658,7 +2400,18 @@ def _onboarding_summary(onboarding_path):
     )
 
 
-def cmd_validate():
+def cmd_validate(argv=()):
+    # `ai-ops validate product-layer` (PR-5): отчёт Missing/Invalid/Outdated/Valid по `.ai-ops/`
+    # ЭТОЙ дочки. Отдельная под-команда: общий `validate` проверяет установку кита, а этот —
+    # продуктовые артефакты репозитория, и смешивать их вывод значило бы прятать одно за другим.
+    if argv and argv[0] == "product-layer":
+        for root in (AI_DIR / "managed", PKG):
+            if (root / "ai_ops_kit" / "validation" / "validate_product_layer.py").is_file():
+                if str(root) not in sys.path:
+                    sys.path.insert(0, str(root))
+                break
+        from ai_ops_kit.validation import validate_product_layer as _vpl
+        return _vpl.main([str(REPO_ROOT), *[a for a in argv[1:] if a.startswith("--")]])
     checks = [["validate_ai_ops_child.py"], ["validate_ai_first_registry.py"],
               ["validate_ai_first_workflows.py"], ["validate_ai_first_providers.py"],
               ["validate_openspec_change.py"]]
@@ -1751,6 +2504,21 @@ def cmd_doctor(argv=()):
     elif inst != avail:
         _dprint(f"источник {PKG} СТАРШЕ установленного ({avail} < {inst}) — это не повод для "
                 f"update: понижение версии обновлением не является")
+    # КАНАЛ ГОВОРИТСЯ ВСЛУХ (19.08.2026, аудит). Поле `parent.update_channel` обязательно по схеме,
+    # пишется в каждую дочку и до этой правки не читалось НИ ОДНОЙ строкой кода, тогда как
+    # `ai-ops-update.yml` приносит ветку по умолчанию, то есть канал `edge`. Дочка объявляла
+    # `stable` и получала `edge` — молча. Здесь это перестаёт быть молчаливым.
+    # Обновление НЕ блокируется: сегодня пакет честно стоит на `qualification`, и блокировка
+    # заморозила бы каждую дочку. Замечание — да; запрет — решение владельца, не установщика.
+    _chan = channel_gap()
+    if _chan["satisfied"] is False:
+        _dprint(f"⚠ {_chan['message']}")
+        ok = False
+    elif _chan["satisfied"] is None:
+        _dprint(f"⚠ {_chan['message']}")
+        ok = False
+    else:
+        _dprint(f"{_chan['message']} ✓")
     # ОТКУДА ПОСТАВЛЕНО — говорится ВСЛУХ (наблюдение владельца 14.08.2026). Кит ставился из копии
     # на черновой ветке и молчал об этом, хотя знает источник. Владелец вправе знать, что у него
     # стоит непроверенная версия: «работает и работает» — не то же самое, что «объявлено готовым».
@@ -1765,6 +2533,23 @@ def cmd_doctor(argv=()):
         # каждую установку из рабочей копии, и предупреждение обесценилось бы за неделю.
         _dprint("  это версия, которую никто не объявлял готовой: работать можно, но при разборе "
                 "странного поведения учитывайте, что перед вами не выпуск")
+    # B2-25 (поле 19.08.2026, наблюдение дочки): установка ПРОСИТ заменить заготовки в `.ai-ops.yaml`
+    # и не проверяет, сделано ли это. В живом продукте `project.name: <project-name>` простоял с
+    # 14.08, а doctor печатал «можно ставить задачу»: кит требует от других «правило без исполнения —
+    # пожелание» и держал ровно такое правило у себя.
+    #
+    # ПОЧЕМУ `✗`, А НЕ БЕЗ РАЗМЕТКИ, КАК У ЗАГОТОВОК ПЛАНИРОВАНИЯ (F-018). Там заготовки заполняет САМ
+    # кит (`./ai-ops model`), и метка на первом экране была бы замечанием на собственный черновик.
+    # Здесь заполнить может ТОЛЬКО человек, и кит его уже попросил — молчать об этом значит забыть
+    # свою же просьбу. Код возврата НЕ меняется намеренно: превращать это в «работать нельзя» —
+    # решение владельца, а не следствие правки.
+    try:
+        from ai_ops_kit.validation import validate_child_config_filled as _cfgfill
+        _dprint(_cfgfill.summary_line(str(REPO_ROOT)))
+    except Exception as _e:  # noqa: BLE001 — недоступность проверки не роняет doctor, но и не молчит
+        # `⚠`, а не голый текст: «не проверено» без разметки уходит в вердикт как «в порядке» —
+        # ровно та подмена, против которой стоит весь остальной doctor
+        _dprint(f"⚠ конфиг дочки: НЕ ПРОВЕРЕНО ({_e}) — это не «заготовок не осталось»")
     for zone in ("managed", "project", "custom", "generated", "runtime"):
         exists = (AI_DIR / zone).exists()
         _dprint(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")
@@ -2243,8 +3028,18 @@ def cmd_audit(argv):
     ДЕТЕРМИНИРОВАННЫЙ снимок архитектуры на текущем SHA (12 осей); полный AI-review — отдельно
     (гейт architecture_review при архитектурных сигналах). НИЧЕГО не меняет."""
     sub = argv[2] if len(argv) > 2 else ""
+    # `ai-ops audit product` (PR-21): периодический read-only снимок продуктовой операционки дочки —
+    # артефакты слоя, tech, delivery, backlog, риски — одним машиночитаемым отчётом. НИЧЕГО не меняет.
+    if sub == "product":
+        for _root in (AI_DIR / "managed", PKG):
+            if (_root / "ai_ops_kit" / "intelligence" / "product_audit.py").is_file():
+                if str(_root) not in sys.path:
+                    sys.path.insert(0, str(_root))
+                break
+        from ai_ops_kit.intelligence import product_audit
+        return product_audit.main([str(REPO_ROOT), *[a for a in argv[3:] if a.startswith("--")]])
     if sub != "architecture":
-        print("usage: ai-ops audit architecture [--json] [--sha SHA]"); return 2
+        print("usage: ai-ops audit architecture|product [--json]"); return 2
     for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
         if (_cand / "architecture_baseline.py").is_file() and str(_cand) not in sys.path:
             sys.path.insert(0, str(_cand))
@@ -2477,6 +3272,8 @@ def _dispatch(argv):
         return cmd_status()
     if cmd == "diff":
         return cmd_diff()
+    if cmd in ("check-update", "check_update"):
+        return cmd_check_update(argv[2:])
     if cmd == "update":
         # --refresh-ci: перезаписать и те kit-owned workflow, которые правил владелец. Отдельный
         # флаг, а не поведение по умолчанию: чужие правки молча не теряются.
@@ -2489,9 +3286,11 @@ def _dispatch(argv):
     if cmd == "delivery-proof":
         return cmd_delivery_proof(argv)
     if cmd == "validate":
-        return cmd_validate()
+        return cmd_validate(argv[2:])
     if cmd == "doctor":
         return cmd_doctor(argv)
+    if cmd == "resolve-ref":
+        return cmd_resolve_ref(argv)
     if cmd == "migrate":
         return cmd_migrate()
     if cmd == "verify-capabilities":

@@ -22,26 +22,26 @@ python3 <путь>/ai-ops-kit/installer/ai_ops.py doctor
 `--engine`/`--author`/`--review`/`--sandbox`. Один вход:
 
 ```bash
-python3 .ai/managed/tools/ai_ops_cli.py <intent> "<задача>" . [--feature NAME] [--execute]
+./ai-ops <intent> "<задача>" [--feature NAME] [--execute]
 ```
 
 Типовой поток продуктовой задачи:
 
 ```bash
 # 1. один раз на репозиторий — определить стек и команды
-python3 .ai/managed/tools/ai_ops_cli.py onboard .
+./ai-ops onboard
 
 # 2. спецификация нужной глубины (создаёт features/<id>/spec.yaml — заполните разделы)
-python3 .ai/managed/tools/ai_ops_cli.py specify "добавить фильтр заказов по статусу" . --feature orders-filter
+./ai-ops specify "добавить фильтр заказов по статусу" --feature orders-filter
 
 # 3. план без правок кода (RunPlan + контекст + WorkPackages)
-python3 .ai/managed/tools/ai_ops_cli.py plan "добавить фильтр заказов по статусу" . --feature orders-filter
+./ai-ops plan "добавить фильтр заказов по статусу" --feature orders-filter
 
 # 4. исполнить (preflight → tool-loop → commit → evidence → гейты → draft PR)
-python3 .ai/managed/tools/ai_ops_cli.py run "добавить фильтр заказов по статусу" . --feature orders-filter --execute
+./ai-ops run "добавить фильтр заказов по статусу" --feature orders-filter --execute
 
 # 5. независимый read-only ревью действующей ветки (writer ≠ judge)
-python3 .ai/managed/tools/ai_ops_cli.py review "проверь ветку" . --feature orders-filter --provider openai-compatible --model deepseek-chat
+./ai-ops review "проверь ветку" --feature orders-filter --provider openai-compatible --model deepseek-chat
 ```
 
 Другие намерения: `new` (каркас фичи), `discuss` (черновик discovery), `status` (активная работа),

@@ -11,7 +11,8 @@ source:
   published_at: null
   is_primary: true
 citation:
-  locator: "model card: архитектура MoE, лицензия, происхождение обучения"
+  locator: 'model card, шапка карточки (MoE-архитектура и русскоязычная направленность, ссылка на arXiv:2506.09440); лицензия — тег «License: mit»; бенчмарки — раздел «Бенчмарки»'
+  quote: 'This repository contains the instructed model of GigaChat Family: Efficient Russian Language Modeling Through Mixture of Experts Architecture'
 captured_at: "2026-07-23"
 captured_by: "scout-agent (RAG-стек, RR-006)"
 freshness:
@@ -19,6 +20,13 @@ freshness:
   expires_at: "2027-01-23"
 reliability:
   level: medium
-  rationale: "Model card вендора; сравнение качества с T-pro не проводилось — вопрос пилота."
+  rationale: 'Model card вендора; сравнение качества с T-pro не проводилось — вопрос пилота.
+    Ревизия quote-grounding 2026-08-14: источник подтверждает MoE-архитектуру, русскоязычную
+    направленность и лицензию MIT, но НЕ подтверждает три элемента statement — (1) флагман
+    GigaChat3.1-702B-A36B и значение MMLU RU 0.8267 на странице отсутствуют (в её таблице
+    семейство — GigaChat-Pro/Max v26.20, а MMLU RU 5-shot у 20B-A3B = 0,598); (2) «обучен на
+    русском с нуля (не тюн)» словами карточки не заявлено (карточка говорит, что instruct-модель
+    основана на GigaChat-20B-A3B-base); (3) «3B активных» выводится из имени A3B, а не из текста.
+    Эти части требуют отдельного источника; statement не правился.'
 status: active
 superseded_by: null

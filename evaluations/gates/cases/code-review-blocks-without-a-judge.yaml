@@ -1,0 +1,18 @@
+schema_version: 1
+kind: gate-evaluation-case
+id: code-review-blocks-without-a-judge
+gate: code_review
+case_kind: no_judge
+summary: |
+  `code_review` без заключения независимого ревьюера — fail, а прогон обязан сказать «готово, но проверено не всё», а не «готово».
+origin:
+  source: qualification/REAL-PRODUCT-NITI-FULLPATH-2026-08-12.md, qualification/REAL-PRODUCT-OKOSHKO-RERUN-2026-08-15.md
+  provenance: verbatim_run_report
+notes: |
+  Два независимых полевых прогона (НИТИ 12.08, Окошко 15.08) закончились одним и тем же: `code_review` и `security` не закрыты, потому что судьи не было. Оба отчёта зафиксировали, что кит сказал это вслух. Кейс закрепляет вердикт, на котором держится эта честность: пока заключения нет, блокирующий судейский гейт красный, и причина названа ролью.
+signals: {}
+expected:
+  status: fail
+  reason_matches:
+  - code-reviewer
+  - нет заключения reviewer

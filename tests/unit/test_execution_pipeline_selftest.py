@@ -159,8 +159,12 @@ def test_execution_pipeline_selftest():
         rep_iso_guard = run_pipeline("в изоляции повторно", sig, root, lambda c: next(it_iso2),
                                      budget={"max_model_calls": 5}, feature="iso-fn",
                                      commit=True, isolate=True, install_deps=False)
+        # obs 2dbfc337 (поле 20.08.2026): сообщение обязано называть РЕАЛЬНУЮ команду продолжения
+        # (интент `ai-ops resume`), а не внутренний `resume=True (--resume)`, которого у `ai-ops` нет.
+        _err_iso = rep_iso_guard.get("error") or ""
         expect("P0.3: повторный прогон без discard -> honest error (работа не потеряна)",
-               rep_iso_guard.get("status") == "error" and "discard" in (rep_iso_guard.get("error") or ""))
+               rep_iso_guard.get("status") == "error" and "ai-ops resume" in _err_iso
+               and "(--resume)" not in _err_iso)
         _git(root, "checkout", "-q", orig_branch)
 
         # P0.3: с discard_previous=True повторный прогон перезаписывает и стартует чисто
@@ -343,7 +347,10 @@ def test_execution_pipeline_selftest():
         # v2.95: security-скан ловит секрет в изменениях -> гейт security блокирует с деталями
         # (ENGINEERING-план содержит security). Не ложный green: секрет -> security в unmet.
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
-        _aws_fx = "AKIA" + "IOSFODNN7EXAMPLE"   # v3.0.4: собрано в рантайме (без статического секрет-литерала)
+        # Не канонический пример AWS: `AKIAIOSFODNN7EXAMPLE` — публичный образец, и
+        # детектор с 19.08.2026 его не считает утечкой. Позитивной фикстуре нужен ключ,
+        # похожий на настоящий.
+        _aws_fx = "AKIA" + "QRSTUVWX9012YZAB"   # v3.0.4: собрано в рантайме (без статического секрет-литерала)
         it_sec = iter([{"op": "write", "path": "src/leak.py",
                         "content": f'API_KEY = "{_aws_fx}"\n'}, {"done": True}])
         rep_sec = run_pipeline("добавить конфиг", sig_eng, root, lambda c: next(it_sec),
@@ -441,7 +448,10 @@ def test_execution_pipeline_selftest():
         run_pipeline("quick api sec", sig_q, root, lambda c: next(it_q1), policy=pol,
                      budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
                      install_deps=False, review=True, reviewer_proposer=sec_reviewer, strict_judge_qualified=False)
-        _nrq = _sp_re.run_pack(str(root / ".ai" / "worktrees" / "reeval-fn"), base=None,
+        # Здесь нужны ИМЕНА доменов, требующих ревью при этих signals, а не скан репозитория.
+        # Прежде стоял `base=None` — то есть охват «весь репозиторий» (заявка #139); теперь охват
+        # без базы — названный отказ, и правильный способ спросить домены — подать карту файлов.
+        _nrq = _sp_re.run_pack(files_content={"rq.py": "def rq():\n    return 1\n"},
                                signals=sig_q).get("needs_review") or ["rate_limiting"]
         # v3.37: план кладём НА ДИСК и связываем одобрение с его настоящим хэшем. Прежде здесь стояло
         # binds_to="reeval-fn-plan" — выдуманная строка, которую никто не сверял: плана не было, и

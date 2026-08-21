@@ -19,6 +19,7 @@ python39-compat опровергла это в том же релизе, пот�
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -48,17 +49,60 @@ def test_both_scopes_are_declared(claims):
             f"{name} без границы — охват, который «покрывает всё», это снова «полный»")
 
 
-def test_full_claim_without_a_scope_is_caught(claims):
+def _pkg_with_note(tmp_path, claims, note, version=None):
+    """Копия пакета, где релизная проза — та, что нужна тесту. -> корень.
+
+    ПРОЗА ПЕРЕЕХАЛА В СВОЙ ФАЙЛ (20.08.2026, `release-claims-stays-in-the-kit`): 61 336 Б — 75%
+    release-claims.yaml — ехали в каждую дочку, где их не читает ни одна строка кода. Тесты поэтому
+    больше не подсовывают `patch_note` в словарь: проверка читает ФАЙЛ, и подмена словарём проверяла
+    бы путь, которого больше нет. Заодно это честнее — прогоняется тот же код, что в релизе.
+    """
+    (tmp_path / "registry").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "registry" / "release-notes.yaml").write_text(
+        yaml.safe_dump({"schema_version": 1, "registry_type": "release-notes",
+                        "version": version if version is not None else claims["version"],
+                        "patch_note": note}, allow_unicode=True), encoding="utf-8")
+    # `obtained_by` со ссылкой на файл проверяется по этому же корню — стаб нужен, иначе тест ловил бы
+    # отсутствие файла вместо предмета проверки.
+    (tmp_path / "scripts").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts" / "check-full.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_full_claim_without_a_scope_is_caught(claims, tmp_path):
     """fail-closed: ровно то заявление, которое сделал PR #38, обязано краснеть."""
-    errors = vrc.evidence_scope_errors(
-        dict(claims, patch_note="3.34 — полный контур зелёный, релиз готов."))
+    pkg = _pkg_with_note(tmp_path, claims, "3.34 — полный контур зелёный, релиз готов.")
+    errors = vrc.evidence_scope_errors(claims, pkg=pkg)
     assert any("не называя охват" in e for e in errors), errors
 
 
-def test_scoped_claim_passes(claims):
+def test_scoped_claim_passes(claims, tmp_path):
     """То же заявление с названным охватом проходит: проверка бьёт по подмене, не по слову."""
-    ok = dict(claims, patch_note="3.34 — охват full-current-python зелёный целиком.")
-    assert not vrc.evidence_scope_errors(ok), vrc.evidence_scope_errors(ok)
+    pkg = _pkg_with_note(tmp_path, claims, "3.34 — охват full-current-python зелёный целиком.")
+    assert not vrc.evidence_scope_errors(claims, pkg=pkg), \
+        vrc.evidence_scope_errors(claims, pkg=pkg)
+
+
+def test_prose_in_the_claims_file_is_refused(claims, tmp_path):
+    """Два места для одного текста разъедутся молча — поэтому старый адрес объявлен ошибкой."""
+    pkg = _pkg_with_note(tmp_path, claims, "3.34 — охват full-current-python зелёный целиком.")
+    errors = vrc.evidence_scope_errors(dict(claims, patch_note="что-то"), pkg=pkg)
+    assert any("остался в release-claims" in e for e in errors), errors
+
+
+def test_note_for_another_release_is_refused(claims, tmp_path):
+    """Версия дублируется намеренно и обязана сверяться: иначе проза относится к другому выпуску."""
+    pkg = _pkg_with_note(tmp_path, claims, "охват full-current-python зелёный", version="0.0.1")
+    errors = vrc.evidence_scope_errors(claims, pkg=pkg)
+    assert any("другому выпуску" in e for e in errors), errors
+
+
+def test_missing_note_file_is_an_error_not_a_pass(claims, tmp_path):
+    """«Нечего проверять» на месте заявления о выпуске — это и было бы ослаблением правила."""
+    (tmp_path / "scripts").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts" / "check-full.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    errors = vrc.evidence_scope_errors(claims, pkg=tmp_path)
+    assert any("отсутствует" in e for e in errors), errors
 
 
 @pytest.mark.parametrize("broken,expect", [
@@ -88,13 +132,58 @@ def test_script_announces_the_scope_it_actually_gives():
     только если скрипт говорит это сам. Прогон с `--collect-only` даёт настоящий запуск скрипта
     без четырёх минут тестов.
     """
+    env = {**os.environ, "PYTHON": sys.executable}
     r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"],
-                       cwd=str(PKG), capture_output=True, text=True, timeout=300)
+                       cwd=str(PKG), capture_output=True, text=True, timeout=300, env=env)
     out = r.stdout + r.stderr
     assert "full-current-python" in out, out[-800:]
     assert "compatibility-matrix" in out, out[-800:]
+    # СРАВНИВАЕМ С ТЕМ ИНТЕРПРЕТАТОРОМ, КОТОРЫМ СКРИПТ РЕАЛЬНО ПОЙДЁТ, а не со своим. Прежде тест
+    # брал `sys.version_info`, а скрипт — `python3` из PATH; на машине владельца это разные
+    # интерпретаторы, и тест краснел ВСЕГДА, ничего при этом не проверяя.
     assert f"{sys.version_info.major}.{sys.version_info.minor}" in out, (
         "охват назван, но без версии интерпретатора — то есть снова без величины")
+
+
+def test_script_refuses_an_interpreter_without_pytest(tmp_path):
+    """fail-closed: интерпретатор без pytest — НАЗВАННЫЙ отказ, а не `No module named pytest`.
+
+    Замер 19.08.2026: на машине владельца `python3` это homebrew без pytest, и документированная
+    точка входа «полный контур» падала трассировкой модуля. Отказ обязан говорить, что делать."""
+    fake = tmp_path / "python-without-pytest"
+    fake.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "-c" ] && [[ "$2" == *"import pytest"* ]]; then exit 1; fi\n'
+        f'exec {sys.executable} "$@"\n', encoding="utf-8")
+    fake.chmod(0o755)
+    r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
+                       capture_output=True, text=True, timeout=120,
+                       env={**os.environ, "PYTHON": str(fake)})
+    assert r.returncode == 2, (r.returncode, (r.stdout + r.stderr)[-600:])
+    assert "pytest в нём нет" in (r.stdout + r.stderr), (r.stdout + r.stderr)[-600:]
+
+
+def test_pytest_runs_on_the_interpreter_that_was_announced(tmp_path):
+    """ШОВ, найденный собственной пробой: объявить охват одним интерпретатором, а гонять другим —
+    это ровно «заявление шире полученного», против которого словарь охватов и заведён.
+
+    Проверяется не текстом, а фактом вызова: `$PYTHON` подменяется обёрткой, которая записывает
+    каждый свой запуск. В журнале обязан быть запуск `-m pytest`."""
+    log = tmp_path / "calls.log"
+    wrapper = tmp_path / "python-logging"
+    wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        f'echo "$@" >> {log}\n'
+        f'exec {sys.executable} "$@"\n', encoding="utf-8")
+    wrapper.chmod(0o755)
+    r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
+                       capture_output=True, text=True, timeout=300,
+                       env={**os.environ, "PYTHON": str(wrapper)})
+    assert r.returncode == 0, (r.stdout + r.stderr)[-600:]
+    calls = log.read_text(encoding="utf-8") if log.is_file() else ""
+    assert "-m pytest" in calls, (
+        "объявленный интерпретатор не тот, которым идут тесты — охват назван, а получен другой:\n"
+        f"{calls[-400:]}")
 
 
 def test_script_scope_name_matches_the_registry(claims):

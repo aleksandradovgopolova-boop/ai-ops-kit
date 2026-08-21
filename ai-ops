@@ -1,0 +1,53 @@
+#!/bin/sh
+# AI Ops — точка входа для САМОГО КИТА (не дочки).
+#
+# У кита нет .ai/managed/ — кит сам является источником. Эта обёртка использует ai_ops_kit/cli/
+# напрямую, а installer/ai_ops.py — для команд самого кита (init, update, doctor и т.д.).
+#
+# Для дочек шаблон другой: templates/runtime/ai-ops-entry.sh (берёт из .ai/managed/).
+set -e
+here=$(cd "$(dirname "$0")" && pwd)
+
+# Интерпретатор с pyyaml (единственная зависимость).
+find_python() {
+  if [ -n "${AI_OPS_PYTHON:-}" ]; then
+    if "$AI_OPS_PYTHON" -c 'import yaml' 2>/dev/null; then echo "$AI_OPS_PYTHON"; return 0; fi
+    return 1
+  fi
+  for cand in python3 python3.13 python3.12 python3.11 python3.10 python3.9 python; do
+    if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import yaml' 2>/dev/null; then
+      echo "$cand"; return 0
+    fi
+  done
+  return 1
+}
+
+if py=$(find_python); then
+  :
+else
+  echo "AI Ops не может запуститься: ни один python3 в PATH не видит pyyaml." >&2
+  echo "python3 -m pip install --user pyyaml" >&2
+  exit 2
+fi
+
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH="$here:$PYTHONPATH"
+
+cli="$here/ai_ops_kit/cli/ai_ops_cli.py"
+installer="$here/installer/ai_ops.py"
+
+cmd=${1:-}
+case "$cmd" in
+  # Команды самого кита — через installer.
+  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|session|subsession|engops|method|status)
+    exec "$py" "$installer" "$@"
+    ;;
+  ""|-h|--help|help)
+    exec "$py" "$cli"
+    ;;
+  *)
+    # Интенты движка: next, model, plan, run, specify, review, health, new, discuss, …
+    intent="$1"; shift
+    exec "$py" "$cli" "$intent" "$here" "$@"
+    ;;
+esac

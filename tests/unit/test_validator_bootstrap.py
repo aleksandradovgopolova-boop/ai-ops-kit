@@ -28,6 +28,8 @@ from pathlib import Path
 
 import pytest
 
+import ambient
+
 PKG = Path(__file__).resolve().parents[2]
 VALIDATION = PKG / "ai_ops_kit" / "validation"
 MISSING = "No module named '_bootstrap'"
@@ -40,17 +42,15 @@ def _needs_bootstrap(root: Path) -> list[Path]:
                   and "import _bootstrap" in f.read_text(encoding="utf-8"))
 
 
-def _clean_env() -> dict:
-    """Окружение без PYTHONPATH — то, что видит пользователь в child-репозитории."""
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return env
-
-
 def _run(script: Path, cwd: Path):
-    return subprocess.run([sys.executable, str(script)], cwd=str(cwd), env=_clean_env(),
-                          capture_output=True, text=True, timeout=180)
+    """Запуск без PYTHONPATH И БЕЗ ПОЯСА editable-установки (см. `tests/ambient`).
+
+    19.08.2026: раньше здесь чистился только `PYTHONPATH`, и проба «удалить `_bootstrap.py` из
+    копии» НЕ ДОХОДИЛА ДО ДЕФЕКТА: `import _bootstrap` разрешался через meta-path finder рабочего
+    клона, запуск завершался кодом 0, и тест сообщал «удалили, а не сломалось». Проверка, которую
+    можно закрасить чужим деревом, проверяет чужое дерево.
+    """
+    return ambient.run([script], cwd=cwd, base=Path(cwd).parent, timeout=180)
 
 
 @pytest.mark.slow
@@ -101,7 +101,6 @@ def test_bootstrap_puts_root_on_path(tmp_path):
         "print('OK', bool(gp))\n",
         encoding="utf-8")
 
-    r = subprocess.run([sys.executable, str(probe)], cwd=str(tmp_path), env=_clean_env(),
-                       capture_output=True, text=True, timeout=120)
+    r = ambient.run([probe], cwd=tmp_path, base=tmp_path, timeout=120)
     assert r.returncode == 0 and "OK True" in r.stdout, (
         f"_bootstrap импортировался, но корень в sys.path не положил.\nstderr: {r.stderr[-800:]}")

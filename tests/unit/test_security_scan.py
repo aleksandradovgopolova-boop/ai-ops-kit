@@ -14,7 +14,7 @@ class TestScanSecrets:
     def test_scan_secrets_detects_aws_key(self):
         """AWS access key pattern (AKIA...) must be detected."""
         # Build the key from fragments so downstream secret scanners don't flag this test file
-        aws_key = "AKIA" + "IOSFODNN7EXAMPLE"
+        aws_key = "AKIA" + "QRSTUVWX9012YZAB"
         files = {"config.py": f'AWS_KEY = "{aws_key}"\n'}
         findings = security_scan.scan_secrets(files)
         assert any(f["id"] == "aws_access_key_id" for f in findings)
@@ -43,7 +43,9 @@ class TestScanSecrets:
 
     def test_scan_secrets_detects_private_key_block(self):
         """PEM private key block header must be detected."""
-        pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAK...\n"
+        # Собрано в рантайме (v3.0.4) и С ТЕЛОМ: заголовок без материала ключа детектор
+        # больше не считает утечкой — это упоминание формата, а не ключ.
+        pem = "-----BEGIN RSA " + "PRIVATE KEY-----\n" + "MIIEpAIBAAKCAQEA" + "q" * 40 + "\n"
         files = {"key.pem": pem}
         findings = security_scan.scan_secrets(files)
         assert any(f["id"] == "private_key_block" for f in findings)
@@ -55,7 +57,7 @@ class TestScanSecrets:
 
     def test_scan_secrets_multiple_files(self):
         """Secrets across multiple files are all reported with correct paths."""
-        aws_key = "AKIA" + "IOSFODNN7EXAMPLE"
+        aws_key = "AKIA" + "QRSTUVWX9012YZAB"
         pat = "ghp_" + "B" * 36
         files = {
             "a.py": f'key = "{aws_key}"\n',

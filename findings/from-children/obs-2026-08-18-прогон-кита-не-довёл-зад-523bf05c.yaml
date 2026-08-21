@@ -1,0 +1,36 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-08-18-прогон-кита-не-довёл-зад-523bf05c
+at: '2026-08-18T19:01:11+00:00'
+statement: 'Прогон кита не довёл задачу и сузил проверку до сделанного: на задаче
+  3.2 (золотой набор эвалов) порог был поставлен только на три сценария из четырёх
+  — одностраничник из порога выпал, то есть проверка описывала сделанное вместо требуемого.
+  Кит об этом не сказал: результат подан как выполненный.'
+observation_class: defect
+severity: p1
+kit_version: 3.36.12
+child:
+  name: ii-sreda
+  path: /Users/sasad/ii-sreda
+  commit: 57439af3439f
+evidence:
+- kind: command
+  command: git show 06f8041 -- src/shared/api/eval-scenario-balance.test.ts
+  output: '-/** Сценарии MVP из CLAUDE.md: справка, презентация, дашборд. */
+
+    -const MVP_SCENARIOS = ["note", "presentation", "dashboard"] as const;
+
+    +const MVP_SCENARIOS = ["note", "presentation", "dashboard", "one_pager"] as const;'
+- kind: note
+  text: 'Четвёртый сценарий вернул человек, а не кит: в текущем main рядом с порогом
+    стоит объяснение, почему вынимать сценарий нельзя.'
+state: became_work
+state_reason: 'Подтверждено уликой из самой дочки: порог стоял на трёх сценариях из
+  четырёх, одностраничник выпал, и вернул его человек. В плане кита это работа run-finishes-the-task-or-says-it-did-not
+  (цель qualification-closeout) — она заведена именно про «не сузил тест до сделанного»
+  и остаётся открытой.'
+delivered_to:
+  kit_root: /Users/sasad/ai-ops-kit
+  at: '2026-08-18T19:01:39+00:00'
+decided_at: '2026-08-18T19:02:27+00:00'
+became_work: run-finishes-the-task-or-says-it-did-not

@@ -306,6 +306,8 @@ def from_next_work(rep: dict) -> dict:
             technical={f"ошибка {i + 1}": x for i, x in enumerate(plan_errors + rm_errors)})
 
     nb = rep.get("next_best")
+    frozen = rep.get("frozen") or []
+    held_others = rep.get("held_by_others") or []
     active = rep.get("in_progress") or []
     blocked = rep.get("blocked") or []
     if not nb:
@@ -321,7 +323,26 @@ def from_next_work(rep: dict) -> dict:
             "no_human_decision": "ждёт решения человека",
             "deps_done": "ждёт незакрытые зависимости",
         }
-        if not_ready:
+        if held_others:
+            # ПРЯМОЙ ОТВЕТ ВМЕСТО ПЕРВОЙ СВОБОДНОЙ СТРОКИ (работа `next-offers-work-nobody-holds`).
+            # Заявка потребителя #150: участник взял работу, которую уже держала другая сессия, и
+            # половина труда ушла в закрытый пустой дубль. Кит обязан сказать «всё нужное держат
+            # другие», а не выдать следующую строку списка.
+            k = len(held_others)
+            who = "; ".join(f"«{h.get('title') or h['id']}» — {h.get('owner_session') or 'кто-то'}"
+                            for h in held_others[:3])
+            return message(
+                status="ok", headline="Свободной работы нет: нужное держат другие",
+                summary=f"{k} {_q(k, 'работа', 'работы', 'работ')} уже взяты: {who}.",
+                why_it_matters=("Брать взятое — это дубль: в поле так вышло два запроса на одну "
+                                "ветку и половина труда ушла в пустой. "
+                                + ((rep.get("holders_reach") or {}).get("note") or "")),
+                next_steps=["подожду освобождения или возьму работу, которой ещё нет в плане",
+                            "или скажи, что важнее — пересоберу порядок"],
+                technical={"держат другие": ", ".join(h["id"] for h in held_others),
+                           "держу я": ", ".join(h["id"] for h in (rep.get("held_by_me") or [])) or "—",
+                           "досягаемость": (rep.get("holders_reach") or {})})
+        elif not_ready:
             causes = sorted({_ADMISSION_RU.get(c, c)
                              for r in not_ready for c in (r.get("blocked_by_admission") or [])})
             why = ("Работа объявлена, но взять её сейчас нельзя: "
@@ -374,12 +395,23 @@ def from_next_work(rep: dict) -> dict:
     return message(
         status="ok", headline="Что взять следующим",
         summary=f"Следующей имеет смысл взять «{nb['title']}».",
-        why_it_matters="Потому что " + "; ".join(nb["why"]) + ".",
+        why_it_matters="Потому что " + "; ".join(nb["why"]) + "."
+                       # ЗАМОРОЗКА НАЗЫВАЕТСЯ, А НЕ ПРЯЧЕТСЯ. Работы, которых кит больше не
+                       # предлагает, не исчезают из плана — и человек обязан знать, что они не
+                       # предложены по ЕГО решению, а не потерялись. Молчание здесь читалось бы как
+                       # «в плане их нет».
+                       + (f" Ещё {len(frozen)} "
+                          + _q(len(frozen), "работа", "работы", "работ")
+                          + " не предлагаю: они помечены как расширение умений, а твоё решение "
+                            "держит их до второго живого проекта."
+                          if frozen else ""),
         next_steps=steps,
         technical={"id": nb["id"], "owner_role": nb["owner_role"], "score": nb["score"],
                    "unblocks": nb["unblocks"],
                    "parallel_with": ", ".join(p["id"] for p in par) or "—",
-                   "blocked_count": len(blocked)})
+                   "blocked_count": len(blocked),
+                   "заморожено": ", ".join(f["id"] for f in frozen) or "—",
+                   "решение о заморозке": (rep.get("freeze") or {}).get("decision") or "—"})
 
 
 def from_contour_consistency(rep: dict) -> dict:
@@ -445,33 +477,94 @@ def from_contour_consistency(rep: dict) -> dict:
                    technical={"findings": len(findings)})
 
 
-def from_active_work(rep: dict) -> dict:
+def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
+                     crosscheck: dict = None) -> dict:
     """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
 
     Прежде `status` печатал `STATUS: активной работы нет (нет .ai/runtime/active-work.yaml)` — путь к
     внутреннему файлу вместо ответа, и одинаково на всех трёх аудиториях: настройка «с кем ты
     говоришь» на эту команду не влияла вовсе. Три независимых ревью нашли это как один дефект.
+
+    `published` (18.08.2026, ep-2026-08-18-claim-medium-hybrid): реестр локален для этой машины, если
+    публикация не включена. Пока она выключена, ответ обязан это СКАЗАТЬ — иначе «работа идёт»/«ничего
+    не идёт» читается как факт о команде, хотя это факт об одной машине. Дефолт False — самый
+    безопасный: он никогда не выдаёт локальное состояние за координацию.
     """
+    # #137: снятое СВЕРКОЙ с базой — не идущая работа. Прежде фильтровался только `done`, поэтому
+    # влитая работа считалась идущей и человеку советовали не трогать те же файлы.
     active = [a for a in (rep or {}).get("active") or []
-              if (a.get("status") or "") != "done"]
+              if (a.get("status") or "") not in ("done", "superseded")]
+    # Снятое сверкой НАЗЫВАЕТСЯ, а не исчезает молча: человек должен видеть, почему список короче.
+    recon_note = (f"Снято сверкой с базой: {reconciled} "
+                  f"{_q(reconciled, 'запись', 'записи', 'записей')} — изменения уже влиты."
+                  if reconciled else None)
+    # Одна фраза человеку, без слов `.ai-ops.yaml` и `team_coordination` — их место в technical.
+    reach_h = ("вижу заявки всех машин команды (публикация включена)" if published
+               else "вижу только ЭТУ машину — заявки других участников сюда не попадают")
+    reach_cap = reach_h[0].upper() + reach_h[1:]   # для начала предложения, без рассинхрона лица
+    # СВЕРКА С ПЛАНОМ (замер 18.08.2026 на самом ките). Ответ строился ТОЛЬКО по реестру рантайма, и
+    # при семи работах со статусом `in_progress` в плане печатал «Сейчас ничего не идёт. Работа не
+    # начата.» — утвердительно, без оговорки. Отсутствие реестра — это «не знаю, что идёт», а не
+    # «ничего не идёт»; для ИСПОРЧЕННОГО реестра тот же код уже отвечает `blocked`, а для
+    # отсутствующего вывод не был сделан. Расхождение теперь НАЗЫВАЕТСЯ, а не сглаживается.
+    stale = (crosscheck or {}).get("only_in_plan") or []
+    stale_names = "; ".join((w.get("title") or w.get("id") or "работа") for w in stale[:3])
     if not active:
+        if stale:
+            k = len(stale)
+            return message(
+                status="degraded", headline="План и заявки расходятся",
+                summary=(f"Заявок на работу нет, но в плане {k} "
+                         + _q(k, "работа объявлена идущей", "работы объявлены идущими",
+                              "работ объявлено идущими") + "."),
+                why_it_matters="Значит одно из двух, и оба требуют решения: работа брошена или она "
+                               "давно закончена, а в плане это не отмечено. Пока расхождение живо, "
+                               "плану верить нельзя — а по нему выбирают, что делать дальше.",
+                next_steps=[f"сверить и закрыть или продолжить: {stale_names}"],
+                technical={"active": 0, "объявлено идущими в плане": k,
+                           "id": ", ".join(str(w.get("id")) for w in stale),
+                           "реестр существует": (crosscheck or {}).get("registry_exists"),
+                           "досягаемость": "команда" if published else "эта машина"})
         return message(
             status="ok", headline="Сейчас ничего не идёт",
-            summary="Работа не начата.",
+            summary="Работа не начата." if not recon_note else recon_note,
+            # Основание ответа названо: это не «я всё осмотрел», а «заявок нет и в плане идущей
+            # работы не объявлено» — два конкретных факта, которые человек может перепроверить.
+            why_it_matters=("Сужу по двум вещам: заявок на работу нет и в плане идущей работы не "
+                            "объявлено. " + reach_cap + "." if not published else
+                            "Сужу по двум вещам: заявок на работу нет и в плане идущей работы не "
+                            "объявлено."),
             next_steps=["скажи, что взять, или спроси «что дальше» — предложу с обоснованием"],
-            technical={"active": 0})
+            technical={"active": 0, "объявлено идущими в плане": 0,
+                       "реестр существует": (crosscheck or {}).get("registry_exists"),
+                       "досягаемость": "команда" if published else "эта машина"})
 
     n = len(active)
     what = "; ".join(
         (a.get("title") or a.get("workitem") or a.get("id") or "работа")
         for a in active[:3])
+    why = f"{reach_cap}."
+    if recon_note:
+        why = recon_note + " " + why
+    if not published:
+        why += (" Пересечения по файлам ниже — про параллельные сессии здесь, не про команду; "
+                "координация команды включается публикацией отдельно.")
+    else:
+        why += " Работу, трогающую те же файлы, лучше не начинать — иначе две сессии перепишут одно место."
+    if stale:
+        # Половина расхождения видна и при живой работе: заявки есть на одно, а план объявляет
+        # идущим ещё что-то. Молчать об этом значит показывать половину картины.
+        why += (f" В плане объявлено идущими ещё {len(stale)} "
+                f"{_q(len(stale), 'работа', 'работы', 'работ')} без заявки: {stale_names} — "
+                "либо брошено, либо закончено и не отмечено.")
     return message(
-        status="ok", headline="Работа идёт",
+        status="degraded" if stale else "ok",
+        headline="Работа идёт" if not stale else "Работа идёт, но план расходится с заявками",
         summary=f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}.",
-        why_it_matters=("Пока она не закончена, работу, которая трогает те же файлы, лучше не "
-                        "начинать — иначе две сессии перепишут одно место." if n else None),
+        why_it_matters=why,
         next_steps=["спроси «что дальше», если нужно чем-то заняться параллельно"],
         technical={"работ": n, "детали": what,
+                   "досягаемость": "команда" if published else "эта машина",
                    "области": ", ".join(sorted({x for a in active
                                                 for x in (a.get("affected_areas")
                                                           or a.get("areas") or [])})) or "—",
@@ -745,6 +838,11 @@ def from_review(rep: dict) -> dict:
             "основание": readiness.get("reason") or "—",
             "гейтов на ревью": len(rep.get("reviewable") or []),
             "изменено файлов": changed,
+            # БАЗА РЯДОМ С ЧИСЛОМ: «изменено файлов 0» без базы неотличимо от «база не выбрана»
+            # (заявка #136 — там же справка обещала автоподбор, которого не было).
+            "база дифа": (rep.get("base") or "не выбрана")
+                         + (f" ({rep['base_source']})" if rep.get("base_source") and rep.get("base") else "")
+                         + (f" — {rep['base_note']}" if rep.get("base_note") else ""),
             "по гейтам": "; ".join(f"{r.get('gate')}: {r.get('status') or 'без вердикта'}"
                                    for r in reviews) or "—",
             "evidence": rep.get("evidence_path") or "—", "note": rep.get("note") or "—"}
@@ -976,6 +1074,9 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
             "ходов": turns, "источник ходов": snapshot.get("turns_source") or "—",
             "расход сессии": spend, "состояние расхода": (rec or {}).get("spend_state") or "—",
             "исход": outcome, "причина": (rec or {}).get("reason") or "—",
+            # Путь — В ДЕТАЛЯХ (наружу путям хода нет), но САМ ФАКТ идёт в текст ниже: уйти из
+            # сессии, не записав её состояние, — это потеря труда, а не деталь реализации.
+            "handoff сессии": (rec or {}).get("handoff") or "—",
             "последняя компакция": snapshot.get("last_compaction_at") or "не обнаружена"}
 
     if status == "unavailable":
@@ -1007,7 +1108,10 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
                       "recommendation": advice,
                       "on_approve": "выполни команду ниже и повтори задачу",
                       "on_reject": "продолжу здесь — решение твоё, я не блокирую"},
-            next_steps=[(rec or {}).get("command") or "продолжаю здесь"],
+            # Состояние handoff — ПЕРВЫЙ шаг, а не приписка: если состояние сессии не записано,
+            # уходить из неё нечем, и это важнее самой команды выхода.
+            next_steps=[(rec or {}).get("handoff") or "состояние сессии не проверено",
+                        (rec or {}).get("command") or "продолжаю здесь"],
             technical=tech)
     # `attention` — не «всё хорошо»: сказать «история дешёвая» при растущем счёте значило бы
     # успокаивать там, где кит как раз обязан предупредить.
@@ -1260,11 +1364,24 @@ def from_kit_feedback_status(rep: dict) -> dict:
             summary="Ты ещё ничего мне не говорила о моей работе в этом проекте.",
             next_steps=['сказать так: ./ai-ops feedback "что было не так"'])
     if rep.get("errors"):
+        # ДВЕ ПРАВКИ ПО ПРОБЕ КАНАЛА НА ЖИВОЙ ДОЧКЕ (18.08.2026), и обе про честность ответа.
+        # ПЕРВАЯ — АРИФМЕТИКА: `total` считает только ЧИТАЕМЫЕ записи, поэтому «записано 1, но 1 из
+        # них не разбираются» на одной хорошей и одной битой читалось как «единственная запись
+        # сломана». Числа теперь названы раздельно, а сумма — сумма.
+        # ВТОРАЯ — ОДНА БИТАЯ ЗАПИСЬ ГЛУШИЛА ВЕСЬ ОТВЕТ: судьба читаемых замечаний не показывалась
+        # вовсе. Это ровно тот отказ, от которого канал и умирает: человек перестаёт видеть ответ и
+        # перестаёт писать. Деградация остаётся деградацией — но она про непрочитанные записи, а не
+        # про все.
+        bad = len(rep["errors"])
+        fates = [f"«{d.get('statement') or d['id']}» — {d.get('state_name') or d['state']}"
+                 for d in decided[:2]]
         return message(
             status="degraded", headline="Часть замечаний я не читаю",
-            summary=f"Записано {total}, но {len(rep['errors'])} из них не разбираются.",
-            why_it_matters="Пока это так, я не могу обещать, что до меня дойдёт всё сказанное.",
-            technical={"ошибки": rep["errors"]})
+            summary=f"Записей {total + bad}: читаю {total}, не могу прочитать {bad}.",
+            why_it_matters="Про непрочитанные я не могу обещать, что они до меня дойдут. "
+                           "Остальные видны ниже — их судьба не потерялась.",
+            next_steps=fates or None,
+            technical={"ошибки": rep["errors"], "по состояниям": rep.get("by_state")})
     if waiting and not decided:
         return message(
             status="ok", headline="Сказанное ждёт ответа",

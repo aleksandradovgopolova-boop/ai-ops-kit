@@ -1,0 +1,27 @@
+# Доставка в чужой репозиторий: единственный инструмент, у которого есть И обновление,
+#       И миграции, И гейт отставания. Прямо против измеренного класса (а) — EV-1110.
+schema_version: 1
+kind: research.evidence
+id: EV-1130
+request_id: RR-015
+statement: "copier 9.17.1 (тег 04.08.2026, MIT, 3.5k звёзд, push 14.08.2026) закрывает все три части боли доставки: (1) copier update снимает диф фактического состояния дочки, обновляет до новой версии шаблона и переналагает диф, конфликты — маркерами как у git merge или .rej-файлами; (2) _migrations в copier.yml — команды с диапазоном версий PEP 440, срабатывают при new >= declared > old (то есть при прыжке через версии проходят ВСЕ промежуточные), только при update и никогда при первом copy, с $STAGE/$VERSION_FROM/$VERSION_TO в окружении; (3) copier check-update --quiet отдаёт exit 0 если актуально и exit 2 если дочка отстала — это готовый гейт в CI дочки. Гейт появился недавно: v9.13.0 от 05.03.2026. Существующие дочки принимаются без пересоздания (copier copy поверх готового git-проекта), и answers-файл можно вынести в .ai/, чтобы не конфликтовать с шаблонами самой дочки."
+evidence_type: documented_fact
+source:
+  title: "copier — официальная документация (updating.md, configuring.md, faq.md) и CHANGELOG"
+  url: "https://copier.readthedocs.io/en/stable/updating/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "copier.readthedocs.io/en/stable/updating/ (алгоритм update, --conflict, check-update с --output-format json и --quiet); configuring.md (_migrations: command/version/when/working_directory, стадии before/after); CHANGELOG v9.13.0 (05.03.2026) и v9.14.0; faq.md (применение поверх существующего проекта)"
+  quote: "{\"update_available\": true, \"current_version\": \"1.0.0\", \"latest_version\": \"2.0.0\"}"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2027-02-17"
+reliability:
+  level: high
+  rationale: "Первичная документация и CHANGELOG проекта, прочитаны 17.08.2026."
+status: active
+superseded_by: null

@@ -1,0 +1,29 @@
+# Пакетная установка (pipx / uv tool) НЕ отвечает на боль доставки — и это записано в
+#       их собственных доках как не-скоуп.
+schema_version: 1
+kind: research.evidence
+id: EV-1133
+request_id: RR-015
+statement: "Механизма синхронизации файлов, которые инструмент записал в репозиторий пользователя, у pipx 1.16.7 и uv 0.12.5 нет по замыслу: у pipx это выведено в явный не-скоуп (он управляет своими окружениями и точками входа, и в не-скоупе прямо перечислено 'tool selection based on the current directory, parent directories, or project metadata'), у uv апгрейд описан исключительно как операция над tool environment ('Tool environments are not intended to be mutated directly'). То есть переход кита на модель пакета решает вопрос 'какая версия движка запускается' и НЕ решает вопрос 'какие правила, валидаторы и точка входа лежат в дочке' — а именно он даёт 8 из 48 находок поля."
+evidence_type: documented_fact
+source:
+  title: "pipx — explanation/scope; uv — concepts/tools"
+  url: "https://docs.astral.sh/uv/concepts/tools/"
+  type: official_documentation
+  published_at: null
+  is_primary: true
+citation:
+  locator: "pipx.pypa.io/latest/explanation/scope.html — раздел не-скоупа; docs.astral.sh/uv/concepts/tools/ — 'Tool environments are not intended to be mutated directly' и uv tool upgrade как операция над окружением"
+  quote: "Tool environments are _not_ intended to be mutated directly"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: "Первичная документация обоих проектов, прочитана 17.08.2026. Связь с 8 находками из 48 — ссылка на EV-1110, а не утверждение докaв."
+derived_from:
+  - EV-1110
+status: active
+superseded_by: null

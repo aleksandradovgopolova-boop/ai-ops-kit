@@ -1,0 +1,27 @@
+# Цена полного мутационного прогона у cosmic-ray. Проверялось как альтернатива mutmut, потому
+#       что у cosmic-ray есть штатный диф-режим, которого у mutmut нет.
+schema_version: 1
+kind: research.evidence
+id: EV-1123
+request_id: RR-015
+statement: "cosmic-ray 8.7.0 (09.08.2026, MIT, живой) имеет штатный диф-фильтр cr-filter-git ('looks for edited or new lines from the given git branch') — единственный такой из четырёх рассмотренных движков, — но у него НЕТ отбора тестов под мутанта: test-command это одна строка, которая гоняется целиком на каждого мутанта (заявка #498 'Reduce runtime by running only module related tests' открыта с 2020 года, #85 про интеграцию с coverage тоже открыта), а локальный дистрибьютор идёт последовательно без параллелизма. На наборе кита (2410 тестов, полный прогон 8 минут) это делает полный мутационный прогон неприменимым. Вдобавок сам диф-режим сейчас с открытым баг-репортом #567 'cr-filter-git doesn't catch diff fills, skips all mutations'."
+evidence_type: documented_fact
+source:
+  title: "cosmic-ray — документация и трекер (issues #498, #85, #567)"
+  url: "https://github.com/sixty-north/cosmic-ray/issues/567"
+  type: source_repository
+  published_at: null
+  is_primary: true
+citation:
+  locator: "cosmic-ray.readthedocs.io how-tos/filters.html (cr-filter-git); github.com/sixty-north/cosmic-ray issues #498, #85, #567; docs про локальный дистрибьютор"
+  quote: "looks for edited or new lines from the given git branch"
+captured_at: "2026-08-17"
+captured_by: "research-agent (RR-015, разработка кита)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-17"
+reliability:
+  level: high
+  rationale: "Первичные документы и трекер проекта, прочитаны 17.08.2026. Оценка 'неприменимо' — вывод из умножения (2410 тестов x число мутантов), а не измеренный прогон; сам вывод про отсутствие отбора тестов процитирован из докaв."
+status: active
+superseded_by: null
