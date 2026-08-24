@@ -92,6 +92,20 @@ def test_health_not_computed_when_absent(installer, tmp_path):
 
 
 @pytest.mark.unit
+def test_live_health_report_is_vocabulary_compatible(installer, tmp_path):
+    """Живой отчёт intelligence.health_product обязан говорить на языке, который понимает контракт:
+    band ∈ green/yellow/red/unknown. Это тот самый стык, где вокабуляры могли разойтись."""
+    from ai_ops_kit.intelligence import health_product
+    r = _bootstrapped(installer, tmp_path)
+    hr = health_product.product_health_report(r)
+    assert hr["band"] in ("green", "yellow", "red", "unknown")
+    c = PC.resolve(r, health=hr)
+    assert c["health"]["band"] == hr["band"]           # band доезжает в грань health
+    v = PC.validate(r, health=hr)
+    assert v["health_band"] == hr["band"]              # и в вердикт — без not_computed
+
+
+@pytest.mark.unit
 def test_red_health_forces_not_ready(installer, tmp_path):
     """Красное здоровье, впрыснутое сверху, обязано ронять вердикт с причиной — даже если форма цела."""
     r = _bootstrapped(installer, tmp_path)

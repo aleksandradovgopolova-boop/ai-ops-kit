@@ -564,6 +564,19 @@ def _intent_model(task, child_root, signals, a):
     return 0
 
 
+def _product_health_report(root):
+    """Живой product-health отчёт для впрыска в контракт (band green/yellow/red/unknown + причины).
+
+    Health считает intelligence (слой выше planning), поэтому его собирает CLI и передаёт вниз
+    параметром. Любой сбой сбора -> None (контракт покажет not_computed, а не упадёт): здоровье —
+    обогащение вердикта, а не его предусловие."""
+    try:
+        from ai_ops_kit.intelligence import health_product
+        return health_product.product_health_report(Path(root))
+    except Exception:  # noqa: BLE001 — сбор здоровья не обязан ронять просмотр контракта
+        return None
+
+
 @_intent("contract")
 def _intent_contract(task, child_root, signals, a):
     js = a.json
@@ -571,9 +584,13 @@ def _intent_contract(task, child_root, signals, a):
     # passport_generator) в один контракт. Ничего не пишет и ничего не перестраивает.
     from ai_ops_kit.planning import artifact_registry as _AR
     from ai_ops_kit.planning import product_contract
+    # Здоровье считает intelligence (слой ВЫШЕ planning) — поэтому его считает CLI (может звать вниз)
+    # и ВПРЫСКИВАЕТ в контракт. band health_product уже в вокабуляре green/yellow/red/unknown, который
+    # понимает validate; нет метрик -> band=unknown (честно), а не выдуманное зелёное.
+    health = _product_health_report(child_root)
     try:
-        contract = product_contract.resolve(child_root)
-        verdict = product_contract.validate(child_root)
+        contract = product_contract.resolve(child_root, health=health)
+        verdict = product_contract.validate(child_root, health=health)
     except _AR.RegistryCorrupt as e:
         print(f"ОШИБКА: реестр артефактов недостоверен: {e}")
         return 1
@@ -639,7 +656,17 @@ def _intent_products(task, child_root, signals, a):
         print("или создайте вручную: kind: product-registry, products: [{id, name, path}].")
         return 1
 
-    rep = product_registry.fleet(reg_path)
+    # Живое здоровье по каждому продукту считаем ЗДЕСЬ (CLI видит intelligence) и передаём во флот
+    # картой id->отчёт: planning не тянет intelligence вверх. Нет метрик у продукта -> band=unknown.
+    health_map = {}
+    _data = product_registry.load(reg_path)
+    for _p in (_data.get("products", []) if isinstance(_data, dict) else []):
+        _pid, _path = _p.get("id"), _p.get("path")
+        if _pid and _path and Path(_path).expanduser().is_dir():
+            _hr = _product_health_report(Path(_path).expanduser())
+            if _hr is not None:
+                health_map[_pid] = _hr
+    rep = product_registry.fleet(reg_path, health_map=health_map)
     if js:
         print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
         return 0
