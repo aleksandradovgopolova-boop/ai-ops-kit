@@ -163,10 +163,21 @@ def register(registry_path, path, *, pid: str | None = None, name: str | None = 
     return {"status": status, "product": entry, "registry": str(reg_path), "verdict": verdict}
 
 
-def inspect(registry_path, pid: str, *, health: dict | None = None) -> dict:
+def product_path(registry_path, pid: str) -> Path | None:
+    """Путь продукта флота по id, либо None. Нужен вызывателю (CLI), чтобы посчитать health/risks
+    ДО inspect (их считает слой выше и впрыскивает вниз)."""
+    data = load(registry_path)
+    products = data.get("products", []) if isinstance(data, dict) else []
+    p = next((x for x in products if isinstance(x, dict) and x.get("id") == pid), None)
+    return Path(p.get("path", "")).expanduser() if p else None
+
+
+def inspect(registry_path, pid: str, *, health: dict | None = None,
+            risks: dict | None = None) -> dict:
     """Подробная карточка ОДНОГО продукта флота по id: полный контракт + вердикт.
 
-    Если id нет в реестре — {status: not_found, known: [...]} (не выдумываем продукт)."""
+    health/risks впрыскиваются СВЕРХУ (их считает intelligence через CLI). Если id нет в реестре —
+    {status: not_found, known: [...]} (не выдумываем продукт)."""
     data = load(registry_path)
     products = data.get("products", []) if isinstance(data, dict) else []
     p = next((x for x in products if isinstance(x, dict) and x.get("id") == pid), None)
@@ -178,7 +189,7 @@ def inspect(registry_path, pid: str, *, health: dict | None = None) -> dict:
         return {"status": "error", "id": pid, "path": str(root),
                 "reason": f"каталог продукта не найден: {root}"}
     return {"status": "ok", "id": pid, "name": p.get("name", pid),
-            "contract": product_contract.resolve(root, health=health),
+            "contract": product_contract.resolve(root, health=health, risks=risks),
             "verdict": product_contract.validate(root, health=health)}
 
 
