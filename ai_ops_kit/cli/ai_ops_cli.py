@@ -50,6 +50,10 @@ INTENTS = {
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
+    # Product Contract (единый объект продукта): агрегирует идентичность, стандарт, артефакты слоя,
+    # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
+    "contract": ("единый контракт продукта: идентичность/стандарт/артефакты/контуры/здоровье + вердикт",
+                 "contract", False),
     # Фаза 3 (лента 4): roadmap Now/Next/Later и delivery-план из backlog.
     "roadmap": ("roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md", "roadmap", False),
     "delivery": ("delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры",
@@ -76,7 +80,7 @@ INTENTS = {
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "model", "bootstrap", "feedback", "session", "doctor",
-                  "roadmap", "delivery", "backlog")
+                  "roadmap", "delivery", "backlog", "contract")
 
 
 def resolve_flags(signals):
@@ -553,6 +557,37 @@ def _intent_model(task, child_root, signals, a):
             print(f"\n  Ответы впишите здесь: {shown}")
             print("  Потом запустите снова: ./ai-ops model — ответы станут подтверждёнными "
                   "фактами и больше не будут переспрашиваться.")
+    return 0
+
+
+@_intent("contract")
+def _intent_contract(task, child_root, signals, a):
+    js = a.json
+    # Единый объект продукта: агрегирует существующие вычислители (product_templates, contours,
+    # passport_generator) в один контракт. Ничего не пишет и ничего не перестраивает.
+    from ai_ops_kit.planning import artifact_registry as _AR
+    from ai_ops_kit.planning import product_contract
+    try:
+        contract = product_contract.resolve(child_root)
+        verdict = product_contract.validate(child_root)
+    except _AR.RegistryCorrupt as e:
+        print(f"ОШИБКА: реестр артефактов недостоверен: {e}")
+        return 1
+    if js:
+        print(json.dumps({"contract": contract, "verdict": verdict},
+                         ensure_ascii=False, indent=2, default=str))
+        return 0
+    print(f"КОНТРАКТ ПРОДУКТА — вердикт: {verdict['verdict'].upper()}")
+    print(f"  стандарт: v{contract['standard']['contract_version']}")
+    print(f"  артефакты слоя: {contract['artifacts']['counts']}")
+    incomplete = [cid for cid, cv in contract["contours"].items() if not cv["ok"]]
+    print("  источники истины контуров: "
+          + ("все на месте" if not incomplete else "неполны — " + ", ".join(incomplete)))
+    print(f"  здоровье: {contract['health'].get('band') or contract['health'].get('state')}")
+    if verdict["blocking"]:
+        print("  что мешает вердикту 'valid':")
+        for b in verdict["blocking"]:
+            print(f"    - {b}")
     return 0
 
 
