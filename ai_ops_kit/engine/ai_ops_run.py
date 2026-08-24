@@ -20,7 +20,7 @@
 Использование:
   ai_ops_run.py run "<задача>" <child_root> [--signals '<json>'] [--features-dir dir]
        [--runtime claude-code|generic-orchestrator] [--provider mock] [--model ID]
-       [--engine controller|pipeline] [--execute] [--open-pr] [--json]
+       [--engine pipeline|controller] [--execute] [--open-pr] [--json]  # pipeline — по умолчанию
   ai_ops_run.py --selftest
 Код возврата: 0 — успех/ready; 1 — blocked или pipeline не готов к PR; 2 — ошибка прогона.
 """
@@ -429,7 +429,7 @@ def _provider_trust(provider, key_env, klp_by_env, env, now, cache):
 
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
-        feature=None, engine="controller", proposer=None, open_pr=False, model=None,
+        feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
@@ -1907,8 +1907,9 @@ def main(argv):
     rp.add_argument("--execute", action="store_true")
     rp.add_argument("--feature", help="имя существующей фичи — привязать WorkItem к ней "
                                       "(иначе wi-<hash>; срезы истории не накопятся на одну фичу)")
-    rp.add_argument("--engine", default="controller", choices=["controller", "pipeline"],
-                    help="controller (план+каркас) или pipeline (собранный движок: detect->tool-loop->evidence->гейты->PR)")
+    rp.add_argument("--engine", default="pipeline", choices=["pipeline", "controller"],
+                    help="pipeline (КАНОНИЧЕСКИЙ путь доставки по умолчанию: detect->tool-loop->evidence->гейты->PR) "
+                         "или controller (план+каркас/оркестрация именованных агентов — явная альтернатива)")
     rp.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat); engine=pipeline")
     rp.add_argument("--open-pr", action="store_true",
                     help="открыть draft PR по результату (нужен GITHUB_TOKEN); engine=pipeline")
