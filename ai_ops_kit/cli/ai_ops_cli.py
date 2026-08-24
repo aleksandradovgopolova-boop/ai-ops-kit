@@ -585,6 +585,17 @@ def _product_health_report(root):
         return None
 
 
+def _product_risks(root):
+    """Живой реестр рисков для впрыска в контракт (risk_register: риски из здоровья+дрейфа + слепые
+    зоны). intelligence выше planning -> считает CLI, передаёт вниз. Сбой -> None (риски покажутся
+    not_computed, а не уронят просмотр)."""
+    try:
+        from ai_ops_kit.intelligence import risk_register
+        return risk_register.risk_register(Path(root))
+    except Exception:  # noqa: BLE001 — сбор рисков не обязан ронять просмотр контракта
+        return None
+
+
 @_intent("contract")
 def _intent_contract(task, child_root, signals, a):
     js = a.json
@@ -592,12 +603,13 @@ def _intent_contract(task, child_root, signals, a):
     # passport_generator) в один контракт. Ничего не пишет и ничего не перестраивает.
     from ai_ops_kit.planning import artifact_registry as _AR
     from ai_ops_kit.planning import product_contract
-    # Здоровье считает intelligence (слой ВЫШЕ planning) — поэтому его считает CLI (может звать вниз)
-    # и ВПРЫСКИВАЕТ в контракт. band health_product уже в вокабуляре green/yellow/red/unknown, который
-    # понимает validate; нет метрик -> band=unknown (честно), а не выдуманное зелёное.
+    # Здоровье и риски считает intelligence (слой ВЫШЕ planning) — поэтому их считает CLI (может звать
+    # вниз) и ВПРЫСКИВАЕТ в контракт. band уже в вокабуляре green/yellow/red/unknown; нет данных ->
+    # unknown/not_computed (честно), а не выдуманное зелёное.
     health = _product_health_report(child_root)
+    risks = _product_risks(child_root)
     try:
-        contract = product_contract.resolve(child_root, health=health)
+        contract = product_contract.resolve(child_root, health=health, risks=risks)
         verdict = product_contract.validate(child_root, health=health)
     except _AR.RegistryCorrupt as e:
         print(f"ОШИБКА: реестр артефактов недостоверен: {e}")
@@ -613,6 +625,14 @@ def _intent_contract(task, child_root, signals, a):
     print("  источники истины контуров: "
           + ("все на месте" if not incomplete else "неполны — " + ", ".join(incomplete)))
     print(f"  здоровье: {contract['health'].get('band') or contract['health'].get('state')}")
+    _rk = contract["risks"]
+    if "count_by_severity" in _rk:
+        _sev = _rk.get("count_by_severity") or {}
+        _bs = len(_rk.get("blind_spots") or [])
+        print(f"  риски: high={_sev.get('high', 0)}, medium={_sev.get('medium', 0)}"
+              + (f"; слепых зон: {_bs}" if _bs else ""))
+    else:
+        print(f"  риски: {_rk.get('state')}")
     if verdict["blocking"]:
         print("  что мешает вердикту 'valid':")
         for b in verdict["blocking"]:
