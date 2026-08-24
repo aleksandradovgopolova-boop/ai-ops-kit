@@ -82,23 +82,30 @@ rules:
 # выводом, то есть шесть контрактов, включая пишущий файлы render(). Это отдельный срез, и
 # записать его отдельным честнее, чем сделать вид, что перенос каталога его выполнил.
 known_violations:
-  - "engine -> validation: pipeline_evidence/pipeline_helpers зовут check()/render() валидаторов артефактов"
   - "lifecycle -> validation: run_report зовёт validate_dir()/check_feature() по фиче"
-  - "providers -> validation: orchestrator проверяет результат ревьюера через check()"
+  - "intelligence -> validation: evolution_triggers зовёт profile()/check_registry()"
   # v3.38 (лента №4): "security -> validation" СНЯТО. Чистая проверка политики памяти вынесена вниз
   # в пакет `checks` (primitives); security_enforcement теперь зовёт её в СВОЙ слой, не вверх.
   # Список ратчета сократился фактом развязки, а не решением — это и есть «только вниз».
-  - "intelligence -> validation: evolution_triggers зовёт profile()/check_registry()"
+  #
+  # v3.38 (лента №5): "engine -> validation" И "providers -> validation" СНЯТЫ. Чистые проверки формы
+  # артефактов/вердиктов (reviewer-result, requirements/plan/acceptance-artifact, spec-change) вынесены
+  # вниз в пакет `checks`; движок и оркестратор зовут их в СВОЙ слой. Пишущий render разрезан на чистую
+  # render_content (в `checks`) + запись файлов (в движке/CLI) — I/O остался в слое ядра, не ниже.
+  # Взаимная пара engine<->validation распалась (validation больше не в цикле с engine): 6 -> 5.
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 6          # context<->engine, delivery<->engine, engine<->gates, engops<->gates,
-                           # engine<->lifecycle, engine<->validation
+  mutual_pairs: 5          # context<->engine, delivery<->engine, engine<->gates, engops<->gates,
+                           # engine<->lifecycle
                            # v3.38 (лента №4): security<->validation СНЯТА — чистая проверка вынесена
                            # вниз в пакет `checks`, security больше не тянет validation вверх. 7 -> 6.
+                           # v3.38 (лента №5): engine<->validation СНЯТА — чистые проверки формы
+                           # артефактов/вердиктов вынесены вниз в `checks`, движок больше не тянет
+                           # validation вверх. Последняя ПЕРЕСЕКАЮЩАЯ СЛОИ взаимная пара ушла. 6 -> 5.
                            #
                            # 12 -> 7 (2026-08-12), четырьмя переездами и без правки логики. Правило
                            # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
@@ -120,14 +127,19 @@ baseline:
                            # сделать ровно то, что этот срез исправляет, — положить модуль не туда.
                            # Пару engine<->lifecycle снимает не переезд, а решение «кто классифицирует»
                            # (`workitem` не должен звать роутер сам), и это проектирование.
-  cycles_longer_than_two: 28   # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
+  cycles_longer_than_two: 17   # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
                                # все циклы, проходившие через это ребро (одно ребро держало многие).
+                               # v3.38 (лента №5): 28 -> 17 — снятие engine->validation и
+                               # providers->validation убрало циклы через validation (validation
+                               # больше не участвует ни в одном цикле ядра).
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    Десять из двенадцати взаимных пар лежат ВНУТРИ слоя capabilities и текущими правилами не
-    запрещены — это осознанная граница первого шага. Оставшиеся две (engine<->validation,
-    security<->validation) пересекают слои и потому перечислены в known_violations поимённо:
-    разрешено только то, что названо. Разбор циклов внутри ядра идёт отдельными срезами.
+    ВСЕ пять оставшихся взаимных пар лежат ВНУТРИ слоя capabilities (context<->engine,
+    delivery<->engine, engine<->gates, engops<->gates, engine<->lifecycle) и текущими правилами не
+    запрещены — это осознанная граница. Обе пары, ПЕРЕСЕКАВШИЕ слои, сняты: security<->validation
+    (лента №4) и engine<->validation (лента №5) — обе тем, что чистую логику валидаторов вынесли
+    вниз в `checks`, а рантайм перестал тянуть `validation` (entrypoints) вверх. Разбор оставшихся
+    внутрикольцевых циклов идёт отдельными срезами.
   raised_in_3_34: >
     Потолок ПОДНЯТ в том же срезе, где введён: 9 -> 12 пар, 31 -> 210 циклов. Связей в коде при
     этом не прибавилось ни одной. Пока `validation` не был пакетом, шесть пакетов ядра импортировали

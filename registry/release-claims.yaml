@@ -97,8 +97,8 @@ validators_externally_tested: 80  # + validate_product_layer, внешне пр�
 # Связность ядра: ДЕРИВИРУЕТСЯ из packages/layering.yaml (см. derived_layering_counts).
 # Появились 2026-08-13: числа жили в прозе и не сверялись ничем, поэтому документы кита
 # говорили 12/210 при фактическом ратчете 7/52 — и CI был зелёным.
-layering_mutual_pairs: 6
-layering_cycles_longer_than_two: 28
+layering_mutual_pairs: 5
+layering_cycles_longer_than_two: 17
 
 qualified_on: >
   provider-neutral портфель по РОЛЯМ: дешёвый API-writer (money-mode) + СИЛЬНЫЙ writer (локальный

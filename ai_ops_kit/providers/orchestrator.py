@@ -128,9 +128,10 @@ def _write_reviewer_json(run_dir, sid, text):
     if obj is None:
         return False
     try:
-        sys.path.insert(0, str(PKG / "validation"))
-        from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-        from ai_ops_kit.validation import validate_reviewer_result as _vrr
+        # Чистая проверка ФОРМЫ вердикта живёт ВНИЗ, в пакете `checks` (слой primitives): зовём её
+        # вниз, без восходящего ребра providers -> validation (лента №5). Ни sys.path, ни bootstrap
+        # больше не нужны — импорт идёт по пакетному имени.
+        from ai_ops_kit.checks import reviewer_result as _vrr
         if _vrr.check(obj):           # непустой список ошибок -> невалидно
             return False
     # Причина подавления (срез providers ратчета, 2026-08-12): FAIL-CLOSED и это верно. Здесь

@@ -536,7 +536,7 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
     Модуль ничего не пишет: судья гоняется под read-only Policy, попытки write/shell попадают
     в `denied` и видны в отчёте.
     """
-    from ai_ops_kit.validation import validate_acceptance_result as var
+    from ai_ops_kit.checks import acceptance_result as var  # чистая проверка формы вниз (лента №5)
 
     if not criteria:
         return _unverified([], "критерии приёмки не объявлены — сверять нечего", declared=False)
