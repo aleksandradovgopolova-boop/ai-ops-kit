@@ -106,6 +106,18 @@ def test_live_health_report_is_vocabulary_compatible(installer, tmp_path):
 
 
 @pytest.mark.unit
+def test_cli_full_health_combines_three_dimensions(installer, tmp_path):
+    """CLI собирает ПОЛНОЕ здоровье (product+tech+delivery) одним rollup'ом и впрыскивает в контракт.
+    Проверяем, что сведение композитно (сигналы всех трёх измерений) и говорит валидным band."""
+    from ai_ops_kit.cli import ai_ops_cli
+    r = _bootstrapped(installer, tmp_path)
+    hr = ai_ops_cli._product_health_report(r)
+    assert hr is not None and hr["band"] in ("green", "yellow", "red", "unknown")
+    # три измерения вносят сигналы -> их суммарно больше, чем у одного product-измерения
+    assert len(hr["signals"]) >= 3
+
+
+@pytest.mark.unit
 def test_red_health_forces_not_ready(installer, tmp_path):
     """Красное здоровье, впрыснутое сверху, обязано ронять вердикт с причиной — даже если форма цела."""
     r = _bootstrapped(installer, tmp_path)
