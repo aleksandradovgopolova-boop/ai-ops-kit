@@ -9,6 +9,6 @@ scripts/warn-path-belt.sh
 # -n auto: параллель по ядрам (набор параллель-безопасен — проверено на полном прогоне). Без
 # pytest-xdist прогон идёт как раньше, последовательно, — быстрый профиль не обязан падать из-за него.
 XNUM=""
-if python3 -c 'import xdist' >/dev/null 2>&1; then XNUM="-n auto"; fi
+if python3 -c 'import xdist' >/dev/null 2>&1; then XNUM="-n auto --dist loadfile"; fi
 # shellcheck disable=SC2086 — XNUM намеренно либо два слова (-n auto), либо пусто
 python3 -m pytest tests/ -q -m "not slow" $XNUM "$@"
