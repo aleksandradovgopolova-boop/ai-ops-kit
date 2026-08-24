@@ -337,8 +337,8 @@ probes:
   - ai_ops_kit/ui/presenter.py
   - ai_ops_kit/lifecycle/active_work.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '        pub = active_work.publication_enabled(child_root)'
-  replace_with: '        pub = False  # SEAM MUTATION'
+  find: '    pub = active_work.publication_enabled(child_root)'
+  replace_with: '    pub = False  # SEAM MUTATION'
   tests:
   - tests/unit/test_local_claim_honest_reach.py
   why: 'ШОВ: честная фраза о досягаемости доходит до человека, только если `status` реально СПРАШИВАЕТ
@@ -382,8 +382,8 @@ probes:
   - ai_ops_kit/cli/ai_ops_cli.py
   - ai_ops_kit/lifecycle/active_work.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '        team = active_work.team_view(child_root, data.get("active") or [], pub)'
-  replace_with: '        team = data.get("active") or []'
+  find: '    team = active_work.team_view(child_root, data.get("active") or [], pub)'
+  replace_with: '    team = data.get("active") or []'
   tests:
   - tests/unit/test_claim_publication_files.py
   why: 'ШОВ: заявка другой машины доходит до человека, только если `status` строит ОБЩУЮ карту через
@@ -441,8 +441,8 @@ probes:
   - ai_ops_kit/delivery/review_branch.py
   - ai_ops_kit/cli/ai_ops_cli.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)'
-  replace_with: '        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base="main")'
+  find: '    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)'
+  replace_with: '    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base="main")'
   tests:
   - tests/unit/test_absent_base_is_resolved_or_refused.py
   why: 'ШОВ на пути ЧЕЛОВЕКА (`ai-ops review`): автоподбор обязан доехать до механизма через CLI.
@@ -554,8 +554,8 @@ probes:
   - ai_ops_kit/lifecycle/active_work.py
   - ai_ops_kit/cli/ai_ops_cli.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '        team = active_work.reconcile_with_base(team, child_root)'
-  replace_with: '        team = team'
+  find: '    team = active_work.reconcile_with_base(team, child_root)'
+  replace_with: '    team = team'
   tests:
   - tests/unit/test_registry_reconciles_with_base.py
   why: 'ШОВ на пути человека: сверка что-то значит только если её зовёт `ai-ops status` — команда, из
@@ -631,8 +631,8 @@ probes:
   - ai_ops_kit/cli/ai_ops_cli.py
   - ai_ops_kit/engops/kit_feedback.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '        if _txt and Path(_txt).is_dir():'
-  replace_with: '        if False:'
+  find: '    if _txt and Path(_txt).is_dir():'
+  replace_with: '    if False:'
   tests:
   - tests/unit/test_kit_feedback_field_probe.py
   why: 'ШОВ на пути человека: `feedback` — единственная команда, где второй позиционный аргумент несёт
@@ -668,8 +668,8 @@ probes:
   - ai_ops_kit/planning/delivery_plan.py
   - ai_ops_kit/ui/presenter.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '            cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())'
-  replace_with: '            cross = None'
+  find: '        cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())'
+  replace_with: '        cross = None'
   tests:
   - tests/unit/test_running_answered_from_both.py
   why: 'ШОВ, которым эта работа и объявлена в приёмке: `status` обязан спрашивать ПЛАН, а не только
@@ -775,8 +775,8 @@ probes:
   - ai_ops_kit/cli/ai_ops_cli.py
   - ai_ops_kit/planning/next_work.py
   file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '                                    me=_session_identity(child_root))'
-  replace_with: '                                    me=None)'
+  find: '                                me=_session_identity(child_root))'
+  replace_with: '                                me=None)'
   tests:
   - tests/unit/test_next_offers_unheld_work.py
   why: 'ШОВ между командой и отбором работы. Указан САМИМ КИТОМ: `validate_mutation_probes` заметил, что

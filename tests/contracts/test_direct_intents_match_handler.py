@@ -9,15 +9,18 @@
 Это самый дорогой вид отказа: он неотличим от работы. И это уже четвёртый список интентов, который
 надо было править рукой при добавлении одного имени (три остальных сведены в `EXPECTED_INTENTS`).
 
-Проверяется структурно: множество имён, которые `_run_intent` реально разбирает, обязано совпадать
-с `DIRECT_INTENTS`. Разойдутся в любую сторону — красное:
-  * обработчик есть, имени в списке нет  -> молчаливый no-op с кодом 0;
-  * имя в списке есть, обработчика нет   -> падение в `_run_intent` или тихий возврат превью.
+v3.38 (реестр обработчиков): диспетч больше НЕ цепочка `if intent == "x"`, а реестр
+`_INTENT_HANDLERS` (регистрация декоратором `@_intent(...)`). Поэтому и разбор здесь читает реестр
+напрямую, а не сканирует исходник регуляркой — ровно то, о чём говорил старый комментарий «четвёртый
+список, который правят рукой»: теперь список один, и он же исполняется.
+
+Проверяется: множество ключей реестра обязано совпадать с `DIRECT_INTENTS`. Разойдутся в любую
+сторону — красное:
+  * обработчик зарегистрирован, имени в списке нет -> молчаливый no-op с кодом 0;
+  * имя в списке есть, обработчика нет            -> тихий возврат превью вместо действия.
 """
 from __future__ import annotations
 
-import ast
-import re
 import sys
 from pathlib import Path
 
@@ -28,20 +31,10 @@ sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 import ai_ops_cli  # noqa: E402 — путь ставится выше
 
-SOURCE = (PKG_ROOT / "ai_ops_kit" / "cli" / "ai_ops_cli.py").read_text(encoding="utf-8")
-
 
 def _handled_intents() -> set[str]:
-    """Имена, которые `_run_intent` разбирает: `intent == "x"` и `intent in ("x", "y")`."""
-    tree = ast.parse(SOURCE)
-    fn = next((n for n in tree.body
-               if isinstance(n, ast.FunctionDef) and n.name == "_run_intent"), None)
-    assert fn is not None, "функция _run_intent исчезла — проверка потеряла предмет"
-    seg = ast.get_source_segment(SOURCE, fn) or ""
-    names = set(re.findall(r'intent\s*==\s*"([a-z-]+)"', seg))
-    for grp in re.findall(r"intent\s+in\s*\(([^)]*)\)", seg):
-        names |= set(re.findall(r'"([a-z-]+)"', grp))
-    return names
+    """Имена, для которых зарегистрирован обработчик в реестре диспетчера."""
+    return set(ai_ops_cli._INTENT_HANDLERS)
 
 
 @pytest.mark.contract
@@ -51,7 +44,7 @@ def test_direct_intents_match_the_handler():
     silent_noop = handled - declared
     dangling = declared - handled
     assert not silent_noop, (
-        f"обработчик написан, но интент не исполняется — команда вернёт 0, ничего не сделав: "
+        f"обработчик зарегистрирован, но интент не исполняется — команда вернёт 0, ничего не сделав: "
         f"{sorted(silent_noop)}. Добавьте имя в DIRECT_INTENTS.")
     assert not dangling, (
         f"интент объявлен исполняемым, а обработчика нет: {sorted(dangling)}")
@@ -66,17 +59,17 @@ def test_every_direct_intent_is_a_declared_intent():
 
 @pytest.mark.contract
 def test_the_guard_catches_the_defect_it_was_written_for():
-    """Охрана обязана краснеть на образце: обработчик есть, имени в списке нет."""
-    fake = '''
-def _run_intent(intent, task, child_root, signals, a):
-    if intent == "session":
-        return 0
-    if intent == "status":
-        return 0
-'''
-    tree = ast.parse(fake)
-    fn = tree.body[0]
-    seg = ast.get_source_segment(fake, fn)
-    names = set(re.findall(r'intent\s*==\s*"([a-z-]+)"', seg))
-    assert names == {"session", "status"}, f"разбор обработчика ослеп: {names}"
-    assert names - {"status"}, "разница с неполным списком не обнаруживается"
+    """Охрана обязана краснеть на образце в ОБЕ стороны — иначе она ничего не значит."""
+    # Класс 1: обработчик зарегистрирован, имени в DIRECT_INTENTS нет -> молчаливый no-op.
+    handled, declared = {"session", "status"}, {"status"}
+    assert handled - declared == {"session"}, "молчаливый no-op не обнаруживается"
+    # Класс 2: имя объявлено исполняемым, обработчика нет -> тихое превью вместо действия.
+    handled, declared = {"status"}, {"status", "roadmap"}
+    assert declared - handled == {"roadmap"}, "висячий интент не обнаруживается"
+
+
+@pytest.mark.contract
+def test_double_registration_is_rejected():
+    """Повторная регистрация одного имени — ошибка, а не тихое затирание обработчика."""
+    with pytest.raises(ValueError):
+        ai_ops_cli._intent("status")(lambda *a: 0)

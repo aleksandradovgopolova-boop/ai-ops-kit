@@ -321,513 +321,584 @@ def _run_backlog(sub, child_root, signals, js):
     return 0 if g.ok else 2
 
 
+# --- Реестр обработчиков команд (v3.38). Прежде диспетч был цепочкой `if intent == …` в
+# `_run_intent` (файл ~1377 строк): добавить команду значило править монолит, и цена этой
+# проводки — корень того, что модули продуктовых операций написаны, но не заведены. Теперь
+# команда подключается регистрацией обработчика; список ключей реестра сверяется с DIRECT_INTENTS
+# тестом (tests/contracts/test_direct_intents_match_handler.py).
+_INTENT_HANDLERS = {}
+
+
+def _intent(name):
+    """Зарегистрировать обработчик команды. Повторное имя — ошибка, а не тихое затирание."""
+    def _register(fn):
+        if name in _INTENT_HANDLERS:
+            raise ValueError(f"intent {name!r} зарегистрирован дважды")
+        _INTENT_HANDLERS[name] = fn
+        return fn
+    return _register
+
+
+@_intent("onboard")
+def _intent_onboard(task, child_root, signals, a):
+    import yaml
+    js = a.json
+    from ai_ops_kit.shared import project_detector
+    prof = project_detector.detect(child_root)
+    out = child_root / ".ai" / "repository-profile.yaml"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(yaml.safe_dump(prof, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    if js:
+        print(json.dumps({"written": str(out), "profile": prof}, ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
+    return 0
+
+
+@_intent("backlog")
+def _intent_backlog(task, child_root, signals, a):
+    js = a.json
+    return _run_backlog(task, child_root, signals, js)
+
+
+@_intent("feedback")
+def _intent_feedback(task, child_root, signals, a):
+    js = a.json
+    # Наблюдение о ките — данные, а не пересказ. Без текста команда показывает судьбу уже
+    # сказанного: канал в одну сторону перестают наполнять, поэтому ответ обязан быть виден.
+    from ai_ops_kit.engops import kit_feedback
+    # ПУТЬ РЕПОЗИТОРИЯ — НЕ НАБЛЮДЕНИЕ (проба канала на живой дочке, 18.08.2026). Обёртка
+    # `./ai-ops` подставляет абсолютный путь сразу после интента, а человек по привычке от всех
+    # остальных команд дописывает `.` — и второй позиционный уезжал в ТЕКСТ. `./ai-ops feedback .`
+    # (ровно та команда, которую кит сам печатает как «посмотреть судьбу сказанного», плюс точка)
+    # записывала наблюдение с содержанием «.», возвращала «записал» и судьбу не показывала.
+    # Здесь путь читается как путь: человек просил показать судьбу, а не сообщать про каталог.
+    _txt = (task or "").strip()
+    if _txt and Path(_txt).is_dir():
+        _txt = ""
+    if not _txt:
+        rep = kit_feedback.status(child_root)
+        if js:
+            print(json.dumps(rep, ensure_ascii=False, indent=2))
+        else:
+            _say(child_root, "from_kit_feedback_status", rep)
+            if _audience(child_root) != "product":
+                print()
+                print(kit_feedback.render_status(rep))
+        return 1 if rep["errors"] else 0
+    ev = kit_feedback.evidence_from_args(getattr(a, "evidence_file", None),
+                                         getattr(a, "evidence_command", None),
+                                         getattr(a, "evidence_note", None))
+    p, created, errors = kit_feedback.record(
+        child_root, _txt, evidence=ev, severity=getattr(a, "severity", None),
+        observation_class=getattr(a, "observation_class", None))
+    if js:
+        print(json.dumps({"path": str(p), "created": created, "errors": errors},
+                         ensure_ascii=False, indent=2))
+    else:
+        try:
+            shown = p.relative_to(child_root)
+        except ValueError:
+            shown = p
+        _say(child_root, "from_kit_feedback_recorded", str(shown), created, errors,
+             bool(ev), getattr(a, "observation_class", None))
+    return 1 if errors else 0
+
+
+@_intent("status")
+def _intent_status(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.lifecycle import active_work
+    from ai_ops_kit.ui import presenter
+    awp = child_root / ".ai" / "runtime" / "active-work.yaml"
+    data = {"active": []}
+    if awp.is_file():
+        try:
+            data = active_work.load(awp)
+        except active_work.ActiveWorkCorrupt as e:
+            # Битый реестр — не «работы нет»: координация сессий недостоверна (инвариант 3.0.12).
+            print(presenter.render(presenter.message(
+                status="blocked",
+                summary="Не могу сказать, что идёт прямо сейчас: запись об идущих работах "
+                        "повреждена.",
+                why_it_matters="Пока это так, я не знаю, не перепишет ли новая работа то, что "
+                               "уже правит другая сессия.",
+                next_steps=["восстановить запись и повторить"],
+                technical={"ошибка": str(e)}),
+                audience=presenter.audience_from_config(child_root)))
+            return 1
+    pub = active_work.publication_enabled(child_root)
+    if js:
+        # Досягаемость видна и в JSON — потребитель ответа не должен угадывать её сам.
+        return (active_work.list_cmd(awp, as_json=True, published=pub, child_root=child_root)
+                if awp.is_file() else 0)
+    aud = presenter.audience_from_config(child_root)
+    # Общая карта: локальные заявки + опубликованные заявки ДРУГИХ машин (если публикация
+    # включена). Так «работа идёт» становится фактом о команде, а не об одной машине.
+    team = active_work.team_view(child_root, data.get("active") or [], pub)
+    # #137: СВЕРКА С БАЗОЙ на чтении. Поле 17.08.2026: три записи из четырёх относились к работе,
+    # давно влитой в main, а `status` отвечал «Работа идёт» и советовал не трогать те же файлы.
+    team = active_work.reconcile_with_base(team, child_root)
+    reconciled = active_work.persist_reconciliation(awp, team) if awp.is_file() else 0
+    # ВТОРОЙ ИСТОЧНИК ПРАВДЫ СПРАШИВАЕТСЯ ЗДЕСЬ, а не заводится третьим (замер 18.08.2026):
+    # реестр говорит, что исполняется на этой машине, план — что объявлено идущим. Сверка живёт в
+    # `planning` осознанно: `lifecycle` не вправе его импортировать (слои), а отвечает человеку
+    # entrypoint — он и складывает два ответа в один.
+    from ai_ops_kit.planning import delivery_plan as _dp
+    try:
+        cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())
+    except _dp.PlanCorrupt as e:
+        # Битый план — не «в плане ничего не объявлено»: это ровно тот случай, где «не знаю»
+        # нельзя выдать за «нет». Ответ про реестр остаётся, а про план говорим прямо.
+        print(presenter.render(presenter.message(
+            status="degraded",
+            summary="Про заявки на работу отвечу, а про план — нет: файл плана не разбирается.",
+            why_it_matters="Пока план не читается, я не могу сказать, не объявлена ли идущей "
+                           "работа, которой никто не занимается.",
+            next_steps=["починить файл плана и повторить"],
+            technical={"ошибка": str(e)}), audience=aud))
+        cross = None
+    print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
+                                                      reconciled=reconciled, crosscheck=cross),
+                           audience=aud))
+    return 0
+
+
+@_intent("next")
+def _intent_next(task, child_root, signals, a):
+    js = a.json
+    # Четыре вопроса: где мы, что идёт сейчас, что блокирует, что взять следующим.
+    from ai_ops_kit.planning import next_work
+    from ai_ops_kit.planning import delivery_plan as _plan
+    from ai_ops_kit.planning import contours as _contours
+    try:
+        # Личность спрашивающего — чтобы «что взять» отвечалось участнику, а не
+        # репозиторию: своя работа отделяется от чужой той же меркой, что и в реестре.
+        rep = next_work.compute(child_root, budget_left=getattr(a, "budget", None),
+                                me=_session_identity(child_root))
+    except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
+        print(f"ОШИБКА: {e}")
+        return 1
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
+        # состоянием. Разбор по четырём вопросам доступен на technical/debug и по --json.
+        from ai_ops_kit.ui import presenter
+        aud = presenter.audience_from_config(child_root)
+        print(presenter.render(presenter.from_next_work(rep), audience=aud))
+        # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
+        # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
+        for _e in (rep.get("plan_errors") or []):
+            print(f"  ✗ план: {_e}")
+        for _e in (rep.get("roadmap") or {}).get("errors") or []:
+            print(f"  ✗ направление: {_e}")
+        if aud != "product":
+            print()
+            print(next_work.render(rep))
+    # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие работы: без плана и с битым roadmap
+    # ответ «что взять следующим» недостоверен, и молчаливый ноль это скрывал бы.
+    return 0 if (rep.get("plan_present") and not rep.get("plan_errors")
+                 and not rep["roadmap"]["errors"]) else 1
+
+
+@_intent("model")
+def _intent_model(task, child_root, signals, a):
+    js = a.json
+    # DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK. Понимание репозитория: артефактов
+    # проекта команда не создаёт и ничего не перестраивает.
+    #
+    # ОДИН ФАЙЛ ОНА ВСЁ-ТАКИ ПИШЕТ, и объявить это обязательно: `.ai/project/
+    # onboarding-answers.yaml` — форма, в которую человек впишет ответы. Раньше здесь стояло
+    # «ничего не пишет», а команда писала (это внёс фикс тупика с вопросами), и человек, позвав
+    # `model` просто посмотреть состояние, находил в своём `git status` незнакомый файл.
+    # Заявление приведено к фактам, повторный вызов файл НЕ трогает, если текст тот же.
+    from ai_ops_kit.planning import repo_audit
+    from ai_ops_kit.planning import contours as _contours
+    try:
+        rep = repo_audit.run(child_root)
+    except _contours.ModelCorrupt as e:
+        print(f"ОШИБКА: {e}")
+        return 1
+    # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА. Прежде форма ответов создавалась только в
+    # человеческой ветке: `--json` того же намерения оставлял человека без места для ответа, то
+    # есть одна команда вела себя двумя разными способами.
+    answers_file = None
+    if rep["ask"]["questions"]:
+        answers_file = repo_audit.write_question_file(child_root, rep["ask"])
+    if js:
+        out = dict(rep)
+        if answers_file:
+            out["answers_file"] = str(answers_file)
+        print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
+    else:
+        from ai_ops_kit.ui import presenter
+        aud = presenter.audience_from_config(child_root)
+        print(presenter.render(presenter.from_repository_understanding(rep), audience=aud))
+        if aud != "product":
+            print()
+            print(repo_audit.render(rep))
+        for q in rep["ask"]["questions"]:
+            mark = "⚠" if q["blocks_work"] else "·"
+            print(f"  {mark} {q['ask']}")
+            if q["proposal"]:
+                print(f"      предполагаю: {q['proposal']['value']} — подтвердить?")
+        # ВОПРОСАМ НУЖНО МЕСТО. Прежде кит печатал их и завершался: куда отвечать — не сказано,
+        # интерактива нет, человек в тупике на главном шаге первого сценария.
+        if answers_file:
+            try:
+                shown = answers_file.relative_to(Path(child_root))
+            except ValueError:
+                shown = answers_file
+            print(f"\n  Ответы впишите здесь: {shown}")
+            print("  Потом запустите снова: ./ai-ops model — ответы станут подтверждёнными "
+                  "фактами и больше не будут переспрашиваться.")
+    return 0
+
+
+@_intent("bootstrap")
+def _intent_bootstrap(task, child_root, signals, a):
+    js = a.json
+    # BOOTSTRAP: онбординг заканчивается работой, а не документацией. Пишет ТОЛЬКО с --apply и
+    # ТОЛЬКО отсутствующее; заготовку кита заменяет (в ней нет фактов о продукте), настоящий
+    # план — никогда.
+    from ai_ops_kit.planning import product_bootstrap as _boot
+    from ai_ops_kit.planning import contours as _contours
+    from ai_ops_kit.planning import delivery_plan as _dp
+    from ai_ops_kit.planning import repo_audit as _ra
+    try:
+        # Аудит — один раз на команду: сухой прогон и запись смотрят на ОДНИ факты, иначе между
+        # «вот что создам» и «создал» могла бы оказаться разница, которую человек не просил.
+        _und = _ra.run(child_root)
+        boot = _boot.plan(child_root, _und)
+    except (_contours.ModelCorrupt, _dp.PlanCorrupt) as e:
+        print(f"ОШИБКА: {e}")
+        return 1
+    applied = bool(getattr(a, "apply", False))
+    rep = _boot.apply(child_root, boot, _und) if applied else boot
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_bootstrap", rep, applied=applied)
+        if not applied and rep["will_write"]:
+            print(f"\n  Записать: ./ai-ops bootstrap --apply")
+    return 1 if rep.get("error") else 0
+
+
+@_intent("health")
+def _intent_health(task, child_root, signals, a):
+    import yaml
+    js = a.json
+    from ai_ops_kit.intelligence import product_health
+    cand = [child_root / "product" / "product-health.yaml",
+            child_root / ".ai" / "product-health.yaml",
+            child_root / "product-health.yaml"]
+    src = next((p for p in cand if p.is_file()), None)
+    if not src:
+        from ai_ops_kit.ui import presenter
+        aud = presenter.audience_from_config(child_root)
+        print(presenter.render(presenter.from_product_health(None), audience=aud))
+        return 1
+    report = product_health.compute(yaml.safe_load(src.read_text(encoding="utf-8")))
+    if js:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        from ai_ops_kit.ui import presenter
+        aud = presenter.audience_from_config(child_root)
+        print(presenter.render(presenter.from_product_health(report), audience=aud))
+    return 0
+
+
+@_intent("roadmap")
+def _intent_roadmap(task, child_root, signals, a):
+    js = a.json
+    # PR-7 (лента 4): roadmap Now/Next/Later ВЫВОДИТСЯ из плана (цели + исходы), а не пишется
+    # руками. Команда read-only: строит три горизонта и сверяет их с авторским ROADMAP.md.
+    # Авторскую сторону разбирает существующий roadmap.py — второй правды об одном горизонте нет.
+    from ai_ops_kit.planning import roadmap_manager
+    from ai_ops_kit.planning import delivery_plan as _plan
+    try:
+        rep = roadmap_manager.check(child_root)
+    except _plan.PlanCorrupt as e:
+        print(f"ОШИБКА: {e}")
+        return 1
+    if rep.get("errors"):
+        for e in rep["errors"]:
+            print(f"  ✗ {e}")
+        return 1
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+        return 0
+    labels = {"now": "СЕЙЧАС", "next": "СЛЕДУЮЩИЙ", "later": "ДАЛЬШЕ"}
+    for h in ("now", "next", "later"):
+        block = rep["roadmap"].get(h) or []
+        print(f"{labels[h]}:")
+        if not block:
+            print("  (пусто)")
+        for d in block:
+            print(f"  • {d['goal']}: исходы {d['reached']}/{d['total']}")
+    if not rep["authored_present"]:
+        print("  · авторского ROADMAP.md нет — сверять с ним нечего (третье состояние)")
+    for dv in rep["deviations"]:
+        print(f"  ⚠ отклонение: {dv}")
+    return 0
+
+
+@_intent("delivery")
+def _intent_delivery(task, child_root, signals, a):
+    import yaml
+    js = a.json
+    # PR-10/PR-15 (лента 4): backlog под milestone -> исполнимый delivery-план (порядок, прогноз-
+    # ОЦЕНКА, риски) + ранние блокеры. Backlog берётся ПО КОНТРАКТУ ленты 3 из файла
+    # (--backlog или .ai-ops/backlog.yaml); источника нет -> третье состояние, а не пустой план.
+    from ai_ops_kit.planning import roadmap_manager as _rm
+    from ai_ops_kit.planning import roadmap_milestones as _ms
+    from ai_ops_kit.planning import delivery_planning as _dpn
+    from ai_ops_kit.planning import delivery_planning_blockers as _blk
+    from ai_ops_kit.planning import delivery_plan as _plan
+    bl_arg = getattr(a, "backlog", None)
+    bpath = Path(bl_arg) if bl_arg else (child_root / ".ai-ops" / "backlog.yaml")
+    if not bpath.is_file():
+        msg = (f"источник backlog не подключён ({bpath}) — delivery-план строить не из чего. "
+               f"Его кладёт интеграция ленты 3; форма файла: {{tasks: [...], milestones: [...]}}")
+        if js:
+            print(json.dumps({"connected": False, "note": msg}, ensure_ascii=False, indent=2))
+        else:
+            print(f"  · {msg}")
+        return 0
+    try:
+        plan = _plan.load(child_root)
+        doc = yaml.safe_load(bpath.read_text(encoding="utf-8")) or {}
+    except _plan.PlanCorrupt as e:
+        print(f"ОШИБКА: {e}")
+        return 1
+    if plan is None:
+        print("ОШИБКА: нет planning/plan.yaml — roadmap выводить не из чего")
+        return 1
+    tasks = [t for t in (doc.get("tasks") or []) if isinstance(t, dict)]
+    milestones = [m for m in (doc.get("milestones") or []) if isinstance(m, dict)]
+    capacity, today = doc.get("capacity"), doc.get("today")
+    milestone = getattr(a, "milestone", None)
+    roadmap = _rm.build(plan, _plan.load_history(child_root))
+    result = {"link": _ms.link(roadmap, milestones, tasks),
+              "blockers": _blk.report(tasks, milestone, today)}
+    if milestone:
+        due = next((m.get("due") for m in milestones if m.get("id") == milestone), None)
+        result["plan"] = _dpn.plan(tasks, milestone, capacity=capacity,
+                                   start=today, due=due).as_dict()
+    if js:
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        return 0
+    for dl in result["link"]["directions"]:
+        if dl["horizon"] in ("now", "next"):
+            print(f"  • {dl['goal']} [{dl['horizon']}]: "
+                  f"{len(dl['milestones'])} milestone / {len(dl['tasks'])} задач")
+    for s in result["link"]["dangling_links"]:
+        print(f"  ✗ {s}")
+    if "plan" in result:
+        fc = result["plan"]["forecast"]
+        if fc and fc.get("available"):
+            end = f" → {fc.get('estimated_end')}" if fc.get("estimated_end") else ""
+            print(f"  прогноз (ОЦЕНКА): {fc['days']} дн.{end}")
+        elif fc:
+            print(f"  прогноз: НЕДОСТУПЕН — {fc.get('reason')}")
+        for r in result["plan"]["risks"]:
+            print(f"  ⚠ {r}")
+    for b in result["blockers"]["early_blockers"]:
+        print(f"  ⚠ блокер '{b['id']}' держит {b['downstream']} задач")
+    return 0
+
+
+# v3.36.13 (session-command-reaches-the-child): команда session перенесена из установщика в CLI,
+# чтобы работала из установленной дочки. Показывает снимок телеметрии сессии и рекомендацию.
+@_intent("doctor")
+def _intent_doctor(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.lifecycle import child_doctor
+    rep = child_doctor.assess(child_root)
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        print(child_doctor.render(rep))
+    # Ненулевой код — ТОЛЬКО на блокерах: замечание («допишите имя проекта») не отказ.
+    return 1 if rep.get("blocking") else 0
+
+
+@_intent("session")
+def _intent_session(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.engops import session_guardrails, session_telemetry
+    snap = session_telemetry.snapshot(str(child_root))
+    pol = session_guardrails.load_policy(child_root)
+    rec = session_guardrails.recommend(snap, pol)
+    # session-ritual-validators-are-dead: check() вызывается на каждом produced-артефакте,
+    # а не только в собственных тестах. Ошибка валидации — warning, не блок: команда session
+    # read-only, и владелец должен увидеть проблему, а не получить отказ.
+    #
+    # ЗДЕСЬ БЫЛ ВЫЗВАН ВАЛИДАТОР ЧУЖОГО АРТЕФАКТА (снято 19.08.2026). Стояло
+    # `session_guardrails.check(rec)`, но эта функция проверяет `CompletionRitual` — результат
+    # ДРУГОЙ функции (`completion_ritual`), а `recommend()` возвращает рекомендацию без `kind`.
+    # Итог: КАЖДЫЙ запуск `./ai-ops session` печатал в stderr «kind должен быть
+    # CompletionRitual» — замерено на чистой установке. Проверка не проверяла ничего и при этом
+    # обучала владельца игнорировать строки `session-check:`.
+    # Своего валидатора у `SessionRecommendation` нет вовсе; заводить его здесь нельзя — это
+    # `ai_ops_kit/engops/`, территория второй ленты. Передано ей работой
+    # `session-recommendation-has-a-validator`.
+    snap_errors = session_telemetry.check(snap)
+    if snap_errors:
+        import sys as _sys
+        for e in snap_errors:
+            print(f"session-check: {e}", file=_sys.stderr)
+    if js:
+        print(json.dumps({"snapshot": snap, "recommendation": rec}, ensure_ascii=False, indent=2))
+    else:
+        # Простой текстовый вывод без presenter (функция from_session_snapshot не реализована)
+        print("Session Snapshot:")
+        for k, v in snap.items():
+            print(f"  {k}: {v}")
+        print("\nRecommendation:")
+        for k, v in rec.items():
+            print(f"  {k}: {v}")
+    return 0
+
+
+@_intent("new")
+def _intent_new(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.lifecycle import workitem
+    from ai_ops_kit.gates import spec_levels
+    from ai_ops_kit.engine import run_plan
+    if not signals.get("task_type"):
+        signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
+    wid = _wid_for(task, signals, a.feature)
+    workitem.start(str(child_root / "features"), wid, task or wid,
+                   task_type=signals.get("task_type"), risk=signals.get("risk"))
+    # v3.35.1 (ревью перед квалификацией): засев `affects` ПО ТИПУ ЗАДАЧИ УБРАН. Кит записывал
+    # `{engineering_quality_security: true}` всем шести инженерным типам, а `reconcile` читал это
+    # как заявление АВТОРА — и на каждой обычной задаче выдавал major-находку «источник истины не
+    # обновлён», потому что задача не трогает DevelopmentProcess.md. Кит ловил себя же.
+    # Теперь `affects` берётся ТОЛЬКО из плана: если элемент с этим id объявлен в
+    # `planning/plan.yaml`, его заявление переносится в WorkItem — это настоящее заявление
+    # человека и настоящая связь уровней. Нет элемента — поле остаётся пустым, и гейт называет
+    # затронутые контуры информацией, а не расхождением.
+    _copy_affects_from_plan(child_root, wid)
+    sp, created, spec_rep = spec_levels.create_spec(child_root, wid, signals)
+    if js:
+        print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
+                          "spec": str(sp), "spec_created": created,
+                          "spec_added": spec_rep["added"]}, ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_new_feature", wid, task or wid, created,
+             f"./ai-ops specify \"{task or '<задача>'}\" --feature {wid}")
+    return 0
+
+
+@_intent("plan")
+def _intent_plan(task, child_root, signals, a):
+    import yaml
+    js = a.json
+    from ai_ops_kit.engine import run_plan
+    from ai_ops_kit.context import context_compiler
+    from ai_ops_kit.gates import spec_levels
+    from ai_ops_kit.engine import atomic_planner
+    if not signals.get("task_type"):
+        signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
+    plan = run_plan.build_plan(dict(signals, task_text=task or ""), workitem_id=a.feature)
+    wid = plan["workitem_id"]
+    fdir = child_root / "features" / wid
+    fdir.mkdir(parents=True, exist_ok=True)
+    (fdir / "run-plan.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    bundle, ctx_error = None, None
+    try:
+        bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
+        (fdir / "context-bundle.yaml").write_text(
+            yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    except Exception as _ce:  # noqa: BLE001 — план не должен рушиться из-за контекста...
+        # ...но деградация обязана быть видна: без бандла оценка пакета уходит на дефолты,
+        # а context-bundle.yaml не пишется — молча это выглядит как обычный план.
+        bundle = None
+        ctx_error = f"{type(_ce).__name__}: {_ce}"[:200]
+    cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
+    (fdir / "spec-coverage.yaml").write_text(yaml.safe_dump(cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    wp = atomic_planner.decompose(signals, wid=wid, child_root=child_root, bundle=bundle)
+    (fdir / "work-package.yaml").write_text(yaml.safe_dump(wp, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    if js:
+        print(json.dumps({"workitem_id": wid, "plan": f"features/{wid}/run-plan.yaml",
+                          "spec_level": cov["level_name"], "should_decompose": wp["should_decompose"],
+                          "work_packages": len(wp["work_packages"]),
+                          "context_error": ctx_error}, ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_plan_built", wid, plan["base_workflow"], cov["level_name"],
+             len(wp["work_packages"]), context_error=ctx_error)
+    return 0
+
+
+@_intent("review")
+def _intent_review(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.delivery import review_branch
+    from ai_ops_kit.engine import run_plan
+    wid = a.feature or _wid_for(task, signals, a.feature)
+    # реальный ревьюер — отдельный провайдер (writer ≠ judge); mock не выносит вердикт (needs-reviewer)
+    rev_prop = None
+    prov = getattr(a, "provider", "mock") or "mock"
+    if prov != "mock":
+        from ai_ops_kit.providers import orchestrator
+        rev_prop = orchestrator.make_provider(prov, getattr(a, "model", None))
+    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_review", rep)
+    # v2.121 (P1.3): exit code = готовность к merge (needs-reviewer/needs-changes -> non-zero)
+    return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
+
+
+@_intent("discuss")
+def _intent_discuss(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.engine import run_plan
+    wid = _wid_for(task, signals, a.feature)
+    fdir = child_root / "features" / wid
+    fdir.mkdir(parents=True, exist_ok=True)
+    draft = fdir / "discovery-draft.md"
+    if not draft.is_file():
+        draft.write_text(
+            f"# Discovery: {task or wid}\n\n"
+            "## Проблема\n_TODO: какую боль решаем, чьи слова_\n\n"
+            "## Пользователи и JTBD\n_TODO_\n\n"
+            "## Гипотезы\n_TODO: если … то … потому что …_\n\n"
+            "## Как измерим\n_TODO: сигнал успеха_\n\n"
+            "## Открытые вопросы / риски\n_TODO_\n\n"
+            "## Что НЕ делаем (scope out)\n_TODO_\n", encoding="utf-8")
+        created = True
+    else:
+        created = False
+    if js:
+        print(json.dumps({"workitem_id": wid, "draft": str(draft), "created": created},
+                         ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_discovery_draft", draft.relative_to(child_root), created)
+    return 0
+
+
+@_intent("advise")
+def _intent_advise(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.engops import engineering_advisor
+    result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
+    if js:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        _say(child_root, "from_advice", result)
+    return 0
+
+
 def _run_intent(intent, task, child_root, signals, a):
     """v2.112 Intent UX: РЕАЛЬНОЕ действие для намерения. -> код возврата или None (нет спец-действия)."""
-    import yaml
     child_root = Path(child_root)
-    js = a.json
-
-    if intent == "onboard":
-        from ai_ops_kit.shared import project_detector
-        prof = project_detector.detect(child_root)
-        out = child_root / ".ai" / "repository-profile.yaml"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(yaml.safe_dump(prof, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        if js:
-            print(json.dumps({"written": str(out), "profile": prof}, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
-        return 0
-
-    if intent == "backlog":
-        return _run_backlog(task, child_root, signals, js)
-
-    if intent == "feedback":
-        # Наблюдение о ките — данные, а не пересказ. Без текста команда показывает судьбу уже
-        # сказанного: канал в одну сторону перестают наполнять, поэтому ответ обязан быть виден.
-        from ai_ops_kit.engops import kit_feedback
-        # ПУТЬ РЕПОЗИТОРИЯ — НЕ НАБЛЮДЕНИЕ (проба канала на живой дочке, 18.08.2026). Обёртка
-        # `./ai-ops` подставляет абсолютный путь сразу после интента, а человек по привычке от всех
-        # остальных команд дописывает `.` — и второй позиционный уезжал в ТЕКСТ. `./ai-ops feedback .`
-        # (ровно та команда, которую кит сам печатает как «посмотреть судьбу сказанного», плюс точка)
-        # записывала наблюдение с содержанием «.», возвращала «записал» и судьбу не показывала.
-        # Здесь путь читается как путь: человек просил показать судьбу, а не сообщать про каталог.
-        _txt = (task or "").strip()
-        if _txt and Path(_txt).is_dir():
-            _txt = ""
-        if not _txt:
-            rep = kit_feedback.status(child_root)
-            if js:
-                print(json.dumps(rep, ensure_ascii=False, indent=2))
-            else:
-                _say(child_root, "from_kit_feedback_status", rep)
-                if _audience(child_root) != "product":
-                    print()
-                    print(kit_feedback.render_status(rep))
-            return 1 if rep["errors"] else 0
-        ev = kit_feedback.evidence_from_args(getattr(a, "evidence_file", None),
-                                             getattr(a, "evidence_command", None),
-                                             getattr(a, "evidence_note", None))
-        p, created, errors = kit_feedback.record(
-            child_root, _txt, evidence=ev, severity=getattr(a, "severity", None),
-            observation_class=getattr(a, "observation_class", None))
-        if js:
-            print(json.dumps({"path": str(p), "created": created, "errors": errors},
-                             ensure_ascii=False, indent=2))
-        else:
-            try:
-                shown = p.relative_to(child_root)
-            except ValueError:
-                shown = p
-            _say(child_root, "from_kit_feedback_recorded", str(shown), created, errors,
-                 bool(ev), getattr(a, "observation_class", None))
-        return 1 if errors else 0
-
-    if intent == "status":
-        from ai_ops_kit.lifecycle import active_work
-        from ai_ops_kit.ui import presenter
-        awp = child_root / ".ai" / "runtime" / "active-work.yaml"
-        data = {"active": []}
-        if awp.is_file():
-            try:
-                data = active_work.load(awp)
-            except active_work.ActiveWorkCorrupt as e:
-                # Битый реестр — не «работы нет»: координация сессий недостоверна (инвариант 3.0.12).
-                print(presenter.render(presenter.message(
-                    status="blocked",
-                    summary="Не могу сказать, что идёт прямо сейчас: запись об идущих работах "
-                            "повреждена.",
-                    why_it_matters="Пока это так, я не знаю, не перепишет ли новая работа то, что "
-                                   "уже правит другая сессия.",
-                    next_steps=["восстановить запись и повторить"],
-                    technical={"ошибка": str(e)}),
-                    audience=presenter.audience_from_config(child_root)))
-                return 1
-        pub = active_work.publication_enabled(child_root)
-        if js:
-            # Досягаемость видна и в JSON — потребитель ответа не должен угадывать её сам.
-            return (active_work.list_cmd(awp, as_json=True, published=pub, child_root=child_root)
-                    if awp.is_file() else 0)
-        aud = presenter.audience_from_config(child_root)
-        # Общая карта: локальные заявки + опубликованные заявки ДРУГИХ машин (если публикация
-        # включена). Так «работа идёт» становится фактом о команде, а не об одной машине.
-        team = active_work.team_view(child_root, data.get("active") or [], pub)
-        # #137: СВЕРКА С БАЗОЙ на чтении. Поле 17.08.2026: три записи из четырёх относились к работе,
-        # давно влитой в main, а `status` отвечал «Работа идёт» и советовал не трогать те же файлы.
-        team = active_work.reconcile_with_base(team, child_root)
-        reconciled = active_work.persist_reconciliation(awp, team) if awp.is_file() else 0
-        # ВТОРОЙ ИСТОЧНИК ПРАВДЫ СПРАШИВАЕТСЯ ЗДЕСЬ, а не заводится третьим (замер 18.08.2026):
-        # реестр говорит, что исполняется на этой машине, план — что объявлено идущим. Сверка живёт в
-        # `planning` осознанно: `lifecycle` не вправе его импортировать (слои), а отвечает человеку
-        # entrypoint — он и складывает два ответа в один.
-        from ai_ops_kit.planning import delivery_plan as _dp
-        try:
-            cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())
-        except _dp.PlanCorrupt as e:
-            # Битый план — не «в плане ничего не объявлено»: это ровно тот случай, где «не знаю»
-            # нельзя выдать за «нет». Ответ про реестр остаётся, а про план говорим прямо.
-            print(presenter.render(presenter.message(
-                status="degraded",
-                summary="Про заявки на работу отвечу, а про план — нет: файл плана не разбирается.",
-                why_it_matters="Пока план не читается, я не могу сказать, не объявлена ли идущей "
-                               "работа, которой никто не занимается.",
-                next_steps=["починить файл плана и повторить"],
-                technical={"ошибка": str(e)}), audience=aud))
-            cross = None
-        print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
-                                                          reconciled=reconciled, crosscheck=cross),
-                               audience=aud))
-        return 0
-
-    if intent == "next":
-        # Четыре вопроса: где мы, что идёт сейчас, что блокирует, что взять следующим.
-        from ai_ops_kit.planning import next_work
-        from ai_ops_kit.planning import delivery_plan as _plan
-        from ai_ops_kit.planning import contours as _contours
-        try:
-            # Личность спрашивающего — чтобы «что взять» отвечалось участнику, а не
-            # репозиторию: своя работа отделяется от чужой той же меркой, что и в реестре.
-            rep = next_work.compute(child_root, budget_left=getattr(a, "budget", None),
-                                    me=_session_identity(child_root))
-        except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
-            print(f"ОШИБКА: {e}")
-            return 1
-        if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2))
-        else:
-            # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
-            # состоянием. Разбор по четырём вопросам доступен на technical/debug и по --json.
-            from ai_ops_kit.ui import presenter
-            aud = presenter.audience_from_config(child_root)
-            print(presenter.render(presenter.from_next_work(rep), audience=aud))
-            # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
-            # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
-            for _e in (rep.get("plan_errors") or []):
-                print(f"  ✗ план: {_e}")
-            for _e in (rep.get("roadmap") or {}).get("errors") or []:
-                print(f"  ✗ направление: {_e}")
-            if aud != "product":
-                print()
-                print(next_work.render(rep))
-        # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие работы: без плана и с битым roadmap
-        # ответ «что взять следующим» недостоверен, и молчаливый ноль это скрывал бы.
-        return 0 if (rep.get("plan_present") and not rep.get("plan_errors")
-                     and not rep["roadmap"]["errors"]) else 1
-
-    if intent == "model":
-        # DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK. Понимание репозитория: артефактов
-        # проекта команда не создаёт и ничего не перестраивает.
-        #
-        # ОДИН ФАЙЛ ОНА ВСЁ-ТАКИ ПИШЕТ, и объявить это обязательно: `.ai/project/
-        # onboarding-answers.yaml` — форма, в которую человек впишет ответы. Раньше здесь стояло
-        # «ничего не пишет», а команда писала (это внёс фикс тупика с вопросами), и человек, позвав
-        # `model` просто посмотреть состояние, находил в своём `git status` незнакомый файл.
-        # Заявление приведено к фактам, повторный вызов файл НЕ трогает, если текст тот же.
-        from ai_ops_kit.planning import repo_audit
-        from ai_ops_kit.planning import contours as _contours
-        try:
-            rep = repo_audit.run(child_root)
-        except _contours.ModelCorrupt as e:
-            print(f"ОШИБКА: {e}")
-            return 1
-        # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА. Прежде форма ответов создавалась только в
-        # человеческой ветке: `--json` того же намерения оставлял человека без места для ответа, то
-        # есть одна команда вела себя двумя разными способами.
-        answers_file = None
-        if rep["ask"]["questions"]:
-            answers_file = repo_audit.write_question_file(child_root, rep["ask"])
-        if js:
-            out = dict(rep)
-            if answers_file:
-                out["answers_file"] = str(answers_file)
-            print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
-        else:
-            from ai_ops_kit.ui import presenter
-            aud = presenter.audience_from_config(child_root)
-            print(presenter.render(presenter.from_repository_understanding(rep), audience=aud))
-            if aud != "product":
-                print()
-                print(repo_audit.render(rep))
-            for q in rep["ask"]["questions"]:
-                mark = "⚠" if q["blocks_work"] else "·"
-                print(f"  {mark} {q['ask']}")
-                if q["proposal"]:
-                    print(f"      предполагаю: {q['proposal']['value']} — подтвердить?")
-            # ВОПРОСАМ НУЖНО МЕСТО. Прежде кит печатал их и завершался: куда отвечать — не сказано,
-            # интерактива нет, человек в тупике на главном шаге первого сценария.
-            if answers_file:
-                try:
-                    shown = answers_file.relative_to(Path(child_root))
-                except ValueError:
-                    shown = answers_file
-                print(f"\n  Ответы впишите здесь: {shown}")
-                print("  Потом запустите снова: ./ai-ops model — ответы станут подтверждёнными "
-                      "фактами и больше не будут переспрашиваться.")
-        return 0
-
-    if intent == "bootstrap":
-        # BOOTSTRAP: онбординг заканчивается работой, а не документацией. Пишет ТОЛЬКО с --apply и
-        # ТОЛЬКО отсутствующее; заготовку кита заменяет (в ней нет фактов о продукте), настоящий
-        # план — никогда.
-        from ai_ops_kit.planning import product_bootstrap as _boot
-        from ai_ops_kit.planning import contours as _contours
-        from ai_ops_kit.planning import delivery_plan as _dp
-        from ai_ops_kit.planning import repo_audit as _ra
-        try:
-            # Аудит — один раз на команду: сухой прогон и запись смотрят на ОДНИ факты, иначе между
-            # «вот что создам» и «создал» могла бы оказаться разница, которую человек не просил.
-            _und = _ra.run(child_root)
-            boot = _boot.plan(child_root, _und)
-        except (_contours.ModelCorrupt, _dp.PlanCorrupt) as e:
-            print(f"ОШИБКА: {e}")
-            return 1
-        applied = bool(getattr(a, "apply", False))
-        rep = _boot.apply(child_root, boot, _und) if applied else boot
-        if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_bootstrap", rep, applied=applied)
-            if not applied and rep["will_write"]:
-                print(f"\n  Записать: ./ai-ops bootstrap --apply")
-        return 1 if rep.get("error") else 0
-
-    if intent == "health":
-        from ai_ops_kit.intelligence import product_health
-        cand = [child_root / "product" / "product-health.yaml",
-                child_root / ".ai" / "product-health.yaml",
-                child_root / "product-health.yaml"]
-        src = next((p for p in cand if p.is_file()), None)
-        if not src:
-            from ai_ops_kit.ui import presenter
-            aud = presenter.audience_from_config(child_root)
-            print(presenter.render(presenter.from_product_health(None), audience=aud))
-            return 1
-        report = product_health.compute(yaml.safe_load(src.read_text(encoding="utf-8")))
-        if js:
-            print(json.dumps(report, ensure_ascii=False, indent=2))
-        else:
-            from ai_ops_kit.ui import presenter
-            aud = presenter.audience_from_config(child_root)
-            print(presenter.render(presenter.from_product_health(report), audience=aud))
-        return 0
-
-    if intent == "roadmap":
-        # PR-7 (лента 4): roadmap Now/Next/Later ВЫВОДИТСЯ из плана (цели + исходы), а не пишется
-        # руками. Команда read-only: строит три горизонта и сверяет их с авторским ROADMAP.md.
-        # Авторскую сторону разбирает существующий roadmap.py — второй правды об одном горизонте нет.
-        from ai_ops_kit.planning import roadmap_manager
-        from ai_ops_kit.planning import delivery_plan as _plan
-        try:
-            rep = roadmap_manager.check(child_root)
-        except _plan.PlanCorrupt as e:
-            print(f"ОШИБКА: {e}")
-            return 1
-        if rep.get("errors"):
-            for e in rep["errors"]:
-                print(f"  ✗ {e}")
-            return 1
-        if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2))
-            return 0
-        labels = {"now": "СЕЙЧАС", "next": "СЛЕДУЮЩИЙ", "later": "ДАЛЬШЕ"}
-        for h in ("now", "next", "later"):
-            block = rep["roadmap"].get(h) or []
-            print(f"{labels[h]}:")
-            if not block:
-                print("  (пусто)")
-            for d in block:
-                print(f"  • {d['goal']}: исходы {d['reached']}/{d['total']}")
-        if not rep["authored_present"]:
-            print("  · авторского ROADMAP.md нет — сверять с ним нечего (третье состояние)")
-        for dv in rep["deviations"]:
-            print(f"  ⚠ отклонение: {dv}")
-        return 0
-
-    if intent == "delivery":
-        # PR-10/PR-15 (лента 4): backlog под milestone -> исполнимый delivery-план (порядок, прогноз-
-        # ОЦЕНКА, риски) + ранние блокеры. Backlog берётся ПО КОНТРАКТУ ленты 3 из файла
-        # (--backlog или .ai-ops/backlog.yaml); источника нет -> третье состояние, а не пустой план.
-        from ai_ops_kit.planning import roadmap_manager as _rm
-        from ai_ops_kit.planning import roadmap_milestones as _ms
-        from ai_ops_kit.planning import delivery_planning as _dpn
-        from ai_ops_kit.planning import delivery_planning_blockers as _blk
-        from ai_ops_kit.planning import delivery_plan as _plan
-        bl_arg = getattr(a, "backlog", None)
-        bpath = Path(bl_arg) if bl_arg else (child_root / ".ai-ops" / "backlog.yaml")
-        if not bpath.is_file():
-            msg = (f"источник backlog не подключён ({bpath}) — delivery-план строить не из чего. "
-                   f"Его кладёт интеграция ленты 3; форма файла: {{tasks: [...], milestones: [...]}}")
-            if js:
-                print(json.dumps({"connected": False, "note": msg}, ensure_ascii=False, indent=2))
-            else:
-                print(f"  · {msg}")
-            return 0
-        try:
-            plan = _plan.load(child_root)
-            doc = yaml.safe_load(bpath.read_text(encoding="utf-8")) or {}
-        except _plan.PlanCorrupt as e:
-            print(f"ОШИБКА: {e}")
-            return 1
-        if plan is None:
-            print("ОШИБКА: нет planning/plan.yaml — roadmap выводить не из чего")
-            return 1
-        tasks = [t for t in (doc.get("tasks") or []) if isinstance(t, dict)]
-        milestones = [m for m in (doc.get("milestones") or []) if isinstance(m, dict)]
-        capacity, today = doc.get("capacity"), doc.get("today")
-        milestone = getattr(a, "milestone", None)
-        roadmap = _rm.build(plan, _plan.load_history(child_root))
-        result = {"link": _ms.link(roadmap, milestones, tasks),
-                  "blockers": _blk.report(tasks, milestone, today)}
-        if milestone:
-            due = next((m.get("due") for m in milestones if m.get("id") == milestone), None)
-            result["plan"] = _dpn.plan(tasks, milestone, capacity=capacity,
-                                       start=today, due=due).as_dict()
-        if js:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-            return 0
-        for dl in result["link"]["directions"]:
-            if dl["horizon"] in ("now", "next"):
-                print(f"  • {dl['goal']} [{dl['horizon']}]: "
-                      f"{len(dl['milestones'])} milestone / {len(dl['tasks'])} задач")
-        for s in result["link"]["dangling_links"]:
-            print(f"  ✗ {s}")
-        if "plan" in result:
-            fc = result["plan"]["forecast"]
-            if fc and fc.get("available"):
-                end = f" → {fc.get('estimated_end')}" if fc.get("estimated_end") else ""
-                print(f"  прогноз (ОЦЕНКА): {fc['days']} дн.{end}")
-            elif fc:
-                print(f"  прогноз: НЕДОСТУПЕН — {fc.get('reason')}")
-            for r in result["plan"]["risks"]:
-                print(f"  ⚠ {r}")
-        for b in result["blockers"]["early_blockers"]:
-            print(f"  ⚠ блокер '{b['id']}' держит {b['downstream']} задач")
-        return 0
-
-    # v3.36.13 (session-command-reaches-the-child): команда session перенесена из установщика в CLI,
-    # чтобы работала из установленной дочки. Показывает снимок телеметрии сессии и рекомендацию.
-    if intent == "doctor":
-        from ai_ops_kit.lifecycle import child_doctor
-        rep = child_doctor.assess(child_root)
-        if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2))
-        else:
-            print(child_doctor.render(rep))
-        # Ненулевой код — ТОЛЬКО на блокерах: замечание («допишите имя проекта») не отказ.
-        return 1 if rep.get("blocking") else 0
-
-    if intent == "session":
-        from ai_ops_kit.engops import session_guardrails, session_telemetry
-        snap = session_telemetry.snapshot(str(child_root))
-        pol = session_guardrails.load_policy(child_root)
-        rec = session_guardrails.recommend(snap, pol)
-        # session-ritual-validators-are-dead: check() вызывается на каждом produced-артефакте,
-        # а не только в собственных тестах. Ошибка валидации — warning, не блок: команда session
-        # read-only, и владелец должен увидеть проблему, а не получить отказ.
-        #
-        # ЗДЕСЬ БЫЛ ВЫЗВАН ВАЛИДАТОР ЧУЖОГО АРТЕФАКТА (снято 19.08.2026). Стояло
-        # `session_guardrails.check(rec)`, но эта функция проверяет `CompletionRitual` — результат
-        # ДРУГОЙ функции (`completion_ritual`), а `recommend()` возвращает рекомендацию без `kind`.
-        # Итог: КАЖДЫЙ запуск `./ai-ops session` печатал в stderr «kind должен быть
-        # CompletionRitual» — замерено на чистой установке. Проверка не проверяла ничего и при этом
-        # обучала владельца игнорировать строки `session-check:`.
-        # Своего валидатора у `SessionRecommendation` нет вовсе; заводить его здесь нельзя — это
-        # `ai_ops_kit/engops/`, территория второй ленты. Передано ей работой
-        # `session-recommendation-has-a-validator`.
-        snap_errors = session_telemetry.check(snap)
-        if snap_errors:
-            import sys as _sys
-            for e in snap_errors:
-                print(f"session-check: {e}", file=_sys.stderr)
-        if js:
-            print(json.dumps({"snapshot": snap, "recommendation": rec}, ensure_ascii=False, indent=2))
-        else:
-            # Простой текстовый вывод без presenter (функция from_session_snapshot не реализована)
-            print("Session Snapshot:")
-            for k, v in snap.items():
-                print(f"  {k}: {v}")
-            print("\nRecommendation:")
-            for k, v in rec.items():
-                print(f"  {k}: {v}")
-        return 0
-
-    if intent == "new":
-        from ai_ops_kit.lifecycle import workitem
-        from ai_ops_kit.gates import spec_levels
-        from ai_ops_kit.engine import run_plan
-        if not signals.get("task_type"):
-            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
-        wid = _wid_for(task, signals, a.feature)
-        workitem.start(str(child_root / "features"), wid, task or wid,
-                       task_type=signals.get("task_type"), risk=signals.get("risk"))
-        # v3.35.1 (ревью перед квалификацией): засев `affects` ПО ТИПУ ЗАДАЧИ УБРАН. Кит записывал
-        # `{engineering_quality_security: true}` всем шести инженерным типам, а `reconcile` читал это
-        # как заявление АВТОРА — и на каждой обычной задаче выдавал major-находку «источник истины не
-        # обновлён», потому что задача не трогает DevelopmentProcess.md. Кит ловил себя же.
-        # Теперь `affects` берётся ТОЛЬКО из плана: если элемент с этим id объявлен в
-        # `planning/plan.yaml`, его заявление переносится в WorkItem — это настоящее заявление
-        # человека и настоящая связь уровней. Нет элемента — поле остаётся пустым, и гейт называет
-        # затронутые контуры информацией, а не расхождением.
-        _copy_affects_from_plan(child_root, wid)
-        sp, created, spec_rep = spec_levels.create_spec(child_root, wid, signals)
-        if js:
-            print(json.dumps({"workitem_id": wid, "workitem": f"features/{wid}/workitem.yaml",
-                              "spec": str(sp), "spec_created": created,
-                              "spec_added": spec_rep["added"]}, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_new_feature", wid, task or wid, created,
-                 f"./ai-ops specify \"{task or '<задача>'}\" --feature {wid}")
-        return 0
-
-    if intent == "plan":
-        from ai_ops_kit.engine import run_plan
-        from ai_ops_kit.context import context_compiler
-        from ai_ops_kit.gates import spec_levels
-        from ai_ops_kit.engine import atomic_planner
-        if not signals.get("task_type"):
-            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
-        plan = run_plan.build_plan(dict(signals, task_text=task or ""), workitem_id=a.feature)
-        wid = plan["workitem_id"]
-        fdir = child_root / "features" / wid
-        fdir.mkdir(parents=True, exist_ok=True)
-        (fdir / "run-plan.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        bundle, ctx_error = None, None
-        try:
-            bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
-            (fdir / "context-bundle.yaml").write_text(
-                yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception as _ce:  # noqa: BLE001 — план не должен рушиться из-за контекста...
-            # ...но деградация обязана быть видна: без бандла оценка пакета уходит на дефолты,
-            # а context-bundle.yaml не пишется — молча это выглядит как обычный план.
-            bundle = None
-            ctx_error = f"{type(_ce).__name__}: {_ce}"[:200]
-        cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
-        (fdir / "spec-coverage.yaml").write_text(yaml.safe_dump(cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        wp = atomic_planner.decompose(signals, wid=wid, child_root=child_root, bundle=bundle)
-        (fdir / "work-package.yaml").write_text(yaml.safe_dump(wp, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        if js:
-            print(json.dumps({"workitem_id": wid, "plan": f"features/{wid}/run-plan.yaml",
-                              "spec_level": cov["level_name"], "should_decompose": wp["should_decompose"],
-                              "work_packages": len(wp["work_packages"]),
-                              "context_error": ctx_error}, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_plan_built", wid, plan["base_workflow"], cov["level_name"],
-                 len(wp["work_packages"]), context_error=ctx_error)
-        return 0
-
-    if intent == "review":
-        from ai_ops_kit.delivery import review_branch
-        from ai_ops_kit.engine import run_plan
-        wid = a.feature or _wid_for(task, signals, a.feature)
-        # реальный ревьюер — отдельный провайдер (writer ≠ judge); mock не выносит вердикт (needs-reviewer)
-        rev_prop = None
-        prov = getattr(a, "provider", "mock") or "mock"
-        if prov != "mock":
-            from ai_ops_kit.providers import orchestrator
-            rev_prop = orchestrator.make_provider(prov, getattr(a, "model", None))
-        rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)
-        if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_review", rep)
-        # v2.121 (P1.3): exit code = готовность к merge (needs-reviewer/needs-changes -> non-zero)
-        return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
-
-    if intent == "discuss":
-        from ai_ops_kit.engine import run_plan
-        wid = _wid_for(task, signals, a.feature)
-        fdir = child_root / "features" / wid
-        fdir.mkdir(parents=True, exist_ok=True)
-        draft = fdir / "discovery-draft.md"
-        if not draft.is_file():
-            draft.write_text(
-                f"# Discovery: {task or wid}\n\n"
-                "## Проблема\n_TODO: какую боль решаем, чьи слова_\n\n"
-                "## Пользователи и JTBD\n_TODO_\n\n"
-                "## Гипотезы\n_TODO: если … то … потому что …_\n\n"
-                "## Как измерим\n_TODO: сигнал успеха_\n\n"
-                "## Открытые вопросы / риски\n_TODO_\n\n"
-                "## Что НЕ делаем (scope out)\n_TODO_\n", encoding="utf-8")
-            created = True
-        else:
-            created = False
-        if js:
-            print(json.dumps({"workitem_id": wid, "draft": str(draft), "created": created},
-                             ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_discovery_draft", draft.relative_to(child_root), created)
-        return 0
-
-    if intent == "advise":
-        from ai_ops_kit.engops import engineering_advisor
-        result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
-        if js:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_advice", result)
-        return 0
-
-    return None
+    handler = _INTENT_HANDLERS.get(intent)
+    return handler(task, child_root, signals, a) if handler else None
 
 
 def _copy_affects_from_plan(child_root, wid):
