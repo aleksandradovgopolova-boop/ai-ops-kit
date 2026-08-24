@@ -1198,8 +1198,8 @@ probes:
   - scripts/check-full.sh
   - tests/unit/test_evidence_scope.py
   file: scripts/check-full.sh
-  find: '"$PYTHON" -m pytest tests/ -q "$@"'
-  replace_with: 'python3 -m pytest tests/ -q "$@"'
+  find: '"$PYTHON" -m pytest tests/ -q -n auto "$@"'
+  replace_with: 'python3 -m pytest tests/ -q -n auto "$@"'
   tests:
   - tests/unit/test_evidence_scope.py
   why: 'ШОВ между объявлением охвата и тем, чем прогон реально идёт. Мутация оставляет объявление по

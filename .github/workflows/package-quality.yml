@@ -46,7 +46,7 @@ jobs:
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest hypothesis
+      - run: pip install pyyaml pytest pytest-xdist hypothesis
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -169,7 +169,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install pyyaml pytest pytest-cov hypothesis
+      - run: pip install pyyaml pytest pytest-cov pytest-xdist hypothesis
       - name: "Покрытие продукта с порогом-ратчетом (пол 70%, замер 71%)"
         env:
           PYTHONDONTWRITEBYTECODE: "1"
@@ -180,7 +180,7 @@ jobs:
           # окажется неподдержанным, джоба упадёт громко — это лучше, чем тихо считать медленно.
           COVERAGE_CORE: sysmon
         run: |
-          python3 -m pytest tests/ -q \
+          python3 -m pytest tests/ -q -n auto \
             --cov=ai_ops_kit --cov=installer \
             --cov-report=term-missing:skip-covered \
             --cov-fail-under=70
@@ -233,6 +233,6 @@ jobs:
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest hypothesis
+      - run: pip install pyyaml pytest pytest-xdist hypothesis
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
