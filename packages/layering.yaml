@@ -82,7 +82,6 @@ rules:
 # выводом, то есть шесть контрактов, включая пишущий файлы render(). Это отдельный срез, и
 # записать его отдельным честнее, чем сделать вид, что перенос каталога его выполнил.
 known_violations:
-  - "lifecycle -> validation: run_report зовёт validate_dir()/check_feature() по фиче"
   - "intelligence -> validation: evolution_triggers зовёт profile()/check_registry()"
   # v3.38 (лента №4): "security -> validation" СНЯТО. Чистая проверка политики памяти вынесена вниз
   # в пакет `checks` (primitives); security_enforcement теперь зовёт её в СВОЙ слой, не вверх.
@@ -93,6 +92,10 @@ known_violations:
   # вниз в пакет `checks`; движок и оркестратор зовут их в СВОЙ слой. Пишущий render разрезан на чистую
   # render_content (в `checks`) + запись файлов (в движке/CLI) — I/O остался в слое ядра, не ниже.
   # Взаимная пара engine<->validation распалась (validation больше не в цикле с engine): 6 -> 5.
+  #
+  # v3.38 (лента №5, шаг 2): "lifecycle -> validation" СНЯТО. Проверки feature-blueprint и кросс-
+  # артефактов (read-only чтение каталога функции) вынесены вниз в `checks`; run_report зовёт их в
+  # свой слой. Read-only I/O переносу не мешает — важно, что рантайм не тянет validation вверх.
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть
@@ -127,11 +130,12 @@ baseline:
                            # сделать ровно то, что этот срез исправляет, — положить модуль не туда.
                            # Пару engine<->lifecycle снимает не переезд, а решение «кто классифицирует»
                            # (`workitem` не должен звать роутер сам), и это проектирование.
-  cycles_longer_than_two: 17   # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
+  cycles_longer_than_two: 11   # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
                                # все циклы, проходившие через это ребро (одно ребро держало многие).
                                # v3.38 (лента №5): 28 -> 17 — снятие engine->validation и
                                # providers->validation убрало циклы через validation (validation
                                # больше не участвует ни в одном цикле ядра).
+                               # v3.38 (лента №5, шаг 2): 17 -> 11 — снятие lifecycle->validation.
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
     ВСЕ пять оставшихся взаимных пар лежат ВНУТРИ слоя capabilities (context<->engine,

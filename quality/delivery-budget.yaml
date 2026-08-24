@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
   volume_bytes: 4300000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 517
+  substantive_files: 519
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -226,3 +226,22 @@ raises:
       ревью импортируют check/render_content ОТСЮДА, а CLI-обёртки в `validation` ре-экспортируют их.
       Без модулей в поставке это был бы вызов отсутствующего файла — класс F-033. Растёт только счёт
       файлов (+5: пять чистых модулей; обёртки остались), объём в норме.
+  - at: '2026-08-24'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 517
+    to_count: 519
+    measured_before: 516
+    measured_after: 518
+    work: cut-lifecycle-validation-extract-checks
+    files:
+      - ai_ops_kit/checks/feature_blueprint.py
+      - ai_ops_kit/checks/cross_artifacts.py
+    why_it_works_in_the_child: >-
+      Лента №5, шаг 2: проверки feature-blueprint и кросс-артефактной консистентности (read-only
+      чтение каталога функции) вынесены ВНИЗ в пакет `checks`, чтобы снять восходящее ребро
+      lifecycle -> validation (ратчет 17 -> 11 циклов). Оба модуля ИСПОЛНЯЮТСЯ в дочке: run_report
+      (рантайм) зовёт validate_dir/check_feature ОТСЮДА, а CLI-обёртки в `validation` ре-экспортируют.
+      Без них в поставке был бы вызов отсутствующего файла — класс F-033. Растёт только счёт (+2),
+      объём в норме.
