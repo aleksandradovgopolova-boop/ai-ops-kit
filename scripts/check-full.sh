@@ -60,7 +60,7 @@ fi
 
 # -n auto: параллель по ядрам. Набор параллель-безопасен (проверено: 3343 passed под -n auto).
 # 665с -> ~283с на 10 ядрах. Переопределить числом воркеров: PYTEST_XDIST_AUTO_NUM_WORKERS или -n N в "$@".
-"$PYTHON" -m pytest tests/ -q -n auto "$@"
+"$PYTHON" -m pytest tests/ -q -n auto --dist loadfile "$@"
 
 echo
 echo "ЗЕЛЁНЫЙ ОХВАТ: full-current-python (${CURRENT}). Формулируя результат, назови охват:"

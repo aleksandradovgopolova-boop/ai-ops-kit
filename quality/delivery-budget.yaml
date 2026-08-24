@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
   volume_bytes: 4300000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 510
+  substantive_files: 512
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -184,3 +184,21 @@ raises:
       human_override принимает переопределение человека как сигнал. Без модулей в поставке команды
       health/risk/audit были бы объявлены и недостижимы у дочки (класс F-033). Растёт только счёт
       файлов (объём в норме), потолок под факт (499 -> 509, ceiling 510).
+  - at: '2026-08-24'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 510
+    to_count: 512
+    measured_before: 509
+    measured_after: 511
+    work: cut-security-validation-extract-checks
+    files:
+      - ai_ops_kit/checks/__init__.py
+      - ai_ops_kit/checks/memory_governance.py
+    why_it_works_in_the_child: >-
+      Лента №4: чистая проверка политики памяти вынесена ВНИЗ в пакет `checks` (слой primitives),
+      чтобы снять восходящее ребро security -> validation (ратчет 7 -> 6 пар, 52 -> 28 циклов). Оба
+      файла ИСПОЛНЯЮТСЯ в дочке: security_enforcement (рантайм) и validate_memory_governance
+      (CLI-обёртка) импортируют check ОТСЮДА. Без них в поставке был бы вызов отсутствующего файла —
+      класс F-033. Растёт только счёт (+1 содержательный: обёртка осталась), объём в норме.

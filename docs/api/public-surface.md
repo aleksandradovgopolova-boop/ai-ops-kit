@@ -144,6 +144,7 @@ experimental:
 internal:
   # Импортировать снаружи нельзя. Внутри пакета имена пакетные, снаружи — никаких обещаний.
   packages:
+    - checks
     - cli
     - context
     - delivery

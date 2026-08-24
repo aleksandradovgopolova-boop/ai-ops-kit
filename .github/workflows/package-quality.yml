@@ -180,7 +180,7 @@ jobs:
           # окажется неподдержанным, джоба упадёт громко — это лучше, чем тихо считать медленно.
           COVERAGE_CORE: sysmon
         run: |
-          python3 -m pytest tests/ -q -n auto \
+          python3 -m pytest tests/ -q -n auto --dist loadfile \
             --cov=ai_ops_kit --cov=installer \
             --cov-report=term-missing:skip-covered \
             --cov-fail-under=70
