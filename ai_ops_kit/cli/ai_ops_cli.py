@@ -56,7 +56,7 @@ INTENTS = {
                  "contract", False),
     # Product Registry (флот): сводный вердикт по ВСЕМ продуктам из реестра флота (products.yaml /
     # $AI_OPS_PRODUCTS). «Увидеть состояние всех продуктов разом». Только чтение.
-    "products": ("сводный вердикт по всем продуктам флота (products.yaml / $AI_OPS_PRODUCTS)",
+    "products": ("флот продуктов: (без арг.) сводный вердикт по всем | register — добавить текущий репозиторий",
                  "products", False),
     # Фаза 3 (лента 4): roadmap Now/Next/Later и delivery-план из backlog.
     "roadmap": ("roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md", "roadmap", False),
@@ -598,17 +598,47 @@ def _intent_contract(task, child_root, signals, a):
 @_intent("products")
 def _intent_products(task, child_root, signals, a):
     js = a.json
-    # Сводный флит-вид: реестр перечисляет продукты, product_contract выносит вердикт по каждому.
-    # Ничего не пишет. Реестр флота ищем рядом (products.yaml) или в $AI_OPS_PRODUCTS.
+    # Флит-операции над реестром продуктов. Подкоманда — первым словом (как у `backlog`):
+    #   products           — сводный вердикт по всему флоту (только чтение);
+    #   products register  — добавить/обновить ТЕКУЩИЙ репозиторий в реестре флота (запись).
+    # Подробная карточка ОДНОГО продукта — это `ai-ops contract`, запущенный в его репозитории:
+    # модель CLI передаёт один токен задачи + путь, поэтому inspect-по-id отдельной командой пока нет
+    # (функция product_registry.inspect() есть для программного вызова и будущего флага).
     from ai_ops_kit.planning import product_registry
+    sub = (task or "").strip()
+
+    if sub == "register":
+        # Регистрируем ТЕКУЩИЙ репозиторий (child_root). Реестр флота — центральный файл оператора
+        # ($AI_OPS_PRODUCTS), иначе products.yaml рядом. Так `cd продукт && ai-ops products register`
+        # накапливает флот в одном файле.
+        reg_path = product_registry._default_registry(Path(child_root)) or (Path(child_root) / "products.yaml")
+        res = product_registry.register(reg_path, Path(child_root).resolve())
+        if js:
+            print(json.dumps(res, ensure_ascii=False, indent=2, default=str)); return 0
+        if res["status"] == "invalid":
+            print("РЕЕСТР ПРОДУКТОВ: запись не добавлена — ошибки формы:")
+            for e in res["errors"]:
+                print(f"  - {e}")
+            return 1
+        p = res["product"]
+        print(f"{res['status'].upper()}: продукт '{p['id']}' ({p['name']}) -> {res['registry']}")
+        print(f"  путь: {p['path']}   вердикт сейчас: {res['verdict'] or 'не посчитан'}")
+        print("  (реестр флота — центральный файл оператора; задайте $AI_OPS_PRODUCTS, чтобы "
+              "накапливать все продукты в одном месте)")
+        return 0
+
+    if sub:
+        print(f"неизвестная подкоманда '{sub}'. Есть: (без аргумента) — весь флот; "
+              "register — добавить текущий репозиторий")
+        return 1
+
     reg_path = product_registry._default_registry(Path(child_root))
     if reg_path is None or not Path(reg_path).is_file():
-        print("НЕТ РЕЕСТРА ПРОДУКТОВ. Создайте products.yaml рядом (или укажите $AI_OPS_PRODUCTS):")
-        print("  schema_version: 1")
-        print("  kind: product-registry")
-        print("  products:")
-        print("    - {id: niti, name: Niti, path: ~/niti}")
+        print("НЕТ РЕЕСТРА ПРОДУКТОВ. Заведите: зайдите в репозиторий продукта и `ai-ops products register`")
+        print("(создаст products.yaml; задайте $AI_OPS_PRODUCTS для общего файла флота),")
+        print("или создайте вручную: kind: product-registry, products: [{id, name, path}].")
         return 1
+
     rep = product_registry.fleet(reg_path)
     if js:
         print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))

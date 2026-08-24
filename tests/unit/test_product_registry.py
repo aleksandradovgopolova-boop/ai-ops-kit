@@ -109,3 +109,61 @@ def test_injected_health_reaches_the_row(installer, tmp_path):
     row = rep["products"][0]
     assert row["health_band"] == "red"
     assert row["verdict"] == "not_ready"  # красное здоровье роняет вердикт даже при валидной форме
+
+
+# ── register: создать/добавить/обновить (upsert) ─────────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_register_creates_registry_and_adds_product(installer, tmp_path):
+    prod = _bootstrapped(installer, tmp_path / "niti")
+    reg = tmp_path / "products.yaml"
+    res = product_registry.register(reg, prod)
+    assert res["status"] == "created"
+    assert res["product"]["id"] == "niti"
+    assert reg.is_file()
+    # записанное читается обратно валидным реестром
+    data = product_registry.load(reg)
+    assert product_registry.validate_registry(data) == []
+    assert any(p["id"] == "niti" for p in data["products"])
+
+
+@pytest.mark.unit
+def test_register_is_upsert_by_id(installer, tmp_path):
+    prod1 = _bootstrapped(installer, tmp_path / "niti")
+    reg = tmp_path / "products.yaml"
+    product_registry.register(reg, prod1)
+    # тот же id, другой путь -> updated, дубля не появляется
+    prod2 = _bootstrapped(installer, tmp_path / "niti_moved")
+    res = product_registry.register(reg, prod2, pid="niti", name="Niti")
+    assert res["status"] == "updated"
+    data = product_registry.load(reg)
+    niti = [p for p in data["products"] if p["id"] == "niti"]
+    assert len(niti) == 1 and niti[0]["path"] == str(prod2)
+
+
+@pytest.mark.unit
+def test_register_writes_managed_header(installer, tmp_path):
+    prod = _bootstrapped(installer, tmp_path / "niti")
+    reg = tmp_path / "products.yaml"
+    product_registry.register(reg, prod)
+    assert "Управляется командой `ai-ops products register`" in reg.read_text(encoding="utf-8")
+
+
+# ── inspect: карточка одного по id ───────────────────────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_inspect_returns_contract_for_known_id(installer, tmp_path):
+    prod = _bootstrapped(installer, tmp_path / "niti")
+    reg = _registry_file(tmp_path, [{"id": "niti", "name": "Niti", "path": str(prod)}])
+    res = product_registry.inspect(reg, "niti")
+    assert res["status"] == "ok"
+    assert res["contract"]["kind"] == "product-contract"
+    assert res["verdict"]["verdict"] == product_contract.validate(prod)["verdict"]
+
+
+@pytest.mark.unit
+def test_inspect_unknown_id_names_the_known(tmp_path):
+    reg = _registry_file(tmp_path, [{"id": "a", "name": "A", "path": str(tmp_path)}])
+    res = product_registry.inspect(reg, "ghost")
+    assert res["status"] == "not_found"
+    assert res["known"] == ["a"]

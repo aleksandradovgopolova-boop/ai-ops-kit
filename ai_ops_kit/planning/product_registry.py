@@ -107,6 +107,81 @@ def fleet(registry_path, *, health_map: dict | None = None) -> dict:
             "registry_errors": reg_errors, "products": products, "counts": counts}
 
 
+_MANAGED_HEADER = ("# products.yaml — реестр флота продуктов (операторское состояние, НЕ часть\n"
+                   "# стандарта кита). Управляется командой `ai-ops products register`; при записи\n"
+                   "# ручные комментарии в блоке products не сохраняются. Правьте вручную ИЛИ через\n"
+                   "# register, не смешивая.\n")
+
+
+def register(registry_path, path, *, pid: str | None = None, name: str | None = None) -> dict:
+    """Добавить/обновить продукт в реестре флота. Upsert по id. Создаёт файл, если его нет.
+
+    Возвращает {status: created|added|updated, product, verdict}. verdict — немедленная обратная
+    связь: `product_contract.validate` по пути (чтобы register не был «записал и молчит»).
+    """
+    reg_path = Path(registry_path).expanduser()
+    root = Path(path).expanduser()
+    pid = pid or root.name
+    name = name or pid
+    entry = {"id": pid, "name": name, "path": str(root)}
+
+    if reg_path.is_file():
+        data = load(reg_path)
+        if not isinstance(data, dict):
+            data = {}
+    else:
+        data = {}
+    data.setdefault("schema_version", 1)
+    data.setdefault("kind", "product-registry")
+    products = data.get("products")
+    if not isinstance(products, list):
+        products = []
+    idx = next((i for i, p in enumerate(products)
+                if isinstance(p, dict) and p.get("id") == pid), None)
+    if idx is None:
+        products.append(entry)
+        status = "created" if not reg_path.is_file() else "added"
+    else:
+        products[idx] = entry
+        status = "updated"
+    data["products"] = products
+
+    errs = validate_registry(data)
+    if errs:
+        return {"status": "invalid", "errors": errs, "product": entry}
+
+    reg_path.parent.mkdir(parents=True, exist_ok=True)
+    reg_path.write_text(_MANAGED_HEADER + yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
+                        encoding="utf-8")
+
+    verdict = None
+    if root.is_dir():
+        try:
+            verdict = product_contract.validate(root)["verdict"]
+        except Exception:  # noqa: BLE001 — register не обязан падать из-за состояния продукта
+            verdict = None
+    return {"status": status, "product": entry, "registry": str(reg_path), "verdict": verdict}
+
+
+def inspect(registry_path, pid: str, *, health: dict | None = None) -> dict:
+    """Подробная карточка ОДНОГО продукта флота по id: полный контракт + вердикт.
+
+    Если id нет в реестре — {status: not_found, known: [...]} (не выдумываем продукт)."""
+    data = load(registry_path)
+    products = data.get("products", []) if isinstance(data, dict) else []
+    p = next((x for x in products if isinstance(x, dict) and x.get("id") == pid), None)
+    if p is None:
+        return {"status": "not_found", "id": pid,
+                "known": [x.get("id") for x in products if isinstance(x, dict)]}
+    root = Path(p.get("path", "")).expanduser()
+    if not root.is_dir():
+        return {"status": "error", "id": pid, "path": str(root),
+                "reason": f"каталог продукта не найден: {root}"}
+    return {"status": "ok", "id": pid, "name": p.get("name", pid),
+            "contract": product_contract.resolve(root, health=health),
+            "verdict": product_contract.validate(root, health=health)}
+
+
 def _default_registry(cwd: Path) -> Path | None:
     """Где искать реестр флота без явного пути: $AI_OPS_PRODUCTS, затем products.yaml рядом."""
     import os
