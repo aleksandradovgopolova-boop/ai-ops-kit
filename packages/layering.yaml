@@ -27,8 +27,10 @@ layers:
       объявлен отдельно: попытка втянуть сюда гейты или исполнение будет поймана.
       `integrations` (чтение GitHub как operational source of truth) здесь по той же причине:
       зависит только от `shared`, а его потребитель — `planning` (слой выше) — тянет его вниз.
-      `checks` (v3.38, лента №4): ЧИСТАЯ проверяющая логика валидаторов, вынесенная вниз, чтобы
-      рантайм звал её ВНИЗ, а не тянул `validation` (entrypoints) вверх. Зависит только от stdlib.
+      `checks` (v3.38, ленты №4-№5): проверяющая логика валидаторов, вынесенная вниз, чтобы рантайм
+      звал её ВНИЗ, а не тянул `validation` (entrypoints) вверх. Часть функций чистые (check(data)),
+      часть — read-only чтение каталога артефакта (validate_dir/check_feature/check_registry).
+      Зависит только от stdlib и pyyaml, НЕ импортирует ничего из ai_ops_kit выше foundation.
     packages: [security, ui, integrations, governance, checks]
 
   - name: capabilities
@@ -51,9 +53,10 @@ layers:
   - name: entrypoints
     purpose: >
       точки входа: CLI, инструменты разработки кита, валидаторы инвариантов. Способ вызова —
-      запуск процессом (CI, `ai-ops doctor`, pytest), а не импорт. `cli` и `devtools` не
-      импортирует действительно НИКТО; `validation` импортируют шесть пакетов ядра, и это
-      перечислено в known_violations поимённо, а не спрятано понижением слоя.
+      запуск процессом (CI, `ai-ops doctor`, pytest), а не импорт. `cli` не импортирует НИКТО;
+      `validation` с v3.38 (ленты №4-№5) не импортирует как библиотеку вверх НИ ОДИН пакет ядра —
+      вся проверяющая логика, которую звал рантайм, вынесена вниз в `checks`; единственный, кто
+      зависит от `validation`, — `devtools` (тот же слой entrypoints, это разрешено).
     packages: [cli, devtools, validation]
 
 # Правила поверх слоёв — то, что слоями не выражается.
@@ -77,25 +80,24 @@ rules:
 # v3.34: пять строк появились не потому, что связи появились, — они были всегда. Пока
 # `validation` не был пакетом, у этих рёбер не было имени, и граф их не видел. Перенос в
 # `ai_ops_kit/validation/` сделал их СЧИТАЕМЫМИ, и первое, что они сделали, — покраснели.
-# Движок зовёт валидатор не как процесс, а как библиотеку: check(data), profile(), validate_dir(),
-# check_feature(), render(). Развязка — перевод этих вызовов на подпроцесс с машиночитаемым
-# выводом, то есть шесть контрактов, включая пишущий файлы render(). Это отдельный срез, и
-# записать его отдельным честнее, чем сделать вид, что перенос каталога его выполнил.
-known_violations:
-  - "intelligence -> validation: evolution_triggers зовёт profile()/check_registry()"
-  # v3.38 (лента №4): "security -> validation" СНЯТО. Чистая проверка политики памяти вынесена вниз
-  # в пакет `checks` (primitives); security_enforcement теперь зовёт её в СВОЙ слой, не вверх.
-  # Список ратчета сократился фактом развязки, а не решением — это и есть «только вниз».
-  #
-  # v3.38 (лента №5): "engine -> validation" И "providers -> validation" СНЯТЫ. Чистые проверки формы
-  # артефактов/вердиктов (reviewer-result, requirements/plan/acceptance-artifact, spec-change) вынесены
-  # вниз в пакет `checks`; движок и оркестратор зовут их в СВОЙ слой. Пишущий render разрезан на чистую
-  # render_content (в `checks`) + запись файлов (в движке/CLI) — I/O остался в слое ядра, не ниже.
-  # Взаимная пара engine<->validation распалась (validation больше не в цикле с engine): 6 -> 5.
-  #
-  # v3.38 (лента №5, шаг 2): "lifecycle -> validation" СНЯТО. Проверки feature-blueprint и кросс-
-  # артефактов (read-only чтение каталога функции) вынесены вниз в `checks`; run_report зовёт их в
-  # свой слой. Read-only I/O переносу не мешает — важно, что рантайм не тянет validation вверх.
+# Рантайм звал валидатор не как процесс, а как библиотеку: check(data), profile(), validate_dir(),
+# check_feature(), render(). ИСХОД (v3.38, ленты №4-№5): развязка сделана НЕ подпроцессом, а
+# переносом самой логики ВНИЗ в пакет `checks` (primitives) — рантайм зовёт её в свой слой. Все пять
+# рёбер сняты, включая разрез пишущего render() на чистый render_content() + запись в вызывателе.
+# Список ниже пуст: он сокращался фактом каждой развязки, а не решением.
+# ПУСТО с v3.38 (лента №5 завершена). Все пять восходящих рёбер `рантайм -> validation` сняты одним
+# способом: чистую/read-only проверяющую логику вынесли ВНИЗ в пакет `checks` (слой primitives), и
+# рантайм зовёт её в СВОЙ слой, не тянет `validation` (entrypoints) вверх. Хронология развязки:
+#   №4: security -> validation      (memory_governance.check)            7->6 пар, 52->28 циклов
+#   №5: engine -> validation        (reviewer/requirements/plan/         6->5 пар, 28->17 циклов
+#       providers -> validation      acceptance/spec + разрез render)
+#   №5: lifecycle -> validation     (feature_blueprint/cross_artifacts)  17->11 циклов
+#   №5: intelligence -> validation  (quality_attributes/architecture_    без изменения чисел —
+#                                    decision/adr_registry)               ребро не было в цикле
+# Список ратчета сократился ФАКТОМ развязки, а не решением, и теперь пуст. `validation` (entrypoints)
+# больше не импортирует НИ ОДИН пакет ядра как библиотеку вверх; единственный, кто зависит от
+# `validation`, — `devtools` (тот же слой entrypoints, это разрешено). Новых нарушений нет.
+known_violations: []
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть
