@@ -27,9 +27,9 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4300000
+  volume_bytes: 4304000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 523
+  substantive_files: 524
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -285,3 +285,36 @@ raises:
       репозиторием продукта (health впрыскивается сверху из CLI, из planning intelligence не тянется).
       Без модуля в поставке команда была бы объявлена и недостижима — класс F-033. Растёт только счёт
       (+1), объём в норме.
+  - at: '2026-08-24'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 523
+    to_count: 524
+    measured_before: 522
+    measured_after: 523
+    work: product-registry-fleet-view
+    files:
+      - ai_ops_kit/planning/product_registry.py
+    why_it_works_in_the_child: >-
+      Product Contract (срез 2): реестр НЕСКОЛЬКИХ продуктов и сводный флит-вид. `product_registry`
+      перечисляет продукты из реестра флота и для каждого зовёт `product_contract.validate` — сводный
+      вердикт «состояние всех продуктов разом». ИСПОЛНЯЕТСЯ в дочке: интент `ai-ops products` зовёт
+      его; реестр флота — операторский файл (products.yaml / $AI_OPS_PRODUCTS), не часть стандарта,
+      поэтому не в registry/. Без модуля команда была бы объявлена и недостижима — класс F-033.
+      Растёт только счёт (+1), объём в норме.
+  - at: '2026-08-24'
+    what: volume
+    from_bytes: 4300000
+    to_bytes: 4304000
+    measured_before: 4293252
+    measured_after: 4301566
+    work: product-registry-fleet-view
+    files:
+      - ai_ops_kit/planning/product_registry.py
+    why_it_works_in_the_child: >-
+      Тот же модуль флит-вида (product_registry), что и в записи счёта файлов выше: он ИСПОЛНЯЕТСЯ в
+      дочке через интент `ai-ops products` и потому едет в поставке. Добавление модуля перевело
+      managed-объём через прежний потолок 4300000 (замер 4301566 Б) — подъём под факт до 4304000.
+      Это НЕ объёмная фича, а один достижимый модуль; крупнейший кандидат на вынос по-прежнему
+      release-claims (78 КБ).

@@ -54,6 +54,10 @@ INTENTS = {
     # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
     "contract": ("единый контракт продукта: идентичность/стандарт/артефакты/контуры/здоровье + вердикт",
                  "contract", False),
+    # Product Registry (флот): сводный вердикт по ВСЕМ продуктам из реестра флота (products.yaml /
+    # $AI_OPS_PRODUCTS). «Увидеть состояние всех продуктов разом». Только чтение.
+    "products": ("сводный вердикт по всем продуктам флота (products.yaml / $AI_OPS_PRODUCTS)",
+                 "products", False),
     # Фаза 3 (лента 4): roadmap Now/Next/Later и delivery-план из backlog.
     "roadmap": ("roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md", "roadmap", False),
     "delivery": ("delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры",
@@ -80,7 +84,7 @@ INTENTS = {
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "model", "bootstrap", "feedback", "session", "doctor",
-                  "roadmap", "delivery", "backlog", "contract")
+                  "roadmap", "delivery", "backlog", "contract", "products")
 
 
 def resolve_flags(signals):
@@ -588,6 +592,41 @@ def _intent_contract(task, child_root, signals, a):
         print("  что мешает вердикту 'valid':")
         for b in verdict["blocking"]:
             print(f"    - {b}")
+    return 0
+
+
+@_intent("products")
+def _intent_products(task, child_root, signals, a):
+    js = a.json
+    # Сводный флит-вид: реестр перечисляет продукты, product_contract выносит вердикт по каждому.
+    # Ничего не пишет. Реестр флота ищем рядом (products.yaml) или в $AI_OPS_PRODUCTS.
+    from ai_ops_kit.planning import product_registry
+    reg_path = product_registry._default_registry(Path(child_root))
+    if reg_path is None or not Path(reg_path).is_file():
+        print("НЕТ РЕЕСТРА ПРОДУКТОВ. Создайте products.yaml рядом (или укажите $AI_OPS_PRODUCTS):")
+        print("  schema_version: 1")
+        print("  kind: product-registry")
+        print("  products:")
+        print("    - {id: niti, name: Niti, path: ~/niti}")
+        return 1
+    rep = product_registry.fleet(reg_path)
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if rep["registry_errors"]:
+        print(f"РЕЕСТР ПРОДУКТОВ {rep['registry']}: ошибки формы:")
+        for x in rep["registry_errors"]:
+            print(f"  - {x}")
+        return 1
+    print(f"ФЛОТ ({len(rep['products'])} продукт(ов)) — {rep['counts']}:")
+    for r in rep["products"]:
+        if r["status"] == "error":
+            print(f"  ✗ {r['id']}: ОШИБКА — {r.get('reason')}")
+        else:
+            mark = "✓" if r["verdict"] == "valid" else "•"
+            print(f"  {mark} {r['id']} ({r['name']}): {r['verdict']} "
+                  f"[артефакты={r['worst_artifact_state']}, "
+                  f"контуры={'ok' if r['contours_ok'] else 'неполны'}, health={r['health_band']}]")
     return 0
 
 
