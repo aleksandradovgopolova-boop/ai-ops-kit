@@ -50,6 +50,10 @@ EXPECTED_INTENTS = {
     # 2026-08-20 (лента 3, Фаза 2): Backlog Intelligence — `backlog classify|dedup|prioritize|graph`
     # над GitHub Issues дочки. Был только модулями (`python3 -m ...`), стал командой движка.
     "backlog",
+    # 2026-08-24 (Product Contract, срез 1): единый объект продукта поверх подсистем. `contract`
+    # агрегирует идентичность/стандарт/артефакты/контуры/здоровье и даёт один вердикт. Делает
+    # product_contract достижимым (иначе модуль ехал бы мёртвым грузом — capability-reachability).
+    "contract",
 }
 
 
