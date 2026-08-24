@@ -67,10 +67,13 @@ def _required_gates(pkg_root: Path | None = None) -> list:
     return sorted(out)
 
 
-def resolve(repo_root, *, health: dict | None = None, reg: dict | None = None) -> dict:
+def resolve(repo_root, *, health: dict | None = None, risks: dict | None = None,
+            reg: dict | None = None) -> dict:
     """Собрать ProductContract для репозитория. Ничего не изобретает — агрегирует существующее.
 
     health — отчёт intelligence.health (band/reasons/complete), впрыснутый СВЕРХУ; None -> not_computed.
+    risks — реестр рисков intelligence.risk_register (count_by_severity/risks/blind_spots), тоже
+    впрыснутый СВЕРХУ (risk_register живёт в intelligence, выше planning); None -> not_computed.
     """
     root = Path(repo_root)
     reg = reg or AR.load()
@@ -106,6 +109,13 @@ def resolve(repo_root, *, health: dict | None = None, reg: dict | None = None) -
                      for cid, v in sot.items()},
         "quality": {"required_gates": _required_gates()},
         "health": hb,
+        "risks": ({"count_by_severity": risks.get("count_by_severity"),
+                   "count_by_category": risks.get("count_by_category"),
+                   "blind_spots": risks.get("blind_spots", []),
+                   "items": risks.get("risks", [])} if isinstance(risks, dict)
+                  else {"state": "not_computed",
+                        "reason": "риски считает intelligence.risk_register; впрысни через risks= "
+                                  "или зови через CLI"}),
     }
 
 

@@ -106,6 +106,18 @@ def test_live_health_report_is_vocabulary_compatible(installer, tmp_path):
 
 
 @pytest.mark.unit
+def test_risks_facet_injected_or_not_computed(installer, tmp_path):
+    """Риски впрыскиваются сверху (risk_register в intelligence). Без впрыска — not_computed (честно),
+    с впрыском — count_by_severity доезжает в грань."""
+    r = _bootstrapped(installer, tmp_path)
+    assert PC.resolve(r)["risks"].get("state") == "not_computed"
+    from ai_ops_kit.cli import ai_ops_cli
+    risks = ai_ops_cli._product_risks(r)
+    assert risks is not None and "count_by_severity" in risks
+    assert "count_by_severity" in PC.resolve(r, risks=risks)["risks"]
+
+
+@pytest.mark.unit
 def test_cli_full_health_combines_three_dimensions(installer, tmp_path):
     """CLI собирает ПОЛНОЕ здоровье (product+tech+delivery) одним rollup'ом и впрыскивает в контракт.
     Проверяем, что сведение композитно (сигналы всех трёх измерений) и говорит валидным band."""
