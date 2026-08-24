@@ -58,6 +58,13 @@ INTENTS = {
     # $AI_OPS_PRODUCTS). «Увидеть состояние всех продуктов разом». Только чтение.
     "products": ("флот продуктов: (без арг.) сводный вердикт по всем | register — добавить текущий репозиторий",
                  "products", False),
+    # Team status (Фаза 4): здоровье×3 + топ-риски + блокеры + следующие задачи + milestone одним
+    # снимком. Только чтение.
+    "team":    ("статус команды: здоровье, риски, блокеры, следующие задачи, milestone", "team", False),
+    # Governance (Фаза 4): активная политика автономии + журнал решений AI + человеческие
+    # переопределения. Только чтение (enforcement не трогаем — это отдельное решение).
+    "governance": ("governance продукта: политика автономии, журнал решений AI, переопределения человека",
+                   "governance", False),
     # Фаза 3 (лента 4): roadmap Now/Next/Later и delivery-план из backlog.
     "roadmap": ("roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md", "roadmap", False),
     "delivery": ("delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры",
@@ -84,7 +91,7 @@ INTENTS = {
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "model", "bootstrap", "feedback", "session", "doctor",
-                  "roadmap", "delivery", "backlog", "contract", "products")
+                  "roadmap", "delivery", "backlog", "contract", "products", "team", "governance")
 
 
 def resolve_flags(signals):
@@ -712,6 +719,54 @@ def _intent_products(task, child_root, signals, a):
             print(f"  {mark} {r['id']} ({r['name']}): {r['verdict']} "
                   f"[артефакты={r['worst_artifact_state']}, "
                   f"контуры={'ok' if r['contours_ok'] else 'неполны'}, health={r['health_band']}]")
+    return 0
+
+
+@_intent("team")
+def _intent_team(task, child_root, signals, a):
+    js = a.json
+    # Снимок статуса команды (Фаза 4): здоровье×3 + топ-риски + блокеры + следующие задачи +
+    # milestone. Агрегатор из intelligence; CLI зовёт его вниз. Только чтение.
+    from ai_ops_kit.intelligence import team_sync
+    try:
+        status = team_sync.team_status(Path(child_root))
+    except Exception as e:  # noqa: BLE001 — сбор статуса не обязан ронять команду CLI
+        print(f"ОШИБКА: статус команды не собран: {e}")
+        return 1
+    if js:
+        print(json.dumps(status, ensure_ascii=False, indent=2, default=str))
+        return 0
+    print(team_sync._render(status))
+    return 0
+
+
+@_intent("governance")
+def _intent_governance(task, child_root, signals, a):
+    js = a.json
+    # Governance-обзор (Фаза 4): активная политика автономии + журнал решений AI + переопределения
+    # человека. ТОЛЬКО ЧТЕНИЕ: enforcement (policy_engine.enforce) сознательно не трогаем — где он
+    # включается в путь исполнения, решается отдельно; здесь показываем состояние governance.
+    from ai_ops_kit.governance import decision_log, human_override, policy_engine
+    root = Path(child_root)
+    try:
+        policy = policy_engine.load_policy(root)
+    except policy_engine.PolicyInvalid as e:
+        print(f"ОШИБКА политики: {e}")
+        return 1
+    decisions = decision_log.ai_decisions(root)
+    ovr = human_override.overrides(root)
+    if js:
+        print(json.dumps({"policy": policy, "ai_decisions_count": len(decisions),
+                          "overrides_count": len(ovr), "recent_decisions": decisions[-5:],
+                          "overrides": ovr}, ensure_ascii=False, indent=2, default=str))
+        return 0
+    print(f"GOVERNANCE ПРОДУКТА ({root})")
+    print(f"  политика автономии: default={policy['default']} (источник: {policy['source']})")
+    for act, lvl in (policy.get("actions") or {}).items():
+        print(f"    {act}: {lvl}")
+    print(f"  решений AI в журнале: {len(decisions)}; переопределений человека: {len(ovr)}")
+    for e in decisions[-5:]:
+        print(f"    · {e.get('date', '?')} {e.get('id', '?')}: {str(e.get('decision', ''))[:70]}")
     return 0
 
 
