@@ -63,6 +63,9 @@ EXPECTED_INTENTS = {
     # team_sync и governance-тройку (последний кусок «мёртвого острова» аудита).
     "team",
     "governance",
+    # 2026-08-25 (Product Contract): `inspect <id>` — карточка одного продукта флота по id без cd в
+    # его репозиторий.
+    "inspect",
 }
 
 

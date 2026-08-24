@@ -131,6 +131,9 @@ experimental:
     # Оба ТОЛЬКО ЧТЕНИЕ (enforcement policy_engine не подключён — отдельное решение). Форма ещё уточняется.
     - team
     - governance
+    # `inspect <id>` — карточка одного продукта флота по id (контракт+вердикт+здоровье+риски). Только
+    # чтение; форма ещё уточняется.
+    - inspect
   # Advisory-гейты: не блокируют, форма улик и applicability ещё уточняются.
   # Проверяется числом и списком — quality/gates.yaml -> blocking: false.
   advisory_gates:

@@ -167,3 +167,16 @@ def test_inspect_unknown_id_names_the_known(tmp_path):
     res = product_registry.inspect(reg, "ghost")
     assert res["status"] == "not_found"
     assert res["known"] == ["a"]
+
+
+@pytest.mark.unit
+def test_product_path_and_inspect_injects_health_and_risks(installer, tmp_path):
+    prod = _bootstrapped(installer, tmp_path / "niti")
+    reg = _registry_file(tmp_path, [{"id": "niti", "name": "Niti", "path": str(prod)}])
+    assert product_registry.product_path(reg, "niti") == prod
+    assert product_registry.product_path(reg, "ghost") is None
+    res = product_registry.inspect(reg, "niti", health={"band": "red", "reasons": ["горит"]},
+                                   risks={"count_by_severity": {"high": 2, "medium": 0}})
+    assert res["contract"]["health"]["band"] == "red"
+    assert res["contract"]["risks"]["count_by_severity"]["high"] == 2
+    assert res["verdict"]["verdict"] == "not_ready"  # красное здоровье роняет вердикт

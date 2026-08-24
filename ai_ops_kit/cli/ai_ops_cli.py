@@ -58,6 +58,9 @@ INTENTS = {
     # $AI_OPS_PRODUCTS). «Увидеть состояние всех продуктов разом». Только чтение.
     "products": ("флот продуктов: (без арг.) сводный вердикт по всем | register — добавить текущий репозиторий",
                  "products", False),
+    # Подробная карточка ОДНОГО продукта флота по id (контракт+вердикт+здоровье+риски) — без cd в его
+    # репозиторий. id — единственный аргумент. Только чтение.
+    "inspect": ("карточка одного продукта флота по id: контракт, вердикт, здоровье, риски", "inspect", True),
     # Team status (Фаза 4): здоровье×3 + топ-риски + блокеры + следующие задачи + milestone одним
     # снимком. Только чтение.
     "team":    ("статус команды: здоровье, риски, блокеры, следующие задачи, milestone", "team", False),
@@ -91,7 +94,8 @@ INTENTS = {
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "model", "bootstrap", "feedback", "session", "doctor",
-                  "roadmap", "delivery", "backlog", "contract", "products", "team", "governance")
+                  "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
+                  "inspect")
 
 
 def resolve_flags(signals):
@@ -719,6 +723,48 @@ def _intent_products(task, child_root, signals, a):
             print(f"  {mark} {r['id']} ({r['name']}): {r['verdict']} "
                   f"[артефакты={r['worst_artifact_state']}, "
                   f"контуры={'ok' if r['contours_ok'] else 'неполны'}, health={r['health_band']}]")
+    return 0
+
+
+@_intent("inspect")
+def _intent_inspect(task, child_root, signals, a):
+    js = a.json
+    # Карточка одного продукта флота по id. id — единственный токен задачи (модель CLI отдаёт один).
+    # health/risks считает CLI и впрыскивает вниз — как в `contract`.
+    from ai_ops_kit.planning import product_registry
+    pid = (task or "").strip()
+    if not pid:
+        print("нужен id продукта: ai-ops inspect <id> (список — `ai-ops products`)")
+        return 1
+    reg_path = product_registry._default_registry(Path(child_root))
+    if reg_path is None or not Path(reg_path).is_file():
+        print("НЕТ РЕЕСТРА ПРОДУКТОВ. Заведите: зайдите в репозиторий продукта и `ai-ops products register`.")
+        return 1
+    path = product_registry.product_path(reg_path, pid)
+    health = _product_health_report(path) if path and path.is_dir() else None
+    risks = _product_risks(path) if path and path.is_dir() else None
+    res = product_registry.inspect(reg_path, pid, health=health, risks=risks)
+    if js:
+        print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if res["status"] == "not_found":
+        print(f"НЕТ ПРОДУКТА '{pid}' в реестре. Известные: {', '.join(res['known']) or '—'}")
+        return 1
+    if res["status"] == "error":
+        print(f"ПРОДУКТ '{res['id']}': ОШИБКА — {res['reason']}")
+        return 1
+    c, v = res["contract"], res["verdict"]
+    print(f"ПРОДУКТ '{res['id']}' ({res['name']}) — вердикт: {v['verdict'].upper()}")
+    print(f"  стандарт: v{c['standard']['contract_version']}   артефакты: {c['artifacts']['counts']}")
+    for cid, cv in c["contours"].items():
+        print(f"  контур {cid}: {'ok' if cv['ok'] else 'НЕПОЛН (' + ', '.join(cv['required_missing']) + ')'}")
+    print(f"  здоровье: {c['health'].get('band') or c['health'].get('state')}")
+    _rk = c["risks"]
+    if "count_by_severity" in _rk:
+        _s = _rk.get("count_by_severity") or {}
+        print(f"  риски: high={_s.get('high', 0)}, medium={_s.get('medium', 0)}")
+    for b in v["blocking"]:
+        print(f"  - {b}")
     return 0
 
 
