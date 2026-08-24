@@ -49,8 +49,9 @@ KNOWN_UNREACHABLE = frozenset({
     # 2026-08-25 (Product Contract, живой health): `health_common` и `health_product` СНЯТЫ с острова —
     # интент `contract`/`products` считает product-health и впрыскивает его в контракт, поэтому оба
     # теперь достижимы из CLI. Список сократился фактом проводки, а не решением (ратчет только вниз).
-    "ai_ops_kit/intelligence/health_tech.py",
-    "ai_ops_kit/intelligence/health_delivery.py",
+    # 2026-08-25 (Product Contract, полное здоровье): `health_tech` и `health_delivery` СНЯТЫ с
+    # острова — контракт впрыскивает здоровье product+tech+delivery (три измерения одним rollup'ом),
+    # поэтому оба достижимы из CLI. Остаются risk_register/team_sync/drift и governance.
     "ai_ops_kit/intelligence/risk_register.py",
     "ai_ops_kit/intelligence/team_sync.py",
     "ai_ops_kit/intelligence/drift_artifacts.py",

@@ -565,14 +565,22 @@ def _intent_model(task, child_root, signals, a):
 
 
 def _product_health_report(root):
-    """Живой product-health отчёт для впрыска в контракт (band green/yellow/red/unknown + причины).
+    """Живое ПОЛНОЕ здоровье продукта для впрыска в контракт: продукт + технологии + delivery,
+    сведённые одним rollup'ом health_common (band green/yellow/red/unknown + причины-драйверы).
 
-    Health считает intelligence (слой выше planning), поэтому его собирает CLI и передаёт вниз
-    параметром. Любой сбой сбора -> None (контракт покажет not_computed, а не упадёт): здоровье —
-    обогащение вердикта, а не его предусловие."""
+    Три измерения здоровья считает intelligence (слой выше planning), поэтому их собирает CLI и
+    передаёт вниз параметром. Сведение через тот же `build_report`, что у каждого измерения по
+    отдельности: worst-known-band побеждает, unknown не зеленит, причины — драйверы итогового band
+    по всем трём измерениям. Любой сбор -> None (контракт покажет not_computed, а не упадёт):
+    здоровье обогащает вердикт, а не является его предусловием."""
     try:
-        from ai_ops_kit.intelligence import health_product
-        return health_product.product_health_report(Path(root))
+        from ai_ops_kit.intelligence import health_common as hc
+        from ai_ops_kit.intelligence import health_delivery, health_product, health_tech
+        r = Path(root)
+        signals = (health_product.collect_signals(r)
+                   + health_tech.collect_signals(r)
+                   + health_delivery.collect_signals(r))
+        return hc.build_report("product-contract-health", signals, scope="product")
     except Exception:  # noqa: BLE001 — сбор здоровья не обязан ронять просмотр контракта
         return None
 
