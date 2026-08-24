@@ -46,8 +46,9 @@ KNOWN_UNREACHABLE = frozenset({
     # Продуктовые операции Фазы 4: агрегаторы здоровья/рисков/синка. Импортируют только друг друга;
     # ни CLI-интента, ни процессного шима, ни вызова из рантайма. Подключение — работа проводки
     # (реестр интентов уже готов: добавить обработчик дёшево).
-    "ai_ops_kit/intelligence/health_common.py",
-    "ai_ops_kit/intelligence/health_product.py",
+    # 2026-08-25 (Product Contract, живой health): `health_common` и `health_product` СНЯТЫ с острова —
+    # интент `contract`/`products` считает product-health и впрыскивает его в контракт, поэтому оба
+    # теперь достижимы из CLI. Список сократился фактом проводки, а не решением (ратчет только вниз).
     "ai_ops_kit/intelligence/health_tech.py",
     "ai_ops_kit/intelligence/health_delivery.py",
     "ai_ops_kit/intelligence/risk_register.py",
