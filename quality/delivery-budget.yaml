@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
   volume_bytes: 4300000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 512
+  substantive_files: 517
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -202,3 +202,27 @@ raises:
       файла ИСПОЛНЯЮТСЯ в дочке: security_enforcement (рантайм) и validate_memory_governance
       (CLI-обёртка) импортируют check ОТСЮДА. Без них в поставке был бы вызов отсутствующего файла —
       класс F-033. Растёт только счёт (+1 содержательный: обёртка осталась), объём в норме.
+  - at: '2026-08-24'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 512
+    to_count: 517
+    measured_before: 511
+    measured_after: 516
+    work: cut-engine-providers-validation-extract-checks
+    files:
+      - ai_ops_kit/checks/reviewer_result.py
+      - ai_ops_kit/checks/requirements_artifact.py
+      - ai_ops_kit/checks/plan_artifact.py
+      - ai_ops_kit/checks/acceptance_result.py
+      - ai_ops_kit/checks/spec_artifact.py
+    why_it_works_in_the_child: >-
+      Лента №5: чистые проверки ФОРМЫ артефактов и вердиктов (reviewer-result, requirements/plan/
+      acceptance-artifact, spec-change) вынесены ВНИЗ в пакет `checks` (слой primitives), чтобы снять
+      восходящие рёбра engine -> validation и providers -> validation (ратчет 6 -> 5 пар, 28 -> 17
+      циклов; распалась последняя пересекающая слои взаимная пара engine<->validation). Пять модулей
+      ИСПОЛНЯЮТСЯ в дочке: движок (pipeline_evidence/pipeline_helpers/acceptance_verify) и оркестратор
+      ревью импортируют check/render_content ОТСЮДА, а CLI-обёртки в `validation` ре-экспортируют их.
+      Без модулей в поставке это был бы вызов отсутствующего файла — класс F-033. Растёт только счёт
+      файлов (+5: пять чистых модулей; обёртки остались), объём в норме.
