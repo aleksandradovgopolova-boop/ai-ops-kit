@@ -76,7 +76,8 @@ def test_ai_ops_run_selftest():
     # planned-путь (claude-code): каркас есть, статус planned
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        r = run("фильтр по статусу в каталоге заказов", sig, root, runtime="claude-code")
+        r = run("фильтр по статусу в каталоге заказов", sig, root, runtime="claude-code",
+                engine="controller")   # planned-путь — контроллер (pipeline теперь дефолт)
         fid = r["workitem_id"]
         expect("planned: статус planned", r["status"] == "planned")
         expect("planned: run_state НЕ материализован (обещание пути)",
@@ -218,7 +219,7 @@ def test_ai_ops_run_selftest():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         rf = run("фильтр по типу в библиотеке", sig, root, runtime="claude-code",
-                 feature="library-view")
+                 feature="library-view", engine="controller")   # planned-каркас — контроллер
         expect("feature: WorkItem привязан к именованной фиче",
                rf["workitem_id"] == "library-view"
                and (root / "features" / "library-view" / "run-plan.yaml").exists())
@@ -441,7 +442,8 @@ def test_ai_ops_run_selftest():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         r2 = run("починить опечатку", {"task_type": "QUICK", "affected_areas": ["docs"]},
-                 root, runtime="generic-orchestrator", provider_name="mock", execute=True)
+                 root, runtime="generic-orchestrator", provider_name="mock", execute=True,
+                 engine="controller")   # orchestrated-путь — контроллер (pipeline теперь дефолт)
         expect("orchestrated: исполнение прошло, статус blocked|done",
                r2["status"] in ("blocked", "done") and r2["execution"] == "orchestrated")
         expect("orchestrated: состояние по WorkItem",
