@@ -50,15 +50,16 @@ KNOWN_UNREACHABLE = frozenset({
     # интент `contract`/`products` считает product-health и впрыскивает его в контракт, поэтому оба
     # теперь достижимы из CLI. Список сократился фактом проводки, а не решением (ратчет только вниз).
     # 2026-08-25 (Product Contract, полное здоровье): `health_tech` и `health_delivery` СНЯТЫ.
-    # 2026-08-25 (Product Contract, риски): `risk_register` и `drift_artifacts` СНЯТЫ — контракт
-    # впрыскивает реестр рисков (risk_register строит их из здоровья+дрейфа), поэтому оба достижимы
-    # из CLI. Остаётся team_sync (агрегатор) и governance-тройка.
-    "ai_ops_kit/intelligence/team_sync.py",
-    # Governance Фазы 4: политика/журнал/override. policy_engine.enforce() ничего не принуждает,
-    # decision_log никогда не пишет — потому что их никто не зовёт. Лист-пакет, импортируют друг друга.
-    "ai_ops_kit/governance/policy_engine.py",
-    "ai_ops_kit/governance/decision_log.py",
-    "ai_ops_kit/governance/human_override.py",
+    # 2026-08-25 (Product Contract, риски): `risk_register` и `drift_artifacts` СНЯТЫ.
+    # 2026-08-25 (Фаза 4, закрытие острова): `team_sync` СНЯТ (интент `ai-ops team` — статус команды);
+    # governance-тройка `policy_engine`/`decision_log`/`human_override` СНЯТА (интент `ai-ops governance`
+    # читает политику/журнал решений/переопределения). Enforcement policy_engine.enforce() пока не в
+    # пути исполнения — это отдельное решение; но модули достижимы и их read-часть исполняется.
+    #
+    # ОСТРОВ ПУСТ. Весь «мёртвый остров» Фазы 4, найденный аудитом 24.08.2026 (built+tested, звали
+    # только тесты), закрыт проводкой в CLI — по грани за срез. Список ратчета дошёл до нуля фактом
+    # подключения, а не удалением из поставки. Детектор ниже продолжает ловить ЛЮБОЙ новый мёртвый
+    # модуль (пустой список-исключение = «мёртвых быть не должно вовсе»).
 })
 
 # Каталоги РАНТАЙМ-диспетча (не проза-доки и не footprint-леджер quality/delivery-budget.yaml):
