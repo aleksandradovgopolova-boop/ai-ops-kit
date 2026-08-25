@@ -7,6 +7,12 @@
 
 РЕШЕНИЕ: явные состояния и доказательство КАЖДОГО перехода.
 
+СЛИЯНИЕ — РОДНОЙ MERGE QUEUE (работа merge-queue-not-handrolled, 2026-08-25).
+Этот модуль ТОЛЬКО ПРОВЕРЯЕТ готовность PR к слиянию (check-merge, status).
+Само слияние выполняет GitHub merge queue с auto-merge под branch protection —
+не polling-цикл, не `gh pr merge` в цикле. CI-воркфлоу имеют триггер merge_group,
+поэтому проверки меряются против итога слияния, а не ветки PR.
+
 Состояния жизненного цикла:
   draft -> ready_for_review -> verified -> approved -> merged -> released -> deployed -> observed
 
