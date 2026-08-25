@@ -12,6 +12,7 @@ on:
   # ИТОГА СЛИЯНИЯ, а не ветки PR (gate-measures-merge-result). Без этого триггера очередь висла бы
   # вечно: обязательный контекст в merge_group некому отдать (капкан статусов из разбора 20.08).
   merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
@@ -48,7 +49,9 @@ jobs:
           - group: contracts
             script: .github/ci-groups/contracts.sh
     env:
-      AI_OPS_DIFF_BASE: ${{ github.event.pull_request.base.sha || '' }}
+      # gate-measures-merge-result: на merge_group нет pull_request.base.sha — берём
+      # base_sha из merge_group (база, в которую мёржится PR). На push в main — пусто.
+      AI_OPS_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
@@ -142,10 +145,13 @@ jobs:
         # squash-слиянии, — это ЗАГОЛОВОК PR, и его проверяет джоба `pr-smoke`. Здесь он намеренно
         # НЕ проверяется второй раз: два механизма на одну работу означают, что ни одна проба не
         # может доказать, какой из них работает.
+        # gate-measures-merge-result: на merge_group нет pull_request.base.sha — берём
+        # merge_group.base_sha (база, в которую мёржится PR в очереди).
         run: |
           FROM=$(python3 -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['tool']['ai_ops']['release_gates']['commit_format_enforced_after'])")
-          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
-            RANGE="${{ github.event.pull_request.base.sha }}..HEAD"
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
+          if [ -n "$BASE_SHA" ]; then
+            RANGE="$BASE_SHA..HEAD"
             echo "формат обязателен для коммитов ЭТОГО PR (${RANGE})"
           else
             RANGE="$FROM..HEAD"
