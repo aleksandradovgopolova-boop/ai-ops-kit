@@ -184,5 +184,5 @@ pytest tests/contracts/test_architecture_constitution.py -v
 
 - [ARCHITECTURE_CONSTITUTION.md](ARCHITECTURE_CONSTITUTION.md) — 15 архитектурных правил
 - [REFACTORING_MAP.md](REFACTORING_MAP.md) — карта модулей и предложений по рефакторингу
-- [packages/layering.yaml](../../packages/layering.yaml) — source of truth для слоёв и ратчета
-- [validate_layering.py](../../ai_ops_kit/validation/validate_layering.py) — исполнитель проверок
+- `packages/layering.yaml` — source of truth для слоёв и ратчета
+- `ai_ops_kit/validation/validate_layering.py` — исполнитель проверок

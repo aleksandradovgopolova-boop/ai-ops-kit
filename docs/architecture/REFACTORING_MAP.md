@@ -305,4 +305,4 @@ Session management (boundary, guardrails, handoff, launcher, telemetry), deploy 
 
 - [ARCHITECTURE_CONSTITUTION.md](ARCHITECTURE_CONSTITUTION.md) — 15 архитектурных правил
 - [DEPENDENCY_DAG.md](DEPENDENCY_DAG.md) — граф зависимостей и ratchet-план
-- [packages/layering.yaml](../../packages/layering.yaml) — source of truth для слоёв
+- `packages/layering.yaml` — source of truth для слоёв
