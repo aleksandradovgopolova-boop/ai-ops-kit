@@ -10,11 +10,11 @@ child-репозиториев. Здесь разрабатывается сам
 | Зона | Что это | Менять можно? |
 |---|---|---|
 | `registry/` | Машиночитаемые реестры: агенты, workflow-контракты, провайдеры, модели, среды, capability-index, routing-policy | Да, но только синхронно с файлами, на которые они ссылаются |
-| `agents/` | 51 агент (markdown) | Да; новый/изменённый агент требует записи в `registry/agents.yaml` и eval-кейсов в `evaluations/agents/` |
+| `agents/` | Агенты (markdown) | Да; новый/изменённый агент требует записи в `registry/agents.yaml` и eval-кейсов в `evaluations/agents/` |
 | `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `ai_ops_kit/` | **Код движка**: 104 модуля в 14 пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/`, и обязан уложиться в слои `packages/layering.yaml` |
+| `ai_ops_kit/` | **Код движка**: модули в пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в пакет, а не в `tools/`, и обязан уложиться в слои `packages/layering.yaml` |
 | `ai_ops_kit/planning/` | Контур Planning & Execution (v3.35): модель контуров продукта, delivery plan, ROADMAP-контракт, отбор следующей работы, понимание репозитория при онбординге | Да; словари (роли, типы, состояния) живут в `registry/product-operating-model.yaml`, а не в коде |
 | `tools/` | **Уходящий слой совместимости** (`deprecated`, см. [docs/api/public-surface.md](docs/api/public-surface.md)): плоские имена как алиасы через `sys.modules` + запуск скриптом через `runpy`. Настоящий код живёт в пакетах; алиасы держат внешние вызовы и точки входа `doctor`/документации | Только удалять. Реестр `quality/deprecated-surface.yaml` заперт и ходит вниз: новый модуль пакета алиаса НЕ получает |
 | `ai_ops_kit/validation/` | Валидаторы (Python, только pyyaml). **Зона-исключение** из инвариантов пакетной чистоты: алиасов в `tools/` нет, `import _bootstrap` двурежимный (пакетный в `try`, плоский в `except`) — валидатор запускают процессом, и в этом режиме корня на пути ещё нет | Да; тесты валидатора — в `tests/`, не внутри модуля |
@@ -128,7 +128,7 @@ Python, та, что стоит у тебя. Объявленный пол `requ
 имени охвата отклоняет `validate_release_claims`. Повод: PR #38 написал «полный контур зелёный»,
 и compatibility-matrix опроверг это в том же релизе.
 
-Построчного чеклиста больше нет: селфтесты модулей, все 72 валидатора и прогоны на примерах
+Построчного чеклиста больше нет: селфтесты модулей, валидаторы и прогоны на примерах
 переехали в pytest — дублировать их значило бы гонять одно и то же дважды. Почему именно так —
 в [docs/agent-guides/pre-commit-checklist.md](docs/agent-guides/pre-commit-checklist.md).
 
