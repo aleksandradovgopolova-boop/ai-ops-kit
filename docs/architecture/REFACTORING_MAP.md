@@ -167,10 +167,10 @@
 | Модуль | Ответственность |
 |--------|-----------------|
 | `ai_ops_kit/providers/orchestrator.py` | HTTP-оркестратор (model calls) |
-| `ai_ops_kit/providers/model_routing.py` | Маршрутизация моделей |
-| `ai_ops_kit/providers/cost_accounting.py` | Учёт стоимости |
+| `ai_ops_kit/providers/model_router.py` | Маршрутизация моделей |
+| `ai_ops_kit/providers/cost_account.py` | Учёт стоимости |
 | `ai_ops_kit/providers/provider_endpoints.py` | Эндпоинты провайдеров |
-| `ai_ops_kit/providers/response_contracts.py` | Контракты ответов |
+| `ai_ops_kit/providers/response_contract.py` | Контракты ответов |
 | ... | (ещё ~4 модуля) |
 
 **Оценка:** Providers чист после переезда `usage_ledger` и `budget` в shared.
@@ -224,7 +224,7 @@
 
 ### 2. Cost accounting: providers vs shared
 
-`ai_ops_kit/shared/usage_ledger.py` — учёт cost/token. `ai_ops_kit/shared/budget.py` — примитив бюджета. `ai_ops_kit/providers/cost_accounting.py` — учёт стоимости провайдеров.
+`ai_ops_kit/shared/usage_ledger.py` — учёт cost/token. `ai_ops_kit/shared/budget.py` — примитив бюджета. `ai_ops_kit/providers/cost_account.py` — учёт стоимости провайдеров.
 
 **Рекомендация:** Чёткое разделение: `shared` — примитивы (запись, чтение); `providers` — бизнес-логика (тарификация, маршрутизация по стоимости). Сегодня, похоже, так и есть, но стоит зафиксировать.
 
