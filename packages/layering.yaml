@@ -76,6 +76,16 @@ rules:
     forbid: {from: shared}
     reason: "shared импортируют все; его собственная зависимость замыкает граф"
 
+  # Ядро не импортирует спутники. Три кольца (AGENTS.md): Kernel — {shared, kernel, engine,
+  # gates, lifecycle, delivery, governance}; Intelligence читает Kernel, но Kernel от него
+  # НЕ зависит. planning и engops — спутники внутри capabilities, слоями не запрещены (они в
+  # том же слое), поэтому правило поверх слоёв. intelligence запрещена слоями (выше), но
+  # перечислена здесь для полноты картины.
+  - id: kernel-boundary
+    kernel_members: [shared, kernel, engine, gates, lifecycle, delivery, governance]
+    forbidden_imports: [planning, intelligence, engops]
+    reason: "ядро не импортирует спутники: planning, intelligence, engops — надстроя над ядром"
+
 # Замороженные нарушения. Каждая строка — «есть сегодня, чинить отдельно».
 # Формат: <пакет> -> <пакет>: причина существования. Реестр вправе только СОКРАЩАТЬСЯ:
 # исчезнувшее нарушение обязано быть удалено отсюда, это проверяется.
@@ -100,7 +110,12 @@ rules:
 # Список ратчета сократился ФАКТОМ развязки, а не решением, и теперь пуст. `validation` (entrypoints)
 # больше не импортирует НИ ОДИН пакет ядра как библиотеку вверх; единственный, кто зависит от
 # `validation`, — `devtools` (тот же слой entrypoints, это разрешено). Новых нарушений нет.
-known_violations: []
+#
+# v3.38 (S2): engine -> engops — ai_ops_run импортирует session_telemetry/session_guardrails
+# для session recommendation. Связь существует в коде; развязка — отдельный срез (перенос
+# recommendation-логики в engops, чтобы engine звал вниз, а не вверх-в-слой).
+known_violations:
+  - "engine -> engops: ai_ops_run -> session_telemetry/session_guardrails (recommendation logic)"
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть

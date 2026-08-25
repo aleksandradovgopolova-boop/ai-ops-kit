@@ -157,8 +157,45 @@ def _layer_index(spec):
     return idx
 
 
-def check(spec, edges):
-    """Список нарушений: зависимость вверх по слоям, нарушение rules, протухшее исключение."""
+def check_kernel_boundary(spec, edges):
+    """Правило kernel-boundary: ядро не импортирует спутники.
+
+    Слои запрещают зависимость вверх (intelligence выше capabilities), но planning и engops
+    лежат в том же слое capabilities, что и ядро. Без правила поверх слоёв ядро могло бы
+    импортировать их молча. Эта проверка закрывает дыру: kernel_members не вправе тянуть
+    forbidden_imports, независимо от слоёв.
+
+    Известные нарушения (known_violations) учитываются: если ребро уже заморожено, оно не
+    краснеет повторно. Это согласовано с check() — один реестр на все правила.
+    """
+    errors = []
+    caught = set()
+    known = set()
+    for item in spec.get("known_violations") or []:
+        known.add(tuple(str(item).split(":")[0].strip().split(" -> ")))
+    for rule in spec.get("rules") or []:
+        if rule.get("id") != "kernel-boundary":
+            continue
+        members = set(rule.get("kernel_members") or [])
+        forbidden = set(rule.get("forbidden_imports") or [])
+        reason = rule.get("reason", "")
+        for (src, dst), why in sorted(edges.items()):
+            if src in members and dst in forbidden:
+                caught.add((src, dst))
+                if (src, dst) not in known:
+                    errors.append(
+                        f"LAYERING-FAIL: kernel-boundary: {src} -> {dst} "
+                        f"({reason}); импорты: {sorted(why)[:3]}")
+    return errors, caught
+
+
+def check(spec, edges, extra_seen=None):
+    """Список нарушений: зависимость вверх по слоям, нарушение rules, протухшее исключение.
+
+    extra_seen — рёбра, пойманные другими проверками (kernel-boundary). Известное нарушение,
+    которое существует в коде и поймано другой проверкой, не обязано быть поймано ещё и здесь —
+    иначе реестр known_violations стал бы конфликтовать сам с собой.
+    """
     errors = []
     idx = _layer_index(spec)
     known = set()
@@ -169,7 +206,20 @@ def check(spec, edges):
     if unknown_pkgs:
         errors.append(f"пакеты вне слоёв (объявить в layering.yaml): {unknown_pkgs}")
 
-    seen = set()
+    # kernel-boundary рёбра: существуют в коде, но не являются нарушением слоёв (тот же слой).
+    # Без этого известное нарушение engine -> engops было бы помечено как «исчезло», потому что
+    # check() его не видит (оба в capabilities), а check_kernel_boundary() не вызван.
+    kb_edges = set()
+    for rule in spec.get("rules") or []:
+        if rule.get("id") != "kernel-boundary":
+            continue
+        members = set(rule.get("kernel_members") or [])
+        forbidden = set(rule.get("forbidden_imports") or [])
+        for (src, dst) in edges:
+            if src in members and dst in forbidden:
+                kb_edges.add((src, dst))
+
+    seen = set(extra_seen or set()) | kb_edges
     for (src, dst), why in sorted(edges.items()):
         if src not in idx or dst not in idx:
             continue
@@ -208,7 +258,8 @@ def main(argv):
         for k, v in sorted(counts.items()):
             print(f"{k}: {v}")
         return 0
-    errors = check(spec, edges) + ratchet_errors(spec, edges)
+    kb_errors, kb_caught = check_kernel_boundary(spec, edges)
+    errors = check(spec, edges, extra_seen=kb_caught) + kb_errors + ratchet_errors(spec, edges)
     for e in errors:
         print(f"  [FAIL] {e}")
     if errors:
