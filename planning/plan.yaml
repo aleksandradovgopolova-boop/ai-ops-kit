@@ -436,21 +436,6 @@ work:
       доставляемый дочке шаблон. Advisory -> blocking по замеру. Территория пересекается с
       installer/templates — согласовать с лентой B. Готово, когда PR, смешивающий код с
       координационным файлом, краснит проверку в обоих контурах, а чистый — нет.
-  - id: plan-contributions-via-fragments
-    title: >-
-      Работы добавляются в план ВКЛАДАМИ-фрагментами, а не правкой общего plan.yaml
-    type: engineering
-    goal: plan-as-control-plane
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/planning/, planning/, tests/]
-    reason: >-
-      Полный фикс беговой дорожки: как newsfragments, но для плана. Новая работа кладётся файлом
-      planning/incoming/<id>.yaml; plan.yaml собирается централизованно. Параллельные работы трогают
-      РАЗНЫЕ файлы -> конфликта и DIRTY от плана нет. Территория planning/ (лента B) — согласовать.
-      Готово, когда добавление работы не требует править plan.yaml, а сборка идёт одной командой.
-
   - id: reviewer-prompt-uses-xml-anchors-measured
     title: >-
       Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
@@ -1079,36 +1064,6 @@ work:
 
   # ── Phase 5: Autonomous Product Loop (капстоун) — ЗАБЛОКИРОВАНО до готовности Phase 4 ──
   # Собирается, когда health/risk/drift/decision-log/policy/override готовы. Пока только заведено.
-
-  - id: policy-driven-execution
-    title: Исполнение под управлением policy — действия проходят через Suggest→…→Require approval
-    type: engineering
-    goal: autonomous-product-loop
-    status: todo
-    owner_role: engineer
-    depends_on: [policy-engine-suggest-to-approval, human-override-as-signal]
-    write_scope: [ai_ops_kit/governance/, tests/]
-    value: high
-    affects: {delivery_operations: true, engineering_quality_security: true}
-    # PR-23 (часть policy_driven_execution): автономные действия цикла исполняются ТОЛЬКО через
-    # policy engine; require_approval сохраняет human control. Заблокировано до готовности policy+override.
-    # Готово, когда: цикл не может выполнить действие в обход policy; тест на попытку обхода краснеет.
-
-  - id: learning-from-human-overrides
-    title: Обучение на человеческих override — прошлые override меняют будущие рекомендации
-    type: engineering
-    goal: autonomous-product-loop
-    status: todo
-    owner_role: engineer
-    depends_on: [human-override-as-signal, ai-decisions-logged-with-rationale]
-    write_scope: [ai_ops_kit/governance/, ai_ops_kit/intelligence/, tests/]
-    value: high
-    affects: {analytics_learning: true, product_strategy: true}
-    # PR-23 (часть learning_from_overrides): AI учитывает историю override из decision log при
-    # следующих рекомендациях (приоритет/риск). Заблокировано до готовности override+decision-log.
-    # Готово, когда: рекомендация с учётом прошлого override отличается от неё же без него; тест.
-
-  - id: autonomous-replanning-works
     title: "Автономный цикл: Observe→Understand→Plan→Prioritize→Execute→Evaluate→Learn→Replanning"
     type: engineering
     goal: autonomous-product-loop
