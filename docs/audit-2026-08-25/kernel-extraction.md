@@ -65,7 +65,7 @@ class PolicyPort(Protocol):          # governance/policy_engine
     def decide(self, action: Action, ctx: RunContext) -> Autonomy: ...
 ```
 
-Ядро зависит ТОЛЬКО от этих Protocol'ов и от контрактов в `shared/contracts.py`. Реализации внедряются на входе (`ai_ops_run`), не импортируются в глубине.
+Ядро зависит ТОЛЬКО от этих Protocol'ов и от контрактов в `ai_ops_kit/shared/contracts.py`. Реализации внедряются на входе (`ai_ops_run`), не импортируются в глубине.
 
 ---
 
@@ -75,7 +75,7 @@ class PolicyPort(Protocol):          # governance/policy_engine
 
 | Взаимная пара | Реальное ребро (проверено) | Разрыв = извлечение |
 |---|---|---|
-| `engine ↔ lifecycle` | `lifecycle/workitem.py` → `engine/ai_route` | вынести классификацию из workitem в шаг ядра `classify` |
+| `engine ↔ lifecycle` | `ai_ops_kit/lifecycle/workitem.py` → `engine/ai_route` | вынести классификацию из workitem в шаг ядра `classify` |
 | `engine ↔ gates` | `gates/evidence_collector` → `engine/tool_broker` | broker внедряется как `EvidenceProvider` (DI), не импортируется |
 | `context ↔ engine` | `context/context_compiler.py:38` → `engine/run_plan` | run_plan как TypedDict-контракт, не импорт модуля |
 | `delivery ↔ engine` | `engine/execution_pipeline` ↔ `delivery` (lazy) | delivery зовётся только из `ai_ops_run` через DeliveryPort + контракт-тест |
@@ -91,19 +91,19 @@ class PolicyPort(Protocol):          # governance/policy_engine
 
 ### Шаг 0 — Объявить порты и контракт ядра (без переезда кода)
 - **Цель:** зафиксировать целевой шов; чистое добавление.
-- **Файлы:** новый `ai_ops_kit/kernel/ports.py`, расширить `shared/contracts.py` (ExecutionSpec, ExecutionResult, ContextBundle, RunContext).
+- **Файлы:** новый ports.py в пакете kernel (создаётся), расширить `ai_ops_kit/shared/contracts.py` (ExecutionSpec, ExecutionResult, ContextBundle, RunContext).
 - **Ратчет:** не двигает (только новые Protocol'ы).
 - **Effort:** S · **Риск:** очень низкий · **Зависимости:** нет.
 
 ### Шаг 1 — Снять 4 «лёгкие» пары через DI/контракт
 - **Цель:** `engine↔gates`, `context↔engine`, `delivery↔engine`, `engops↔gates` → DAG.
-- **Файлы:** `gates/evidence_collector.py` (принять broker параметром), `context/context_compiler.py:38` (TypedDict вместо импорта), `engine/execution_pipeline.py` + `engine/ai_ops_run.py` (delivery только транзакционно) + контракт-тест, перенос `engops/deploy_readiness.py → gates/deploy_readiness.py` (убрать `sys.path`-хак `gate_executor.py:301-310`).
+- **Файлы:** `ai_ops_kit/gates/evidence_collector.py` (принять broker параметром), `context/context_compiler.py:38` (TypedDict вместо импорта), `ai_ops_kit/engine/execution_pipeline.py` + `ai_ops_kit/engine/ai_ops_run.py` (delivery только транзакционно) + контракт-тест, перенос `engops/deploy_readiness.py → gates/deploy_readiness.py` (убрать `sys.path`-хак `gate_executor.py:301-310`).
 - **Ратчет:** `mutual_pairs 5 → 1` в `layering.yaml` (вниз — легально).
 - **Effort:** M · **Риск:** низкий (это priority-1 из их REFACTORING_MAP) · **Зависимости:** шаг 0.
 
 ### Шаг 2 — Вынести классификацию из `workitem` (корневая пара)
 - **Цель:** `engine↔lifecycle` → 0; workitem перестаёт знать про routing.
-- **Файлы:** `engine/ai_route.py` → шаг ядра `classify(task) -> Classification`; `lifecycle/workitem.py` перестаёт импортировать engine, `derive_status()` остаётся чистой функцией.
+- **Файлы:** `ai_ops_kit/engine/ai_route.py` → шаг ядра `classify(task) -> Classification`; `ai_ops_kit/lifecycle/workitem.py` перестаёт импортировать engine, `derive_status()` остаётся чистой функцией.
 - **Ратчет:** `mutual_pairs 1 → 0`. Кольцо capabilities официально стало DAG.
 - **Effort:** M · **Риск:** средний (workitem — центральный объект; нужен контракт-тест на derive_status до правки) · **Зависимости:** шаг 1.
 
@@ -116,19 +116,19 @@ class PolicyPort(Protocol):          # governance/policy_engine
 
 ### Шаг 4 — Закрепить границу пакета ядра
 - **Цель:** сделать «ядро не зависит от спутника» проверяемым, а не подразумеваемым.
-- **Файлы:** `packages/layering.yaml` — ввести супер-слой `kernel` = {shared, engine, gates, lifecycle, delivery, governance} + правило «kernel не импортирует planning/intelligence/engops-satellite»; тест в `validation/validate_layering.py`.
+- **Файлы:** `packages/layering.yaml` — ввести супер-слой `kernel` = {shared, engine, gates, lifecycle, delivery, governance} + правило «kernel не импортирует planning/intelligence/engops-satellite»; тест в `ai_ops_kit/validation/validate_layering.py`.
 - **Ратчет:** новое правило (не число) — краснеет на нарушении границы ядра.
 - **Effort:** S · **Риск:** низкий · **Зависимости:** шаги 1–2.
 
 ### Шаг 5 — (опционально, по данным) заменить самописную инфраструктуру за ExecutorPort
 - **Цель:** снять свой tool-loop / durable-транзакцию / worktree, если внешний рантайм делает надёжнее (это ИХ инвариант «свой tool-loop не наращиваем»).
-- **Файлы:** новая реализация `ExecutorPort` поверх внешнего агент-рантайма/durable-движка; старый `engine/tool_loop.py` остаётся как fallback-реализация того же порта.
+- **Файлы:** новая реализация `ExecutorPort` поверх внешнего агент-рантайма/durable-движка; старый `ai_ops_kit/engine/tool_loop.py` остаётся как fallback-реализация того же порта.
 - **Ратчет:** не двигает (за портом).
 - **Effort:** L–XL · **Риск:** средний, но ИЗОЛИРОВАН портом · **Зависимости:** шаги 0–3; **решение о запуске — только по замеру**, стоит ли самописный лишних денег/багов.
 
 ### Шаг 6 — Спутники на контракте событий
 - **Цель:** `planning/intelligence/engops-satellite/research/product-learning` читают стабильный `KernelEvent`, версионируются отдельно, вправе отставать; отключение любого не ломает доставку (у них это уже наполовину так — слой intelligence выше ядра).
-- **Файлы:** контракт `KernelEvent` в `shared/contracts.py`; спутники переключаются с прямых импортов ядра на события; тест «off-switch спутника не ломает delivery».
+- **Файлы:** контракт `KernelEvent` в `ai_ops_kit/shared/contracts.py`; спутники переключаются с прямых импортов ядра на события; тест «off-switch спутника не ломает delivery».
 - **Ратчет:** правило «спутник не импортируется ядром» (частично уже есть для intelligence).
 - **Effort:** M · **Риск:** низкий · **Зависимости:** шаг 4.
 

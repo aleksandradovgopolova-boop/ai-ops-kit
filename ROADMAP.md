@@ -60,6 +60,11 @@ owner: product-team
   Record, Outcome Contract, Outcome Readout. Проверяемо: у решения названы рассмотренные
   альтернативы и то, что сознательно не делаем; у функции есть baseline, target и guardrails; после
   релиза есть readout, а не тишина.
+- `trustworthy-core` — контроль качества честен (Phase 0: аудит нашёл разрыв между заявленной и
+  исполненной дисциплиной) и ядро вырезано как отдельный слой (Phase B: God-функции и кольцо
+  capabilities — корень того, почему тесты не ловят дефекты на ветвях). Проверяемо: Phase 0 — все
+  ленты влиты, findigs аудита закрыты; Phase B — mutual_pairs в layering.yaml снижен, фазы pipeline
+  — отдельные тестируемые функции.
 - `storybook-as-visual-contract` — UI-задача проектируется, согласуется и проверяется через
   Storybook. Сторона evidence уже построена (`ui/storybook_adapter.py` собирает UIEvidenceBundle,
   `validate_storybook_evidence.py` не даёт выдать «нет данных» за «чисто»); достраивается сторона
