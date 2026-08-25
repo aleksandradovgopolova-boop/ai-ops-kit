@@ -1217,7 +1217,7 @@ work:
       На package-quality и pr-smoke объявлен минимальный permissions (contents: read)
     type: engineering
     goal: green-means-checked
-    status: in_progress
+    status: done
     owner_role: engineer
     value: high
     write_scope: [.github/]
@@ -1231,7 +1231,7 @@ work:
       Кит гоняет собственный security_scan в CI против диффа PR
     type: engineering
     goal: checks-that-run
-    status: in_progress
+    status: done
     owner_role: engineer
     value: high
     write_scope: [.github/]
@@ -1245,7 +1245,7 @@ work:
       Автообновление дочки пушит через --force-with-lease и узким токеном
     type: engineering
     goal: team-works-in-parallel
-    status: in_progress
+    status: done
     owner_role: engineer
     value: medium
     write_scope: [templates/ci/]
@@ -1259,7 +1259,7 @@ work:
       Осиротевший config/quality-gates.yaml удалён; повторное появление краснеет
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [config/, ai_ops_kit/validation/, tests/]
@@ -1273,7 +1273,7 @@ work:
       Счётчики модулей/пакетов/валидаторов выводятся из факта, а не написаны рукой
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [docs/, AGENTS.md, ai_ops_kit/validation/, tests/]
@@ -1288,7 +1288,7 @@ work:
       Четыре «оживлённых» валидатора имеют fail-closed кейс (ловят дефект, не только проходят)
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [tests/, ai_ops_kit/validation/]
@@ -1303,7 +1303,7 @@ work:
       Каталог инвариантов честно помечен «проверено на синтетике»; фантомные ссылки убраны
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
     owner_role: engineer
     value: medium
     write_scope: [docs/, AGENTS.md]
@@ -1318,7 +1318,7 @@ work:
       Тест сверяет форму evidence в коде с schemas/gate-evidence.schema.json
     type: engineering
     goal: green-means-checked
-    status: in_progress
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/gates/, schemas/, tests/]
@@ -1332,7 +1332,7 @@ work:
       Docstring gates/invariants.py указывает реальный путь импорта
     type: engineering
     goal: green-means-checked
-    status: in_progress
+    status: done
     owner_role: engineer
     value: low
     write_scope: [ai_ops_kit/gates/]
@@ -1346,7 +1346,7 @@ work:
       Окна контекста моделей выводятся из registry/models.yaml, не из кода
     type: engineering
     goal: green-means-checked
-    status: in_progress
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/context/, registry/, tests/]
@@ -1360,7 +1360,7 @@ work:
       Цены per-token живут в registry/models.yaml, orchestrator_usage читает их оттуда
     type: engineering
     goal: green-means-checked
-    status: in_progress
+    status: done
     owner_role: engineer
     value: medium
     write_scope: [ai_ops_kit/providers/, registry/, tests/]
