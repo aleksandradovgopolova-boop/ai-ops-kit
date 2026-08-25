@@ -148,7 +148,6 @@ _PROSE_SUFFIXES = (".md", ".rst", ".txt")
 DETECTOR_OWN_MATERIAL = {
     "ai_ops_kit/security/security_scan.py": "объявляет сами образцы injection и секретов",
     "tests/unit/test_security_scan.py": "подсовывает детектору образцы, чтобы проверить детекцию",
-    "tests/unit/test_security_scan_selftest.py": "то же, для селфтеста модуля",
     "tests/unit/test_property_based.py": "property-based фикстуры того же детектора",
 }
 
