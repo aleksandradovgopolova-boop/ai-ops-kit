@@ -6,11 +6,10 @@ usage honesty, and budget. Each invariant has a unique ID, description, severity
 a check function that returns True when the invariant HOLDS.
 
 Usage:
-    from invariants import check_invariant, ALL_INVARIANTS, selftest
+    from ai_ops_kit.gates.invariants import check_invariant, ALL_INVARIANTS
     assert check_invariant("INV-PREFLIGHT-001", blocked=True, reasons=["spec missing"])
-    selftest()
 
-python3 tools/invariants.py --selftest
+Селфтесты инвариантов — в tests/unit/test_invariants_selftest.py (pytest).
 """
 from __future__ import annotations
 
