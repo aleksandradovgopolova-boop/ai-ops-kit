@@ -135,6 +135,18 @@ def derived_verification_counts(pkg=PKG):
     return len(names), len(covered)
 
 
+def derived_field_values(pkg=PKG):
+    """Числа release-claims, выведенные ИЗ ФАКТА (файлов/замера), а не хранимые в реестре.
+
+    Пока это счёт валидаторов и их внешнего покрытия (работа
+    `derived-counts-are-computed-not-declared`): release-claims их больше не держит, поэтому двум
+    лентам нечего двигать и расходиться нечему by construction. Единственное место, где живёт
+    число, — сам факт; все поверхности (проверка release-claims и публичный текст) читают его
+    отсюда, а не из хранимого литерала."""
+    vtotal, vtested = derived_verification_counts(pkg)
+    return {"validators_count": vtotal, "validators_externally_tested": vtested}
+
+
 def mvp_gates_are_blocking(pkg=PKG):
     """Гейты из mvp_blocking_gates обязаны иметь blocking: true. Иначе список MVP-блокеров —
     декларация без силы: гейт числится блокирующим, а прогон он не останавливает."""
@@ -257,6 +269,12 @@ def derived_number_errors(data, pkg=PKG):
     к самим claim'ам (они деривируются из реестров), — но на публичном тексте.
     """
     import re
+    # Числа, выводимые из факта, здесь тоже должны быть известны: вызов может передать СЫРОЙ реестр,
+    # где validators_* уже не хранятся (они DERIVED). Заполняем факт, не затирая объявленное, —
+    # тогда текст сверяется с фактом, а не с отсутствующим ключом (иначе «в тексте 80, claim=None»).
+    data = dict(data)
+    for _k, _v in derived_field_values(pkg).items():
+        data.setdefault(_k, _v)
     e = []
     for rule in (data.get("derived_numbers_in_docs") or []):
         name, pat, field = rule.get("file"), rule.get("pattern"), rule.get("claim")
@@ -389,13 +407,22 @@ def check(data, pkg=PKG):
                 e.append(f"claims.layering_cycles_longer_than_two="
                          f"{data['layering_cycles_longer_than_two']} != ратчета в "
                          f"packages/layering.yaml={lay_cycles}")
+    # validators_count / validators_externally_tested — DERIVED и в release-claims БОЛЬШЕ НЕ хранятся
+    # (работа `derived-counts-are-computed-not-declared`): число выводится из факта, поэтому PR его не
+    # правит и двум лентам нечего двигать. Литерал ОСТАЁТСЯ допустимым, но не обязателен — если лента
+    # всё же объявит число и оно разойдётся с фактом, это по-прежнему ошибка (защита от повторного
+    # «прибивания гвоздём»). Затем факт ВПРЫСКИВАЕТСЯ в data, чтобы публичный текст (derived_number_
+    # errors ниже) сверялся с фактом, а не с отсутствующим ключом.
     vtotal, vtested = derived_verification_counts(pkg)
-    if data.get("validators_count") != vtotal:
+    if data.get("validators_count") is not None and data.get("validators_count") != vtotal:
         e.append(f"claims.validators_count={data.get('validators_count')} != валидаторов в validation/={vtotal}")
-    if data.get("validators_externally_tested") != vtested:
+    if (data.get("validators_externally_tested") is not None
+            and data.get("validators_externally_tested") != vtested):
         e.append(f"claims.validators_externally_tested={data.get('validators_externally_tested')} "
                  f"!= фактически покрытых внешним тестом={vtested} (покрытие изменилось — "
                  f"обнови claim осознанно, молча просесть оно не должно)")
+    data.setdefault("validators_count", vtotal)
+    data.setdefault("validators_externally_tested", vtested)
     _weak = mvp_gates_are_blocking(pkg)
     if _weak:
         e.append(f"mvp_blocking_gates без blocking: true — {', '.join(_weak)} "
