@@ -1,0 +1,1 @@
+run_pipeline расщеплён: извлечены _build_containment, _build_loop_section, _build_commit_section, _plan_delivery, _compute_overall_status, _build_not_yet_list. 1092→1019 строк. 17 характеристических тестов зелёные.

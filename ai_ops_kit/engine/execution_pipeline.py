@@ -66,6 +66,112 @@ from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402,F401
 )
 
 
+def _build_loop_section(loop, applied):
+    """Секция loop в отчёте. v3.38 (K6): вынесено из run_pipeline."""
+    return {"stopped": loop["stopped"], "steps": loop["steps"],
+            "applied_writes": len(applied), "denied": len(loop["denied"]),
+            "denied_reasons": [d.get("reason") for d in loop["denied"]][:10],
+            "transcript": [{k: t.get(k) for k in ("step", "op", "allowed", "ok", "done", "reason")
+                            if k in t} for t in (loop.get("transcript") or [])][:40]}
+
+
+def _build_commit_section(work_branch, committed_sha, evidence_revision, revision_matches,
+                          changed_for_verification, work_produced_by, tree_clean_before, tree_clean_after):
+    """Секция commit в отчёте. v3.38 (K6): вынесено из run_pipeline."""
+    return {"branch": work_branch, "sha": committed_sha,
+            "evidence_revision": evidence_revision,
+            "evidence_on_exact_sha": revision_matches,
+            "changed_files": list(changed_for_verification or []),
+            "produced_by": work_produced_by,
+            "tree_clean_before_checks": tree_clean_before,
+            "tree_clean_after_checks": tree_clean_after}
+
+
+def _build_containment(sandbox, pol, loop):
+    """Секция containment в отчёте. v3.38 (K6): вынесено из run_pipeline."""
+    return {"sandbox": sandbox, "shell_mode": pol.shell_mode,
+            "block_push": pol.block_push, "allow_network": pol.allow_network,
+            "shell_path_guard": getattr(pol, "shell_path_guard", False),
+            "shell_scope_guard": getattr(pol, "shell_scope_guard", False),
+            "shell_path_violations": sum(
+                len(((e.get("fs_guard") or {}).get("violations")) or [])
+                for e in (loop.get("evidence") or [])),
+            "note": "enforceable-подмножество на уровне брокера: пути закрыты на обоих "
+                    "каналах (write — до, shell — пост-фактум с откатом); запись вне "
+                    "корня репозитория, сеть и не-git деревья — по-прежнему нет; полная "
+                    "FS/сеть/ресурс-изоляция — контейнерный runtime"}
+
+
+def _plan_delivery(open_pr, ready, committed_sha, work_branch, base_binding, base_ref, base_sha,
+                   work_root, wid, task, delivery_pf):
+    """Планирование доставки. v3.38 (K6): вынесено из run_pipeline.
+    -> (delivery, delivery_plan, can_deliver)."""
+    delivery_plan = None
+    can_deliver = bool(open_pr and ready and committed_sha and work_branch)
+    if can_deliver:
+        delivery = {"requested": True, "base_binding": base_binding, "status": "planned",
+                    "reason": "доставку выполняет ТОЛЬКО транзакционный контроллер после durable-фиксации "
+                              "lifecycle (run_pipeline не открывает PR)"}
+        delivery_plan = {"ready_for_delivery": True, "work_root": str(work_root), "work_branch": work_branch,
+                         "base_ref": base_ref, "base_sha": base_sha, "committed_sha": committed_sha,
+                         "wid": wid, "task": task, "base_binding": base_binding}
+    else:
+        delivery = {"requested": bool(open_pr), "base_binding": base_binding,
+                    "preflight": delivery_pf,
+                    "status": ("not-requested" if not open_pr
+                               else ("not-attempted" if not ready else None))}
+    return delivery, delivery_plan, can_deliver
+
+
+def _compute_overall_status(ready, can_deliver, open_pr):
+    """Определить итоговый статус прогона. v3.38 (K6): вынесено из run_pipeline."""
+    if not ready:
+        return "error"
+    if can_deliver:
+        return "ready-undelivered"
+    if not open_pr:
+        return "delivered"
+    return "delivery-failed"
+
+
+def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_depth_missing,
+                        spec_incomplete, spec_bad_status, context_overflow, approvals_cover_ok,
+                        approval_recheck):
+    """Список «что ещё не сделано» — информирование вызывающего. v3.38 (K6): вынесено из run_pipeline."""
+    not_yet = ["живой предложитель (swap провайдера)"]
+    if spec_prestage_bad:
+        not_yet.insert(0, "spec-first (P0.1): author вернул невалидную спецификацию ["
+                       + ", ".join(str(e.get("gate")) for e in spec_prestage_bad)
+                       + "] — реализация НЕ запускалась (0 tool-loop вызовов); почини author/спеку")
+    if not commit:
+        not_yet.insert(0, "commit+reverify (запусти с commit=True) — без коммита ready_for_pr всегда False")
+    if not env_qualified:
+        not_yet.insert(0, "окружение не квалифицировано: install упал И проверки не смогли отработать "
+                          "(нет тулчейна/зависимостей) — почини установку стека")
+    if not open_pr:
+        not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
+    if spec_depth_missing:
+        not_yet.append("spec-depth: не закрыты разделы уровня " + ", ".join(spec_depth_missing))
+    if spec_incomplete:
+        _bad = {b["id"]: b for b in spec_bad_status}
+        _empty = [s for s in spec_incomplete if s not in _bad]
+        if _empty:
+            not_yet.append("spec-first: features/<wid>/spec.yaml неполон — заполни разделы: "
+                           + ", ".join(_empty))
+        for sid, b in _bad.items():
+            not_yet.append(
+                f"spec-first: раздел {sid} {'заполнен, но' if b.get('has_content') else 'имеет'} "
+                f"нераспознанный статус '{b.get('given')}' — допустимо: "
+                + "/".join(sorted(_sl.SECTION_STATUSES - {"missing"})))
+    if context_overflow:
+        not_yet.append("context budget превышен — задачу нужно декомпозировать (см. work_package)")
+    if not approvals_cover_ok:
+        not_yet.insert(0, "human-approval: scope одобрения не покрывает изменённые пути ("
+                       + ", ".join(u["domain"] for u in approval_recheck.get("uncovered") or [])
+                       + ") — переодобри под фактический дифф")
+    return not_yet
+
+
 def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, committed_sha, wid, task,
                 delivery_id=None):
     """v3.0.15/v3.0.16 (finding аудита P0/#1): доверенная доставка draft PR — единственная точка открытия
@@ -1008,56 +1114,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # DeliveryIntent. Так прямой вызов run_pipeline(..., open_pr=True) больше НЕ может обойти lifecycle-
     # барьер (прежде defer_delivery=False давал inline-доставку). Параметр defer_delivery устарел и
     # игнорируется (внешнее действие из pipeline запрещено архитектурно).
-    delivery_plan = None
-    can_deliver = bool(open_pr and ready and committed_sha and work_branch)
-    if can_deliver:
-        delivery = {"requested": True, "base_binding": base_binding, "status": "planned",
-                    "reason": "доставку выполняет ТОЛЬКО транзакционный контроллер после durable-фиксации "
-                              "lifecycle (run_pipeline не открывает PR)"}
-        delivery_plan = {"ready_for_delivery": True, "work_root": str(work_root), "work_branch": work_branch,
-                         "base_ref": base_ref, "base_sha": base_sha, "committed_sha": committed_sha,
-                         "wid": wid, "task": task, "base_binding": base_binding}
-    else:
-        delivery = {"requested": bool(open_pr), "base_binding": base_binding,
-                    "preflight": delivery_pf,
-                    "status": ("not-requested" if not open_pr
-                               else ("not-attempted" if not ready else None))}
+    delivery, delivery_plan, can_deliver = _plan_delivery(
+        open_pr, ready, committed_sha, work_branch, base_binding, base_ref, base_sha,
+        work_root, wid, task, delivery_pf)
     # ready есть, доставка НЕ выполнена в pipeline: overall — «готово к доставке» (контроллер финализирует).
-    overall_status = ("error" if not ready else
-                      ("ready-undelivered" if can_deliver
-                       else ("delivered" if not open_pr else "delivery-failed")))
+    overall_status = _compute_overall_status(ready, can_deliver, open_pr)
 
-    not_yet = ["живой предложитель (swap провайдера)"]
-    if spec_prestage_bad:
-        not_yet.insert(0, "spec-first (P0.1): author вернул невалидную спецификацию ["
-                       + ", ".join(str(e.get("gate")) for e in spec_prestage_bad)
-                       + "] — реализация НЕ запускалась (0 tool-loop вызовов); почини author/спеку")
-    if not commit:
-        not_yet.insert(0, "commit+reverify (запусти с commit=True) — без коммита ready_for_pr всегда False")
-    if not env_qualified:
-        not_yet.insert(0, "окружение не квалифицировано: install упал И проверки не смогли отработать "
-                          "(нет тулчейна/зависимостей) — почини установку стека")
-    if not open_pr:
-        not_yet.append("draft PR (запусти с open_pr=True + GITHUB_TOKEN)")
-    if spec_depth_missing:
-        not_yet.append("spec-depth: не закрыты разделы уровня " + ", ".join(spec_depth_missing))
-    if spec_incomplete:
-        _bad = {b["id"]: b for b in spec_bad_status}
-        _empty = [s for s in spec_incomplete if s not in _bad]
-        if _empty:
-            not_yet.append("spec-first: features/<wid>/spec.yaml неполон — заполни разделы: "
-                           + ", ".join(_empty))
-        for sid, b in _bad.items():
-            not_yet.append(
-                f"spec-first: раздел {sid} {'заполнен, но' if b.get('has_content') else 'имеет'} "
-                f"нераспознанный статус '{b.get('given')}' — допустимо: "
-                + "/".join(sorted(_sl.SECTION_STATUSES - {"missing"})))
-    if context_overflow:
-        not_yet.append("context budget превышен — задачу нужно декомпозировать (см. work_package)")
-    if not approvals_cover_ok:
-        not_yet.insert(0, "human-approval: scope одобрения не покрывает изменённые пути ("
-                       + ", ".join(u["domain"] for u in approval_recheck.get("uncovered") or [])
-                       + ") — переодобри под фактический дифф")
+    not_yet = _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad,
+                                  spec_depth_missing, spec_incomplete, spec_bad_status,
+                                  context_overflow, approvals_cover_ok, approval_recheck)
 
     report = {
         "schema_version": 1, "kind": "execution-pipeline",
@@ -1066,29 +1131,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "base_workflow": plan["base_workflow"],
         "profile": {"stacks": [s.get("language") for s in profile.get("stacks", [])],
                     "undetermined": profile.get("undetermined", [])},
-        # v2.81 Containment: честная декларация действующей политики изоляции (что реально
-        # enforced в этом прогоне) — sandbox сужает shell до allowlist; block_push всегда True.
-        "containment": {"sandbox": sandbox, "shell_mode": pol.shell_mode,
-                        "block_push": pol.block_push, "allow_network": pol.allow_network,
-                        # v3.36: пути enforced на ДВА канала, а не на один — shell сверяется
-                        # пост-фактум (нарушение откатывается). shell_path_violations>0 означает,
-                        # что модель пыталась обойти границу через shell.
-                        "shell_path_guard": getattr(pol, "shell_path_guard", False),
-                        "shell_scope_guard": getattr(pol, "shell_scope_guard", False),
-                        "shell_path_violations": sum(
-                            len(((e.get("fs_guard") or {}).get("violations")) or [])
-                            for e in (loop.get("evidence") or [])),
-                        "note": "enforceable-подмножество на уровне брокера: пути закрыты на обоих "
-                                "каналах (write — до, shell — пост-фактум с откатом); запись вне "
-                                "корня репозитория, сеть и не-git деревья — по-прежнему нет; полная "
-                                "FS/сеть/ресурс-изоляция — контейнерный runtime"},
-        "loop": {"stopped": loop["stopped"], "steps": loop["steps"],
-                 "applied_writes": len(applied), "denied": len(loop["denied"]),
-                 # observability (finding живого прогона): без трейса не понять, ПОЧЕМУ петля
-                 # уткнулась в max_steps (модель флудит read? denied? bad-json?). Компактный трейс.
-                 "denied_reasons": [d.get("reason") for d in loop["denied"]][:10],
-                 "transcript": [{k: t.get(k) for k in ("step", "op", "allowed", "ok", "done", "reason")
-                                 if k in t} for t in (loop.get("transcript") or [])][:40]},
+        "containment": _build_containment(sandbox, pol, loop),
+        "loop": _build_loop_section(loop, applied),
         "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
         "base_binding": base_binding,              # v3.0.1 (P0): base_ref + base_sha, от которого форкнута ветка
         "resume": resume_info,                     # v2.109: продолжение поверх подтверждённой работы (None если resume не запрошен)
@@ -1096,21 +1140,10 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "prepare_ok": prepare_ok,                  # install-команды стека прошли (для наблюдаемости)
         "env_qualified": env_qualified,            # v2.118: install прошёл ЛИБО проверки реально отработали
         "prepare_mutated_tree": prepare_mutated_tree,  # P0.6: подготовка меняла tracked -> откачено до модели
-        "commit": {"branch": work_branch, "sha": committed_sha,
-                   "evidence_revision": evidence_revision,
-                   "evidence_on_exact_sha": revision_matches,
-                   # F-017 (раунд C, T5): loop.applied_writes считает правки, применённые ЧЕРЕЗ
-                   # брокера, и это не то же самое, что реально изменённые файлы: writer уровня
-                   # `claude -p` правит файлы своими инструментами. В отчёте расходилось
-                   # `applied_writes: 0` с коммитом на 2 файла. Ground truth — коммит, кладём его
-                   # рядом, чтобы не приходилось выяснять это вручную.
-                   "changed_files": list(_changed_for_verification or []),
-                   # ЧЕМ произведена работа. Без этого «правок 0» рядом с живым коммитом читается
-                   # как «кит не работает» — и читалось: ии-среда дважды за день получила
-                   # «код не написан» при сделанном коммите.
-                   "produced_by": work_produced_by,
-                   "tree_clean_before_checks": tree_clean_before_checks,
-                   "tree_clean_after_checks": tree_clean_after_checks},
+        "commit": _build_commit_section(work_branch, committed_sha, evidence_revision,
+                                        revision_matches, _changed_for_verification,
+                                        work_produced_by, tree_clean_before_checks,
+                                        tree_clean_after_checks),
         # v3.30: доказательство исправления — в отчёте, а не только в вердикте гейта: постфактум
         # видно, ЧЕМ подтверждена правка (или почему не подтверждена).
         "regression": regression_proof,
