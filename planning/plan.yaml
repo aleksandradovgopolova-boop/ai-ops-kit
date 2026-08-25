@@ -1346,7 +1346,7 @@ work:
       Окна контекста моделей выводятся из registry/models.yaml, не из кода
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/context/, registry/, tests/]
