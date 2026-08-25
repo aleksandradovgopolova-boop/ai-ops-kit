@@ -3980,3 +3980,205 @@ work:
       ЗАКРЫТО 25.08.2026 (PR #292). override_learning.py: adjust_priority/adjust_risk меняют
       рекомендации на основе прошлых override'ов из human_override.override_signals().
       Ключевой тест: рекомендация С override отличается от БЕЗ override. 9 тестов.
+
+  # --- Phase 0 + Phase B закрыты (аудит 2026-08-25, цель trustworthy-core) ---
+  - id: workflow-least-privilege
+    title: >-
+      На package-quality и pr-smoke объявлен минимальный permissions (contents: read)
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 300
+    evidence: .github/workflows/pr-smoke.yml
+    result: >-
+      ЗАКРЫТО 2026-08-25. package-quality и pr-smoke объявляют минимальный permissions (contents: read); PR-триггерный код больше не получает широкий токен по умолчанию.
+  - id: kit-runs-own-security-scan
+    title: >-
+      Кит гоняет собственный security_scan в CI против диффа PR
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-25'
+    pr: 302
+    evidence: .github/workflows/package-quality.yml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Кит гоняет свой security_scan.py --base origin/main обязательной джобой CI — та же планка, что для дочек.
+  - id: child-update-force-with-lease
+    title: >-
+      Автообновление дочки пушит через --force-with-lease и узким токеном
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-25'
+    pr: 304
+    evidence: templates/ci/ai-ops-update.yml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Автообновление дочки пушит через --force-with-lease — чужие коммиты на ветке обновления больше не перетираются молча.
+  - id: delete-orphaned-gate-config
+    title: >-
+      Осиротевший config/quality-gates.yaml удалён; повторное появление краснеет
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 307
+    evidence: quality/gates.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Осиротевший config/quality-gates.yaml (14 гейтов, имена расходились с SoT) удалён; quality/gates.yaml — единственный реестр гейтов.
+  - id: arch-counts-under-claim-markers
+    title: >-
+      Счётчики модулей/пакетов/валидаторов выводятся из факта, а не написаны рукой
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 308
+    evidence: tests/unit/test_arch_counts_honest.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Рукописные счётчики модулей/валидаторов убраны из AGENTS.md; derive-тест выводит числа из факта. Остаток: перечень пакетов в карте AGENTS.md не полон (нет checks/governance/integrations) — мелкий хвост.
+  - id: validator-teeth-fail-closed
+    title: >-
+      Четыре «оживлённых» валидатора имеют fail-closed кейс (ловят дефект, не только проходят)
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 309
+    evidence: tests/unit/test_validator_teeth_fail_closed.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. 4 «оживлённых» валидатора получили fail-closed кейсы: впрыснутый дефект -> assert result == 1. Mutant-survivable больше нет (TEST-2 аудита закрыта).
+  - id: invariant-claims-honest
+    title: >-
+      Каталог инвариантов честно помечен «проверено на синтетике»; фантомные ссылки убраны
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 310
+    evidence: docs/api/invariants.md
+    result: >-
+      ЗАКРЫТО 2026-08-25. Каталог инвариантов честно помечен «проверено на синтетике»; фантомные --selftest/tools/invariants.py убраны. Рантайм-подключение — отдельной работой wire-invariants-runtime.
+  - id: gate-evidence-schema-synced
+    title: >-
+      Тест сверяет форму evidence в коде с schemas/gate-evidence.schema.json
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 299
+    evidence: tests/unit/test_gate_evidence_schema_synced.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Тест сверяет _EVIDENCE_KEYS кода со schemas/gate-evidence.schema.json — расхождение код<->схема краснеет (INT-4 аудита закрыта).
+  - id: invariants-docstring-fix
+    title: >-
+      Docstring gates/invariants.py указывает реальный путь импорта
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 301
+    evidence: ai_ops_kit/gates/invariants.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Docstring указывает реальный путь (tests/unit/test_invariants_selftest.py); фантомные ссылки убраны.
+  - id: model-context-from-registry
+    title: >-
+      Окна контекста моделей выводятся из registry/models.yaml, не из кода
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 298
+    evidence: ai_ops_kit/context/context_compiler.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. MODEL_CONTEXT читается из registry/models.yaml (_load_model_context); хардкод с устаревшими id удалён — реестр единственный SoT окон контекста (INT-2 закрыта).
+  - id: model-pricing-in-registry
+    title: >-
+      Цены per-token живут в registry/models.yaml, orchestrator_usage читает их оттуда
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 303
+    evidence: tests/unit/test_model_pricing_in_registry.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Цены per-mtok — first-class поля registry/models.yaml; orchestrator_usage читает их из реестра (INT-3 закрыта).
+  - id: kernel-ports-and-contracts
+    title: >-
+      Объявлены порты ядра (Executor/Context/Evidence/Gate/Delivery/Policy) и контракты
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/kernel/ports.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Объявлены 6 портов ядра (Executor/Context/Evidence/Gate/Delivery/Policy) и TypedDict-контракты; единый шов ядра назван.
+  - id: break-engine-gates-di
+    title: >-
+      evidence_collector получает tool_broker параметром (снят цикл engine↔gates)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/gates/evidence_collector.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. evidence_collector получает tool_broker параметром (DI); mutual_pairs 5->4.
+  - id: break-context-engine-contract
+    title: >-
+      context_compiler использует run_plan как TypedDict-контракт (снят цикл context↔engine)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/context/context_compiler.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. context_compiler не импортирует engine.run_plan модулем; mutual_pairs 4->3, циклы длиннее двух 6->0.
+  - id: break-delivery-engine-tx
+    title: >-
+      delivery вызывается только из ai_ops_run (контракт-тест; снят цикл delivery↔engine)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/delivery/review_branch.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. delivery вызывается только транзакционно из ai_ops_run, контракт-тест фиксирует границу; mutual_pairs 3->2.
+  - id: move-deploy-readiness-to-gates
+    title: >-
+      deploy_readiness переехал в gates; sys.path-хак в gate_executor удалён (снят цикл engops↔gates)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/gates/deploy_readiness.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. deploy_readiness переехал из engops в gates; sys.path-хак в gate_executor удалён; mutual_pairs 2->1.
+  - id: break-engine-lifecycle-classify
+    title: >-
+      Классификация вынесена из workitem в шаг ядра (снят корневой цикл engine↔lifecycle)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: packages/layering.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Классификация вынесена из workitem; mutual_pairs 1->0 — кольцо capabilities стало DAG (validate_layering: пар 0, циклов 0).
+  - id: split-god-functions
+    title: >-
+      run/run_pipeline расщеплены на тестируемые по фазам функции
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/engine/execution_pipeline.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Из run_pipeline извлечено 6 функций (1092->1019). ЧЕСТНО: это первый срез — run_pipeline 1019 и run 1277 строк остаются крупными; глубокое расщепление — отдельный долг под защитой характеристических тестов.
+  - id: wire-invariants-runtime
+    title: >-
+      check_invariant вызывается в реальных producer'ах (fail-closed на нарушении)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/gates/preflight.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. check_invariant вызывается в реальных producer'ах (preflight, ai_ops_run, execution_pipeline) fail-closed — каталог инвариантов перестал быть декоративным (INT-1 аудита закрыта).
+  - id: characterization-tests-pipeline
+    title: >-
+      Характеристические тесты фаз pipeline написаны ДО расщепления God-функций
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: tests/unit/test_pipeline_characterization.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Характеристические тесты зафиксировали поведение run_pipeline ДО расщепления K6.
+  - id: kernel-boundary-rule
+    title: >-
+      Слой kernel объявлен в layering.yaml; ядро не импортирует спутники (проверяется)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: packages/layering.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Правило границы ядра: ядро не импортирует спутники; краснеет на нарушении.
