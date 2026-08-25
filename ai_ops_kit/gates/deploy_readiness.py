@@ -32,11 +32,10 @@ from pathlib import Path
 
 import yaml
 
-try:
-    from ai_ops_kit.engops.environment_map import assess as env_assess
-except ImportError:  # pragma: no cover — путь подмешивает вызывающий
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from ai_ops_kit.engops.environment_map import assess as env_assess
+# v3.38 (K4): environment_map загружается лениво — gates не импортирует engops статически.
+def _env_assess(root):
+    _em = __import__("ai_ops_kit.engops.environment_map", fromlist=["assess"])
+    return _em.assess(root)
 
 MATURITY = ("absent", "configured", "runnable", "verified")
 
@@ -182,7 +181,7 @@ def assess(child_root):
     """Зрелость поставки. -> DeployReadiness (dict). Ничего не запускает и не меняет."""
     root = Path(child_root)
     cfg = _deploy_config(root)
-    env_map = env_assess(root)
+    env_map = _env_assess(root)
     declared_envs = [e for e in env_map["environments"] if e["declared"]]
 
     markers = _config_markers(root)

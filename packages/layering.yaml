@@ -107,11 +107,12 @@ known_violations: []
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 2          # engops<->gates, engine<->lifecycle
+  mutual_pairs: 1          # engine<->lifecycle
                            # v3.38 (K1): engine<->gates СНЯТА. 5 -> 4.
                            # v3.38 (K2): context<->engine СНЯТА. 4 -> 3.
-                           # v3.38 (K3): delivery<->engine СНЯТА — review_branch загружает
-                           # engine-модули динамически (__import__). 3 -> 2.
+                           # v3.38 (K3): delivery<->engine СНЯТА. 3 -> 2.
+                           # v3.38 (K4): engops<->gates СНЯТА — deploy_readiness перенесён
+                           # из engops в gates, environment_map загружается лениво. 2 -> 1.
                            #
                            # 12 -> 7 (2026-08-12), четырьмя переездами и без правки логики. Правило
                            # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
