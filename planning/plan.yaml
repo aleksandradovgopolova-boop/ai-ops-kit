@@ -399,20 +399,6 @@ work:
       Разбор 20.08: ручной интегратор падал на таймаутах gh, отчитывался «влито» по факту запуска
       команды, сверял SHA с пустой строкой. Готово, когда green-PR вливается родным merge queue без
       ручного опроса; DIRTY не возникает (queue батчит и ребейзит сам).
-  - id: local-check-mirrors-ci
-    title: >-
-      Локальная проверка зеркалит блокирующий CI: красное ловится до пуша, а не раундом CI после
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [scripts/, docs/]
-    finding: docs/parallel-execution-retro.md
-    reason: >-
-      Разбор 20.08: регистрация валидатора/пакета, layering, public-surface, footprint,
-      3.9-синтаксис — всё всплывало в CI после пуша, тратя раунд. Готово, когда ./scripts/check-fast
-      прогоняет тот же набор локально и лента видит красное мгновенно.
   - id: lane-ships-small-prs
     title: >-
       Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
