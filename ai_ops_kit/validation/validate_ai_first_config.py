@@ -5,7 +5,8 @@
   1. невалидный YAML;
   2. отсутствие обязательного `version`;
   3. рассинхрон `agents.yaml` с файлами агентов (агент в реестре без файла роли);
-  4. структурные ошибки в model-routing / quality-gates / tool-permissions / protected-paths.
+  4. структурные ошибки в model-routing / tool-permissions / protected-paths;
+  5. орфанный config/quality-gates.yaml (дубликат quality/gates.yaml — SoT).
 
 Использование:  python3 02_tools/ci/validate_ai_first_config.py
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
@@ -77,12 +78,6 @@ def check_model_routing(data):
             fail("model-routing.yaml", f"маршрут {name} без tasks")
 
 
-def check_quality_gates(data):
-    gates = data.get("gates")
-    if not isinstance(gates, dict) or not gates:
-        fail("quality-gates.yaml", "нет непустого gates")
-
-
 def check_tool_permissions(data):
     modes = data.get("modes")
     if not isinstance(modes, dict) or not modes:
@@ -111,9 +106,15 @@ def main():
     agents = load("agents.yaml")
     if agents:
         check_agents(agents, stems)
+    # B1: config/quality-gates.yaml — орфанный дубликат quality/gates.yaml (SoT).
+    # Если файл появился снова — отказ (fail-closed).
+    orphaned_gates = CONFIG_DIR / "quality-gates.yaml"
+    if orphaned_gates.exists():
+        fail("config/quality-gates.yaml",
+             "орфанный дубликат quality/gates.yaml (SoT); удалите файл")
+
     for name, checker in [
         ("model-routing.yaml", check_model_routing),
-        ("quality-gates.yaml", check_quality_gates),
         ("tool-permissions.yaml", check_tool_permissions),
         ("protected-paths.yaml", check_protected_paths),
     ]:
