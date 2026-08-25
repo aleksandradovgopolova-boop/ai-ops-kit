@@ -1245,7 +1245,7 @@ work:
       Автообновление дочки пушит через --force-with-lease и узким токеном
     type: engineering
     goal: team-works-in-parallel
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: medium
     write_scope: [templates/ci/]
