@@ -209,6 +209,35 @@ def evidence_from_judge_output(gate: dict, text: str, source: str = "judge-outpu
     return evidence_from_markdown(gate, text, source)
 
 
+# no-verdict: ревьюер исчерпал попытки, но вердикта не вынес. Это НЕ «evidence не предоставлено»
+# (generic fail/warn), а ЧЕСТНЫЙ ОТКАЗ с названной причиной — как ProviderRefusal, но от петли
+# ревью, а не от провайдера. Работа не «висит молча»: человек читает, ПОЧЕМУ вердикта нет.
+_NO_VERDICT_NEEDS_HUMAN = {"no-verdict", "no-verdict-handoff"}
+
+
+def evidence_from_no_verdict(gate: dict, stopped: str, source: str = "no-verdict"):
+    """Ревьюер не вынес вердикт (run_review -> result=None) -> evidence, которое НАЗЫВАЕТ причину.
+
+    Тот же принцип, что `evidence_from_judge_refusal`: отсутствие вердикта — не молчаливый fail,
+    а отказ с named cause. Статус повторяет то, что дал бы гейт без evidence (блокирующий -> fail,
+    advisory -> warn). `stopped` из run_review различает «ревьюер не успел» (no-verdict) и
+    «бюджет исчерпан» (budget: ...) — причина едет в отчёт.
+
+    Когда `stopped` — один из `_NO_VERDICT_NEEDS_HUMAN`, ставим `pending_human=True`: это тот же
+    класс, что `refused_by_model` у ProviderRefusal — человек обязан принять решение, агент не
+    может закрыть гейт самостоятельно."""
+    blocking = bool(gate.get("blocking"))
+    reason_text = f"судья не вынес вердикт: {stopped}" if stopped else "судья не вынес вердикт"
+    ev = {"status": "fail" if blocking else "warn", "evidence": [source]}
+    if blocking:
+        ev["blockers"] = [reason_text]
+    else:
+        ev["warnings"] = [reason_text]
+    if stopped in _NO_VERDICT_NEEDS_HUMAN:
+        ev["pending_human"] = True
+    return ev
+
+
 def collect_evidence(workflow_id: str, run_dir) -> dict:
     """Собрать evidence из артефактов reviewer-стадий (orchestrator --collect-evidence).
     Для каждого гейта ищем ответственную стадию (gate.stage / gate.responsible_role),

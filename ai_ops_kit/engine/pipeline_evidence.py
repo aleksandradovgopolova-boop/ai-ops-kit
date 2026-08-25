@@ -324,6 +324,17 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                  "errors": errs or None}
         reviews.append(entry)
         if errs:
+            # P0 no-verdict-is-an-honest-refusal-not-a-stall: отсутствие вердикта — не молчаливый
+            # пропуск гейта, а ЧЕСТНЫЙ отказ с названной причиной. stopped из run_review говорит,
+            # ПОЧЕМУ вердикта нет (no-verdict / budget / ...); evidence_from_no_verdict превращает
+            # это в gate evidence, которое доезжает до отчёта (блокеры/warnings + pending_human).
+            # Раньше gate_ev не пополнялся -> evaluate_gate давал generic «нет заключения reviewer»
+            # без причины, и работа «висла молча» — человек не отличал «судья не смог» от «судья
+            # не вызывался».
+            if not isinstance(res, dict):
+                gate_ev[gid] = gate_executor.evidence_from_no_verdict(
+                    g, rv.get("stopped") or "no-verdict",
+                    source=f"no-verdict @ {revision or 'HEAD'}")
             continue
         status = res.get("status")
         blocking = bool(g.get("blocking"))
@@ -407,7 +418,10 @@ def _review_security(reviewer_proposer, work_root, pack_result, revision, budget
             observed += [ln.strip() for ln in _names.splitlines() if ln.strip()]
     errs = _security_verdict_errors(res, revision, applicable, vrr, reviewer_reads=observed)
     if errs:
-        return None, {"status": (res or {}).get("status"), "invalid": errs, "raw": res}
+        # P0 no-verdict: stopped едет наружу, чтобы вызывающий отличил «вердикта нет» от
+        # «вердикт невалиден» — разные причины, разные действия человека.
+        return None, {"status": (res or {}).get("status"), "invalid": errs, "raw": res,
+                      "stopped": rv.get("stopped")}
     return (res or {}).get("status"), res
 
 

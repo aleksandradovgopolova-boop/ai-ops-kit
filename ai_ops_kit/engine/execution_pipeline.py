@@ -702,17 +702,31 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                 # в res["invalid"]) + структурную диагностику — чтобы видеть, промпт/формат это или модель.
                 _inv = sec_res.get("invalid") if isinstance(sec_res, dict) else None
                 _raw = (sec_res.get("raw") if isinstance(sec_res, dict) and "raw" in sec_res else sec_res)
+                _stopped = (sec_res.get("stopped") if isinstance(sec_res, dict) else None)
                 _diag = {}
                 if isinstance(_raw, dict):
                     _dr = _raw.get("domain_results")
                     _diag = {"raw_keys": sorted(_raw.keys()),
                              "has_domain_results": isinstance(_dr, list) and bool(_dr),
                              "domain_results_count": len(_dr) if isinstance(_dr, list) else 0}
-                gate_ev["security"] = {"status": "fail", "blockers": ["security-reviewer не вынес pass"],
+                # P0 no-verdict-is-refusal: когда вердикта НЕТ (result=None), причина из stopped
+                # едет в блокеры — человек читает «судья не вынес вердикт: no-verdict», а не
+                # generic «не вынес pass» (которое не отличает отказ от fail-вердикта).
+                _sec_gate = {"blocking": True}
+                _no_v = None
+                if not isinstance(_raw, dict) and _stopped:
+                    _no_v = gate_executor.evidence_from_no_verdict(
+                        _sec_gate, _stopped, source=f"security no-verdict @ {committed_sha or 'HEAD'}")
+                    _blockers = _no_v.get("blockers", ["security-reviewer не вынес pass"])
+                else:
+                    _blockers = ["security-reviewer не вынес pass"]
+                gate_ev["security"] = {"status": "fail", "blockers": _blockers,
                                        "reviewer": {"status": sec_status},
                                        "verdict_errors": _inv, "verdict_diag": _diag,
                                        "pack": {"applicable": security_pack_result["applicable_domains"],
                                                 "needs_review": security_pack_result["needs_review"]}}
+                if _no_v and _no_v.get("pending_human"):
+                    gate_ev["security"]["pending_human"] = True
         else:
             blockers = []
             if security_pack_result["blocking"]:
