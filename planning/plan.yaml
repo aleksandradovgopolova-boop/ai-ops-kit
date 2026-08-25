@@ -1231,7 +1231,7 @@ work:
       Кит гоняет собственный security_scan в CI против диффа PR
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [.github/]

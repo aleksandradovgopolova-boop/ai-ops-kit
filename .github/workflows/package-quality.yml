@@ -153,6 +153,23 @@ jobs:
             echo "::error::формат сообщений коммитов нарушен (код $rc)"
             exit 1
           fi
+
+  # Lane A2: кит гоняет собственный security-scan против диффа PR.
+  # Только на PR (не push в main): `--base origin/main` требует наличия базы для сравнения.
+  # Сканер детерминированный (секреты + зависимости + флаги injection-surface),
+  # возврат 0 = чисто, 1 = находки/ошибка.
+  security-scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # нужна история для git diff против origin/main
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "Security scan: секреты, зависимости, injection-surface"
+        run: python3 ai_ops_kit/security/security_scan.py --base origin/main
+
   # 2026-08-12: ПОКРЫТИЕ СТАЛО ГЕЙТОМ, а не сбором ради сбора. Прежде `--cov` стоял в addopts
   # pytest.ini — то есть включался в каждом запуске, — и поэтому все скрипты контура гасили его
   # через `--no-cov`. Итог: покрытие реально считалось ровно в одном шаге и не сверялось с порогом
