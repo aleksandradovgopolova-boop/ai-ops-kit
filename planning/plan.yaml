@@ -1044,21 +1044,8 @@ work:
     # policy/risk его читают; тест доказывает, что override не помечается ошибкой и виден дальше.
 
   # ── Phase 5: Autonomous Product Loop (капстоун) — ЗАБЛОКИРОВАНО до готовности Phase 4 ──
-  # Собирается, когда health/risk/drift/decision-log/policy/override готовы. Пока только заведено.
-    title: "Автономный цикл: Observe→Understand→Plan→Prioritize→Execute→Evaluate→Learn→Replanning"
-    type: engineering
-    goal: autonomous-product-loop
-    status: todo
-    owner_role: engineer
-    depends_on: [team-status-auto-generated, risks-identified-with-mitigation, policy-driven-execution, learning-from-human-overrides]
-    write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/governance/, tests/]
-    value: high
-    affects: {delivery_operations: true, product_strategy: true, analytics_learning: true}
-    # PR-23: конечная цель — переход от AI assistant к AI operator при сохранении human control.
-    # КАПСТОУН: собирается, когда health/risk/drift/team-sync/decision-log/policy/override готовы и
-    # сходятся четыре ленты. Заблокировано зависимостями выше.
-    # Готово, когда: цикл на фикстуре проходит все восемь шагов, реплан меняет план по сигналам,
-    # каждое действие — через policy; тест на полный проход и на сохранение human control.
+  # Все зависимости (policy-driven-execution, learning-from-human-overrides) закрыты в
+  # history/plan-history.yaml. Капстоун собирается отдельной работой.
   # ── Phase 3: Roadmap & Delivery (лента 4) — ПОСТРОЕНА ─────────────────────────────────────────
   # Четыре работы построены и влиты (#226 roadmap, #231 milestones, #233 delivery+blockers) и
   # закрыты в history/plan-history.yaml. ИСХОДЫ цели roadmap-and-delivery ОСТАЮТСЯ false осознанно:
