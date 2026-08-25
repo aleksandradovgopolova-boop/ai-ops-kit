@@ -20,7 +20,7 @@ def engine_env():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         managed = root / ".ai" / "managed"
-        n = build_managed(PKG, managed)
+        build_managed(PKG, managed)
 
         child = root / "childrepo"
         child.mkdir()

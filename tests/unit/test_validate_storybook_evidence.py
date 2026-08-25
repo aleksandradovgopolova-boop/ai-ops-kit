@@ -13,7 +13,6 @@ from validate_storybook_evidence import (  # noqa: F401
     SCHEMA,
     STATUS3,
     check,
-    json,
     sys,
 )
 

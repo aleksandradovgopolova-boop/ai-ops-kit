@@ -67,7 +67,7 @@ class TestCompileBundle:
         assert b["included"] == b2["included"] and b["excluded"] == b2["excluded"]
 
     def test_overflow_small_budget(self, repo, eng_task):
-        b = compile_bundle(eng_task, repo)
+        compile_bundle(eng_task, repo)
         b_of = compile_bundle(eng_task, repo, context_budget=10)
         assert b_of["overflow"] is True
 

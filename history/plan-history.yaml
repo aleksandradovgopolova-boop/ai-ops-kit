@@ -3943,3 +3943,40 @@ work:
       Проверено на git worktree и git clone.
     # РАЗБОР: type: quality; write_scope [ai_ops_kit/lifecycle/, ai_ops_kit/planning/, quality/,
     #   docs/, planning/, tests/].
+  # ─── Закрыто 25.08.2026, Лента C (продолжение) ───
+
+  - id: plan-contributions-via-fragments
+    title: Работы добавляются в план фрагментами, а не правкой plan.yaml
+    goal: plan-as-control-plane
+    status: done
+    closed_at: '2026-08-25'
+    pr: 290
+    evidence: tests/unit/test_plan_fragments.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #290). plan_fragments.py: validate_fragment, read_fragments,
+      check_conflicts, assemble, create_fragment. Новая работа = planning/incoming/<id>.yaml;
+      сборка одной командой. 22 теста.
+
+  - id: policy-driven-execution
+    title: Исполнение под управлением policy
+    goal: autonomous-product-loop
+    status: done
+    closed_at: '2026-08-25'
+    pr: 285
+    evidence: ai_ops_kit/governance/enforcement.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #285, a7c7cb8). enforcement.py (124 строки): решение политики о
+      доставке входит в путь исполнения (observe mode). Композирует policy_engine + human_override +
+      decision_log. Block mode — отдельная работа (блокер: схема POLICY.yaml autonomy: vs default:).
+
+  - id: learning-from-human-overrides
+    title: Обучение на человеческих override
+    goal: autonomous-product-loop
+    status: done
+    closed_at: '2026-08-25'
+    pr: 292
+    evidence: tests/unit/test_override_learning.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #292). override_learning.py: adjust_priority/adjust_risk меняют
+      рекомендации на основе прошлых override'ов из human_override.override_signals().
+      Ключевой тест: рекомендация С override отличается от БЕЗ override. 9 тестов.
