@@ -237,3 +237,63 @@ class TestRaisedLevelAddsSections:
         assert created is False and rep["added"] == []
         assert rep["error"], "молчаливый отказ дописать неотличим от успеха"
         assert path.read_text(encoding="utf-8") == "это не спека, а обрывок текста\n"
+
+
+@pytest.mark.unit
+class TestArtifactCoverage:
+    """Перенос из test_spec_levels_selftest.py: покрытие из РЕАЛЬНОГО артефакта на диске.
+
+    Real Spec-First (v2.110): create_spec кладёт файл нужной глубины, а assess_from_artifacts /
+    validate_spec читают его с диска — «готов к реализации» доказывается содержимым файла, а не
+    словами. Артефакт прогона (requirements.yaml) засчитывает свой раздел; отсутствие spec.yaml
+    честно помечается, а не выдаётся за пустую-но-существующую спеку.
+    """
+
+    ENG = {"task_type": "ENGINEERING", "affected_areas": ["core"]}
+
+    def _doc(self, path):
+        import yaml
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    def test_create_spec_engineering_makes_l1_with_missing_sections(self, tmp_path):
+        sp, created, _rep = spec_levels.create_spec(tmp_path, "sf", self.ENG)
+        assert created and sp.is_file()
+        doc = self._doc(sp)
+        assert doc["level"] == 1
+        assert "requirements" in doc["sections"]
+        assert doc["sections"]["goal"]["status"] == "missing"
+
+    def test_empty_spec_is_not_ready_but_artifact_exists(self, tmp_path):
+        spec_levels.create_spec(tmp_path, "sf", self.ENG)
+        cov = spec_levels.assess_from_artifacts(self.ENG, tmp_path, "sf")
+        assert cov["ready_to_implement"] is False
+        assert cov["spec_artifact"] is True
+        assert cov["blocking_missing"]
+
+    def test_filled_spec_on_disk_is_ready(self, tmp_path):
+        import yaml
+        sp, _c, _r = spec_levels.create_spec(tmp_path, "sf", self.ENG)
+        doc = self._doc(sp)
+        for sid in doc["sections"]:
+            doc["sections"][sid] = {"status": "complete", "content": "x"}
+        sp.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+        cov = spec_levels.assess_from_artifacts(self.ENG, tmp_path, "sf")
+        assert cov["ready_to_implement"] is True
+        assert not cov["blocking_missing"]
+
+    def test_run_artifact_credits_its_section(self, tmp_path):
+        spec_levels.create_spec(tmp_path, "sf", self.ENG)
+        work_root = tmp_path / "work"
+        art_dir = work_root / ".ai" / "runplan" / "art"
+        art_dir.mkdir(parents=True)
+        (art_dir / "requirements.yaml").write_text("k: v\n", encoding="utf-8")
+
+        prov = spec_levels.provided_from_artifacts(tmp_path, "art", work_root=work_root)
+        assert prov.get("requirements", {}).get("status") == "complete"
+        assert "requirements.yaml" in (prov["requirements"].get("note") or "")
+
+    def test_validate_spec_without_artifact_is_honest(self, tmp_path):
+        cov = spec_levels.validate_spec(tmp_path, "never", self.ENG)
+        assert cov["spec_artifact"] is False
+        assert "note" in cov

@@ -61,6 +61,72 @@ def populated_child(tmp_path):
     return str(root)
 
 
+@pytest.fixture
+def child_with_unavailable(tmp_path):
+    """Child с тремя записями учёта, одна из которых unavailable (стоимость неизвестна).
+
+    Перенесено из test_kit_observability_selftest.py: покрывает честность отчёта, когда часть
+    вызовов не поддаётся замеру — total_calls их считает, но стоимость помечена неполной.
+    """
+    root = tmp_path / "child"
+    root.mkdir()
+    (root / ".ai" / "usage").mkdir(parents=True)
+
+    records = [
+        {"run_id": "r1", "role": "implementation", "provider": "openai-compatible",
+         "model": "deepseek-chat", "input_tokens": 1000, "output_tokens": 500,
+         "usage_status": "measured", "cost": 0.05, "cost_status": "measured",
+         "latency": 2.0, "trigger": "initial"},
+        {"run_id": "r1", "role": "review", "provider": "openai-compatible",
+         "model": "deepseek-chat", "input_tokens": 200, "output_tokens": 100,
+         "usage_status": "measured", "cost": 0.01, "cost_status": "measured",
+         "latency": 1.0, "trigger": "review"},
+        {"run_id": "r2", "role": "implementation", "provider": "claude-cli",
+         "model": "claude-sonnet-5", "input_tokens": None, "output_tokens": None,
+         "usage_status": "unavailable", "cost": None, "cost_status": "unavailable",
+         "latency": None, "trigger": "initial"},
+    ]
+    usage_ledger.append(str(root), "wid-1", records[:2], run_id="r1")
+    usage_ledger.append(str(root), "wid-2", [records[2]], run_id="r2")
+    return str(root)
+
+
+class TestUnavailableIsCounted:
+    """unavailable-запись считается в total_calls, но стоимость помечена неполной.
+
+    Перенос из монолитного test_kit_observability_selftest.py: тот же принцип, что «unavailable != 0»
+    — тихо занизить число вызовов или выдать неполную стоимость за полную запрещено.
+    """
+
+    def test_total_calls_includes_unavailable(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert r["cost"]["total_calls"] == 3
+
+    def test_cost_marked_incomplete(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert r["cost"]["cost_complete"] is False
+
+    def test_cost_unavailable_count(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert r["cost"]["cost_unavailable_count"] == 1
+
+    def test_models_provider_breakdown(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert "openai-compatible" in r["models"]["by_provider"]
+
+    def test_measured_calls(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert r["models"]["measured_calls"] == 2
+
+    def test_unavailable_calls(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert r["models"]["unavailable_calls"] == 1
+
+    def test_text_warns_unknown_cost(self, child_with_unavailable):
+        r = kit_observability.compute(child_with_unavailable)
+        assert "unknown cost" in kit_observability.format_text(r)
+
+
 class TestEmptyChild:
     """Empty child repo — honest 'no data'."""
 
