@@ -24,6 +24,14 @@ class TestRunAll:
         for name, r in results.items():
             assert "median_ms" in r, f"{name} missing median_ms"
 
+    def test_benchmark_median_ms_is_nonnegative_number(self):
+        """Перенесено из монолита (прополка): median_ms — число >= 0, а не только присутствующий
+        ключ. Наличие ключа не отличает измеренное 0.0 от строки/None/отрицательного мусора."""
+        results = bench_performance.run_all(iterations=1)
+        for name, r in results.items():
+            assert isinstance(r["median_ms"], (int, float)), f"{name}: median_ms не число"
+            assert r["median_ms"] >= 0, f"{name}: median_ms отрицателен"
+
 
 @pytest.mark.unit
 class TestBaseline:
