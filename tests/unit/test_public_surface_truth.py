@@ -115,6 +115,12 @@ def test_rules_are_data_not_code(claims):
     """
     for rule in claims.get("authoritative_version") or []:
         assert {"file", "pattern"} <= set(rule), rule
+    # Известное число = объявленное в реестре ЛИБО выведенное из факта (derived_field_values):
+    # часть чисел (счёт валидаторов) в release-claims больше не хранится, но правило доков на них
+    # ссылаться вправе — валидатор подставит факт. Дырявой ссылки это не разрешает: неизвестный claim
+    # по-прежнему запрещён.
+    known = set(claims) | set(vrc.derived_field_values(vrc.PKG))
     for rule in claims.get("derived_numbers_in_docs") or []:
         assert {"file", "pattern", "claim"} <= set(rule), rule
-        assert rule["claim"] in claims, f"claim '{rule['claim']}' в реестре не объявлен"
+        assert rule["claim"] in known, (
+            f"claim '{rule['claim']}' не объявлен в реестре и не выводится из факта")
