@@ -130,3 +130,26 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "live: live tests (require external services)")
     config.addinivalue_line("markers", "regression: regression tests for known bugs")
     config.addinivalue_line("markers", "slow: tests that take >10 seconds")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Проставить ярусный маркер по каталогу, если явного нет — пирамида читается числом.
+
+    Ярус задаётся расположением (tests/tier_map.DIR_TIER): tests/unit -> unit, tests/contracts ->
+    contract, tests/integration -> integration. Явный ярусный маркер на тесте не трогаем (тест
+    вправе объявить ярус сам); ортогональные slow/live/regression/critical_path — не ярус.
+    Тест в каталоге без известного яруса маркер НЕ получает: его ловит test_pyramid_is_tiered.
+    """
+    from tier_map import DIR_TIER, TIER_MARKERS
+
+    tests_root = Path(__file__).resolve().parent
+    for item in items:
+        if TIER_MARKERS & {m.name for m in item.iter_markers()}:
+            continue
+        try:
+            rel = Path(str(item.path)).resolve().relative_to(tests_root)
+        except (ValueError, AttributeError):
+            continue
+        tier = DIR_TIER.get(rel.parts[0]) if rel.parts else None
+        if tier:
+            item.add_marker(getattr(pytest.mark, tier))
