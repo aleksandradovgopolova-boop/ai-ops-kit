@@ -6,6 +6,9 @@ name: pr-smoke
 on:
   pull_request:
     branches: [main]
+  # v3.38 (merge-queue-not-handrolled): `smoke` — обязательный контекст защиты main; без этого
+  # триггера очередь слияния ждала бы его вечно (в merge_group событие pull_request не приходит).
+  merge_group:
 
 # Lane A1: минимальные привилегии — workflow получает только чтение контента.
 permissions:
