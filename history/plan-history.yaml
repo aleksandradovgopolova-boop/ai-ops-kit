@@ -3926,3 +3926,20 @@ work:
     #   tests/]. Класс derived-числа из docs/parallel-execution-retro.md. Готово (по половине названия
     #   «счёт валидаторов»), когда число выводится из факта и PR не обязан его править — расхождение
     #   невозможно by construction. Потолки — см. result: не авто-вывод by design.
+
+  - id: claim-reaches-other-copies
+    title: Заявка на работу видна другим рабочим копиям, а не только своему дереву
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-20'
+    pr: 235
+    evidence: tests/unit/test_claim_reaches_other_copies.py
+    result: >-
+      ЗАКРЫТО 20.08.2026. Код полностью реализован в ai_ops_kit/lifecycle/active_work.py:
+      publish_claim, unpublish_claim, load_published_claims, copies_claims_dir, claim_to_copies,
+      load_copy_claims, team_view, working_copies — весь носитель копий и общая карта. Тесты:
+      23 теста на ДВУХ настоящих копиях. Заявка доезжает двумя транспортами — носитель в общем
+      каталоге git (все копии одной машины) и опубликованная заявка (другие машины, через git).
+      Проверено на git worktree и git clone.
+    # РАЗБОР: type: quality; write_scope [ai_ops_kit/lifecycle/, ai_ops_kit/planning/, quality/,
+    #   docs/, planning/, tests/].
