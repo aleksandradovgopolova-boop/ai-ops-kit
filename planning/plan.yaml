@@ -503,7 +503,9 @@ work:
       Отсутствие вердикта судьи — честный отказ, который можно разобрать, а не молчаливый ступор
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: done
+    branch: lane-b-no-verdict-is-refusal
+    pr: 291
     owner_role: engineer
     value: high
     finding: findings/from-children/obs-2026-08-20-главное-за-прогон-кит-са-fad8d07f.yaml
