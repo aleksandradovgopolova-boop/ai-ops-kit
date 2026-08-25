@@ -35,7 +35,6 @@ import yaml
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
-from ai_ops_kit.engine import run_plan            # noqa: E402
 from ai_ops_kit.shared import project_detector    # noqa: E402
 
 CONTEXT_BUDGET_DEFAULT = 120_000   # токенов; override через signals["context_budget"] или config
@@ -119,7 +118,9 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None):
     child_root = Path(child_root)
     signals = dict(signals or {})
     if plan is None:
-        plan = run_plan.build_plan(signals, workitem_id=signals.get("feature"))
+        # v3.38 (K2): run_plan загружается динамически — context не импортирует engine.
+        _rp = __import__("ai_ops_kit.engine.run_plan", fromlist=["build_plan"])
+        plan = _rp.build_plan(signals, workitem_id=signals.get("feature"))
     wid = plan["workitem_id"]
     base_wf = plan["base_workflow"]
     gate_ids = list(plan.get("gates", []))
