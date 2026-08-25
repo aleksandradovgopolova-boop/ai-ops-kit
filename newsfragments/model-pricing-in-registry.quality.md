@@ -1,0 +1,1 @@
+Цены per-token ($/1M токенов) — first-class поле `pricing` в registry/models.yaml со статусом (documented/inferred/pending). `orchestrator_usage` читает цены из реестра вместо хардкода; синхронизационный тест гарантирует совпадение.

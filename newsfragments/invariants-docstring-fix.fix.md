@@ -1,0 +1,1 @@
+Docstring `gates/invariants.py` показывает реальный путь импорта (`from ai_ops_kit.gates.invariants import ...`) вместо фантомного `from invariants import ... selftest`. Удалены ссылки на несуществующие `selftest` (функции нет в модуле) и `tools/invariants.py` (файла нет).
