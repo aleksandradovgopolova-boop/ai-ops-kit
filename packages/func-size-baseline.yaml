@@ -1,0 +1,63 @@
+# Ратчет максимального размера функции в ai_ops_kit/engine/.
+#
+# Замер сделан ДО расщепления run_pipeline (K6). Потолок = текущий max.
+# Ратчет ходит ТОЛЬКО ВНИЗ: разбиение god-функций снижает потолок,
+# новая god-функция сверх потолка — красный сигнал.
+#
+# Измеряется: validate_func_size.py (AST-обход, end_lineno - lineno + 1).
+schema_version: 1
+kind: func-size-ratchet
+scope: ai_ops_kit/engine/
+
+# Потолок максимального размера функции (в строках).
+# Текущий max: run() в ai_ops_run.py — 1270 строк.
+# После K6 (расщепление run_pipeline) ожидается снижение.
+max_function_lines: 1270
+
+# Информация о текущей max-функции (для справки).
+max_function: run
+max_function_file: ai_ops_run.py
+max_function_lineno: 430
+
+# Топ-10 крупнейших функций на момент замера (2026-08-25).
+top_10:
+  - name: run
+    file: ai_ops_run.py
+    lineno: 430
+    size: 1270
+  - name: run_pipeline
+    file: execution_pipeline.py
+    lineno: 109
+    size: 1075
+  - name: execute_sequence
+    file: workpackage_executor.py
+    lineno: 532
+    size: 453
+  - name: main
+    file: ai_ops_run.py
+    lineno: 1906
+    size: 206
+  - name: route
+    file: ai_route.py
+    lineno: 42
+    size: 177
+  - name: _print_pipeline
+    file: ai_ops_run.py
+    lineno: 1702
+    size: 132
+  - name: resume_preflight
+    file: run_handoff.py
+    lineno: 113
+    size: 121
+  - name: verify
+    file: acceptance_verify.py
+    lineno: 531
+    size: 108
+  - name: execute
+    file: tool_broker.py
+    lineno: 614
+    size: 103
+  - name: run_loop
+    file: tool_loop.py
+    lineno: 204
+    size: 102
