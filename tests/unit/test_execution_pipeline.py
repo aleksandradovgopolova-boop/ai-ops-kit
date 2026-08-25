@@ -2429,3 +2429,1082 @@ class TestRunPipelineNewDependency:
         assert "dependencies" in (report["security_scan"].get("needs_review") or [])
         assert "security" in report["gates"]["unmet"]
         assert report["ready_for_pr"] is False
+
+
+# ============================================================================
+# MIGRATED FROM MONOLITH — test_execution_pipeline_selftest (weed round)
+# Каждое поведение перенесено с НАСТОЯЩЕЙ проверкой значения (не только наличия
+# ключа/верхнего status). Точные вызовы/фикстуры/фейковые proposer'ы — из монолита.
+# ============================================================================
+
+
+def _init_python_repo(child_root):
+    """Git-репо с python-профилем БЕЗ тулчейна (нет ruff/mypy/pytest, нет tests/).
+
+    Все проверки -> not_applicable детерминированно, независимо от среды теста.
+    Повторяет фикстуру монолита (test_execution_pipeline_selftest, строки 51-62).
+    """
+    subprocess.run(["git", "init", "-q"], cwd=child_root, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=child_root, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=child_root, capture_output=True)
+    (child_root / "src").mkdir(exist_ok=True)
+    (child_root / "pyproject.toml").write_text(
+        "[tool.poetry]\nname='x'\n[tool.poetry.dependencies]\n", encoding="utf-8")
+    (child_root / "f").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=child_root, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "i"], cwd=child_root, capture_output=True)
+
+
+def _head_branch(child_root):
+    """Имя текущей ветки — default-ветка после git init варьируется (master/main)."""
+    return execution_pipeline._git(child_root, "rev-parse", "--abbrev-ref", "HEAD")[1].strip()
+
+
+_QUICK_SIG = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
+
+
+@pytest.mark.unit
+class TestPipelineLoopReport:
+    """Петля/отчёт run_pipeline: точные значения полей (dry QUICK, python-профиль)."""
+
+    def _run_dry(self, child_root):
+        import tool_broker
+        script = [
+            {"op": "write", "path": "src/add.py", "content": "def add(a,b): return a+b\n"},
+            {"op": "read", "path": "src/add.py"},
+            {"done": True, "summary": "добавил add"},
+        ]
+        it = iter(script)
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        return execution_pipeline.run_pipeline(
+            "добавить функцию add", _QUICK_SIG, child_root, lambda c: next(it),
+            policy=pol, budget={"max_model_calls": 10}, feature="add-fn")
+
+    def test_loop_stopped_done(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert rep["loop"]["stopped"] == "done"
+
+    def test_applied_writes_one_and_file_exists(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert rep["loop"]["applied_writes"] == 1
+        assert (child_root / "src" / "add.py").exists()
+
+    def test_profile_detected_python(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert "python" in rep["profile"]["stacks"]
+
+    def test_checks_nonempty_dict(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert isinstance(rep["checks"], dict) and rep["checks"]
+
+    def test_gates_have_blocked_verdict_and_evaluated_list(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert "blocked" in rep["gates"]
+        assert isinstance(rep["gates"]["evaluated"], list)
+
+    def test_intake_completeness_closed_from_signals(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert "intake_completeness" not in rep["gates"]["unmet"]
+
+    def test_workitem_bound_to_named_feature(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        assert rep["workitem_id"] == "add-fn"
+
+    def test_dry_quick_not_yet_len_three(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        # dry-run (commit=False) — честный not_yet: commit/PR/живой
+        assert len(rep["not_yet"]) == 3
+
+    def test_dry_quick_never_ready_for_pr(self, child_root):
+        _init_python_repo(child_root)
+        rep = self._run_dry(child_root)
+        # P0.5: commit=False НИКОГДА не ready_for_pr — нет ревизии для draft PR
+        assert rep["ready_for_pr"] is False
+
+    def test_out_of_scope_write_file_not_created(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])
+        rep2 = execution_pipeline.run_pipeline(
+            "вне scope", _QUICK_SIG, child_root, lambda c: next(it2),
+            policy=pol, budget={"max_model_calls": 5})
+        assert rep2["loop"]["denied"] >= 1
+        assert not (child_root / "config" / "x").exists()
+
+
+@pytest.mark.unit
+class TestCommitNonIsolate:
+    """commit=True без isolate: ветка ai-ops/*, evidence на точном SHA, ready True."""
+
+    def _run_commit(self, child_root, feature="mul-fn"):
+        import tool_broker
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it_c = iter([
+            {"op": "write", "path": "src/mul.py", "content": "def mul(a,b): return a*b\n"},
+            {"done": True, "summary": "mul"},
+        ])
+        return execution_pipeline.run_pipeline(
+            "добавить mul", _QUICK_SIG, child_root, lambda c: next(it_c),
+            policy=pol, budget={"max_model_calls": 10}, feature=feature, commit=True)
+
+    def test_commit_on_working_branch_not_main(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        assert rep_c["commit"]["sha"]
+        assert rep_c["commit"]["branch"] == "ai-ops/mul-fn"
+
+    def test_evidence_on_exact_committed_sha(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        assert rep_c["commit"]["evidence_on_exact_sha"] is True
+        assert rep_c["commit"]["evidence_revision"] == rep_c["commit"]["sha"]
+
+    def test_main_not_touched_head_on_ai_ops_branch(self, child_root):
+        _init_python_repo(child_root)
+        self._run_commit(child_root)
+        # работа на ветке ai-ops/*, HEAD переключён туда (main не тронут)
+        assert _head_branch(child_root) == "ai-ops/mul-fn"
+
+    def test_commit_clean_matched_sha_ready_true(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        assert rep_c["commit"]["tree_clean_before_checks"] is True
+        assert rep_c["ready_for_pr"] is True
+
+    def test_approval_recheck_ok_true_for_quick(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        # для QUICK одобрений нет -> recheck ok
+        assert isinstance(rep_c.get("approval_recheck"), dict)
+        assert rep_c["approval_recheck"]["ok"] is True
+
+    def test_committed_changed_files_lists_diff(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        chg = execution_pipeline._committed_changed_files(child_root, rep_c["commit"]["sha"])
+        assert "src/mul.py" in chg
+
+    def test_smart_relaxation_tests_exempted_and_warn(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        # нет тестов -> освобождено + громкий tests_warn (allow_missing_tests по умолчанию)
+        assert "tests_passed" in rep_c["exemptions"]
+        assert rep_c["tests_warn"]
+
+    def test_smart_relaxation_impl_verification_not_blocked(self, child_root):
+        _init_python_repo(child_root)
+        rep_c = self._run_commit(child_root)
+        assert "implementation_verification" not in rep_c["gates"]["unmet"]
+
+
+@pytest.mark.unit
+class TestApprovalsRecheckAfterDiff:
+    """approvals.recheck_after_diff: одобрение со scope, не покрывающим путь -> uncovered."""
+
+    def test_scope_not_covering_path_uncovered_secrets(self, child_root):
+        _init_python_repo(child_root)
+        import approvals as appr
+        appr.write_record(child_root, "mul-fn", "secrets", "u@x", "config/other.py", "ротация",
+                          created_at="2026-07-05T00:00:00Z", binds_to="P",
+                          expires_at="2027-01-01T00:00:00Z", risk="secret", source="user")
+        rc_bad = appr.recheck_after_diff(child_root, "mul-fn", ["src/mul.py"],
+                                         signals={"secret_boundary": True},
+                                         now="2026-07-05T00:00:00Z", plan_hash="P")
+        assert rc_bad["ok"] is False
+        assert rc_bad["uncovered"][0]["domain"] == "secrets"
+
+
+@pytest.mark.unit
+class TestRequireTestsEscalation:
+    """allow_missing_tests=False -> отсутствие тестов БЛОКИРУЕТ implementation_verification."""
+
+    def test_require_tests_blocks_impl_verification(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it_rt = iter([{"op": "write", "path": "src/q.py", "content": "x=1\n"}, {"done": True}])
+        rep_rt = execution_pipeline.run_pipeline(
+            "нужны тесты", _QUICK_SIG, child_root, lambda c: next(it_rt), policy=pol,
+            budget={"max_model_calls": 5}, feature="need-tests", allow_missing_tests=False)
+        assert "implementation_verification" in rep_rt["gates"]["unmet"]
+
+
+@pytest.mark.unit
+class TestIsolateRun:
+    """isolate=True: весь прогон в отдельном worktree, основное дерево не тронуто."""
+
+    def _run_iso(self, child_root, content="y=2\n", feature="iso-fn", **kw):
+        it = iter([{"op": "write", "path": "src/iso.py", "content": content}, {"done": True}])
+        return execution_pipeline.run_pipeline(
+            "в изоляции", _QUICK_SIG, child_root, lambda c: next(it),
+            budget={"max_model_calls": 5}, feature=feature,
+            commit=True, isolate=True, install_deps=False, **kw)
+
+    def test_run_in_worktree_main_untouched(self, child_root):
+        _init_python_repo(child_root)
+        rep_iso = self._run_iso(child_root)
+        assert rep_iso["isolation"]["worktree"] == ".ai/worktrees/iso-fn"
+        assert (child_root / ".ai" / "worktrees" / "iso-fn" / "src" / "iso.py").exists()
+        assert not (child_root / "src" / "iso.py").exists()
+
+    def test_commit_on_branch_evidence_exact_sha(self, child_root):
+        _init_python_repo(child_root)
+        rep_iso = self._run_iso(child_root)
+        assert rep_iso["commit"]["branch"] == "ai-ops/iso-fn"
+        assert rep_iso["commit"]["evidence_on_exact_sha"] is True
+
+    def test_default_engine_containment(self, child_root):
+        _init_python_repo(child_root)
+        rep_iso = self._run_iso(child_root)
+        # дефолтная политика движка (policy не передан)
+        assert isinstance(rep_iso.get("containment"), dict)
+        assert rep_iso["containment"]["block_push"] is True
+        assert rep_iso["containment"]["sandbox"] is False
+        assert rep_iso["containment"]["shell_mode"] == "unrestricted"
+
+    def test_rerun_without_discard_honest_error(self, child_root):
+        _init_python_repo(child_root)
+        self._run_iso(child_root, content="y=2\n")
+        # повторный прогон того же feature с несохранённым коммитом -> honest error без discard
+        it2 = iter([{"op": "write", "path": "src/iso.py", "content": "y=3\n"}, {"done": True}])
+        rep_guard = execution_pipeline.run_pipeline(
+            "в изоляции повторно", _QUICK_SIG, child_root, lambda c: next(it2),
+            budget={"max_model_calls": 5}, feature="iso-fn",
+            commit=True, isolate=True, install_deps=False)
+        err = rep_guard.get("error") or ""
+        assert rep_guard.get("status") == "error"
+        # сообщение называет РЕАЛЬНУЮ команду `ai-ops resume`, а не внутренний `(--resume)`
+        assert "ai-ops resume" in err
+        assert "(--resume)" not in err
+
+    def test_discard_previous_fresh_worktree(self, child_root):
+        _init_python_repo(child_root)
+        self._run_iso(child_root, content="y=2\n")
+        it3 = iter([{"op": "write", "path": "src/iso.py", "content": "y=4\n"}, {"done": True}])
+        rep3 = execution_pipeline.run_pipeline(
+            "в изоляции c discard", _QUICK_SIG, child_root, lambda c: next(it3),
+            budget={"max_model_calls": 5}, feature="iso-fn",
+            commit=True, isolate=True, install_deps=False, discard_previous=True)
+        assert rep3.get("status") != "error"
+        assert rep3["isolation"]["worktree"] == ".ai/worktrees/iso-fn"
+        assert rep3["commit"]["evidence_on_exact_sha"] is True
+
+    def test_shell_only_edit_still_commits(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        pol_sh = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it_sh = iter([
+            {"op": "shell", "command": "python3 -c \"open('shelledit.py','w').write('s=1\\n')\""},
+            {"done": True, "summary": "через shell"},
+        ])
+        rep_sh = execution_pipeline.run_pipeline(
+            "правка через shell", _QUICK_SIG, child_root, lambda c: next(it_sh),
+            policy=pol_sh, budget={"max_model_calls": 5}, feature="shell-fn",
+            commit=True, isolate=True, install_deps=False)
+        # правка только через shell (0 write-op) всё равно коммитится (не теряем работу)
+        assert rep_sh["loop"]["applied_writes"] == 0
+        assert bool(rep_sh["commit"]["sha"])
+
+
+@pytest.mark.unit
+class TestSnapshotDelta:
+    """_untracked snapshot-delta: новый untracked подготовки vs пользовательский."""
+
+    def test_prep_untracked_in_delta_user_not(self, child_root):
+        _init_git(child_root)
+        (child_root / "user_note.txt").write_text("mine\n", encoding="utf-8")
+        before = execution_pipeline._untracked(child_root)
+        assert "user_note.txt" in before
+        # подготовка создаёт НОВЫЙ untracked (эмуляция package-lock.json от npm install)
+        (child_root / "package-lock.json").write_text("{}\n", encoding="utf-8")
+        delta = execution_pipeline._untracked(child_root) - before
+        assert delta == {"package-lock.json"}
+        assert "user_note.txt" not in delta
+
+
+@pytest.mark.unit
+class TestResume:
+    """resume=True: продолжение поверх закоммиченной фазы 1; честный fresh без прошлого."""
+
+    def test_resume_continues_over_phase1(self, child_root):
+        _init_python_repo(child_root)
+        it_r1 = iter([{"op": "write", "path": "src/first.py", "content": "a=1\n"},
+                      {"done": True, "summary": "фаза 1"}])
+        rep_r1 = execution_pipeline.run_pipeline(
+            "resume фаза 1", _QUICK_SIG, child_root, lambda c: next(it_r1),
+            budget={"max_model_calls": 5}, feature="resume-fn",
+            commit=True, isolate=True, install_deps=False)
+        assert bool((rep_r1.get("commit") or {}).get("sha"))
+
+        seen_r = {}
+        it_r2 = iter([{"op": "write", "path": "src/second.py", "content": "b=2\n"},
+                      {"done": True, "summary": "фаза 2"}])
+
+        def _resume_prop(c):
+            seen_r.setdefault("ctx", c)
+            return next(it_r2)
+        rep_r2 = execution_pipeline.run_pipeline(
+            "resume фаза 2", _QUICK_SIG, child_root, _resume_prop,
+            budget={"max_model_calls": 5}, feature="resume-fn",
+            commit=True, isolate=True, install_deps=False,
+            resume=True, resume_context="MARKER_RESUME_STATE_ABC")
+        rinfo = rep_r2.get("resume") or {}
+        # НЕ ошибка про несохранённые коммиты (продолжаем, а не падаем)
+        assert rep_r2.get("status") != "error"
+        assert rinfo.get("resumed") is True
+        assert rinfo.get("reused_branch") is True
+        # resume_context РЕАЛЬНО в prompt модели
+        assert "MARKER_RESUME_STATE_ABC" in (seen_r.get("ctx") or "")
+        # работа фазы 1 сохранена в worktree (продолжили поверх, не с нуля)
+        wt_r = child_root / ".ai" / "worktrees" / "resume-fn"
+        assert (wt_r / "src" / "first.py").exists()
+        assert (wt_r / "src" / "second.py").exists()
+
+    def test_resume_no_previous_honest_fresh(self, child_root):
+        _init_python_repo(child_root)
+        it_r3 = iter([{"op": "write", "path": "src/n.py", "content": "n=1\n"}, {"done": True}])
+        rep_r3 = execution_pipeline.run_pipeline(
+            "resume без прошлого", _QUICK_SIG, child_root, lambda c: next(it_r3),
+            budget={"max_model_calls": 5}, feature="resume-none",
+            commit=True, isolate=True, install_deps=False, resume=True)
+        rinfo3 = rep_r3.get("resume") or {}
+        assert rinfo3.get("resumed") is False
+        assert bool(rinfo3.get("reason"))
+        assert rep_r3.get("status") != "error"
+
+
+@pytest.mark.unit
+class TestSpecFirstGate:
+    """spec-first: неполный spec.yaml не пускает в implementation; полный — не блокирует."""
+
+    def test_incomplete_spec_blocks(self, child_root):
+        _init_python_repo(child_root)
+        import spec_levels as sl
+        sl.create_spec(child_root, "spec-fn", _QUICK_SIG)  # все разделы missing
+        it_sf = iter([{"op": "write", "path": "src/sf.py", "content": "s=1\n"}, {"done": True}])
+        rep_sf = execution_pipeline.run_pipeline(
+            "spec-first блок", _QUICK_SIG, child_root, lambda c: next(it_sf),
+            budget={"max_model_calls": 5}, feature="spec-fn",
+            commit=True, isolate=True, install_deps=False, baseline_diff=True)
+        assert rep_sf.get("ready_for_pr") is False
+        assert rep_sf["spec_first"]["ok"] is False
+        assert rep_sf["spec_first"]["incomplete_sections"]
+
+    def test_full_spec_does_not_block(self, child_root):
+        _init_python_repo(child_root)
+        import spec_levels as sl
+        import yaml as yaml_mod
+        sp = child_root / "features" / "spec-fn2" / "spec.yaml"
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        full_secs = {s: {"status": "complete", "content": "x"} for s in sl.required_sections(0)}
+        sp.write_text(yaml_mod.safe_dump({"schema_version": 1, "kind": "spec",
+                      "workitem_id": "spec-fn2", "level": 0, "sections": full_secs}),
+                      encoding="utf-8")
+        it_sf2 = iter([{"op": "write", "path": "src/sf2.py", "content": "s=2\n"}, {"done": True}])
+        rep_sf2 = execution_pipeline.run_pipeline(
+            "spec-first полон", _QUICK_SIG, child_root, lambda c: next(it_sf2),
+            budget={"max_model_calls": 5}, feature="spec-fn2",
+            commit=True, isolate=True, install_deps=False, baseline_diff=True)
+        assert rep_sf2["spec_first"]["ok"] is True
+        assert not rep_sf2["spec_first"]["incomplete_sections"]
+
+
+@pytest.mark.unit
+class TestEnvUnqualified:
+    """_env_unqualified: env-симптомы (127/No module) -> True; честный fail -> False."""
+
+    def test_passed_check_qualified(self):
+        assert execution_pipeline._env_unqualified(
+            {"test": {"status": "pass"}, "build": {"status": "not_run"}}) is False
+
+    def test_exit_127_unqualified(self):
+        assert execution_pipeline._env_unqualified(
+            {"test": {"status": "fail", "runs": [{"ok": False, "exit_code": 127}]}}) is True
+
+    def test_no_module_named_unqualified(self):
+        assert execution_pipeline._env_unqualified(
+            {"test": {"status": "fail",
+                      "runs": [{"ok": False, "exit_code": 1,
+                                "output_tail": "ModuleNotFoundError: No module named 'foo'"}]}}) is True
+
+    def test_honest_assertion_fail_not_env(self):
+        assert execution_pipeline._env_unqualified(
+            {"test": {"status": "fail",
+                      "runs": [{"ok": False, "exit_code": 1,
+                                "output_tail": "AssertionError: 2 != 3"}]}}) is False
+
+
+@pytest.mark.unit
+class TestSecurityFailClosed:
+    """security pack бросил -> security=fail (fail-closed, не ложный green)."""
+
+    def test_scan_raises_security_unmet_not_ready(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        import security_pack as sp_mod
+        sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
+                   "affected_areas": ["core"]}
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        orig_rp = sp_mod.run_pack
+        sp_mod.run_pack = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("scan boom"))
+        try:
+            it_se = iter([{"op": "write", "path": "src/se.py", "content": "s=1\n"}, {"done": True}])
+            rep_se = execution_pipeline.run_pipeline(
+                "скан падает", sig_eng, child_root, lambda c: next(it_se),
+                policy=pol, budget={"max_model_calls": 5}, feature="scanerr-fn",
+                commit=True, isolate=True, install_deps=False)
+        finally:
+            sp_mod.run_pack = orig_rp
+        assert "security" in rep_se["gates"]["unmet"]
+        assert not rep_se["ready_for_pr"]
+
+
+@pytest.mark.unit
+class TestSecurityForcedInQuick:
+    """QUICK + новая зависимость -> security ФОРСИРОВАН в evaluated и блокирует без ApprovalRecord."""
+
+    def test_security_forced_evaluated(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        pol_dep = tool_broker.Policy(level="execution", block_push=True)
+        it_dep = iter([{"op": "write", "path": "requirements.txt", "content": "flask\n"}, {"done": True}])
+        rep_dep = execution_pipeline.run_pipeline(
+            "добавить зависимость", _QUICK_SIG, child_root, lambda c: next(it_dep),
+            policy=pol_dep, budget={"max_model_calls": 5}, feature="dep-fn",
+            commit=True, isolate=True, install_deps=False)
+        assert "security" in rep_dep["gates"]["evaluated"]
+        assert "security" in rep_dep["gates"]["unmet"]
+        assert rep_dep["ready_for_pr"] is False
+
+
+@pytest.mark.unit
+class TestSecurityReviewerCloses:
+    """Независимый security-reviewer pass закрывает needs_review домены -> security не в unmet."""
+
+    def test_reviewer_pass_closes_security(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
+                   "affected_areas": ["core"]}
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        sec_reviewer = lambda c: {"kind": "reviewer-result", "status": "pass",  # noqa: E731
+                                  "summary": "injection-surface чист"}
+        it = iter([{"op": "write", "path": "src/clean.py", "content": "def f():\n    return 1\n"},
+                   {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "чистая правка", sig_eng, child_root, lambda c: next(it),
+            policy=pol, budget={"max_model_calls": 8}, feature="secrev-fn",
+            commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=sec_reviewer)
+        assert "security" not in rep["gates"]["unmet"]
+
+
+@pytest.mark.unit
+class TestSecurityGuard5:
+    """#5-guard: qualified судья не берёт; нет судьи+нет ApprovalRecord -> fail + называет ApprovalRecord."""
+
+    def _sec_result(self, rep):
+        return next((g for g in rep["gates"].get("gate_results", [])
+                     if g.get("gate") == "security"), {})
+
+    @staticmethod
+    def _has(g, sub):
+        return any(sub in b for b in (g.get("blockers") or []))
+
+    def _sec_reviewer(self):
+        return lambda c: {"kind": "reviewer-result", "status": "pass",  # noqa: E731
+                          "summary": "injection-surface чист"}
+
+    def test_qualified_judge_skips_guard5(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        sig_api = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
+                   "affected_areas": ["core"], "api_change": True}
+        it_q = iter([{"op": "write", "path": "src/rl_a.py", "content": "def a():\n    return 1\n"}, {"done": True}])
+        rep_q = execution_pipeline.run_pipeline(
+            "api rate strict-on", sig_api, child_root, lambda c: next(it_q),
+            policy=pol, budget={"max_model_calls": 8}, feature="rl-q-fn",
+            commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=self._sec_reviewer(), strict_judge_qualified=True)
+        sec_a = self._sec_result(rep_q)
+        # qualified судья -> reviewer-ветка: #5 pending_human-guard НЕ берётся
+        assert not self._has(sec_a, "нет QUALIFIED security-судьи")
+
+    def test_no_qualified_judge_no_approval_fails(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        sig_api = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
+                   "affected_areas": ["core"], "api_change": True}
+        it = iter([{"op": "write", "path": "src/rl_b.py", "content": "def b():\n    return 1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "api rate strict-off", sig_api, child_root, lambda c: next(it),
+            policy=pol, budget={"max_model_calls": 8}, feature="rl-b-fn",
+            commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=self._sec_reviewer(), strict_judge_qualified=False)
+        sec_b = self._sec_result(rep)
+        assert "security" in rep["gates"]["unmet"]
+        assert sec_b.get("status") == "fail"
+        assert self._has(sec_b, "нет QUALIFIED security-судьи")
+        # блокер называет ApprovalRecord (человеку даётся путь закрыть)
+        assert self._has(sec_b, "ApprovalRecord")
+
+
+@pytest.mark.unit
+class TestReevaluateOnly:
+    """re-evaluate-only: человеко-одобрение снимает #5-блок БЕЗ переавторинга кода."""
+
+    def test_approval_lifts_guard5_via_reevaluate(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        import security_pack as sp_re
+        import approvals as appr_re
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        sec_reviewer = lambda c: {"kind": "reviewer-result", "status": "pass",  # noqa: E731
+                                  "summary": "чист"}
+        sig_q = {"task_type": "QUICK", "size": "small", "risk": "low",
+                 "affected_areas": ["api"], "api_change": True}
+        it_q1 = iter([{"op": "write", "path": "rq.py", "content": "def rq():\n    return 1\n"}, {"done": True}])
+        execution_pipeline.run_pipeline(
+            "quick api sec", sig_q, child_root, lambda c: next(it_q1), policy=pol,
+            budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
+            install_deps=False, review=True, reviewer_proposer=sec_reviewer,
+            strict_judge_qualified=False)
+        nrq = sp_re.run_pack(files_content={"rq.py": "def rq():\n    return 1\n"},
+                             signals=sig_q).get("needs_review") or ["rate_limiting"]
+        rf = child_root / "features" / "reeval-fn"
+        rf.mkdir(parents=True, exist_ok=True)
+        (rf / "run-plan.yaml").write_text("base_workflow: QUICK\ngates: [security]\n", encoding="utf-8")
+        for d in nrq:
+            appr_re.write_record(child_root, "reeval-fn", approval=d, approved_by="human@owner",
+                                 scope=f"security {d}", reason="человек одобрил (reeval тест)",
+                                 created_at="2026-07-29", expires_at="2026-12-31",
+                                 risk="medium", source="human")
+        rep_re = execution_pipeline.run_pipeline(
+            "quick api sec", sig_q, child_root, lambda c: {"done": True}, policy=pol,
+            budget={"max_model_calls": 8}, feature="reeval-fn", commit=True, isolate=True,
+            install_deps=False, review=True, reviewer_proposer=sec_reviewer,
+            strict_judge_qualified=False, reevaluate_only=True)
+        sec_re = next((g for g in rep_re["gates"].get("gate_results", [])
+                       if g.get("gate") == "security"), {})
+        assert (rep_re.get("loop") or {}).get("stopped") == "reevaluate-only"
+        assert not any("нет QUALIFIED security-судьи" in b for b in (sec_re.get("blockers") or []))
+
+
+@pytest.mark.unit
+class TestSecretBoundary:
+    """secret_boundary требует человека даже при pass ревьюера."""
+
+    def test_secret_boundary_without_human_blocks(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
+                   "affected_areas": ["core"], "secret_boundary": True}
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        sec_reviewer = lambda c: {"kind": "reviewer-result", "status": "pass", "summary": "чист"}  # noqa: E731
+        it_sb = iter([{"op": "write", "path": "src/sb.py", "content": "def g():\n    return 2\n"}, {"done": True}])
+        rep_sb = execution_pipeline.run_pipeline(
+            "граница секретов", sig_eng, child_root, lambda c: next(it_sb),
+            policy=pol, budget={"max_model_calls": 8}, feature="sb-fn",
+            commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=sec_reviewer)
+        assert "security" in rep_sb["gates"]["unmet"]
+
+
+@pytest.mark.unit
+class TestSpecDepthEngineering:
+    """spec-depth: ENGINEERING без --author -> незакрытые разделы уровня -> блок."""
+
+    def test_eng_without_author_blocked(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
+                   "affected_areas": ["core"]}
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it_sd = iter([{"op": "write", "path": "src/sd.py", "content": "x=1\n"}, {"done": True}])
+        rep_sd = execution_pipeline.run_pipeline(
+            "eng без артефактов", sig_eng, child_root, lambda c: next(it_sd),
+            policy=pol, budget={"max_model_calls": 5}, feature="sd-fn",
+            commit=True, isolate=True, install_deps=False)
+        assert rep_sd["spec_depth"]["ok"] is False
+        assert rep_sd["spec_depth"]["missing"]
+        assert rep_sd["ready_for_pr"] is False
+
+
+@pytest.mark.unit
+class TestDiffChecksStackSwaps:
+    """structured-id diff: swap упавших тестов = регрессия; тот же id/другое время = нет."""
+
+    def test_pytest_swap_same_count_different_test(self):
+        base = {"test": {"status": "fail", "runs": [{"output_tail":
+                "FAILED tests/test_a.py::test_one\n1 failed, 10 passed"}]}}
+        swap = {"test": {"status": "fail", "runs": [{"output_tail":
+                "FAILED tests/test_b.py::test_two\n1 failed, 10 passed"}]}}
+        assert execution_pipeline._diff_checks(base, swap) == (["test"], [])
+
+    def test_pytest_same_test_same_id_no_regression(self):
+        base = {"test": {"status": "fail", "runs": [{"output_tail":
+                "FAILED tests/test_a.py::test_one\n1 failed, 10 passed"}]}}
+        same = {"test": {"status": "fail", "runs": [{"output_tail":
+                "FAILED tests/test_a.py::test_one\n1 failed, 10 passed"}]}}
+        assert execution_pipeline._diff_checks(base, same) == ([], [])
+
+    def test_unparseable_after_no_fabricated_fixed(self):
+        s10_base = {"test": {"status": "fail", "runs": [{"output_tail":
+                    "FAILED test_task.py::test_target\nFAILED test_legacy.py::test_old\n2 failed"}]}}
+        after = {"test": {"status": "fail", "runs": [{"output_tail": "BUILD FAILED"}]}}
+        assert execution_pipeline._diff_checks(s10_base, after) == ([], [])
+
+    def test_red_base_node_fixed_preexisting_remains(self):
+        s10_base = {"test": {"status": "fail", "runs": [{"output_tail":
+                    "FAILED test_task.py::test_target\nFAILED test_legacy.py::test_old\n2 failed"}]}}
+        s10_after = {"test": {"status": "fail", "runs": [{"output_tail":
+                     "FAILED test_legacy.py::test_old\n1 failed, 1 passed"}]}}
+        assert execution_pipeline._diff_checks(s10_base, s10_after) == ([], ["test"])
+
+    def test_go_swap_same_package_regression(self):
+        go_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "--- FAIL: TestSub (0.00s)\n    calc_test.go:13: Sub(5,2) = 3; want 999\nFAIL\nFAIL\tcalc\t0.002s\nFAIL"}]}}
+        go_add = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "--- FAIL: TestAdd (0.00s)\n    calc_test.go:6: Add(2,3) = 6; want 5\nFAIL\nFAIL\tcalc\t0.003s\nFAIL"}]}}
+        assert "TestSub" in execution_pipeline._failure_ids(go_sub["test"])
+        assert execution_pipeline._diff_checks(go_sub, go_add) == (["test"], [])
+
+    def test_go_same_test_different_time_no_regression(self):
+        go_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "--- FAIL: TestSub (0.00s)\n    calc_test.go:13: Sub(5,2) = 3; want 999\nFAIL\nFAIL\tcalc\t0.002s\nFAIL"}]}}
+        go_sub2 = {"test": {"status": "fail", "runs": [{"output_tail":
+                   "--- FAIL: TestSub (0.01s)\n    calc_test.go:13: Sub(5,2) = 3; want 999\nFAIL\nFAIL\tcalc\t0.009s\nFAIL"}]}}
+        assert execution_pipeline._diff_checks(go_sub, go_sub2) == ([], [])
+
+    def test_rust_panic_swap_regression(self):
+        rs_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "thread 'tests::test_sub' (13663) panicked at src/lib.rs:10:21:\nassertion `left == right` failed\n"
+                  "failures:\n    tests::test_sub\ntest result: FAILED. 1 passed; 1 failed; finished in 0.28s\n"
+                  "error: test failed, to rerun pass `--lib`"}]}}
+        rs_add = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "thread 'tests::test_add' (13999) panicked at src/lib.rs:8:21:\nassertion `left == right` failed\n"
+                  "failures:\n    tests::test_add\ntest result: FAILED. 1 passed; 1 failed; finished in 0.19s\n"
+                  "error: test failed, to rerun pass `--lib`"}]}}
+        assert any("tests::test_sub" in i for i in execution_pipeline._failure_ids(rs_sub["test"]))
+        assert execution_pipeline._diff_checks(rs_sub, rs_add) == (["test"], [])
+
+    def test_rust_same_test_different_pid_no_regression(self):
+        rs_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "thread 'tests::test_sub' (13663) panicked at src/lib.rs:10:21:\nassertion `left == right` failed\n"
+                  "failures:\n    tests::test_sub\ntest result: FAILED. 1 passed; 1 failed; finished in 0.28s\n"
+                  "error: test failed, to rerun pass `--lib`"}]}}
+        rs_sub2 = {"test": {"status": "fail", "runs": [{"output_tail":
+                   "thread 'tests::test_sub' (55555) panicked at src/lib.rs:10:21:\nassertion `left == right` failed\n"
+                   "failures:\n    tests::test_sub\ntest result: FAILED. 1 passed; 1 failed; finished in 0.30s\n"
+                   "error: test failed, to rerun pass `--lib`"}]}}
+        assert execution_pipeline._diff_checks(rs_sub, rs_sub2) == ([], [])
+
+    def test_java_class_method_failure_id(self):
+        jv_sub = {"test": {"status": "fail", "runs": [{"output_tail":
+                  "[ERROR] CalcTest.testSub -- Time elapsed: 0.007 s <<< FAILURE!\n"
+                  "org.opentest4j.AssertionFailedError: expected: <999> but was: <3>\n"
+                  "[ERROR]   CalcTest.testSub:5 expected: <999> but was: <3>\n"
+                  "[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0"}]}}
+        assert any("CalcTest.testSub" in i for i in execution_pipeline._failure_ids(jv_sub["test"]))
+
+    def test_tsc_new_error_new_file_regression(self):
+        base_ts = {"typecheck": {"status": "fail", "runs": [{"output_tail":
+                   "src/a.ts(3,5): error TS2322: Type error"}]}}
+        new_ts = {"typecheck": {"status": "fail", "runs": [{"output_tail":
+                  "src/a.ts(3,5): error TS2322: Type error\nsrc/b.ts(9,1): error TS2531: Object is possibly null"}]}}
+        assert execution_pipeline._diff_checks(base_ts, new_ts) == (["typecheck"], [])
+
+    def test_coverage_loss_fail_to_warn_regression(self):
+        assert execution_pipeline._diff_checks(
+            {"test": {"status": "fail"}}, {"test": {"status": "warn"}}) == (["test"], [])
+
+    def test_new_red_not_run_to_fail_regression(self):
+        assert execution_pipeline._diff_checks(
+            {"x": {"status": "not_run"}}, {"x": {"status": "fail"}}) == (["x"], [])
+
+
+@pytest.mark.unit
+class TestBaselineDoesNotBypassGates:
+    """P0.1: baseline-diff НЕ обходит прочие блокирующие гейты (ux_review без evidence)."""
+
+    def test_ui_changed_ux_review_blocks_despite_no_regressions(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        sig_ui = dict(_QUICK_SIG, ui_changed=True)
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it = iter([{"op": "write", "path": "src/p01.py", "content": "p=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "baseline не обходит гейты", sig_ui, child_root, lambda c: next(it),
+            policy=pol, budget={"max_model_calls": 5}, feature="p01-fn",
+            commit=True, baseline_diff=True)
+        assert rep["gates"]["other_blocking_unmet"]
+        assert rep["ready_for_pr"] is False
+
+    def test_gate_results_and_tested_revision_in_report(self, child_root):
+        _init_python_repo(child_root)
+        import tool_broker
+        sig_ui = dict(_QUICK_SIG, ui_changed=True)
+        pol = tool_broker.Policy(level="execution", write_scope=["src/"])
+        it = iter([{"op": "write", "path": "src/p01.py", "content": "p=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "baseline gate_results", sig_ui, child_root, lambda c: next(it),
+            policy=pol, budget={"max_model_calls": 5}, feature="p01b-fn",
+            commit=True, baseline_diff=True)
+        assert isinstance(rep["gates"]["gate_results"], list)
+        assert rep["gates"]["tested_revision"] == rep["commit"]["sha"]
+
+
+@pytest.mark.unit
+class TestReviewUiGateBlocksWithoutReview:
+    """ui_changed -> ux_review в evaluated+unmet, reviews=None без --review."""
+
+    def test_ux_review_blocks_without_reviewer(self, child_root):
+        _init_python_repo(child_root)
+        sig_rv = dict(_QUICK_SIG, ui_changed=True)
+        it = iter([{"op": "write", "path": "src/nr.py", "content": "n=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "ui без ревью", sig_rv, child_root, lambda c: next(it),
+            budget={"max_model_calls": 5}, feature="nr-fn",
+            commit=True, isolate=True, install_deps=False)
+        assert "ux_review" in rep["gates"]["evaluated"]
+        assert "ux_review" in rep["gates"]["unmet"]
+        assert rep["reviews"] is None
+
+
+@pytest.mark.unit
+class TestReviewContentlessWarn:
+    """rc11: contentless warn (без blockers) -> вердикт невалиден (errors), гейт остаётся unmet."""
+
+    def test_warn_without_blockers_invalid_verdict(self, child_root):
+        _init_python_repo(child_root)
+        sig_rv = dict(_QUICK_SIG, ui_changed=True)
+        cwarn = lambda p: '{"kind":"reviewer-result","status":"warn","checks":[{"id":"x","status":"warn"}]}'  # noqa: E731
+        it = iter([{"op": "write", "path": "src/cw.py", "content": "c=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "ui с ревью warn без причины", sig_rv, child_root, lambda c: next(it),
+            budget={"max_model_calls": 20}, feature="cw-fn",
+            commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=cwarn)
+        assert "ux_review" in rep["gates"]["unmet"]
+        assert any(r["gate"] == "ux_review" and r.get("errors") for r in (rep["reviews"] or []))
+
+
+@pytest.mark.unit
+class TestChangeContextRangeDegradation:
+    """_change_context_range без base -> только последний коммит (rA не виден)."""
+
+    def test_without_base_only_last_commit(self, child_root):
+        _init_git(child_root)
+        (child_root / "src").mkdir(exist_ok=True)
+        (child_root / "src" / "rA.py").write_text("A = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "pkgA"], cwd=child_root, capture_output=True)
+        (child_root / "src" / "rB.py").write_text("B = 2\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=child_root, capture_output=True)
+        subprocess.run(["git", "commit", "-q", "-m", "pkgB"], cwd=child_root, capture_output=True)
+        _, head_r, _ = execution_pipeline._git(child_root, "rev-parse", "HEAD")
+        single = execution_pipeline._change_context_range(child_root, None, head_r.strip())
+        assert "src/rB.py" in single
+        assert "src/rA.py" not in single
+
+
+@pytest.mark.unit
+class TestEvidenceRefSameBasename:
+    """EvidenceRef: same-basename другой путь -> 'которого нет среди реально прочитанных'."""
+
+    def _make_vrr(self):
+        import validate_reviewer_result as vrr
+        return vrr
+
+    def _dom_ev(self, ev):
+        return {"schema_version": 1, "kind": "reviewer-result", "gate": "security", "status": "pass",
+                "reviewed_revision": "abc123", "checks": [{"id": "c", "status": "pass"}],
+                "domain_results": [{"domain": "injection", "status": "pass",
+                                    "checks": [{"id": "injection_ok", "status": "pass"}], "evidence": ev}]}
+
+    def test_same_basename_different_path_invalid(self):
+        errs = execution_pipeline._security_verdict_errors(
+            self._dom_ev([{"type": "code-read", "path": "src/prod/config.py"}]),
+            "abc123", ["injection"], self._make_vrr(), reviewer_reads=["tests/config.py"])
+        assert any("которого нет среди реально прочитанных" in e for e in errs)
+
+
+@pytest.mark.unit
+class TestApprovalsRecordValid:
+    """approvals._record_valid: рыхлая destructive-запись невалидна в обоих режимах."""
+
+    def test_loose_destructive_invalid_both_modes(self):
+        import approvals as a4
+        loose = {"approval": "destructive", "approved_by": "u@x", "scope": ".", "reason": "ok"}
+        assert a4._record_valid(loose, now=a4._now_iso(), plan_hash="x") is False
+        assert a4._record_valid(loose, now=a4._now_iso(), plan_hash="x", strict=True) is False
+
+    def test_bound_destructive_passes_nonstrict_not_strict(self):
+        import approvals as a4
+        bound = {"approval": "destructive", "approved_by": "u@x", "scope": ".",
+                 "reason": "ok", "binds_to": "x"}
+        assert a4._record_valid(bound, now=a4._now_iso(), plan_hash="x") is True
+        assert a4._record_valid(bound, now=a4._now_iso(), plan_hash="x", strict=True) is False
+
+
+@pytest.mark.unit
+class TestHumanApprovalDomains:
+    """_human_approval_domains_uncovered: Dockerfile/.github -> deployment_config; src -> []."""
+
+    def test_dockerfile_requires_deployment_config(self, child_root):
+        _init_git(child_root)
+        assert "deployment_config" in execution_pipeline._human_approval_domains_uncovered(
+            str(child_root), "no-wi", ["Dockerfile", "src/x.py"])
+
+    def test_github_workflows_requires_deployment_config(self, child_root):
+        _init_git(child_root)
+        assert "deployment_config" in execution_pipeline._human_approval_domains_uncovered(
+            str(child_root), "no-wi", [".github/workflows/deploy.yml"])
+
+    def test_regular_src_no_human_approval(self, child_root):
+        _init_git(child_root)
+        assert execution_pipeline._human_approval_domains_uncovered(
+            str(child_root), "no-wi", ["src/app.py", "tests/t.py"]) == []
+
+    def test_legacy_loose_approval_does_not_close(self, child_root):
+        _init_git(child_root)
+        import yaml as yaml_mod
+        ad = child_root / "features" / "no-wi" / "approvals"
+        ad.mkdir(parents=True, exist_ok=True)
+        (ad / "deployment_config.yaml").write_text(yaml_mod.safe_dump(
+            {"schema_version": 1, "kind": "ApprovalRecord", "approval": "deployment_config",
+             "approved_by": "u@x", "scope": ".", "reason": "ok"}, allow_unicode=True), encoding="utf-8")
+        assert "deployment_config" in execution_pipeline._human_approval_domains_uncovered(
+            str(child_root), "no-wi", ["Dockerfile"])
+
+
+@pytest.mark.unit
+class TestBaseBinding:
+    """BASE BINDING: рабочая ветка форкается от --base, а не от текущего HEAD."""
+
+    def test_worktree_forked_from_base(self, child_root):
+        _init_python_repo(child_root)
+        orig = _head_branch(child_root)
+        execution_pipeline._git(child_root, "checkout", "-q", "-B", "feat-base")
+        (child_root / "src").mkdir(exist_ok=True)
+        (child_root / "src" / "on_feat.py").write_text("FEAT = 1\n", encoding="utf-8")
+        execution_pipeline._git(child_root, "add", "-A")
+        execution_pipeline._git(child_root, "commit", "-q", "-m", "commit on feat-base")
+        execution_pipeline._git(child_root, "checkout", "-q", orig)  # checkout НЕ на feat-base
+        it = iter([{"op": "write", "path": "src/bb.py", "content": "b=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "base binding", _QUICK_SIG, child_root, lambda c: next(it),
+            budget={"max_model_calls": 8}, feature="bb-fn",
+            commit=True, isolate=True, install_deps=False, base="feat-base")
+        wt_bb = child_root / ".ai" / "worktrees" / "bb-fn"
+        forked_ok = (wt_bb / "src" / "on_feat.py").exists() if wt_bb.is_dir() else False
+        assert rep.get("status") != "error"
+        assert forked_ok
+        assert (rep.get("base_binding") or {}).get("base_ref") == "feat-base"
+
+
+@pytest.mark.unit
+class TestResolveBaseAuto:
+    """_resolve_base auto -> реальная ветка (не 'main'-хардкод); _verify_remote_base reason truthy."""
+
+    def test_auto_resolves_to_current_branch(self, child_root):
+        _init_git(child_root)
+        orig = _head_branch(child_root)
+        ab = execution_pipeline._resolve_base(child_root, None)
+        assert ab.get("resolved") is True
+        assert ab.get("mode") == "auto"
+        assert ab.get("base_ref") == orig
+        assert ab.get("base_sha")
+
+    def test_verify_remote_base_reason_truthy(self, child_root):
+        _init_git(child_root)
+        orig = _head_branch(child_root)
+        base_sha = execution_pipeline._resolve_base(child_root, orig).get("base_sha")
+        rvb = execution_pipeline._verify_remote_base(child_root, orig, base_sha)
+        assert rvb.get("verdict") == "unverifiable"
+        assert rvb.get("reason")
+
+
+@pytest.mark.unit
+class TestBasePreflightNoModel:
+    """base-preflight: явная несуществующая base -> блок ДО модели (0 вызовов, нет worktree)."""
+
+    def test_nonexistent_base_zero_model_calls_no_worktree(self, child_root):
+        _init_python_repo(child_root)
+        it = iter([{"op": "write", "path": "src/nb.py", "content": "n=1\n"}, {"done": True}])
+        model_calls = {"n": 0}
+
+        def counting_prop(c):
+            model_calls["n"] += 1
+            return next(it)
+        rep = execution_pipeline.run_pipeline(
+            "несуществующая база", _QUICK_SIG, child_root, counting_prop,
+            budget={"max_model_calls": 8}, feature="nb-fn",
+            commit=True, isolate=True, open_pr=True, install_deps=False,
+            base="no-such-branch-xyz")
+        assert rep.get("status") == "error"
+        assert rep.get("ready_for_pr") is False
+        assert (rep.get("base_binding") or {}).get("resolved") is False
+        assert "base-preflight" in (rep.get("error") or "")
+        assert model_calls["n"] == 0
+        assert not (child_root / ".ai" / "worktrees" / "nb-fn").exists()
+
+
+@pytest.mark.unit
+class TestAuthoringEngineering:
+    """Product Authoring: ENGINEERING-план и артефакт-гейты requirements/plan_readiness."""
+
+    def _sig_eng(self):
+        return {"task_type": "ENGINEERING", "size": "small", "risk": "low", "affected_areas": ["core"]}
+
+    def _author_provider(self, prompt):
+        if "requirements-artifact" in prompt:
+            return ("schema_version: 1\nkind: requirements-artifact\nrequirements:\n"
+                    "  - id: R1\n    statement: фильтр по статусу сужает список\n"
+                    "    acceptance:\n      - when статус=paid then только оплаченные\n")
+        if "spec-change" in prompt:
+            return ("schema_version: 1\nkind: spec-change\ncapability: catalog\nwhy: нужен фильтр\n"
+                    "what_changes:\n  - добавить фильтр по статусу\ntasks:\n  - реализовать\n"
+                    "requirements:\n  - name: Filter\n    text: The system SHALL filter by status.\n"
+                    "    scenarios:\n      - {name: T, when: статус=paid, then: показаны оплаченные}\n")
+        return ("schema_version: 1\nkind: plan-artifact\nwork_packages:\n"
+                "  - id: WP1\n    summary: добавить фильтр\n    depends_on: []\n"
+                "write_scope:\n  - src/\n")
+
+    def test_engineering_plan_has_artifact_gates_evaluated(self, child_root):
+        _init_python_repo(child_root)
+        it = iter([{"op": "write", "path": "src/na.py", "content": "n=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "рефактор без артефактов", self._sig_eng(), child_root, lambda c: next(it),
+            budget={"max_model_calls": 5}, feature="eng-na",
+            commit=True, isolate=True, install_deps=False)
+        assert "requirements" in rep["gates"]["evaluated"]
+        assert "plan_readiness" in rep["gates"]["evaluated"]
+
+    def test_without_author_artifact_gates_unmet(self, child_root):
+        _init_python_repo(child_root)
+        it = iter([{"op": "write", "path": "src/na.py", "content": "n=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "рефактор без артефактов", self._sig_eng(), child_root, lambda c: next(it),
+            budget={"max_model_calls": 5}, feature="eng-na2",
+            commit=True, isolate=True, install_deps=False)
+        assert "requirements" in rep["gates"]["unmet"]
+        assert "plan_readiness" in rep["gates"]["unmet"]
+        assert rep["authored"] is None
+
+    def test_valid_artifact_closes_gates_and_runs_impl(self, child_root):
+        _init_python_repo(child_root)
+        it = iter([{"op": "write", "path": "src/au.py", "content": "a=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "рефактор с артефактами", self._sig_eng(), child_root, lambda c: next(it),
+            budget={"max_model_calls": 5}, feature="eng-au",
+            commit=True, isolate=True, install_deps=False,
+            author=True, author_proposer=self._author_provider)
+        assert "requirements" not in rep["gates"]["unmet"]
+        assert "plan_readiness" not in rep["gates"]["unmet"]
+        assert rep["authored"] and all(a["valid"] for a in rep["authored"])
+        assert (child_root / ".ai" / "worktrees" / "eng-au" / ".ai" / "runplan" / "eng-au" / "requirements.yaml").exists()
+        # валидная спека -> реализация запущена
+        assert (child_root / ".ai" / "worktrees" / "eng-au" / "src" / "au.py").exists()
+        assert rep["spec_first"]["prestage"]["implementation_skipped"] is False
+
+    def test_invalid_artifact_keeps_requirements_blocking_no_code(self, child_root):
+        _init_python_repo(child_root)
+        bad_author = lambda prompt: "это не yaml артефакта, просто текст"  # noqa: E731
+        it = iter([{"op": "write", "path": "src/ba.py", "content": "b=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "рефактор с битым артефактом", self._sig_eng(), child_root, lambda c: next(it),
+            budget={"max_model_calls": 5}, feature="eng-ba",
+            commit=True, isolate=True, install_deps=False,
+            author=True, author_proposer=bad_author)
+        assert "requirements" in rep["gates"]["unmet"]
+        assert any(not a["valid"] for a in (rep["authored"] or []))
+        # невалидная спека -> tool loop НЕ запущен, код НЕ записан
+        assert rep["loop"]["stopped"] == "spec-prestage-failed"
+        assert rep["spec_first"]["prestage"]["implementation_skipped"] is True
+        assert rep["ready_for_pr"] is False
+        assert not (child_root / ".ai" / "worktrees" / "eng-ba" / "src" / "ba.py").exists()
+
+    def test_flaky_author_retry_restores_valid_form(self, child_root):
+        _init_python_repo(child_root)
+
+        def flaky_author(prompt):
+            if "[повтор" not in prompt:
+                return "(пустой ответ модели)"
+            return self._author_provider(prompt)
+        it = iter([{"op": "write", "path": "src/fk.py", "content": "f=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "рефактор с флаки-автором", self._sig_eng(), child_root, lambda c: next(it),
+            budget={"max_model_calls": 20}, feature="eng-fk",
+            commit=True, isolate=True, install_deps=False,
+            author=True, author_proposer=flaky_author)
+        assert "requirements" not in rep["gates"]["unmet"]
+        assert rep["authored"] and all(a["valid"] for a in rep["authored"])
+
+    def test_always_flaky_author_keeps_gate_blocking(self, child_root):
+        _init_python_repo(child_root)
+        always_bad = lambda prompt: "(пустой ответ модели)"  # noqa: E731
+        it = iter([{"op": "write", "path": "src/ab.py", "content": "b=1\n"}, {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            "рефактор с вечно-битым автором", self._sig_eng(), child_root, lambda c: next(it),
+            budget={"max_model_calls": 20}, feature="eng-ab",
+            commit=True, isolate=True, install_deps=False,
+            author=True, author_proposer=always_bad)
+        assert "requirements" in rep["gates"]["unmet"]
+        assert any(not a["valid"] for a in (rep["authored"] or []))
+
+
+@pytest.mark.unit
+class TestRunAuthoringSpecEdges:
+    """_run_authoring: битый spec не закрывается; task с двоеточием нормализуется."""
+
+    def _spec_author(self, prompt):
+        return (
+            "schema_version: 1\nkind: spec-change\ncapability: pricing\nwhy: нужна утилита цены\n"
+            "what_changes:\n  - добавить formatPrice\ntasks:\n  - реализовать\n  - тест\n"
+            "requirements:\n  - name: Formatting\n    text: The system SHALL format price.\n"
+            "    scenarios:\n      - {name: T, when: formatPrice(1000), then: returns 1 000}\n")
+
+    def test_cli_ok_closes_specification(self, child_root):
+        _init_git(child_root)
+        gev, _auth, _ = execution_pipeline._run_authoring(
+            self._spec_author, child_root, ["specification"], {}, "spec-ok",
+            "форматирование цены", {"max_model_calls": 5},
+            openspec_validate=lambda wr, cid: (True, True, "valid"))
+        assert "specification" in gev
+        assert gev["specification"]["provided"] == ["openspec_valid", "requirements_covered"]
+        assert (child_root / "openspec" / "changes" / "spec-ok" / "proposal.md").exists()
+
+    def test_broken_spec_not_closed(self, child_root):
+        _init_git(child_root)
+        gev, auth, _ = execution_pipeline._run_authoring(
+            lambda p: "не yaml", child_root, ["specification"], {}, "spec-bad",
+            "x", {"max_model_calls": 5},
+            openspec_validate=lambda wr, cid: (True, True, "valid"))
+        assert "specification" not in gev
+        assert any(a["gate"] == "specification" and not a["valid"] for a in auth)
+
+    def test_task_with_colon_normalized_valid(self, child_root):
+        _init_git(child_root)
+        colon_author = lambda prompt: (  # noqa: E731
+            "schema_version: 1\nkind: spec-change\ncapability: pricing\nwhy: нужна утилита\n"
+            "what_changes:\n  - добавить formatPrice\n"
+            "tasks:\n  - Написать unit-тесты: все ветвления, граничные значения, ошибочный ввод\n  - реализовать\n"
+            "requirements:\n  - name: Fmt\n    text: The system SHALL format price.\n"
+            "    scenarios:\n      - {name: T, when: x, then: y}\n")
+        _gev, auth, _ = execution_pipeline._run_authoring(
+            colon_author, child_root, ["specification"], {}, "spec-colon",
+            "цена", {"max_model_calls": 5},
+            openspec_validate=lambda wr, cid: (True, True, "valid"))
+        assert any(a["gate"] == "specification" and a["valid"] for a in auth)
