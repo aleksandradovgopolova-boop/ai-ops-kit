@@ -1376,7 +1376,7 @@ work:
       Объявлены порты ядра (Executor/Context/Evidence/Gate/Delivery/Policy) и контракты
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/shared/, ai_ops_kit/kernel/]
@@ -1390,7 +1390,7 @@ work:
       evidence_collector получает tool_broker параметром (снят цикл engine↔gates)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/gates/, ai_ops_kit/engine/]
@@ -1404,7 +1404,7 @@ work:
       context_compiler использует run_plan как TypedDict-контракт (снят цикл context↔engine)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/context/, ai_ops_kit/engine/, ai_ops_kit/shared/]
@@ -1417,7 +1417,7 @@ work:
       delivery вызывается только из ai_ops_run (контракт-тест; снят цикл delivery↔engine)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: medium
     write_scope: [ai_ops_kit/engine/, ai_ops_kit/delivery/, tests/]
@@ -1430,7 +1430,7 @@ work:
       deploy_readiness переехал в gates; sys.path-хак в gate_executor удалён (снят цикл engops↔gates)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: medium
     write_scope: [ai_ops_kit/gates/, ai_ops_kit/engops/]
@@ -1444,7 +1444,7 @@ work:
       Классификация вынесена из workitem в шаг ядра (снят корневой цикл engine↔lifecycle)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/engine/, ai_ops_kit/lifecycle/]
@@ -1472,7 +1472,7 @@ work:
       check_invariant вызывается в реальных producer'ах (fail-closed на нарушении)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/engine/, ai_ops_kit/gates/, ai_ops_kit/lifecycle/, tests/]
@@ -1486,7 +1486,7 @@ work:
       Характеристические тесты фаз pipeline написаны ДО расщепления God-функций
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [tests/]
@@ -1499,7 +1499,7 @@ work:
       Слой kernel объявлен в layering.yaml; ядро не импортирует спутники (проверяется)
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [packages/, ai_ops_kit/validation/]
