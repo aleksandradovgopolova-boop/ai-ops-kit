@@ -198,6 +198,58 @@ class TestCriticalApproval:
         )
         assert len(preview["approvals_needed"]) > 0
 
+    def test_critical_approval_names_human(self, child_root):
+        """CRITICAL: хотя бы одно требование одобрения адресовано ЧЕЛОВЕКУ (не абстрактный список)."""
+        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
+        preview = ai_ops_cli.build_preview(
+            intent="run",
+            task="миграция схемы",
+            child_root=child_root,
+            signals={"task_type": "CRITICAL", "risk": "critical", "affected_areas": ["db"]},
+        )
+        assert any("человек" in a for a in preview["approvals_needed"])
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestPreviewClassificationAndData:
+    """Перенос из монолита: понятый workflow, измеренные данные, названный результат, согласие с роутером."""
+
+    def test_preview_understood_workflow_engineering(self, child_root):
+        """ENGINEERING-сигналы -> preview.understood.workflow == 'ENGINEERING'."""
+        (child_root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        pv = ai_ops_cli.build_preview(
+            "run", "добавить фильтр", child_root,
+            {"task_type": "ENGINEERING", "risk": "medium", "affected_areas": ["core"]})
+        assert pv["understood"]["workflow"] == "ENGINEERING"
+
+    def test_preview_data_used_agents_and_tokens_measured(self, child_root):
+        """data_used.agents — список, estimated_tokens измерены (не None) при собранном контексте."""
+        (child_root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        pv = ai_ops_cli.build_preview(
+            "run", "добавить фильтр", child_root,
+            {"task_type": "ENGINEERING", "risk": "medium", "affected_areas": ["core"]})
+        assert isinstance(pv["data_used"]["agents"], list)
+        assert pv["data_used"]["estimated_tokens"] is not None
+
+    def test_preview_expected_result_named(self, child_root):
+        """Ожидаемый результат назван (truthy)."""
+        (child_root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        pv = ai_ops_cli.build_preview(
+            "run", "добавить фильтр", child_root,
+            {"task_type": "ENGINEERING", "risk": "medium", "affected_areas": ["core"]})
+        assert bool(pv["expected_result"])
+
+    def test_preview_without_task_type_agrees_with_router(self, child_root):
+        """v2.107: без task_type preset согласован с роутером (QUICK ИЛИ review&&author включены)."""
+        (child_root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        pv = ai_ops_cli.build_preview(
+            "run", "поправить логику расчёта", child_root,
+            {"affected_areas": ["core"], "risk": "medium"})  # без task_type
+        wf = pv["understood"]["workflow"]
+        af = pv["will_do"]["auto_flags"]
+        assert wf == "QUICK" or (af["review"] and af["author"])
+
 
 @pytest.mark.critical_path
 @pytest.mark.unit
@@ -267,6 +319,106 @@ class TestOnboardIntent:
             assert profile.is_file()
         finally:
             os.chdir(old_cwd)
+
+
+def _run_main(argv):
+    """Прогнать main(argv), захватив stdout. -> (rc, output). Мирроринг `_run` из монолита."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = ai_ops_cli.main(argv)
+    return rc, buf.getvalue()
+
+
+@pytest.mark.unit
+class TestDirectIntentActions:
+    """Перенос из монолита: настоящие действия команд (не превью) — артефакты и коды возврата.
+
+    Плоский root с package.json, без git — ровно как первый tempdir-блок монолита, где эти
+    команды и проверялись.
+    """
+
+    @pytest.fixture
+    def cli_root(self, tmp_path):
+        root = tmp_path / "cli-root"
+        root.mkdir()
+        (root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        return root
+
+    def test_new_creates_workitem_and_spec(self, cli_root):
+        """v2.112 new: РЕАЛЬНО создаёт features/nf/{workitem,spec}.yaml, rc==0."""
+        rc, _ = _run_main(["new", str(cli_root), "--feature", "nf",
+                           "--signals", '{"task_type":"ENGINEERING","affected_areas":["core"]}'])
+        assert rc == 0
+        assert (cli_root / "features" / "nf" / "workitem.yaml").is_file()
+        assert (cli_root / "features" / "nf" / "spec.yaml").is_file()
+
+    def test_plan_writes_plan_artifacts(self, cli_root):
+        """v2.112 plan: РЕАЛЬНО пишет run-plan.yaml + work-package.yaml, rc==0."""
+        rc, _ = _run_main(["plan", "сделать X", str(cli_root), "--feature", "pf",
+                           "--signals", '{"affected_areas":["core"]}'])
+        assert rc == 0
+        assert (cli_root / "features" / "pf" / "run-plan.yaml").is_file()
+        assert (cli_root / "features" / "pf" / "work-package.yaml").is_file()
+
+    def test_discuss_creates_discovery_draft(self, cli_root):
+        """v2.112 discuss: РЕАЛЬНО создаёт features/df/discovery-draft.md, rc==0."""
+        rc, _ = _run_main(["discuss", "идея", str(cli_root), "--feature", "df"])
+        assert rc == 0
+        assert (cli_root / "features" / "df" / "discovery-draft.md").is_file()
+
+    def test_status_returns_zero(self, cli_root):
+        """v2.112 status: реальное чтение active-work (не превью), rc==0."""
+        rc, _ = _run_main(["status", str(cli_root)])
+        assert rc == 0
+
+    def test_health_without_metrics_is_honest_refusal(self, cli_root):
+        """v2.112 health: без метрик — честный отказ (rc==1, «не знаю» / «по пустому месту»), не фабрикует score."""
+        rc, out = _run_main(["health", str(cli_root)])
+        assert rc == 1
+        assert "не знаю" in out
+        assert "по пустому месту" in out
+
+    def test_preview_onboard_does_not_execute(self, cli_root):
+        """preview onboard НЕ выполняет действие: профиль репозитория не создаётся."""
+        rc, _ = _run_main(["preview", "onboard", str(cli_root)])
+        assert rc == 0
+        assert not (cli_root / ".ai" / "repository-profile.yaml").is_file()
+
+    def test_review_without_branch_is_honest_no_branch(self, cli_root):
+        """v2.116 review: без ветки честный no-branch (rc!=0, «Проверять нечего», НЕ «можно вливать»)."""
+        rc, out = _run_main(["review", "поревьюить", str(cli_root), "--feature", "nope-wid"])
+        assert rc != 0
+        assert "Проверять нечего" in out
+        assert "можно вливать" not in out
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+class TestRunExecuteWiresModel:
+    """v2.120 CLI: run --execute проводит --model до движка (не mock-хардкод)."""
+
+    def test_model_wired_into_run_report(self, tmp_path):
+        import json as _json
+
+        groot = tmp_path / "grepo"
+        groot.mkdir()
+        (groot / "calc.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        for aa in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t"),
+                   ("add", "-A"), ("commit", "-q", "-m", "i")):
+            subprocess.run(["git", "-C", str(groot), *aa], capture_output=True)
+
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            ai_ops_cli.main(["run", "добавить x", str(groot), "--execute", "--feature", "wiref",
+                             "--model", "marker-model-xyz",
+                             "--signals",
+                             '{"task_type":"QUICK","size":"small","risk":"low","affected_areas":["core"]}'])
+        rep_p = groot / "features" / "wiref" / "run-report.json"
+        assert rep_p.is_file()
+        assert _json.loads(rep_p.read_text(encoding="utf-8")).get("model") == "marker-model-xyz"
 
 
 @pytest.mark.unit
