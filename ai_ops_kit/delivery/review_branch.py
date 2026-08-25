@@ -21,8 +21,6 @@ import sys
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
-from ai_ops_kit.engine import execution_pipeline as _ep   # noqa: E402
-from ai_ops_kit.engine import worktree as _wt             # noqa: E402
 
 
 def _git(root, *a):
@@ -59,7 +57,7 @@ def _base_for_review(child_root, base, branch):
             return {"base": base, "source": "explicit", "resolved": True}
         return {"base": base, "source": "explicit", "resolved": False,
                 "reason": f"явная база '{base}' не найдена в репозитории — диф не считан"}
-    from ai_ops_kit.engine import pipeline_git as _pg
+    _pg = __import__("ai_ops_kit.engine.pipeline_git", fromlist=["_resolve_base"])
     r = _pg._resolve_base(child_root, None)
     if r.get("resolved"):
         if r.get("base_ref") == branch:
@@ -124,6 +122,7 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     branch = f"ai-ops/{wid}"
     wp = child_root / ".ai" / "worktrees" / wid
 
+    _wt = __import__("ai_ops_kit.engine.worktree", fromlist=["_branch_exists", "add"])
     if not _wt._branch_exists(child_root, branch):
         return {"kind": "BranchReview", "workitem_id": wid, "reviewable": False,
                 "reviews": [], "verdict": "no-branch", "readiness": _readiness_for("no-branch"),
@@ -154,6 +153,7 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     plan = _load_plan(child_root, wid)
     gate_ids = plan.get("gates") or ["code_review"]
     signals = {"task_type": plan.get("base_workflow", "QUICK")}
+    _ep = __import__("ai_ops_kit.engine.execution_pipeline", fromlist=["_reviewable_gates", "_run_reviews"])
     reviewable = _ep._reviewable_gates(gate_ids, signals)
 
     reviews = []
