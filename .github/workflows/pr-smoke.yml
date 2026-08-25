@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+# Lane A1: минимальные привилегии — workflow получает только чтение контента.
+permissions:
+  contents: read
+
 # v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ — см. пояснение в package-quality.yml. Коротко: пояс прятал
 # дефект импорта в валидаторах, из-за которого кит не запускался в child-репозитории при зелёном
 # CI. Причина устранена в коде (validation/_bootstrap.py); CI видит окружение пользователя.
