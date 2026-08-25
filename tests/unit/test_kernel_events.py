@@ -80,3 +80,47 @@ def test_kernel_event_typeddict():
     """KernelEvent — TypedDict (dict-подкласс)."""
     from ai_ops_kit.shared.contracts import KernelEvent
     assert issubclass(KernelEvent, dict)
+
+
+def test_off_switch_satellite_does_not_break_kernel():
+    """Отключение спутника (нет подписчиков) НЕ ломает emit — ядро работает автономно."""
+    # Эмитируем событие без подписчиков — не падает
+    emit("run_completed", {"workitem_id": "w1", "status": "done", "report": {}})
+    emit("gate_evaluated", {"workitem_id": "w1", "gate_results": []})
+    emit("delivery_completed", {"workitem_id": "w1", "receipt": {}})
+
+
+def test_kernel_does_not_import_satellites():
+    """Ядро (engine/gates/lifecycle/delivery/governance/kernel) НЕ импортирует спутники."""
+    import ast
+    import os
+
+    kernel_pkgs = {"engine", "gates", "lifecycle", "delivery", "governance", "kernel"}
+    satellite_pkgs = {"planning", "intelligence", "engops"}
+    pkg_root = os.path.join(os.path.dirname(__file__), "..", "..", "ai_ops_kit")
+
+    for kp in kernel_pkgs:
+        pkg_dir = os.path.join(pkg_root, kp)
+        if not os.path.isdir(pkg_dir):
+            continue
+        for root, dirs, files in os.walk(pkg_dir):
+            for f in files:
+                if not f.endswith(".py"):
+                    continue
+                fpath = os.path.join(root, f)
+                with open(fpath) as fh:
+                    tree = ast.parse(fh.read())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        for sp in satellite_pkgs:
+                            assert not (node.module == f'ai_ops_kit.{sp}'
+                                        or node.module.startswith(f'ai_ops_kit.{sp}.')), (
+                                f"{fpath}:{node.lineno}: ядро ({kp}) импортирует спутник ({sp})"
+                            )
+                    elif isinstance(node, ast.Import):
+                        for alias in node.names:
+                            for sp in satellite_pkgs:
+                                assert not (alias.name == f'ai_ops_kit.{sp}'
+                                            or alias.name.startswith(f'ai_ops_kit.{sp}.')), (
+                                    f"{fpath}:{node.lineno}: ядро ({kp}) импортирует спутник ({sp})"
+                                )

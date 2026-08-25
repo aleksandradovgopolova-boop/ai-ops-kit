@@ -1,0 +1,1 @@
+Шина событий ядра (shared/events.py) + KernelEvent контракт. Engine больше не импортирует спутники (kernel→satellite violations: 2→0). Engops подписывается на run_completed для session recommendation. Off-switch спутника не ломает доставку.
