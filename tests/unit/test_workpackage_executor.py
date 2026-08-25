@@ -190,7 +190,7 @@ class TestExecuteSequenceHappyPath:
             pkgs = atomic_planner.decompose(three_area_sig, wid="seq", child_root=root)["work_packages"]
             buf = io.StringIO()
             with contextlib.redirect_stderr(buf):
-                seq = execute_sequence("большой рефактор", three_area_sig, root, pkgs, _prop_for,
+                execute_sequence("большой рефактор", three_area_sig, root, pkgs, _prop_for,
                                        feature="seq", base=cur, author=True, author_proposer=_author,
                                        review=True, reviewer_proposer=_pass_reviewer)
             assert (root / "features" / "seq" / "sequence-report.yaml").is_file()
@@ -304,7 +304,7 @@ class TestResume:
             pkgs = atomic_planner.decompose(three_area_sig, wid="seq", child_root=root)["work_packages"]
             buf = io.StringIO()
             with contextlib.redirect_stderr(buf):
-                seq = execute_sequence("x", three_area_sig, root, pkgs, _prop_for, feature="seq",
+                execute_sequence("x", three_area_sig, root, pkgs, _prop_for, feature="seq",
                                        base=cur, author=True, author_proposer=_author,
                                        review=True, reviewer_proposer=_pass_reviewer)
             seq_drift = execute_sequence("x", three_area_sig, root, pkgs, _prop_for, feature="seq",
@@ -817,7 +817,7 @@ class TestBaselineProvenance:
     def test_valid_base_proven_true(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            cur = _mkrepo(td)
+            _mkrepo(td)
             res = _collect_base_checks_at(root, _git(root, "rev-parse", "HEAD")[1], False)
             assert isinstance(res, dict)
             assert res.get("proven") is True
