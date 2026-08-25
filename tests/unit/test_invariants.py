@@ -57,6 +57,24 @@ class TestInvariantCatalogSelfTest:
         with pytest.raises(KeyError):
             check_invariant("INV-NONEXISTENT-999")
 
+    # перенос из test_invariants_selftest.py: каталог непуст и каждый инвариант well-formed
+    def test_catalog_is_non_empty(self):
+        assert len(ALL_INVARIANTS) > 0
+
+    def test_every_invariant_has_required_fields(self):
+        for inv in ALL_INVARIANTS:
+            missing = [k for k in ("id", "description", "severity", "check") if k not in inv]
+            assert not missing, f"{inv.get('id', '?')} missing fields: {missing}"
+
+    def test_every_severity_is_critical_or_warning(self):
+        for inv in ALL_INVARIANTS:
+            assert inv.get("severity") in ("critical", "warning"), \
+                f"{inv.get('id', '?')} has bad severity {inv.get('severity')!r}"
+
+    def test_every_check_is_callable(self):
+        for inv in ALL_INVARIANTS:
+            assert callable(inv.get("check")), f"{inv.get('id', '?')} check is not callable"
+
 
 # ============================================================================
 # Preflight Invariants — Property-Based
@@ -79,6 +97,10 @@ class TestPreflightInvariants:
             assert check_invariant("INV-PREFLIGHT-001", blocked=blocked, reasons=reasons)
         elif not blocked:
             assert check_invariant("INV-PREFLIGHT-001", blocked=blocked, reasons=reasons)
+
+    # перенос из test_invariants_selftest.py: явная негативная ветвь
+    def test_inv_preflight_001_blocked_without_reasons_fails(self):
+        assert check_invariant("INV-PREFLIGHT-001", blocked=True, reasons=[]) is False
 
     @given(
         ok=st.booleans(),
@@ -352,6 +374,10 @@ class TestBudgetInvariants:
         assert check_invariant(
             "INV-BUDGET-001", model_calls=b.model_calls, max_model_calls=b.max_model_calls,
         )
+
+    # перенос из test_invariants_selftest.py: явная негативная ветвь (calls > max → FAIL)
+    def test_inv_budget_001_over_ceiling_fails(self):
+        assert check_invariant("INV-BUDGET-001", model_calls=5, max_model_calls=3) is False
 
     @given(
         max_calls=st.integers(min_value=1, max_value=1000),
