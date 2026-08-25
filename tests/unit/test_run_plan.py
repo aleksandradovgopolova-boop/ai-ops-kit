@@ -62,6 +62,48 @@ class TestBuildPlan:
 
 
 @pytest.mark.unit
+class TestTrackSelection:
+    """Выбор треков и гейтов из сигналов — поведение, а не только форма плана.
+
+    Перенесено из монолитного test_run_plan_selftest (прополка): гранулярный файл проверял лишь
+    НАЛИЧИЕ ключей required/conditional/skipped, а какие именно треки выбираются по сигналам и какие
+    гейты они добавляют — не проверялось нигде. Здесь эта логика закреплена по-тестово.
+    """
+
+    _PRODUCT_SIG = {
+        "task_type": "PRODUCT", "risk": "medium",
+        "available_providers": ["anthropic"], "available_runtimes": ["claude-code"],
+        "ui_changed": True, "measurable_behavior": True, "security_surface_changed": True,
+        "user_facing_change": True, "task_text": "фильтр по статусу в каталоге заказов",
+    }
+
+    def test_product_ui_analytics_security_require_their_tracks(self):
+        plan = run_plan.build_plan(self._PRODUCT_SIG)
+        required = {t["track"] for t in plan["required_tracks"]}
+        assert {"VISUAL", "ANALYTICS", "SECURITY", "DOCUMENTATION"} <= required
+        assert plan["base_workflow"] == "PRODUCT"
+
+    def test_selected_tracks_add_their_gates_to_base(self):
+        # PRODUCT сам по себе не имел ux/analytics гейтов — их добавляют треки
+        plan = run_plan.build_plan(self._PRODUCT_SIG)
+        assert {"ux_review", "analytics_design_readiness", "security"} <= set(plan["gates"])
+        assert run_plan.validate_plan(plan) == []
+
+    def test_no_ui_skips_visual_with_reason_and_drops_its_gate(self):
+        sig = dict(self._PRODUCT_SIG); sig["ui_changed"] = False
+        plan = run_plan.build_plan(sig)
+        vis = next((t for t in plan["skipped_tracks"] if t["track"] == "VISUAL"), None)
+        assert vis is not None and "UI" in vis["reason"]
+        assert "ux_review" not in plan["gates"]
+
+    def test_ai_component_adds_conditional_ai_track_and_gate(self):
+        sig = dict(self._PRODUCT_SIG); sig["ai_component"] = True
+        plan = run_plan.build_plan(sig)
+        assert any(t["track"] == "AI" for t in plan["conditional_tracks"])
+        assert "ai_red_team" in plan["gates"]
+
+
+@pytest.mark.unit
 class TestValidatePlan:
     """Tests for validate_plan(): plan integrity checks."""
 
