@@ -11,6 +11,10 @@ on:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
 
+# Lane A1: минимальные привилегии — workflow получает только чтение контента.
+permissions:
+  contents: read
+
 # v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ. Он ставился (v3.28.x) потому, что валидаторы делали
 # `import _bootstrap`, а файл лежал только в tools/ — и заодно прятал этот дефект от CI: с поясом
 # `installer --selftest` был зелёным, без пояса падал, то есть в child-репозитории кит не работал,

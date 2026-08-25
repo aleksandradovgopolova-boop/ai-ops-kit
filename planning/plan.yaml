@@ -1217,7 +1217,7 @@ work:
       На package-quality и pr-smoke объявлен минимальный permissions (contents: read)
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [.github/]
