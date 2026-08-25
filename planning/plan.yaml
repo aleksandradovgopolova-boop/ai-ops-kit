@@ -353,7 +353,9 @@ work:
       coverage и footprint меряются против итога слияния, а не ветки PR
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: in_progress
+    branch: gate-measures-merge-result
+    pr: 287
     owner_role: engineer
     value: high
     write_scope: [.github/, tests/]
