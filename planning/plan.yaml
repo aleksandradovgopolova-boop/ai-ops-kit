@@ -383,7 +383,9 @@ work:
       Слияние идёт родным GitHub merge queue с auto-merge, а не самодельным polling-циклом
     type: engineering
     goal: team-works-in-parallel
-    status: todo
+    status: in_progress
+    branch: merge-queue-not-handrolled
+    pr: 289
     owner_role: engineer
     value: high
     write_scope: [.github/, docs/]
