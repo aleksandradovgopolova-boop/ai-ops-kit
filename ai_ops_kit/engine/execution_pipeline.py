@@ -1059,7 +1059,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                        + ", ".join(u["domain"] for u in approval_recheck.get("uncovered") or [])
                        + ") — переодобри под фактический дифф")
 
-    return {
+    report = {
         "schema_version": 1, "kind": "execution-pipeline",
         "workitem_id": plan["workitem_id"],
         "child_root": str(child_root),          # нужен вывода: уровень детализации берётся из репо
@@ -1181,6 +1181,23 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         "draft_pr": delivery.get("pr"),        # результат открытия PR (None если deferred/не открыт)
         "not_yet": not_yet,
     }
+    # v3.38 (K7): инварианты pipeline — fail-closed, нарушение записывается в отчёт.
+    from ai_ops_kit.gates.invariants import check_invariant as _ci
+    _pipe_breaches = []
+    for _inv_id, _kw in [
+        ("INV-PIPELINE-001", {"result": report}),
+        ("INV-PIPELINE-002", {"ready_for_pr": report.get("ready_for_pr"),
+                               "overall_status": report.get("overall_status")}),
+        ("INV-PIPELINE-004", {"changed_files": report.get("commit", {}).get("changed_files", [])}),
+    ]:
+        try:
+            if not _ci(_inv_id, **_kw):
+                _pipe_breaches.append(_inv_id)
+        except (KeyError, TypeError):
+            pass
+    if _pipe_breaches:
+        report["invariant_breaches"] = _pipe_breaches
+    return report
 
 
 def main(argv):

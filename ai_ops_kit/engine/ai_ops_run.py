@@ -1464,6 +1464,21 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                     "commit_sha": _csha, "base_ref": _plan["base_ref"], "status": _st,
                                     "remote_sha": _remote_sha, "sha_verified": _sha_ok,
                                     "pr_url": _pr.get("url"), "pr_number": _pr.get("number")}
+                        # v3.38 (K7): инварианты DeliveryReceipt — fail-closed.
+                        from ai_ops_kit.gates.invariants import check_invariant as _ci
+                        _del_breaches = []
+                        for _inv_id, _kw in [
+                            ("INV-DELIVERY-001", {"sha_verified": _sha_ok, "remote_sha": _remote_sha}),
+                            ("INV-DELIVERY-002", {"status": _st, "sha_verified": _sha_ok}),
+                            ("INV-DELIVERY-003", {"commit_sha": _csha, "branch": _branch}),
+                        ]:
+                            try:
+                                if not _ci(_inv_id, **_kw):
+                                    _del_breaches.append(_inv_id)
+                            except (KeyError, TypeError):
+                                pass
+                        if _del_breaches:
+                            _receipt["invariant_breaches"] = _del_breaches
                         _cw = _ls.durable_write(_rp, _receipt,
                                                 require_keys=("kind", "delivery_id", "status"), keep_backup=True)
                         if _cw.get("ok"):
