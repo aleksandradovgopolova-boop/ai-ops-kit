@@ -1,0 +1,1 @@
+CI меряет coverage и footprint против итога слияния, а не ветки PR: добавлен триггер `merge_group` в `package-quality.yml` и `pr-smoke.yml`. Merge queue создаёт временный merge-коммит (PR + base), и checkout в этом контексте даёт именно результат слияния — дрейф main выше порога невозможен.

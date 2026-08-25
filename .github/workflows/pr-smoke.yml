@@ -6,6 +6,10 @@ name: pr-smoke
 on:
   pull_request:
     branches: [main]
+  # РАБОТА gate-measures-merge-result (2026-08-25): smoke тоже меряется против итога слияния.
+  # Merge queue создаёт временный merge-коммит; checkout даёт результат слияния PR + main.
+  merge_group:
+    types: [checks_requested]
 
 # v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ — см. пояснение в package-quality.yml. Коротко: пояс прятал
 # дефект импорта в валидаторах, из-за которого кит не запускался в child-репозитории при зелёном
