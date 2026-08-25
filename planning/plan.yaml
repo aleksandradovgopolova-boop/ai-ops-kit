@@ -1458,7 +1458,7 @@ work:
       run/run_pipeline расщеплены на тестируемые по фазам функции
     type: engineering
     goal: trustworthy-core
-    status: todo
+    status: done
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/engine/]
