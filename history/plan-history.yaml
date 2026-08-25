@@ -3926,3 +3926,165 @@ work:
     #   tests/]. Класс derived-числа из docs/parallel-execution-retro.md. Готово (по половине названия
     #   «счёт валидаторов»), когда число выводится из факта и PR не обязан его править — расхождение
     #   невозможно by construction. Потолки — см. result: не авто-вывод by design.
+
+  # ─── Закрыто 25.08.2026, Лента C (Product Operating System) ───
+
+  - id: plan-agrees-with-git
+    title: Расхождение плана с состоянием работы в git краснеет проверкой
+    goal: plan-as-control-plane
+    status: done
+    closed_at: '2026-08-25'
+    pr: 219
+    evidence: tests/unit/test_plan_agrees_with_git.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #219, коммит 802aac3). delivery_plan.validate сверяет статус работы с
+      состоянием ветки в git: ветка впереди ствола = in_progress, ветка в стволе = работа сделана.
+      Расхождение краснеет в отчёте validate (читает CI). 11 тестов, 3 мутации — красные.
+
+  - id: product-layer-bootstrap
+    title: ai-ops init создаёт Product Operating Layer в новом репозитории
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-25'
+    pr: 240
+    evidence: tests/unit/test_planning_bootstrap.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #240, коммит 5f125b8). product_bootstrap.py (336 строк) создаёт .ai-ops/
+      с 5 артефактами (PRODUCT_PASSPORT.md, ROADMAP.md, DELIVERY.md, POLICY.yaml, templates/) через
+      managed_set + deliver_assets. ai-ops init на пустом репо создаёт все артефакты валидно.
+
+  - id: product-layer-validation
+    title: Валидация артефактов Missing/Invalid/Outdated/Valid
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-25'
+    pr: 240
+    evidence: tests/unit/test_product_templates.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #240, коммит 5f125b8). product_templates.check: покрытие реестра,
+      совпадение версий, обязательные разделы/поля. Четыре состояния Missing→Invalid→Outdated→Valid.
+
+  - id: continuous-product-audit
+    title: Периодический аудит продукта
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-25'
+    pr: 240
+    evidence: tests/unit/test_product_audit.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #240, коммит 5f125b8). product_audit.py (132 строки): наличие/
+      актуальность артефактов, backlog, roadmap, delivery, риски. Машиночитаемый отчёт.
+
+  - id: backlog-issue-classification
+    title: Классификация GitHub Issues по типу, области, приоритету
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-25'
+    pr: 230
+    evidence: tests/unit/test_backlog_classify.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #230, коммит 9bc5cf3). github.py (396 строк) + backlog_classify.py
+      (271 строк): типы feature/bug/research/improvement/tech-debt/experiment/infrastructure; атрибуты
+      type/area/status/priority/milestone. Каждый вывод объясним, unknown честен.
+
+  - id: backlog-deduplication
+    title: Дедупликация задач
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-25'
+    pr: 230
+    evidence: tests/unit/test_backlog_dedup.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #230, коммит 9bc5cf3). backlog_dedup.py (212 строк): Jaccard по
+      заголовку/телу/меткам, взвешенно; suggest_merge (не сливает молча); учёт устаревших по updated_at.
+
+  - id: backlog-ai-prioritization
+    title: AI-приоритизация backlog с объяснением
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-25'
+    pr: 239
+    evidence: tests/unit/test_backlog_prioritize.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #239, коммит 7425835). backlog_prioritize.py (238 строк): приоритет из
+      impact/urgency/cost/strategic/confidence/deps; factors + explanation для каждой задачи; override
+      человека в .ai/backlog-overrides.yaml учитывается впредь.
+
+  - id: backlog-dependency-graph
+    title: Граф зависимостей задач
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-25'
+    pr: 239
+    evidence: tests/unit/test_backlog_depgraph.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #239, коммит 7425835). backlog_depgraph.py (206 строк): блокирующие,
+      критический путь, циклы, скрытые транзитивные зависимости, dangling ссылки.
+
+  - id: drift-detected-between-artifacts
+    title: Drift между артефактами
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-25'
+    pr: 229
+    evidence: tests/unit/test_drift_artifacts.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #229, коммит 3d5c861). drift_artifacts.py (190 строк): расхождения
+      документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт. Недоступная пара — unknown.
+
+  - id: risks-identified-with-mitigation
+    title: Риски с mitigation
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-25'
+    pr: 229
+    evidence: tests/unit/test_risk_register.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #229, коммит 3d5c861). risk_register.py (151 строк): 6 категорий
+      (product/delivery/tech/dependency/resource/strategic) с предложением действия. Выводится из
+      health и drift. Пустые сигналы — пустой список рисков.
+
+  - id: team-status-auto-generated
+    title: Авто-статус команды
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-25'
+    pr: 229
+    evidence: tests/unit/test_team_sync.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #229, коммит 3d5c861). team_sync.py (155 строк): прогресс milestone,
+      изменения, блокеры, риски, ближайшие задачи, delivery forecast. Агрегирует health+risk+drift+план.
+
+  - id: ai-decisions-logged-with-rationale
+    title: AI Decision Log
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-25'
+    pr: 229
+    evidence: tests/unit/test_decision_log.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #229, коммит 3d5c861). decision_log.py (164 строки): расширяет
+      decisions/registry.yaml, тип эпизода actor:ai с полями решение/reason/data/outcome/human_overrode.
+
+  - id: policy-engine-suggest-to-approval
+    title: Policy Engine Suggest→Prepare→Execute→Require approval
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-25'
+    pr: 229
+    evidence: tests/unit/test_policy_engine.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #229, коммит 3d5c861). policy_engine.py (130 строк): по типу действия
+      policy возвращает уровень (suggest/prepare/execute/require_approval). require_approval РЕАЛЬНО
+      блокирует до одобрения (доказано тестом, не декларация).
+
+  - id: human-override-as-signal
+    title: Human override как сигнал
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-25'
+    pr: 229
+    evidence: tests/unit/test_human_override.py
+    result: >-
+      ЗАКРЫТО 25.08.2026 (PR #229, коммит 3d5c861). human_override.py (93 строки): override
+      записывается как сигнал в decision log (human_overrode=true), не как ошибка. Policy/risk читают.
