@@ -91,3 +91,22 @@ class TestSelectTests:
         result = verification_tiers.select_tests(["tools/orchestrator.py"], str(tmp_path))
         assert result["tier"] == "full"
         assert result["full_command"] is True
+
+    def test_select_tests_module_without_test_is_impact_unknown(self, tmp_path):
+        """Module present but no targeting test -> impact_status=targeted_tests_not_found."""
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "module.py").write_text("def func(): return 1\n", encoding="utf-8")
+        result = verification_tiers.select_tests(["tools/module.py"], str(tmp_path))
+        assert result["impact_status"] == verification_tiers.IMPACT_TARGETED_TESTS_NOT_FOUND
+
+    def test_select_tests_targeted_test_found_is_affected(self, tmp_path):
+        """When the module's test exists: tier is affected, test lands in affected_tests,
+        and impact_status reports the test was found."""
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "module.py").write_text("def func(): return 1\n", encoding="utf-8")
+        (tmp_path / "tools" / "test_module.py").write_text(
+            "import module\ndef test_func(): assert module.func() == 1\n", encoding="utf-8")
+        result = verification_tiers.select_tests(["tools/module.py"], str(tmp_path))
+        assert result["tier"] == "affected"
+        assert "tools/test_module.py" in (result["affected_tests"] or [])
+        assert result["impact_status"] == verification_tiers.IMPACT_TARGETED_TESTS_FOUND

@@ -1,0 +1,1 @@
+Добавлена цель `trustworthy-core` и 21 работа из аудита 2026-08-25 (11 Phase 0 + 10 Phase B) в planning/plan.yaml; горизонт `trustworthy-core` добавлен в ROADMAP.md. Пути в audit-доках приведены к реальным (`ai_ops_kit/...`).

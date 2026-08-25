@@ -169,8 +169,24 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
                       or "economic-preflight: прогон не разрешён политикой экономики")
 
     ok = not reasons
-    return {"schema_version": 1, "kind": "PreflightTruth", "ok": ok, "blocked": not ok,
-            "task_type": tt, "checks": checks, "reasons": reasons}
+    result = {"schema_version": 1, "kind": "PreflightTruth", "ok": ok, "blocked": not ok,
+              "task_type": tt, "checks": checks, "reasons": reasons}
+    # v3.38 (K7): инварианты preflight — fail-closed, нарушение не молчит.
+    from ai_ops_kit.gates.invariants import check_invariant
+    _inv_breaches = []
+    for _inv_id, _kw in [
+        ("INV-PREFLIGHT-001", {"blocked": result["blocked"], "reasons": result["reasons"]}),
+        ("INV-PREFLIGHT-002", {"ok": result["ok"], "blocked": result["blocked"]}),
+        ("INV-PREFLIGHT-005", {"checks": result["checks"]}),
+    ]:
+        try:
+            if not check_invariant(_inv_id, **_kw):
+                _inv_breaches.append(_inv_id)
+        except (KeyError, TypeError):
+            pass
+    if _inv_breaches:
+        result["invariant_breaches"] = _inv_breaches
+    return result
 
 
 def main(argv):

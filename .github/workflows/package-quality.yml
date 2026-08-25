@@ -11,6 +11,10 @@ on:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
 
+# Lane A1: минимальные привилегии — workflow получает только чтение контента.
+permissions:
+  contents: read
+
 # v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ. Он ставился (v3.28.x) потому, что валидаторы делали
 # `import _bootstrap`, а файл лежал только в tools/ — и заодно прятал этот дефект от CI: с поясом
 # `installer --selftest` был зелёным, без пояса падал, то есть в child-репозитории кит не работал,
@@ -46,7 +50,7 @@ jobs:
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest hypothesis
+      - run: pip install pyyaml pytest pytest-xdist hypothesis
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -149,6 +153,23 @@ jobs:
             echo "::error::формат сообщений коммитов нарушен (код $rc)"
             exit 1
           fi
+
+  # Lane A2: кит гоняет собственный security-scan против диффа PR.
+  # Только на PR (не push в main): `--base origin/main` требует наличия базы для сравнения.
+  # Сканер детерминированный (секреты + зависимости + флаги injection-surface),
+  # возврат 0 = чисто, 1 = находки/ошибка.
+  security-scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # нужна история для git diff против origin/main
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "Security scan: секреты, зависимости, injection-surface"
+        run: python3 ai_ops_kit/security/security_scan.py --base origin/main
+
   # 2026-08-12: ПОКРЫТИЕ СТАЛО ГЕЙТОМ, а не сбором ради сбора. Прежде `--cov` стоял в addopts
   # pytest.ini — то есть включался в каждом запуске, — и поэтому все скрипты контура гасили его
   # через `--no-cov`. Итог: покрытие реально считалось ровно в одном шаге и не сверялось с порогом
@@ -169,7 +190,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install pyyaml pytest pytest-cov hypothesis
+      - run: pip install pyyaml pytest pytest-cov pytest-xdist hypothesis
       - name: "Покрытие продукта с порогом-ратчетом (пол 70%, замер 71%)"
         env:
           PYTHONDONTWRITEBYTECODE: "1"
@@ -180,7 +201,7 @@ jobs:
           # окажется неподдержанным, джоба упадёт громко — это лучше, чем тихо считать медленно.
           COVERAGE_CORE: sysmon
         run: |
-          python3 -m pytest tests/ -q \
+          python3 -m pytest tests/ -q -n auto --dist loadfile \
             --cov=ai_ops_kit --cov=installer \
             --cov-report=term-missing:skip-covered \
             --cov-fail-under=70
@@ -233,6 +254,6 @@ jobs:
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest hypothesis
+      - run: pip install pyyaml pytest pytest-xdist hypothesis
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short

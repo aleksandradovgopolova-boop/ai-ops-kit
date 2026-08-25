@@ -80,3 +80,22 @@ class TestDeriveStatus:
         assert result["kind"] == "workitem-status"
         assert "action" in result
         assert "lifecycle_intent" in result
+
+    def test_unclosed_human_approval_needs_human_decision(self):
+        """Перенесено из монолита (прополка): если все машинные гейты pass, но остался незакрытый
+        human-approval — статус needs_human_decision, а не done. Гранулярно проверялись
+        needs_more_evidence/done/blocked, но эта ветвь — нет."""
+        ge = workitem.gate_executor
+        gates = ge.load_gates()
+        for wid, w in ge.load_workflows().items():
+            gs = w.get("quality_gates", []) or []
+            human = [g for g in gs if ge.classify(gates[g]) == "human-approval"]
+            if not human:
+                continue
+            # закрываем все НЕ-human гейты, human оставляем открытым
+            ev = {g: {"status": "pass", "provided": list(gates[g].get("required_evidence", []) or [])}
+                  for g in gs if g not in human}
+            result = workitem.derive_status(wid, Path("/nonexistent"), ev)
+            assert result["status"] == "needs_human_decision", (wid, human, result["status"])
+            return
+        pytest.skip("нет workflow с human-approval гейтом")

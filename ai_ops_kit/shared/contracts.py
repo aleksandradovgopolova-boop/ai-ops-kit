@@ -277,6 +277,35 @@ class WorkItemState(TypedDict, total=False):
     pr_url: Optional[str]
 
 
+# ============================================================================
+# Kernel Events (v3.38, trustworthy-core Wave 3)
+# ============================================================================
+
+class KernelEvent(TypedDict, total=False):
+    """Событие ядра — контракт между ядром и спутниками.
+
+    Ядро испускает события через shared.events.emit(); спутники подписываются через
+    shared.events.subscribe(). Спутник не импортируется ядром напрямую.
+
+    Типы событий:
+      run_completed      — прогон завершён (report, workitem_id, status, child_root)
+      gate_evaluated     — гейты оценены (gate_results, workitem_id, tested_revision)
+      delivery_completed — доставка выполнена (receipt, workitem_id)
+    """
+    event_type: str
+    workitem_id: str
+    timestamp: str
+    # run_completed
+    status: str
+    report: dict[str, Any]
+    child_root: str
+    # gate_evaluated
+    gate_results: list[dict[str, Any]]
+    tested_revision: str
+    # delivery_completed
+    receipt: dict[str, Any]
+
+
 # Запуск скриптом ОБЪЯСНЯЕТ модуль, а не молчит (ревизия 2026-08-11).
 #
 # Здесь стояло `sys.exit(selftest())`, а сама функция удалена в v3.30 вместе с переносом

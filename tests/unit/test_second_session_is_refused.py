@@ -158,9 +158,14 @@ class TestRunStopsOnRefusal:
         reg.parent.mkdir(parents=True)
         aw.register(reg, "wi-probe", "feature/wi-probe", ["a.py"], "session:aaaa")
 
+        # `engine="controller"` — планирующий путь: именно он проходит через ВТОРУЮ точку
+        # регистрации `_reg_rc2` (её охраняет проба planning-run-stops-when-work-is-held). С v3.38
+        # дефолт — pipeline (первая точка `_reg_rc`), поэтому контроллер-путь называем явно, иначе
+        # мутант `_reg_rc2` выживает — тест до охраны не доходит.
         rep = ai_ops_run.run("починить функцию f",
                              {"task_type": "QUICK", "size": "small", "risk": "low"},
-                             root, feature="wi-probe", execute=False, session="session:bbbb")
+                             root, feature="wi-probe", execute=False, session="session:bbbb",
+                             engine="controller")
         assert rep.get("status") == "blocked", f"прогон пошёл дальше при чужой заявке: {rep}"
         assert rep.get("blocked_by") == "active-work", rep
         assert _holders(reg) == [("wi-probe", "session:aaaa")], "чужая заявка затёрта прогоном"

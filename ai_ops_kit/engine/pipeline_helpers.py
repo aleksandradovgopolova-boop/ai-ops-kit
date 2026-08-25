@@ -218,9 +218,10 @@ def _openspec_validate(work_root, change_id):
 def _authoring_specs():
     """v2.86: артефакт-гейты, которые движок умеет ЗАКРЫВАТЬ производством артефакта + детерминированной
     проверкой ФОРМЫ (не «качества»). specification обрабатывается ОТДЕЛЬНО."""
-    from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-    from ai_ops_kit.validation import validate_requirements_artifact as vra
-    from ai_ops_kit.validation import validate_plan_artifact as vpa
+    # Чистые проверки формы живут ВНИЗ, в пакете `checks` (слой primitives): зовём их вниз, без
+    # восходящего ребра engine -> validation (лента №5).
+    from ai_ops_kit.checks import requirements_artifact as vra
+    from ai_ops_kit.checks import plan_artifact as vpa
     return {
         "requirements": ("requirements.yaml", vra, "requirements-artifact",
                          "requirements: список объектов {id, statement (тестируемое требование), "

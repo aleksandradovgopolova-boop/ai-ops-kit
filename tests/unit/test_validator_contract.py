@@ -101,6 +101,13 @@ def _seam_of(path: Path):
         if isinstance(n, ast.FunctionDef) and n.name == "check":
             args = [a.arg for a in n.args.args]
             return (args[0] if args else None), len(args)
+    # v3.38 (лента №4): чистая логика check(data) выносится вниз в пакет `checks`, а валидатор её
+    # РЕ-ЭКСПОРТИРУЕТ (`from ai_ops_kit.checks.* import ... check ...`). Шов остаётся у валидатора —
+    # он по-прежнему публикует check(data), только определение переехало. Контракт это признаёт.
+    for n in tree.body:
+        if isinstance(n, ast.ImportFrom) and n.module and "ai_ops_kit.checks" in n.module:
+            if any(a.name == "check" for a in n.names):
+                return ("data", 1)
     return None
 
 

@@ -47,11 +47,15 @@ def test_every_validator_is_listed_or_declared_excluded():
     excluded = _declared_exclusions()
 
     # v3.30: чеклист перестал быть единственным местом запуска. Валидатор считается покрытым,
-    # если его проверки переехали в pytest (test_<validator>_selftest.py) ИЛИ он под
+    # если его проверки переехали в pytest (test_validate_<name>.py) ИЛИ он под
     # рантайм-контрактом (test_validator_runtime_contract прогоняет его из копии репозитория).
     # Дублировать те же команды в чеклисте значит гонять одно и то же дважды.
-    migrated = {f"ai_ops_kit/validation/{p.stem.replace('test_', '', 1).replace('_selftest', '')}.py"
-                for p in (PKG / "tests" / "unit").glob("test_validate_*_selftest.py")}
+    migrated = set()
+    for p in (PKG / "tests" / "unit").glob("test_validate_*.py"):
+        name = p.stem.replace("test_", "", 1)
+        if name.endswith("_selftest"):
+            name = name[: -len("_selftest")]
+        migrated.add(f"ai_ops_kit/validation/{name}.py")
     from test_validator_runtime_contract import NEEDS_ARTIFACT, STANDALONE
     contracted = {f"ai_ops_kit/validation/{n}.py" for n in list(STANDALONE) + list(NEEDS_ARTIFACT)}
     missing = sorted(real - listed - excluded - migrated - contracted)

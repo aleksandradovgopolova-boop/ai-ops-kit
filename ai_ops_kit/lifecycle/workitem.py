@@ -38,7 +38,7 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401 — кладёт val
                                          # модуля ниже удалён ревизией 2026-08-11 как дубль
 from ai_ops_kit.gates import gate_executor          # noqa: E402
 from ai_ops_kit.lifecycle import run_report             # noqa: E402
-from ai_ops_kit.engine import ai_route   # noqa: E402
+# v3.38 (K5): ai_route загружается лениво — lifecycle не импортирует engine.
 from ai_ops_kit.lifecycle import lifecycle_intent       # noqa: E402  v3.27.0 WP1
 
 STATUS_ACTION = {
@@ -60,7 +60,8 @@ def start(features_dir, fid, task, task_type=None, risk=None):
         inp["task_type"] = task_type
     if risk:
         inp["risk"] = risk
-    r = ai_route.route(inp)
+    _ar = __import__("ai_ops_kit.engine.ai_route", fromlist=["route"])
+    r = _ar.route(inp)
     wf = r["workflow"]
     fdir = Path(features_dir) / fid
     fdir.mkdir(parents=True, exist_ok=True)

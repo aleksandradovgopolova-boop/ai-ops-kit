@@ -1,0 +1,1 @@
+Починены 4 pre-existing failure, блокировавших push main: YAML-шаблон `_fake_repo` в тесте `validate_agents_checklist` давал невалидный YAML (dedent с 1-пробельным общим отступом); осиротевшие поля Phase 5 капстоуна в plan.yaml перезаписывали `human-override-as-signal` через duplicate key.

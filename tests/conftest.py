@@ -33,6 +33,25 @@ for p in (PKG_ROOT, TOOLS_DIR, VALIDATION_DIR, TESTS_DIR):
         sys.path.insert(0, str(p))
 
 
+# ── Отключаем фоновую обслуживание git ВО ВСЕХ тестах ──────────────────────────────────────────
+# ПОВОД: рецидивирующий флак CI. Тесты, которые git-init'ят репозиторий и потом копируют его целиком
+# (`shutil.copytree` каталога с `.git` — test_update_policy_enforcement, test_command_language_wiring),
+# ловили гонку: git после commit запускал фоновую обслуживание, та создавала и тут же удаляла
+# `.git/objects/maintenance.lock`, а параллельный copytree видел файл в листинге и падал на его
+# отсутствии при копировании. Это НЕ дефект продукта — это фоновой git против copytree под xdist.
+#
+# Через GIT_CONFIG_* переменные (документированный способ git инжектить конфиг) выключаем и
+# `maintenance.auto`, и `gc.auto` на КАЖДЫЙ git-подпроцесс, порождаемый тестами: локов больше нет,
+# копировать нечего ловить. Ни один тест не зависит от фоновой уборки — поведение продукта не
+# меняется, снимается только источник гонки. Значения дозаписываются к тому, что уже есть в среде.
+_gc = int(os.environ.get("GIT_CONFIG_COUNT", "0") or "0")
+os.environ[f"GIT_CONFIG_KEY_{_gc}"] = "maintenance.auto"
+os.environ[f"GIT_CONFIG_VALUE_{_gc}"] = "false"
+os.environ[f"GIT_CONFIG_KEY_{_gc + 1}"] = "gc.auto"
+os.environ[f"GIT_CONFIG_VALUE_{_gc + 1}"] = "0"
+os.environ["GIT_CONFIG_COUNT"] = str(_gc + 2)
+
+
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -111,3 +130,26 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "live: live tests (require external services)")
     config.addinivalue_line("markers", "regression: regression tests for known bugs")
     config.addinivalue_line("markers", "slow: tests that take >10 seconds")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Проставить ярусный маркер по каталогу, если явного нет — пирамида читается числом.
+
+    Ярус задаётся расположением (tests/tier_map.DIR_TIER): tests/unit -> unit, tests/contracts ->
+    contract, tests/integration -> integration. Явный ярусный маркер на тесте не трогаем (тест
+    вправе объявить ярус сам); ортогональные slow/live/regression/critical_path — не ярус.
+    Тест в каталоге без известного яруса маркер НЕ получает: его ловит test_pyramid_is_tiered.
+    """
+    from tier_map import DIR_TIER, TIER_MARKERS
+
+    tests_root = Path(__file__).resolve().parent
+    for item in items:
+        if TIER_MARKERS & {m.name for m in item.iter_markers()}:
+            continue
+        try:
+            rel = Path(str(item.path)).resolve().relative_to(tests_root)
+        except (ValueError, AttributeError):
+            continue
+        tier = DIR_TIER.get(rel.parts[0]) if rel.parts else None
+        if tier:
+            item.add_marker(getattr(pytest.mark, tier))

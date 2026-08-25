@@ -536,7 +536,7 @@ def reconcile_with_base(entries, child_root, base=None):
     src = list(entries or [])
     if not src:
         return out
-    from ai_ops_kit.engine import pipeline_git as _pg   # локально: engine импортирует lifecycle
+    _pg = __import__("ai_ops_kit.engine.pipeline_git", fromlist=["_resolve_base"])
     resolved = _pg._resolve_base(child_root, base)
     base_ref = resolved.get("base_ref") if resolved.get("resolved") else None
     note = None if base_ref else (resolved.get("reason") or "база не определена")
@@ -626,7 +626,7 @@ def classify(active, entry):
     branch и same-work добавлены 18.08.2026 — это ровно два случая из заявки #150, которые ломали
     команду: двойная работа на ОДНОЙ ветке и двойная работа над ОДНОЙ работой из разных сессий. Они
     видны и МЕЖДУ машинами, потому что опубликованная заявка несёт branch и id (team_view их подаёт)."""
-    from ai_ops_kit.engine import work_areas as _work_areas   # локально: engine импортирует lifecycle
+    _work_areas = __import__("ai_ops_kit.engine.work_areas", fromlist=["check_conflict"])
     wid = entry.get("id")
     areas = list(entry.get("affected_areas") or [])
     deps = set(entry.get("depends_on") or [])

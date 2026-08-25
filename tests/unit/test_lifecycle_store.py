@@ -140,3 +140,114 @@ class TestDurableWriteJson:
         p = tmp_path / "data.json"
         result = lifecycle_store.durable_write_json(p, {"kind": "x"}, require_keys=("kind", "missing"))
         assert result["ok"] is False
+
+
+def _seed_journal(jn):
+    """Append a Run -> Package -> Gate chain (3 events) into jn."""
+    lifecycle_store.journal_append(jn, {"kind": "run_start", "run_id": "R1", "workitem_id": "w"})
+    lifecycle_store.journal_append(jn, {"kind": "package_start", "run_id": "R1", "package_id": "WP1"})
+    lifecycle_store.journal_append(
+        jn, {"kind": "gate", "run_id": "R1", "package_id": "WP1", "gate": "security", "status": "pass"})
+
+
+@pytest.mark.unit
+class TestEventJournal:
+    """journal_append/journal_read: append-only JSONL with a verified checksum chain."""
+
+    def test_three_events_intact_chain(self, tmp_path):
+        jn = tmp_path / "journal.jsonl"
+        _seed_journal(jn)
+        result = lifecycle_store.journal_read(jn)
+        assert result["ok"] is True
+        assert len(result["events"]) == 3
+
+    def test_seq_monotonic(self, tmp_path):
+        jn = tmp_path / "journal.jsonl"
+        _seed_journal(jn)
+        result = lifecycle_store.journal_read(jn)
+        assert [e["seq"] for e in result["events"]] == [0, 1, 2]
+
+    def test_run_package_gate_links_preserved(self, tmp_path):
+        jn = tmp_path / "journal.jsonl"
+        _seed_journal(jn)
+        third = lifecycle_store.journal_read(jn)["events"][2]
+        assert third["run_id"] == "R1"
+        assert third["package_id"] == "WP1"
+        assert third["gate"] == "security"
+
+    def test_tampered_middle_line_detected(self, tmp_path):
+        import json
+        jn = tmp_path / "journal.jsonl"
+        _seed_journal(jn)
+        lines = jn.read_text(encoding="utf-8").splitlines()
+        rec = json.loads(lines[1])
+        rec["status"] = "HACKED"
+        lines[1] = json.dumps(rec, ensure_ascii=False)
+        jn.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        assert lifecycle_store.journal_read(jn)["ok"] is False
+
+    def test_truncated_last_line_detected(self, tmp_path):
+        jn = tmp_path / "journal.jsonl"
+        lifecycle_store.journal_append(jn, {"kind": "run_start", "run_id": "R2"})
+        with open(jn, "a", encoding="utf-8") as f:
+            f.write('{"kind": "run_end", "run_i')  # truncated record, no newline
+        assert lifecycle_store.journal_read(jn)["ok"] is False
+
+    def test_append_to_broken_chain_refused(self, tmp_path):
+        import json
+        jn = tmp_path / "journal.jsonl"
+        lifecycle_store.journal_append(jn, {"kind": "run_start", "run_id": "R3"})
+        lifecycle_store.journal_append(jn, {"kind": "package_end", "run_id": "R3", "package_id": "P1"})
+        lines = jn.read_text(encoding="utf-8").splitlines()
+        rec = json.loads(lines[0])
+        rec["run_id"] = "TAMPER"
+        lines[0] = json.dumps(rec, ensure_ascii=False)
+        jn.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = lifecycle_store.journal_append(jn, {"kind": "run_end", "run_id": "R3"})
+        assert result["ok"] is False
+        assert "повреждён" in result.get("error", "")
+
+    def test_head_marker_written_on_intact_journal(self, tmp_path):
+        jn = tmp_path / "journal.jsonl"
+        lifecycle_store.journal_append(jn, {"kind": "run_start", "run_id": "R4"})
+        lifecycle_store.journal_append(jn, {"kind": "run_end", "run_id": "R4"})
+        assert lifecycle_store.journal_read(jn)["ok"] is True
+        assert (tmp_path / "journal.jsonl.head").exists()
+
+    def test_deleted_last_line_detected_via_head_marker(self, tmp_path):
+        jn = tmp_path / "journal.jsonl"
+        lifecycle_store.journal_append(jn, {"kind": "run_start", "run_id": "R4"})
+        lifecycle_store.journal_append(jn, {"kind": "run_end", "run_id": "R4"})
+        lines = jn.read_text(encoding="utf-8").splitlines()
+        jn.write_text(lines[0] + "\n", encoding="utf-8")  # drop the whole last (valid-prefix) line
+        result = lifecycle_store.journal_read(jn)
+        assert result["ok"] is False
+        assert "усечение" in (result.get("reason") or "")
+
+
+@pytest.mark.unit
+class TestValidateTrace:
+    """validate_trace: events must carry the mandatory ids of their link."""
+
+    def test_full_valid_trace_has_no_errors(self):
+        events = [
+            {"kind": "run_start", "run_id": "R", "workitem_id": "R", "attempt_id": "R#a1"},
+            {"kind": "package_end", "run_id": "R", "workitem_id": "R", "package_id": "WP1"},
+            {"kind": "delivery_receipt", "run_id": "R", "delivery_id": "d1"},
+            {"kind": "run_end", "run_id": "R", "workitem_id": "R", "attempt_id": "R#a1", "status": "delivered"},
+        ]
+        assert lifecycle_store.validate_trace(events) == []
+
+    def test_package_end_without_package_id_errors(self):
+        errs = lifecycle_store.validate_trace(
+            [{"kind": "package_end", "run_id": "R", "workitem_id": "R"}])
+        assert any("package_id" in e for e in errs)
+
+    def test_delivery_without_delivery_id_errors(self):
+        errs = lifecycle_store.validate_trace([{"kind": "delivery", "run_id": "R"}])
+        assert any("delivery_id" in e for e in errs)
+
+    def test_run_start_without_attempt_id_errors(self):
+        errs = lifecycle_store.validate_trace(
+            [{"kind": "run_start", "run_id": "R", "workitem_id": "R"}])
+        assert any("attempt_id" in e for e in errs)

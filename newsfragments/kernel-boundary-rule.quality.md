@@ -1,0 +1,1 @@
+Добавлено правило `kernel-boundary` в `packages/layering.yaml` и проверка в `validate_layering.py`: ядро ({shared, kernel, engine, gates, lifecycle, delivery, governance}) не импортирует спутники (planning, intelligence, engops). planning и engops лежат в том же слое capabilities, что и ядро, и слоями не запрещены — правило поверх слоёв закрывает дыру.

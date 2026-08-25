@@ -1,0 +1,1 @@
+Тест сверяет `_EVIDENCE_KEYS` в `gate_executor` с `schemas/gate-evidence.schema.json` и краснеет на расхождении. Схема дополнена полями `pending_human` и `human_handoff`, которые код использовал, но схема не объявляла.

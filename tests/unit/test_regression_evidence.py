@@ -48,6 +48,30 @@ def _profile(target=""):
     return {"stacks": [{"commands": {"test": f"{sys.executable} -m pytest -q {target}".strip()}}]}
 
 
+# --------------------------------------------------- классификация путей ---
+# Перенесено из монолитного test_regression_evidence_selftest (прополка): гранулярный файл не
+# проверял чистые функции is_test_path/classify_changed, на которых стоит вся ветвящаяся логика prove.
+
+@pytest.mark.unit
+class TestPathClassification:
+
+    def test_is_test_path_recognises_tests_by_dir_and_name(self):
+        assert re_.is_test_path("tests/test_a.py")
+        assert re_.is_test_path("src/a.test.ts")
+        assert re_.is_test_path("pkg/__tests__/b.spec.ts")
+        assert re_.is_test_path("x/foo_test.go")
+
+    def test_is_test_path_rejects_ordinary_code(self):
+        assert not re_.is_test_path("src/parse.ts")
+        assert not re_.is_test_path("tools/run.py")
+
+    def test_classify_changed_splits_tests_docs_code(self):
+        sp = re_.classify_changed(["src/a.ts", "src/a.test.ts", "README.md", "config/app.yaml"])
+        assert sp["tests"] == ["src/a.test.ts"]
+        assert sp["docs"] == ["README.md"]
+        assert sp["code"] == ["src/a.ts", "config/app.yaml"]
+
+
 # ---------------------------------------------------------------- positive ---
 
 @pytest.mark.unit

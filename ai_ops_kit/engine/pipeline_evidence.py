@@ -70,8 +70,9 @@ def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
 
 def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
     """v2.89: произвести OpenSpec change для гейта specification."""
-    from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
-    from ai_ops_kit.validation import validate_spec_artifact as vsa
+    # Проверка формы и рендер СОДЕРЖИМОГО живут ВНИЗ, в пакете `checks` (слой primitives): движок
+    # зовёт их вниз, без восходящего ребра engine -> validation (лента №5). Запись файлов — ниже.
+    from ai_ops_kit.checks import spec_artifact as vsa
     prompt = (
         "Ты автор OpenSpec-изменения (spec-change) для задачи. Верни ТОЛЬКО YAML со схемой:\n"
         "  schema_version: 1\n  kind: spec-change\n  capability: <slug>\n  why: <зачем>\n"
@@ -96,7 +97,13 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
              "errors": errs or None}
     if errs:
         return gate_ev, entry
-    vsa.render(data, Path(work_root) / "openspec", wid)
+    # Запись (I/O) — забота движка: чистая render_content строит содержимое, движок пишет файлы под
+    # openspec-корень. Так рендер живёт вниз (в `checks`), а запись остаётся в слое ядра.
+    _openspec_root = Path(work_root) / "openspec"
+    for _rel, _content in vsa.render_content(data, wid):
+        _target = _openspec_root / _rel
+        _target.parent.mkdir(parents=True, exist_ok=True)
+        _target.write_text(_content, encoding="utf-8")
     available, ok, out = openspec_validate(work_root, wid)
     entry["openspec_cli"] = "available" if available else "absent"
     entry["openspec_valid"] = ok if available else None
@@ -284,7 +291,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                  max_reads=10, change_context=None,
                  calibrated_enforcement=False, ui_evidence=None):
     """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence."""
-    from ai_ops_kit.validation import validate_reviewer_result as vrr
+    from ai_ops_kit.checks import reviewer_result as vrr  # чистая проверка вниз (лента №5)
     gates = gate_executor.load_gates()
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     reviews = []
@@ -369,7 +376,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
 def _review_security(reviewer_proposer, work_root, pack_result, revision, budget, change_context=None):
     """v2.106: независимый security-reviewer выносит вердикт по needs_review доменам."""
     from ai_ops_kit.security import security_pack
-    from ai_ops_kit.validation import validate_reviewer_result as vrr
+    from ai_ops_kit.checks import reviewer_result as vrr  # чистая проверка вниз (лента №5)
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     domains = {d["id"]: d for d in security_pack.load_domains()[0]}
     applicable = list(pack_result.get("needs_review", []) or [])

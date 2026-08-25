@@ -61,6 +61,21 @@ class TestAssess:
             child_root=child_root)
         assert "by-size" in result["decomposition_axes"]
 
+    def test_budget_overrun_triggers_by_context_budget(self, child_root):
+        """A small task whose context exceeds the budget -> by-context-budget axis."""
+        result = atomic_planner.assess(
+            {"task_type": "ENGINEERING", "size": "small", "affected_areas": ["core"]},
+            child_root=child_root, budget=10)
+        assert "by-context-budget" in result["decomposition_axes"]
+
+    def test_not_single_criteria_verifiable_triggers_by_verifiable_unit(self, child_root):
+        """Work not verifiable by a single criterion -> by-verifiable-unit axis."""
+        result = atomic_planner.assess(
+            {"task_type": "ENGINEERING", "size": "medium", "affected_areas": ["core"],
+             "single_criteria_verifiable": False},
+            child_root=child_root)
+        assert "by-verifiable-unit" in result["decomposition_axes"]
+
     def test_constraint_note_present(self, child_root):
         result = atomic_planner.assess({"size": "small", "affected_areas": ["core"]},
                                        child_root=child_root)
@@ -116,6 +131,36 @@ class TestDecompose:
             wid="wi-e", child_root=child_root)
         for pkg in result["work_packages"]:
             assert "write_scope" in pkg
+
+    def test_by_subsystem_packages_carry_scope_id_and_acceptance(self, child_root):
+        """Every by-subsystem package carries a non-empty scope, id and acceptance."""
+        result = atomic_planner.decompose(
+            {"task_type": "ENGINEERING", "size": "medium",
+             "affected_areas": ["catalog", "orders", "billing", "search"]},
+            wid="wi-g", child_root=child_root)
+        assert result["work_packages"]
+        assert all(p["scope"] and p["id"] and p["acceptance"] for p in result["work_packages"])
+
+    def test_write_scope_is_own_subsystem_not_foreign(self, child_root):
+        """The catalog package's write_scope names its own subsystem paths, not orders'."""
+        result = atomic_planner.decompose(
+            {"task_type": "ENGINEERING", "size": "medium",
+             "affected_areas": ["catalog", "orders", "billing", "search"]},
+            wid="wi-h", child_root=child_root)
+        pc = next(p for p in result["work_packages"] if "catalog" in (p.get("scope") or []))
+        write_scope = pc.get("write_scope") or []
+        assert write_scope
+        assert any("catalog" in s for s in write_scope)
+        assert all("orders" not in s for s in write_scope)
+
+    def test_package_scope_is_subset_of_signalled_subsystems(self, child_root):
+        """Packages don't invent scope areas beyond the assessed subsystems."""
+        result = atomic_planner.decompose(
+            {"task_type": "ENGINEERING", "size": "medium",
+             "affected_areas": ["catalog", "orders", "billing", "search"]},
+            wid="wi-i", child_root=child_root)
+        subsystems = set(result["estimate"]["subsystems"])
+        assert all(set(p["scope"]) <= subsystems for p in result["work_packages"])
 
     def test_human_confirms_flag(self, child_root):
         result = atomic_planner.decompose(

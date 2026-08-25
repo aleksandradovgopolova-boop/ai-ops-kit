@@ -55,6 +55,13 @@ class TestScanSecrets:
         files = {"app.py": "x = 1 + 2\ndef hello(): return 'world'\n"}
         assert security_scan.scan_secrets(files) == []
 
+    def test_scan_secrets_detects_generic_api_key_assignment(self):
+        """A generic api_key assigned a hex-like value in quotes must be flagged."""
+        hex_value = "abcdef0123456789" + "ABCDEF"
+        files = {"config.py": f'api_key = "{hex_value}"\n'}
+        findings = security_scan.scan_secrets(files)
+        assert any(f["id"] == "generic_secret_assignment" for f in findings)
+
     def test_scan_secrets_multiple_files(self):
         """Secrets across multiple files are all reported with correct paths."""
         aws_key = "AKIA" + "QRSTUVWX9012YZAB"
@@ -135,6 +142,12 @@ class TestNewDependencies:
         after = {"requirements.txt": "flask\nrequests\n"}
         assert security_scan.new_dependencies(before, after) == ["requests"]
 
+    def test_detects_new_go_mod_require(self):
+        """A newly added `require` line in go.mod surfaces the module path."""
+        before = {"go.mod": "module m\n"}
+        after = {"go.mod": "module m\nrequire github.com/x/y v1.2.3\n"}
+        assert "github.com/x/y" in security_scan.new_dependencies(before, after)
+
 
 @pytest.mark.unit
 class TestSecurityEvidence:
@@ -156,6 +169,11 @@ class TestSecurityEvidence:
         injections = [{"path": "a.py", "id": "eval_or_exec", "line": 1}]
         ev = security_scan.security_evidence([], injections, [])
         assert ev["no_injection_surface"]["status"] == "fail"
+
+    def test_new_deps_fail_deps_approved(self):
+        """A new, unapproved dependency fails the deps_approved gate."""
+        ev = security_scan.security_evidence([], [], ["left-pad"])
+        assert ev["deps_approved"]["status"] == "fail"
 
 
 @pytest.mark.unit

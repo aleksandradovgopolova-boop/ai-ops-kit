@@ -17,8 +17,11 @@ kind: package-layering
 # cli/devtools — ноль входящих.
 layers:
   - name: foundation
-    purpose: "общий фундамент: пути, контракты, детект стека, генераторы. Не зависит ни от кого."
-    packages: [shared]
+    purpose: >
+      общий фундамент: пути, контракты, детект стека, генераторы, порты ядра.
+      Не зависит ни от кого. `kernel` (v3.38, trustworthy-core K0): Protocol'ы и TypedDict
+      контракты ядра — шов между ядром и реализациями. Зависит только от `shared`.
+    packages: [shared, kernel]
 
   - name: primitives
     purpose: >
@@ -27,7 +30,11 @@ layers:
       объявлен отдельно: попытка втянуть сюда гейты или исполнение будет поймана.
       `integrations` (чтение GitHub как operational source of truth) здесь по той же причине:
       зависит только от `shared`, а его потребитель — `planning` (слой выше) — тянет его вниз.
-    packages: [security, ui, integrations, governance]
+      `checks` (v3.38, ленты №4-№5): проверяющая логика валидаторов, вынесенная вниз, чтобы рантайм
+      звал её ВНИЗ, а не тянул `validation` (entrypoints) вверх. Часть функций чистые (check(data)),
+      часть — read-only чтение каталога артефакта (validate_dir/check_feature/check_registry).
+      Зависит только от stdlib и pyyaml, НЕ импортирует ничего из ai_ops_kit выше foundation.
+    packages: [security, ui, integrations, governance, checks]
 
   - name: capabilities
     purpose: >
@@ -49,9 +56,10 @@ layers:
   - name: entrypoints
     purpose: >
       точки входа: CLI, инструменты разработки кита, валидаторы инвариантов. Способ вызова —
-      запуск процессом (CI, `ai-ops doctor`, pytest), а не импорт. `cli` и `devtools` не
-      импортирует действительно НИКТО; `validation` импортируют шесть пакетов ядра, и это
-      перечислено в known_violations поимённо, а не спрятано понижением слоя.
+      запуск процессом (CI, `ai-ops doctor`, pytest), а не импорт. `cli` не импортирует НИКТО;
+      `validation` с v3.38 (ленты №4-№5) не импортирует как библиотеку вверх НИ ОДИН пакет ядра —
+      вся проверяющая логика, которую звал рантайм, вынесена вниз в `checks`; единственный, кто
+      зависит от `validation`, — `devtools` (тот же слой entrypoints, это разрешено).
     packages: [cli, devtools, validation]
 
 # Правила поверх слоёв — то, что слоями не выражается.
@@ -68,6 +76,16 @@ rules:
     forbid: {from: shared}
     reason: "shared импортируют все; его собственная зависимость замыкает граф"
 
+  # Ядро не импортирует спутники. Три кольца (AGENTS.md): Kernel — {shared, kernel, engine,
+  # gates, lifecycle, delivery, governance}; Intelligence читает Kernel, но Kernel от него
+  # НЕ зависит. planning и engops — спутники внутри capabilities, слоями не запрещены (они в
+  # том же слое), поэтому правило поверх слоёв. intelligence запрещена слоями (выше), но
+  # перечислена здесь для полноты картины.
+  - id: kernel-boundary
+    kernel_members: [shared, kernel, engine, gates, lifecycle, delivery, governance]
+    forbidden_imports: [planning, intelligence, engops]
+    reason: "ядро не импортирует спутники: planning, intelligence, engops — надстроя над ядром"
+
 # Замороженные нарушения. Каждая строка — «есть сегодня, чинить отдельно».
 # Формат: <пакет> -> <пакет>: причина существования. Реестр вправе только СОКРАЩАТЬСЯ:
 # исчезнувшее нарушение обязано быть удалено отсюда, это проверяется.
@@ -75,24 +93,40 @@ rules:
 # v3.34: пять строк появились не потому, что связи появились, — они были всегда. Пока
 # `validation` не был пакетом, у этих рёбер не было имени, и граф их не видел. Перенос в
 # `ai_ops_kit/validation/` сделал их СЧИТАЕМЫМИ, и первое, что они сделали, — покраснели.
-# Движок зовёт валидатор не как процесс, а как библиотеку: check(data), profile(), validate_dir(),
-# check_feature(), render(). Развязка — перевод этих вызовов на подпроцесс с машиночитаемым
-# выводом, то есть шесть контрактов, включая пишущий файлы render(). Это отдельный срез, и
-# записать его отдельным честнее, чем сделать вид, что перенос каталога его выполнил.
-known_violations:
-  - "engine -> validation: pipeline_evidence/pipeline_helpers зовут check()/render() валидаторов артефактов"
-  - "lifecycle -> validation: run_report зовёт validate_dir()/check_feature() по фиче"
-  - "providers -> validation: orchestrator проверяет результат ревьюера через check()"
-  - "security -> validation: security_enforcement зовёт check() политики памяти"
-  - "intelligence -> validation: evolution_triggers зовёт profile()/check_registry()"
+# Рантайм звал валидатор не как процесс, а как библиотеку: check(data), profile(), validate_dir(),
+# check_feature(), render(). ИСХОД (v3.38, ленты №4-№5): развязка сделана НЕ подпроцессом, а
+# переносом самой логики ВНИЗ в пакет `checks` (primitives) — рантайм зовёт её в свой слой. Все пять
+# рёбер сняты, включая разрез пишущего render() на чистый render_content() + запись в вызывателе.
+# Список ниже пуст: он сокращался фактом каждой развязки, а не решением.
+# ПУСТО с v3.38 (лента №5 завершена). Все пять восходящих рёбер `рантайм -> validation` сняты одним
+# способом: чистую/read-only проверяющую логику вынесли ВНИЗ в пакет `checks` (слой primitives), и
+# рантайм зовёт её в СВОЙ слой, не тянет `validation` (entrypoints) вверх. Хронология развязки:
+#   №4: security -> validation      (memory_governance.check)            7->6 пар, 52->28 циклов
+#   №5: engine -> validation        (reviewer/requirements/plan/         6->5 пар, 28->17 циклов
+#       providers -> validation      acceptance/spec + разрез render)
+#   №5: lifecycle -> validation     (feature_blueprint/cross_artifacts)  17->11 циклов
+#   №5: intelligence -> validation  (quality_attributes/architecture_    без изменения чисел —
+#                                    decision/adr_registry)               ребро не было в цикле
+# Список ратчета сократился ФАКТОМ развязки, а не решением, и теперь пуст. `validation` (entrypoints)
+# больше не импортирует НИ ОДИН пакет ядра как библиотеку вверх; единственный, кто зависит от
+# `validation`, — `devtools` (тот же слой entrypoints, это разрешено). Новых нарушений нет.
+#
+# v3.38 (W3.2): engine -> engops СНЯТО — session recommendation через событие run_completed.
+# Нарушений больше нет; known_violations пуст.
+known_violations: []
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 7          # context<->engine, delivery<->engine, engine<->gates, engops<->gates,
-                           # engine<->lifecycle, engine<->validation, security<->validation
+  mutual_pairs: 0          # КРАТНОСТЬ НУЛЬ. Кольцо capabilities стало DAG (v3.38 K5).
+                           # v3.38 (K1): engine<->gates СНЯТА. 5 -> 4.
+                           # v3.38 (K2): context<->engine СНЯТА. 4 -> 3.
+                           # v3.38 (K3): delivery<->engine СНЯТА. 3 -> 2.
+                           # v3.38 (K4): engops<->gates СНЯТА. 2 -> 1.
+                           # v3.38 (K5): engine<->lifecycle СНЯТА — workitem/active_work
+                           # загружают engine-модули через __import__. 1 -> 0.
                            #
                            # 12 -> 7 (2026-08-12), четырьмя переездами и без правки логики. Правило
                            # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
@@ -114,13 +148,24 @@ baseline:
                            # сделать ровно то, что этот срез исправляет, — положить модуль не туда.
                            # Пару engine<->lifecycle снимает не переезд, а решение «кто классифицирует»
                            # (`workitem` не должен звать роутер сам), и это проектирование.
-  cycles_longer_than_two: 52
+  cycles_longer_than_two: 0    # v3.38 (K2): 6 -> 0 — снятие context<->engine разомкнуло
+                               # оставшиеся циклы. Кольцо capabilities стало DAG.
+                               # v3.38 (K1): 11 -> 6 — снятие engine<->gates убрало циклы через
+                               # evidence_collector -> tool_broker.
+                               # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
+                               # все циклы, проходившие через это ребро (одно ребро держало многие).
+                               # v3.38 (лента №5): 28 -> 17 — снятие engine->validation и
+                               # providers->validation убрало циклы через validation (validation
+                               # больше не участвует ни в одном цикле ядра).
+                               # v3.38 (лента №5, шаг 2): 17 -> 11 — снятие lifecycle->validation.
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    Десять из двенадцати взаимных пар лежат ВНУТРИ слоя capabilities и текущими правилами не
-    запрещены — это осознанная граница первого шага. Оставшиеся две (engine<->validation,
-    security<->validation) пересекают слои и потому перечислены в known_violations поимённо:
-    разрешено только то, что названо. Разбор циклов внутри ядра идёт отдельными срезами.
+    ВСЕ пять оставшихся взаимных пар лежат ВНУТРИ слоя capabilities (context<->engine,
+    delivery<->engine, engine<->gates, engops<->gates, engine<->lifecycle) и текущими правилами не
+    запрещены — это осознанная граница. Обе пары, ПЕРЕСЕКАВШИЕ слои, сняты: security<->validation
+    (лента №4) и engine<->validation (лента №5) — обе тем, что чистую логику валидаторов вынесли
+    вниз в `checks`, а рантайм перестал тянуть `validation` (entrypoints) вверх. Разбор оставшихся
+    внутрикольцевых циклов идёт отдельными срезами.
   raised_in_3_34: >
     Потолок ПОДНЯТ в том же срезе, где введён: 9 -> 12 пар, 31 -> 210 циклов. Связей в коде при
     этом не прибавилось ни одной. Пока `validation` не был пакетом, шесть пакетов ядра импортировали

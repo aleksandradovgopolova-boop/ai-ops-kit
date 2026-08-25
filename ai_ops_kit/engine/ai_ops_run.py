@@ -20,7 +20,7 @@
 Использование:
   ai_ops_run.py run "<задача>" <child_root> [--signals '<json>'] [--features-dir dir]
        [--runtime claude-code|generic-orchestrator] [--provider mock] [--model ID]
-       [--engine controller|pipeline] [--execute] [--open-pr] [--json]
+       [--engine pipeline|controller] [--execute] [--open-pr] [--json]  # pipeline — по умолчанию
   ai_ops_run.py --selftest
 Код возврата: 0 — успех/ready; 1 — blocked или pipeline не готов к PR; 2 — ошибка прогона.
 """
@@ -429,7 +429,7 @@ def _provider_trust(provider, key_env, klp_by_env, env, now, cache):
 
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
-        feature=None, engine="controller", proposer=None, open_pr=False, model=None,
+        feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
         sandbox=False, review=False, reviewer_proposer=None,
         author=False, author_proposer=None, install_deps=True,
@@ -1380,7 +1380,23 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # Если после внешнего действия запись Receipt упала -> outcome_unknown + reconciliation_required
         # (не притворяемся, что доставки не было). Идемпотентность: pr_open находит существующий PR ветки
         # и не создаёт дубль; delivery_id детерминирован по (wid, branch, commit) — повтор бьёт в ту же запись.
+        # GOVERNANCE (Фаза 4, проводка, работа `governance-enforce-observe`): решение политики о
+        # доставке (открытии PR) впрыскивается здесь — единственное место, где governance входит в
+        # путь исполнения. Записывается в decision_log ВСЕГДА; блокирует ТОЛЬКО в режиме
+        # enforcement=block (.ai-ops/POLICY.yaml). По умолчанию observe: видно, что было бы
+        # заблокировано, без остановки (радиус до включения). Одобрение — из human_override.
+        _gate = None
         if _plan and _handoff_ok and _report_ok:
+            from ai_ops_kit.governance import enforcement as _enf
+            _gate = _enf.gate_delivery(child_root, target=fid)
+            rep.setdefault("governance", {})["delivery"] = _gate
+        if _gate and _gate.get("blocked"):
+            rep["delivery"] = {"requested": True, "status": "blocked-by-policy",
+                               "reason": f"policy: {_gate.get('reason')} — доставка остановлена "
+                                         "governance (режим block)"}
+            rep["overall_status"] = "delivery-blocked"
+            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        elif _plan and _handoff_ok and _report_ok:
             import hashlib as _hl
             from ai_ops_kit.gates import concurrency_preflight as _cpp
             _branch = _plan["work_branch"]
@@ -1448,6 +1464,21 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                     "commit_sha": _csha, "base_ref": _plan["base_ref"], "status": _st,
                                     "remote_sha": _remote_sha, "sha_verified": _sha_ok,
                                     "pr_url": _pr.get("url"), "pr_number": _pr.get("number")}
+                        # v3.38 (K7): инварианты DeliveryReceipt — fail-closed.
+                        from ai_ops_kit.gates.invariants import check_invariant as _ci
+                        _del_breaches = []
+                        for _inv_id, _kw in [
+                            ("INV-DELIVERY-001", {"sha_verified": _sha_ok, "remote_sha": _remote_sha}),
+                            ("INV-DELIVERY-002", {"status": _st, "sha_verified": _sha_ok}),
+                            ("INV-DELIVERY-003", {"commit_sha": _csha, "branch": _branch}),
+                        ]:
+                            try:
+                                if not _ci(_inv_id, **_kw):
+                                    _del_breaches.append(_inv_id)
+                            except (KeyError, TypeError):
+                                pass
+                        if _del_breaches:
+                            _receipt["invariant_breaches"] = _del_breaches
                         _cw = _ls.durable_write(_rp, _receipt,
                                                 require_keys=("kind", "delivery_id", "status"), keep_backup=True)
                         if _cw.get("ok"):
@@ -1539,29 +1570,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         orchestrator.clear_call_context()
         # v3.16.0 Development Culture Guardrails (WP5): каждый прогон завершается SessionRecommendation
         # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
-        # Контекст оценивается по ledger (estimated) — рантайм может уточнить через `ai-ops session --context`.
+        # v3.38 (W3.2): ядро НЕ импортирует спутники — session recommendation через событие run_completed.
+        # Подписчик (engops/session_guardrails) реагирует синхронно и пишет в rep in-place.
+        from ai_ops_kit.shared.events import emit as _emit
         try:
-            from ai_ops_kit.engops import session_telemetry as _st
-            from ai_ops_kit.engops import session_guardrails as _sg
-            _snap = _st.snapshot(child_root, workitem_id=fid)
-            _pol = _sg.load_policy(child_root)
-            _done = bool(rep.get("ready_for_pr"))
-            _pr = rep.get("pull_request") or (rep.get("delivery") or {}).get("pr_url")
-            if _done:
-                _rit = _sg.completion_ritual(_snap, _pol, workitem_id=fid, pr=_pr,
-                                             next_relation="new_independent_task",
-                                             at_safe_boundary=True, repo_path=str(child_root))
-                rep["session_recommendation"] = _rit["session_recommendation"]
-                rep["completion_ritual"] = {k: _rit[k] for k in
-                                            ("completion_checklist", "complete", "next_command")}
-            else:
-                rep["session_recommendation"] = _sg.recommend(_snap, _pol,
-                                                              next_relation="continuation", task_done=False)
-        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): рекомендация по гигиене
-        # сессии объявлена ADVISE-ONLY выше — она ничего не блокирует и ни одного утверждения не
-        # доказывает. Её отсутствие в отчёте видно по отсутствию ключа `session_recommendation`;
-        # ложным green это стать не может, потому что зелёный отчёт на неё не опирается.
-        except Exception:  # noqa: BLE001,S110 — совет ADVISE-ONLY: его утрата не меняет ни один вердикт
+            _emit("run_completed", {
+                "event_type": "run_completed",
+                "workitem_id": fid,
+                "child_root": str(child_root),
+                "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr") else "not-ready"),
+                "ready_for_pr": bool(rep.get("ready_for_pr")),
+                "report": rep,
+            })
+        except Exception:  # noqa: BLE001,S110 — событие ADVISE-ONLY: его утрата не меняет вердикт
             pass
         # run_end (исход прогона, включая итог доставки)
         _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
@@ -1907,8 +1928,9 @@ def main(argv):
     rp.add_argument("--execute", action="store_true")
     rp.add_argument("--feature", help="имя существующей фичи — привязать WorkItem к ней "
                                       "(иначе wi-<hash>; срезы истории не накопятся на одну фичу)")
-    rp.add_argument("--engine", default="controller", choices=["controller", "pipeline"],
-                    help="controller (план+каркас) или pipeline (собранный движок: detect->tool-loop->evidence->гейты->PR)")
+    rp.add_argument("--engine", default="pipeline", choices=["pipeline", "controller"],
+                    help="pipeline (КАНОНИЧЕСКИЙ путь доставки по умолчанию: detect->tool-loop->evidence->гейты->PR) "
+                         "или controller (план+каркас/оркестрация именованных агентов — явная альтернатива)")
     rp.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat); engine=pipeline")
     rp.add_argument("--open-pr", action="store_true",
                     help="открыть draft PR по результату (нужен GITHUB_TOKEN); engine=pipeline")

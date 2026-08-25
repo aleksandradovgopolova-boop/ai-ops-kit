@@ -1,6 +1,10 @@
 # Invariants Catalog
 
-`tools/invariants.py` — каталог критических инвариантов с machine-checkable свойствами.
+`ai_ops_kit/gates/invariants.py` — каталог критических инвариантов с machine-checkable свойствами.
+
+> **Статус проверки:** инварианты проверены на синтетических данных (property-based тесты через
+> hypothesis). Рантайм-подключение к producer'ам (preflight/pipeline/DeliveryReceipt) — задача
+> `wire-invariants-runtime` (Phase B). Сейчас каталог не вызывается из production-кода.
 
 ## Overview
 
@@ -53,7 +57,7 @@
 ## Usage
 
 ```python
-from invariants import check_invariant, ALL_INVARIANTS
+from ai_ops_kit.gates.invariants import check_invariant, ALL_INVARIANTS
 
 # Проверить один инвариант
 ok = check_invariant("INV-PREFLIGHT-001", blocked=True, reasons=["spec missing"])
