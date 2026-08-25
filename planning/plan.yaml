@@ -1067,7 +1067,7 @@ work:
     title: "Автономный цикл: Observe→Understand→Plan→Prioritize→Execute→Evaluate→Learn→Replanning"
     type: engineering
     goal: autonomous-product-loop
-    status: todo
+    status: in_progress
     owner_role: engineer
     depends_on: [team-status-auto-generated, risks-identified-with-mitigation, policy-driven-execution, learning-from-human-overrides]
     write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/governance/, tests/]

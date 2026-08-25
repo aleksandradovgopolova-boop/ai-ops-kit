@@ -12,16 +12,16 @@
 
 | Модуль | Ответственность | Зависимости | Размер |
 |--------|-----------------|-------------|--------|
-| `ai_ops_kit/shared/contracts.py` | TypedDict-контракты (WorkItemState, GateResultV2, DeliveryIntent, ...) | stdlib | ~200 строк |
-| `ai_ops_kit/shared/budget.py` | Примитив бюджета прогона | stdlib | ~68 строк |
-| `ai_ops_kit/shared/gitio.py` | Обёртка над git (subprocess) | stdlib | ~39 строк |
-| `ai_ops_kit/shared/lifecycle_store.py` | Durable-запись и fail-closed чтение lifecycle-состояния | stdlib, yaml | ~404 строки |
-| `ai_ops_kit/shared/usage_ledger.py` | Учёт cost/token per model call | stdlib | ~252 строки |
-| `ai_ops_kit/shared/path_hygiene.py` | Нормализация путей, project detection | stdlib | ~50 строк |
-| `ai_ops_kit/shared/project_detector.py` | Детект стека (.ai/, .git/, package.json, ...) | stdlib | ~80 строк |
-| `ai_ops_kit/shared/generate_artifacts.py` | Генерация runtime-артефактов | stdlib, yaml | ~120 строк |
-| `ai_ops_kit/shared/generate_runtime.py` | Генерация runtime-конфигурации | stdlib, yaml | ~100 строк |
-| `ai_ops_kit/shared/_bootstrap.py` | Инициализация кита при старте | stdlib | ~60 строк |
+| `tools/contracts.py` | TypedDict-контракты (WorkItemState, GateResultV2, DeliveryIntent, ...) | stdlib | ~200 строк |
+| `tools/budget.py` | Примитив бюджета прогона | stdlib | ~68 строк |
+| `tools/gitio.py` | Обёртка над git (subprocess) | stdlib | ~39 строк |
+| `tools/lifecycle_store.py` | Durable-запись и fail-closed чтение lifecycle-состояния | stdlib, yaml | ~404 строки |
+| `tools/usage_ledger.py` | Учёт cost/token per model call | stdlib | ~252 строки |
+| `tools/path_hygiene.py` | Нормализация путей, project detection | stdlib | ~50 строк |
+| `tools/project_detector.py` | Детект стека (.ai/, .git/, package.json, ...) | stdlib | ~80 строк |
+| `tools/generate_artifacts.py` | Генерация runtime-артефактов | stdlib, yaml | ~120 строк |
+| `tools/generate_runtime.py` | Генерация runtime-конфигурации | stdlib, yaml | ~100 строк |
+| `tools/_bootstrap.py` | Инициализация кита при старте | stdlib | ~60 строк |
 
 **Оценка:** Foundation чист. Все модули — инфраструктура, не зависят ни от кого. `lifecycle_store` (404 строки) — самый крупный; кандидат на разделение на read/write, но не срочно.
 
@@ -167,10 +167,10 @@
 | Модуль | Ответственность |
 |--------|-----------------|
 | `ai_ops_kit/providers/orchestrator.py` | HTTP-оркестратор (model calls) |
-| `ai_ops_kit/providers/model_routing.py` | Маршрутизация моделей |
-| `ai_ops_kit/providers/cost_accounting.py` | Учёт стоимости |
+| `ai_ops_kit/providers/model_router.py` | Маршрутизация моделей |
+| `ai_ops_kit/providers/cost_account.py` | Учёт стоимости |
 | `ai_ops_kit/providers/provider_endpoints.py` | Эндпоинты провайдеров |
-| `ai_ops_kit/providers/response_contracts.py` | Контракты ответов |
+| `ai_ops_kit/providers/response_contract.py` | Контракты ответов |
 | ... | (ещё ~4 модуля) |
 
 **Оценка:** Providers чист после переезда `usage_ledger` и `budget` в shared.
@@ -224,7 +224,7 @@
 
 ### 2. Cost accounting: providers vs shared
 
-`ai_ops_kit/shared/usage_ledger.py` — учёт cost/token. `ai_ops_kit/shared/budget.py` — примитив бюджета. `ai_ops_kit/providers/cost_accounting.py` — учёт стоимости провайдеров.
+`tools/usage_ledger.py` — учёт cost/token. `tools/budget.py` — примитив бюджета. `ai_ops_kit/providers/cost_account.py` — учёт стоимости провайдеров.
 
 **Рекомендация:** Чёткое разделение: `shared` — примитивы (запись, чтение); `providers` — бизнес-логика (тарификация, маршрутизация по стоимости). Сегодня, похоже, так и есть, но стоит зафиксировать.
 

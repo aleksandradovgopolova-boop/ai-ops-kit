@@ -28,21 +28,17 @@ PKG = Path(__file__).resolve().parents[2]
 def _fake_repo(tmp_path, run_body):
     wf = tmp_path / ".github" / "workflows"
     wf.mkdir(parents=True)
-    (wf / "x.yml").write_text(
-        textwrap.dedent(
-            f"""\
- name: x
- on: {{push: {{branches: [main]}}}}
- jobs:
- j:
- runs-on: ubuntu-latest
- steps:
- - run: |
- {textwrap.indent(run_body, ' ' * 10)}
- """
-        ),
-        encoding="utf-8",
+    indented_body = textwrap.indent(run_body, "            ")
+    content = (
+        "name: x\n"
+        "on: {push: {branches: [main]}}\n"
+        "jobs:\n"
+        "  j:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        f"      - run: |\n{indented_body}\n"
     )
+    (wf / "x.yml").write_text(content, encoding="utf-8")
     return tmp_path
 
 

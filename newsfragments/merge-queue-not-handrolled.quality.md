@@ -1,0 +1,1 @@
+Слияние идёт родным GitHub merge queue, а не самодельным polling-циклом: `merge_lifecycle.py` обновлён с явной документацией о merge queue; добавлены 4 контрактных теста, доказывающих отсутствие polling-паттернов (цикл + sleep + gh subprocess) в кодовой базе.
