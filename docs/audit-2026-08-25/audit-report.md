@@ -166,7 +166,7 @@ Observability: intelligence/ (product_health, effect_metrics, evolution_triggers
 Продуктовой БД нет; «данные» кита = YAML-реестры (SoT) + JSON-схемы контрактов + jsonl-ledgers (usage/report/telemetry) + `planning/plan.yaml` + `history/plan-history.yaml`.
 
 - **Владение/целостность реестров** — сильно enforced для ядра (registry⇄agents двунаправленно, версии, ссылки на существующие id), с харнесом порчи в CI.
-- **Нарушения single-source-of-truth (реальные):** окна контекста моделей — второй источник в коде мимо реестра (INT-2); цены — в трёх представлениях без сверки (INT-3); `config/quality-gates.yaml` — осиротевший второй реестр гейтов (INT-5).
+- **Нарушения single-source-of-truth (реальные):** окна контекста моделей — второй источник в коде мимо реестра (INT-2); цены — в трёх представлениях без сверки (INT-3); config/quality-gates.yaml (удалён, B1) — осиротевший второй реестр гейтов (INT-5).
 - **Схемы как «данные»**: `schemas/*.json` объявлены публичными контрактами, но валидируются вручную в Python и уже разошлись с кодом (INT-4).
 - **Ledgers**: честность usage реализована по-настоящему (`unavailable ≠ 0`) — сильнейший реализованный инвариант.
 - **Пробелы харнеса порчи** (INT-6): `routing-policy`, `tools`, `entities`, `skills-catalog`, `model-qualification`, `artifact-registry` — без теста на порчу.
@@ -308,7 +308,7 @@ Observability: intelligence/ (product_health, effect_metrics, evolution_triggers
 
 # 21. Fix Now (≤10, дни, не недели)
 
-1. **Удалить `config/quality-gates.yaml`** (INT-5) — осиротевший второй реестр гейтов, прямое нарушение «registry=SoT». S. P0.
+1. **Удалить config/quality-gates.yaml (удалён, B1)** (INT-5) — осиротевший второй реестр гейтов, прямое нарушение «registry=SoT». S. P0.
 2. **Добавить `permissions: contents: read`** в `package-quality.yml` и `pr-smoke.yml` (OPS-2). S. P0.
 3. **Переклассифицировать каталог инвариантов** (INT-1): либо звать `check_invariant` в producer'ах, либо (минимум сегодня) поправить AGENTS.md/`invariants.md` — «проверено на синтетике», убрать фантомные `--selftest`/`tools/invariants.py` (INT-1/F9). S→M. P0.
 4. **Sync-тест `_EVIDENCE_KEYS` ↔ `schemas/gate-evidence.schema.json`** (INT-4). S. P0.
@@ -458,7 +458,7 @@ Big-bang rewrite **не оправдан**: существующую архит�
     1) Заморозить крупные фичи до конца Phase 0.
     2) Правило «инвариант без рантайм-enforcement — не инвариант»: `check_invariant` в producer'ах или переименовать в доке (INT-1).
     3) «Один SoT на факт»: окна/цены/схемы моделей — из реестра + sync-тесты в CI (INT-2/3/4).
-    4) Удалить осиротевший `config/quality-gates.yaml` (INT-5).
+    4) Удалить осиротевший config/quality-gates.yaml (удалён, B1) (INT-5).
     5) Кит применяет к себе планку дочек: self-scan в CI + `verify_artifact` в install-loader + `permissions` (SEC-1/4, OPS-2).
     6) Integration-ярус — цель роста; каждый полевой дефект → subprocess-регресс (TEST-1); nightly mutmut+eval (TEST-2/3/4).
     7) Разорвать ОДИН цикл структурно (workitem→classification) как доказательство, что кольцо станет DAG (ARC-1).
@@ -482,4 +482,4 @@ Big-bang rewrite **не оправдан**: существующую архит�
 - Противоречия рекомендаций? Нет; Roadmap последователен (тесты до декомпозиции; DI до разрыва циклов).
 - Cascading effect: INT-1 (доверие), ARC-2 (тестируемость), TEST-1 (полевые дефекты) — тянут за собой большинство остального.
 - Что подорожает через 6–12 мес: God-функции и кольцо capabilities (стоимость каждой фичи растёт нелинейно); рукописные доки (расхождение усилится).
-- Что чинил бы первым, будь я ответственным: INT-1 + удаление `config/quality-gates.yaml` + `permissions` (день, максимум доверия/безопасности за минимум усилий), затем TEST-1.
+- Что чинил бы первым, будь я ответственным: INT-1 + удаление config/quality-gates.yaml (удалён, B1) + `permissions` (день, максимум доверия/безопасности за минимум усилий), затем TEST-1.

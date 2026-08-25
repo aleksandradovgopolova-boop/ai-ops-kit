@@ -35,6 +35,10 @@ ALLOWED = (
     # образец проверял другое.
     re.compile(r"^(?:python3?\s+-m\s+)?pip\s+install\b"),
     re.compile(r"^\./scripts/check-(fast|full)\.sh"),
+    # Security scan — детерминированный сканер, не pytest-тест. CI-джоба запускает его напрямую
+    # против диффа PR. Обёртка в pytest бессмысленна: сканер сам fail-closed и тестируется
+    # отдельными юнит-тестами (test_kit_security_scan_job).
+    re.compile(r"^python3?\s+ai_ops_kit/security/security_scan\.py\b"),
 )
 
 
