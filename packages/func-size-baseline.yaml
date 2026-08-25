@@ -10,9 +10,9 @@ kind: func-size-ratchet
 scope: ai_ops_kit/engine/
 
 # Потолок максимального размера функции (в строках).
-# Текущий max: run() в ai_ops_run.py — 1270 строк.
+# Текущий max: run() в ai_ops_run.py — 1285 строк (K7 добавил invariant checks).
 # После K6 (расщепление run_pipeline) ожидается снижение.
-max_function_lines: 1270
+max_function_lines: 1285
 
 # Информация о текущей max-функции (для справки).
 max_function: run
