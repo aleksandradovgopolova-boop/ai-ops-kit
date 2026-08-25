@@ -172,6 +172,7 @@ internal:
     - integrations
     - intelligence
     - governance
+    - kernel
     - lifecycle
     - planning
     - providers

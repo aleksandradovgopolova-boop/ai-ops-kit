@@ -187,7 +187,7 @@ def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/int
             from ai_ops_kit.gates import evidence_collector as _ec
             from ai_ops_kit.engine import tool_broker as _tb
             _pol = _tb.sandbox_policy(child_root=str(child_root))
-            _coll = _ec.collect(_pd.detect(child_root), child_root, _pol)
+            _coll = _ec.collect(_pd.detect(child_root), child_root, _pol, broker=_tb)
             _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
             stack_ok = _iv.get("status") == "pass"
             stack_checks = {k: (v.get("status") if isinstance(v, dict) else v) for k, v in (_coll.get("checks") or {}).items()}
@@ -315,7 +315,7 @@ def make_isolated_integration_runner(child_root, base_sha, clones, integration_b
             from ai_ops_kit.shared import project_detector as _pd
             from ai_ops_kit.gates import evidence_collector as _ec
             from ai_ops_kit.engine import tool_broker as _tb
-            _coll = _ec.collect(_pd.detect(iroot), iroot, _tb.sandbox_policy(child_root=str(iroot)))
+            _coll = _ec.collect(_pd.detect(iroot), iroot, _tb.sandbox_policy(child_root=str(iroot)), broker=_tb)
             _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
             stack_ok = _iv.get("status") == "pass"
             stack_checks = {k: (v.get("status") if isinstance(v, dict) else v) for k, v in (_coll.get("checks") or {}).items()}

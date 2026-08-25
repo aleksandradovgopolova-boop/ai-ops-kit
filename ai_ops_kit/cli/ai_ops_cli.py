@@ -1576,6 +1576,12 @@ def main(argv):
     if (intent == "run" and a.execute) or intent == "do":
         from ai_ops_kit.engine import ai_ops_run
         from ai_ops_kit.engine import pipeline_helpers
+        # v3.38 (W3): регистрация подписчиков спутников — ЗДЕСЬ, на входе, а не в ядре.
+        # Ядро испускает события (ai_ops_run -> events.emit) и НЕ импортирует спутники
+        # (kernel-boundary); без этого импорта подписка engops зависела бы от того, тронул
+        # ли ДРУГОЙ интент пакет engops раньше. Явный импорт делает регистрацию видимой
+        # и статическому обходчику (test_capability_reachability).
+        from ai_ops_kit.engops import session_events as _session_events  # noqa: F401
         # v3.28.x (F-015, находка живой квалификации): intake-сигналы проверяем ДО старта.
         # `size` требует блокирующий гейт intake_completeness, вывести его из репозитория нечем,
         # и раньше пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона — в раунде C

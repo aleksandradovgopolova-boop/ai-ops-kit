@@ -145,7 +145,7 @@
 
 | Модуль | Ответственность |
 |--------|-----------------|
-| `ai_ops_kit/engops/deploy_readiness.py` | Проверка готовности к deployment |
+| `ai_ops_kit/gates/deploy_readiness.py` | Проверка готовности к deployment (K4: переехал из engops в gates) |
 | `ai_ops_kit/engops/engineering_advisor.py` | Инженерный советник (рекомендации) |
 | `ai_ops_kit/engops/architecture_baseline.py` | Архитектурный baseline |
 | `ai_ops_kit/engops/branch_policy.py` | Политика веток |
@@ -248,7 +248,7 @@
 
 ### 2. deploy_readiness — engops или gates?
 
-`ai_ops_kit/engops/deploy_readiness.py` лежит в engops, но вызывается из `ai_ops_kit/gates/gate_executor.py`. Это gate-логика (проверка готовности к deployment), но packaged как engops.
+РЕШЕНО (K4, 2026-08-25): `ai_ops_kit/gates/deploy_readiness.py` переехал в gates; sys.path-хак в `ai_ops_kit/gates/gate_executor.py` удалён, взаимная пара engops↔gates снята.
 
 **Проблема:** Если deploy readiness — gate, почему не в пакете `gates`? Если engops — почему gate_executor его вызывает?
 

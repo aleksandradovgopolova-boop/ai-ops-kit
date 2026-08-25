@@ -27,9 +27,9 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4332000
+  volume_bytes: 4356000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 525
+  substantive_files: 528
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -398,3 +398,40 @@ raises:
       24.08 «декоративна») — класс F-033. Замер установленной поставки 4317233 -> 4326123 Б перешёл
       прежний потолок 4324000 — подъём под факт до 4332000. Крупнейший кандидат на вынос по-прежнему
       release-claims (78 КБ).
+  - at: '2026-08-25'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 525
+    to_count: 528
+    measured_before: 525
+    measured_after: 527
+    work: trustworthy-core (W3)
+    files:
+      - ai_ops_kit/engops/session_events.py
+      - ai_ops_kit/kernel/ports.py
+    why_it_works_in_the_child: >-
+      Два файла trustworthy-core, оба ИСПОЛНЯЮТСЯ в дочке. session_events — подписчик спутника
+      engops на событие ядра run_completed (шина shared/events.py, W3): регистрируется через
+      engops/__init__ и явный импорт в CLI на пути run, даёт advise-only session recommendation.
+      kernel/ports.py — контракт ядра (K0): конвейер run_pipeline на каждом прогоне сверяет свои
+      параметры с ExecutionSpec (страж дрейфа контракта); реализации портам ещё НЕ соответствуют —
+      это записано в самом страже и остаётся долгом Phase B.
+  - at: '2026-08-25'
+    what: volume
+    from_bytes: 4332000
+    to_bytes: 4356000
+    measured_before: 4326123
+    measured_after: 4350400
+    work: trustworthy-core (W3, шина событий)
+    files:
+      - ai_ops_kit/shared/events.py
+      - ai_ops_kit/engops/session_events.py
+      - ai_ops_kit/shared/contracts.py
+      - ai_ops_kit/engine/ai_ops_run.py
+    why_it_works_in_the_child: >-
+      Шина событий ядра (W3) + контракт ядра (K0): shared/events.py — emit/subscribe, contracts.py
+      вырос на KernelEvent, ai_ops_run.py испускает run_completed после каждого прогона,
+      session_events подписан (advise-only), kernel/ports.py сверяется конвейером на каждом прогоне.
+      Всё исполняется В дочке — без шины и контракта их звал бы отсутствующий файл (класс F-033).
+      Замер 4326123 -> ~4350400 Б перешёл потолок 4332000 — подъём под факт до 4356000.

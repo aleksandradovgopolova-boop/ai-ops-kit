@@ -548,6 +548,10 @@ DEV_ONLY_PREFIXES = (
 # `test_unwired_modules_are_really_unwired` краснеет, если имя из этого списка кто-то начал звать.
 # Список вправе только СОКРАЩАТЬСЯ — как ратчет слоёв и как потолок поставки.
 UNWIRED_MODULES = frozenset({
+    # `kernel/ports.py` побывал здесь ровно один коммит (2026-08-25) и УШЁЛ проводкой, а не решением:
+    # транзакционный контроллер `ai_ops_run` сверяет свои параметры прогона с ExecutionSpec на каждом
+    # запуске (страж дрейфа контракта). Реализации портам по-прежнему не соответствуют — это записано
+    # в самом контроллере и остаётся долгом Phase B.
     "ai_ops_kit/engops/delivery_size.py",
     "ai_ops_kit/engops/merge_lifecycle.py",
     "ai_ops_kit/engops/refusal_paths.py",

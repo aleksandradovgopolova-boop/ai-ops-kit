@@ -53,6 +53,7 @@ STANDALONE = [
     "validate_event_catalog",
     "validate_feature_learning",
     "validate_freshness",
+    "validate_func_size",
     "validate_integration_trace",
     "validate_key_lifecycle",
     "validate_layering",

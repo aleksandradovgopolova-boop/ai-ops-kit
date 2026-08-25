@@ -37,7 +37,7 @@ Task
 | **KERNEL — state** | `lifecycle`: workitem.derive_status, run_report, active_work | детерминированная машина состояний WorkItem | вынуть классификацию (шаг 2) |
 | **KERNEL — delivery** | `delivery`: pr_open, review_branch | верифицированная доставка draft PR | формализовать вызов только из ai_ops_run (шаг 1) |
 | **KERNEL — governance** | `governance` (517 строк): policy_engine, enforcement, decision_log, human_override | автономия/HITL, fail-closed до require_approval | оставить в ядре |
-| **PORTS (шов ядра)** | новый `kernel/ports.py` | ExecutorPort, ContextPort, EvidenceProvider, GatePort, DeliveryPort, PolicyPort | создать (шаг 0) |
+| **PORTS (шов ядра)** | новый `ai_ops_kit/kernel/ports.py` | ExecutorPort, ContextPort, EvidenceProvider, GatePort, DeliveryPort, PolicyPort | создать (шаг 0) |
 | **ADAPTERS (сменные, за портом)** | `providers` (ExecutorPort), `context` (ContextPort), `security` scan (EvidenceProvider), `integrations/github` | реализации портов; заменяемы без правки ядра | развязать через порт (шаг 1, 5) |
 | **PRIMITIVES (ядро зовёт ВНИЗ — разрешено)** | `checks`, `ui/presenter` | чистая проверяющая логика; форматирование вывода | оставить |
 | **SATELLITES (читают события ядра, версионируются отдельно, вправе отставать)** | `planning`, `intelligence`, `engops` (session_*, advisors, branch/commit policy), `research`, `product-learning` | планирование, аналитика, сессии, исследования | отрезать по контракту событий (шаг 6) |

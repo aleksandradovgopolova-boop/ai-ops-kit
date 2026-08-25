@@ -449,7 +449,7 @@ def _collect_base_checks_at(child_root, base_sha, sandbox):
             return None
         pol = (_tb.sandbox_policy(child_root=str(tmp)) if sandbox
                else _tb.Policy(level="execution", child_root=str(tmp), block_push=True))
-        checks = _ec.collect(_pd.detect(tmp), tmp, pol)["checks"]
+        checks = _ec.collect(_pd.detect(tmp), tmp, pol, broker=_tb)["checks"]
         return {"checks": checks, "sha": base_sha, "proven": True}
     except Exception:  # noqa: BLE001
         return None
@@ -485,7 +485,7 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
         revision_ok = (head_sha == final_sha)
         _vpol = (_tb2.sandbox_policy(child_root=str(vroot)) if sandbox
                  else _tb2.Policy(level="execution", child_root=str(vroot), block_push=True))
-        coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol)
+        coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol, broker=_tb2)
         final_checks = coll["checks"]
         _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
         tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True

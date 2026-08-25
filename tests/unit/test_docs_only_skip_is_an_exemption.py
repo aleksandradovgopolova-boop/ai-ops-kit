@@ -89,10 +89,11 @@ def test_collector_and_gate_agree_on_the_flags(tmp_path):
     """
     import gate_executor as gx
     from evidence_collector import collect
+    from ai_ops_kit.engine import tool_broker as _tb
 
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "readme.md").write_text("текст\n", encoding="utf-8")
-    coll = collect({}, tmp_path, None, changed_files=["docs/readme.md"])
+    coll = collect({}, tmp_path, None, changed_files=["docs/readme.md"], broker=_tb)
 
     assert coll["gate_evidence"][GATE]["status"] == "pass", coll["gate_evidence"]
     exempt = set(coll["not_applicable"])

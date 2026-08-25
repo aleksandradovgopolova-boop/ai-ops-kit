@@ -238,6 +238,22 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
     чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
+    # v3.38 (K0-проводка): параметры прогона обязаны оставаться подмножеством объявленного
+    # контракта ядра (kernel/ports.ExecutionSpec). Это НЕ проверка реализации портов (реализации
+    # им ещё не соответствуют — долг Phase B, записан в installer.UNWIRED_MODULES), а страж
+    # дрейфа КОНТРАКТА: переименование поля в ports.py или новый параметр без записи в контракт
+    # краснеет на каждом прогоне, в том числе в дочке.
+    from ai_ops_kit.kernel import ports as _kports
+    _spec: _kports.ExecutionSpec = {
+        "task": task, "signals": dict(signals or {}), "child_root": str(child_root),
+        "feature": feature or "", "write_scope": list(write_scope or []),
+        "max_steps": max_steps, "commit": bool(commit), "baseline_diff": bool(baseline_diff),
+        "require_fix": bool(require_fix), "sandbox": bool(sandbox),
+        "review": bool(review), "author": bool(author)}
+    _spec_drift = set(_spec) - set(_kports.ExecutionSpec.__annotations__)
+    if _spec_drift:
+        raise SystemExit(f"контракт ядра разошёлся с конвейером: полей {sorted(_spec_drift)} "
+                         f"нет в kernel/ports.ExecutionSpec — обновите контракт или вызов")
     child_root = Path(child_root)
     signals = dict(signals or {})
     signals.setdefault("task_text", task)

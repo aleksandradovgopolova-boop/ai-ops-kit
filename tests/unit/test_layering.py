@@ -172,19 +172,32 @@ def test_ratchet_sees_the_real_graph(spec):
     """
     edges = vl.build_graph()
     base = vl.cyclic_counts(edges)
-    assert base["mutual_pairs"] > 0 and base["cycles_longer_than_two"] > 0, base
 
     # РЕБРО ВЫБИРАЕТСЯ ИЗ ГРАФА, а не вписано именем. Здесь стояло `("gates", "providers")`, и
     # тест упал, когда эту пару развязали (`usage_ledger` переехал в `shared`, 2026-08-12) — то есть
-    # охранник мешал ровно той работе, ради которой стоит. Берём любое ребро, участвующее во взаимной
-    # паре: предмет проверки — «счётчик реагирует на реальный граф», а не «эта пара существует».
+    # охранник мешал ровно той работе, ради которой стоит. Предмет проверки — «счётчик реагирует
+    # на реальный граф», а не «эта пара существует».
     victim = next((e for e in edges if (e[1], e[0]) in edges), None)
-    assert victim is not None, "во графе нет ни одной взаимной пары — проверять реакцию нечем"
-    without = {e: w for e, w in edges.items() if e != victim}
-    after = vl.cyclic_counts(without)
-    assert after["mutual_pairs"] == base["mutual_pairs"] - 1, (
-        f"снятие реального ребра {victim} не изменило замер: {base} -> {after}")
-    assert after["cycles_longer_than_two"] < base["cycles_longer_than_two"]
+    if victim is not None:
+        # Долг ещё есть: снятие реального ребра обязано УМЕНЬШИТЬ замер.
+        without = {e: w for e, w in edges.items() if e != victim}
+        after = vl.cyclic_counts(without)
+        assert after["mutual_pairs"] == base["mutual_pairs"] - 1, (
+            f"снятие реального ребра {victim} не изменило замер: {base} -> {after}")
+        assert after["cycles_longer_than_two"] <= base["cycles_longer_than_two"]
+    else:
+        # Долг дошёл до нуля (v3.38 K5: mutual_pairs 0) — реального ребра для снятия больше нет,
+        # и это успех, а не поломка охранника. Реакцию счётчика проверяем в обратную сторону:
+        # впрыскиваем синтетическое обратное ребро к любому существующему — замер обязан ВЫРАСТИ.
+        # Сломанный счётчик, всегда возвращающий ноль, этот тест продолжает ловить.
+        assert base["mutual_pairs"] == 0, base
+        assert edges, "в графе нет ни одного межпакетного ребра — нечем проверять счётчик"
+        src, dst = next(iter(edges))
+        injected = dict(edges)
+        injected[(dst, src)] = injected.get((dst, src), 0) + 1
+        after = vl.cyclic_counts(injected)
+        assert after["mutual_pairs"] == 1, (
+            f"впрыск обратного ребра ({dst},{src}) не поднял замер: {base} -> {after}")
 
 
 @pytest.mark.parametrize("key", ["mutual_pairs", "cycles_longer_than_two"])
