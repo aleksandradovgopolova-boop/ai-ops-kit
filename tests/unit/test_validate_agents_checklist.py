@@ -31,15 +31,15 @@ def _fake_repo(tmp_path, run_body):
     (wf / "x.yml").write_text(
         textwrap.dedent(
             f"""\
- name: x
- on: {{push: {{branches: [main]}}}}
- jobs:
- j:
- runs-on: ubuntu-latest
- steps:
- - run: |
- {textwrap.indent(run_body, ' ' * 10)}
- """
+            name: x
+            on: {{push: {{branches: [main]}}}}
+            jobs:
+              j:
+                runs-on: ubuntu-latest
+                steps:
+                  - run: |
+                      {run_body}
+            """
         ),
         encoding="utf-8",
     )

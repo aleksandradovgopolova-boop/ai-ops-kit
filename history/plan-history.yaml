@@ -3926,3 +3926,37 @@ work:
     #   tests/]. Класс derived-числа из docs/parallel-execution-retro.md. Готово (по половине названия
     #   «счёт валидаторов»), когда число выводится из факта и PR не обязан его править — расхождение
     #   невозможно by construction. Потолки — см. result: не авто-вывод by design.
+
+  - id: unit-weeding-is-mutation-proven
+    title: >-
+      Прополка юнитов: срезать только доказанно-избыточное — верхний ярус ловит ту же мутацию красным
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 284
+    evidence: tests/contracts/test_pyramid_is_tiered.py
+    result: >-
+      ЗАКРЫТО 2026-08-25 (PR #264-#284). Разметка ярусов (conftest + tier_map.py + инвариант
+      test_pyramid_is_tiered; unit/contract/integration 100%); все 26 пар «монолит рядом с гранулярным
+      дублем» закрыты — покрытие в ~375 новых именованных гранулярных тестах, монолиты сняты.
+      НАХОДКА: из 26 только 4 были дублями, 22 несли УНИКАЛЬНОЕ покрытие — прополка оказалась
+      ПЕРЕНОСОМ покрытия, число тестов выросло. Ярусы в main (PR #262). ЗАМЕР: быстрый контур
+      4739 passed, 16 skipped.
+    # РАЗБОР: type: quality; write_scope [tests/, ai_ops_kit/validation/, quality/].
+
+  - id: selftests-are-granular-not-monolithic
+    title: >-
+      Селфтесты сольного покрытия — гранулярные, не монолит: одно поведение = один именованный тест
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 286
+    evidence: tests/unit/test_active_work.py
+    result: >-
+      ЗАКРЫТО 2026-08-25 (PR #286). 142 монолитных `*_selftest.py` переведены в гранулярные
+      `test_<имя>.py`. Каждый expect() стал отдельным тестом с настоящим assert, все помечены
+      @pytest.mark.unit, сгруппированы по классам Test*. Суффикс _selftest уходит из конвенции.
+      Обновлён test_checklist_completeness (понимает оба именования). ЗАМЕР: 4739 passed, 16 skipped,
+      0 selftest файлов осталось.
+    # РАЗБОР: type: quality; depends_on [unit-weeding-is-mutation-proven];
+    #   write_scope [tests/, ai_ops_kit/, .github/, docs/].
