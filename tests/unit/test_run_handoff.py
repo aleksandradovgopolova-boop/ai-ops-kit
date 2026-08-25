@@ -218,7 +218,7 @@ class TestResumePreflight:
         (root / "w").write_text("work", encoding="utf-8")
         _git(root, "add", "-A")
         _git(root, "commit", "-q", "-m", "work")
-        work_sha = _git(root, "rev-parse", "HEAD")[1]
+        _git(root, "rev-parse", "HEAD")[1]
         _git(root, "checkout", "-q", cur)
         fdir = root / "features" / "rw2"
         fdir.mkdir(parents=True)
