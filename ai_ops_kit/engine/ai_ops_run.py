@@ -1570,29 +1570,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         orchestrator.clear_call_context()
         # v3.16.0 Development Culture Guardrails (WP5): каждый прогон завершается SessionRecommendation
         # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
-        # Контекст оценивается по ledger (estimated) — рантайм может уточнить через `ai-ops session --context`.
+        # v3.38 (W3.2): ядро НЕ импортирует спутники — session recommendation через событие run_completed.
+        # Подписчик (engops/session_guardrails) реагирует синхронно и пишет в rep in-place.
+        from ai_ops_kit.shared.events import emit as _emit
         try:
-            from ai_ops_kit.engops import session_telemetry as _st
-            from ai_ops_kit.engops import session_guardrails as _sg
-            _snap = _st.snapshot(child_root, workitem_id=fid)
-            _pol = _sg.load_policy(child_root)
-            _done = bool(rep.get("ready_for_pr"))
-            _pr = rep.get("pull_request") or (rep.get("delivery") or {}).get("pr_url")
-            if _done:
-                _rit = _sg.completion_ritual(_snap, _pol, workitem_id=fid, pr=_pr,
-                                             next_relation="new_independent_task",
-                                             at_safe_boundary=True, repo_path=str(child_root))
-                rep["session_recommendation"] = _rit["session_recommendation"]
-                rep["completion_ritual"] = {k: _rit[k] for k in
-                                            ("completion_checklist", "complete", "next_command")}
-            else:
-                rep["session_recommendation"] = _sg.recommend(_snap, _pol,
-                                                              next_relation="continuation", task_done=False)
-        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): рекомендация по гигиене
-        # сессии объявлена ADVISE-ONLY выше — она ничего не блокирует и ни одного утверждения не
-        # доказывает. Её отсутствие в отчёте видно по отсутствию ключа `session_recommendation`;
-        # ложным green это стать не может, потому что зелёный отчёт на неё не опирается.
-        except Exception:  # noqa: BLE001,S110 — совет ADVISE-ONLY: его утрата не меняет ни один вердикт
+            _emit("run_completed", {
+                "event_type": "run_completed",
+                "workitem_id": fid,
+                "child_root": str(child_root),
+                "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr") else "not-ready"),
+                "ready_for_pr": bool(rep.get("ready_for_pr")),
+                "report": rep,
+            })
+        except Exception:  # noqa: BLE001,S110 — событие ADVISE-ONLY: его утрата не меняет вердикт
             pass
         # run_end (исход прогона, включая итог доставки)
         _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
