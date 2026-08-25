@@ -304,7 +304,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #     отличить пред-существующие провалы репо от РЕГРЕССИЙ, внесённых этой правкой.
     baseline_checks = None
     if baseline_diff:
-        baseline_checks = evidence_collector.collect(profile, work_root, pol)["checks"]
+        baseline_checks = evidence_collector.collect(profile, work_root, pol, broker=tool_broker)["checks"]
 
     # P0.6 (аудит v2.79) + v2.93 (finding аудита): install/baseline могли намутить TRACKED-файлы
     # (lock, снапшоты, конфиги) И создать НОВЫЕ untracked (классика: `npm install` создаёт
@@ -426,7 +426,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     # v3.26.1 Progressive Verification: передаём changed_files для targeted test execution
     _changed_for_verification = _committed_changed_files(work_root, committed_sha) if (commit and is_git and committed_sha) else None
-    coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification)
+    coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification, broker=tool_broker)
 
     # 6a. finding аудита (P0.5): проверки могли намутить дерево (build-артефакты, lock-файлы) —
     #     тогда собранный evidence уже не отражает закоммиченный SHA. Фиксируем факт, не скрываем.

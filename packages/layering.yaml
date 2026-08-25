@@ -107,13 +107,14 @@ known_violations: []
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 5          # context<->engine, delivery<->engine, engine<->gates, engops<->gates,
-                           # engine<->lifecycle
+  mutual_pairs: 4          # context<->engine, delivery<->engine, engops<->gates, engine<->lifecycle
                            # v3.38 (лента №4): security<->validation СНЯТА — чистая проверка вынесена
                            # вниз в пакет `checks`, security больше не тянет validation вверх. 7 -> 6.
                            # v3.38 (лента №5): engine<->validation СНЯТА — чистые проверки формы
                            # артефактов/вердиктов вынесены вниз в `checks`, движок больше не тянет
                            # validation вверх. Последняя ПЕРЕСЕКАЮЩАЯ СЛОИ взаимная пара ушла. 6 -> 5.
+                           # v3.38 (K1): engine<->gates СНЯТА — evidence_collector получает
+                           # tool_broker параметром (DI), а не импортом модуля. 5 -> 4.
                            #
                            # 12 -> 7 (2026-08-12), четырьмя переездами и без правки логики. Правило
                            # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
@@ -135,7 +136,9 @@ baseline:
                            # сделать ровно то, что этот срез исправляет, — положить модуль не туда.
                            # Пару engine<->lifecycle снимает не переезд, а решение «кто классифицирует»
                            # (`workitem` не должен звать роутер сам), и это проектирование.
-  cycles_longer_than_two: 11   # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
+  cycles_longer_than_two: 6    # v3.38 (K1): 11 -> 6 — снятие engine<->gates убрало циклы через
+                               # evidence_collector -> tool_broker.
+                               # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
                                # все циклы, проходившие через это ребро (одно ребро держало многие).
                                # v3.38 (лента №5): 28 -> 17 — снятие engine->validation и
                                # providers->validation убрало циклы через validation (validation

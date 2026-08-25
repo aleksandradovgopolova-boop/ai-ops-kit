@@ -8,11 +8,11 @@ import subprocess
 
 import pytest
 
+from ai_ops_kit.engine import tool_broker
 from evidence_collector import (
     Path,
     collect,
     project_detector,
-    tool_broker,
 )
 
 
@@ -34,33 +34,38 @@ def policy():
     return tool_broker.Policy(level="execution")
 
 
+@pytest.fixture
+def broker():
+    return tool_broker
+
+
 @pytest.mark.unit
 class TestCollectAllPass:
     def test_gate_pass(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert ge["status"] == "pass"
 
     def test_provided_contains_passed_flags(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert {"build_passed", "lint_passed", "tests_passed"} <= set(ge["provided"])
 
     def test_tested_revision_flag(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert "tested_revision" in ge["provided"] and r["revision"]
 
     def test_typecheck_none_not_run(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         assert r["checks"]["typecheck"]["status"] == "not_run"
         ge = r["gate_evidence"]["implementation_verification"]
         assert "typecheck_passed" not in ge["provided"]
@@ -68,7 +73,7 @@ class TestCollectAllPass:
     def test_structural_evidence_schema(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         assert r["schema_evidence"]["build"]["exit_code"] == 0
         assert r["schema_evidence"]["build"]["command"] == "true"
         assert r["schema_evidence"]["build"]["revision"] == r["revision"]
@@ -79,14 +84,14 @@ class TestCollectFailure:
     def test_command_failure_gate_fail(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "false", "typecheck": None, "test": "true"}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert ge["status"] == "fail"
 
     def test_lint_failure_no_flag_and_blocker(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "false", "typecheck": None, "test": "true"}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert "lint_passed" not in ge["provided"]
         assert any("lint" in b for b in ge.get("blockers", []))
@@ -98,7 +103,7 @@ class TestGateEvidenceValidation:
         import gate_executor
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         assert gate_executor.validate_evidence(r["gate_evidence"]) == []
 
 
@@ -107,7 +112,7 @@ class TestDestructiveCommand:
     def test_destructive_command_denied(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "rm -rf /", "lint": None, "typecheck": None, "test": None}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         assert r["checks"]["build"]["status"] == "fail"
         assert any(run.get("denied") for run in r["checks"]["build"]["runs"])
 
@@ -119,7 +124,7 @@ class TestProjectDetector:
             "[tool.poetry]\nname='x'\n[tool.poetry.dependencies]\npytest='*'\n", encoding="utf-8")
         (git_repo / "tests").mkdir()
         prof = project_detector.detect(git_repo)
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         assert r["checks"]["test"]["status"] in ("pass", "fail", "warn")
         assert r["checks"]["test"].get("runs")
 
@@ -130,14 +135,14 @@ class TestPytestExit5:
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": None, "typecheck": None,
             "test": "bash -c 'exit 5'  # pytest"}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         assert r["checks"]["test"]["status"] == "warn"
 
     def test_no_tests_no_passed_flag_no_blocker(self, git_repo, policy):
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": None, "typecheck": None,
             "test": "bash -c 'exit 5'  # pytest"}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert "tests_passed" not in ge["provided"]
         assert not any("test" in b for b in ge.get("blockers", []))
@@ -150,7 +155,7 @@ class TestPolyglot:
             {"language": "node", "commands": {"build": None, "lint": None, "typecheck": None, "test": "true"}},
             {"language": "python", "commands": {"build": None, "lint": None, "typecheck": None,
                                                 "test": "bash -c 'exit 5'  # pytest"}}]}
-        r = collect(prof, git_repo, policy)
+        r = collect(prof, git_repo, policy, broker=tool_broker)
         ge = r["gate_evidence"]["implementation_verification"]
         assert "tests_passed" in ge["provided"]
         assert r["checks"]["test"]["status"] == "pass"
@@ -173,14 +178,14 @@ class TestProgressiveVerification:
         prof = {"stacks": [{"language": "python", "commands": {
             "build": None, "lint": None, "typecheck": None,
             "test": "python3 -m pytest tests/"}}]}
-        r = collect(prof, repo_with_modules, policy)
+        r = collect(prof, repo_with_modules, policy, broker=tool_broker)
         assert r.get("verification") is None
 
     def test_with_changed_files_verification_info(self, repo_with_modules, policy):
         prof = {"stacks": [{"language": "python", "commands": {
             "build": None, "lint": None, "typecheck": None,
             "test": "python3 -m pytest tests/"}}]}
-        r = collect(prof, repo_with_modules, policy, changed_files=["module_a.py"])
+        r = collect(prof, repo_with_modules, policy, changed_files=["module_a.py"], broker=tool_broker)
         v = r.get("verification")
         assert v is not None
 
@@ -188,7 +193,7 @@ class TestProgressiveVerification:
         prof = {"stacks": [{"language": "python", "commands": {
             "build": None, "lint": None, "typecheck": None,
             "test": "python3 -m pytest tests/"}}]}
-        r = collect(prof, repo_with_modules, policy, changed_files=["module_a.py"])
+        r = collect(prof, repo_with_modules, policy, changed_files=["module_a.py"], broker=tool_broker)
         v = r.get("verification")
         assert v.get("tier") == "affected"
 
@@ -196,6 +201,6 @@ class TestProgressiveVerification:
         prof = {"stacks": [{"language": "python", "commands": {
             "build": None, "lint": None, "typecheck": None,
             "test": "python3 -m pytest tests/"}}]}
-        r = collect(prof, repo_with_modules, policy, changed_files=["module_a.py"])
+        r = collect(prof, repo_with_modules, policy, changed_files=["module_a.py"], broker=tool_broker)
         v = r.get("verification")
         assert "tests/test_a.py" in (v.get("affected_tests") or [])
