@@ -1318,7 +1318,7 @@ work:
       Тест сверяет форму evidence в коде с schemas/gate-evidence.schema.json
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/gates/, schemas/, tests/]
