@@ -1332,7 +1332,7 @@ work:
       Docstring gates/invariants.py указывает реальный путь импорта
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: low
     write_scope: [ai_ops_kit/gates/]
