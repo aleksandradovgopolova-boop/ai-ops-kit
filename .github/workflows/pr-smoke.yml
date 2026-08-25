@@ -40,10 +40,19 @@ jobs:
         run: |
           python3 -m pytest tests/contracts/ -v -m critical_path --tb=short
 
-      - name: Pytest — selftest wrappers (critical modules)
+      - name: Pytest — critical modules (granular)
         run: |
-          # v3.28.x: обёртки селфтестов давно параметризованы — это test_selftest_runs_clean[<файл>],
-          # а не test_selftest_<модуль>. Прежний -k не совпадал ни с одним именем: pytest выбирал
-          # 0 тестов и отдавал код 5, то есть шаг «проверил» ровно ничего на каждом PR.
-          python3 -m pytest tests/ -v --tb=short -k "test_orchestrator_selftest or test_execution_pipeline_selftest or test_preflight_selftest or test_tool_broker_selftest or test_gate_executor_selftest or test_ai_ops_run_selftest or test_ai_ops_cli_selftest"
+          # Прополка (2026-08-25): монолитные `*_selftest` этих модулей заменены гранулярными
+          # тестами (одно поведение = один тест). Smoke-слой теперь гоняет сами гранулярные файлы —
+          # то же покрытие, но диагностируемое пофайлово и пофункционально. `-m "not slow"` держит
+          # smoke быстрым (тяжёлые агрегатные прогоны идут в отдельной slow-джобе selftests-a/m).
+          # Прежний `-k` по именам селфтестов после снятия монолитов осиротел бы (0 тестов, код 5).
+          python3 -m pytest -v --tb=short -m "not slow" \
+            tests/unit/test_orchestrator.py \
+            tests/unit/test_execution_pipeline.py \
+            tests/unit/test_preflight.py \
+            tests/unit/test_tool_broker.py \
+            tests/unit/test_gate_executor.py \
+            tests/unit/test_ai_ops_run.py \
+            tests/unit/test_ai_ops_cli.py
 
