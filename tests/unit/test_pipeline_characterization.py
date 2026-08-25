@@ -160,8 +160,8 @@ class TestPipelinePhasePlan:
         mock_git.return_value = (0, "true", "")
 
         from ai_ops_kit.engine.execution_pipeline import run_pipeline
-        result = run_pipeline("test task", {}, child_repo, _make_proposer(),
-                              commit=False, install_deps=False)
+        run_pipeline("test task", {}, child_repo, _make_proposer(),
+                     commit=False, install_deps=False)
 
         mock_run_plan.build_plan.assert_called_once()
 

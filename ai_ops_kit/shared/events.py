@@ -45,7 +45,7 @@ def emit(event_type: str, data: dict[str, Any]) -> None:
     for handler in _subscribers.get(event_type, []):
         try:
             handler(data)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — причина ЗАПИСАНА: отказ подписчика-спутника не вправе ронять ядро (fail-safe шины, см. докстринг)
             logger.warning("Event subscriber %s failed on %s: %s", handler.__name__, event_type, e)
 
 

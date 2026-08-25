@@ -138,6 +138,9 @@ def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_
                         spec_incomplete, spec_bad_status, context_overflow, approvals_cover_ok,
                         approval_recheck):
     """Список «что ещё не сделано» — информирование вызывающего. v3.38 (K6): вынесено из run_pipeline."""
+    # Импорт локальный: при выносе из run_pipeline (K6) ссылка _sl уехала от своего импорта —
+    # NameError всплывал на живом пути spec-first (CI lint, F821), а не при импорте модуля.
+    from ai_ops_kit.gates import spec_levels as _sl
     not_yet = ["живой предложитель (swap провайдера)"]
     if spec_prestage_bad:
         not_yet.insert(0, "spec-first (P0.1): author вернул невалидную спецификацию ["
