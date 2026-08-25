@@ -1360,7 +1360,7 @@ work:
       Цены per-token живут в registry/models.yaml, orchestrator_usage читает их оттуда
     type: engineering
     goal: green-means-checked
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: medium
     write_scope: [ai_ops_kit/providers/, registry/, tests/]
