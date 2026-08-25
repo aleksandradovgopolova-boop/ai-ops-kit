@@ -7,6 +7,11 @@ on:
     # запускался вовсе, а PR показывал зелёный статус по одному pr-smoke. Draft-PR
     # по-прежнему отсекается условием на уровне джоба, так что смысл v3.25.1 сохранён.
     types: [opened, ready_for_review, synchronize]
+  # v3.38 (merge-queue-not-handrolled): merge queue строит временный merge-коммит и требует те же
+  # обязательные контексты НА НЁМ — то есть пороги (coverage, footprint, ратчеты) меряются против
+  # ИТОГА СЛИЯНИЯ, а не ветки PR (gate-measures-merge-result). Без этого триггера очередь висла бы
+  # вечно: обязательный контекст в merge_group некому отдать (капкан статусов из разбора 20.08).
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
@@ -22,8 +27,11 @@ permissions:
 # видеть ровно то же окружение, что пользователь. Не возвращать — вместо этого чинить импорт.
 jobs:
   quality:
-    # v3.27.3 WP4: не запускаем полный CI для draft PR даже при synchronize
-    if: github.event.pull_request.draft == false
+    # v3.27.3 WP4: не запускаем полный CI для draft PR даже при synchronize.
+    # v3.38: сравнение НЕ `... == false`: в merge_group и push событие pull_request отсутствует,
+    # `null == false` в выражениях Actions ложно — джоба молча скипалась бы и обязательный контекст
+    # в очереди слияния не отдавался НИКОГДА (очередь висит; капкан статусов из разбора 20.08).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
