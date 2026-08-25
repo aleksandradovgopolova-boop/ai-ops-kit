@@ -1,0 +1,1 @@
+Объявлены порты ядра (ExecutorPort, ContextPort, EvidenceProvider, GatePort, DeliveryPort, PolicyPort, ClassifierPort) и TypedDict-контракты (ExecutionSpec, ExecutionResult, Evidence, Change, RunContext, Action, Autonomy, Classification) в новом пакете `ai_ops_kit/kernel/`. Чистое добавление — ничего не переехало, ратчет не двигается. Базис для снятия 5 взаимных пар (K1–K5).

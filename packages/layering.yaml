@@ -17,8 +17,11 @@ kind: package-layering
 # cli/devtools — ноль входящих.
 layers:
   - name: foundation
-    purpose: "общий фундамент: пути, контракты, детект стека, генераторы. Не зависит ни от кого."
-    packages: [shared]
+    purpose: >
+      общий фундамент: пути, контракты, детект стека, генераторы, порты ядра.
+      Не зависит ни от кого. `kernel` (v3.38, trustworthy-core K0): Protocol'ы и TypedDict
+      контракты ядра — шов между ядром и реализациями. Зависит только от `shared`.
+    packages: [shared, kernel]
 
   - name: primitives
     purpose: >
