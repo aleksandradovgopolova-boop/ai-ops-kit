@@ -220,3 +220,133 @@ class TestPlatformHints:
         assert rep["deploy_maturity"] == "configured"
         assert rep["deploy_path_unknown"] is True
         assert "vercel.json" in rep["platform_hints"]
+
+    def test_vercel_json_reason_does_not_claim_deploy_path(self, tmp_path):
+        """Инструмент НЕ утверждает, что поставку ведёт найденная платформа."""
+        (tmp_path / "vercel.json").write_text('{"framework": "vite"}', encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert "ведёт" not in rep["reason"]
+        assert "путь существует" not in rep["reason"]
+
+    def test_hint_named_as_hint_not_proof(self, tmp_path):
+        """Подсказка названа подсказкой, а не доказательством."""
+        (tmp_path / "vercel.json").write_text('{"framework": "vite"}', encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert "НЕ следует, что деплой идёт через них" in rep["reason"]
+        assert "наследием" in rep["reason"]
+
+    def test_honest_fork_no_delivery_or_outside_repo(self, tmp_path):
+        """Честная развилка: поставки нет вовсе, либо она вне репозитория."""
+        (tmp_path / "vercel.json").write_text('{"framework": "vite"}', encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert "поставки нет вовсе, либо она производится вне репозитория" in rep["reason"]
+
+    def test_single_deploy_path_unknown_finding_not_proof(self, tmp_path):
+        """Ровно одна находка deploy_path_unknown с пометкой «не доказательство»."""
+        (tmp_path / "vercel.json").write_text('{"framework": "vite"}', encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        f = [x for x in rep["findings"] if x["rule"] == "deploy_path_unknown"]
+        assert len(f) == 1
+        assert "не доказательство" in f[0]["detail"]
+
+    def test_declared_command_and_rollback_clear_unknown(self, tmp_path):
+        """Объявленные deploy_command+rollback снимают незнание пути -> runnable."""
+        (tmp_path / "vercel.json").write_text('{"framework": "vite"}', encoding="utf-8")
+        (tmp_path / ".ai-ops.yaml").write_text(
+            "engineering_operating_model:\n  deploy: {deploy_command: vercel deploy --prod, "
+            "rollback: vercel rollback}\n", encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert rep["deploy_maturity"] == "runnable"
+        assert rep["deploy_path_unknown"] is False
+        assert not any(x["rule"] == "deploy_path_unknown" for x in rep["findings"])
+
+
+@pytest.mark.unit
+class TestMaturityConstant:
+    """Все ступени лестницы объявлены и в правильном порядке."""
+
+    def test_maturity_tuple(self):
+        assert dr.MATURITY == ("absent", "configured", "runnable", "verified")
+
+
+@pytest.mark.unit
+class TestShouldRunAdditional:
+    """Дополнительные триггеры применимости гейта."""
+
+    def test_new_service_signal(self):
+        assert dr.should_run_deploy_readiness([], {"new_service": True})[0] is True
+
+    def test_terraform_change(self):
+        assert dr.should_run_deploy_readiness(["infra/main.tf"])[0] is True
+
+    def test_k8s_manifest_change(self):
+        assert dr.should_run_deploy_readiness(["k8s/app.yaml"])[0] is True
+
+
+@pytest.mark.unit
+class TestSummaryLine:
+    """summary_line() честно сообщает состояние поставки."""
+
+    def test_absent_summary_says_norm(self, tmp_path):
+        """Пустой репозиторий -> «норма» в summary_line (absent не маскируется)."""
+        assert "норма" in dr.summary_line(tmp_path)
+
+    def test_runnable_summary_reports_missing_rollback(self, tmp_path):
+        """runnable без отката -> summary_line сообщает про отсутствующий откат."""
+        (tmp_path / "deploy.sh").write_text("#!/bin/sh\necho ship\n", encoding="utf-8")
+        assert "откат не объявлен" in dr.summary_line(tmp_path)
+
+
+@pytest.mark.unit
+class TestDockerfileOnlyReason:
+    """Dockerfile-only: путь неизвестен, платформенных подсказок нет, честный текст."""
+
+    def test_dockerfile_only_path_unknown_no_hints(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text("FROM alpine\n", encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert rep["deploy_path_unknown"] is True
+        assert rep["platform_hints"] == []
+        assert "НЕ следует" not in rep["reason"]
+        assert "НЕТ" in rep["reason"]
+
+
+@pytest.mark.unit
+class TestRecordsWithoutPath:
+    """DEP-записи без исполняемого пути не дают verified."""
+
+    def test_records_without_path_not_verified(self, tmp_path):
+        rec_dir = tmp_path / ".ai" / "runtime" / "deploy"
+        rec_dir.mkdir(parents=True)
+        (rec_dir / "DEP-001.json").write_text("{}", encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert rep["deploy_maturity"] != "verified"
+
+
+@pytest.mark.unit
+class TestConfigDeploy:
+    """deploy_command/rollback из .ai-ops.yaml как источник исполняемого пути."""
+
+    def test_deploy_command_from_config(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text(
+            "engineering_operating_model:\n  environments: [production]\n"
+            "  deploy: {deploy_command: make deploy, rollback: make rollback}\n", encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert "config:deploy_command" in rep["runnable_paths"]
+
+    def test_rollback_from_config(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text(
+            "engineering_operating_model:\n  environments: [production]\n"
+            "  deploy: {deploy_command: make deploy, rollback: make rollback}\n", encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert rep["rollback_declared"] is True
+
+    def test_config_without_records_runnable_not_verified(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text(
+            "engineering_operating_model:\n  environments: [production]\n"
+            "  deploy: {deploy_command: make deploy, rollback: make rollback}\n", encoding="utf-8")
+        rep = dr.assess(tmp_path)
+        assert rep["deploy_maturity"] == "runnable"
+
+    def test_malformed_config_does_not_crash(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text("{{ битый", encoding="utf-8")
+        assert dr.assess(tmp_path)["deploy_maturity"] in dr.MATURITY
