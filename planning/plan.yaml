@@ -360,7 +360,7 @@ work:
       coverage и footprint меряются против итога слияния, а не ветки PR
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [.github/, tests/]
@@ -370,6 +370,8 @@ work:
       незаметно и всплывает на первом следующем PR, а не на виновнике (main тихо ушёл 490->498
       файлов). Готово, когда порог проверяется на результате слияния (merge queue) — дрейф main
       невозможен.
+    progress_note: >-
+      МЕХАНИЗМ СЛИТ (PR #311/#312, 26.08): merge_group-триггеры в required-workflow + контракт-страж (3 капкана, мутационная пара). ОСТАЁТСЯ включение очереди — репозиторная настройка «Require merge queue»: программная конфигурация ruleset отклонена GitHub (422), флип отложен владельцу. Порог мерится против итога слияния только когда очередь включена.
   - id: required-contexts-match-jobs
     title: >-
       Обязательные статусы защиты ветки сверяются с реально существующими CI-джобами
@@ -390,7 +392,7 @@ work:
       Слияние идёт родным GitHub merge queue с auto-merge, а не самодельным polling-циклом
     type: engineering
     goal: team-works-in-parallel
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [.github/, docs/]
@@ -399,6 +401,8 @@ work:
       Разбор 20.08: ручной интегратор падал на таймаутах gh, отчитывался «влито» по факту запуска
       команды, сверял SHA с пустой строкой. Готово, когда green-PR вливается родным merge queue без
       ручного опроса; DIRTY не возникает (queue батчит и ребейзит сам).
+    progress_note: >-
+      МЕХАНИЗМ СЛИТ (PR #311/#312, 26.08): merge_group в package-quality+pr-smoke, draft-фильтр и шаг заголовка PR gated, страж на мутации, раздел в docs/guides/ci.md. ОСТАЁТСЯ один флип владельца — «Require merge queue» в защите main; программный ruleset отклонён GitHub (422). До включения green-PR вливается ручным merge, как сейчас.
   - id: lane-ships-small-prs
     title: >-
       Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
