@@ -27,9 +27,9 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4324000
+  volume_bytes: 4332000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 524
+  substantive_files: 525
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -360,3 +360,41 @@ raises:
       Команда `ai-ops inspect <id>` (карточка одного продукта флота по id) — обработчик интента в уже
       доставляемом CLI; файлов не прибавилось, CLI вырос кодом. Замер 4319498 Б перешёл потолок
       4316000 — подъём под факт до 4324000. Крупнейший кандидат на вынос — по-прежнему release-claims.
+  - at: '2026-08-25'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 524
+    to_count: 525
+    measured_before: 523
+    measured_after: 524
+    work: governance-enforce-observe
+    files:
+      - ai_ops_kit/governance/enforcement.py
+    why_it_works_in_the_child: >-
+      Governance входит в путь исполнения (Фаза 4, проводка): `enforcement` — единственный шов, где
+      решение политики о доставке считается, пишется в decision_log и (в режиме block) блокирует
+      открытие PR. ИСПОЛНЯЕТСЯ в дочке: транзакционный контроллер `ai_ops_run` зовёт
+      `enforcement.gate_delivery` над репозиторием продукта перед доставкой; модуль композирует уже
+      доставляемые policy_engine/human_override/decision_log. Без него в поставке был бы вызов
+      отсутствующего файла — класс F-033. Растёт только счёт (+1 содержательный), объём в норме
+      (managed 4257483 < 4324000). По умолчанию observe — доставку не останавливает.
+  - at: '2026-08-25'
+    what: volume
+    from_bytes: 4324000
+    to_bytes: 4332000
+    measured_before: 4317233
+    measured_after: 4326123
+    work: governance-enforce-observe
+    files:
+      - ai_ops_kit/governance/enforcement.py
+      - ai_ops_kit/engine/ai_ops_run.py
+    why_it_works_in_the_child: >-
+      Проводка governance в путь исполнения: новый модуль `enforcement` (шов решения политики о
+      доставке) плюс рост транзакционного контроллера `ai_ops_run`, который зовёт его перед открытием
+      PR. Оба ИСПОЛНЯЮТСЯ в дочке: gate_delivery считает уровень действия и пишет решение в
+      decision_log над репозиторием продукта, а контроллер — единственный, кто открывает PR. Без них
+      в поставке governance остался бы построенным, но не звался бы из рантайма (находка аудита
+      24.08 «декоративна») — класс F-033. Замер установленной поставки 4317233 -> 4326123 Б перешёл
+      прежний потолок 4324000 — подъём под факт до 4332000. Крупнейший кандидат на вынос по-прежнему
+      release-claims (78 КБ).

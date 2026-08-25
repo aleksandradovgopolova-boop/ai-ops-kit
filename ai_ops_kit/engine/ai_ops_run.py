@@ -1380,7 +1380,23 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # Если после внешнего действия запись Receipt упала -> outcome_unknown + reconciliation_required
         # (не притворяемся, что доставки не было). Идемпотентность: pr_open находит существующий PR ветки
         # и не создаёт дубль; delivery_id детерминирован по (wid, branch, commit) — повтор бьёт в ту же запись.
+        # GOVERNANCE (Фаза 4, проводка, работа `governance-enforce-observe`): решение политики о
+        # доставке (открытии PR) впрыскивается здесь — единственное место, где governance входит в
+        # путь исполнения. Записывается в decision_log ВСЕГДА; блокирует ТОЛЬКО в режиме
+        # enforcement=block (.ai-ops/POLICY.yaml). По умолчанию observe: видно, что было бы
+        # заблокировано, без остановки (радиус до включения). Одобрение — из human_override.
+        _gate = None
         if _plan and _handoff_ok and _report_ok:
+            from ai_ops_kit.governance import enforcement as _enf
+            _gate = _enf.gate_delivery(child_root, target=fid)
+            rep.setdefault("governance", {})["delivery"] = _gate
+        if _gate and _gate.get("blocked"):
+            rep["delivery"] = {"requested": True, "status": "blocked-by-policy",
+                               "reason": f"policy: {_gate.get('reason')} — доставка остановлена "
+                                         "governance (режим block)"}
+            rep["overall_status"] = "delivery-blocked"
+            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        elif _plan and _handoff_ok and _report_ok:
             import hashlib as _hl
             from ai_ops_kit.gates import concurrency_preflight as _cpp
             _branch = _plan["work_branch"]
