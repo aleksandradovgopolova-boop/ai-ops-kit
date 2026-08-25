@@ -3895,3 +3895,34 @@ work:
       team_sync/risk_register. ЗАМЕР: тесты на фикстурах, причина цвета названа.
     # РАЗБОР: type: engineering; PR-15; depends_on [product-health-explained].
     #   Готово, когда health_delivery называет причину цвета из состояния работ; тесты на фикстурах.
+
+  - id: derived-counts-are-computed-not-declared
+    title: >-
+      Счёт валидаторов и потолки считаются автоматически, а не держатся числом, которое каждый PR
+      синхронит
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-25'
+    pr: 269
+    finding: docs/parallel-execution-retro.md
+    evidence: tests/unit/test_derived_counts_are_computed.py
+    result: >-
+      ЗАКРЫТО 2026-08-25 (PR #269). СЧЁТ ВАЛИДАТОРОВ выведен из факта: validators_count и
+      validators_externally_tested удалены из registry/release-claims.yaml; число выводится при
+      проверке (validate_release_claims.derived_verification_counts: файлы validation/validate_*.py +
+      те, чьё имя упомянуто в tests/) и впрыскивается туда, где стоял литерал. Добавление валидатора
+      больше не требует правки реестра — расхождение невозможно by construction; сверка при
+      объявлении сохранена (защита от повторного «прибивания гвоздём»), публичный текст сверяется с
+      этим фактом через derived_numbers_in_docs. ЗАМЕР: три теста на capability
+      (side-effect/positive/fail-closed) + обновлён инвариант test_rules_are_data_not_code; быстрый
+      контур 3044 passed, ruff 0.
+      ПОТОЛКИ (вторая половина названия) закрыты ОСОЗНАННО, а не сделаны: вывести потолок «из факта»
+      значит приравнять его к текущему размеру и убить запас, ради которого он существует. У потолков
+      delivery-budget уже своя дисциплина подъёма (названные файлы, даты, одно место в реестре —
+      quality/delivery-budget.yaml + test_delivery_budget), а их скрытый дрейф на main ведёт отдельная
+      работа gate-measures-merge-result (порог против результата слияния). Фантомного «полуготово» не
+      оставлено: авто-вывод потолка — не улучшение, а снятие страховки.
+    # РАЗБОР: type: engineering; goal: checks-that-run; write_scope [ai_ops_kit/validation/, registry/,
+    #   tests/]. Класс derived-числа из docs/parallel-execution-retro.md. Готово (по половине названия
+    #   «счёт валидаторов»), когда число выводится из факта и PR не обязан его править — расхождение
+    #   невозможно by construction. Потолки — см. result: не авто-вывод by design.

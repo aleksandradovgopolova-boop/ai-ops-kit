@@ -348,22 +348,6 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
-  - id: derived-counts-are-computed-not-declared
-    title: >-
-      Счёт валидаторов и потолки считаются автоматически, а не держатся числом, которое каждый PR
-      синхронит
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/validation/, registry/, tests/]
-    finding: docs/parallel-execution-retro.md
-    reason: >-
-      Разбор 20.08 (docs/parallel-execution-retro.md, класс derived-числа): счёт валидаторов в
-      release-claims и потолки в delivery-budget — общая точка, которую каждая лента двигала руками;
-      кто вливался вторым, пересчитывал. Готово, когда число выводится из факта (файлов/замера) и PR
-      не обязан его править — расхождение невозможно by construction.
   - id: gate-measures-merge-result
     title: >-
       coverage и footprint меряются против итога слияния, а не ветки PR
