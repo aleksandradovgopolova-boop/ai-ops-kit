@@ -774,6 +774,105 @@ def _resolve_sequence_plan(ordered, features_dir, wid, base, resume_from, child_
     return base, sequence_base_sha, base_drift, None
 
 
+def _verify_resumed_package(pid, features_dir, wid, rev_root, branch):
+    """K6: вынесено из execute_sequence без изменения поведения (был вложенный `_verify_skipped`).
+    v3.0-rc2 (P0.3): пакет ДО resume_from подтверждён ТОЛЬКО если отчёт есть, SHA есть, SHA — коммит
+    в sequence-ветке и предок её HEAD, пакет executed и без hard-блокера. Возвращает (rep, why):
+    rep=None + причина, если пропуск НЕ подтверждён."""
+    prior = features_dir / wid / "work-packages" / pid / "report.json"
+    if not prior.is_file():
+        return None, "нет отчёта прошлого прогона"
+    try:
+        rep = json.loads(prior.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return None, f"битый отчёт: {e}"
+    sha = (rep.get("commit") or {}).get("sha")
+    if not sha:
+        return None, "в отчёте нет commit SHA"
+    if _git(rev_root, "cat-file", "-e", sha + "^{commit}")[0] != 0:
+        return None, f"SHA {sha[:8]} не существует в репозитории"
+    if _git(rev_root, "merge-base", "--is-ancestor", sha, branch)[0] != 0:
+        return None, f"SHA {sha[:8]} не в sequence-ветке {branch} (не предок HEAD)"
+    if not rep.get("ready_for_pr") and _hard_stop(rep) is not None:
+        return None, f"пакет имел hard-блокер: {_hard_stop(rep)}"
+    return rep, None
+
+
+def _build_package_signals_and_task(pkg, pid, task, signals, signals_for, ordered):
+    """K6: вынесено из execute_sequence без изменения поведения. Готовит per-package сигналы и текст
+    задачи. Сигналы: affected_areas/size/work_package_id + АВТОРИТЕТНЫЙ список id плана
+    (_sequence_plan_ids), против которого preflight валидирует work_package_id (P0.4/P0.5), и метка
+    _sequence_internal (v3.0-rc4 P0.1: внутренний per-package resume ≠ replan). Текст: явные границы
+    пакета (v3.0-rc19, finding живого sequential) — writer пишет ТОЛЬКО в свою подсистему/write_scope,
+    что убирает первопричину out-of-scope записей, НЕ ослабляя containment (брокер/post-diff в силе;
+    ревьюер судит независимо). Возвращает (sig_pkg, pkg_task)."""
+    sig_pkg = dict(signals or {})
+    sig_pkg["affected_areas"] = pkg.get("scope") or sig_pkg.get("affected_areas") or ["core"]
+    sig_pkg["size"] = "small"
+    sig_pkg["work_package_id"] = pid
+    sig_pkg["_sequence_plan_ids"] = [p.get("id") for p in ordered]
+    sig_pkg["_sequence_internal"] = True
+    if signals_for:
+        sig_pkg.update(signals_for(pkg) or {})
+
+    _pkg_scope = pkg.get("scope") or []
+    _pkg_ws = pkg.get("write_scope") or []
+    _scope_note = ""
+    if _pkg_scope:
+        _scope_note = (
+            f"\n\n=== ГРАНИЦЫ ЭТОГО ПАКЕТА ({pid}) ===\n"
+            f"Реализуй ТОЛЬКО часть, относящуюся к подсистеме: {', '.join(_pkg_scope)}. "
+            f"Пиши ИСКЛЮЧИТЕЛЬНО в пути: {', '.join(_pkg_ws) or _pkg_scope}. "
+            f"НЕ трогай файлы других подсистем — их реализуют отдельные пакеты последовательности. "
+            f"Если задача упоминает другие подсистемы — это контекст, не работа этого пакета.")
+    pkg_task = f"{task} — пакет {pid}: {pkg.get('title', '')}{_scope_note}".strip()
+    return sig_pkg, pkg_task
+
+
+def _persist_package_report(pkg_dir, features_dir, wid, rep):
+    """K6: вынесено из execute_sequence без изменения поведения. v3.0.12 (finding аудита блок B):
+    report.json — ЧЕКПОИНТ resume/retry, пишем АТОМАРНО (tmp+fsync+replace); сбой не гаснет молча, а
+    возвращается вызывающему (решение о HARD-STOP — за ним). Снимки lifecycle (v2.124) — best-effort
+    аудит-копии. Возвращает _persist_err (str) или None."""
+    _persist_err = None
+    try:
+        import os as _os
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        _tmp = pkg_dir / "report.json.tmp"
+        with open(_tmp, "w", encoding="utf-8") as _f:
+            _f.write(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
+            _f.flush()
+            _os.fsync(_f.fileno())
+        _os.replace(_tmp, pkg_dir / "report.json")
+    except OSError as _e:
+        _persist_err = f"{type(_e).__name__}: {_e}"
+    if _persist_err is None:
+        try:
+            for _art in ("run-plan.yaml", "run-handoff.yaml", "context-bundle.yaml", "spec-coverage.yaml"):
+                _src = features_dir / wid / _art
+                if _src.is_file():
+                    (pkg_dir / _art).write_text(_src.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            pass
+    return _persist_err
+
+
+def _journal_package_end(features_dir, wid, pid, pkg, sha, ready, status, gates_unmet):
+    """K6: вынесено из execute_sequence без изменения поведения. v3.0.14 (#3): event journal
+    package_end (Run->Package->Gate: gates_unmet + статус пакета). Журнал не роняет исполнение (срез
+    engine ратчета 2026-08-12): пропуск регистрирует сам `journal_append` у источника (его основной
+    отказ — возврат `{"ok": False}`, не исключение); этот `except` — только для сбоя импорта журнала."""
+    try:
+        from ai_ops_kit.shared import lifecycle_store as _lsj
+        _lsj.journal_append(features_dir / wid / "lifecycle-journal.jsonl",
+                            {"kind": "package_end", "run_id": wid, "workitem_id": wid,
+                             "package_id": pid, "pkg_hash": _pkg_hash(pkg), "sha": sha,
+                             "ready": bool(ready), "status": status,
+                             "gates_unmet": gates_unmet})
+    except Exception:  # noqa: BLE001,S110 — пропуск регистрирует journal_append; здесь только сбой импорта
+        pass
+
+
 def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                      features_dir=None, base=None, provider_name="mock", model=None,
                      author=False, author_proposer=None, review=False, reviewer_proposer=None,
@@ -811,31 +910,10 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     _wt = child_root / ".ai" / "worktrees" / wid
     _rev_root = _wt if _wt.is_dir() else child_root
 
-    def _verify_skipped(pid):
-        # v3.0-rc2 (P0.3): пакет можно считать выполненным ТОЛЬКО при подтверждении: отчёт есть, SHA есть,
-        # SHA реально коммит в sequence-ветке и предок её HEAD, пакет executed и без hard-блокера.
-        prior = features_dir / wid / "work-packages" / pid / "report.json"
-        if not prior.is_file():
-            return None, "нет отчёта прошлого прогона"
-        try:
-            rep = json.loads(prior.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
-            return None, f"битый отчёт: {e}"
-        sha = (rep.get("commit") or {}).get("sha")
-        if not sha:
-            return None, "в отчёте нет commit SHA"
-        if _git(_rev_root, "cat-file", "-e", sha + "^{commit}")[0] != 0:
-            return None, f"SHA {sha[:8]} не существует в репозитории"
-        if _git(_rev_root, "merge-base", "--is-ancestor", sha, _branch)[0] != 0:
-            return None, f"SHA {sha[:8]} не в sequence-ветке {_branch} (не предок HEAD)"
-        if not rep.get("ready_for_pr") and _hard_stop(rep) is not None:
-            return None, f"пакет имел hard-блокер: {_hard_stop(rep)}"
-        return rep, None
-
     for i, pkg in enumerate(ordered):
         pid = pkg.get("id", f"pkg-{i+1}")
         if i < start_index:
-            rep_ok, why = _verify_skipped(pid)
+            rep_ok, why = _verify_resumed_package(pid, features_dir, wid, _rev_root, _branch)
             if rep_ok is None:
                 # неподтверждённый пропуск -> НЕ добавляем в completed, останавливаем resume честной ошибкой
                 return _seq_err(wid, ordered,
@@ -865,34 +943,8 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             stopped_at = pid
             break
 
-        sig_pkg = dict(signals or {})
-        sig_pkg["affected_areas"] = pkg.get("scope") or sig_pkg.get("affected_areas") or ["core"]
-        sig_pkg["size"] = "small"
-        # исполнитель = подтверждение декомпозиции: пакет атомарен, его id выбран, и передан
-        # АВТОРИТЕТНЫЙ список id плана (preflight валидирует work_package_id против него — P0.4/P0.5).
-        sig_pkg["work_package_id"] = pid
-        sig_pkg["_sequence_plan_ids"] = [p.get("id") for p in ordered]
-        sig_pkg["_sequence_internal"] = True   # v3.0-rc4 (P0.1): внутренний per-package resume ≠ replan
-        if signals_for:
-            sig_pkg.update(signals_for(pkg) or {})
-
-        # v3.0-rc19 (finding живого sequential): каждый пакет получал ПОЛНУЮ многочастную задачу с
-        # общим ярлыком -> writer лез в чужие подсистемы (напр. в pkg-1 писал pricing/*) -> брокер
-        # отклонял, но _hard_stop справедливо стопал цепочку на попытке эскейпа. Явно ограничиваем
-        # writer'а рамками ЕГО подсистемы (остальные части делают отдельные пакеты) — это НЕ ослабляет
-        # containment (брокер/post-diff по-прежнему в силе), а убирает первопричину: writer не выходит
-        # за scope. Ревьюер по-прежнему судит независимо.
-        _pkg_scope = pkg.get("scope") or []
-        _pkg_ws = pkg.get("write_scope") or []
-        _scope_note = ""
-        if _pkg_scope:
-            _scope_note = (
-                f"\n\n=== ГРАНИЦЫ ЭТОГО ПАКЕТА ({pid}) ===\n"
-                f"Реализуй ТОЛЬКО часть, относящуюся к подсистеме: {', '.join(_pkg_scope)}. "
-                f"Пиши ИСКЛЮЧИТЕЛЬНО в пути: {', '.join(_pkg_ws) or _pkg_scope}. "
-                f"НЕ трогай файлы других подсистем — их реализуют отдельные пакеты последовательности. "
-                f"Если задача упоминает другие подсистемы — это контекст, не работа этого пакета.")
-        pkg_task = f"{task} — пакет {pid}: {pkg.get('title', '')}{_scope_note}".strip()
+        sig_pkg, pkg_task = _build_package_signals_and_task(
+            pkg, pid, task, signals, signals_for, ordered)
         # v3.0-rc12 (finding живого sequential): исключение провайдера/инфры (напр. ConnectionReset
         # от kimi ПОСЛЕ исчерпания ретраев _http_post_json) НЕ должно ронять всю транзакцию traceback'ом
         # и терять per-package lifecycle. Ловим -> пакет честно фейлится (infra-error) -> цепочка
@@ -954,31 +1006,11 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         # features/<wid>/{run-plan,run-handoff,...} перетираются следующим пакетом -> у каждого пакета
         # свой неизменный lifecycle-каталог work-packages/<pid>/ (P1 аудита).
         pkg_dir = features_dir / wid / "work-packages" / pid
-        # v3.0.12 (finding аудита блок B): report.json — ЧЕКПОИНТ resume/retry. Пишем АТОМАРНО (tmp+fsync+
-        # replace); сбой БОЛЬШЕ НЕ гаснет молча (иначе пакет помечен completed, следующий строится поверх
-        # коммита, но durable-чекпоинта нет) -> HARD-STOP цепочки. Снимки lifecycle — best-effort аудит-копии.
-        _persist_err = None
-        try:
-            import os as _os
-            pkg_dir.mkdir(parents=True, exist_ok=True)
-            _tmp = pkg_dir / "report.json.tmp"
-            with open(_tmp, "w", encoding="utf-8") as _f:
-                _f.write(json.dumps(rep, ensure_ascii=False, indent=2, default=str))
-                _f.flush()
-                _os.fsync(_f.fileno())
-            _os.replace(_tmp, pkg_dir / "report.json")
-        except OSError as _e:
-            _persist_err = f"{type(_e).__name__}: {_e}"
-        if _persist_err is None:
-            try:
-                for _art in ("run-plan.yaml", "run-handoff.yaml", "context-bundle.yaml", "spec-coverage.yaml"):
-                    _src = features_dir / wid / _art
-                    if _src.is_file():
-                        (pkg_dir / _art).write_text(_src.read_text(encoding="utf-8"), encoding="utf-8")
-            except OSError:
-                pass
-        else:
-            blocked = True   # чекпоинт не сохранён durable -> нельзя строить следующий пакет поверх
+        _persist_err = _persist_package_report(pkg_dir, features_dir, wid, rep)
+        if _persist_err is not None:
+            # v3.0.12 (finding аудита блок B): чекпоинт resume/retry не сохранён durable -> нельзя
+            # строить следующий пакет поверх коммита без durable-чекпоинта -> HARD-STOP цепочки.
+            blocked = True
             if not stop_reason:
                 stop_reason = f"checkpoint-persist-failed: {_persist_err}"
 
@@ -998,22 +1030,10 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                         "handoff": (rep.get("handoff") or {}).get("next_action"),
                         "failure": infra_error,   # v3.0-rc13 (P1): типизированный envelope (None если не исключение)
                         "status": status})
-        # v3.0.14 (#3): event journal — package_end (Run->Package->Gate: gates_unmet + статус пакета)
-        try:
-            from ai_ops_kit.shared import lifecycle_store as _lsj
-            _lsj.journal_append(features_dir / wid / "lifecycle-journal.jsonl",
-                                {"kind": "package_end", "run_id": wid, "workitem_id": wid,
-                                 "package_id": pid, "pkg_hash": _pkg_hash(pkg), "sha": sha,
-                                 "ready": bool(ready), "status": status,
-                                 "gates_unmet": (rep.get("gates") or {}).get("unmet")})
-        # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12). Решение «журнал не роняет
-        # исполнение» верно и остаётся. Утрата записи при этом больше НЕ невидима, но закрыта не
-        # здесь: `journal_append` сам регистрирует пропуск у источника, потому что его основной путь
-        # отказа — не исключение, а возврат `{"ok": False}`, который тут никто не читал (и не читал
-        # ни в одном из 11 вызовов пакета). Накопленное сливается в отчёт последовательности ниже.
-        # Этот `except` остаётся только для сбоя самого импорта модуля журнала.
-        except Exception:  # noqa: BLE001,S110 — пропуск регистрирует journal_append; здесь только сбой импорта
-            pass
+        # v3.0.14 (#3): event journal — package_end (Run->Package->Gate). Накопленное сливается в
+        # отчёт последовательности ниже.
+        _journal_package_end(features_dir, wid, pid, pkg, sha, ready, status,
+                             (rep.get("gates") or {}).get("unmet"))
 
         if executed:
             completed.add(pid)
