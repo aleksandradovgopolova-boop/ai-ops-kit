@@ -17,19 +17,21 @@ scope: ai_ops_kit/engine/
 # 2026-08-26 (K6-глубина, срез context): из run() вынесена _compile_context_artifacts (bundle/payload/
 # hybrid/spec/work-package) -> run() 1275 -> 1182. Это ПЕРВЫЙ срез, реально опустивший потолок:
 # 1275 -> 1182 (новый глобальный max — по-прежнему run(), но уже меньше).
-max_function_lines: 1182
+# 2026-08-26 (K6-глубина, срез context-reports): из run() вынесена _add_context_reports (контекст-
+# отчёты в rep: bundle/shadow/hybrid/payload/spec/work-package) -> run() 1182 -> 1129. Потолок 1129.
+max_function_lines: 1129
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 540
+max_function_lineno: 608
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _compile_context_artifacts).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _add_context_reports).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 540
-    size: 1182
+    lineno: 608
+    size: 1129
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -40,16 +42,24 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1928
+    lineno: 1943
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
     lineno: 218
     size: 184
+  - name: route
+    file: ai_route.py
+    lineno: 42
+    size: 177
   - name: _compile_context_artifacts
     file: ai_ops_run.py
     lineno: 430
     size: 107
+  - name: _add_context_reports
+    file: ai_ops_run.py
+    lineno: 540
+    size: 65
   - name: route
     file: ai_route.py
     lineno: 42
