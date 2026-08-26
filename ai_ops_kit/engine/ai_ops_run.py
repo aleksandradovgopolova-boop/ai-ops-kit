@@ -938,6 +938,67 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
 
 
 
+def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
+    """Финализация прогона: событие run_completed + журнал run_end + вывод статуса работы
+    (done/blocked) + снятие active-work с учёта. K6: вынесено из run(); -> rep."""
+    # v3.16.0 Development Culture Guardrails (WP5): каждый прогон завершается SessionRecommendation
+    # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
+    # v3.38 (W3.2): ядро НЕ импортирует спутники — session recommendation через событие run_completed.
+    # Подписчик (engops/session_guardrails) реагирует синхронно и пишет в rep in-place.
+    from ai_ops_kit.shared.events import emit as _emit
+    try:
+        _emit("run_completed", {
+            "event_type": "run_completed",
+            "workitem_id": fid,
+            "child_root": str(child_root),
+            "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr") else "not-ready"),
+            "ready_for_pr": bool(rep.get("ready_for_pr")),
+            "report": rep,
+        })
+    except Exception:  # noqa: BLE001,S110 — событие ADVISE-ONLY: его утрата не меняет вердикт
+        pass
+    # run_end (исход прогона, включая итог доставки)
+    _ls.journal_append(jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
+                                "attempt_id": attempt_id,
+                                "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
+                                                                        else "not-ready"),
+                                "ready_for_pr": bool(rep.get("ready_for_pr")),
+                                "commit": (rep.get("commit") or {}).get("sha")})
+    # F-012: `done` только когда работа действительно доведена. NOT_READY -> blocked, иначе
+    # `ai-ops status` показывает пустоту при незакрытых гейтах и ненаписанном коде.
+    _ready = bool(rep.get("ready_for_pr"))
+    _unmet = (rep.get("gates") or {}).get("unmet") or []
+    # НАХОДКА ИИ-СРЕДЫ (ежедневная): факт работы брался из счётчика write-операций брокера, а
+    # писать могут иначе — writer уровня `claude -p` своими инструментами, `sed -i` в shell,
+    # и модель может закоммитить сама. Тогда `applied_writes == 0` при живом коммите, и статус
+    # работы становился «blocked: код не написан — правок 0». По отчёту выглядело, будто кит не
+    # работает, хотя он работал. Ground truth — git: коммит и его файлы.
+    _wrote = work_produced(rep)
+    if _ready:
+        _st, _why = "done", None
+    elif _wrote:
+        _st, _why = "blocked", f"гейты не закрыты: {', '.join(_unmet) or 'см. отчёт'}"
+    else:
+        _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
+    # B2-20 (повтор B2-12, живой прогон 14.08.2026): `resume` завершённой-но-НЕДОСТАВЛЕННОЙ работы
+    # заново звал писателя, получал ноль правок — потому что делать уже нечего — и хоронил готовый
+    # READY_FOR_PR в `blocked: код не написан`. Работа с коммитом на ветке пропадала из активного
+    # состояния, и владелец видел «кит не справился» там, где кит справился и ждал доставки.
+    # Продолжение поверх существующей ветки без новых правок — это НЕ «код не написан».
+    if _st == "blocked" and delivery_pending(rep):
+        print("  работа прошлого прогона на ветке, дописывать нечего — нужна ДОСТАВКА, а не "
+              "повторный прогон: запусти с open_pr (и GITHUB_TOKEN), либо открой PR из ветки сам")
+        with contextlib.redirect_stdout(sys.stderr):
+            active_work.finish_cmd(aw_path, fid, status="blocked",
+                                   reason="ждёт доставки: работа готова на ветке, новых правок нет")
+        _ls.merge_bookkeeping_losses(rep)
+        return rep
+    with contextlib.redirect_stdout(sys.stderr):
+        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
+    _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
+    return rep
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1670,62 +1731,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # агрегат стоимости прогона + usage-ledger + очистка call-context -> _finalize_run_cost (K6).
         _finalize_run_cost(rep, orchestrator, model, _jname, fid, _attempt_id, signals,
                            _plan, _model_resolution, child_root)
-        # v3.16.0 Development Culture Guardrails (WP5): каждый прогон завершается SessionRecommendation
-        # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
-        # v3.38 (W3.2): ядро НЕ импортирует спутники — session recommendation через событие run_completed.
-        # Подписчик (engops/session_guardrails) реагирует синхронно и пишет в rep in-place.
-        from ai_ops_kit.shared.events import emit as _emit
-        try:
-            _emit("run_completed", {
-                "event_type": "run_completed",
-                "workitem_id": fid,
-                "child_root": str(child_root),
-                "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr") else "not-ready"),
-                "ready_for_pr": bool(rep.get("ready_for_pr")),
-                "report": rep,
-            })
-        except Exception:  # noqa: BLE001,S110 — событие ADVISE-ONLY: его утрата не меняет вердикт
-            pass
-        # run_end (исход прогона, включая итог доставки)
-        _ls.journal_append(_jname, {"kind": "run_end", "run_id": fid, "workitem_id": fid,
-                                    "attempt_id": _attempt_id,
-                                    "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
-                                                                            else "not-ready"),
-                                    "ready_for_pr": bool(rep.get("ready_for_pr")),
-                                    "commit": (rep.get("commit") or {}).get("sha")})
-        # F-012: `done` только когда работа действительно доведена. NOT_READY -> blocked, иначе
-        # `ai-ops status` показывает пустоту при незакрытых гейтах и ненаписанном коде.
-        _ready = bool(rep.get("ready_for_pr"))
-        _unmet = (rep.get("gates") or {}).get("unmet") or []
-        # НАХОДКА ИИ-СРЕДЫ (ежедневная): факт работы брался из счётчика write-операций брокера, а
-        # писать могут иначе — writer уровня `claude -p` своими инструментами, `sed -i` в shell,
-        # и модель может закоммитить сама. Тогда `applied_writes == 0` при живом коммите, и статус
-        # работы становился «blocked: код не написан — правок 0». По отчёту выглядело, будто кит не
-        # работает, хотя он работал. Ground truth — git: коммит и его файлы.
-        _wrote = work_produced(rep)
-        if _ready:
-            _st, _why = "done", None
-        elif _wrote:
-            _st, _why = "blocked", f"гейты не закрыты: {', '.join(_unmet) or 'см. отчёт'}"
-        else:
-            _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
-        # B2-20 (повтор B2-12, живой прогон 14.08.2026): `resume` завершённой-но-НЕДОСТАВЛЕННОЙ работы
-        # заново звал писателя, получал ноль правок — потому что делать уже нечего — и хоронил готовый
-        # READY_FOR_PR в `blocked: код не написан`. Работа с коммитом на ветке пропадала из активного
-        # состояния, и владелец видел «кит не справился» там, где кит справился и ждал доставки.
-        # Продолжение поверх существующей ветки без новых правок — это НЕ «код не написан».
-        if _st == "blocked" and delivery_pending(rep):
-            print("  работа прошлого прогона на ветке, дописывать нечего — нужна ДОСТАВКА, а не "
-                  "повторный прогон: запусти с open_pr (и GITHUB_TOKEN), либо открой PR из ветки сам")
-            with contextlib.redirect_stdout(sys.stderr):
-                active_work.finish_cmd(aw_path, fid, status="blocked",
-                                       reason="ждёт доставки: работа готова на ветке, новых правок нет")
-            _ls.merge_bookkeeping_losses(rep)
-            return rep
-        with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
-        _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
-        return rep
+        # финализация: run_completed + run_end + статус + снятие active-work -> _finalize_run (K6).
+        return _finalize_run(rep, fid, child_root, _jname, _attempt_id, aw_path)
 
     # 1-2. RunPlan (route + треки + агрегированные гейты).
     # feature (v2.51): привязка WorkItem к ИМЕНОВАННОЙ фиче — иначе wid=wi-<hash>, и срезы

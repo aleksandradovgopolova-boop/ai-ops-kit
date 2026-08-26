@@ -32,30 +32,32 @@ scope: ai_ops_kit/engine/
 # WorkItem: can_resume/base-rewritten/revalidation) -> run() 957 -> 910. Потолок 910.
 # 2026-08-26 (K6-глубина, срез run-cost): из run() вынесена _finalize_run_cost (агрегат стоимости
 # + usage-ledger + очистка call-context) -> run() 910 -> 866. Потолок 866 (почти вровень с run_pipeline 864).
-max_function_lines: 866
+# 2026-08-26 (K6-глубина, срез finalize): из run() вынесена _finalize_run (run_completed + run_end +
+# статус работы + снятие active-work) -> run() 866 -> 812. Глобальный max теперь run_pipeline (864). Потолок 864.
+max_function_lines: 864
 
 # Информация о текущей max-функции (для справки).
-max_function: run
-max_function_file: ai_ops_run.py
-max_function_lineno: 941
+max_function: run_pipeline
+max_function_file: execution_pipeline.py
+max_function_lineno: 405
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _finalize_run_cost).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _finalize_run).
 top_10:
-  - name: run
-    file: ai_ops_run.py
-    lineno: 941
-    size: 866
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
     size: 864
+  - name: run
+    file: ai_ops_run.py
+    lineno: 1002
+    size: 812
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 2013
+    lineno: 2020
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
@@ -67,7 +69,7 @@ top_10:
     size: 177
   - name: _print_pipeline
     file: ai_ops_run.py
-    lineno: 1809
+    lineno: 1816
     size: 132
   - name: resume_preflight
     file: run_handoff.py
