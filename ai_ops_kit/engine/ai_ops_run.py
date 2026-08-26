@@ -825,6 +825,65 @@ def _start_lifecycle(features_dir, fid, task_text, signals, plan, engine, base, 
 
 
 
+def _resume_gate(child_root, fid, base, force_resume, resume):
+    """Resume-preflight гейт: продолжать WorkItem поверх подтверждённой работы или честный ранний
+    выход (can_resume/base-rewritten/revalidation). K6: вынесено из run(). -> (pf, resume_ctx, error|None)."""
+    resume_ctx = None
+    pf = None
+    if resume:
+        from ai_ops_kit.engine import run_handoff
+        pf = run_handoff.resume_preflight(child_root, fid, base=base)
+        if not pf["can_resume"]:
+            return None, None, {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                    "status": "error", "engine": "pipeline", "ready_for_pr": False,
+                    "error": "resume невозможен: " + "; ".join(pf["reasons"]),
+                    "resume": {"requested": True, "resumed": False, "can_resume": False,
+                               "reasons": pf["reasons"]}}
+        # v3.0.10 (finding аудита P0): base ПЕРЕПИСАН (force-push назад / пересоздан на несвязанном
+        # SHA — сохранённый base_sha исходного прогона больше не предок текущего HEAD базы). Это НЕ
+        # fast-forward: продолжать старую работу против ДРУГОЙ базы и выдать её за проверенную нельзя.
+        # force_resume этот случай НЕ снимает (иначе можно тихо переобозначить базу) — только явный
+        # replan (пересобрать план + переисполнить с новой базы) либо отмена.
+        # v3.0.14 (finding аудита #1, вариант B): base СДВИНУЛСЯ с прошлого прогона — переписан
+        # (rewrite) ИЛИ ушёл вперёд (fast-forward). В ОБОИХ случаях старая работа НЕ интегрирована с
+        # новой базой: resume ПЕРЕИСПОЛЬЗУЕТ worktree, форкнутый от старой базы (не пере-форкает), а
+        # baseline считался на старой — отдать PR против новой базы нельзя. Блок на resume-пути НЕ
+        # снимается ни force_resume, ни replan (обе модификации resume реиспользуют устаревший worktree).
+        # Recourse — СВЕЖИЙ прогон от новой базы (без --resume; --discard заменит устаревшую ветку):
+        # он пере-форкает worktree от новой базы. Авто-интеграция при resume (rebase onto B + повтор
+        # проверок) — запланирована на v3.1.
+        if pf.get("base_rewritten") or pf.get("base_moved"):
+            _kind = ("переписан (force-push/пересоздание)" if pf.get("base_rewritten")
+                     else "ушёл вперёд (fast-forward)")
+            return None, None, {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                    "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
+                    "error": (f"resume заблокирован: base {_kind} с прошлого прогона — старую работу "
+                              "нельзя выдать за проверенную против новой базы (worktree форкнут от "
+                              "старой базы и не интегрирован с новой). Ни force_resume, ни replan это "
+                              # B2-10: здесь назывались флаги ВНУТРЕННЕЙ точки входа (`--resume`,
+                              # `--discard`), которых у `ai-ops` нет вовсе. Человек читает это
+                              # сообщение, работая через `ai-ops`, и набирает несуществующее.
+                              "НЕ снимают. Нужен СВЕЖИЙ прогон от новой базы: удалите ветку "
+                              f"прошлого прогона (`git branch -D ai-ops/{fid}`) и запустите "
+                              f"`ai-ops run . --feature {fid} --execute`. " + "; ".join(pf["reasons"])),
+                    "resume": {"requested": True, "resumed": False,
+                               "base_rewritten": bool(pf.get("base_rewritten")),
+                               "base_moved": bool(pf.get("base_moved")),
+                               "revalidation_needed": True, "reasons": pf["reasons"]}}
+        # ЧЕСТНОСТЬ: база/состояние изменились -> НЕ продолжаем молча на устаревшем evidence.
+        if pf["revalidation_needed"] and not force_resume:
+            return None, None, {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                    "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
+                    "error": "resume требует ревалидации (база/состояние изменились с прошлого "
+                             "прогона) — перепроверь и запусти с force_resume=True (--force), "
+                             "чтобы продолжить осознанно",
+                    "resume": {"requested": True, "resumed": False, "revalidation_needed": True,
+                               "reasons": pf["reasons"]}}
+        resume_ctx = _resume_context_from_handoff(child_root, fid)
+    return pf, resume_ctx, None
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1157,57 +1216,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
         # v2.109 Real Resume: продолжить WorkItem поверх подтверждённой работы (не начинать заново).
         # Проверяем ДО регистрации/изменения состояния, чтобы честный ранний выход ничего не оставил.
-        resume_ctx = None
-        if resume:
-            from ai_ops_kit.engine import run_handoff
-            pf = run_handoff.resume_preflight(child_root, fid, base=base)
-            if not pf["can_resume"]:
-                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                        "status": "error", "engine": "pipeline", "ready_for_pr": False,
-                        "error": "resume невозможен: " + "; ".join(pf["reasons"]),
-                        "resume": {"requested": True, "resumed": False, "can_resume": False,
-                                   "reasons": pf["reasons"]}}
-            # v3.0.10 (finding аудита P0): base ПЕРЕПИСАН (force-push назад / пересоздан на несвязанном
-            # SHA — сохранённый base_sha исходного прогона больше не предок текущего HEAD базы). Это НЕ
-            # fast-forward: продолжать старую работу против ДРУГОЙ базы и выдать её за проверенную нельзя.
-            # force_resume этот случай НЕ снимает (иначе можно тихо переобозначить базу) — только явный
-            # replan (пересобрать план + переисполнить с новой базы) либо отмена.
-            # v3.0.14 (finding аудита #1, вариант B): base СДВИНУЛСЯ с прошлого прогона — переписан
-            # (rewrite) ИЛИ ушёл вперёд (fast-forward). В ОБОИХ случаях старая работа НЕ интегрирована с
-            # новой базой: resume ПЕРЕИСПОЛЬЗУЕТ worktree, форкнутый от старой базы (не пере-форкает), а
-            # baseline считался на старой — отдать PR против новой базы нельзя. Блок на resume-пути НЕ
-            # снимается ни force_resume, ни replan (обе модификации resume реиспользуют устаревший worktree).
-            # Recourse — СВЕЖИЙ прогон от новой базы (без --resume; --discard заменит устаревшую ветку):
-            # он пере-форкает worktree от новой базы. Авто-интеграция при resume (rebase onto B + повтор
-            # проверок) — запланирована на v3.1.
-            if pf.get("base_rewritten") or pf.get("base_moved"):
-                _kind = ("переписан (force-push/пересоздание)" if pf.get("base_rewritten")
-                         else "ушёл вперёд (fast-forward)")
-                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                        "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
-                        "error": (f"resume заблокирован: base {_kind} с прошлого прогона — старую работу "
-                                  "нельзя выдать за проверенную против новой базы (worktree форкнут от "
-                                  "старой базы и не интегрирован с новой). Ни force_resume, ни replan это "
-                                  # B2-10: здесь назывались флаги ВНУТРЕННЕЙ точки входа (`--resume`,
-                                  # `--discard`), которых у `ai-ops` нет вовсе. Человек читает это
-                                  # сообщение, работая через `ai-ops`, и набирает несуществующее.
-                                  "НЕ снимают. Нужен СВЕЖИЙ прогон от новой базы: удалите ветку "
-                                  f"прошлого прогона (`git branch -D ai-ops/{fid}`) и запустите "
-                                  f"`ai-ops run . --feature {fid} --execute`. " + "; ".join(pf["reasons"])),
-                        "resume": {"requested": True, "resumed": False,
-                                   "base_rewritten": bool(pf.get("base_rewritten")),
-                                   "base_moved": bool(pf.get("base_moved")),
-                                   "revalidation_needed": True, "reasons": pf["reasons"]}}
-            # ЧЕСТНОСТЬ: база/состояние изменились -> НЕ продолжаем молча на устаревшем evidence.
-            if pf["revalidation_needed"] and not force_resume:
-                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                        "status": "blocked", "engine": "pipeline", "ready_for_pr": False,
-                        "error": "resume требует ревалидации (база/состояние изменились с прошлого "
-                                 "прогона) — перепроверь и запусти с force_resume=True (--force), "
-                                 "чтобы продолжить осознанно",
-                        "resume": {"requested": True, "resumed": False, "revalidation_needed": True,
-                                   "reasons": pf["reasons"]}}
-            resume_ctx = _resume_context_from_handoff(child_root, fid)
+        # resume-preflight гейт (продолжение поверх подтверждённой работы) -> _resume_gate (K6).
+        pf, resume_ctx, _rerr = _resume_gate(child_root, fid, base, force_resume, resume)
+        if _rerr:
+            return _rerr
 
         # durable lifecycle-start (workitem/RunPlan/run-settings/journal) -> _start_lifecycle (K6).
         _attempt_id, _lcerr = _start_lifecycle(
