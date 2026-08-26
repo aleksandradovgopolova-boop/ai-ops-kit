@@ -36,6 +36,7 @@ import yaml
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.engine import run_plan          # noqa: E402
+from ai_ops_kit.engine.run_context import RunContext   # noqa: E402
 from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending   # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work
@@ -999,6 +1000,96 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
     return rep
 
 
+def _restore_resume_policy(ctx, resume):
+    """v3.0-rc2 (P0.1) Canonical Resume Context: при resume восстановить ПОЛИТИКУ исходного прогона.
+
+    K6: вынесено из run() без изменения поведения. Мутирует `ctx` (signals/task_type/risk +
+    sandbox/baseline_diff/require_fix/author/review/open_pr/write_scope/max_steps/base/task_text/
+    saved_task; sandbox здесь — policy enforcement, не security isolation: флаг политики прогона)
+    из сохранённого run-settings.yaml — иначе resume молча теряет политику и
+    переклассифицирует задачу. provider/model/base приходят от вызывающего (runtime-выбор);
+    изменение базы/состояния уже требует явной ревалидации (resume_preflight). -> error-dict | None.
+
+    v3.0-rc4 (P0.1): immutable-resume — ТОЛЬКО для пользовательского resume задачи. Внутренний
+    per-package resume executor'а (каждый пакет — своя подсистема/affected_areas, поверх общей
+    ветки) НЕ является сменой классификации: executor сам управляет policy пакета. Помечен
+    _sequence_internal -> пропускаем drift-проверку и restore run-settings.
+    """
+    ctx.saved_task = None    # F-027: продуктовая задача исходного прогона (переживает продолжение)
+    if resume and ctx.feature and not ctx.signals.get("_sequence_internal"):
+        _sp = ctx.features_dir / ctx.feature / "run-settings.yaml"
+        # v3.0.12 (finding аудита блок B): FAIL-CLOSED чтение. Прежде safe_load(...) or {} трактовал
+        # битый/пустой run-settings как «отсутствует» -> resume тихо откатывался к дефолтам вызова
+        # (терял классификацию/policy/BaseBinding) И перезаписывал файл дефолтами (контракт исходного
+        # прогона уничтожался навсегда). Теперь: повреждён -> явный отказ (не дефолт, не перезапись).
+        _g = _ls.load_guarded(_sp, required_keys=("kind", "policy"), kind="run-settings")
+        if _g["state"] == "corrupt":
+            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": ctx.feature,
+                    "status": "error", "ready_for_pr": False,
+                    "error": (f"run-settings повреждён ({_g['reason']}) — resume не может восстановить "
+                              "policy/классификацию исходного прогона. Нужна явная recovery (не тихий "
+                              "дефолт: иначе прогон переклассифицируется и перезапишет контракт)."),
+                    "resume": {"requested": True, "resumed": False}}
+        if _g["state"] == "ok":
+            _saved = _g["data"]
+            _ss, _pp = (_saved.get("signals") or {}), (_saved.get("policy") or {})
+            if isinstance(_saved.get("task"), str) and _saved["task"].strip():
+                ctx.saved_task = _saved["task"]
+            # v3.0-rc4 (P0.1) IMMUTABLE resume: resume НЕ меняет классификацию/policy. Если новый
+            # вызов пытается переопределить routing-сигнал (task_type/risk/size/affected_areas) или
+            # write_scope значением, отличным от сохранённого — это НЕ resume, а replan: требуется
+            # явный replan=True (+ ревалидация). Иначе можно было бы тихо продолжить ENGINEERING как QUICK.
+            _POLICY_KEYS = ("task_type", "risk", "size", "affected_areas")
+            _drift = [k for k in _POLICY_KEYS
+                      if k in ctx.signals and k in _ss and ctx.signals[k] != _ss[k]]
+            if ctx.write_scope is not None and _pp.get("write_scope") is not None \
+                    and ctx.write_scope != _pp.get("write_scope"):
+                _drift.append("write_scope")
+            if _drift and not ctx.replan:
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": ctx.feature,
+                        "status": "error", "ready_for_pr": False,
+                        "error": ("resume не меняет классификацию/policy исходного прогона "
+                                  f"(drift: {', '.join(_drift)}). Это replan — запусти с replan=True "
+                                  "(ревалидация + новый план), а не resume."),
+                        "resume": {"requested": True, "resumed": False, "drift": _drift}}
+            # восстанавливаем СОХРАНЁННУЮ policy как источник истины (не «or», а точное значение),
+            # кроме случая replan, где новый вызов осознанно задаёт новую policy.
+            if not ctx.replan:
+                ctx.signals = {**ctx.signals, **_ss}          # saved policy побеждает
+                ctx.sandbox = bool(_pp.get("sandbox", ctx.sandbox))
+                ctx.baseline_diff = bool(_pp.get("baseline_diff", ctx.baseline_diff))
+                ctx.require_fix = bool(_pp.get("require_fix", ctx.require_fix))
+                ctx.author = bool(_pp.get("author", ctx.author))
+                ctx.review = bool(_pp.get("review", ctx.review))
+                ctx.open_pr = bool(_pp.get("open_pr", ctx.open_pr))
+                ctx.write_scope = _pp.get("write_scope") if ctx.write_scope is None else ctx.write_scope
+                if ctx.max_steps == 40 and _pp.get("max_steps"):
+                    ctx.max_steps = _pp["max_steps"]
+                # v3.0.2/v3.0.9 (P0): base восстанавливается из saved BaseBinding (точная база исходного
+                # запуска), с фолбэком на плоское поле base (совместимость со старыми run-settings).
+                ctx.base = ((_pp.get("base_binding") or {}).get("base_ref")) or _pp.get("base", ctx.base)
+        # F-027: задача исполнителя на продолжении обязана остаться ПРОДУКТОВОЙ. Служебный
+        # next_action кита («закрыть незакрытые гейты: …») сюда доезжал как task_text — и автор
+        # честно писал требования про гейты кита, заводил под них openspec-изменение и
+        # validate_gates.py. Продуктовая спека при этом цела, потому и выглядело осмысленно.
+        # Проверка стоит в движке, а не только в CLI: путь resume есть и у прямых вызывающих.
+        if is_service_text(ctx.task_text):
+            _pt = product_task_for_resume(ctx.child_root, ctx.feature, ctx.features_dir)
+            if not _pt["task"]:
+                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": ctx.feature,
+                        "status": "error", "ready_for_pr": False,
+                        "error": ("продолжение получило служебный текст кита вместо продуктовой "
+                                  f"задачи («{(ctx.task_text or '')[:60]}…»), а восстановить исходную "
+                                  "не из чего (нет ни task в run-settings, ни задачи в "
+                                  "workitem.yaml, ни раздела goal в спеке). Назовите задачу явно: "
+                                  "--task \"<что делаем для продукта>\". Служебное «что осталось» "
+                                  "задачей исполнителя не бывает."),
+                        "resume": {"requested": True, "resumed": False}}
+            ctx.task_text = _pt["task"]
+            ctx.signals["task_text"] = ctx.task_text
+    return None
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1021,87 +1112,25 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         from ai_ops_kit.engine import execution_pipeline
         from ai_ops_kit.engine import tool_loop
         from ai_ops_kit.providers import orchestrator
-        # v3.0-rc2 (P0.1) Canonical Resume Context: при resume восстанавливаем ПОЛИТИКУ исходного прогона
-        # (signals/task_type/risk + sandbox/baseline_diff/require_fix/author/review/open_pr/write_scope/
-        # max_steps) из сохранённого run-settings.yaml — иначе resume молча теряет политику и
-        # переклассифицирует задачу. provider/model/base приходят от вызывающего (runtime-выбор);
-        # изменение базы/состояния уже требует явной ревалидации (resume_preflight).
-        # v3.0-rc4 (P0.1): immutable-resume — ТОЛЬКО для пользовательского resume задачи. Внутренний
-        # per-package resume executor'а (каждый пакет — своя подсистема/affected_areas, поверх общей
-        # ветки) НЕ является сменой классификации: executor сам управляет policy пакета. Помечен
-        # _sequence_internal -> пропускаем drift-проверку и restore run-settings.
-        _saved_task = None    # F-027: продуктовая задача исходного прогона (переживает продолжение)
-        if resume and feature and not signals.get("_sequence_internal"):
-            _sp = features_dir / feature / "run-settings.yaml"
-            # v3.0.12 (finding аудита блок B): FAIL-CLOSED чтение. Прежде safe_load(...) or {} трактовал
-            # битый/пустой run-settings как «отсутствует» -> resume тихо откатывался к дефолтам вызова
-            # (терял классификацию/policy/BaseBinding) И перезаписывал файл дефолтами (контракт исходного
-            # прогона уничтожался навсегда). Теперь: повреждён -> явный отказ (не дефолт, не перезапись).
-            _g = _ls.load_guarded(_sp, required_keys=("kind", "policy"), kind="run-settings")
-            if _g["state"] == "corrupt":
-                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature,
-                        "status": "error", "ready_for_pr": False,
-                        "error": (f"run-settings повреждён ({_g['reason']}) — resume не может восстановить "
-                                  "policy/классификацию исходного прогона. Нужна явная recovery (не тихий "
-                                  "дефолт: иначе прогон переклассифицируется и перезапишет контракт)."),
-                        "resume": {"requested": True, "resumed": False}}
-            if _g["state"] == "ok":
-                _saved = _g["data"]
-                _ss, _pp = (_saved.get("signals") or {}), (_saved.get("policy") or {})
-                if isinstance(_saved.get("task"), str) and _saved["task"].strip():
-                    _saved_task = _saved["task"]
-                # v3.0-rc4 (P0.1) IMMUTABLE resume: resume НЕ меняет классификацию/policy. Если новый
-                # вызов пытается переопределить routing-сигнал (task_type/risk/size/affected_areas) или
-                # write_scope значением, отличным от сохранённого — это НЕ resume, а replan: требуется
-                # явный replan=True (+ ревалидация). Иначе можно было бы тихо продолжить ENGINEERING как QUICK.
-                _POLICY_KEYS = ("task_type", "risk", "size", "affected_areas")
-                _drift = [k for k in _POLICY_KEYS
-                          if k in signals and k in _ss and signals[k] != _ss[k]]
-                if write_scope is not None and _pp.get("write_scope") is not None \
-                        and write_scope != _pp.get("write_scope"):
-                    _drift.append("write_scope")
-                if _drift and not replan:
-                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature,
-                            "status": "error", "ready_for_pr": False,
-                            "error": ("resume не меняет классификацию/policy исходного прогона "
-                                      f"(drift: {', '.join(_drift)}). Это replan — запусти с replan=True "
-                                      "(ревалидация + новый план), а не resume."),
-                            "resume": {"requested": True, "resumed": False, "drift": _drift}}
-                # восстанавливаем СОХРАНЁННУЮ policy как источник истины (не «or», а точное значение),
-                # кроме случая replan, где новый вызов осознанно задаёт новую policy.
-                if not replan:
-                    signals = {**signals, **_ss}          # saved policy побеждает
-                    sandbox = bool(_pp.get("sandbox", sandbox))
-                    baseline_diff = bool(_pp.get("baseline_diff", baseline_diff))
-                    require_fix = bool(_pp.get("require_fix", require_fix))
-                    author = bool(_pp.get("author", author))
-                    review = bool(_pp.get("review", review))
-                    open_pr = bool(_pp.get("open_pr", open_pr))
-                    write_scope = _pp.get("write_scope") if write_scope is None else write_scope
-                    if max_steps == 40 and _pp.get("max_steps"):
-                        max_steps = _pp["max_steps"]
-                    # v3.0.2/v3.0.9 (P0): base восстанавливается из saved BaseBinding (точная база исходного
-                    # запуска), с фолбэком на плоское поле base (совместимость со старыми run-settings).
-                    base = ((_pp.get("base_binding") or {}).get("base_ref")) or _pp.get("base", base)
-            # F-027: задача исполнителя на продолжении обязана остаться ПРОДУКТОВОЙ. Служебный
-            # next_action кита («закрыть незакрытые гейты: …») сюда доезжал как task_text — и автор
-            # честно писал требования про гейты кита, заводил под них openspec-изменение и
-            # validate_gates.py. Продуктовая спека при этом цела, потому и выглядело осмысленно.
-            # Проверка стоит в движке, а не только в CLI: путь resume есть и у прямых вызывающих.
-            if is_service_text(task_text):
-                _pt = product_task_for_resume(child_root, feature, features_dir)
-                if not _pt["task"]:
-                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature,
-                            "status": "error", "ready_for_pr": False,
-                            "error": ("продолжение получило служебный текст кита вместо продуктовой "
-                                      f"задачи («{(task_text or '')[:60]}…»), а восстановить исходную "
-                                      "не из чего (нет ни task в run-settings, ни задачи в "
-                                      "workitem.yaml, ни раздела goal в спеке). Назовите задачу явно: "
-                                      "--task \"<что делаем для продукта>\". Служебное «что осталось» "
-                                      "задачей исполнителя не бывает."),
-                            "resume": {"requested": True, "resumed": False}}
-                task_text = _pt["task"]
-                signals["task_text"] = task_text
+        # v3.0-rc2/rc4 (P0.1) Canonical Resume Context + immutable-resume: вынесено в
+        # _restore_resume_policy (K6-глубина). RunContext держит переписываемое состояние прогона:
+        # вынесенный блок мутирует ctx, а run() синхронизирует изменённые policy-поля обратно в
+        # локалы (downstream пока читает локалы; к ctx как источнику истины сходимся по мере выноса
+        # соседних блоков). Поведение сохранено: restore при resume, fail-closed на битом
+        # run-settings, immutable drift-отказ, F-027 продуктовая задача.
+        ctx = RunContext.from_run_args(
+            task_text=task_text, signals=signals, child_root=child_root, features_dir=features_dir,
+            feature=feature, provider_name=provider_name, model=model, runtime=runtime,
+            sandbox=sandbox, baseline_diff=baseline_diff, require_fix=require_fix, author=author,
+            review=review, open_pr=open_pr, write_scope=write_scope, max_steps=max_steps,
+            base=base, replan=replan)
+        _rrerr = _restore_resume_policy(ctx, resume)
+        if _rrerr:
+            return _rrerr
+        signals, task_text, _saved_task = ctx.signals, ctx.task_text, ctx.saved_task
+        sandbox, baseline_diff, require_fix = ctx.sandbox, ctx.baseline_diff, ctx.require_fix
+        author, review, open_pr = ctx.author, ctx.review, ctx.open_pr
+        write_scope, max_steps, base = ctx.write_scope, ctx.max_steps, ctx.base
         # v3.0.8 (finding аудита P0.1): base РАЗРЕШАЕТСЯ В КОНКРЕТНУЮ ВЕТКУ ОДИН РАЗ здесь (до resume_preflight
         # и до записи run-settings). Иначе fresh auto-run сохранял base=null -> resume передавал None в
         # git rev-parse -> TypeError. На resume уже восстановлен сохранённый base (выше); для fresh —

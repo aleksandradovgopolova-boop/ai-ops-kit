@@ -27,9 +27,9 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4364000
+  volume_bytes: 4372000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 528
+  substantive_files: 529
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -471,3 +471,38 @@ raises:
       execute_sequence — исполнитель пакетов work-package. Вынос фаз в именованные функции добавляет
       def+докстринг на исполняемом пути; взамен критический путь стал тестируемым по фазам, а
       func-size ратчет опущен 864 -> 812. Замер 4356181 -> 4362327 Б перешёл потолок 4360000 — подъём до 4364000.
+  - at: '2026-08-26'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 528
+    to_count: 529
+    measured_before: 527
+    measured_after: 528
+    work: wave5 K6-глубина (RunContext + вынос resume-policy-restore)
+    files:
+      - ai_ops_kit/engine/run_context.py
+    why_it_works_in_the_child: >-
+      RunContext (ai_ops_kit/engine/run_context.py) ИСПОЛНЯЕТСЯ в дочке на каждом pipeline-прогоне:
+      ai_ops_run.run() строит его через RunContext.from_run_args и передаёт вынесенным фазам
+      контроллера (первая — _restore_resume_policy, восстановление policy/классификации из
+      run-settings при resume) как переписываемое состояние прогона. Без модуля в поставке импорт
+      `from ai_ops_kit.engine.run_context import RunContext` в ai_ops_run упал бы у дочки на первом
+      же прогоне (ImportError на критическом пути). Растёт только счёт файлов, потолок под факт
+      528 -> 529; func-size ратчет run() опущен 812 -> 750.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4364000
+    to_bytes: 4372000
+    measured_before: 4362327
+    measured_after: 4369656
+    work: wave5 K6-глубина (RunContext + вынос resume-policy-restore)
+    files:
+      - ai_ops_kit/engine/run_context.py
+    why_it_works_in_the_child: >-
+      Тот же новый поставляемый модуль RunContext (ai_ops_kit/engine/run_context.py, 5485 Б):
+      ai_ops_run импортирует его на критическом пути run() и строит на каждом прогоне дочки, а
+      генерируемый manifest поставки прибавляет строку на этот файл. Объём установленной поставки
+      перешёл потолок 4364000 (замер 4362327 -> 4369656 Б, +7329 Б: сам модуль плюс запись manifest)
+      — подъём до 4372000. Рост объёмом оправдан работой файла в дочке, не запасом: без модуля
+      контроллер прогона не импортируется.

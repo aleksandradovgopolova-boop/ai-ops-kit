@@ -35,19 +35,22 @@ scope: ai_ops_kit/engine/
 # 2026-08-26 (K6-глубина, срез finalize): из run() вынесена _finalize_run (run_completed + run_end +
 # статус работы + снятие active-work) -> run() 866 -> 812. Глобальный max теперь run_pipeline (864). Потолок 864.
 # 2026-08-26 (K6-глубина, срез run_pipeline-фаз): run_pipeline 864 -> 730; глобальный max теперь run() (812). Потолок 812.
-max_function_lines: 812
+# 2026-08-26 (K6-глубина, срез resume-policy-restore): из run() вынесен _restore_resume_policy
+# (восстановление policy/классификации из run-settings при resume) через объект RunContext ->
+# run() 812 -> 750. Глобальный max по-прежнему run() (750). Потолок 750.
+max_function_lines: 750
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 1002
+max_function_lineno: 1092
 
 # Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 1002
-    size: 812
+    lineno: 1092
+    size: 750
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
