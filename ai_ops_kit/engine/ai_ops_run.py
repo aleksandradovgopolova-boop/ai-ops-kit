@@ -429,10 +429,8 @@ def _provider_trust(provider, key_env, klp_by_env, env, now, cache):
 
 def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, model,
                                context_hybrid, base_binding, task_text):
-    """Компиляция артефактов контекста фазы run() (bundle/payload/hybrid/spec/work-package).
-    v3.38 (K6-глубина): вынесено из run() без изменения поведения. Ошибки слоя контекста не
-    гаснут — копятся в lifecycle_errors. -> (lifecycle_errors, bundle, payload, hybrid_prelude,
-    hybrid_fed, spec_cov, work_pkg)."""
+    """Артефакты контекста (bundle/payload/hybrid/spec/work-package); ошибки не гаснут —
+    копятся в lifecycle_errors. K6: вынесено из run() без изменения поведения."""
     # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
     # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
     lifecycle_errors = []
@@ -539,10 +537,8 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
 
 def _add_context_reports(rep, *, bundle, payload, spec_cov, work_pkg, context_shadow,
                          context_hybrid, hybrid_fed, child_root, task_text, fid):
-    """Обогащение отчёта прогона контекст-отчётами (bundle/shadow/hybrid/payload/spec/
-    work-package). v3.38 (K6-глубина): вынесено из run() без изменения поведения.
-    Всё guarded/условно; мутирует rep на месте (context_shadow — чистая наблюдаемость,
-    его сбой не роняет прогон)."""
+    """Контекст-отчёты в rep (bundle/shadow/hybrid/payload/spec/work-package); всё guarded.
+    K6: вынесено из run() без изменения поведения; мутирует rep на месте."""
     if bundle:
         rep["context_bundle"] = {"estimated_tokens": bundle["estimated_tokens"],
                                  "context_budget": bundle["context_budget"],
@@ -609,9 +605,8 @@ def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, chil
                        base_binding, model_resolution, writer_model, model, pretruth,
                        resume, pf, force_resume, fid, bundle, payload, spec_cov, work_pkg,
                        preflight):
-    """Обогащение отчёта прогона provenance-полями (runtime/engine/provider/profile/base/
-    model/model_resolution/preflight/resume/lifecycle-dict). v3.38 (K6-глубина): вынесено из
-    run() без изменения поведения; мутирует rep на месте."""
+    """Provenance-поля отчёта (runtime/provider/model/base/preflight/resume/lifecycle-dict).
+    K6: вынесено из run() без изменения поведения; мутирует rep на месте."""
     rep["runtime"] = runtime
     rep["engine"] = "pipeline"
     rep["provider"] = provider_name
@@ -665,6 +660,47 @@ def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, chil
         "run_handoff": f"features/{fid}/run-handoff.yaml",
         "concurrency_preflight": preflight,
     }
+
+
+
+def _commit_barrier(rep, child_root, features_dir, fid, lifecycle_errors):
+    """Commit-barrier перед доставкой: durable RunHandoff + final report + journal-checkpoint.
+    K6: вынесено из run() без изменения поведения; -> (jname, handoff_ok, report_ok, plan)."""
+    _jp = features_dir / fid / "lifecycle-journal.jsonl"
+    _jname = str(_jp)
+    _handoff_ok = False
+    from ai_ops_kit.engine import run_handoff
+    try:
+        wt = child_root / ".ai" / "worktrees" / fid
+        handoff = run_handoff.build_handoff(rep, work_root=(wt if wt.is_dir() else child_root))
+        _hw = _ls.durable_write(features_dir / fid / "run-handoff.yaml", handoff,
+                                require_keys=("kind", "workitem_id"), keep_backup=True)
+        if _hw.get("ok"):
+            _handoff_ok = True
+            rep["handoff"] = {"next_action": handoff["next_action"],
+                              "resume_from_revision": handoff["resume_from_revision"],
+                              "open_questions": handoff["open_questions"]}
+        else:
+            lifecycle_errors.append(f"run-handoff durable-write: {_hw.get('error')} "
+                                    "(доставка НЕ выполняется — lifecycle не зафиксирован)")
+    except Exception as _e:  # noqa: BLE001
+        lifecycle_errors.append(f"run-handoff build/write: {type(_e).__name__}: {_e}")
+    if lifecycle_errors:
+        rep["lifecycle_errors"] = lifecycle_errors
+    # durable final report (ДО доставки) — второй барьер
+    _rw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep, keep_backup=True)
+    _report_ok = _rw.get("ok")
+    if not _report_ok:
+        rep.setdefault("lifecycle_errors", [])
+        rep["lifecycle_errors"].append(f"run-report durable-write: {_rw.get('error')} "
+                                       "(доставка НЕ выполняется)")
+    # journal checkpoint: готовность к доставке + прошли ли барьеры
+    _plan = rep.get("delivery_plan")
+    _ls.journal_append(_jname, {"kind": "ready_for_delivery", "run_id": fid, "workitem_id": fid,
+                                "ready_for_delivery": bool(_plan),
+                                "handoff_durable": _handoff_ok, "report_durable": bool(_report_ok),
+                                "commit": (rep.get("commit") or {}).get("sha")})
+    return _jname, _handoff_ok, _report_ok, _plan
 
 
 
@@ -1105,8 +1141,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _hist.mkdir(parents=True, exist_ok=True)
             _n = len(list(_hist.glob("run-*.yaml"))) + 1
             _ls.durable_write(_hist / f"run-{_n:03d}.yaml", _settings)   # v3.0.14 (#2): атомарно
-        # v2.107..v2.111: артефакты контекста (bundle/payload/hybrid/spec/work-package).
-        #     v3.38 (K6): тело вынесено в _compile_context_artifacts.
+        # артефакты контекста -> _compile_context_artifacts (K6).
         (lifecycle_errors, bundle, payload, _hybrid_prelude, _hybrid_fed,
          spec_cov, work_pkg) = _compile_context_artifacts(
             signals, child_root, features_dir, fid, plan, model,
@@ -1365,7 +1400,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _note_bookkeeping_error(err_rep, "failure_evidence.write", _we)
             _ls.merge_bookkeeping_losses(err_rep)
             return err_rep
-        # provenance-поля отчёта (runtime/provider/model/base/lifecycle). v3.38 (K6): -> _enrich_run_report.
+        # provenance-поля отчёта -> _enrich_run_report (K6).
         _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
                            provider_resolution=provider_resolution, child_root=child_root,
                            base_binding=base_binding, model_resolution=_model_resolution,
@@ -1373,8 +1408,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                            resume=resume, pf=(pf if resume else None), force_resume=force_resume, fid=fid,
                            bundle=bundle, payload=payload, spec_cov=spec_cov,
                            work_pkg=work_pkg, preflight=preflight)
-        # v2.109..v3.7.16: контекст-отчёты в rep (bundle/shadow/hybrid/payload/spec/work-package).
-        #     v3.38 (K6): тело вынесено в _add_context_reports.
+        # контекст-отчёты в rep -> _add_context_reports (K6).
         _add_context_reports(rep, bundle=bundle, payload=payload, spec_cov=spec_cov,
                              work_pkg=work_pkg, context_shadow=context_shadow,
                              context_hybrid=context_hybrid, hybrid_fed=_hybrid_fed,
@@ -1390,40 +1424,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # Pipeline вызван с defer_delivery=True: он вернул ДОКАЗАННЫЙ результат + delivery_plan, но PR НЕ
         # открыл. Критические записи здесь — БАРЬЕРЫ: если RunHandoff или final report не зафиксированы
         # durable, доставка НЕ выполняется (fail-closed) — наружу нельзя отдавать то, что локально не зафиксировано.
-        _jp = features_dir / fid / "lifecycle-journal.jsonl"
-        _jname = str(_jp)
-        _handoff_ok = False
-        from ai_ops_kit.engine import run_handoff
-        try:
-            wt = child_root / ".ai" / "worktrees" / fid
-            handoff = run_handoff.build_handoff(rep, work_root=(wt if wt.is_dir() else child_root))
-            _hw = _ls.durable_write(features_dir / fid / "run-handoff.yaml", handoff,
-                                    require_keys=("kind", "workitem_id"), keep_backup=True)
-            if _hw.get("ok"):
-                _handoff_ok = True
-                rep["handoff"] = {"next_action": handoff["next_action"],
-                                  "resume_from_revision": handoff["resume_from_revision"],
-                                  "open_questions": handoff["open_questions"]}
-            else:
-                lifecycle_errors.append(f"run-handoff durable-write: {_hw.get('error')} "
-                                        "(доставка НЕ выполняется — lifecycle не зафиксирован)")
-        except Exception as _e:  # noqa: BLE001
-            lifecycle_errors.append(f"run-handoff build/write: {type(_e).__name__}: {_e}")
-        if lifecycle_errors:
-            rep["lifecycle_errors"] = lifecycle_errors
-        # durable final report (ДО доставки) — второй барьер
-        _rw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep, keep_backup=True)
-        _report_ok = _rw.get("ok")
-        if not _report_ok:
-            rep.setdefault("lifecycle_errors", [])
-            rep["lifecycle_errors"].append(f"run-report durable-write: {_rw.get('error')} "
-                                           "(доставка НЕ выполняется)")
-        # journal checkpoint: готовность к доставке + прошли ли барьеры
-        _plan = rep.get("delivery_plan")
-        _ls.journal_append(_jname, {"kind": "ready_for_delivery", "run_id": fid, "workitem_id": fid,
-                                    "ready_for_delivery": bool(_plan),
-                                    "handoff_durable": _handoff_ok, "report_durable": bool(_report_ok),
-                                    "commit": (rep.get("commit") or {}).get("sha")})
+        # commit-barrier перед доставкой (RunHandoff+report durable, journal-checkpoint) -> _commit_barrier (K6).
+        _jname, _handoff_ok, _report_ok, _plan = _commit_barrier(
+            rep, child_root, features_dir, fid, lifecycle_errors)
         # DELIVERY — только за барьером: план готов И обе критические записи durable. v3.0.16 Phase A
         # (finding аудита #2): DELIVERY OUTBOX. Внешнее действие (PR) и локальная запись НЕ атомарны, поэтому:
         #   durable DeliveryIntent -> external delivery (идемпотентно) -> durable DeliveryReceipt.
