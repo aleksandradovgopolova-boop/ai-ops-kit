@@ -704,8 +704,8 @@ probes:
   - ai_ops_kit/engine/ai_ops_run.py
   - ai_ops_kit/lifecycle/active_work.py
   file: ai_ops_kit/engine/ai_ops_run.py
-  find: '        if _reg_rc:'
-  replace_with: '        if False:'
+  find: '    if _reg_rc:'
+  replace_with: '    if False:'
   tests:
   - tests/unit/test_second_session_is_refused.py
   why: 'ШОВ: отказ реестра обязан останавливать ПРОГОН. До 18.08.2026 код возврата `register`
