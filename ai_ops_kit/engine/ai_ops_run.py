@@ -884,6 +884,60 @@ def _resume_gate(child_root, fid, base, force_resume, resume):
 
 
 
+def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals, plan,
+                       model_resolution, child_root):
+    """Агрегат run_cost (tokens/latency/cost) из вызовов модели + usage-ledger + очистка
+    call-context. K6: вынесено из run(); мутирует rep, без ранних выходов."""
+    # v3.1 (trace v0.2): run_cost — агрегат tokens/latency/cost из вызовов модели (наблюдаемость).
+    _stats_error = None
+    try:
+        _stats = orchestrator.drain_call_stats()
+    except Exception as _se:  # noqa: BLE001 — сбор статистики не должен ронять уже сделанный прогон
+        # но «не собрали» != «расхода не было»: инвариант Usage Truth требует unavailable,
+        # а не тихий ноль.
+        _stats, _stats_error = [], f"{type(_se).__name__}: {_se}"[:200]
+        rep["run_cost"] = {"status": "unavailable", "reason": _stats_error}
+    if _stats:
+        _in = sum(s.get("input_tokens") or 0 for s in _stats)
+        _out = sum(s.get("output_tokens") or 0 for s in _stats)
+        _lat = round(sum(s.get("latency_s") or 0 for s in _stats), 3)
+        _costs = [s.get("cost_usd_est") for s in _stats if s.get("cost_usd_est") is not None]
+        _cost = round(sum(_costs), 6) if _costs else None
+        _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
+                     "latency_s": _lat, "cost_usd_est": _cost, "model": model}
+        rep["cost"] = _cost_rep
+        _ls.journal_append(jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
+                                    "attempt_id": attempt_id, **_cost_rep})
+        # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)
+        # в ledger задачи + продукта. Честный usage_status; неизвестное -> unavailable, не 0.
+        # v3.24.0 Cost & Architecture Accuracy: extra_context штампуется на все записи —
+        # task_type/workflow/risk/size/writer_tier/execution_mode/stack для economic alternatives.
+        try:
+            from ai_ops_kit.shared import usage_ledger as _ul
+            _extra = {
+                "task_type": signals.get("task_type"),
+                "workflow": (plan.get("base_workflow") if isinstance(plan, dict) else None),
+                "risk": signals.get("risk"),
+                "size": signals.get("size"),
+                "writer_tier": ((model_resolution or {}).get("writer") or {}).get("tier"),
+                "execution_mode": "sequential" if signals.get("_sequence_internal") else "single",
+                "stack": ",".join(s.get("language", "") for s in (signals.get("_stacks") or [])) or None,
+            }
+            _ul.append(child_root, fid, _stats, run_id=fid, extra_context={k: v for k, v in _extra.items() if v is not None})
+        except Exception as _ue:  # noqa: BLE001 — учёт usage не должен ронять прогон...
+            # ...но и пропасть молча не должен: занижённая стоимость, поданная как факт, —
+            # это нарушение той самой Usage Truth, ради которой ledger и существует.
+            _note_bookkeeping_error(rep, "usage_ledger.append", _ue)
+    # СРЕЗ engine РАТЧЕТА 2026-08-12: здесь стоял `try/except Exception: pass` без причины.
+    # Подавлять нечего: `clear_call_context` — это `dict.clear()` над модульным `_CALL_CONTEXT`
+    # (`providers/orchestrator_usage.py`), он не бросает. Пустой `except` защищал от
+    # несуществующего сбоя и при этом был бы единственным местом, где утрата контекста вызова
+    # (Usage Truth: role/trigger/provider) прошла бы молча, если бы функция когда-нибудь стала
+    # бросать. Снят, а не задокументирован: подавление без риска — это шум, а не решение.
+    orchestrator.clear_call_context()
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1613,53 +1667,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                          "запрещена до надёжной фиксации доказательств и состояния"}
             rep["overall_status"] = "delivery-failed"
             _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
-        # v3.1 (trace v0.2): run_cost — агрегат tokens/latency/cost из вызовов модели (наблюдаемость).
-        _stats_error = None
-        try:
-            _stats = orchestrator.drain_call_stats()
-        except Exception as _se:  # noqa: BLE001 — сбор статистики не должен ронять уже сделанный прогон
-            # но «не собрали» != «расхода не было»: инвариант Usage Truth требует unavailable,
-            # а не тихий ноль.
-            _stats, _stats_error = [], f"{type(_se).__name__}: {_se}"[:200]
-            rep["run_cost"] = {"status": "unavailable", "reason": _stats_error}
-        if _stats:
-            _in = sum(s.get("input_tokens") or 0 for s in _stats)
-            _out = sum(s.get("output_tokens") or 0 for s in _stats)
-            _lat = round(sum(s.get("latency_s") or 0 for s in _stats), 3)
-            _costs = [s.get("cost_usd_est") for s in _stats if s.get("cost_usd_est") is not None]
-            _cost = round(sum(_costs), 6) if _costs else None
-            _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
-                         "latency_s": _lat, "cost_usd_est": _cost, "model": model}
-            rep["cost"] = _cost_rep
-            _ls.journal_append(_jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
-                                        "attempt_id": _attempt_id, **_cost_rep})
-            # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)
-            # в ledger задачи + продукта. Честный usage_status; неизвестное -> unavailable, не 0.
-            # v3.24.0 Cost & Architecture Accuracy: extra_context штампуется на все записи —
-            # task_type/workflow/risk/size/writer_tier/execution_mode/stack для economic alternatives.
-            try:
-                from ai_ops_kit.shared import usage_ledger as _ul
-                _extra = {
-                    "task_type": signals.get("task_type"),
-                    "workflow": (_plan.get("base_workflow") if isinstance(_plan, dict) else None),
-                    "risk": signals.get("risk"),
-                    "size": signals.get("size"),
-                    "writer_tier": ((_model_resolution or {}).get("writer") or {}).get("tier"),
-                    "execution_mode": "sequential" if signals.get("_sequence_internal") else "single",
-                    "stack": ",".join(s.get("language", "") for s in (signals.get("_stacks") or [])) or None,
-                }
-                _ul.append(child_root, fid, _stats, run_id=fid, extra_context={k: v for k, v in _extra.items() if v is not None})
-            except Exception as _ue:  # noqa: BLE001 — учёт usage не должен ронять прогон...
-                # ...но и пропасть молча не должен: занижённая стоимость, поданная как факт, —
-                # это нарушение той самой Usage Truth, ради которой ledger и существует.
-                _note_bookkeeping_error(rep, "usage_ledger.append", _ue)
-        # СРЕЗ engine РАТЧЕТА 2026-08-12: здесь стоял `try/except Exception: pass` без причины.
-        # Подавлять нечего: `clear_call_context` — это `dict.clear()` над модульным `_CALL_CONTEXT`
-        # (`providers/orchestrator_usage.py`), он не бросает. Пустой `except` защищал от
-        # несуществующего сбоя и при этом был бы единственным местом, где утрата контекста вызова
-        # (Usage Truth: role/trigger/provider) прошла бы молча, если бы функция когда-нибудь стала
-        # бросать. Снят, а не задокументирован: подавление без риска — это шум, а не решение.
-        orchestrator.clear_call_context()
+        # агрегат стоимости прогона + usage-ledger + очистка call-context -> _finalize_run_cost (K6).
+        _finalize_run_cost(rep, orchestrator, model, _jname, fid, _attempt_id, signals,
+                           _plan, _model_resolution, child_root)
         # v3.16.0 Development Culture Guardrails (WP5): каждый прогон завершается SessionRecommendation
         # (гигиена сессии/контекста) с точной командой. ADVISE-ONLY: НЕ блокирует прогон/доставку.
         # v3.38 (W3.2): ядро НЕ импортирует спутники — session recommendation через событие run_completed.
