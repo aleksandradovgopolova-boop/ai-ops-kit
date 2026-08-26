@@ -704,6 +704,66 @@ def _commit_barrier(rep, child_root, features_dir, fid, lifecycle_errors):
 
 
 
+def _register_active_work(child_root, signals, write_scope, fid, session, lifecycle_errors):
+    """Регистрация active-work + concurrency-preflight (координация параллельных сессий).
+    K6: вынесено из run() без изменения поведения. -> (aw_path, preflight, error|None)."""
+    aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
+    # v3.0.12 (finding аудита блок B): общий реестр координации повреждён -> FAIL-CLOSED (не стартуем
+    # вслепую: пустая карта скрыла бы чужую активную работу и две сессии столкнулись бы). Проверяем
+    # ДО preflight/register, чтобы register не наткнулся на corrupt-raise без обработки.
+    _awg = _ls.load_guarded(aw_path, kind="active-work")
+    if _awg["state"] == "corrupt":
+        return None, None, {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                "status": "error", "ready_for_pr": False,
+                "error": (f"active-work реестр повреждён ({_awg['reason']}) — прогон не начат, чтобы не "
+                          "потерять координацию параллельных сессий (пустая карта скрыла бы коллизии). "
+                          "Нужна явная recovery .ai/runtime/active-work.yaml.")}
+    # ЗАЯВКА #138: здесь стояло `or ["unspecified"]`, а `affected_areas` на одиночном пути в
+    # сигналы не кладёт НИКТО — поэтому пересечение зон находилось со ВСЕМИ активными записями
+    # сразу (неизвестность считалась совпадением). Зоны выводятся из `write_scope` тем же
+    # правилом, что на пакетном пути (`work_areas` — одна формула на оба пути).
+    areas = _work_areas.areas_for(signals, write_scope)
+    # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
+    # активной работой (тихо, через classify — без печати и без себя). Advisory в отчёт.
+    try:
+        _aw = active_work.load(aw_path)
+        _conf = active_work.classify(
+            [w for w in _aw.get("active", []) if w.get("id") != fid],
+            {"id": fid, "affected_areas": list(areas), "depends_on": [], "shared_contracts": []})
+        preflight = {"conflicts": _conf}
+    except Exception as _pe:  # noqa: BLE001 — preflight не должен ронять прогон...
+        # ...но и выглядеть пройденным не должен: при preflight=None отчёт печатал
+        # «preflight-конфликтов: 0», то есть заявлял «конфликтов нет» там, где проверки
+        # вообще не было. Записываем сбой явно.
+        preflight = {"error": f"{type(_pe).__name__}: {_pe}"[:200], "conflicts": None}
+    # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
+    # stdout оставался чистым для --json.
+    # КОД ВОЗВРАТА РЕГИСТРАЦИИ ЧИТАЕТСЯ (замер 18.08.2026). Прежде он отбрасывался в обеих
+    # точках вызова: `register` мог отказать (цикл зависимостей, работа в main, нет зон) — и
+    # прогон всё равно продолжался. С отказом второй сессии на ту же работу/ветку цена этого
+    # молчания стала прямой: заявка потребителя #150 — два PR на одну ветку и выброшенная
+    # половина работы. Отказ обязан останавливать прогон ДО правок, а не после.
+    _reg_rc = 1
+    with contextlib.redirect_stdout(sys.stderr):
+        try:
+            _reg_rc = active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
+                                           workitem=f"features/{fid}/workitem.yaml",
+                                           child_root=child_root,
+                                           published=active_work.publication_enabled(child_root))
+        except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
+            lifecycle_errors.append(f"active-work register: {_e}")
+            _reg_rc = 0        # сбой записи реестра уже назван выше — не путать его с отказом
+    if _reg_rc:
+        return None, None, {"schema_version": 1, "kind": "run-report", "workitem_id": fid,
+                "status": "blocked",
+                "blocked_by": "active-work",
+                "error": ("работа не начата: заявку на эту работу или ветку держит другая сессия "
+                          "(причина и держатель названы выше). Перенять её можно осознанно — "
+                          "`active_work.py register … --takeover --takeover-reason \"почему\"`.")}
+    return aw_path, preflight, None
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1177,59 +1237,11 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _ls.durable_write_json(features_dir / fid / "run-report.json", rep)   # v3.0.14 (#2): атомарно
             return rep
 
-        aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
-        # v3.0.12 (finding аудита блок B): общий реестр координации повреждён -> FAIL-CLOSED (не стартуем
-        # вслепую: пустая карта скрыла бы чужую активную работу и две сессии столкнулись бы). Проверяем
-        # ДО preflight/register, чтобы register не наткнулся на corrupt-raise без обработки.
-        _awg = _ls.load_guarded(aw_path, kind="active-work")
-        if _awg["state"] == "corrupt":
-            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                    "status": "error", "ready_for_pr": False,
-                    "error": (f"active-work реестр повреждён ({_awg['reason']}) — прогон не начат, чтобы не "
-                              "потерять координацию параллельных сессий (пустая карта скрыла бы коллизии). "
-                              "Нужна явная recovery .ai/runtime/active-work.yaml.")}
-        # ЗАЯВКА #138: здесь стояло `or ["unspecified"]`, а `affected_areas` на одиночном пути в
-        # сигналы не кладёт НИКТО — поэтому пересечение зон находилось со ВСЕМИ активными записями
-        # сразу (неизвестность считалась совпадением). Зоны выводятся из `write_scope` тем же
-        # правилом, что на пакетном пути (`work_areas` — одна формула на оба пути).
-        areas = _work_areas.areas_for(signals, write_scope)
-        # concurrency preflight ДО регистрации/изменения файлов: пересечения по областям с ДРУГОЙ
-        # активной работой (тихо, через classify — без печати и без себя). Advisory в отчёт.
-        try:
-            _aw = active_work.load(aw_path)
-            _conf = active_work.classify(
-                [w for w in _aw.get("active", []) if w.get("id") != fid],
-                {"id": fid, "affected_areas": list(areas), "depends_on": [], "shared_contracts": []})
-            preflight = {"conflicts": _conf}
-        except Exception as _pe:  # noqa: BLE001 — preflight не должен ронять прогон...
-            # ...но и выглядеть пройденным не должен: при preflight=None отчёт печатал
-            # «preflight-конфликтов: 0», то есть заявлял «конфликтов нет» там, где проверки
-            # вообще не было. Записываем сбой явно.
-            preflight = {"error": f"{type(_pe).__name__}: {_pe}"[:200], "conflicts": None}
-        # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
-        # stdout оставался чистым для --json.
-        # КОД ВОЗВРАТА РЕГИСТРАЦИИ ЧИТАЕТСЯ (замер 18.08.2026). Прежде он отбрасывался в обеих
-        # точках вызова: `register` мог отказать (цикл зависимостей, работа в main, нет зон) — и
-        # прогон всё равно продолжался. С отказом второй сессии на ту же работу/ветку цена этого
-        # молчания стала прямой: заявка потребителя #150 — два PR на одну ветку и выброшенная
-        # половина работы. Отказ обязан останавливать прогон ДО правок, а не после.
-        _reg_rc = 1
-        with contextlib.redirect_stdout(sys.stderr):
-            try:
-                _reg_rc = active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
-                                               workitem=f"features/{fid}/workitem.yaml",
-                                               child_root=child_root,
-                                               published=active_work.publication_enabled(child_root))
-            except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
-                lifecycle_errors.append(f"active-work register: {_e}")
-                _reg_rc = 0        # сбой записи реестра уже назван выше — не путать его с отказом
-        if _reg_rc:
-            return {"schema_version": 1, "kind": "run-report", "workitem_id": fid,
-                    "status": "blocked",
-                    "blocked_by": "active-work",
-                    "error": ("работа не начата: заявку на эту работу или ветку держит другая сессия "
-                              "(причина и держатель названы выше). Перенять её можно осознанно — "
-                              "`active_work.py register … --takeover --takeover-reason \"почему\"`.")}
+        # регистрация active-work + concurrency-preflight -> _register_active_work (K6).
+        aw_path, preflight, _awerr = _register_active_work(
+            child_root, signals, write_scope, fid, session, lifecycle_errors)
+        if _awerr:
+            return _awerr
 
         # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
         # останется in-progress навсегда) — гарантируем через except+re-raise.
