@@ -605,6 +605,69 @@ def _add_context_reports(rep, *, bundle, payload, spec_cov, work_pkg, context_sh
 
 
 
+def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, child_root,
+                       base_binding, model_resolution, writer_model, model, pretruth,
+                       resume, pf, force_resume, fid, bundle, payload, spec_cov, work_pkg,
+                       preflight):
+    """Обогащение отчёта прогона provenance-полями (runtime/engine/provider/profile/base/
+    model/model_resolution/preflight/resume/lifecycle-dict). v3.38 (K6-глубина): вынесено из
+    run() без изменения поведения; мутирует rep на месте."""
+    rep["runtime"] = runtime
+    rep["engine"] = "pipeline"
+    rep["provider"] = provider_name
+    # P0-1 side-effect proof: КАК выбран провайдер — в отчёте (и в run-report.json на диске),
+    # а не только в stdout: иначе решение резолва невозможно проверить постфактум.
+    if provider_resolution:
+        rep["provider_resolution"] = dict(provider_resolution)
+    # P1-3: обогащаем профиль движка (там stacks — только языки) человекочитаемым display
+    rep["profile"] = _profile_for_report(child_root, rep.get("profile"))
+    # F-014: в отчёт кладём базу, выбранную резолвером ПРОГОНА. Движок резолвит повторно, но
+    # получает уже конкретную ветку и потому всегда рапортует source=explicit-* — по такому
+    # отчёту не отличить «человек задал --base» от «кит выбрал сам».
+    if isinstance(base_binding, dict) and base_binding.get("base_ref"):
+        rep["base_binding"] = {k: v for k, v in base_binding.items() if k != "kind"}
+    # v3.8.3-rc3: финализировать model_attempts (исход последней попытки) + честные initial/effective_model.
+    if isinstance(model_resolution, dict) and model_resolution.get("model_attempts"):
+        _last = model_resolution["model_attempts"][-1]
+        if _last.get("outcome") == "pending":
+            _last["outcome"] = ("verified" if rep.get("ready_for_pr")
+                                else "not_ready:" + ",".join((rep.get("gates") or {}).get("unmet") or []))
+    _eff = model_resolution.get("effective_model") if isinstance(model_resolution, dict) else None
+    # v3.7.12/rc3: model = РЕАЛЬНО завершившая модель (effective), не только первоначальная.
+    rep["model"] = _eff or (writer_model if (isinstance(model_resolution, dict) and model_resolution.get("applied")) else model)
+    if isinstance(model_resolution, dict) and model_resolution.get("applied"):
+        rep["initial_model"] = model_resolution.get("initial_model")
+        rep["effective_model"] = model_resolution.get("effective_model")
+        if model_resolution.get("escalation_error"):
+            rep["escalation_error"] = model_resolution["escalation_error"]
+    rep["model_resolution"] = model_resolution   # per-role решение роутера (видимость в каждом отчёте)
+    rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
+    # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
+    # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.
+    if provider_name and provider_name != "mock" and isinstance(rep.get("not_yet"), list):
+        rep["not_yet"] = [n for n in rep["not_yet"] if "живой предложитель" not in n]
+    # v2.109 Real Resume: если продолжали — честно фиксируем в отчёте preflight-контекст (в т.ч.
+    # что ревалидация требовалась и была осознанно переопределена --force), не только факт reuse.
+    if resume and isinstance(rep.get("resume"), dict):
+        rep["resume"]["preflight_reasons"] = pf["reasons"]
+        rep["resume"]["revalidation_needed"] = pf["revalidation_needed"]
+        rep["resume"]["revalidation_overridden"] = bool(pf["revalidation_needed"] and force_resume)
+    # v2.94: единая транзакция — фиксируем lifecycle-артефакты в отчёте и на диске
+    rep["lifecycle"] = {
+        "workitem": f"features/{fid}/workitem.yaml",
+        "run_plan": f"features/{fid}/run-plan.yaml",
+        "context_bundle": (f"features/{fid}/context-bundle.yaml" if bundle else None),
+        "context_payload": (f"features/{fid}/context-payload.yaml" if payload else None),
+        "spec_coverage": (f"features/{fid}/spec-coverage.yaml" if spec_cov else None),
+        "work_package": (f"features/{fid}/work-package.yaml" if work_pkg else None),
+        "active_work": ".ai/runtime/active-work.yaml",
+        "run_report": f"features/{fid}/run-report.json",
+        "run_handoff": f"features/{fid}/run-handoff.yaml",
+        "concurrency_preflight": preflight,
+    }
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1302,59 +1365,14 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _note_bookkeeping_error(err_rep, "failure_evidence.write", _we)
             _ls.merge_bookkeeping_losses(err_rep)
             return err_rep
-        rep["runtime"] = runtime
-        rep["engine"] = "pipeline"
-        rep["provider"] = provider_name
-        # P0-1 side-effect proof: КАК выбран провайдер — в отчёте (и в run-report.json на диске),
-        # а не только в stdout: иначе решение резолва невозможно проверить постфактум.
-        if provider_resolution:
-            rep["provider_resolution"] = dict(provider_resolution)
-        # P1-3: обогащаем профиль движка (там stacks — только языки) человекочитаемым display
-        rep["profile"] = _profile_for_report(child_root, rep.get("profile"))
-        # F-014: в отчёт кладём базу, выбранную резолвером ПРОГОНА. Движок резолвит повторно, но
-        # получает уже конкретную ветку и потому всегда рапортует source=explicit-* — по такому
-        # отчёту не отличить «человек задал --base» от «кит выбрал сам».
-        if isinstance(base_binding, dict) and base_binding.get("base_ref"):
-            rep["base_binding"] = {k: v for k, v in base_binding.items() if k != "kind"}
-        # v3.8.3-rc3: финализировать model_attempts (исход последней попытки) + честные initial/effective_model.
-        if isinstance(_model_resolution, dict) and _model_resolution.get("model_attempts"):
-            _last = _model_resolution["model_attempts"][-1]
-            if _last.get("outcome") == "pending":
-                _last["outcome"] = ("verified" if rep.get("ready_for_pr")
-                                    else "not_ready:" + ",".join((rep.get("gates") or {}).get("unmet") or []))
-        _eff = _model_resolution.get("effective_model") if isinstance(_model_resolution, dict) else None
-        # v3.7.12/rc3: model = РЕАЛЬНО завершившая модель (effective), не только первоначальная.
-        rep["model"] = _eff or (_writer_model if (isinstance(_model_resolution, dict) and _model_resolution.get("applied")) else model)
-        if isinstance(_model_resolution, dict) and _model_resolution.get("applied"):
-            rep["initial_model"] = _model_resolution.get("initial_model")
-            rep["effective_model"] = _model_resolution.get("effective_model")
-            if _model_resolution.get("escalation_error"):
-                rep["escalation_error"] = _model_resolution["escalation_error"]
-        rep["model_resolution"] = _model_resolution   # per-role решение роутера (видимость в каждом отчёте)
-        rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
-        # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
-        # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.
-        if provider_name and provider_name != "mock" and isinstance(rep.get("not_yet"), list):
-            rep["not_yet"] = [n for n in rep["not_yet"] if "живой предложитель" not in n]
-        # v2.109 Real Resume: если продолжали — честно фиксируем в отчёте preflight-контекст (в т.ч.
-        # что ревалидация требовалась и была осознанно переопределена --force), не только факт reuse.
-        if resume and isinstance(rep.get("resume"), dict):
-            rep["resume"]["preflight_reasons"] = pf["reasons"]
-            rep["resume"]["revalidation_needed"] = pf["revalidation_needed"]
-            rep["resume"]["revalidation_overridden"] = bool(pf["revalidation_needed"] and force_resume)
-        # v2.94: единая транзакция — фиксируем lifecycle-артефакты в отчёте и на диске
-        rep["lifecycle"] = {
-            "workitem": f"features/{fid}/workitem.yaml",
-            "run_plan": f"features/{fid}/run-plan.yaml",
-            "context_bundle": (f"features/{fid}/context-bundle.yaml" if bundle else None),
-            "context_payload": (f"features/{fid}/context-payload.yaml" if payload else None),
-            "spec_coverage": (f"features/{fid}/spec-coverage.yaml" if spec_cov else None),
-            "work_package": (f"features/{fid}/work-package.yaml" if work_pkg else None),
-            "active_work": ".ai/runtime/active-work.yaml",
-            "run_report": f"features/{fid}/run-report.json",
-            "run_handoff": f"features/{fid}/run-handoff.yaml",
-            "concurrency_preflight": preflight,
-        }
+        # provenance-поля отчёта (runtime/provider/model/base/lifecycle). v3.38 (K6): -> _enrich_run_report.
+        _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
+                           provider_resolution=provider_resolution, child_root=child_root,
+                           base_binding=base_binding, model_resolution=_model_resolution,
+                           writer_model=_writer_model, model=model, pretruth=pretruth,
+                           resume=resume, pf=(pf if resume else None), force_resume=force_resume, fid=fid,
+                           bundle=bundle, payload=payload, spec_cov=spec_cov,
+                           work_pkg=work_pkg, preflight=preflight)
         # v2.109..v3.7.16: контекст-отчёты в rep (bundle/shadow/hybrid/payload/spec/work-package).
         #     v3.38 (K6): тело вынесено в _add_context_reports.
         _add_context_reports(rep, bundle=bundle, payload=payload, spec_cov=spec_cov,
