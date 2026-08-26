@@ -185,8 +185,8 @@ probes:
 - id: engine-refuses-service-task-on-resume
   kind: guard
   file: ai_ops_kit/engine/ai_ops_run.py
-  find: '            if is_service_text(task_text):'
-  replace_with: '            if False:'
+  find: '        if is_service_text(ctx.task_text):'
+  replace_with: '        if False:'
   tests:
   - tests/unit/test_field_findings_cockpit.py::TestProductTaskSurvivesResume::test_engine_refuses_service_task_even_from_a_direct_caller
   why: 'Та же охрана, что и предыдущая, но В ДВИЖКЕ: путь resume есть не только у CLI. Проверка в одном
