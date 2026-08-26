@@ -532,111 +532,19 @@ def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
             "delivery_pf": delivery_pf}
 
 
-def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
-                 max_steps=40, feature=None, commit=False, allow_missing_tests=True,
-                 isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
-                 require_fix=False, discard_previous=False, sandbox=False,
-                 review=False, reviewer_proposer=None,
-                 author=False, author_proposer=None, plan=None, context_prelude=None,
-                 resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False,
-                 calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
-                 strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
-                 security_reviewer_proposer=None,   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
-                 reevaluate_only=False):   # v3.8.4: переоценить гейты существующего HEAD БЕЗ переавторинга
-    """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
-    [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
+def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, loop, *,
+                       commit, is_git, committed_sha, base_sha, authored_ev, allow_missing_tests,
+                       calibrated_enforcement, ui_evidence, review, reviewer_proposer, budget,
+                       strict_judge_qualified, security_reviewer_proposer, reevaluate_only):
+    """Сбор evidence на зафиксированном SHA и наполнение gate_ev: реальный прогон проверок профиля
+    через Broker, intake/regression/authored/reevaluate-seed, освобождения по неприменимым проверкам,
+    UI-evidence на точном SHA, seam-scan advisory, независимые ревью и доменный security-вердикт.
 
-    v2.108 (Operational Context): context_prelude — compiled payload из ContextBundle (реальное
-    содержимое релевантных правил/решений/спек), который РЕАЛЬНО попадает в prompt модели (prepend к
-    base_context tool loop) — не только статистика в отчёте.
-
-    v2.109 (Real Resume): resume=True — ПРОДОЛЖИТЬ WorkItem поверх уже подтверждённой работы, а не
-    начинать заново. Ветка ai-ops/<wid> и её коммиты НЕ удаляются (иначе потеряли бы результат);
-    worktree переиспользуется (или пере-подключается к сохранившейся ветке). resume_context —
-    состояние из RunHandoff (что сделано/решения/следующий шаг), реально подаётся модели в начало
-    prompt, чтобы она продолжила, а не переделала подтверждённое.
-
-    v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
-    чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
-    # v3.38 (K0-проводка): параметры прогона обязаны оставаться подмножеством объявленного
-    # контракта ядра (kernel/ports.ExecutionSpec). Это НЕ проверка реализации портов (реализации
-    # им ещё не соответствуют — долг Phase B, записан в installer.UNWIRED_MODULES), а страж
-    # дрейфа КОНТРАКТА: переименование поля в ports.py или новый параметр без записи в контракт
-    # краснеет на каждом прогоне, в том числе в дочке.
-    from ai_ops_kit.kernel import ports as _kports
-    _spec: _kports.ExecutionSpec = {
-        "task": task, "signals": dict(signals or {}), "child_root": str(child_root),
-        "feature": feature or "", "write_scope": list(write_scope or []),
-        "max_steps": max_steps, "commit": bool(commit), "baseline_diff": bool(baseline_diff),
-        "require_fix": bool(require_fix), "sandbox": bool(sandbox),
-        "review": bool(review), "author": bool(author)}
-    _spec_drift = set(_spec) - set(_kports.ExecutionSpec.__annotations__)
-    if _spec_drift:
-        raise SystemExit(f"контракт ядра разошёлся с конвейером: полей {sorted(_spec_drift)} "
-                         f"нет в kernel/ports.ExecutionSpec — обновите контракт или вызов")
-    child_root = Path(child_root)
-    signals = dict(signals or {})
-    signals.setdefault("task_text", task)
-
-    # 2. план (нужен workitem_id для имени ветки/worktree). v2.94: принимаем готовый план от
-    #    контроллера; иначе строим сами (обратная совместимость: прямой вызов run_pipeline).
-    if plan is None:
-        plan = run_plan.build_plan(signals, workitem_id=feature)
-    wid = plan["workitem_id"]
-
-    # 1b. изоляция + base-binding + resume -> _setup_isolation (K6). Прогон в отдельном worktree на
-    #     ветке ai-ops/<id>, основное дерево child не трогается; при отказе — ранний честный выход.
-    _iso = _setup_isolation(child_root, wid, base, isolate=isolate, resume=resume,
-                            reevaluate_only=reevaluate_only, discard_previous=discard_previous,
-                            open_pr=open_pr)
-    if _iso.get("error"):
-        return _iso["error"]
-    work_root, worktree_rel = _iso["work_root"], _iso["worktree_rel"]
-    resume_info, base_binding = _iso["resume_info"], _iso["base_binding"]
-    base_ref, base_sha, delivery_pf = _iso["base_ref"], _iso["base_sha"], _iso["delivery_pf"]
-
-    # 1. детект стека (в рабочем дереве)
-    profile = project_detector.detect(work_root)
-
-    # 3. политика по умолчанию: execution, границы — по work_root.
-    #    v2.81 Containment: даже базовая политика запрещает модели push-ить (block_push=True) —
-    #    доставка (PR) идёт ТОЛЬКО через доверенный delivery-слой, не через tool-loop.
-    #    sandbox=True дополнительно включает allowlist на shell (произвольный shell выключен)
-    #    и denylist на сетевые бинарники — см. tool_broker.sandbox_policy().
-    if policy is not None:
-        pol = policy
-    elif sandbox:
-        pol = tool_broker.sandbox_policy(child_root=str(work_root), write_scope=write_scope)
-    else:
-        pol = tool_broker.Policy(level="execution", child_root=str(work_root), block_push=True,
-                                 write_scope=write_scope)
-    is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
-
-    # 3b/3c. фаза install-deps (K6: _prepare_environment).
-    prepare, prepare_ok, baseline_checks, prepare_mutated_tree = _prepare_environment(
-        profile, work_root, pol, is_git, install_deps=install_deps, isolate=isolate,
-        baseline_diff=baseline_diff)
-
-    # 4/4a. фаза spec-gate: prompt-контекст (task+профиль+prelude/resume+провалы базы) + pre-authoring
-    #       Spec-First (K6: _assemble_context_and_author).
-    ctx, authored, authored_ev, spec_prestage_bad = _assemble_context_and_author(
-        task, profile, plan, wid, work_root, budget,
-        context_prelude=context_prelude, resume_context=resume_context,
-        baseline_diff=baseline_diff, baseline_checks=baseline_checks,
-        author=author, author_proposer=author_proposer, reevaluate_only=reevaluate_only)
-
-    # 4b. фаза execute (tool-loop): реализация + распознавание факта правок (K6: _run_tool_loop).
-    loop, applied, shell_changed, self_committed, head_sha = _run_tool_loop(
-        proposer, work_root, pol, ctx, is_git, budget=budget, max_steps=max_steps,
-        reevaluate_only=reevaluate_only, spec_prestage_bad=spec_prestage_bad)
-
-    # 5. фаза commit: фиксация на ветке ai-ops/<wid> ДО evidence — evidence бьётся о ТОЧНЫЙ SHA
-    #    (K6: _commit_work).
-    committed_sha, work_branch, work_produced_by, tree_clean_before_checks = _commit_work(
-        work_root, wid, task, is_git, applied, authored, shell_changed, self_committed, head_sha,
-        commit=commit, reevaluate_only=reevaluate_only)
-
-    # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
+    K6: вынесено из run_pipeline без изменения поведения. -> dict со всем, что нужно дальше для гейтов
+    и отчёта (changed_for_verification/coll/gate_ev/tree_clean_after_checks/regression_proof/exempt/
+    not_applicable/exempt_reason/tests_warn/ui_evidence_bundle/seam_advisory/reviews/security_pack_result/
+    effective_approval_signals).
+    """
     # v3.26.1 Progressive Verification: передаём changed_files для targeted test execution
     _changed_for_verification = _committed_changed_files(work_root, committed_sha) if (commit and is_git and committed_sha) else None
     coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification, broker=tool_broker)
@@ -776,6 +684,143 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         review=review, strict_judge_qualified=strict_judge_qualified,
         security_reviewer_proposer=security_reviewer_proposer,
         reviewer_proposer=reviewer_proposer, budget=budget)
+    return {"changed_for_verification": _changed_for_verification, "coll": coll, "gate_ev": gate_ev,
+            "tree_clean_after_checks": tree_clean_after_checks, "regression_proof": regression_proof,
+            "exempt": exempt, "not_applicable": not_applicable, "exempt_reason": exempt_reason,
+            "tests_warn": tests_warn, "ui_evidence_bundle": ui_evidence_bundle,
+            "seam_advisory": seam_advisory, "reviews": reviews,
+            "security_pack_result": security_pack_result,
+            "effective_approval_signals": effective_approval_signals}
+
+
+def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
+                 max_steps=40, feature=None, commit=False, allow_missing_tests=True,
+                 isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
+                 require_fix=False, discard_previous=False, sandbox=False,
+                 review=False, reviewer_proposer=None,
+                 author=False, author_proposer=None, plan=None, context_prelude=None,
+                 resume=False, resume_context=None, write_scope=None, base=None, defer_delivery=False,
+                 calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
+                 strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
+                 security_reviewer_proposer=None,   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
+                 reevaluate_only=False):   # v3.8.4: переоценить гейты существующего HEAD БЕЗ переавторинга
+    """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
+    [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
+
+    v2.108 (Operational Context): context_prelude — compiled payload из ContextBundle (реальное
+    содержимое релевантных правил/решений/спек), который РЕАЛЬНО попадает в prompt модели (prepend к
+    base_context tool loop) — не только статистика в отчёте.
+
+    v2.109 (Real Resume): resume=True — ПРОДОЛЖИТЬ WorkItem поверх уже подтверждённой работы, а не
+    начинать заново. Ветка ai-ops/<wid> и её коммиты НЕ удаляются (иначе потеряли бы результат);
+    worktree переиспользуется (или пере-подключается к сохранившейся ветке). resume_context —
+    состояние из RunHandoff (что сделано/решения/следующий шаг), реально подаётся модели в начало
+    prompt, чтобы она продолжила, а не переделала подтверждённое.
+
+    v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
+    чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
+    # v3.38 (K0-проводка): параметры прогона обязаны оставаться подмножеством объявленного
+    # контракта ядра (kernel/ports.ExecutionSpec). Это НЕ проверка реализации портов (реализации
+    # им ещё не соответствуют — долг Phase B, записан в installer.UNWIRED_MODULES), а страж
+    # дрейфа КОНТРАКТА: переименование поля в ports.py или новый параметр без записи в контракт
+    # краснеет на каждом прогоне, в том числе в дочке.
+    from ai_ops_kit.kernel import ports as _kports
+    _spec: _kports.ExecutionSpec = {
+        "task": task, "signals": dict(signals or {}), "child_root": str(child_root),
+        "feature": feature or "", "write_scope": list(write_scope or []),
+        "max_steps": max_steps, "commit": bool(commit), "baseline_diff": bool(baseline_diff),
+        "require_fix": bool(require_fix), "sandbox": bool(sandbox),
+        "review": bool(review), "author": bool(author)}
+    _spec_drift = set(_spec) - set(_kports.ExecutionSpec.__annotations__)
+    if _spec_drift:
+        raise SystemExit(f"контракт ядра разошёлся с конвейером: полей {sorted(_spec_drift)} "
+                         f"нет в kernel/ports.ExecutionSpec — обновите контракт или вызов")
+    child_root = Path(child_root)
+    signals = dict(signals or {})
+    signals.setdefault("task_text", task)
+
+    # 2. план (нужен workitem_id для имени ветки/worktree). v2.94: принимаем готовый план от
+    #    контроллера; иначе строим сами (обратная совместимость: прямой вызов run_pipeline).
+    if plan is None:
+        plan = run_plan.build_plan(signals, workitem_id=feature)
+    wid = plan["workitem_id"]
+
+    # 1b. изоляция + base-binding + resume -> _setup_isolation (K6). Прогон в отдельном worktree на
+    #     ветке ai-ops/<id>, основное дерево child не трогается; при отказе — ранний честный выход.
+    _iso = _setup_isolation(child_root, wid, base, isolate=isolate, resume=resume,
+                            reevaluate_only=reevaluate_only, discard_previous=discard_previous,
+                            open_pr=open_pr)
+    if _iso.get("error"):
+        return _iso["error"]
+    work_root, worktree_rel = _iso["work_root"], _iso["worktree_rel"]
+    resume_info, base_binding = _iso["resume_info"], _iso["base_binding"]
+    base_ref, base_sha, delivery_pf = _iso["base_ref"], _iso["base_sha"], _iso["delivery_pf"]
+
+    # 1. детект стека (в рабочем дереве)
+    profile = project_detector.detect(work_root)
+
+    # 3. политика по умолчанию: execution, границы — по work_root.
+    #    v2.81 Containment: даже базовая политика запрещает модели push-ить (block_push=True) —
+    #    доставка (PR) идёт ТОЛЬКО через доверенный delivery-слой, не через tool-loop.
+    #    sandbox=True дополнительно включает allowlist на shell (произвольный shell выключен)
+    #    и denylist на сетевые бинарники — см. tool_broker.sandbox_policy().
+    if policy is not None:
+        pol = policy
+    elif sandbox:
+        pol = tool_broker.sandbox_policy(child_root=str(work_root), write_scope=write_scope)
+    else:
+        pol = tool_broker.Policy(level="execution", child_root=str(work_root), block_push=True,
+                                 write_scope=write_scope)
+    is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
+
+    # 3b/3c. фаза install-deps (K6: _prepare_environment).
+    prepare, prepare_ok, baseline_checks, prepare_mutated_tree = _prepare_environment(
+        profile, work_root, pol, is_git, install_deps=install_deps, isolate=isolate,
+        baseline_diff=baseline_diff)
+
+    # 4/4a. фаза spec-gate: prompt-контекст (task+профиль+prelude/resume+провалы базы) + pre-authoring
+    #       Spec-First (K6: _assemble_context_and_author).
+    ctx, authored, authored_ev, spec_prestage_bad = _assemble_context_and_author(
+        task, profile, plan, wid, work_root, budget,
+        context_prelude=context_prelude, resume_context=resume_context,
+        baseline_diff=baseline_diff, baseline_checks=baseline_checks,
+        author=author, author_proposer=author_proposer, reevaluate_only=reevaluate_only)
+
+    # 4b. фаза execute (tool-loop): реализация + распознавание факта правок (K6: _run_tool_loop).
+    loop, applied, shell_changed, self_committed, head_sha = _run_tool_loop(
+        proposer, work_root, pol, ctx, is_git, budget=budget, max_steps=max_steps,
+        reevaluate_only=reevaluate_only, spec_prestage_bad=spec_prestage_bad)
+
+    # 5. фаза commit: фиксация на ветке ai-ops/<wid> ДО evidence — evidence бьётся о ТОЧНЫЙ SHA
+    #    (K6: _commit_work).
+    committed_sha, work_branch, work_produced_by, tree_clean_before_checks = _commit_work(
+        work_root, wid, task, is_git, applied, authored, shell_changed, self_committed, head_sha,
+        commit=commit, reevaluate_only=reevaluate_only)
+
+    # 6. evidence на зафиксированном SHA + наполнение gate_ev (collect/intake/regression/authored/
+    #    reevaluate-seed/освобождения/UI-evidence/seam-scan/reviews/security) -> _assemble_evidence (K6).
+    _ev = _assemble_evidence(
+        profile, work_root, pol, child_root, wid, plan, signals, loop,
+        commit=commit, is_git=is_git, committed_sha=committed_sha, base_sha=base_sha,
+        authored_ev=authored_ev, allow_missing_tests=allow_missing_tests,
+        calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence,
+        review=review, reviewer_proposer=reviewer_proposer, budget=budget,
+        strict_judge_qualified=strict_judge_qualified,
+        security_reviewer_proposer=security_reviewer_proposer, reevaluate_only=reevaluate_only)
+    _changed_for_verification = _ev["changed_for_verification"]
+    coll = _ev["coll"]
+    gate_ev = _ev["gate_ev"]
+    tree_clean_after_checks = _ev["tree_clean_after_checks"]
+    regression_proof = _ev["regression_proof"]
+    exempt = _ev["exempt"]
+    not_applicable = _ev["not_applicable"]
+    exempt_reason = _ev["exempt_reason"]
+    tests_warn = _ev["tests_warn"]
+    ui_evidence_bundle = _ev["ui_evidence_bundle"]
+    seam_advisory = _ev["seam_advisory"]
+    reviews = _ev["reviews"]
+    security_pack_result = _ev["security_pack_result"]
+    effective_approval_signals = _ev["effective_approval_signals"]
 
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
     #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.

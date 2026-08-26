@@ -51,12 +51,15 @@ scope: ai_ops_kit/engine/
 # 2026-08-26 (K6-глубина, срез isolation): из run_pipeline вынесен _setup_isolation (base-binding +
 # worktree-изоляция + resume) -> run_pipeline 730 -> 616. Глобальный max по-прежнему run_pipeline (616).
 # Потолок 616.
-max_function_lines: 616
+# 2026-08-26 (K6-глубина, срез evidence): из run_pipeline вынесен _assemble_evidence (сбор evidence
+# на SHA + наполнение gate_ev: collect/intake/regression/authored/reevaluate/освобождения/UI/seam/
+# reviews/security) -> run_pipeline 616 -> 500. Глобальный max по-прежнему run_pipeline (500). Потолок 500.
+max_function_lines: 500
 
 # Информация о текущей max-функции (для справки).
 max_function: run_pipeline
 max_function_file: execution_pipeline.py
-max_function_lineno: 535
+max_function_lineno: 696
 
 # Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
 top_10:
@@ -66,8 +69,8 @@ top_10:
     size: 315
   - name: run_pipeline
     file: execution_pipeline.py
-    lineno: 535
-    size: 616
+    lineno: 696
+    size: 500
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532
