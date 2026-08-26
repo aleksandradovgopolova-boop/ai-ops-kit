@@ -2128,3 +2128,50 @@ class TestFixLoopIntegration:
         root, _ = fixloop_run
         jr = _ls.journal_read(root / "features" / "fixloop" / "lifecycle-journal.jsonl")
         assert any(e.get("kind") == "fix_attempt" for e in jr["events"])
+
+
+@pytest.fixture(scope="module")
+def hybrid_run(tmp_path_factory):
+    """Pipeline-прогон с context_hybrid=True (mock-предложитель). Один раз на модуль.
+
+    Закрывает пробел покрытия под расщепление K6: под-блок hybrid фазы компиляции
+    контекста (context_hybrid) не гонялся ни одним тестом до этого.
+    """
+    root = tmp_path_factory.mktemp("hybrid")
+    subprocess.run(["git", "-C", str(root), "init", "-q"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], capture_output=True)
+    (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "i"], capture_output=True)
+    pscript = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+    rp = ai_ops_run.run(
+        task_text="добавить a",
+        signals={"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]},
+        child_root=root, engine="pipeline", proposer=lambda c: next(pscript),
+        context_hybrid=True,
+    )
+    return root, rp
+
+
+@pytest.mark.unit
+class TestPipelineContextHybrid:
+    """Характеристика под-блока hybrid фазы компиляции контекста (context_hybrid=True).
+
+    Фиксирует поведение ДО расщепления run() (K6-глубина): на минимальном репозитории
+    без v2-additions hybrid — fail-safe v1-only, ничего не подаётся сверх v1.
+    """
+
+    def test_report_has_context_hybrid(self, hybrid_run):
+        """rep['context_hybrid'] присутствует и является ContextHybrid."""
+        _, rp = hybrid_run
+        assert rp["context_hybrid"]["kind"] == "ContextHybrid"
+
+    def test_v1_only_fail_safe_on_minimal_repo(self, hybrid_run):
+        """Без v2-additions: mode=v1-only, ничего не подано сверх v1, exact-snapshot соблюдён."""
+        _, rp = hybrid_run
+        ch = rp["context_hybrid"]
+        assert ch["mode"] == "v1-only"
+        assert ch["fed_to_model"] is False
+        assert ch["v2_additions"] == []
+        assert ch["exact_snapshot"] is True
