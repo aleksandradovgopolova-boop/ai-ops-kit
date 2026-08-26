@@ -735,3 +735,110 @@ class TestPipelineSignals:
         bp_call = mock_run_plan.build_plan.call_args
         inner_signals = bp_call[0][0]  # первый аргумент build_plan — signals
         assert inner_signals.get("task_text") == "my task"
+
+
+# ---------------------------------------------------------------------------
+# Характеристические тесты фазы security (committed-путь)
+#
+# Существующие тесты выше гоняют happy-path с commit=False -> committed_sha=None ->
+# фаза security НЕ исполняется. Эти тесты доводят прогон до РЕАЛЬНОГО коммита (мок-петля
+# пишет файл в рабочее дерево, commit=True), поэтому фаза security выполняется на НАСТОЯЩЕМ
+# security_pack (не на моках) и её вердикт можно зафиксировать до расщепления run_pipeline (K6).
+#
+# ВАЖНО: здесь НЕ патчатся _git и _resolve_base — коммит должен произойти по-настоящему,
+# иначе committed_sha=None и фаза security снова не исполнится.
+# ---------------------------------------------------------------------------
+
+def _committing_loop(files):
+    """side_effect для tool_loop.run_loop: пишет files={rel: content} в work_root и
+    возвращает stopped=done -> появляется реальная правка -> коммит на ветке."""
+    def _side(proposer, work_root, pol, **kw):
+        for rel, content in files.items():
+            (Path(work_root) / rel).write_text(content, encoding="utf-8")
+        return _make_loop_result(stopped="done", steps=1)
+    return _side
+
+
+@pytest.mark.unit
+class TestPipelineSecurityCharacterization:
+    """Фаза security: доменный вердикт security_pack -> gate_ev['security'].
+
+    Фиксируем ДВЕ опорные ветви на committed-пути:
+    - чистый дифф -> security 'pass' (домены закрыты детерминированно), 'security' НЕ форсится
+      в оценку гейтов;
+    - новая зависимость -> security 'fail' (нужен ApprovalRecord) И 'security' ФОРСИТСЯ в
+      gate_ids (инвариант v2.125: security-находка блокирует даже в QUICK-workflow без гейта
+      security).
+    """
+
+    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_PATCH_BASE}.tool_loop")
+    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_PATCH_BASE}.project_detector")
+    @patch(f"{_PATCH_BASE}.run_plan")
+    def test_clean_diff_security_passes(self, mock_run_plan, mock_detect, mock_broker,
+                                        mock_loop, mock_evidence, mock_gates, mock_contour,
+                                        child_repo):
+        """Чистый дифф (только документация) -> security='pass', 'security' НЕ в gate_ids."""
+        mock_run_plan.build_plan.return_value = _make_plan()
+        mock_detect.detect.return_value = _make_profile()
+        mock_broker.Policy.return_value = _make_policy()
+        mock_loop.run_loop.side_effect = _committing_loop({"notes.md": "just docs\n"})
+        mock_evidence.collect.return_value = _make_evidence_result()
+        mock_gates.evaluate.return_value = _make_gates_result()
+
+        from ai_ops_kit.engine.execution_pipeline import run_pipeline
+        result = run_pipeline("task", {}, child_repo, _make_proposer(),
+                              commit=True, install_deps=False)
+
+        # security-вердикт, переданный в gate_executor.evaluate (2-й позиционный — gate_ev)
+        gate_ev = mock_gates.evaluate.call_args[0][1]
+        assert gate_ev["security"]["status"] == "pass"
+        assert set(gate_ev["security"]["provided"]) == {
+            "no_secrets", "no_injection_surface", "deps_approved"}
+        # security НЕ форсится в оценку гейтов на чистом диффе
+        assert "security" not in mock_gates.evaluate.call_args.kwargs["gate_ids"]
+        # проекция для отчёта присутствует и честна
+        assert result["security_scan"]["overall"] == "clear"
+
+    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_PATCH_BASE}.tool_loop")
+    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_PATCH_BASE}.project_detector")
+    @patch(f"{_PATCH_BASE}.run_plan")
+    def test_new_dependency_forces_security_gate(self, mock_run_plan, mock_detect, mock_broker,
+                                                 mock_loop, mock_evidence, mock_gates, mock_contour,
+                                                 child_repo):
+        """Новая зависимость в диффе -> security='fail' (нужен ApprovalRecord) И 'security'
+        ФОРСИТСЯ в gate_ids, хотя в плане QUICK гейта security нет (инвариант v2.125)."""
+        import subprocess
+        # базовый requirements.txt уже в репозитории (до правки)
+        (child_repo / "requirements.txt").write_text("existing==1.0\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(child_repo), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(child_repo), "commit", "-q", "-m", "add reqs"], check=True)
+
+        mock_run_plan.build_plan.return_value = _make_plan()   # base_workflow=quick, без security
+        mock_detect.detect.return_value = _make_profile()
+        mock_broker.Policy.return_value = _make_policy()
+        # петля добавляет НОВУЮ прямую зависимость
+        mock_loop.run_loop.side_effect = _committing_loop(
+            {"requirements.txt": "existing==1.0\nrequests==2.31.0\n"})
+        mock_evidence.collect.return_value = _make_evidence_result()
+        mock_gates.evaluate.return_value = _make_gates_result()
+
+        from ai_ops_kit.engine.execution_pipeline import run_pipeline
+        result = run_pipeline("task", {}, child_repo, _make_proposer(),
+                              commit=True, install_deps=False)
+
+        gate_ev = mock_gates.evaluate.call_args[0][1]
+        assert gate_ev["security"]["status"] == "fail"
+        # причина — незакрытое человеко-одобрение по домену dependencies
+        domains = [m.get("domain") for m in gate_ev["security"].get("approvals_missing", [])]
+        assert "dependencies" in domains
+        # ФОРСИНГ: security добавлен в оценку гейтов несмотря на QUICK-план без него
+        assert "security" in mock_gates.evaluate.call_args.kwargs["gate_ids"]
+        assert result["security_scan"]["overall"] == "needs_review"

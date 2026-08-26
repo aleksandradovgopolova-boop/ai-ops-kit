@@ -215,6 +215,193 @@ def _security_pack_for_report(security_pack_result):
     return _sp_report.for_report(security_pack_result)
 
 
+def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_ev, signals,
+                       *, review, strict_judge_qualified, security_reviewer_proposer,
+                       reviewer_proposer, budget):
+    """Доменный security-вердикт (security/security-domains.yaml) -> gate_ev['security'].
+    v3.38 (K6-глубина): вынесено из run_pipeline без изменения поведения.
+
+    Проверяются только ПРИМЕНИМЫЕ к изменению домены; детерминированные (secrets/deps/
+    injection) блокируют по severity; домены с security_reviewer/human -> needs_review
+    (судья/человек). security проходит ТОЛЬКО если pack 'clear'. Возвращает обновлённый
+    gate_ev, результат пака и effective_approval_signals (намерение + findings-derived).
+    -> (gate_ev, security_pack_result, effective_approval_signals)."""
+    security_pack_result = None
+    _security_scan_error = None
+    # v2.125 (finding живого прогона): security pack запускается на ЛЮБОМ коммите (не только когда
+    # "security" в плане workflow). Security-релевантная находка в диффе (новая зависимость/секрет)
+    # обязана быть замечена и в QUICK — иначе новая зависимость в QUICK-задаче проскакивала без
+    # ApprovalRecord. Если находка -> gate_ev.security=fail -> ниже security форсируется в оценку гейтов.
+    if committed_sha and is_git and "security" not in gate_ev:
+        from ai_ops_kit.security import security_pack
+        try:
+            security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
+        except Exception as _e:  # noqa: BLE001
+            _security_scan_error = str(_e)
+            security_pack_result = None
+    # v3.0-rc2 (P0.6): universal security scan — техническая ОШИБКА скана = FAIL-CLOSED, а не тихий обход.
+    # Раньше exception -> result=None -> security-гейт не добавлялся -> QUICK оставался зелёным.
+    effective_approval_signals = dict(signals)   # v3.0-rc2 (P0.5): signals намерения + findings-derived
+    if _security_scan_error:
+        gate_ev = dict(gate_ev)
+        gate_ev["security"] = {"status": "fail",
+                               "blockers": [f"security scan упал (fail-closed): {_security_scan_error}"]}
+    elif security_pack_result:
+        overall = security_pack_result["overall"]
+        gate_ev = dict(gate_ev)
+        # v2.123 (P0.2): ЕДИНЫЙ ApprovalDecision. Требования человеко-одобрения выводим из ВХОДНЫХ signals
+        # И из РЕАЛЬНЫХ находок security pack (новая зависимость/секрет, внесённые самой правкой), даже
+        # если сигнала заранее не было. boolean signals.human_approved БОЛЬШЕ НЕ используется — засчитывается
+        # ТОЛЬКО валидный ApprovalRecord (человек). Reviewer (writer≠judge) НЕ заменяет человеко-одобрение.
+        from ai_ops_kit.gates import approvals as _appr
+        _merged_sig = {**signals, **_appr.signals_from_findings(security_pack_result)}
+        effective_approval_signals = _merged_sig   # v3.0-rc2 (P0.5): используется и в recheck ниже
+        _appr_missing = list(_appr.check(_merged_sig, child_root, wid).get("missing") or [])
+        if _merged_sig.get("destructive"):
+            _recs = _appr.load_approvals(child_root, wid)
+            # v3.0.11 (finding аудита P1): destructive — high-risk, поэтому STRICT-валидация (expiry +
+            # plan-binding + trusted source), как для остальных high-risk доменов. Прежде вызывался
+            # _record_valid(r) с дефолтами -> просроченное/привязанное к другому плану/недоверенное
+            # одобрение проходило (слабее, чем approvals.check() для high-risk).
+            _dnow = _appr._now_iso()
+            _dph = _appr.plan_binding_hash(child_root, wid)
+            if not any(r.get("approval") == "destructive"
+                       and _appr._record_valid(r, now=_dnow, plan_hash=_dph, strict=True) for r in _recs):
+                _appr_missing.append({"domain": "destructive",
+                                      "reason": "нет строго-валидного ApprovalRecord для деструктивного "
+                                                "действия (expiry/plan-binding/trusted source)"})
+        human_ok = not _appr_missing
+        if not human_ok:
+            # человеко-одобрение требуется (по сигналам ИЛИ по находкам диффа) и его нет -> fail, независимо
+            # от чистого scan / pass ревьюера.
+            gate_ev["security"] = {"status": "fail",
+                                   "blockers": [f"{m['domain']}: {m.get('reason', 'нужно человеко-одобрение (ApprovalRecord)')}"
+                                                for m in _appr_missing],
+                                   "approvals_missing": _appr_missing,
+                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
+        elif overall in ("clear", "advisory"):
+            # `advisory` — домены, поднятые ТОЛЬКО совпадением по содержимому и БЕЗ находок
+            # (`security_pack._content_only`). Гейт их не держит, но и не молчит: список уезжает в
+            # evidence и в run-report, иначе «проверено чисто» и «проверять было нечего» слились бы.
+            _adv = security_pack_result.get("advisory") or []
+            gate_ev["security"] = {"status": "pass",
+                                   "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                   "advisory": _adv,
+                                   "pack": {"applicable": security_pack_result["applicable_domains"],
+                                            "advisory": _adv,
+                                            "note": ("все применимые security-домены закрыты детерминированным evidence"
+                                                     if not _adv else
+                                                     "детерминированные проверки чисты; домены "
+                                                     + ", ".join(_adv) + " подняты только совпадением по "
+                                                     "содержимому и без находок — предупреждение, не ворота")}}
+        elif (overall == "needs_review" and not security_pack_result["blocking"]
+              and committed_sha and not (strict_judge_qualified and review)
+              and not (signals or {}).get("_sequence_internal")):
+            # v3.7.3 (#5) STRICT SECURITY JUDGE: security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ
+            # security-судья (strict_judge_qualified) ЛИБО ЧЕЛОВЕК (ApprovalRecord). Общий code reviewer НЕ
+            # закрывает security. Нет qualified судьи -> pending_human ДО валидного человеческого одобрения.
+            # ПОД-ПАКЕТ executor'а (_sequence_internal) НЕ хардстопим здесь: security судится на АГРЕГАТЕ
+            # (integration-SHA, _aggregate_close_security). Enforcement #5 на агрегате executor'а — следующий шаг.
+            from ai_ops_kit.gates import approvals as _appr_sec
+            _sec_recs = _appr_sec.load_approvals(child_root, wid)
+            _sec_now, _sec_ph = _appr_sec._now_iso(), _appr_sec.plan_binding_hash(child_root, wid)
+            _sec_domains = {"security", "security_review", *security_pack_result["needs_review"]}
+            # v3.8.3: одобрение валидно, если привязано к ревизии плана (_sec_ph) ЛИБО к ТОЧНОМУ committed_sha.
+            # SHA-binding стабилен при reevaluate (SHA не меняется, даже если run() перезаписал run-plan.yaml)
+            # и семантически сильнее: человек одобряет КОНКРЕТНЫЙ код, а не ревизию плана (как aggregate #4b).
+            def _appr_valid_here(r):
+                return (_appr_sec._record_valid(r, now=_sec_now, plan_hash=_sec_ph, strict=True)
+                        or (committed_sha and _appr_sec._record_valid(r, now=_sec_now, plan_hash=committed_sha, strict=True)))
+            _human_closed = any(r.get("approval") in _sec_domains and _appr_valid_here(r) for r in _sec_recs)
+            if _human_closed:
+                gate_ev["security"] = {"status": "pass",
+                                       "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                       "human_approved": True,
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "note": "нет qualified security-судьи -> needs_review закрыт "
+                                                        "человеком (валидный ApprovalRecord)"}}
+            else:
+                _why_no_judge = ("судья на этом уровне задачи выключен автоподбором"
+                                 if not review else "нет QUALIFIED security-судьи")
+                gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
+                                       "blockers": [_why_no_judge + ": needs_review домены "
+                                                    "закрывает ТОЛЬКО квалифицированный судья или человек "
+                                                    "(валидный ApprovalRecord); общий code reviewer НЕ "
+                                                    "закрывает security. Домены: "
+                                                    + ", ".join(security_pack_result["needs_review"])
+                                                    + ". Человеку закрыть так: python3 "
+                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "
+                                                    + str(wid) + " --approval <домен> --by <кто> "
+                                                    "--scope <что> --reason <почему>"],
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "needs_review": security_pack_result["needs_review"]}}
+        elif (overall == "needs_review" and not security_pack_result["blocking"]
+              and review and committed_sha and (security_reviewer_proposer or reviewer_proposer) is not None):
+            # v2.106/v3.7.3: КВАЛИФИЦИРОВАННЫЙ security-судья (strict_judge_qualified) закрывает needs_review.
+            # Судья — ОТДЕЛЬНЫЙ security_reviewer_proposer (не общий code reviewer); fallback только если он
+            # не передан (совместимость). Блокирующие детерминированные находки судья НЕ переопределяет.
+            sec_status, sec_res = _review_security(security_reviewer_proposer or reviewer_proposer, work_root,
+                                                   security_pack_result, committed_sha, budget)
+            if sec_status == "pass":
+                gate_ev["security"] = {"status": "pass",
+                                       "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
+                                       "reviewer": {"status": sec_status},
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "note": "детерминированные домены чисты + независимый "
+                                                        "security-reviewer вынес pass по needs_review"}}
+            else:
+                # v3.6.8 (finding живой квалификации): раньше причина отказа вердикта была НЕМА
+                # («не вынес pass»). Теперь фиксируем ТОЧНЫЕ ошибки вердикта (_review_security кладёт их
+                # в res["invalid"]) + структурную диагностику — чтобы видеть, промпт/формат это или модель.
+                _inv = sec_res.get("invalid") if isinstance(sec_res, dict) else None
+                _raw = (sec_res.get("raw") if isinstance(sec_res, dict) and "raw" in sec_res else sec_res)
+                _diag = {}
+                if isinstance(_raw, dict):
+                    _dr = _raw.get("domain_results")
+                    _diag = {"raw_keys": sorted(_raw.keys()),
+                             "has_domain_results": isinstance(_dr, list) and bool(_dr),
+                             "domain_results_count": len(_dr) if isinstance(_dr, list) else 0}
+                gate_ev["security"] = {"status": "fail", "blockers": ["security-reviewer не вынес pass"],
+                                       "reviewer": {"status": sec_status},
+                                       "verdict_errors": _inv, "verdict_diag": _diag,
+                                       "pack": {"applicable": security_pack_result["applicable_domains"],
+                                                "needs_review": security_pack_result["needs_review"]}}
+        else:
+            blockers = []
+            if security_pack_result["blocking"]:
+                blockers.append("блокирующие домены (critical/high находки): " + ", ".join(security_pack_result["blocking"]))
+            if security_pack_result["needs_review"]:
+                blockers.append("нужен независимый security-reviewer/человек по доменам: "
+                                + ", ".join(security_pack_result["needs_review"]))
+            gate_ev["security"] = {"status": "fail", "blockers": blockers,
+                                   "pack": {"applicable": security_pack_result["applicable_domains"],
+                                            "blocking": security_pack_result["blocking"],
+                                            "needs_review": security_pack_result["needs_review"]}}
+
+        # v3.0-rc20 (finding аудита P0): БРАНЧ-НЕЗАВИСИМАЯ проверка — high-risk домены, применимые ПО
+        # РЕАЛЬНО ИЗМЕНЁННЫМ ПУТЯМ (Dockerfile/CI/auth), требуют человеческого ApprovalRecord, даже если
+        # security-reviewer/детерминированные проверки дали pass. Неожиданное изменение прод-конфига без
+        # одобрения -> security=fail. Форсируется поверх любой ветки выше.
+        # v3.0.2 (finding аудита P1): изменённые файлы берём из EXECUTION-root (worktree), а
+        # ApprovalRecord'ы/plan-binding — из LIFECYCLE-root (child_root/features), где их создаёт человек
+        # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
+        # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
+        try:
+            from ai_ops_kit.security import security_scan as _ss
+            _sec_changed = _ss._git_changed_files(work_root, committed_sha + "^") if committed_sha else []
+        except Exception:  # noqa: BLE001
+            _sec_changed = []
+        _hu = _human_approval_domains_uncovered(child_root, wid, _sec_changed, diff_root=work_root)
+        if _hu and (gate_ev.get("security") or {}).get("status") != "fail":
+            gate_ev["security"] = {"status": "fail",
+                                   "blockers": ["high-risk изменение по путям без человеческого ApprovalRecord "
+                                                "(reviewer не закрывает): " + ", ".join(_hu)],
+                                   "human_approval_uncovered": _hu,
+                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
+    return gate_ev, security_pack_result, effective_approval_signals
+
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
@@ -692,184 +879,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                         calibrated_enforcement=calibrated_enforcement,
                                         ui_evidence=ui_evidence)
 
-    # 6e. v2.95 -> v2.101 Security Pack: доменный security-вердикт (security/security-domains.yaml).
-    #     Проверяются только ПРИМЕНИМЫЕ к изменению домены; детерминированные (secrets/deps/injection)
-    #     ловятся с деталями и блокируют по severity. Домены, чьё required_evidence целиком
-    #     детерминированно (secrets/dependencies), авто-закрываются при чистоте; домены с
-    #     security_reviewer/human — needs_review (судья/человек). security проходит ТОЛЬКО если
-    #     pack "clear" (все применимые домены закрыты детерминированно) — иначе честный блок.
-    security_pack_result = None
-    _security_scan_error = None
-    # v2.125 (finding живого прогона): security pack запускается на ЛЮБОМ коммите (не только когда
-    # "security" в плане workflow). Security-релевантная находка в диффе (новая зависимость/секрет)
-    # обязана быть замечена и в QUICK — иначе новая зависимость в QUICK-задаче проскакивала без
-    # ApprovalRecord. Если находка -> gate_ev.security=fail -> ниже security форсируется в оценку гейтов.
-    if committed_sha and is_git and "security" not in gate_ev:
-        from ai_ops_kit.security import security_pack
-        try:
-            security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
-        except Exception as _e:  # noqa: BLE001
-            _security_scan_error = str(_e)
-            security_pack_result = None
-    # v3.0-rc2 (P0.6): universal security scan — техническая ОШИБКА скана = FAIL-CLOSED, а не тихий обход.
-    # Раньше exception -> result=None -> security-гейт не добавлялся -> QUICK оставался зелёным.
-    effective_approval_signals = dict(signals)   # v3.0-rc2 (P0.5): signals намерения + findings-derived
-    if _security_scan_error:
-        gate_ev = dict(gate_ev)
-        gate_ev["security"] = {"status": "fail",
-                               "blockers": [f"security scan упал (fail-closed): {_security_scan_error}"]}
-    elif security_pack_result:
-        overall = security_pack_result["overall"]
-        gate_ev = dict(gate_ev)
-        # v2.123 (P0.2): ЕДИНЫЙ ApprovalDecision. Требования человеко-одобрения выводим из ВХОДНЫХ signals
-        # И из РЕАЛЬНЫХ находок security pack (новая зависимость/секрет, внесённые самой правкой), даже
-        # если сигнала заранее не было. boolean signals.human_approved БОЛЬШЕ НЕ используется — засчитывается
-        # ТОЛЬКО валидный ApprovalRecord (человек). Reviewer (writer≠judge) НЕ заменяет человеко-одобрение.
-        from ai_ops_kit.gates import approvals as _appr
-        _merged_sig = {**signals, **_appr.signals_from_findings(security_pack_result)}
-        effective_approval_signals = _merged_sig   # v3.0-rc2 (P0.5): используется и в recheck ниже
-        _appr_missing = list(_appr.check(_merged_sig, child_root, wid).get("missing") or [])
-        if _merged_sig.get("destructive"):
-            _recs = _appr.load_approvals(child_root, wid)
-            # v3.0.11 (finding аудита P1): destructive — high-risk, поэтому STRICT-валидация (expiry +
-            # plan-binding + trusted source), как для остальных high-risk доменов. Прежде вызывался
-            # _record_valid(r) с дефолтами -> просроченное/привязанное к другому плану/недоверенное
-            # одобрение проходило (слабее, чем approvals.check() для high-risk).
-            _dnow = _appr._now_iso()
-            _dph = _appr.plan_binding_hash(child_root, wid)
-            if not any(r.get("approval") == "destructive"
-                       and _appr._record_valid(r, now=_dnow, plan_hash=_dph, strict=True) for r in _recs):
-                _appr_missing.append({"domain": "destructive",
-                                      "reason": "нет строго-валидного ApprovalRecord для деструктивного "
-                                                "действия (expiry/plan-binding/trusted source)"})
-        human_ok = not _appr_missing
-        if not human_ok:
-            # человеко-одобрение требуется (по сигналам ИЛИ по находкам диффа) и его нет -> fail, независимо
-            # от чистого scan / pass ревьюера.
-            gate_ev["security"] = {"status": "fail",
-                                   "blockers": [f"{m['domain']}: {m.get('reason', 'нужно человеко-одобрение (ApprovalRecord)')}"
-                                                for m in _appr_missing],
-                                   "approvals_missing": _appr_missing,
-                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
-        elif overall in ("clear", "advisory"):
-            # `advisory` — домены, поднятые ТОЛЬКО совпадением по содержимому и БЕЗ находок
-            # (`security_pack._content_only`). Гейт их не держит, но и не молчит: список уезжает в
-            # evidence и в run-report, иначе «проверено чисто» и «проверять было нечего» слились бы.
-            _adv = security_pack_result.get("advisory") or []
-            gate_ev["security"] = {"status": "pass",
-                                   "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
-                                   "advisory": _adv,
-                                   "pack": {"applicable": security_pack_result["applicable_domains"],
-                                            "advisory": _adv,
-                                            "note": ("все применимые security-домены закрыты детерминированным evidence"
-                                                     if not _adv else
-                                                     "детерминированные проверки чисты; домены "
-                                                     + ", ".join(_adv) + " подняты только совпадением по "
-                                                     "содержимому и без находок — предупреждение, не ворота")}}
-        elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and committed_sha and not (strict_judge_qualified and review)
-              and not (signals or {}).get("_sequence_internal")):
-            # v3.7.3 (#5) STRICT SECURITY JUDGE: security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ
-            # security-судья (strict_judge_qualified) ЛИБО ЧЕЛОВЕК (ApprovalRecord). Общий code reviewer НЕ
-            # закрывает security. Нет qualified судьи -> pending_human ДО валидного человеческого одобрения.
-            # ПОД-ПАКЕТ executor'а (_sequence_internal) НЕ хардстопим здесь: security судится на АГРЕГАТЕ
-            # (integration-SHA, _aggregate_close_security). Enforcement #5 на агрегате executor'а — следующий шаг.
-            from ai_ops_kit.gates import approvals as _appr_sec
-            _sec_recs = _appr_sec.load_approvals(child_root, wid)
-            _sec_now, _sec_ph = _appr_sec._now_iso(), _appr_sec.plan_binding_hash(child_root, wid)
-            _sec_domains = {"security", "security_review", *security_pack_result["needs_review"]}
-            # v3.8.3: одобрение валидно, если привязано к ревизии плана (_sec_ph) ЛИБО к ТОЧНОМУ committed_sha.
-            # SHA-binding стабилен при reevaluate (SHA не меняется, даже если run() перезаписал run-plan.yaml)
-            # и семантически сильнее: человек одобряет КОНКРЕТНЫЙ код, а не ревизию плана (как aggregate #4b).
-            def _appr_valid_here(r):
-                return (_appr_sec._record_valid(r, now=_sec_now, plan_hash=_sec_ph, strict=True)
-                        or (committed_sha and _appr_sec._record_valid(r, now=_sec_now, plan_hash=committed_sha, strict=True)))
-            _human_closed = any(r.get("approval") in _sec_domains and _appr_valid_here(r) for r in _sec_recs)
-            if _human_closed:
-                gate_ev["security"] = {"status": "pass",
-                                       "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
-                                       "human_approved": True,
-                                       "pack": {"applicable": security_pack_result["applicable_domains"],
-                                                "note": "нет qualified security-судьи -> needs_review закрыт "
-                                                        "человеком (валидный ApprovalRecord)"}}
-            else:
-                _why_no_judge = ("судья на этом уровне задачи выключен автоподбором"
-                                 if not review else "нет QUALIFIED security-судьи")
-                gate_ev["security"] = {"status": "fail", "human_handoff": True, "pending_human": True,
-                                       "blockers": [_why_no_judge + ": needs_review домены "
-                                                    "закрывает ТОЛЬКО квалифицированный судья или человек "
-                                                    "(валидный ApprovalRecord); общий code reviewer НЕ "
-                                                    "закрывает security. Домены: "
-                                                    + ", ".join(security_pack_result["needs_review"])
-                                                    + ". Человеку закрыть так: python3 "
-                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "
-                                                    + str(wid) + " --approval <домен> --by <кто> "
-                                                    "--scope <что> --reason <почему>"],
-                                       "pack": {"applicable": security_pack_result["applicable_domains"],
-                                                "needs_review": security_pack_result["needs_review"]}}
-        elif (overall == "needs_review" and not security_pack_result["blocking"]
-              and review and committed_sha and (security_reviewer_proposer or reviewer_proposer) is not None):
-            # v2.106/v3.7.3: КВАЛИФИЦИРОВАННЫЙ security-судья (strict_judge_qualified) закрывает needs_review.
-            # Судья — ОТДЕЛЬНЫЙ security_reviewer_proposer (не общий code reviewer); fallback только если он
-            # не передан (совместимость). Блокирующие детерминированные находки судья НЕ переопределяет.
-            sec_status, sec_res = _review_security(security_reviewer_proposer or reviewer_proposer, work_root,
-                                                   security_pack_result, committed_sha, budget)
-            if sec_status == "pass":
-                gate_ev["security"] = {"status": "pass",
-                                       "provided": ["no_secrets", "no_injection_surface", "deps_approved"],
-                                       "reviewer": {"status": sec_status},
-                                       "pack": {"applicable": security_pack_result["applicable_domains"],
-                                                "note": "детерминированные домены чисты + независимый "
-                                                        "security-reviewer вынес pass по needs_review"}}
-            else:
-                # v3.6.8 (finding живой квалификации): раньше причина отказа вердикта была НЕМА
-                # («не вынес pass»). Теперь фиксируем ТОЧНЫЕ ошибки вердикта (_review_security кладёт их
-                # в res["invalid"]) + структурную диагностику — чтобы видеть, промпт/формат это или модель.
-                _inv = sec_res.get("invalid") if isinstance(sec_res, dict) else None
-                _raw = (sec_res.get("raw") if isinstance(sec_res, dict) and "raw" in sec_res else sec_res)
-                _diag = {}
-                if isinstance(_raw, dict):
-                    _dr = _raw.get("domain_results")
-                    _diag = {"raw_keys": sorted(_raw.keys()),
-                             "has_domain_results": isinstance(_dr, list) and bool(_dr),
-                             "domain_results_count": len(_dr) if isinstance(_dr, list) else 0}
-                gate_ev["security"] = {"status": "fail", "blockers": ["security-reviewer не вынес pass"],
-                                       "reviewer": {"status": sec_status},
-                                       "verdict_errors": _inv, "verdict_diag": _diag,
-                                       "pack": {"applicable": security_pack_result["applicable_domains"],
-                                                "needs_review": security_pack_result["needs_review"]}}
-        else:
-            blockers = []
-            if security_pack_result["blocking"]:
-                blockers.append("блокирующие домены (critical/high находки): " + ", ".join(security_pack_result["blocking"]))
-            if security_pack_result["needs_review"]:
-                blockers.append("нужен независимый security-reviewer/человек по доменам: "
-                                + ", ".join(security_pack_result["needs_review"]))
-            gate_ev["security"] = {"status": "fail", "blockers": blockers,
-                                   "pack": {"applicable": security_pack_result["applicable_domains"],
-                                            "blocking": security_pack_result["blocking"],
-                                            "needs_review": security_pack_result["needs_review"]}}
-
-        # v3.0-rc20 (finding аудита P0): БРАНЧ-НЕЗАВИСИМАЯ проверка — high-risk домены, применимые ПО
-        # РЕАЛЬНО ИЗМЕНЁННЫМ ПУТЯМ (Dockerfile/CI/auth), требуют человеческого ApprovalRecord, даже если
-        # security-reviewer/детерминированные проверки дали pass. Неожиданное изменение прод-конфига без
-        # одобрения -> security=fail. Форсируется поверх любой ветки выше.
-        # v3.0.2 (finding аудита P1): изменённые файлы берём из EXECUTION-root (worktree), а
-        # ApprovalRecord'ы/plan-binding — из LIFECYCLE-root (child_root/features), где их создаёт человек
-        # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
-        # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
-        try:
-            from ai_ops_kit.security import security_scan as _ss
-            _sec_changed = _ss._git_changed_files(work_root, committed_sha + "^") if committed_sha else []
-        except Exception:  # noqa: BLE001
-            _sec_changed = []
-        _hu = _human_approval_domains_uncovered(child_root, wid, _sec_changed, diff_root=work_root)
-        if _hu and (gate_ev.get("security") or {}).get("status") != "fail":
-            gate_ev["security"] = {"status": "fail",
-                                   "blockers": ["high-risk изменение по путям без человеческого ApprovalRecord "
-                                                "(reviewer не закрывает): " + ", ".join(_hu)],
-                                   "human_approval_uncovered": _hu,
-                                   "pack": {"applicable": security_pack_result["applicable_domains"]}}
+    # 6e. v2.95 -> v2.101 Security Pack: доменный security-вердикт -> gate_ev['security'].
+    #     v3.38 (K6): тело вынесено в _evaluate_security (см. функцию выше).
+    gate_ev, security_pack_result, effective_approval_signals = _evaluate_security(
+        work_root, child_root, wid, committed_sha, is_git, gate_ev, signals,
+        review=review, strict_judge_qualified=strict_judge_qualified,
+        security_reviewer_proposer=security_reviewer_proposer,
+        reviewer_proposer=reviewer_proposer, budget=budget)
 
     # 7. гейты RunPlan (base + треки), c evidence из коллектора + сигналы (условный approval) +
     #    освобождения по неприменимым проверкам. tested_revision -> в evidence/аудит гейтов.

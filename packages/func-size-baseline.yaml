@@ -1,6 +1,6 @@
 # Ратчет максимального размера функции в ai_ops_kit/engine/.
 #
-# Замер сделан ДО расщепления run_pipeline (K6). Потолок = текущий max.
+# K6-глубина (Волна 5): god-функции реально расщепляются на фазы, а не только замораживаются.
 # Ратчет ходит ТОЛЬКО ВНИЗ: разбиение god-функций снижает потолок,
 # новая god-функция сверх потолка — красный сигнал.
 #
@@ -12,7 +12,9 @@ scope: ai_ops_kit/engine/
 # Потолок максимального размера функции (в строках).
 # 2026-08-25: 1285 -> 1275 — замер после K6 (из run_pipeline извлечено 6 функций) показал
 # снижение max; ратчет ходит только вниз, потолок опущен под факт.
-# Текущий max: run() в ai_ops_run.py — 1275 строк.
+# 2026-08-26 (K6-глубина, срез security): из run_pipeline вынесена _evaluate_security -> run_pipeline
+# 1075 -> 864. Потолок ПОКА держит run() в ai_ops_run.py (1275) — он и есть глобальный max; опустить
+# потолок ниже 1275 сможет только срез самого run(). Оставляем 1275: слака над фактическим max нет.
 max_function_lines: 1275
 
 # Информация о текущей max-функции (для справки).
@@ -20,16 +22,16 @@ max_function: run
 max_function_file: ai_ops_run.py
 max_function_lineno: 430
 
-# Топ-10 крупнейших функций на момент замера (2026-08-25).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _evaluate_security).
 top_10:
   - name: run
     file: ai_ops_run.py
     lineno: 430
-    size: 1270
+    size: 1275
   - name: run_pipeline
     file: execution_pipeline.py
-    lineno: 109
-    size: 1075
+    lineno: 405
+    size: 864
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532
@@ -38,6 +40,10 @@ top_10:
     file: ai_ops_run.py
     lineno: 1906
     size: 206
+  - name: _evaluate_security
+    file: execution_pipeline.py
+    lineno: 218
+    size: 184
   - name: route
     file: ai_route.py
     lineno: 42
