@@ -594,8 +594,8 @@ probes:
   - ai_ops_kit/engine/ai_ops_run.py
   - ai_ops_kit/providers/orchestrator_providers.py
   file: ai_ops_kit/engine/ai_ops_run.py
-  find: '                        if orchestrator.claude_binary():'
-  replace_with: '                        if __import__("shutil").which("claude"):'
+  find: '                    if orchestrator.claude_binary():'
+  replace_with: '                    if __import__("shutil").which("claude"):'
   tests:
   - tests/unit/test_provider_decision_equals_launch.py
   why: 'ШОВ между решением движка и запуском: выбор сильного writer''а идёт СВОИМ путём, не через

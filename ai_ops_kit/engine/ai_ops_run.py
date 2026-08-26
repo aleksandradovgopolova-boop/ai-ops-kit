@@ -1090,6 +1090,166 @@ def _restore_resume_policy(ctx, resume):
     return None
 
 
+def _resolve_models(ctx):
+    """v3.7.12 Router->runtime: без явного --model резолвим модель ПО РОЛИ через model_router и
+    физически диспатчим на endpoint вендора (provider_endpoints) -> writer≠judge по МОДЕЛИ.
+
+    K6: вынесено из run() без изменения поведения. Мутирует `ctx` (writer/reviewer model+prov,
+    model_resolution, sec_qualified, klp_by_env/trust_cache/trust_now/trust_env). Явный --model =
+    override (записывается). Всё под fail-safe: нет резолва/ключа/endpoint -> прежнее поведение
+    (passthrough --model) + честная запись в отчёт. JIT provider-preflight PRIMARY не пройден ->
+    возвращает blocked-preflight-отчёт (fail-closed, provider не строится). -> error-dict | None.
+    """
+    from ai_ops_kit.providers import orchestrator
+    ctx.writer_model, ctx.writer_prov, ctx.rev_model, ctx.rev_prov = ctx.model, None, ctx.model, None
+    try:
+        from ai_ops_kit.providers import model_router as _mr
+        from ai_ops_kit.providers import provider_endpoints as _pe
+        _plan = _mr.plan_run(signals=ctx.signals)   # v3.9.0-rc3: signals -> preferred_writer_tier
+        ctx.model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
+                                "mode": "explicit-override" if ctx.model else "router", "notes": []}
+        # v3.8.3-rc3 Dynamic Model Trust: JIT provider-preflight для КАЖДОЙ реально вызываемой модели
+        # (primary/reviewer/fallback/escalation), а не только primary+reviewer. Trust-переменные видны
+        # и в fix-loop (эскалация проверяет trust там).
+        import os as _os
+        import datetime as _dt
+        ctx.trust_cache = {}
+        ctx.klp_by_env = _load_klp_by_env(ctx.child_root)
+        ctx.trust_now = _dt.date.today().isoformat()
+        ctx.trust_env = dict(_os.environ)
+        if ctx.model is None and ctx.provider_name == "openai-compatible":
+            impl, rev = _plan.get("implementation") or {}, _plan.get("code_review") or {}
+            if impl.get("resolved") and _pe.key_available(impl.get("provider")):
+                ep = _pe.endpoint_for(impl["provider"])
+                # JIT trust PRIMARY: не готов -> blocked-preflight (fail-closed, как раньше)
+                _pt = _provider_trust(impl["provider"], ep["key_env"], ctx.klp_by_env, ctx.trust_env, ctx.trust_now, ctx.trust_cache)
+                ctx.model_resolution["key_preflight"] = _pt.get("preflight") or {"ready": _pt["ready"], "blocks": ([] if _pt["ready"] else [_pt.get("reason")])}
+                if not _pt["ready"]:
+                    ctx.model_resolution["preflight_blocked"] = True
+                ctx.writer_model = impl["model_id"]
+                ctx.writer_prov = orchestrator.make_openai_provider(impl["model_id"], ep["base_url"], ep["key_env"])
+                ctx.model_resolution["applied"] = True
+                ctx.model_resolution["initial_model"] = impl["model_id"]
+                ctx.model_resolution["effective_model"] = impl["model_id"]   # обновится при эскалации/fallback
+                ctx.model_resolution["writer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
+                                                  "cost_basis": impl.get("cost_basis")}
+                ctx.model_resolution["model_attempts"] = [
+                    {"attempt": 1, "model": impl["model_id"], "provider": impl["provider"],
+                     "trigger": "initial", "outcome": "pending"}]
+                # v3.9.0-rc3 COMPLEXITY-AWARE ROUTING: сложный класс задачи -> сильный executor (Claude
+                # Code adapter, claude-cli) СРАЗУ, не cheap-then-fix-loop. Честный fallback: нет локального
+                # claude CLI -> остаёмся на дешёвом money-mode writer + пишем причину. Реестр/ключи не нужны
+                # (локальная сессия). Escalation-ladder чистим: некуда «эскалировать» сильного вниз на kimi/qwen.
+                _tier = _plan.get("preferred_writer_tier") or {}
+                if _tier.get("tier") == "strong-executor":
+                    # СПРАШИВАЕМ ТЕМ ЖЕ, ЧЕМ ЗАПУСТИМ (замер 18.08.2026). Здесь стоял голый
+                    # `shutil.which("claude")`, а `make_claude_cli_provider()` запускает то, что
+                    # найдёт `claude_lookup` — то есть путь, названный владельцем в
+                    # AI_OPS_CLAUDE_BIN, сильнее PATH. Расхождение давало ровно тот класс, из-за
+                    # которого функция и заводилась: рабочий исполнитель назван, но не в PATH ->
+                    # «strong executor недоступен» и тихий откат на дешёвого writer'а; битый
+                    # названный путь при claude в PATH -> writer выбран, а первый же вызов модели
+                    # отказывается работать посреди начатого прогона.
+                    if orchestrator.claude_binary():
+                        ctx.writer_model = "claude-code-local"
+                        ctx.writer_prov = orchestrator.make_claude_cli_provider()
+                        ctx.model_resolution["effective_model"] = "claude-code-local"
+                        ctx.model_resolution["writer"] = {"model_id": "claude-code-local", "provider": "claude-cli",
+                                                          "tier": "strong-executor", "reason": _tier.get("reason")}
+                        ctx.model_resolution["model_attempts"][0].update(
+                            model="claude-code-local", provider="claude-cli", trigger="complexity-routing")
+                        if isinstance(impl, dict):
+                            impl["escalation_ladder"] = []   # сильный executor — вниз не даунгрейдим
+                        ctx.model_resolution["notes"].append(
+                            "complexity-aware: сложный класс -> writer=claude-cli (сильный executor) сразу")
+                    else:
+                        ctx.model_resolution["strong_executor_unavailable"] = True
+                        _look = orchestrator.claude_lookup()
+                        ctx.model_resolution["notes"].append(
+                            "complexity-aware: класс требует strong-executor, но локальный claude CLI "
+                            "недоступен ("
+                            + ("назван путь AI_OPS_CLAUDE_BIN, файла нет или он не исполняемый"
+                               if _look["where"] == "named" else "в PATH процесса кита не найден")
+                            + ") -> честный fallback на money-mode дешёвый writer")
+                # reviewer — JIT trust отдельного провайдера (writer≠judge по модели).
+                # v3.9.0-rc3: сравниваем с ЭФФЕКТИВНЫМ writer'ом (ctx.writer_model), а не с registry-impl —
+                # иначе при complexity-override (writer=claude-cli) deepseek-ревьюер ложно считался
+                # «не независим» (deepseek==registry-impl) и откатывался в self-model -> no-verdict.
+                _rev_trusted = (rev.get("resolved") and rev.get("model_id") != ctx.writer_model
+                                and _pe.key_available(rev.get("provider"))
+                                and _provider_trust(rev["provider"], _pe.endpoint_for(rev["provider"])["key_env"],
+                                                    ctx.klp_by_env, ctx.trust_env, ctx.trust_now, ctx.trust_cache)["ready"])
+                if _rev_trusted:
+                    ep2 = _pe.endpoint_for(rev["provider"])
+                    ctx.rev_model = rev["model_id"]
+                    ctx.rev_prov = orchestrator.make_openai_provider(rev["model_id"], ep2["base_url"], ep2["key_env"])
+                    ctx.model_resolution["reviewer"] = {"model_id": rev["model_id"], "provider": rev["provider"], "independent_by_model": True}
+                elif (ctx.writer_model == "claude-code-local" and impl.get("resolved")
+                      and _pe.key_available(impl.get("provider"))):
+                    # v3.9.0-rc3 complexity-routing: writer=claude-cli (сильный executor) -> ревьюер =
+                    # ДЕШЁВЫЙ qualified impl-судья (deepseek), независим от claude-cli по модели, даже если
+                    # отдельная code_review-роль не резолвится в реестре. Это и есть owner-план review->deepseek.
+                    _iep = _pe.endpoint_for(impl["provider"])
+                    ctx.rev_model = impl["model_id"]
+                    ctx.rev_prov = orchestrator.make_openai_provider(impl["model_id"], _iep["base_url"], _iep["key_env"])
+                    ctx.model_resolution["reviewer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
+                                                        "independent_by_model": True,
+                                                        "reason": "дешёвый qualified судья vs сильный writer=claude-cli"}
+                else:
+                    ctx.rev_model, ctx.rev_prov = ctx.writer_model, ctx.writer_prov
+                    ctx.model_resolution["reviewer"] = {"model_id": ctx.writer_model, "independent_by_model": False,
+                                                        "reason": "code_review не резолвится/нет ключа/trust -> self-model review (writer=judge по модели)"}
+                    ctx.model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной+trusted модели")
+                # v3.8.3-rc2 (#6) PROVIDER FALLBACK на RETRYABLE infra-сбое. rc3: fallback — НЕОБЯЗАТЕЛЬНЫЙ
+                # кандидат: JIT trust; НЕ готов -> ИСКЛЮЧАЕМ (не блокируем primary) + пишем причину.
+                _fb = impl.get("fallback") or {}
+                if _fb.get("model_id") and _fb.get("provider"):
+                    _fpt = (_provider_trust(_fb["provider"], _pe.endpoint_for(_fb["provider"])["key_env"],
+                                            ctx.klp_by_env, ctx.trust_env, ctx.trust_now, ctx.trust_cache)
+                            if _pe.key_available(_fb.get("provider")) else {"ready": False, "reason": "ключ отсутствует в env"})
+                    if _fpt["ready"]:
+                        try:
+                            _fbep = _pe.endpoint_for(_fb["provider"])
+                            _fb_prov = orchestrator.make_openai_provider(_fb["model_id"], _fbep["base_url"], _fbep["key_env"])
+                            _sw = {"switched_to": None}
+                            ctx.writer_prov = _with_provider_fallback(
+                                ctx.writer_prov, _fb_prov,
+                                on_switch=lambda e, _s=_sw, _m=_fb["model_id"]: _s.update(switched_to=_m))
+                            ctx.model_resolution["writer_fallback"] = {
+                                "model_id": _fb["model_id"], "provider": _fb["provider"],
+                                "trigger": "retryable-infra-failure-only", "switch_state": _sw}
+                            if not (ctx.model_resolution.get("reviewer") or {}).get("independent_by_model"):
+                                ctx.rev_prov = ctx.writer_prov
+                        except Exception as _fbe:  # noqa: BLE001 — сбой построения fallback не роняет прогон
+                            ctx.model_resolution["writer_fallback"] = {"error": f"{type(_fbe).__name__}: {_fbe}"[:160]}
+                    else:
+                        ctx.model_resolution["writer_fallback"] = {
+                            "excluded_model": _fb["model_id"], "provider": _fb.get("provider"),
+                            "reason": _fpt.get("reason"),
+                            "note": "необязательный fallback ИСКЛЮЧЁН по JIT-trust (не блокирует primary)"}
+            else:
+                ctx.model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
+    except Exception as _e:  # noqa: BLE001
+        ctx.model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
+                                "mode": "explicit-override" if ctx.model else "router"}
+    # v3.7.3 (#5 flip): security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ security-судья
+    # (security_review.resolved в plan_run) ЛИБО человек (ApprovalRecord). Общий code reviewer — НЕТ.
+    # Пока qualified security-судьи нет (до Bench v2) -> security needs_review -> pending_human до
+    # человеческого ApprovalRecord (реальный human-fallback). Отдельный security_reviewer_proposer.
+    ctx.sec_qualified = bool(((ctx.model_resolution.get("plan") or {}).get("security_review") or {}).get("resolved"))
+    # v3.7.1 (#4) РЕАЛЬНЫЙ security-барьер: key preflight не пройден (ключ/ротация) -> блок ПРОГОНА
+    # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
+    if isinstance(ctx.model_resolution, dict) and ctx.model_resolution.get("preflight_blocked"):
+        _kpf = ctx.model_resolution.get("key_preflight", {})
+        return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked-preflight",
+                "ready_for_pr": False, "provider": ctx.provider_name, "model": ctx.writer_model,
+                "model_resolution": ctx.model_resolution, "key_preflight": _kpf,
+                "blocked_reason": "key preflight не пройден до provider-вызова: "
+                                  + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация"]),
+                "not_yet": ["security key preflight: " + "; ".join(_kpf.get("blocks", []) or ["ключ отсутствует/просрочен"])]}
+    return None
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1150,157 +1310,17 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         base_binding = {"kind": "BaseBinding",
                         "base_ref": _brr.get("base_ref") or base, "base_sha": _brr.get("base_sha"),
                         "mode": _brr.get("mode"), "source": _brr.get("source")}
-        # v3.7.12 Router->runtime: без явного --model резолвим модель ПО РОЛИ через model_router и физически
-        # диспатчим на endpoint вендора (provider_endpoints) -> writer≠judge по МОДЕЛИ становится поведением
-        # продукта, а не только резолвером. Явный --model = override (записывается). Всё под fail-safe:
-        # нет резолва/ключа/endpoint -> прежнее поведение (passthrough --model) + честная запись в отчёт.
-        _writer_model, _writer_prov, _rev_model, _rev_prov = model, None, model, None
-        try:
-            from ai_ops_kit.providers import model_router as _mr
-            from ai_ops_kit.providers import provider_endpoints as _pe
-            _plan = _mr.plan_run(signals=signals)   # v3.9.0-rc3: signals -> preferred_writer_tier
-            _model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
-                                 "mode": "explicit-override" if model else "router", "notes": []}
-            # v3.8.3-rc3 Dynamic Model Trust: JIT provider-preflight для КАЖДОЙ реально вызываемой модели
-            # (primary/reviewer/fallback/escalation), а не только primary+reviewer. Trust-переменные видны
-            # и в fix-loop (эскалация проверяет trust там).
-            import os as _os
-            import datetime as _dt
-            _trust_cache = {}
-            _klp_by_env = _load_klp_by_env(child_root)
-            _trust_now = _dt.date.today().isoformat()
-            _trust_env = dict(_os.environ)
-            if model is None and provider_name == "openai-compatible":
-                impl, rev = _plan.get("implementation") or {}, _plan.get("code_review") or {}
-                if impl.get("resolved") and _pe.key_available(impl.get("provider")):
-                    ep = _pe.endpoint_for(impl["provider"])
-                    # JIT trust PRIMARY: не готов -> blocked-preflight (fail-closed, как раньше)
-                    _pt = _provider_trust(impl["provider"], ep["key_env"], _klp_by_env, _trust_env, _trust_now, _trust_cache)
-                    _model_resolution["key_preflight"] = _pt.get("preflight") or {"ready": _pt["ready"], "blocks": ([] if _pt["ready"] else [_pt.get("reason")])}
-                    if not _pt["ready"]:
-                        _model_resolution["preflight_blocked"] = True
-                    _writer_model = impl["model_id"]
-                    _writer_prov = orchestrator.make_openai_provider(impl["model_id"], ep["base_url"], ep["key_env"])
-                    _model_resolution["applied"] = True
-                    _model_resolution["initial_model"] = impl["model_id"]
-                    _model_resolution["effective_model"] = impl["model_id"]   # обновится при эскалации/fallback
-                    _model_resolution["writer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
-                                                   "cost_basis": impl.get("cost_basis")}
-                    _model_resolution["model_attempts"] = [
-                        {"attempt": 1, "model": impl["model_id"], "provider": impl["provider"],
-                         "trigger": "initial", "outcome": "pending"}]
-                    # v3.9.0-rc3 COMPLEXITY-AWARE ROUTING: сложный класс задачи -> сильный executor (Claude
-                    # Code adapter, claude-cli) СРАЗУ, не cheap-then-fix-loop. Честный fallback: нет локального
-                    # claude CLI -> остаёмся на дешёвом money-mode writer + пишем причину. Реестр/ключи не нужны
-                    # (локальная сессия). Escalation-ladder чистим: некуда «эскалировать» сильного вниз на kimi/qwen.
-                    _tier = _plan.get("preferred_writer_tier") or {}
-                    if _tier.get("tier") == "strong-executor":
-                        # СПРАШИВАЕМ ТЕМ ЖЕ, ЧЕМ ЗАПУСТИМ (замер 18.08.2026). Здесь стоял голый
-                        # `shutil.which("claude")`, а `make_claude_cli_provider()` запускает то, что
-                        # найдёт `claude_lookup` — то есть путь, названный владельцем в
-                        # AI_OPS_CLAUDE_BIN, сильнее PATH. Расхождение давало ровно тот класс, из-за
-                        # которого функция и заводилась: рабочий исполнитель назван, но не в PATH ->
-                        # «strong executor недоступен» и тихий откат на дешёвого writer'а; битый
-                        # названный путь при claude в PATH -> writer выбран, а первый же вызов модели
-                        # отказывается работать посреди начатого прогона.
-                        if orchestrator.claude_binary():
-                            _writer_model = "claude-code-local"
-                            _writer_prov = orchestrator.make_claude_cli_provider()
-                            _model_resolution["effective_model"] = "claude-code-local"
-                            _model_resolution["writer"] = {"model_id": "claude-code-local", "provider": "claude-cli",
-                                                           "tier": "strong-executor", "reason": _tier.get("reason")}
-                            _model_resolution["model_attempts"][0].update(
-                                model="claude-code-local", provider="claude-cli", trigger="complexity-routing")
-                            if isinstance(impl, dict):
-                                impl["escalation_ladder"] = []   # сильный executor — вниз не даунгрейдим
-                            _model_resolution["notes"].append(
-                                "complexity-aware: сложный класс -> writer=claude-cli (сильный executor) сразу")
-                        else:
-                            _model_resolution["strong_executor_unavailable"] = True
-                            _look = orchestrator.claude_lookup()
-                            _model_resolution["notes"].append(
-                                "complexity-aware: класс требует strong-executor, но локальный claude CLI "
-                                "недоступен ("
-                                + ("назван путь AI_OPS_CLAUDE_BIN, файла нет или он не исполняемый"
-                                   if _look["where"] == "named" else "в PATH процесса кита не найден")
-                                + ") -> честный fallback на money-mode дешёвый writer")
-                    # reviewer — JIT trust отдельного провайдера (writer≠judge по модели).
-                    # v3.9.0-rc3: сравниваем с ЭФФЕКТИВНЫМ writer'ом (_writer_model), а не с registry-impl —
-                    # иначе при complexity-override (writer=claude-cli) deepseek-ревьюер ложно считался
-                    # «не независим» (deepseek==registry-impl) и откатывался в self-model -> no-verdict.
-                    _rev_trusted = (rev.get("resolved") and rev.get("model_id") != _writer_model
-                                    and _pe.key_available(rev.get("provider"))
-                                    and _provider_trust(rev["provider"], _pe.endpoint_for(rev["provider"])["key_env"],
-                                                        _klp_by_env, _trust_env, _trust_now, _trust_cache)["ready"])
-                    if _rev_trusted:
-                        ep2 = _pe.endpoint_for(rev["provider"])
-                        _rev_model = rev["model_id"]
-                        _rev_prov = orchestrator.make_openai_provider(rev["model_id"], ep2["base_url"], ep2["key_env"])
-                        _model_resolution["reviewer"] = {"model_id": rev["model_id"], "provider": rev["provider"], "independent_by_model": True}
-                    elif (_writer_model == "claude-code-local" and impl.get("resolved")
-                          and _pe.key_available(impl.get("provider"))):
-                        # v3.9.0-rc3 complexity-routing: writer=claude-cli (сильный executor) -> ревьюер =
-                        # ДЕШЁВЫЙ qualified impl-судья (deepseek), независим от claude-cli по модели, даже если
-                        # отдельная code_review-роль не резолвится в реестре. Это и есть owner-план review->deepseek.
-                        _iep = _pe.endpoint_for(impl["provider"])
-                        _rev_model = impl["model_id"]
-                        _rev_prov = orchestrator.make_openai_provider(impl["model_id"], _iep["base_url"], _iep["key_env"])
-                        _model_resolution["reviewer"] = {"model_id": impl["model_id"], "provider": impl["provider"],
-                                                         "independent_by_model": True,
-                                                         "reason": "дешёвый qualified судья vs сильный writer=claude-cli"}
-                    else:
-                        _rev_model, _rev_prov = _writer_model, _writer_prov
-                        _model_resolution["reviewer"] = {"model_id": _writer_model, "independent_by_model": False,
-                                                         "reason": "code_review не резолвится/нет ключа/trust -> self-model review (writer=judge по модели)"}
-                        _model_resolution["notes"].append("reviewer=writer по модели: нет отдельной допущенной+trusted модели")
-                    # v3.8.3-rc2 (#6) PROVIDER FALLBACK на RETRYABLE infra-сбое. rc3: fallback — НЕОБЯЗАТЕЛЬНЫЙ
-                    # кандидат: JIT trust; НЕ готов -> ИСКЛЮЧАЕМ (не блокируем primary) + пишем причину.
-                    _fb = impl.get("fallback") or {}
-                    if _fb.get("model_id") and _fb.get("provider"):
-                        _fpt = (_provider_trust(_fb["provider"], _pe.endpoint_for(_fb["provider"])["key_env"],
-                                                _klp_by_env, _trust_env, _trust_now, _trust_cache)
-                                if _pe.key_available(_fb.get("provider")) else {"ready": False, "reason": "ключ отсутствует в env"})
-                        if _fpt["ready"]:
-                            try:
-                                _fbep = _pe.endpoint_for(_fb["provider"])
-                                _fb_prov = orchestrator.make_openai_provider(_fb["model_id"], _fbep["base_url"], _fbep["key_env"])
-                                _sw = {"switched_to": None}
-                                _writer_prov = _with_provider_fallback(
-                                    _writer_prov, _fb_prov,
-                                    on_switch=lambda e, _s=_sw, _m=_fb["model_id"]: _s.update(switched_to=_m))
-                                _model_resolution["writer_fallback"] = {
-                                    "model_id": _fb["model_id"], "provider": _fb["provider"],
-                                    "trigger": "retryable-infra-failure-only", "switch_state": _sw}
-                                if not (_model_resolution.get("reviewer") or {}).get("independent_by_model"):
-                                    _rev_prov = _writer_prov
-                            except Exception as _fbe:  # noqa: BLE001 — сбой построения fallback не роняет прогон
-                                _model_resolution["writer_fallback"] = {"error": f"{type(_fbe).__name__}: {_fbe}"[:160]}
-                        else:
-                            _model_resolution["writer_fallback"] = {
-                                "excluded_model": _fb["model_id"], "provider": _fb.get("provider"),
-                                "reason": _fpt.get("reason"),
-                                "note": "необязательный fallback ИСКЛЮЧЁН по JIT-trust (не блокирует primary)"}
-                else:
-                    _model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
-        except Exception as _e:  # noqa: BLE001
-            _model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
-                                 "mode": "explicit-override" if model else "router"}
-        # v3.7.3 (#5 flip): security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ security-судья
-        # (security_review.resolved в plan_run) ЛИБО человек (ApprovalRecord). Общий code reviewer — НЕТ.
-        # Пока qualified security-судьи нет (до Bench v2) -> security needs_review -> pending_human до
-        # человеческого ApprovalRecord (реальный human-fallback). Отдельный security_reviewer_proposer.
-        _sec_qualified = bool(((_model_resolution.get("plan") or {}).get("security_review") or {}).get("resolved"))
-
-        # v3.7.1 (#4) РЕАЛЬНЫЙ security-барьер: key preflight не пройден (ключ/ротация) -> блок ПРОГОНА
-        # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
-        if isinstance(_model_resolution, dict) and _model_resolution.get("preflight_blocked"):
-            _kpf = _model_resolution.get("key_preflight", {})
-            return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked-preflight",
-                    "ready_for_pr": False, "provider": provider_name, "model": _writer_model,
-                    "model_resolution": _model_resolution, "key_preflight": _kpf,
-                    "blocked_reason": "key preflight не пройден до provider-вызова: "
-                                      + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация"]),
-                    "not_yet": ["security key preflight: " + "; ".join(_kpf.get("blocks", []) or ["ключ отсутствует/просрочен"])]}
+        # v3.7.12 Router->runtime + JIT-trust + complexity-aware + provider-fallback: вынесено в
+        # _resolve_models (K6-глубина). Мутирует ctx (writer/reviewer model+prov, model_resolution,
+        # sec_qualified, klp/trust-*). preflight PRIMARY не пройден -> blocked-preflight (fail-closed).
+        _mrerr = _resolve_models(ctx)
+        if _mrerr:
+            return _mrerr
+        _writer_model, _writer_prov = ctx.writer_model, ctx.writer_prov
+        _rev_model, _rev_prov = ctx.rev_model, ctx.rev_prov
+        _model_resolution, _sec_qualified = ctx.model_resolution, ctx.sec_qualified
+        _klp_by_env, _trust_cache = ctx.klp_by_env, ctx.trust_cache
+        _trust_now, _trust_env = ctx.trust_now, ctx.trust_env
 
         # v3.10.0 Usage Truth: обёртка провайдера ставит call-context (role/trigger/provider/runtime) перед
         # вызовом -> _record_call пишет их в UsageRecord. run_id/workitem_id заполнит usage_ledger.append.
