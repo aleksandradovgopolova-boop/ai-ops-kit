@@ -54,12 +54,15 @@ scope: ai_ops_kit/engine/
 # 2026-08-26 (K6-глубина, срез evidence): из run_pipeline вынесен _assemble_evidence (сбор evidence
 # на SHA + наполнение gate_ev: collect/intake/regression/authored/reevaluate/освобождения/UI/seam/
 # reviews/security) -> run_pipeline 616 -> 500. Глобальный max по-прежнему run_pipeline (500). Потолок 500.
-max_function_lines: 500
+# 2026-08-26 (K6-глубина, срез readiness): из run_pipeline вынесен _assess_readiness (spec-depth +
+# Real Spec-First + сверка критериев приёмки B2-14 + context-budget overflow) -> run_pipeline 500 ->
+# 401. Глобальный max по-прежнему run_pipeline (401). Потолок 401.
+max_function_lines: 401
 
 # Информация о текущей max-функции (для справки).
 max_function: run_pipeline
 max_function_file: execution_pipeline.py
-max_function_lineno: 696
+max_function_lineno: 827
 
 # Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
 top_10:
@@ -69,8 +72,8 @@ top_10:
     size: 315
   - name: run_pipeline
     file: execution_pipeline.py
-    lineno: 696
-    size: 500
+    lineno: 827
+    size: 401
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532
