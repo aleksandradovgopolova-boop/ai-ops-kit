@@ -48,12 +48,15 @@ scope: ai_ops_kit/engine/
 # доставка: DeliveryIntent -> внешнее действие -> DeliveryReceipt, outcome_unknown/fail-closed) через
 # RunContext -> run() 458 -> 315. Все четыре оставшихся крупных блока run() разобраны; run() больше НЕ
 # держит потолок. Глобальный max — run_pipeline (730). Потолок 730 (без изменения).
-max_function_lines: 730
+# 2026-08-26 (K6-глубина, срез isolation): из run_pipeline вынесен _setup_isolation (base-binding +
+# worktree-изоляция + resume) -> run_pipeline 730 -> 616. Глобальный max по-прежнему run_pipeline (616).
+# Потолок 616.
+max_function_lines: 616
 
 # Информация о текущей max-функции (для справки).
 max_function: run_pipeline
 max_function_file: execution_pipeline.py
-max_function_lineno: 405
+max_function_lineno: 535
 
 # Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
 top_10:
@@ -63,8 +66,8 @@ top_10:
     size: 315
   - name: run_pipeline
     file: execution_pipeline.py
-    lineno: 405
-    size: 730
+    lineno: 535
+    size: 616
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532

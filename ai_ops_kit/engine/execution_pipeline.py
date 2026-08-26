@@ -401,6 +401,136 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
     return gate_ev, security_pack_result, effective_approval_signals
 
 
+def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
+                     discard_previous, open_pr):
+    """BASE BINDING + worktree-изоляция/resume: рабочая ветка ai-ops/<wid> форкается от РАЗРЕШЁННОГО
+    base (не от HEAD), весь прогон идёт в отдельном worktree, основное дерево не трогается.
+
+    K6: вынесено из run_pipeline без изменения поведения. -> dict: при отказе {"error": <report>}
+    (ранний честный выход ДО модели/worktree), иначе {"work_root", "worktree_rel", "resume_info",
+    "base_binding", "base_ref", "base_sha"}.
+    """
+    work_root, worktree_rel = child_root, None
+    resume_info = ({"requested": bool(resume), "resumed": False,
+                    "reused_worktree": False, "reused_branch": False}
+                   if (resume or reevaluate_only) else None)
+    # v3.0.1/v3.0.7 (P0): рабочая ветка форкается от РАЗРЕШЁННОГО base (--base), а НЕ от HEAD.
+    # base=None -> AUTO-резолв (upstream/remote-default/текущая ветка), не хардкод 'main'.
+    _br = _resolve_base(child_root, base)   # base может быть None (auto) или явной веткой
+    base_sha = _br.get("base_sha")
+    base_ref = _br.get("base_ref") or base or "HEAD"
+    base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
+                    "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
+                    "reason": _br.get("reason")}
+    # B2-23: доставка проверяла remote-базу ПОСЛЕ работы (13.5 мин живой модели, только потом «база
+    # сдвинулась»). База известна ЗДЕСЬ, до первого вызова модели — предупреждаем заранее (бесплатно),
+    # прогон не останавливаем, но в тех же словах, что скажет доставка.
+    delivery_pf = _delivery_preflight(child_root, base_ref, base_sha, open_pr)
+    if delivery_pf:
+        print(f"  ⚠ {delivery_pf['warning']}")
+    # B2-27: update --in-place оставляет managed-файлы в рабочем дереве, а worktree создаётся от HEAD
+    # -> прогон на старом ките. Предупреждаем ДО изоляции.
+    managed_pf = _managed_drift_preflight(child_root)
+    if managed_pf:
+        print(f"  ⚠ {managed_pf['warning']}")
+    # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
+    # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
+    if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
+        return {"error": {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                "status": "error", "ready_for_pr": False, "base_binding": base_binding,
+                "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
+                          f"({_br.get('reason')}) — прогон остановлен ДО вызова модели (не выполняем "
+                          f"от произвольного HEAD)"),
+                "loop": None, "isolation": {"worktree": None}, "gates": None, "overall_status": "error"}}
+    if isolate:
+        from ai_ops_kit.engine import worktree as _wt
+        branch = f"ai-ops/{wid}"
+        wp = child_root / ".ai" / "worktrees" / wid
+        branch_exists = _wt._branch_exists(child_root, branch)
+        # v2.109 Real Resume: продолжаем ПОВЕРХ подтверждённой работы — ветку/коммиты НЕ удаляем.
+        reused = False
+        if (resume or reevaluate_only) and (branch_exists or wp.is_dir()):
+            if not wp.is_dir() and branch_exists:
+                # worktree утерян, но ветка (коммиты) на месте -> пере-подключаем worktree к ветке
+                rc = _wt.add(child_root, wid, branch)
+                if rc != 0:
+                    return {"error": {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                            "status": "error",
+                            "error": f"resume: не удалось пере-подключить worktree к ветке {branch} "
+                                     f"(занята? не в .gitignore?) — прогон остановлен, работа не тронута",
+                            "loop": None, "isolation": {"worktree": None}, "gates": None,
+                            "ready_for_pr": False, "resume": {**resume_info, "resumed": False}}}
+                resume_info["reused_branch"] = True
+            else:
+                resume_info["reused_worktree"] = True
+                resume_info["reused_branch"] = branch_exists
+            work_root = wp
+            worktree_rel = wp.relative_to(child_root).as_posix()
+            resume_info["resumed"] = True
+            reused = True
+        if not reused:
+            if resume:
+                # resume запрошен, но продолжать нечего (ни ветки, ни worktree) — честный свежий старт
+                resume_info["reason"] = (f"ни ветки {branch}, ни worktree нет — продолжать нечего; "
+                                         f"выполняется свежий старт")
+            # finding живого прогона: worktree от ПРЕДЫДУЩЕГО прогона того же wid молча
+            # переиспользовался -> прогон шёл поверх грязного состояния (нечистый baseline).
+            # P0.3 (аудит v2.79): но слепо удалять прошлую ветку ОПАСНО — там могут быть НЕсохранённые
+            # коммиты (PR не открылся и т.п.). Удаляем только если на ветке нет работы ЛИБО явный discard.
+            if wp.is_dir() or branch_exists:
+                ahead = 0
+                if branch_exists:
+                    # коммиты на ветке ai-ops/<wid>, которых нет в текущем HEAD -> несохранённая работа
+                    rc_a, out_a, _ = _git(child_root, "rev-list", "--count", branch, "^HEAD")
+                    ahead = int(out_a) if rc_a == 0 and out_a.isdigit() else 0
+                if ahead > 0 and not discard_previous:
+                    return {"error": {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                            "status": "error",
+                            # obs 2dbfc337 (поле 20.08.2026) + B2-10: здесь назывались ВНУТРЕННИЕ
+                            # параметры движка — `resume=True (--resume)` и `discard_previous=True
+                            # (--discard)`. Человек читает это через `ai-ops`, где `--resume` нет
+                            # вовсе (argparse принимает его за сокращение `--resume-from` и падает),
+                            # а продолжение — это ИНТЕНТ `resume`. Печатаем РЕАЛЬНЫЕ команды.
+                            "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
+                                     f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
+                                     f"остановлен. Продолжить поверх них: "
+                                     f"`ai-ops resume . --feature {wid} --execute`. Перезаписать: "
+                                     f"`git branch -D {branch}` и "
+                                     f"`ai-ops run . --feature {wid} --execute`. Или возьми другой "
+                                     f"--feature.",
+                            "loop": None, "isolation": {"worktree": None}, "gates": None,
+                            "ready_for_pr": False, "overall_status": "error"}}
+                _wt.remove(child_root, wid, force=True)
+                _git(child_root, "worktree", "prune")
+                _git(child_root, "branch", "-D", branch)
+            rc = _wt.add(child_root, wid, branch, base=(base_sha or "HEAD"))   # v3.0.1: форк от base_sha
+            if rc == 0:
+                work_root = wp
+                worktree_rel = wp.relative_to(child_root).as_posix()
+                # v3.0.1 (P0): свежая ветка обязана форкнуться РОВНО от base_sha (иначе `--base` — фикция)
+                if base_sha:
+                    _rc_h, _wh, _ = _git(wp, "rev-parse", "HEAD")
+                    if _rc_h != 0 or (_wh or "").strip() != base_sha:
+                        return {"error": {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                                "status": "error", "base_binding": base_binding,
+                                "error": (f"base binding нарушен: ветка {branch} форкнулась от "
+                                          f"{(_wh or '?').strip()[:12]}, а заявлен base={base_ref}"
+                                          f" ({base_sha[:12]}) — прогон остановлен"),
+                                "loop": None, "isolation": {"worktree": None}, "gates": None,
+                                "ready_for_pr": False, "overall_status": "error"}}
+        if work_root is child_root:
+            # finding adversarial-review: НЕ деградируем молча в основное дерево — это исполнило бы
+            # правки и коммит в main вопреки isolate=True. Останавливаемся честной ошибкой.
+            return {"error": {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
+                    "status": "error",
+                    "error": f"isolate=True, но worktree .ai/worktrees/{wid} не создан "
+                             f"(ветка занята? не в .gitignore?) — прогон остановлен, основное дерево не тронуто",
+                    "loop": None, "isolation": {"worktree": None}, "gates": None,
+                    "ready_for_pr": False}}
+    return {"work_root": work_root, "worktree_rel": worktree_rel, "resume_info": resume_info,
+            "base_binding": base_binding, "base_ref": base_ref, "base_sha": base_sha,
+            "delivery_pf": delivery_pf}
+
 
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
@@ -454,130 +584,16 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         plan = run_plan.build_plan(signals, workitem_id=feature)
     wid = plan["workitem_id"]
 
-    # 1b. изоляция (finding аудита): весь прогон в отдельном git worktree на ветке ai-ops/<id>,
-    #     основное рабочее дерево child не трогается. work_root = каталог worktree.
-    work_root, worktree_rel = child_root, None
-    resume_info = ({"requested": bool(resume), "resumed": False,
-                    "reused_worktree": False, "reused_branch": False}
-                   if (resume or reevaluate_only) else None)
-    # v3.0.1 (finding аудита P0): BASE BINDING — рабочая ветка форкается от РАЗРЕШЁННОГО base (--base),
-    # а НЕ от текущего HEAD. Фиксируем base_ref+base_sha; worktree создаётся от base_sha; после — проверка;
-    # delivery ревалидирует remote base. Раньше _wt.add шёл от HEAD -> `--base develop` игнорировался.
-    # v3.0.7 (finding аудита P0): base=None -> AUTO-резолв (upstream/remote-default/текущая ветка), НЕ
-    # хардкод 'main'. Явная base обязана существовать. base_sha берётся из резолвера; форк — от него.
-    _br = _resolve_base(child_root, base)   # base может быть None (auto) или явной веткой
-    base_sha = _br.get("base_sha")
-    base_ref = _br.get("base_ref") or base or "HEAD"
-    base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
-                    "resolved": bool(_br.get("resolved")), "source": _br.get("source"),
-                    "reason": _br.get("reason")}
-    # B2-23 (пере-прогон 14.08.2026): доставка проверяла remote-базу ПОСЛЕ работы. Прогон отработал
-    # 13.5 минуты живой модели и ~$3.5 и только на шаге доставки сказал «remote base сдвинулась —
-    # PR не открыт». Отказ верный, момент — нет: база известна ЗДЕСЬ, до первого вызова модели, и
-    # предупредить можно бесплатно. Прогон не останавливаем (работа сама по себе может быть нужна),
-    # но говорим ЗАРАНЕЕ и в тех же словах, что скажет доставка.
-    delivery_pf = _delivery_preflight(child_root, base_ref, base_sha, open_pr)
-    if delivery_pf:
-        print(f"  ⚠ {delivery_pf['warning']}")
-    # B2-27 (прогон 19.08.2026): update --in-place оставляет managed-файлы в рабочем дереве,
-    # но worktree создаётся от HEAD — прогон идёт на старом ките. Предупреждаем ДО изоляции.
-    managed_pf = _managed_drift_preflight(child_root)
-    if managed_pf:
-        print(f"  ⚠ {managed_pf['warning']}")
-    # P0.2: ЯВНО переданная, но неразрешённая base -> preflight-блок ДО модели/worktree (не выполнять
-    # от HEAD). auto всегда разрешается, поэтому блокирует только явную несуществующую ветку.
-    if isolate and _br.get("mode") == "explicit" and not _br.get("resolved"):
-        return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
-                "status": "error", "ready_for_pr": False, "base_binding": base_binding,
-                "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
-                          f"({_br.get('reason')}) — прогон остановлен ДО вызова модели (не выполняем "
-                          f"от произвольного HEAD)"),
-                "loop": None, "isolation": {"worktree": None}, "gates": None, "overall_status": "error"}
-    if isolate:
-        from ai_ops_kit.engine import worktree as _wt
-        branch = f"ai-ops/{wid}"
-        wp = child_root / ".ai" / "worktrees" / wid
-        branch_exists = _wt._branch_exists(child_root, branch)
-        # v2.109 Real Resume: продолжаем ПОВЕРХ подтверждённой работы — ветку/коммиты НЕ удаляем.
-        reused = False
-        if (resume or reevaluate_only) and (branch_exists or wp.is_dir()):
-            if not wp.is_dir() and branch_exists:
-                # worktree утерян, но ветка (коммиты) на месте -> пере-подключаем worktree к ветке
-                rc = _wt.add(child_root, wid, branch)
-                if rc != 0:
-                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
-                            "status": "error",
-                            "error": f"resume: не удалось пере-подключить worktree к ветке {branch} "
-                                     f"(занята? не в .gitignore?) — прогон остановлен, работа не тронута",
-                            "loop": None, "isolation": {"worktree": None}, "gates": None,
-                            "ready_for_pr": False, "resume": {**resume_info, "resumed": False}}
-                resume_info["reused_branch"] = True
-            else:
-                resume_info["reused_worktree"] = True
-                resume_info["reused_branch"] = branch_exists
-            work_root = wp
-            worktree_rel = wp.relative_to(child_root).as_posix()
-            resume_info["resumed"] = True
-            reused = True
-        if not reused:
-            if resume:
-                # resume запрошен, но продолжать нечего (ни ветки, ни worktree) — честный свежий старт
-                resume_info["reason"] = (f"ни ветки {branch}, ни worktree нет — продолжать нечего; "
-                                         f"выполняется свежий старт")
-            # finding живого прогона: worktree от ПРЕДЫДУЩЕГО прогона того же wid молча
-            # переиспользовался -> прогон шёл поверх грязного состояния (нечистый baseline).
-            # P0.3 (аудит v2.79): но слепо удалять прошлую ветку ОПАСНО — там могут быть НЕсохранённые
-            # коммиты (PR не открылся и т.п.). Удаляем только если на ветке нет работы ЛИБО явный discard.
-            if wp.is_dir() or branch_exists:
-                ahead = 0
-                if branch_exists:
-                    # коммиты на ветке ai-ops/<wid>, которых нет в текущем HEAD -> несохранённая работа
-                    rc_a, out_a, _ = _git(child_root, "rev-list", "--count", branch, "^HEAD")
-                    ahead = int(out_a) if rc_a == 0 and out_a.isdigit() else 0
-                if ahead > 0 and not discard_previous:
-                    return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
-                            "status": "error",
-                            # obs 2dbfc337 (поле 20.08.2026) + B2-10: здесь назывались ВНУТРЕННИЕ
-                            # параметры движка — `resume=True (--resume)` и `discard_previous=True
-                            # (--discard)`. Человек читает это через `ai-ops`, где `--resume` нет
-                            # вовсе (argparse принимает его за сокращение `--resume-from` и падает),
-                            # а продолжение — это ИНТЕНТ `resume`. Печатаем РЕАЛЬНЫЕ команды.
-                            "error": f"предыдущий прогон feature='{wid}' имеет {ahead} несохранённых "
-                                     f"коммит(ов) на ветке {branch}. Чтобы не потерять работу, прогон "
-                                     f"остановлен. Продолжить поверх них: "
-                                     f"`ai-ops resume . --feature {wid} --execute`. Перезаписать: "
-                                     f"`git branch -D {branch}` и "
-                                     f"`ai-ops run . --feature {wid} --execute`. Или возьми другой "
-                                     f"--feature.",
-                            "loop": None, "isolation": {"worktree": None}, "gates": None,
-                            "ready_for_pr": False, "overall_status": "error"}
-                _wt.remove(child_root, wid, force=True)
-                _git(child_root, "worktree", "prune")
-                _git(child_root, "branch", "-D", branch)
-            rc = _wt.add(child_root, wid, branch, base=(base_sha or "HEAD"))   # v3.0.1: форк от base_sha
-            if rc == 0:
-                work_root = wp
-                worktree_rel = wp.relative_to(child_root).as_posix()
-                # v3.0.1 (P0): свежая ветка обязана форкнуться РОВНО от base_sha (иначе `--base` — фикция)
-                if base_sha:
-                    _rc_h, _wh, _ = _git(wp, "rev-parse", "HEAD")
-                    if _rc_h != 0 or (_wh or "").strip() != base_sha:
-                        return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
-                                "status": "error", "base_binding": base_binding,
-                                "error": (f"base binding нарушен: ветка {branch} форкнулась от "
-                                          f"{(_wh or '?').strip()[:12]}, а заявлен base={base_ref}"
-                                          f" ({base_sha[:12]}) — прогон остановлен"),
-                                "loop": None, "isolation": {"worktree": None}, "gates": None,
-                                "ready_for_pr": False, "overall_status": "error"}
-        if work_root is child_root:
-            # finding adversarial-review: НЕ деградируем молча в основное дерево — это исполнило бы
-            # правки и коммит в main вопреки isolate=True. Останавливаемся честной ошибкой.
-            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
-                    "status": "error",
-                    "error": f"isolate=True, но worktree .ai/worktrees/{wid} не создан "
-                             f"(ветка занята? не в .gitignore?) — прогон остановлен, основное дерево не тронуто",
-                    "loop": None, "isolation": {"worktree": None}, "gates": None,
-                    "ready_for_pr": False}
+    # 1b. изоляция + base-binding + resume -> _setup_isolation (K6). Прогон в отдельном worktree на
+    #     ветке ai-ops/<id>, основное дерево child не трогается; при отказе — ранний честный выход.
+    _iso = _setup_isolation(child_root, wid, base, isolate=isolate, resume=resume,
+                            reevaluate_only=reevaluate_only, discard_previous=discard_previous,
+                            open_pr=open_pr)
+    if _iso.get("error"):
+        return _iso["error"]
+    work_root, worktree_rel = _iso["work_root"], _iso["worktree_rel"]
+    resume_info, base_binding = _iso["resume_info"], _iso["base_binding"]
+    base_ref, base_sha, delivery_pf = _iso["base_ref"], _iso["base_sha"], _iso["delivery_pf"]
 
     # 1. детект стека (в рабочем дереве)
     profile = project_detector.detect(work_root)
