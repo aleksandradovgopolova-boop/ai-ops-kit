@@ -26,19 +26,21 @@ scope: ai_ops_kit/engine/
 # бюджета поставки K6-докстрингов/комментариев). Потолок 1051.
 # 2026-08-26 (K6-глубина, срез active-work): из run() вынесена _register_active_work (регистрация
 # active-work + concurrency-preflight координации параллельных сессий) -> run() 1051 -> 1003. Потолок 1003.
-max_function_lines: 1003
+# 2026-08-26 (K6-глубина, срез lifecycle-start): из run() вынесена _start_lifecycle (workitem.start +
+# durable RunPlan/run-settings + journal run_start) -> run() 1003 -> 957. Потолок 957.
+max_function_lines: 957
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 767
+max_function_lineno: 828
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _register_active_work).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _start_lifecycle).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 767
-    size: 1003
+    lineno: 828
+    size: 957
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -49,7 +51,7 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1976
+    lineno: 1991
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
@@ -61,7 +63,7 @@ top_10:
     size: 177
   - name: _print_pipeline
     file: ai_ops_run.py
-    lineno: 1772
+    lineno: 1787
     size: 132
   - name: resume_preflight
     file: run_handoff.py
