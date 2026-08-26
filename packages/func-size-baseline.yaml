@@ -34,23 +34,24 @@ scope: ai_ops_kit/engine/
 # + usage-ledger + очистка call-context) -> run() 910 -> 866. Потолок 866 (почти вровень с run_pipeline 864).
 # 2026-08-26 (K6-глубина, срез finalize): из run() вынесена _finalize_run (run_completed + run_end +
 # статус работы + снятие active-work) -> run() 866 -> 812. Глобальный max теперь run_pipeline (864). Потолок 864.
-max_function_lines: 864
+# 2026-08-26 (K6-глубина, срез run_pipeline-фаз): run_pipeline 864 -> 730; глобальный max теперь run() (812). Потолок 812.
+max_function_lines: 812
 
 # Информация о текущей max-функции (для справки).
-max_function: run_pipeline
-max_function_file: execution_pipeline.py
-max_function_lineno: 405
+max_function: run
+max_function_file: ai_ops_run.py
+max_function_lineno: 1002
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _finalize_run).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
 top_10:
-  - name: run_pipeline
-    file: execution_pipeline.py
-    lineno: 405
-    size: 864
   - name: run
     file: ai_ops_run.py
     lineno: 1002
     size: 812
+  - name: run_pipeline
+    file: execution_pipeline.py
+    lineno: 405
+    size: 730
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532

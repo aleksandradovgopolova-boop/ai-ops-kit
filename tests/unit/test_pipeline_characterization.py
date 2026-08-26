@@ -842,3 +842,46 @@ class TestPipelineSecurityCharacterization:
         # ФОРСИНГ: security добавлен в оценку гейтов несмотря на QUICK-план без него
         assert "security" in mock_gates.evaluate.call_args.kwargs["gate_ids"]
         assert result["security_scan"]["overall"] == "needs_review"
+
+
+@pytest.mark.unit
+class TestPipelinePhaseBaselineDiff:
+    """Фаза install-deps/baseline (baseline_diff=True): evidence на БАЗЕ до правок модели.
+
+    Существующие тесты гоняют baseline_diff=False -> baseline-ветка _prepare_environment и
+    baseline-раздел отчёта НЕ исполняются. Этот тест фиксирует их до/после расщепления (K6):
+    evidence_collector.collect вызывается ДВАЖДЫ (baseline + основной прогон), отчёт несёт
+    baseline-раздел и переключается на критерий no-regressions.
+    """
+
+    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_PATCH_BASE}.tool_loop")
+    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_PATCH_BASE}.project_detector")
+    @patch(f"{_PATCH_BASE}.run_plan")
+    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_PATCH_BASE}._git")
+    def test_baseline_diff_collects_baseline_and_reports(self, mock_git, mock_resolve, mock_run_plan,
+                                                         mock_detect, mock_broker, mock_loop,
+                                                         mock_evidence, mock_gates, mock_contour,
+                                                         child_repo):
+        """baseline_diff=True -> collect вызван дважды, отчёт несёт baseline + no-regressions."""
+        mock_run_plan.build_plan.return_value = _make_plan()
+        mock_detect.detect.return_value = _make_profile()
+        mock_broker.Policy.return_value = _make_policy()
+        mock_loop.run_loop.return_value = _make_loop_result()
+        mock_evidence.collect.return_value = _make_evidence_result()
+        mock_gates.evaluate.return_value = _make_gates_result()
+        mock_git.return_value = (0, "true", "")
+
+        from ai_ops_kit.engine.execution_pipeline import run_pipeline
+        result = run_pipeline("task", {}, child_repo, _make_proposer(),
+                              commit=False, install_deps=False, baseline_diff=True)
+
+        # collect вызван дважды: baseline (в _prepare_environment) + основной прогон
+        assert mock_evidence.collect.call_count == 2
+        # baseline-раздел присутствует, критерий переключён на no-regressions
+        assert result["baseline"] is not None
+        assert result["ready_criterion"] == "no-regressions"
