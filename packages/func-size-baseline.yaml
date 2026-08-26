@@ -13,21 +13,23 @@ scope: ai_ops_kit/engine/
 # 2026-08-25: 1285 -> 1275 — замер после K6 (из run_pipeline извлечено 6 функций) показал
 # снижение max; ратчет ходит только вниз, потолок опущен под факт.
 # 2026-08-26 (K6-глубина, срез security): из run_pipeline вынесена _evaluate_security -> run_pipeline
-# 1075 -> 864. Потолок ПОКА держит run() в ai_ops_run.py (1275) — он и есть глобальный max; опустить
-# потолок ниже 1275 сможет только срез самого run(). Оставляем 1275: слака над фактическим max нет.
-max_function_lines: 1275
+# 1075 -> 864. Потолок тогда держал run() (1275) — он глобальный max.
+# 2026-08-26 (K6-глубина, срез context): из run() вынесена _compile_context_artifacts (bundle/payload/
+# hybrid/spec/work-package) -> run() 1275 -> 1182. Это ПЕРВЫЙ срез, реально опустивший потолок:
+# 1275 -> 1182 (новый глобальный max — по-прежнему run(), но уже меньше).
+max_function_lines: 1182
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 430
+max_function_lineno: 540
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _evaluate_security).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _compile_context_artifacts).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 430
-    size: 1275
+    lineno: 540
+    size: 1182
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -38,12 +40,16 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1906
+    lineno: 1928
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
     lineno: 218
     size: 184
+  - name: _compile_context_artifacts
+    file: ai_ops_run.py
+    lineno: 430
+    size: 107
   - name: route
     file: ai_route.py
     lineno: 42

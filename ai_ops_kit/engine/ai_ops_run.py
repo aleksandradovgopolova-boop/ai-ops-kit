@@ -427,6 +427,116 @@ def _provider_trust(provider, key_env, klp_by_env, env, now, cache):
     return res
 
 
+def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, model,
+                               context_hybrid, base_binding, task_text):
+    """Компиляция артефактов контекста фазы run() (bundle/payload/hybrid/spec/work-package).
+    v3.38 (K6-глубина): вынесено из run() без изменения поведения. Ошибки слоя контекста не
+    гаснут — копятся в lifecycle_errors. -> (lifecycle_errors, bundle, payload, hybrid_prelude,
+    hybrid_fed, spec_cov, work_pkg)."""
+    # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
+    # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
+    lifecycle_errors = []
+    # v2.97 Context Compiler: минимальный релевантный ContextBundle для WorkItem (детерминированно).
+    from ai_ops_kit.context import context_compiler
+    try:
+        bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
+        (features_dir / fid / "context-bundle.yaml").write_text(
+            yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001 — не роняем прогон, но и не молчим
+        bundle = None; lifecycle_errors.append(f"context_compiler: {type(e).__name__}: {e}")
+    # v2.108 Operational Context: compiled payload -> реально в prompt модели (context_prelude).
+    payload = None
+    try:
+        payload = context_compiler.build_payload(signals, child_root, plan=plan, bundle=bundle, model=model)
+        (features_dir / fid / "context-payload.yaml").write_text(
+            yaml.safe_dump({k: v for k, v in payload.items() if k != "text"},
+                           allow_unicode=True, sort_keys=False), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        payload = None; lifecycle_errors.append(f"context_payload: {type(e).__name__}: {e}")
+    # v3.7.16 Live Context Hybrid FED_TO_MODEL: при --context-hybrid собираем hybrid (mandatory v1 +
+    # разрешённые v2-additions через promotion gate) ДО прогона и РЕАЛЬНО подаём модели (читаем контент
+    # additions из base-состояния child и дописываем к payload). v1 НИКОГДА не теряется; gate не готов
+    # -> v1-only (fail-safe, additions=[]). Раньше hybrid только фиксировался в отчёте post-hoc.
+    _hybrid_prelude = (payload or {}).get("text")
+    _hybrid_fed = None
+    if context_hybrid and payload:
+        try:
+            from ai_ops_kit.context import context_hybrid as _chyb
+            from ai_ops_kit.context import context_engine as _ce
+            _mand = None
+            if bundle:
+                _inc = bundle.get("included", {})
+                _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
+            _afp, _dcp, _bud = _ce.load_child_policies(child_root)
+            _rule_refs = list((bundle.get("included", {}) or {}).get("rules", [])) if bundle else []
+            _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
+            _budget = _ce.budget_tokens_from(_bud)
+            _base_sha = base_binding.get("base_sha")
+            # v3.7.1 (#3) EXACT-SNAPSHOT: require_snapshot=True -> content читается ТОЛЬКО если child
+            # РОВНО на base_sha и дерево чисто; иначе view invalid -> hybrid v1-only (не подаём
+            # возможно-несоответствующий base_sha контент). Ровно exact-SHA дисциплина.
+            _hyb = _chyb.build_hybrid_from_child(
+                child_root, task_text, "executor", sha=_base_sha, afp=_afp, dcp=_dcp,
+                v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
+                budget=_budget, require_snapshot=True)
+            _adds = _hyb.get("v2_additions") or []
+            # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
+            _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
+            _fed, _dropped = [], []
+            if _hyb.get("mode") == "hybrid" and _adds:
+                # v3.7.1 (#3) ПОЛНЫЙ token budget: считаем весь prompt (v1 payload + additions) против
+                # hard-window; additions, не влезающие в бюджет, ДРОПАЕМ (не раздуваем hard-window).
+                _base_txt = (payload or {}).get("text") or ""
+                _used = len(_base_txt) // 4
+                _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
+                _extra = []
+                for _f in _adds:
+                    _p = child_root / _f
+                    if not _p.is_file():
+                        continue
+                    _c = _p.read_text(encoding="utf-8", errors="replace")[:8000]
+                    _t = len(_c) // 4
+                    if _used + _t > _hard:
+                        _dropped.append(_f); continue
+                    _used += _t; _fed.append(_f); _extra.append(f"### {_f}\n{_c}")
+                if _extra:
+                    _hybrid_prelude = _base_txt + "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
+            _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"),
+                           "v2_additions": _adds, "fed_additions": _fed, "dropped_over_budget": _dropped,
+                           "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _fed),
+                           "prompt_tokens_est": (len(_hybrid_prelude or "") // 4), "hard_window": (_budget or 20000),
+                           "exact_snapshot": True,
+                           "mandatory_references": _hyb.get("mandatory_references"),
+                           "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
+        except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
+            _hybrid_fed = {"kind": "ContextHybrid", "error": f"hybrid feed failed: {type(_e).__name__}: {_e}"[:300],
+                           "fed_to_model": False}
+    # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
+    from ai_ops_kit.gates import spec_levels
+    try:
+        # v2.110 Real Spec-First: coverage из РЕАЛЬНЫХ артефактов (features/<fid>/spec.yaml +
+        # засчёт requirements/plan/openspec), а не из сигналов с пустым provided.
+        _wt_pre = child_root / ".ai" / "worktrees" / fid
+        spec_cov = spec_levels.assess_from_artifacts(
+            signals, child_root, fid, work_root=(_wt_pre if _wt_pre.is_dir() else None))
+        (features_dir / fid / "spec-coverage.yaml").write_text(
+            yaml.safe_dump(spec_cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        spec_cov = None; lifecycle_errors.append(f"spec_levels: {type(e).__name__}: {e}")
+    # v2.100 Atomic Planning: оценка размера пакета + нужна ли декомпозиция по контекстному бюджету.
+    from ai_ops_kit.engine import atomic_planner
+    try:
+        # v2.111: decompose — при необходимости строит КОНКРЕТНЫЕ WorkPackages (не только оси).
+        work_pkg = atomic_planner.decompose(signals, wid=fid, child_root=child_root, bundle=bundle)
+        (features_dir / fid / "work-package.yaml").write_text(
+            yaml.safe_dump(work_pkg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        work_pkg = None; lifecycle_errors.append(f"atomic_planner: {type(e).__name__}: {e}")
+    return (lifecycle_errors, bundle, payload, _hybrid_prelude, _hybrid_fed,
+            spec_cov, work_pkg)
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -864,105 +974,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             _hist.mkdir(parents=True, exist_ok=True)
             _n = len(list(_hist.glob("run-*.yaml"))) + 1
             _ls.durable_write(_hist / f"run-{_n:03d}.yaml", _settings)   # v3.0.14 (#2): атомарно
-        # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
-        # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
-        lifecycle_errors = []
-        # v2.97 Context Compiler: минимальный релевантный ContextBundle для WorkItem (детерминированно).
-        from ai_ops_kit.context import context_compiler
-        try:
-            bundle = context_compiler.compile_bundle(signals, child_root, plan=plan)
-            (features_dir / fid / "context-bundle.yaml").write_text(
-                yaml.safe_dump(bundle, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception as e:  # noqa: BLE001 — не роняем прогон, но и не молчим
-            bundle = None; lifecycle_errors.append(f"context_compiler: {type(e).__name__}: {e}")
-        # v2.108 Operational Context: compiled payload -> реально в prompt модели (context_prelude).
-        payload = None
-        try:
-            payload = context_compiler.build_payload(signals, child_root, plan=plan, bundle=bundle, model=model)
-            (features_dir / fid / "context-payload.yaml").write_text(
-                yaml.safe_dump({k: v for k, v in payload.items() if k != "text"},
-                               allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception as e:  # noqa: BLE001
-            payload = None; lifecycle_errors.append(f"context_payload: {type(e).__name__}: {e}")
-        # v3.7.16 Live Context Hybrid FED_TO_MODEL: при --context-hybrid собираем hybrid (mandatory v1 +
-        # разрешённые v2-additions через promotion gate) ДО прогона и РЕАЛЬНО подаём модели (читаем контент
-        # additions из base-состояния child и дописываем к payload). v1 НИКОГДА не теряется; gate не готов
-        # -> v1-only (fail-safe, additions=[]). Раньше hybrid только фиксировался в отчёте post-hoc.
-        _hybrid_prelude = (payload or {}).get("text")
-        _hybrid_fed = None
-        if context_hybrid and payload:
-            try:
-                from ai_ops_kit.context import context_hybrid as _chyb
-                from ai_ops_kit.context import context_engine as _ce
-                _mand = None
-                if bundle:
-                    _inc = bundle.get("included", {})
-                    _mand = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
-                _afp, _dcp, _bud = _ce.load_child_policies(child_root)
-                _rule_refs = list((bundle.get("included", {}) or {}).get("rules", [])) if bundle else []
-                _pol_refs = [p.get("id") for p in (_afp, _dcp) if isinstance(p, dict) and p.get("id")]
-                _budget = _ce.budget_tokens_from(_bud)
-                _base_sha = base_binding.get("base_sha")
-                # v3.7.1 (#3) EXACT-SNAPSHOT: require_snapshot=True -> content читается ТОЛЬКО если child
-                # РОВНО на base_sha и дерево чисто; иначе view invalid -> hybrid v1-only (не подаём
-                # возможно-несоответствующий base_sha контент). Ровно exact-SHA дисциплина.
-                _hyb = _chyb.build_hybrid_from_child(
-                    child_root, task_text, "executor", sha=_base_sha, afp=_afp, dcp=_dcp,
-                    v1_mandatory=_mand, rule_refs=_rule_refs, policy_refs=_pol_refs,
-                    budget=_budget, require_snapshot=True)
-                _adds = _hyb.get("v2_additions") or []
-                # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
-                _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
-                _fed, _dropped = [], []
-                if _hyb.get("mode") == "hybrid" and _adds:
-                    # v3.7.1 (#3) ПОЛНЫЙ token budget: считаем весь prompt (v1 payload + additions) против
-                    # hard-window; additions, не влезающие в бюджет, ДРОПАЕМ (не раздуваем hard-window).
-                    _base_txt = (payload or {}).get("text") or ""
-                    _used = len(_base_txt) // 4
-                    _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
-                    _extra = []
-                    for _f in _adds:
-                        _p = child_root / _f
-                        if not _p.is_file():
-                            continue
-                        _c = _p.read_text(encoding="utf-8", errors="replace")[:8000]
-                        _t = len(_c) // 4
-                        if _used + _t > _hard:
-                            _dropped.append(_f); continue
-                        _used += _t; _fed.append(_f); _extra.append(f"### {_f}\n{_c}")
-                    if _extra:
-                        _hybrid_prelude = _base_txt + "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
-                _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"),
-                               "v2_additions": _adds, "fed_additions": _fed, "dropped_over_budget": _dropped,
-                               "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _fed),
-                               "prompt_tokens_est": (len(_hybrid_prelude or "") // 4), "hard_window": (_budget or 20000),
-                               "exact_snapshot": True,
-                               "mandatory_references": _hyb.get("mandatory_references"),
-                               "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
-            except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
-                _hybrid_fed = {"kind": "ContextHybrid", "error": f"hybrid feed failed: {type(_e).__name__}: {_e}"[:300],
-                               "fed_to_model": False}
-        # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
-        from ai_ops_kit.gates import spec_levels
-        try:
-            # v2.110 Real Spec-First: coverage из РЕАЛЬНЫХ артефактов (features/<fid>/spec.yaml +
-            # засчёт requirements/plan/openspec), а не из сигналов с пустым provided.
-            _wt_pre = child_root / ".ai" / "worktrees" / fid
-            spec_cov = spec_levels.assess_from_artifacts(
-                signals, child_root, fid, work_root=(_wt_pre if _wt_pre.is_dir() else None))
-            (features_dir / fid / "spec-coverage.yaml").write_text(
-                yaml.safe_dump(spec_cov, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception as e:  # noqa: BLE001
-            spec_cov = None; lifecycle_errors.append(f"spec_levels: {type(e).__name__}: {e}")
-        # v2.100 Atomic Planning: оценка размера пакета + нужна ли декомпозиция по контекстному бюджету.
-        from ai_ops_kit.engine import atomic_planner
-        try:
-            # v2.111: decompose — при необходимости строит КОНКРЕТНЫЕ WorkPackages (не только оси).
-            work_pkg = atomic_planner.decompose(signals, wid=fid, child_root=child_root, bundle=bundle)
-            (features_dir / fid / "work-package.yaml").write_text(
-                yaml.safe_dump(work_pkg, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        except Exception as e:  # noqa: BLE001
-            work_pkg = None; lifecycle_errors.append(f"atomic_planner: {type(e).__name__}: {e}")
+        # v2.107..v2.111: артефакты контекста (bundle/payload/hybrid/spec/work-package).
+        #     v3.38 (K6): тело вынесено в _compile_context_artifacts.
+        (lifecycle_errors, bundle, payload, _hybrid_prelude, _hybrid_fed,
+         spec_cov, work_pkg) = _compile_context_artifacts(
+            signals, child_root, features_dir, fid, plan, model,
+            context_hybrid, base_binding, task_text)
         # v2.115 Preflight Truth: проверки ДО запуска модели. Блок -> tool loop НЕ запускается,
         # правки/коммит НЕ создаются (Spec-First блокирует РЕАЛИЗАЦИЮ, а не только доставку). Единая
         # точка: spec/атомарность/overflow/approvals/lifecycle. Выполняется и для fresh, и для resume.
