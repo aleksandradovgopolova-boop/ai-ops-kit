@@ -1250,6 +1250,182 @@ def _resolve_models(ctx):
     return None
 
 
+def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, install_deps,
+                           hybrid_prelude, calib, ui_evidence, reevaluate_only, resume,
+                           resume_ctx, attempt_id, fid, aw_path, review_fix_attempts,
+                           reviewer_proposer, author_proposer):
+    """Исполнение прогона движком + fix-loop с quality-эскалацией writer'а.
+
+    K6: вынесено из run() без изменения поведения. Читает/мутирует `ctx` (prop/rev_prop/auth_prop,
+    model_resolution, trust-группа). -> (rep, terminal_error): при обычном исходе terminal_error=None
+    и rep — доказанный результат; при сбое провайдера/инфры terminal_error — честный error-отчёт
+    (durable-записанный), а rep=None; KeyboardInterrupt/SystemExit ПРОБРАСЫВАЕТСЯ (active-work закрыт).
+
+    v3.1.1 fix-loop: блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх той же ветки (resume=True),
+    пока не pass ЛИБО не исчерпан бюджет. fail-closed: бюджет кончился и всё ещё не ready -> честный
+    блок (ничего не форсируем в green). Не для mock. v3.8.3 WRITER QUALITY-ESCALATION: money-mode взял
+    дешёвого writer'а; при КАЧЕСТВЕННОМ провале эскалируем на СИЛЬНЕЙШУЮ допущенную модель по ladder.
+    """
+    from ai_ops_kit.engine import execution_pipeline
+    from ai_ops_kit.engine import tool_loop
+    from ai_ops_kit.providers import orchestrator
+
+    def _pipe(_resume, _rctx):
+        return execution_pipeline.run_pipeline(
+            ctx.task_text, ctx.signals, ctx.child_root, ctx.prop, feature=ctx.feature, plan=plan,
+            commit=execute, isolate=execute, open_pr=ctx.open_pr, baseline_diff=ctx.baseline_diff,
+            require_fix=ctx.require_fix, max_steps=ctx.max_steps, discard_previous=discard_previous,
+            sandbox=ctx.sandbox, review=ctx.review, reviewer_proposer=ctx.rev_prop,
+            author=ctx.author, author_proposer=ctx.auth_prop, install_deps=install_deps,
+            context_prelude=hybrid_prelude,   # v3.7.16: hybrid (v1 ∪ v2-additions) реально подаётся модели
+            resume=_resume, resume_context=_rctx, write_scope=ctx.write_scope,
+            base=ctx.base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
+            defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
+            calibrated_enforcement=calib, ui_evidence=ui_evidence,
+            reevaluate_only=reevaluate_only,   # v3.8.3-rc: переоценка гейтов после человеко-approval БЕЗ переавторинга
+            strict_judge_qualified=ctx.sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
+    try:
+        rep = _pipe(resume, resume_ctx)
+        _fix_left = int(review_fix_attempts or 0)
+        # v3.8.3 WRITER QUALITY-ESCALATION: ладдер по success_rate (impl из model_resolution).
+        _esc_ladder = (((ctx.model_resolution or {}).get("plan") or {}).get("implementation") or {}).get("escalation_ladder") or []
+        _esc_idx = 0
+        _QUALITY_GATES = {"implementation_verification", "code_review"}
+        _rev_self = not ((ctx.model_resolution.get("reviewer") or {}).get("independent_by_model")) if isinstance(ctx.model_resolution, dict) else True
+        while (not rep.get("ready_for_pr")) and _fix_left > 0 and ctx.provider_name not in (None, "mock"):
+            _fx = _review_fix_context(rep)
+            if not _fx:
+                break   # блок не модель-фиксируем (human/base/lifecycle) -> не зацикливаем
+            # эскалация writer'а, если провалены КАЧЕСТВЕННЫЕ гейты и ладдер не исчерпан (model=None -> router-путь)
+            _unmet = set((rep.get("gates") or {}).get("unmet") or [])
+            if ctx.model is None and (_unmet & _QUALITY_GATES) and _esc_idx < len(_esc_ladder):
+                if ctx.model_resolution.get("model_attempts"):
+                    ctx.model_resolution["model_attempts"][-1]["outcome"] = "quality_failed"
+                from ai_ops_kit.providers import provider_endpoints as _pe2
+
+                def _cand_trusted(c):  # rc3: JIT trust кандидата эскалации (ключ + KLP/TTL)
+                    if not _pe2.key_available(c.get("provider")):
+                        return False, "ключ отсутствует в env"
+                    _ct = _provider_trust(c["provider"], _pe2.endpoint_for(c["provider"])["key_env"],
+                                          ctx.klp_by_env, ctx.trust_env, ctx.trust_now, ctx.trust_cache)
+                    return _ct["ready"], _ct.get("reason")
+                # найти СЛЕДУЮЩЕГО кандидата ладдера, прошедшего JIT-trust; не готов -> исключить+записать
+                _esc = None
+                while _esc_idx < len(_esc_ladder):
+                    _cand = _esc_ladder[_esc_idx]; _esc_idx += 1
+                    try:
+                        _ok, _why = _cand_trusted(_cand)
+                    except Exception as _ce:  # noqa: BLE001 — сбой trust-проверки -> исключаем честно
+                        _ok, _why = False, f"trust-check упал: {type(_ce).__name__}"
+                    if _ok:
+                        _esc = _cand; break
+                    ctx.model_resolution.setdefault("escalation_excluded", []).append(
+                        {"model": _cand.get("model_id"), "provider": _cand.get("provider"), "reason": _why})
+                if _esc is not None:
+                    try:
+                        _eep = _pe2.endpoint_for(_esc["provider"])
+                        _eprov = orchestrator.make_openai_provider(_esc["model_id"], _eep["base_url"], _eep["key_env"])
+                        # #6-fallback на СЛЕДУЮЩЕГО TRUSTED кандидата (если эскалированный сам жёстко 429-ится)
+                        _nxt = next((n for n in _esc_ladder[_esc_idx:] if _cand_trusted(n)[0]), None)
+                        if _nxt:
+                            _nep = _pe2.endpoint_for(_nxt["provider"])
+                            _eprov = _with_provider_fallback(
+                                _eprov, orchestrator.make_openai_provider(_nxt["model_id"], _nep["base_url"], _nep["key_env"]))
+                        _eprov_ctx = uctx(_eprov, "implementation", "escalation", _esc.get("provider"))  # v3.10.0 Usage Truth
+                        ctx.prop = tool_loop.make_model_proposer(_eprov_ctx)  # writer -> выше observed success
+                        if ctx.author and author_proposer is None:
+                            ctx.auth_prop = _eprov_ctx
+                        if ctx.review and reviewer_proposer is None and _rev_self:
+                            ctx.rev_prop = _eprov_ctx                        # self-model reviewer следует за writer'ом
+                        ctx.model_resolution["effective_model"] = _esc["model_id"]
+                        ctx.model_resolution.setdefault("model_attempts", []).append(
+                            {"attempt": len(ctx.model_resolution.get("model_attempts") or []) + 1,
+                             "model": _esc["model_id"], "provider": _esc.get("provider"),
+                             "trigger": "quality_escalation", "outcome": "pending",
+                             "observed_success_rate": _esc.get("observed_success_rate"),
+                             "corpus_version": _esc.get("corpus_version")})
+                        ctx.model_resolution.setdefault("escalations", []).append(
+                            {"to": _esc["model_id"], "provider": _esc.get("provider"),
+                             "observed_success_rate": _esc.get("observed_success_rate"),
+                             "corpus_version": _esc.get("corpus_version"),
+                             "reason": "quality-failure:" + ",".join(sorted(_unmet & _QUALITY_GATES))})
+                    except Exception as _ee:  # noqa: BLE001 — rc3: НЕ глотаем молча -> честный escalation_error
+                        ctx.model_resolution["escalation_error"] = f"{type(_ee).__name__}: {_ee}"[:200]
+            try:
+                _ls.journal_append(ctx.features_dir / fid / "lifecycle-journal.jsonl",
+                                   {"kind": "fix_attempt", "run_id": fid, "workitem_id": fid,
+                                    "attempt_id": attempt_id, "remaining": _fix_left,
+                                    "unmet": (rep.get("gates") or {}).get("unmet")})
+            except Exception as _je:  # noqa: BLE001 — журнал не роняет fix-loop...
+                # ...но пробел в аудит-цепочке обязан быть видимым: цепочка checksum'ов
+                # lifecycle-журнала после пропущенной записи уже не полна.
+                _note_bookkeeping_error(rep, "lifecycle_journal.fix_attempt", _je)
+            rep = _pipe(True, _fx + (("\n\n" + resume_ctx) if resume_ctx else ""))
+            _fix_left -= 1
+    except (KeyboardInterrupt, SystemExit):
+        with contextlib.redirect_stdout(sys.stderr):
+            active_work.finish_cmd(aw_path, fid, status="blocked",
+                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена")
+        raise
+    except Exception as _e:  # noqa: BLE001
+        # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
+        # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16),
+        # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
+        # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
+        with contextlib.redirect_stdout(sys.stderr):
+            active_work.finish_cmd(aw_path, fid, status="blocked",
+                                   reason=f"прогон упал: {type(_e).__name__}")
+        try:
+            from ai_ops_kit.engine.workpackage_executor import _classify_failure
+            _fail = _classify_failure(_e)
+        except Exception:  # noqa: BLE001
+            _fail = {"failure_class": "engine", "exception_type": type(_e).__name__,
+                     "message": str(_e)[:400], "retryable": False}
+        # v3.8.3-rc3: пометить исход текущей попытки в trace (провайдерный сбой) — видно на 429 и т.п.
+        if isinstance(ctx.model_resolution, dict) and ctx.model_resolution.get("model_attempts"):
+            _la = ctx.model_resolution["model_attempts"][-1]
+            if _la.get("outcome") == "pending":
+                _la["outcome"] = ("provider_%s" % _fail.get("failure_class")
+                                  if _fail.get("retryable") else "error:" + str(_fail.get("failure_class")))
+        _eff_e = ctx.model_resolution.get("effective_model") if isinstance(ctx.model_resolution, dict) else None
+        err_rep = {"schema_version": 1, "kind": "execution-pipeline", "status": "error",
+                   "workitem_id": fid, "error": f"{_fail['exception_type']}: {_fail['message']}",
+                   "failure": _fail, "ready_for_pr": False, "not_yet": [],
+                   "runtime": ctx.runtime, "engine": "pipeline", "provider": ctx.provider_name,
+                   "model": _eff_e or ctx.model,
+                   "initial_model": (ctx.model_resolution.get("initial_model") if isinstance(ctx.model_resolution, dict) else None),
+                   "effective_model": _eff_e,
+                   "model_resolution": ctx.model_resolution if isinstance(ctx.model_resolution, dict) else None}
+        # v3.0-rc20 (finding аудита P1): DURABLE failure evidence — не только вернуть отчёт, но и
+        # ЗАПИСАТЬ свежий run-report.json + failure-handoff, иначе на диске остаётся старый отчёт/
+        # handoff прошлого прогона (пользователь думает, что evidence свежее). next_action — безопасный.
+        try:
+            _safe = ("retry прогон (сбой транзиентный: провайдер/сеть)"
+                     if _fail.get("retryable") else
+                     "разобрать сбой перед повтором (вероятен дефект/невалидный ввод — не транзиент)")
+            _ls.durable_write_json(ctx.features_dir / fid / "run-report.json", err_rep)   # v3.0.14 (#2)
+            _hf = {"schema_version": 1, "kind": "run-handoff", "workitem_id": fid,
+                   "status": "error", "failure": _fail, "retryable": bool(_fail.get("retryable")),
+                   "next_action": _safe}
+            # v3.0.12: durable failure-handoff (атомарно) — чтобы не оставить наполовину записанный
+            # или устаревший handoff прошлого прогона, который resume принял бы за свежий.
+            _ls.durable_write(ctx.features_dir / fid / "run-handoff.yaml", _hf,
+                              require_keys=("kind", "workitem_id"))
+            err_rep["run_report"] = f"features/{fid}/run-report.json"
+            err_rep["handoff"] = {"next_action": _safe}
+        # СРЕЗ engine РАТЧЕТА 2026-08-12. Решение «запись evidence не маскирует исходный сбой»
+        # остаётся верным: подменять причину падения ошибкой записи нельзя. Но у него не было
+        # второй половины. Комментарий ВЫШЕ сам называет цену: не записали свежий отчёт/handoff
+        # — «на диске остаётся старый отчёт прошлого прогона, пользователь думает, что evidence
+        # свежее». При `pass` происходило ровно это, и МОЛЧА: `err_rep` даже не упоминал, что
+        # обещанные им `run_report`/`handoff` на диск не легли. Теперь упоминает.
+        except Exception as _we:  # noqa: BLE001 — исходный сбой важнее сбоя записи, но утрата видна
+            _note_bookkeeping_error(err_rep, "failure_evidence.write", _we)
+        _ls.merge_bookkeeping_losses(err_rep)
+        return None, err_rep
+    return rep, None
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1362,6 +1538,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         auth_prop = author_proposer
         if author and auth_prop is None and provider_name != "mock":
             auth_prop = _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname)
+        # resolved-предложители -> ctx: fix-loop (вынесен) читает/перевязывает их через ctx.
+        ctx.prop, ctx.rev_prop, ctx.auth_prop = prop, rev_prop, auth_prop
 
         # v2.94 (One Run Transaction, аудит #2): pipeline БОЛЬШЕ НЕ обходит lifecycle. Один план
         # строится здесь и передаётся в движок (не второй раз внутри); WorkItem/RunPlan/active-work/
@@ -1434,175 +1612,21 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         if _awerr:
             return _awerr
 
-        # v2.107 (finding аудита): если pipeline упадёт, active-work обязана закрыться (иначе запись
-        # останется in-progress навсегда) — гарантируем через except+re-raise.
-        # v3.1.8: калиброванное UI-enforcement (по умолчанию включено в контроллере). NO-OP без более
-        # богатых сигналов: легаси ui_changed -> user_facing + нет evidence -> fail-closed == сегодня.
-        # Ослабление возможно ТОЛЬКО при ui_impact=internal (не-safety гейты) или passing UI-evidence.
-        # v3.1.9 (trust-фикс): контроллер БОЛЬШЕ НЕ собирает evidence до реализации из основного
-        # checkout. Сбор перенесён В pipeline — ПОСЛЕ коммита, из рабочего worktree, на ТОЧНОМ SHA
-        # (см. execution_pipeline: build_bundle(work_root) + evidence_for_gate(expected_sha=committed)).
-        # ui_evidence прокидывается как есть (обычно None; bench инжектит синтетический dict напрямую).
+        # v2.107: если pipeline упадёт, active-work обязана закрыться (except+re-raise). v3.1.8/3.1.9
+        # калиброванное UI-enforcement, fix-loop с quality-эскалацией writer'а -> вынесено в
+        # _execute_with_fix_loop (K6). ctx несёт prop/rev_prop/auth_prop + model_resolution/trust;
+        # helper мутирует ctx и возвращает (rep, terminal_error): terminal_error != None -> ранний
+        # честный error-отчёт (durable-записан); KeyboardInterrupt/SystemExit пробрасывается.
         _calib = bool(calibrated_enforcement)
-
-        def _pipe(_resume, _rctx):
-            return execution_pipeline.run_pipeline(
-                task_text, signals, child_root, prop, feature=feature, plan=plan,
-                commit=execute, isolate=execute, open_pr=open_pr, baseline_diff=baseline_diff,
-                require_fix=require_fix, max_steps=max_steps, discard_previous=discard_previous,
-                sandbox=sandbox, review=review, reviewer_proposer=rev_prop,
-                author=author, author_proposer=auth_prop, install_deps=install_deps,
-                context_prelude=_hybrid_prelude,   # v3.7.16: hybrid (v1 ∪ v2-additions) реально подаётся модели
-                resume=_resume, resume_context=_rctx, write_scope=write_scope,
-                base=base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
-                defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
-                calibrated_enforcement=_calib, ui_evidence=ui_evidence,
-                reevaluate_only=reevaluate_only,   # v3.8.3-rc: переоценка гейтов после человеко-approval БЕЗ переавторинга
-                strict_judge_qualified=_sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
-        try:
-            rep = _pipe(resume, resume_ctx)
-            # v3.1.1 (fix-loop, находка Phase B): блокеры ревью/проверок -> писателю на ИТЕРАЦИЮ поверх
-            # той же ветки (resume=True), пока не pass ЛИБО не исчерпан бюджет. fail-closed сохранён:
-            # бюджет кончился и всё ещё не ready -> честный блок (ничего не форсируем в green). Не для mock.
-            _fix_left = int(review_fix_attempts or 0)
-            # v3.8.3 WRITER QUALITY-ESCALATION: money-mode взял дешёвого writer'а; при КАЧЕСТВЕННОМ провале
-            # (impl_verification/code_review) эскалируем на СИЛЬНЕЙШУЮ допущенную модель (ладдер по success_rate),
-            # а не re-prompt того же слабого. Отличается от provider_fallback (#6 — только retryable infra).
-            _esc_ladder = (((_model_resolution or {}).get("plan") or {}).get("implementation") or {}).get("escalation_ladder") or []
-            _esc_idx = 0
-            _QUALITY_GATES = {"implementation_verification", "code_review"}
-            _rev_self = not ((_model_resolution.get("reviewer") or {}).get("independent_by_model")) if isinstance(_model_resolution, dict) else True
-            while (not rep.get("ready_for_pr")) and _fix_left > 0 and provider_name not in (None, "mock"):
-                _fx = _review_fix_context(rep)
-                if not _fx:
-                    break   # блок не модель-фиксируем (human/base/lifecycle) -> не зацикливаем
-                # эскалация writer'а, если провалены КАЧЕСТВЕННЫЕ гейты и ладдер не исчерпан (model=None -> router-путь)
-                _unmet = set((rep.get("gates") or {}).get("unmet") or [])
-                if model is None and (_unmet & _QUALITY_GATES) and _esc_idx < len(_esc_ladder):
-                    if _model_resolution.get("model_attempts"):
-                        _model_resolution["model_attempts"][-1]["outcome"] = "quality_failed"
-                    from ai_ops_kit.providers import provider_endpoints as _pe2
-
-                    def _cand_trusted(c):  # rc3: JIT trust кандидата эскалации (ключ + KLP/TTL)
-                        if not _pe2.key_available(c.get("provider")):
-                            return False, "ключ отсутствует в env"
-                        _ct = _provider_trust(c["provider"], _pe2.endpoint_for(c["provider"])["key_env"],
-                                              _klp_by_env, _trust_env, _trust_now, _trust_cache)
-                        return _ct["ready"], _ct.get("reason")
-                    # найти СЛЕДУЮЩЕГО кандидата ладдера, прошедшего JIT-trust; не готов -> исключить+записать
-                    _esc = None
-                    while _esc_idx < len(_esc_ladder):
-                        _cand = _esc_ladder[_esc_idx]; _esc_idx += 1
-                        try:
-                            _ok, _why = _cand_trusted(_cand)
-                        except Exception as _ce:  # noqa: BLE001 — сбой trust-проверки -> исключаем честно
-                            _ok, _why = False, f"trust-check упал: {type(_ce).__name__}"
-                        if _ok:
-                            _esc = _cand; break
-                        _model_resolution.setdefault("escalation_excluded", []).append(
-                            {"model": _cand.get("model_id"), "provider": _cand.get("provider"), "reason": _why})
-                    if _esc is not None:
-                        try:
-                            _eep = _pe2.endpoint_for(_esc["provider"])
-                            _eprov = orchestrator.make_openai_provider(_esc["model_id"], _eep["base_url"], _eep["key_env"])
-                            # #6-fallback на СЛЕДУЮЩЕГО TRUSTED кандидата (если эскалированный сам жёстко 429-ится)
-                            _nxt = next((n for n in _esc_ladder[_esc_idx:] if _cand_trusted(n)[0]), None)
-                            if _nxt:
-                                _nep = _pe2.endpoint_for(_nxt["provider"])
-                                _eprov = _with_provider_fallback(
-                                    _eprov, orchestrator.make_openai_provider(_nxt["model_id"], _nep["base_url"], _nep["key_env"]))
-                            _eprov_ctx = _uctx(_eprov, "implementation", "escalation", _esc.get("provider"))  # v3.10.0 Usage Truth
-                            prop = tool_loop.make_model_proposer(_eprov_ctx)  # writer -> выше observed success
-                            if author and author_proposer is None:
-                                auth_prop = _eprov_ctx
-                            if review and reviewer_proposer is None and _rev_self:
-                                rev_prop = _eprov_ctx                        # self-model reviewer следует за writer'ом
-                            _model_resolution["effective_model"] = _esc["model_id"]
-                            _model_resolution.setdefault("model_attempts", []).append(
-                                {"attempt": len(_model_resolution.get("model_attempts") or []) + 1,
-                                 "model": _esc["model_id"], "provider": _esc.get("provider"),
-                                 "trigger": "quality_escalation", "outcome": "pending",
-                                 "observed_success_rate": _esc.get("observed_success_rate"),
-                                 "corpus_version": _esc.get("corpus_version")})
-                            _model_resolution.setdefault("escalations", []).append(
-                                {"to": _esc["model_id"], "provider": _esc.get("provider"),
-                                 "observed_success_rate": _esc.get("observed_success_rate"),
-                                 "corpus_version": _esc.get("corpus_version"),
-                                 "reason": "quality-failure:" + ",".join(sorted(_unmet & _QUALITY_GATES))})
-                        except Exception as _ee:  # noqa: BLE001 — rc3: НЕ глотаем молча -> честный escalation_error
-                            _model_resolution["escalation_error"] = f"{type(_ee).__name__}: {_ee}"[:200]
-                try:
-                    _ls.journal_append(features_dir / fid / "lifecycle-journal.jsonl",
-                                       {"kind": "fix_attempt", "run_id": fid, "workitem_id": fid,
-                                        "attempt_id": _attempt_id, "remaining": _fix_left,
-                                        "unmet": (rep.get("gates") or {}).get("unmet")})
-                except Exception as _je:  # noqa: BLE001 — журнал не роняет fix-loop...
-                    # ...но пробел в аудит-цепочке обязан быть видимым: цепочка checksum'ов
-                    # lifecycle-журнала после пропущенной записи уже не полна.
-                    _note_bookkeeping_error(rep, "lifecycle_journal.fix_attempt", _je)
-                rep = _pipe(True, _fx + (("\n\n" + resume_ctx) if resume_ctx else ""))
-                _fix_left -= 1
-        except (KeyboardInterrupt, SystemExit):
-            with contextlib.redirect_stdout(sys.stderr):
-                active_work.finish_cmd(aw_path, fid, status="blocked",
-                                       reason="прогон прерван (Ctrl-C/exit) — работа не завершена")
-            raise
-        except Exception as _e:  # noqa: BLE001
-            # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
-            # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16),
-            # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
-            # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
-            with contextlib.redirect_stdout(sys.stderr):
-                active_work.finish_cmd(aw_path, fid, status="blocked",
-                                       reason=f"прогон упал: {type(_e).__name__}")
-            try:
-                from ai_ops_kit.engine.workpackage_executor import _classify_failure
-                _fail = _classify_failure(_e)
-            except Exception:  # noqa: BLE001
-                _fail = {"failure_class": "engine", "exception_type": type(_e).__name__,
-                         "message": str(_e)[:400], "retryable": False}
-            # v3.8.3-rc3: пометить исход текущей попытки в trace (провайдерный сбой) — видно на 429 и т.п.
-            if isinstance(_model_resolution, dict) and _model_resolution.get("model_attempts"):
-                _la = _model_resolution["model_attempts"][-1]
-                if _la.get("outcome") == "pending":
-                    _la["outcome"] = ("provider_%s" % _fail.get("failure_class")
-                                      if _fail.get("retryable") else "error:" + str(_fail.get("failure_class")))
-            _eff_e = _model_resolution.get("effective_model") if isinstance(_model_resolution, dict) else None
-            err_rep = {"schema_version": 1, "kind": "execution-pipeline", "status": "error",
-                       "workitem_id": fid, "error": f"{_fail['exception_type']}: {_fail['message']}",
-                       "failure": _fail, "ready_for_pr": False, "not_yet": [],
-                       "runtime": runtime, "engine": "pipeline", "provider": provider_name,
-                       "model": _eff_e or model,
-                       "initial_model": (_model_resolution.get("initial_model") if isinstance(_model_resolution, dict) else None),
-                       "effective_model": _eff_e,
-                       "model_resolution": _model_resolution if isinstance(_model_resolution, dict) else None}
-            # v3.0-rc20 (finding аудита P1): DURABLE failure evidence — не только вернуть отчёт, но и
-            # ЗАПИСАТЬ свежий run-report.json + failure-handoff, иначе на диске остаётся старый отчёт/
-            # handoff прошлого прогона (пользователь думает, что evidence свежее). next_action — безопасный.
-            try:
-                _safe = ("retry прогон (сбой транзиентный: провайдер/сеть)"
-                         if _fail.get("retryable") else
-                         "разобрать сбой перед повтором (вероятен дефект/невалидный ввод — не транзиент)")
-                _ls.durable_write_json(features_dir / fid / "run-report.json", err_rep)   # v3.0.14 (#2)
-                _hf = {"schema_version": 1, "kind": "run-handoff", "workitem_id": fid,
-                       "status": "error", "failure": _fail, "retryable": bool(_fail.get("retryable")),
-                       "next_action": _safe}
-                # v3.0.12: durable failure-handoff (атомарно) — чтобы не оставить наполовину записанный
-                # или устаревший handoff прошлого прогона, который resume принял бы за свежий.
-                _ls.durable_write(features_dir / fid / "run-handoff.yaml", _hf,
-                                  require_keys=("kind", "workitem_id"))
-                err_rep["run_report"] = f"features/{fid}/run-report.json"
-                err_rep["handoff"] = {"next_action": _safe}
-            # СРЕЗ engine РАТЧЕТА 2026-08-12. Решение «запись evidence не маскирует исходный сбой»
-            # остаётся верным: подменять причину падения ошибкой записи нельзя. Но у него не было
-            # второй половины. Комментарий ВЫШЕ сам называет цену: не записали свежий отчёт/handoff
-            # — «на диске остаётся старый отчёт прошлого прогона, пользователь думает, что evidence
-            # свежее». При `pass` происходило ровно это, и МОЛЧА: `err_rep` даже не упоминал, что
-            # обещанные им `run_report`/`handoff` на диск не легли. Теперь упоминает.
-            except Exception as _we:  # noqa: BLE001 — исходный сбой важнее сбоя записи, но утрата видна
-                _note_bookkeeping_error(err_rep, "failure_evidence.write", _we)
-            _ls.merge_bookkeeping_losses(err_rep)
-            return err_rep
+        rep, _exerr = _execute_with_fix_loop(
+            ctx, _uctx, execute=execute, plan=plan, discard_previous=discard_previous,
+            install_deps=install_deps, hybrid_prelude=_hybrid_prelude, calib=_calib,
+            ui_evidence=ui_evidence, reevaluate_only=reevaluate_only, resume=resume,
+            resume_ctx=resume_ctx, attempt_id=_attempt_id, fid=fid, aw_path=aw_path,
+            review_fix_attempts=review_fix_attempts, reviewer_proposer=reviewer_proposer,
+            author_proposer=author_proposer)
+        if _exerr is not None:
+            return _exerr
         # provenance-поля отчёта -> _enrich_run_report (K6).
         _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
                            provider_resolution=provider_resolution, child_root=child_root,
