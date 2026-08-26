@@ -596,144 +596,29 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                                  write_scope=write_scope)
     is_git = _git(work_root, "rev-parse", "--is-inside-work-tree")[0] == 0
 
-    # P0.6/v2.93: снимок untracked-файлов ДО install/baseline — чтобы потом удалить только НОВЫЕ
-    # (созданные подготовкой, напр. package-lock.json от `npm install`), не тронув untracked-файлы,
-    # которые уже были у пользователя. Игнорируемые (node_modules) сюда не попадают.
-    untracked_before_prep = _untracked(work_root) if is_git else set()
+    # 3b/3c. фаза install-deps (K6: _prepare_environment).
+    prepare, prepare_ok, baseline_checks, prepare_mutated_tree = _prepare_environment(
+        profile, work_root, pol, is_git, install_deps=install_deps, isolate=isolate,
+        baseline_diff=baseline_diff)
 
-    # 3b. подготовка окружения ДО петли и baseline: поставить зависимости стека В ИЗОЛИРОВАННОМ
-    #     worktree, иначе build/lint/test упадут exit 127 (нет node_modules/venv). node_modules
-    #     обычно в .gitignore -> дерево остаётся чистым. В основном дереве НЕ ставим.
-    prepare = None
-    if install_deps and isolate:
-        prepare = _install_dependencies(profile, work_root, pol)
-    # P0.6 (аудит v2.79): установка зависимостей должна ПРОЙТИ — иначе baseline/проверки
-    # недостоверны. Провал install -> окружение не квалифицировано, прогон не может быть ready.
-    prepare_ok = (prepare is None) or all(p.get("ok") for p in prepare)
+    # 4/4a. фаза spec-gate: prompt-контекст (task+профиль+prelude/resume+провалы базы) + pre-authoring
+    #       Spec-First (K6: _assemble_context_and_author).
+    ctx, authored, authored_ev, spec_prestage_bad = _assemble_context_and_author(
+        task, profile, plan, wid, work_root, budget,
+        context_prelude=context_prelude, resume_context=resume_context,
+        baseline_diff=baseline_diff, baseline_checks=baseline_checks,
+        author=author, author_proposer=author_proposer, reevaluate_only=reevaluate_only)
 
-    # 3c. baseline-evidence (finding живого прогона: ii-sreda был красным САМ ПО СЕБЕ — build/
-    #     typecheck/test падали до любой правки). Прогон проверок на БАЗЕ до правок модели, чтобы
-    #     отличить пред-существующие провалы репо от РЕГРЕССИЙ, внесённых этой правкой.
-    baseline_checks = None
-    if baseline_diff:
-        baseline_checks = evidence_collector.collect(profile, work_root, pol, broker=tool_broker)["checks"]
+    # 4b. фаза execute (tool-loop): реализация + распознавание факта правок (K6: _run_tool_loop).
+    loop, applied, shell_changed, self_committed, head_sha = _run_tool_loop(
+        proposer, work_root, pol, ctx, is_git, budget=budget, max_steps=max_steps,
+        reevaluate_only=reevaluate_only, spec_prestage_bad=spec_prestage_bad)
 
-    # P0.6 (аудит v2.79) + v2.93 (finding аудита): install/baseline могли намутить TRACKED-файлы
-    # (lock, снапшоты, конфиги) И создать НОВЫЕ untracked (классика: `npm install` создаёт
-    # package-lock.json, которого не было). Откатываем ОБА вида ДО работы модели, иначе `git add -A`
-    # в коммите втянул бы файлы подготовки в AI-коммит. Откат tracked — `checkout -- .`; новые
-    # untracked (delta к снимку до install) — удаляем адресно (untracked ПОЛЬЗОВАТЕЛЯ не трогаем).
-    # node_modules/venv в .gitignore -> в porcelain не видны, остаются для проверок.
-    prepare_mutated_tree = False
-    if is_git and not _tree_clean(work_root):
-        prepare_mutated_tree = True
-        _git(work_root, "checkout", "--", ".")
-        new_untracked = _untracked(work_root) - untracked_before_prep
-        for rel in new_untracked:
-            try:
-                fp = (work_root / rel)
-                if fp.is_file() or fp.is_symlink():
-                    fp.unlink()
-            except OSError:
-                pass
-
-    # 4. tool-loop: модель применяет изменения (context = задача + профиль стека +
-    #    ФАКТИЧЕСКИЙ вывод падающих проверок базы — finding живого прогона: без него модель
-    #    не знала, ЧТО чинить, и крутилась до max_steps с 0 правок на fix-задачах).
-    ctx = f"{task}\n\n{_profile_summary(profile)}"
-    # v2.108 Operational Context: compiled payload из ContextBundle РЕАЛЬНО в prompt (не только отчёт).
-    if context_prelude:
-        ctx = context_prelude + "\n\n" + ctx
-    # v2.109 Real Resume: состояние из RunHandoff в самое начало prompt — модель ПРОДОЛЖАЕТ, а не
-    # переделывает подтверждённое (что сделано / решения / следующий шаг).
-    if resume_context:
-        ctx = resume_context + "\n\n" + ctx
-    if baseline_diff:
-        fails = _baseline_failure_summary(baseline_checks)
-        if fails:
-            ctx += ("\n\n=== ТЕКУЩИЕ ПРОВАЛЫ ПРОВЕРОК НА БАЗЕ (почини относящиеся к задаче; "
-                    "не ломай остальное) ===\n" + fails)
-    # 4a. v2.123 (P0.1) НАСТОЯЩИЙ Spec-First: СНАЧАЛА автор создаёт requirements/plan/specification,
-    #     движок валидирует ФОРМУ (v2.86). Невалидный author-артефакт -> tool loop НЕ запускается
-    #     (ноль implementation-вызовов). Валидные артефакты подаются в prompt реализации (код по спеке).
-    #     Качество артефактов судит независимый ревьюер (--review)/человек, не эта проверка формы.
-    #     Раньше authoring шёл ПОСЛЕ tool loop -> с --author heavy начинал писать код до спеки (обход
-    #     Spec-First). Теперь порядок: authoring -> валидация -> [tool loop только при валидной спеке].
-    authored, authored_ev = None, {}
-    spec_prestage_bad = []
-    if author and author_proposer is not None and not reevaluate_only:
-        authored_ev, authored, _wrote_art = _run_authoring(
-            author_proposer, work_root, plan["gates"], {}, wid, task, budget)
-        spec_prestage_bad = [e for e in (authored or []) if e.get("valid") is False]
-        if not spec_prestage_bad:
-            _spec_ctx = _authored_context(authored, work_root, wid)
-            if _spec_ctx:
-                ctx = _spec_ctx + "\n\n" + ctx
-
-    # HEAD НА СТАРТЕ — точка отсчёта «что произвёл ИМЕННО ЭТОТ прогон». Сравнивать с `base_sha`
-    # нельзя: при resume/reevaluate и при работе на ветке, уже ушедшей вперёд базы, HEAD отличается
-    # от базы ДО начала работы — и кит увидел бы работу там, где её не делали. Это была бы ложь в
-    # обратную сторону, не лучше исходной.
-    _rc_hb, _out_hb, _ = _git(work_root, "rev-parse", "HEAD") if is_git else (1, "", "")
-    head_before = _out_hb.strip() if _rc_hb == 0 else None
-
-    # 4b. tool-loop: реализация. Пропускается, если pre-authoring дал невалидную спецификацию
-    #     (Spec-First: нет валидной спеки -> нет кода — ноль tool-loop вызовов).
-    if reevaluate_only:
-        # v3.8.4: НЕ авторим и НЕ гоняем tool-loop — переоцениваем существующий HEAD ветки как есть
-        # (после добавления человеко-одобрения). Ноль model-вызовов, ноль правок, план не меняется.
-        loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "reevaluate-only",
-                "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
-    elif spec_prestage_bad:
-        loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "spec-prestage-failed",
-                "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
-    else:
-        loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
-                                  max_steps=max_steps, base_context=ctx)
-    applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
-    # v2.93 (finding аудита): факт правок берём из git (tracked-diff ИЛИ новые untracked), а не
-    # только из счётчика write-операций. Иначе правки через разрешённый shell (sed/форматтер)
-    # не распознавались как «применено» -> коммит не создавался и работа терялась.
-    shell_changed = bool(applied) or (is_git and _has_changes(work_root))
-    # НАХОДКА ИИ-СРЕДЫ: модель может закоммитить САМА (`git commit` в разрешённом shell). Тогда
-    # дерево чистое, `applied` пусто, `_has_changes` False — и все три признака говорят «правок
-    # нет», хотя коммит уже лежит на ветке. Третий факт: HEAD сдвинулся ЗА ЭТОТ прогон.
-    self_committed, head_sha = (_head_advanced(work_root, head_before)
-                                if is_git else (False, None))
-
-    # 5. commit на рабочей ветке (finding аудита: evidence должен биться о ТОЧНЫЙ SHA, не
-    #    о грязное дерево поверх старого HEAD). Коммитим ДО сбора evidence.
-    committed_sha, work_branch = None, None
-    # ЧЕМ произведена работа — факт, который нужен человеку: «правок 0» при живом коммите читается
-    # как «кит не работает». Значения: broker (через write-операции), shell/writer (дерево было
-    # грязным), model-commit (модель закоммитила сама).
-    work_produced_by = ("broker" if applied else ("shell" if shell_changed else None))
-    tree_clean_before_checks = None
-    # v2.93: коммитим, если В ДЕРЕВЕ есть правки (git-diff/untracked) — включая правки через shell и
-    # произведённые артефакты — а не только при непустом applied. Для не-git репо fallback на applied.
-    have_work = ((is_git and _has_changes(work_root)) or bool(applied) or bool(authored)
-                 or self_committed)
-    if reevaluate_only:
-        # v3.8.4: существующий HEAD ветки — уже зафиксированная работа; НЕ создаём новый коммит,
-        # план/SHA не меняются -> plan-bound ApprovalRecords остаются валидны.
-        work_branch = f"ai-ops/{wid}"
-        _rc_h, _out_h, _ = _git(work_root, "rev-parse", "HEAD")
-        committed_sha = _out_h.strip() if _rc_h == 0 else None
-        tree_clean_before_checks = _tree_clean(work_root)
-    elif commit and have_work:
-        work_branch = f"ai-ops/{wid}"
-        committed_sha = _commit_on_branch(work_root, work_branch,
-                                          f"ai-ops: {task[:60]}")
-        # Коммитить было нечего, но HEAD ушёл от базы — значит модель зафиксировала работу сама.
-        # Берём ЕЁ коммит вместо того, чтобы отчитаться об отсутствии работы: ground truth — git.
-        if committed_sha is None and self_committed:
-            _rc_b, _out_b, _ = _git(work_root, "rev-parse", "--abbrev-ref", "HEAD")
-            work_branch = _out_b.strip() if _rc_b == 0 and _out_b.strip() != "HEAD" else work_branch
-            committed_sha = head_sha
-            work_produced_by = "model-commit"
-        # finding аудита (P0.5): после коммита дерево обязано быть чистым — иначе часть правок
-        # не в SHA, и evidence соберётся о смешанном состоянии.
-        tree_clean_before_checks = _tree_clean(work_root)
+    # 5. фаза commit: фиксация на ветке ai-ops/<wid> ДО evidence — evidence бьётся о ТОЧНЫЙ SHA
+    #    (K6: _commit_work).
+    committed_sha, work_branch, work_produced_by, tree_clean_before_checks = _commit_work(
+        work_root, wid, task, is_git, applied, authored, shell_changed, self_committed, head_sha,
+        commit=commit, reevaluate_only=reevaluate_only)
 
     # 6. evidence: реальный прогон команд профиля через Broker (теперь дерево чистое на SHA)
     # v3.26.1 Progressive Verification: передаём changed_files для targeted test execution
@@ -859,18 +744,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # Surfaces тихие швы (запись без round-trip / catch без happy-path / stub без real-run / optional-поле
     # в контракте / смена предусловия без аудита вызывающих). НЕ блокирует (advisory); станет gate после
     # обкатки на child. Экономия/скорость НЕ ослабляют проверку (ADR-004).
-    seam_advisory = None
-    if committed_sha:
-        try:
-            from ai_ops_kit.security import seam_scan
-            _diff = _change_context_range(work_root, base_sha, committed_sha, max_chars=20000)
-            _sc = seam_scan.scan_diff(_diff or "")
-            _dec = seam_scan.gate_decision(_sc)
-            seam_advisory = {"mode": "advisory", "would_block": _dec["block"],
-                             "blockers": _dec["blockers"], "advisories": _dec["advisories"],
-                             "findings": _sc["findings"]}
-        except Exception as _e:  # noqa: BLE001 — advisory-детектор не должен ронять прогон
-            seam_advisory = {"error": f"seam_scan failed: {type(_e).__name__}: {_e}"[:200]}
+    seam_advisory = _seam_scan_advisory(work_root, base_sha, committed_sha)
 
     reviews = None
     if review and reviewer_proposer is not None and committed_sha:
@@ -1044,15 +918,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
     # превышении context budget выполнение блокируется или задача дробится"). Мягкие оси
     # (подсистемы/размер) остаются advisory (в report['work_package']), блокирует только жёсткий лимит.
-    context_overflow = False
-    try:
-        from ai_ops_kit.context import context_compiler as _cc
-        _bundle = _cc.compile_bundle(signals, work_root, plan=plan)
-        context_overflow = bool(_bundle.get("overflow"))
-    except Exception:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение при
-        # сборке bundle -> context_overflow=False -> блокер «задача превышает context budget» тихо исчезал,
-        # и over-budget задача проходила в ready. Теперь ошибка = считаем overflow (блокируем, не молчим).
-        context_overflow = True
+    context_overflow = _context_budget_overflow(signals, work_root, plan)
 
     # baseline-diff (finding живого прогона): что правка сломала/починила против базы
     regressions, fixed = _diff_checks(baseline_checks, coll["checks"]) if baseline_diff else ([], [])
@@ -1266,6 +1132,176 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     if _pipe_breaches:
         report["invariant_breaches"] = _pipe_breaches
     return report
+
+
+def _prepare_environment(profile, work_root, pol, is_git, *, install_deps, isolate, baseline_diff):
+    """Фаза install-deps: зависимости стека + baseline-evidence + откат мутаций подготовки до правок
+    модели. v3.38 (K6): вынесено из run_pipeline. -> (prepare, prepare_ok, baseline_checks, mutated)."""
+    # P0.6/v2.93: снимок untracked ДО install/baseline — удалить только НОВЫЕ (package-lock и т.п.),
+    # не тронув untracked пользователя. Игнорируемые (node_modules) сюда не попадают.
+    untracked_before_prep = _untracked(work_root) if is_git else set()
+    # 3b. зависимости стека В ИЗОЛИРОВАННОМ worktree (иначе build/lint/test = exit 127); в основном
+    #     дереве НЕ ставим. node_modules обычно в .gitignore -> дерево чистое.
+    prepare = None
+    if install_deps and isolate:
+        prepare = _install_dependencies(profile, work_root, pol)
+    # P0.6: install обязан ПРОЙТИ — иначе baseline/проверки недостоверны, прогон не может быть ready.
+    prepare_ok = (prepare is None) or all(p.get("ok") for p in prepare)
+    # 3c. baseline-evidence: прогон проверок на БАЗЕ до правок — отличить пред-существующие провалы
+    #     репо от РЕГРЕССИЙ этой правки (finding живого прогона: ii-sreda был красным сам по себе).
+    baseline_checks = None
+    if baseline_diff:
+        baseline_checks = evidence_collector.collect(profile, work_root, pol, broker=tool_broker)["checks"]
+    # P0.6+v2.93: install/baseline могли намутить tracked (lock/снапшоты) И создать новые untracked.
+    # Откатываем ОБА вида ДО модели, иначе `git add -A` втянул бы файлы подготовки в AI-коммит:
+    # tracked — `checkout -- .`; новые untracked (delta к снимку) — адресно (untracked юзера не трогаем).
+    prepare_mutated_tree = False
+    if is_git and not _tree_clean(work_root):
+        prepare_mutated_tree = True
+        _git(work_root, "checkout", "--", ".")
+        new_untracked = _untracked(work_root) - untracked_before_prep
+        for rel in new_untracked:
+            try:
+                fp = (work_root / rel)
+                if fp.is_file() or fp.is_symlink():
+                    fp.unlink()
+            except OSError:
+                pass
+    return prepare, prepare_ok, baseline_checks, prepare_mutated_tree
+
+
+def _assemble_context_and_author(task, profile, plan, wid, work_root, budget, *,
+                                 context_prelude, resume_context, baseline_diff, baseline_checks,
+                                 author, author_proposer, reevaluate_only):
+    """Фаза spec-gate: собрать base_context tool-loop (task+профиль+prelude/resume+провалы базы) и
+    pre-authoring по Spec-First (автор -> валидация формы -> реализация только при валидной спеке).
+    v3.38 (K6): вынесено из run_pipeline. -> (ctx, authored, authored_ev, spec_prestage_bad)."""
+    ctx = f"{task}\n\n{_profile_summary(profile)}"
+    # v2.108: compiled payload из ContextBundle РЕАЛЬНО в prompt (не только отчёт).
+    if context_prelude:
+        ctx = context_prelude + "\n\n" + ctx
+    # v2.109 Real Resume: состояние из RunHandoff в начало prompt — модель ПРОДОЛЖАЕТ, а не переделывает.
+    if resume_context:
+        ctx = resume_context + "\n\n" + ctx
+    if baseline_diff:
+        fails = _baseline_failure_summary(baseline_checks)
+        if fails:
+            ctx += ("\n\n=== ТЕКУЩИЕ ПРОВАЛЫ ПРОВЕРОК НА БАЗЕ (почини относящиеся к задаче; "
+                    "не ломай остальное) ===\n" + fails)
+    # 4a. v2.123 (P0.1) Spec-First: СНАЧАЛА автор (requirements/plan/spec), движок валидирует ФОРМУ.
+    #     Невалидный артефакт -> tool loop НЕ запускается (0 impl-вызовов). Валидные -> в prompt.
+    #     Качество судит независимый ревьюер (--review)/человек, не эта проверка формы.
+    authored, authored_ev = None, {}
+    spec_prestage_bad = []
+    if author and author_proposer is not None and not reevaluate_only:
+        authored_ev, authored, _wrote_art = _run_authoring(
+            author_proposer, work_root, plan["gates"], {}, wid, task, budget)
+        spec_prestage_bad = [e for e in (authored or []) if e.get("valid") is False]
+        if not spec_prestage_bad:
+            _spec_ctx = _authored_context(authored, work_root, wid)
+            if _spec_ctx:
+                ctx = _spec_ctx + "\n\n" + ctx
+    return ctx, authored, authored_ev, spec_prestage_bad
+
+
+def _run_tool_loop(proposer, work_root, pol, ctx, is_git, *, budget, max_steps,
+                   reevaluate_only, spec_prestage_bad):
+    """Фаза execute: снять HEAD до правок, прогнать реализацию через модель (или пропустить при
+    reevaluate/невалидной pre-spec), распознать факт правок из git (broker/shell/model-commit).
+    v3.38 (K6): вынесено из run_pipeline. -> (loop, applied, shell_changed, self_committed, head_sha)."""
+    # HEAD НА СТАРТЕ — точка отсчёта «что произвёл ИМЕННО ЭТОТ прогон». С base_sha сравнивать нельзя:
+    # при resume/reevaluate и на ушедшей вперёд ветке HEAD != база ДО работы -> кит увидел бы работу,
+    # которой не делали.
+    _rc_hb, _out_hb, _ = _git(work_root, "rev-parse", "HEAD") if is_git else (1, "", "")
+    head_before = _out_hb.strip() if _rc_hb == 0 else None
+    # 4b. tool-loop: реализация. Пропускается при невалидной pre-spec (Spec-First: нет спеки -> нет кода).
+    if reevaluate_only:
+        # v3.8.4: НЕ авторим и НЕ гоняем loop — переоцениваем существующий HEAD как есть (0 вызовов).
+        loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "reevaluate-only",
+                "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
+    elif spec_prestage_bad:
+        loop = {"schema_version": 1, "kind": "tool-loop-report", "stopped": "spec-prestage-failed",
+                "steps": 0, "model_calls": 0, "executed": [], "denied": [], "evidence": [], "transcript": []}
+    else:
+        loop = tool_loop.run_loop(proposer, work_root, pol, budget=budget,
+                                  max_steps=max_steps, base_context=ctx)
+    applied = [e for e in loop["executed"] if e.get("op") == "write" and e.get("ok")]
+    # v2.93: факт правок из git (tracked-diff ИЛИ новые untracked), не только из счётчика write —
+    # иначе правки через shell (sed/форматтер) не считались «применено» и коммит терялся.
+    shell_changed = bool(applied) or (is_git and _has_changes(work_root))
+    # НАХОДКА ИИ-СРЕДЫ: модель может закоммитить САМА — дерево чистое, applied пусто, _has_changes False,
+    # хотя коммит уже на ветке. Третий факт: HEAD сдвинулся ЗА ЭТОТ прогон.
+    self_committed, head_sha = (_head_advanced(work_root, head_before)
+                                if is_git else (False, None))
+    return loop, applied, shell_changed, self_committed, head_sha
+
+
+def _commit_work(work_root, wid, task, is_git, applied, authored, shell_changed, self_committed,
+                 head_sha, *, commit, reevaluate_only):
+    """Фаза commit: зафиксировать правки на ветке ai-ops/<wid> ДО evidence (evidence бьётся о ТОЧНЫЙ
+    SHA); reevaluate переиспользует HEAD. work_produced_by (broker/shell/model-commit) — факт для
+    человека. v3.38 (K6): вынесено из run_pipeline. -> (committed_sha, work_branch, produced_by, clean)."""
+    committed_sha, work_branch = None, None
+    # ЧЕМ произведена работа: «правок 0» при живом коммите читается как «кит не работает».
+    work_produced_by = ("broker" if applied else ("shell" if shell_changed else None))
+    tree_clean_before_checks = None
+    # v2.93: коммитим при правках В ДЕРЕВЕ (git-diff/untracked, вкл. shell и артефакты), не только
+    # при applied. Для не-git репо fallback на applied.
+    have_work = ((is_git and _has_changes(work_root)) or bool(applied) or bool(authored)
+                 or self_committed)
+    if reevaluate_only:
+        # v3.8.4: существующий HEAD — уже зафиксированная работа; НЕ создаём коммит, план/SHA не меняются.
+        work_branch = f"ai-ops/{wid}"
+        _rc_h, _out_h, _ = _git(work_root, "rev-parse", "HEAD")
+        committed_sha = _out_h.strip() if _rc_h == 0 else None
+        tree_clean_before_checks = _tree_clean(work_root)
+    elif commit and have_work:
+        work_branch = f"ai-ops/{wid}"
+        committed_sha = _commit_on_branch(work_root, work_branch,
+                                          f"ai-ops: {task[:60]}")
+        # Коммитить нечего, но HEAD ушёл от базы -> модель зафиксировала сама. Берём ЕЁ коммит: ground truth — git.
+        if committed_sha is None and self_committed:
+            _rc_b, _out_b, _ = _git(work_root, "rev-parse", "--abbrev-ref", "HEAD")
+            work_branch = _out_b.strip() if _rc_b == 0 and _out_b.strip() != "HEAD" else work_branch
+            committed_sha = head_sha
+            work_produced_by = "model-commit"
+        # P0.5: после коммита дерево обязано быть чистым — иначе часть правок не в SHA.
+        tree_clean_before_checks = _tree_clean(work_root)
+    return committed_sha, work_branch, work_produced_by, tree_clean_before_checks
+
+
+def _seam_scan_advisory(work_root, base_sha, committed_sha):
+    """v3.7.4 SEAM-SCAN (ADVISORY, non-blocking): детектор «дефекта шва» по дифу base..committed
+    (запись без round-trip / catch без happy-path / stub без real-run / optional-поле / смена
+    предусловия). НЕ блокирует; станет gate после обкатки. v3.38 (K6): вынесено. -> seam_advisory."""
+    seam_advisory = None
+    if committed_sha:
+        try:
+            from ai_ops_kit.security import seam_scan
+            _diff = _change_context_range(work_root, base_sha, committed_sha, max_chars=20000)
+            _sc = seam_scan.scan_diff(_diff or "")
+            _dec = seam_scan.gate_decision(_sc)
+            seam_advisory = {"mode": "advisory", "would_block": _dec["block"],
+                             "blockers": _dec["blockers"], "advisories": _dec["advisories"],
+                             "findings": _sc["findings"]}
+        except Exception as _e:  # noqa: BLE001 — advisory-детектор не должен ронять прогон
+            seam_advisory = {"error": f"seam_scan failed: {type(_e).__name__}: {_e}"[:200]}
+    return seam_advisory
+
+
+def _context_budget_overflow(signals, work_root, plan):
+    """v2.106 #3 Context-budget: контекст задачи превышает бюджет (ContextBundle overflow) -> пакет
+    не атомарен -> блок ready. FAIL-CLOSED: ошибка сборки bundle = overflow. v3.38 (K6): вынесено.
+    -> context_overflow (bool)."""
+    context_overflow = False
+    try:
+        from ai_ops_kit.context import context_compiler as _cc
+        _bundle = _cc.compile_bundle(signals, work_root, plan=plan)
+        context_overflow = bool(_bundle.get("overflow"))
+    except Exception:  # noqa: BLE001 — v3.0.11 (P2): FAIL-CLOSED. Прежде исключение -> overflow=False ->
+        # блокер «превышает context budget» тихо исчезал. Теперь ошибка = overflow (блокируем, не молчим).
+        context_overflow = True
+    return context_overflow
 
 
 def main(argv):
