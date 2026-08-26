@@ -693,6 +693,137 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
             "effective_approval_signals": effective_approval_signals}
 
 
+def _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root, *,
+                      baseline_diff, baseline_checks, committed_sha, base_sha,
+                      reviewer_proposer, budget):
+    """Ready-критерии уровня спеки: spec-depth enforcement (незакрытые разделы уровня, мапящиеся на
+    unmet-гейты), Real Spec-First (реальный spec.yaml неполон -> блок), сверка критериев приёмки
+    независимым судьёй (B2-14, не блокирует, но unmet при verified блокирует у вызывающего) и
+    context-budget overflow.
+
+    K6: вынесено из run_pipeline без изменения поведения. -> dict (spec_depth_missing/spec_depth_ok/
+    spec_incomplete/spec_bad_status/spec_complete_ok/level/acceptance_criteria/context_overflow).
+    """
+    # v2.106 #2 Spec-depth enforcement: разделы спецификации уровня задачи, ЗАКРЫВАЕМЫЕ evidence
+    # гейтов, но незакрытые -> блокируют ready. Маппим только доказуемые разделы (недоказуемые не
+    # над-блокируем). Это подмножество unmet-гейтов -> не блокирует сверх гейтов, но делает
+    # spec-depth явным ready-критерием ("реализация не начинается без блокирующих разделов").
+    from ai_ops_kit.gates import spec_levels as _sl
+    _SECTION_GATE = {
+        "goal": "intake_completeness", "scope": "intake_completeness",
+        "acceptance_criteria": "intake_completeness",
+        "requirements": "requirements", "acceptance_scenarios": "requirements",
+        "implementation_plan": "plan_readiness", "verification_strategy": "implementation_verification",
+        "problem": "discovery_completeness", "users_jtbd": "discovery_completeness",
+        "value": "discovery_completeness", "success_metrics": "analytics_readiness",
+    }
+    _unmet = set(gates["unmet_gates"])
+    # v3.8.4 (finding живой full-stack квалификации): spec_depth ДОЛЖЕН быть baseline-осведомлён.
+    # verification_strategy маппится на implementation_verification; в baseline-diff режиме этот гейт
+    # baseline-освобождён (красная база не блокирует — см. other_blocking_unmet ниже). Раньше spec_depth
+    # брал СЫРОЙ _unmet -> предсуществующий провал базы (напр. flaky date-тест) блокировал ready через
+    # verification_strategy, ОБХОДЯ baseline-diff. Теперь: если правка НЕ внесла новых регрессий, гейт
+    # implementation_verification не считается незакрытым и для spec_depth (реальная регрессия ПРАВКИ —
+    # по-прежнему блокирует, т.к. тогда _diff_checks вернёт непустые regressions).
+    _iv_baseline_exempt = bool(baseline_diff) and not _diff_checks(baseline_checks, coll["checks"])[0]
+    _unmet_for_spec = (_unmet - {"implementation_verification"}) if _iv_baseline_exempt else _unmet
+    _level = _sl.classify(signals)["level"]
+    _req_sections = set(_sl.required_sections(_level))
+    spec_depth_missing = sorted({s for s, g in _SECTION_GATE.items()
+                                 if s in _req_sections and g in plan["gates"] and g in _unmet_for_spec})
+    spec_depth_ok = not spec_depth_missing
+
+    # v2.110 Real Spec-First enforcement: если для этого WorkItem СУЩЕСТВУЕТ явный spec-артефакт
+    # (features/<wid>/spec.yaml), но он НЕ полон (есть blocking_missing) -> «неполная спека не
+    # пускает в implementation» (аудит). Спеки нет -> поведение прежнее (spec-first опционален для
+    # мелких задач, spec_depth через гейты). Читаем реальный артефакт, а не сигналы.
+    spec_incomplete, spec_bad_status = [], []
+    try:
+        _cov = _sl.assess_from_artifacts(signals, child_root, wid, work_root=work_root)
+        if _cov.get("spec_artifact") and _cov.get("blocking_missing"):
+            spec_incomplete = list(_cov["blocking_missing"])
+        # F-013: разделы с содержимым, но нераспознанным статусом — это НЕ «не заполнено».
+        # Прежний вывод отправлял заполнять уже заполненное; настоящая правка — одно слово.
+        spec_bad_status = list(_cov.get("invalid_status") or [])
+    except Exception as _e:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение
+        # -> spec_incomplete=[] -> spec_complete_ok=True: реальный, но неоцениваемый spec.yaml проходил в
+        # реализацию. Теперь ошибка оценки спеки = блокирующий незакрытый пункт (не тихий пропуск).
+        spec_incomplete = [f"<spec-assess-failed: {type(_e).__name__}>"]
+    spec_complete_ok = not spec_incomplete
+
+    # КРИТЕРИИ ПРИЁМКИ НЕ СВЕРЯЮТСЯ С РЕЗУЛЬТАТОМ (B2-14, живой прогон 14.08.2026).
+    #
+    # ЗАМЕР, а не опасение. Прогон на реальном продукте отдал владельцу draft PR со
+    # `sha_verified: True` и `overall_status: delivered`, тогда как критерий приёмки требовал
+    # дословно «в README нет строк с `public/media`» — а в доставленном тексте эта строка осталась,
+    # только описание стало расплывчатым. Ложное утверждение о проекте (каталога не существует) не
+    # ушло, а замаскировалось. `spec-coverage` при этом сообщал `acceptance_criteria: complete`.
+    #
+    # `complete` В SPEC-COVERAGE ОЗНАЧАЕТ «РАЗДЕЛ ЗАПОЛНЕН», А НЕ «КРИТЕРИЙ ВЫПОЛНЕН». Разница в
+    # одном слове, а цена — ложный green на последнем шаге: владелец получает работу, помеченную
+    # проверенной, и приёмка перекладывается на него без предупреждения.
+    #
+    # ПЕРВАЯ ПОЛОВИНА (14.08, #111): непроверенное перестало выглядеть проверенным.
+    # ВТОРАЯ ПОЛОВИНА (здесь): появилась САМА СВЕРКА. Независимый read-only судья (writer ≠ judge)
+    # читает дифф против КАЖДОГО критерия и выносит вердикт с цитатой; цитата проверяется кодом в
+    # диффе и в названном файле, иначе вердикт не принимается — `ai_ops_kit/engine/acceptance_verify.py`.
+    # СВЕРКА НЕ БЛОКИРУЕТ ready. Порядок из плана обязателен: advisory + полевые доказательства
+    # качества вердиктов, и только потом блокировка. Гейт, включённый до замера, останавливал бы все
+    # прогоны на непроверенном вердикте — и его научились бы обходить.
+    from ai_ops_kit.engine import acceptance_verify as _av
+    _ac_text, _ac_items, _ac_problem = _av.criteria_from_spec(child_root, wid)
+    # СВЕРКА НЕ ЗАВИСИТ ОТ ФЛАГА `review` (полевой замер 14.08.2026, пере-прогон BNBM). Судья
+    # включается автоподбором по классу задачи: для QUICK `review=False`. Правка документа — это
+    # QUICK, и именно на правке документа родился B2-14. То есть механизм против ложного green не
+    # работал ровно на том классе, где ложный green и случился: за весь живой прогон сверка не
+    # запустилась НИ РАЗУ. Критерии, если они объявлены, сверяются всегда, когда есть кому судить.
+    if _ac_items and reviewer_proposer is not None and committed_sha:
+        try:
+            # Контекст судьи — ВЕСЬ диапазон base..head, а не последний коммит (ревью PR #118).
+            # Критерии приёмки описывают изменение целиком; на resume и reevaluate_only ветка
+            # несёт несколько коммитов, и критерий, выполненный в предыдущем, не попал бы в дифф —
+            # судья честно ответил бы `unmet`/`undetermined` о работе, которая сделана. Тот же
+            # довод, по которому диапазон берёт seam_scan выше.
+            acceptance_criteria = _av.verify(
+                work_root, _ac_items, reviewer_proposer, revision=committed_sha,
+                change_context=_change_context_range(work_root, base_sha, committed_sha),
+                budget=budget)
+        except Exception as _e:  # noqa: BLE001 — FAIL-CLOSED: сбой сверки = «не сверено» с названной
+            # причиной, а не отсутствие блока (пустой блок читался бы как «претензий нет»).
+            acceptance_criteria = _av._unverified(
+                _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300])
+    elif _ac_problem:
+        # Спека ЕСТЬ, но не разобрана: это «не знаю», а не «критериев нет». Молчание здесь было бы
+        # тем же ложным green — `spec-coverage` для того же файла говорит `complete`.
+        acceptance_criteria = _av._unverified(
+            [], f"критерии приёмки НЕ прочитаны: {_ac_problem} — сверка невозможна, проверь вручную",
+            declared=True)
+    elif _ac_text and not _ac_items:
+        # Раздел заполнен, но проверяемых пунктов из него не извлеклось (одни заголовки/разделители).
+        acceptance_criteria = _av._unverified(
+            [], "раздел критериев заполнен, но ни одного проверяемого пункта в нём не найдено — "
+                "сверять нечего по существу (проверь формат: пункты списка или строки)",
+            declared=True)
+    else:
+        acceptance_criteria = _av._unverified(
+            _ac_items,
+            ("критерии объявлены, но с результатом НЕ сверялись: независимый ревьюер не запускался "
+             "(нужны --execute с коммитом и провайдер судьи); `spec-coverage: complete` означает "
+             "«раздел заполнен», а не «критерий выполнен»"
+             if _ac_items else "критерии приёмки не объявлены — сверять нечего"),
+            declared=bool(_ac_items))
+
+    # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
+    # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
+    # превышении context budget выполнение блокируется или задача дробится"). Мягкие оси
+    # (подсистемы/размер) остаются advisory (в report['work_package']), блокирует только жёсткий лимит.
+    context_overflow = _context_budget_overflow(signals, work_root, plan)
+    return {"spec_depth_missing": spec_depth_missing, "spec_depth_ok": spec_depth_ok,
+            "spec_incomplete": spec_incomplete, "spec_bad_status": spec_bad_status,
+            "spec_complete_ok": spec_complete_ok, "level": _level,
+            "acceptance_criteria": acceptance_criteria, "context_overflow": context_overflow}
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
@@ -866,120 +997,21 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     evidence_revision = coll.get("revision")
     revision_matches = (committed_sha is not None and evidence_revision == committed_sha)
 
-    # v2.106 #2 Spec-depth enforcement: разделы спецификации уровня задачи, ЗАКРЫВАЕМЫЕ evidence
-    # гейтов, но незакрытые -> блокируют ready. Маппим только доказуемые разделы (недоказуемые не
-    # над-блокируем). Это подмножество unmet-гейтов -> не блокирует сверх гейтов, но делает
-    # spec-depth явным ready-критерием ("реализация не начинается без блокирующих разделов").
-    from ai_ops_kit.gates import spec_levels as _sl
-    _SECTION_GATE = {
-        "goal": "intake_completeness", "scope": "intake_completeness",
-        "acceptance_criteria": "intake_completeness",
-        "requirements": "requirements", "acceptance_scenarios": "requirements",
-        "implementation_plan": "plan_readiness", "verification_strategy": "implementation_verification",
-        "problem": "discovery_completeness", "users_jtbd": "discovery_completeness",
-        "value": "discovery_completeness", "success_metrics": "analytics_readiness",
-    }
-    _unmet = set(gates["unmet_gates"])
-    # v3.8.4 (finding живой full-stack квалификации): spec_depth ДОЛЖЕН быть baseline-осведомлён.
-    # verification_strategy маппится на implementation_verification; в baseline-diff режиме этот гейт
-    # baseline-освобождён (красная база не блокирует — см. other_blocking_unmet ниже). Раньше spec_depth
-    # брал СЫРОЙ _unmet -> предсуществующий провал базы (напр. flaky date-тест) блокировал ready через
-    # verification_strategy, ОБХОДЯ baseline-diff. Теперь: если правка НЕ внесла новых регрессий, гейт
-    # implementation_verification не считается незакрытым и для spec_depth (реальная регрессия ПРАВКИ —
-    # по-прежнему блокирует, т.к. тогда _diff_checks вернёт непустые regressions).
-    _iv_baseline_exempt = bool(baseline_diff) and not _diff_checks(baseline_checks, coll["checks"])[0]
-    _unmet_for_spec = (_unmet - {"implementation_verification"}) if _iv_baseline_exempt else _unmet
-    _level = _sl.classify(signals)["level"]
-    _req_sections = set(_sl.required_sections(_level))
-    spec_depth_missing = sorted({s for s, g in _SECTION_GATE.items()
-                                 if s in _req_sections and g in plan["gates"] and g in _unmet_for_spec})
-    spec_depth_ok = not spec_depth_missing
-
-    # v2.110 Real Spec-First enforcement: если для этого WorkItem СУЩЕСТВУЕТ явный spec-артефакт
-    # (features/<wid>/spec.yaml), но он НЕ полон (есть blocking_missing) -> «неполная спека не
-    # пускает в implementation» (аудит). Спеки нет -> поведение прежнее (spec-first опционален для
-    # мелких задач, spec_depth через гейты). Читаем реальный артефакт, а не сигналы.
-    spec_incomplete, spec_bad_status = [], []
-    try:
-        _cov = _sl.assess_from_artifacts(signals, child_root, wid, work_root=work_root)
-        if _cov.get("spec_artifact") and _cov.get("blocking_missing"):
-            spec_incomplete = list(_cov["blocking_missing"])
-        # F-013: разделы с содержимым, но нераспознанным статусом — это НЕ «не заполнено».
-        # Прежний вывод отправлял заполнять уже заполненное; настоящая правка — одно слово.
-        spec_bad_status = list(_cov.get("invalid_status") or [])
-    except Exception as _e:  # noqa: BLE001 — v3.0.11 (finding аудита P2): FAIL-CLOSED. Прежде исключение
-        # -> spec_incomplete=[] -> spec_complete_ok=True: реальный, но неоцениваемый spec.yaml проходил в
-        # реализацию. Теперь ошибка оценки спеки = блокирующий незакрытый пункт (не тихий пропуск).
-        spec_incomplete = [f"<spec-assess-failed: {type(_e).__name__}>"]
-    spec_complete_ok = not spec_incomplete
-
-    # КРИТЕРИИ ПРИЁМКИ НЕ СВЕРЯЮТСЯ С РЕЗУЛЬТАТОМ (B2-14, живой прогон 14.08.2026).
-    #
-    # ЗАМЕР, а не опасение. Прогон на реальном продукте отдал владельцу draft PR со
-    # `sha_verified: True` и `overall_status: delivered`, тогда как критерий приёмки требовал
-    # дословно «в README нет строк с `public/media`» — а в доставленном тексте эта строка осталась,
-    # только описание стало расплывчатым. Ложное утверждение о проекте (каталога не существует) не
-    # ушло, а замаскировалось. `spec-coverage` при этом сообщал `acceptance_criteria: complete`.
-    #
-    # `complete` В SPEC-COVERAGE ОЗНАЧАЕТ «РАЗДЕЛ ЗАПОЛНЕН», А НЕ «КРИТЕРИЙ ВЫПОЛНЕН». Разница в
-    # одном слове, а цена — ложный green на последнем шаге: владелец получает работу, помеченную
-    # проверенной, и приёмка перекладывается на него без предупреждения.
-    #
-    # ПЕРВАЯ ПОЛОВИНА (14.08, #111): непроверенное перестало выглядеть проверенным.
-    # ВТОРАЯ ПОЛОВИНА (здесь): появилась САМА СВЕРКА. Независимый read-only судья (writer ≠ judge)
-    # читает дифф против КАЖДОГО критерия и выносит вердикт с цитатой; цитата проверяется кодом в
-    # диффе и в названном файле, иначе вердикт не принимается — `ai_ops_kit/engine/acceptance_verify.py`.
-    # СВЕРКА НЕ БЛОКИРУЕТ ready. Порядок из плана обязателен: advisory + полевые доказательства
-    # качества вердиктов, и только потом блокировка. Гейт, включённый до замера, останавливал бы все
-    # прогоны на непроверенном вердикте — и его научились бы обходить.
-    from ai_ops_kit.engine import acceptance_verify as _av
-    _ac_text, _ac_items, _ac_problem = _av.criteria_from_spec(child_root, wid)
-    # СВЕРКА НЕ ЗАВИСИТ ОТ ФЛАГА `review` (полевой замер 14.08.2026, пере-прогон BNBM). Судья
-    # включается автоподбором по классу задачи: для QUICK `review=False`. Правка документа — это
-    # QUICK, и именно на правке документа родился B2-14. То есть механизм против ложного green не
-    # работал ровно на том классе, где ложный green и случился: за весь живой прогон сверка не
-    # запустилась НИ РАЗУ. Критерии, если они объявлены, сверяются всегда, когда есть кому судить.
-    if _ac_items and reviewer_proposer is not None and committed_sha:
-        try:
-            # Контекст судьи — ВЕСЬ диапазон base..head, а не последний коммит (ревью PR #118).
-            # Критерии приёмки описывают изменение целиком; на resume и reevaluate_only ветка
-            # несёт несколько коммитов, и критерий, выполненный в предыдущем, не попал бы в дифф —
-            # судья честно ответил бы `unmet`/`undetermined` о работе, которая сделана. Тот же
-            # довод, по которому диапазон берёт seam_scan выше.
-            acceptance_criteria = _av.verify(
-                work_root, _ac_items, reviewer_proposer, revision=committed_sha,
-                change_context=_change_context_range(work_root, base_sha, committed_sha),
-                budget=budget)
-        except Exception as _e:  # noqa: BLE001 — FAIL-CLOSED: сбой сверки = «не сверено» с названной
-            # причиной, а не отсутствие блока (пустой блок читался бы как «претензий нет»).
-            acceptance_criteria = _av._unverified(
-                _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300])
-    elif _ac_problem:
-        # Спека ЕСТЬ, но не разобрана: это «не знаю», а не «критериев нет». Молчание здесь было бы
-        # тем же ложным green — `spec-coverage` для того же файла говорит `complete`.
-        acceptance_criteria = _av._unverified(
-            [], f"критерии приёмки НЕ прочитаны: {_ac_problem} — сверка невозможна, проверь вручную",
-            declared=True)
-    elif _ac_text and not _ac_items:
-        # Раздел заполнен, но проверяемых пунктов из него не извлеклось (одни заголовки/разделители).
-        acceptance_criteria = _av._unverified(
-            [], "раздел критериев заполнен, но ни одного проверяемого пункта в нём не найдено — "
-                "сверять нечего по существу (проверь формат: пункты списка или строки)",
-            declared=True)
-    else:
-        acceptance_criteria = _av._unverified(
-            _ac_items,
-            ("критерии объявлены, но с результатом НЕ сверялись: независимый ревьюер не запускался "
-             "(нужны --execute с коммитом и провайдер судьи); `spec-coverage: complete` означает "
-             "«раздел заполнен», а не «критерий выполнен»"
-             if _ac_items else "критерии приёмки не объявлены — сверять нечего"),
-            declared=bool(_ac_items))
-
-    # v2.106 #3 Context-budget enforcement: если контекст задачи превышает бюджет (ContextBundle
-    # overflow) -> пакет не атомарен, доставлять как один нельзя -> блок ready (аудит: "при
-    # превышении context budget выполнение блокируется или задача дробится"). Мягкие оси
-    # (подсистемы/размер) остаются advisory (в report['work_package']), блокирует только жёсткий лимит.
-    context_overflow = _context_budget_overflow(signals, work_root, plan)
+    # v2.106 ready-критерии уровня спеки: spec-depth enforcement + Real Spec-First + сверка критериев
+    #    приёмки (B2-14) + context-budget overflow -> _assess_readiness (K6).
+    _rd = _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root,
+                            baseline_diff=baseline_diff, baseline_checks=baseline_checks,
+                            committed_sha=committed_sha, base_sha=base_sha,
+                            reviewer_proposer=reviewer_proposer, budget=budget)
+    spec_depth_missing = _rd["spec_depth_missing"]
+    spec_depth_ok = _rd["spec_depth_ok"]
+    spec_incomplete = _rd["spec_incomplete"]
+    spec_bad_status = _rd["spec_bad_status"]
+    spec_complete_ok = _rd["spec_complete_ok"]
+    _level = _rd["level"]
+    acceptance_criteria = _rd["acceptance_criteria"]
+    context_overflow = _rd["context_overflow"]
+    from ai_ops_kit.gates import spec_levels as _sl   # для report.spec_first (_spec_path) ниже
 
     # baseline-diff (finding живого прогона): что правка сломала/починила против базы
     regressions, fixed = _diff_checks(baseline_checks, coll["checks"]) if baseline_diff else ([], [])
