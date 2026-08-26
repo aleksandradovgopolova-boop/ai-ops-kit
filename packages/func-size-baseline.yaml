@@ -21,19 +21,22 @@ scope: ai_ops_kit/engine/
 # отчёты в rep: bundle/shadow/hybrid/payload/spec/work-package) -> run() 1182 -> 1129. Потолок 1129.
 # 2026-08-26 (K6-глубина, срез provenance): из run() вынесена _enrich_run_report (provenance-поля
 # отчёта: runtime/provider/model/base/lifecycle-dict) -> run() 1129 -> 1084. Потолок 1084.
-max_function_lines: 1084
+# 2026-08-26 (K6-глубина, срез commit-barrier): из run() вынесена _commit_barrier (durable RunHandoff
+# + final report + journal-checkpoint перед доставкой) -> run() 1084 -> 1051 (с учётом ужатых до
+# бюджета поставки K6-докстрингов/комментариев). Потолок 1051.
+max_function_lines: 1051
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 671
+max_function_lineno: 707
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _enrich_run_report).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _commit_barrier + ужатия K6-докстрингов).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 671
-    size: 1084
+    lineno: 707
+    size: 1051
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -44,35 +47,19 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1961
+    lineno: 1964
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
     lineno: 218
     size: 184
-  - name: _enrich_run_report
-    file: ai_ops_run.py
-    lineno: 608
-    size: 60
-  - name: route
-    file: ai_route.py
-    lineno: 42
-    size: 177
-  - name: _compile_context_artifacts
-    file: ai_ops_run.py
-    lineno: 430
-    size: 107
-  - name: _add_context_reports
-    file: ai_ops_run.py
-    lineno: 540
-    size: 65
   - name: route
     file: ai_route.py
     lineno: 42
     size: 177
   - name: _print_pipeline
     file: ai_ops_run.py
-    lineno: 1702
+    lineno: 1760
     size: 132
   - name: resume_preflight
     file: run_handoff.py
@@ -82,11 +69,7 @@ top_10:
     file: acceptance_verify.py
     lineno: 531
     size: 108
-  - name: execute
-    file: tool_broker.py
-    lineno: 614
-    size: 103
-  - name: run_loop
-    file: tool_loop.py
-    lineno: 204
-    size: 102
+  - name: _compile_context_artifacts
+    file: ai_ops_run.py
+    lineno: 430
+    size: 105
