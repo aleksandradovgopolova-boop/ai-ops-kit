@@ -764,6 +764,67 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
 
 
 
+def _start_lifecycle(features_dir, fid, task_text, signals, plan, engine, base, resume, execute,
+                     saved_task, sandbox, baseline_diff, require_fix, author, review, open_pr,
+                     write_scope, max_steps, base_binding):
+    """Durable lifecycle-start: workitem.start + RunPlan/run-settings (write-barrier) + journal
+    run_start + per-run снимок. K6: вынесено из run(). -> (attempt_id, error|None)."""
+    workitem.start(str(features_dir), fid, task_text,
+                   task_type=signals.get("task_type"), risk=signals.get("risk"))
+    # v3.0.15 (finding аудита P1): RunPlan — write BARRIER. Сбой durable-записи -> прогон НЕ начат
+    # (0 вызовов модели): без надёжного плана нельзя доказать routing/гейты/resume.
+    _pw = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan, require_keys=("workitem_id",))
+    if not _pw.get("ok"):
+        return None, {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                "status": "error", "ready_for_pr": False,
+                "error": f"lifecycle fail-closed: не удалось надёжно сохранить RunPlan ({_pw.get('error')}) "
+                         "— прогон не начат (0 вызовов модели)"}
+    # v3.0.14/v3.1 (trace v0.2): event journal — run_start. attempt_id = попытка прогона WorkItem
+    # (resume/повтор -> новая попытка), детерминированно из числа снимков run-history.
+    _jp = features_dir / fid / "lifecycle-journal.jsonl"
+    _att = len(list((features_dir / fid / "run-history").glob("run-*.yaml"))) + 1
+    _attempt_id = f"{fid}#a{_att}"
+    _ls.journal_append(_jp, {"kind": "run_start", "run_id": fid, "workitem_id": fid,
+                             "attempt_id": _attempt_id, "task_type": signals.get("task_type"),
+                             "engine": engine, "base": base, "resume": bool(resume)})
+    # v3.0-rc2 (P0.1): сохраняем ЭФФЕКТИВНУЮ политику прогона -> resume восстановит её, а не
+    # переклассифицирует/деградирует до дефолтов. provider/model НЕ храним (runtime-выбор/секрет).
+    if execute:
+        _settings = {
+            "schema_version": 1, "kind": "run-settings", "workitem_id": fid,
+            # F-027: ПРОДУКТОВАЯ задача прогона хранится явно и переживает продолжение. Раньше
+            # её не было нигде: signals пишутся без task_text, RunHandoff несёт только
+            # next_action — и resume брал задачей служебное «что осталось». На продолжении
+            # сохранённая задача не переписывается: она — идентичность работы, а не аргумент вызова.
+            "task": (saved_task if (resume and saved_task) else task_text),
+            "signals": {k: v for k, v in signals.items() if k != "task_text"},
+            "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
+                       "author": author, "review": review, "open_pr": open_pr,
+                       "write_scope": write_scope, "max_steps": max_steps, "engine": engine,
+                       "base": base,   # v3.0.2 (P0): резолвнутый base_ref (back-compat)
+                       "base_binding": base_binding},   # v3.0.9 (P0.2): полный BaseBinding (ref+sha+mode+source)
+        }
+        # v3.0.12 (finding аудита блок B): run-settings — источник истины для resume, пишем DURABLE
+        # (атомарно + fsync + перечитывание). Сбой записи -> FAIL-CLOSED отказ (без надёжной policy
+        # resume восстановит мусор/дефолты). require_keys гарантируют, что перечитанный файл цел.
+        _ws = _ls.durable_write(features_dir / fid / "run-settings.yaml", _settings,
+                                require_keys=("kind", "policy", "signals"))
+        if not _ws.get("ok"):
+            return None, {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+                    "status": "error", "ready_for_pr": False,
+                    "error": (f"lifecycle fail-closed: не удалось надёжно сохранить run-settings "
+                              f"({_ws.get('error')}) — без durable policy resume небезопасен; прогон "
+                              "не начат")}
+        # v3.0-rc4 (P0.1): per-run СНИМОК для аудита (не только последнее состояние). Нумеруем по
+        # числу уже сохранённых снимков — детерминированно, без времени (совместимо с workflow-песочницей).
+        _hist = features_dir / fid / "run-history"
+        _hist.mkdir(parents=True, exist_ok=True)
+        _n = len(list(_hist.glob("run-*.yaml"))) + 1
+        _ls.durable_write(_hist / f"run-{_n:03d}.yaml", _settings)   # v3.0.14 (#2): атомарно
+    return _attempt_id, None
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1148,59 +1209,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                    "reasons": pf["reasons"]}}
             resume_ctx = _resume_context_from_handoff(child_root, fid)
 
-        workitem.start(str(features_dir), fid, task_text,
-                       task_type=signals.get("task_type"), risk=signals.get("risk"))
-        # v3.0.15 (finding аудита P1): RunPlan — write BARRIER. Сбой durable-записи -> прогон НЕ начат
-        # (0 вызовов модели): без надёжного плана нельзя доказать routing/гейты/resume.
-        _pw = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan, require_keys=("workitem_id",))
-        if not _pw.get("ok"):
-            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                    "status": "error", "ready_for_pr": False,
-                    "error": f"lifecycle fail-closed: не удалось надёжно сохранить RunPlan ({_pw.get('error')}) "
-                             "— прогон не начат (0 вызовов модели)"}
-        # v3.0.14/v3.1 (trace v0.2): event journal — run_start. attempt_id = попытка прогона WorkItem
-        # (resume/повтор -> новая попытка), детерминированно из числа снимков run-history.
-        _jp = features_dir / fid / "lifecycle-journal.jsonl"
-        _att = len(list((features_dir / fid / "run-history").glob("run-*.yaml"))) + 1
-        _attempt_id = f"{fid}#a{_att}"
-        _ls.journal_append(_jp, {"kind": "run_start", "run_id": fid, "workitem_id": fid,
-                                 "attempt_id": _attempt_id, "task_type": signals.get("task_type"),
-                                 "engine": engine, "base": base, "resume": bool(resume)})
-        # v3.0-rc2 (P0.1): сохраняем ЭФФЕКТИВНУЮ политику прогона -> resume восстановит её, а не
-        # переклассифицирует/деградирует до дефолтов. provider/model НЕ храним (runtime-выбор/секрет).
-        if execute:
-            _settings = {
-                "schema_version": 1, "kind": "run-settings", "workitem_id": fid,
-                # F-027: ПРОДУКТОВАЯ задача прогона хранится явно и переживает продолжение. Раньше
-                # её не было нигде: signals пишутся без task_text, RunHandoff несёт только
-                # next_action — и resume брал задачей служебное «что осталось». На продолжении
-                # сохранённая задача не переписывается: она — идентичность работы, а не аргумент вызова.
-                "task": (_saved_task if (resume and _saved_task) else task_text),
-                "signals": {k: v for k, v in signals.items() if k != "task_text"},
-                "policy": {"sandbox": sandbox, "baseline_diff": baseline_diff, "require_fix": require_fix,
-                           "author": author, "review": review, "open_pr": open_pr,
-                           "write_scope": write_scope, "max_steps": max_steps, "engine": engine,
-                           "base": base,   # v3.0.2 (P0): резолвнутый base_ref (back-compat)
-                           "base_binding": base_binding},   # v3.0.9 (P0.2): полный BaseBinding (ref+sha+mode+source)
-            }
-            # v3.0.12 (finding аудита блок B): run-settings — источник истины для resume, пишем DURABLE
-            # (атомарно + fsync + перечитывание). Сбой записи -> FAIL-CLOSED отказ (без надёжной policy
-            # resume восстановит мусор/дефолты). require_keys гарантируют, что перечитанный файл цел.
-            _ws = _ls.durable_write(features_dir / fid / "run-settings.yaml", _settings,
-                                    require_keys=("kind", "policy", "signals"))
-            if not _ws.get("ok"):
-                return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                        "status": "error", "ready_for_pr": False,
-                        "error": (f"lifecycle fail-closed: не удалось надёжно сохранить run-settings "
-                                  f"({_ws.get('error')}) — без durable policy resume небезопасен; прогон "
-                                  "не начат")}
-            _sdump = yaml.safe_dump(_settings, allow_unicode=True, sort_keys=False)   # снимок истории (ниже)
-            # v3.0-rc4 (P0.1): per-run СНИМОК для аудита (не только последнее состояние). Нумеруем по
-            # числу уже сохранённых снимков — детерминированно, без времени (совместимо с workflow-песочницей).
-            _hist = features_dir / fid / "run-history"
-            _hist.mkdir(parents=True, exist_ok=True)
-            _n = len(list(_hist.glob("run-*.yaml"))) + 1
-            _ls.durable_write(_hist / f"run-{_n:03d}.yaml", _settings)   # v3.0.14 (#2): атомарно
+        # durable lifecycle-start (workitem/RunPlan/run-settings/journal) -> _start_lifecycle (K6).
+        _attempt_id, _lcerr = _start_lifecycle(
+            features_dir, fid, task_text, signals, plan, engine, base, resume, execute,
+            _saved_task, sandbox, baseline_diff, require_fix, author, review, open_pr,
+            write_scope, max_steps, base_binding)
+        if _lcerr:
+            return _lcerr
         # артефакты контекста -> _compile_context_artifacts (K6).
         (lifecycle_errors, bundle, payload, _hybrid_prelude, _hybrid_fed,
          spec_cov, work_pkg) = _compile_context_artifacts(
