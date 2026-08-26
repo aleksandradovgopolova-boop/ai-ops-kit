@@ -2244,3 +2244,48 @@ class TestPipelineRunProvenance:
         assert lc["run_handoff"] == f"features/{pfid}/run-handoff.yaml"
         assert lc["active_work"] == ".ai/runtime/active-work.yaml"
         assert "concurrency_preflight" in lc
+
+
+@pytest.mark.unit
+class TestPipelineRunCost:
+    """Характеристика фазы run_cost (агрегат tokens/latency/cost из вызовов модели).
+
+    pipeline_run с mock-предложителем даёт пустой drain_call_stats -> тело `if _stats:`
+    (rep['cost'] + usage_ledger) не гонялось. Инжектируем один вызов, чтобы зафиксировать
+    поведение ДО расщепления run() (K6-глубина) перед выносом в _finalize_run_cost.
+    """
+
+    def _run_with_stats(self, root, stats):
+        import subprocess
+        from unittest.mock import patch
+        root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "-C", str(root), "init", "-q"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], capture_output=True)
+        (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "i"], capture_output=True)
+        ps = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+        with patch("ai_ops_kit.providers.orchestrator.drain_call_stats", return_value=stats):
+            return ai_ops_run.run(
+                task_text="add a",
+                signals={"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]},
+                child_root=root, engine="pipeline", proposer=lambda c: next(ps))
+
+    def test_cost_aggregated_from_stats(self, tmp_path):
+        """Непустой drain_call_stats -> rep['cost'] агрегирует calls/tokens/latency."""
+        rp = self._run_with_stats(tmp_path / "r", [
+            {"input_tokens": 100, "output_tokens": 40, "latency_s": 1.5, "cost_usd_est": 0.01},
+            {"input_tokens": 50, "output_tokens": 10, "latency_s": 0.5, "cost_usd_est": 0.005},
+        ])
+        cost = rp["cost"]
+        assert cost["calls"] == 2
+        assert cost["input_tokens"] == 150
+        assert cost["output_tokens"] == 50
+        assert cost["latency_s"] == 2.0
+        assert cost["cost_usd_est"] == 0.015
+
+    def test_no_stats_no_cost(self, tmp_path):
+        """Пустой drain_call_stats -> rep['cost'] не проставляется (нет вызовов — нечего агрегировать)."""
+        rp = self._run_with_stats(tmp_path / "r", [])
+        assert "cost" not in rp
