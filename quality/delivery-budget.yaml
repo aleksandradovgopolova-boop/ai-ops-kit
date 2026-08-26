@@ -27,7 +27,7 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4356000
+  volume_bytes: 4360000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
   substantive_files: 528
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
@@ -435,3 +435,22 @@ raises:
       session_events подписан (advise-only), kernel/ports.py сверяется конвейером на каждом прогоне.
       Всё исполняется В дочке — без шины и контракта их звал бы отсутствующий файл (класс F-033).
       Замер 4326123 -> ~4350400 Б перешёл потолок 4332000 — подъём под факт до 4356000.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4356000
+    to_bytes: 4360000
+    measured_before: 4350400
+    measured_after: 4356181
+    work: wave5 K6-глубина (расщепление god-функций ядра)
+    files:
+      - ai_ops_kit/engine/ai_ops_run.py
+      - ai_ops_kit/engine/execution_pipeline.py
+    why_it_works_in_the_child: >-
+      K6-глубина (Волна 5): god-функции run() и run_pipeline расщепляются на фазовые функции
+      внутри ai_ops_run.py и execution_pipeline.py — ОБА модуля исполняются В дочке на каждом
+      прогоне: ai_ops_run.run() это транзакционный контроллер прогона, execution_pipeline.
+      run_pipeline() — движок исполнения (detect/execute/evidence/gate/commit). Вынос фаз в
+      именованные функции (_evaluate_security/_compile_context_artifacts/_add_context_reports/
+      _enrich_run_report/_commit_barrier/_register_active_work) добавляет def+докстринг на
+      исполняемом пути, но делает критический путь тестируемым по фазам; взамен func-size ратчет
+      опущен 1275 -> 1003. Замер 4350400 -> 4356181 Б перешёл потолок 4356000 — подъём до 4360000.
