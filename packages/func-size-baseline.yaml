@@ -24,19 +24,21 @@ scope: ai_ops_kit/engine/
 # 2026-08-26 (K6-глубина, срез commit-barrier): из run() вынесена _commit_barrier (durable RunHandoff
 # + final report + journal-checkpoint перед доставкой) -> run() 1084 -> 1051 (с учётом ужатых до
 # бюджета поставки K6-докстрингов/комментариев). Потолок 1051.
-max_function_lines: 1051
+# 2026-08-26 (K6-глубина, срез active-work): из run() вынесена _register_active_work (регистрация
+# active-work + concurrency-preflight координации параллельных сессий) -> run() 1051 -> 1003. Потолок 1003.
+max_function_lines: 1003
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 707
+max_function_lineno: 767
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _commit_barrier + ужатия K6-докстрингов).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _register_active_work).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 707
-    size: 1051
+    lineno: 767
+    size: 1003
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -47,7 +49,7 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1964
+    lineno: 1976
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
@@ -59,7 +61,7 @@ top_10:
     size: 177
   - name: _print_pipeline
     file: ai_ops_run.py
-    lineno: 1760
+    lineno: 1772
     size: 132
   - name: resume_preflight
     file: run_handoff.py
