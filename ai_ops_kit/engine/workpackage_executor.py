@@ -529,28 +529,137 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
         return {"verified": False, "error": str(e)}
 
 
-def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
-                     features_dir=None, base=None, provider_name="mock", model=None,
-                     author=False, author_proposer=None, review=False, reviewer_proposer=None,
-                     baseline_diff=True, install_deps=False, signals_for=None,
-                     sandbox=False, open_pr=False, max_steps=40, write_scope_for=None, resume_from=None,
-                     security_reviewer_proposer=None, strict_judge_qualified=True):
-    """Исполнить список WorkPackages последовательно. proposer_for(pkg)->proposer; signals_for(pkg)->
-    доп. сигналы пакета (опц.); write_scope_for(pkg)->список путей write-scope пакета (опц.).
-    v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути — containment не
-    теряется. Containment здесь означает политику брокера (allowlist, write_scope, запрет push),
-    а не изоляцию исполнения: сеть и ресурсы им не ограничены;
-    open_pr применяется к финальному пакету (интегрированная ветка). -> {kind, workitem_id, packages,
-    completed, stopped_at, executed_all, ready_all, final_sha, sequential_chain}."""
-    from ai_ops_kit.engine import ai_ops_run
-    child_root = Path(child_root)
-    features_dir = Path(features_dir) if features_dir else child_root / "features"
-    wid = feature
-    ordered = _ordered(packages)
-    results, completed, stopped_at, final_sha = [], set(), None, None
-    prev_sha = None
-    chain_ok = True
+def _resolve_start_index(ordered, resume_from, wid):
+    # v2.124: resume с КОНКРЕТНОГО пакета — пакеты до него считаются исполненными в прошлом прогоне
+    # (их SHA/готовность восстанавливаются из снимков work-packages/<pid>/report.json).
+    start_index = 0
+    if resume_from:
+        _ids = [p.get("id") for p in ordered]
+        # v3.0-rc2 (P0.3): неизвестный resume_from -> ОШИБКА, а не тихий старт с нуля.
+        if resume_from not in _ids:
+            return None, _seq_err(wid, ordered,
+                    f"resume_from='{resume_from}' нет в SequencePlan (пакеты: {_ids})")
+        start_index = _ids.index(resume_from)
+    return start_index, None
 
+
+def _collect_baseline(child_root, sequence_base_sha, sandbox):
+    # v3.0-rc16/rc20 (finding аудита P0): baseline СТРОГО на sequence_base_sha (detached worktree с
+    # проверкой HEAD). rc20: БЕЗ fallback на child_root — если baseline не доказан на точной базе,
+    # aggregate НЕДОСТУПЕН (baseline_proven=False) -> PR не открывается. Иначе sequence от develop мог
+    # сравниться с baseline от main -> false green.
+    _base_res = _collect_base_checks_at(child_root, sequence_base_sha, sandbox)
+    base_checks = (_base_res or {}).get("checks") if _base_res else None
+    baseline_proven = bool(_base_res and _base_res.get("proven"))
+    return base_checks, baseline_proven
+
+
+def _compute_aggregate_verdict(completed, ordered, stopped_at, results, final_sha, chain_ok,
+                               base_drift, child_root, wid, sandbox, base_checks, sequence_base_sha,
+                               signals, reviewer_proposer, review, baseline_proven,
+                               security_reviewer_proposer, strict_judge_qualified):
+    executed_all = len(completed) == len(ordered) and stopped_at is None
+    ready_all = executed_all and all(r.get("ready") for r in results)
+
+    # v2.124: AGGREGATE verification на ФИНАЛЬНОМ интегрированном SHA — перепроверяем результат ЦЕЛИКОМ
+    # (не только конъюнкцию per-package вердиктов), чтобы поймать межпакетные взаимодействия (каждый
+    # пакет зелен по отдельности, но интеграция сломана). Сравниваем финальные проверки с БАЗОЙ (до п.1).
+    # v3.0.13 (блок C): тело aggregate-верификации вынесено в _aggregate_verify (чистый вход->dict) —
+    # execute_sequence перестал быть god-функцией на этом участке, поведение идентично.
+    aggregate = {"verified": False}
+    if executed_all and final_sha:
+        aggregate = _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks,
+                                      sequence_base_sha, signals, reviewer_proposer, review, baseline_proven,
+                                      security_reviewer_proposer=security_reviewer_proposer,
+                                      strict_judge_qualified=strict_judge_qualified)
+    # v3.0-rc2/rc4 (P0.4/P1.1): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена
+    # И чиста: verified, нет регрессий, HEAD==final_sha, evidence на final_sha, дерево чистое, агрегатный
+    # security clear на полном диффе. Сбой/недоступность -> НЕ ready.
+    # v3.0-rc20 (finding аудита P0): + baseline ДОКАЗАН на точной sequence_base_sha (нет fallback-базы),
+    # + НЕТ base_drift (base-ветка не сдвинулась с начала цепочки) — иначе evidence против не той базы.
+    agg_ok = bool(aggregate.get("verified") and aggregate.get("no_regressions")
+                  and aggregate.get("baseline_proven")
+                  and aggregate.get("revision_ok") and aggregate.get("tree_clean")
+                  and aggregate.get("evidence_revision_ok") and aggregate.get("security_ok")
+                  and aggregate.get("code_review_ok", True))
+    aggregate_ready = ready_all and chain_ok and agg_ok and (base_drift is None)
+    return executed_all, ready_all, aggregate, aggregate_ready
+
+
+def _deliver_pr(open_pr, aggregate_ready, final_sha, child_root, wid, base, sequence_base_sha,
+                task, ordered):
+    from ai_ops_kit.engine import execution_pipeline as _ep
+    # v2.124 (P0.4): доставка draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта, на финальном
+    # интегрированном SHA. PR открывается ТОЛЬКО при aggregate_ready — не по готовности отдельного пакета.
+    pr, delivery = None, {"requested": bool(open_pr), "status": "not-requested" if not open_pr else None}
+    if open_pr:
+        if aggregate_ready and final_sha:
+            wt = child_root / ".ai" / "worktrees" / wid
+            _drt = wt if wt.is_dir() else child_root
+            # v3.0-rc20 (finding аудита P0): DELIVERY BASE BINDING — evidence собрано против
+            # sequence_base_sha; перед PR сверяем АКТУАЛЬНУЮ remote base с этой базой. Разошлась
+            # (remote main сдвинулся после старта цепочки) -> НЕ открываем PR (проверенное состояние
+            # != потенциальному merge-состоянию); нужна ревалидация. Иначе — «verified» PR был бы ложью.
+            # v3.0.9 (finding аудита P0): ЕДИНЫЙ fail-closed RemoteBaseVerifier (как single-run). Раньше
+            # sequential был fail-OPEN: remote_base=None (нет origin/сети/ветки) -> else -> открывал PR.
+            # Теперь: verified-equal -> PR; verified-moved -> revalidation; unverifiable -> unavailable.
+            _rv = _ep._verify_remote_base(_drt, base, sequence_base_sha)
+            _vd = _rv.get("verdict")
+            if _vd == "verified-equal":
+                try:
+                    from ai_ops_kit.delivery import pr_open
+                    pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}", base=base,
+                                               title=f"ai-ops: {task[:60]}",
+                                               body=(f"Sequential WorkPackages: {len(ordered)} пакет(ов). "
+                                                     f"База {base} ({(sequence_base_sha or '?')[:12]}) → финал {final_sha}. "
+                                                     f"Агрегатный вердикт: aggregate_ready."))
+                    delivery["status"] = (pr or {}).get("status") or "failed"
+                    delivery["validated_base"] = sequence_base_sha
+                    delivery["base_ref"] = base
+                except Exception as e:  # noqa: BLE001
+                    delivery["status"] = "failed"
+                    delivery["error"] = str(e)
+            elif _vd == "verified-moved":
+                delivery["status"] = "not-attempted"
+                delivery["base_moved"] = {"base_ref": base, "validated_base": sequence_base_sha,
+                                          "remote_base": _rv.get("remote_sha")}
+                delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — нужна ревалидация; "
+                                      "PR не открыт (иначе непроверенное merge-состояние)")
+            else:   # unverifiable -> доставка НЕДОСТУПНА (fail-closed), НЕ открываем PR
+                delivery["status"] = "unavailable"
+                delivery["reason"] = f"remote-base-unverified: {_rv.get('reason')} — доставка невозможна fail-closed"
+        else:
+            delivery["status"] = "not-attempted"   # последовательность не готова -> PR НЕ открываем
+    return pr, delivery
+
+
+def _finalize_sequence_report(wid, results, completed, stopped_at, executed_all, ready_all,
+                              aggregate_ready, final_sha, chain_ok, ordered, sequence_base_sha,
+                              base_drift, aggregate, delivery, pr, resume_from, features_dir):
+    seq = {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
+           "packages": results, "completed": sorted(completed), "stopped_at": stopped_at,
+           "executed_all": executed_all, "ready_all": ready_all, "aggregate_ready": aggregate_ready,
+           "final_sha": final_sha, "sequential_chain": chain_ok, "total": len(ordered),
+           "sequence_base_sha": sequence_base_sha, "base_drift": base_drift,   # rc16 (P0/P1)
+           "aggregate": aggregate, "delivery": delivery, "draft_pr": pr,
+           "resumed_from": resume_from}
+    # v3.0.14 (finding аудита #2): sequence-report — durable (атомарно); сбой фиксируем в отчёте, не молчим
+    from ai_ops_kit.shared import lifecycle_store as _ls2
+    # Срез engine ратчета 2026-08-12: пропущенные записи журнала называются в ОТЧЁТЕ, а не только в
+    # возврате, который никто не читал. Слив ДО durable_write — иначе на диске лёг бы отчёт, из
+    # которого утрата исчезла. Слив обнуляет накопитель: та же утрата не приедет во второй отчёт.
+    _ls2.merge_bookkeeping_losses(seq)
+    _sr = _ls2.durable_write(features_dir / wid / "sequence-report.yaml", seq)
+    if not _sr.get("ok"):
+        seq["report_persist_error"] = _sr.get("error")
+    return seq
+
+
+def _resolve_sequence_plan(ordered, features_dir, wid, base, resume_from, child_root):
+    """Разрешить/зафиксировать IMMUTABLE SequencePlan и base-контракт последовательности.
+    Возвращает (base, sequence_base_sha, base_drift, err): err != None -> последовательность не
+    запускается (lifecycle-corrupted / plan-drift / base-contract-drift / base-preflight / fail-closed
+    записи плана). Поведение идентично прежнему инлайну execute_sequence."""
     # v2.124/v3.0-rc4 (P0.3): IMMUTABLE parent SequencePlan С ХЭШАМИ. Фиксируем порядок/зависимости
     # ОДИН раз; при повторном вызове план мог быть перестроен planner'ом (тот же id — другой scope).
     # Если сохранённый план существует и его hash РАСХОДИТСЯ с текущим -> дрейф: resume запрещён
@@ -592,7 +701,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                 _raw = _sp.read_bytes()
             except Exception:  # noqa: BLE001,S110 — только для sha256 в сообщении; вердикт уже fail-closed
                 pass
-            return _seq_err(wid, ordered,
+            return None, None, None, _seq_err(wid, ordered,
                     (f"lifecycle-corrupted: {_sp} существует, но невалиден "
                      f"({_corrupt_reason or _schema_err}) — выполнение запрещено "
                      f"(повреждён источник истины). Нужна явная recovery, не автоперезапись."),
@@ -606,7 +715,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     # ЛЮБОМ существующем плане (не только resume_from): другой plan_hash от текущих пакетов = planner
     # перестроил план, исполнять по нему поверх старых отчётов небезопасно. Нужен явный replan.
     if saved_plan and saved_plan.get("plan_hash") and saved_plan["plan_hash"] != cur_plan_hash:
-        return _seq_err(wid, ordered,
+        return None, None, None, _seq_err(wid, ordered,
                 ("SequencePlan дрейфнул с прошлого прогона (planner перестроил пакеты) — "
                  "resume по старым отчётам небезопасен. Нужен явный replan (пересобрать план "
                  "и переисполнить с нуля), а не resume_from."),
@@ -616,7 +725,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     from ai_ops_kit.engine import execution_pipeline as _ep
     if saved_plan and saved_plan.get("base_ref"):
         if resume_from and base and base != saved_plan["base_ref"]:
-            return _seq_err(wid, ordered,
+            return None, None, None, _seq_err(wid, ordered,
                     (f"base-contract-drift: последовательность зафиксирована на base_ref="
                      f"'{saved_plan['base_ref']}', а передан --base '{base}'. Смена базы = другой "
                      f"контракт доставки — нужен явный replan, не resume с новой базой."))
@@ -624,7 +733,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
     else:
         _br = _ep._resolve_base(child_root, base)   # base=None -> auto; явная -> строго
         if _br.get("mode") == "explicit" and not _br.get("resolved"):
-            return _seq_err(wid, ordered,
+            return None, None, None, _seq_err(wid, ordered,
                     (f"base-preflight: явная база '{base}' не разрешается в ветку "
                      f"({_br.get('reason')}) — последовательность не запущена (ноль пакетов)"))
         base = _br.get("base_ref") or base
@@ -656,30 +765,47 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
         _wr = _durable_write_yaml(_sp, _plan_doc,
                                   require_keys=("plan_hash", "base_ref", "sequence_base_sha", "packages"))
         if not _wr.get("ok"):
-            return _seq_err(wid, ordered,
+            return None, None, None, _seq_err(wid, ordered,
                     (f"lifecycle fail-closed: не удалось надёжно сохранить SequencePlan "
                      f"({_wr.get('error')}) — без immutable-плана нельзя доказать base/порядок/"
                      f"hashes/checkpoint/sequence_base_sha; последовательность не запущена"))
         saved_plan = _plan_doc
 
-    # v3.0-rc16/rc20 (finding аудита P0): baseline СТРОГО на sequence_base_sha (detached worktree с
-    # проверкой HEAD). rc20: БЕЗ fallback на child_root — если baseline не доказан на точной базе,
-    # aggregate НЕДОСТУПЕН (baseline_proven=False) -> PR не открывается. Иначе sequence от develop мог
-    # сравниться с baseline от main -> false green.
-    _base_res = _collect_base_checks_at(child_root, sequence_base_sha, sandbox)
-    base_checks = (_base_res or {}).get("checks") if _base_res else None
-    baseline_proven = bool(_base_res and _base_res.get("proven"))
+    return base, sequence_base_sha, base_drift, None
 
-    # v2.124: resume с КОНКРЕТНОГО пакета — пакеты до него считаются исполненными в прошлом прогоне
-    # (их SHA/готовность восстанавливаются из снимков work-packages/<pid>/report.json).
-    start_index = 0
-    if resume_from:
-        _ids = [p.get("id") for p in ordered]
-        # v3.0-rc2 (P0.3): неизвестный resume_from -> ОШИБКА, а не тихий старт с нуля.
-        if resume_from not in _ids:
-            return _seq_err(wid, ordered,
-                    f"resume_from='{resume_from}' нет в SequencePlan (пакеты: {_ids})")
-        start_index = _ids.index(resume_from)
+
+def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
+                     features_dir=None, base=None, provider_name="mock", model=None,
+                     author=False, author_proposer=None, review=False, reviewer_proposer=None,
+                     baseline_diff=True, install_deps=False, signals_for=None,
+                     sandbox=False, open_pr=False, max_steps=40, write_scope_for=None, resume_from=None,
+                     security_reviewer_proposer=None, strict_judge_qualified=True):
+    """Исполнить список WorkPackages последовательно. proposer_for(pkg)->proposer; signals_for(pkg)->
+    доп. сигналы пакета (опц.); write_scope_for(pkg)->список путей write-scope пакета (опц.).
+    v2.120: НАСЛЕДУЕТ sandbox/install_deps/max_steps/провайдера обычного пути — containment не
+    теряется. Containment здесь означает политику брокера (allowlist, write_scope, запрет push),
+    а не изоляцию исполнения: сеть и ресурсы им не ограничены;
+    open_pr применяется к финальному пакету (интегрированная ветка). -> {kind, workitem_id, packages,
+    completed, stopped_at, executed_all, ready_all, final_sha, sequential_chain}."""
+    from ai_ops_kit.engine import ai_ops_run
+    child_root = Path(child_root)
+    features_dir = Path(features_dir) if features_dir else child_root / "features"
+    wid = feature
+    ordered = _ordered(packages)
+    results, completed, stopped_at, final_sha = [], set(), None, None
+    prev_sha = None
+    chain_ok = True
+
+    base, sequence_base_sha, base_drift, _plan_err = _resolve_sequence_plan(
+        ordered, features_dir, wid, base, resume_from, child_root)
+    if _plan_err:
+        return _plan_err
+
+    base_checks, baseline_proven = _collect_baseline(child_root, sequence_base_sha, sandbox)
+
+    start_index, _si_err = _resolve_start_index(ordered, resume_from, wid)
+    if _si_err:
+        return _si_err
 
     _branch = f"ai-ops/{wid}"
     _wt = child_root / ".ai" / "worktrees" / wid
@@ -897,91 +1023,18 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
             stopped_at = pid
             break
 
-    executed_all = len(completed) == len(ordered) and stopped_at is None
-    ready_all = executed_all and all(r.get("ready") for r in results)
+    executed_all, ready_all, aggregate, aggregate_ready = _compute_aggregate_verdict(
+        completed, ordered, stopped_at, results, final_sha, chain_ok, base_drift,
+        child_root, wid, sandbox, base_checks, sequence_base_sha, signals,
+        reviewer_proposer, review, baseline_proven, security_reviewer_proposer,
+        strict_judge_qualified)
 
-    # v2.124: AGGREGATE verification на ФИНАЛЬНОМ интегрированном SHA — перепроверяем результат ЦЕЛИКОМ
-    # (не только конъюнкцию per-package вердиктов), чтобы поймать межпакетные взаимодействия (каждый
-    # пакет зелен по отдельности, но интеграция сломана). Сравниваем финальные проверки с БАЗОЙ (до п.1).
-    # v3.0.13 (блок C): тело aggregate-верификации вынесено в _aggregate_verify (чистый вход->dict) —
-    # execute_sequence перестал быть god-функцией на этом участке, поведение идентично.
-    aggregate = {"verified": False}
-    if executed_all and final_sha:
-        aggregate = _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks,
-                                      sequence_base_sha, signals, reviewer_proposer, review, baseline_proven,
-                                      security_reviewer_proposer=security_reviewer_proposer,
-                                      strict_judge_qualified=strict_judge_qualified)
-    # v3.0-rc2/rc4 (P0.4/P1.1): FAIL-CLOSED. aggregate_ready ТОЛЬКО если верификация РЕАЛЬНО выполнена
-    # И чиста: verified, нет регрессий, HEAD==final_sha, evidence на final_sha, дерево чистое, агрегатный
-    # security clear на полном диффе. Сбой/недоступность -> НЕ ready.
-    # v3.0-rc20 (finding аудита P0): + baseline ДОКАЗАН на точной sequence_base_sha (нет fallback-базы),
-    # + НЕТ base_drift (base-ветка не сдвинулась с начала цепочки) — иначе evidence против не той базы.
-    agg_ok = bool(aggregate.get("verified") and aggregate.get("no_regressions")
-                  and aggregate.get("baseline_proven")
-                  and aggregate.get("revision_ok") and aggregate.get("tree_clean")
-                  and aggregate.get("evidence_revision_ok") and aggregate.get("security_ok")
-                  and aggregate.get("code_review_ok", True))
-    aggregate_ready = ready_all and chain_ok and agg_ok and (base_drift is None)
+    pr, delivery = _deliver_pr(open_pr, aggregate_ready, final_sha, child_root, wid, base,
+                               sequence_base_sha, task, ordered)
 
-    # v2.124 (P0.4): доставка draft PR — ОТДЕЛЬНЫЙ шаг ПОСЛЕ агрегатного вердикта, на финальном
-    # интегрированном SHA. PR открывается ТОЛЬКО при aggregate_ready — не по готовности отдельного пакета.
-    pr, delivery = None, {"requested": bool(open_pr), "status": "not-requested" if not open_pr else None}
-    if open_pr:
-        if aggregate_ready and final_sha:
-            wt = child_root / ".ai" / "worktrees" / wid
-            _drt = wt if wt.is_dir() else child_root
-            # v3.0-rc20 (finding аудита P0): DELIVERY BASE BINDING — evidence собрано против
-            # sequence_base_sha; перед PR сверяем АКТУАЛЬНУЮ remote base с этой базой. Разошлась
-            # (remote main сдвинулся после старта цепочки) -> НЕ открываем PR (проверенное состояние
-            # != потенциальному merge-состоянию); нужна ревалидация. Иначе — «verified» PR был бы ложью.
-            # v3.0.9 (finding аудита P0): ЕДИНЫЙ fail-closed RemoteBaseVerifier (как single-run). Раньше
-            # sequential был fail-OPEN: remote_base=None (нет origin/сети/ветки) -> else -> открывал PR.
-            # Теперь: verified-equal -> PR; verified-moved -> revalidation; unverifiable -> unavailable.
-            _rv = _ep._verify_remote_base(_drt, base, sequence_base_sha)
-            _vd = _rv.get("verdict")
-            if _vd == "verified-equal":
-                try:
-                    from ai_ops_kit.delivery import pr_open
-                    pr = pr_open.open_draft_pr(_drt, f"ai-ops/{wid}", base=base,
-                                               title=f"ai-ops: {task[:60]}",
-                                               body=(f"Sequential WorkPackages: {len(ordered)} пакет(ов). "
-                                                     f"База {base} ({(sequence_base_sha or '?')[:12]}) → финал {final_sha}. "
-                                                     f"Агрегатный вердикт: aggregate_ready."))
-                    delivery["status"] = (pr or {}).get("status") or "failed"
-                    delivery["validated_base"] = sequence_base_sha
-                    delivery["base_ref"] = base
-                except Exception as e:  # noqa: BLE001
-                    delivery["status"] = "failed"
-                    delivery["error"] = str(e)
-            elif _vd == "verified-moved":
-                delivery["status"] = "not-attempted"
-                delivery["base_moved"] = {"base_ref": base, "validated_base": sequence_base_sha,
-                                          "remote_base": _rv.get("remote_sha")}
-                delivery["reason"] = ("remote base сдвинулась с момента сбора evidence — нужна ревалидация; "
-                                      "PR не открыт (иначе непроверенное merge-состояние)")
-            else:   # unverifiable -> доставка НЕДОСТУПНА (fail-closed), НЕ открываем PR
-                delivery["status"] = "unavailable"
-                delivery["reason"] = f"remote-base-unverified: {_rv.get('reason')} — доставка невозможна fail-closed"
-        else:
-            delivery["status"] = "not-attempted"   # последовательность не готова -> PR НЕ открываем
-
-    seq = {"schema_version": 1, "kind": "WorkPackageSequence", "workitem_id": wid,
-           "packages": results, "completed": sorted(completed), "stopped_at": stopped_at,
-           "executed_all": executed_all, "ready_all": ready_all, "aggregate_ready": aggregate_ready,
-           "final_sha": final_sha, "sequential_chain": chain_ok, "total": len(ordered),
-           "sequence_base_sha": sequence_base_sha, "base_drift": base_drift,   # rc16 (P0/P1)
-           "aggregate": aggregate, "delivery": delivery, "draft_pr": pr,
-           "resumed_from": resume_from}
-    # v3.0.14 (finding аудита #2): sequence-report — durable (атомарно); сбой фиксируем в отчёте, не молчим
-    from ai_ops_kit.shared import lifecycle_store as _ls2
-    # Срез engine ратчета 2026-08-12: пропущенные записи журнала называются в ОТЧЁТЕ, а не только в
-    # возврате, который никто не читал. Слив ДО durable_write — иначе на диске лёг бы отчёт, из
-    # которого утрата исчезла. Слив обнуляет накопитель: та же утрата не приедет во второй отчёт.
-    _ls2.merge_bookkeeping_losses(seq)
-    _sr = _ls2.durable_write(features_dir / wid / "sequence-report.yaml", seq)
-    if not _sr.get("ok"):
-        seq["report_persist_error"] = _sr.get("error")
-    return seq
+    return _finalize_sequence_report(wid, results, completed, stopped_at, executed_all, ready_all,
+                                     aggregate_ready, final_sha, chain_ok, ordered, sequence_base_sha,
+                                     base_drift, aggregate, delivery, pr, resume_from, features_dir)
 
 
 def main(argv):

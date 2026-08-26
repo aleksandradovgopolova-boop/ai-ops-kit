@@ -27,7 +27,7 @@ registry_type: delivery-budget
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
   # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4360000
+  volume_bytes: 4364000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
   substantive_files: 528
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
@@ -454,3 +454,20 @@ raises:
       _enrich_run_report/_commit_barrier/_register_active_work) добавляет def+докстринг на
       исполняемом пути, но делает критический путь тестируемым по фазам; взамен func-size ратчет
       опущен 1275 -> 1003. Замер 4350400 -> 4356181 Б перешёл потолок 4356000 — подъём до 4360000.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4360000
+    to_bytes: 4364000
+    measured_before: 4356181
+    measured_after: 4362327
+    work: wave5 K6-глубина (расщепление run_pipeline + execute_sequence)
+    files:
+      - ai_ops_kit/engine/execution_pipeline.py
+      - ai_ops_kit/engine/workpackage_executor.py
+    why_it_works_in_the_child: >-
+      K6-глубина (Волна 5): god-функции run_pipeline (execution_pipeline.py) и execute_sequence
+      (workpackage_executor.py) расщеплены на фазовые функции. ОБА модуля исполняются В дочке на
+      каждом прогоне — run_pipeline это движок исполнения (detect/execute/evidence/gate/commit),
+      execute_sequence — исполнитель пакетов work-package. Вынос фаз в именованные функции добавляет
+      def+докстринг на исполняемом пути; взамен критический путь стал тестируемым по фазам, а
+      func-size ратчет опущен 864 -> 812. Замер 4356181 -> 4362327 Б перешёл потолок 4360000 — подъём до 4364000.
