@@ -2175,3 +2175,43 @@ class TestPipelineContextHybrid:
         assert ch["fed_to_model"] is False
         assert ch["v2_additions"] == []
         assert ch["exact_snapshot"] is True
+
+
+@pytest.fixture(scope="module")
+def shadow_run(tmp_path_factory):
+    """Pipeline-прогон с context_shadow=True (mock-предложитель). Один раз на модуль.
+
+    Закрывает пробел покрытия под расщепление K6: под-блок context_shadow фазы
+    обогащения отчёта не гонялся через run() ни одним тестом до этого.
+    """
+    root = tmp_path_factory.mktemp("shadow")
+    subprocess.run(["git", "-C", str(root), "init", "-q"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], capture_output=True)
+    (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "i"], capture_output=True)
+    pscript = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+    rp = ai_ops_run.run(
+        task_text="добавить a",
+        signals={"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]},
+        child_root=root, engine="pipeline", proposer=lambda c: next(pscript),
+        context_shadow=True,
+    )
+    return root, rp
+
+
+@pytest.mark.unit
+class TestPipelineContextShadow:
+    """Характеристика под-блока context_shadow фазы обогащения отчёта (context_shadow=True).
+
+    Фиксирует поведение ДО расщепления run() (K6-глубина): shadow — чистая наблюдаемость
+    РЯДОМ с боевым v1, полностью guarded — его сбой не роняет прогон, а честно фиксируется.
+    """
+
+    def test_shadow_present_and_guarded(self, shadow_run):
+        """rep['context_shadow'] присутствует как dict; прогон не упал из-за shadow."""
+        _, rp = shadow_run
+        assert isinstance(rp.get("context_shadow"), dict)
+        # прогон дошёл до отчёта пайплайна (shadow не прервал исполнение)
+        assert rp.get("kind") == "execution-pipeline"
