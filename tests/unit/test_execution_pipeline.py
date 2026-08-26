@@ -2716,6 +2716,33 @@ class TestIsolateRun:
 
 
 @pytest.mark.unit
+class TestUnsavedCommitsRefusal:
+    """isolate без resume/discard: ветка ai-ops/<wid> с несохранёнными коммитами -> честный отказ.
+
+    Характеристика ДО выноса блока изоляции/base из run_pipeline (K6-глубина): эта ветвь
+    (ahead>0 и not discard_previous) не покрывалась ни одним тестом.
+    """
+
+    def test_ahead_commits_block_without_discard(self, child_root):
+        _init_python_repo(child_root)
+        it1 = iter([{"op": "write", "path": "src/iso.py", "content": "y=1\n"}, {"done": True}])
+        rep1 = execution_pipeline.run_pipeline(
+            "фаза 1", _QUICK_SIG, child_root, lambda c: next(it1),
+            budget={"max_model_calls": 5}, feature="ahead-fn",
+            commit=True, isolate=True, install_deps=False)
+        assert bool((rep1.get("commit") or {}).get("sha"))   # ветка ai-ops/ahead-fn впереди HEAD
+        # второй прогон тем же feature, БЕЗ resume/discard -> отказ (несохранённые коммиты не теряем)
+        it2 = iter([{"op": "write", "path": "src/iso2.py", "content": "y=2\n"}, {"done": True}])
+        rep2 = execution_pipeline.run_pipeline(
+            "фаза 2", _QUICK_SIG, child_root, lambda c: next(it2),
+            budget={"max_model_calls": 5}, feature="ahead-fn",
+            commit=True, isolate=True, install_deps=False)
+        assert rep2.get("status") == "error"
+        assert "несохранённых" in (rep2.get("error") or "")
+        assert rep2["isolation"]["worktree"] is None   # worktree не создан, работа не тронута
+
+
+@pytest.mark.unit
 class TestSnapshotDelta:
     """_untracked snapshot-delta: новый untracked подготовки vs пользовательский."""
 
