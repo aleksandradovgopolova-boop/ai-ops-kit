@@ -30,19 +30,21 @@ scope: ai_ops_kit/engine/
 # durable RunPlan/run-settings + journal run_start) -> run() 1003 -> 957. Потолок 957.
 # 2026-08-26 (K6-глубина, срез resume-preflight): из run() вынесен _resume_gate (гейт продолжения
 # WorkItem: can_resume/base-rewritten/revalidation) -> run() 957 -> 910. Потолок 910.
-max_function_lines: 910
+# 2026-08-26 (K6-глубина, срез run-cost): из run() вынесена _finalize_run_cost (агрегат стоимости
+# + usage-ledger + очистка call-context) -> run() 910 -> 866. Потолок 866 (почти вровень с run_pipeline 864).
+max_function_lines: 866
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 887
+max_function_lineno: 941
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _resume_gate).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _finalize_run_cost).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 887
-    size: 910
+    lineno: 941
+    size: 866
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -53,7 +55,7 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 2003
+    lineno: 2013
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
@@ -65,7 +67,7 @@ top_10:
     size: 177
   - name: _print_pipeline
     file: ai_ops_run.py
-    lineno: 1799
+    lineno: 1809
     size: 132
   - name: resume_preflight
     file: run_handoff.py
