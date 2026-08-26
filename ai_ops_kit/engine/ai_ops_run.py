@@ -537,6 +537,74 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
 
 
 
+def _add_context_reports(rep, *, bundle, payload, spec_cov, work_pkg, context_shadow,
+                         context_hybrid, hybrid_fed, child_root, task_text, fid):
+    """Обогащение отчёта прогона контекст-отчётами (bundle/shadow/hybrid/payload/spec/
+    work-package). v3.38 (K6-глубина): вынесено из run() без изменения поведения.
+    Всё guarded/условно; мутирует rep на месте (context_shadow — чистая наблюдаемость,
+    его сбой не роняет прогон)."""
+    if bundle:
+        rep["context_bundle"] = {"estimated_tokens": bundle["estimated_tokens"],
+                                 "context_budget": bundle["context_budget"],
+                                 "overflow": bundle["overflow"],
+                                 "agents": bundle["included"]["agents"],
+                                 "rules": bundle["included"]["rules"],
+                                 "excluded_count": len(bundle["excluded"])}
+    # v3.6.4 SHADOW-wiring (по умолчанию OFF): Context Engine v2 shadow-view РЯДОМ с боевым v1.
+    # Execution по-прежнему на v1 (context_compiler); shadow — чистая наблюдаемость перед
+    # промоушеном retrieval в runtime. Полностью guarded: сбой shadow не влияет на прогон.
+    if context_shadow:
+        try:
+            from ai_ops_kit.context import context_shadow as _cshadow
+            # v3.6.7d: содержимое читаем из ТОЧНОГО execution-worktree (HEAD==committed_sha,
+            # require_snapshot доказывает это), политики — из основного checkout (.ai/policies).
+            # Обязательный контекст v1 (spec/decisions) берём из реального ContextBundle и передаём
+            # в orchestrator — иначе инвариант «mandatory не потерян» не проверяется. Демо-политик
+            # в runtime нет (afp=None -> child-политики / deny-by-default). Execution по-прежнему v1.
+            _wt = child_root / ".ai" / "worktrees" / fid
+            _content_root = _wt if _wt.is_dir() else child_root
+            _mandatory = None
+            if bundle:
+                _inc = bundle.get("included", {})
+                _mandatory = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
+            _csha = (rep.get("commit") or {}).get("sha")   # v3.6.7d-fix: SHA в rep["commit"]["sha"]
+            rep["context_shadow"] = _cshadow.build_shadow(
+                _content_root, task_text, role="executor", sha=_csha,
+                policy_root=child_root, v1_mandatory=_mandatory, require_snapshot=True)
+        except Exception as _e:  # noqa: BLE001 — shadow не должен ронять прогон
+            # честно фиксируем реальную причину (не влияет на execution=v1) — иначе баг wiring немой
+            rep["context_shadow"] = {"error": f"shadow build failed: {type(_e).__name__}: {_e}"[:300]}
+    # v3.7.16: hybrid собран ДО прогона и РЕАЛЬНО подан модели (см. hybrid_fed выше). Записываем что
+    # именно было fed_to_model (mode/additions/references), а не пересобираем post-hoc. v1 не теряется.
+    if context_hybrid and hybrid_fed is not None:
+        rep["context_hybrid"] = hybrid_fed
+    if payload:
+        rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
+                                  "payload_budget": payload["payload_budget"],
+                                  "context_budget": payload["context_budget"],
+                                  "included_items": len(payload["included_items"]),
+                                  "excluded_for_budget": len(payload["excluded_for_budget"]),
+                                  "fed_to_model": bool(payload.get("text"))}
+    if spec_cov:
+        rep["spec_coverage"] = {"level": spec_cov["level"], "level_name": spec_cov["level_name"],
+                                "escalated_from": spec_cov["escalated_from"],
+                                "blocking_missing": spec_cov["blocking_missing"],
+                                "needs_human": spec_cov["needs_human"],
+                                # v2.110: реальность — есть ли явный spec.yaml и что засчитано из артефактов
+                                "spec_artifact": spec_cov.get("spec_artifact", False),
+                                "covered_sections": spec_cov.get("covered_sections", []),
+                                "provided_sources": spec_cov.get("provided_sources", {})}
+    if work_pkg:
+        rep["work_package"] = {"atomic": work_pkg["atomic"],
+                               "should_decompose": work_pkg["should_decompose"],
+                               "decomposition_axes": work_pkg["decomposition_axes"],
+                               "decomposition_reasons": work_pkg["decomposition_reasons"],
+                               # v2.111: конкретные пакеты (id/scope/deps) + основная ось
+                               "primary_axis": work_pkg.get("primary_axis"),
+                               "work_packages": work_pkg.get("work_packages", [])}
+
+
+
 def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
@@ -1287,65 +1355,12 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             "run_handoff": f"features/{fid}/run-handoff.yaml",
             "concurrency_preflight": preflight,
         }
-        if bundle:
-            rep["context_bundle"] = {"estimated_tokens": bundle["estimated_tokens"],
-                                     "context_budget": bundle["context_budget"],
-                                     "overflow": bundle["overflow"],
-                                     "agents": bundle["included"]["agents"],
-                                     "rules": bundle["included"]["rules"],
-                                     "excluded_count": len(bundle["excluded"])}
-        # v3.6.4 SHADOW-wiring (по умолчанию OFF): Context Engine v2 shadow-view РЯДОМ с боевым v1.
-        # Execution по-прежнему на v1 (context_compiler); shadow — чистая наблюдаемость перед
-        # промоушеном retrieval в runtime. Полностью guarded: сбой shadow не влияет на прогон.
-        if context_shadow:
-            try:
-                from ai_ops_kit.context import context_shadow as _cshadow
-                # v3.6.7d: содержимое читаем из ТОЧНОГО execution-worktree (HEAD==committed_sha,
-                # require_snapshot доказывает это), политики — из основного checkout (.ai/policies).
-                # Обязательный контекст v1 (spec/decisions) берём из реального ContextBundle и передаём
-                # в orchestrator — иначе инвариант «mandatory не потерян» не проверяется. Демо-политик
-                # в runtime нет (afp=None -> child-политики / deny-by-default). Execution по-прежнему v1.
-                _wt = child_root / ".ai" / "worktrees" / fid
-                _content_root = _wt if _wt.is_dir() else child_root
-                _mandatory = None
-                if bundle:
-                    _inc = bundle.get("included", {})
-                    _mandatory = list(_inc.get("specifications", [])) + list(_inc.get("decisions", []))
-                _csha = (rep.get("commit") or {}).get("sha")   # v3.6.7d-fix: SHA в rep["commit"]["sha"]
-                rep["context_shadow"] = _cshadow.build_shadow(
-                    _content_root, task_text, role="executor", sha=_csha,
-                    policy_root=child_root, v1_mandatory=_mandatory, require_snapshot=True)
-            except Exception as _e:  # noqa: BLE001 — shadow не должен ронять прогон
-                # честно фиксируем реальную причину (не влияет на execution=v1) — иначе баг wiring немой
-                rep["context_shadow"] = {"error": f"shadow build failed: {type(_e).__name__}: {_e}"[:300]}
-        # v3.7.16: hybrid собран ДО прогона и РЕАЛЬНО подан модели (см. _hybrid_fed выше). Записываем что
-        # именно было fed_to_model (mode/additions/references), а не пересобираем post-hoc. v1 не теряется.
-        if context_hybrid and _hybrid_fed is not None:
-            rep["context_hybrid"] = _hybrid_fed
-        if payload:
-            rep["context_payload"] = {"payload_tokens": payload["payload_tokens"],
-                                      "payload_budget": payload["payload_budget"],
-                                      "context_budget": payload["context_budget"],
-                                      "included_items": len(payload["included_items"]),
-                                      "excluded_for_budget": len(payload["excluded_for_budget"]),
-                                      "fed_to_model": bool(payload.get("text"))}
-        if spec_cov:
-            rep["spec_coverage"] = {"level": spec_cov["level"], "level_name": spec_cov["level_name"],
-                                    "escalated_from": spec_cov["escalated_from"],
-                                    "blocking_missing": spec_cov["blocking_missing"],
-                                    "needs_human": spec_cov["needs_human"],
-                                    # v2.110: реальность — есть ли явный spec.yaml и что засчитано из артефактов
-                                    "spec_artifact": spec_cov.get("spec_artifact", False),
-                                    "covered_sections": spec_cov.get("covered_sections", []),
-                                    "provided_sources": spec_cov.get("provided_sources", {})}
-        if work_pkg:
-            rep["work_package"] = {"atomic": work_pkg["atomic"],
-                                   "should_decompose": work_pkg["should_decompose"],
-                                   "decomposition_axes": work_pkg["decomposition_axes"],
-                                   "decomposition_reasons": work_pkg["decomposition_reasons"],
-                                   # v2.111: конкретные пакеты (id/scope/deps) + основная ось
-                                   "primary_axis": work_pkg.get("primary_axis"),
-                                   "work_packages": work_pkg.get("work_packages", [])}
+        # v2.109..v3.7.16: контекст-отчёты в rep (bundle/shadow/hybrid/payload/spec/work-package).
+        #     v3.38 (K6): тело вынесено в _add_context_reports.
+        _add_context_reports(rep, bundle=bundle, payload=payload, spec_cov=spec_cov,
+                             work_pkg=work_pkg, context_shadow=context_shadow,
+                             context_hybrid=context_hybrid, hybrid_fed=_hybrid_fed,
+                             child_root=child_root, task_text=task_text, fid=fid)
         # v3.0.12 (finding аудита блок B): RunHandoff — состояние для resume, пишем DURABLE (атомарно +
         # fsync + перечитывание). Сбой записи БОЛЬШЕ НЕ гаснет молча (иначе на диске остаётся handoff
         # ПРОШЛОГО прогона, и resume продолжит с устаревшего состояния, думая, что оно свежее): фиксируем
