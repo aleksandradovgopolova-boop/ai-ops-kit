@@ -19,19 +19,21 @@ scope: ai_ops_kit/engine/
 # 1275 -> 1182 (новый глобальный max — по-прежнему run(), но уже меньше).
 # 2026-08-26 (K6-глубина, срез context-reports): из run() вынесена _add_context_reports (контекст-
 # отчёты в rep: bundle/shadow/hybrid/payload/spec/work-package) -> run() 1182 -> 1129. Потолок 1129.
-max_function_lines: 1129
+# 2026-08-26 (K6-глубина, срез provenance): из run() вынесена _enrich_run_report (provenance-поля
+# отчёта: runtime/provider/model/base/lifecycle-dict) -> run() 1129 -> 1084. Потолок 1084.
+max_function_lines: 1084
 
 # Информация о текущей max-функции (для справки).
 max_function: run
 max_function_file: ai_ops_run.py
-max_function_lineno: 608
+max_function_lineno: 671
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _add_context_reports).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после среза _enrich_run_report).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 608
-    size: 1129
+    lineno: 671
+    size: 1084
   - name: run_pipeline
     file: execution_pipeline.py
     lineno: 405
@@ -42,12 +44,16 @@ top_10:
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1943
+    lineno: 1961
     size: 206
   - name: _evaluate_security
     file: execution_pipeline.py
     lineno: 218
     size: 184
+  - name: _enrich_run_report
+    file: ai_ops_run.py
+    lineno: 608
+    size: 60
   - name: route
     file: ai_route.py
     lineno: 42

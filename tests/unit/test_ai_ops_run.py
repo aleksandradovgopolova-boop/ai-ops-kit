@@ -2215,3 +2215,32 @@ class TestPipelineContextShadow:
         assert isinstance(rp.get("context_shadow"), dict)
         # прогон дошёл до отчёта пайплайна (shadow не прервал исполнение)
         assert rp.get("kind") == "execution-pipeline"
+
+
+@pytest.mark.unit
+class TestPipelineRunProvenance:
+    """Характеристика фазы обогащения отчёта provenance-полями (runtime/provider/engine/
+    model/model_resolution/preflight/lifecycle). Фиксирует поведение ДО расщепления run()
+    (K6-глубина) перед выносом блока в _enrich_run_report.
+    """
+
+    def test_runtime_engine_provider(self, pipeline_run):
+        _, rp, _ = pipeline_run
+        assert rp["runtime"] == "claude-code"
+        assert rp["engine"] == "pipeline"
+        assert rp["provider"] == "mock"
+
+    def test_model_resolution_and_preflight_present(self, pipeline_run):
+        _, rp, _ = pipeline_run
+        assert rp["model_resolution"]["kind"] == "ModelResolution"
+        assert "preflight" in rp
+
+    def test_lifecycle_dict_shape(self, pipeline_run):
+        _, rp, pfid = pipeline_run
+        lc = rp["lifecycle"]
+        assert lc["workitem"] == f"features/{pfid}/workitem.yaml"
+        assert lc["run_plan"] == f"features/{pfid}/run-plan.yaml"
+        assert lc["run_report"] == f"features/{pfid}/run-report.json"
+        assert lc["run_handoff"] == f"features/{pfid}/run-handoff.yaml"
+        assert lc["active_work"] == ".ai/runtime/active-work.yaml"
+        assert "concurrency_preflight" in lc
