@@ -4202,3 +4202,68 @@ work:
       3.9-синтаксис снят решением пола 3.12. Оговорка честности из шапки скрипта сохранена:
       «быстро зелёное» НЕ значит «CI зелёный» — slow-selftests и compatibility-matrix
       даёт только check-full/CI (урок 26.08: наследованный красный жил именно в slow-группе).
+  - id: parallel-safety-runs-in-ci
+    title: >-
+      Проверка параллельной безопасности исполняется в CI — кита и дочки
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    pr: 335
+    evidence: tests/unit/test_parallel_safety.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #335, волна 6). validate_parallel_safety исполняется в CI ОБОИХ
+      контуров: в pr-smoke кита — отдельной джобой parallel-safety (--strict), в дочке — шагом в
+      ai-ops-validate с --defaults (база координационных файлов из клона кита, т.к. у свежей дочки
+      своего реестра нет). Валидатор получил флаг --defaults; прямой вызов внесён в whitelist
+      pytest-only инварианта. ПЕРЕПРОВЕРЯЕМО: тесты red/green (грязный PR краснит, чистый — нет) в
+      обоих контурах + тесты проводки обеих джоб. ГРАНИЦА ПО РЕШЕНИЮ: джоба кита пока НЕ в
+      обязательных контекстах (dp-002 — обкатка перед enforce); перевод в required — решение
+      владельца.
+  - id: no-verdict-is-an-honest-refusal-not-a-stall
+    title: >-
+      Отсутствие вердикта судьи — честный отказ, который можно разобрать, а не молчаливый ступор
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-27'
+    pr: 336
+    finding: findings/from-children/obs-2026-08-20-главное-за-прогон-кит-са-fad8d07f.yaml
+    evidence: tests/unit/test_no_verdict_is_an_honest_refusal.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #336, волна 6). Находка поля P0 (obs fad8d07f): на 'живом' пути прогона
+      (_run_reviews) гейт с no-verdict тихо ронялся голым continue — падал на общий «нет заключения
+      reviewer», _hard_stop не распознавал reviewer-blocked, работа МОЛЧА вставала. Теперь: no-verdict
+      даёт НАЗВАННЫЙ отказ (gate_executor.evidence_from_no_verdict — бюджет/чтения-без-вердикта/ноль
+      разбираемых/отказ провайдера), несёт «reviewer verdict» в evidence (взводит reviewer-blocked);
+      claude-cli на пустой result даёт ProviderRefusal(empty_answer), как API-провайдеры. ПЕРЕПРОВЕРЯЕМО:
+      сквозная проба полевого случая (гейт становится refused с причиной, а не исчезает) + юниты
+      строителя/run_review/провайдера. Настоящая починка задела engine/ (шире write_scope карточки).
+  - id: reach-phrase-names-working-copies
+    title: Человеческий ответ называет рабочие копии, а не только машины
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-27'
+    pr: 337
+    evidence: tests/unit/test_ui_presenter.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #337, волна 6). presenter.from_active_work называет рабочие копии
+      (ветки/ленты) активных работ в сводке для человека: «в работе N задач — в рабочих копиях …»;
+      worktree-путь ушёл в technical. Заявка без ветки не называется — сводка тогда прежняя, без
+      выдумок. Машинная фраза досягаемости не тронута. ПЕРЕПРОВЕРЯЕМО: тест презентера утверждает,
+      что рабочая копия названа человеку, а id работы — нет.
+  - id: night-review-autofix-class-a
+    title: Класс A правок исполняется в worktree и собирается в один draft PR за ночь
+    goal: nightly-product-review
+    status: done
+    closed_at: '2026-08-27'
+    pr: 338
+    evidence: tests/unit/test_night_review_autofix.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #338, волна 6). Условие готовности карточки было пусто — предложено и
+      реализовано. Класс A (детерминированные, обратимые правки) собирается в изолированной рабочей
+      копии в ОДИН черновой PR; в main не пишется, слияние за человеком. engine/worktree.py:
+      apply_fixes_in_worktree (чистый git-примитив, не тянет intelligence). intelligence/nightly_review.py:
+      run_autofix — реестр фиксеров ПУСТ по умолчанию (fail-closed), kill-switch (env/файл), гейт
+      policy (suggest → только рекомендация), Budget(max_model_calls=0) как инвариант, идемпотентный
+      open_draft_pr (один PR), эталонный фиксер trailing-whitespace (выключен), CLI --autofix/--dry-run.
+      ПЕРЕПРОВЕРЯЕМО: тесты — никогда main, один PR, откат при провале проверки, класс A пуст без
+      решения владельца. ГРАНИЦА ПО РЕШЕНИЮ: какой фиксер открыть первым — решает владелец.
