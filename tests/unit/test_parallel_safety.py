@@ -139,3 +139,85 @@ def test_a_broken_registry_is_skipped_not_crashed(tmp_path):
 def test_changed_files_returns_none_outside_git(tmp_path):
     """Вне git-репо changed_files -> None (не пустой список, не падение)."""
     assert ps.changed_files(tmp_path, "HEAD") is None
+
+
+@pytest.mark.unit
+def test_defaults_supplies_base_list_when_child_has_none(tmp_path):
+    """--defaults: у дочки своего реестра нет, база берётся из клона кита -> есть что проверять.
+
+    Без этого дочкин контур структурно не мог покраснеть (coordination_paths=[] -> checked=False),
+    и вторая половина done-when («краснит в контуре дочки») была бы недостижима."""
+    child = tmp_path / "child"; child.mkdir()            # у дочки НЕТ registry/coordination-files.yaml
+    kit = tmp_path / "kit" / "registry"; kit.mkdir(parents=True)
+    (kit / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [planning/plan.yaml]\n", encoding="utf-8")
+    assert ps.coordination_paths(child) == []            # сама по себе дочка — пусто
+    paths = ps.coordination_paths(child, defaults=str(kit / "coordination-files.yaml"))
+    assert paths == ["planning/plan.yaml"]               # база из клона докатилась
+    # и дочка всё ещё расширяет своим .ai/project/...
+    (child / ".ai" / "project").mkdir(parents=True)
+    (child / ".ai" / "project" / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [docs/ROADMAP.md]\n", encoding="utf-8")
+    both = ps.coordination_paths(child, defaults=str(kit / "coordination-files.yaml"))
+    assert both == ["docs/ROADMAP.md", "planning/plan.yaml"]
+
+
+def _git_repo_with_base(root, coord_registry=True):
+    """Собрать git-репо с базовым коммитом. -> (git, base_sha). Опционально с реестром координаторов."""
+    (root / "planning").mkdir(parents=True)
+    if coord_registry:
+        (root / "registry").mkdir(parents=True)
+        (root / "registry" / "coordination-files.yaml").write_text(
+            "schema_version: 1\npaths: [planning/plan.yaml]\n", encoding="utf-8")
+    def git(*a): subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True)
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@t.t"); git("config", "user.name", "t")
+    (root / "code.py").write_text("x=1\n", encoding="utf-8")
+    (root / "planning" / "plan.yaml").write_text("kind: delivery-plan\n", encoding="utf-8")
+    git("add", "-A"); git("commit", "-qm", "base")
+    base = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    return git, base
+
+
+@pytest.mark.unit
+def test_strict_reddens_a_mixed_pr_and_passes_a_clean_one(tmp_path):
+    """DONE-WHEN (контур кита): --strict -> код 1 на PR, смешавшем код с планом; 0 на чистом."""
+    # ГРЯЗНЫЙ: код + план в одном диффе -> красный (код 1)
+    dirty = tmp_path / "dirty"; git, base = _git_repo_with_base(dirty)
+    (dirty / "code.py").write_text("x=2\n", encoding="utf-8")
+    (dirty / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    git("add", "-A"); git("commit", "-qm", "mixed")
+    assert ps.main(["x", str(dirty), "--base", base, "--strict"]) == 1
+
+    # ЧИСТЫЙ: только код -> зелёный (код 0)
+    clean = tmp_path / "clean"; git2, base2 = _git_repo_with_base(clean)
+    (clean / "code.py").write_text("x=2\n", encoding="utf-8")
+    git2("add", "-A"); git2("commit", "-qm", "code only")
+    assert ps.main(["x", str(clean), "--base", base2, "--strict"]) == 0
+
+
+@pytest.mark.unit
+def test_strict_reddens_in_the_child_context_via_defaults(tmp_path):
+    """DONE-WHEN (контур дочки): у дочки нет своего реестра, база — через --defaults из клона кита.
+
+    Смешанный PR дочки краснит проверку (код 1), чистый — нет (код 0). Так вторая половина
+    done-when («краснит в обоих контурах») достижима, а не структурно невозможна."""
+    kit = tmp_path / "kit" / "registry"; kit.mkdir(parents=True)
+    (kit / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [planning/plan.yaml]\n", encoding="utf-8")
+    defaults = str(kit / "coordination-files.yaml")
+
+    # ГРЯЗНЫЙ дочкин PR: у дочки СВОЕГО реестра нет — красный держится только на --defaults
+    dirty = tmp_path / "child-dirty"; git, base = _git_repo_with_base(dirty, coord_registry=False)
+    (dirty / "code.py").write_text("x=2\n", encoding="utf-8")
+    (dirty / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    git("add", "-A"); git("commit", "-qm", "mixed")
+    assert ps.coordination_paths(dirty) == []            # без --defaults проверять было бы нечего
+    assert ps.main(["x", str(dirty), "--base", base, "--defaults", defaults, "--strict"]) == 1
+
+    # ЧИСТЫЙ дочкин PR: только код -> зелёный
+    clean = tmp_path / "child-clean"; git2, base2 = _git_repo_with_base(clean, coord_registry=False)
+    (clean / "code.py").write_text("x=2\n", encoding="utf-8")
+    git2("add", "-A"); git2("commit", "-qm", "code only")
+    assert ps.main(["x", str(clean), "--base", base2, "--defaults", defaults, "--strict"]) == 0
