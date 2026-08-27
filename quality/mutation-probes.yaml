@@ -1415,3 +1415,28 @@ probes:
   why: 'ШОВ: охраны подъёма проверяют НАСТОЯЩИЙ реестр, а не заглушку. Мутация оставляет все проверки
     на месте и подсовывает им выдуманный бюджет с пустой лентой подъёмов — механизм есть, а
     объявленные потолки им никто не судит. Тот же класс, что «валидатор, не запускавшийся нигде».'
+- id: thinning-reserve-honours-the-threshold
+  kind: guard
+  file: ai_ops_kit/validation/delivery_footprint_warning.py
+  find: '    return actual < ceiling and (ceiling - actual) < ceiling * fraction'
+  replace_with: '    return actual < ceiling'
+  tests:
+  - tests/unit/test_delivery_footprint_warning.py
+  why: 'Порог — весь смысл предупреждения: без доли ТАЮЩИЙ запас не отличить от комфортного, и любая
+    поставка под потолком «предупреждает» — шум топит сигнал. Мутация снимает порог (всё под потолком
+    объявляется тонким); комфортный-запас-не-тонкий обязан покраснеть. Замер 2026-08-20/21: пробой
+    узнавали падением на следующей работе — порог возвращает называние в тот прогон, где запас исчерпан.'
+- id: thinning-reserve-warning-is-actually-called
+  kind: seam
+  covers:
+  - ai_ops_kit/validation/delivery_footprint_warning.py
+  - tests/unit/test_installer.py
+  file: tests/unit/test_installer.py
+  find: '    if _dfw.reserve_is_thin(total, _ceil["volume_bytes"], _warn_fraction):'
+  replace_with: '    if False:  # шов срезан: механизм корректен, но его никто не зовёт'
+  tests:
+  - tests/unit/test_delivery_footprint_warning.py
+  why: 'ШОВ: предупреждение полезно, только если тест поставки его РЕАЛЬНО зовёт. Мутация оставляет
+    модуль корректным, но срезает вызов — ни один прогон не предупредит, а модульные тесты модуля
+    зелёные. Ровно класс «механизм зелёный в изоляции, в пайплайн не подключён». Ловит
+    side-effect-тест (греп источника на reserve_is_thin/thinning_reserve_warning).'
