@@ -69,3 +69,24 @@ jobs:
             tests/unit/test_ai_ops_run.py \
             tests/unit/test_ai_ops_cli.py
 
+  # ПАРАЛЛЕЛЬНАЯ БЕЗОПАСНОСТЬ (parallel-safety-runs-in-ci). Отдельная джоба, а НЕ шаг в `smoke`,
+  # СОЗНАТЕЛЬНО: по dp-002 новый гейт обкатывается non-blocking. Джоба уже РАБОТАЕТ в полную силу
+  # (--strict краснеет на PR, смешавшем код с координационным файлом — planning/plan.yaml,
+  # history/plan-history.yaml, decisions/registry.yaml, registry/release-claims.yaml — и зелёная на
+  # чистом), но пока НЕ внесена в обязательные контексты защиты main, поэтому красный тут виден, но
+  # слияние жёстко не блокирует. Перевод в обязательные — решение владельца после обкатки: добавить
+  # `parallel-safety` в required status checks. Тогда же дать джобе исход в merge_group (сейчас она
+  # там пропускается: в merge_group нет PR-диффа, а обязательный пропущенный статус повесил бы
+  # очередь — тот же капкан, что у `smoke` выше).
+  parallel-safety:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # нужна история для git diff против origin/main
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "PR не смешивает код с координационным файлом"
+        run: python3 ai_ops_kit/validation/validate_parallel_safety.py --base origin/main --strict
+

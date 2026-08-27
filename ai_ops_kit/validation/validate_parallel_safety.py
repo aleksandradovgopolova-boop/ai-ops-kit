@@ -36,20 +36,30 @@ _REG = "registry/coordination-files.yaml"
 _CHILD_REG = ".ai/project/coordination-files.yaml"
 
 
-def coordination_paths(root: Path) -> list:
-    """Список координационных файлов: пакетный реестр + расширение дочки. -> отсортированный список."""
+def _read_paths(p: Path, out: set) -> None:
+    """Прочитать paths: из одного реестра в накопитель. Молча пропускает отсутствующий/битый файл."""
+    if not p.is_file():
+        return
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return
+    for x in doc.get("paths") or []:
+        if isinstance(x, str) and x.strip():
+            out.add(x.strip())
+
+
+def coordination_paths(root: Path, defaults=None) -> list:
+    """Список координационных файлов: пакетный реестр + расширение дочки. -> отсортированный список.
+
+    `defaults` — путь к базовому реестру ВНЕ дерева `root` (в дочкином CI это клон кита:
+    у свежей дочки своего `registry/coordination-files.yaml` нет, и без базы проверка структурно
+    не может покраснеть). Дочка всё так же расширяет список своим `.ai/project/...`."""
     out = set()
+    if defaults:
+        _read_paths(Path(defaults), out)
     for rel in (_REG, _CHILD_REG):
-        p = Path(root) / rel
-        if not p.is_file():
-            continue
-        try:
-            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError:
-            continue
-        for x in doc.get("paths") or []:
-            if isinstance(x, str) and x.strip():
-                out.add(x.strip())
+        _read_paths(Path(root) / rel, out)
     return sorted(out)
 
 
@@ -80,9 +90,9 @@ def diff_mixes_code_with_coordination(changed: list, coord: list) -> dict:
             "coordination": sorted(coord_hits), "code": sorted(code_hits)}
 
 
-def assess(root, base=None) -> dict:
+def assess(root, base=None, defaults=None) -> dict:
     root = Path(root)
-    coord = coordination_paths(root)
+    coord = coordination_paths(root, defaults=defaults)
     rep = {"schema_version": 1, "kind": "parallel-safety", "coordination_files": coord,
            "diff": None, "findings": []}
     if not coord:
@@ -118,11 +128,13 @@ def render(rep: dict) -> str:
 
 
 def main(argv):
-    root, base, js, strict = ".", None, False, False
+    root, base, defaults, js, strict = ".", None, None, False, False
     it = iter(argv[1:])
     for a in it:
         if a == "--base":
             base = next(it, None)
+        elif a == "--defaults":
+            defaults = next(it, None)
         elif a == "--json":
             js = True
         elif a == "--strict":
@@ -130,7 +142,7 @@ def main(argv):
         elif not a.startswith("-"):
             root = a
     import json
-    rep = assess(root, base=base)
+    rep = assess(root, base=base, defaults=defaults)
     print(json.dumps(rep, ensure_ascii=False, indent=2) if js else render(rep))
     # НЕ БЛОКИРУЕТ по умолчанию (dp-002): новый гейт обкатывается non-blocking. С --strict —
     # ненулевой код на настоящем нарушении (план или смешанный дифф), но не на «не проверено».
