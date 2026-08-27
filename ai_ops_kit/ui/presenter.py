@@ -540,6 +540,14 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                        "досягаемость": "команда" if published else "эта машина"})
 
     n = len(active)
+    # РАБОЧИЕ КОПИИ НАЗЫВАЮТСЯ, А НЕ ТОЛЬКО МАШИНЫ. Параллельные ленты живут каждая в своём git
+    # worktree/ветке; ответ, называющий лишь «эту машину», не говорит, ГДЕ идёт работа — а на одной
+    # машине копий несколько. Ветка (она же лента) есть у каждой заявки, включая опубликованную
+    # чужую (PUBLISHED_FIELDS её несёт); worktree-путь — только у локальных, поэтому в человеческий
+    # текст идёт ветка, а путь остаётся в technical. Заявка без ветки просто не называется — сводка
+    # тогда прежняя, без рассинхрона.
+    copies = [a.get("branch") for a in active if a.get("branch")]
+    copies_h = ("; ".join(copies[:3]) + ("…" if len(copies) > 3 else "")) if copies else ""
     what = "; ".join(
         (a.get("title") or a.get("workitem") or a.get("id") or "работа")
         for a in active[:3])
@@ -560,7 +568,8 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
     return message(
         status="degraded" if stale else "ok",
         headline="Работа идёт" if not stale else "Работа идёт, но план расходится с заявками",
-        summary=f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}.",
+        summary=(f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}"
+                 + (f" — в рабочих копиях {copies_h}." if copies_h else ".")),
         why_it_matters=why,
         next_steps=["спроси «что дальше», если нужно чем-то заняться параллельно"],
         technical={"работ": n, "детали": what,
@@ -569,6 +578,8 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                                                 for x in (a.get("affected_areas")
                                                           or a.get("areas") or [])})) or "—",
                    "ветки": ", ".join(a.get("branch") or "?" for a in active),
+                   "рабочие копии": ", ".join(
+                       a.get("worktree") or a.get("branch") or "?" for a in active),
                    "id": ", ".join(str(a.get("id") or "?") for a in active)})
 
 
