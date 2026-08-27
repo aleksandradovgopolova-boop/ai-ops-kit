@@ -4267,3 +4267,65 @@ work:
       open_draft_pr (один PR), эталонный фиксер trailing-whitespace (выключен), CLI --autofix/--dry-run.
       ПЕРЕПРОВЕРЯЕМО: тесты — никогда main, один PR, откат при провале проверки, класс A пуст без
       решения владельца. ГРАНИЦА ПО РЕШЕНИЮ: какой фиксер открыть первым — решает владелец.
+  - id: required-contexts-match-jobs
+    title: >-
+      Обязательные статусы защиты ветки сверяются с CI-джобами
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    pr: 295
+    evidence: tests/contracts/test_required_contexts_match_jobs.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #295). validate_required_contexts сверяет объявленные обязательные
+      контексты (quality/required-contexts.yaml) с реальными CI-джобами и краснит рассинхрон до
+      того, как он повесит очередь слияния (ловушка «BLOCKED навсегда»). Перепроверяемо: 6
+      контрактных тестов; валидатор внесён в STANDALONE рантайм-контракта. В поставку дочки не едет.
+  - id: plan-agrees-with-git
+    title: >-
+      План согласуется с git: расхождение — ошибка, неизвестность — предупреждение, а не тишина
+    goal: plan-as-control-plane
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_plan_agrees_with_git.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены). Расхождение активного плана с git (коммиты работы в
+      стволе при открытой работе; открытый PR при todo) даёт ошибку в отчёте validate, который
+      читает CI; «неизвестность» — предупреждение словами, а не молчаливый зелёный. Перепроверяемо:
+      capability-тесты (позитив + fail-closed + побочный эффект) с мутантами.
+  - id: release-claims-stays-in-the-kit
+    title: >-
+      Релизная проза остаётся у кита и не едет в дочку; канал проверяется вызовом
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_validate_release_claims.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены). Релизная проза (~61 КБ) вынесена в
+      registry/release-notes.yaml и объявлена DEV_ONLY_FILES (installer) — в дочку не едет (−60 КБ
+      поставки); сам claims доставляется ради ключа channel, шов package_channel проверен вызовом.
+      Перепроверяемо: test_validate_release_claims + DEV_ONLY_FILES.
+  - id: delivery-budget-is-declared
+    title: >-
+      Потолок поставки объявлен данными с лентой подъёмов, а не вписан числом в тест
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_delivery_budget.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены). Потолок поставки — данными в quality/delivery-budget.yaml
+      с лентой подъёмов (дата, замеры до/после, файлы, причина «почему работает в дочке»); подъём без
+      названного доставляемого файла отклоняется, при пробое печатается состав поставки по каталогам.
+      Перепроверяемо: 3 capability-теста (в т.ч. fail-closed на подъёме без основания).
+  - id: unit-weeding-is-mutation-proven
+    title: >-
+      Юнит-тесты гранулярны и прополоты по мутациям, а не монолитные селф-тесты
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/contracts/test_pyramid_is_tiered.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены; по сути сделано ранее, PR #264–#282). 26 пар
+      «монолит+гранула» закрыты переносом покрытия (0 tracked test_*_selftest, ~375 гранулярных
+      тестов); ярус проставляется по каталогу и держится инвариантом test_pyramid_is_tiered; 121
+      мутационная проба (quality/mutation-probes.yaml) страхует, что ни один срез не оставляет
+      проверку зелёной впустую. Перепроверяемо: test_pyramid_is_tiered + test_mutation_probe.
