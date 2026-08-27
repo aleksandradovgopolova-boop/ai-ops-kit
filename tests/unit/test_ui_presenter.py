@@ -134,9 +134,12 @@ def test_status_and_health_speak_to_a_human(tmp_path):
     assert "ничего" in out.lower() or "не иду" in out.lower() or "не идёт" in out.lower()
 
     busy = PR.from_active_work({"active": [
-        {"id": "w1", "affected_areas": ["src/api/"], "branch": "ai-ops/w1",
+        {"id": "w1", "affected_areas": ["src/api/"], "branch": "wave6/api-refactor",
          "status": "in-progress", "owner_session": "s1"}]})
-    assert "w1" not in PR.render(busy, audience="product"), "id работы продакту не нужен"
+    busy_product = PR.render(busy, audience="product")
+    assert "w1" not in busy_product, "id работы продакту не нужен"
+    # но рабочая копия (ветка/лента) — называется: ответ говорит, ГДЕ идёт работа, а не только «здесь».
+    assert "wave6/api-refactor" in busy_product, "рабочая копия должна быть названа человеку"
     assert "w1" in PR.render(busy, audience="debug")
 
     # HEALTH без данных: честность сохранена, жаргон убран, следующий шаг назван.
