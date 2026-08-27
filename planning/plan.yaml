@@ -271,11 +271,17 @@ goals:
     status: active
     outcome:
       # Phase 1: обязательные артефакты, реестр, шаблоны, Product Passport, bootstrap, валидация.
+      # ЧАСТИЧНО ДОСТИГНУТА 2026-08-27 живым прогоном на дочке ~/ai-ops-cockpit (3.37.0), а не
+      # декларацией «код написан». Три исхода флипнуты замером: bootstrap создал `.ai-ops/` слой;
+      # `ai-ops validate product-layer` докладывает все четыре состояния (5 valid · 0 outdated ·
+      # 0 invalid · 0 missing); PRODUCT_PASSPORT.md сгенерирован из состояния репо с честными
+      # «_неизвестно_». Остальные три оставлены false — вживую не подтверждены (см. todo-работы
+      # verify-artifact-registry-as-data, verify-template-migrations, continuous-product-audit).
       artifact_registry_exists_as_data: false
       templates_have_versions_and_migrations: false
-      product_passport_auto_generated: false
-      bootstrap_creates_product_layer: false
-      validation_reports_missing_invalid_outdated_valid: false
+      product_passport_auto_generated: true
+      bootstrap_creates_product_layer: true
+      validation_reports_missing_invalid_outdated_valid: true
       continuous_audit_runs_periodically: false
 
   - id: backlog-intelligence
@@ -284,10 +290,16 @@ goals:
     status: active
     outcome:
       # Phase 2: классификация, дедупликация, приоритизация, зависимости.
-      issues_classified_by_type_and_area: false
+      # ЧАСТИЧНО ДОСТИГНУТА 2026-08-27 живым прогоном на 7 реальных Issues кита. Три исхода флипнуты
+      # замером: `backlog classify` дал тип/область/уверенность по каждому (#161 bug·cli high и т.д.);
+      # `backlog prioritize` — score с объяснением и учётом неизвестных; `backlog graph` — граф
+      # (7 задач, блокирующие/критический путь/циклы). Четвёртый (dedup) оставлен false: детектор
+      # отработал, но на 0 дубликатов — «обнаружены и слиты» на реальных дублях не показан (см.
+      # todo-работу backlog-deduplication).
+      issues_classified_by_type_and_area: true
       duplicates_detected_and_merged: false
-      ai_priority_explained_per_task: false
-      dependency_graph_built: false
+      ai_priority_explained_per_task: true
+      dependency_graph_built: true
 
   - id: roadmap-and-delivery
     # заморозка: roadmap + delivery planning — новое умение
@@ -313,9 +325,16 @@ goals:
     status: active
     outcome:
       # Phase 4: drift detection, risk management, team sync, AI decision log.
+      # ЧАСТИЧНО ДОСТИГНУТА 2026-08-27 живым прогоном `ai-ops team` (агрегатор) на самом ките. Два
+      # исхода флипнуты замером: авто-сводка команды собралась (здоровье продукт/тех/delivery,
+      # блокеры, ближайшая работа, milestone «не проверено», 12 слепых зон); риски названы с текстом
+      # смягчения ([high] technical: привести документацию в соответствие коду). Два оставлены false:
+      # drift вживую не запускал; журнал решений (`ai-ops governance`) живой, но записей 0 — решения
+      # с обоснованием показать не на чем. Оба — child-facing зазор: `team`/`governance` в дочке не
+      # выведены. См. todo-работы drift-detected-between-artifacts, ai-decisions-logged-with-rationale.
       drift_detected_between_artifacts: false
-      risks_identified_with_mitigation: false
-      team_status_auto_generated: false
+      risks_identified_with_mitigation: true
+      team_status_auto_generated: true
       ai_decisions_logged_with_rationale: false
 
   - id: autonomous-product-loop
@@ -649,43 +668,45 @@ work:
 
   # ─── nightly-product-review (решение владельца 14.08.2026, ep-2026-08-14-nightly-review) ──────
 
-  - id: product-layer-bootstrap
-    title: "ai-ops init создаёт Product Operating Layer в новом репозитории"
-    type: engineering
-    goal: product-operating-layer
-    status: in_progress
-    branch: lane-2-work
-    depends_on: [product-layer-templates-versioned, product-passport-auto-generation]
-    owner_role: engineer
-    write_scope: [installer/ai_ops.py, templates/product-layer/, manifest/]
-    value: high
-    affects: {delivery_operations: true, product_strategy: true}
-    # PR-3: При `ai-ops init` создаётся .ai-ops/ с PRODUCT_PASSPORT.md, ROADMAP.md, DELIVERY.md,
-    # POLICY.yaml, templates/. Переиспользует существующий механизм managed_set + deliver_assets.
-    # Готово, когда: `ai-ops init` на пустом репо создаёт все 5 артефактов валидно.
+  # product-layer-bootstrap и product-layer-validation закрыты в историю 2026-08-27 (живой прогон
+  # на дочке ~/ai-ops-cockpit подтвердил bootstrap и четырёхсостоянийный validate). См.
+  # history/plan-history.yaml.
 
-  - id: product-layer-validation
-    title: "Валидация артефактов: Missing / Invalid / Outdated / Valid с отчётом"
+  - id: verify-artifact-registry-as-data
+    title: "Живьём: реестр артефактов существует как данные и читается на дочке"
     type: quality
     goal: product-operating-layer
-    status: in_progress
-    branch: lane-2-work
-    depends_on: [artifact-registry-as-data, product-layer-templates-versioned]
+    status: todo
     owner_role: engineer
     write_scope: [ai_ops_kit/validation/, tests/]
-    value: high
-    affects: {engineering_quality_security: true, delivery_operations: true}
-    # PR-5 (validation): Проверка наличия, структуры, актуальности, содержимого.
-    # Четыре состояния вместо двух. Пустая секция ≠ отсутствующая.
-    # Готово, когда: `ai-ops validate product-layer` на живой дочке даёт корректный отчёт.
+    value: low
+    affects: {delivery_operations: true}
+    # Остаток живой проверки lane-2 (27.08). Механизм построен (#227, PR-4), но исход
+    # artifact_registry_exists_as_data вживую на дочке не подтверждён отдельным замером.
+    # Готово, когда: на живой дочке показано, что реестр артефактов читается как данные (а не файл-
+    # заглушка) — например, validate/аудит перечисляет артефакты из реестра, а не хардкодом.
+
+  - id: verify-template-migrations
+    title: "Живьём: у шаблонов продукта есть версии И миграции, применяемые на дочке"
+    type: quality
+    goal: product-operating-layer
+    status: todo
+    owner_role: engineer
+    write_scope: [ai_ops_kit/validation/, templates/product-layer/, tests/]
+    value: low
+    affects: {delivery_operations: true}
+    # Остаток живой проверки lane-2 (27.08). Версии шаблонов подтверждены (validate: «версия
+    # актуальна»), но исход templates_have_versions_and_migrations требует показать МИГРАЦИЮ:
+    # устаревший шаблон в дочке обновляется, а не только помечается outdated.
+    # Готово, когда: на дочке с устаревшим шаблоном показан переход версии (миграция), а не только
+    # диагноз outdated.
 
   - id: continuous-product-audit
     title: Периодический аудит продукта — артефакты, backlog, roadmap, delivery, риски
     type: delivery
     goal: product-operating-layer
-    status: in_progress
-    branch: lane-2-work
-    depends_on: [product-layer-validation, product-layer-bootstrap]
+    status: todo
+    depends_on: []
     owner_role: engineer
     write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/validation/]
     value: medium
@@ -693,38 +714,22 @@ work:
     # PR-21: Проверка наличия/актуальности артефактов, состояние backlog, качество roadmap,
     # delivery, техническое состояние, риски, зависимости, соответствие policy.
     # Результат — машиночитаемый отчёт (Artifacts: 5/5, Backlog: Healthy, Delivery: Yellow, ...).
-    # Готово, когда: `ai-ops audit product` на живой дочке даёт валидный отчёт.
+    # ПОНИЖЕНА до todo 27.08: модуль построен, но исход continuous_audit_runs_periodically —
+    # «периодически» — одним прогоном не подтверждается; нужен реальный периодический запуск.
+    # Готово, когда: `ai-ops audit product` на живой дочке даёт валидный отчёт и запускается
+    # периодически (не только по требованию).
 
   # ── Phase 2: Backlog Intelligence ──
 
-  - id: backlog-issue-classification
-    title: Классификация GitHub Issues по типу, области, приоритету, milestone
-    type: engineering
-    goal: backlog-intelligence
-    status: in_progress
-    branch: lane-3-work
-    depends_on: []
-    owner_role: engineer
-    write_scope: [ai_ops_kit/integrations/, ai_ops_kit/planning/]
-    value: high
-    affects: {delivery_operations: true, product_strategy: true}
-    # PR-8/PR-11. Зависимость на product-layer-bootstrap СНЯТА замером: GitHub Issues существуют
-    # независимо от артефактного слоя, реализация не импортирует ничего из ленты 2 (OS-LANES).
-    # Сначала GitHub-интеграция (PR-11): `ai_ops_kit/integrations/github.py` на `gh`/`urllib` без
-    # новой зависимости, с честным третьим состоянием (не проверено ≠ задач нет). На ней —
-    # классификатор: типы feature/bug/research/improvement/tech-debt/experiment/infrastructure;
-    # атрибуты type/area/status/priority/milestone/impact/urgency/effort/confidence/strategic/deps.
-    # Каждый вывод ОБЪЯСНИМ (evidence), unknown честен (не выдаёт себя за средний).
-    # Готово, когда: `backlog_classify` на живом репо возвращает структурированный отчёт с
-    # объяснениями (проверено живьём на 11 Issues aleksandradovgopolova-boop/ai-ops-kit).
+  # backlog-issue-classification закрыта в историю 2026-08-27 (живой прогон `backlog classify` на
+  # 7 реальных Issues кита: тип/область/уверенность по каждому). См. history/plan-history.yaml.
 
   - id: backlog-deduplication
     title: Дедупликация задач — нахождение и предложение объединения дубликатов
     type: engineering
     goal: backlog-intelligence
-    status: in_progress
-    branch: lane-3-work
-    depends_on: [backlog-issue-classification]
+    status: todo
+    depends_on: []
     owner_role: engineer
     write_scope: [ai_ops_kit/planning/]
     value: medium
@@ -732,51 +737,18 @@ work:
     # PR-8 (+PR-19/20). Похожесть по заголовку/телу/меткам (Jaccard, взвешенно) с объяснением; учёт
     # устаревших по updated_at (опорная дата детерминирована). ПРЕДЛАГАЕТ, не сливает молча:
     # action=suggest_merge, слияние требует одобрения человека (Suggest→…→Require approval).
+    # ПОНИЖЕНА до todo 27.08: детектор отработал живьём, но на 0 дубликатов — исход
+    # duplicates_detected_and_merged требует репо с реальными дублями.
     # Готово, когда: `backlog_dedup` на репо с дубликатами находит пары и помечает устаревшие.
 
-  # ── Phase 2 (додекомпозиция ленты 3): приоритизация и граф зависимостей ──
+  # backlog-ai-prioritization и backlog-dependency-graph закрыты в историю 2026-08-27 (живой прогон
+  # `backlog prioritize` и `backlog graph` на 7 реальных Issues кита). См. history/plan-history.yaml.
 
-  - id: backlog-ai-prioritization
-    title: AI-приоритизация backlog с объяснением вердикта и учётом override человека
-    type: engineering
-    goal: backlog-intelligence
-    status: in_progress
-    branch: lane-3-work
-    depends_on: [backlog-issue-classification]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/]
-    value: high
-    affects: {delivery_operations: true, product_strategy: true}
-    # PR-9/PR-20. Приоритет из impact/urgency/cost/strategic/confidence/deps; для КАЖДОЙ задачи
-    # объяснено ПОЧЕМУ (factors + explanation) — мнение без объяснения непроверяемо, как вердикт
-    # судьи. unknown понижает confidence рекомендации и это НАЗВАНО (не высокий приоритет с видом
-    # уверенности). Override человека (PR-20) хранится в реестре `.ai/backlog-overrides.yaml`,
-    # учитывается ВПРЕДЬ, при расхождении с расчётом показывает и решение человека, и расчёт.
-    # Готово, когда: `backlog_prioritize` ранжирует задачи с объяснением и применяет override
-    # (проверено живьём; на backlog без меток честно возвращает low-confidence, а не выдумку).
-
-  - id: backlog-dependency-graph
-    title: Граф зависимостей задач — блокирующие, критический путь, скрытые, циклы
-    type: engineering
-    goal: backlog-intelligence
-    status: in_progress
-    branch: lane-3-work
-    depends_on: [backlog-issue-classification]
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/]
-    value: medium
-    affects: {delivery_operations: true}
-    # PR-17. Строит граф из зависимостей классификатора (A→B: A зависит от B). Находит блокирующие
-    # (сколько задач зависят), критический путь (самая длинная цепочка), циклы (доставить нельзя),
-    # скрытые транзитивные зависимости, ссылки вне набора (dangling). Каждый пункт объясним рёбрами.
-    # Готово, когда: `backlog_depgraph` на графе с цепочками/циклами возвращает верные блокирующие,
-    # критический путь и циклы (проверено юнит-тестами на синтетических графах + живьём на репо).
   - id: drift-detected-between-artifacts
     title: "Drift: расхождения документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт"
     type: engineering
     goal: ai-product-operations
-    status: in_progress
-    branch: lane-5-work
+    status: todo
     owner_role: engineer
     write_scope: [ai_ops_kit/intelligence/, tests/]
     value: high
@@ -785,48 +757,20 @@ work:
     # architecture_baseline) — dp-001: дубли уже построенного отклоняем. Мягко опирается на артефакты
     # ленты 2 (Passport/roadmap) и backlog ленты 3 ПО КОНТРАКТУ; при их отсутствии — честный unknown
     # по недоступной паре, а не «дрейфа нет». Каждое расхождение названо: что с чем разошлось.
+    # ПОНИЖЕНА до todo 27.08: модуль построен, но исход drift_detected_between_artifacts вживую
+    # отдельным прогоном не подтверждён (в дочке drift-команда наружу не выведена).
     # Готово, когда: detect_drift_between_artifacts даёт список названных расхождений; тесты на
     # фикстурах с искусственным дрейфом краснеют, без дрейфа — зелёные; недоступная пара — unknown.
 
-  - id: risks-identified-with-mitigation
-    title: "Риски (product/delivery/tech/dependency/resource/strategic) + предложенное действие"
-    type: engineering
-    goal: ai-product-operations
-    status: in_progress
-    branch: lane-5-work
-    owner_role: engineer
-    depends_on: [product-health-explained, tech-health-explained, delivery-health-explained, drift-detected-between-artifacts]
-    write_scope: [ai_ops_kit/intelligence/, tests/]
-    value: high
-    affects: {product_strategy: true, delivery_operations: true, engineering_quality_security: true}
-    # PR-16: выявление рисков шести категорий с ПРЕДЛОЖЕНИЕМ действия (риск без mitigation —
-    # половина ответа). Выводится из сигналов health и drift, не из отдельного гадания. Каждый риск:
-    # категория, из какого сигнала выведен, severity, предложенное действие.
-    # Готово, когда: risk_register из фикстур health/drift даёт риски с mitigation; пустые сигналы —
-    # пустой список рисков (не выдуманные), а не unknown-как-риск.
-
-  - id: team-status-auto-generated
-    title: Авто-статус команды — прогресс milestone, изменения, блокеры, риски, ближайшие задачи
-    type: engineering
-    goal: ai-product-operations
-    status: in_progress
-    branch: lane-5-work
-    owner_role: engineer
-    depends_on: [risks-identified-with-mitigation]
-    write_scope: [ai_ops_kit/intelligence/, tests/]
-    value: medium
-    affects: {delivery_operations: true, analytics_learning: true}
-    # PR-12: команда не собирает статус вручную — кит формирует прогресс milestone, изменения,
-    # блокеры, риски, ближайшие задачи, delivery forecast. Агрегирует health + risk + drift + план;
-    # не считает сам, а сводит уже посчитанное (не дублирует калькуляторы).
-    # Готово, когда: team_sync даёт машиночитаемый статус из фикстур health/risk/плана; тесты.
+  # risks-identified-with-mitigation и team-status-auto-generated закрыты в историю 2026-08-27
+  # (живой прогон `ai-ops team`: авто-сводка команды собралась, риск [high] technical назван с
+  # действием). См. history/plan-history.yaml.
 
   - id: ai-decisions-logged-with-rationale
     title: "AI Decision Log: решение AI, почему, на каких данных, результат, менял ли человек"
     type: engineering
     goal: ai-product-operations
-    status: in_progress
-    branch: lane-5-work
+    status: todo
     owner_role: engineer
     write_scope: [ai_ops_kit/governance/, decisions/, tests/]
     value: high
@@ -835,6 +779,8 @@ work:
     # а НЕ заводит второй реестр (dp-001). Новый тип эпизода `actor: ai` с полями: решение, reason,
     # data (на каких данных), outcome (результат), human_overrode (менял ли человек). Файл общий —
     # согласовано в OS-LANES: пишу через ai_ops_kit/governance/, схему не ломаю.
+    # ПОНИЖЕНА до todo 27.08: механизм живой (`ai-ops governance` читает журнал), но записей 0 —
+    # исход ai_decisions_logged_with_rationale требует показать реальное решение с обоснованием.
     # Готово, когда: log_ai_decision дописывает валидный AI-эпизод в registry; validate_decisions
     # (существующий) остаётся зелёным; тесты на схему AI-эпизода.
 

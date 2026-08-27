@@ -4329,3 +4329,90 @@ work:
       тестов); ярус проставляется по каталогу и держится инвариантом test_pyramid_is_tiered; 121
       мутационная проба (quality/mutation-probes.yaml) страхует, что ни один срез не оставляет
       проверку зелёной впустую. Перепроверяемо: test_pyramid_is_tiered + test_mutation_probe.
+  - id: product-layer-bootstrap
+    title: "ai-ops init создаёт Product Operating Layer в новом репозитории"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон на дочке ~/ai-ops-cockpit (3.37.0): слой .ai-ops/ создан китом"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-2 на дочке). bootstrap создал в ~/ai-ops-cockpit слой
+      .ai-ops/ со всеми артефактами (PRODUCT_PASSPORT.md, ROADMAP.md, DELIVERY.md, POLICY.yaml,
+      templates/). Исход product-operating-layer.bootstrap_creates_product_layer поднят замером, а
+      не декларацией «код написан». Перепроверяемо на дочке: `ls .ai-ops/` + `ai-ops validate
+      product-layer`. Остаток исходов направления оформлен todo (verify-artifact-registry-as-data,
+      verify-template-migrations, continuous-product-audit).
+  - id: product-layer-validation
+    title: "Валидация артефактов: Missing / Invalid / Outdated / Valid с отчётом"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон на дочке ~/ai-ops-cockpit: `ai-ops validate product-layer` → 5 valid"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-2 на дочке). `ai-ops validate product-layer` на
+      ~/ai-ops-cockpit доложил все четыре состояния поимённо: valid 5 (passport, roadmap, delivery,
+      policy, templates_dir) · outdated 0 · invalid 0 · missing 0. Исход
+      product-operating-layer.validation_reports_missing_invalid_outdated_valid поднят замером.
+      Также подтверждён product_passport_auto_generated: PRODUCT_PASSPORT.md сгенерирован из
+      состояния репо с честными «_неизвестно_». Перепроверяемо: та же команда на дочке.
+  - id: backlog-issue-classification
+    title: Классификация GitHub Issues по типу, области, приоритету, milestone
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops backlog classify .` на 7 реальных Issues кита"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-3). `backlog classify` на 7 реальных Issues
+      aleksandradovgopolova-boop/ai-ops-kit дал тип/область/уверенность по каждой (#161 bug·cli
+      high, #160 bug·unknown high, #151/#150/#148/#138/#137 feature с областями и low-confidence).
+      Исход backlog-intelligence.issues_classified_by_type_and_area поднят замером. Перепроверяемо:
+      та же команда на репо с Issues.
+  - id: backlog-ai-prioritization
+    title: AI-приоритизация backlog с объяснением вердикта и учётом override человека
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops backlog prioritize .` на 7 реальных Issues кита"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-3). `backlog prioritize` ранжировал 7 Issues со
+      score и ОБЪЯСНЕНИЕМ каждого (польза×conf − стоимость; неизвестные impact/urgency/strategic
+      названы и понижают confidence — не выдаёт себя за высокий приоритет). Исход
+      backlog-intelligence.ai_priority_explained_per_task поднят замером. Перепроверяемо: та же
+      команда на репо с Issues.
+  - id: backlog-dependency-graph
+    title: Граф зависимостей задач — блокирующие, критический путь, скрытые, циклы
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops backlog graph .` на 7 реальных Issues кита"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-3). `backlog graph` построил граф из 7 задач и
+      корректно доложил блокирующие/критический путь/циклы (на этом наборе — 0 связей, честно
+      «нет», а не выдуманные рёбра). Исход backlog-intelligence.dependency_graph_built поднят
+      замером; юнит-тесты на синтетических графах с цепочками/циклами — уже были. Перепроверяемо:
+      та же команда на репо.
+  - id: risks-identified-with-mitigation
+    title: "Риски (product/delivery/tech/dependency/resource/strategic) + предложенное действие"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops team` (агрегатор рисков) на самом ките"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-5). `ai-ops team` показал риски с mitigation: [high]
+      technical — «привести документацию в соответствие коду», [medium] — из сигналов health/drift,
+      не из отдельного гадания. Исход ai-product-operations.risks_identified_with_mitigation поднят
+      замером. Перепроверяемо: `ai-ops team` на ките. ЗАЗОР: наружу в дочке команда не выведена —
+      это отдельный todo уровня командного слоя, не этой работы.
+  - id: team-status-auto-generated
+    title: Авто-статус команды — прогресс milestone, изменения, блокеры, риски, ближайшие задачи
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops team` на самом ките"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-5). `ai-ops team` сам собрал сводку: здоровье
+      (продукт/тех/delivery), 4 блокера, ближайшая работа, milestone «не проверено» (честно, при
+      отсутствии delivery-выгрузки), 12 названных слепых зон. Агрегирует health+risk+drift+план, не
+      дублируя калькуляторы. Исход ai-product-operations.team_status_auto_generated поднят замером.
+      Перепроверяемо: `ai-ops team` на ките. ЗАЗОР: в дочке команда не выведена наружу (отдельный
+      todo командного слоя).
