@@ -354,6 +354,28 @@ goals:
     freeze_relation: run_condition
     status: active
 
+  - id: uiux-standard-as-product
+    # НОВАЯ ЦЕЛЬ. Подтверждена владельцем 2026-08-27 (вариант A). Источник — пакет владельца
+    # `ai-ops-uiux`: единый ПРОВЕРЯЕМЫЙ UI/UX-стандарт (Конституция со стабильными ID, токены-
+    # контракт, реестры возможностей, Storybook-контракт) вместо тонкого набора чек-листов. Кит
+    # УЖЕ имеет тонкий слой дизайна на блокирующих гейтах (ux_review/accessibility_review/
+    # design_system_usage, rules/design/*); стандарт внедряется СЛИЯНИЕМ/углублением, не вторым
+    # островом. Внедряется волнами (см. работы): 1 — Конституция-источник + реконсиляция ID
+    # (наблюдение), 2 — токены + реестры, 3 — углубление ролей-ревьюеров + ui-health, 4 — MCP.
+    # Storybook-сторона создания идёт через цель `storybook-as-visual-contract`.
+    # заморозка: единый UI/UX-стандарт как продукт кита — новое умение, внедряется волнами.
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Волна 1 — Конституция становится источником; гейты дизайна ссылаются на её ID (наблюдение).
+      constitution_is_source_and_gates_cite_its_ids: false
+      # Волна 2 — токены-контракт + реестры компонентов/паттернов/шаблонов доступны агенту.
+      tokens_contract_and_capability_registries_available: false
+      # Волна 3 — ревьюеры и ui-health углублены содержанием Конституции.
+      reviewers_and_ui_health_deepened_from_constitution: false
+      # Волна 4 — MCP-доступ к UI-системе (get_*/validate_*).
+      mcp_access_to_ui_system: false
+
 # ЧТО ЗДЕСЬ ЛЕЖИТ, А ЧТО НЕТ (`plan-as-control-plane`, 2026-08-14). Активный план — это ответ на
 # четыре вопроса управления: где мы, что идёт сейчас, что блокирует и чем, какую работу взять
 # следующей. Поэтому здесь ТОЛЬКО незакрытая работа (`todo`/`in_progress`); закрытая, вместе со
@@ -871,6 +893,49 @@ work:
     # (охранный инвариант ловит новые монолиты — по образцу test_suite_asserts); каждый снятый
     # `_selftest` заменён гранулярным `test_<имя>.py`; конвенция валидаторов обновлена и checklist
     # зелёный; полный набор зелёный; число тест-функций до/после названо как СЛЕДСТВИЕ.
+
+  # ─── uiux-standard-as-product · Волна 1 (решение владельца A, 2026-08-27) ─────────────────────
+  - id: uiux-constitution-is-source
+    title: >-
+      Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
+    type: engineering
+    goal: uiux-standard-as-product
+    status: todo
+    owner_role: engineer
+    write_scope: [standards/uiux/, scripts/, tests/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # ПОВОД. Пакет `ai-ops-uiux` держит один источник (UI_CONSTITUTION.md, 65 правил, стабильные
+    # ID UI-/AI-/UI-FORBIDDEN-) и генератор build-rules.py, который пересобирает оперативный слой
+    # (ui-ux.rules.md) и машинный реестр (rules.yaml). У кита уже есть механизм «зеркал» (check-fast
+    # ↔ CI, layering, счёт валидаторов): расхождение факта и генерата = красный. Волна 1 кладёт
+    # Конституцию в standards/uiux/ как источник и включает эту сверку.
+    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: править rules.yaml/ui-ux.rules.md руками (они генерируются); менять силу
+    # гейтов дизайна — это делает следующая работа, и то в режиме наблюдения.
+    # Готово, когда: build-rules.py пересобирает оба представления из Конституции байт-в-байт;
+    # CI краснеет при ручном расхождении генерата с источником; ручная правка генерата затирается.
+
+  - id: design-gates-cite-constitution-ids
+    title: >-
+      Гейты дизайна ссылаются на ID Конституции; сила гейтов не меняется (наблюдение)
+    type: quality
+    goal: uiux-standard-as-product
+    status: todo
+    depends_on: [uiux-constitution-is-source]
+    owner_role: engineer
+    write_scope: [rules/design/, quality/gates.yaml, agents/quality/]
+    value: high
+    affects: {engineering_quality_security: true}
+    # ПОВОД. Три блокирующих гейта (ux_review, accessibility_review, design_system_usage) ссылаются
+    # на тонкие чек-листы rules/design/*.yaml. Реконсиляция связывает каждый их пункт с правилом
+    # Конституции полем constitution_id; находки гейтов начинают цитировать UI-/AI-/UI-FORBIDDEN-
+    # ID (как code-review цитирует id пунктов). Расхождения «кит↔Конституция» (пункт есть у одной
+    # стороны и нет у другой) перечисляются ЯВНО, не скрываются.
+    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: менять blocking/severity гейтов — волна 1 только сверяет и ссылается;
+    # ужесточение идёт отдельной работой после обкатки (правило roadmap: гейт крепнет по обкатке).
+    # Готово, когда: каждый пункт трёх чек-листов имеет constitution_id на существующее правило;
+    # находки ux_review/accessibility_review/design_system_usage несут ID Конституции; blocking и
+    # severity не изменились; список расхождений «кит↔Конституция» зафиксирован в репозитории.
 
   # ─── Phase 0: «контроль качества честен» (аудит 2026-08-25) ───────────────────────────────────
 
