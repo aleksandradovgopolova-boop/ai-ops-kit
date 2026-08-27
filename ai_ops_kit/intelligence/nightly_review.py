@@ -479,6 +479,202 @@ def format_brief(delta: dict, root: Path) -> str:
     return "\n".join(L)
 
 
+# ─── КЛАСС A: детерминированный автофикс в worktree -> ОДИН черновой PR за ночь ────────────────
+#
+# Owner decision ep-2026-08-14-nightly-review, четыре класса правок:
+#   A — детерминированное, обратимое, не меняющее поведение: можно автоматически, но НИКОГДА в main;
+#       worktree -> проверки -> draft PR. B кит готовит, мержит человек. C — только рекомендация.
+#       D (секрет/сломанный main/выключенный security-гейт) — срочно, не дожидаясь утра.
+#
+# КЛАСС A НА СТАРТЕ ПУСТ. Какие ИМЕННО пункты допускаются к автоматической правке — решение
+# владельца по одному, и только после измеренной точности v0 (human_decision в карточке работы).
+# Поэтому реестр фиксеров существует, но ВКЛЮЧЁННЫЙ список по умолчанию пуст (fail-closed): фиксер
+# ездит выключенным, владелец открывает его отдельным решением. Ничего не правится, пока список пуст.
+#
+# ГРАНИЦЫ (все механизмами, не на словах):
+#   · никогда в main — worktree.add отказывает main/master, PR всегда черновой, слияние не делаем;
+#   · не более ОДНОГО PR за ночь — одна стабильная ветка + идемпотентный open_draft_pr (обновляет);
+#   · ноль вызовов модели — класс A детерминирован (Budget(max_model_calls=0) как заявленный инвариант);
+#   · kill-switch — env AI_OPS_NIGHTLY_AUTOFIX=off или файл-сигнал; пустой список — тоже «выключено»;
+#   · откат при провале проверки — в worktree.apply_fixes_in_worktree (per-fixer revert / force remove);
+#   · unknown не чинится — берём только доказанные расхождения, «не проверено» не трогаем.
+
+NIGHTLY_AUTOFIX_ENV = "AI_OPS_NIGHTLY_AUTOFIX"          # =off (любой регистр) -> глушим
+AUTOFIX_OFF_SENTINEL = ".ai/project/nightly-review/autofix-off"
+
+
+class FixerSpec:
+    """Детерминированный фиксер класса A. `apply(worktree_path) -> list[str]` изменённых путей.
+
+    Обязан быть обратимым и не менять поведение. Свой allowlist путей фиксер держит сам — движок
+    (worktree.apply_fixes_in_worktree) лишь применяет, проверяет и откатывает."""
+    def __init__(self, key: str, description: str, apply):
+        self.key = key
+        self.description = description
+        self.apply = apply
+
+
+def _fix_trailing_whitespace(globs):
+    """Фабрика эталонного фиксера: убрать хвостовые пробелы и добить один финальный перевод строки.
+
+    Класс A в чистом виде — детерминированно, обратимо, не меняет поведение. Трогает ТОЛЬКО файлы по
+    своим globs. Возвращает apply(worktree_path) -> list[str] изменённых относительных путей."""
+    def apply(wt: Path) -> list:
+        wt = Path(wt)
+        changed = []
+        for pat in globs:
+            for p in sorted(wt.glob(pat)):
+                if not p.is_file():
+                    continue
+                try:
+                    text = p.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                fixed = "\n".join(line.rstrip() for line in text.split("\n"))
+                fixed = fixed.rstrip("\n") + "\n" if fixed.strip() else fixed
+                if fixed != text:
+                    p.write_text(fixed, encoding="utf-8")
+                    changed.append(str(p.relative_to(wt)))
+        return changed
+    return apply
+
+
+# Реестр фиксеров класса A. Ключ -> FixerSpec. ВКЛЮЧАЮТСЯ отдельным решением владельца (см. ниже);
+# по умолчанию не включён НИ ОДИН. Эталонный фиксер держим на узком allowlist (док-Markdown).
+CLASS_A_FIXERS = {
+    "trailing-whitespace": FixerSpec(
+        "trailing-whitespace",
+        "хвостовые пробелы и финальный перевод строки в Markdown-документах",
+        _fix_trailing_whitespace(["docs/**/*.md", "*.md"])),
+}
+
+
+def autofix_kill_switch_off(root: Path) -> str | None:
+    """Заглушён ли автофикс. -> причина (str) или None (не заглушён)."""
+    val = (__import__("os").environ.get(NIGHTLY_AUTOFIX_ENV) or "").strip().lower()
+    if val == "off":
+        return f"{NIGHTLY_AUTOFIX_ENV}=off"
+    if (Path(root) / AUTOFIX_OFF_SENTINEL).exists():
+        return f"файл-сигнал {AUTOFIX_OFF_SENTINEL}"
+    return None
+
+
+def enabled_fixers(root: Path, enabled=None) -> list:
+    """Включённые ключи фиксеров. По умолчанию (config nightly.autofix.enabled) — ПУСТО (fail-closed).
+
+    `enabled` (список ключей) переопределяет config — для тестов и явного вызова."""
+    if enabled is None:
+        cfg = Path(root) / ".ai-ops.yaml"
+        enabled = []
+        if cfg.is_file():
+            try:
+                doc = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+                enabled = (((doc.get("nightly") or {}).get("autofix") or {}).get("enabled")) or []
+            except (OSError, yaml.YAMLError):
+                enabled = []
+    return [k for k in enabled if k in CLASS_A_FIXERS]
+
+
+def run_autofix(root: Path, *, dry_run: bool = False, enabled=None, date: str | None = None,
+                policy=None, verify=None) -> dict:
+    """Собрать включённые правки класса A в ОДИН черновой PR за ночь (или сказать, почему не собрала).
+
+    Возврат (AutoFixResult): {status, reason?, branch?, base_sha?, head_sha?, applied, skipped, pr?,
+    budget, enabled}. status: disabled | suggest-only | no_changes | prepared | dry_run | rolled_back.
+    Никогда не пишет в main, не мержит, не зовёт модель."""
+    from ai_ops_kit.engine import worktree
+    from ai_ops_kit.governance import policy_engine
+    from ai_ops_kit.shared.budget import Budget
+
+    result = {"applied": [], "skipped": [], "enabled": [], "pr": None,
+              "budget": {"max_model_calls": 0, "spent": 0}}
+
+    off = autofix_kill_switch_off(root)
+    if off:
+        return {**result, "status": "disabled", "reason": f"автофикс заглушён ({off})"}
+
+    keys = enabled_fixers(root, enabled)
+    result["enabled"] = keys
+    if not keys:
+        return {**result, "status": "disabled",
+                "reason": "класс A пуст — включённых фиксеров нет (открывается решением владельца)"}
+
+    pol = policy if policy is not None else policy_engine.load_policy(root)
+    # Черновой PR — действие уровня «подготовить» (кит готовит, мержит человек). suggest = даже не
+    # готовим, только рекомендуем. prepare и выше — готовим черновой PR (но НЕ мержим никогда).
+    if policy_engine.level_for("nightly_autofix", pol) == "suggest":
+        return {**result, "status": "suggest-only",
+                "reason": "policy: nightly_autofix=suggest — только рекомендация, правку не готовлю"}
+
+    _ = Budget(max_model_calls=0)     # заявленный инвариант: класс A детерминирован, модель не зовёт
+    day = date or datetime.now().strftime("%Y-%m-%d")
+    branch = f"ai-ops/nightly-autofix/{day}"
+    fixers = [{"key": k, "apply": CLASS_A_FIXERS[k].apply} for k in keys]
+
+    res = worktree.apply_fixes_in_worktree(root, branch, fixers, base="HEAD", verify=verify)
+    result["applied"] = res.get("applied", [])
+    result["skipped"] = res.get("skipped", [])
+    result["branch"] = branch
+    result["base_sha"] = res.get("base_sha")
+    result["head_sha"] = res.get("head_sha")
+
+    if res["status"] == "no_changes":
+        return {**result, "status": "no_changes", "reason": "включённые фиксеры не нашли что править"}
+    if res["status"] in ("error", "rolled_back"):
+        return {**result, "status": "rolled_back",
+                "reason": res.get("reason", "правки откачены — ни одна не собрана")}
+
+    if dry_run:
+        return {**result, "status": "dry_run",
+                "reason": "dry-run: правки собраны в ветку, PR не открыт"}
+
+    from ai_ops_kit.delivery import pr_open
+    body = ("Ночной автофикс класса A (детерминированные, обратимые правки).\n\n"
+            f"База: {res.get('base_sha')}\nВершина: {res.get('head_sha')}\n\n"
+            + "\n".join(f"- {a['key']}: {', '.join(a['files'])}" for a in res.get("applied", []))
+            + "\n\nЧерновой PR: слияние — за человеком.")
+    pr = pr_open.open_draft_pr(root, branch, "chore: ночной автофикс класса A", body,
+                               delivery_id=f"nightly-autofix-{day}")
+    result["pr"] = pr
+    return {**result, "status": "prepared",
+            "reason": "правки класса A собраны в один черновой PR (слияние за человеком)"}
+
+
+def format_autofix_report(res: dict) -> str:
+    """Человеческий отчёт об автофиксе: что собрано / что пропущено / почему выключено."""
+    st = res.get("status")
+    L = ["# Ночной автофикс (класс A)", ""]
+    if st in ("disabled", "suggest-only"):
+        L.append(f"Ничего не правила: {res.get('reason')}.")
+        L.append("Это граница по решению, а не недоделка: класс A открывается по одному пункту.")
+        return "\n".join(L)
+    if st == "no_changes":
+        L.append(f"Включённые фиксеры ({', '.join(res.get('enabled', []))}) не нашли что править.")
+        return "\n".join(L)
+    if st == "rolled_back":
+        L.append(f"Правки откачены: {res.get('reason')}. В main и в PR ничего не ушло.")
+        return "\n".join(L)
+    applied = res.get("applied", [])
+    L.append(f"Собрано правок: {len(applied)} (ветка {res.get('branch')}).")
+    for a in applied:
+        L.append(f"- **{a['key']}**: {', '.join(a['files'])}")
+    if res.get("skipped"):
+        L.append("")
+        L.append("Пропущено (не прошло проверку или потолок):")
+        for s in res["skipped"]:
+            L.append(f"- {s.get('key')}: {s.get('reason')}")
+    pr = res.get("pr") or {}
+    L.append("")
+    if st == "dry_run":
+        L.append("Dry-run: PR не открыт.")
+    elif pr.get("status") in ("opened", "updated"):
+        L.append(f"Черновой PR {pr.get('status')}: {pr.get('url', pr.get('number'))}. Слияние — за тобой.")
+    else:
+        L.append(f"Черновой PR не открыт: {pr.get('note') or pr.get('status')} "
+                 f"(правки собраны в ветке {res.get('branch')}).")
+    return "\n".join(L)
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(description="Nightly Product Health Review (v0, read-only)")
@@ -487,6 +683,10 @@ def main():
     ap.add_argument("--json", action="store_true", help="Output delta as JSON")
     ap.add_argument("--confirm", action="store_true",
                     help="отметить обзор разобранным: завтрашняя дельта пойдёт отсюда")
+    ap.add_argument("--autofix", action="store_true",
+                    help="собрать включённые правки класса A в один черновой PR (по умолчанию класс A пуст)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="с --autofix: собрать правки в ветку, но НЕ открывать PR")
     ap.add_argument("--selftest", action="store_true", help="Run self-test")
     args = ap.parse_args()
 
@@ -514,6 +714,17 @@ def main():
         rec = confirm_review(root)
         print(f"обзор подтверждён на {rec['commit_sha'] or 'неизвестном коммите'} "
               f"({rec['confirmed_at']}) — завтрашняя дельта пойдёт отсюда")
+        return 0
+
+    if args.autofix:
+        # КЛАСС A: детерминированный автофикс в worktree -> один черновой PR. По умолчанию класс A
+        # пуст (fail-closed) — тогда честно скажет, что ничего не правила и почему. Никогда не пишет
+        # в main и не мержит.
+        res = run_autofix(root, dry_run=args.dry_run)
+        if args.json:
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+        else:
+            print(format_autofix_report(res))
         return 0
 
     delta = collect_delta(root, args.since)
