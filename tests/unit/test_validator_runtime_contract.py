@@ -80,6 +80,7 @@ STANDALONE = [
     "validate_references",
     "validate_regression_corpus",
     "validate_release_claims",
+    "validate_required_contexts",   # standalone: сверяет required-статусы защиты с CI-джобами (fail-open без gh API)
     "validate_research_artifacts",
     "validate_runtime_surface",
     "validate_sandbox_boundary",
