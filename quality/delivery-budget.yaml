@@ -26,8 +26,8 @@ registry_type: delivery-budget
 
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
-  # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4380000
+  # Объём managed-поставки в байтах.
+  volume_bytes: 4410000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
   substantive_files: 529
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
@@ -539,3 +539,30 @@ raises:
       500 -> 401 и критический путь стал тестируемым по фазам. Замер 4374580 -> 4376846 Б перешёл
       потолок 4376000 — подъём до 4380000. На этом расщепление run_pipeline завершено, рост
       объёмом от него останавливается; рост — работой кода в дочке, а не запасом.
+  - at: '2026-08-27'
+    what: volume
+    from_bytes: 4380000
+    to_bytes: 4410000
+    measured_before: 4377068
+    measured_after: 4404975
+    work: wave6 (no-verdict + reach-phrase + night-review-autofix; parallel-safety едет клоном)
+    files:
+      - ai_ops_kit/engine/worktree.py
+      - ai_ops_kit/intelligence/nightly_review.py
+      - ai_ops_kit/gates/gate_executor.py
+      - ai_ops_kit/engine/pipeline_evidence.py
+      - ai_ops_kit/engine/tool_loop.py
+      - ai_ops_kit/providers/orchestrator_providers.py
+      - ai_ops_kit/ui/presenter.py
+    why_it_works_in_the_child: >-
+      НАКОПИТЕЛЬНЫЙ подъём волны 6 (замер на объединённом дереве всех работ, не только этих файлов —
+      так же, как прежние записи о дрейфе main от слитых лент). Перечисленные модули ИСПОЛНЯЮТСЯ в
+      дочке и потому едут в поставке: worktree/nightly_review дают ночной автофикс класса A в worktree
+      дочки; gate_executor/pipeline_evidence/tool_loop/orchestrator_providers делают отсутствие
+      вердикта судьи честным отказом на боевом пути прогона дочки; presenter называет рабочие копии в
+      ответе человеку. Без них в поставке был бы вызов отсутствующего/старого файла — класс F-033.
+      Параллельная безопасность (validate_parallel_safety) объёма НЕ добавляет: её CI-контур дочки
+      КЛОНИРУЕТ кит и зовёт валидатор из клона, а не из managed-поставки. Замер установленной поставки
+      base main 4 377 068 -> объединённое дерево волны 4 404 975 Б (+27 907 Б: рост семи исполняемых
+      модулей плюс строки manifest) перешёл прежний потолок 4 380 000 — подъём под факт до 4 410 000
+      (запас ~5 КБ). Рост — работой кода в дочке, а не запасом.
