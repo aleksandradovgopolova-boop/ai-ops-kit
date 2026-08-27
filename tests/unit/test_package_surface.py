@@ -282,6 +282,10 @@ ZONE_NON_VALIDATORS = {
     "_bootstrap": "загрузчик путей: с него начинается КАЖДЫЙ валидатор в script-режиме",
     "ai_capability_selftest": "самопроверка возможностей, запускается процессом как валидатор",
     "ai_managed_checksums": "drift-детект managed-зоны; вызывается installer'ом и в child",
+    "delivery_footprint_warning": "чистая логика предупреждения о тающем запасе поставки; ядро вверх "
+                                  "не тянет (разбор передаётся аргументом), зовётся проверкой "
+                                  "поставки test_installer — живёт рядом с потолком по write_scope "
+                                  "работы delivery-footprint-warns-before-breach",
 }
 
 

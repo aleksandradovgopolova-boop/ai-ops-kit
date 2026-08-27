@@ -21,6 +21,7 @@ import os
 import shutil
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -821,6 +822,19 @@ def test_delivery_footprint_is_smaller_than_legacy(installed, ai_ops):
     # запись «почему не подняли» осталась историей, действующее число — в одном месте.
     assert total < _ceil["volume_bytes"], ai_ops.footprint_breach_message(
         "объём managed", total, _ceil["volume_bytes"])
+    # ПРЕДУПРЕЖДЕНИЕ О ТАЮЩЕМ ЗАПАСЕ (работа `delivery-footprint-warns-before-breach`, 2026-08-27).
+    # Порог — ИЗ РЕЕСТРА, не хардкод. Пока поставка под потолком, но запас меньше доли volume_bytes —
+    # ЗЕЛЁНОЕ предупреждение с авто-разбором В ЭТОМ прогоне, а не падением на следующей работе.
+    # Потолок выше остаётся блокирующим: пробой — это assert; здесь — warnings.warn, тест зелёный.
+    from ai_ops_kit.validation import delivery_footprint_warning as _dfw
+    _warn_fraction = (_budget.get("warnings") or {}).get("volume_reserve_fraction")
+    assert _warn_fraction, "порог предупреждения о запасе объёма не прочитан из реестра поставки"
+    if _dfw.reserve_is_thin(total, _ceil["volume_bytes"], _warn_fraction):
+        warnings.warn(
+            _dfw.thinning_reserve_warning(
+                total, _ceil["volume_bytes"], _warn_fraction,
+                ai_ops.delivery_breakdown_lines(top=8)),
+            stacklevel=2)
 
 
 def test_release_prose_does_not_ship_but_the_channel_does(installed, ai_ops):
