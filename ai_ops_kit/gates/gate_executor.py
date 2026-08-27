@@ -200,6 +200,46 @@ def evidence_from_judge_refusal(gate: dict, refusal: dict, source: str):
     return ev
 
 
+def evidence_from_no_verdict(gate: dict, *, gate_id: str, stopped=None, reads=None,
+                             errors=None, refusal=None):
+    """Ревью-петля завершилась без разбираемого вердикта -> evidence, которое НАЗЫВАЕТ причину.
+
+    Тот же принцип, что evidence_from_judge_refusal: гейт остаётся НЕзакрытым (blocking -> fail,
+    advisory -> warn), но человек читает, ПОЧЕМУ вердикта нет, а не общее «нет заключения reviewer».
+
+    ПОВОД — находка поля P0 (obs-2026-08-20, ai-ops-cockpit): code_review ОБА прогона кончился
+    stopped=no-verdict, valid=false, а `_run_reviews` тихо ронял гейт (`if errs: continue`) — тот
+    падал на общий `_unmet_reason`, не называя причину, и `_hard_stop` не распознавал reviewer-blocked
+    (работа МОЛЧА вставала). Здесь причина названа, а `"reviewer verdict"` в evidence взводит
+    распознавание reviewer-blocked (см. workpackage_executor._hard_stop).
+
+    Различает под-случаи: провайдер назвал отказ (refusal) / бюджет вызовов исчерпан / лимит чтений
+    исчерпан без вердикта / ответы судьи не разобрались в reviewer-result."""
+    if refusal:                       # провайдер назвал причину (пусто/обрезано/отказ) — она первична
+        ev = evidence_from_judge_refusal(gate, refusal, f"reviewer verdict @ {gate_id} (refusal)")
+        return ev
+    nreads = len(reads or []) if not isinstance(reads, int) else reads
+    stopped = stopped or "no-verdict"
+    if str(stopped).startswith("budget"):
+        why, needs_human = f"судья исчерпал бюджет вызовов до вердикта ({stopped})", False
+    elif nreads:
+        why, needs_human = (f"судья прочитал {nreads} файл(ов), но на форс-ходе не вынес "
+                            f"разбираемого reviewer-result"), True
+    else:
+        detail = "; ".join(errors or []) or str(stopped)
+        why, needs_human = f"судья не вернул разбираемого reviewer-result ни разу ({detail})", True
+    text = f"независимый ревьюер не вынес вердикт по гейту {gate_id}: {why}. Гейт не закрыт."
+    ev = {"status": "fail" if gate.get("blocking") else "warn", "checks": [],
+          "evidence": [f"reviewer verdict @ {gate_id} (no-verdict: {stopped})"]}
+    if gate.get("blocking"):
+        ev["blockers"] = [text]
+    else:
+        ev["warnings"] = [text]
+    if needs_human:
+        ev["pending_human"] = True
+    return ev
+
+
 def evidence_from_judge_output(gate: dict, text: str, source: str = "judge-output"):
     """Ответ судьи (сырой текст) -> evidence одного гейта. Тот же путь, что в бою:
     структурный reviewer-result имеет приоритет, проза — фолбэк, отсутствие вердикта -> None."""

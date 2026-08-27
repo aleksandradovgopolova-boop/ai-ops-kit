@@ -145,6 +145,9 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
     `reviewer-result` не меняется ни на байт; `terminal_field` называет поле, по которому вердикт
     узнаётся, когда модель не проставила `kind`."""
     root = Path(root)
+    # Локальный импорт (как ai_ops_run зовёт providers): response_contract — лист, engine не тянет,
+    # цикла нет; локально — чтобы не расширять статический граф engine ради одного класса-исключения.
+    from ai_ops_kit.providers.response_contract import ProviderRefusal as _ProviderRefusal
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     context = base_context
     reads, denied = [], []
@@ -162,7 +165,14 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
         elif len(reads) == max_reads - 1:
             context += (f"\n[ревью] остаётся последнее чтение до лимита — прочти только самое нужное, "
                         f"затем верни {terminal_kind}.")
-        action = reviewer(context)
+        try:
+            action = reviewer(context)
+        except _ProviderRefusal as refusal:
+            # Провайдер судьи НАЗВАЛ отказ (пусто/обрезано/отказ модели). Прежде это был
+            # неперехваченный подъём (после того как провайдеры научились называть пустой ответ);
+            # теперь — честный no-verdict с названной причиной, которую поднимет gate_executor.
+            return {"result": None, "stopped": f"refusal: {refusal.reason}",
+                    "refusal": refusal.as_dict(), "reads": reads, "denied": denied}
         if not isinstance(action, dict) or action.get("error"):
             context += f"\n[ревью] верни РОВНО один JSON: read-действие или {terminal_kind}."
             continue

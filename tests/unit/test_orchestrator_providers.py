@@ -136,6 +136,43 @@ class TestClaudeCliProvider:
 
 
 @pytest.mark.unit
+class TestClaudeCliEmptyIsRefusal:
+    """Пустой result (rc=0) — НАЗВАННЫЙ отказ, а не тихая пустая строка (находка поля obs-2026-08-20).
+
+    Прежде пустой ответ сворачивался в "" и доезжал до разбора куском без вердикта: судья «не
+    выносил вердикт», гейт краснел «нет заключения reviewer» — правда по существу, ложь по причине.
+    Теперь claude-cli на том же контракте, что API-провайдеры: пусто -> ProviderRefusal(empty_answer).
+    """
+
+    def test_empty_result_raises_named_refusal(self):
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+
+        def empty_runner(cmd):
+            return _FakeResult(stdout=_test_json.dumps({"result": "", "usage": {}}))
+
+        with pytest.raises(ProviderRefusal) as ei:
+            make_claude_cli_provider(model="claude-opus", runner=empty_runner)("верни вердикт")
+        assert ei.value.reason == "empty_answer"
+        assert ei.value.provider == "claude-cli"
+
+    def test_whitespace_only_result_is_also_empty(self):
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+
+        def blank_runner(cmd):
+            return _FakeResult(stdout=_test_json.dumps({"result": "   \n  ", "usage": {}}))
+
+        with pytest.raises(ProviderRefusal):
+            make_claude_cli_provider(runner=blank_runner)("верни вердикт")
+
+    def test_non_empty_result_still_returns_unchanged(self):
+        """Обратная сторона: нормальный ответ не тронут — путь не сломан."""
+        def ok_runner(cmd):
+            return _FakeResult(stdout=_test_json.dumps({"result": "ВЕРДИКТ", "usage": {}}))
+
+        assert make_claude_cli_provider(runner=ok_runner)("верни вердикт") == "ВЕРДИКТ"
+
+
+@pytest.mark.unit
 class TestClaudeCliYamlFrontmatter:
     def test_prompt_with_frontmatter_goes_after_separator(self):
         """Промпт с YAML-фронтматтером уходит после `--` (не разбирается как опция)."""

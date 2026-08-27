@@ -287,6 +287,25 @@ class TestRunReview:
                                    "code_review", budget={"max_model_calls": 20}, max_reads=3)
         assert rev["result"] is None
 
+    def test_run_review_provider_refusal_is_named_not_crash(self, review_deps):
+        """Провайдер судьи отказал (пусто/обрезано) -> run_review несёт названную причину, не падает.
+
+        Прежде подъём ProviderRefusal из провайдера был бы неперехваченным (движок его не ловил);
+        теперь run_review возвращает честный no-verdict с refusal-словарём для gate_executor."""
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+        policy, root = review_deps
+
+        def refuses(_ctx):
+            raise ProviderRefusal("empty_answer", "claude -p вернул пустой result",
+                                  "claude-cli", "claude-code-local")
+
+        rev = tool_loop.run_review(refuses, root, policy, "code_review",
+                                   budget={"max_model_calls": 5})
+        assert rev["result"] is None
+        assert rev["stopped"].startswith("refusal")
+        assert rev["refusal"]["reason"] == "empty_answer"
+        assert rev["refusal"]["provider"] == "claude-cli"
+
     def test_run_review_force_verdict_after_reads(self, review_deps):
         """rc10: жадное чтение до лимита, затем на ФОРС-ХОДЕ выносится вердикт (не тихий no-verdict)."""
         policy, root = review_deps
