@@ -4416,3 +4416,23 @@ work:
       дублируя калькуляторы. Исход ai-product-operations.team_status_auto_generated поднят замером.
       Перепроверяемо: `ai-ops team` на ките. ЗАЗОР: в дочке команда не выведена наружу (отдельный
       todo командного слоя).
+  - id: delivery-footprint-warns-before-breach
+    title: >-
+      Потолок ОБЪЁМА поставки предупреждает о таящем запасе до пробоя, а не только падением
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_delivery_footprint_warning.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (код в PR #343, закрытие плана — отдельный PR координатора: parallel-safety
+      запрещает смешивать код с координационными файлами). Порог запаса объявлен ДАННЫМИ
+      (quality/delivery-budget.yaml -> warnings.volume_reserve_fraction=0.10; читает test_installer,
+      не хардкод). Пока поставка под потолком, но осталось меньше 10% — прогон печатает ЗЕЛЁНОЕ
+      предупреждение с АВТО-РАЗБОРОМ: сколько байт до пробоя и что съедает бюджет по каталогам/файлам
+      (переиспользует delivery_breakdown_lines). Что урезать — решает человек, кит молча не удаляет.
+      Потолок остался блокирующим: пробой по-прежнему красный assert, предупреждение добавлено К нему,
+      не advisory. Логика — в чистом модуле ai_ops_kit/validation/delivery_footprint_warning.py.
+      Перепроверяемо: test_delivery_footprint_warning.py (positive/fail-closed/side-effect) +
+      мутационные пробы thinning-reserve-honours-the-threshold (guard) и
+      thinning-reserve-warning-is-actually-called (seam). ЖИВЬЁМ: предупреждение сразу сработало на
+      самом ките — запас объёма < 441 КБ (< 10%), крупнейший кандидат урезания manifest 252 КБ (5.8%).
