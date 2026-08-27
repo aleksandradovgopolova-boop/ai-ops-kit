@@ -324,6 +324,18 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                  "errors": errs or None}
         reviews.append(entry)
         if errs:
+            # НЕ тихий пропуск. Прежде здесь стоял голый `continue`: gate_ev не получал ключа гейта,
+            # тот падал на общий _unmet_reason «нет заключения reviewer» (не называя ПОЧЕМУ вердикта
+            # нет), а _hard_stop не распознавал reviewer-blocked — работа МОЛЧА вставала (находка
+            # поля P0, obs-2026-08-20). Теперь no-verdict -> НАЗВАННЫЙ отказ в gate_ev, с
+            # `"reviewer verdict"` в evidence (взводит reviewer-blocked).
+            ref = gate_executor.evidence_from_no_verdict(
+                g, gate_id=gid, stopped=rv.get("stopped"), reads=rv.get("reads"),
+                errors=errs, refusal=rv.get("refusal"))
+            gate_ev[gid] = ref
+            entry["closed_as"] = "refused"
+            entry["status"] = ref["status"]                       # fail/warn, не None
+            entry["reason"] = (ref.get("blockers") or ref.get("warnings") or [None])[0]
             continue
         status = res.get("status")
         blocking = bool(g.get("blocking"))
