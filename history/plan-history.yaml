@@ -4436,3 +4436,23 @@ work:
       мутационные пробы thinning-reserve-honours-the-threshold (guard) и
       thinning-reserve-warning-is-actually-called (seam). ЖИВЬЁМ: предупреждение сразу сработало на
       самом ките — запас объёма < 441 КБ (< 10%), крупнейший кандидат урезания manifest 252 КБ (5.8%).
+  - id: selftests-are-granular-not-monolithic
+    title: >-
+      Селфтесты сольного покрытия — гранулярные, не монолит: одно поведение = один именованный тест
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-28'
+    evidence: tests/contracts/test_no_monolith_funnel.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код гейта в PR #346). Конверсия 128 монолитных *_selftest в гранулярные
+      завершена ранее зависимостью unit-weeding-is-mutation-proven (в наборе 0 файлов *_selftest.py);
+      эта работа добавила НЕДОСТАЮЩИЙ охранный инвариант — главный пункт её done-when, которого не
+      было. tests/contracts/test_no_monolith_funnel.py (по образцу test_suite_asserts): (1) ни один
+      тест-файл не носит ретированный суффикс _selftest.py; (2) ни одна тест-функция не сводит >=5
+      проверок через soft-помощник-накопитель (nonlocal/append/print, вызванный с булевым условием)
+      в один финальный assert. Помощник, который САМ ассёртит, разрешён. Порог 5 калиброван замером
+      (легитимный максимум в наборе — 1, монолит имел десятки). У детектора зубы: три fail-closed
+      теста (ловит синтетический монолит, не трогает гранулярные и assert-помощник). Конвенция в
+      AGENTS.md обновлена: тест модуля — гранулярный test_<module>.py, суффикс _selftest снят.
+      Перепроверяемо: test_no_monolith_funnel.py. Замер числа тест-функций назван в unit-weeding
+      (~375 гранулярных).
