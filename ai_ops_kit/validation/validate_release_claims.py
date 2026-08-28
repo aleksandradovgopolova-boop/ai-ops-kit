@@ -258,6 +258,28 @@ def channel_errors(data):
                      f"репозиториях для версии {version}, а есть {len(for_version)} "
                      f"({', '.join(sorted(for_version)) or 'ни одного'}). Канал не заработан: "
                      f"поставьте `qualification`, пока обкатки нет — либо запишите доказательства.")
+    if "product_layer_ready" in requires:
+        goals = list(spec.get("product_layer_goals") or [])
+        if not goals:
+            e.append(f"channel: {chan} требует product_layer_ready, но product_layer_goals пуст — "
+                     f"нечего проверять; укажите список целей в channels.{chan}.product_layer_goals")
+        else:
+            plan_path = PKG / "planning" / "plan.yaml"
+            if not plan_path.is_file():
+                e.append(f"product_layer_ready: planning/plan.yaml не найден — нечего проверять")
+            else:
+                import yaml as _yaml
+                plan = _yaml.safe_load(plan_path.read_text(encoding="utf-8")) or {}
+                plan_goals = {g["id"]: g.get("status") for g in (plan.get("goals") or []) if "id" in g}
+                not_achieved = [gid for gid in goals if plan_goals.get(gid) != "achieved"]
+                if not_achieved:
+                    e.append(
+                        f"channel: {chan} требует product_layer_ready (все цели Product OS достигнуты), "
+                        f"но {len(not_achieved)} из {len(goals)} не достигнуты: "
+                        f"{', '.join(not_achieved)}. "
+                        f"«Канал заработан» и «продукт-как-ОС готов» — один рубеж "
+                        f"(ep-2026-08-20-stable-includes-product-operating-layer); "
+                        f"пока цели не достигнуты, stable объявить нельзя.")
     return e
 
 
