@@ -368,7 +368,10 @@ goals:
     status: active
     outcome:
       # Волна 1 — Конституция становится источником; гейты дизайна ссылаются на её ID (наблюдение).
-      constitution_is_source_and_gates_cite_its_ids: false
+      # ДОСТИГНУТО 2026-08-28: обе половины влиты — источник (#345, uiux-constitution-is-source) и
+      # цитирование ID гейтами дизайна (#354, design-gates-cite-constitution-ids). Наблюдение-уровень:
+      # чек-листы несут constitution_id, промпты ревьюеров цитируют ID, силу гейтов не меняли.
+      constitution_is_source_and_gates_cite_its_ids: true
       # Волна 2 — токены-контракт + реестры компонентов/паттернов/шаблонов доступны агенту.
       tokens_contract_and_capability_registries_available: false
       # Волна 3 — ревьюеры и ui-health углублены содержанием Конституции.
@@ -461,25 +464,10 @@ work:
       речь только о разметке ВХОДА судейского промпта. Территория пересекается с линией C —
       согласовать, чтобы не столкнуться в промпте ревьюера.
 
-  - id: stable-gate-includes-product-layer
-    title: >-
-      Машинный гейт stable не даёт объявить канал, пока продуктовый слой не реализован
-    type: quality
-    goal: qualification-closeout
-    status: todo
-    owner_role: engineer
-    value: high
-    depends_on: [continuous-product-audit]
-    write_scope: [registry/, ai_ops_kit/validation/, tests/]
-    reason: >-
-      РЕШЕНИЕ ВЛАДЕЛЬЦА ep-2026-08-20-stable-includes-product-operating-layer: stable включает
-      реализацию PR-1..PR-25. Сегодня `channels.stable.requires` в registry/release-claims.yaml —
-      это [own_ci_green, field_evidence], и по нему stable почти достижим; продуктовый слой в гейт
-      не входит. Разрыв опасен: канал можно объявить заработанным, пока кит ещё не умеет вести
-      продуктовую операционку. Готово, когда машинная проверка канала stable краснеет, пока исходы
-      пяти целей (product-operating-layer..autonomous-product-loop) не достигнуты — так же
-      машиночитаемо, как field_evidence сейчас; «канал заработан» и «продукт-как-ОС готов»
-      становятся одним рубежом не на словах, а в валидаторе.
+  # stable-gate-includes-product-layer закрыта в историю 2026-08-28 (код в PR #362): channel_errors
+  # (validate_release_claims) читает channels.stable.product_layer_goals и planning/plan.yaml и
+  # краснит stable, пока хоть одна из 5 целей Product OS не achieved — так же машиночитаемо, как
+  # field_evidence. Сейчас красит верно (4 из 5 не достигнуты). См. history.
   - id: the-plan-tells-the-truth-about-the-run
     title: >-
       План прогона называет все гейты и не отключает треки причинами о ещё не написанном коде
@@ -509,23 +497,10 @@ work:
       не ту форму и узнал после; подсказка «Дальше» после specify ведёт сразу на run, пропуская
       plan. Готово, когда план называет ровно те гейты, что применит прогон; уровень и форма
       известны ДО заполнения; причина отключения трека не утверждает факт о ненаписанном коде.
-  - id: spend-ceiling-counts-only-this-work
-    title: >-
-      Потолок траты считает расход этой работы, а не прошлых сессий
-    type: engineering
-    goal: owner-speaks-product-not-pipeline
-    status: todo
-    owner_role: engineer
-    value: medium
-    finding: findings/from-children/obs-2026-08-20-потолок-траты-на-разбор--487d952b.yaml
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/engops/, tests/]
-    reason: >-
-      НАХОДКА ПОЛЯ (obs 487d952b). На шаге планирования кит показал 559 тысяч токенов при потолке 50
-      тысяч — ДО того, как в этой задаче хоть что-то описано: счётчик сложил расход прошлых сессий и
-      заблокировал шаг, рекомендовав «пропусти планирование и иди делать». То есть потолок не
-      привязан к работе, а рекомендация уводит с заявленного пути specify -> plan -> run. Пришлось
-      проходить plan с --spend-ok. Готово, когда потолок разбора считает трату ТЕКУЩЕЙ работы, и
-      рекомендация не предлагает пропустить объявленный шаг.
+  # spend-ceiling-counts-only-this-work закрыта в историю 2026-08-28 (код в PR #355): потолок разбора
+  # привязан к личности живой сессии (CLAUDE_CODE_SESSION_ID) — расход прошлых сессий больше не
+  # блокирует свежую работу; при неизвестной сессии — честный unknown, не whole-session; рекомендация
+  # ведёт specify->plan->run, а не «пропусти планирование». См. history.
 
   # ─── разбор внешнего аудита 19.08.2026 (две параллельные сессии) ─────────────────────────────
   #
@@ -789,27 +764,11 @@ work:
 
   # ─── uiux-standard-as-product · Волна 1 (решение владельца A, 2026-08-27) ─────────────────────
   # Работа 1 `uiux-constitution-is-source` ЗАКРЫТА в history/plan-history.yaml (PR #345, 2026-08-28).
-  - id: design-gates-cite-constitution-ids
-    title: >-
-      Гейты дизайна ссылаются на ID Конституции; сила гейтов не меняется (наблюдение)
-    type: quality
-    goal: uiux-standard-as-product
-    status: todo
-    depends_on: [uiux-constitution-is-source]
-    owner_role: engineer
-    write_scope: [rules/design/, quality/gates.yaml, agents/quality/]
-    value: high
-    affects: {engineering_quality_security: true}
-    # ПОВОД. Три блокирующих гейта (ux_review, accessibility_review, design_system_usage) ссылаются
-    # на тонкие чек-листы rules/design/*.yaml. Реконсиляция связывает каждый их пункт с правилом
-    # Конституции полем constitution_id; находки гейтов начинают цитировать UI-/AI-/UI-FORBIDDEN-
-    # ID (как code-review цитирует id пунктов). Расхождения «кит↔Конституция» (пункт есть у одной
-    # стороны и нет у другой) перечисляются ЯВНО, не скрываются.
-    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: менять blocking/severity гейтов — волна 1 только сверяет и ссылается;
-    # ужесточение идёт отдельной работой после обкатки (правило roadmap: гейт крепнет по обкатке).
-    # Готово, когда: каждый пункт трёх чек-листов имеет constitution_id на существующее правило;
-    # находки ux_review/accessibility_review/design_system_usage несут ID Конституции; blocking и
-    # severity не изменились; список расхождений «кит↔Конституция» зафиксирован в репозитории.
+  # design-gates-cite-constitution-ids закрыта в историю 2026-08-28 (код в PR #354): три чек-листа
+  # дизайна получили constitution_id (27 из 31 пункта на реальные UI-/AI- ID, 4 честных none),
+  # промпты ревьюеров цитируют ID, расхождения кит↔Конституция зафиксированы в
+  # standards/uiux/gate-reconciliation.md; blocking/severity гейтов не менялись. Это ВТОРАЯ половина
+  # волны 1 — исход цели constitution_is_source_and_gates_cite_its_ids флипнут в true. См. history.
 
   # ─── Phase 0: «контроль качества честен» (аудит 2026-08-25) ───────────────────────────────────
 
