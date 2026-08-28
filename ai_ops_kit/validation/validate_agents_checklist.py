@@ -44,6 +44,11 @@ ALLOWED = (
     # с `--base`; логика покрыта юнит-тестами (test_parallel_safety), проводка — отдельным
     # тестом джобы (test_kit_parallel_safety_job).
     re.compile(r"^python3?\s+ai_ops_kit/validation/validate_parallel_safety\.py\b"),
+    # Размер PR — тот же класс: детерминированная проверка ДИФФА PR (не пробил ли PR потолок
+    # размера из quality/pr-budget.yaml), а не pytest-тест. Зовётся напрямую с `--base` (advisory,
+    # без --strict — обкатка non-blocking). Логика покрыта юнит-тестами (test_pr_size), проводка —
+    # отдельным тестом джобы (test_kit_pr_size_job).
+    re.compile(r"^python3?\s+ai_ops_kit/validation/validate_pr_size\.py\b"),
 )
 
 

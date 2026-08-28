@@ -90,3 +90,22 @@ jobs:
       - name: "PR не смешивает код с координационным файлом"
         run: python3 ai_ops_kit/validation/validate_parallel_safety.py --base origin/main --strict
 
+  # РАЗМЕР PR (lane-ships-small-prs). Отдельная джоба, ADVISORY (без --strict), СОЗНАТЕЛЬНО: по
+  # dp-002 новый гейт обкатывается non-blocking — ровно как parallel-safety начинала. Джоба ловит
+  # «вся фаза одним PR» (повод замерен: дамп +2589 строк, docs/parallel-execution-retro.md §1.7),
+  # но пока лишь ПЕЧАТАЕТ отчёт: потолки из quality/pr-budget.yaml — стартовый ратчет, обкатке нужна
+  # статистика здоровых PR до перевода в --strict/required. Перевод в блокирующий и в обязательные
+  # контексты — решение владельца после обкатки. `if: pull_request` — тот же капкан статусов, что у
+  # parallel-safety: в merge_group PR-диффа нет, а обязательный пропущенный статус повесил бы очередь.
+  pr-size:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # нужна история для git diff против origin/main
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "размер PR: одна работа = один малый PR (advisory)"
+        run: python3 ai_ops_kit/validation/validate_pr_size.py --base origin/main
+
