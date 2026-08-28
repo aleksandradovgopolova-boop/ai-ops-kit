@@ -154,3 +154,66 @@ class TestAssessBlocksOnlyWhatItMeasured:
         assert "do" not in process_spend.PROCESS_INTENTS
         assert "next" not in process_spend.PROCESS_INTENTS
         assert set(process_spend.PROCESS_INTENTS) == {"discuss", "specify", "plan"}
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestCeilingCountsThisWorkNotPastSessions:
+    """Полевой дефект 487d952b: на шаге plan свежей работы кит показал ~559k против 50k и ЗАБЛОКИРОВАЛ
+    шаг — ещё до того, как в задаче что-либо описали. Причина: точка отсчёта была снята в ПРОШЛОЙ
+    сессии, а из неё вычитался расход транскрипта ТЕКУЩЕЙ (накопленный прошлыми работами/разговором).
+    Свойство: точка отсчёта и текущий замер обязаны быть из ОДНОЙ живой сессии.
+    """
+
+    def test_prior_session_spend_does_not_trip_the_ceiling(self, tmp_path):
+        """ГЛАВНЫЙ шов дефекта. Мутация «не переносить отсчёт при смене сессии» (record_step) обязана
+        краснеть здесь: без переноса из большого расхода этой сессии вычтется отсчёт прошлой."""
+        repo = _git_repo(tmp_path)
+        # Прошлая сессия S1: работу начали разбирать, расход S1 на тот момент — 20k.
+        process_spend.record_step(repo, WID, "specify", 20000, session_id="S1")
+        # Новая сессия S2: её транскрипт уже 559k из-за ПРОШЛЫХ работ/разговора, но по ЭТОЙ работе в
+        # S2 ещё ничего не разбирали.
+        c = process_spend.assess(repo, WID, "plan", session_total=559000, session_id="S2")
+        assert c["state"] == "normal", c
+        assert c["blocks"] is False
+        assert c["spent_on_process"] == 0, "трату прошлой сессии засчитали как трату разбора этой работы"
+
+    def test_same_session_growth_still_counts(self, tmp_path):
+        """Контроль: в ПРЕДЕЛАХ одной сессии рост расхода на разбор потолок ловит как раньше — иначе
+        мы бы «починили» дефект, выключив механизм вовсе."""
+        repo = _git_repo(tmp_path)
+        process_spend.record_step(repo, WID, "specify", 10000, session_id="S1")
+        c = process_spend.assess(repo, WID, "plan", session_total=75000, session_id="S1")
+        assert c["state"] == "over_ceiling" and c["blocks"] is True
+        assert c["spent_on_process"] == 65000
+
+    def test_cross_session_without_record_is_unknown_not_whole_session(self, tmp_path):
+        """Fail-honest на пути record=False (preview/CLI-справка): точка отсчёта из другой сессии ->
+        трату этой работы посчитать нечем -> unknown, а НЕ расход сессии целиком (это вернуло бы дефект).
+        Мутация охраны в `_work_scoped_spend` (`if False`) обязана краснеть: тогда вернётся whole-session
+        и state станет over_ceiling."""
+        repo = _git_repo(tmp_path)
+        process_spend.record_step(repo, WID, "specify", 20000, session_id="S1")
+        c = process_spend.assess(repo, WID, "plan", session_total=559000, session_id="S2", record=False)
+        assert c["state"] == "unknown", c
+        assert c["blocks"] is False
+        assert c["spent_on_process"] is None, "трата разных сессий выдана за трату разбора"
+
+    def test_ceiling_reads_the_live_session_identity(self, tmp_path, monkeypatch):
+        """ШОВ: assess обязан БРАТЬ личность живой сессии и мерить по ней. Если id перестаёт доезжать
+        до решения (`session_id = None` в assess), отсчёт прошлой сессии снова вычитается из этой —
+        полевой дефект 487d952b возвращается. Тест идёт РЕАЛЬНЫМ путём измерения (session_total=_UNSET),
+        как в рантайме."""
+        repo = _git_repo(tmp_path)
+        monkeypatch.setattr(process_spend, "_session_total", lambda *a, **k: 559000)
+        # Прошлая сессия S1 задала отсчёт 20k.
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "S1")
+        process_spend.record_step(repo, WID, "specify", 20000,
+                                  session_id=process_spend._session_id(repo, WID))
+        # Новая сессия S2: assess сам измеряет расход и берёт личность сессии из ENV.
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "S2")
+        c = process_spend.assess(repo, WID, "plan")
+        assert c["session_id"] == "S2", "личность живой сессии не доехала до решения"
+        assert c["state"] != "over_ceiling", c
+        assert c["blocks"] is False
+        assert c["spent_on_process"] == 0
