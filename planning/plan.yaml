@@ -742,77 +742,27 @@ work:
   # backlog-ai-prioritization и backlog-dependency-graph закрыты в историю 2026-08-27 (живой прогон
   # `backlog prioritize` и `backlog graph` на 7 реальных Issues кита). См. history/plan-history.yaml.
 
-  - id: drift-detected-between-artifacts
-    title: "Drift: расхождения документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт"
-    type: engineering
-    goal: ai-product-operations
-    status: todo
-    owner_role: engineer
-    write_scope: [ai_ops_kit/intelligence/, tests/]
-    value: high
-    affects: {product_strategy: true, delivery_operations: true}
-    # PR-22: обнаружение расхождений между артефактами. ПЕРЕИСПОЛЬЗУЕТ существующее (repo_graph,
-    # architecture_baseline) — dp-001: дубли уже построенного отклоняем. Мягко опирается на артефакты
-    # ленты 2 (Passport/roadmap) и backlog ленты 3 ПО КОНТРАКТУ; при их отсутствии — честный unknown
-    # по недоступной паре, а не «дрейфа нет». Каждое расхождение названо: что с чем разошлось.
-    # ПОНИЖЕНА до todo 27.08: модуль построен, но исход drift_detected_between_artifacts вживую
-    # отдельным прогоном не подтверждён (в дочке drift-команда наружу не выведена).
-    # Готово, когда: detect_drift_between_artifacts даёт список названных расхождений; тесты на
-    # фикстурах с искусственным дрейфом краснеют, без дрейфа — зелёные; недоступная пара — unknown.
+  # drift-detected-between-artifacts закрыта в историю 2026-08-28 (код в PR #229): drift_artifacts.py
+  # + 13 тестов на все три случая (искусственный дрейф→красный, чисто→зелёный, недоступная пара→unknown).
+  # Исход цели drift_detected_between_artifacts остаётся false: требует реального дрейфа на живой дочке
+  # через команду `ai-ops drift` (CLI-проводка вне территории этой работы). См. history.
 
   # risks-identified-with-mitigation и team-status-auto-generated закрыты в историю 2026-08-27
   # (живой прогон `ai-ops team`: авто-сводка команды собралась, риск [high] technical назван с
   # действием). См. history/plan-history.yaml.
 
-  - id: ai-decisions-logged-with-rationale
-    title: "AI Decision Log: решение AI, почему, на каких данных, результат, менял ли человек"
-    type: engineering
-    goal: ai-product-operations
-    status: todo
-    owner_role: engineer
-    write_scope: [ai_ops_kit/governance/, decisions/, tests/]
-    value: high
-    affects: {analytics_learning: true, delivery_operations: true}
-    # PR-18: значимые решения AI логируются. РАСШИРЯЕТ существующий decisions/registry.yaml (episodes),
-    # а НЕ заводит второй реестр (dp-001). Новый тип эпизода `actor: ai` с полями: решение, reason,
-    # data (на каких данных), outcome (результат), human_overrode (менял ли человек). Файл общий —
-    # согласовано в OS-LANES: пишу через ai_ops_kit/governance/, схему не ломаю.
-    # ПОНИЖЕНА до todo 27.08: механизм живой (`ai-ops governance` читает журнал), но записей 0 —
-    # исход ai_decisions_logged_with_rationale требует показать реальное решение с обоснованием.
-    # Готово, когда: log_ai_decision дописывает валидный AI-эпизод в registry; validate_decisions
-    # (существующий) остаётся зелёным; тесты на схему AI-эпизода.
+  # ai-decisions-logged-with-rationale закрыта в историю 2026-08-28 (код в PR #229/#285):
+  # log_ai_decision дописывает валидный actor:ai-эпизод, validate_decisions зелёный, 9 тестов схемы.
+  # Исход цели ai_decisions_logged_with_rationale остаётся false: «реальное решение с обоснованием»
+  # рождается живым прогоном (пишется в реестр дочки), не кодом. См. history.
 
-  - id: policy-engine-suggest-to-approval
-    title: "Policy Engine: Suggest → Prepare → Execute → Require approval (исполняемое поведение)"
-    type: engineering
-    goal: ai-product-operations
-    status: in_progress
-    branch: lane-5-work
-    owner_role: engineer
-    write_scope: [ai_ops_kit/governance/, tests/]
-    value: high
-    affects: {delivery_operations: true, engineering_quality_security: true}
-    # PR-19: политики определяют допустимое поведение по действиям. НЕ пожелание в тексте, а
-    # исполняемый gate: по типу действия policy возвращает уровень (suggest/prepare/execute/
-    # require_approval), и вызывающий обязан ему подчиниться. require_approval блокирует до одобрения.
-    # Готово, когда: policy_engine.decide(action) возвращает уровень из POLICY.yaml; тест
-    # доказывает, что require_approval РЕАЛЬНО не пропускает действие без одобрения (не декларация).
+  # policy-engine-suggest-to-approval закрыта в историю 2026-08-28 (код в PR #229): policy_engine.decide
+  # возвращает уровень из POLICY.yaml; enforce РЕАЛЬНО не запускает действие на require_approval без
+  # одобрения (test_enforce_blocks_require_approval_and_does_not_run). См. history.
 
-  - id: human-override-as-signal
-    title: Human override — сигнал на будущее, а не ошибка; учитывается в решениях
-    type: engineering
-    goal: ai-product-operations
-    status: in_progress
-    branch: lane-5-work
-    owner_role: engineer
-    depends_on: [policy-engine-suggest-to-approval, ai-decisions-logged-with-rationale]
-    write_scope: [ai_ops_kit/governance/, tests/]
-    value: medium
-    affects: {analytics_learning: true, product_strategy: true}
-    # PR-20: человек всегда может переопределить приоритет/roadmap/статус/рекомендацию. Override
-    # записывается как СИГНАЛ (в AI Decision Log, human_overrode=true), не как ошибка, и доступен
-    # будущим решениям. Готово, когда: record_override пишет override-сигнал в decision log и
-    # policy/risk его читают; тест доказывает, что override не помечается ошибкой и виден дальше.
+  # human-override-as-signal закрыта в историю 2026-08-28 (код в PR #229): record_override пишет
+  # override как СИГНАЛ (не ошибку) в decision log, виден будущим решениям
+  # (test_override_is_visible_to_future_decisions). См. history.
 
   # ── Phase 5: Autonomous Product Loop (капстоун) — ЗАБЛОКИРОВАНО до готовности Phase 4 ──
   # Все зависимости (policy-driven-execution, learning-from-human-overrides) закрыты в
