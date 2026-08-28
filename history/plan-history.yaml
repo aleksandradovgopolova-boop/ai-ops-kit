@@ -19,6 +19,18 @@ kind: delivery-plan-history
 
 
 work:
+  - id: the-plan-tells-the-truth-about-the-run
+    title: >-
+      План прогона называет все гейты и не отключает треки причинами о ещё не написанном коде
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-08-28'
+    evidence: ai_ops_kit/engine/run_plan.py
+    result: >-
+      Все три части выполнены: (1) build_plan() включает гейты активных треков из tracks.yaml —
+      план называет все гейты, которые применит прогон (проверено: QUICK+треки = 8 гейтов в плане,
+      ENGINEERING+треки = 17); (2) skip_reason в tracks.yaml переформулирован про заявку/сигнал,
+      а не прошедшее время о ненаписанном коде; (3) подсказка после specify ведёт на plan, не run.
   - id: uiux-constitution-is-source
     title: >-
       Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
