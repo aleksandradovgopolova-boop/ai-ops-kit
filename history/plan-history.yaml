@@ -19,6 +19,33 @@ kind: delivery-plan-history
 
 
 work:
+  - id: uiux-constitution-is-source
+    title: >-
+      Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-08-28'
+    pr: 345
+    evidence: tests/unit/test_uiux_constitution_source.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (PR #345; закрытие плана — отдельный PR координатора: parallel-safety
+      запрещает смешивать код с координационным файлом plan.yaml, как в закрытии #344). Заведён единый
+      ИСТОЧНИК стандарта UI/UX: standards/uiux/UI_CONSTITUTION.md — 65 правил со стабильными ID
+      (UI-/AI-/UI-FORBIDDEN-). Оперативный слой ui-ux.rules.md и машинный реестр rules.yaml
+      ГЕНЕРИРУЮТСЯ из него (standards/uiux/scripts/build-rules.py, stdlib), руками не правятся. Первая
+      работа волны 1 цели uiux-standard-as-product; силу гейтов дизайна НЕ меняет (это следующая
+      работа design-gates-cite-constitution-ids). Свежее независимое ревью (writer≠judge) вернуло FIX;
+      все 4 находки закрыты и ПРОВЕРЕНЫ МУТАЦИОННО: (1) fail-closed вынесен в общий помощник _mirror_ok
+      (был тавтологией); (2) добавлен независимый якорь числа правил из ИСТОЧНИКА (ловит тихую потерю
+      правила); (3) yaml_escape чинит экранирование double-quoted YAML; (4) хардкод ID-множества
+      генератора ⊆ ID источника. РЕЗУЛЬТАТ ПЕРЕПРОВЕРЯЕМ: tests/unit/test_uiux_constitution_source.py
+      (8 тестов) — правка или удаление правила в rules.yaml краснит суите; check-fast 4960 passed.
+    # РАЗБОР (как в плане):
+    #   type: engineering; owner_role: engineer; value: high
+    #   write_scope: [standards/uiux/, scripts/, tests/]
+    #   Готово, когда: build-rules.py пересобирает оба представления байт-в-байт; CI краснеет при
+    #   ручном расхождении генерата с источником; ручная правка генерата затирается.
+
   - id: artifact-registry-as-data
     title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
     goal: product-operating-layer
