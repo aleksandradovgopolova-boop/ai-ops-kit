@@ -146,7 +146,9 @@ Python, та, что стоит у тебя. Объявленный пол `requ
 инвариантов. Проверяется структурно — `tests/contracts/test_suite_asserts.py`.
 
 **Selftest не живёт в продакшн-модуле.** Модули `ai_ops_kit/` едут в child-репозиторий; тест
-модуля — в `tests/unit/test_<module>_selftest.py`.
+модуля — в `tests/unit/test_<module>.py`, ГРАНУЛЯРНЫЙ: одно поведение = один именованный тест с
+настоящим assert. Суффикс `_selftest` ретирован (прополка 2026-08): мега-функцию с воронкой
+десятков проверок в один assert ловит `tests/contracts/test_no_monolith_funnel.py`.
 
 ## Инженерный цикл
 
