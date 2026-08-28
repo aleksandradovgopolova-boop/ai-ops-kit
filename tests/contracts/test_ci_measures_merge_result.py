@@ -74,12 +74,19 @@ class TestQualityJobRunsOnMergeGroup:
     def test_quality_job_does_not_skip_merge_group(self, package_quality):
         """Прежнее условие `github.event.pull_request.draft == false` отсекало merge_group:
         у merge_group-события нет pull_request-объекта, и условие давало false. Джоба
-        пропускалась — и coverage/footprint на merge-коммите не мерялись вовсе."""
+        пропускалась — и coverage/footprint на merge-коммите не мерялись вовсе.
+
+        Два допустимых паттерна (оба доказанно работают):
+          * явное упоминание merge_group: `event_name == 'merge_group' || ...`
+          * отрицание pull_request: `event_name != 'pull_request' || ...` — покрывает
+            merge_group, push и workflow_dispatch; merge_group != pull_request → true
+        """
         jobs = package_quality.get("jobs", {})
         quality = jobs.get("quality", {})
         if_condition = quality.get("if", "")
-        # Условие обязано явно разрешать merge_group ИЛИ проверять draft
-        assert "merge_group" in if_condition, (
-            f"if-условие quality-джобы не упоминает merge_group: '{if_condition}'. "
-            "На merge_group-событии нет pull_request.draft — джоба будет пропущена, "
-            "и coverage/footprint на merge-коммите не меряются")
+        mentions_merge_group = "merge_group" in if_condition
+        negates_pull_request = "!= 'pull_request'" in if_condition or '!= "pull_request"' in if_condition
+        assert mentions_merge_group or negates_pull_request, (
+            f"if-условие quality-джобы не разрешает merge_group: '{if_condition}'. "
+            "Ожидается явное упоминание merge_group или отрицание pull_request "
+            "(event_name != 'pull_request') — иначе джоба пропускается на merge-коммите")
