@@ -789,27 +789,7 @@ work:
 
   # ─── uiux-standard-as-product · Волна 1 (решение владельца A, 2026-08-27) ─────────────────────
   # Работа 1 `uiux-constitution-is-source` ЗАКРЫТА в history/plan-history.yaml (PR #345, 2026-08-28).
-  - id: design-gates-cite-constitution-ids
-    title: >-
-      Гейты дизайна ссылаются на ID Конституции; сила гейтов не меняется (наблюдение)
-    type: quality
-    goal: uiux-standard-as-product
-    status: todo
-    depends_on: [uiux-constitution-is-source]
-    owner_role: engineer
-    write_scope: [rules/design/, quality/gates.yaml, agents/quality/]
-    value: high
-    affects: {engineering_quality_security: true}
-    # ПОВОД. Три блокирующих гейта (ux_review, accessibility_review, design_system_usage) ссылаются
-    # на тонкие чек-листы rules/design/*.yaml. Реконсиляция связывает каждый их пункт с правилом
-    # Конституции полем constitution_id; находки гейтов начинают цитировать UI-/AI-/UI-FORBIDDEN-
-    # ID (как code-review цитирует id пунктов). Расхождения «кит↔Конституция» (пункт есть у одной
-    # стороны и нет у другой) перечисляются ЯВНО, не скрываются.
-    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: менять blocking/severity гейтов — волна 1 только сверяет и ссылается;
-    # ужесточение идёт отдельной работой после обкатки (правило roadmap: гейт крепнет по обкатке).
-    # Готово, когда: каждый пункт трёх чек-листов имеет constitution_id на существующее правило;
-    # находки ux_review/accessibility_review/design_system_usage несут ID Конституции; blocking и
-    # severity не изменились; список расхождений «кит↔Конституция» зафиксирован в репозитории.
+  # Работа 2 `design-gates-cite-constitution-ids` ЗАКРЫТА в history/plan-history.yaml (2026-08-28).
 
   # ─── Phase 0: «контроль качества честен» (аудит 2026-08-25) ───────────────────────────────────
 
