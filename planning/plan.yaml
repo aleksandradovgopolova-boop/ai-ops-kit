@@ -862,26 +862,10 @@ work:
   # history/plan-history.yaml.
 
   # ─── uiux-standard-as-product · Волна 1 (решение владельца A, 2026-08-27) ─────────────────────
-  - id: uiux-constitution-is-source
-    title: >-
-      Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
-    type: engineering
-    goal: uiux-standard-as-product
-    status: todo
-    owner_role: engineer
-    write_scope: [standards/uiux/, scripts/, tests/]
-    value: high
-    affects: {engineering_quality_security: true}
-    # ПОВОД. Пакет `ai-ops-uiux` держит один источник (UI_CONSTITUTION.md, 65 правил, стабильные
-    # ID UI-/AI-/UI-FORBIDDEN-) и генератор build-rules.py, который пересобирает оперативный слой
-    # (ui-ux.rules.md) и машинный реестр (rules.yaml). У кита уже есть механизм «зеркал» (check-fast
-    # ↔ CI, layering, счёт валидаторов): расхождение факта и генерата = красный. Волна 1 кладёт
-    # Конституцию в standards/uiux/ как источник и включает эту сверку.
-    # ЧЕГО ДЕЛАТЬ НЕЛЬЗЯ: править rules.yaml/ui-ux.rules.md руками (они генерируются); менять силу
-    # гейтов дизайна — это делает следующая работа, и то в режиме наблюдения.
-    # Готово, когда: build-rules.py пересобирает оба представления из Конституции байт-в-байт;
-    # CI краснеет при ручном расхождении генерата с источником; ручная правка генерата затирается.
-
+  # uiux-constitution-is-source закрыта в историю 2026-08-28 (код в PR #345): Конституция лежит в
+  # standards/uiux/ как источник, scripts/build-rules.py пересобирает из неё ui-ux.rules.md + rules.yaml
+  # байт-в-байт, расхождение генерата с источником краснит CI. Исход цели остаётся false до второй
+  # работы волны 1 (цитирование ID гейтами ещё нет). См. history/plan-history.yaml.
   - id: design-gates-cite-constitution-ids
     title: >-
       Гейты дизайна ссылаются на ID Конституции; сила гейтов не меняется (наблюдение)

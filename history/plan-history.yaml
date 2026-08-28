@@ -4456,3 +4456,32 @@ work:
       AGENTS.md обновлена: тест модуля — гранулярный test_<module>.py, суффикс _selftest снят.
       Перепроверяемо: test_no_monolith_funnel.py. Замер числа тест-функций назван в unit-weeding
       (~375 гранулярных).
+  - id: uiux-constitution-is-source
+    title: >-
+      Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-08-28'
+    pr: 345
+    evidence: tests/unit/test_uiux_constitution_source.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #345; закрытие плана — отдельный PR координатора: parallel-safety
+      запрещает смешивать код с координационными файлами). Конституция UI/UX (standards/uiux/
+      UI_CONSTITUTION.md, 65 правил со стабильными ID UI-/AI-/UI-FORBIDDEN-) стала ЕДИНСТВЕННЫМ
+      источником: scripts/build-rules.py (stdlib) пересобирает из неё и оперативный слой
+      (standards/uiux/ui-ux.rules.md), и машинный реестр (standards/uiux/rules.yaml) байт-в-байт.
+      Генераты руками не правятся — пересборка затирает ручную правку; расхождение генерата с
+      источником краснит CI по механизму «зеркал» кита. Перепроверяемо: tests/unit/
+      test_uiux_constitution_source.py (8 тестов) — тест-зеркало прогоняет сам страж, независимо
+      считает число правил из ИСТОЧНИКА своим регэкспом и сверяет множества ID; мутация (правка или
+      удаление правила в rules.yaml) краснит суите. ПЕРВАЯ из двух работ волны 1: источник готов;
+      вторая (design-gates-cite-constitution-ids) свяжет находки гейтов с ID Конституции. Исход цели
+      constitution_is_source_and_gates_cite_its_ids ОСТАЁТСЯ false до второй работы — источник есть,
+      цитирование ID гейтами ещё нет.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: uiux-standard-as-product; owner_role: engineer; value: high
+    #   write_scope: [standards/uiux/, scripts/, tests/]
+    #   Волна 1 (решение владельца A, 2026-08-27), freeze_relation: extension у цели. Пакет владельца
+    #   `ai-ops-uiux` внедряется СЛИЯНИЕМ в существующий тонкий дизайн-слой кита, не вторым островом.
+    #   Готово: build-rules.py пересобирает оба представления из Конституции байт-в-байт; CI краснеет
+    #   при ручном расхождении генерата с источником; ручная правка генерата затирается.
