@@ -4483,3 +4483,63 @@ work:
       AGENTS.md обновлена: тест модуля — гранулярный test_<module>.py, суффикс _selftest снят.
       Перепроверяемо: test_no_monolith_funnel.py. Замер числа тест-функций назван в unit-weeding
       (~375 гранулярных).
+  - id: backlog-deduplication
+    title: Дедупликация задач — нахождение и предложение объединения дубликатов
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-28'
+    pr: 350
+    evidence: tests/unit/test_backlog_dedup.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (тест-доказательство в PR #350). Детектор дедупа
+      (ai_ops_kit/planning/backlog_dedup.py, подключён как `ai-ops backlog dedup`) построен ранее, но
+      его исход проверялся живьём лишь на 0 дубликатов. Эта работа добавила НЕДОСТАЮЩЕЕ
+      детерминированное доказательство: тест
+      test_dedup_report_on_repo_with_dupes_finds_pair_marks_stale_and_suggests прогоняет РЕАЛЬНЫЙ путь
+      dedup_backlog (find_duplicates + find_stale) на фикстуре из 4 Issues с зафиксированной опорной
+      датой (now_iso, без часов и сети) и в ОДНОМ отчёте утверждает: найдена пара {101,102} (близкий
+      заголовок + общие метки), помечено устаревшее [103] (239 дней простоя при пороге 120, не задевая
+      свежие) и all(action == suggest_merge) — ПРЕДЛОЖЕНИЕ слить, никогда молчаливое слияние.
+      Перепроверяемо: независимое ревью (writer≠judge) прогнало 5 мутаций механизма (пустой список
+      дублей, action='merge', пустой stale, порог 0, подмена id) — каждая покраснила тест, ни одна
+      проверка не вакуумна. Изменение тест-only, продуктовый код не тронут. ИСХОД ЦЕЛИ
+      backlog-intelligence -> duplicates_detected_and_merged ОСТАЁТСЯ false ОСОЗНАННО: слово «merged»
+      кодом не флипается — слияние по инварианту PR-19/20 требует живого одобрения человека
+      (Suggest→Require approval); код доказывает обнаружение и предложение, не слияние.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: backlog-intelligence; owner_role: engineer; value: medium
+    #   write_scope по факту: [tests/] (доказательство) — не [ai_ops_kit/planning/], механизм уже был.
+    #   Готово: `backlog_dedup` на репо с дубликатами находит пары и помечает устаревшие (детермин. тест).
+  - id: lane-ships-small-prs
+    title: >-
+      Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-28'
+    pr: 351
+    evidence: tests/unit/test_pr_size.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #351). Правило «малый PR» НАЗВАНО и ПРОВЕРЯЕТСЯ машиной: порог
+      объявлен ДАННЫМИ (quality/pr-budget.yaml -> max_diff_lines=800, max_changed_files=15, исключения
+      newsfragments/docs/координационные файлы; калибровка замером 30 последних влитых PR — норма
+      ≤~500 строк/≤10 файлов, аномалия 2589 из разбора), валидатор
+      ai_ops_kit/validation/validate_pr_size.py по образцу validate_parallel_safety (assess/render/main,
+      git diff --numstat base...HEAD, fail-open без --base, --strict краснеет только на реальном
+      пробое). Подключено в pr-smoke.yml как ADVISORY (без --strict, не required, PR-only, пропуск в
+      merge_group) — обкатка, как начиналась parallel-safety; крепнет отдельной работой. Половина
+      «закрытие ленты = влиты ИЛИ переданы с зелёным CI» — ПРОТОКОЛЬНОЕ правило в docs/parallel-work.md
+      (реестра лента→PR нет, машиной не сверяется, названо честно, не выдано за гейт). Перепроверяемо:
+      tests/unit/test_pr_size.py (порог из данных, не хардкод; пробой/норма/на-грани/исключения/
+      fail-open/коды выхода) + test_kit_pr_size_job.py (advisory-обкатка); независимое ревью прогнало
+      мутации (подмена вердикта и логики исключений) — покраснели. Добавление validate_*.py подняло
+      derived validators_count 82→83; число в ProductStatus.md синхронизировано (честное следствие,
+      не подгонка). Футпринт не вырос — валидатор не поставляется (зона validation/ EXEMPT).
+      ИЗВЕСТНЫЙ ХВОСТ (не блокирует, advisory): переименование файла В исключённую папку может обойти
+      префикс-сверку — учесть при будущем флипе в --strict, не сейчас.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: team-works-in-parallel; owner_role: engineer; value: medium
+    #   finding: docs/parallel-execution-retro.md
+    #   write_scope по факту шире объявленного [docs/, .github/]: +quality/, ai_ops_kit/validation/,
+    #   tests/ — так требует образец «данные+валидатор+тест», а чистый .github/-вариант запрещён
+    #   инвариантом «проверка обязана быть запускаема локально».
+    #   Готово: правило названо и проверяется (размер/охват); закрытие ленты — протокольное правило.
