@@ -98,7 +98,18 @@ def test_channel_without_criteria_block_is_rejected():
 
 # ─── positive: заработанный канал проходит ───────────────────────────────────────────────────────
 @pytest.mark.unit
-def test_two_distinct_repos_earn_stable():
+def test_two_distinct_repos_earn_stable(tmp_path, monkeypatch):
+    # Канал stable теперь требует И полевые доказательства, И product_layer_ready — все 5 целей
+    # Product OS достигнуты (ep-2026-08-20-stable-includes-product-operating-layer). Этот тест
+    # проверяет ПОЛЕВУЮ половину, поэтому product-слой изолируем синтетическим планом со всеми целями
+    # `achieved` (сам product-слой покрыт tests/contracts/test_stable_gate_includes_product_layer.py).
+    # Иначе тест мерил бы обе половины сразу и падал бы из-за реального плана, где цели ещё не достигнуты.
+    goals = ["product-operating-layer", "backlog-intelligence", "roadmap-and-delivery",
+             "ai-product-operations", "autonomous-product-loop"]
+    (tmp_path / "planning").mkdir()
+    (tmp_path / "planning" / "plan.yaml").write_text(
+        yaml.dump({"goals": [{"id": g, "status": "achieved"} for g in goals]}), encoding="utf-8")
+    monkeypatch.setattr(vrc, "PKG", tmp_path)
     ver = _data()["version"]
     good = [{"repo": "ii-sreda", "version": ver, "outcome": "ok", "date": "2026-08-12"},
             {"repo": "niti", "version": ver, "outcome": "ok", "date": "2026-08-12"}]
