@@ -26,9 +26,19 @@ channels:
     what: "выпущен тег, собственный контур зелёный; в дочки ещё не обкатан"
     requires: [own_ci_green]
   stable:
-    what: "обкатан в поле: обновление доехало до живых дочек и там ничего не сломало"
-    requires: [own_ci_green, field_evidence]
+    what: "обкатан в поле: обновление доехало до живых дочек и там ничего не сломало; продуктовый слой реализован"
+    requires: [own_ci_green, field_evidence, product_layer_ready]
     field_evidence_min_repos: 2
+    # ep-2026-08-20-stable-includes-product-operating-layer: stable не объявить, пока пять целей
+    # Product OS (product-operating-layer, backlog-intelligence, roadmap-and-delivery,
+    # ai-product-operations, autonomous-product-loop) не достигнуты. «Канал заработан» и
+    # «продукт-как-ОС готов» — один рубеж.
+    product_layer_goals:
+      - product-operating-layer
+      - backlog-intelligence
+      - roadmap-and-delivery
+      - ai-product-operations
+      - autonomous-product-loop
 
 # ПОЛЕ, а не намерение. Запись сюда означает: эта версия реально доехала до этого репозитория и
 # результат известен. Пустой список — нормальное состояние свежего патча, и оно ЧЕСТНЕЕ, чем
