@@ -103,3 +103,37 @@ def test_dedup_backlog_end_to_end_suggests():
     assert rep.ok and rep.total == 2
     assert len(rep.duplicate_pairs) == 1
     assert rep.duplicate_pairs[0].action == "suggest_merge"
+
+
+@pytest.mark.unit
+def test_dedup_report_on_repo_with_dupes_finds_pair_marks_stale_and_suggests():
+    """Один отчёт на backlog с РЕАЛЬНЫМИ дублями: находит пару, помечает устаревшее и ПРЕДЛАГАЕТ.
+
+    Детерминированно: фикс now_iso, без часов и живого GitHub. Фикстура — 4 Issue: пара
+    почти-идентичных дублей (#101/#102, общий заголовок и метки, оба свежие), одна явно устаревшая
+    (#103, старый updated_at) и одна свежая непохожая (#104). В ОДНОМ DedupReport:
+    (a) есть пара дублей {101,102}; (b) устаревшее непусто и это именно #103; (c) КАЖДАЯ пара —
+    только suggest_merge, никакого молчаливого слияния.
+    """
+    from ai_ops_kit.integrations.github import FetchResult
+    items = [
+        _issue(101, "экспорт заказов падает на пустом фильтре",
+               labels=["bug", "export"], updated_at="2026-08-27T00:00:00Z"),
+        _issue(102, "экспорт заказов падает при пустом фильтре",
+               labels=["bug", "export"], updated_at="2026-08-26T00:00:00Z"),
+        _issue(103, "устаревшая задача про старый роадмап",
+               labels=["roadmap"], updated_at="2026-01-01T00:00:00Z"),
+        _issue(104, "настроить пайплайн ночного деплоя",
+               labels=["ci"], updated_at="2026-08-25T00:00:00Z"),
+    ]
+    rep = dd.dedup_backlog(client=_FakeClient(FetchResult(True, items=items, source="gh")),
+                           threshold=0.5, stale_days=120, now_iso="2026-08-28T00:00:00Z")
+    assert rep.ok and rep.total == 4
+    # (a) найдена ровно пара реальных дублей — с верными членами
+    assert len(rep.duplicate_pairs) == 1
+    assert {rep.duplicate_pairs[0].a, rep.duplicate_pairs[0].b} == {101, 102}
+    # (b) помечено устаревшее — именно #103, и оно не путается с дублями
+    assert [s.number for s in rep.stale] == [103]
+    assert rep.stale[0].days_idle >= 120
+    # (c) действие — только предложение, слияние требует одобрения (никогда молча)
+    assert all(p.action == "suggest_merge" for p in rep.duplicate_pairs)
