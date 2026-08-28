@@ -1440,3 +1440,49 @@ probes:
     модуль корректным, но срезает вызов — ни один прогон не предупредит, а модульные тесты модуля
     зелёные. Ровно класс «механизм зелёный в изоляции, в пайплайн не подключён». Ловит
     side-effect-тест (греп источника на reserve_is_thin/thinning_reserve_warning).'
+- id: process-spend-rebaselines-on-session-change
+  kind: guard
+  file: ai_ops_kit/engops/process_spend.py
+  find: '    session_changed = (not new) and session_id is not None and session_id != base_sid'
+  replace_with: '    session_changed = False'
+  tests:
+  - tests/unit/test_process_spend.py::TestCeilingCountsThisWorkNotPastSessions::test_prior_session_spend_does_not_trip_the_ceiling
+  why: 'Полевой дефект 487d952b: на шаге plan свежей работы кит показал ~559k против 50k и ЗАБЛОКИРОВАЛ
+    шаг — потому что из расхода ТЕКУЩЕЙ сессии вычитал точку отсчёта, снятую в ПРОШЛОЙ. Смена сессии
+    рантайма — новый бюджет разбора: отсчёт переносится на текущую сессию. Мутация убирает перенос —
+    трата прошлой сессии снова засчитывается как трата разбора этой работы.'
+- id: process-spend-cross-session-is-unknown-not-whole-session
+  kind: guard
+  file: ai_ops_kit/engops/process_spend.py
+  find: '    if session_id is not None and base_sid is not None and session_id != base_sid:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_process_spend.py::TestCeilingCountsThisWorkNotPastSessions::test_cross_session_without_record_is_unknown_not_whole_session
+  why: 'Fail-honest на пути record=False (preview/CLI-справка), где переноса отсчёта нет: точка отсчёта
+    из ДРУГОЙ сессии -> трату этой работы посчитать нечем -> unknown, а НЕ расход сессии целиком.
+    Мутация снимает охрану, и whole-session снова выдаётся за трату разбора — ровно форма дефекта 487d952b.'
+- id: process-spend-unknown-current-session-is-unknown-not-prior-spend
+  kind: guard
+  file: ai_ops_kit/engops/process_spend.py
+  find: '    if base_sid is not None and session_id is None:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_process_spend.py::TestCeilingCountsThisWorkNotPastSessions::test_unknown_current_session_is_unknown_not_prior_session_spend
+  why: 'Достижимое окно на РАБОЧЕМ пути (record=True): рантайм без CLAUDE_CODE_SESSION_ID даёт
+    session_id=None, а record_step не переносит отсчёт при неизвестном id -> база остаётся из прошлой
+    сессии. Без этого охранника whole-session (559k-20k) вычитается через сессии -> over_ceiling —
+    форма дефекта 487d952b в окне, которое пропускала первая версия правки.'
+- id: process-spend-seam-decision-reads-live-session-identity
+  kind: seam
+  covers:
+  - ai_ops_kit/engops/process_spend.py
+  file: ai_ops_kit/engops/process_spend.py
+  find: '        session_id = _session_id(child_root, wid)'
+  replace_with: '        session_id = None'
+  tests:
+  - tests/unit/test_process_spend.py::TestCeilingCountsThisWorkNotPastSessions::test_ceiling_reads_the_live_session_identity
+  why: 'ШОВ: привязка к сессии что-то значит, только если ЛИЧНОСТЬ живой сессии реально доезжает до
+    решения. Механизм переноса отсчёта можно написать и покрыть, но если id не берётся из рантайма,
+    точка отсчёта и текущий замер снова оказываются «одной неизвестной сессией», и трата прошлой
+    сессии вычитается из этой. Мутация обрывает чтение личности сессии в assess — тест реального пути
+    измерения (session_total=_UNSET, две сессии в ENV) обязан покраснеть.'
