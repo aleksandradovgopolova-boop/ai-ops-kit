@@ -429,22 +429,10 @@ work:
       ручного опроса; DIRTY не возникает (queue батчит и ребейзит сам).
     progress_note: >-
       МЕХАНИЗМ СЛИТ (PR #311/#312, 26.08): merge_group в package-quality+pr-smoke, draft-фильтр и шаг заголовка PR gated, страж на мутации, раздел в docs/guides/ci.md. ОСТАЁТСЯ один флип владельца — «Require merge queue» в защите main; программный ruleset отклонён GitHub (422). До включения green-PR вливается ручным merge, как сейчас.
-  - id: lane-ships-small-prs
-    title: >-
-      Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
-    type: engineering
-    goal: team-works-in-parallel
-    status: todo
-    owner_role: engineer
-    value: medium
-    write_scope: [docs/, .github/]
-    finding: docs/parallel-execution-retro.md
-    reason: >-
-      Разбор 20.08: лента 5 сложила всю Фазу 4 в один PR (+2589 строк) с незарегистрированным
-      пакетом и модулями на 0% покрытия; сессия закрылась — долг лёг на координатора серией правок.
-      Готово, когда правило «малый PR, code+tests+newsfragment, green сам» названо и проверяется
-      (размер PR/охват), а закрытие ленты требует влитых ИЛИ переданных с зелёным CI PR.
-
+  # lane-ships-small-prs закрыта в историю 2026-08-28 (код в PR #351): правило «малый PR» названо и
+  # проверяется машиной (quality/pr-budget.yaml + ai_ops_kit/validation/validate_pr_size.py, advisory-
+  # обкатка по образцу parallel-safety); половина «закрытие ленты = влиты/зелёные PR» — протокольное
+  # правило в docs/parallel-work.md (реестра лента→PR нет, машиной не сверяется). См. history.
   - id: reviewer-prompt-uses-xml-anchors-measured
     title: >-
       Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
@@ -746,22 +734,10 @@ work:
   # backlog-issue-classification закрыта в историю 2026-08-27 (живой прогон `backlog classify` на
   # 7 реальных Issues кита: тип/область/уверенность по каждому). См. history/plan-history.yaml.
 
-  - id: backlog-deduplication
-    title: Дедупликация задач — нахождение и предложение объединения дубликатов
-    type: engineering
-    goal: backlog-intelligence
-    status: todo
-    depends_on: []
-    owner_role: engineer
-    write_scope: [ai_ops_kit/planning/]
-    value: medium
-    affects: {delivery_operations: true}
-    # PR-8 (+PR-19/20). Похожесть по заголовку/телу/меткам (Jaccard, взвешенно) с объяснением; учёт
-    # устаревших по updated_at (опорная дата детерминирована). ПРЕДЛАГАЕТ, не сливает молча:
-    # action=suggest_merge, слияние требует одобрения человека (Suggest→…→Require approval).
-    # ПОНИЖЕНА до todo 27.08: детектор отработал живьём, но на 0 дубликатов — исход
-    # duplicates_detected_and_merged требует репо с реальными дублями.
-    # Готово, когда: `backlog_dedup` на репо с дубликатами находит пары и помечает устаревшие.
+  # backlog-deduplication закрыта в историю 2026-08-28 (тест-доказательство в PR #350): детектор
+  # доказан детерминированным тестом на репо с реальными дублями — находит пару, помечает устаревшее,
+  # предлагает слить (никогда молча). Исход цели duplicates_detected_and_merged ОСТАЁТСЯ false:
+  # «слияние» требует живого решения человека, кодом не флипается. См. history.
 
   # backlog-ai-prioritization и backlog-dependency-graph закрыты в историю 2026-08-27 (живой прогон
   # `backlog prioritize` и `backlog graph` на 7 реальных Issues кита). См. history/plan-history.yaml.
