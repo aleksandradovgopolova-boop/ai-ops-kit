@@ -4623,3 +4623,78 @@ work:
     #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: medium
     #   depends_on: [policy-engine-suggest-to-approval, ai-decisions-logged-with-rationale] (обе done).
     #   write_scope: [ai_ops_kit/governance/, tests/]. Была in_progress на устаревшей ветке lane-5-work.
+  - id: design-gates-cite-constitution-ids
+    title: >-
+      Гейты дизайна ссылаются на ID Конституции; сила гейтов не меняется (наблюдение)
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-08-28'
+    pr: 354
+    evidence: tests/unit/test_design_gates_cite_constitution.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #354; закрытие плана — отдельный учётный PR). ВТОРАЯ половина волны
+      1 UI/UX: три блокирующих чек-листа дизайна (rules/design/{ux-heuristics,accessibility-checklist,
+      design-system-checklist}.yaml) получили поле constitution_id — 27 из 31 пункта связаны с
+      реальными ID Конституции (UI-/AI-/UI-FORBIDDEN-), 4 честно помечены none (нет правила-двойника,
+      не выдуманы). Промпты ревьюеров (agents/quality/*-reviewer.md) обязаны цитировать constitution_id
+      в находках, выдумывать ID запрещено. Расхождения кит↔Конституция (4 «только кит», 43 правила
+      Конституции вне трёх гейтов) зафиксированы в standards/uiux/gate-reconciliation.md — не скрыты.
+      Сила гейтов НЕ менялась (blocking/severity запинены тестом). Перепроверяемо:
+      tests/unit/test_design_gates_cite_constitution.py (6 тестов) + независимое ревью проверило ВСЕ 27
+      сопоставлений по тексту Конституции (ни одного неверного) и две мутации (подмена силы гейта,
+      фейковый ID) — покраснели. Обе половины волны 1 влиты (#345 источник + #354 цитирование) —
+      исход цели constitution_is_source_and_gates_cite_its_ids флипнут в true (наблюдение-уровень).
+    # РАЗБОР (как в плане):
+    #   type: quality; goal: uiux-standard-as-product; owner_role: engineer; value: high
+    #   depends_on: [uiux-constitution-is-source] (done). write_scope: [rules/design/, quality/gates.yaml, agents/quality/].
+  - id: spend-ceiling-counts-only-this-work
+    title: >-
+      Потолок траты считает расход этой работы, а не прошлых сессий
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-08-28'
+    pr: 355
+    evidence: tests/unit/test_process_spend.py
+    finding: findings/from-children/obs-2026-08-20-потолок-траты-на-разбор--487d952b.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #355; закрытие плана — отдельный учётный PR). Полевой дефект
+      obs 487d952b: на шаге plan свежей работы кит показывал ~559k против 50k ДО описания задачи —
+      счётчик складывал расход ПРОШЛЫХ сессий и блокировал, рекомендуя «пропусти планирование».
+      Причина: точка отсчёта расхода бралась из прошлой сессии, а из неё вычитался транскрипт текущей.
+      Правка (ai_ops_kit/engops/process_spend.py): точка отсчёта привязана к личности живой сессии
+      (CLAUDE_CODE_SESSION_ID), record_step переносит её при смене сессии; при НЕизвестной личности
+      текущей сессии — честный unknown, а НЕ whole-session (закрыто и окно record=False, и рабочий
+      путь record=True — второе нашло независимое ревью). Рекомендация (ui/presenter.py) ведёт
+      specify->plan->run, «пропусти шаг» убрано. Перепроверяемо: tests/unit/test_process_spend.py
+      (guard+seam+guard-на-окне) + 3 мутационные пробы (все покраснели); футпринт поднят ЧЕСТНО под
+      реальный замер 4 415 346 (не фиктивные числа первой версии). Независимое ревью: PASS.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: owner-speaks-product-not-pipeline; owner_role: engineer; value: medium
+    #   write_scope по факту шире: +ai_ops_kit/ui/ (recommendation), quality/ (пробы+потолок) — сказано в PR.
+    #   ОСТАЁТСЯ отдельно (не эта работа): внутрисессионная атрибуция трат между работами (session_total
+    #   — на всю сессию; переплетённые работы всё ещё смешиваются) — названо честно, не выдано за фикс.
+  - id: stable-gate-includes-product-layer
+    title: >-
+      Машинный гейт stable не даёт объявить канал, пока продуктовый слой не реализован
+    goal: qualification-closeout
+    status: done
+    closed_at: '2026-08-28'
+    pr: 362
+    evidence: tests/contracts/test_stable_gate_includes_product_layer.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #362; закрытие плана — отдельный учётный PR). Решение владельца
+      ep-2026-08-20-stable-includes-product-operating-layer: «канал заработан» и «продукт-как-ОС готов»
+      — один рубеж. channel_errors (ai_ops_kit/validation/validate_release_claims.py) при channel=stable
+      читает channels.stable.product_layer_goals (5 целей) и planning/plan.yaml и краснит, пока хоть
+      одна цель не achieved — так же машиночитаемо, как field_evidence. Сейчас краснеет ВЕРНО (4 из 5
+      не достигнуты) и честно: файл объявляет channel=qualification, поэтому валидатор зелёный, но
+      попытка объявить stable немедленно краснеет с перечнем недостигнутых целей. Перепроверяемо:
+      tests/contracts/test_stable_gate_includes_product_layer.py (4 теста, двусторонняя мутация —
+      отключение гейта и инверсия краснят) + регресс-тест канала изолирован от product-слоя.
+      Независимое ревью: PASS (после починки одного регресс-теста).
+    # РАЗБОР (как в плане):
+    #   type: quality; goal: qualification-closeout; owner_role: engineer; value: high
+    #   depends_on: [continuous-product-audit] — гейт ссылается на ИСХОДЫ 5 целей, не на саму работу
+    #   аудита; построен и краснит независимо. write_scope: [registry/, ai_ops_kit/validation/, tests/].
+    #   Мелкие незакрытые нит-заметки ревью (channel_errors не проброшен pkg из check(); лишний import
+    #   yaml в функции) — не блокируют, оставлены как есть.
