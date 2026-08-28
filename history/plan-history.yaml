@@ -4543,3 +4543,83 @@ work:
     #   tests/ — так требует образец «данные+валидатор+тест», а чистый .github/-вариант запрещён
     #   инвариантом «проверка обязана быть запускаема локально».
     #   Готово: правило названо и проверяется (размер/охват); закрытие ленты — протокольное правило.
+  - id: drift-detected-between-artifacts
+    title: "Drift: расхождения документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_drift_artifacts.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229; закрытие плана — отдельный учётный PR). По СОБСТВЕННОМУ
+      done-when работа сделана: ai_ops_kit/intelligence/drift_artifacts.py даёт drift_report с
+      названными расхождениями (DriftResult.findings; пустой reason у расхождения запрещён
+      __post_init__), пара документация↔код имеет живой компаратор (repo_graph, dp-001), три
+      остальные пары честно возвращают UNKNOWN с названной причиной и лентой-источником — не «дрейфа
+      нет». Перепроверяемо: tests/unit/test_drift_artifacts.py (13 тестов на ВСЕ три случая —
+      искусственный дрейф→DRIFT с именем, чисто→CLEAN, недоступная пара→UNKNOWN). ИСХОД ЦЕЛИ
+      drift_detected_between_artifacts ОСТАЁТСЯ false: он требует реального дрейфа, пойманного на
+      живой дочке через выведенную наружу команду `ai-ops drift` (CLI-проводка вне write_scope этой
+      работы) — это отдельный живой шаг, не код.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/intelligence/, tests/]. Заметка: код цитирует repo_graph, а не
+    #   architecture_baseline (план упоминал оба). Остаток к исходу: команда `ai-ops drift` + живой прогон.
+  - id: ai-decisions-logged-with-rationale
+    title: "AI Decision Log: решение AI, почему, на каких данных, результат, менял ли человек"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_decision_log.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229, шов доставки — #285; закрытие плана — отдельный учётный PR).
+      По done-when работа сделана: ai_ops_kit/governance/decision_log.py — log_ai_decision строит и
+      дописывает валидный actor:ai-эпизод (поля decision/reason/data/outcome/human_overrode) в
+      decisions/registry.yaml, сохраняя комментарии и перечитывая fail-closed; РАСШИРЯЕТ существующий
+      реестр, не заводит второй (dp-001). Перепроверяемо: tests/unit/test_decision_log.py (9 тестов,
+      в т.ч. валидатор validate_decisions ОСТАЁТСЯ зелёным после вставки — подтверждено и живым
+      прогоном валидатора, exit 0). ИСХОД ЦЕЛИ ai_decisions_logged_with_rationale ОСТАЁТСЯ false:
+      «реальное решение с обоснованием» рождается живым прогоном (шов gate_delivery пишет запись в
+      реестр ДОЧКИ на каждой управляемой доставке), а не кодом; в реестре самого кита записей 0.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/governance/, decisions/, tests/]. Остаток к исходу: живой прогон.
+  - id: policy-engine-suggest-to-approval
+    title: "Policy Engine: Suggest → Prepare → Execute → Require approval (исполняемое поведение)"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_policy_engine.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229; закрытие плана — отдельный учётный PR). done-when выполнен и
+      доказан не декларацией, а швом: ai_ops_kit/governance/policy_engine.py — decide(action)
+      возвращает уровень (suggest/prepare/execute/require_approval) из POLICY.yaml (нет политики →
+      require_approval; неизвестное действие → default; невалидный уровень отвергается, а не
+      угадывается), а enforce РЕАЛЬНО не запускает действие на require_approval без одобрения.
+      Перепроверяемо: tests/unit/test_policy_engine.py (в т.ч.
+      test_require_approval_blocks_without_approval_allows_with,
+      test_enforce_blocks_require_approval_and_does_not_run, test_every_decision_names_reason).
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/governance/, tests/]. Была in_progress на устаревшей ветке lane-5-work,
+    #   но код давно в main (#229) — ветка удалена как избыточная.
+  - id: human-override-as-signal
+    title: Human override — сигнал на будущее, а не ошибка; учитывается в решениях
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_human_override.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229; закрытие плана — отдельный учётный PR). done-when выполнен:
+      ai_ops_kit/governance/human_override.py — record_override пишет override как СИГНАЛ
+      (human_overrode=true) в AI Decision Log, не как ошибку, и он доступен будущим решениям
+      (overrides/override_signals читают его). Перепроверяемо: tests/unit/test_human_override.py
+      (test_override_recorded_as_signal_not_error, test_override_is_visible_to_future_decisions,
+      test_override_lands_in_decision_log, накопление нескольких override).
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: medium
+    #   depends_on: [policy-engine-suggest-to-approval, ai-decisions-logged-with-rationale] (обе done).
+    #   write_scope: [ai_ops_kit/governance/, tests/]. Была in_progress на устаревшей ветке lane-5-work.
