@@ -280,6 +280,11 @@ def _work_scoped_spend(entry, session_total, session_id):
     base_sid = entry.get("first_step_session_id")
     if base is None or session_total is None:
         return None
+    # База из ИЗВЕСТНОЙ сессии, а личность текущей неизвестна (session_id=None, напр. рантайм без
+    # CLAUDE_CODE_SESSION_ID): same-session НЕ подтвердить -> unknown, а не вычитать. Иначе, если
+    # база из прошлой сессии, вернулся бы расход прошлых сессий (дефект 487d952b) под видом текущего.
+    if base_sid is not None and session_id is None:
+        return None
     if session_id is not None and base_sid is not None and session_id != base_sid:
         return None
     return max(0, session_total - base)

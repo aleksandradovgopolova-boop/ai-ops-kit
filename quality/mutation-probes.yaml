@@ -1461,6 +1461,17 @@ probes:
   why: 'Fail-honest на пути record=False (preview/CLI-справка), где переноса отсчёта нет: точка отсчёта
     из ДРУГОЙ сессии -> трату этой работы посчитать нечем -> unknown, а НЕ расход сессии целиком.
     Мутация снимает охрану, и whole-session снова выдаётся за трату разбора — ровно форма дефекта 487d952b.'
+- id: process-spend-unknown-current-session-is-unknown-not-prior-spend
+  kind: guard
+  file: ai_ops_kit/engops/process_spend.py
+  find: '    if base_sid is not None and session_id is None:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_process_spend.py::TestCeilingCountsThisWorkNotPastSessions::test_unknown_current_session_is_unknown_not_prior_session_spend
+  why: 'Достижимое окно на РАБОЧЕМ пути (record=True): рантайм без CLAUDE_CODE_SESSION_ID даёт
+    session_id=None, а record_step не переносит отсчёт при неизвестном id -> база остаётся из прошлой
+    сессии. Без этого охранника whole-session (559k-20k) вычитается через сессии -> over_ceiling —
+    форма дефекта 487d952b в окне, которое пропускала первая версия правки.'
 - id: process-spend-seam-decision-reads-live-session-identity
   kind: seam
   covers:

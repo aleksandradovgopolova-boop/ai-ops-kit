@@ -217,3 +217,20 @@ class TestCeilingCountsThisWorkNotPastSessions:
         assert c["state"] != "over_ceiling", c
         assert c["blocks"] is False
         assert c["spent_on_process"] == 0
+
+    def test_unknown_current_session_is_unknown_not_prior_session_spend(self, tmp_path, monkeypatch):
+        """FIX (ревью #355): реально достижимое окно на РАБОЧЕМ пути (record=True). Рантайм без
+        CLAUDE_CODE_SESSION_ID -> личность текущей сессии None, а отсчёт снят в ИЗВЕСТНОЙ прошлой сессии
+        S1. record_step НЕ переносит отсчёт при неизвестном id (session_changed=False), поэтому охрану
+        обязан держать `_work_scoped_spend`: база известна, текущая сессия — нет, same-session не
+        подтвердить -> unknown, а НЕ вычитание расхода прошлой сессии (иначе дефект 487d952b возвращается
+        в этом окне). Мутация нового охранника (`if base_sid is not None and session_id is None`) обязана
+        краснеть: без неё вернётся 559000-20000 и state станет over_ceiling."""
+        repo = _git_repo(tmp_path)
+        monkeypatch.setattr(process_spend, "_session_total", lambda *a, **k: 559000)
+        monkeypatch.setattr(process_spend, "_session_id", lambda *a, **k: None)
+        process_spend.record_step(repo, WID, "specify", 20000, session_id="S1")
+        c = process_spend.assess(repo, WID, "plan")
+        assert c["state"] == "unknown", c
+        assert c["blocks"] is False
+        assert c["spent_on_process"] is None, "неизвестную текущую сессию посчитали вычитанием через сессии"
