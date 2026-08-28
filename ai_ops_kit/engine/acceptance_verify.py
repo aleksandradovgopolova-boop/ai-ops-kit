@@ -478,16 +478,25 @@ def make_acceptance_proposer(provider, criteria, revision=None):
 
     def propose(context):
         prompt = (
+            "<role>\n"
             "Ты НЕЗАВИСИМЫЙ ревьюер приёмки (не автор изменения). Только чтение.\n"
             f"Проверяемая ревизия: {revision or 'HEAD'}.\n"
+            "</role>\n\n"
+            "<task>\n"
             "Задача: по КАЖДОМУ критерию приёмки сказать, выполнен ли он В ЭТОМ изменении, и "
-            "привести ЦИТАТУ-основание.\n\n"
-            f"Критерии приёмки:\n{listing}\n\n"
+            "привести ЦИТАТУ-основание.\n"
+            "</task>\n\n"
+            "<criteria>\n"
+            f"Критерии приёмки:\n{listing}\n"
+            "</criteria>\n\n"
+            "<output_format>\n"
             "На каждом шаге верни РОВНО ОДИН JSON:\n"
             '  {"op":"read","path":"..."}  — прочитать файл, чтобы удостовериться\n'
             '  {"kind":"acceptance-result","criteria":[{"id":"AC-1","status":"met|unmet|'
             'undetermined","evidence":"present|absent","quote":"дословный фрагмент",'
             '"source":"путь/до/файла","reason":"кратко"}]}  — ИТОГ\n'
+            "</output_format>\n\n"
+            "<rules>\n"
             "Правила:\n"
             "* вердикт нужен по КАЖДОМУ критерию из списка, ни одного не пропускай;\n"
             "* status=met ТРЕБУЕТ дословной quote и source: цитата ПРОВЕРЯЕТСЯ КОДОМ — в теле "
@@ -504,8 +513,11 @@ def make_acceptance_proposer(provider, criteria, revision=None):
             "нашёл X, которого не должно быть — unmet и цитируй найденное (evidence=present);\n"
             "* честность симметрична: не выдумывай ни met, ни unmet. Не хватило прочитанного — "
             "undetermined с причиной, это законный ответ;\n"
-            "* только JSON, без пояснений вокруг.\n\n"
-            "=== КОНТЕКСТ (изменение и журнал чтений) ===\n" + context)
+            "* только JSON, без пояснений вокруг.\n"
+            "</rules>\n\n"
+            "<diff>\n"
+            f"{context}\n"
+            "</diff>")
         return tool_loop.parse_action(provider(prompt))
     return propose
 

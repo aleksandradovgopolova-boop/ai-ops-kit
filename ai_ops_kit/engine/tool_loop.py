@@ -86,7 +86,10 @@ def make_model_proposer(provider):
             "done, не пиши файл повторно. ЧИТАЙ (read) МИНИМУМ — 1-2 файла, чтобы понять, затем "
             "СРАЗУ вноси правку через write. НЕ читай по кругу: если файл уже прочитан (есть в "
             "журнале), не читай его снова — пиши фикс. Только JSON, без пояснений.\n\n"
-            "=== ЗАДАЧА И ЖУРНАЛ УЖЕ ВЫПОЛНЕННЫХ ШАГОВ ===\n" + context)
+            "<task>\n"
+            "ЗАДАЧА И ЖУРНАЛ УЖЕ ВЫПОЛНЕННЫХ ШАГОВ:\n"
+            f"{context}\n"
+            "</task>")
         return parse_action(provider(prompt))
     return propose
 
@@ -102,21 +105,29 @@ def make_reviewer_proposer(provider, gate_id, checklist="", required_evidence=No
     req = list(required_evidence or [])
     def propose(context):
         prompt = (
+            "<role>\n"
             f"Ты НЕЗАВИСИМЫЙ ревьюер гейта '{gate_id}' (не автор изменения). Только чтение.\n"
             f"Проверяемая ревизия: {reviewed_revision or 'HEAD'}.\n"
-            + (f"Чек-лист:\n{checklist}\n" if checklist else "")
-            + (f"Требуемые доказательства (required_evidence): {', '.join(req)}. Ставь pass ТОЛЬКО "
-               f"если реально подтвердил их чтением; иначе fail/warn с конкретикой.\n" if req else "")
-            + "На каждом шаге верни РОВНО ОДИН JSON:\n"
+            "</role>\n\n"
+            + (f"<criteria>\n{checklist}\n</criteria>\n\n" if checklist else "")
+            + (f"<required_evidence>\n{', '.join(req)}. Ставь pass ТОЛЬКО "
+               f"если реально подтвердил их чтением; иначе fail/warn с конкретикой.\n</required_evidence>\n\n" if req else "")
+            + "<output_format>\n"
+            "На каждом шаге верни РОВНО ОДИН JSON:\n"
             '  {"op":"read","path":"..."}  — прочитать файл, чтобы удостовериться\n'
             '  {"kind":"reviewer-result","gate":"' + gate_id + '","status":"pass|warn|fail",'
             '"checks":[{"id":"...","status":"pass|warn|fail"}],"blockers":["..."]}  — ИТОГ\n'
+            "</output_format>\n\n"
+            "<rules>\n"
             "Правила: читай минимально; выноси вердикт по фактам из прочитанного. status=fail И "
             "status=warn требуют непустой blockers с КОНКРЕТНЫМИ проблемами (warn на блокирующем "
             "гейте тоже блокирует). Честность симметрична: НЕ выдумывай pass (чего не подтвердил "
             "чтением — не pass), но и НЕ выдумывай сомнения ради подстраховки — если прочитал "
-            "изменение и КОНКРЕТНОЙ проблемы нет, это pass, а не warn «на всякий случай». Только JSON.\n\n"
-            "=== КОНТЕКСТ (изменение и журнал чтений) ===\n" + context)
+            "изменение и КОНКРЕТНОЙ проблемы нет, это pass, а не warn «на всякий случай». Только JSON.\n"
+            "</rules>\n\n"
+            "<diff>\n"
+            f"{context}\n"
+            "</diff>")
         return parse_action(provider(prompt))
     return propose
 

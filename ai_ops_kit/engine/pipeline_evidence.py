@@ -74,12 +74,17 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
     # зовёт их вниз, без восходящего ребра engine -> validation (лента №5). Запись файлов — ниже.
     from ai_ops_kit.checks import spec_artifact as vsa
     prompt = (
+        "<role>\n"
         "Ты автор OpenSpec-изменения (spec-change) для задачи. Верни ТОЛЬКО YAML со схемой:\n"
         "  schema_version: 1\n  kind: spec-change\n  capability: <slug>\n  why: <зачем>\n"
         "  what_changes: [<что меняется>]\n  tasks: [<шаг>, ...]\n"
         "  requirements:\n    - name: <имя>\n      text: <нормативное требование со словом SHALL>\n"
         "      scenarios:\n        - {name: <имя>, when: <условие>, then: <результат>}\n"
-        "Требования конкретные и проверяемые. Только JSON/YAML.\n\n=== ЗАДАЧА ===\n" + task)
+        "Требования конкретные и проверяемые. Только JSON/YAML.\n"
+        "</role>\n\n"
+        "<task>\n"
+        f"{task}\n"
+        "</task>")
 
     def _spec_check(data):
         if not isinstance(data, dict):
@@ -131,10 +136,15 @@ def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, bud
         if gid not in gate_ids or gid in gate_ev:
             continue
         prompt = (
+            "<role>\n"
             f"Ты автор артефакта '{kind}' для задачи. Верни ТОЛЬКО YAML (без пояснений) со схемой:\n"
             f"  schema_version: 1\n  kind: {kind}\n  workitem_id: {wid}\n  {shape}\n"
             f"Артефакт должен точно отражать задачу ниже. Требования/пакеты — конкретные и "
-            f"тестируемые, не общие слова.\n\n=== ЗАДАЧА ===\n{task}")
+            f"тестируемые, не общие слова.\n"
+            "</role>\n\n"
+            "<task>\n"
+            f"{task}\n"
+            "</task>")
 
         # `mod=mod` связывает модуль ЗДЕСЬ, а не в момент вызова: сейчас `_check` зовётся
         # синхронно в этой же итерации и потому работает, но замыкание на переменную цикла
@@ -182,7 +192,9 @@ def _authored_context(authored, work_root, wid):
                 parts.append(f"# {e.get('gate')} ({fn})\n" + p.read_text(encoding="utf-8")[:2000])
         except OSError:
             pass
-    return ("=== СПЕЦИФИКАЦИЯ ЗАДАЧИ (создана ДО реализации; следуй ей) ===\n" + "\n\n".join(parts)
+    return ("<specification>\n"
+            "СПЕЦИФИКАЦИЯ ЗАДАЧИ (создана ДО реализации; следуй ей)\n" + "\n\n".join(parts) +
+            "\n</specification>"
             if parts else "")
 
 
