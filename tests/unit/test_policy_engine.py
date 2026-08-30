@@ -30,6 +30,41 @@ def test_unknown_action_falls_back_to_default(tmp_path):
     assert pe.level_for("merge_pr", policy) == pe.REQUIRE_APPROVAL
 
 
+def test_autonomy_schema_is_read_not_ignored(tmp_path):
+    """Уровни из схемы шаблона `autonomy:` РЕАЛЬНО читаются (сведение схем, блокер Фазы Б).
+
+    До сведения движок читал только `actions:`/`default:`, поэтому `autonomy:`-уровни молча падали
+    в default (require_approval). Мутация: читать снова только `actions:` -> create_pr станет
+    require_approval, и assert ниже покраснеет."""
+    _policy_file(tmp_path, {"autonomy": {"create_pr": pe.EXECUTE, "merge": pe.REQUIRE_APPROVAL}})
+    policy = pe.load_policy(tmp_path)
+    assert pe.level_for("create_pr", policy) == pe.EXECUTE          # НЕ упало в require_approval
+    assert pe.level_for("merge", policy) == pe.REQUIRE_APPROVAL
+    assert pe.level_for("unlisted", policy) == pe.REQUIRE_APPROVAL  # неописанное — fail-closed
+
+
+def test_shipped_template_policy_levels_reach_the_engine(tmp_path):
+    """СКВОЗНОЙ: официальный шаблон POLICY.yaml, положенный дочке, читается движком без подгонки —
+    его autonomy-уровни доезжают до РЕШЕНИЯ. Это и есть сведённая схема на реальном артефакте."""
+    import shutil
+    from pathlib import Path
+    tmpl = Path(__file__).resolve().parents[2] / "templates" / "product-layer" / "POLICY.yaml"
+    (tmp_path / ".ai-ops").mkdir(exist_ok=True)
+    shutil.copy(tmpl, tmp_path / pe.POLICY_REL)
+    policy = pe.load_policy(tmp_path)
+    assert pe.level_for("create_pr", policy) == pe.PREPARE          # из autonomy: шаблона
+    assert pe.level_for("merge", policy) == pe.REQUIRE_APPROVAL
+    assert pe.authorize("merge", policy)["allowed"] is False        # слияние ждёт человека
+    assert pe.authorize("create_pr", policy)["allowed"] is False    # prepare — не исполнять
+
+
+def test_actions_legacy_form_still_read(tmp_path):
+    """Старая форма `actions:` продолжает читаться после сведения (совместимость)."""
+    _policy_file(tmp_path, {"actions": {"run_tests": pe.EXECUTE}})
+    policy = pe.load_policy(tmp_path)
+    assert pe.level_for("run_tests", policy) == pe.EXECUTE
+
+
 def test_invalid_level_is_rejected_not_guessed(tmp_path):
     _policy_file(tmp_path, {"actions": {"x": "maybe"}})
     with pytest.raises(pe.PolicyInvalid):
