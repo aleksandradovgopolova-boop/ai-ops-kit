@@ -108,6 +108,7 @@ SPEAKS = [
     ("session", None),              # гигиена сессии: снимок и рекомендация
     ("delivery-proof", None),       # долг доказательств поставки
     ("audit", None),                # без подкоманды обязан показать, как им пользоваться
+    ("drift", None),                # v3.37: снимок рассинхрона артефактов дочки
 ]
 
 
@@ -179,6 +180,25 @@ def test_resolve_ref_refuses_by_name_when_the_channel_has_nothing(tmp_path, monk
     rc, out = _run(["resolve-ref", "--channel", "stable", "--repo", str(empty)], capfd)
     assert rc == 2, f"отказ не отличается кодом от успеха (rc={rc})\n{out}"
     assert "stable" in out, out
+
+
+@pytest.mark.unit
+def test_drift_command_surfaces_real_drift(tmp_path, monkeypatch, capfd):
+    """`ai-ops drift` РЕАЛЬНО прогоняет детектор на дочке: внедрённый рассинхрон виден в отчёте.
+
+    До этой команды детектор `drift_artifacts` существовал (#229) и читался риск-реестром, но
+    запустить его на дочке было НЕЧЕМ — исход `drift_detected_between_artifacts` живьём не проверялся.
+    Здесь: документация ссылается на несуществующий код -> команда должна вернуть отчёт с has_drift.
+    Мутация: если снять маршрут (`cmd == "drift"`) или сломать импорт — тест краснеет.
+    """
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "d.md").write_text(
+        "см. реализацию в `src/nonexistent_module.py` — файла нет\n", encoding="utf-8")
+    monkeypatch.setattr(installer, "REPO_ROOT", tmp_path, raising=False)
+    rc, out = _run(["drift"], capfd)
+    assert "Traceback" not in out, out[-700:]
+    assert '"has_drift": true' in out, f"drift не поймал внедрённый рассинхрон:\n{out[:600]}"
+    assert "nonexistent_module.py" in out, f"в отчёте нет внедрённого файла:\n{out[:600]}"
 
 
 @pytest.mark.unit
