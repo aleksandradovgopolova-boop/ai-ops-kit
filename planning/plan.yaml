@@ -275,9 +275,12 @@ goals:
       # декларацией «код написан». Три исхода флипнуты замером: bootstrap создал `.ai-ops/` слой;
       # `ai-ops validate product-layer` докладывает все четыре состояния (5 valid · 0 outdated ·
       # 0 invalid · 0 missing); PRODUCT_PASSPORT.md сгенерирован из состояния репо с честными
-      # «_неизвестно_». Остальные три оставлены false — вживую не подтверждены (см. todo-работы
-      # verify-artifact-registry-as-data, verify-template-migrations, continuous-product-audit).
-      artifact_registry_exists_as_data: false
+      # «_неизвестно_». artifact_registry_exists_as_data ФЛИПНУТ замером 2026-08-31: на копии живой
+      # дочки ai-ops-cockpit `ai-ops validate product-layer` перечислил 5 артефактов ИЗ реестра и
+      # подтвердил 5/5 valid на реальных .ai-ops/ файлах — список берётся из данных, не хардкодом
+      # (работа verify-artifact-registry-as-data закрыта). Ещё два оставлены false — вживую не
+      # подтверждены (см. todo-работы verify-template-migrations, continuous-product-audit).
+      artifact_registry_exists_as_data: true
       templates_have_versions_and_migrations: false
       product_passport_auto_generated: true
       bootstrap_creates_product_layer: true
@@ -329,13 +332,15 @@ goals:
       # исхода флипнуты замером: авто-сводка команды собралась (здоровье продукт/тех/delivery,
       # блокеры, ближайшая работа, milestone «не проверено», 12 слепых зон); риски названы с текстом
       # смягчения ([high] technical: привести документацию в соответствие коду). Два оставлены false:
-      # drift вживую не запускал; журнал решений (`ai-ops governance`) живой, но записей 0 — решения
-      # с обоснованием показать не на чем. Оба — child-facing зазор: `team`/`governance` в дочке не
-      # выведены. См. todo-работы drift-detected-between-artifacts, ai-decisions-logged-with-rationale.
+      # ai_decisions_logged_with_rationale ФЛИПНУТ замером 2026-08-31: на копии живой дочки
+      # ai-ops-cockpit log_ai_decision записал реальный actor:ai-эпизод С ОБОСНОВАНИЕМ в
+      # decisions/registry.yaml дочки (0 -> 1), комментарии владельца уцелели. drift оставлен false до
+      # тонкой команды `ai-ops drift`: детектор работает (поймал реальный рассинхрон на дочке — и мой
+      # внедрённый, и два уже бывших), но дочке нечем его запустить. См. todo drift-detected-between-artifacts.
       drift_detected_between_artifacts: false
       risks_identified_with_mitigation: true
       team_status_auto_generated: true
-      ai_decisions_logged_with_rationale: false
+      ai_decisions_logged_with_rationale: true
 
   - id: autonomous-product-loop
     # заморозка: полный автономный цикл — новое умение
@@ -662,19 +667,10 @@ work:
   # на дочке ~/ai-ops-cockpit подтвердил bootstrap и четырёхсостоянийный validate). См.
   # history/plan-history.yaml.
 
-  - id: verify-artifact-registry-as-data
-    title: "Живьём: реестр артефактов существует как данные и читается на дочке"
-    type: quality
-    goal: product-operating-layer
-    status: todo
-    owner_role: engineer
-    write_scope: [ai_ops_kit/validation/, tests/]
-    value: low
-    affects: {delivery_operations: true}
-    # Остаток живой проверки lane-2 (27.08). Механизм построен (#227, PR-4), но исход
-    # artifact_registry_exists_as_data вживую на дочке не подтверждён отдельным замером.
-    # Готово, когда: на живой дочке показано, что реестр артефактов читается как данные (а не файл-
-    # заглушка) — например, validate/аудит перечисляет артефакты из реестра, а не хардкодом.
+  # verify-artifact-registry-as-data закрыта в историю 2026-08-31 (живой замер на копии дочки
+  # ai-ops-cockpit: `ai-ops validate product-layer` перечислил 5 артефактов ИЗ реестра, 5/5 valid на
+  # реальных .ai-ops/ файлах; исход product-operating-layer.artifact_registry_exists_as_data флипнут).
+  # См. history/plan-history.yaml.
 
   - id: verify-template-migrations
     title: "Живьём: у шаблонов продукта есть версии И миграции, применяемые на дочке"
@@ -733,8 +729,8 @@ work:
 
   # ai-decisions-logged-with-rationale закрыта в историю 2026-08-28 (код в PR #229/#285):
   # log_ai_decision дописывает валидный actor:ai-эпизод, validate_decisions зелёный, 9 тестов схемы.
-  # Исход цели ai_decisions_logged_with_rationale остаётся false: «реальное решение с обоснованием»
-  # рождается живым прогоном (пишется в реестр дочки), не кодом. См. history.
+  # Исход цели ai_decisions_logged_with_rationale ФЛИПНУТ 2026-08-31 живым замером на копии дочки
+  # ai-ops-cockpit: реальное решение с обоснованием записано в реестр дочки (0 -> 1 actor:ai). См. history.
 
   # policy-engine-suggest-to-approval закрыта в историю 2026-08-28 (код в PR #229): policy_engine.decide
   # возвращает уровень из POLICY.yaml; enforce РЕАЛЬНО не запускает действие на require_approval без

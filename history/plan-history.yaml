@@ -4751,3 +4751,21 @@ work:
     # РАЗБОР (как в плане):
     #   type: quality; goal: checks-that-run; owner_role: engineer; value: medium
     #   write_scope: [manifest/, newsfragments/]. Freeze-exception: снижает цену процесса (запас поставки).
+
+  - id: verify-artifact-registry-as-data
+    title: "Живьём: реестр артефактов существует как данные и читается на дочке"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-31'
+    evidence: "живой замер на копии дочки ai-ops-cockpit: `ai-ops validate product-layer` -> 5 артефактов из реестра, 5/5 valid"
+    result: >-
+      ЗАКРЫТО 2026-08-31 живым замером на КОПИИ живой дочки ai-ops-cockpit (реальный репозиторий не
+      тронут, проверено). `ai-ops validate product-layer` перечислил ровно 5 объявленных в реестре
+      артефактов (product_passport, roadmap, delivery, policy, templates_dir) и подтвердил 5/5 valid на
+      реальных .ai-ops/ файлах — перечень берётся ИЗ данных реестра (registry/artifact-registry.yaml),
+      не хардкодом: загрузчик fail-closed на пустом/битом реестре, список артефактов меняется вместе с
+      данными. НАЗВАНО ЧЕСТНО: сам файл реестра в дочку НЕ поставляется — validate/audit идут через
+      родительский кит (обёртка `ai-ops` -> find_installer), это «кит обслуживает сам себя» по замыслу,
+      не дефект. Исход цели product-operating-layer.artifact_registry_exists_as_data флипнут в true.
+    # РАЗБОР: type: quality; goal: product-operating-layer; owner_role: engineer; value: low
+    #   write_scope: [ai_ops_kit/validation/, tests/]. Freeze-exception: замыкает обратную связь из поля.
