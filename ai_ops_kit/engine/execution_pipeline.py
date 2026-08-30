@@ -44,6 +44,7 @@ from ai_ops_kit.ui import storybook_adapter     # noqa: E402  (v3.1.9 exact-SHA 
 from ai_ops_kit.engine.pipeline_helpers import (  # noqa: E402,F401
     _profile_summary, _intake_evidence, NO_SELF_REVIEW, _reviewable_gates,
     _gate_checklist, _parse_yaml_block, _openspec_validate, _authoring_specs,
+    acceptance_blocks_ready,
 )
 from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _git, _has_changes, _head_advanced, _tree_clean, _TOOL_CACHE_RE, _tree_clean_after_checks,
@@ -136,12 +137,15 @@ def _compute_overall_status(ready, can_deliver, open_pr):
 
 def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_depth_missing,
                         spec_incomplete, spec_bad_status, context_overflow, approvals_cover_ok,
-                        approval_recheck):
+                        approval_recheck, acceptance_block_reason=None):
     """Список «что ещё не сделано» — информирование вызывающего. v3.38 (K6): вынесено из run_pipeline."""
     # Импорт локальный: при выносе из run_pipeline (K6) ссылка _sl уехала от своего импорта —
     # NameError всплывал на живом пути spec-first (CI lint, F821), а не при импорте модуля.
     from ai_ops_kit.gates import spec_levels as _sl
     not_yet = ["живой предложитель (swap провайдера)"]
+    if acceptance_block_reason:
+        # Причина и способ закрыть — первыми, а не только внутри блока acceptance_criteria.
+        not_yet.insert(0, f"приёмка: {acceptance_block_reason}")
     if spec_prestage_bad:
         not_yet.insert(0, "spec-first (P0.1): author вернул невалидную спецификацию ["
                        + ", ".join(str(e.get("gate")) for e in spec_prestage_bad)
@@ -789,9 +793,10 @@ def _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root, *,
                 change_context=_change_context_range(work_root, base_sha, committed_sha),
                 budget=budget)
         except Exception as _e:  # noqa: BLE001 — FAIL-CLOSED: сбой сверки = «не сверено» с названной
-            # причиной, а не отсутствие блока (пустой блок читался бы как «претензий нет»).
+            # причиной, а не отсутствие блока. attempted=True: сюда попадаем ТОЛЬКО с поднятым судьёй,
+            # и крах сверки не должен давать READY_FOR_PR в обход рубер-штамп-блока (green-means-checked).
             acceptance_criteria = _av._unverified(
-                _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300])
+                _ac_items, f"сверка не выполнена ({type(_e).__name__}: {_e})"[:300], attempted=True)
     elif _ac_problem:
         # Спека ЕСТЬ, но не разобрана: это «не знаю», а не «критериев нет». Молчание здесь было бы
         # тем же ложным green — `spec-coverage` для того же файла говорит `complete`.
@@ -1080,23 +1085,20 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # недостижим). Остальные условия base_ok (committed_sha/revision/tree/env/approvals) по-прежнему строги.
     base_ok = (loop["stopped"] in ("done", "reevaluate-only")) and (committed_sha is not None) \
         and revision_matches and tree_ok and env_qualified and approvals_cover_ok
-    # B2-30 (run-finishes-the-task): если сверка критериев СОСТОЯЛАСЬ (verified=True) и есть
-    # невыполненные критерии (unmet не пуст) — прогон НЕ доводит задачу. Блокируем ready, чтобы
-    # модель не могла объявить успех при незакрытой основной части задачи. Если сверка не состоялась
-    # (verified=False) — не блокируем (advisory, как было).
-    acceptance_unmet_block = False
-    if acceptance_criteria.get("verified") and acceptance_criteria.get("unmet"):
-        acceptance_unmet_block = True
+    # ПРИЁМКА КАК УСЛОВИЕ READY: B2-30 (сверка состоялась, критерий не выполнен) И
+    # green-means-checked (судья поднят и отработал, но сверка не установлена — 0 reads / рубер-штамп,
+    # прежде давало READY_FOR_PR на QUICK). Разбор и граница #176 — в предикате.
+    acceptance_block, acceptance_block_reason = acceptance_blocks_ready(acceptance_criteria)
     if baseline_diff:
         # критерий «no-regressions»: implementation_verification baseline-осведомлён (красная база
         # не блокирует), НО все ОСТАЛЬНЫЕ блокирующие гейты обязательны (P0.1). require_fix (для
         # fix-задач): дополнительно требуем, чтобы правка РЕАЛЬНО починила падавшую проверку.
-        ready = base_ok and not acceptance_unmet_block and no_regressions and (not other_blocking_unmet) \
+        ready = base_ok and not acceptance_block and no_regressions and (not other_blocking_unmet) \
             and (not require_fix or len(fixed) > 0) and spec_depth_ok and (not context_overflow) \
             and spec_complete_ok
         ready_criterion = "no-regressions+require-fix" if require_fix else "no-regressions"
     else:
-        ready = base_ok and not acceptance_unmet_block and (not gates["blocked"]) and spec_depth_ok \
+        ready = base_ok and not acceptance_block and (not gates["blocked"]) and spec_depth_ok \
             and (not context_overflow) and spec_complete_ok
         ready_criterion = "all-green"
 
@@ -1116,7 +1118,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     not_yet = _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad,
                                   spec_depth_missing, spec_incomplete, spec_bad_status,
-                                  context_overflow, approvals_cover_ok, approval_recheck)
+                                  context_overflow, approvals_cover_ok, approval_recheck,
+                                  acceptance_block_reason=(acceptance_block_reason if acceptance_block else None))
 
     report = {
         "schema_version": 1, "kind": "execution-pipeline",

@@ -1,57 +1,87 @@
-"""B2-30: acceptance_verify unmet criteria block ready_for_pr.
+"""Приёмка как условие READY_FOR_PR — предикат `acceptance_blocks_ready`.
 
-Наблюдение 12.08.2026 (ИИ-Среда): прогон ТРИЖДЫ остановился, не доделав задачу.
-Модель возвращала {done: true}, но критерии приёмки не были выполнены.
-acceptance_verify был advisory и не блокировал ready.
+Два наблюдения поля, одно правило: «зелёное значит проверено».
 
-Теперь: если сверка СОСТОЯЛАСЬ (verified=True) и есть unmet критерии — ready=False.
-Если сверка не состоялась (verified=False) — не блокируем (advisory).
+B2-30 (12.08.2026, ИИ-Среда): прогон ТРИЖДЫ останавливался, не доделав задачу. Модель
+возвращала {done: true}, но критерии приёмки не были выполнены. Сверка СОСТОЯЛАСЬ (verified=True) и
+критерий unmet -> ready=False.
+
+green-means-checked (30.08.2026, second-brownfield на ii-sreda): судья приёмки БЫЛ поднят и
+отработал, но вынес вердикт, не прочитав ни файла (0 reads, рубер-штамп). Прежде блок стоял ТОЛЬКО
+на verified+unmet, а несостоявшаяся сверка была advisory — и QUICK возвращал READY_FOR_PR на
+разрушительной правке. Теперь несостоявшаяся сверка ПРИ ПОДНЯТОМ судье (attempted=True) тоже не
+пускает в ready.
+
+Граница (#176): судью НЕ поднимали вовсе (attempted=False) -> НЕ блокируем; иначе завели бы гейт,
+который QUICK закрыть не может.
+
+ПРЕЖДЕ здесь тесты повторяли формулу `verified and unmet` инлайном — то есть проверяли КОПИЮ
+логики, а не ту, что стоит в конвейере. Теперь проверяется настоящий предикат: мутация в нём
+краснит эти тесты.
 """
 from __future__ import annotations
 
 import pytest
 
+from ai_ops_kit.engine.pipeline_helpers import acceptance_blocks_ready
+
 
 @pytest.mark.unit
-class TestAcceptanceUnmetBlocksReady:
+class TestAcceptanceBlocksReady:
     def test_verified_with_unmet_blocks(self):
-        """verified=True + unmet не пуст → acceptance_unmet_block=True."""
-        acceptance_criteria = {
-            "verified": True,
-            "met_all": False,
-            "unmet": [{"id": "AC-1", "text": "критерий не выполнен", "status": "unmet"}],
-        }
-        block = acceptance_criteria.get("verified") and acceptance_criteria.get("unmet")
-        assert block, "verified + unmet должны блокировать ready"
+        """B2-30: сверка состоялась, критерий не выполнен -> блок."""
+        block, reason = acceptance_blocks_ready({
+            "declared": True, "attempted": True, "verified": True, "met_all": False,
+            "count": 1, "unmet": ["AC-1"]})
+        assert block is True
+        assert "НЕ ВЫПОЛНЕНО" in reason
 
-    def test_verified_without_unmet_passes(self):
-        """verified=True + unmet пуст → не блокирует."""
-        acceptance_criteria = {
-            "verified": True,
-            "met_all": True,
-            "unmet": [],
-        }
-        block = acceptance_criteria.get("verified") and acceptance_criteria.get("unmet")
-        assert not block, "verified + все met не должны блокировать"
+    def test_verified_all_met_passes(self):
+        """Сверка состоялась, все критерии выполнены -> не блок."""
+        block, reason = acceptance_blocks_ready({
+            "declared": True, "attempted": True, "verified": True, "met_all": True,
+            "count": 1, "unmet": []})
+        assert block is False and reason is None
 
-    def test_unverified_does_not_block(self):
-        """verified=False (не сверено) → не блокирует (advisory)."""
-        acceptance_criteria = {
-            "verified": False,
-            "met_all": None,
-            "unmet": [],
-            "reason": "сверка не выполнена (нет провайдера)",
-        }
-        block = acceptance_criteria.get("verified") and acceptance_criteria.get("unmet")
-        assert not block, "не сверено не должно блокировать (advisory)"
+    def test_rubber_stamp_zero_reads_blocks(self):
+        """green-means-checked: судья отработал (attempted=True), но сверка не состоялась -> блок.
 
-    def test_unverified_with_unmet_does_not_block(self):
-        """verified=False + unmet не пуст → не блокирует (сверка не состоялась)."""
-        acceptance_criteria = {
-            "verified": False,
-            "met_all": None,
-            "unmet": [{"id": "AC-1", "text": "предположительно не выполнен"}],
-            "reason": "сверка не выполнена (сбой ревьюера)",
-        }
-        block = acceptance_criteria.get("verified") and acceptance_criteria.get("unmet")
-        assert not block, "если сверка не состоялась, unmet не блокирует (нет доказательства)"
+        Это ровно полевой дефект 30.08: 0 reads, verified=False, unmet пуст. Прежняя формула
+        `verified and unmet` пропускала его (verified=False), и путь возвращал READY_FOR_PR.
+        """
+        block, reason = acceptance_blocks_ready({
+            "declared": True, "attempted": True, "verified": False, "unmet": [],
+            "count": 1, "reads": [],
+            "reason": "вердикт вынесен без единого чтения (0 reads) — рубер-штамп сверкой не является"})
+        assert block is True, "рубер-штамп при поднятом судье обязан снимать READY_FOR_PR"
+        assert "рубер-штамп" in reason
+        assert "человеком" in reason, "причина обязана назвать способ закрыть (сверка / приёмка человеком)"
+
+    def test_no_judge_does_not_block(self):
+        """Граница #176: судью НЕ поднимали (attempted=False) -> advisory, не блок.
+
+        Требовать сверку там, где судьи нет, значило бы завести гейт, который QUICK закрыть не
+        может (тот же класс, что security-gate-closable-on-quick, PR #176).
+        """
+        block, reason = acceptance_blocks_ready({
+            "declared": True, "attempted": False, "verified": False, "unmet": [],
+            "count": 1, "reason": "критерии объявлены, но с результатом НЕ сверялись"})
+        assert block is False and reason is None
+
+    def test_not_declared_does_not_block(self):
+        """Критериев нет вовсе -> сверять нечего, блокировать нечем."""
+        block, reason = acceptance_blocks_ready({
+            "declared": False, "attempted": False, "verified": False, "count": 0})
+        assert block is False and reason is None
+
+    def test_declared_but_no_checkable_items_does_not_block(self):
+        """Раздел заполнен, но проверяемых пунктов нет (count=0, судья не поднимался) -> не блок."""
+        block, reason = acceptance_blocks_ready({
+            "declared": True, "attempted": False, "verified": False, "count": 0, "unmet": [],
+            "reason": "раздел критериев заполнен, но ни одного проверяемого пункта не найдено"})
+        assert block is False and reason is None
+
+    def test_empty_input_does_not_block(self):
+        """Отсутствующий блок приёмки не роняет предикат и не блокирует."""
+        assert acceptance_blocks_ready(None) == (False, None)
+        assert acceptance_blocks_ready({}) == (False, None)

@@ -57,7 +57,10 @@ scope: ai_ops_kit/engine/
 # 2026-08-26 (K6-глубина, срез readiness): из run_pipeline вынесен _assess_readiness (spec-depth +
 # Real Spec-First + сверка критериев приёмки B2-14 + context-budget overflow) -> run_pipeline 500 ->
 # 401. Глобальный max по-прежнему run_pipeline (401). Потолок 401.
-max_function_lines: 401
+# 2026-08-30 (green-means-checked): инлайновый B2-30-блок в run_pipeline заменён вызовом предиката
+# acceptance_blocks_ready, а вставка причины приёмки в not_yet вынесена в _build_not_yet_list ->
+# run_pipeline 401 -> 399. Глобальный max по-прежнему run_pipeline (399). Потолок 399 (ратчет вниз).
+max_function_lines: 399
 
 # Информация о текущей max-функции (для справки).
 max_function: run_pipeline
