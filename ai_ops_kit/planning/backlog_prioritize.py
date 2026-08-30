@@ -159,6 +159,25 @@ def save_override(path: Path, number: int, priority: str, reason: str = "", by: 
     path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
+def _apply_learning(root: Path, p: Priority) -> Priority:
+    """Мягкий сдвиг РАСЧЁТНОГО приоритета из прошлых human-override'ов (learning-from-human-overrides).
+
+    В отличие от `_apply_override` (жёсткое решение человека по ЭТОЙ задаче), здесь прошлые
+    governance-override'ы (`decisions/registry.yaml`) сдвигают score похожих задач в сторону
+    прежних решений человека. Сдвиг ограничен (`override_learning.MAX_SHIFT`) и ВСЕГДА назван в
+    объяснении; нет override'ов — score не тронут (честный unknown). Явный override по задаче сюда
+    не попадает (ветка `if c.number in ov_map` выше) и остаётся сильнее обучения.
+    """
+    from ai_ops_kit.governance import override_learning
+    adj = override_learning.adjust_priority(root, work_id=str(p.number), base_score=p.score)
+    if adj.get("override_count", 0) and adj.get("override_shift"):
+        p.score = adj["adjusted_score"]
+        p.priority = _bucket(p.score)
+        p.computed_priority = p.priority
+        p.explanation = f"ОБУЧЕНИЕ: {adj['explanation']}. {p.explanation}"
+    return p
+
+
 def _apply_override(p: Priority, ov: dict) -> Priority:
     p.overridden = True
     p.override_reason = ov.get("reason", "")
@@ -197,13 +216,16 @@ def prioritize_backlog(repo_or_root: str = ".", state: str = "open", overrides: 
     open_set = {c.number for c in rep.items}
     blocked = {c.number: sum(1 for d in (c.dependencies or []) if d in open_set) for c in rep.items}
 
+    root = Path(repo_or_root) if Path(repo_or_root).exists() else Path(".")
     ov_map = load_overrides(_overrides_path(repo_or_root, overrides))
     scored = []
     for c in rep.items:
         p = score_issue(c, dependents=dependents.get(c.number, 0),
                         blocked_by_open=blocked.get(c.number, 0))
         if c.number in ov_map:
-            p = _apply_override(p, ov_map[c.number])
+            p = _apply_override(p, ov_map[c.number])   # явный человек-override — авторитетнее обучения
+        else:
+            p = _apply_learning(root, p)               # мягкий сдвиг из прошлых governance-override'ов
         scored.append(p)
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     scored.sort(key=lambda x: (order.get(x.priority, 9), -x.score))
