@@ -1897,7 +1897,7 @@ def _assets_report_line(assets: dict) -> str:
 # Молча перезаписывать файл в чужом `.github/` тоже нельзя: владелец вправе его править. Поэтому
 # кит трогает только то, что САМ написал и что с тех пор никто не менял — это знание хранится
 # отпечатком. Остальное он НАЗЫВАЕТ, а решение оставляет человеку.
-CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml")
+CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml", "ai-ops-audit.yml")
 # Путь отпечатков считается ОТ ПЕРЕДАННОГО КОРНЯ, а не от глобального REPO_ROOT. Первая версия
 # брала глобальный — и `sync_ci_workflows(other_root)` писал отпечатки в текущий репозиторий, а не
 # в тот, который обслуживал. Поймано тем, что в коммит кита попал чужой `.ai/runtime/ci-templates.json`.

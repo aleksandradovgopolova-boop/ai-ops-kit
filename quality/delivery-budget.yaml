@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 530
+  substantive_files: 531
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -619,3 +619,21 @@ raises:
       это был бы вызов отсутствующего модуля (класс F-033). Проводка доказана мутацией
       (tests/unit/test_override_learning.py::TestWiredIntoPrioritize: снятие вызова красит сквозной
       тест). Растёт только счёт файлов (+1), объём в норме; потолок под факт 529 -> 530.
+  - at: '2026-08-31'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 530
+    to_count: 531
+    measured_before: 529
+    measured_after: 530
+    work: continuous-product-audit (аудит по расписанию)
+    files:
+      - templates/ci/ai-ops-audit.yml
+    why_it_works_in_the_child: >-
+      Новый ПОСТАВЛЯЕМЫЙ workflow: `ai-ops init`/`update` кладёт его в .github/workflows/ дочки
+      (зарегистрирован в CI_TEMPLATES). Он ИСПОЛНЯЕТСЯ в дочке по расписанию (cron еженедельно) и
+      запускает `ai-ops audit product` — периодическую половину исхода continuous_audit_runs_periodically
+      (аудит был только «по требованию»). Read-only: contents:read, ничего не коммитит, отчёт в summary.
+      Без файла в поставке у дочки не было бы планового аудита вовсе. Растёт только счёт файлов (+1),
+      объём в норме; потолок под факт 530 -> 531.
