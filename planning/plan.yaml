@@ -436,6 +436,11 @@ work:
   # проверяется машиной (quality/pr-budget.yaml + ai_ops_kit/validation/validate_pr_size.py, advisory-
   # обкатка по образцу parallel-safety); половина «закрытие ленты = влиты/зелёные PR» — протокольное
   # правило в docs/parallel-work.md (реестра лента→PR нет, машиной не сверяется). См. history.
+  # acceptance-rubber-stamp-does-not-reach-ready закрыта в историю 2026-08-30 (код в PR #364):
+  # полевой дефект второго brownfield (ii-sreda) — QUICK давал READY_FOR_PR при рубер-штампе приёмки
+  # (судья «подтвердил» результат, 0 reads). Поле `attempted` различает «судьи не было» (граница #176)
+  # от «судья был, но сверку не сделал»; предикат acceptance_blocks_ready стоит в обеих ветках ready;
+  # writer≠judge цел. Freeze-exception: найденный полем дефект. См. history/plan-history.yaml.
   - id: reviewer-prompt-uses-xml-anchors-measured
     title: >-
       Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
@@ -755,6 +760,12 @@ work:
   # запаса объявлен данными (quality/delivery-budget.yaml -> warnings.volume_reserve_fraction=0.10),
   # тающий запас называется ЗЕЛЁНЫМ предупреждением с авто-разбором в ТОМ прогоне, где он возник;
   # потолок остаётся блокирующим (пробой красным). См. history/plan-history.yaml.
+
+  # manifest-drops-historical-audit-ballast закрыта в историю 2026-08-30 (код в PR #365): манифест
+  # вёз в КАЖДУЮ дочку ~213КБ датированных аудит-записей (external_audit v2.79 133КБ + аудиты июля),
+  # не читаемых в дочке ни строкой кода (grep пуст, схема их не требует). Снял: manifest 252КБ→39КБ,
+  # индекс компонентов движка и читаемые ключи целы. Запас поставки 0.0%→4.9% под тем же потолком —
+  # потолок не трогали. См. history/plan-history.yaml.
 
   # selftests-are-granular-not-monolithic закрыта в историю 2026-08-28 (код гейта в PR #346):
   # конверсия 128 монолитов завершена ранее (unit-weeding, 0 *_selftest.py), а недостающий охранный

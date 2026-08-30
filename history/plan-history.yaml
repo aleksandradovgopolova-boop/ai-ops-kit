@@ -4698,3 +4698,56 @@ work:
     #   аудита; построен и краснит независимо. write_scope: [registry/, ai_ops_kit/validation/, tests/].
     #   Мелкие незакрытые нит-заметки ревью (channel_errors не проброшен pkg из check(); лишний import
     #   yaml в функции) — не блокируют, оставлены как есть.
+  - id: acceptance-rubber-stamp-does-not-reach-ready
+    title: >-
+      Несверенная приёмка (0 reads) на QUICK не даёт READY_FOR_PR — рубер-штамп сверкой не является
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-30'
+    pr: 364
+    evidence: tests/unit/test_acceptance_rubber_stamp_not_ready.py
+    result: >-
+      ЗАКРЫТО 2026-08-30 (код в PR #364; закрытие плана — отдельный учётный PR). Полевой дефект второго
+      brownfield-прогона (ii-sreda, диагностика): QUICK возвращал READY_FOR_PR, хотя писатель работу не
+      доделал (снёс полплана), а судья приёмки «подтвердил» результат, НЕ прочитав ни файла (0 reads,
+      рубер-штамп). Блок ready стоял только на verified+unmet (B2-30); несостоявшаяся сверка была
+      advisory — ложный green ровно на классе QUICK, где он и случился. Дефект воспроизведён на самом
+      ките (ready_for_pr=True) ДО правки. Правка: поле `attempted` в acceptance_verify различает «судьи
+      не было» (граница security-gate-closable-on-quick #176, не блок) от «судья был, но сверку не
+      сделал» (у обоих reads=[]); предикат pipeline_helpers.acceptance_blocks_ready заменил инлайн
+      B2-30 и стоит в ОБЕИХ ветках расчёта ready; причина и способ закрыть уходят в not_yet. writer≠judge
+      цел — не требуем нового судью, а не принимаем рубер-штамп за сверку. Перепроверяемо:
+      tests/unit/test_acceptance_rubber_stamp_not_ready.py (e2e otherwise-green QUICK + рубер-штамп →
+      NOT READY; граница #176; seam) + переписанный test_acceptance_unmet_blocks_ready.py на настоящий
+      предикат; мутация (откат attempted-ветки) красит e2e и предикат. CI поймал ратчет func-size (фикс
+      уменьшил run_pipeline 401→399 — опущен baseline; slow selftests-m, вне check-fast).
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: green-means-checked; owner_role: engineer; value: high
+    #   write_scope по факту: [ai_ops_kit/engine/, tests/, packages/func-size-baseline.yaml (ратчет)].
+    #   Freeze-exception: закрывает найденный полем дефект (не новое умение).
+  - id: manifest-drops-historical-audit-ballast
+    title: >-
+      Манифест не везёт в дочку ~213КБ исторических аудит-записей — поставка урезана 252КБ→39КБ
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-30'
+    pr: 365
+    evidence: tests/unit/test_installer.py
+    result: >-
+      ЗАКРЫТО 2026-08-30 (код в PR #365; закрытие плана — отдельный учётный PR). Рекомендованная из
+      ревью #364 работа по урезанию поставки (лента объёма 28.08 прямо просила: тонкий запас — сигнал к
+      ОТДЕЛЬНОЙ работе по урезанию, а не к подъёму потолка). manifest/ai-ops-manifest.yaml вёз в КАЖДУЮ
+      дочку ~213КБ датированных аудит-записей (external_audit_2026_07_17_v2_79 133КБ, аудиты исполнения
+      и самопроверки июля, dogfood-находки), не читаемых в дочке ни строкой кода. Проверено, не
+      заявлено: grep по ai_ops_kit/tools/installer пуст, схема package-manifest.schema.json их не
+      требует (additionalProperties:true, в required только schema_version/kind/ai_ops/spec_protocol/
+      update_policy), ни один тест на аудит-контент не опирается (все читают managed_set/package_version/
+      skills.shipped). Тот же класс балласта, что снятый patch_note. Снял строки 213-792 (удаление
+      диапазона, не yaml.dump — сохранены комментарии и порядок): 252КБ→39КБ, индекс компонентов движка
+      и все читаемые ключи целы, история аудитов в git и docs/changelog/v2.md. Перепроверяемо:
+      tests/unit/test_installer.py (footprint + kit-only-paths), test_delivery_budget,
+      test_validate_references — зелёные. Запас поставки восстановлен 0.7КБ(0.0%)→217КБ(4.9%) под ТЕМ ЖЕ
+      потолком (не трогал — прецедент release-claims «не опускаю до следующего замера»).
+    # РАЗБОР (как в плане):
+    #   type: quality; goal: checks-that-run; owner_role: engineer; value: medium
+    #   write_scope: [manifest/, newsfragments/]. Freeze-exception: снижает цену процесса (запас поставки).
