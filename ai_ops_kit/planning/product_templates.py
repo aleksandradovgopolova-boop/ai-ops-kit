@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -240,6 +241,61 @@ def report(repo_root: Path, reg: dict | None = None) -> dict:
               for s in (MISSING, INVALID, OUTDATED, VALID)}
     return {"artifacts": out, "counts": counts,
             "valid": counts[MISSING] == 0 and counts[INVALID] == 0 and counts[OUTDATED] == 0}
+
+
+def _instance_version(inst: Path, artifact: dict) -> int | None:
+    """Текущая версия ЭКЗЕМПЛЯРА: markdown — маркер template-version, yaml — поле template_version."""
+    if artifact.get("format") == "markdown":
+        return AR._read_template_version(inst)
+    try:
+        data = yaml.safe_load(inst.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    v = data.get("template_version")
+    return v if isinstance(v, int) else None
+
+
+def migrate_instance(repo_root: Path, artifact: dict, reg: dict | None = None,
+                     pkg_root: Path = PKG) -> dict:
+    """ПРИМЕНИТЬ миграции версий к ЭКЗЕМПЛЯРУ артефакта в дочке: провести его с текущей версии до
+    объявленной в реестре, выполнив `up.py` каждого шага (v_cur -> … -> v_declared).
+
+    Это НЕДОСТАЮЩАЯ ПОЛОВИНА механизма: `state_of` ставил диагноз OUTDATED, а миграцию до сих пор
+    НИКТО не применял — «обратная совместимость либо миграция» (PR-5) оставалась словом без
+    исполнения на стороне применения. Мигрирует ТОЛЬКО OUTDATED-экземпляр (для VALID/MISSING/INVALID
+    мигрировать нечего — честный отказ, не тихий «успех»). Каждый `up.py` вызывается как
+    `python up.py <путь-экземпляра>`, exit 0 = успех (контракт
+    migrations/product-layer-templates/README.md). FAIL-CLOSED: нет шага или `up.py` упал — прекращаем
+    и НЕ объявляем успех. Успех подтверждается ПОВТОРНЫМ state_of == VALID, а не фактом запуска
+    (green-means-checked). -> {artifact, migrated, from, to, steps, state_after, reason}.
+    """
+    reg = reg or AR.load()
+    aid = artifact.get("id")
+    st = state_of(repo_root, artifact, reg)
+    if st["state"] != OUTDATED:
+        return {"artifact": aid, "migrated": False, "state_after": st["state"],
+                "reason": f"состояние {st['state']} — мигрировать нечего"}
+    inst = _resolve_instance(repo_root, artifact.get("path") or "")
+    declared = (artifact.get("template") or {}).get("version")
+    cur = _instance_version(inst, artifact)
+    if not isinstance(cur, int) or not isinstance(declared, int):
+        return {"artifact": aid, "migrated": False, "state_after": st["state"],
+                "reason": "версия экземпляра или реестра не число — переход невозможен"}
+    steps = []
+    for frm, to in [(n, n + 1) for n in range(cur, declared)]:
+        up = _step_dir(aid, frm, to, pkg_root) / "up.py"
+        if not up.is_file():
+            return {"artifact": aid, "migrated": False, "from": cur, "to": declared, "steps": steps,
+                    "reason": f"нет миграции v{frm}->v{to} ({up}) — переход невозможен"}
+        r = subprocess.run([sys.executable, str(up), str(inst)], capture_output=True, text=True)
+        steps.append({"step": f"v{frm}->v{to}", "rc": r.returncode,
+                      "output": (r.stdout + r.stderr).strip()[:300]})
+        if r.returncode != 0:
+            return {"artifact": aid, "migrated": False, "from": cur, "to": declared, "steps": steps,
+                    "reason": f"миграция v{frm}->v{to} упала (rc={r.returncode})"}
+    after = state_of(repo_root, artifact, reg)
+    return {"artifact": aid, "migrated": after["state"] == VALID, "from": cur, "to": declared,
+            "steps": steps, "state_after": after["state"], "reason": after["reason"]}
 
 
 def main(argv=None):
