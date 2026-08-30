@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 529
+  substantive_files: 530
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -598,3 +598,24 @@ raises:
       ЧЕСТНО: тонкость запаса отражает дрейф main от двух лент подряд без merge queue (#354 сел под
       потолок, #355 пробил) — сигнал к отдельной работе по урезанию поставки (крупнейший кусок —
       manifest 252 КБ), не к молчаливому наращиванию запаса.
+  - at: '2026-08-31'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 529
+    to_count: 530
+    measured_before: 528
+    measured_after: 529
+    work: learning-from-human-overrides (честное закрытие ложно-закрытой работы)
+    files:
+      - ai_ops_kit/governance/override_learning.py
+    why_it_works_in_the_child: >-
+      Работа была помечена done (PR #292), но её модуль и тест на main НЕ существовали, а сам код,
+      где он есть, никто не вызывал — двойной ложный green. Модуль восстановлен И ПОДКЛЮЧЁН:
+      `backlog_prioritize.prioritize_backlog` вызывает `override_learning.adjust_priority` для задач
+      без жёсткого override — прошлые governance-override'ы человека (`decisions/registry.yaml`)
+      мягко сдвигают РАСЧЁТНЫЙ приоритет похожих задач, сдвиг ограничен и всегда назван в объяснении.
+      Модуль ИСПОЛНЯЕТСЯ в дочке: приоритизация бэклога — боевой путь дочки, и без файла в поставке
+      это был бы вызов отсутствующего модуля (класс F-033). Проводка доказана мутацией
+      (tests/unit/test_override_learning.py::TestWiredIntoPrioritize: снятие вызова красит сквозной
+      тест). Растёт только счёт файлов (+1), объём в норме; потолок под факт 529 -> 530.
