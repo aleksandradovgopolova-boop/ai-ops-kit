@@ -17,6 +17,7 @@
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
+  drift                — read-only снимок рассинхрона между продуктовыми артефактами (документация↔код; v3.37)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
   subsession           — взять ли работу в отдельную сессию самому: решение + потолок автономной
                          траты; сухо по умолчанию, тратит только с `--spawn`
@@ -3256,6 +3257,20 @@ def _force_utf8_stdio():
                 pass
 
 
+def cmd_drift(argv):
+    """v3.37 `ai-ops drift` — read-only снимок РАССИНХРОНА между продуктовыми артефактами дочки
+    (документация↔код и др.). Детектор `drift_artifacts` построен (#229) и уже читался риск-реестром,
+    но ОТДЕЛЬНОЙ команды на дочке не было — исход `drift_detected_between_artifacts` живьём было нечем
+    запустить. Команда ничего не меняет; печатает машиночитаемый отчёт (или пишет в файл через `-o`)."""
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "intelligence" / "drift_artifacts.py").is_file():
+            if str(_root) not in sys.path:
+                sys.path.insert(0, str(_root))
+            break
+    from ai_ops_kit.intelligence import drift_artifacts
+    return drift_artifacts.main([str(REPO_ROOT), *argv[2:]])
+
+
 def main(argv):
     _force_utf8_stdio()
     try:
@@ -3305,6 +3320,8 @@ def _dispatch(argv):
         return cmd_onboard(argv)
     if cmd == "audit":
         return cmd_audit(argv)
+    if cmd == "drift":
+        return cmd_drift(argv)
     if cmd == "session":
         return cmd_session(argv)
     if cmd == "subsession":
