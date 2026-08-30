@@ -325,19 +325,18 @@ goals:
   - id: ai-product-operations
     # заморозка: автономная продуктовая операционка — новое умение
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТА 2026-08-31: все четыре исхода Phase 4 верны живыми замерами.
+    status: achieved
     outcome:
       # Phase 4: drift detection, risk management, team sync, AI decision log.
-      # ЧАСТИЧНО ДОСТИГНУТА 2026-08-27 живым прогоном `ai-ops team` (агрегатор) на самом ките. Два
-      # исхода флипнуты замером: авто-сводка команды собралась (здоровье продукт/тех/delivery,
-      # блокеры, ближайшая работа, milestone «не проверено», 12 слепых зон); риски названы с текстом
-      # смягчения ([high] technical: привести документацию в соответствие коду). Два оставлены false:
-      # ai_decisions_logged_with_rationale ФЛИПНУТ замером 2026-08-31: на копии живой дочки
-      # ai-ops-cockpit log_ai_decision записал реальный actor:ai-эпизод С ОБОСНОВАНИЕМ в
-      # decisions/registry.yaml дочки (0 -> 1), комментарии владельца уцелели. drift оставлен false до
-      # тонкой команды `ai-ops drift`: детектор работает (поймал реальный рассинхрон на дочке — и мой
-      # внедрённый, и два уже бывших), но дочке нечем его запустить. См. todo drift-detected-between-artifacts.
-      drift_detected_between_artifacts: false
+      # risks_identified_with_mitigation и team_status_auto_generated флипнуты 2026-08-27 живым
+      # прогоном `ai-ops team` на ките (авто-сводка команды; риск [high] technical с текстом смягчения).
+      # ai_decisions_logged_with_rationale ФЛИПНУТ 2026-08-31: на копии дочки ai-ops-cockpit
+      # log_ai_decision записал реальный actor:ai-эпизод С ОБОСНОВАНИЕМ в decisions/registry.yaml дочки
+      # (0 -> 1), комментарии уцелели. drift_detected_between_artifacts ФЛИПНУТ 2026-08-31 после слияния
+      # команды `ai-ops drift` (#369): детектор поймал реальный рассинхрон на копии дочки (внедрённый +
+      # два уже бывших), и теперь дочка запускает его командой. ВСЕ ЧЕТЫРЕ верны -> цель достигнута.
+      drift_detected_between_artifacts: true
       risks_identified_with_mitigation: true
       team_status_auto_generated: true
       ai_decisions_logged_with_rationale: true
