@@ -268,24 +268,24 @@ goals:
   - id: product-operating-layer
     # заморозка: новый продуктовый слой — новое умение
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТА 2026-08-31: все шесть исходов Phase 1 верны живыми замерами.
+    status: achieved
     outcome:
       # Phase 1: обязательные артефакты, реестр, шаблоны, Product Passport, bootstrap, валидация.
-      # ЧАСТИЧНО ДОСТИГНУТА 2026-08-27 живым прогоном на дочке ~/ai-ops-cockpit (3.37.0), а не
-      # декларацией «код написан». Три исхода флипнуты замером: bootstrap создал `.ai-ops/` слой;
-      # `ai-ops validate product-layer` докладывает все четыре состояния (5 valid · 0 outdated ·
-      # 0 invalid · 0 missing); PRODUCT_PASSPORT.md сгенерирован из состояния репо с честными
-      # «_неизвестно_». artifact_registry_exists_as_data ФЛИПНУТ замером 2026-08-31: на копии живой
-      # дочки ai-ops-cockpit `ai-ops validate product-layer` перечислил 5 артефактов ИЗ реестра и
-      # подтвердил 5/5 valid на реальных .ai-ops/ файлах — список берётся из данных, не хардкодом
-      # (работа verify-artifact-registry-as-data закрыта). Ещё два оставлены false — вживую не
-      # подтверждены (см. todo-работы verify-template-migrations, continuous-product-audit).
+      # bootstrap/validation/passport флипнуты 2026-08-27 (живой прогон на ~/ai-ops-cockpit 3.37.0).
+      # artifact_registry_exists_as_data — 2026-08-31 (validate перечислил 5 артефактов ИЗ реестра,
+      # 5/5 valid на реальных .ai-ops/ файлах). templates_have_versions_and_migrations — 2026-08-31
+      # после #372: applier `migrate_instance` провёл РЕАЛЬНЫЙ POLICY.yaml дочки v1->v2 миграцией
+      # policy/v1-to-v2 (сквозной тест на живом артефакте). continuous_audit_runs_periodically —
+      # 2026-08-31 после #373: поставляемый ai-ops-audit.yml запускает `ai-ops audit product` ПО
+      # РАСПИСАНИЮ (cron). ВСЕ ШЕСТЬ верны -> цель достигнута. Работы verify-template-migrations и
+      # continuous-product-audit закрыты в history.
       artifact_registry_exists_as_data: true
-      templates_have_versions_and_migrations: false
+      templates_have_versions_and_migrations: true
       product_passport_auto_generated: true
       bootstrap_creates_product_layer: true
       validation_reports_missing_invalid_outdated_valid: true
-      continuous_audit_runs_periodically: false
+      continuous_audit_runs_periodically: true
 
   - id: backlog-intelligence
     # заморозка: работа с GitHub Issues — новое умение
@@ -347,9 +347,15 @@ goals:
     status: active
     outcome:
       # Phase 5: Observe → Understand → Plan → Prioritize → Execute → Evaluate → Learn → Replanning.
+      # policy_driven_execution ФЛИПНУТ 2026-08-31: схема POLICY.yaml сведена (#371) + живой прогон на
+      # копии дочки — enforcement:block РЕАЛЬНО блокирует require_approval, записанное одобрение
+      # человека снимает, observe не блокирует. learning_from_human_overrides ФЛИПНУТ 2026-08-31: код
+      # влит и подключён к приоритизации (#367), прошлый human-override сдвигает рекомендацию (сквозной
+      # тест + демонстрация, сдвиг назван «ОБУЧЕНИЕ»). autonomous_replanning_works остаётся false —
+      # капстоун (авто-перепланирование по сигналам drift/evolution) ещё не построен.
       autonomous_replanning_works: false
-      learning_from_human_overrides: false
-      policy_driven_execution: false
+      learning_from_human_overrides: true
+      policy_driven_execution: true
 
   - id: trustworthy-core
     # НОВАЯ ЦЕЛЬ. Подтверждена владельцем 2026-08-25. Не под capability-freeze: структура/цена
@@ -671,38 +677,13 @@ work:
   # реальных .ai-ops/ файлах; исход product-operating-layer.artifact_registry_exists_as_data флипнут).
   # См. history/plan-history.yaml.
 
-  - id: verify-template-migrations
-    title: "Живьём: у шаблонов продукта есть версии И миграции, применяемые на дочке"
-    type: quality
-    goal: product-operating-layer
-    status: todo
-    owner_role: engineer
-    write_scope: [ai_ops_kit/validation/, templates/product-layer/, tests/]
-    value: low
-    affects: {delivery_operations: true}
-    # Остаток живой проверки lane-2 (27.08). Версии шаблонов подтверждены (validate: «версия
-    # актуальна»), но исход templates_have_versions_and_migrations требует показать МИГРАЦИЮ:
-    # устаревший шаблон в дочке обновляется, а не только помечается outdated.
-    # Готово, когда: на дочке с устаревшим шаблоном показан переход версии (миграция), а не только
-    # диагноз outdated.
+  # verify-template-migrations закрыта в историю 2026-08-31 (#372): applier `migrate_instance` провёл
+  # реальный POLICY.yaml дочки v1->v2 миграцией policy/v1-to-v2 (сквозной тест); исход
+  # product-operating-layer.templates_have_versions_and_migrations флипнут. См. history/plan-history.yaml.
 
-  - id: continuous-product-audit
-    title: Периодический аудит продукта — артефакты, backlog, roadmap, delivery, риски
-    type: delivery
-    goal: product-operating-layer
-    status: todo
-    depends_on: []
-    owner_role: engineer
-    write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/validation/]
-    value: medium
-    affects: {analytics_learning: true, delivery_operations: true}
-    # PR-21: Проверка наличия/актуальности артефактов, состояние backlog, качество roadmap,
-    # delivery, техническое состояние, риски, зависимости, соответствие policy.
-    # Результат — машиночитаемый отчёт (Artifacts: 5/5, Backlog: Healthy, Delivery: Yellow, ...).
-    # ПОНИЖЕНА до todo 27.08: модуль построен, но исход continuous_audit_runs_periodically —
-    # «периодически» — одним прогоном не подтверждается; нужен реальный периодический запуск.
-    # Готово, когда: `ai-ops audit product` на живой дочке даёт валидный отчёт и запускается
-    # периодически (не только по требованию).
+  # continuous-product-audit закрыта в историю 2026-08-31 (#373): поставляемый ai-ops-audit.yml
+  # запускает `ai-ops audit product` ПО РАСПИСАНИЮ (cron); исход
+  # product-operating-layer.continuous_audit_runs_periodically флипнут. См. history/plan-history.yaml.
 
   # ── Phase 2: Backlog Intelligence ──
 
