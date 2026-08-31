@@ -26,12 +26,23 @@ registry_type: delivery-budget
 
 # Действующие потолки. Меняются только вместе с записью в `raises` ниже.
 ceilings:
-  # Объём managed-поставки в байтах. 3.9 МБ = 3.9 * 1024 * 1024.
-  volume_bytes: 4332000
+  # Объём managed-поставки в байтах.
+  volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 525
+  substantive_files: 532
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
+
+# Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
+# `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
+# меньше этой доли volume_bytes, прогон печатает ЗЕЛЁНОЕ предупреждение с разбором — чтобы
+# исчерпание называлось в ТОМ прогоне, где оно возникло, а не падением на следующей работе. Потолок
+# при этом остаётся блокирующим (пробой — красный assert), предупреждение добавляется К нему.
+# Значение 0.10 — из разбора работы: два пробоя за сессию оба случились с запасом в единицы КБ
+# (< 0.1% потолка ~4 МБ); 10% (~440 КБ) заранее ловит именно такой дрейф, не поднимая шум на каждом
+# обычном подъёме.
+warnings:
+  volume_reserve_fraction: 0.10
 
 raises:
   # Порядок: первым идёт подъём ОБЪЁМА (fail-closed проба test_a_raise_that_does_not_raise мутирует
@@ -398,3 +409,254 @@ raises:
       24.08 «декоративна») — класс F-033. Замер установленной поставки 4317233 -> 4326123 Б перешёл
       прежний потолок 4324000 — подъём под факт до 4332000. Крупнейший кандидат на вынос по-прежнему
       release-claims (78 КБ).
+  - at: '2026-08-25'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 525
+    to_count: 528
+    measured_before: 525
+    measured_after: 527
+    work: trustworthy-core (W3)
+    files:
+      - ai_ops_kit/engops/session_events.py
+      - ai_ops_kit/kernel/ports.py
+    why_it_works_in_the_child: >-
+      Два файла trustworthy-core, оба ИСПОЛНЯЮТСЯ в дочке. session_events — подписчик спутника
+      engops на событие ядра run_completed (шина shared/events.py, W3): регистрируется через
+      engops/__init__ и явный импорт в CLI на пути run, даёт advise-only session recommendation.
+      kernel/ports.py — контракт ядра (K0): конвейер run_pipeline на каждом прогоне сверяет свои
+      параметры с ExecutionSpec (страж дрейфа контракта); реализации портам ещё НЕ соответствуют —
+      это записано в самом страже и остаётся долгом Phase B.
+  - at: '2026-08-25'
+    what: volume
+    from_bytes: 4332000
+    to_bytes: 4356000
+    measured_before: 4326123
+    measured_after: 4350400
+    work: trustworthy-core (W3, шина событий)
+    files:
+      - ai_ops_kit/shared/events.py
+      - ai_ops_kit/engops/session_events.py
+      - ai_ops_kit/shared/contracts.py
+      - ai_ops_kit/engine/ai_ops_run.py
+    why_it_works_in_the_child: >-
+      Шина событий ядра (W3) + контракт ядра (K0): shared/events.py — emit/subscribe, contracts.py
+      вырос на KernelEvent, ai_ops_run.py испускает run_completed после каждого прогона,
+      session_events подписан (advise-only), kernel/ports.py сверяется конвейером на каждом прогоне.
+      Всё исполняется В дочке — без шины и контракта их звал бы отсутствующий файл (класс F-033).
+      Замер 4326123 -> ~4350400 Б перешёл потолок 4332000 — подъём под факт до 4356000.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4356000
+    to_bytes: 4360000
+    measured_before: 4350400
+    measured_after: 4356181
+    work: wave5 K6-глубина (расщепление god-функций ядра)
+    files:
+      - ai_ops_kit/engine/ai_ops_run.py
+      - ai_ops_kit/engine/execution_pipeline.py
+    why_it_works_in_the_child: >-
+      K6-глубина (Волна 5): god-функции run() и run_pipeline расщепляются на фазовые функции
+      внутри ai_ops_run.py и execution_pipeline.py — ОБА модуля исполняются В дочке на каждом
+      прогоне: ai_ops_run.run() это транзакционный контроллер прогона, execution_pipeline.
+      run_pipeline() — движок исполнения (detect/execute/evidence/gate/commit). Вынос фаз в
+      именованные функции (_evaluate_security/_compile_context_artifacts/_add_context_reports/
+      _enrich_run_report/_commit_barrier/_register_active_work) добавляет def+докстринг на
+      исполняемом пути, но делает критический путь тестируемым по фазам; взамен func-size ратчет
+      опущен 1275 -> 1003. Замер 4350400 -> 4356181 Б перешёл потолок 4356000 — подъём до 4360000.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4360000
+    to_bytes: 4364000
+    measured_before: 4356181
+    measured_after: 4362327
+    work: wave5 K6-глубина (расщепление run_pipeline + execute_sequence)
+    files:
+      - ai_ops_kit/engine/execution_pipeline.py
+      - ai_ops_kit/engine/workpackage_executor.py
+    why_it_works_in_the_child: >-
+      K6-глубина (Волна 5): god-функции run_pipeline (execution_pipeline.py) и execute_sequence
+      (workpackage_executor.py) расщеплены на фазовые функции. ОБА модуля исполняются В дочке на
+      каждом прогоне — run_pipeline это движок исполнения (detect/execute/evidence/gate/commit),
+      execute_sequence — исполнитель пакетов work-package. Вынос фаз в именованные функции добавляет
+      def+докстринг на исполняемом пути; взамен критический путь стал тестируемым по фазам, а
+      func-size ратчет опущен 864 -> 812. Замер 4356181 -> 4362327 Б перешёл потолок 4360000 — подъём до 4364000.
+  - at: '2026-08-26'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 528
+    to_count: 529
+    measured_before: 527
+    measured_after: 528
+    work: wave5 K6-глубина (RunContext + вынос resume-policy-restore)
+    files:
+      - ai_ops_kit/engine/run_context.py
+    why_it_works_in_the_child: >-
+      RunContext (ai_ops_kit/engine/run_context.py) ИСПОЛНЯЕТСЯ в дочке на каждом pipeline-прогоне:
+      ai_ops_run.run() строит его через RunContext.from_run_args и передаёт вынесенным фазам
+      контроллера (первая — _restore_resume_policy, восстановление policy/классификации из
+      run-settings при resume) как переписываемое состояние прогона. Без модуля в поставке импорт
+      `from ai_ops_kit.engine.run_context import RunContext` в ai_ops_run упал бы у дочки на первом
+      же прогоне (ImportError на критическом пути). Растёт только счёт файлов, потолок под факт
+      528 -> 529; func-size ратчет run() опущен 812 -> 750.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4364000
+    to_bytes: 4372000
+    measured_before: 4362327
+    measured_after: 4369656
+    work: wave5 K6-глубина (RunContext + вынос resume-policy-restore)
+    files:
+      - ai_ops_kit/engine/run_context.py
+    why_it_works_in_the_child: >-
+      Тот же новый поставляемый модуль RunContext (ai_ops_kit/engine/run_context.py, 5485 Б):
+      ai_ops_run импортирует его на критическом пути run() и строит на каждом прогоне дочки, а
+      генерируемый manifest поставки прибавляет строку на этот файл. Объём установленной поставки
+      перешёл потолок 4364000 (замер 4362327 -> 4369656 Б, +7329 Б: сам модуль плюс запись manifest)
+      — подъём до 4372000. Рост объёмом оправдан работой файла в дочке, не запасом: без модуля
+      контроллер прогона не импортируется.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4372000
+    to_bytes: 4376000
+    measured_before: 4371493
+    measured_after: 4374580
+    work: 'wave5 K6-глубина (расщепление run_pipeline — isolation + evidence)'
+    files:
+      - ai_ops_kit/engine/execution_pipeline.py
+    why_it_works_in_the_child: >-
+      execution_pipeline.py ИСПОЛНЯЕТСЯ в дочке на каждом прогоне (run_pipeline — движок
+      detect/execute/evidence/gate/commit). K6-расщепление god-функции run_pipeline на фазы
+      (_setup_isolation, _assemble_evidence) добавляет def+докстринг и комментарии выноса на
+      исполняемом пути того же модуля (+3087 Б), взамен func-size ратчет опущен 730 -> 500 и
+      критический путь стал тестируемым по фазам. Замер 4371493 -> 4374580 Б перешёл потолок
+      4372000 — подъём до 4376000. Рост — работой кода в дочке, а не запасом.
+  - at: '2026-08-26'
+    what: volume
+    from_bytes: 4376000
+    to_bytes: 4380000
+    measured_before: 4374580
+    measured_after: 4376846
+    work: 'wave5 K6-глубина (расщепление run_pipeline — readiness, последний срез)'
+    files:
+      - ai_ops_kit/engine/execution_pipeline.py
+    why_it_works_in_the_child: >-
+      execution_pipeline.py ИСПОЛНЯЕТСЯ в дочке на каждом прогоне. Последний срез god-функции
+      run_pipeline — вынос ready-критериев уровня спеки (_assess_readiness: spec-depth, Real
+      Spec-First, сверка критериев приёмки B2-14, context-budget) добавляет def+докстринг и
+      call/unpack на исполняемом пути того же модуля (+2265 Б), взамен func-size ратчет опущен
+      500 -> 401 и критический путь стал тестируемым по фазам. Замер 4374580 -> 4376846 Б перешёл
+      потолок 4376000 — подъём до 4380000. На этом расщепление run_pipeline завершено, рост
+      объёмом от него останавливается; рост — работой кода в дочке, а не запасом.
+  - at: '2026-08-27'
+    what: volume
+    from_bytes: 4380000
+    to_bytes: 4410000
+    measured_before: 4377068
+    measured_after: 4404975
+    work: wave6 (no-verdict + reach-phrase + night-review-autofix; parallel-safety едет клоном)
+    files:
+      - ai_ops_kit/engine/worktree.py
+      - ai_ops_kit/intelligence/nightly_review.py
+      - ai_ops_kit/gates/gate_executor.py
+      - ai_ops_kit/engine/pipeline_evidence.py
+      - ai_ops_kit/engine/tool_loop.py
+      - ai_ops_kit/providers/orchestrator_providers.py
+      - ai_ops_kit/ui/presenter.py
+    why_it_works_in_the_child: >-
+      НАКОПИТЕЛЬНЫЙ подъём волны 6 (замер на объединённом дереве всех работ, не только этих файлов —
+      так же, как прежние записи о дрейфе main от слитых лент). Перечисленные модули ИСПОЛНЯЮТСЯ в
+      дочке и потому едут в поставке: worktree/nightly_review дают ночной автофикс класса A в worktree
+      дочки; gate_executor/pipeline_evidence/tool_loop/orchestrator_providers делают отсутствие
+      вердикта судьи честным отказом на боевом пути прогона дочки; presenter называет рабочие копии в
+      ответе человеку. Без них в поставке был бы вызов отсутствующего/старого файла — класс F-033.
+      Параллельная безопасность (validate_parallel_safety) объёма НЕ добавляет: её CI-контур дочки
+      КЛОНИРУЕТ кит и зовёт валидатор из клона, а не из managed-поставки. Замер установленной поставки
+      base main 4 377 068 -> объединённое дерево волны 4 404 975 Б (+27 907 Б: рост семи исполняемых
+      модулей плюс строки manifest) перешёл прежний потолок 4 380 000 — подъём под факт до 4 410 000
+      (запас ~5 КБ). Рост — работой кода в дочке, а не запасом.
+  - at: '2026-08-28'
+    what: volume
+    from_bytes: 4410000
+    to_bytes: 4420000
+    measured_before: 4404975
+    measured_after: 4415346
+    work: spend-ceiling-counts-only-this-work (накопительно с design-gates-cite-constitution-ids #354)
+    files:
+      - ai_ops_kit/engops/process_spend.py
+      - ai_ops_kit/ui/presenter.py
+    why_it_works_in_the_child: >-
+      НАКОПИТЕЛЬНЫЙ подъём (замер установленной поставки на объединённом дереве, как в записи волны 6).
+      process_spend.py и presenter.py ИСПОЛНЯЮТСЯ в дочке на боевом пути прогона: process_spend держит
+      потолок разбора (теперь привязан к личности сессии — правка дефекта 487d952b, +5 376 Б реальной
+      логики), presenter формулирует рекомендацию человеку (ведёт specify->plan->run, +580 Б). В тот же
+      замер входит design-gates-cite-constitution-ids (#354): его reconciliation сел ~610 Б под прежний
+      потолок и объёма отдельной записью не потребовал. Замер 4 404 975 -> 4 415 346 Б перешёл потолок
+      4 410 000 — подъём под факт до 4 420 000 (запас ~4.6 КБ). Рост — работой кода в дочке, а не запасом.
+      ЧЕСТНО: тонкость запаса отражает дрейф main от двух лент подряд без merge queue (#354 сел под
+      потолок, #355 пробил) — сигнал к отдельной работе по урезанию поставки (крупнейший кусок —
+      manifest 252 КБ), не к молчаливому наращиванию запаса.
+  - at: '2026-08-31'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 529
+    to_count: 530
+    measured_before: 528
+    measured_after: 529
+    work: learning-from-human-overrides (честное закрытие ложно-закрытой работы)
+    files:
+      - ai_ops_kit/governance/override_learning.py
+    why_it_works_in_the_child: >-
+      Работа была помечена done (PR #292), но её модуль и тест на main НЕ существовали, а сам код,
+      где он есть, никто не вызывал — двойной ложный green. Модуль восстановлен И ПОДКЛЮЧЁН:
+      `backlog_prioritize.prioritize_backlog` вызывает `override_learning.adjust_priority` для задач
+      без жёсткого override — прошлые governance-override'ы человека (`decisions/registry.yaml`)
+      мягко сдвигают РАСЧЁТНЫЙ приоритет похожих задач, сдвиг ограничен и всегда назван в объяснении.
+      Модуль ИСПОЛНЯЕТСЯ в дочке: приоритизация бэклога — боевой путь дочки, и без файла в поставке
+      это был бы вызов отсутствующего модуля (класс F-033). Проводка доказана мутацией
+      (tests/unit/test_override_learning.py::TestWiredIntoPrioritize: снятие вызова красит сквозной
+      тест). Растёт только счёт файлов (+1), объём в норме; потолок под факт 529 -> 530.
+  - at: '2026-08-31'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 530
+    to_count: 531
+    measured_before: 529
+    measured_after: 530
+    work: continuous-product-audit (аудит по расписанию)
+    files:
+      - templates/ci/ai-ops-audit.yml
+    why_it_works_in_the_child: >-
+      Новый ПОСТАВЛЯЕМЫЙ workflow: `ai-ops init`/`update` кладёт его в .github/workflows/ дочки
+      (зарегистрирован в CI_TEMPLATES). Он ИСПОЛНЯЕТСЯ в дочке по расписанию (cron еженедельно) и
+      запускает `ai-ops audit product` — периодическую половину исхода continuous_audit_runs_periodically
+      (аудит был только «по требованию»). Read-only: contents:read, ничего не коммитит, отчёт в summary.
+      Без файла в поставке у дочки не было бы планового аудита вовсе. Растёт только счёт файлов (+1),
+      объём в норме; потолок под факт 530 -> 531.
+  - at: '2026-08-31'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 531
+    to_count: 532
+    measured_before: 530
+    measured_after: 531
+    work: autonomous-replanning-loop (капстоун Фазы 5)
+    files:
+      - ai_ops_kit/intelligence/replan_loop.py
+    why_it_works_in_the_child: >-
+      Капстоун Фазы 5: цикл, который САМ сводит приоритеты плана к реальности, замыкает продуктовую
+      ОС (Observe -> ... -> Replanning). Модуль replan_loop ИСПОЛНЯЕТСЯ в дочке командой `ai-ops replan`
+      над её `planning/plan.yaml`: без флага строит отчёт-перепланирование (что переупорядочено и
+      почему + структурные предложения), с `--apply` записывает переприоритизацию (класс A: обратимо,
+      состав работ не меняет) в машинный артефакт `.ai/project/replan/latest.yaml` дочки, авторский
+      план и main не трогая. Он СВОДИТ уже поставляемые сигналы (next_work/delivery_plan drift+
+      git_disagreements/risk_register/backlog_prioritize), а не заводит вторую правду. Без модуля в
+      поставке команда `ai-ops replan` (INTENTS/DIRECT_INTENTS в cli/ai_ops_cli) звала бы отсутствующий
+      файл — класс F-033, механизм зелёный у кита и недостижимый у дочки. Растёт только счёт файлов
+      (+1: сам оркестратор; CLI вырос кодом, не файлом), объём в норме (managed 4186733 < 4420000);
+      потолок под факт 531 -> 532.

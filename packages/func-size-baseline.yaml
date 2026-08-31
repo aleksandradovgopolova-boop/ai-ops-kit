@@ -1,6 +1,6 @@
 # Ратчет максимального размера функции в ai_ops_kit/engine/.
 #
-# Замер сделан ДО расщепления run_pipeline (K6). Потолок = текущий max.
+# K6-глубина (Волна 5): god-функции реально расщепляются на фазы, а не только замораживаются.
 # Ратчет ходит ТОЛЬКО ВНИЗ: разбиение god-функций снижает потолок,
 # новая god-функция сверх потолка — красный сигнал.
 #
@@ -10,40 +10,92 @@ kind: func-size-ratchet
 scope: ai_ops_kit/engine/
 
 # Потолок максимального размера функции (в строках).
-# Текущий max: run() в ai_ops_run.py — 1285 строк (K7 добавил invariant checks).
-# После K6 (расщепление run_pipeline) ожидается снижение.
-max_function_lines: 1285
+# 2026-08-25: 1285 -> 1275 — замер после K6 (из run_pipeline извлечено 6 функций) показал
+# снижение max; ратчет ходит только вниз, потолок опущен под факт.
+# 2026-08-26 (K6-глубина, срез security): из run_pipeline вынесена _evaluate_security -> run_pipeline
+# 1075 -> 864. Потолок тогда держал run() (1275) — он глобальный max.
+# 2026-08-26 (K6-глубина, срез context): из run() вынесена _compile_context_artifacts (bundle/payload/
+# hybrid/spec/work-package) -> run() 1275 -> 1182. Это ПЕРВЫЙ срез, реально опустивший потолок:
+# 1275 -> 1182 (новый глобальный max — по-прежнему run(), но уже меньше).
+# 2026-08-26 (K6-глубина, срез context-reports): из run() вынесена _add_context_reports (контекст-
+# отчёты в rep: bundle/shadow/hybrid/payload/spec/work-package) -> run() 1182 -> 1129. Потолок 1129.
+# 2026-08-26 (K6-глубина, срез provenance): из run() вынесена _enrich_run_report (provenance-поля
+# отчёта: runtime/provider/model/base/lifecycle-dict) -> run() 1129 -> 1084. Потолок 1084.
+# 2026-08-26 (K6-глубина, срез commit-barrier): из run() вынесена _commit_barrier (durable RunHandoff
+# + final report + journal-checkpoint перед доставкой) -> run() 1084 -> 1051 (с учётом ужатых до
+# бюджета поставки K6-докстрингов/комментариев). Потолок 1051.
+# 2026-08-26 (K6-глубина, срез active-work): из run() вынесена _register_active_work (регистрация
+# active-work + concurrency-preflight координации параллельных сессий) -> run() 1051 -> 1003. Потолок 1003.
+# 2026-08-26 (K6-глубина, срез lifecycle-start): из run() вынесена _start_lifecycle (workitem.start +
+# durable RunPlan/run-settings + journal run_start) -> run() 1003 -> 957. Потолок 957.
+# 2026-08-26 (K6-глубина, срез resume-preflight): из run() вынесен _resume_gate (гейт продолжения
+# WorkItem: can_resume/base-rewritten/revalidation) -> run() 957 -> 910. Потолок 910.
+# 2026-08-26 (K6-глубина, срез run-cost): из run() вынесена _finalize_run_cost (агрегат стоимости
+# + usage-ledger + очистка call-context) -> run() 910 -> 866. Потолок 866 (почти вровень с run_pipeline 864).
+# 2026-08-26 (K6-глубина, срез finalize): из run() вынесена _finalize_run (run_completed + run_end +
+# статус работы + снятие active-work) -> run() 866 -> 812. Глобальный max теперь run_pipeline (864). Потолок 864.
+# 2026-08-26 (K6-глубина, срез run_pipeline-фаз): run_pipeline 864 -> 730; глобальный max теперь run() (812). Потолок 812.
+# 2026-08-26 (K6-глубина, срез resume-policy-restore): из run() вынесен _restore_resume_policy
+# (восстановление policy/классификации из run-settings при resume) через объект RunContext ->
+# run() 812 -> 750. Глобальный max по-прежнему run() (750). Потолок 750.
+# 2026-08-26 (K6-глубина, срез model-routing): из run() вынесен _resolve_models (router->runtime,
+# JIT-trust, complexity-aware strong-executor, provider-fallback) через RunContext -> run() 750 ->
+# 610. Глобальный max теперь run_pipeline (730). Потолок 730.
+# 2026-08-26 (K6-глубина, срез execute+fix-loop): из run() вынесен _execute_with_fix_loop
+# (исполнение движком + fix-loop с quality-эскалацией writer'а) через RunContext -> run() 610 ->
+# 458. Глобальный max по-прежнему run_pipeline (730). Потолок 730 (без изменения).
+# 2026-08-26 (K6-глубина, срез delivery): из run() вынесен _deliver (governance-gate + транзакционная
+# доставка: DeliveryIntent -> внешнее действие -> DeliveryReceipt, outcome_unknown/fail-closed) через
+# RunContext -> run() 458 -> 315. Все четыре оставшихся крупных блока run() разобраны; run() больше НЕ
+# держит потолок. Глобальный max — run_pipeline (730). Потолок 730 (без изменения).
+# 2026-08-26 (K6-глубина, срез isolation): из run_pipeline вынесен _setup_isolation (base-binding +
+# worktree-изоляция + resume) -> run_pipeline 730 -> 616. Глобальный max по-прежнему run_pipeline (616).
+# Потолок 616.
+# 2026-08-26 (K6-глубина, срез evidence): из run_pipeline вынесен _assemble_evidence (сбор evidence
+# на SHA + наполнение gate_ev: collect/intake/regression/authored/reevaluate/освобождения/UI/seam/
+# reviews/security) -> run_pipeline 616 -> 500. Глобальный max по-прежнему run_pipeline (500). Потолок 500.
+# 2026-08-26 (K6-глубина, срез readiness): из run_pipeline вынесен _assess_readiness (spec-depth +
+# Real Spec-First + сверка критериев приёмки B2-14 + context-budget overflow) -> run_pipeline 500 ->
+# 401. Глобальный max по-прежнему run_pipeline (401). Потолок 401.
+# 2026-08-30 (green-means-checked): инлайновый B2-30-блок в run_pipeline заменён вызовом предиката
+# acceptance_blocks_ready, а вставка причины приёмки в not_yet вынесена в _build_not_yet_list ->
+# run_pipeline 401 -> 399. Глобальный max по-прежнему run_pipeline (399). Потолок 399 (ратчет вниз).
+max_function_lines: 399
 
 # Информация о текущей max-функции (для справки).
-max_function: run
-max_function_file: ai_ops_run.py
-max_function_lineno: 430
+max_function: run_pipeline
+max_function_file: execution_pipeline.py
+max_function_lineno: 827
 
-# Топ-10 крупнейших функций на момент замера (2026-08-25).
+# Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
 top_10:
   - name: run
     file: ai_ops_run.py
-    lineno: 430
-    size: 1270
+    lineno: 1580
+    size: 315
   - name: run_pipeline
     file: execution_pipeline.py
-    lineno: 109
-    size: 1075
+    lineno: 827
+    size: 401
   - name: execute_sequence
     file: workpackage_executor.py
     lineno: 532
     size: 453
   - name: main
     file: ai_ops_run.py
-    lineno: 1906
+    lineno: 2020
     size: 206
+  - name: _evaluate_security
+    file: execution_pipeline.py
+    lineno: 218
+    size: 184
   - name: route
     file: ai_route.py
     lineno: 42
     size: 177
   - name: _print_pipeline
     file: ai_ops_run.py
-    lineno: 1702
+    lineno: 1816
     size: 132
   - name: resume_preflight
     file: run_handoff.py
@@ -53,11 +105,7 @@ top_10:
     file: acceptance_verify.py
     lineno: 531
     size: 108
-  - name: execute
-    file: tool_broker.py
-    lineno: 614
-    size: 103
-  - name: run_loop
-    file: tool_loop.py
-    lineno: 204
-    size: 102
+  - name: _compile_context_artifacts
+    file: ai_ops_run.py
+    lineno: 430
+    size: 105

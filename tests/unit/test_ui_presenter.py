@@ -134,9 +134,12 @@ def test_status_and_health_speak_to_a_human(tmp_path):
     assert "ничего" in out.lower() or "не иду" in out.lower() or "не идёт" in out.lower()
 
     busy = PR.from_active_work({"active": [
-        {"id": "w1", "affected_areas": ["src/api/"], "branch": "ai-ops/w1",
+        {"id": "w1", "affected_areas": ["src/api/"], "branch": "wave6/api-refactor",
          "status": "in-progress", "owner_session": "s1"}]})
-    assert "w1" not in PR.render(busy, audience="product"), "id работы продакту не нужен"
+    busy_product = PR.render(busy, audience="product")
+    assert "w1" not in busy_product, "id работы продакту не нужен"
+    # но рабочая копия (ветка/лента) — называется: ответ говорит, ГДЕ идёт работа, а не только «здесь».
+    assert "wave6/api-refactor" in busy_product, "рабочая копия должна быть названа человеку"
     assert "w1" in PR.render(busy, audience="debug")
 
     # HEALTH без данных: честность сохранена, жаргон убран, следующий шаг назван.
@@ -372,3 +375,43 @@ def test_unreadable_repo_is_not_described_as_understood():
     out = PR.render(PR.from_repository_understanding(rep), audience="product")
     assert "не смог" in out.lower()
     assert "разобрался" not in out.lower()
+
+
+def _spend_check(intent="plan", state="over_ceiling"):
+    return {"kind": "ProcessSpendCheck", "intent": intent, "state": state,
+            "blocks": state == "over_ceiling", "spent_on_process": 60000, "ceiling": 50000,
+            "session_total_tokens": 60000, "process_steps": ["specify", "plan"],
+            "decision_ref": "потолок владельца 2026-08-17: 50 000 токенов"}
+
+
+def test_ceiling_recommendation_does_not_advise_skipping_the_declared_step():
+    """Полевой дефект 487d952b (вторая половина): потолок разбора рекомендовал «идти делать» —
+    то есть ПЕРЕПРЫГНУТЬ объявленный шаг specify→plan→run. Рекомендация обязана вести по объявленному
+    пути, а не в обход него: иначе кит сам сталкивает человека с процесса, который же и предписал."""
+    msg = PR.from_process_spend(_spend_check("plan"),
+                                continue_command="./ai-ops plan \"t\" --feature w --spend-ok",
+                                run_command="./ai-ops run \"t\" --feature w --execute")
+    reco = msg["decision"]["recommendation"]
+    # Явно ведёт по объявленному пути и прямо запрещает перепрыгивать шаг.
+    assert "не пропускать" in reco.lower(), reco
+    assert "довести" in reco.lower(), reco
+    # Прежняя рекомендация «идти делать по тому, что уже есть» больше не звучит.
+    assert "идти делать" not in reco.lower(), reco
+    assert "по тому, что уже есть" not in reco.lower(), reco
+
+
+def test_ceiling_still_asks_and_names_the_spend():
+    """Контроль: это по-прежнему ВОПРОС с названной тратой и обоими исходами — механизм не выключен,
+    только рекомендация перестала толкать в обход шага."""
+    msg = PR.from_process_spend(_spend_check("plan"),
+                                continue_command="cont", run_command="run")
+    assert msg["status"] == "needs_input"
+    assert msg["decision"]["question"]
+    # оба исхода доступны: и довести шаг, и (если описание готово) взять в исполнение
+    assert "cont" in " ".join(msg["next"]) and "run" in " ".join(msg["next"])
+
+
+def test_ceiling_unknown_stays_honest():
+    """Контроль: неизмеримый расход остаётся degraded «не вижу», а не выдаётся за норму."""
+    msg = PR.from_process_spend(_spend_check(state="unknown"))
+    assert msg["status"] == "degraded"

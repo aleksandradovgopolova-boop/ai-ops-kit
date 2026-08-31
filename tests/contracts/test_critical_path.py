@@ -183,7 +183,9 @@ class TestOrchestratorContracts:
         def capture_runner(cmd):
             seen_cmd.append(cmd)
             class R:
-                stdout = json.dumps({"result": "", "usage": {}})
+                # непустой result: тест смотрит только флаги команды. Пустой ответ теперь законно =
+                # ProviderRefusal(empty_answer) (как у API-провайдеров) и падал бы до проверки флагов.
+                stdout = json.dumps({"result": "OK", "usage": {}})
                 returncode = 0
                 stderr = ""
             return R()

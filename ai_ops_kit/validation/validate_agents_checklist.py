@@ -39,6 +39,16 @@ ALLOWED = (
     # против диффа PR. Обёртка в pytest бессмысленна: сканер сам fail-closed и тестируется
     # отдельными юнит-тестами (test_kit_security_scan_job).
     re.compile(r"^python3?\s+ai_ops_kit/security/security_scan\.py\b"),
+    # Параллельная безопасность — тот же класс, что security_scan: детерминированная проверка
+    # ДИФФА PR (смешал ли PR код с координационным файлом), а не pytest-тест. Зовётся напрямую
+    # с `--base`; логика покрыта юнит-тестами (test_parallel_safety), проводка — отдельным
+    # тестом джобы (test_kit_parallel_safety_job).
+    re.compile(r"^python3?\s+ai_ops_kit/validation/validate_parallel_safety\.py\b"),
+    # Размер PR — тот же класс: детерминированная проверка ДИФФА PR (не пробил ли PR потолок
+    # размера из quality/pr-budget.yaml), а не pytest-тест. Зовётся напрямую с `--base` (advisory,
+    # без --strict — обкатка non-blocking). Логика покрыта юнит-тестами (test_pr_size), проводка —
+    # отдельным тестом джобы (test_kit_pr_size_job).
+    re.compile(r"^python3?\s+ai_ops_kit/validation/validate_pr_size\.py\b"),
 )
 
 

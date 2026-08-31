@@ -106,7 +106,8 @@ class Change(TypedDict, total=False):
 class RunContext(TypedDict, total=False):
     """Контекст принятия решения о допустимости действия.
 
-    Включает: write_scope, sandbox, risk, workflow, task_type.
+    Включает: write_scope, sandbox (policy enforcement, не security isolation:
+    broker решает, что можно, но агент не изолирован контейнером), risk, workflow, task_type.
     """
     workitem_id: str
     workflow: str

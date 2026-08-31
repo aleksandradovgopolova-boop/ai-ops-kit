@@ -32,8 +32,11 @@ def good_bundle():
 class TestContextBundleValidation:
 
     def test_valid_bundle(self, good_bundle):
-        good_bundle["included"]["agents"] = ["a"]
-        assert check(good_bundle) == []
+        # Копия, не мутация: фикстура module-scoped, и запись в неё утекала в соседние тесты —
+        # test_agent_in_both_... проходил только ПОСЛЕ этого теста (в xdist падал).
+        bundle = json.loads(json.dumps(good_bundle))
+        bundle["included"]["agents"] = ["a"]
+        assert check(bundle) == []
 
     def test_wrong_kind_rejected(self):
         assert any("ContextBundle" in e for e in check({"kind": "x"}))
@@ -51,6 +54,10 @@ class TestContextBundleValidation:
 
     def test_agent_in_both_included_and_excluded_rejected(self, good_bundle):
         bad = json.loads(json.dumps(good_bundle))
+        # Самодостаточно: agents ставится ЗДЕСЬ, а не наследуется от мутации фикстуры соседним
+        # тестом (scope="module" + порядок исполнения; в xdist порядок другой — тест падал в CI
+        # и проходил локально, класс «первый по случайности»).
+        bad["included"]["agents"] = ["a"]
         bad["excluded"] = [{"source": "agent:a", "reason": "x"}]
         assert any("included и excluded" in e for e in check(bad))
 

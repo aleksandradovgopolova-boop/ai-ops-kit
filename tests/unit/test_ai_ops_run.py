@@ -2128,3 +2128,164 @@ class TestFixLoopIntegration:
         root, _ = fixloop_run
         jr = _ls.journal_read(root / "features" / "fixloop" / "lifecycle-journal.jsonl")
         assert any(e.get("kind") == "fix_attempt" for e in jr["events"])
+
+
+@pytest.fixture(scope="module")
+def hybrid_run(tmp_path_factory):
+    """Pipeline-прогон с context_hybrid=True (mock-предложитель). Один раз на модуль.
+
+    Закрывает пробел покрытия под расщепление K6: под-блок hybrid фазы компиляции
+    контекста (context_hybrid) не гонялся ни одним тестом до этого.
+    """
+    root = tmp_path_factory.mktemp("hybrid")
+    subprocess.run(["git", "-C", str(root), "init", "-q"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], capture_output=True)
+    (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "i"], capture_output=True)
+    pscript = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+    rp = ai_ops_run.run(
+        task_text="добавить a",
+        signals={"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]},
+        child_root=root, engine="pipeline", proposer=lambda c: next(pscript),
+        context_hybrid=True,
+    )
+    return root, rp
+
+
+@pytest.mark.unit
+class TestPipelineContextHybrid:
+    """Характеристика под-блока hybrid фазы компиляции контекста (context_hybrid=True).
+
+    Фиксирует поведение ДО расщепления run() (K6-глубина): на минимальном репозитории
+    без v2-additions hybrid — fail-safe v1-only, ничего не подаётся сверх v1.
+    """
+
+    def test_report_has_context_hybrid(self, hybrid_run):
+        """rep['context_hybrid'] присутствует и является ContextHybrid."""
+        _, rp = hybrid_run
+        assert rp["context_hybrid"]["kind"] == "ContextHybrid"
+
+    def test_v1_only_fail_safe_on_minimal_repo(self, hybrid_run):
+        """Без v2-additions: mode=v1-only, ничего не подано сверх v1, exact-snapshot соблюдён."""
+        _, rp = hybrid_run
+        ch = rp["context_hybrid"]
+        assert ch["mode"] == "v1-only"
+        assert ch["fed_to_model"] is False
+        assert ch["v2_additions"] == []
+        assert ch["exact_snapshot"] is True
+
+
+@pytest.fixture(scope="module")
+def shadow_run(tmp_path_factory):
+    """Pipeline-прогон с context_shadow=True (mock-предложитель). Один раз на модуль.
+
+    Закрывает пробел покрытия под расщепление K6: под-блок context_shadow фазы
+    обогащения отчёта не гонялся через run() ни одним тестом до этого.
+    """
+    root = tmp_path_factory.mktemp("shadow")
+    subprocess.run(["git", "-C", str(root), "init", "-q"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], capture_output=True)
+    (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "i"], capture_output=True)
+    pscript = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+    rp = ai_ops_run.run(
+        task_text="добавить a",
+        signals={"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]},
+        child_root=root, engine="pipeline", proposer=lambda c: next(pscript),
+        context_shadow=True,
+    )
+    return root, rp
+
+
+@pytest.mark.unit
+class TestPipelineContextShadow:
+    """Характеристика под-блока context_shadow фазы обогащения отчёта (context_shadow=True).
+
+    Фиксирует поведение ДО расщепления run() (K6-глубина): shadow — чистая наблюдаемость
+    РЯДОМ с боевым v1, полностью guarded — его сбой не роняет прогон, а честно фиксируется.
+    """
+
+    def test_shadow_present_and_guarded(self, shadow_run):
+        """rep['context_shadow'] присутствует как dict; прогон не упал из-за shadow."""
+        _, rp = shadow_run
+        assert isinstance(rp.get("context_shadow"), dict)
+        # прогон дошёл до отчёта пайплайна (shadow не прервал исполнение)
+        assert rp.get("kind") == "execution-pipeline"
+
+
+@pytest.mark.unit
+class TestPipelineRunProvenance:
+    """Характеристика фазы обогащения отчёта provenance-полями (runtime/provider/engine/
+    model/model_resolution/preflight/lifecycle). Фиксирует поведение ДО расщепления run()
+    (K6-глубина) перед выносом блока в _enrich_run_report.
+    """
+
+    def test_runtime_engine_provider(self, pipeline_run):
+        _, rp, _ = pipeline_run
+        assert rp["runtime"] == "claude-code"
+        assert rp["engine"] == "pipeline"
+        assert rp["provider"] == "mock"
+
+    def test_model_resolution_and_preflight_present(self, pipeline_run):
+        _, rp, _ = pipeline_run
+        assert rp["model_resolution"]["kind"] == "ModelResolution"
+        assert "preflight" in rp
+
+    def test_lifecycle_dict_shape(self, pipeline_run):
+        _, rp, pfid = pipeline_run
+        lc = rp["lifecycle"]
+        assert lc["workitem"] == f"features/{pfid}/workitem.yaml"
+        assert lc["run_plan"] == f"features/{pfid}/run-plan.yaml"
+        assert lc["run_report"] == f"features/{pfid}/run-report.json"
+        assert lc["run_handoff"] == f"features/{pfid}/run-handoff.yaml"
+        assert lc["active_work"] == ".ai/runtime/active-work.yaml"
+        assert "concurrency_preflight" in lc
+
+
+@pytest.mark.unit
+class TestPipelineRunCost:
+    """Характеристика фазы run_cost (агрегат tokens/latency/cost из вызовов модели).
+
+    pipeline_run с mock-предложителем даёт пустой drain_call_stats -> тело `if _stats:`
+    (rep['cost'] + usage_ledger) не гонялось. Инжектируем один вызов, чтобы зафиксировать
+    поведение ДО расщепления run() (K6-глубина) перед выносом в _finalize_run_cost.
+    """
+
+    def _run_with_stats(self, root, stats):
+        import subprocess
+        from unittest.mock import patch
+        root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "-C", str(root), "init", "-q"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], capture_output=True)
+        (root / "src").mkdir(); (root / "f").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "i"], capture_output=True)
+        ps = iter([{"op": "write", "path": "src/a.py", "content": "a=1\n"}, {"done": True}])
+        with patch("ai_ops_kit.providers.orchestrator.drain_call_stats", return_value=stats):
+            return ai_ops_run.run(
+                task_text="add a",
+                signals={"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]},
+                child_root=root, engine="pipeline", proposer=lambda c: next(ps))
+
+    def test_cost_aggregated_from_stats(self, tmp_path):
+        """Непустой drain_call_stats -> rep['cost'] агрегирует calls/tokens/latency."""
+        rp = self._run_with_stats(tmp_path / "r", [
+            {"input_tokens": 100, "output_tokens": 40, "latency_s": 1.5, "cost_usd_est": 0.01},
+            {"input_tokens": 50, "output_tokens": 10, "latency_s": 0.5, "cost_usd_est": 0.005},
+        ])
+        cost = rp["cost"]
+        assert cost["calls"] == 2
+        assert cost["input_tokens"] == 150
+        assert cost["output_tokens"] == 50
+        assert cost["latency_s"] == 2.0
+        assert cost["cost_usd_est"] == 0.015
+
+    def test_no_stats_no_cost(self, tmp_path):
+        """Пустой drain_call_stats -> rep['cost'] не проставляется (нет вызовов — нечего агрегировать)."""
+        rp = self._run_with_stats(tmp_path / "r", [])
+        assert "cost" not in rp

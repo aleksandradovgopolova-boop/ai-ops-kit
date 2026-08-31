@@ -162,7 +162,7 @@ case "$cmd" in
   # отвечал «исходник рядом не найден». То есть работа сделала половину: интент появился и был
   # недостижим по документированному пути. Класс F-033 — механизм починен у кита и не доехал до дочки.
   # Поведение то же: интент CLI зовёт те же session_telemetry + session_guardrails.
-  init|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|subsession|engops|method)
+  init|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|subsession|engops|method)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi

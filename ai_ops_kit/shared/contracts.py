@@ -288,9 +288,15 @@ class KernelEvent(TypedDict, total=False):
     shared.events.subscribe(). Спутник не импортируется ядром напрямую.
 
     Типы событий:
-      run_completed      — прогон завершён (report, workitem_id, status, child_root)
-      gate_evaluated     — гейты оценены (gate_results, workitem_id, tested_revision)
-      delivery_completed — доставка выполнена (receipt, workitem_id)
+      run_completed      — ИСПУСКАЕТСЯ (ai_ops_run) и подписан (engops/session_events).
+                           Несёт весь report — из него доступны и гейты, и итог доставки.
+      gate_evaluated     — ОБЪЯВЛЕН, НО НЕ ИСПУСКАЕТСЯ: отдельного потребителя, которому нужен
+                           момент «сразу после гейтов» без полного report, пока нет. Не эмитим
+                           событие без потребителя — это была бы декоративная поверхность
+                           (тот же класс, что мёртвый каталог инвариантов до K7). Появится ПО
+                           ДАННЫМ реального спроса, аддитивно, вместе со своим подписчиком.
+      delivery_completed — ОБЪЯВЛЕН, НО НЕ ИСПУСКАЕТСЯ (та же причина; итог доставки уже в report
+                           события run_completed). Поля ниже — заготовка контракта, не активный шов.
     """
     event_type: str
     workitem_id: str

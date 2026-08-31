@@ -19,6 +19,33 @@ kind: delivery-plan-history
 
 
 work:
+  - id: uiux-constitution-is-source
+    title: >-
+      Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-08-28'
+    pr: 345
+    evidence: tests/unit/test_uiux_constitution_source.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (PR #345; закрытие плана — отдельный PR координатора: parallel-safety
+      запрещает смешивать код с координационным файлом plan.yaml, как в закрытии #344). Заведён единый
+      ИСТОЧНИК стандарта UI/UX: standards/uiux/UI_CONSTITUTION.md — 65 правил со стабильными ID
+      (UI-/AI-/UI-FORBIDDEN-). Оперативный слой ui-ux.rules.md и машинный реестр rules.yaml
+      ГЕНЕРИРУЮТСЯ из него (standards/uiux/scripts/build-rules.py, stdlib), руками не правятся. Первая
+      работа волны 1 цели uiux-standard-as-product; силу гейтов дизайна НЕ меняет (это следующая
+      работа design-gates-cite-constitution-ids). Свежее независимое ревью (writer≠judge) вернуло FIX;
+      все 4 находки закрыты и ПРОВЕРЕНЫ МУТАЦИОННО: (1) fail-closed вынесен в общий помощник _mirror_ok
+      (был тавтологией); (2) добавлен независимый якорь числа правил из ИСТОЧНИКА (ловит тихую потерю
+      правила); (3) yaml_escape чинит экранирование double-quoted YAML; (4) хардкод ID-множества
+      генератора ⊆ ID источника. РЕЗУЛЬТАТ ПЕРЕПРОВЕРЯЕМ: tests/unit/test_uiux_constitution_source.py
+      (8 тестов) — правка или удаление правила в rules.yaml краснит суите; check-fast 4960 passed.
+    # РАЗБОР (как в плане):
+    #   type: engineering; owner_role: engineer; value: high
+    #   write_scope: [standards/uiux/, scripts/, tests/]
+    #   Готово, когда: build-rules.py пересобирает оба представления байт-в-байт; CI краснеет при
+    #   ручном расхождении генерата с источником; ручная правка генерата затирается.
+
   - id: artifact-registry-as-data
     title: Реестр артефактов как данные — YAML-схема с ID, путём, обязательностью, версией шаблона
     goal: product-operating-layer
@@ -3980,3 +4007,869 @@ work:
       ЗАКРЫТО 25.08.2026 (PR #292). override_learning.py: adjust_priority/adjust_risk меняют
       рекомендации на основе прошлых override'ов из human_override.override_signals().
       Ключевой тест: рекомендация С override отличается от БЕЗ override. 9 тестов.
+
+  - id: autonomous-replanning-loop
+    title: Автономное перепланирование — цикл сам сводит приоритеты плана к реальности (капстоун Фазы 5)
+    goal: autonomous-product-loop
+    status: done
+    closed_at: '2026-08-31'
+    pr: 375
+    evidence: tests/unit/test_replan_loop.py
+    result: >-
+      ЗАКРЫТО 2026-08-31 (#375, cdd6f0a). КАПСТОУН Фазы 5: команда `ai-ops replan` замыкает
+      продуктовую ОС (Observe -> ... -> Replanning) — цикл сам сводит приоритеты плана к реальности
+      БЕЗ человеческого --replan. Модуль ai_ops_kit/intelligence/replan_loop.py (оркестратор,
+      DIRECT_INTENTS). Граница автономии — вариант B (решение владельца, перенос одобренной 4-классовой
+      модели ночного обзора на план): ПЕРЕПРИОРИТИЗАЦИЯ (класс A) обратимая/детерминированная/СОСТАВ
+      РАБОТ НЕ МЕНЯЕТ, каждый сдвиг подписан «почему» — применяется САМА (--apply пишет машинный артефакт
+      .ai/project/replan/latest.yaml дочки, авторский planning/plan.yaml и main НЕ трогает). СТРУКТУРНЫЕ
+      изменения (закрыть/пометить работу) — только ПРЕДЛОЖЕНИЕМ на одобрение. Автономное удаление работ
+      невозможно по механизму (_check_same_work_set) — прямой ответ полевому провалу ии-среды (writer
+      удалил 27 из 57 работ, ложный green). Детерминизм, budget=0, kill-switch, policy-гейт. Второй
+      правды не заводит (dp-001): reuse next_work.compute / delivery_plan resolve+git_disagreements /
+      risk_register / backlog_prioritize. ДОКАЗАНО: 17 мутационных тестов (снятие инварианта состава ->
+      уронённая работа молча пишется -> красит) + ЖИВОЙ ПРОГОН на изолированной git-дочке
+      (переприоритизировал 3 работы под реальность с провенансом + поймал реальное расхождение «ветка
+      влита, план держит todo» как предложение класса B; --apply не тронул план/main). footprint
+      substantive_files 531->532. Исход autonomous_replanning_works флипнут -> цель autonomous-product-loop
+      достигнута (4/5 Product OS). Freeze-exception: закрывает объявленный исход Фазы 5, заказан
+      владельцем этой сессией (два соседних исхода Фазы 5 закрыты этой же сессией под той же заморозкой).
+    # РАЗБОР: type: engineering; goal: autonomous-product-loop; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/cli/, tests/, quality/, docs/].
+    #   Freeze-exception: закрывает объявленный исход autonomous_replanning_works Фазы 5 (капстоун),
+    #   заказан владельцем этой сессией; переприоритизация обратима, состав работ не меняет, main не
+    #   трогает — риск удаления объёма закрыт механизмом.
+
+  # --- Phase 0 + Phase B закрыты (аудит 2026-08-25, цель trustworthy-core) ---
+  - id: workflow-least-privilege
+    title: >-
+      На package-quality и pr-smoke объявлен минимальный permissions (contents: read)
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 300
+    evidence: .github/workflows/pr-smoke.yml
+    result: >-
+      ЗАКРЫТО 2026-08-25. package-quality и pr-smoke объявляют минимальный permissions (contents: read); PR-триггерный код больше не получает широкий токен по умолчанию.
+  - id: kit-runs-own-security-scan
+    title: >-
+      Кит гоняет собственный security_scan в CI против диффа PR
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-25'
+    pr: 302
+    evidence: .github/workflows/package-quality.yml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Кит гоняет свой security_scan.py --base origin/main обязательной джобой CI — та же планка, что для дочек.
+  - id: child-update-force-with-lease
+    title: >-
+      Автообновление дочки пушит через --force-with-lease и узким токеном
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-25'
+    pr: 304
+    evidence: templates/ci/ai-ops-update.yml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Автообновление дочки пушит через --force-with-lease — чужие коммиты на ветке обновления больше не перетираются молча.
+  - id: delete-orphaned-gate-config
+    title: >-
+      Осиротевший config/quality-gates.yaml удалён; повторное появление краснеет
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 307
+    evidence: quality/gates.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Осиротевший config/quality-gates.yaml (14 гейтов, имена расходились с SoT) удалён; quality/gates.yaml — единственный реестр гейтов.
+  - id: arch-counts-under-claim-markers
+    title: >-
+      Счётчики модулей/пакетов/валидаторов выводятся из факта, а не написаны рукой
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 308
+    evidence: tests/unit/test_arch_counts_honest.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Рукописные счётчики модулей/валидаторов убраны из AGENTS.md; derive-тест выводит числа из факта. Остаток: перечень пакетов в карте AGENTS.md не полон (нет checks/governance/integrations) — мелкий хвост.
+  - id: validator-teeth-fail-closed
+    title: >-
+      Четыре «оживлённых» валидатора имеют fail-closed кейс (ловят дефект, не только проходят)
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 309
+    evidence: tests/unit/test_validator_teeth_fail_closed.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. 4 «оживлённых» валидатора получили fail-closed кейсы: впрыснутый дефект -> assert result == 1. Mutant-survivable больше нет (TEST-2 аудита закрыта).
+  - id: invariant-claims-honest
+    title: >-
+      Каталог инвариантов честно помечен «проверено на синтетике»; фантомные ссылки убраны
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 310
+    evidence: docs/api/invariants.md
+    result: >-
+      ЗАКРЫТО 2026-08-25. Каталог инвариантов честно помечен «проверено на синтетике»; фантомные --selftest/tools/invariants.py убраны. Рантайм-подключение — отдельной работой wire-invariants-runtime.
+  - id: gate-evidence-schema-synced
+    title: >-
+      Тест сверяет форму evidence в коде с schemas/gate-evidence.schema.json
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 299
+    evidence: tests/unit/test_gate_evidence_schema_synced.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Тест сверяет _EVIDENCE_KEYS кода со schemas/gate-evidence.schema.json — расхождение код<->схема краснеет (INT-4 аудита закрыта).
+  - id: invariants-docstring-fix
+    title: >-
+      Docstring gates/invariants.py указывает реальный путь импорта
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 301
+    evidence: ai_ops_kit/gates/invariants.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Docstring указывает реальный путь (tests/unit/test_invariants_selftest.py); фантомные ссылки убраны.
+  - id: model-context-from-registry
+    title: >-
+      Окна контекста моделей выводятся из registry/models.yaml, не из кода
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 298
+    evidence: ai_ops_kit/context/context_compiler.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. MODEL_CONTEXT читается из registry/models.yaml (_load_model_context); хардкод с устаревшими id удалён — реестр единственный SoT окон контекста (INT-2 закрыта).
+  - id: model-pricing-in-registry
+    title: >-
+      Цены per-token живут в registry/models.yaml, orchestrator_usage читает их оттуда
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-25'
+    pr: 303
+    evidence: tests/unit/test_model_pricing_in_registry.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Цены per-mtok — first-class поля registry/models.yaml; orchestrator_usage читает их из реестра (INT-3 закрыта).
+  - id: kernel-ports-and-contracts
+    title: >-
+      Объявлены порты ядра (Executor/Context/Evidence/Gate/Delivery/Policy) и контракты
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/kernel/ports.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Объявлены 6 портов ядра (Executor/Context/Evidence/Gate/Delivery/Policy) и TypedDict-контракты; единый шов ядра назван.
+  - id: break-engine-gates-di
+    title: >-
+      evidence_collector получает tool_broker параметром (снят цикл engine↔gates)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/gates/evidence_collector.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. evidence_collector получает tool_broker параметром (DI); mutual_pairs 5->4.
+  - id: break-context-engine-contract
+    title: >-
+      context_compiler использует run_plan как TypedDict-контракт (снят цикл context↔engine)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/context/context_compiler.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. context_compiler не импортирует engine.run_plan модулем; mutual_pairs 4->3, циклы длиннее двух 6->0.
+  - id: break-delivery-engine-tx
+    title: >-
+      delivery вызывается только из ai_ops_run (контракт-тест; снят цикл delivery↔engine)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/delivery/review_branch.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. delivery вызывается только транзакционно из ai_ops_run, контракт-тест фиксирует границу; mutual_pairs 3->2.
+  - id: move-deploy-readiness-to-gates
+    title: >-
+      deploy_readiness переехал в gates; sys.path-хак в gate_executor удалён (снят цикл engops↔gates)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/gates/deploy_readiness.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. deploy_readiness переехал из engops в gates; sys.path-хак в gate_executor удалён; mutual_pairs 2->1.
+  - id: break-engine-lifecycle-classify
+    title: >-
+      Классификация вынесена из workitem в шаг ядра (снят корневой цикл engine↔lifecycle)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: packages/layering.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Классификация вынесена из workitem; mutual_pairs 1->0 — кольцо capabilities стало DAG (validate_layering: пар 0, циклов 0).
+  - id: split-god-functions
+    title: >-
+      run/run_pipeline расщеплены на тестируемые по фазам функции
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/engine/execution_pipeline.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Из run_pipeline извлечено 6 функций (1092->1019). ЧЕСТНО: это первый срез — run_pipeline 1019 и run 1277 строк остаются крупными; глубокое расщепление — отдельный долг под защитой характеристических тестов.
+  - id: wire-invariants-runtime
+    title: >-
+      check_invariant вызывается в реальных producer'ах (fail-closed на нарушении)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: ai_ops_kit/gates/preflight.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. check_invariant вызывается в реальных producer'ах (preflight, ai_ops_run, execution_pipeline) fail-closed — каталог инвариантов перестал быть декоративным (INT-1 аудита закрыта).
+  - id: characterization-tests-pipeline
+    title: >-
+      Характеристические тесты фаз pipeline написаны ДО расщепления God-функций
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: tests/unit/test_pipeline_characterization.py
+    result: >-
+      ЗАКРЫТО 2026-08-25. Характеристические тесты зафиксировали поведение run_pipeline ДО расщепления K6.
+  - id: kernel-boundary-rule
+    title: >-
+      Слой kernel объявлен в layering.yaml; ядро не импортирует спутники (проверяется)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-08-25'
+    evidence: packages/layering.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-25. Правило границы ядра: ядро не импортирует спутники; краснеет на нарушении.
+
+  - id: local-check-mirrors-ci
+    title: >-
+      Локальная проверка зеркалит блокирующий CI: красное ловится до пуша, а не раундом CI после
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-26'
+    pr: 283
+    evidence: scripts/check-fast.sh
+    result: >-
+      ЗАКРЫТО 2026-08-26. Суть сделана PR #283: check-fast гоняет те же быстрые блокирующие ворота,
+      что CI — ruff (джоба lint) и весь pytest -m "not slow" (джобы fast/contracts), с честным
+      отказом при отсутствии pytest/ruff. Верификация 26.08 по пунктам разбора 20.08: layering
+      (test_layering), public-surface (test_public_surface), footprint
+      (test_delivery_footprint_is_smaller_than_legacy), регистрация валидатора
+      (test_lists_cover_every_validator_without_uniform_seam), регистрация пакета
+      (test_package_surface) — ВСЕ собираются в not-slow, то есть входят в check-fast;
+      3.9-синтаксис снят решением пола 3.12. Оговорка честности из шапки скрипта сохранена:
+      «быстро зелёное» НЕ значит «CI зелёный» — slow-selftests и compatibility-matrix
+      даёт только check-full/CI (урок 26.08: наследованный красный жил именно в slow-группе).
+  - id: parallel-safety-runs-in-ci
+    title: >-
+      Проверка параллельной безопасности исполняется в CI — кита и дочки
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    pr: 335
+    evidence: tests/unit/test_parallel_safety.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #335, волна 6). validate_parallel_safety исполняется в CI ОБОИХ
+      контуров: в pr-smoke кита — отдельной джобой parallel-safety (--strict), в дочке — шагом в
+      ai-ops-validate с --defaults (база координационных файлов из клона кита, т.к. у свежей дочки
+      своего реестра нет). Валидатор получил флаг --defaults; прямой вызов внесён в whitelist
+      pytest-only инварианта. ПЕРЕПРОВЕРЯЕМО: тесты red/green (грязный PR краснит, чистый — нет) в
+      обоих контурах + тесты проводки обеих джоб. ГРАНИЦА ПО РЕШЕНИЮ: джоба кита пока НЕ в
+      обязательных контекстах (dp-002 — обкатка перед enforce); перевод в required — решение
+      владельца.
+  - id: no-verdict-is-an-honest-refusal-not-a-stall
+    title: >-
+      Отсутствие вердикта судьи — честный отказ, который можно разобрать, а не молчаливый ступор
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-27'
+    pr: 336
+    finding: findings/from-children/obs-2026-08-20-главное-за-прогон-кит-са-fad8d07f.yaml
+    evidence: tests/unit/test_no_verdict_is_an_honest_refusal.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #336, волна 6). Находка поля P0 (obs fad8d07f): на 'живом' пути прогона
+      (_run_reviews) гейт с no-verdict тихо ронялся голым continue — падал на общий «нет заключения
+      reviewer», _hard_stop не распознавал reviewer-blocked, работа МОЛЧА вставала. Теперь: no-verdict
+      даёт НАЗВАННЫЙ отказ (gate_executor.evidence_from_no_verdict — бюджет/чтения-без-вердикта/ноль
+      разбираемых/отказ провайдера), несёт «reviewer verdict» в evidence (взводит reviewer-blocked);
+      claude-cli на пустой result даёт ProviderRefusal(empty_answer), как API-провайдеры. ПЕРЕПРОВЕРЯЕМО:
+      сквозная проба полевого случая (гейт становится refused с причиной, а не исчезает) + юниты
+      строителя/run_review/провайдера. Настоящая починка задела engine/ (шире write_scope карточки).
+  - id: reach-phrase-names-working-copies
+    title: Человеческий ответ называет рабочие копии, а не только машины
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-27'
+    pr: 337
+    evidence: tests/unit/test_ui_presenter.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #337, волна 6). presenter.from_active_work называет рабочие копии
+      (ветки/ленты) активных работ в сводке для человека: «в работе N задач — в рабочих копиях …»;
+      worktree-путь ушёл в technical. Заявка без ветки не называется — сводка тогда прежняя, без
+      выдумок. Машинная фраза досягаемости не тронута. ПЕРЕПРОВЕРЯЕМО: тест презентера утверждает,
+      что рабочая копия названа человеку, а id работы — нет.
+  - id: night-review-autofix-class-a
+    title: Класс A правок исполняется в worktree и собирается в один draft PR за ночь
+    goal: nightly-product-review
+    status: done
+    closed_at: '2026-08-27'
+    pr: 338
+    evidence: tests/unit/test_night_review_autofix.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #338, волна 6). Условие готовности карточки было пусто — предложено и
+      реализовано. Класс A (детерминированные, обратимые правки) собирается в изолированной рабочей
+      копии в ОДИН черновой PR; в main не пишется, слияние за человеком. engine/worktree.py:
+      apply_fixes_in_worktree (чистый git-примитив, не тянет intelligence). intelligence/nightly_review.py:
+      run_autofix — реестр фиксеров ПУСТ по умолчанию (fail-closed), kill-switch (env/файл), гейт
+      policy (suggest → только рекомендация), Budget(max_model_calls=0) как инвариант, идемпотентный
+      open_draft_pr (один PR), эталонный фиксер trailing-whitespace (выключен), CLI --autofix/--dry-run.
+      ПЕРЕПРОВЕРЯЕМО: тесты — никогда main, один PR, откат при провале проверки, класс A пуст без
+      решения владельца. ГРАНИЦА ПО РЕШЕНИЮ: какой фиксер открыть первым — решает владелец.
+  - id: required-contexts-match-jobs
+    title: >-
+      Обязательные статусы защиты ветки сверяются с CI-джобами
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    pr: 295
+    evidence: tests/contracts/test_required_contexts_match_jobs.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (PR #295). validate_required_contexts сверяет объявленные обязательные
+      контексты (quality/required-contexts.yaml) с реальными CI-джобами и краснит рассинхрон до
+      того, как он повесит очередь слияния (ловушка «BLOCKED навсегда»). Перепроверяемо: 6
+      контрактных тестов; валидатор внесён в STANDALONE рантайм-контракта. В поставку дочки не едет.
+  - id: plan-agrees-with-git
+    title: >-
+      План согласуется с git: расхождение — ошибка, неизвестность — предупреждение, а не тишина
+    goal: plan-as-control-plane
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_plan_agrees_with_git.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены). Расхождение активного плана с git (коммиты работы в
+      стволе при открытой работе; открытый PR при todo) даёт ошибку в отчёте validate, который
+      читает CI; «неизвестность» — предупреждение словами, а не молчаливый зелёный. Перепроверяемо:
+      capability-тесты (позитив + fail-closed + побочный эффект) с мутантами.
+  - id: release-claims-stays-in-the-kit
+    title: >-
+      Релизная проза остаётся у кита и не едет в дочку; канал проверяется вызовом
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_validate_release_claims.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены). Релизная проза (~61 КБ) вынесена в
+      registry/release-notes.yaml и объявлена DEV_ONLY_FILES (installer) — в дочку не едет (−60 КБ
+      поставки); сам claims доставляется ради ключа channel, шов package_channel проверен вызовом.
+      Перепроверяемо: test_validate_release_claims + DEV_ONLY_FILES.
+  - id: delivery-budget-is-declared
+    title: >-
+      Потолок поставки объявлен данными с лентой подъёмов, а не вписан числом в тест
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_delivery_budget.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены). Потолок поставки — данными в quality/delivery-budget.yaml
+      с лентой подъёмов (дата, замеры до/после, файлы, причина «почему работает в дочке»); подъём без
+      названного доставляемого файла отклоняется, при пробое печатается состав поставки по каталогам.
+      Перепроверяемо: 3 capability-теста (в т.ч. fail-closed на подъёме без основания).
+  - id: unit-weeding-is-mutation-proven
+    title: >-
+      Юнит-тесты гранулярны и прополоты по мутациям, а не монолитные селф-тесты
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/contracts/test_pyramid_is_tiered.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (перенос гигиены; по сути сделано ранее, PR #264–#282). 26 пар
+      «монолит+гранула» закрыты переносом покрытия (0 tracked test_*_selftest, ~375 гранулярных
+      тестов); ярус проставляется по каталогу и держится инвариантом test_pyramid_is_tiered; 121
+      мутационная проба (quality/mutation-probes.yaml) страхует, что ни один срез не оставляет
+      проверку зелёной впустую. Перепроверяемо: test_pyramid_is_tiered + test_mutation_probe.
+  - id: product-layer-bootstrap
+    title: "ai-ops init создаёт Product Operating Layer в новом репозитории"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон на дочке ~/ai-ops-cockpit (3.37.0): слой .ai-ops/ создан китом"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-2 на дочке). bootstrap создал в ~/ai-ops-cockpit слой
+      .ai-ops/ со всеми артефактами (PRODUCT_PASSPORT.md, ROADMAP.md, DELIVERY.md, POLICY.yaml,
+      templates/). Исход product-operating-layer.bootstrap_creates_product_layer поднят замером, а
+      не декларацией «код написан». Перепроверяемо на дочке: `ls .ai-ops/` + `ai-ops validate
+      product-layer`. Остаток исходов направления оформлен todo (verify-artifact-registry-as-data,
+      verify-template-migrations, continuous-product-audit).
+  - id: product-layer-validation
+    title: "Валидация артефактов: Missing / Invalid / Outdated / Valid с отчётом"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон на дочке ~/ai-ops-cockpit: `ai-ops validate product-layer` → 5 valid"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-2 на дочке). `ai-ops validate product-layer` на
+      ~/ai-ops-cockpit доложил все четыре состояния поимённо: valid 5 (passport, roadmap, delivery,
+      policy, templates_dir) · outdated 0 · invalid 0 · missing 0. Исход
+      product-operating-layer.validation_reports_missing_invalid_outdated_valid поднят замером.
+      Также подтверждён product_passport_auto_generated: PRODUCT_PASSPORT.md сгенерирован из
+      состояния репо с честными «_неизвестно_». Перепроверяемо: та же команда на дочке.
+  - id: backlog-issue-classification
+    title: Классификация GitHub Issues по типу, области, приоритету, milestone
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops backlog classify .` на 7 реальных Issues кита"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-3). `backlog classify` на 7 реальных Issues
+      aleksandradovgopolova-boop/ai-ops-kit дал тип/область/уверенность по каждой (#161 bug·cli
+      high, #160 bug·unknown high, #151/#150/#148/#138/#137 feature с областями и low-confidence).
+      Исход backlog-intelligence.issues_classified_by_type_and_area поднят замером. Перепроверяемо:
+      та же команда на репо с Issues.
+  - id: backlog-ai-prioritization
+    title: AI-приоритизация backlog с объяснением вердикта и учётом override человека
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops backlog prioritize .` на 7 реальных Issues кита"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-3). `backlog prioritize` ранжировал 7 Issues со
+      score и ОБЪЯСНЕНИЕМ каждого (польза×conf − стоимость; неизвестные impact/urgency/strategic
+      названы и понижают confidence — не выдаёт себя за высокий приоритет). Исход
+      backlog-intelligence.ai_priority_explained_per_task поднят замером. Перепроверяемо: та же
+      команда на репо с Issues.
+  - id: backlog-dependency-graph
+    title: Граф зависимостей задач — блокирующие, критический путь, скрытые, циклы
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops backlog graph .` на 7 реальных Issues кита"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-3). `backlog graph` построил граф из 7 задач и
+      корректно доложил блокирующие/критический путь/циклы (на этом наборе — 0 связей, честно
+      «нет», а не выдуманные рёбра). Исход backlog-intelligence.dependency_graph_built поднят
+      замером; юнит-тесты на синтетических графах с цепочками/циклами — уже были. Перепроверяемо:
+      та же команда на репо.
+  - id: risks-identified-with-mitigation
+    title: "Риски (product/delivery/tech/dependency/resource/strategic) + предложенное действие"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops team` (агрегатор рисков) на самом ките"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-5). `ai-ops team` показал риски с mitigation: [high]
+      technical — «привести документацию в соответствие коду», [medium] — из сигналов health/drift,
+      не из отдельного гадания. Исход ai-product-operations.risks_identified_with_mitigation поднят
+      замером. Перепроверяемо: `ai-ops team` на ките. ЗАЗОР: наружу в дочке команда не выведена —
+      это отдельный todo уровня командного слоя, не этой работы.
+  - id: team-status-auto-generated
+    title: Авто-статус команды — прогресс milestone, изменения, блокеры, риски, ближайшие задачи
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-27'
+    evidence: "живой прогон: `ai-ops team` на самом ките"
+    result: >-
+      ЗАКРЫТО 2026-08-27 (живая проверка lane-5). `ai-ops team` сам собрал сводку: здоровье
+      (продукт/тех/delivery), 4 блокера, ближайшая работа, milestone «не проверено» (честно, при
+      отсутствии delivery-выгрузки), 12 названных слепых зон. Агрегирует health+risk+drift+план, не
+      дублируя калькуляторы. Исход ai-product-operations.team_status_auto_generated поднят замером.
+      Перепроверяемо: `ai-ops team` на ките. ЗАЗОР: в дочке команда не выведена наружу (отдельный
+      todo командного слоя).
+  - id: delivery-footprint-warns-before-breach
+    title: >-
+      Потолок ОБЪЁМА поставки предупреждает о таящем запасе до пробоя, а не только падением
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-27'
+    evidence: tests/unit/test_delivery_footprint_warning.py
+    result: >-
+      ЗАКРЫТО 2026-08-27 (код в PR #343, закрытие плана — отдельный PR координатора: parallel-safety
+      запрещает смешивать код с координационными файлами). Порог запаса объявлен ДАННЫМИ
+      (quality/delivery-budget.yaml -> warnings.volume_reserve_fraction=0.10; читает test_installer,
+      не хардкод). Пока поставка под потолком, но осталось меньше 10% — прогон печатает ЗЕЛЁНОЕ
+      предупреждение с АВТО-РАЗБОРОМ: сколько байт до пробоя и что съедает бюджет по каталогам/файлам
+      (переиспользует delivery_breakdown_lines). Что урезать — решает человек, кит молча не удаляет.
+      Потолок остался блокирующим: пробой по-прежнему красный assert, предупреждение добавлено К нему,
+      не advisory. Логика — в чистом модуле ai_ops_kit/validation/delivery_footprint_warning.py.
+      Перепроверяемо: test_delivery_footprint_warning.py (positive/fail-closed/side-effect) +
+      мутационные пробы thinning-reserve-honours-the-threshold (guard) и
+      thinning-reserve-warning-is-actually-called (seam). ЖИВЬЁМ: предупреждение сразу сработало на
+      самом ките — запас объёма < 441 КБ (< 10%), крупнейший кандидат урезания manifest 252 КБ (5.8%).
+  - id: selftests-are-granular-not-monolithic
+    title: >-
+      Селфтесты сольного покрытия — гранулярные, не монолит: одно поведение = один именованный тест
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-28'
+    evidence: tests/contracts/test_no_monolith_funnel.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код гейта в PR #346). Конверсия 128 монолитных *_selftest в гранулярные
+      завершена ранее зависимостью unit-weeding-is-mutation-proven (в наборе 0 файлов *_selftest.py);
+      эта работа добавила НЕДОСТАЮЩИЙ охранный инвариант — главный пункт её done-when, которого не
+      было. tests/contracts/test_no_monolith_funnel.py (по образцу test_suite_asserts): (1) ни один
+      тест-файл не носит ретированный суффикс _selftest.py; (2) ни одна тест-функция не сводит >=5
+      проверок через soft-помощник-накопитель (nonlocal/append/print, вызванный с булевым условием)
+      в один финальный assert. Помощник, который САМ ассёртит, разрешён. Порог 5 калиброван замером
+      (легитимный максимум в наборе — 1, монолит имел десятки). У детектора зубы: три fail-closed
+      теста (ловит синтетический монолит, не трогает гранулярные и assert-помощник). Конвенция в
+      AGENTS.md обновлена: тест модуля — гранулярный test_<module>.py, суффикс _selftest снят.
+      Перепроверяемо: test_no_monolith_funnel.py. Замер числа тест-функций назван в unit-weeding
+      (~375 гранулярных).
+  - id: backlog-deduplication
+    title: Дедупликация задач — нахождение и предложение объединения дубликатов
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-28'
+    pr: 350
+    evidence: tests/unit/test_backlog_dedup.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (тест-доказательство в PR #350). Детектор дедупа
+      (ai_ops_kit/planning/backlog_dedup.py, подключён как `ai-ops backlog dedup`) построен ранее, но
+      его исход проверялся живьём лишь на 0 дубликатов. Эта работа добавила НЕДОСТАЮЩЕЕ
+      детерминированное доказательство: тест
+      test_dedup_report_on_repo_with_dupes_finds_pair_marks_stale_and_suggests прогоняет РЕАЛЬНЫЙ путь
+      dedup_backlog (find_duplicates + find_stale) на фикстуре из 4 Issues с зафиксированной опорной
+      датой (now_iso, без часов и сети) и в ОДНОМ отчёте утверждает: найдена пара {101,102} (близкий
+      заголовок + общие метки), помечено устаревшее [103] (239 дней простоя при пороге 120, не задевая
+      свежие) и all(action == suggest_merge) — ПРЕДЛОЖЕНИЕ слить, никогда молчаливое слияние.
+      Перепроверяемо: независимое ревью (writer≠judge) прогнало 5 мутаций механизма (пустой список
+      дублей, action='merge', пустой stale, порог 0, подмена id) — каждая покраснила тест, ни одна
+      проверка не вакуумна. Изменение тест-only, продуктовый код не тронут. ИСХОД ЦЕЛИ
+      backlog-intelligence -> duplicates_detected_and_merged ОСТАЁТСЯ false ОСОЗНАННО: слово «merged»
+      кодом не флипается — слияние по инварианту PR-19/20 требует живого одобрения человека
+      (Suggest→Require approval); код доказывает обнаружение и предложение, не слияние.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: backlog-intelligence; owner_role: engineer; value: medium
+    #   write_scope по факту: [tests/] (доказательство) — не [ai_ops_kit/planning/], механизм уже был.
+    #   Готово: `backlog_dedup` на репо с дубликатами находит пары и помечает устаревшие (детермин. тест).
+
+  - id: backlog-approval-gated-merge
+    title: Слияние дублей по одобрению человека — вторая половина duplicates_detected_and_merged
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-31'
+    pr: 377
+    evidence: tests/unit/test_backlog_merge.py
+    result: >-
+      ЗАКРЫТО 2026-08-31 (#377, c32b77b). Вторая половина исхода duplicates_detected_and_merged,
+      которую #350 ОСОЗНАННО оставил false: слово «merged» кодом не флипалось — слияние по инварианту
+      PR-19/20 требует живого одобрения человека. По РЕШЕНИЮ ВЛАДЕЛЬЦА (2026-08-31, вариант «одобряемое
+      слияние») построен approval-gated execute: `ai-ops backlog merge --approved <файл>`. GitHub не
+      «сливает» Issue — кит закрывает ДУБЛЬ с кросс-ссылкой на канонический (комментарий + state=closed,
+      reason=not_planned), канонический оставляет открытым; обратимо (GitHubClient.reopen_issue).
+      ГРАНИЦЫ МЕХАНИЗМОМ: без --approved отказ (пары задаёт ЧЕЛОВЕК, из детектора не берутся — принцип
+      «предлагать не сливать» цел); без --apply dry-run; канонический не трогается; пустой/битый approved,
+      duplicate==canonical, не-int — отказ; провал комментария не закрывает дубль; все мутации GitHub через
+      единственный шов _gh_mutate (POST/PATCH только через gh, rest-путь записи закрыт). ДОКАЗАНО: 12
+      мутационных тестов (снятие fail-safe -> дубль закрывается вопреки провалу комментария -> красит;
+      canonical неприкосновенен; dry-run по умолчанию; write-seam) + ЖИВОЙ DRY-RUN на реальном backlog
+      кита (11 issues, 0 дублей — честно; `backlog merge --approved` показал «закрыть #160 как дубль #161»
+      с НУЛЕВОЙ мутацией, issues остались OPEN; без --approved — отказ). ГРАНИЦА ЧЕСТНО: реального
+      необратимого закрытия на живых дублях не было — настоящих дублей в backlog кита нет, кит их не
+      фабрикует; capability построена, достижима и доказана точными операциями (mock) + сухим прогоном.
+      Нового содержательного файла нет (execute_merge в backlog_dedup, write-ops в github, merge в cli)
+      -> footprint не тронут. Исход duplicates_detected_and_merged флипнут -> цель backlog-intelligence
+      достигнута (5/5 Product OS). Freeze-exception: закрывает объявленный исход Phase 2, заказан владельцем.
+    # РАЗБОР: type: engineering; goal: backlog-intelligence; owner_role: engineer; value: medium
+    #   write_scope: [ai_ops_kit/integrations/, ai_ops_kit/planning/, ai_ops_kit/cli/, tests/].
+    #   Freeze-exception: закрывает объявленный исход duplicates_detected_and_merged, заказан владельцем;
+    #   слияние обратимо, только по одобрению человека, канонический не трогает.
+  - id: lane-ships-small-prs
+    title: >-
+      Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-08-28'
+    pr: 351
+    evidence: tests/unit/test_pr_size.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #351). Правило «малый PR» НАЗВАНО и ПРОВЕРЯЕТСЯ машиной: порог
+      объявлен ДАННЫМИ (quality/pr-budget.yaml -> max_diff_lines=800, max_changed_files=15, исключения
+      newsfragments/docs/координационные файлы; калибровка замером 30 последних влитых PR — норма
+      ≤~500 строк/≤10 файлов, аномалия 2589 из разбора), валидатор
+      ai_ops_kit/validation/validate_pr_size.py по образцу validate_parallel_safety (assess/render/main,
+      git diff --numstat base...HEAD, fail-open без --base, --strict краснеет только на реальном
+      пробое). Подключено в pr-smoke.yml как ADVISORY (без --strict, не required, PR-only, пропуск в
+      merge_group) — обкатка, как начиналась parallel-safety; крепнет отдельной работой. Половина
+      «закрытие ленты = влиты ИЛИ переданы с зелёным CI» — ПРОТОКОЛЬНОЕ правило в docs/parallel-work.md
+      (реестра лента→PR нет, машиной не сверяется, названо честно, не выдано за гейт). Перепроверяемо:
+      tests/unit/test_pr_size.py (порог из данных, не хардкод; пробой/норма/на-грани/исключения/
+      fail-open/коды выхода) + test_kit_pr_size_job.py (advisory-обкатка); независимое ревью прогнало
+      мутации (подмена вердикта и логики исключений) — покраснели. Добавление validate_*.py подняло
+      derived validators_count 82→83; число в ProductStatus.md синхронизировано (честное следствие,
+      не подгонка). Футпринт не вырос — валидатор не поставляется (зона validation/ EXEMPT).
+      ИЗВЕСТНЫЙ ХВОСТ (не блокирует, advisory): переименование файла В исключённую папку может обойти
+      префикс-сверку — учесть при будущем флипе в --strict, не сейчас.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: team-works-in-parallel; owner_role: engineer; value: medium
+    #   finding: docs/parallel-execution-retro.md
+    #   write_scope по факту шире объявленного [docs/, .github/]: +quality/, ai_ops_kit/validation/,
+    #   tests/ — так требует образец «данные+валидатор+тест», а чистый .github/-вариант запрещён
+    #   инвариантом «проверка обязана быть запускаема локально».
+    #   Готово: правило названо и проверяется (размер/охват); закрытие ленты — протокольное правило.
+  - id: drift-detected-between-artifacts
+    title: "Drift: расхождения документация↔код, roadmap↔backlog, backlog↔delivery, Passport↔факт"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_drift_artifacts.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229; закрытие плана — отдельный учётный PR). По СОБСТВЕННОМУ
+      done-when работа сделана: ai_ops_kit/intelligence/drift_artifacts.py даёт drift_report с
+      названными расхождениями (DriftResult.findings; пустой reason у расхождения запрещён
+      __post_init__), пара документация↔код имеет живой компаратор (repo_graph, dp-001), три
+      остальные пары честно возвращают UNKNOWN с названной причиной и лентой-источником — не «дрейфа
+      нет». Перепроверяемо: tests/unit/test_drift_artifacts.py (13 тестов на ВСЕ три случая —
+      искусственный дрейф→DRIFT с именем, чисто→CLEAN, недоступная пара→UNKNOWN). ИСХОД ЦЕЛИ
+      drift_detected_between_artifacts ОСТАЁТСЯ false: он требует реального дрейфа, пойманного на
+      живой дочке через выведенную наружу команду `ai-ops drift` (CLI-проводка вне write_scope этой
+      работы) — это отдельный живой шаг, не код.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/intelligence/, tests/]. Заметка: код цитирует repo_graph, а не
+    #   architecture_baseline (план упоминал оба). Остаток к исходу: команда `ai-ops drift` + живой прогон.
+  - id: ai-decisions-logged-with-rationale
+    title: "AI Decision Log: решение AI, почему, на каких данных, результат, менял ли человек"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_decision_log.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229, шов доставки — #285; закрытие плана — отдельный учётный PR).
+      По done-when работа сделана: ai_ops_kit/governance/decision_log.py — log_ai_decision строит и
+      дописывает валидный actor:ai-эпизод (поля decision/reason/data/outcome/human_overrode) в
+      decisions/registry.yaml, сохраняя комментарии и перечитывая fail-closed; РАСШИРЯЕТ существующий
+      реестр, не заводит второй (dp-001). Перепроверяемо: tests/unit/test_decision_log.py (9 тестов,
+      в т.ч. валидатор validate_decisions ОСТАЁТСЯ зелёным после вставки — подтверждено и живым
+      прогоном валидатора, exit 0). ИСХОД ЦЕЛИ ai_decisions_logged_with_rationale ОСТАЁТСЯ false:
+      «реальное решение с обоснованием» рождается живым прогоном (шов gate_delivery пишет запись в
+      реестр ДОЧКИ на каждой управляемой доставке), а не кодом; в реестре самого кита записей 0.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/governance/, decisions/, tests/]. Остаток к исходу: живой прогон.
+  - id: policy-engine-suggest-to-approval
+    title: "Policy Engine: Suggest → Prepare → Execute → Require approval (исполняемое поведение)"
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_policy_engine.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229; закрытие плана — отдельный учётный PR). done-when выполнен и
+      доказан не декларацией, а швом: ai_ops_kit/governance/policy_engine.py — decide(action)
+      возвращает уровень (suggest/prepare/execute/require_approval) из POLICY.yaml (нет политики →
+      require_approval; неизвестное действие → default; невалидный уровень отвергается, а не
+      угадывается), а enforce РЕАЛЬНО не запускает действие на require_approval без одобрения.
+      Перепроверяемо: tests/unit/test_policy_engine.py (в т.ч.
+      test_require_approval_blocks_without_approval_allows_with,
+      test_enforce_blocks_require_approval_and_does_not_run, test_every_decision_names_reason).
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/governance/, tests/]. Была in_progress на устаревшей ветке lane-5-work,
+    #   но код давно в main (#229) — ветка удалена как избыточная.
+  - id: human-override-as-signal
+    title: Human override — сигнал на будущее, а не ошибка; учитывается в решениях
+    goal: ai-product-operations
+    status: done
+    closed_at: '2026-08-28'
+    pr: 229
+    evidence: tests/unit/test_human_override.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #229; закрытие плана — отдельный учётный PR). done-when выполнен:
+      ai_ops_kit/governance/human_override.py — record_override пишет override как СИГНАЛ
+      (human_overrode=true) в AI Decision Log, не как ошибку, и он доступен будущим решениям
+      (overrides/override_signals читают его). Перепроверяемо: tests/unit/test_human_override.py
+      (test_override_recorded_as_signal_not_error, test_override_is_visible_to_future_decisions,
+      test_override_lands_in_decision_log, накопление нескольких override).
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: ai-product-operations; owner_role: engineer; value: medium
+    #   depends_on: [policy-engine-suggest-to-approval, ai-decisions-logged-with-rationale] (обе done).
+    #   write_scope: [ai_ops_kit/governance/, tests/]. Была in_progress на устаревшей ветке lane-5-work.
+  - id: design-gates-cite-constitution-ids
+    title: >-
+      Гейты дизайна ссылаются на ID Конституции; сила гейтов не меняется (наблюдение)
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-08-28'
+    pr: 354
+    evidence: tests/unit/test_design_gates_cite_constitution.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #354; закрытие плана — отдельный учётный PR). ВТОРАЯ половина волны
+      1 UI/UX: три блокирующих чек-листа дизайна (rules/design/{ux-heuristics,accessibility-checklist,
+      design-system-checklist}.yaml) получили поле constitution_id — 27 из 31 пункта связаны с
+      реальными ID Конституции (UI-/AI-/UI-FORBIDDEN-), 4 честно помечены none (нет правила-двойника,
+      не выдуманы). Промпты ревьюеров (agents/quality/*-reviewer.md) обязаны цитировать constitution_id
+      в находках, выдумывать ID запрещено. Расхождения кит↔Конституция (4 «только кит», 43 правила
+      Конституции вне трёх гейтов) зафиксированы в standards/uiux/gate-reconciliation.md — не скрыты.
+      Сила гейтов НЕ менялась (blocking/severity запинены тестом). Перепроверяемо:
+      tests/unit/test_design_gates_cite_constitution.py (6 тестов) + независимое ревью проверило ВСЕ 27
+      сопоставлений по тексту Конституции (ни одного неверного) и две мутации (подмена силы гейта,
+      фейковый ID) — покраснели. Обе половины волны 1 влиты (#345 источник + #354 цитирование) —
+      исход цели constitution_is_source_and_gates_cite_its_ids флипнут в true (наблюдение-уровень).
+    # РАЗБОР (как в плане):
+    #   type: quality; goal: uiux-standard-as-product; owner_role: engineer; value: high
+    #   depends_on: [uiux-constitution-is-source] (done). write_scope: [rules/design/, quality/gates.yaml, agents/quality/].
+  - id: spend-ceiling-counts-only-this-work
+    title: >-
+      Потолок траты считает расход этой работы, а не прошлых сессий
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-08-28'
+    pr: 355
+    evidence: tests/unit/test_process_spend.py
+    finding: findings/from-children/obs-2026-08-20-потолок-траты-на-разбор--487d952b.yaml
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #355; закрытие плана — отдельный учётный PR). Полевой дефект
+      obs 487d952b: на шаге plan свежей работы кит показывал ~559k против 50k ДО описания задачи —
+      счётчик складывал расход ПРОШЛЫХ сессий и блокировал, рекомендуя «пропусти планирование».
+      Причина: точка отсчёта расхода бралась из прошлой сессии, а из неё вычитался транскрипт текущей.
+      Правка (ai_ops_kit/engops/process_spend.py): точка отсчёта привязана к личности живой сессии
+      (CLAUDE_CODE_SESSION_ID), record_step переносит её при смене сессии; при НЕизвестной личности
+      текущей сессии — честный unknown, а НЕ whole-session (закрыто и окно record=False, и рабочий
+      путь record=True — второе нашло независимое ревью). Рекомендация (ui/presenter.py) ведёт
+      specify->plan->run, «пропусти шаг» убрано. Перепроверяемо: tests/unit/test_process_spend.py
+      (guard+seam+guard-на-окне) + 3 мутационные пробы (все покраснели); футпринт поднят ЧЕСТНО под
+      реальный замер 4 415 346 (не фиктивные числа первой версии). Независимое ревью: PASS.
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: owner-speaks-product-not-pipeline; owner_role: engineer; value: medium
+    #   write_scope по факту шире: +ai_ops_kit/ui/ (recommendation), quality/ (пробы+потолок) — сказано в PR.
+    #   ОСТАЁТСЯ отдельно (не эта работа): внутрисессионная атрибуция трат между работами (session_total
+    #   — на всю сессию; переплетённые работы всё ещё смешиваются) — названо честно, не выдано за фикс.
+  - id: stable-gate-includes-product-layer
+    title: >-
+      Машинный гейт stable не даёт объявить канал, пока продуктовый слой не реализован
+    goal: qualification-closeout
+    status: done
+    closed_at: '2026-08-28'
+    pr: 362
+    evidence: tests/contracts/test_stable_gate_includes_product_layer.py
+    result: >-
+      ЗАКРЫТО 2026-08-28 (код в PR #362; закрытие плана — отдельный учётный PR). Решение владельца
+      ep-2026-08-20-stable-includes-product-operating-layer: «канал заработан» и «продукт-как-ОС готов»
+      — один рубеж. channel_errors (ai_ops_kit/validation/validate_release_claims.py) при channel=stable
+      читает channels.stable.product_layer_goals (5 целей) и planning/plan.yaml и краснит, пока хоть
+      одна цель не achieved — так же машиночитаемо, как field_evidence. Сейчас краснеет ВЕРНО (4 из 5
+      не достигнуты) и честно: файл объявляет channel=qualification, поэтому валидатор зелёный, но
+      попытка объявить stable немедленно краснеет с перечнем недостигнутых целей. Перепроверяемо:
+      tests/contracts/test_stable_gate_includes_product_layer.py (4 теста, двусторонняя мутация —
+      отключение гейта и инверсия краснят) + регресс-тест канала изолирован от product-слоя.
+      Независимое ревью: PASS (после починки одного регресс-теста).
+    # РАЗБОР (как в плане):
+    #   type: quality; goal: qualification-closeout; owner_role: engineer; value: high
+    #   depends_on: [continuous-product-audit] — гейт ссылается на ИСХОДЫ 5 целей, не на саму работу
+    #   аудита; построен и краснит независимо. write_scope: [registry/, ai_ops_kit/validation/, tests/].
+    #   Мелкие незакрытые нит-заметки ревью (channel_errors не проброшен pkg из check(); лишний import
+    #   yaml в функции) — не блокируют, оставлены как есть.
+  - id: acceptance-rubber-stamp-does-not-reach-ready
+    title: >-
+      Несверенная приёмка (0 reads) на QUICK не даёт READY_FOR_PR — рубер-штамп сверкой не является
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-08-30'
+    pr: 364
+    evidence: tests/unit/test_acceptance_rubber_stamp_not_ready.py
+    result: >-
+      ЗАКРЫТО 2026-08-30 (код в PR #364; закрытие плана — отдельный учётный PR). Полевой дефект второго
+      brownfield-прогона (ii-sreda, диагностика): QUICK возвращал READY_FOR_PR, хотя писатель работу не
+      доделал (снёс полплана), а судья приёмки «подтвердил» результат, НЕ прочитав ни файла (0 reads,
+      рубер-штамп). Блок ready стоял только на verified+unmet (B2-30); несостоявшаяся сверка была
+      advisory — ложный green ровно на классе QUICK, где он и случился. Дефект воспроизведён на самом
+      ките (ready_for_pr=True) ДО правки. Правка: поле `attempted` в acceptance_verify различает «судьи
+      не было» (граница security-gate-closable-on-quick #176, не блок) от «судья был, но сверку не
+      сделал» (у обоих reads=[]); предикат pipeline_helpers.acceptance_blocks_ready заменил инлайн
+      B2-30 и стоит в ОБЕИХ ветках расчёта ready; причина и способ закрыть уходят в not_yet. writer≠judge
+      цел — не требуем нового судью, а не принимаем рубер-штамп за сверку. Перепроверяемо:
+      tests/unit/test_acceptance_rubber_stamp_not_ready.py (e2e otherwise-green QUICK + рубер-штамп →
+      NOT READY; граница #176; seam) + переписанный test_acceptance_unmet_blocks_ready.py на настоящий
+      предикат; мутация (откат attempted-ветки) красит e2e и предикат. CI поймал ратчет func-size (фикс
+      уменьшил run_pipeline 401→399 — опущен baseline; slow selftests-m, вне check-fast).
+    # РАЗБОР (как в плане):
+    #   type: engineering; goal: green-means-checked; owner_role: engineer; value: high
+    #   write_scope по факту: [ai_ops_kit/engine/, tests/, packages/func-size-baseline.yaml (ратчет)].
+    #   Freeze-exception: закрывает найденный полем дефект (не новое умение).
+  - id: manifest-drops-historical-audit-ballast
+    title: >-
+      Манифест не везёт в дочку ~213КБ исторических аудит-записей — поставка урезана 252КБ→39КБ
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-08-30'
+    pr: 365
+    evidence: tests/unit/test_installer.py
+    result: >-
+      ЗАКРЫТО 2026-08-30 (код в PR #365; закрытие плана — отдельный учётный PR). Рекомендованная из
+      ревью #364 работа по урезанию поставки (лента объёма 28.08 прямо просила: тонкий запас — сигнал к
+      ОТДЕЛЬНОЙ работе по урезанию, а не к подъёму потолка). manifest/ai-ops-manifest.yaml вёз в КАЖДУЮ
+      дочку ~213КБ датированных аудит-записей (external_audit_2026_07_17_v2_79 133КБ, аудиты исполнения
+      и самопроверки июля, dogfood-находки), не читаемых в дочке ни строкой кода. Проверено, не
+      заявлено: grep по ai_ops_kit/tools/installer пуст, схема package-manifest.schema.json их не
+      требует (additionalProperties:true, в required только schema_version/kind/ai_ops/spec_protocol/
+      update_policy), ни один тест на аудит-контент не опирается (все читают managed_set/package_version/
+      skills.shipped). Тот же класс балласта, что снятый patch_note. Снял строки 213-792 (удаление
+      диапазона, не yaml.dump — сохранены комментарии и порядок): 252КБ→39КБ, индекс компонентов движка
+      и все читаемые ключи целы, история аудитов в git и docs/changelog/v2.md. Перепроверяемо:
+      tests/unit/test_installer.py (footprint + kit-only-paths), test_delivery_budget,
+      test_validate_references — зелёные. Запас поставки восстановлен 0.7КБ(0.0%)→217КБ(4.9%) под ТЕМ ЖЕ
+      потолком (не трогал — прецедент release-claims «не опускаю до следующего замера»).
+    # РАЗБОР (как в плане):
+    #   type: quality; goal: checks-that-run; owner_role: engineer; value: medium
+    #   write_scope: [manifest/, newsfragments/]. Freeze-exception: снижает цену процесса (запас поставки).
+
+  - id: verify-artifact-registry-as-data
+    title: "Живьём: реестр артефактов существует как данные и читается на дочке"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-31'
+    evidence: "живой замер на копии дочки ai-ops-cockpit: `ai-ops validate product-layer` -> 5 артефактов из реестра, 5/5 valid"
+    result: >-
+      ЗАКРЫТО 2026-08-31 живым замером на КОПИИ живой дочки ai-ops-cockpit (реальный репозиторий не
+      тронут, проверено). `ai-ops validate product-layer` перечислил ровно 5 объявленных в реестре
+      артефактов (product_passport, roadmap, delivery, policy, templates_dir) и подтвердил 5/5 valid на
+      реальных .ai-ops/ файлах — перечень берётся ИЗ данных реестра (registry/artifact-registry.yaml),
+      не хардкодом: загрузчик fail-closed на пустом/битом реестре, список артефактов меняется вместе с
+      данными. НАЗВАНО ЧЕСТНО: сам файл реестра в дочку НЕ поставляется — validate/audit идут через
+      родительский кит (обёртка `ai-ops` -> find_installer), это «кит обслуживает сам себя» по замыслу,
+      не дефект. Исход цели product-operating-layer.artifact_registry_exists_as_data флипнут в true.
+    # РАЗБОР: type: quality; goal: product-operating-layer; owner_role: engineer; value: low
+    #   write_scope: [ai_ops_kit/validation/, tests/]. Freeze-exception: замыкает обратную связь из поля.
+
+  - id: verify-template-migrations
+    title: "Живьём: у шаблонов продукта есть версии И миграции, применяемые на дочке"
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-31'
+    pr: 372
+    evidence: tests/unit/test_template_migration_applier.py
+    result: >-
+      ЗАКРЫТО 2026-08-31 (#372). Недоставало ПРИМЕНЕНИЯ миграции: state_of ставил диагноз OUTDATED, а
+      миграцию никто не применял. Добавлен applier product_templates.migrate_instance (гонит up.py
+      каждого шага, успех = повторный state_of==VALID, fail-closed на отсутствии шага/падении up.py),
+      первая реальная миграция POLICY.yaml v1->v2 (поле enforcement) с up.py/down.py, сохраняющими
+      комментарии. Сквозной тест на РЕАЛЬНОМ артефакте: v1 POLICY.yaml дочки проведён до v2 настоящей
+      миграцией policy/v1-to-v2, autonomy и комментарии уцелели. Мутация: снять запуск up.py ->
+      экземпляр остаётся OUTDATED, тест краснеет. Исход
+      product-operating-layer.templates_have_versions_and_migrations флипнут.
+    # РАЗБОР: type: quality; goal: product-operating-layer; owner_role: engineer; value: low
+    #   write_scope: [ai_ops_kit/planning/, templates/product-layer/, registry/, migrations/, tests/].
+    #   Freeze-exception: закрывает объявленный исход продуктового слоя (не новое умение сверх плана).
+
+  - id: continuous-product-audit
+    title: Периодический аудит продукта — артефакты, backlog, roadmap, delivery, риски
+    goal: product-operating-layer
+    status: done
+    closed_at: '2026-08-31'
+    pr: 373
+    evidence: tests/unit/test_ci_template_delivery.py
+    result: >-
+      ЗАКРЫТО 2026-08-31 (#373). Аудит был только «по требованию» (`ai-ops audit product`);
+      недоставало периодической половины. Добавлен поставляемый workflow templates/ci/ai-ops-audit.yml
+      (schedule cron еженедельно + workflow_dispatch), берёт кит из parent, запускает `ai-ops audit
+      product`, отчёт в job summary; READ-ONLY (contents:read), вердикт не роняет джобу. Зарегистрирован
+      в CI_TEMPLATES -> `ai-ops init`/`update` доставляет дочке. Тест: расписание (cron) + зовёт audit
+      product + реально доставляется (sync_ci_workflows); мутация — убрать из CI_TEMPLATES -> доставки
+      нет, тест краснеет. footprint substantive_files 530->531 с обоснованием. Исход
+      product-operating-layer.continuous_audit_runs_periodically флипнут.
+    # РАЗБОР: type: delivery; goal: product-operating-layer; owner_role: engineer; value: medium
+    #   write_scope: [templates/ci/, installer/, tests/, quality/]. Freeze-exception: закрывает
+    #   объявленный исход продуктового слоя.

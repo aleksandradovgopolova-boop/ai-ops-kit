@@ -76,6 +76,35 @@ def test_documented_recipes_call_paths_that_exist():
 
 
 @pytest.mark.unit
+def test_child_template_wires_parallel_safety():
+    """parallel-safety-runs-in-ci (контур дочки): шаблон отдаёт ребёнку проверку, способную краснеть.
+
+    Без --defaults (база координационных файлов из клона кита) у свежей дочки нет своего реестра и
+    проверка структурно не может покраснеть. Без --base нечего диффать. Без --strict красный не
+    взводится. Только на PR: в push нет PR-диффа. Этот тест держит все четыре условия вместе, иначе
+    вторая половина done-when («краснит в контуре дочки») тихо перестала бы выполняться.
+    """
+    import yaml
+    tpl = TEMPLATES / "ai-ops-validate.yml"
+    jobs = (yaml.safe_load(tpl.read_text(encoding="utf-8")) or {}).get("jobs") or {}
+    step = None
+    for job in jobs.values():
+        for s in job.get("steps") or []:
+            if "validate_parallel_safety.py" in str(s.get("run", "")):
+                step = s
+                break
+    assert step is not None, "шаблон дочки не зовёт validate_parallel_safety.py — контур дочки слеп"
+    run = step["run"]
+    assert "--base" in run, "нет --base: диффать нечего, проверка fail-open"
+    assert "--defaults" in run, "нет --defaults: у дочки своего реестра нет, красный невозможен"
+    assert "--strict" in run, "нет --strict: смешанный PR не покраснеет"
+    assert "pull_request" in str(step.get("if", "")), "шаг должен идти только на PR (в push нет диффа)"
+    # путь базы координаторов (--defaults) внутрь клона обязан существовать в ките
+    for rel in _kit_paths(run):
+        assert (KIT / rel).exists(), f"--defaults ссылается на несуществующее в ките: {rel}"
+
+
+@pytest.mark.unit
 def test_no_template_clones_into_shared_tmp():
     """`/tmp` считает раннер одноразовым. На своём раннере каталог живёт между джобами, и клон
     падает на «destination path already exists» (находка PR #53)."""

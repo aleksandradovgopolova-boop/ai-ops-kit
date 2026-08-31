@@ -53,6 +53,7 @@ STANDALONE = [
     "validate_event_catalog",
     "validate_feature_learning",
     "validate_freshness",
+    "validate_func_size",
     "validate_integration_trace",
     "validate_key_lifecycle",
     "validate_layering",
@@ -66,6 +67,7 @@ STANDALONE = [
     "validate_own_medicine",
     "validate_package_boundaries",
     "validate_parallel_safety",   # 20.08.2026: standalone, читает свой registry/coordination-files.yaml
+    "validate_pr_size",           # 28.08.2026: standalone, читает свой quality/pr-budget.yaml (fail-open без --base)
     "validate_pipeline_e2e",
     "validate_post_release_readout",
     "validate_presets",
@@ -79,6 +81,7 @@ STANDALONE = [
     "validate_references",
     "validate_regression_corpus",
     "validate_release_claims",
+    "validate_required_contexts",   # standalone: сверяет required-статусы защиты с CI-джобами (fail-open без gh API)
     "validate_research_artifacts",
     "validate_runtime_surface",
     "validate_sandbox_boundary",

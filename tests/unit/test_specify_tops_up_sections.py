@@ -57,10 +57,15 @@ def child(tmp_path):
 
 
 def _over_ceiling(root, wid, monkeypatch):
-    """Расход сессии перевалил потолок владельца, кода никто не трогал — состояние из поля."""
+    """Расход сессии перевалил потолок владельца, кода никто не трогал — состояние из поля.
+
+    Точка отсчёта и текущий замер — ОДНА живая сессия (`sess-1`): потолок мерит трату разбора в
+    текущей сессии, и без общей личности сессии он бы (верно) не сработал — см. work-scoped-spend.
+    """
     monkeypatch.setattr(session_telemetry, "snapshot",
                         lambda *a, **k: {"session_total_tokens": 200_000})
-    process_spend.record_step(root, wid, "specify", 100_000)
+    monkeypatch.setattr(process_spend, "_session_id", lambda *a, **k: "sess-1")
+    process_spend.record_step(root, wid, "specify", 100_000, session_id="sess-1")
     assert process_spend.assess(root, wid, "specify")["blocks"] is True, (
         "проба не дошла до дефекта: потолок не сработал, проверять было бы нечего")
 

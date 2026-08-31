@@ -540,6 +540,14 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                        "досягаемость": "команда" if published else "эта машина"})
 
     n = len(active)
+    # РАБОЧИЕ КОПИИ НАЗЫВАЮТСЯ, А НЕ ТОЛЬКО МАШИНЫ. Параллельные ленты живут каждая в своём git
+    # worktree/ветке; ответ, называющий лишь «эту машину», не говорит, ГДЕ идёт работа — а на одной
+    # машине копий несколько. Ветка (она же лента) есть у каждой заявки, включая опубликованную
+    # чужую (PUBLISHED_FIELDS её несёт); worktree-путь — только у локальных, поэтому в человеческий
+    # текст идёт ветка, а путь остаётся в technical. Заявка без ветки просто не называется — сводка
+    # тогда прежняя, без рассинхрона.
+    copies = [a.get("branch") for a in active if a.get("branch")]
+    copies_h = ("; ".join(copies[:3]) + ("…" if len(copies) > 3 else "")) if copies else ""
     what = "; ".join(
         (a.get("title") or a.get("workitem") or a.get("id") or "работа")
         for a in active[:3])
@@ -560,7 +568,8 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
     return message(
         status="degraded" if stale else "ok",
         headline="Работа идёт" if not stale else "Работа идёт, но план расходится с заявками",
-        summary=f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}.",
+        summary=(f"Сейчас в работе {n} {_q(n, 'задача', 'задачи', 'задач')}"
+                 + (f" — в рабочих копиях {copies_h}." if copies_h else ".")),
         why_it_matters=why,
         next_steps=["спроси «что дальше», если нужно чем-то заняться параллельно"],
         technical={"работ": n, "детали": what,
@@ -569,6 +578,8 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                                                 for x in (a.get("affected_areas")
                                                           or a.get("areas") or [])})) or "—",
                    "ветки": ", ".join(a.get("branch") or "?" for a in active),
+                   "рабочие копии": ", ".join(
+                       a.get("worktree") or a.get("branch") or "?" for a in active),
                    "id": ", ".join(str(a.get("id") or "?") for a in active)})
 
 
@@ -1299,19 +1310,23 @@ def from_process_spend(check: dict, continue_command: str = None,
             why_it_matters="Называть это нормой было бы неправдой: я не знаю числа, а не знаю, что "
                            "оно маленькое.",
             technical={"причина": check.get("reason")})
+    step = check.get("intent") or "разбор"
     return message(
         status="needs_input", headline="Разбор уже дороже, чем ты разрешила",
-        summary=f"На то, чтобы разобраться и описать, ушло {_t(spent)} токенов, а кода я ещё не "
-                f"тронул. Твой потолок на это — {_t(limit)}.",
-        why_it_matters="Ровно так уже сгорели две сессии: описание уточнялось, а работа не "
-                       "начиналась. Дальше решаешь ты.",
-        decision={"question": "продолжать разбор или идти делать по тому, что уже есть?",
-                  "recommendation": "идти делать: если чего-то не хватит, это станет видно на "
-                                    "проверках, а не в разговоре",
-                  "on_approve": f"делаю: {run_command}" if run_command else "беру работу в исполнение",
-                  "on_reject": f"продолжаю разбор: {continue_command}" if continue_command
-                               else "продолжаю разбор"},
-        next_steps=[c for c in (run_command, continue_command) if c],
+        summary=f"На то, чтобы разобраться и описать, ушло в этой сессии {_t(spent)} токенов, а кода я "
+                f"ещё не тронул. Твой потолок на это — {_t(limit)}.",
+        why_it_matters="Ровно так уже сгорали сессии: описание уточнялось по кругу, а работа не "
+                       "начиналась. Но пропускать объявленный шаг я не советую — путь "
+                       "specify→plan→run затем и объявлен, чтобы результат было чем проверить.",
+        decision={"question": f"довести шаг «{step}» до конца или ты считаешь описание готовым?",
+                  "recommendation": f"довести {step} и идти дальше по объявленному пути; если разбор "
+                                    "пошёл по кругу — назвать, чего конкретно не хватает, а не "
+                                    "углубляться дальше. Шаг не пропускать.",
+                  "on_approve": f"продолжаю {step}: {continue_command}" if continue_command
+                                else f"продолжаю {step}",
+                  "on_reject": f"описание готово — беру в исполнение: {run_command}" if run_command
+                               else "описание готово — беру работу в исполнение"},
+        next_steps=[c for c in (continue_command, run_command) if c],
         technical={"потрачено на описание": spent, "потолок": limit,
                    "шаги описания": ", ".join(check.get("process_steps") or []) or "—",
                    "расход сессии всего": check.get("session_total_tokens"),

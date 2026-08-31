@@ -518,6 +518,11 @@ def _unverified(criteria, reason, declared=None, **extra):
     """
     out = {"declared": bool(criteria) if declared is None else bool(declared),
            "count": len(criteria or []), "verified": False, "verifier": None,
+           # `attempted` — отработал ли поднятый судья (30.08.2026, second-brownfield). `verified=
+           # False` не различает «судьи не было» и «судья был, но вынес рубер-штамп» (у обоих
+           # reads=[]) — на различии стоит граница #176 (pipeline_helpers.acceptance_blocks_ready).
+           # По умолчанию False; verify() ставит True на всех исходах ПОСЛЕ вызова run_review.
+           "attempted": False,
            "met_all": None, "quote_verified": 0, "judge_only": [],
            "owner_check_required": False, "unmet": [], "undetermined": [],
            "criteria": [{"id": c["id"], "text": c["text"], "status": "undetermined",
@@ -553,20 +558,23 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
                               terminal_kind="acceptance-result", terminal_field="criteria")
     res, reads, denied = rv.get("result"), rv.get("reads") or [], rv.get("denied") or []
 
+    # ДОШЛИ ДО СЮДА -> судья отработал (attempted=True), чем бы ни кончилось: нет вердикта / не по
+    # контракту / рубер-штамп. Это и отличает «сверка не состоялась при поднятом судье» от «судьи
+    # не было» — на различии стоит граница READY_FOR_PR (#176).
     if not isinstance(res, dict):
         return _unverified(criteria, f"ревьюер не вынес вердикт ({rv.get('stopped')}) — сверки нет",
-                           reads=reads, denied=denied)
+                           reads=reads, denied=denied, attempted=True)
     errs = var.check(res, criterion_ids=[c["id"] for c in criteria])
     if errs:
         return _unverified(criteria, "вердикт ревьюера не соответствует контракту: "
                                      + "; ".join(errs[:3]),
-                           reads=reads, denied=denied, errors=errs)
+                           reads=reads, denied=denied, errors=errs, attempted=True)
     if not reads:
         # Тот же инвариант, что для блокирующих ai-review гейтов (`pipeline_evidence._run_reviews`):
         # вердикт без единого чтения — рубер-штамп. Здесь он опаснее: подтверждает приёмку.
         return _unverified(criteria, "вердикт вынесен без единого чтения (0 reads) — рубер-штамп "
                                      "сверкой не является",
-                           reads=reads, denied=denied)
+                           reads=reads, denied=denied, attempted=True)
 
     by_id = {str(c["id"]): c for c in res["criteria"]}
     out, unmet, undet = [], [], []
@@ -626,6 +634,7 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
     else:
         reason = f"все критерии выполнены, основания подтверждены цитатой ({len(strong)})"
     return {"declared": True, "count": len(criteria), "verified": verified,
+            "attempted": True,   # судья отработал (см. _unverified.attempted выше)
             "verifier": (f"independent-reviewer @ {(revision or 'HEAD')[:12]}" if verified else None),
             "met_all": met_all if verified else None,
             "quote_verified": len(strong), "judge_only": weak,

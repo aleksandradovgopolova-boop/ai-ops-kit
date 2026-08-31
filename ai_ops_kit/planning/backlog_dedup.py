@@ -179,6 +179,96 @@ def dedup_backlog(repo_or_root: str = ".", state: str = "open", threshold: float
                        len(res.items), dups, stale)
 
 
+# ── СЛИЯНИЕ ДУБЛЕЙ: approval-gated execute (PR-19/20 «Execute → Require approval») ───────────────
+#
+# Детектор ПРЕДЛАГАЕТ (find_duplicates, action=suggest_merge). Здесь — вторая половина исхода
+# `duplicates_detected_and_merged`, ПОСТРОЕННАЯ ПО РЕШЕНИЮ ВЛАДЕЛЬЦА (2026-08-31, вариант «одобряемое
+# слияние»): кит выполняет слияние ТОЛЬКО по явно одобренным человеком парам, и никогда сам.
+#
+# GitHub не умеет «слить» два Issue — конвенция: закрыть ДУБЛЬ с кросс-ссылкой на канонический,
+# канонический оставить открытым. Операция ОБРАТИМА (закрытый issue переоткрывается).
+#
+# ГРАНИЦЫ (механизмами, не на словах):
+#   · approved — ЯВНЫЙ вход человека; из детектора он НЕ выводится (принцип «предлагать, не сливать»);
+#   · dry_run по умолчанию True — что закроется, человек видит ДО того, как это произошло;
+#   · канонический НИКОГДА не трогается (закрывается только дубль);
+#   · пустой approved / duplicate==canonical / не-int — отказ с причиной, не «слил на всякий случай»;
+#   · при провале комментария дубль НЕ закрывается (пара пропущена с причиной) — нет «тихого» закрытия.
+
+@dataclass
+class MergeExecution:
+    ok: bool
+    dry_run: bool
+    by: str
+    executed: list = field(default_factory=list)   # [{duplicate, canonical, comment_ok, close_ok}]
+    skipped: list = field(default_factory=list)     # [{duplicate, canonical, reason}]
+    reason: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _validate_approved(approved) -> "tuple[list, list]":
+    """Разобрать одобренные пары -> (валидные, отклонённые с причиной). Инварианты границы."""
+    valid, bad = [], []
+    for row in (approved or []):
+        dup = row.get("duplicate")
+        can = row.get("canonical")
+        if not isinstance(dup, int) or not isinstance(can, int) or dup <= 0 or can <= 0:
+            bad.append({"duplicate": dup, "canonical": can,
+                        "reason": "duplicate/canonical должны быть положительными int (номера Issue)"})
+            continue
+        if dup == can:
+            bad.append({"duplicate": dup, "canonical": can,
+                        "reason": "duplicate == canonical — это не пара дублей"})
+            continue
+        valid.append({"duplicate": dup, "canonical": can})
+    return valid, bad
+
+
+def execute_merge(repo_or_root: str = ".", approved=None, *, dry_run: bool = True,
+                  by: str = "owner", note: str = "", client=None) -> MergeExecution:
+    """Слить ОДОБРЕННЫЕ пары дублей: закрыть дубль с кросс-ссылкой на канонический.
+
+    `approved`: список {"duplicate": N, "canonical": M} — ЯВНЫЙ выбор человека (не из детектора).
+    `dry_run=True` (по умолчанию): ничего не пишет, возвращает план. Никогда не трогает канонический.
+    """
+    valid, bad = _validate_approved(approved)
+    if not valid:
+        return MergeExecution(False, dry_run, by, executed=[], skipped=bad,
+                              reason="нет валидных одобренных пар — слияние не выполняется "
+                                     "(approved задаёт ЧЕЛОВЕК, из детектора он не берётся)")
+    from ai_ops_kit.integrations import github as gh
+    client = client or gh.make_client(repo_or_root)
+    av = client.availability()
+    if not av.ok:
+        return MergeExecution(False, dry_run, by, executed=[], skipped=bad, reason=av.reason)
+
+    executed, skipped = [], list(bad)
+    for pair in valid:
+        dup, can = pair["duplicate"], pair["canonical"]
+        body = (f"Дубликат #{can}. Объединено с одобрения: {by}."
+                + (f" {note}" if note else "")
+                + "\n\n(закрыто автоматизацией AI Ops по одобренной паре; обратимо переоткрытием)")
+        if dry_run:
+            executed.append({"duplicate": dup, "canonical": can, "dry_run": True,
+                             "would": f"комментарий на #{dup} '{body[:40]}...' + закрыть #{dup} "
+                                      f"(канонический #{can} остаётся открыт)"})
+            continue
+        cres = client.comment_issue(dup, body)
+        if not cres.ok:
+            skipped.append({"duplicate": dup, "canonical": can,
+                            "reason": f"комментарий не оставлен ({cres.reason}) — дубль НЕ закрыт"})
+            continue
+        clres = client.close_issue(dup, reason="not_planned")
+        executed.append({"duplicate": dup, "canonical": can,
+                         "comment_ok": True, "close_ok": clres.ok,
+                         "close_reason": "" if clres.ok else clres.reason})
+    ok = bool(executed) and all(e.get("close_ok", True) for e in executed)
+    return MergeExecution(ok, dry_run, by, executed=executed, skipped=skipped,
+                          reason="" if ok else "часть пар не слита — см. skipped/close_reason")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────────────────────
 
 def main(argv=None) -> int:

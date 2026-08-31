@@ -102,8 +102,9 @@ class TestCeilingStopsTheStepItself:
         """Потолок пробит -> шаг НЕ исполняется. Спека не создана — это и есть доказательство, что
         проверка стоит перед шагом, а не рядом с ним."""
         repo = _repo(tmp_path)
-        process_spend.record_step(repo, WID, "discuss", 10000)
+        process_spend.record_step(repo, WID, "discuss", 10000, session_id="sess-1")
         monkeypatch.setattr(process_spend, "_session_total", lambda *a, **k: 200000)
+        monkeypatch.setattr(process_spend, "_session_id", lambda *a, **k: "sess-1")
         rc = ai_ops_cli.main(["specify", "Добавь выгрузку заказов в CSV", str(repo), "--feature", WID])
         out = capsys.readouterr().out
         assert rc == 2
@@ -113,8 +114,9 @@ class TestCeilingStopsTheStepItself:
     def test_spend_ok_lets_the_owner_continue(self, tmp_path, monkeypatch):
         """Решение владельца (в): предупредить и СПРОСИТЬ. Ответ «продолжаем» обязан работать."""
         repo = _repo(tmp_path)
-        process_spend.record_step(repo, WID, "discuss", 10000)
+        process_spend.record_step(repo, WID, "discuss", 10000, session_id="sess-1")
         monkeypatch.setattr(process_spend, "_session_total", lambda *a, **k: 200000)
+        monkeypatch.setattr(process_spend, "_session_id", lambda *a, **k: "sess-1")
         rc = ai_ops_cli.main(["specify", "Добавь выгрузку заказов в CSV", str(repo),
                               "--feature", WID, "--spend-ok"])
         assert rc == 0

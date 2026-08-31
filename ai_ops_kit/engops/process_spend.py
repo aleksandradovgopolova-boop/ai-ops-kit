@@ -10,10 +10,16 @@
 Залипание на описании умещается во все три: 200 тысяч токенов — это норма для сессии и ноль для
 ledger'а, потому что модель звал не кит, а разговор вокруг кита.
 
-ЧТО МЕРИТСЯ ЗДЕСЬ: расход сессии рантайма МЕЖДУ первым процессным шагом по этой работе и текущим
-моментом, при условии что код ещё не тронут. Порог — 50 000 токенов (владелец, 2026-08-17; замер
-поля показывал 200 000+, порог назван вчетверо меньшим сознательно). Настраивается ключом
-`session_economy.process_spend_ceiling_before_code` в `.ai-ops.yaml`.
+ЧТО МЕРИТСЯ ЗДЕСЬ: расход ТЕКУЩЕЙ живой сессии рантайма МЕЖДУ первым процессным шагом по этой работе
+В ЭТОЙ ЖЕ СЕССИИ и текущим моментом, при условии что код ещё не тронут. Порог — 50 000 токенов
+(владелец, 2026-08-17; замер поля показывал 200 000+, порог назван вчетверо меньшим сознательно).
+Настраивается ключом `session_economy.process_spend_ceiling_before_code` в `.ai-ops.yaml`.
+
+СЧЁТ ПРИВЯЗАН К СЕССИИ, А НЕ К ИСТОРИИ (полевой дефект 487d952b). `session_total` — накопленный расход
+транскрипта ТЕКУЩЕЙ сессии; отсчёт, снятый в ДРУГОЙ сессии, из него не вычитается — иначе на первом же
+шаге свежей работы кит показывал бы трату прошлых сессий (в поле: ~559k против 50k ещё до того, как в
+задаче что-либо описали). Смена сессии рантайма (id из ENV `CLAUDE_CODE_SESSION_ID`, иначе из
+транскрипта) переносит отсчёт на текущую сессию: новая сессия — новый бюджет разбора.
 
 «КОД ТРОНУТ» — ВЫВОД, А НЕ ОБЪЯВЛЕНИЕ. Спрашиваем git: есть ли изменения (в индексе или в дереве) по
 путям, которые киту НЕ принадлежат (список получен замером свежей установки, см. `_KIT_PREFIXES`).
@@ -151,22 +157,34 @@ def code_changed(child_root):
     return False
 
 
-def record_step(child_root, wid, intent, session_total):
+def record_step(child_root, wid, intent, session_total, session_id=None):
     """Отметить процессный шаг. -> запись работы. Первый шаг задаёт точку отсчёта расхода.
 
-    Точка отсчёта берётся ОДИН раз и не переписывается: иначе каждый следующий шаг обнулял бы счёт,
-    и потолок не срабатывал бы никогда — ровно та ошибка, из-за которой залипание и не ловилось.
+    Точка отсчёта берётся ОДИН раз В ПРЕДЕЛАХ ОДНОЙ СЕССИИ и внутри неё не переписывается: иначе
+    каждый следующий шаг обнулял бы счёт, и потолок не срабатывал бы никогда — ровно та ошибка, из-за
+    которой залипание и не ловилось. НО смена сессии рантайма (id, отличный от записанного) переносит
+    отсчёт на текущую сессию — новый бюджет разбора (см. счёт-привязан-к-сессии в docstring модуля).
+    При НЕизвестном id ничего не трогаем: «не знаю» не повод сбросить.
     """
     doc = load_state(child_root)
     wid = str(wid)
     entry = doc["works"].get(wid)
-    if not isinstance(entry, dict):
+    new = not isinstance(entry, dict)
+    if new:
         entry = {"first_step": intent, "first_step_at": _now(),
-                 "first_step_session_tokens": session_total, "steps": []}
-    if entry.get("first_step_session_tokens") is None and session_total is not None:
-        # Первый шаг случился при недоступном транскрипте — берём отсчёт с первого измеримого.
+                 "first_step_session_tokens": session_total,
+                 "first_step_session_id": session_id, "steps": []}
+    base_sid = entry.get("first_step_session_id")
+    session_changed = (not new) and session_id is not None and session_id != base_sid
+    first_measurable = entry.get("first_step_session_tokens") is None and session_total is not None
+    if session_changed or first_measurable:
+        # session_changed — новая сессия рантайма. first_measurable — первый шаг был при недоступном
+        # транскрипте, отсчёт берём с первого измеримого (иначе ложное «пробит» на первом же числе).
         entry["first_step_session_tokens"] = session_total
+        entry["first_step_session_id"] = session_id
         entry["baseline_from"] = intent
+        if session_changed:
+            entry["baseline_session_changed_at"] = _now()
     entry["steps"] = (entry.get("steps") or []) + [
         {"intent": intent, "at": _now(), "session_total_tokens": session_total}]
     entry["last_step"] = intent
@@ -193,7 +211,7 @@ def classify(spent_on_process, limit):
 _UNSET = object()
 
 
-def assess(child_root, wid, intent, session_total=_UNSET, policy=None, record=True):
+def assess(child_root, wid, intent, session_total=_UNSET, session_id=None, policy=None, record=True):
     """Оценить процессную фазу этой работы. -> ProcessSpendCheck.
 
     `blocks=True` означает: шаг делать НЕ надо, надо спросить владельца. Блокирует только
@@ -203,18 +221,24 @@ def assess(child_root, wid, intent, session_total=_UNSET, policy=None, record=Tr
     limit = ceiling(child_root, policy)
     if session_total is _UNSET:
         session_total = _session_total(child_root, wid)
+        # Личность живой сессии доезжает до РЕШЕНИЯ: без неё трата этой работы неотличима от прошлых
+        # сессий (дефект 487d952b). Тот же живой рантайм, что и расход.
+        session_id = _session_id(child_root, wid)
     touched = code_changed(child_root)
-    entry = record_step(child_root, wid, intent, session_total) if record \
+    entry = record_step(child_root, wid, intent, session_total, session_id) if record \
         else (load_state(child_root)["works"].get(str(wid)) or {})
 
     base = entry.get("first_step_session_tokens")
-    spent = None if (base is None or session_total is None) else max(0, session_total - base)
+    spent = _work_scoped_spend(entry, session_total, session_id)
 
     if touched is True:
         state, reason = "code_started", "код уже правится — процессная фаза закрыта, потолок не применяется"
     else:
         state = classify(spent, limit)
-        if state == "unknown":
+        if state == "unknown" and session_total is not None and base is not None:
+            reason = ("точка отсчёта снята в другой сессии — трату разбора ЭТОЙ работы в текущей "
+                      "сессии посчитать нечем; потолок не применяю и не выдаю это за норму")
+        elif state == "unknown":
             reason = ("расход сессии не измерим (нет транскрипта рантайма) — потолок процессных "
                       "шагов не применяю и не выдаю это за норму")
         elif state == "over_ceiling":
@@ -222,7 +246,7 @@ def assess(child_root, wid, intent, session_total=_UNSET, policy=None, record=Tr
                       f"потолок владельца — {_tok(limit)}")
         elif state == "attention":
             reason = (f"на описание ушло {_tok(spent)} из {_tok(limit)} токенов, кода ещё нет — "
-                      "дальше стоит либо делать, либо назвать, чего не хватает")
+                      "стоит довести объявленный шаг или назвать, чего не хватает, а не углубляться в разбор")
         else:
             reason = f"на описание ушло {_tok(spent)} из {_tok(limit)} токенов"
 
@@ -234,6 +258,8 @@ def assess(child_root, wid, intent, session_total=_UNSET, policy=None, record=Tr
         "spent_on_process": spent,
         "session_total_tokens": session_total,
         "baseline_session_tokens": base,
+        "session_id": session_id,
+        "baseline_session_id": entry.get("first_step_session_id"),
         "code_changed": touched,
         "process_steps": [s.get("intent") for s in (entry.get("steps") or [])],
         "measurement": "measured" if session_total is not None else "unavailable",
@@ -242,12 +268,51 @@ def assess(child_root, wid, intent, session_total=_UNSET, policy=None, record=Tr
     }
 
 
+def _work_scoped_spend(entry, session_total, session_id):
+    """Трата на разбор ТЕКУЩЕЙ работы в ТЕКУЩЕЙ сессии. -> int или None (не измеримо -> unknown).
+
+    None, а НЕ расход сессии целиком: точка отсчёта и текущий замер ТОЧНО из разных сессий (обе
+    известны и различны) -> вычесть значило бы посчитать трату прошлых сессий (дефект 487d952b), и
+    «не знаю» тут честнее. Обычный путь (record=True) сюда не доходит — record_step переносит отсчёт
+    на текущую сессию; ветка держит честность на пути record=False (preview/CLI).
+    """
+    base = entry.get("first_step_session_tokens")
+    base_sid = entry.get("first_step_session_id")
+    if base is None or session_total is None:
+        return None
+    # База из ИЗВЕСТНОЙ сессии, а личность текущей неизвестна (session_id=None, напр. рантайм без
+    # CLAUDE_CODE_SESSION_ID): same-session НЕ подтвердить -> unknown, а не вычитать. Иначе, если
+    # база из прошлой сессии, вернулся бы расход прошлых сессий (дефект 487d952b) под видом текущего.
+    if base_sid is not None and session_id is None:
+        return None
+    if session_id is not None and base_sid is not None and session_id != base_sid:
+        return None
+    return max(0, session_total - base)
+
+
 def _session_total(child_root, wid):
     try:
         from ai_ops_kit.engops import session_telemetry
         snap = session_telemetry.snapshot(child_root, workitem_id=wid)
         return snap.get("session_total_tokens")
     except Exception:  # noqa: BLE001 — телеметрия недоступна -> unknown, а не 0
+        return None
+
+
+def _session_id(child_root, wid):
+    """Личность живой сессии рантайма: ENV -> транскрипт. None, если сессии нет.
+
+    ENV первичен: он есть и когда транскрипт ещё не найден, и стабилен весь срок сессии.
+    """
+    try:
+        from ai_ops_kit.engops import session_telemetry_provider as _p
+        env_sid = _p._env(_p.ENV_SESSION_ID_KEYS)
+        if env_sid:
+            return env_sid
+        from ai_ops_kit.engops import session_telemetry
+        sid = session_telemetry.snapshot(child_root, workitem_id=wid).get("session_id")
+        return sid if sid and sid != "unlabelled" else None
+    except Exception:  # noqa: BLE001 — сессии нет -> личности нет, это «не знаю», а не подстановка
         return None
 
 

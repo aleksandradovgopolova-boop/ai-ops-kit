@@ -17,6 +17,7 @@
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
   onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
+  drift                — read-only снимок рассинхрона между продуктовыми артефактами (документация↔код; v3.37)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
   subsession           — взять ли работу в отдельную сессию самому: решение + потолок автономной
                          траты; сухо по умолчанию, тратит только с `--spawn`
@@ -548,6 +549,10 @@ DEV_ONLY_PREFIXES = (
 # `test_unwired_modules_are_really_unwired` краснеет, если имя из этого списка кто-то начал звать.
 # Список вправе только СОКРАЩАТЬСЯ — как ратчет слоёв и как потолок поставки.
 UNWIRED_MODULES = frozenset({
+    # `kernel/ports.py` побывал здесь ровно один коммит (2026-08-25) и УШЁЛ проводкой, а не решением:
+    # транзакционный контроллер `ai_ops_run` сверяет свои параметры прогона с ExecutionSpec на каждом
+    # запуске (страж дрейфа контракта). Реализации портам по-прежнему не соответствуют — это записано
+    # в самом контроллере и остаётся долгом Phase B.
     "ai_ops_kit/engops/delivery_size.py",
     "ai_ops_kit/engops/merge_lifecycle.py",
     "ai_ops_kit/engops/refusal_paths.py",
@@ -1892,7 +1897,7 @@ def _assets_report_line(assets: dict) -> str:
 # Молча перезаписывать файл в чужом `.github/` тоже нельзя: владелец вправе его править. Поэтому
 # кит трогает только то, что САМ написал и что с тех пор никто не менял — это знание хранится
 # отпечатком. Остальное он НАЗЫВАЕТ, а решение оставляет человеку.
-CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml")
+CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml", "ai-ops-audit.yml")
 # Путь отпечатков считается ОТ ПЕРЕДАННОГО КОРНЯ, а не от глобального REPO_ROOT. Первая версия
 # брала глобальный — и `sync_ci_workflows(other_root)` писал отпечатки в текущий репозиторий, а не
 # в тот, который обслуживал. Поймано тем, что в коммит кита попал чужой `.ai/runtime/ci-templates.json`.
@@ -3252,6 +3257,20 @@ def _force_utf8_stdio():
                 pass
 
 
+def cmd_drift(argv):
+    """v3.37 `ai-ops drift` — read-only снимок РАССИНХРОНА между продуктовыми артефактами дочки
+    (документация↔код и др.). Детектор `drift_artifacts` построен (#229) и уже читался риск-реестром,
+    но ОТДЕЛЬНОЙ команды на дочке не было — исход `drift_detected_between_artifacts` живьём было нечем
+    запустить. Команда ничего не меняет; печатает машиночитаемый отчёт (или пишет в файл через `-o`)."""
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "intelligence" / "drift_artifacts.py").is_file():
+            if str(_root) not in sys.path:
+                sys.path.insert(0, str(_root))
+            break
+    from ai_ops_kit.intelligence import drift_artifacts
+    return drift_artifacts.main([str(REPO_ROOT), *argv[2:]])
+
+
 def main(argv):
     _force_utf8_stdio()
     try:
@@ -3301,6 +3320,8 @@ def _dispatch(argv):
         return cmd_onboard(argv)
     if cmd == "audit":
         return cmd_audit(argv)
+    if cmd == "drift":
+        return cmd_drift(argv)
     if cmd == "session":
         return cmd_session(argv)
     if cmd == "subsession":

@@ -490,3 +490,57 @@ class TestValidateEvidenceSchemas:
     def test_broken_type_is_error(self):
         assert gate_executor.validate_evidence_schemas(
             {"g": {"evidence_schema": {"build": {"exit_code": "bogus"}}}}) != []
+
+
+@pytest.mark.unit
+class TestEvidenceFromNoVerdict:
+    """no-verdict -> evidence, которое НАЗЫВАЕТ причину (находка поля P0, obs-2026-08-20).
+
+    Блокирующий гейт при отсутствии вердикта обязан пасть с НАЗВАННОЙ причиной (а не общим «нет
+    заключения reviewer»), нести `"reviewer verdict"` в evidence (взводит reviewer-blocked в
+    _hard_stop) и различать под-случаи: бюджет / чтения-без-вердикта / ноль разбираемых ответов /
+    названный отказ провайдера."""
+    BLOCKING = {"blocking": True}
+    ADVISORY = {"blocking": False}
+
+    def _said(self, ev):
+        return " ".join((ev.get("blockers") or []) + (ev.get("warnings") or []))
+
+    def test_blocking_no_verdict_fails_with_named_reason(self):
+        ev = gate_executor.evidence_from_no_verdict(
+            self.BLOCKING, gate_id="code_review", stopped="no-verdict",
+            errors=["ревьюер не вынес вердикт"])
+        assert ev["status"] == "fail"
+        said = self._said(ev)
+        assert "не вынес вердикт" in said
+        assert "нет заключения reviewer" not in said, "общая формулировка врала о причине"
+
+    def test_evidence_carries_reviewer_verdict_marker(self):
+        """`_hard_stop` распознаёт reviewer-blocked по подстроке 'reviewer verdict' в evidence."""
+        ev = gate_executor.evidence_from_no_verdict(
+            self.BLOCKING, gate_id="code_review", stopped="no-verdict", errors=["x"])
+        assert any("reviewer verdict" in e for e in ev.get("evidence", []))
+
+    def test_budget_subcase_is_named_and_not_pending_human(self):
+        ev = gate_executor.evidence_from_no_verdict(
+            self.BLOCKING, gate_id="code_review", stopped="budget: max_model_calls")
+        assert "бюджет" in self._said(ev)
+        assert not ev.get("pending_human")
+
+    def test_reads_without_verdict_flags_pending_human(self):
+        ev = gate_executor.evidence_from_no_verdict(
+            self.BLOCKING, gate_id="code_review", stopped="no-verdict", reads=["a.py", "b.py"])
+        assert "2" in self._said(ev) and ev.get("pending_human") is True
+
+    def test_advisory_gate_warns_not_fails(self):
+        ev = gate_executor.evidence_from_no_verdict(
+            self.ADVISORY, gate_id="ux_review", stopped="no-verdict", errors=["x"])
+        assert ev["status"] == "warn" and ev.get("warnings")
+
+    def test_provider_refusal_reason_is_primary(self):
+        refusal = {"kind": "provider-refusal", "reason": "empty_answer",
+                   "reason_text": "модель вернула пустой ответ", "provider": "claude-cli"}
+        ev = gate_executor.evidence_from_no_verdict(
+            self.BLOCKING, gate_id="code_review", stopped="refusal: empty_answer", refusal=refusal)
+        assert ev["status"] == "fail"
+        assert "пустой" in self._said(ev)

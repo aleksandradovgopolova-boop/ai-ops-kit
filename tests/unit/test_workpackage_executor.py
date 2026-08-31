@@ -384,6 +384,27 @@ class TestResume:
             assert "error" in seq_pd2
             assert "дрейф" in (seq_pd2.get("error") or "").lower()
 
+    def test_corrupt_prior_report_on_resume_error(self, three_area_sig):
+        # K6-характеристика: пакет ДО resume_from с БИТЫМ report.json (невалидный JSON) не
+        # подтверждается — resume честно ошибается, пакет НЕ попадает в completed. Фиксирует ветку
+        # `_verify_skipped`/`_verify_resumed_package` «битый отчёт» перед выносом её из execute_sequence.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cur = _mkrepo(td)
+            pkgs = atomic_planner.decompose(three_area_sig, wid="seqc", child_root=root)["work_packages"]
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                execute_sequence("x", three_area_sig, root, pkgs, _prop_for, feature="seqc",
+                                 base=cur, author=True, author_proposer=_author,
+                                 review=True, reviewer_proposer=_pass_reviewer)
+            _rep = (root / "features" / "seqc" / "work-packages" / pkgs[0]["id"] / "report.json")
+            _rep.write_text("{ это не JSON", encoding="utf-8")
+            seq_c = execute_sequence("x", three_area_sig, root, pkgs, _prop_for, feature="seqc",
+                                     base=cur, resume_from=pkgs[1]["id"])
+            assert "error" in seq_c
+            assert "битый отчёт" in (seq_c.get("error") or "")
+            assert pkgs[0]["id"] not in seq_c.get("completed", [])
+
     def test_unconfirmed_skipped_package_error(self, three_area_sig):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

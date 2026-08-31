@@ -147,7 +147,7 @@ artifacts:
     kind: config
     format: yaml
     path: ".ai-ops/POLICY.yaml"
-    template: {path: "templates/product-layer/POLICY.yaml", version: 1}
+    template: {path: "templates/product-layer/POLICY.yaml", version: 2}
     owner_role: engineer
     source_contour: engineering_quality_security
     structure:

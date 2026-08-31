@@ -104,6 +104,10 @@ def test_record_call_uses_registry_price():
     """_record_call оценивает cost по ценам из реестра (не по хардкоду)."""
     from ai_ops_kit.providers.orchestrator_usage import _record_call, drain_call_stats, _PRICE_PER_MTOK
 
+    # Аккумулятор глобальный и делится между тестами одного воркера: сначала сливаем ЧУЖИЕ записи,
+    # иначе тест «первый по случайности» — в CI (другая раскладка xdist) drain вернул 3 записи
+    # там, где локально была 1 (PR #311, 26.08).
+    drain_call_stats()
     # Записываем вызов с токенами для модели из реестра
     _record_call("deepseek-chat", 1000, 500, 1.5, provider="deepseek")
     stats = drain_call_stats()

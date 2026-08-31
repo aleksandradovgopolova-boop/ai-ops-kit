@@ -13,12 +13,14 @@ Require approval.
   execute          — AI вправе исполнить автономно;
   require_approval  — AI вправе исполнить ТОЛЬКО после явного одобрения человека.
 
-Источник — `.ai-ops/POLICY.yaml` (артефакт Product Operating Layer):
-  default: require_approval
-  actions:
-    run_tests:     execute
-    update_roadmap: prepare
-    merge_pr:      require_approval
+Источник — `.ai-ops/POLICY.yaml` (артефакт Product Operating Layer). Поканальные уровни объявляет
+ключ `autonomy:` (схема официального шаблона `templates/product-layer/POLICY.yaml`); историческая
+форма `actions:` тоже читается (совместимость). `default:` необязателен:
+  autonomy:
+    update_artifacts: prepare
+    create_pr:        prepare
+    merge:            require_approval
+    change_policy:    require_approval
 
 FAIL-CLOSED: нет файла или действие не описано → уровень по умолчанию, а по умолчанию —
 require_approval (человек в контуре). Неизвестный уровень в файле → ошибка, а не догадка.
@@ -60,9 +62,19 @@ def load_policy(root: Path) -> dict:
     if not isinstance(data, dict):
         raise PolicyInvalid(f"{POLICY_REL}: ожидался mapping, получен {type(data).__name__}")
     default = data.get("default", DEFAULT_LEVEL)
-    actions = data.get("actions") or {}
-    if not isinstance(actions, dict):
+    # СВЕДЕНИЕ СХЕМ (блокер Фазы Б, enforcement.py). Официальный шаблон
+    # `templates/product-layer/POLICY.yaml` объявляет поканальные уровни под ключом `autonomy:`
+    # (update_artifacts/create_pr/merge/change_policy), а исторические примеры и старые дочки — под
+    # `actions:`. Раньше движок читал только `actions:`/`default:`, поэтому `autonomy:`-уровни дочки
+    # молча игнорировались и КАЖДОЕ действие падало в default (require_approval). Читаем ОБА ключа в
+    # одну карту action->level; при совпадении имени явный `actions:` (старая форма) переопределяет.
+    autonomy = data.get("autonomy") or {}
+    actions_legacy = data.get("actions") or {}
+    if not isinstance(autonomy, dict):
+        raise PolicyInvalid(f"{POLICY_REL}: autonomy должен быть mapping")
+    if not isinstance(actions_legacy, dict):
         raise PolicyInvalid(f"{POLICY_REL}: actions должен быть mapping")
+    actions = {**autonomy, **actions_legacy}
     for name, level in list(actions.items()) + [("default", default)]:
         if level not in LEVELS:
             raise PolicyInvalid(

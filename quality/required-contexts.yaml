@@ -1,0 +1,38 @@
+# quality/required-contexts.yaml — декларация обязательных статусов защиты ветки.
+#
+# РАБОТА required-contexts-match-jobs (2026-08-25).
+#
+# ПОВОД — ЗАМЕР 20.08.2026 (docs/parallel-execution-retro.md §1 п.5): удаление джобы
+# python39-compat не убрало её из обязательных контекстов защиты ветки — ВСЕ PR зависли
+# BLOCKED навсегда, потребовалось admin-действие владельца.
+#
+# ЧТО ЗДЕСЬ. Список контекстов, которые ОБЯЗАНЫ быть в защите ветки main. Валидатор
+# (validate_required_contexts.py) сверяет этот список с реальными джобами в CI-workflows.
+# Если контекст объявлен, но джобы нет — КРАСНОЕ (рассинхрон, который повесит очередь).
+# Если джоба есть, но не объявлена — WARNING (не все джобы обязаны быть required).
+#
+# КАК ОБНОВЛЯТЬ. При добавлении/удалении/переименовании CI-джобы, которая должна блокировать
+# мёрж, обновите этот файл. Валидатор ловит рассинхрон в CI и локально.
+#
+# ФОРМАТ. Каждый элемент — строка вида "<workflow_name> / <job_name>" (как GitHub показывает
+# в status checks) или просто "<job_name>" (если workflow один).
+schema_version: 1
+registry_type: required-contexts
+
+# Обязательные контексты защиты ветки main.
+# Имена джоб из .github/workflows/*.yml (job IDs под ключами jobs:).
+contexts:
+  # pr-smoke.yml
+  - pr-smoke / smoke
+  # package-quality.yml
+  - package-quality / lint
+  - package-quality / quality (fast)
+  - package-quality / quality (selftests-a)
+  - package-quality / quality (selftests-m)
+  - package-quality / quality (contracts)
+  - package-quality / coverage
+  - package-quality / clean-install
+  - package-quality / upgrade-path
+  - package-quality / pipeline-e2e (3.12)
+  # docs.yml
+  - docs / build

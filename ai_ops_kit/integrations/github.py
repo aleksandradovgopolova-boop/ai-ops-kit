@@ -63,6 +63,19 @@ class FetchResult:
         return self.ok
 
 
+@dataclass
+class WriteResult:
+    """Итог одной ЗАПИСИ (комментарий/закрытие Issue). `ok is False` — не выполнено (reason назван).
+
+    Запись к GitHub — отдельный тип от чтения: у неё нет `items`, и её отсутствие успеха НИКОГДА не
+    выглядит как «нечего писать». Все write-операции идут через единственный шов `_gh_mutate`, чтобы
+    тесты могли доказать намерение (какой issue закрыт, с каким текстом) не касаясь живого GitHub."""
+    ok: bool
+    number: int = 0
+    action: str = ""        # "comment" | "close" | "reopen"
+    reason: str = ""        # человекочитаемая причина, когда ok is False
+
+
 # ── определение репозитория ─────────────────────────────────────────────────────────────────
 
 def _git_remote_url(root: Path) -> str:
@@ -239,6 +252,77 @@ class GitHubClient:
 
     def labels(self) -> FetchResult:
         return self._fetch("repos/%s/labels" % self.repo, {"per_page": 100}, _norm_label)
+
+    # -- предметные ЗАПИСИ (approval-gated: выполняются только по явному одобрению человека) -------
+    #
+    # Единственный write-путь — `_gh_mutate` (gh api -X POST/PATCH). Тесты подменяют ровно его и
+    # живого GitHub не касаются. GitHub НЕ умеет «слить» два Issue: конвенция — закрыть ДУБЛЬ с
+    # кросс-ссылкой на канонический (комментарий + state=closed, reason=not_planned), канонический
+    # оставить открытым. Операция ОБРАТИМА: закрытый issue переоткрывается (`reopen_issue`).
+
+    def _gh_mutate(self, method: str, path: str, fields: "dict | None" = None) -> dict:
+        """`gh api -X METHOD path -f k=v` — единственный write-транспорт. -> распарсенный ответ (dict).
+
+        Только через gh: у gh уже есть аутентификация с нужным scope; rest-путь (urllib) писать не
+        разрешаем, чтобы у записи был ровно один шов. Ошибка транспорта -> GitHubError."""
+        endpoint = path.lstrip("/")
+        cmd = ["gh", "api", "-X", method, "-H", "Accept: application/vnd.github+json", endpoint]
+        for k, v in (fields or {}).items():
+            cmd += ["-f", f"{k}={v}"]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout * 2)
+        if proc.returncode != 0:
+            raise GitHubError((proc.stderr or proc.stdout or "gh api write failed").strip())
+        try:
+            return json.loads(proc.stdout) if proc.stdout.strip() else {}
+        except ValueError:
+            return {}
+
+    def _writable(self) -> "WriteResult | None":
+        """Проверка доступности записи. -> WriteResult(ok=False) если нельзя, иначе None.
+
+        Запись возможна ТОЛЬКО через gh: rest-токен-путь для мутаций мы сознательно не открываем."""
+        av = self.availability()
+        if not av.ok:
+            return WriteResult(False, reason=av.reason)
+        if av.transport != "gh":
+            return WriteResult(False, reason="запись к GitHub идёт только через `gh` "
+                                             "(rest-путь для мутаций не открыт); установите gh")
+        return None
+
+    def comment_issue(self, number: int, body: str) -> WriteResult:
+        """Оставить комментарий на Issue. Approval-gated: вызывается только из execute_merge по
+        одобренной человеком паре."""
+        blocked = self._writable()
+        if blocked:
+            return WriteResult(False, number=number, action="comment", reason=blocked.reason)
+        try:
+            self._gh_mutate("POST", f"repos/{self.repo}/issues/{number}/comments", {"body": body})
+        except GitHubError as e:
+            return WriteResult(False, number=number, action="comment", reason=str(e))
+        return WriteResult(True, number=number, action="comment")
+
+    def close_issue(self, number: int, reason: str = "not_planned") -> WriteResult:
+        """Закрыть Issue (reason: completed|not_planned). Дубль закрывается как not_planned. Обратимо."""
+        blocked = self._writable()
+        if blocked:
+            return WriteResult(False, number=number, action="close", reason=blocked.reason)
+        try:
+            self._gh_mutate("PATCH", f"repos/{self.repo}/issues/{number}",
+                            {"state": "closed", "state_reason": reason})
+        except GitHubError as e:
+            return WriteResult(False, number=number, action="close", reason=str(e))
+        return WriteResult(True, number=number, action="close")
+
+    def reopen_issue(self, number: int) -> WriteResult:
+        """Переоткрыть Issue — обратная операция к close (обратимость слияния дублей)."""
+        blocked = self._writable()
+        if blocked:
+            return WriteResult(False, number=number, action="reopen", reason=blocked.reason)
+        try:
+            self._gh_mutate("PATCH", f"repos/{self.repo}/issues/{number}", {"state": "open"})
+        except GitHubError as e:
+            return WriteResult(False, number=number, action="reopen", reason=str(e))
+        return WriteResult(True, number=number, action="reopen")
 
 
 class GitHubError(RuntimeError):

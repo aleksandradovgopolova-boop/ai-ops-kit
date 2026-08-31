@@ -716,7 +716,15 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
             _record_call(d.get("model") or model or "claude-code-local",
                          u.get("input_tokens"), u.get("output_tokens"), time.monotonic() - _t0,
                          provider="claude-cli", cost=d.get("total_cost_usd"))
-            return d.get("result") or ""
+            # ПУСТОЙ РЕЗУЛЬТАТ — НЕ ОТВЕТ. Прежде пустой `result` (rc=0) сворачивался в "" и доезжал
+            # до разбора куском без вердикта: судья «не выносил вердикт», гейт краснел «нет заключения
+            # reviewer» — правда по существу, ложь по причине. Приводим claude-cli к тому же контракту,
+            # что и API-провайдеры (anthropic/openai уже так делают): пустое — названный отказ.
+            result = d.get("result") or ""
+            if not result.strip():
+                raise ProviderRefusal("empty_answer", "claude -p вернул пустой result (rc=0)",
+                                      "claude-cli", d.get("model") or model or "claude-code-local")
+            return result
         last = _human_error(r.stderr or r.stdout or "")
         # ЛИМИТ СЕССИИ/КВОТЫ РАСПОЗНАЁТСЯ ПЕРВЫМ (obs 99aa67ef): его текст несёт «429», и без этой
         # ветки он попал бы в `_transient` и был бы повторён пять раз впустую, а затем упал бы

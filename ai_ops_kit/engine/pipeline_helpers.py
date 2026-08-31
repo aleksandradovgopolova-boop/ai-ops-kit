@@ -55,6 +55,30 @@ def delivery_pending(rep) -> bool:
     return bool((rep.get("resume") or {}).get("reused_branch")) and not work_produced(rep)
 
 
+def acceptance_blocks_ready(acceptance_criteria) -> tuple:
+    """Приёмка НЕ пускает работу в READY_FOR_PR? -> (block: bool, reason | None).
+
+    Блокирует, когда: `verified` и есть `unmet` (B2-30); ЛИБО `attempted` без `verified` — судья
+    приёмки поднят и отработал, но сверка не состоялась (green-means-checked). Судью не поднимали
+    вовсе (`attempted=False`) — НЕ блокируем (граница #176). Разбор — в
+    tests/unit/test_acceptance_rubber_stamp_not_ready.py.
+    """
+    ac = acceptance_criteria or {}
+    if not ac.get("declared"):
+        return False, None                       # нечего сверять — нечем и блокировать
+    if ac.get("verified"):
+        if ac.get("unmet"):
+            return True, (f"сверка приёмки состоялась: НЕ ВЫПОЛНЕНО {len(ac.get('unmet') or [])} "
+                          f"из {ac.get('count')} ({', '.join(ac.get('unmet') or [])}) — задача не "
+                          f"доведена, READY_FOR_PR объявлять нельзя")
+        return False, None
+    if ac.get("attempted"):
+        return True, ((ac.get("reason") or "приёмка объявлена, но сверка не состоялась")
+                      + " — судья приёмки был поднят, но результат с критериями не сверил; закрыть "
+                        "можно сверкой судьёй, который читает результат, либо приёмкой человеком")
+    return False, None
+
+
 def _profile_summary(profile):
     stacks = profile.get("stacks") or []
     langs = ", ".join(s.get("language", "?") for s in stacks) or "не определён"

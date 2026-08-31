@@ -220,6 +220,25 @@ def test_install_and_update_deliver_the_same_things():
     assert {"sync_ci_workflows", "ensure_zone_markers"} <= inside, inside
 
 
+def test_audit_workflow_scheduled_delivered_and_runs_product_audit(tmp_path):
+    """Периодический аудит (`continuous_audit_runs_periodically`): ai-ops-audit.yml зарегистрирован,
+    запускается ПО РАСПИСАНИЮ (cron, не только руками), зовёт `ai-ops audit product` и реально
+    доставляется дочке. «По расписанию» — это и есть недостающая половина к аудиту «по требованию».
+
+    Мутация: убрать ai-ops-audit.yml из CI_TEMPLATES -> доставка файла не происходит, тест краснеет.
+    """
+    inst = _installer(tmp_path)
+    assert "ai-ops-audit.yml" in inst.CI_TEMPLATES               # доставляется init/update
+    wf = (KIT / "templates" / "ci" / "ai-ops-audit.yml").read_text(encoding="utf-8")
+    assert "schedule:" in wf and "cron:" in wf                   # РАСПИСАНИЕ, не только workflow_dispatch
+    assert "audit product" in wf                                 # зовёт именно продуктовый аудит
+    served = tmp_path / "served"
+    (served / ".github" / "workflows").mkdir(parents=True)
+    (served / ".ai" / "runtime").mkdir(parents=True)
+    inst.sync_ci_workflows(served)
+    assert (served / ".github" / "workflows" / "ai-ops-audit.yml").is_file()   # доехал до дочки
+
+
 # ── зоны переживают клон ──────────────────────────────────────────────────────────────────────
 
 def test_empty_zone_survives_a_clone(tmp_path):
