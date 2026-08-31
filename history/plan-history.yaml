@@ -4542,6 +4542,38 @@ work:
     #   type: engineering; goal: backlog-intelligence; owner_role: engineer; value: medium
     #   write_scope по факту: [tests/] (доказательство) — не [ai_ops_kit/planning/], механизм уже был.
     #   Готово: `backlog_dedup` на репо с дубликатами находит пары и помечает устаревшие (детермин. тест).
+
+  - id: backlog-approval-gated-merge
+    title: Слияние дублей по одобрению человека — вторая половина duplicates_detected_and_merged
+    goal: backlog-intelligence
+    status: done
+    closed_at: '2026-08-31'
+    pr: 377
+    evidence: tests/unit/test_backlog_merge.py
+    result: >-
+      ЗАКРЫТО 2026-08-31 (#377, c32b77b). Вторая половина исхода duplicates_detected_and_merged,
+      которую #350 ОСОЗНАННО оставил false: слово «merged» кодом не флипалось — слияние по инварианту
+      PR-19/20 требует живого одобрения человека. По РЕШЕНИЮ ВЛАДЕЛЬЦА (2026-08-31, вариант «одобряемое
+      слияние») построен approval-gated execute: `ai-ops backlog merge --approved <файл>`. GitHub не
+      «сливает» Issue — кит закрывает ДУБЛЬ с кросс-ссылкой на канонический (комментарий + state=closed,
+      reason=not_planned), канонический оставляет открытым; обратимо (GitHubClient.reopen_issue).
+      ГРАНИЦЫ МЕХАНИЗМОМ: без --approved отказ (пары задаёт ЧЕЛОВЕК, из детектора не берутся — принцип
+      «предлагать не сливать» цел); без --apply dry-run; канонический не трогается; пустой/битый approved,
+      duplicate==canonical, не-int — отказ; провал комментария не закрывает дубль; все мутации GitHub через
+      единственный шов _gh_mutate (POST/PATCH только через gh, rest-путь записи закрыт). ДОКАЗАНО: 12
+      мутационных тестов (снятие fail-safe -> дубль закрывается вопреки провалу комментария -> красит;
+      canonical неприкосновенен; dry-run по умолчанию; write-seam) + ЖИВОЙ DRY-RUN на реальном backlog
+      кита (11 issues, 0 дублей — честно; `backlog merge --approved` показал «закрыть #160 как дубль #161»
+      с НУЛЕВОЙ мутацией, issues остались OPEN; без --approved — отказ). ГРАНИЦА ЧЕСТНО: реального
+      необратимого закрытия на живых дублях не было — настоящих дублей в backlog кита нет, кит их не
+      фабрикует; capability построена, достижима и доказана точными операциями (mock) + сухим прогоном.
+      Нового содержательного файла нет (execute_merge в backlog_dedup, write-ops в github, merge в cli)
+      -> footprint не тронут. Исход duplicates_detected_and_merged флипнут -> цель backlog-intelligence
+      достигнута (5/5 Product OS). Freeze-exception: закрывает объявленный исход Phase 2, заказан владельцем.
+    # РАЗБОР: type: engineering; goal: backlog-intelligence; owner_role: engineer; value: medium
+    #   write_scope: [ai_ops_kit/integrations/, ai_ops_kit/planning/, ai_ops_kit/cli/, tests/].
+    #   Freeze-exception: закрывает объявленный исход duplicates_detected_and_merged, заказан владельцем;
+    #   слияние обратимо, только по одобрению человека, канонический не трогает.
   - id: lane-ships-small-prs
     title: >-
       Лента сдаёт работу малыми PR (одна работа = один PR), а не фазой одним куском
