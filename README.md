@@ -51,7 +51,7 @@ cd /path/to/project
 
 ## Версия
 
-**v3.37.0 qualification** — Product Operating System
+**v3.38.0 qualification** — Product Operating System замкнута (5/5)
 
 > Канал `qualification`, а не `stable`, и это не осторожность, а правило: `stable` требует полевых
 > доказательств на двух живых дочках для ЭТОЙ версии, и проверяется машиной
