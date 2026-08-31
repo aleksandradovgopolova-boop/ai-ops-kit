@@ -86,6 +86,13 @@ INTENTS = {
     # словом: classify | dedup | prioritize | graph. Без доступа к GitHub отвечает «не проверено»
     # с причиной, а не пустотой. Форма ещё меняется — интент experimental.
     "backlog": ("backlog из GitHub Issues: classify | dedup | prioritize | graph", "backlog", True),
+    # Autonomous Replanning (Фаза 5, капстоун): цикл сам сводит приоритеты плана к реальности. Без
+    # флага — отчёт (read-only превью: что переупорядочено и почему + структурные ПРЕДЛОЖЕНИЯ).
+    # С `--apply` — записывает переприоритизацию (класс A, обратимо, состав работ не меняет) в
+    # машинный артефакт дочки; авторский plan.yaml и main не трогает. Структурные правки — только
+    # предложением, автоматически не применяются.
+    "replan":  ("перепланирование: сам переприоритизирует план под реальность (--apply — записать), "
+                "структурные изменения — предложением", "replan", False),
 }
 
 
@@ -95,7 +102,7 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect")
+                  "inspect", "replan")
 
 
 def resolve_flags(signals):
@@ -783,6 +790,40 @@ def _intent_team(task, child_root, signals, a):
         print(json.dumps(status, ensure_ascii=False, indent=2, default=str))
         return 0
     print(team_sync._render(status))
+    return 0
+
+
+@_intent("replan")
+def _intent_replan(task, child_root, signals, a):
+    js = a.json
+    # Autonomous Replanning (Фаза 5, капстоун): оркестратор из intelligence, CLI зовёт его вниз.
+    # Без --apply — read-only отчёт (превью). С --apply — записывает переприоритизацию (класс A):
+    # обратимо, состав работ не меняет, авторский plan.yaml/main не трогает, kill-switch/policy/
+    # budget=0 внутри модуля.
+    from ai_ops_kit.intelligence import replan_loop
+    root = Path(child_root)
+    if getattr(a, "apply", False):
+        try:
+            res = replan_loop.apply_reprioritization(root)
+        except Exception as e:  # noqa: BLE001 — запись не обязана ронять команду CLI
+            print(f"ОШИБКА: перепланирование не применено: {e}")
+            return 1
+        if js:
+            print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(f"перепланирование [{res['status']}]: {res.get('reason')}")
+            if res.get("written"):
+                print(f"артефакт: {res['written']} (авторский план и main не тронуты)")
+        return 0
+    try:
+        report = replan_loop.replan_report(root)
+    except Exception as e:  # noqa: BLE001 — отчёт не обязан ронять команду CLI
+        print(f"ОШИБКА: отчёт-перепланирование не построен: {e}")
+        return 1
+    if js:
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(replan_loop.format_report(report))
     return 0
 
 

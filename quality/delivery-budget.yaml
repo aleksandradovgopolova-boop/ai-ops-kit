@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 531
+  substantive_files: 532
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -637,3 +637,26 @@ raises:
       (аудит был только «по требованию»). Read-only: contents:read, ничего не коммитит, отчёт в summary.
       Без файла в поставке у дочки не было бы планового аудита вовсе. Растёт только счёт файлов (+1),
       объём в норме; потолок под факт 530 -> 531.
+  - at: '2026-08-31'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 531
+    to_count: 532
+    measured_before: 530
+    measured_after: 531
+    work: autonomous-replanning-loop (капстоун Фазы 5)
+    files:
+      - ai_ops_kit/intelligence/replan_loop.py
+    why_it_works_in_the_child: >-
+      Капстоун Фазы 5: цикл, который САМ сводит приоритеты плана к реальности, замыкает продуктовую
+      ОС (Observe -> ... -> Replanning). Модуль replan_loop ИСПОЛНЯЕТСЯ в дочке командой `ai-ops replan`
+      над её `planning/plan.yaml`: без флага строит отчёт-перепланирование (что переупорядочено и
+      почему + структурные предложения), с `--apply` записывает переприоритизацию (класс A: обратимо,
+      состав работ не меняет) в машинный артефакт `.ai/project/replan/latest.yaml` дочки, авторский
+      план и main не трогая. Он СВОДИТ уже поставляемые сигналы (next_work/delivery_plan drift+
+      git_disagreements/risk_register/backlog_prioritize), а не заводит вторую правду. Без модуля в
+      поставке команда `ai-ops replan` (INTENTS/DIRECT_INTENTS в cli/ai_ops_cli) звала бы отсутствующий
+      файл — класс F-033, механизм зелёный у кита и недостижимый у дочки. Растёт только счёт файлов
+      (+1: сам оркестратор; CLI вырос кодом, не файлом), объём в норме (managed 4186733 < 4420000);
+      потолок под факт 531 -> 532.
