@@ -383,6 +383,27 @@ goals:
     freeze_relation: run_condition
     status: active
 
+  - id: kit-release-strategy
+    # НОВАЯ ЦЕЛЬ. Заведена по наблюдению владельца 2026-08-31 (во время владелец-ведомого прогона на
+    # cockpit). ПОВОД: релиз 3.38.0 вышел РЕАКТИВНО — staleng-гейт cockpit вынудил выпустить одним
+    # куском 235 накопленных изменений, потому что cockpit обновили с main (edge) вместо
+    # qualification-тега. Каналы (edge/qualification/stable) и ручки дочки (update_channel ×
+    # allowed_version_range × update_policy pr|manual) УЖЕ есть — не хватает ДИСЦИПЛИНЫ сборки релиза
+    # у самого кита (по вехе/расписанию, а не когда что-то упало), явного владелец-facing МЕНЮ
+    # стратегий и режимов доставки за пределами pr/manual (scheduled-батч, auto-stable). Строить
+    # ПОСЛЕ stable (решение владельца) — заморозка к тому времени снята.
+    # заморозка: как кит собирает и выпускает релизы + меню обновления дочки — новое умение.
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Релизы собираются осознанно (веха/расписание), а не когда гейт вынудил.
+      releases_are_assembled_by_milestone_or_schedule_not_reactively: false
+      # Продукт выбирает стратегию обновления из НАЗВАННОГО меню (канал × политика), а не из
+      # закопанных полей.
+      products_pick_update_strategy_from_a_named_menu: false
+      # Режимы доставки за пределами pr/manual: scheduled-батч и auto-stable для боевых продуктов.
+      delivery_modes_beyond_pr_and_manual_exist: false
+
   - id: uiux-standard-as-product
     # НОВАЯ ЦЕЛЬ. Подтверждена владельцем 2026-08-27 (вариант A). Источник — пакет владельца
     # `ai-ops-uiux`: единый ПРОВЕРЯЕМЫЙ UI/UX-стандарт (Конституция со стабильными ID, токены-
@@ -497,6 +518,33 @@ work:
       правильно и уже делается). Границы: НЕ трогаем JSON-схемы на диске; не меняем формат ВЫВОДА;
       речь только о разметке ВХОДА судейского промпта. Территория пересекается с линией C —
       согласовать, чтобы не столкнуться в промпте ревьюера.
+
+  - id: release-strategy-assembled-releases-and-update-menu
+    title: >-
+      Кит собирает релизы осознанно (веха/расписание) + владелец-facing меню стратегий обновления
+      дочки (канал × политика, + scheduled/auto-stable)
+    type: engineering
+    goal: kit-release-strategy
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [installer/, ai_ops_kit/, registry/, docs/, templates/, tests/]
+    reason: >-
+      Наблюдение владельца 2026-08-31 во время владелец-ведомого прогона: релиз 3.38.0 вышел
+      РЕАКТИВНО — staleness-гейт cockpit вынудил смести 235 накопленных изменений одним куском,
+      потому что cockpit обновили с main (edge) вместо qualification-тега. Каналы
+      (edge/qualification/stable) и ручки дочки (update_channel × allowed_version_range ×
+      update_policy pr|manual) УЖЕ есть — потому это проводка/дисциплина, не постройка с нуля.
+      Готово, когда: (1) кит режет qualification-релизы по вехе ИЛИ расписанию (собранная тема, а не
+      «версия, которую вынудили») — с проверкой, что накопленное не выходит одним куском без разбора;
+      (2) владелец видит НАЗВАННОЕ меню стратегий обновления (канал × политика), а не закопанные поля
+      .ai-ops.yaml; (3) есть режимы доставки scheduled-батч и auto-stable сверх pr/manual, каждый с
+      тестом и живым замером на копии дочки. Строить ПОСЛЕ stable (решение владельца 2026-08-31);
+      заморозка к тому времени снята, freeze_exception не нужен. Границы: не ломать существующие
+      каналы/ручки — это их достройка. Пересекается с release-процессом (AGENTS «Релизный процесс»)
+      — согласовать формат коммита релиза: тип `release` не пускают cz/PR-title гейты (замечено
+      2026-08-31 на выпуске 3.38.0, обошли `chore(release):`) — либо добавить `release` в допустимые,
+      либо закрепить `chore(release):` в AGENTS.
 
   # stable-gate-includes-product-layer закрыта в историю 2026-08-28 (код в PR #362): channel_errors
   # (validate_release_claims) читает channels.stable.product_layer_goals и planning/plan.yaml и
