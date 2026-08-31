@@ -51,11 +51,13 @@ probes:
 - id: acceptance-rubber-stamp-rejected
   kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
-  find: '    if not reads:'
+  find: '    if not reads and not any(c["basis"] in FILE_CONFIRMED_BASES for c in out):'
   replace_with: '    if False:'
   tests:
   - tests/unit/test_acceptance_verify.py
-  why: Вердикт без единого чтения — рубер-штамп; принимать его опаснее всего именно в приёмке.
+  why: 'Рубер-штамп (Fix C, 31.08.2026) — вердикт без единого чтения СУДЬЁЙ и без сверки хоть одной
+    цитаты по ДОСТАВЛЕННОМУ файлу (кит его не читал): с эталоном не сверялись ничем. Снять страж —
+    пропустить met, стоящий на одном диффе, который мог устареть. Принимать такое опаснее всего в приёмке.'
 - id: acceptance-seam-pipeline-calls-check
   kind: seam
   covers:

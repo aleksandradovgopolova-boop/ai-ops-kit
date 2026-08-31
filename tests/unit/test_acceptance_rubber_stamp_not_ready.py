@@ -84,11 +84,19 @@ def _writer(_ctx):
 
 
 def _rubber_judge(prompt):
-    """Судья приёмки выносит вердикт СРАЗУ, не прочитав ни файла — рубер-штамп (0 reads)."""
+    """Судья приёмки «подтверждает» met БЕЗ сверки с эталоном — рубер-штамп (Fix C, 31.08.2026).
+
+    Рубер-штамп после Fix C — это вердикт, не коснувшийся доставленного файла: судья read-op не
+    эмитит (0 reads) И кит не смог сверить ни одной цитаты по файлу. Здесь судья ставит met на
+    цитату, которой нет НИГДЕ — ни в диффе, ни в доставленном README: сверка ни с чем. (Прежний
+    вариант — met/absent на оставленной строке `public/media` — теперь ловится СИЛЬНЕЕ, как
+    not-met через чтение файла китом: absence-refuted; это покрыто юнит-тестами acceptance_verify.)
+    """
     if "ревьюер приёмки" in prompt:
         return json.dumps({"kind": "acceptance-result", "criteria": [
-            {"id": "AC-1", "status": "met", "evidence": "absent", "quote": "public/media",
-             "source": "README.md", "reason": "выполнено (не читая)"}]})
+            {"id": "AC-1", "status": "met", "evidence": "present",
+             "quote": "всё соответствует требованиям задачи", "source": "README.md",
+             "reason": "подтверждено (не читая)"}]})
     return json.dumps({"kind": "reviewer-result", "status": "pass",
                        "checks": [{"id": "review", "status": "pass"}]})
 
