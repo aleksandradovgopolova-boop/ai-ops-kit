@@ -349,18 +349,59 @@ def test_no_spec_at_all_is_not_a_problem(tmp_path):
 
 # ─── fail-closed ───────────────────────────────────────────────────────────────────────────────
 
-def test_rubber_stamp_without_a_single_read_is_not_a_verification(tree):
-    """fail-closed #1: вердикт без единого чтения. Тот же инвариант, что для блокирующих гейтов."""
-    prov = _provider([_verdict([
-        {"id": "AC-1", "status": "met", "quote": "public/media/ — каталог медиа", "source": "README.md"},
-        {"id": "AC-2", "status": "met", "quote": "src/ — исходный код", "source": "README.md"},
-    ])])
+def test_a_verdict_grounded_only_on_the_diff_with_no_read_is_a_rubber_stamp(tmp_path):
+    """fail-closed #1 (Fix C, 31.08.2026): met без чтения СУДЬЁЙ и без сверки по доставленному файлу.
 
-    rep = av.verify(tree, CRITERIA, prov, revision="abc", change_context=DIFF)
+    Прежде рубер-штампом было «0 read судьи». Шесть живых замеров показали: судья claude-cli read-op
+    детерминированно НЕ эмитит, а цитату сверяет сам кит по доставленному файлу — поэтому
+    вовлечённость определяется сверкой с ЭТАЛОНОМ, а не ceremonial read. Здесь met опирается ТОЛЬКО
+    на дифф (post-state), а доставленный файл цитаты НЕ содержит (устаревший/частичный дифф): с
+    эталоном не сверились ничем — рубер-штамп. Мутация: убери страж FILE_CONFIRMED_BASES из verify —
+    вердикт «пройдёт» на одном диффе, и тест краснеет.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")   # доставленный файл БЕЗ строки
+    ctx = ("diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1,2 @@\n"
+           " # Проект\n+public/media/ — каталог медиа\n")   # дифф ДОБАВЛЯЕТ строку, но в файле её нет
+    crit = [{"id": "AC-1", "text": "в README есть строка про public/media"}]
+    prov = _provider([_verdict([
+        {"id": "AC-1", "status": "met", "evidence": "present",
+         "quote": "public/media/ — каталог медиа", "source": "README.md"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
 
     assert rep["verified"] is False
     assert rep["met_all"] is None, "«выполнено» не объявляется там, где сверка не состоялась"
     assert "рубер-штамп" in rep["reason"] and "0 reads" in rep["reason"]
+    assert not (rep.get("reads") or [])
+
+
+def test_a_met_confirmed_against_the_delivered_file_stands_without_a_judge_read(tmp_path):
+    """positive (Fix C, 31.08.2026): met стоит без read-op СУДЬИ, если КИТ сверил цитату по файлу.
+
+    Ровно поведение живого судьи claude-cli: корректный met выносится сразу, read-op не эмитится
+    (шесть замеров). Прежний страж «0 reads» такой вердикт обнулял, и чистая приёмка авто-судьёй
+    была недостижима НА ПРАКТИКЕ. Теперь авторитетное чтение доставленного файла делает КИТ: цитата
+    есть в доставленном confirm.py -> basis `file` -> сверка состоялась. writer≠judge цел: смысловой
+    вердикт вынес независимый судья, а кит лишь подтвердил цитату по эталону. Мутация: верни страж к
+    `if not reads` ДО грунтовки — met снова обнуляется, и тест краснеет.
+    """
+    (tmp_path / "confirm.py").write_text(
+        "def should_confirm(proc):\n    if proc.get('under_tmux'):\n        return False\n"
+        "    return True\n", encoding="utf-8")
+    ctx = ("diff --git a/confirm.py b/confirm.py\n--- /dev/null\n+++ b/confirm.py\n@@ -0,0 +1,4 @@\n"
+           "+def should_confirm(proc):\n+    if proc.get('under_tmux'):\n+        return False\n"
+           "+    return True\n")
+    crit = [{"id": "AC-1", "text": "есть функция should_confirm(proc)"}]
+    prov = _provider([_verdict([
+        {"id": "AC-1", "status": "met", "evidence": "present",
+         "quote": "def should_confirm(proc):", "source": "confirm.py"}])])   # НИ ОДНОГО read
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
+
+    assert not (rep.get("reads") or []), "судья не читал — читал КИТ при грунтовке"
+    assert rep["verified"] is True and rep["met_all"] is True, rep["reason"]
+    assert rep["criteria"][0]["basis"] == "file", "met не сверен по доставленному файлу"
+    assert rep["quote_verified"] == 1
 
 
 def test_invented_quote_does_not_close_a_criterion(tree):
