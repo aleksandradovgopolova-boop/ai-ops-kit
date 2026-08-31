@@ -250,16 +250,16 @@ def _audience(child_root):
     return presenter.audience_from_config(child_root)
 
 
-_BACKLOG_SUBS = ("classify", "dedup", "prioritize", "graph")
+_BACKLOG_SUBS = ("classify", "dedup", "prioritize", "graph", "merge")
 
 
-def _run_backlog(sub, child_root, signals, js):
+def _run_backlog(sub, child_root, signals, js, a=None):
     """Backlog Intelligence через CLI: подкоманда первым словом, репозиторий — `child_root`.
 
     Читает GitHub Issues САМОЙ дочки. Третье состояние честно: если доступа к GitHub нет, ответ —
     «не проверено» с причиной и код 2 (блокировано), а НЕ пустой backlog с кодом 0. `graph` —
     синоним `depgraph`/`deps`. Состояние выборки берётся из --signals '{"state":"all"}' (по
-    умолчанию open)."""
+    умолчанию open). `merge` — approval-gated слияние дублей: `a` несёт --approved/--apply."""
     sub = (sub or "").strip().lower()
     if sub in ("depgraph", "deps"):
         sub = "graph"
@@ -272,6 +272,7 @@ def _run_backlog(sub, child_root, signals, js):
                "  dedup       — дубликаты (предлагает объединение) и устаревшие\n"
                "  prioritize  — приоритет с объяснением и учётом override человека\n"
                "  graph       — граф зависимостей: блокирующие, критический путь, циклы\n"
+               "  merge       — СЛИТЬ одобренные дубли (--approved файл; без --apply — dry-run)\n"
                "Пример: ./ai-ops backlog classify .   (state: --signals '{\"state\":\"all\"}')")
         if js:
             print(json.dumps({"ok": False, "reason": f"нет подкоманды backlog: {sub or '—'}",
@@ -327,6 +328,50 @@ def _run_backlog(sub, child_root, signals, js):
                 print(f"  #{p.number} {p.priority}{mark} (score {p.score}, увер. {p.confidence})")
                 print(f"      {p.explanation}")
         return 0 if rep.ok else 2
+
+    if sub == "merge":
+        # Approval-gated слияние дублей (PR-19/20 «Execute → Require approval»). Пары одобряет
+        # ЧЕЛОВЕК файлом --approved (из детектора они не берутся). Без --apply — dry-run (что закроется,
+        # видно ДО того). Закрывается ТОЛЬКО дубль, канонический остаётся; операция обратима.
+        import yaml as _yaml
+        from ai_ops_kit.planning import backlog_dedup as _dd
+        approved_path = getattr(a, "approved", None) if a is not None else None
+        if not approved_path:
+            print(json.dumps({"ok": False, "reason": "нужен --approved <файл> с одобренными парами "
+                              "{approved: [{duplicate, canonical}]}"}, ensure_ascii=False, indent=2)
+                  if js else "backlog merge: нужен --approved <файл> с одобренными парами "
+                  "человека ({approved: [{duplicate: N, canonical: M}]}). Слияние без явного "
+                  "одобрения кит не делает.")
+            return 2
+        p = Path(approved_path)
+        if not p.is_file():
+            print(f"backlog merge: файл одобрений не найден: {approved_path}")
+            return 2
+        try:
+            doc = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except _yaml.YAMLError as e:
+            print(f"backlog merge: файл одобрений не разобран: {e}")
+            return 2
+        approved = doc.get("approved") if isinstance(doc, dict) else None
+        dry = not getattr(a, "apply", False) if a is not None else True
+        res = _dd.execute_merge(root, approved, dry_run=dry,
+                                by=(doc.get("by") if isinstance(doc, dict) else None) or "owner")
+        if js:
+            print(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
+        else:
+            head = "DRY-RUN (ничего не закрыто)" if res.dry_run else ("СЛИТО" if res.ok else "СЛИТО ЧАСТИЧНО")
+            print(f"backlog merge [{head}]: выполнено {len(res.executed)}, пропущено {len(res.skipped)}")
+            for e in res.executed:
+                if e.get("dry_run"):
+                    print(f"  #{e['duplicate']} → закрыть как дубль #{e['canonical']} (dry-run)")
+                else:
+                    print(f"  #{e['duplicate']} закрыт как дубль #{e['canonical']} "
+                          f"(комментарий+закрытие: {'ок' if e.get('close_ok') else e.get('close_reason')})")
+            for s in res.skipped:
+                print(f"  пропущено #{s.get('duplicate')}↔#{s.get('canonical')}: {s.get('reason')}")
+            if res.reason:
+                print(f"  {res.reason}")
+        return 0 if res.ok or res.dry_run else 2
 
     # graph
     from ai_ops_kit.planning import backlog_depgraph as _dg
@@ -384,7 +429,7 @@ def _intent_onboard(task, child_root, signals, a):
 @_intent("backlog")
 def _intent_backlog(task, child_root, signals, a):
     js = a.json
-    return _run_backlog(task, child_root, signals, js)
+    return _run_backlog(task, child_root, signals, js, a)
 
 
 @_intent("feedback")
@@ -1441,6 +1486,9 @@ def main(argv):
                     help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
+    ap.add_argument("--approved", default=None,
+                    help="backlog merge: файл с одобренными парами дублей "
+                         "({approved: [{duplicate, canonical}]}); слияние без него кит не делает")
     ap.add_argument("--backlog", default=None,
                     help="delivery: файл backlog {tasks, milestones, capacity, today} (лента 3); "
                          "по умолчанию .ai-ops/backlog.yaml")
