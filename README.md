@@ -51,7 +51,7 @@ cd /path/to/project
 
 ## Версия
 
-**v3.38.0 qualification** — Product Operating System замкнута (5/5)
+**v3.39.0 qualification** — судья приёмки сверяет met с доставленным файлом (Fix C)
 
 > Канал `qualification`, а не `stable`, и это не осторожность, а правило: `stable` требует полевых
 > доказательств на двух живых дочках для ЭТОЙ версии, и проверяется машиной
