@@ -4008,6 +4008,38 @@ work:
       рекомендации на основе прошлых override'ов из human_override.override_signals().
       Ключевой тест: рекомендация С override отличается от БЕЗ override. 9 тестов.
 
+  - id: autonomous-replanning-loop
+    title: Автономное перепланирование — цикл сам сводит приоритеты плана к реальности (капстоун Фазы 5)
+    goal: autonomous-product-loop
+    status: done
+    closed_at: '2026-08-31'
+    pr: 375
+    evidence: tests/unit/test_replan_loop.py
+    result: >-
+      ЗАКРЫТО 2026-08-31 (#375, cdd6f0a). КАПСТОУН Фазы 5: команда `ai-ops replan` замыкает
+      продуктовую ОС (Observe -> ... -> Replanning) — цикл сам сводит приоритеты плана к реальности
+      БЕЗ человеческого --replan. Модуль ai_ops_kit/intelligence/replan_loop.py (оркестратор,
+      DIRECT_INTENTS). Граница автономии — вариант B (решение владельца, перенос одобренной 4-классовой
+      модели ночного обзора на план): ПЕРЕПРИОРИТИЗАЦИЯ (класс A) обратимая/детерминированная/СОСТАВ
+      РАБОТ НЕ МЕНЯЕТ, каждый сдвиг подписан «почему» — применяется САМА (--apply пишет машинный артефакт
+      .ai/project/replan/latest.yaml дочки, авторский planning/plan.yaml и main НЕ трогает). СТРУКТУРНЫЕ
+      изменения (закрыть/пометить работу) — только ПРЕДЛОЖЕНИЕМ на одобрение. Автономное удаление работ
+      невозможно по механизму (_check_same_work_set) — прямой ответ полевому провалу ии-среды (writer
+      удалил 27 из 57 работ, ложный green). Детерминизм, budget=0, kill-switch, policy-гейт. Второй
+      правды не заводит (dp-001): reuse next_work.compute / delivery_plan resolve+git_disagreements /
+      risk_register / backlog_prioritize. ДОКАЗАНО: 17 мутационных тестов (снятие инварианта состава ->
+      уронённая работа молча пишется -> красит) + ЖИВОЙ ПРОГОН на изолированной git-дочке
+      (переприоритизировал 3 работы под реальность с провенансом + поймал реальное расхождение «ветка
+      влита, план держит todo» как предложение класса B; --apply не тронул план/main). footprint
+      substantive_files 531->532. Исход autonomous_replanning_works флипнут -> цель autonomous-product-loop
+      достигнута (4/5 Product OS). Freeze-exception: закрывает объявленный исход Фазы 5, заказан
+      владельцем этой сессией (два соседних исхода Фазы 5 закрыты этой же сессией под той же заморозкой).
+    # РАЗБОР: type: engineering; goal: autonomous-product-loop; owner_role: engineer; value: high
+    #   write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/cli/, tests/, quality/, docs/].
+    #   Freeze-exception: закрывает объявленный исход autonomous_replanning_works Фазы 5 (капстоун),
+    #   заказан владельцем этой сессией; переприоритизация обратима, состав работ не меняет, main не
+    #   трогает — риск удаления объёма закрыт механизмом.
+
   # --- Phase 0 + Phase B закрыты (аудит 2026-08-25, цель trustworthy-core) ---
   - id: workflow-least-privilege
     title: >-

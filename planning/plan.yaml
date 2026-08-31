@@ -344,16 +344,25 @@ goals:
   - id: autonomous-product-loop
     # заморозка: полный автономный цикл — новое умение
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТА 2026-08-31: все три исхода Phase 5 верны. Капстоун autonomous_replanning_works
+    # ФЛИПНУТ живым прогоном команды `ai-ops replan` (#375) на изолированной git-дочке.
+    status: achieved
     outcome:
       # Phase 5: Observe → Understand → Plan → Prioritize → Execute → Evaluate → Learn → Replanning.
       # policy_driven_execution ФЛИПНУТ 2026-08-31: схема POLICY.yaml сведена (#371) + живой прогон на
       # копии дочки — enforcement:block РЕАЛЬНО блокирует require_approval, записанное одобрение
       # человека снимает, observe не блокирует. learning_from_human_overrides ФЛИПНУТ 2026-08-31: код
       # влит и подключён к приоритизации (#367), прошлый human-override сдвигает рекомендацию (сквозной
-      # тест + демонстрация, сдвиг назван «ОБУЧЕНИЕ»). autonomous_replanning_works остаётся false —
-      # капстоун (авто-перепланирование по сигналам drift/evolution) ещё не построен.
-      autonomous_replanning_works: false
+      # тест + демонстрация, сдвиг назван «ОБУЧЕНИЕ»). autonomous_replanning_works ФЛИПНУТ 2026-08-31
+      # (#375): команда `ai-ops replan` — капстоун — сама сводит приоритеты плана к реальности БЕЗ
+      # человеческого --replan. Живьём на изолированной git-дочке: переприоритизировала 3 работы под
+      # реальность (с провенансом) и поймала реальное расхождение (ветка влита в main, план держит todo)
+      # как СТРУКТУРНОЕ ПРЕДЛОЖЕНИЕ класса B (не авто); --apply записал переприоритизацию в машинный
+      # артефакт дочки, авторский план и main не тронув. Граница автономии — вариант B (владелец):
+      # переприоритизация обратимая/детерминированная/состав работ не меняет применяется сама,
+      # структурные изменения — только предложением. Автономное удаление работ невозможно по механизму
+      # (провал ии-среды закрыт). ВСЕ ТРИ верны -> цель достигнута.
+      autonomous_replanning_works: true
       learning_from_human_overrides: true
       policy_driven_execution: true
 
