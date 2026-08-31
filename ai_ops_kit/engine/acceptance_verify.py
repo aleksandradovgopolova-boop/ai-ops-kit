@@ -408,6 +408,12 @@ def _read_source(work_root, source) -> tuple:
 #: Основания, при которых вердикт опирается на ПРОВЕРЕННУЮ цитату из результата правки.
 STRONG_BASIS = {"absence-proof", "post-state", "file", "absence-refuted"}
 
+#: Основания, при которых КИТ РЕАЛЬНО ПРОЧИТАЛ доставленный файл (не только дифф): цитата сверена с
+#: эталоном. Fix C (31.08.2026): именно это, а НЕ ceremonial read-op судьи, доказывает, что сверка
+#: коснулась доставленного артефакта. Судья claude-cli read-op детерминированно не эмитит (шесть
+#: живых замеров) — авторитетное чтение делает кит в `_ground_quote` -> `_read_source`.
+FILE_CONFIRMED_BASES = {"file", "absence-proof", "absence-refuted"}
+
 
 def _ground_quote(quote, change_context, work_root, source, evidence="present") -> tuple:
     """(basis | None, причина). `None` = цитата выдумана — вердикт не принимается ни в какую сторону.
@@ -453,10 +459,16 @@ def _ground_quote(quote, change_context, work_root, source, evidence="present") 
                               else "отсутствие в файле подтверждено, но эта строка не удалялась "
                                    "в этом изменении — связь с правкой не доказана")
 
-    if q in _norm(own_post) or (not src and q in _norm(any_post)):
-        return "post-state", None
+    # met/present: ПОДТВЕРЖДЕНИЕ ПО ДОСТАВЛЕННОМУ ФАЙЛУ СИЛЬНЕЕ, ЧЕМ ПО ДИФФУ (Fix C, 31.08.2026,
+    # шесть живых замеров судьи). Кит сам прочитал файл на проверенном SHA (_read_source выше); если
+    # цитата есть в НЁМ — основание `file`: сверено с эталоном, а не с хунком, который мог устареть
+    # или быть частичным. Это же снимает зависимость от read-op судьи (claude-cli его детерминированно
+    # НЕ эмитит): авторитетное чтение доставленного файла делает КИТ. `post-state` (дифф) остаётся
+    # ЗАПАСНЫМ основанием — когда source не назван или файл не прочитан, а цитата есть в теле ханка.
     if body is not None and q in _norm(body):
         return "file", None
+    if q in _norm(own_post) or (not src and q in _norm(any_post)):
+        return "post-state", None
     if q in _norm(own_removed) or q in _norm(any_removed):
         # Цитата настоящая, но описывает состояние ДО правки: вердикт остаётся суждением судьи.
         return "removed-line", ("основание — УДАЛЁННАЯ строка диффа: она описывает состояние ДО "
@@ -569,12 +581,6 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
         return _unverified(criteria, "вердикт ревьюера не соответствует контракту: "
                                      + "; ".join(errs[:3]),
                            reads=reads, denied=denied, errors=errs, attempted=True)
-    if not reads:
-        # Тот же инвариант, что для блокирующих ai-review гейтов (`pipeline_evidence._run_reviews`):
-        # вердикт без единого чтения — рубер-штамп. Здесь он опаснее: подтверждает приёмку.
-        return _unverified(criteria, "вердикт вынесен без единого чтения (0 reads) — рубер-штамп "
-                                     "сверкой не является",
-                           reads=reads, denied=denied, attempted=True)
 
     by_id = {str(c["id"]): c for c in res["criteria"]}
     out, unmet, undet = [], [], []
@@ -616,6 +622,22 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
             unmet.append(c["id"])
         elif status == "undetermined":
             undet.append(c["id"])
+
+    # ── РУБЕР-ШТАМП ПЕРЕОПРЕДЕЛЁН ЧЕРЕЗ ЭТАЛОН, А НЕ ЧЕРЕЗ read-op СУДЬИ (Fix C, 31.08.2026) ──
+    # Прежде страж стоял ДО грунтовки: вердикт без единого чтения СУДЬЁЙ = рубер-штамп. Шесть живых
+    # замеров показали, что судья claude-cli детерминированно судит из диффа и read-op НЕ эмитит —
+    # при этом машинную сверку цитаты с ДОСТАВЛЕННЫМ ФАЙЛОМ делает САМ КИТ (_ground_quote ->
+    # _read_source). Значит вовлечённость сверки с эталоном определяется тем, коснулась ли она
+    # доставленного файла (кит его прочитал: basis из FILE_CONFIRMED_BASES), а не тем, дёрнул ли
+    # судья ceremonial read. Дифф-only вердикт (0 reads И ни одна цитата не сверена по файлу —
+    # только по хунку или выдумана) — по-прежнему рубер-штамп: с эталоном не сверялись ничем. Это
+    # НЕ ослабляет #364, а усиливает: met, чья цитата есть в диффе, но НЕТ в доставленном файле
+    # (устаревший/частичный дифф), больше не проходит как подтверждённый.
+    if not reads and not any(c["basis"] in FILE_CONFIRMED_BASES for c in out):
+        return _unverified(criteria, "вердикт вынесен без единого чтения (0 reads) и ни одна цитата "
+                                     "не сверена с доставленным файлом — рубер-штамп сверкой не "
+                                     "является",
+                           reads=reads, denied=denied, attempted=True)
 
     verified = not undet
     met_all = verified and not unmet
