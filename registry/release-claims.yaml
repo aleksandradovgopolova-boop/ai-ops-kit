@@ -5,8 +5,8 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.37.0
-phase: "v3.37 — Product Operating System: продуктовый слой, backlog-разведка, roadmap и продуктовые операции едут в дочку; девять находок поля из cockpit закрыты"
+version: 3.38.0
+phase: "v3.38 — Product Operating System замкнута 5/5: автономное перепланирование (капстоун `ai-ops replan`) и approval-gated слияние дублей (`ai-ops backlog merge`); остался только owner-led второй brownfield для stable"
 # КАНАЛ ЗАРАБАТЫВАЕТСЯ, А НЕ ОБЪЯВЛЯЕТСЯ (F-030, по внешнему ревью 12.08.2026).
 #
 # До этой правки здесь стояло `channel: stable`, и не проверял его НИКТО. Слово было
