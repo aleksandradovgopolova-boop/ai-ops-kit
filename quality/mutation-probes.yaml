@@ -21,6 +21,17 @@
 schema_version: 1
 kind: mutation-probes
 probes:
+- id: fast-path-small-low-skips-ceremony
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '        if spec_levels.classify(signals).get("level", 0) < 2:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_fast_path_small_low.py
+  why: 'Быстрый путь для small/low опирается на уровень классификатора (< L2), а не на голый size —
+    иначе рискованное можно было бы протащить, пометив как small. Снять проверку уровня — либо
+    открыть быстрый путь опасному (если заменить на True), либо не открыть никогда (False): тест
+    small/low ENGINEERING краснеет.'
 - id: delivery-seam-pipeline-opens-pr
   kind: seam
   covers: ['ai_ops_kit/delivery/pr_open.py', 'ai_ops_kit/engine/execution_pipeline.py']
