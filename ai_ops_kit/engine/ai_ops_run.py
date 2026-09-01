@@ -231,6 +231,35 @@ def _unresolved_intents(features_dir, fid, branch=None):
     return out
 
 
+def _nonfinal_receipt_intents(features_dir, fid, branch=None):
+    """#400 (обратная связь ИИ-Среды): DeliveryIntent'ы, у которых Receipt ЕСТЬ, но он НЕ финально
+    подтверждён (`sha_verified` != True — mismatch / not-delivered / ложный false из гонки чтения
+    head_sha, P0/#399). Такие надо перепроверить против СВЕЖЕГО remote: `_unresolved_intents` смотрит
+    лишь НАЛИЧИЕ файла receipt, поэтому однажды записанный ложный false залипал навсегда и remote,
+    уже совпавший с коммитом, больше не сверялся (приходилось руками удалять файл леджера).
+    Финально-подтверждённый (`sha_verified` is True) не трогаем — он окончателен."""
+    d = _outbox_dir(features_dir, fid)
+    out = []
+    if not d.is_dir():
+        return out
+    for ip in sorted(d.glob("*.intent.yaml")):
+        did = ip.name[:-len(".intent.yaml")]
+        g = _ls.load_guarded(ip, kind="DeliveryIntent")
+        if g["state"] != "ok":
+            continue
+        intent = g["data"]
+        if branch is not None and intent.get("branch") != branch:
+            continue
+        rp = d / f"{did}.receipt.yaml"
+        rg = _ls.load_guarded(rp, kind="DeliveryReceipt")
+        if rg["state"] != "ok":
+            continue  # receipt отсутствует/битый — это область _unresolved_intents, не наша
+        if (rg["data"] or {}).get("sha_verified") is True:
+            continue  # финально подтверждён — окончателен, не перепроверяем
+        out.append((did, intent))
+    return out
+
+
 def _reconcile_pending_delivery(features_dir, fid, child_root):
     """v3.0.16/v3.0.17 (finding аудита #2/P0): сверить с remote КАЖДУЮ незавершённую доставку (Intent без
     Receipt) и дописать DeliveryReceipt — но ТОЛЬКО при СТРОГОМ совпадении идентичности PR с Intent
@@ -239,7 +268,9 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
     рапортует успех, если Receipt фактически не сохранился). Идемпотентно, ничего не создаёт на remote.
     -> список исходов по delivery_id | None (нечего сверять)."""
     from pathlib import Path as _P
-    pending = _unresolved_intents(features_dir, fid)
+    # незавершённые (Intent без Receipt) + #400: не-финальные receipt (sha_verified != True) —
+    # ложный false из гонки P0 больше не залипает, а перепроверяется против свежего remote.
+    pending = _unresolved_intents(features_dir, fid) + _nonfinal_receipt_intents(features_dir, fid)
     if not pending:
         return None
     from ai_ops_kit.delivery import pr_open
