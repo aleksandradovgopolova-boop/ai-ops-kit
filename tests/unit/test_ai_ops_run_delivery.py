@@ -109,3 +109,51 @@ class TestDeliveryOutcomeUnknown:
         obx = root / "features" / "delivunk" / "delivery-outbox"
         assert (obx / f"{did}.intent.yaml").is_file()
         assert not (obx / f"{did}.receipt.yaml").is_file()   # confirmed Receipt не пишется
+
+
+@pytest.mark.unit
+class TestReconcileNonFinalReceipt:
+    """#400: ложный sha_verified=false (гонка чтения head_sha, P0) больше не залипает — реконсиляция
+    перепроверяет НЕ-финальный receipt против свежего remote и повышает до подтверждённого. Раньше
+    _unresolved_intents считал доставку решённой, как только файл receipt есть, и remote, уже
+    совпавший с коммитом, не сверялся — приходилось руками удалять файл леджера."""
+
+    def _seed(self, root, fid, did, *, sha_verified):
+        obx = root / "features" / fid / "delivery-outbox"
+        obx.mkdir(parents=True, exist_ok=True)
+        _ls.durable_write(obx / f"{did}.intent.yaml",
+                          {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": did,
+                           "workitem_id": fid, "repository": "o/r", "branch": "ai-ops/x",
+                           "base_ref": "main", "base_sha": "b0", "commit_sha": "c0ffee",
+                           "status": "completed"},
+                          require_keys=("kind", "delivery_id", "commit_sha", "repository"))
+        _ls.durable_write(obx / f"{did}.receipt.yaml",
+                          {"schema_version": 1, "kind": "DeliveryReceipt", "delivery_id": did,
+                           "workitem_id": fid, "repository": "o/r", "branch": "ai-ops/x",
+                           "commit_sha": "c0ffee", "base_ref": "main", "status": "updated",
+                           "remote_sha": "stale", "sha_verified": sha_verified},
+                          require_keys=("kind", "delivery_id", "status"))
+        return obx
+
+    def test_nonfinal_selected_final_ignored(self, tmp_path):
+        self._seed(tmp_path, "featA", "d1", sha_verified=False)   # ложный false
+        self._seed(tmp_path, "featB", "d2", sha_verified=True)    # окончателен
+        fd = tmp_path / "features"
+        assert [d for d, _ in ai_ops_run._nonfinal_receipt_intents(fd, "featA")] == ["d1"]
+        assert ai_ops_run._nonfinal_receipt_intents(fd, "featB") == []
+
+    def test_reconcile_upgrades_false_to_verified(self, tmp_path):
+        obx = self._seed(tmp_path, "featA", "d1", sha_verified=False)
+        fd = tmp_path / "features"
+
+        def fake_reconcile(child_root, branch):
+            # remote теперь совпадает с commit_sha -> строгая идентичность проходит
+            return {"status": "found", "repository": "o/r", "head_sha": "c0ffee", "base_ref": "main",
+                    "url": "https://example.test/pr/5", "number": 5, "pr_state": "open", "merged": False,
+                    "checks": {"status": "absent", "total": 0, "failed": 0, "pending": 0, "success": 0}}
+
+        with patch("ai_ops_kit.delivery.pr_open.reconcile_delivery", side_effect=fake_reconcile):
+            res = ai_ops_run._reconcile_pending_delivery(fd, "featA", str(tmp_path))
+        assert res and res[0]["status"] == "reconciled"
+        rec = _ls.load_guarded(obx / "d1.receipt.yaml", kind="DeliveryReceipt")["data"]
+        assert rec["sha_verified"] is True    # ложный false вылечен без ручного удаления леджера

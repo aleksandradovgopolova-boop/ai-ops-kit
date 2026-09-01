@@ -21,6 +21,37 @@
 schema_version: 1
 kind: mutation-probes
 probes:
+- id: delivery-seam-pipeline-opens-pr
+  kind: seam
+  covers: ['ai_ops_kit/delivery/pr_open.py', 'ai_ops_kit/engine/execution_pipeline.py']
+  file: ai_ops_kit/delivery/pr_open.py
+  find: 'def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_id=None):'
+  replace_with: 'def open_draft_pr_DISABLED(root, branch, title, body="", base=None, push=True, delivery_id=None):'
+  tests:
+  - tests/unit/test_delivery_pr_seam.py
+  why: 'ШОВ: pr_open — единственная точка открытия PR, но модульные тесты pr_open зелены, даже если
+    контроллер перестанет её звать. Тест шва краснеет, когда точка входа open_draft_pr исчезает:
+    _deliver_pr -> open_draft_pr, и именно этот вызов ломается вместе с `def`.'
+- id: delivery-head-sha-authoritative-local
+  kind: guard
+  file: ai_ops_kit/delivery/pr_open.py
+  find: '                "head_sha": pushed_sha or (existing.get("head") or {}).get("sha"),'
+  replace_with: '                "head_sha": (existing.get("head") or {}).get("sha"),'
+  tests:
+  - tests/unit/test_pr_open.py
+  why: 'P0/#399: после успешного push авторитет — локально запушенный sha, НЕ ответ GitHub API про head
+    PR (он отстаёт и давал ложный sha_verified=false на успешной доставке). Снять `pushed_sha or` —
+    вернуть гонку, стоившую суток отладки.'
+- id: delivery-reconcile-nonfinal-receipts
+  kind: guard
+  file: ai_ops_kit/engine/ai_ops_run.py
+  find: '    pending = _unresolved_intents(features_dir, fid) + _nonfinal_receipt_intents(features_dir, fid)'
+  replace_with: '    pending = _unresolved_intents(features_dir, fid)'
+  tests:
+  - tests/unit/test_ai_ops_run_delivery.py
+  why: 'P1/#400: реконсиляция обязана перепроверять не-финальный receipt (sha_verified != True) против
+    свежего remote. Убрать слагаемое — ложный false залипает навсегда, remote не сверяется, и починка
+    возможна только ручным удалением файла леджера (что классификатор блокирует).'
 - id: acceptance-fabricated-quote-nullifies
   kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
