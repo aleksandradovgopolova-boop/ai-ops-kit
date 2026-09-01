@@ -871,3 +871,30 @@ work:
       Готово, когда одна команда (`release X.Y.Z` / devtools) атомарно правит все версионные
       поверхности и добавляет release-newsfragment, а тест проверяет, что после неё версии совпадают
       во всех точках и оба валидатора зелены. Упрощает релиз любому, кто его режет.
+
+  # delivery-of-ready-work-is-one-autonomous-command — замер owner-led прогона ii-sreda 01.09.2026:
+  # готовую-на-ветке работу нельзя довести до ОТКРЫТОГО verified PR одной автономной командой.
+  - id: delivery-of-ready-work-is-one-autonomous-command
+    title: >-
+      Готовую-на-ветке работу доставка доводит до ОТКРЫТОГО verified PR + DeliveryReceipt одной
+      автономной командой, без ручного подбора флагов
+    type: engineering
+    goal: owner-speaks-product-not-pipeline
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 695
+    write_scope: [ai_ops_kit/cli/, ai_ops_kit/engine/, tests/]
+    reason: >-
+      Замер 01.09.2026 (owner-led второй brownfield, ii-sreda material-ready-notification, релизный
+      3.39.2). VERIFIED PR открыт (ii-sreda#695, ревью pass), но НЕ автономно — кластер разрывов:
+      (1) `resume` НЕ пробрасывает `--open-pr` и `--takeover` — готовую работу продолжает, но PR не
+      открывает и утёкшую заявку не снимает; (2) `run` принципиально не идёт поверх готовых коммитов
+      (шлёт в `resume`), то есть у «доставить уже реализованное» нет автономной команды; (3)
+      прерванный прогон ОСТАВЛЯЕТ свою active-work заявку (свежую, по возрасту не гасится) — она
+      блокирует следующий; (4) session-identity у `run` и `resume` расходится (resume не видит
+      заявку run как свою). Из-за (1)+(2)+(3) DeliveryReceipt (sha_verified) на #695 автоматически не
+      выдан — реконсиляции нужен DeliveryIntent, а прогон до него не доезжает. Готово, когда одна
+      команда доводит готовую-на-ветке работу до ОТКРЫТОГО PR + DeliveryReceipt (resume умеет
+      open-pr/takeover; run-over-commits имеет автономный путь; заявка снимается на выходе прогона;
+      session стабилен), проверено полем на #695.
