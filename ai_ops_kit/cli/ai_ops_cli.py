@@ -107,12 +107,23 @@ DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "revi
 
 def resolve_flags(signals):
     """Авто-подбор внутренних флагов по классу задачи (preset). Пользователь их не задаёт вручную."""
+    from ai_ops_kit.gates import spec_levels
     tt = (signals.get("task_type") or "QUICK").upper()
     flags = {"engine": "pipeline", "sandbox": True, "baseline_diff": True,
              "review": False, "author": False}
     if tt in ("ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"):
         flags["review"] = True
         flags["author"] = True
+    # Быстрый путь (заявка владельца): МЕЛКАЯ и НИЗКО-рисковая работа не гоняется через план и
+    # приёмку — остаётся обычный PR, то есть человеческое ревью и CI. Опасное сюда не попадает по
+    # построению: классификатор эскалирует необратимое/деструктивное/секретное/высокий риск к L3, а
+    # быстрый путь открыт только ниже L2 (L0/L1). Поэтому пометить рискованное как small не поможет:
+    # уровень считает не size, а сигналы риска. PRODUCT/CRITICAL полный путь сохраняют.
+    if (signals.get("size") or "").lower() == "small" and (signals.get("risk") or "").lower() == "low":
+        if spec_levels.classify(signals).get("level", 0) < 2:
+            flags["review"] = False
+            flags["author"] = False
+            flags["fast_path"] = True
     if signals.get("fix") or tt == "QUICK" and signals.get("require_fix"):
         flags["require_fix"] = True
     return flags
