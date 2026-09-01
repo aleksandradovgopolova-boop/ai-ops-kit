@@ -5,8 +5,8 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 3.39.0
-phase: "v3.39 — Product Operating System замкнута 5/5; судья приёмки теперь сверяет met с ДОСТАВЛЕННЫМ файлом сам (Fix C): чистая авто-приёмка достижима, а страж строже прежнего. Остался единственный барьер stable — owner-led второй brownfield до DeliveryReceipt"
+version: 3.39.1
+phase: "v3.39.1 — сняты два полевых блокера к DeliveryReceipt: parallel-safety больше не валит собственные install/update-PR кита (#384), а рубер-штамп code_review/architecture_review переопределён через сверку с доставленным файлом (Fix C для ревьюеров, #388; подтверждён вживую на ii-sreda — claude-cli закрыл оба ревью). Остался owner-led второй brownfield до verified PR на релизном ките"
 # КАНАЛ ЗАРАБАТЫВАЕТСЯ, А НЕ ОБЪЯВЛЯЕТСЯ (F-030, по внешнему ревью 12.08.2026).
 #
 # До этой правки здесь стояло `channel: stable`, и не проверял его НИКТО. Слово было
