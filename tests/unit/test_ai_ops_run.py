@@ -879,6 +879,18 @@ class TestPrintHuman:
         assert "planned" in captured.out
         assert "IMPL" in captured.out
 
+    def test_print_human_minimal_blocked_report_does_not_crash(self, capsys):
+        """Минимальный отчёт отказа active-work (без base_workflow/треков) НЕ роняет вывод.
+        Замер поля 01.09.2026: печать такого отчёта падала KeyError('base_workflow') — прогон
+        завершался, а print_human ронял процесс. Теперь печатает коротко: id, статус, причину."""
+        report = {"schema_version": 1, "kind": "run-report", "workitem_id": "mat-ready",
+                  "status": "blocked", "blocked_by": "active-work",
+                  "error": "работа не начата: заявку держит другая сессия"}
+        ai_ops_run.print_human(report)          # НЕ должно бросать KeyError
+        out = capsys.readouterr().out
+        assert "mat-ready" in out and "blocked" in out
+        assert "active-work" in out
+
     def test_print_human_pipeline_delegates(self, capsys):
         """print_human on pipeline kind -> delegates to _print_pipeline."""
         report = {
@@ -2289,3 +2301,29 @@ class TestPipelineRunCost:
         """Пустой drain_call_stats -> rep['cost'] не проставляется (нет вызовов — нечего агрегировать)."""
         rp = self._run_with_stats(tmp_path / "r", [])
         assert "cost" not in rp
+
+
+class TestRegisterActiveWorkTakeover:
+    """Fix 2 (#autonomous-delivery, 01.09.2026): `--takeover` доезжает до register через
+    run -> _register_active_work. Раньше run звал register БЕЗ takeover — брошенную заявку можно
+    было снять только руками через active_work.py, и автономная доставка вставала."""
+
+    def test_takeover_overrides_a_blocking_claim(self, child_root):
+        from ai_ops_kit.lifecycle import active_work as aw
+        aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
+        aw_path.parent.mkdir(parents=True, exist_ok=True)
+        aw.register(aw_path, "wi-x", "ai-ops/wi-x", ["src/"], "session:holder")   # свежая, держит
+        sig = {"affected_areas": ["core"]}
+        errs = []
+        # БЕЗ takeover: свежая чужая заявка обязана останавливать (контроль Fix 1 — молодую не гасим)
+        p1, _pf1, err1 = ai_ops_run._register_active_work(
+            child_root, sig, ["src/"], "wi-x", "session:me", errs)
+        assert err1 is not None and p1 is None, "без takeover блокирующая заявка обязана останавливать"
+        # С takeover: проводка Fix 2 — register перенимает заявку
+        p2, _pf2, err2 = ai_ops_run._register_active_work(
+            child_root, sig, ["src/"], "wi-x", "session:me", errs,
+            takeover=True, takeover_reason="прежняя сессия мертва")
+        assert err2 is None and p2 is not None, "--takeover обязан перенять заявку (проводка Fix 2)"
+        entry = [w for w in aw.load(aw_path)["active"] if w["id"] == "wi-x"][0]
+        assert entry.get("taken_over_from", {}).get("owner_session") == "session:holder", \
+            "прежний держатель обязан остаться записан (атрибуция)"

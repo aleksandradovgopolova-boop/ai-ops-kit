@@ -136,6 +136,33 @@ class TestDeadHolderDoesNotHold:
         entry = {"id": "wi-1", "owner_session": "pid:999999", "machine": "другая-машина"}
         assert aw.holder_is_gone(entry) is False
 
+    def test_stale_session_claim_is_gone_by_age(self):
+        """#autonomous-delivery (замер 01.09.2026): session-заявка старше порога — БРОШЕНА. Liveness
+        по session-id не проверить, но возраст в полсуток доказывает: прогон длиной 12ч нереален,
+        перезапуск сессии/машины — обычен. Вчерашняя session-заявка держала доставку сутки."""
+        old = {"id": "wi-1", "owner_session": "session:stale",
+               "started_at": "2020-01-01T00:00:00+00:00"}
+        assert aw.holder_is_gone(old) is True
+
+    def test_fresh_session_claim_still_holds(self, reg):
+        """МУТАЦИОННЫЙ КОНТРОЛЬ: молодую session-заявку НЕ гасим (иначе снимали бы любую session).
+        Свежая заявка держит и блокирует новую сессию."""
+        aw.register(reg, "wi-1", "ai-ops/wi-1", ["src/"], "session:fresh")
+        assert aw.holder_is_gone(aw.load(reg)["active"][0]) is False
+        assert aw.register(reg, "wi-1", "ai-ops/wi-1", ["src/"], "session:other") != 0
+
+    def test_stale_session_claim_does_not_block_new_work(self, reg, capsys):
+        """Стале-заявка авто-освобождается при register новой сессии — НАЗЫВАЯ (как мёртвый pid),
+        а не тихо. Это и разблокирует автономную доставку без ручного takeover."""
+        aw.register(reg, "wi-1", "ai-ops/wi-1", ["src/"], "session:stale")
+        data = aw.load(reg)
+        data["active"][0]["started_at"] = "2020-01-01T00:00:00+00:00"   # состарить
+        aw.save(reg, data)
+        rc = aw.register(reg, "wi-1", "ai-ops/wi-1", ["src/"], "session:new")
+        out = capsys.readouterr().out
+        assert rc == 0, "стале-заявка заблокировала работу"
+        assert "ЗАЯВКА ОСВОБОЖДЕНА" in out, out
+
 
 class TestRunStopsOnRefusal:
     """Отказ обязан останавливать ПРОГОН, а не только печататься."""

@@ -444,33 +444,53 @@ def _locked(path: Path):
 _CLOSED_STATUSES = ("done", "superseded")   # #137: снятое сверкой — не идущая работа
 
 
-def holder_is_gone(entry, machine=None) -> bool:
-    """Держатель заявки уже не существует? -> True только когда это ДОКАЗАНО.
+# session-заявка старше этого (в часах) без finish считается БРОШЕННОЙ. Замер поля 01.09.2026:
+# вчерашняя `session:*`-заявка держала доставку сутки — liveness по session-id не проверить, но
+# возраст в полсуток не догадка: прогон длиной 12ч нереален, перезапуск сессии/машины — обычен.
+_CLAIM_STALE_HOURS = 12
 
-    Личность сессии бывает двух видов. Измеренный идентификатор рантайма (`session:ab12cd34`) живёт
-    дольше процесса — по нему «жив ли держатель» не проверить, и мы НЕ угадываем. Личность вида
-    `pid:1234` — это конкретный процесс на конкретной машине: если его нет, заявку держать некому.
-    Без этой проверки честный отказ второй сессии превратился бы в помеху одиночной работе: обычный
-    повторный прогон той же работы получал бы «её держит другой» от процесса, которого нет.
+
+def _claim_age_hours(started_iso) -> float:
+    """Возраст заявки в часах по её `started_at` (ISO). Нечитаемое время -> 0.0 (не гасим по догадке)."""
+    try:
+        t = datetime.fromisoformat(str(started_iso))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - t).total_seconds() / 3600.0
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def holder_is_gone(entry, machine=None) -> bool:
+    """Держатель заявки уже не существует? -> True только когда это ДОКАЗАНО (процессом или возрастом).
+
+    Личность держателя бывает двух видов. `pid:1234` — конкретный процесс на конкретной машине: нет
+    процесса — заявку держать некому. `session:ab12cd34` — идентификатор рантайма, он живёт дольше
+    процесса, и по нему liveness не проверить — НО брошенность по ВОЗРАСТУ доказуема замером: заявка
+    старше `_CLAIM_STALE_HOURS` без finish держать некому (перезапуск сессии/машины реальнее прогона
+    длиной в полсуток). Без этого честный отказ второй сессии становился помехой: одиночный повторный
+    прогон получал «её держит другой» от процесса, которого нет, или от сессии, которой уже нет.
     """
     holder = str(entry.get("owner_session") or "")
-    if not holder.startswith("pid:"):
+    if holder.startswith("pid:"):
+        if (entry.get("machine") or "") != (machine or _machine()):
+            return False           # чужая машина: её процессы отсюда не видны, значит не знаем
+        try:
+            pid = int(holder.split(":", 1)[1])
+        except (ValueError, IndexError):
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False           # процесс есть, просто чужой
+        except OSError:
+            return False
         return False
-    if (entry.get("machine") or "") != (machine or _machine()):
-        return False           # чужая машина: её процессы отсюда не видны, значит не знаем
-    try:
-        pid = int(holder.split(":", 1)[1])
-    except (ValueError, IndexError):
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    except PermissionError:
-        return False           # процесс есть, просто чужой
-    except OSError:
-        return False
-    return False
+    # session-личность: гасим по возрасту (started_at | since). Молодую НЕ трогаем.
+    started = entry.get("started_at") or entry.get("since")
+    return bool(started) and _claim_age_hours(started) >= _CLAIM_STALE_HOURS
 
 
 def _active_others(active, exclude_id):
