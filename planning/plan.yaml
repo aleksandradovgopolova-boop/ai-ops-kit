@@ -851,3 +851,23 @@ work:
       chore(ai-ops)) и пропускает их, ЛИБО update сам раскладывает миграцию плана в отдельный
       координаторский коммит/PR — и это проверено полем: заезд кита на репозиторий без кита проходит
       гейт без ручного git rm. Заявка #384.
+
+  # release-helper-bumps-all-version-surfaces — замер релиза v3.39.1 (01.09.2026): версию бампали
+  # руками в 8 файлах. Автоматизация упрощает релиз любому, кто его режет.
+  - id: release-helper-bumps-all-version-surfaces
+    title: >-
+      Релиз-помощник одной командой бампает все версионные поверхности и добавляет release-фрагмент
+    type: engineering
+    goal: kit-release-strategy
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [ai_ops_kit/devtools/, tests/]
+    reason: >-
+      Замер 01.09.2026 при выпуске v3.39.1: версию пришлось бампать РУКАМИ в восьми файлах — VERSION,
+      manifest.package_version, release-claims.version, release-notes.version, README, ROADMAP,
+      раздел CHANGELOG, release-newsfragment. Рассинхрон ловят валидаторы (validate_release_claims,
+      validate_ai_first_registry), но уже ПОСТФАКТУМ — класс «объявлено, но не автоматизировано».
+      Готово, когда одна команда (`release X.Y.Z` / devtools) атомарно правит все версионные
+      поверхности и добавляет release-newsfragment, а тест проверяет, что после неё версии совпадают
+      во всех точках и оба валидатора зелены. Упрощает релиз любому, кто его режет.
