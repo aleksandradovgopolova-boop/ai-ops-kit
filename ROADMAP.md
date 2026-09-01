@@ -10,7 +10,7 @@ owner: product-team
 Видение — в `VISION.md`. Список релизов — в `CHANGELOG.md`. Пройденный путь (фазы v1.3 → v3.36,
 856 строк) — в [`docs/changelog/roadmap-history.md`](docs/changelog/roadmap-history.md).
 
-Совместимость: 2.x совместим в пределах 2.x; 3.x (текущий канал — **v3.39.2 qualification**) остаётся
+Совместимость: 2.x совместим в пределах 2.x; 3.x (текущий канал — **v3.39.3 qualification**) остаётся
 обратно совместимым. Точная версия — в `VERSION`. Физический разнос дерева по packages
 (breaking) намечен на v4.0.
 
