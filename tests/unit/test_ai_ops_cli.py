@@ -462,6 +462,18 @@ class TestResumePositionalRoot:
         assert argv[1] == str(child_root)
         assert argv[2] == "продолжить работу"
 
+    def test_resume_forwards_open_pr_and_takeover(self, child_root, monkeypatch):
+        """#695: resume доводит готовую-на-ветке работу до ОТКРЫТОГО PR и снимает утёкшую заявку —
+        значит --open-pr и --takeover обязаны доехать до движка. Раньше argv2 их терял, и готовая
+        работа не открывала PR (owner-led прогон ii-sreda), а брошенную заявку нельзя было снять."""
+        seen = self._capture(monkeypatch)
+        ai_ops_cli.main(["resume", str(child_root), "wi-x", "--execute", "--open-pr",
+                         "--takeover", "--takeover-reason", "утёкшая заявка"])
+        argv = seen["argv"]
+        assert "--open-pr" in argv, "resume не пробросил --open-pr — PR не откроется"
+        assert "--takeover" in argv, "resume не пробросил --takeover — утёкшую заявку не снять"
+        assert "утёкшая заявка" in argv
+
 
 @pytest.mark.unit
 class TestDegradedContextIsVisible:

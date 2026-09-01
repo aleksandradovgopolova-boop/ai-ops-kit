@@ -1597,6 +1597,12 @@ def main(argv):
             argv2 += ["--model", a.model]
         if getattr(a, "replan", False):
             argv2.append("--replan")   # v3.0-rc4 (P0.1): осознанная смена policy при продолжении
+        if getattr(a, "open_pr", False):
+            argv2.append("--open-pr")  # #695: resume доводит готовую работу до ОТКРЫТОГО PR
+        if getattr(a, "takeover", False):
+            argv2.append("--takeover")  # #695: resume снимает брошенную/утёкшую заявку
+            if getattr(a, "takeover_reason", None):
+                argv2 += ["--takeover-reason", a.takeover_reason]
         if a.execute:
             argv2.append("--execute")
         if a.force:
