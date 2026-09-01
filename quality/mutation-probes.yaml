@@ -32,6 +32,16 @@ probes:
   why: 'ШОВ: pr_open — единственная точка открытия PR, но модульные тесты pr_open зелены, даже если
     контроллер перестанет её звать. Тест шва краснеет, когда точка входа open_draft_pr исчезает:
     _deliver_pr -> open_draft_pr, и именно этот вызов ломается вместе с `def`.'
+- id: cli-is-dir-oserror-guard
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '    except OSError:'
+  replace_with: '    except ValueError:'
+  tests:
+  - tests/unit/test_cli_long_arg_is_dir.py
+  why: '#161: _is_dir_safe гасит OSError (ENAMETOOLONG) от Path.is_dir() на первом позиционном
+    аргументе — тексте задачи длиннее ~255 байт. Снять guard (ловить не тот класс) — вернуть падение
+    main() на 3.11/3.12, которое ложно закрыли коммитом, не тронувшим код.'
 - id: delivery-head-sha-authoritative-local
   kind: guard
   file: ai_ops_kit/delivery/pr_open.py
