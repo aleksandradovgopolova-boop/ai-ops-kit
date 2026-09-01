@@ -488,7 +488,13 @@ def holder_is_gone(entry, machine=None) -> bool:
         except OSError:
             return False
         return False
-    # session-личность: гасим по возрасту (started_at | since). Молодую НЕ трогаем.
+    # session-личность: гасим по возрасту ТОЛЬКО на своей машине. Чужую машину не судим — её сессия
+    # может быть жива, а её ОПУБЛИКОВАННАЯ заявка есть авторитет координации (как и в pid-пути выше:
+    # «чужая машина — не знаю»). Заявка без поля machine считается локальной (register всегда пишет
+    # machine своей машины; пустое — тестовый/битый артефакт, судим как своё). Молодую НЕ трогаем.
+    claim_machine = entry.get("machine") or ""
+    if claim_machine and claim_machine != (machine or _machine()):
+        return False
     started = entry.get("started_at") or entry.get("since")
     return bool(started) and _claim_age_hours(started) >= _CLAIM_STALE_HOURS
 

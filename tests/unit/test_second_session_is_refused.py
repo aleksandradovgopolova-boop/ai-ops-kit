@@ -151,6 +151,13 @@ class TestDeadHolderDoesNotHold:
         assert aw.holder_is_gone(aw.load(reg)["active"][0]) is False
         assert aw.register(reg, "wi-1", "ai-ops/wi-1", ["src/"], "session:other") != 0
 
+    def test_stale_foreign_machine_session_claim_is_not_aged_out(self):
+        """Чужую машину по возрасту НЕ судим (её сессия может быть жива, опубликованная заявка —
+        авторитет координации, как в pid-пути). Гашение по возрасту — только СВОИ session-заявки."""
+        old_foreign = {"id": "wi-1", "owner_session": "session:stale",
+                       "started_at": "2020-01-01T00:00:00+00:00", "machine": "другая-машина"}
+        assert aw.holder_is_gone(old_foreign) is False
+
     def test_stale_session_claim_does_not_block_new_work(self, reg, capsys):
         """Стале-заявка авто-освобождается при register новой сессии — НАЗЫВАЯ (как мёртвый pid),
         а не тихо. Это и разблокирует автономную доставку без ручного takeover."""
