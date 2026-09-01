@@ -1,0 +1,1 @@
+resume-СУБПАРСЕР движка теперь принимает `--open-pr`/`--takeover`/`--takeover-reason`. В 3.39.3 их имел только run-субпарсер: CLI пробрасывал флаги, а `ai_ops_run.py resume` падал «unrecognized arguments» (поле, финальный owner-led прогон #695). Завершает проводку resume до открытого PR + DeliveryReceipt.

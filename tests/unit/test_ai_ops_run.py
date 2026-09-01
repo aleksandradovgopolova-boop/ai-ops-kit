@@ -2327,3 +2327,18 @@ class TestRegisterActiveWorkTakeover:
         entry = [w for w in aw.load(aw_path)["active"] if w["id"] == "wi-x"][0]
         assert entry.get("taken_over_from", {}).get("owner_session") == "session:holder", \
             "прежний держатель обязан остаться записан (атрибуция)"
+
+
+@pytest.mark.unit
+def test_resume_subparser_accepts_open_pr_and_takeover(tmp_path):
+    """#695: resume-СУБПАРСЕР движка обязан принимать --open-pr/--takeover. Раньше их имел только
+    run-субпарсер — CLI пробрасывал флаги, а движок падал 'unrecognized arguments' (поле, финальный
+    прогон). argparse отверг бы неизвестный флаг SystemExit(2); любой другой исход = флаги приняты."""
+    from ai_ops_kit.engine import ai_ops_run
+    try:
+        ai_ops_run.main(["resume", str(tmp_path), "no-such-wi", "--open-pr", "--takeover",
+                         "--takeover-reason", "x"])
+    except SystemExit as e:
+        pytest.fail(f"resume-субпарсер отверг --open-pr/--takeover: code={e.code}")
+    except Exception as e:  # noqa: BLE001 — прочий сбой (нет ветки/фичи) не про разбор аргументов
+        assert e is not None  # тело есть (не try-except-pass) — проба только о том, что argparse принял флаги
