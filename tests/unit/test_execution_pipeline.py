@@ -2344,15 +2344,21 @@ class TestRunPipelineReviewPass:
         assert any(r["gate"] == "ux_review" and r["status"] == "warn" for r in report["reviews"])
         assert "ux_review" in report["gates"]["unmet"]
 
-    def test_review_rubber_stamp_blocked(self, child_root):
+    def test_review_diff_grounded_pass_closes_gate(self, child_root):
+        """Сиблинг Fix C (01.09.2026, замер на ii-sreda): валидный СУБСТАНТИВНЫЙ pass закрывает
+        блокирующий ai-review гейт даже при 0 kit-reads — ревьюер судит из полного диффа (claude-cli
+        read-op ДЕТЕРМИНИСТИЧНО не эмитит). Прежде 0 reads обнуляли pass в fail, и блокирующий ai-review
+        НЕ закрывался НИКОГДА, при любом качестве кода. Мутация: верни страж `if status=="pass" and
+        blocking and not reads -> fail` в _run_reviews — тест краснеет.
+        """
         _init_git(child_root)
         sig = {"task_type": "QUICK", "size": "small", "risk": "low",
                "affected_areas": ["core"], "ui_changed": True}
-        # Rubber-stamp: pass without reading anything
-        rubber = lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
+        # Субстантивный pass, НИ ОДНОГО чтения (diff-grounded) — ровно поведение живого claude-cli-ревьюера.
+        diff_grounded = lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[{"id":"ok","status":"pass"}]}'
         ops = iter([{"op": "write", "path": "src/rs2.py", "content": "r = 1\n"}, {"done": True}])
         report = execution_pipeline.run_pipeline(
-            task="rubber stamp",
+            task="diff-grounded review",
             signals=sig,
             child_root=child_root,
             proposer=lambda ctx: next(ops),
@@ -2362,11 +2368,39 @@ class TestRunPipelineReviewPass:
             isolate=True,
             install_deps=False,
             review=True,
-            reviewer_proposer=rubber,
+            reviewer_proposer=diff_grounded,
         )
-        # 0 reads on blocking gate -> blocked as rubber-stamp
-        assert any(r["gate"] == "ux_review" and r.get("closed_as") == "blocked"
-                    for r in (report["reviews"] or []))
+        rev = next((r for r in (report["reviews"] or []) if r["gate"] == "ux_review"), None)
+        assert rev is not None and rev.get("closed_as") == "pass", rev
+        assert rev.get("grounding") == "diff-grounded", "факт «сверено по диффу» обязан быть НАЗВАН"
+        assert "ux_review" not in report["gates"]["unmet"]
+
+    def test_review_empty_verdict_is_refused_not_closed(self, child_root):
+        """Анти-рубер-штамп под Option A держит СХЕМА reviewer_result, а не чтение: `pass` с ПУСТЫМИ
+        checks невалиден -> отказ (refused), гейт не закрывается. Так «пустой» рубер-штамп по-прежнему
+        не проходит, а диффо-обоснованный субстантивный pass — проходит (тест выше). Мутация: сними
+        требование непустых checks в checks/reviewer_result.py — тест краснеет.
+        """
+        _init_git(child_root)
+        sig = {"task_type": "QUICK", "size": "small", "risk": "low",
+               "affected_areas": ["core"], "ui_changed": True}
+        empty = lambda prompt: '{"kind":"reviewer-result","status":"pass","checks":[]}'
+        ops = iter([{"op": "write", "path": "src/rse.py", "content": "e = 1\n"}, {"done": True}])
+        report = execution_pipeline.run_pipeline(
+            task="empty verdict",
+            signals=sig,
+            child_root=child_root,
+            proposer=lambda ctx: next(ops),
+            budget={"max_model_calls": 20},
+            feature="rse-test",
+            commit=True,
+            isolate=True,
+            install_deps=False,
+            review=True,
+            reviewer_proposer=empty,
+        )
+        rev = next((r for r in (report["reviews"] or []) if r["gate"] == "ux_review"), None)
+        assert rev is not None and rev.get("closed_as") == "refused", rev
         assert "ux_review" in report["gates"]["unmet"]
 
 

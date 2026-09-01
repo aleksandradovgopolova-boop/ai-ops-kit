@@ -344,14 +344,18 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         calib_ui = calibrated_enforcement and gid in gate_policy.UI_GATES
         if calib_ui and isinstance(ui_evidence, dict):
             ev_status = (ui_evidence.get(gid) or {}).get("deterministic_status", "not_run")
-        if status == "pass" and blocking and not (rv.get("reads")):
-            gate_ev[gid] = {"status": "fail",
-                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) — рубер-штамп "
-                                         f"не закрывает блокирующий гейт @ {gid}; требуется верификация чтением"],
-                            "checks": res.get("checks", []), "evidence": [ev_ref]}
-            entry["closed_as"] = "blocked"
-            entry["status"] = "fail"
-            continue
+        # 0 READS БОЛЬШЕ НЕ РУБЕР-ШТАМП ДЛЯ РЕВЬЮ (сиблинг Fix C, 01.09.2026, замер на ii-sreda). Прежде
+        # `pass` блокирующего ai-review гейта БЕЗ единого kit-read обнулялся в fail («требуется верификация
+        # чтением»). Замер (тот же claude-cli, что судья приёмки): ревьюер ДЕТЕРМИНИСТИЧНО судит из диффа
+        # и read-op не эмитит — значит блокирующий ai-review НЕ закрывался НИКОГДА, при любом качестве
+        # кода (все прогоны обречены на code_review). В отличие от приёмки, у ревью НЕТ цитаты для сверки
+        # по файлу: вердикт — СУЖДЕНИЕ, кит его не подтверждает. Анти-рубер-штамп держат ДРУГИЕ три опоры:
+        # схема reviewer_result (checks обязаны быть непусты — уже проверено выше через `errs`), writer≠judge
+        # (независимая роль под read-only Policy) и полный дифф в контексте ревьюера; жёсткую верификацию
+        # несут ДЕТЕРМИНИРОВАННЫЕ гейты (tests/typecheck/lint), а ai-review — слой суждения поверх них.
+        # Поэтому валидный субстантивный `pass` закрывает гейт, а факт «сверено по диффу, файлы не
+        # открывались» НАЗЫВАЕТСЯ в evidence (`grounding`), а не блокирует — как сила основания у Fix C.
+        grounding = "read-verified" if rv.get("reads") else "diff-grounded"
         if calib_ui and ev_status == "fail":
             gate_ev[gid] = {"status": "fail",
                             "blockers": [f"детерминированное UI-evidence: реальная регрессия/дефект @ {gid} "
@@ -380,8 +384,12 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             entry["closed_as"] = "blocked"
         else:
             gate_ev[gid] = {"status": status, "provided": list(req),
-                            "checks": res.get("checks", []), "evidence": [ev_ref]}
+                            "checks": res.get("checks", []), "evidence": [ev_ref],
+                            # дифф-grounded pass закрывает гейт, но владелец видит, что файлы не
+                            # открывались (сила основания названа, как в Fix C), — на случай ручного добора.
+                            "grounding": grounding}
             entry["closed_as"] = status
+            entry["grounding"] = grounding
     return gate_ev, reviews
 
 
