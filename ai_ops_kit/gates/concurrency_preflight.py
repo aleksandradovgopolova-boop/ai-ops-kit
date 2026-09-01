@@ -73,8 +73,19 @@ def _prs_overlap(pr_records, paths):
 
 
 def _github_token():
-    """Токен только из env (GITHUB_TOKEN / GH_TOKEN). В логи/вывод не попадает."""
-    return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    """Токен из env (GITHUB_TOKEN / GH_TOKEN); при их отсутствии — fallback на `gh auth token`
+    (#402: gh и так зависимость кита, и на машине он обычно авторизован — иначе доставка молча
+    деградировала до «нет токена» при живой gh-авторизации). В логи/вывод не попадает."""
+    tok = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if tok:
+        return tok
+    try:
+        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return r.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
 
 
 def _gh_api_get(path, token):

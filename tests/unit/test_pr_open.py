@@ -53,21 +53,27 @@ class TestPrPayload:
 class TestNoToken:
     def test_unavailable_without_token(self, git_repo, stash_gh):
         saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        real_token = pr_open._cp._github_token
+        pr_open._cp._github_token = lambda: None   # #402: и gh-fallback пуст -> токена нет нигде
         try:
             r = open_draft_pr(git_repo, "ai-ops/y", "T", "B")
             assert r["status"] == "unavailable"
             assert "GITHUB_TOKEN" in r["note"]
         finally:
+            pr_open._cp._github_token = real_token
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
 
     def test_unavailable_carries_payload(self, git_repo, stash_gh):
         saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        real_token = pr_open._cp._github_token
+        pr_open._cp._github_token = lambda: None   # #402: и gh-fallback пуст -> токена нет нигде
         try:
             r = open_draft_pr(git_repo, "ai-ops/y", "T", "B")
             assert r.get("payload", {}).get("draft") is True
         finally:
+            pr_open._cp._github_token = real_token
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
