@@ -474,6 +474,20 @@ class TestResumePositionalRoot:
         assert "--takeover" in argv, "resume не пробросил --takeover — утёкшую заявку не снять"
         assert "утёкшая заявка" in argv
 
+    def test_resume_deliver_only_forwards_reevaluate_only(self, child_root, monkeypatch):
+        """#403: --deliver-only доставляет уже готовый READY-коммит без перезапуска писателя —
+        интент обязан пробросить существующий режим reevaluate-only в движок. Иначе resume снова
+        переавторит и плодит evidence-коммиты при сбое доставки после READY."""
+        seen = self._capture(monkeypatch)
+        ai_ops_cli.main(["resume", str(child_root), "wi-x", "--execute", "--open-pr", "--deliver-only"])
+        assert "--reevaluate-only" in seen["argv"], "--deliver-only не пробросил reevaluate-only в движок"
+
+    def test_resume_without_deliver_only_reauthors(self, child_root, monkeypatch):
+        """Без --deliver-only resume идёт обычным путём (переавторинг) — reevaluate-only не появляется."""
+        seen = self._capture(monkeypatch)
+        ai_ops_cli.main(["resume", str(child_root), "wi-x", "--execute", "--open-pr"])
+        assert "--reevaluate-only" not in seen["argv"]
+
 
 @pytest.mark.unit
 class TestDegradedContextIsVisible:
