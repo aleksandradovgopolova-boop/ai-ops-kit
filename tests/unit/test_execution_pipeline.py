@@ -2369,6 +2369,48 @@ class TestRunPipelineReviewPass:
                     for r in (report["reviews"] or []))
         assert "ux_review" in report["gates"]["unmet"]
 
+    def test_review_pass_zero_reads_but_grounded_evidence_passes(self, child_root):
+        """Fix C для ревьюеров: pass БЕЗ read-op, но evidence ссылается на ДОСТАВЛЕННЫЙ файл — НЕ
+        рубер-штамп: кит сам сверил состав правки. Разблокирует боевого claude-cli, который судит из
+        диффа и read-op детерминированно не эмитит (тот же класс, что закрыл acceptance Fix C)."""
+        _init_git(child_root)
+        sig = {"task_type": "QUICK", "size": "small", "risk": "low",
+               "affected_areas": ["core"], "ui_changed": True}
+        # pass, НИ ОДНОГО read-op, но evidence на доставленный src/rg2.py
+        grounded = lambda prompt: (
+            '{"kind":"reviewer-result","status":"pass",'
+            '"checks":[{"id":"ok","status":"pass","evidence":[{"file":"src/rg2.py","lines":"1"}]}]}')
+        ops = iter([{"op": "write", "path": "src/rg2.py", "content": "g = 1\n"}, {"done": True}])
+        report = execution_pipeline.run_pipeline(
+            task="grounded pass", signals=sig, child_root=child_root,
+            proposer=lambda ctx: next(ops), budget={"max_model_calls": 20},
+            feature="rg2-test", commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=grounded)
+        # заземлено на доставленный файл -> pass закрывает гейт, несмотря на 0 reads
+        assert any(r["gate"] == "ux_review" and r["status"] == "pass"
+                   for r in (report["reviews"] or [])), report["reviews"]
+        assert "ux_review" not in report["gates"]["unmet"]
+
+    def test_review_pass_zero_reads_evidence_off_change_is_still_blocked(self, child_root):
+        """Заземление требует ИМЕННО доставленный файл. pass с 0 reads и evidence на ЧУЖОЙ файл
+        (не в правке) остаётся рубер-штампом — страж не ослаблен. Мутация (снять условие заземления)
+        роняет либо этот тест (over-ground), либо grounded-тест (under-ground)."""
+        _init_git(child_root)
+        sig = {"task_type": "QUICK", "size": "small", "risk": "low",
+               "affected_areas": ["core"], "ui_changed": True}
+        off = lambda prompt: (
+            '{"kind":"reviewer-result","status":"pass",'
+            '"checks":[{"id":"ok","status":"pass","evidence":[{"file":"src/UNRELATED.py","lines":"1"}]}]}')
+        ops = iter([{"op": "write", "path": "src/ro2.py", "content": "o = 1\n"}, {"done": True}])
+        report = execution_pipeline.run_pipeline(
+            task="off-change evidence", signals=sig, child_root=child_root,
+            proposer=lambda ctx: next(ops), budget={"max_model_calls": 20},
+            feature="ro2-test", commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=off)
+        assert any(r["gate"] == "ux_review" and r.get("closed_as") == "blocked"
+                   for r in (report["reviews"] or [])), report["reviews"]
+        assert "ux_review" in report["gates"]["unmet"]
+
 
 @pytest.mark.critical_path
 @pytest.mark.unit
