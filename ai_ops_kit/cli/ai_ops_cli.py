@@ -1510,6 +1510,10 @@ def main(argv):
                                             "checkpoint предшественника и продолжает (без ручного git reset)")
     ap.add_argument("--replan", action="store_true",
                     help="resume: осознанно сменить классификацию/policy (replan c ревалидацией)")
+    ap.add_argument("--deliver-only", action="store_true", dest="deliver_only",
+                    help="resume: доставить УЖЕ готовый READY-коммит без перезапуска писателя "
+                         "(#403: перепроверка существующего HEAD без нового evidence-коммита, затем "
+                         "доставка) — при сбое доставки после READY не плодит новые коммиты")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
     ap.add_argument("--approved", default=None,
@@ -1618,6 +1622,11 @@ def main(argv):
             argv2 += ["--model", a.model]
         if getattr(a, "replan", False):
             argv2.append("--replan")   # v3.0-rc4 (P0.1): осознанная смена policy при продолжении
+        if getattr(a, "deliver_only", False):
+            # #403: delivery-only resume — переиспользуем существующий режим reevaluate-only
+            # (пропуск писателя, HEAD как committed_sha без нового коммита), затем обычная доставка.
+            # Интент этот флаг раньше не прокидывал, поэтому resume всегда переавторил и плодил коммиты.
+            argv2.append("--reevaluate-only")
         if getattr(a, "open_pr", False):
             argv2.append("--open-pr")  # #695: resume доводит готовую работу до ОТКРЫТОГО PR
         if getattr(a, "takeover", False):

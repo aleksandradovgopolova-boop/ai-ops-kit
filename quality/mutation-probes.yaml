@@ -21,6 +21,16 @@
 schema_version: 1
 kind: mutation-probes
 probes:
+- id: resume-deliver-only-forwards-reevaluate
+  kind: guard
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '            argv2.append("--reevaluate-only")'
+  replace_with: '            argv2.append("--replan")'
+  tests:
+  - tests/unit/test_ai_ops_cli.py
+  why: '#403: --deliver-only доставляет уже готовый READY-коммит, форвардя reevaluate-only (пропуск
+    писателя, без нового коммита). Подменить форвард — resume снова переавторит и будет плодить
+    evidence-коммиты при сбое доставки после READY.'
 - id: fast-path-small-low-skips-ceremony
   kind: guard
   file: ai_ops_kit/cli/ai_ops_cli.py
