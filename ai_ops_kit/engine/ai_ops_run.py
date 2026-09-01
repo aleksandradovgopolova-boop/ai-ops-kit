@@ -705,7 +705,8 @@ def _commit_barrier(rep, child_root, features_dir, fid, lifecycle_errors):
 
 
 
-def _register_active_work(child_root, signals, write_scope, fid, session, lifecycle_errors):
+def _register_active_work(child_root, signals, write_scope, fid, session, lifecycle_errors,
+                          takeover=False, takeover_reason=None):
     """Регистрация active-work + concurrency-preflight (координация параллельных сессий).
     K6: вынесено из run() без изменения поведения. -> (aw_path, preflight, error|None)."""
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
@@ -750,6 +751,7 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
             _reg_rc = active_work.register(aw_path, fid, f"ai-ops/{fid}", areas, session,
                                            workitem=f"features/{fid}/workitem.yaml",
                                            child_root=child_root,
+                                           takeover=takeover, takeover_reason=takeover_reason,
                                            published=active_work.publication_enabled(child_root))
         except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
             lifecycle_errors.append(f"active-work register: {_e}")
@@ -1581,7 +1583,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         runtime="claude-code", provider_name="mock", session="cli", execute=False,
         feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
         baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
-        sandbox=False, review=False, reviewer_proposer=None,
+        sandbox=False, review=False, reviewer_proposer=None, takeover=False, takeover_reason=None,
         author=False, author_proposer=None, install_deps=True,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
@@ -1759,7 +1761,8 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
         # регистрация active-work + concurrency-preflight -> _register_active_work (K6).
         aw_path, preflight, _awerr = _register_active_work(
-            child_root, signals, write_scope, fid, session, lifecycle_errors)
+            child_root, signals, write_scope, fid, session, lifecycle_errors,
+            takeover=takeover, takeover_reason=takeover_reason)
         if _awerr:
             return _awerr
 
@@ -2062,6 +2065,16 @@ def print_human(r):
     # pipeline-отчёт имеет свою форму — не смешиваем с controller-отчётом (P0.1)
     if r.get("kind") == "execution-pipeline":
         return _print_pipeline(r)
+    # Минимальный отчёт (например, отказ active-work/preflight ДО классификации) не несёт
+    # base_workflow/треков. Раньше вывод для человека падал на нём KeyError('base_workflow') —
+    # прогон завершался, а печать результата роняла процесс (замер поля 01.09.2026). Печатаем коротко.
+    if "base_workflow" not in r:
+        print(f"ai-ops run → WorkItem {r.get('workitem_id', '?')} [{r.get('status', '?')}]")
+        if r.get("blocked_by"):
+            print(f"  заблокировано: {r['blocked_by']}")
+        if r.get("error"):
+            print(f"  {r['error']}")
+        return
     print(f"ai-ops run → WorkItem {r['workitem_id']} [{r['status']}]")
     print(f"  base_workflow: {r['base_workflow']} · execution: {r['execution']} ({r['runtime']})")
     if r["required_tracks"]:
