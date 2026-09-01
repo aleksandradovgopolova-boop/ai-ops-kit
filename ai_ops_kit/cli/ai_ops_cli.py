@@ -118,6 +118,16 @@ def resolve_flags(signals):
     return flags
 
 
+def _is_dir_safe(p):
+    """#161: Path.is_dir() кидает OSError (ENAMETOOLONG и др.) вместо False, когда первый позиционный
+    аргумент — не путь, а длинный текст задачи (>255 байт). На 3.11/3.12 это роняло main(); на 3.14
+    stdlib глотает сам, и баг маскируется. Не-путь (в т.ч. слишком длинный) = не каталог."""
+    try:
+        return Path(p).is_dir()
+    except OSError:
+        return False
+
+
 def build_preview(intent, task, child_root, signals):
     """Execution preview: что понято, что будет сделано, какие данные, какие approvals, результат."""
     from ai_ops_kit.engine import run_plan
@@ -1554,11 +1564,11 @@ def main(argv):
     # хвост (так пишет человек), потом относительный путь в начале (`./ai-ops specify . "текст"`).
     # Абсолютность в первом правиле — не украшение: она отличает подстановку обёртки от текста
     # задачи, который случайно совпал с именем каталога.
-    if len(rest) >= 2 and Path(rest[0]).is_dir() and Path(rest[0]).is_absolute():
+    if len(rest) >= 2 and _is_dir_safe(rest[0]) and Path(rest[0]).is_absolute():
         child_root = rest.pop(0)
-    elif rest and Path(rest[-1]).is_dir():
+    elif rest and _is_dir_safe(rest[-1]):
         child_root = rest.pop()
-    elif len(rest) >= 2 and Path(rest[0]).is_dir():
+    elif len(rest) >= 2 and _is_dir_safe(rest[0]):
         child_root = rest.pop(0)
     if rest:
         task = rest.pop(0)
