@@ -2264,7 +2264,7 @@ def main(argv):
         report = run(task, json.loads(a.signals), Path(a.child_root),
                      provider_name=_pres["provider"], model=a.model, engine="pipeline",
                      execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
-                     replan=a.replan, open_pr=a.open_pr,
+                     replan=a.replan, open_pr=getattr(a, "open_pr", False),
                      takeover=getattr(a, "takeover", False),
                      takeover_reason=getattr(a, "takeover_reason", None),
                      provider_resolution={k: _pres.get(k) for k in
