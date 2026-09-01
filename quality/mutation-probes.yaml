@@ -52,6 +52,35 @@ probes:
   why: 'P1/#400: реконсиляция обязана перепроверять не-финальный receipt (sha_verified != True) против
     свежего remote. Убрать слагаемое — ложный false залипает навсегда, remote не сверяется, и починка
     возможна только ручным удалением файла леджера (что классификатор блокирует).'
+- id: token-seam-delivery-reads-token
+  kind: seam
+  covers: ['ai_ops_kit/gates/concurrency_preflight.py', 'ai_ops_kit/delivery/pr_open.py']
+  file: ai_ops_kit/gates/concurrency_preflight.py
+  find: 'def _github_token():'
+  replace_with: 'def _github_token_DISABLED():'
+  tests:
+  - tests/unit/test_pr_open.py
+  why: 'ШОВ: доставка (open_draft_pr/reconcile_delivery) читает токен через _cp._github_token();
+    модульные тесты токена зелены, даже если доставка перестанет его звать. Переименование точки
+    входа ломает вызов из pr_open — тест доставки без токена (unavailable) краснеет.'
+- id: delivery-force-with-lease-own-branch
+  kind: guard
+  file: ai_ops_kit/delivery/pr_open.py
+  find: '            if _is_non_fast_forward(perr):'
+  replace_with: '            if False:'
+  tests:
+  - tests/unit/test_pr_open_force_with_lease.py
+  why: '#401: свою delivery-ветку при расхождении с remote (non-fast-forward) кит пере-пушит
+    --force-with-lease, а не роняет сырым rc=1. Снять распознавание — вернуть тупик доставки.'
+- id: github-token-gh-fallback
+  kind: guard
+  file: ai_ops_kit/gates/concurrency_preflight.py
+  find: '        if r.returncode == 0:'
+  replace_with: '        if False:'
+  tests:
+  - tests/unit/test_github_token_fallback.py
+  why: '#402: при отсутствии GITHUB_TOKEN/GH_TOKEN токен берётся из `gh auth token`. Снять ветку
+    успешного gh — вернуть молчаливую деградацию доставки до «нет токена» при живой gh-авторизации.'
 - id: acceptance-fabricated-quote-nullifies
   kind: guard
   file: ai_ops_kit/engine/acceptance_verify.py
