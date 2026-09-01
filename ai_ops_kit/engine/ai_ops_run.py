@@ -2203,6 +2203,12 @@ def main(argv):
     # без флага — прежний офлайн-дефолт mock.
     rs.add_argument("--provider", default=None)
     rs.add_argument("--model", help="ID модели для провайдера (напр. deepseek-chat)")
+    # #695: resume доводит готовую-на-ветке работу до ОТКРЫТОГО PR и снимает брошенную заявку.
+    rs.add_argument("--open-pr", action="store_true",
+                    help="открыть/обновить draft PR по результату (нужен GITHUB_TOKEN)")
+    rs.add_argument("--takeover", action="store_true",
+                    help="перенять брошенную/устаревшую заявку на работу или ветку")
+    rs.add_argument("--takeover-reason", default=None, help="причина переятия (для атрибуции)")
     rs.add_argument("--replan", action="store_true",
                     help="осознанно сменить классификацию/policy при продолжении (не resume, а replan "
                          "с ревалидацией) — иначе смена task_type/risk/write_scope блокируется")
