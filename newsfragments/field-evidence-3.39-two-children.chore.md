@@ -1,0 +1,1 @@
+`field_evidence` пополнен вторым доказательством поля: v3.39.0 доехала до cockpit (PR #55) и wow-repo (PR #11, первый заезд кита на голый `main`) — обе выжили. Для `stable` записано, что update-survival есть на двух дочках; owner-led verified-PR на втором brownfield остаётся отдельным барьером.

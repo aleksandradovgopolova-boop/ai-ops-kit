@@ -826,3 +826,28 @@ work:
 
   # ─── Phase 0: «контроль качества честен» (аудит 2026-08-25) ───────────────────────────────────
 
+
+  # parallel-safety-allows-kit-own-update-prs — заявка поля #384 (2026-09-01). При взятии в дело —
+  # freeze-exception: это найденный полем дефект механизма parallel-safety, блокирующий раскатку кита.
+  - id: parallel-safety-allows-kit-own-update-prs
+    title: >-
+      parallel-safety пропускает собственные install/update-PR кита — координационные файлы в них
+      неизбежны при первом заезде на репозиторий без кита
+    type: engineering
+    goal: team-works-in-parallel
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 384
+    write_scope: [ai_ops_kit/validation/, registry/, tests/]
+    reason: >-
+      Поле 01.09.2026 (wow-repo: обновление 3.36.8->3.39.0 и первый заезд кита на main без кита).
+      validate_parallel_safety.py --strict валит апдейт-PR за смешение кода с координационными
+      planning/plan.yaml + history/plan-history.yaml. Правки в них породила миграция плана ВНУТРИ
+      update, а первый заезд на голый main неизбежно вносит и план-стор — значит гейт по построению
+      не пропускает легитимный install/update-PR кита (любая новая дочка и любой апдейт с миграцией
+      плана). В поле обошли вручную: git rm координационных из код-PR + отдельный координаторский PR.
+      Готово, когда parallel-safety РАЗЛИЧАЕТ install/update-PR кита (признак миграции апдейта / метка
+      chore(ai-ops)) и пропускает их, ЛИБО update сам раскладывает миграцию плана в отдельный
+      координаторский коммит/PR — и это проверено полем: заезд кита на репозиторий без кита проходит
+      гейт без ручного git rm. Заявка #384.

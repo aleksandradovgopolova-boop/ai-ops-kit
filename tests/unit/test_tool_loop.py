@@ -280,6 +280,23 @@ class TestRunReview:
         tool_loop.run_review(rprop, root, policy, "code_review", budget={"max_model_calls": 5})
         assert "REVIEW_SENTINEL_7" in cap_r.get("ctx", "")
 
+    def test_reviewer_prompt_requires_delivered_file_evidence(self):
+        """Fix C для ревьюеров (вторая половина): промпт ОБЯЗЫВАЕТ у каждого check evidence-ссылку на
+        изменённый файл. Без неё заземлять нечего — claude-cli ceremonial read-op не эмитит, и
+        grounding в _run_reviews не сработал бы. Эта инструкция и делает вердикт заземляемым."""
+        cap = {}
+
+        def provider(prompt):
+            cap["p"] = prompt
+            return ('{"kind":"reviewer-result","gate":"code_review","status":"pass",'
+                    '"checks":[{"id":"x","status":"pass","evidence":[{"file":"a.py","lines":"1"}]}]}')
+
+        prop = tool_loop.make_reviewer_proposer(provider, "code_review")
+        prop("=== КОНТЕКСТ ===\nизменение")
+        p = cap["p"]
+        assert '"evidence"' in p and '"file"' in p, "промпт обязан требовать evidence с file"
+        assert "коснулся доставленной" in p or "заземл" in p
+
     def test_run_review_no_verdict_returns_none(self, review_deps):
         """Ревьюер не вынес вердикт за лимит чтений -> result=None (честный не-pass)."""
         policy, root = review_deps

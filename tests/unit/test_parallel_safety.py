@@ -221,3 +221,40 @@ def test_strict_reddens_in_the_child_context_via_defaults(tmp_path):
     (clean / "code.py").write_text("x=2\n", encoding="utf-8")
     git2("add", "-A"); git2("commit", "-qm", "code only")
     assert ps.main(["x", str(clean), "--base", base2, "--defaults", defaults, "--strict"]) == 0
+
+
+@pytest.mark.unit
+def test_a_kit_update_pr_is_not_flagged_though_it_touches_the_plan():
+    """#384: install/update-PR кита (правит .ai/managed/VERSION) + миграция плана — НЕ смешение.
+
+    Апдейт сам мигрирует план/историю; эти координационные правки — вывод машинной миграции, а не
+    рука параллельной ленты. Признак — `.ai/managed/VERSION` в диффе."""
+    changed = [".ai/managed/VERSION", ".ai/managed/manifest/ai-ops-manifest.yaml",
+               "planning/plan.yaml", "history/plan-history.yaml"]
+    rep = ps.diff_mixes_code_with_coordination(changed, COORD)
+    assert rep["kit_update"] is True
+    assert rep["mixed"] is False
+    # МУТАЦИОННЫЙ КОНТРОЛЬ: тот же смешанный дифф, но БЕЗ маркера апдейта — снова смешение.
+    # Уберёшь `and not kit_update` в фиксе — этот assert (и верхний) покраснеют.
+    no_marker = ["ai_ops_kit/intelligence/health_product.py", "planning/plan.yaml"]
+    assert ps.diff_mixes_code_with_coordination(no_marker, COORD)["mixed"] is True
+
+
+@pytest.mark.unit
+def test_strict_passes_a_kit_update_pr_that_migrates_the_plan(tmp_path):
+    """DONE-WHEN #384: --strict пропускает апдейт-PR (managed VERSION + миграция плана) кодом 0;
+    тот же смешанный дифф БЕЗ .ai/managed/VERSION остаётся красным (код 1) — маркер и решает."""
+    # АПДЕЙТ: managed VERSION + план в одном диффе -> зелёный (это и был случай wow-repo #11)
+    upd = tmp_path / "upd"; git, base = _git_repo_with_base(upd)
+    (upd / ".ai" / "managed").mkdir(parents=True)
+    (upd / ".ai" / "managed" / "VERSION").write_text("3.39.0\n", encoding="utf-8")
+    (upd / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    git("add", "-A"); git("commit", "-qm", "chore(ai-ops): update")
+    assert ps.main(["x", str(upd), "--base", base, "--strict"]) == 0
+
+    # КОНТРОЛЬ: тот же смешанный дифф, но без managed VERSION -> по-прежнему красный
+    plain = tmp_path / "plain"; git2, base2 = _git_repo_with_base(plain)
+    (plain / "code.py").write_text("x=2\n", encoding="utf-8")
+    (plain / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    git2("add", "-A"); git2("commit", "-qm", "feature + plan")
+    assert ps.main(["x", str(plain), "--base", base2, "--strict"]) == 1

@@ -18,6 +18,12 @@
 (замер 20.08.2026, четыре ленты). Чистый бухгалтерский PR (только координационные файлы) допустим —
 его пишет одна рука. Fail-open: без `--base` проверять нечего (не «чисто», а «не проверено»).
 
+ИСКЛЮЧЕНИЕ — install/update-PR кита (#384, замер 01.09.2026). Апдейт САМ мигрирует план/историю, а
+первый заезд на голый репозиторий неизбежно вносит весь план-стор: эти координационные правки —
+вывод машинной миграции, а не рука параллельной ленты. Такой PR распознаётся по правке
+`.ai/managed/VERSION` (обычная работа его не трогает) и смешением не считается. Без исключения гейт
+по построению не пропускал бы НИ ОДИН апдейт кита с миграцией и НИ ОДИН первый заезд на новую дочку.
+
 Список координационных файлов — в `registry/coordination-files.yaml` (дочка расширяет своим
 `.ai/project/coordination-files.yaml`), а не зашит здесь: два источника одной правды разошлись бы.
 """
@@ -34,6 +40,8 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 
 _REG = "registry/coordination-files.yaml"
 _CHILD_REG = ".ai/project/coordination-files.yaml"
+# #384: файл-признак машинного install/update-PR кита. Обычная фиче-работа его не трогает.
+_UPDATE_MARKER = ".ai/managed/VERSION"
 
 
 def _read_paths(p: Path, out: set) -> None:
@@ -78,16 +86,36 @@ def changed_files(root: Path, base: str) -> list | None:
     return [l.strip() for l in r.stdout.splitlines() if l.strip()]
 
 
+def is_kit_update_diff(changed: list) -> bool:
+    """PR — install/update кита? Признак — правка `.ai/managed/VERSION` (#384).
+
+    Установщик апдейта меняет managed-слой (в дочке — `.ai/managed/VERSION`) и в ТОМ ЖЕ коммите
+    мигрирует план/историю; при ПЕРВОМ заезде на голый репозиторий managed-слой ДОБАВЛЯЕТСЯ целиком.
+    Обычная фиче-работа `.ai/managed/VERSION` не трогает — файл принадлежит машине апдейта, не руке
+    ленты. Значит его наличие в диффе отличает машинный апдейт от параллельной работы."""
+    marker = _norm(_UPDATE_MARKER)  # _norm срезает ведущую точку — нормализуем обе стороны
+    return any(_norm(f) == marker for f in changed)
+
+
 def diff_mixes_code_with_coordination(changed: list, coord: list) -> dict:
-    """PR смешивает код с координационным файлом? -> {"mixed", "coordination", "code"}."""
+    """PR смешивает код с координационным файлом? -> {"mixed", "coordination", "code", "kit_update"}."""
     coord_n = {_norm(c) for c in coord}
     coord_hits, code_hits = [], []
     for f in changed:
         (coord_hits if _norm(f) in coord_n else code_hits).append(f)
     # newsfragments/докстринги/тесты — не «код территории» в смысле конфликта, но для простоты
     # считаем кодом всё некоординационное: смешение даже с тестом всё равно взводит DIRTY.
-    return {"mixed": bool(coord_hits) and bool(code_hits),
-            "coordination": sorted(coord_hits), "code": sorted(code_hits)}
+    #
+    # #384 (замер 01.09.2026, wow-repo). ИСКЛЮЧЕНИЕ — install/update-PR кита. Апдейт САМ порождает
+    # правку плана/истории (миграция закрытых работ в history), а первый заезд на голый main
+    # неизбежно вносит и весь план-стор — эти координационные правки суть вывод миграции апдейта, а
+    # НЕ рука параллельной ленты. Такой PR машинный (одна рука), DIRTY-дорожки N² не создаёт. Без
+    # исключения гейт по построению не пропускал бы НИ ОДИН апдейт кита с миграцией и НИ ОДИН первый
+    # заезд на новую дочку. Признак апдейта структурный — `.ai/managed/VERSION` в диффе.
+    kit_update = is_kit_update_diff(changed)
+    return {"mixed": bool(coord_hits) and bool(code_hits) and not kit_update,
+            "coordination": sorted(coord_hits), "code": sorted(code_hits),
+            "kit_update": kit_update}
 
 
 def assess(root, base=None, defaults=None) -> dict:
@@ -116,6 +144,12 @@ def assess(root, base=None, defaults=None) -> dict:
                     f"{', '.join(mix['coordination'])}. Код — в фичевом PR, правки плана/истории/"
                     "решений — отдельным PR координатора; смешанный PR ловит DIRTY на каждый чужой "
                     "мёрж (замер 20.08.2026, четыре ленты).")
+            elif mix["kit_update"] and mix["coordination"] and mix["code"]:
+                # #384: не нарушение — install/update кита. Пометка, чтобы пропуск был назван, а не молчал.
+                rep["notes"] = rep.get("notes", []) + [
+                    "install/update-PR кита (меняет .ai/managed/VERSION): правки "
+                    f"{', '.join(mix['coordination'])} — миграция апдейта, а не параллельная работа; "
+                    "смешение DIRTY не взводит (#384)."]
     return rep
 
 

@@ -287,6 +287,38 @@ def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
     return ev
 
 
+def _delivered_files(work_root, revision) -> set:
+    """Файлы, затронутые ДОСТАВЛЕННОЙ правкой на revision. Авторитет — git, не судья.
+
+    Тот же источник, что уже использует `_review_security` (git show --name-only). Нужен для
+    заземления вердикта ревьюера по Fix C: кит сам знает состав правки, а не полагается на read-op."""
+    if not revision:
+        return set()
+    from ai_ops_kit.engine.pipeline_git import _git
+    rc, names, _ = _git(work_root, "show", "--name-only", "--format=", revision)
+    if rc != 0:
+        return set()
+    return {ln.strip().lstrip("./") for ln in names.splitlines() if ln.strip()}
+
+
+def _review_cites_delivered_file(res, delivered) -> bool:
+    """Ссылается ли хоть одно evidence ревьюера на ДОСТАВЛЕННЫЙ файл? (заземление Fix C для ревью).
+
+    Reviewer-result несёт `checks[].evidence[] = {file, lines}`. Если ревьюер сослался на файл,
+    реально входящий в правку, — кит ПОДТВЕРДИЛ, что вердикт коснулся доставленного артефакта, даже
+    когда судья не эмитил ceremonial read-op. Пустая/чужая ссылка заземлением не является."""
+    if not delivered or not isinstance(res, dict):
+        return False
+    for c in res.get("checks") or []:
+        if not isinstance(c, dict):
+            continue
+        for ev in c.get("evidence") or []:
+            f = ev.get("file") if isinstance(ev, dict) else None
+            if f and f.strip().lstrip("./") in delivered:
+                return True
+    return False
+
+
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
                  max_reads=10, change_context=None,
                  calibrated_enforcement=False, ui_evidence=None):
@@ -304,6 +336,9 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
     # спасало от сбоя, а выключало проверку. Сам `load_gates()` выше не обёрнут и падает честно.
     valid_ids = set(gates)
     change_ctx = change_context if change_context is not None else _change_context(work_root, revision)
+    # Fix C для ревьюеров: авторитетный состав доставленной правки (кит, не судья) — для заземления
+    # вердикта, когда read-op не эмитится (claude-cli детерминированно его не даёт).
+    delivered = _delivered_files(work_root, revision)
     for gid in _reviewable_gates(gate_ids, signals):
         if gid in gate_ev:
             continue
@@ -344,10 +379,21 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         calib_ui = calibrated_enforcement and gid in gate_policy.UI_GATES
         if calib_ui and isinstance(ui_evidence, dict):
             ev_status = (ui_evidence.get(gid) or {}).get("deterministic_status", "not_run")
-        if status == "pass" and blocking and not (rv.get("reads")):
+        # РУБЕР-ШТАМП ПЕРЕОПРЕДЕЛЁН ЧЕРЕЗ ЭТАЛОН, А НЕ ЧЕРЕЗ read-op СУДЬИ (Fix C для ревьюеров,
+        # 01.09.2026). Прежде: pass без единого чтения СУДЬЁЙ = рубер-штамп. Но claude-cli судит из
+        # диффа и read-op детерминированно НЕ эмитит (тот же замер, что закрыл acceptance Fix C) —
+        # поэтому КАЖДЫЙ настоящий code_review/architecture_review штамповался в fail, и ни один
+        # прогон не мог закрыть блокирующее ревью (полевой блокер flip, ii-sreda). Теперь вовлечённость
+        # определяется тем, СВЕРЕН ли вердикт с ДОСТАВЛЕННЫМ файлом: кит сам знает состав правки
+        # (`delivered`), и если evidence ревьюера ссылается на файл из неё — вердикт коснулся эталона.
+        # Рубер-штампом остаётся pass, у которого И 0 reads, И ни одна ссылка не заземлена на правку
+        # (пустые/чужие evidence). Это НЕ ослабляет страж: фабрикация «pass без ничего» по-прежнему fail.
+        if (status == "pass" and blocking and not rv.get("reads")
+                and not _review_cites_delivered_file(res, delivered)):
             gate_ev[gid] = {"status": "fail",
-                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) — рубер-штамп "
-                                         f"не закрывает блокирующий гейт @ {gid}; требуется верификация чтением"],
+                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) и ни одно "
+                                         f"evidence не сослалось на доставленный файл — рубер-штамп не "
+                                         f"закрывает блокирующий гейт @ {gid}; сверка с эталоном не доказана"],
                             "checks": res.get("checks", []), "evidence": [ev_ref]}
             entry["closed_as"] = "blocked"
             entry["status"] = "fail"
