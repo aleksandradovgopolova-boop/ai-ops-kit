@@ -1463,6 +1463,11 @@ def main(argv):
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
+    ap.add_argument("--takeover", action="store_true",
+                    help="run: перенять брошенную/устаревшую заявку на работу или ветку "
+                         "(прежний держатель остаётся записан в taken_over_from — атрибуция цела)")
+    ap.add_argument("--takeover-reason", default=None,
+                    help="run --takeover: причина переятия (для атрибуции)")
     ap.add_argument("--base", default=None, help="resume/review: base-ветка (по умолчанию auto: upstream/remote-default/текущая)")
     # v3.28.x (P0-1): дефолта `mock` больше НЕТ. Для `run --execute`/`do` провайдера выбирает резолв
     # (.ai-ops.yaml + ключ в env -> claude в PATH -> mock с громким предупреждением); явный --provider
@@ -1773,6 +1778,8 @@ def main(argv):
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
                              author=flags["author"], provider_name=provider, model=a.model,
                              base=a.base, open_pr=a.open_pr, max_steps=a.max_steps,
+                             takeover=getattr(a, "takeover", False),
+                             takeover_reason=getattr(a, "takeover_reason", None),
                              require_fix=flags.get("require_fix", False),
                              review_fix_attempts=review_fix,
                              provider_resolution={k: _pres.get(k) for k in
