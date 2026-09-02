@@ -162,7 +162,11 @@ case "$cmd" in
   # отвечал «исходник рядом не найден». То есть работа сделала половину: интент появился и был
   # недостижим по документированному пути. Класс F-033 — механизм починен у кита и не доехал до дочки.
   # Поведение то же: интент CLI зовёт те же session_telemetry + session_guardrails.
-  init|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|subsession|engops|method)
+  # `ui-status` (переименование 2026-09-02): зрелость UI-evidence репозитория. Раньше эта команда
+  # установщика звалась `onboard` и в дочку не выводилась вовсе — то же имя носит интент движка
+  # «определить стек», и `./ai-ops onboard` вёл именно в движок. После переименования столкновения
+  # имён нет, и команду можно честно вести в установщик наравне с прочими kit-командами.
+  init|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|subsession|engops|method|ui-status)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi
