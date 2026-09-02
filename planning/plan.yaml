@@ -181,7 +181,10 @@ goals:
   - id: plan-as-control-plane
     # заморозка: план как управление — цена процесса владельца
     freeze_relation: run_condition
-    status: active
+    # ДОСТИГНУТА 2026-09-02 (roadmap-sync): все четыре исхода true и проверяются кодом (validate/
+    # validate_history/git_disagreements), работ под целью нет. Направление стало фактом — в ROADMAP
+    # ушло в «Дальше» к достигнутому, а не висит под «Сейчас» как занятость, которой нет.
+    status: achieved
     outcome:
       # ВСЕ ТРИ ЗАКРЫТЫ 14.08 (PR #120) и проверяются кодом, а не соглашением:
       # `delivery_plan.validate` и `validate_history`, 11 тестов, 10 мутаций — 10 красных.
@@ -201,7 +204,10 @@ goals:
   - id: product-decision-loop
     # заморозка: решения владельца о процессе, не новое умение кита
     freeze_relation: run_condition
-    status: active
+    # ПРИОСТАНОВЛЕНА 2026-09-02 (решение владельца, roadmap-sync): открыт один исход (#417 baseline/
+    # target/guardrails), работы под ним нет. Держать под «Сейчас» значило бы объявлять занятость,
+    # которой нет. В ROADMAP — «Дальше»; вернётся вместе с работой. Бэклог: #417.
+    status: paused
     outcome:
       # Четыре объекта вместо новых документов: Opportunity Brief, Product Decision Record,
       # Outcome Contract, Outcome Readout.
@@ -230,7 +236,9 @@ goals:
   - id: nightly-product-review
     # заморозка: ночной обзор — новое умение целиком
     freeze_relation: extension
-    status: active
+    # ПРИОСТАНОВЛЕНА 2026-09-02 (решение владельца, roadmap-sync): все три исхода открыты, работы нет.
+    # Приоритет ушёл в closeout + uiux/storybook. В ROADMAP — «Дальше». Бэклог: #421, #422, #423.
+    status: paused
     outcome:
       # v0 — только наблюдение и предложение; класс автофикса пуст, пока точность не измерена.
       delta_review_runs_nightly_and_briefs_the_owner: false
@@ -240,7 +248,9 @@ goals:
   - id: outcome-and-analytics-loop
     # заморозка: аналитика исходов — новое умение
     freeze_relation: extension
-    status: active
+    # ПРИОСТАНОВЛЕНА 2026-09-02 (решение владельца, roadmap-sync): исход открыт, работы нет.
+    # В ROADMAP — «Дальше». Бэклог: #424.
+    status: paused
     outcome:
       events_verified_in_runtime_not_declared: false
 
@@ -859,3 +869,107 @@ work:
       а разбивку по работам (PR #290) закрыли. Открытый исход цели: kit_edits_do_not_create_conflicts:
       False. Готово, когда правки plan.yaml из двух параллельных работ сводятся без ручного
       разрешения — разбивкой по работам (файл на работу) либо иной проверенной стратегией. Заявка #148.
+
+  # ─── roadmap-sync 2026-09-02: работы под цели, объявленные в ROADMAP («направление без работы») ──
+  # Заведены сверкой roadmap ↔ план: каждая закрывает РОВНО ОДИН объявленный исход цели и привязана
+  # к бэклог-issue (#415–#420) — кит должен быть эталоном согласованности для дочек по своим же правилам.
+  - id: closeout-repeated-on-second-live-repo
+    title: Owner-led verified PR повторён на ВТОРОЙ живой дочке — closeout.repeated_on_two_different_live_repos
+    type: delivery
+    goal: qualification-closeout
+    status: todo
+    owner_role: delivery
+    value: high
+    depends_on: [second-brownfield-run]
+    write_scope: [qualification/]
+    affects: {delivery_operations: true, analytics_learning: true}
+    reason: >-
+      Единственный открытый исход closeout после #701. Первый owner-led verified PR получен на ии-среде
+      (second-brownfield-run, 2026-09-02); критерий требует, чтобы реальная задача дошла до verified PR
+      без правки кита на ВТОРОМ, отличном живом репозитории. Готово, когда есть слитый owner-led PR на
+      другой дочке и отчёт qualification/REAL-PRODUCT-*.md с числами приёмки — тогда исход флипается и
+      цель qualification-closeout закрывается.
+
+  - id: storybook-required-stories-derived-from-contract
+    title: Обязательные stories выводятся из Experience Contract кодом, а не пишутся руками
+    type: visual
+    goal: storybook-as-visual-contract
+    status: todo
+    owner_role: frontend
+    value: high
+    issue: 415
+    write_scope: [ai_ops_kit/ui/, ai_ops_kit/planning/, templates/visual/, schemas/, tests/]
+    affects: {product_strategy: true, engineering_quality_security: true}
+    reason: >-
+      Исход required_stories_derived_from_contract_by_code = false (#415). Сторона evidence построена
+      (UIEvidenceBundle, validate_storybook_evidence не выдаёт «нет данных» за «чисто»); сторона СОЗДАНИЯ
+      нет: из Experience Contract обязательный набор stories должен выводиться кодом. Готово, когда по
+      контракту генерируется список обязательных stories, их отсутствие в Storybook краснеет, и это
+      проверено на реальном контракте (qualification/COCKPIT-VERTICAL-SLICE-EXPERIENCE-CONTRACT.md).
+
+  - id: storybook-experience-options-with-tradeoffs
+    title: Кит предлагает варианты опыта с trade-offs вместо одного «правильного» макета
+    type: visual
+    goal: storybook-as-visual-contract
+    status: todo
+    owner_role: frontend
+    value: medium
+    issue: 416
+    depends_on: [storybook-required-stories-derived-from-contract]
+    write_scope: [ai_ops_kit/ui/, ai_ops_kit/planning/, templates/visual/, tests/]
+    affects: {product_strategy: true}
+    reason: >-
+      Исход experience_options_offered_with_tradeoffs = false (#416). Готово, когда на UI-задачу кит
+      выдаёт не менее двух вариантов опыта с названными trade-offs и владелец выбирает ОДИН — выбор
+      записывается в Experience Contract и становится входом для stories.
+
+  - id: uiux-tokens-contract-and-capability-registries
+    title: Волна 2 — токены-контракт и реестры компонентов/паттернов/шаблонов доступны агенту
+    type: visual
+    goal: uiux-standard-as-product
+    status: todo
+    owner_role: frontend
+    value: high
+    issue: 418
+    write_scope: [standards/uiux/, scripts/, schemas/, tests/]
+    affects: {engineering_quality_security: true, product_strategy: true}
+    reason: >-
+      Исход tokens_contract_and_capability_registries_available = false (#418). Волна 1 (Конституция —
+      источник, гейты цитируют ID) достигнута 28.08. Готово, когда токены объявлены контрактом со
+      стабильными ID, реестры возможностей (компоненты/паттерны/шаблоны) читаются агентом из данных, а
+      не из прозы, и валидатор ловит расхождение реестра с Конституцией.
+
+  - id: uiux-reviewers-and-ui-health-deepened
+    title: Волна 3 — роли-ревьюеры и UI-health углублены содержанием Конституции
+    type: quality
+    goal: uiux-standard-as-product
+    status: todo
+    owner_role: reviewer
+    value: high
+    issue: 419
+    depends_on: [uiux-tokens-contract-and-capability-registries]
+    write_scope: [standards/uiux/, agents/, rules/design/, ai_ops_kit/intelligence/, tests/]
+    affects: {engineering_quality_security: true}
+    reason: >-
+      Исход reviewers_and_ui_health_deepened_from_constitution = false (#419). Гейты ux_review/
+      accessibility_review/design_system_usage уже цитируют ID (волна 1), но содержание проверок
+      тонкое. Готово, когда ревьюеры судят по правилам стандарта (UI-/AI-/UI-FORBIDDEN- с ID), а
+      UI-health считает покрытие реестров волны 2. Blocking/severity гейтов не меняются — advisory до
+      обкатки на дочках (правило движения по roadmap).
+
+  - id: uiux-mcp-access-to-ui-system
+    title: Волна 4 — MCP-доступ к UI-системе (get_*/validate_*)
+    type: engineering
+    goal: uiux-standard-as-product
+    status: todo
+    owner_role: engineer
+    value: medium
+    issue: 420
+    depends_on: [uiux-reviewers-and-ui-health-deepened]
+    write_scope: [ai_ops_kit/, standards/uiux/, tests/]
+    affects: {system_architecture: true}
+    reason: >-
+      Исход mcp_access_to_ui_system = false (#420). Последняя волна: агент читает токены, реестры и
+      валидирует экран через MCP (get_*/validate_*) вместо чтения файлов стандарта. Зависит от волн 2–3
+      — отдавать по MCP нечего, пока реестры и проверки не наполнены. Готово, когда MCP-сервер отдаёт
+      данные волны 2 и вердикты волны 3, и это проверено живым вызовом.
