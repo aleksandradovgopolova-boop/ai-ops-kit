@@ -995,7 +995,8 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/engine/pipeline_git.py
-  file: ai_ops_kit/engine/execution_pipeline.py
+  - ai_ops_kit/engine/pipeline_setup.py
+  file: ai_ops_kit/engine/pipeline_setup.py
   find: '    managed_pf = _managed_drift_preflight(child_root)'
   replace_with: '    managed_pf = None'
   tests:

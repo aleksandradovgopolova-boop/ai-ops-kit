@@ -23,6 +23,9 @@ import subprocess
 import pytest
 
 from ai_ops_kit.engine import execution_pipeline as ep
+# deep-cut: _setup_isolation вынесен в pipeline_setup и резолвит _managed_drift_preflight из ЕГО
+# globals — подмену ставим там, где механизм реально живёт, а не на реэкспорте в execution_pipeline.
+from ai_ops_kit.engine import pipeline_setup as ps
 
 pytestmark = pytest.mark.unit
 
@@ -47,7 +50,7 @@ def child(tmp_path):
 def _run_until_isolation(child, monkeypatch, preflight):
     """Прогон, остановленный сразу ПОСЛЕ преflight'ов: явная несуществующая база — объявленный
     отказ до модели и до worktree. Дальше конвейер не идёт, и тест не платит за живой прогон."""
-    monkeypatch.setattr(ep, "_managed_drift_preflight", preflight)
+    monkeypatch.setattr(ps, "_managed_drift_preflight", preflight)
     return ep.run_pipeline(
         task="проба шва", signals={}, child_root=child, proposer=None,
         plan={"workitem_id": "wi-seam-probe"}, isolate=True, base="ветки-такой-нет")

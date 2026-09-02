@@ -114,8 +114,11 @@ def test_status_and_human_output_use_the_same_predicate():
 def test_pipeline_reports_how_the_work_was_produced():
     """Канал работы назван в отчёте: «правок 0» рядом с живым коммитом читается как «кит не работает»."""
     src = (KIT / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    # deep-cut: фаза commit (_commit_work) вынесена в pipeline_setup — именование канала работы теперь
+    # там, а секция отчёта и распознавание сдвига HEAD остаются в execution_pipeline.
+    setup_src = (KIT / "ai_ops_kit" / "engine" / "pipeline_setup.py").read_text(encoding="utf-8")
     assert '"produced_by": work_produced_by' in src, "происхождение работы не попадает в отчёт"
-    assert 'work_produced_by = "model-commit"' in src, "свой коммит модели не называется в отчёте"
+    assert 'work_produced_by = "model-commit"' in setup_src, "свой коммит модели не называется в отчёте"
     tree = ast.parse(src)
     called = {getattr(n.func, "id", "") for n in ast.walk(tree) if isinstance(n, ast.Call)}
     assert "_head_advanced" in called, "конвейер не проверяет, ушёл ли HEAD от базы"

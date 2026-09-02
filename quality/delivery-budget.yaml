@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 538
+  substantive_files: 539
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -773,3 +773,27 @@ raises:
       дочки ImportError'ом на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у
       дочки) — тем же способом, что сосед ai_ops_run_print. Растёт только счёт файлов (+2), объём в
       норме; потолок под факт 536 -> 538.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 538
+    to_count: 539
+    measured_before: 535
+    measured_after: 536
+    work: deepcut-execution-pipeline (вынос isolation/evidence-кластера из execution_pipeline)
+    files:
+      - ai_ops_kit/engine/pipeline_setup.py
+    why_it_works_in_the_child: >-
+      Кластер обрамления tool-loop (_setup_isolation / _prepare_environment / _commit_work /
+      _assemble_evidence / _seam_scan_advisory) вынесен из god-модуля execution_pipeline.py в модуль-
+      спутник — поведение не меняется (чистый перенос + ре-экспорт), крупнейший файл движка разрежается
+      (1046 -> 664 строк), сам run_pipeline остаётся на месте. Модуль ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ
+      прогоне `ai-ops run`: run_pipeline зовёт _setup_isolation (base-binding + worktree-изоляция) на
+      входе, _prepare_environment (install-deps стека), _commit_work (фиксация правок на ветке) и
+      _assemble_evidence (сбор evidence на зафиксированном SHA + гейты) — это основной путь исполнения
+      конвейера. Без файла в поставке ре-экспортный импорт
+      (`from ai_ops_kit.engine.pipeline_setup import ...`) упал бы у дочки ImportError'ом на первом же
+      прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же способом, что
+      соседи по разрежению god-модулей движка. Растёт только счёт файлов (+1), объём в норме; потолок
+      под факт 538 -> 539.
