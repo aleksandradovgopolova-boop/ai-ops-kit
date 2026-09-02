@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 536
+  substantive_files: 538
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -748,3 +748,28 @@ raises:
       бы у дочки ImportError'ом на первом же выводе (класс F-033, механизм зелёный у кита и
       отсутствующий у дочки) — тем же способом, что соседи по разрежению god-модулей. Растёт только
       счёт файлов (+1), объём в норме; потолок под факт 534 -> 535.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 536
+    to_count: 538
+    measured_before: 535
+    measured_after: 537
+    work: split-ai-ops-run (разрежение god-модуля ai_ops_run)
+    files:
+      - ai_ops_kit/engine/ai_ops_run_reporting.py
+      - ai_ops_kit/engine/ai_ops_run_lifecycle.py
+    why_it_works_in_the_child: >-
+      Отчётность прогона (_compile_context_artifacts / _add_context_reports / _enrich_run_report /
+      _review_fix_context) и жизненный цикл прогона (_start_lifecycle / _resume_gate / _commit_barrier /
+      _finalize_run / _finalize_run_cost / _deliver) вынесены из god-модуля ai_ops_run.py в два
+      модуля-спутника — поведение не меняется (чистый перенос + ре-экспорт), крупнейший файл движка
+      разрежается (2173 -> 1479 строк). Оба модуля ИСПОЛНЯЮТСЯ в дочке на КАЖДОМ прогоне `ai-ops run`:
+      run() зовёт _resume_gate/_start_lifecycle/_compile_context_artifacts на входе, _enrich_run_report/
+      _add_context_reports при сборке отчёта, _commit_barrier/_deliver/_finalize_run на доставке и
+      финализации — это основной путь исполнения контроллера. Без файлов в поставке ре-экспортные импорты
+      (`from ai_ops_kit.engine.ai_ops_run_reporting import ...` и `..._lifecycle import ...`) упали бы у
+      дочки ImportError'ом на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у
+      дочки) — тем же способом, что сосед ai_ops_run_print. Растёт только счёт файлов (+2), объём в
+      норме; потолок под факт 536 -> 538.

@@ -136,8 +136,12 @@ def test_delivery_pending_distinguishes_waiting_from_unwritten_code(rep, expecte
 
 
 def test_the_run_uses_the_predicate_and_names_the_waiting_state():
-    """ШОВ: предикат действительно стоит в решении о статусе работы, а не лежит рядом."""
-    src = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
+    """ШОВ: предикат действительно стоит в решении о статусе работы, а не лежит рядом.
+
+    Решение о статусе (`_finalize_run`) вынесено из god-модуля `ai_ops_run` в модуль-спутник
+    `ai_ops_run_lifecycle` (чистый перенос + ре-экспорт); шов сохранился, сместился лишь файл.
+    """
+    src = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
 
     assert 'if _st == "blocked" and delivery_pending(rep):' in src, "предикат не подключён к решению"
     assert "ждёт доставки: работа готова на ветке, новых правок нет" in src
