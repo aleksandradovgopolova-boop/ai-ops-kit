@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 334
+behavioral_count: 335
 structural_count: 60
-total_count: 394
-behavioral_share_pct: 84.77
+total_count: 395
+behavioral_share_pct: 84.81
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -46,3 +46,15 @@ raises:
       занижен, а снят классификатором как есть. Снижать порог осознанно можно только записью здесь:
       падение доли без записи — красный сигнал (поведенческий тест выродился в структурный либо
       структурных добавили сверх порога).
+  - at: '2026-09-02'
+    what: baseline_raised_up
+    from_behavioral: 334
+    from_total: 394
+    to_behavioral: 335
+    to_total: 395
+    to_share_pct: 84.81
+    work: tests-verify-behavior (issue #437 слит в тот же день)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): #437 добавил поведенческий тест человеко-читаемого вывода
+      (test_run_output_human_readable.py), доля поведенческих выросла 84.77% -> 84.81%. Baseline
+      пере-записан на фактический замер, чтобы ратчет держал уже улучшенную границу, а не устаревшую.
