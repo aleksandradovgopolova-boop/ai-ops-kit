@@ -101,6 +101,9 @@ goals:
       # вердикт READY_FOR_PR). Владелец довёл задачу до слитого PR сам. Улика:
       # qualification/REAL-PRODUCT-II-SREDA-OWNER-LED-2026-09-01.md. Прежние прогоны давали
       # verified PR = 0 (токен/гейт/режим) — здесь впервые доведено до слияния.
+      # Поле (ии-среда — репозиторий с настоящим CI): evidence называет источник значений —
+      # F-019 подтверждён, значения читаются из манифестов стека, а не из артефактов, которые
+      # кит записал сам. Классификация EXISTING_PRODUCT, придуманных фактов 0.
       owner_reaches_verified_pr_without_patching_the_kit: true
 
   - id: session-autonomy-under-ceiling
