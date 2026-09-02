@@ -4873,3 +4873,31 @@ work:
     # РАЗБОР: type: delivery; goal: product-operating-layer; owner_role: engineer; value: medium
     #   write_scope: [templates/ci/, installer/, tests/, quality/]. Freeze-exception: закрывает
     #   объявленный исход продуктового слоя.
+
+  - id: second-brownfield-run
+    title: Провести установку и задачу до verified PR на втором реальном brownfield-репозитории
+    goal: second-real-brownfield
+    status: done
+    closed_at: '2026-09-02'
+    evidence: qualification/REAL-PRODUCT-II-SREDA-OWNER-LED-2026-09-01.md
+    result: >-
+      ЗАКРЫТО 2026-09-02 owner-led verified PR на ии-среде. Владелец второго реального brownfield
+      (Proektnyy-ofis/ii-sreda, Node/TS + БД + свой CI) сам довёл продуктовую задачу «браузерное
+      уведомление о готовности материала» до СЛИТОГО verified PR #701 (ветка
+      ai-ops/material-ready-notification, открыт 2026-09-01 21:55 МСК, слит в main 2026-09-02 00:07
+      МСК merge-commit 8cfc4bb, вердикт прогона READY_FOR_PR). Это ПЕРВЫЙ verified PR за всю
+      квалификацию — прежние прогоны давали verified PR = 0 (niti: токен/open_pr; bolshe-ne-budu-menshe:
+      гейт B2-08; ночные 19.08: условие режима). Исход
+      second-real-brownfield.owner_reaches_verified_pr_without_patching_the_kit флипнут в true, цель
+      переведена в achieved. Также флипнут qualification-closeout.real_task_reaches_verified_pr_without_
+      patching_the_kit; его repeated_on_two_different_live_repos ОСТАЁТСЯ false (#701 первый такой PR).
+      ЧЕСТНО ПРО ОХВАТ: машинные артефакты прогона (run-report/receipt) в кит не доставлены — шесть из
+      семи чисел приёмки взяты со слов владельца (attestation), проверяемый якорь один и достаточный —
+      слитый owner-led PR #701. Полевые разрывы доставки, вскрытые этим прогоном (#695), закрыты
+      релизами 3.39.1–3.39.4; остаток «доставка одной автономной командой» ведётся работой
+      delivery-of-ready-work-is-one-autonomous-command (цель owner-speaks-product-not-pipeline).
+    # РАЗБОР: type: delivery; goal: second-real-brownfield; owner_role: delivery; value: high
+    #   depends_on: [ci-lint-job-proven]; write_scope: [qualification/];
+    #   affects: {delivery_operations: true, analytics_learning: true}.
+    #   История прогона (severnaya/niti/bnbm/ии-среда, попытки 1–4 и ночные ре-прогоны 19.08) —
+    #   в отчётах qualification/REAL-PRODUCT-*.md; закрывающий прогон — owner-led #701.
