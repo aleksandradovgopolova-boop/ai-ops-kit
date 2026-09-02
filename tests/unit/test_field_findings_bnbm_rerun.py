@@ -266,9 +266,13 @@ def test_delivery_preflight_warns_before_spending(tmp_path, open_pr, expect):
 def test_delivery_preflight_is_wired_before_the_model_call():
     """ШОВ: предупреждение стоит в конвейере ДО петли, иначе оно приходит после траты."""
     src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    # deep-cut: preflight выполняется внутри _setup_isolation (pipeline_setup); в конвейере изоляция
+    # вызвана ДО tool_loop.run_loop, значит предупреждение звучит до первой траты модели.
+    setup_src = (PKG / "ai_ops_kit" / "engine" / "pipeline_setup.py").read_text(encoding="utf-8")
 
-    assert src.index("_delivery_preflight(") < src.index("tool_loop.run_loop"), (
-        "предупреждение о базе стоит после вызова модели — то есть после траты, как и было")
+    assert "_delivery_preflight(" in setup_src, "preflight ушёл из изоляции — предупреждение о базе не выполняется"
+    assert src.index("_setup_isolation(") < src.index("tool_loop.run_loop"), (
+        "изоляция (с preflight) стоит после вызова модели — то есть после траты, как и было")
     assert '"preflight": delivery_pf' in src, "предупреждение не доехало до отчёта"
 
 

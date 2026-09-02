@@ -75,7 +75,7 @@ probes:
     вернуть гонку, стоившую суток отладки.'
 - id: delivery-reconcile-nonfinal-receipts
   kind: guard
-  file: ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run_lifecycle.py
   find: '    pending = _unresolved_intents(features_dir, fid) + _nonfinal_receipt_intents(features_dir, fid)'
   replace_with: '    pending = _unresolved_intents(features_dir, fid)'
   tests:
@@ -257,7 +257,7 @@ probes:
     argparse — исполнить задачу через обёртку было нельзя вовсе.'
 - id: resume-refuses-without-live-provider
   kind: guard
-  file: ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run_lifecycle.py
   find: '    if explicit or not isinstance(res, dict):'
   replace_with: '    if True:'
   tests:
@@ -277,7 +277,7 @@ probes:
     подмена и выглядела осмысленной работой.'
 - id: engine-refuses-service-task-on-resume
   kind: guard
-  file: ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run_lifecycle.py
   find: '        if is_service_text(ctx.task_text):'
   replace_with: '        if False:'
   tests:
@@ -684,9 +684,9 @@ probes:
 - id: strong-executor-decided-by-the-launcher
   kind: seam
   covers:
-  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/engine/ai_ops_run_lifecycle.py
   - ai_ops_kit/providers/orchestrator_providers.py
-  file: ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run_lifecycle.py
   find: '                    if orchestrator.claude_binary():'
   replace_with: '                    if __import__("shutil").which("claude"):'
   tests:
@@ -794,9 +794,9 @@ probes:
 - id: run-stops-when-work-is-held
   kind: seam
   covers:
-  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/engine/ai_ops_run_lifecycle.py
   - ai_ops_kit/lifecycle/active_work.py
-  file: ai_ops_kit/engine/ai_ops_run.py
+  file: ai_ops_kit/engine/ai_ops_run_lifecycle.py
   find: '    if _reg_rc:'
   replace_with: '    if False:'
   tests:
@@ -995,7 +995,8 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/engine/pipeline_git.py
-  file: ai_ops_kit/engine/execution_pipeline.py
+  - ai_ops_kit/engine/pipeline_setup.py
+  file: ai_ops_kit/engine/pipeline_setup.py
   find: '    managed_pf = _managed_drift_preflight(child_root)'
   replace_with: '    managed_pf = None'
   tests:
