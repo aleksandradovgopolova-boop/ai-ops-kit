@@ -1,0 +1,160 @@
+{
+  "$id": "colors",
+  "constitution_section": 25,
+  "note": "primitive -> semantic (light/dark). Монохромный дефолт. UI_CONSTITUTION.md 21, 25.",
+  "architecture": "primitive -> semantic -> component (3 уровня, §21)",
+  "primitive": {
+    "neutral": [
+      {
+        "id": "neutral.50",
+        "value": "#F5F6F6"
+      },
+      {
+        "id": "neutral.100",
+        "value": "#E8EAEA"
+      },
+      {
+        "id": "neutral.200",
+        "value": "#D2D6D6"
+      },
+      {
+        "id": "neutral.300",
+        "value": "#B4B9B9"
+      },
+      {
+        "id": "neutral.400",
+        "value": "#8D9393"
+      },
+      {
+        "id": "neutral.500",
+        "value": "#6B7171"
+      },
+      {
+        "id": "neutral.600",
+        "value": "#545959"
+      },
+      {
+        "id": "neutral.700",
+        "value": "#414545"
+      },
+      {
+        "id": "neutral.800",
+        "value": "#2B2E2E"
+      },
+      {
+        "id": "neutral.900",
+        "value": "#1B1D1D"
+      },
+      {
+        "id": "neutral.950",
+        "value": "#0F1010"
+      }
+    ],
+    "functional": [
+      {
+        "id": "success.500",
+        "value": "#3B8C5A"
+      },
+      {
+        "id": "success.600",
+        "value": "#2F7049"
+      },
+      {
+        "id": "warning.500",
+        "value": "#E8871E"
+      },
+      {
+        "id": "warning.600",
+        "value": "#C26E12"
+      },
+      {
+        "id": "danger.500",
+        "value": "#D64B4B"
+      },
+      {
+        "id": "danger.600",
+        "value": "#BB3A3A"
+      },
+      {
+        "id": "info.500",
+        "value": "#3B7DD8"
+      },
+      {
+        "id": "info.600",
+        "value": "#2F63AC"
+      }
+    ]
+  },
+  "semantic": [
+    {
+      "id": "color.bg.canvas",
+      "light": "neutral.50",
+      "dark": "neutral.950"
+    },
+    {
+      "id": "color.bg.surface",
+      "light": "#FFFFFF",
+      "dark": "neutral.900"
+    },
+    {
+      "id": "color.bg.subtle",
+      "light": "neutral.100",
+      "dark": "neutral.800"
+    },
+    {
+      "id": "color.bg.muted",
+      "light": "neutral.200",
+      "dark": "neutral.700"
+    },
+    {
+      "id": "color.border.default",
+      "light": "neutral.200",
+      "dark": "neutral.800"
+    },
+    {
+      "id": "color.border.strong",
+      "light": "neutral.300",
+      "dark": "neutral.700"
+    },
+    {
+      "id": "color.text.primary",
+      "light": "neutral.900",
+      "dark": "neutral.50"
+    },
+    {
+      "id": "color.text.secondary",
+      "light": "neutral.600",
+      "dark": "neutral.300"
+    },
+    {
+      "id": "color.text.muted",
+      "light": "neutral.500",
+      "dark": "neutral.400"
+    },
+    {
+      "id": "color.action.primary",
+      "light": "neutral.900",
+      "dark": "neutral.50"
+    },
+    {
+      "id": "color.action.primary.hover",
+      "light": "neutral.800",
+      "dark": "neutral.200"
+    },
+    {
+      "id": "color.action.primary.active",
+      "light": "neutral.950",
+      "dark": "#FFFFFF"
+    },
+    {
+      "id": "color.action.onPrimary",
+      "light": "#FFFFFF",
+      "dark": "neutral.950"
+    },
+    {
+      "id": "color.focus.ring",
+      "light": "neutral.900",
+      "dark": "neutral.50"
+    }
+  ]
+}

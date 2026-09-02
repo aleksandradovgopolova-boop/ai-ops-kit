@@ -1,0 +1,74 @@
+# patterns.yaml — реестр возможностей UI/UX-стандарта (данные, не проза).
+# Волна 2 (#418). Каждая запись ссылается на правила Конституции (constitution_refs)
+# и токены (tokens); валидатор ловит расхождение реестра с Конституцией и токенами.
+# Продукт-дочка расширяет реестр своими записями, не редактируя источник стандарта.
+version: '1.0'
+kind: patterns
+note: Каталог-справочник §16 к правилу переиспользования (UI-012). catalog_key покрывает
+  §16.
+entries:
+- id: pat.search
+  catalog_key: поиск
+  name: Поиск
+  constitution_refs:
+  - UI-012
+  - UI-031
+  uses:
+  - comp.input
+  - comp.data-table
+- id: pat.filter
+  catalog_key: фильтрация
+  name: Фильтрация
+  constitution_refs:
+  - UI-012
+  - UI-031
+  uses:
+  - comp.filter-bar
+  - comp.data-table
+- id: pat.crud
+  catalog_key: crud
+  name: CRUD
+  constitution_refs:
+  - UI-012
+  - UI-018
+  uses:
+  - comp.data-table
+  - comp.modal
+  - comp.button
+- id: pat.approval
+  catalog_key: согласование/approval
+  name: Согласование / approval
+  constitution_refs:
+  - UI-018
+  - UI-039
+  uses:
+  - comp.button
+  - comp.modal
+- id: pat.dashboard
+  catalog_key: дашборд
+  name: Дашборд
+  constitution_refs:
+  - UI-008
+  - UI-031
+  uses:
+  - comp.card
+  - comp.data-table
+- id: pat.onboarding
+  catalog_key: онбординг
+  name: Онбординг
+  constitution_refs:
+  - UI-010
+  - UI-036
+  uses:
+  - comp.empty-state
+  - comp.button
+- id: pat.settings
+  catalog_key: настройки
+  name: Настройки
+  constitution_refs:
+  - UI-019
+  - UI-011
+  uses:
+  - comp.input
+  - comp.select
+  - comp.checkbox

@@ -24,9 +24,9 @@ kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
 behavioral_count: 350
-structural_count: 60
-total_count: 410
-behavioral_share_pct: 85.37
+structural_count: 61
+total_count: 411
+behavioral_share_pct: 85.16
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -152,3 +152,19 @@ raises:
       (test_decision_feature_target.py — импортирует decision_loop И зовёт check_feature_target/
       gate_feature_decisions), доля поведенческих выросла 85.33% -> 85.37%. Baseline пере-записан
       на фактический замер (после ребейза на main).
+  - at: '2026-09-03'
+    what: baseline_lowered
+    from_behavioral: 350
+    from_total: 410
+    to_behavioral: 350
+    to_total: 411
+    to_share_pct: 85.16
+    work: uiux-token-capability-registries (#451)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.37% -> 85.16%): работа uiux-реестров добавила один СТРУКТУРНЫЙ
+      тест (test_uiux_tokens_and_registries.py — проверяет ФОРМУ данных-контракта: токены design/
+      tokens/*.json и реестры registries/*.yaml на соответствие схемам/Конституции, не исполняя
+      продуктовый код). Поведенческих НЕ убыло (350 без изменений) — добавился +1 структурный над
+      контрактными данными (ровно случай «крупный ввоз структурных фикстур-контрактов», названный в
+      шапке как законный повод для записи). Это не деградация поведенческого теста в структурный, а
+      новая проверка данных; снижение доли зафиксировано записью, а не проехало молча.
