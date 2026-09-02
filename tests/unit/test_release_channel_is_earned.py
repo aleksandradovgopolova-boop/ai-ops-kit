@@ -59,11 +59,37 @@ def test_one_repo_is_not_enough_when_two_required():
 
 @pytest.mark.unit
 def test_evidence_for_another_version_does_not_count():
-    """Обкатка прошлой версии не делает stable новую — иначе канал наследовался бы молча."""
+    """Обкатка ДРУГОГО минора не делает stable новую — иначе канал наследовался бы молча."""
     old = [{"repo": "ii-sreda", "version": "3.0.0", "outcome": "ok"},
            {"repo": "niti", "version": "3.0.0", "outcome": "ok"}]
     assert vrc.channel_errors(_with(channel="stable", field_evidence=old)), (
-        "доказательства другой версии зачлись текущей")
+        "доказательства другого минора зачлись текущему")
+
+
+@pytest.mark.unit
+def test_evidence_from_an_earlier_patch_of_the_same_minor_counts():
+    """Патч НАСЛЕДУЕТ обкатку своего минора: доказательства на X.Y.0 засчитываются для X.Y.Z —
+    иначе каждый патч обнулял бы счётчик и stable был бы беговой дорожкой. РАЗВОДКА: при точной
+    сверке по версии (дефект) этот тест краснел бы, ведь X.Y.0 != X.Y.Z."""
+    ver = _data()["version"]
+    mj, mn, *_rest = ver.split(".")
+    earlier = f"{mj}.{mn}.0" if not ver.endswith(".0") else f"{mj}.{mn}.1"
+    rows = [{"repo": "ii-sreda", "version": earlier, "outcome": "ok"},
+            {"repo": "niti", "version": earlier, "outcome": "ok"}]
+    assert vrc.channel_errors(_with(channel="stable", version=ver, field_evidence=rows)) == [], (
+        "доказательства другого патча ТОГО ЖЕ минора обязаны засчитываться")
+
+
+@pytest.mark.unit
+def test_inheritance_is_bounded_to_the_minor():
+    """Наследование — только ВНУТРИ минора: соседний минор X.(Y±1) для X.Y не годится (fail-closed)."""
+    ver = _data()["version"]
+    mj, mn, *_rest = ver.split(".")
+    other = f"{mj}.{int(mn) - 1}.9" if int(mn) > 0 else f"{mj}.{int(mn) + 1}.9"
+    rows = [{"repo": "a", "version": other, "outcome": "ok"},
+            {"repo": "b", "version": other, "outcome": "ok"}]
+    assert vrc.channel_errors(_with(channel="stable", version=ver, field_evidence=rows)), (
+        "доказательства ДРУГОГО минора не должны зарабатывать stable")
 
 
 @pytest.mark.unit
