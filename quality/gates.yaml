@@ -44,7 +44,7 @@ gates:
     blocking: false          # advisory до обкатки на живых прогонах; MVP-blocking ≤ 8 не трогаем
     responsible_role: final-verifier
     review_mode: read-only
-    validator: validate-regression-evidence   # runnable: tools/regression_evidence.py
+    validator: validate-regression-evidence   # runnable: ai_ops_kit/gates/regression_evidence.py
     human_approval: false
     applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]   # пишущие в код
     required_evidence: [regression_proven]
@@ -65,7 +65,7 @@ gates:
     blocking: false          # advisory до обкатки; MVP-blocking ≤ 8 не трогаем (см. ROADMAP)
     responsible_role: intake-classifier
     review_mode: writer
-    validator: validate-concurrency          # runnable: tools/concurrency_preflight.py
+    validator: validate-concurrency          # runnable: ai_ops_kit/gates/concurrency_preflight.py
     human_approval: false
     applicability: [QUICK, ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]   # пишущие в код
     required_evidence: [checked_paths, verdict]   # verdict ∈ clean|collision
@@ -90,7 +90,7 @@ gates:
     # когда валидаторы переехали в `ai_ops_kit/validation/`. Указатель на исполнитель живёт в
     # комментарии, поэтому `validate_references` (читает YAML) его не видел; нашёл
     # `validate_own_medicine.py`.
-    validator: validate-product-model        # runnable: tools/contours.py + ai_ops_kit/validation/validate_product_model.py
+    validator: validate-product-model        # runnable: ai_ops_kit/planning/contours.py + ai_ops_kit/validation/validate_product_model.py
     human_approval: false
     applicability: [ENGINEERING, PRODUCT, VISUAL, AI_FEATURE, CRITICAL]
     required_evidence: [affects, changed_files, verdict]   # verdict ∈ ok|inconsistent
@@ -175,7 +175,7 @@ gates:
     validator: validate-requirements
     human_approval: false
     # override разрешён только с человеком и записью причины (не forbidden — иначе
-    # противоречие с override_policy; enforcement — tools/gate_executor.override_effective)
+    # противоречие с override_policy; enforcement — ai_ops_kit/gates/gate_executor.override_effective)
     override_policy: {allowed: true, requires: human, records: override_reason}
     applicability: [ENGINEERING, PRODUCT]
     stale_detection: {bind_to: artifact_hashes}
@@ -292,7 +292,7 @@ gates:
     closed_by: validator
     purpose: >
       ЧЕСТНАЯ зрелость поставки при изменении деплоя: лестница absent/configured/runnable/verified
-      (tools/deploy_readiness.py). Кит НЕ деплоит — он не даёт врать о готовности. Обязателен ТОЛЬКО
+      (ai_ops_kit/gates/deploy_readiness.py). Кит НЕ деплоит — он не даёт врать о готовности. Обязателен ТОЛЬКО
       при сигналах изменения поставки (required_when); иначе честный non-blocking skip. Провал =
       поставка заявлена как изменяемая, а исполняемого пути в репозитории нет (configured/absent).
       Вердикт детерминированный: его даёт инструмент на текущем SHA, не судья.
@@ -300,7 +300,7 @@ gates:
     blocking: true
     responsible_role: devops-engineer
     review_mode: writer                        # детерминированный гейт: вердикт инструмента, не ревью
-    validator: validate-deploy-readiness       # runnable: tools/deploy_readiness.py
+    validator: validate-deploy-readiness       # runnable: ai_ops_kit/gates/deploy_readiness.py
     human_approval: false
     required_when: [deployment_change, new_service, infrastructure_change]
     applicability: [ENGINEERING, AI_FEATURE, PRODUCT, CRITICAL]   # v3.27.1 WP2: PRODUCT и CRITICAL добавлены — изменение поставки требует проверки зрелости независимо от base workflow

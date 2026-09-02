@@ -17,7 +17,7 @@ class TestDecideTier:
 
     def test_decide_tier_infra_change(self):
         """Infrastructure change (orchestrator.py) -> full tier."""
-        tier = verification_tiers.decide_tier(["tools/orchestrator.py"])
+        tier = verification_tiers.decide_tier(["ai_ops_kit/providers/orchestrator.py"])
         assert tier == "full"
 
     def test_decide_tier_many_files(self):
@@ -66,7 +66,7 @@ class TestDecideTier:
 
     def test_decide_tier_lifecycle_intent_overrides_files(self):
         """lifecycle_intent takes precedence over file-based detection."""
-        tier = verification_tiers.decide_tier(["tools/orchestrator.py"],
+        tier = verification_tiers.decide_tier(["ai_ops_kit/providers/orchestrator.py"],
                                               lifecycle_intent="explore")
         assert tier == "skip"  # intent overrides even infra files
 
@@ -88,7 +88,7 @@ class TestSelectTests:
         assert "note" in result
 
     def test_select_tests_full_for_infra(self, tmp_path):
-        result = verification_tiers.select_tests(["tools/orchestrator.py"], str(tmp_path))
+        result = verification_tiers.select_tests(["ai_ops_kit/providers/orchestrator.py"], str(tmp_path))
         assert result["tier"] == "full"
         assert result["full_command"] is True
 
