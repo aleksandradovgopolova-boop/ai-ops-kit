@@ -646,6 +646,12 @@ RUNTIME_VALIDATORS = frozenset({
     # исполняется У ДОЧКИ — считает состояние `.ai-ops/` (Missing/Invalid/Outdated/Valid). Не внести
     # имя сюда значило бы починить кит и не починить дочку (F-033), как было с validate_acceptance_result.
     "validate_product_layer",
+    # 2026-09-02, issue #439 (tests-verify-behavior): метрика «поведенческие vs структурные тесты»
+    # и ратчет её доли. Валидатор едет в дочку, чтобы она мерила ТАКСОНОМИЮ СВОИХ тестов тем же
+    # инструментом — перекос «читаем свои файлы вместо исполнения поведения» не должен быть виден
+    # только у кита. Standalone (stdlib+pyyaml, `import _bootstrap` не нужен), запускается процессом
+    # у дочки.
+    "validate_test_taxonomy",
 })
 
 

@@ -94,6 +94,7 @@ STANDALONE = [
     "validate_standalone_engine",
     "validate_supply_chain",
     "validate_surface_wiring",
+    "validate_test_taxonomy",     # 02.09.2026 (#439): standalone, читает свой packages/test-taxonomy-baseline.yaml + tests/
     "validate_work_graph",
     "validate_workflow_gates",
 ]
