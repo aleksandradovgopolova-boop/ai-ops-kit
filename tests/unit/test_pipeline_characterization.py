@@ -123,6 +123,10 @@ def child_repo(tmp_path):
 # ---------------------------------------------------------------------------
 
 _PATCH_BASE = "ai_ops_kit.engine.execution_pipeline"
+# deep-cut: кластер изоляции/окружения/сборки evidence вынесен в pipeline_setup. Его коллабораторы
+# (evidence_collector, _resolve_base) резолвятся из globals ЭТОГО модуля — подмену ставим здесь, а не
+# на реэкспорте в execution_pipeline (иначе она не дойдёт до _setup_isolation/_assemble_evidence).
+_SETUP_BASE = "ai_ops_kit.engine.pipeline_setup"
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +143,12 @@ class TestPipelinePhasePlan:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_builds_plan_when_not_provided(self, mock_git, mock_resolve, mock_run_plan,
                                            mock_detect, mock_broker, mock_loop,
@@ -167,11 +171,11 @@ class TestPipelinePhasePlan:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_uses_provided_plan(self, mock_git, mock_resolve, mock_detect,
                                 mock_broker, mock_loop, mock_evidence, mock_gates,
@@ -201,12 +205,12 @@ class TestPipelinePhaseDetection:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_detect_called_on_work_root(self, mock_git, mock_resolve, mock_run_plan,
                                         mock_detect, mock_broker, mock_loop,
@@ -240,12 +244,12 @@ class TestPipelinePhasePolicy:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_default_policy_is_execution(self, mock_git, mock_resolve, mock_run_plan,
                                          mock_detect, mock_broker, mock_loop,
@@ -271,12 +275,12 @@ class TestPipelinePhasePolicy:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_sandbox_uses_sandbox_policy(self, mock_git, mock_resolve, mock_run_plan,
                                          mock_detect, mock_broker, mock_loop,
@@ -308,12 +312,12 @@ class TestPipelinePhaseToolLoop:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_tool_loop_called_with_proposer(self, mock_git, mock_resolve, mock_run_plan,
                                             mock_detect, mock_broker, mock_loop,
@@ -339,12 +343,12 @@ class TestPipelinePhaseToolLoop:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_reevaluate_skips_tool_loop(self, mock_git, mock_resolve, mock_run_plan,
                                         mock_detect, mock_broker, mock_loop,
@@ -376,12 +380,12 @@ class TestPipelinePhaseEvidence:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_evidence_collector_called(self, mock_git, mock_resolve, mock_run_plan,
                                        mock_detect, mock_broker, mock_loop,
@@ -415,12 +419,12 @@ class TestPipelinePhaseGates:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_gates_evaluated_with_plan_workflow(self, mock_git, mock_resolve, mock_run_plan,
                                                 mock_detect, mock_broker, mock_loop,
@@ -456,12 +460,12 @@ class TestPipelineReturnStructure:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_return_has_required_keys(self, mock_git, mock_resolve, mock_run_plan,
                                       mock_detect, mock_broker, mock_loop,
@@ -492,12 +496,12 @@ class TestPipelineReturnStructure:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_schema_version_is_one(self, mock_git, mock_resolve, mock_run_plan,
                                    mock_detect, mock_broker, mock_loop,
@@ -529,12 +533,12 @@ class TestPipelinePhaseOrdering:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_detect_before_tool_loop(self, mock_git, mock_resolve, mock_run_plan,
                                      mock_detect, mock_broker, mock_loop,
@@ -559,12 +563,12 @@ class TestPipelinePhaseOrdering:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_evidence_before_gates(self, mock_git, mock_resolve, mock_run_plan,
                                    mock_detect, mock_broker, mock_loop,
@@ -596,12 +600,12 @@ class TestPipelineContainment:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_containment_reflects_sandbox_flag(self, mock_git, mock_resolve, mock_run_plan,
                                                mock_detect, mock_broker, mock_loop,
@@ -624,12 +628,12 @@ class TestPipelineContainment:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_block_push_always_true(self, mock_git, mock_resolve, mock_run_plan,
                                     mock_detect, mock_broker, mock_loop,
@@ -662,12 +666,12 @@ class TestPipelineDeliveryPlan:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_no_delivery_without_open_pr(self, mock_git, mock_resolve, mock_run_plan,
                                          mock_detect, mock_broker, mock_loop,
@@ -700,12 +704,12 @@ class TestPipelineSignals:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_task_text_added_to_signals(self, mock_git, mock_resolve, mock_run_plan,
                                         mock_detect, mock_broker, mock_loop,
@@ -773,7 +777,7 @@ class TestPipelineSecurityCharacterization:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
@@ -805,7 +809,7 @@ class TestPipelineSecurityCharacterization:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
@@ -856,12 +860,12 @@ class TestPipelinePhaseBaselineDiff:
 
     @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
     @patch(f"{_PATCH_BASE}.gate_executor")
-    @patch(f"{_PATCH_BASE}.evidence_collector")
+    @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
     @patch(f"{_PATCH_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
-    @patch(f"{_PATCH_BASE}._resolve_base", return_value=_make_base_resolution())
+    @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
     @patch(f"{_PATCH_BASE}._git")
     def test_baseline_diff_collects_baseline_and_reports(self, mock_git, mock_resolve, mock_run_plan,
                                                          mock_detect, mock_broker, mock_loop,

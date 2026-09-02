@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_ops_kit.engine import execution_pipeline
+from ai_ops_kit.engine import pipeline_setup
 from ai_ops_kit.engine import living_status as ls
 from ai_ops_kit.validation import validate_freshness as vf
 
@@ -102,12 +102,12 @@ def test_config_points_at_child_specific_doc(tmp_path):
 def test_commit_work_refreshes_status_before_commit(tmp_path, monkeypatch):
     """Шов доставки (`_commit_work`) вызывает refresh на пути commit+have_work — иначе фикс мёртв."""
     calls = []
-    monkeypatch.setattr(execution_pipeline._living_status, "refresh",
+    monkeypatch.setattr(pipeline_setup._living_status, "refresh",
                         lambda root, wid, task: calls.append((root, wid, task)))
-    monkeypatch.setattr(execution_pipeline, "_has_changes", lambda root: True)
-    monkeypatch.setattr(execution_pipeline, "_commit_on_branch", lambda root, br, msg: "deadbeef")
-    monkeypatch.setattr(execution_pipeline, "_tree_clean", lambda root: True)
-    sha, branch, _, _ = execution_pipeline._commit_work(
+    monkeypatch.setattr(pipeline_setup, "_has_changes", lambda root: True)
+    monkeypatch.setattr(pipeline_setup, "_commit_on_branch", lambda root, br, msg: "deadbeef")
+    monkeypatch.setattr(pipeline_setup, "_tree_clean", lambda root: True)
+    sha, branch, _, _ = pipeline_setup._commit_work(
         str(tmp_path), "W-7", "задача", is_git=True, applied=True, authored=False,
         shell_changed=False, self_committed=False, head_sha=None,
         commit=True, reevaluate_only=False)
@@ -119,10 +119,10 @@ def test_commit_work_refreshes_status_before_commit(tmp_path, monkeypatch):
 def test_no_refresh_without_commit(tmp_path, monkeypatch):
     """reevaluate-only / commit=False не создаёт коммит -> статус-док не трогаем."""
     calls = []
-    monkeypatch.setattr(execution_pipeline._living_status, "refresh",
+    monkeypatch.setattr(pipeline_setup._living_status, "refresh",
                         lambda *a, **k: calls.append(a))
-    monkeypatch.setattr(execution_pipeline, "_has_changes", lambda root: True)
-    execution_pipeline._commit_work(
+    monkeypatch.setattr(pipeline_setup, "_has_changes", lambda root: True)
+    pipeline_setup._commit_work(
         str(tmp_path), "W-7", "задача", is_git=True, applied=True, authored=False,
         shell_changed=False, self_committed=False, head_sha=None,
         commit=False, reevaluate_only=False)
