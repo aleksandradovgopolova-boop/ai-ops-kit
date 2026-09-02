@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 348
+behavioral_count: 349
 structural_count: 60
-total_count: 408
-behavioral_share_pct: 85.29
+total_count: 409
+behavioral_share_pct: 85.33
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -126,3 +126,16 @@ raises:
       ПОВЕДЕНЧЕСКИЙ тест (test_verdict_names_env_degradation.py — импортирует _env_degraded_note/
       _env_skipped_checks И зовёт их), доля поведенческих выросла 85.26% -> 85.29%. Baseline
       пере-записан на фактический замер (после ребейза на main с #454/#458).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 348
+    from_total: 408
+    to_behavioral: 349
+    to_total: 409
+    to_share_pct: 85.33
+    work: release-helper-bumps-version-surfaces (#445)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа release-helper добавила ПОВЕДЕНЧЕСКИЙ тест
+      (test_release_bump_validators_green.py — импортирует validate_release_claims/
+      validate_ai_first_registry И зовёт их), доля поведенческих выросла 85.29% -> 85.33%.
+      Baseline пере-записан на фактический замер (после ребейза на main с тройкой durable-фиксов).
