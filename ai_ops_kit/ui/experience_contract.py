@@ -176,6 +176,69 @@ def generate_stories(contract: dict) -> list[dict]:
     return stories
 
 
+def required_story_specs(contract: dict) -> list[dict]:
+    """Обязательные stories, ВЫВЕДЕННЫЕ КОДОМ: каждый экран контракта × каждое обязательное состояние.
+
+    Экраны берутся из контракта (их описывает владелец), а обязательные состояния — из одного
+    общего источника `REQUIRED_STATES`, а НЕ из того, что владелец вспомнил перечислить. В этом и
+    состоит «выводятся кодом, а не пишутся руками»: набор нельзя недосоставить, забыв `error`.
+
+    Это стабильный контракт обязательного набора, по которому сторона доказательства
+    (`storybook_adapter`) сверяет собранный Storybook. Возвращает список
+    `{id, screen, screen_name, state}`.
+    """
+    specs = []
+    for screen in contract.get("screens", []) or []:
+        sid = str(screen.get("id", "unknown"))
+        sname = str(screen.get("name", sid))
+        for state in REQUIRED_STATES:
+            specs.append({"id": f"{sid}-{state}", "screen": sid,
+                          "screen_name": sname, "state": state})
+    return specs
+
+
+def _norm_token(s) -> str:
+    """Имя для сравнения: lower + только буквы/цифры. `active-work` и `ActiveWork` -> `activework`.
+
+    Индекс Storybook и id контракта пишут разделители по-разному (kebab в контракте, PascalCase в
+    title, слэши в importPath). Сравнение по «сырому» id разошлось бы на первом же дефисе.
+    """
+    return "".join(ch for ch in str(s).lower() if ch.isalnum())
+
+
+def _index_story_hay(story: dict) -> str:
+    """Нормализованная «сенная копна» одной story из индекса Storybook: id+title+name+importPath."""
+    parts = (story.get("id", ""), story.get("title", ""),
+             story.get("name", ""), story.get("importPath", ""))
+    return _norm_token(" ".join(str(p) for p in parts))
+
+
+def required_stories_coverage(contract: dict, index_stories: list) -> dict:
+    """Сверка обязательного набора stories (из контракта, кодом) с СОБРАННЫМ Storybook.
+
+    `index_stories` — распарсенный story-index child-репо (`storybook_adapter._parse_story_index`).
+    Обязательная story считается присутствующей, если в индексе есть story, чья копна содержит и
+    экран, и состояние (по нормализованному вхождению). Непустой `missing` -> объявленного
+    контрактом опыта в Storybook НЕТ, и сторона доказательства обязана краснеть, а не молчать.
+
+    -> {"required": [id...], "present": [id...], "missing": [id...], "complete": bool}
+    """
+    specs = required_story_specs(contract)
+    hays = [_index_story_hay(s) for s in (index_stories or []) if isinstance(s, dict)]
+    present, missing = [], []
+    for spec in specs:
+        sc, st = _norm_token(spec["screen"]), _norm_token(spec["state"])
+        found = bool(sc) and bool(st) and any(sc in h and st in h for h in hays)
+        (present if found else missing).append(spec["id"])
+    return {"required": [s["id"] for s in specs], "present": present,
+            "missing": missing, "complete": not missing}
+
+
+def missing_required_stories(contract: dict, index_stories: list) -> list[str]:
+    """Обязательные stories из контракта, которых НЕТ в собранном Storybook. -> список id."""
+    return required_stories_coverage(contract, index_stories)["missing"]
+
+
 def generate_design_options(contract: dict) -> list[dict]:
     """Generate 2-3 design options with trade-offs.
 
@@ -256,11 +319,13 @@ def process_contract(contract_path: Path) -> dict:
         "contract_title": contract.get("title"),
         "user_goal": contract.get("user_goal"),
         "stories": stories,
+        "required_stories": [s["id"] for s in required_story_specs(contract)],
         "design_options": options,
         "open_questions": contract.get("open_questions", []),
         "tradeoffs": contract.get("tradeoffs", []),
         "summary": {
             "total_stories": len(stories),
+            "required_stories": len(required_story_specs(contract)),
             "screens": len(contract.get("screens", [])),
             "states": len(contract.get("states", [])),
             "roles": len(contract.get("roles", [])),
@@ -286,6 +351,7 @@ def format_output(output: dict) -> str:
     summary = output.get("summary", {})
     lines.append("\n## Summary\n")
     lines.append(f"- Stories generated: {summary.get('total_stories', 0)}")
+    lines.append(f"- Required stories (derived by code): {summary.get('required_stories', 0)}")
     lines.append(f"- Screens: {summary.get('screens', 0)}")
     lines.append(f"- States: {summary.get('states', 0)}")
     lines.append(f"- Roles: {summary.get('roles', 0)}")
