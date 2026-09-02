@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Ратчет максимального размера функции в ai_ops_kit/engine/.
+"""Ратчет максимального размера функции в ai_ops_kit/.
 
-AST-обход всех .py файлов в engine/, для каждой function/async function считает
-end_lineno - lineno + 1. Выводит max-функцию, топ-10, и возвращает 0 если max <= baseline,
-1 если превышен.
+AST-обход всех .py файлов в каждом объявленном каталоге, для каждой function/async function
+считает end_lineno - lineno + 1. У каждого каталога (scope) свой потолок; проверка сверяет
+максимум каталога с его потолком и возвращает 0, если ни один scope не превышен, 1 — если
+хотя бы один превышен.
 
 Ратчет ходит ТОЛЬКО ВНИЗ: снижение потолка обязано быть записано в baseline-файл.
 Превышение — красный сигнал: новая god-функция или рефакторинг не завершён.
 
-Использование:
-  validate_func_size.py              # проверить против baseline
-  validate_func_size.py --report     # напечатать топ-10 без проверки
-  validate_func_size.py --baseline   # обновить baseline текущим замером
+Scopes перечислены в packages/func-size-baseline.yaml (ключ `scopes`). Раньше ратчет стерёг
+только engine/, а god-функции ВНЕ него росли свободно; теперь потолок есть у каждого
+объявленного каталога (engine/cli/planning/providers/validation).
 
-Возврат 0 — в пределах потолка, 1 — превышен.
+Использование:
+  validate_func_size.py              # проверить все scope против baseline
+  validate_func_size.py --report     # напечатать топ-10 по каждому scope без проверки
+  validate_func_size.py --baseline   # обновить baseline текущим замером всех scope
+
+Возврат 0 — все scope в пределах потолка, 1 — хотя бы один превышен.
 """
 from __future__ import annotations
 
@@ -82,6 +87,36 @@ def check(funcs: list[dict], baseline: dict) -> list[str]:
     return []
 
 
+def iter_scopes(baseline: dict, pkg_root: Path = PKG) -> list[dict]:
+    """Список scope'ов из baseline с разрешённым каталогом.
+
+    Каждый элемент: {'path': относительный путь, 'dir': абсолютный Path, 'spec': dict scope}.
+    Порядок сохраняется как в baseline.
+    """
+    scopes = []
+    for spec in baseline.get("scopes", []) or []:
+        rel = spec.get("path", "")
+        scopes.append({"path": rel, "dir": pkg_root / rel, "spec": spec})
+    return scopes
+
+
+def check_all(baseline: dict, pkg_root: Path = PKG) -> list[str]:
+    """Сверить максимум каждого scope с его потолком. Возвращает список ошибок (пустой = ОК).
+
+    Ошибки каждого scope префиксуются его путём. Отсутствие секции `scopes` — сама ошибка:
+    без неё ратчет ничего не стережёт.
+    """
+    scopes = iter_scopes(baseline, pkg_root)
+    if not scopes:
+        return ["ратчет func-size: в baseline нет секции scopes — стеречь нечего"]
+    errors = []
+    for scope in scopes:
+        funcs = measure_functions(scope["dir"])
+        for err in check(funcs, scope["spec"]):
+            errors.append(f"[{scope['path']}] {err}")
+    return errors
+
+
 def render_report(funcs: list[dict], n: int = 10) -> str:
     """Человекочитаемый отчёт: топ-N крупнейших функций."""
     lines = [f"Всего функций: {len(funcs)}"]
@@ -92,43 +127,51 @@ def render_report(funcs: list[dict], n: int = 10) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv or sys.argv[1:])
-    funcs = measure_functions()
+    baseline = load_baseline()
+    scopes = iter_scopes(baseline)
 
     if "--report" in argv:
-        print(render_report(funcs))
+        for scope in scopes:
+            funcs = measure_functions(scope["dir"])
+            print(f"== {scope['path']} ==")
+            print(render_report(funcs))
         return 0
 
     if "--baseline" in argv:
-        actual_max = max((f["size"] for f in funcs), default=0)
-        worst = max(funcs, key=lambda f: f["size"]) if funcs else {}
-        data = {
-            "max_function_lines": actual_max,
-            "max_function": worst.get("name", ""),
-            "max_function_file": worst.get("file", ""),
-            "max_function_lineno": worst.get("lineno", 0),
-            "top_10": [{"name": f["name"], "file": f["file"],
-                        "lineno": f["lineno"], "size": f["size"]}
-                       for f in top_n(funcs, 10)],
-        }
+        new_scopes = []
+        for scope in scopes:
+            funcs = measure_functions(scope["dir"])
+            actual_max = max((f["size"] for f in funcs), default=0)
+            worst = max(funcs, key=lambda f: f["size"]) if funcs else {}
+            new_scopes.append({
+                "path": scope["path"],
+                "max_function_lines": actual_max,
+                "max_function": worst.get("name", ""),
+                "max_function_file": worst.get("file", ""),
+                "max_function_lineno": worst.get("lineno", 0),
+            })
+            print(f"  {scope['path']}: max={actual_max} "
+                  f"({worst.get('file')}:{worst.get('lineno')} {worst.get('name')})")
+        data = {"schema_version": 2, "kind": "func-size-ratchet", "scopes": new_scopes}
         BASELINE_FILE.parent.mkdir(parents=True, exist_ok=True)
         BASELINE_FILE.write_text(
             yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
             encoding="utf-8",
         )
-        print(f"Baseline обновлён: max={actual_max} ({worst.get('file')}:{worst.get('lineno')} "
-              f"{worst.get('name')})")
+        print("Baseline обновлён.")
         return 0
 
-    baseline = load_baseline()
-    errors = check(funcs, baseline)
+    errors = check_all(baseline)
     for e in errors:
         print(f"  [FAIL] {e}")
     if errors:
         print(f"FUNC-SIZE-FAIL: {len(errors)} нарушение(ий)")
         return 1
-    actual_max = max((f["size"] for f in funcs), default=0)
-    print(f"FUNC-SIZE-OK: max {actual_max} строк, в пределах потолка "
-          f"({baseline.get('max_function_lines')})")
+    for scope in scopes:
+        funcs = measure_functions(scope["dir"])
+        actual_max = max((f["size"] for f in funcs), default=0)
+        print(f"FUNC-SIZE-OK: {scope['path']} max {actual_max} строк, в пределах потолка "
+              f"({scope['spec'].get('max_function_lines')})")
     return 0
 
 

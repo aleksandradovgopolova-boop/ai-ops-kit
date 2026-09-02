@@ -1,111 +1,56 @@
-# Ратчет максимального размера функции в ai_ops_kit/engine/.
+# Ратчет максимального размера функции в ai_ops_kit/.
 #
 # K6-глубина (Волна 5): god-функции реально расщепляются на фазы, а не только замораживаются.
 # Ратчет ходит ТОЛЬКО ВНИЗ: разбиение god-функций снижает потолок,
 # новая god-функция сверх потолка — красный сигнал.
 #
 # Измеряется: validate_func_size.py (AST-обход, end_lineno - lineno + 1).
-schema_version: 1
+#
+# 2026-09-02 (func-size-ratchet-wider): ратчет расширен с одного каталога engine/ на пять
+# каталогов, где живут крупнейшие функции пакета. Раньше потолок стерёг только engine/, а
+# god-функции ВНЕ engine/ (cli/main, planning/validate, providers/run_workflow,
+# validation/run_scenarios) росли свободно — ратчет давал ложное чувство защиты. Теперь у
+# каждого каталога свой потолок, замороженный на ТЕКУЩЕМ максимуме: это не заставляет
+# рефакторить существующий код прямо сейчас, а останавливает НОВЫЙ рост везде.
+# Каждый scope сверяется точно (max == потолок): превышение краснеет как новая god-функция,
+# снижение — как «опусти потолок» (ратчет ходит только вниз).
+schema_version: 2
 kind: func-size-ratchet
-scope: ai_ops_kit/engine/
 
-# Потолок максимального размера функции (в строках).
-# 2026-08-25: 1285 -> 1275 — замер после K6 (из run_pipeline извлечено 6 функций) показал
-# снижение max; ратчет ходит только вниз, потолок опущен под факт.
-# 2026-08-26 (K6-глубина, срез security): из run_pipeline вынесена _evaluate_security -> run_pipeline
-# 1075 -> 864. Потолок тогда держал run() (1275) — он глобальный max.
-# 2026-08-26 (K6-глубина, срез context): из run() вынесена _compile_context_artifacts (bundle/payload/
-# hybrid/spec/work-package) -> run() 1275 -> 1182. Это ПЕРВЫЙ срез, реально опустивший потолок:
-# 1275 -> 1182 (новый глобальный max — по-прежнему run(), но уже меньше).
-# 2026-08-26 (K6-глубина, срез context-reports): из run() вынесена _add_context_reports (контекст-
-# отчёты в rep: bundle/shadow/hybrid/payload/spec/work-package) -> run() 1182 -> 1129. Потолок 1129.
-# 2026-08-26 (K6-глубина, срез provenance): из run() вынесена _enrich_run_report (provenance-поля
-# отчёта: runtime/provider/model/base/lifecycle-dict) -> run() 1129 -> 1084. Потолок 1084.
-# 2026-08-26 (K6-глубина, срез commit-barrier): из run() вынесена _commit_barrier (durable RunHandoff
-# + final report + journal-checkpoint перед доставкой) -> run() 1084 -> 1051 (с учётом ужатых до
-# бюджета поставки K6-докстрингов/комментариев). Потолок 1051.
-# 2026-08-26 (K6-глубина, срез active-work): из run() вынесена _register_active_work (регистрация
-# active-work + concurrency-preflight координации параллельных сессий) -> run() 1051 -> 1003. Потолок 1003.
-# 2026-08-26 (K6-глубина, срез lifecycle-start): из run() вынесена _start_lifecycle (workitem.start +
-# durable RunPlan/run-settings + journal run_start) -> run() 1003 -> 957. Потолок 957.
-# 2026-08-26 (K6-глубина, срез resume-preflight): из run() вынесен _resume_gate (гейт продолжения
-# WorkItem: can_resume/base-rewritten/revalidation) -> run() 957 -> 910. Потолок 910.
-# 2026-08-26 (K6-глубина, срез run-cost): из run() вынесена _finalize_run_cost (агрегат стоимости
-# + usage-ledger + очистка call-context) -> run() 910 -> 866. Потолок 866 (почти вровень с run_pipeline 864).
-# 2026-08-26 (K6-глубина, срез finalize): из run() вынесена _finalize_run (run_completed + run_end +
-# статус работы + снятие active-work) -> run() 866 -> 812. Глобальный max теперь run_pipeline (864). Потолок 864.
-# 2026-08-26 (K6-глубина, срез run_pipeline-фаз): run_pipeline 864 -> 730; глобальный max теперь run() (812). Потолок 812.
-# 2026-08-26 (K6-глубина, срез resume-policy-restore): из run() вынесен _restore_resume_policy
-# (восстановление policy/классификации из run-settings при resume) через объект RunContext ->
-# run() 812 -> 750. Глобальный max по-прежнему run() (750). Потолок 750.
-# 2026-08-26 (K6-глубина, срез model-routing): из run() вынесен _resolve_models (router->runtime,
-# JIT-trust, complexity-aware strong-executor, provider-fallback) через RunContext -> run() 750 ->
-# 610. Глобальный max теперь run_pipeline (730). Потолок 730.
-# 2026-08-26 (K6-глубина, срез execute+fix-loop): из run() вынесен _execute_with_fix_loop
-# (исполнение движком + fix-loop с quality-эскалацией writer'а) через RunContext -> run() 610 ->
-# 458. Глобальный max по-прежнему run_pipeline (730). Потолок 730 (без изменения).
-# 2026-08-26 (K6-глубина, срез delivery): из run() вынесен _deliver (governance-gate + транзакционная
-# доставка: DeliveryIntent -> внешнее действие -> DeliveryReceipt, outcome_unknown/fail-closed) через
-# RunContext -> run() 458 -> 315. Все четыре оставшихся крупных блока run() разобраны; run() больше НЕ
-# держит потолок. Глобальный max — run_pipeline (730). Потолок 730 (без изменения).
-# 2026-08-26 (K6-глубина, срез isolation): из run_pipeline вынесен _setup_isolation (base-binding +
-# worktree-изоляция + resume) -> run_pipeline 730 -> 616. Глобальный max по-прежнему run_pipeline (616).
-# Потолок 616.
-# 2026-08-26 (K6-глубина, срез evidence): из run_pipeline вынесен _assemble_evidence (сбор evidence
-# на SHA + наполнение gate_ev: collect/intake/regression/authored/reevaluate/освобождения/UI/seam/
-# reviews/security) -> run_pipeline 616 -> 500. Глобальный max по-прежнему run_pipeline (500). Потолок 500.
-# 2026-08-26 (K6-глубина, срез readiness): из run_pipeline вынесен _assess_readiness (spec-depth +
-# Real Spec-First + сверка критериев приёмки B2-14 + context-budget overflow) -> run_pipeline 500 ->
-# 401. Глобальный max по-прежнему run_pipeline (401). Потолок 401.
-# 2026-08-30 (green-means-checked): инлайновый B2-30-блок в run_pipeline заменён вызовом предиката
-# acceptance_blocks_ready, а вставка причины приёмки в not_yet вынесена в _build_not_yet_list ->
-# run_pipeline 401 -> 399. Глобальный max по-прежнему run_pipeline (399). Потолок 399 (ратчет вниз).
-max_function_lines: 399
+# По одному потолку на каталог. Потолок = текущий измеренный максимум каталога.
+scopes:
+  # engine/ — исторический scope ратчета (K6-глубина расщепляла именно его).
+  # История опускания потолка 1285 -> 399 (срезы run()/run_pipeline) — в git-логе этого файла.
+  - path: ai_ops_kit/engine/
+    max_function_lines: 399
+    max_function: run_pipeline
+    max_function_file: execution_pipeline.py
+    max_function_lineno: 833
 
-# Информация о текущей max-функции (для справки).
-max_function: run_pipeline
-max_function_file: execution_pipeline.py
-max_function_lineno: 827
+  # cli/ — точка входа CLI. main() исторически аккумулирует разбор аргументов и диспетч.
+  - path: ai_ops_kit/cli/
+    max_function_lines: 348
+    max_function: main
+    max_function_file: ai_ops_cli.py
+    max_function_lineno: 1478
 
-# Топ-10 крупнейших функций (обновлено 2026-08-26 после расщепления фаз run_pipeline).
-top_10:
-  - name: run
-    file: ai_ops_run.py
-    lineno: 1580
-    size: 315
-  - name: run_pipeline
-    file: execution_pipeline.py
-    lineno: 827
-    size: 401
-  - name: execute_sequence
-    file: workpackage_executor.py
-    lineno: 532
-    size: 453
-  - name: main
-    file: ai_ops_run.py
-    lineno: 2020
-    size: 206
-  - name: _evaluate_security
-    file: execution_pipeline.py
-    lineno: 218
-    size: 184
-  - name: route
-    file: ai_route.py
-    lineno: 42
-    size: 177
-  - name: _print_pipeline
-    file: ai_ops_run.py
-    lineno: 1816
-    size: 132
-  - name: resume_preflight
-    file: run_handoff.py
-    lineno: 113
-    size: 121
-  - name: verify
-    file: acceptance_verify.py
-    lineno: 531
-    size: 108
-  - name: _compile_context_artifacts
-    file: ai_ops_run.py
-    lineno: 430
-    size: 105
+  # planning/ — контур Planning & Execution.
+  - path: ai_ops_kit/planning/
+    max_function_lines: 188
+    max_function: validate
+    max_function_file: delivery_plan.py
+    max_function_lineno: 402
+
+  # providers/ — адаптеры исполнителей и оркестрация workflow.
+  - path: ai_ops_kit/providers/
+    max_function_lines: 170
+    max_function: run_workflow
+    max_function_file: orchestrator.py
+    max_function_lineno: 149
+
+  # validation/ — валидаторы (сценарии квалификации — крупнейшая функция каталога).
+  - path: ai_ops_kit/validation/
+    max_function_lines: 207
+    max_function: run_scenarios
+    max_function_file: validate_product_qualification.py
+    max_function_lineno: 63
