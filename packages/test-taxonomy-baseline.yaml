@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 349
+behavioral_count: 350
 structural_count: 60
-total_count: 409
-behavioral_share_pct: 85.33
+total_count: 410
+behavioral_share_pct: 85.37
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -139,3 +139,16 @@ raises:
       (test_release_bump_validators_green.py — импортирует validate_release_claims/
       validate_ai_first_registry И зовёт их), доля поведенческих выросла 85.29% -> 85.33%.
       Baseline пере-записан на фактический замер (после ребейза на main с тройкой durable-фиксов).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 349
+    from_total: 409
+    to_behavioral: 350
+    to_total: 410
+    to_share_pct: 85.37
+    work: product-decision-baseline-target-guardrails (#450)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа decision-loop добавила ПОВЕДЕНЧЕСКИЙ тест
+      (test_decision_feature_target.py — импортирует decision_loop И зовёт check_feature_target/
+      gate_feature_decisions), доля поведенческих выросла 85.33% -> 85.37%. Baseline пере-записан
+      на фактический замер (после ребейза на main).
