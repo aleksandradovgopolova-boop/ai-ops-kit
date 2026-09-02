@@ -11,8 +11,13 @@ from pr_open import open_draft_pr, _is_non_fast_forward
 @pytest.fixture
 def stash_gh():
     orig_gh, orig_cp, orig_git = pr_open._gh_request, pr_open._cp, pr_open._git
+    # _wire мутирует АТРИБУТ модуля (_cp._github_token), а не привязку pr_open._cp —
+    # восстановления самой ссылки мало, иначе заглушка "tok" утекает в другие файлы
+    # на том же xdist-воркере (ловилось в test_github_token_fallback.py под --dist loadfile).
+    orig_token = pr_open._cp._github_token
     yield
     pr_open._gh_request, pr_open._cp, pr_open._git = orig_gh, orig_cp, orig_git
+    pr_open._cp._github_token = orig_token
 
 
 @pytest.mark.unit
