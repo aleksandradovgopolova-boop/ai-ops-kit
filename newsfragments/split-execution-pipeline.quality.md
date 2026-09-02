@@ -1,0 +1,1 @@
+Разрежён god-модуль `execution_pipeline.py`: оценка готовности и security-вердикт (`_assess_readiness` / `_build_not_yet_list` / `_evaluate_security` + приватный `_context_budget_overflow`) вынесены в новый модуль-сосед `ai_ops_kit/engine/pipeline_readiness.py` с ре-экспортом — чистый перенос без изменения поведения (1417 → 1046 строк).

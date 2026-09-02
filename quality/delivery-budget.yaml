@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 534
+  substantive_files: 535
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -701,3 +701,26 @@ raises:
       ре-экспортный импорт (`from ai_ops_kit.engine.ai_ops_run_print import ...`) упал бы у дочки
       ImportError'ом на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у
       дочки). Растёт только счёт файлов (+1), объём в норме; потолок под факт 533 -> 534.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 534
+    to_count: 535
+    measured_before: 533
+    measured_after: 534
+    work: split-execution-pipeline (разрежение god-модуля execution_pipeline)
+    files:
+      - ai_ops_kit/engine/pipeline_readiness.py
+    why_it_works_in_the_child: >-
+      Оценка готовности и security-вердикт (_assess_readiness / _build_not_yet_list /
+      _evaluate_security + приватный _context_budget_overflow) вынесены из god-модуля
+      execution_pipeline.py в отдельный pipeline_readiness.py — поведение не меняется (чистый
+      перенос + ре-экспорт), крупнейший файл движка разрежается (1417 -> 1046 строк). Модуль
+      ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ прогоне: _assemble_evidence зовёт _evaluate_security при сборке
+      security-гейта, а run_pipeline зовёт _assess_readiness и _build_not_yet_list на шаге
+      готовности — это часть основного пути исполнения контроллера. Без файла в поставке ре-экспортный
+      импорт (`from ai_ops_kit.engine.pipeline_readiness import ...`) упал бы у дочки ImportError'ом
+      на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же
+      способом, что соседи pipeline_helpers/pipeline_git/pipeline_evidence/pipeline_failure. Растёт
+      только счёт файлов (+1), объём в норме; потолок под факт 533 -> 534.
