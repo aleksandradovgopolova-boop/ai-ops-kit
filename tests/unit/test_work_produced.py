@@ -96,16 +96,19 @@ def test_status_and_human_output_use_the_same_predicate():
     Пока каждый считал по-своему, отчёт говорил «правок 0», статус — «код не написан», а в коммите
     лежали файлы. Проверяем разбором: `applied_writes` больше не является судьёй.
     """
-    # Человекочитаемый вывод вынесен из ai_ops_run в ai_ops_run_print (v3.x): предикат зовут оба
-    # модуля (статус — контроллер, печать — модуль вывода), и судить они обязаны по одному правилу.
+    # Человекочитаемый вывод вынесен из ai_ops_run в ai_ops_run_print, а решение о статусе работы
+    # (_finalize_run) — в ai_ops_run_lifecycle (v3.x, разрежение god-модуля): предикат зовут оба
+    # (статус — жизненный цикл, печать — модуль вывода), и судить они обязаны по одному правилу.
     src = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
     src_print = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run_print.py").read_text(encoding="utf-8")
-    calls = [n for mod in (src, src_print) for n in ast.walk(ast.parse(mod))
+    src_life = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
+    calls = [n for mod in (src, src_print, src_life) for n in ast.walk(ast.parse(mod))
              if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "work_produced"]
     assert len(calls) >= 2, ("общий предикат зовётся реже двух раз — значит кто-то снова судит "
                              "по счётчику брокера")
-    # И самого счётчика в роли судьи больше нет.
-    assert '_wrote = ((rep.get("loop") or {}).get("applied_writes") or 0) > 0' not in src
+    # И самого счётчика в роли судьи больше нет — ни в контроллере, ни в вынесенном жизненном цикле.
+    _counter = '_wrote = ((rep.get("loop") or {}).get("applied_writes") or 0) > 0'
+    assert _counter not in src and _counter not in src_life
 
 
 def test_pipeline_reports_how_the_work_was_produced():

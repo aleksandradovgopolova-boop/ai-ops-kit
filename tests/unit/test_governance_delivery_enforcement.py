@@ -122,8 +122,12 @@ def test_missing_registry_does_not_break_delivery(tmp_path):
 
 
 def test_delivery_seam_calls_the_gate():
-    """Проводка, а не декор: транзакционный шов доставки ai_ops_run зовёт gate_delivery."""
-    src = (Path(__file__).resolve().parents[2] / "ai_ops_kit" / "engine" / "ai_ops_run.py"
+    """Проводка, а не декор: транзакционный шов доставки зовёт gate_delivery.
+
+    Доставка (`_deliver`) вынесена из god-модуля `ai_ops_run` в модуль-спутник
+    `ai_ops_run_lifecycle` (чистый перенос + ре-экспорт); шов сохранился, сместился лишь файл.
+    """
+    src = (Path(__file__).resolve().parents[2] / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py"
            ).read_text(encoding="utf-8")
     assert "enforcement" in src and "gate_delivery" in src, (
         "шов доставки не зовёт governance — находка аудита «декоративна» не закрыта")
