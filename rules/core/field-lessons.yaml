@@ -96,7 +96,7 @@ lessons:
     grounding:
       - {file: ai_ops_kit/gates/economic_preflight.py, contains: "НИКОГДА 0"}
       - {file: ai_ops_kit/planning/contours.py, contains: "не сворачивается в"}
-      - {file: ai_ops_kit/ui/presenter.py, contains: "проверил один контур из восьми"}
+      - {file: ai_ops_kit/ui/presenter_formatters.py, contains: "проверил один контур из восьми"}
       - {file: AGENTS.md, contains: "третье НЕ равно второму"}
 
   - id: name-the-scope-you-checked

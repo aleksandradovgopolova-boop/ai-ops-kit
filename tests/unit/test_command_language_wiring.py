@@ -25,6 +25,11 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 CLI = PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
 PRESENTER = PKG / "ai_ops_kit" / "ui" / "presenter.py"
+# Переводчики повседневных команд вынесены в модуль-сосед (v3.35): переводчик — это `from_*` в любом
+# из двух файлов слоя, и оба исключаются из «корпуса, где кит говорит», чтобы `def from_X` не
+# засчитывался как вызов сам себя.
+PRESENTER_FORMATTERS = PKG / "ai_ops_kit" / "ui" / "presenter_formatters.py"
+PRESENTER_FILES = (PRESENTER, PRESENTER_FORMATTERS)
 
 # Внутренние имена, которым нечего делать в ответе владельцу продукта. Список короткий и конкретный:
 # каждый пункт когда-то печатался наружу.
@@ -43,14 +48,17 @@ NOT_WIRED_YET = set()
 
 
 def _translators():
-    tree = ast.parse(PRESENTER.read_text(encoding="utf-8"))
-    return sorted(n.name for n in tree.body
-                  if isinstance(n, ast.FunctionDef) and n.name.startswith("from_"))
+    names = []
+    for f in PRESENTER_FILES:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        names += [n.name for n in tree.body
+                  if isinstance(n, ast.FunctionDef) and n.name.startswith("from_")]
+    return sorted(set(names))
 
 
 def _product_sources():
     """Файлы, из которых кит говорит с человеком. Тесты и алиасы `tools/` не считаются."""
-    files = [p for p in (PKG / "ai_ops_kit").rglob("*.py") if p != PRESENTER]
+    files = [p for p in (PKG / "ai_ops_kit").rglob("*.py") if p not in PRESENTER_FILES]
     files += list((PKG / "installer").rglob("*.py"))
     return files
 
