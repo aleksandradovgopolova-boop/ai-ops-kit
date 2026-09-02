@@ -4,6 +4,10 @@
 
 AI сопровождает продукт на всём жизненном цикле: Discovery → Delivery → Release → Measurement → Insights → Discovery.
 
+> **START HERE.** Единая точка входа — [QUICKSTART.md](QUICKSTART.md): полный канонический путь
+> `init → doctor → onboard → specify → plan → run --execute`. Начинайте отсюда; команды ниже —
+> сокращённая выжимка того же потока.
+
 ## Ключевые возможности
 
 - **Execution Engine** — единый движок «задача → draft PR» с preflight-проверками, tool-loop, evidence collection и quality gates
@@ -28,4 +32,6 @@ python3 <path-to-ai-ops-kit>/installer/ai_ops.py init .
 
 ## Версия
 
-Текущая: **v3.28.0 stable** (Verification Foundation II)
+Текущая: **v3.39.4 qualification** — канал `qualification`, а не `stable`: `stable` требует полевых
+доказательств на живых дочках для этой версии и проверяется машиной
+(`registry/release-claims.yaml`).

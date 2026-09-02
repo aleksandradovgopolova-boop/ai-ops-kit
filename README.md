@@ -6,6 +6,9 @@ AI сопровождает продукт на всём жизненном ци
 
 ## Quick Start
 
+> **START HERE.** Канонический первый путь целиком — [docs/QUICKSTART.md](docs/QUICKSTART.md)
+> (`init → doctor → onboard → specify → plan → run --execute`). Команды ниже — краткая выжимка.
+
 ```bash
 # 1. Установка в репозиторий (пока — вручную, см. ниже про zero-touch)
 python3 installer/ai_ops.py init /path/to/project
