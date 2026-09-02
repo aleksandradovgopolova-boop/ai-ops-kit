@@ -243,9 +243,17 @@ class TestRunStopsOnRefusal:
             f"своя заявка заблокировала свой же прогон: {rep}"
 
     def test_blocked_report_names_the_reason(self):
-        src = (KIT_ROOT / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
-        assert src.count('"blocked_by": "active-work"') == 2, \
-            "остановка прогона обязана быть НАЗВАНА в отчёте на обоих путях, а не быть тихим выходом"
+        # Отказ обязан быть НАЗВАН в отчёте на ОБОИХ путях, а не быть тихим выходом.
+        # Пути живут в двух модулях: pipeline-регистрация вынесена в ai_ops_run_lifecycle
+        # (`_register_active_work`, чистый перенос), planning-путь остался в ai_ops_run
+        # (`_reg_rc2`). Считаем суммарно по обоим — по одному вхождению на путь.
+        eng = KIT_ROOT / "ai_ops_kit" / "engine"
+        run_src = (eng / "ai_ops_run.py").read_text(encoding="utf-8")
+        life_src = (eng / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
+        assert run_src.count('"blocked_by": "active-work"') == 1, \
+            "planning-путь обязан НАЗВАТЬ причину отказа в ai_ops_run.py"
+        assert life_src.count('"blocked_by": "active-work"') == 1, \
+            "pipeline-путь (_register_active_work) обязан НАЗВАТЬ причину отказа в ai_ops_run_lifecycle.py"
 
     def test_identity_is_measured_not_constant(self):
         from ai_ops_kit.cli import ai_ops_cli
