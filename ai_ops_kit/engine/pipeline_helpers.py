@@ -40,6 +40,19 @@ def work_produced(rep) -> bool:
     return ((rep.get("loop") or {}).get("applied_writes") or 0) > 0
 
 
+def _stacks_human(profile):
+    """['python (pip)', 'node (pnpm)'] из профиля любой формы: словари detect() или строки-языки."""
+    out = []
+    for s in (profile or {}).get("stacks") or []:
+        if isinstance(s, dict):
+            lang = s.get("language") or "?"
+            pm = s.get("package_manager")
+            out.append(f"{lang} ({pm})" if pm else str(lang))
+        elif s:
+            out.append(str(s))
+    return out
+
+
 def delivery_pending(rep) -> bool:
     """Работа готова на ветке, а новых правок в этом прогоне нет. -> bool.
 

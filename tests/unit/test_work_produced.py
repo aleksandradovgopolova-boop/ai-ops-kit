@@ -96,9 +96,11 @@ def test_status_and_human_output_use_the_same_predicate():
     Пока каждый считал по-своему, отчёт говорил «правок 0», статус — «код не написан», а в коммите
     лежали файлы. Проверяем разбором: `applied_writes` больше не является судьёй.
     """
+    # Человекочитаемый вывод вынесен из ai_ops_run в ai_ops_run_print (v3.x): предикат зовут оба
+    # модуля (статус — контроллер, печать — модуль вывода), и судить они обязаны по одному правилу.
     src = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    calls = [n for n in ast.walk(tree)
+    src_print = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run_print.py").read_text(encoding="utf-8")
+    calls = [n for mod in (src, src_print) for n in ast.walk(ast.parse(mod))
              if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "work_produced"]
     assert len(calls) >= 2, ("общий предикат зовётся реже двух раз — значит кто-то снова судит "
                              "по счётчику брокера")

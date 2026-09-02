@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 533
+  substantive_files: 534
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -680,3 +680,24 @@ raises:
       управляемого дока (лжи не добавляем). Проба краснеет на дефекте: test_reddens_on_the_bug
       требует stale ДО и ok ПОСЛЕ. Растёт только счёт файлов (+1), объём в норме; потолок под факт
       531 -> 532.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 533
+    to_count: 534
+    measured_before: 532
+    measured_after: 533
+    work: split-ai-ops-run-print (разрежение god-модуля ai_ops_run)
+    files:
+      - ai_ops_kit/engine/ai_ops_run_print.py
+    why_it_works_in_the_child: >-
+      Печать человекочитаемого результата прогона (_print_pipeline / _print_contour_consistency /
+      print_human) вынесена из god-модуля ai_ops_run.py в отдельный ai_ops_run_print.py —
+      поведение не меняется (чистый перенос + ре-экспорт), крупнейший файл поставки разрежается
+      (2365 -> 2164 строки). Модуль ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ прогоне: это выходной путь
+      контроллера ai_ops_run — cli/ai_ops_cli зовёт `ai_ops_run.print_human(rep)` в конце команды
+      run, а сам ai_ops_run ре-экспортирует функции из нового модуля. Без файла в поставке этот
+      ре-экспортный импорт (`from ai_ops_kit.engine.ai_ops_run_print import ...`) упал бы у дочки
+      ImportError'ом на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у
+      дочки). Растёт только счёт файлов (+1), объём в норме; потолок под факт 533 -> 534.
