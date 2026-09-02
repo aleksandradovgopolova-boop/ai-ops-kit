@@ -236,7 +236,7 @@ probes:
     и проба теперь ломает его.'
 - id: acceptance-not-gated-by-review-flag
   kind: guard
-  file: ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/pipeline_readiness.py
   find: '    if _ac_items and reviewer_proposer is not None and committed_sha:'
   replace_with: '    if _ac_items and review and reviewer_proposer is not None and committed_sha:'
   tests:
@@ -1137,7 +1137,7 @@ probes:
   covers:
   - ai_ops_kit/engine/execution_pipeline.py
   - ai_ops_kit/security/security_pack.py
-  file: ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/pipeline_readiness.py
   find: '        elif overall in ("clear", "advisory"):'
   replace_with: '        elif overall == "clear":'
   tests:
@@ -1149,7 +1149,7 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/engine/execution_pipeline.py
-  file: ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/pipeline_readiness.py
   find: '              and committed_sha and not (strict_judge_qualified and review)'
   replace_with: '              and review and committed_sha and not strict_judge_qualified'
   tests:
@@ -1236,7 +1236,7 @@ probes:
     фиксированный, а факт жил рядом с ним.'
 - id: refusal-names-a-command-that-exists
   kind: guard
-  file: ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/pipeline_readiness.py
   find: '                                                    ".ai/managed/ai_ops_kit/gates/approvals.py record . "'
   replace_with: '                                                    "ai-ops approve "'
   tests:
@@ -1579,3 +1579,18 @@ probes:
     точка отсчёта и текущий замер снова оказываются «одной неизвестной сессией», и трата прошлой
     сессии вычитается из этой. Мутация обрывает чтение личности сессии в assess — тест реального пути
     измерения (session_total=_UNSET, две сессии в ENV) обязан покраснеть.'
+- id: readiness-seam-pipeline-calls-assess
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/pipeline_readiness.py
+  - ai_ops_kit/engine/execution_pipeline.py
+  file: ai_ops_kit/engine/pipeline_readiness.py
+  find: 'def _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root, *,'
+  replace_with: 'def _assess_readiness_DISABLED(gates, coll, signals, plan, child_root, wid, work_root, *,'
+  tests:
+  - tests/unit/test_acceptance_verify_seam.py
+  why: 'ШОВ: readiness/security-оценка вынесена в pipeline_readiness (v4-рефактор), и её охранные пробы
+    ничего не стоят, если run_pipeline перестанет её звать. Переименование точки входа рвёт импорт-реэкспорт
+    в execution_pipeline и валит интеграционный тест приёмки (он гоняет настоящий run_pipeline, а
+    acceptance-гейт живёт внутри _assess_readiness). Шов проверяется с обеих сторон: у механизма исчезает
+    точка входа, и это ломает ВЫЗОВ из конвейера.'
