@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 335
+behavioral_count: 336
 structural_count: 60
-total_count: 395
-behavioral_share_pct: 84.81
+total_count: 396
+behavioral_share_pct: 84.85
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -58,3 +58,16 @@ raises:
       Подъём порога ВВЕРХ (не снижение): #437 добавил поведенческий тест человеко-читаемого вывода
       (test_run_output_human_readable.py), доля поведенческих выросла 84.77% -> 84.81%. Baseline
       пере-записан на фактический замер, чтобы ратчет держал уже улучшенную границу, а не устаревшую.
+  - at: '2026-09-02'
+    what: baseline_raised_up
+    from_behavioral: 335
+    from_total: 395
+    to_behavioral: 336
+    to_total: 396
+    to_share_pct: 84.85
+    work: module-size-ratchet
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): ратчет размера модуля добавил ПОВЕДЕНЧЕСКИЙ тест
+      (test_module_size.py — импортирует validate_module_size И зовёт его), доля поведенческих
+      выросла 84.81% -> 84.85%. Baseline пере-записан на фактический замер, чтобы ратчет держал уже
+      улучшенную границу, а не устаревшую.
