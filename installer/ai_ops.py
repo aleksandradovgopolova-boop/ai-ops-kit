@@ -652,6 +652,11 @@ RUNTIME_VALIDATORS = frozenset({
     # только у кита. Standalone (stdlib+pyyaml, `import _bootstrap` не нужен), запускается процессом
     # у дочки.
     "validate_test_taxonomy",
+    # 2026-09-02 (module-size-ratchet): ратчет размера МОДУЛЯ — заморозить монолиты вниз. Валидатор
+    # едет в дочку, чтобы она стерегла размеры СВОИХ файлов ai_ops_kit/**/*.py тем же инструментом:
+    # ужатый монолит не должен молча отрастать только потому, что замок стоит у кита, а не у неё.
+    # Standalone (stdlib+pyyaml, `import _bootstrap` не нужен), запускается процессом у дочки.
+    "validate_module_size",
 })
 
 

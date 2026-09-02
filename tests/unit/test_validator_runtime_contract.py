@@ -62,6 +62,7 @@ STANDALONE = [
     "validate_memory_governance",
     "validate_model_qualification",
     "validate_model_roles",
+    "validate_module_size",       # 02.09.2026: standalone, читает свой packages/module-size-baseline.yaml + ai_ops_kit/
     "validate_mutation_probes",
     "validate_openspec_change",
     "validate_own_medicine",

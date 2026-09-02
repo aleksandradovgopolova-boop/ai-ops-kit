@@ -1,0 +1,51 @@
+# Ратчет размера МОДУЛЯ (файла) в ai_ops_kit/ — заморозить монолиты вниз.
+#
+# ЗАЧЕМ. func-size (packages/func-size-baseline.yaml) стережёт максимум ФУНКЦИИ, но не размер ФАЙЛА:
+# god-функцию можно расщепить на десять мелких, а модуль при этом останется на 1800 строк. Мы дорого
+# ужимали крупнейшие модули (ai_ops_run.py -> 1073, execution_pipeline.py -> 664, presenter.py -> 571);
+# без замка эти строки тихо отрастают обратно. Здесь размер каждого крупного файла заморожен на
+# ТЕКУЩЕМ значении — потолок держит рост, но НЕ мешает усыхать.
+#
+# Измеряется: validate_module_size.py (число строк `splitlines()` каждого ai_ops_kit/**/*.py).
+#
+# ПОРОГ 700 строк. Файл на пороге или выше обязан быть в `ceilings` с потолком == текущему размеру.
+# Семантика потолка — по «≤»: файл сверх порога краснеет, если ВЫРОС сверх потолка ИЛИ его вовсе нет
+# в baseline (новый монолит обязан появиться ОСОЗНАННО — записью в ленте `raises`). Файл ниже порога
+# не ограничен. Усыхание (строк < потолка) НЕ краснит прогон; тест module-size лишь просит пере-снять
+# baseline, чтобы потолок оставался равен факту (ратчет ходит только вниз).
+schema_version: 1
+kind: module-size-ratchet
+threshold: 700
+
+# По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
+ceilings:
+  ai_ops_kit/cli/ai_ops_cli.py: 1855
+  ai_ops_kit/engine/ai_ops_run.py: 1073
+  ai_ops_kit/engine/workpackage_executor.py: 1066
+  ai_ops_kit/planning/delivery_plan.py: 1050
+  ai_ops_kit/lifecycle/active_work.py: 1040
+  ai_ops_kit/ui/presenter_formatters.py: 977
+  ai_ops_kit/planning/repo_audit.py: 965
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
+  ai_ops_kit/providers/orchestrator_providers.py: 778
+  ai_ops_kit/intelligence/nightly_review.py: 741
+  ai_ops_kit/validation/validate_own_medicine.py: 732
+  ai_ops_kit/gates/gate_executor.py: 726
+  ai_ops_kit/engine/tool_broker.py: 725
+  ai_ops_kit/planning/contours.py: 724
+
+raises:
+  # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
+  # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
+  # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-02'
+    what: baseline_established
+    from: null
+    to: 14 файлов сверх порога 700
+    work: module-size-ratchet
+    why: >-
+      Метрика заведена впервые: размер файла не был ограничен ничем, и ужатые монолиты могли молча
+      отрасти. Потолки сняты классификатором с фактического замера кита (14 файлов ≥ 700 строк,
+      крупнейший ai_ops_cli.py = 1855) — не завышены и не занижены. Поднять потолок или внести новый
+      монолит можно только записью здесь: рост сверх потолка без записи — красный сигнал (файл
+      отрос), а новый файл ≥ порога без записи — новый монолит, появившийся незамеченным.
