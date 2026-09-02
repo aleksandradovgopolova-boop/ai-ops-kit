@@ -39,7 +39,7 @@ installer="$here/installer/ai_ops.py"
 cmd=${1:-}
 case "$cmd" in
   # Команды самого кита — через installer.
-  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|session|subsession|engops|method|status)
+  init|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|session|subsession|engops|method|status|ui-status)
     exec "$py" "$installer" "$@"
     ;;
   ""|-h|--help|help)
