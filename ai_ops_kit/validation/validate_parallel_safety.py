@@ -18,6 +18,13 @@
 (замер 20.08.2026, четыре ленты). Чистый бухгалтерский PR (только координационные файлы) допустим —
 его пишет одна рука. Fail-open: без `--base` проверять нечего (не «чисто», а «не проверено»).
 
+КОД — это ИСХОДНЫЙ код, а не любой некоординационный файл. Документация и новостные/квалификационные
+артефакты (`*.md` где угодно: ROADMAP/README/CHANGELOG в корне, `newsfragments/*.md`,
+`qualification/*.md`, всё под `docs/`) — работа одной руки, как и бухгалтерский PR: план-синк
+«ROADMAP + план + newsfragment» законен и обязан проходить. Считать их «кодом» краснило КАЖДЫЙ такой
+PR (например #425) ложным «PR смешивает код с координацией». Смешением остаётся только ИСХОДНЫЙ код
+(`ai_ops_kit/**`, `tools/**`, `.py`/`.yaml` вне `docs/`) плюс координационный файл — консервативно.
+
 ИСКЛЮЧЕНИЕ — install/update-PR кита (#384, замер 01.09.2026). Апдейт САМ мигрирует план/историю, а
 первый заезд на голый репозиторий неизбежно вносит весь план-стор: эти координационные правки —
 вывод машинной миграции, а не рука параллельной ленты. Такой PR распознаётся по правке
@@ -75,6 +82,24 @@ def _norm(p: str) -> str:
     return (p or "").strip().lstrip("./")
 
 
+# Документация и новостные/квалификационные артефакты. Это НЕ исходный код территории: markdown
+# ничего не исполняет, а план-синк-PR (ROADMAP.md + newsfragments/*.md + qualification/*.md) —
+# работа одной руки координатора, ровно как чистый бухгалтерский PR из координационных файлов.
+# Считать их «кодом» значило краснить КАЖДЫЙ законный план-синк (например #425) ложным «PR
+# смешивает код с координацией». Замер 20.08.2026 (четыре ленты) касался ИСХОДНОГО кода: правка
+# кода ловит DIRTY на чужой мёрж — доки этой дорожки N² не создают.
+_DOC_SUFFIXES = (".md",)
+_DOC_PREFIXES = ("docs/", "newsfragments/")
+
+
+def _is_doc(path: str) -> bool:
+    """Файл — документация/новостной артефакт, а не исходный код? (консервативно: markdown и docs/).
+
+    Doc — это `*.md` в любом месте (README/ROADMAP/CHANGELOG в корне, `newsfragments/*.md`,
+    `qualification/*.md`, `docs/**`) плюс всё под `docs/`. Осторожно: НЕ-markdown вне `docs/`
+    (`.py`, `.yaml`, `tools/**`) остаётся кодом — страж смешения кода с координацией держится."""
+    n = _norm(path).lower()
+    return n.endswith(_DOC_SUFFIXES) or any(n.startswith(p) for p in _DOC_PREFIXES)
 
 
 def changed_files(root: Path, base: str) -> list | None:
@@ -98,13 +123,20 @@ def is_kit_update_diff(changed: list) -> bool:
 
 
 def diff_mixes_code_with_coordination(changed: list, coord: list) -> dict:
-    """PR смешивает код с координационным файлом? -> {"mixed", "coordination", "code", "kit_update"}."""
+    """PR смешивает код с координационным файлом? -> {"mixed","coordination","code","docs","kit_update"}."""
     coord_n = {_norm(c) for c in coord}
-    coord_hits, code_hits = [], []
+    coord_hits, code_hits, doc_hits = [], [], []
     for f in changed:
-        (coord_hits if _norm(f) in coord_n else code_hits).append(f)
-    # newsfragments/докстринги/тесты — не «код территории» в смысле конфликта, но для простоты
-    # считаем кодом всё некоординационное: смешение даже с тестом всё равно взводит DIRTY.
+        if _norm(f) in coord_n:
+            coord_hits.append(f)
+        elif _is_doc(f):
+            doc_hits.append(f)          # документация — не код территории, DIRTY-дорожку N² не растит
+        else:
+            code_hits.append(f)
+    # Смешением считается ТОЛЬКО код + координация. Документация (ROADMAP.md, newsfragments/*.md,
+    # qualification/*.md, docs/**) — работа одной руки координатора, как и чистый бухгалтерский PR;
+    # план-синк из плана и доков законен и обязан проходить. Замер 20.08.2026 (четыре ленты) — про
+    # ИСХОДНЫЙ код: смешение с реальным кодом (даже тестом) по-прежнему взводит DIRTY и краснит.
     #
     # #384 (замер 01.09.2026, wow-repo). ИСКЛЮЧЕНИЕ — install/update-PR кита. Апдейт САМ порождает
     # правку плана/истории (миграция закрытых работ в history), а первый заезд на голый main
@@ -115,7 +147,7 @@ def diff_mixes_code_with_coordination(changed: list, coord: list) -> dict:
     kit_update = is_kit_update_diff(changed)
     return {"mixed": bool(coord_hits) and bool(code_hits) and not kit_update,
             "coordination": sorted(coord_hits), "code": sorted(code_hits),
-            "kit_update": kit_update}
+            "docs": sorted(doc_hits), "kit_update": kit_update}
 
 
 def assess(root, base=None, defaults=None) -> dict:
