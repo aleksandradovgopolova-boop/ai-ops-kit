@@ -58,11 +58,11 @@ check_produces_output() {
 }
 
 check_produces_output "ai-ops status" \
-  python3 .ai/managed/tools/ai_ops_cli.py status
+  python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py status
 check_produces_output "run_plan --help" \
-  python3 .ai/managed/tools/run_plan.py --help
+  python3 .ai/managed/ai_ops_kit/engine/run_plan.py --help
 check_produces_output "workitem --help" \
-  python3 .ai/managed/tools/workitem.py --help
+  python3 .ai/managed/ai_ops_kit/lifecycle/workitem.py --help
 
 # ------------------------------------------------------------------ 5. валидатор child'а зелёный
 python3 .ai/managed/ai_ops_kit/validation/validate_ai_ops_child.py > "$WORK/child-validate.log" 2>&1 \

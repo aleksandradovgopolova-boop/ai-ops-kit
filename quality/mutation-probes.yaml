@@ -8,7 +8,7 @@
 #
 # ЧТО ЗДЕСЬ. Для каждой охранной проверки — ради которой механизм и существует — названы: файл,
 # дословный образец охраны, чем её нейтрализовать, тесты, которые ОБЯЗАНЫ покраснеть, и ЗАЧЕМ она
-# нужна. Прогон: `python3 tools/mutation_probe.py .` (медленный, отдельная джоба);
+# нужна. Прогон: `python3 ai_ops_kit/devtools/mutation_probe.py .` (медленный, отдельная джоба);
 # быстрая половина — `validate_mutation_probes.py`, она держит реестр от отставания от кода.
 #
 # ИСХОДЫ ПРОГОНА ТРИ, И ТРЕТИЙ НЕ РАВЕН ВТОРОМУ: `killed` (тест покраснел — так и надо),
@@ -249,8 +249,8 @@ probes:
   covers:
   - ai_ops_kit/cli/ai_ops_cli.py
   file: templates/runtime/ai-ops-entry.sh
-  find: '    exec "$py" "$managed/tools/ai_ops_cli.py" "$intent" "$here" "$@"'
-  replace_with: '    exec "$py" "$managed/tools/ai_ops_cli.py" "$@" "$here"'
+  find: '    exec "$py" "$managed/ai_ops_kit/cli/ai_ops_cli.py" "$intent" "$here" "$@"'
+  replace_with: '    exec "$py" "$managed/ai_ops_kit/cli/ai_ops_cli.py" "$@" "$here"'
   tests:
   - tests/unit/test_field_findings_bnbm_rerun.py
   why: 'ШОВ пути владельца: пока путь дописывался последним, `./ai-ops run "текст" --execute` падал сырым

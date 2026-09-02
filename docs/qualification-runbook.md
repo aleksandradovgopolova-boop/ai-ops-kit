@@ -34,7 +34,7 @@ export OPENAI_COMPATIBLE_API_KEY="…"        # ваш ключ, из менед
 
 ```bash
 echo "добавь функцию форматирования цены с разделителями тысяч и покрой её тестом" > /tmp/s1.txt
-python3 .ai/managed/tools/qual_run.py . --tasks /tmp/s1.txt \
+python3 .ai/managed/ai_ops_kit/devtools/qual_run.py . --tasks /tmp/s1.txt \
   --provider openai-compatible --model deepseek-chat --sandbox --out qual-reports
 ```
 
