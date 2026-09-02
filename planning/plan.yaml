@@ -835,11 +835,18 @@ work:
       неизбежны при первом заезде на репозиторий без кита
     type: engineering
     goal: team-works-in-parallel
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     issue: 384
     write_scope: [ai_ops_kit/validation/, registry/, tests/]
+    progress_note: >-
+      КОД ВЛИТ (PR #387, 01.09.2026): validate_parallel_safety.py различает install/update-PR кита
+      по файлу-признаку миграции апдейта и пропускает их (#384 закрыт как issue). ОСТАЁТСЯ проверка
+      полем: заезд кита на репозиторий без кита должен пройти гейт без ручного git rm координационных
+      файлов. Полевое свидетельство в release-claims.yaml пока фиксирует ДО-фиксовый ручной обход
+      (раскатка v3.39.0 на wow-repo/cockpit); после #387 повторного замера ещё не было. Готово —
+      когда следующий заезд на голый main пройдёт parallel-safety --strict без ручного шага.
     reason: >-
       Поле 01.09.2026 (wow-repo: обновление 3.36.8->3.39.0 и первый заезд кита на main без кита).
       validate_parallel_safety.py --strict валит апдейт-PR за смешение кода с координационными
@@ -898,3 +905,103 @@ work:
       команда доводит готовую-на-ветке работу до ОТКРЫТОГО PR + DeliveryReceipt (resume умеет
       open-pr/takeover; run-over-commits имеет автономный путь; заявка снимается на выходе прогона;
       session стабилен), проверено полем на #695.
+
+  # run-updates-status-docs-or-names-the-exception — обратная связь ИИ-Среды 02.09.2026 (#404).
+  - id: run-updates-status-docs-or-names-the-exception
+    title: >-
+      Прогон обновляет статус-доки репозитория (или явно пишет причину-исключение) — сгенерированный
+      PR не валит собственный status-freshness гейт
+    type: engineering
+    goal: green-means-checked
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 404
+    write_scope: [ai_ops_kit/engine/, ai_ops_kit/delivery/, tests/]
+    reason: >-
+      Поле 02.09.2026 (ИИ-Среда): прогon не трогает PROJECT_STATUS.md, PR не проходит
+      status-freshness — кит по своим же правилам отдаёт немёржабельный PR. Готово, когда прогон
+      либо обновляет статус-доки в рамках доставки, либо пишет в PR явную причину-исключение, и
+      сгенерированный PR проходит status-freshness без ручной правки. Заявка #404.
+
+  # writer-verdict-is-deterministic — обратная связь ИИ-Среды 02.09.2026 (#405).
+  - id: writer-verdict-is-deterministic
+    title: >-
+      Вердикт implementation_verification / verification_strategy стабилен на одном входе — READY не
+      чередуется с NOT_READY между дорогими прогонами
+    type: engineering
+    goal: green-means-checked
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 405
+    write_scope: [ai_ops_kit/gates/, ai_ops_kit/engine/, tests/]
+    reason: >-
+      Поле 02.09.2026 (ИИ-Среда): на одном входе прогон чередует READY/NOT_READY, упираясь в
+      implementation_verification и verification_strategy, при цене прогона $18–32. Недетерминизм
+      вердикта на неизменном входе — это ложное красное/зелёное и сожжённый бюджет. Готово, когда
+      оба гейта дают воспроизводимый вердикт на одном входе (замер: N повторов — один исход).
+      Заявка #405.
+
+  # resume-flags-loud-on-old-versions-and-dead-claim-cleared-by-liveness — ИИ-Среда 02.09.2026 (#406).
+  - id: resume-flags-loud-and-dead-claim-cleared-by-liveness
+    title: >-
+      resume ругается на неподдерживаемые флаги на старых версиях (не молча игнорирует) + заявка
+      мёртвой сессии гасится по признаку смерти, а не только по возрасту >12ч
+    type: engineering
+    goal: team-works-in-parallel
+    status: todo
+    owner_role: engineer
+    value: medium
+    issue: 406
+    write_scope: [ai_ops_kit/cli/, ai_ops_kit/lifecycle/, tests/]
+    reason: >-
+      Поле 02.09.2026 (ИИ-Среда), две мелочи одного класса. (1) Флаги resume --open-pr/--takeover
+      появились в 3.39.4, на старых версиях молча игнорировались — надо валидировать и явно ругаться.
+      (2) Заявка active-work мёртвой сессии (f4d5c2e9) висела весь заход предупреждением — гасится
+      только по возрасту >12ч; надо гасить и по признаку «сессия мертва». Готово, когда старый
+      бинарь на неизвестном флаге падает с внятной ошибкой, а заявка мёртвой сессии снимается по
+      liveness, не дожидаясь 12ч. Заявка #406.
+
+  # run-execute-names-unavailable-provider-instead-of-traceback — заявка поля #160 (18.08.2026).
+  - id: run-execute-names-unavailable-provider-not-traceback
+    title: >-
+      run --execute при структурно недоступном claude-cli (запуск изнутри сессии Claude) даёт внятное
+      сообщение и путь, а не RuntimeError после 5 бессмысленных ретраев
+    type: engineering
+    goal: trustworthy-core
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 160
+    write_scope: [ai_ops_kit/providers/, ai_ops_kit/engine/, tests/]
+    reason: >-
+      Поле 18.08.2026 (ИИ-Среда, 3.36.12): при запуске изнутри активной сессии Claude Code вложенный
+      claude -p возвращается мгновенно с api_error и 0 токенов, не доходя до API — провайдер
+      claude-cli структурно нерабочий в этой среде, ретраи бессмысленны. Кит делает 5 попыток и
+      падает RuntimeError, работа blocked, пользователь получает общий трейс без объяснения и
+      альтернативы. Готово, когда кит детектит именно этот отказ (api_error + 0 токенов +
+      duration_api_ms:0), не ретраит его и выдаёт понятное сообщение с путём (запусти вне сессии
+      или укажи --provider с ключом). Заявка #160; НЕ дубль #161 (issue остался OPEN).
+
+  # plan-yaml-edits-do-not-conflict-in-parallel — заявка поля #148, plan.yaml-половина (report-history
+  # уже закрыта .gitattributes merge=union в installer; половина plan.yaml — нет).
+  - id: plan-yaml-edits-do-not-conflict-in-parallel
+    title: >-
+      Правки plan.yaml из параллельных работ не порождают ручных конфликтов слияния — разбивка по
+      работам либо явная стратегия (report-history уже закрыт union, остаётся структурный plan.yaml)
+    type: engineering
+    goal: team-works-in-parallel
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 148
+    write_scope: [ai_ops_kit/planning/, installer/, tests/]
+    reason: >-
+      Поле 17.08.2026 (ii-sreda): plan.yaml — самый правимый файл кита (25 коммитов/неделю), его
+      меняет каждый срез работы, и параллельные ветки дают ручной конфликт на одной строке.
+      Append-only журналы (report-history/*.jsonl) уже закрыты — installer ставит .gitattributes
+      merge=union. Но к структурному plan.yaml union сознательно не применяют (склеит в битый YAML),
+      а разбивку по работам (PR #290) закрыли. Открытый исход цели: kit_edits_do_not_create_conflicts:
+      False. Готово, когда правки plan.yaml из двух параллельных работ сводятся без ручного
+      разрешения — разбивкой по работам (файл на работу) либо иной проверенной стратегией. Заявка #148.
