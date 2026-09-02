@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 535
+  substantive_files: 536
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -724,3 +724,27 @@ raises:
       на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же
       способом, что соседи pipeline_helpers/pipeline_git/pipeline_evidence/pipeline_failure. Растёт
       только счёт файлов (+1), объём в норме; потолок под факт 533 -> 534.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 535
+    to_count: 536
+    measured_before: 534
+    measured_after: 535
+    work: split-presenter (разрежение god-модуля presenter)
+    files:
+      - ai_ops_kit/ui/presenter_formatters.py
+    why_it_works_in_the_child: >-
+      Группа переводчиков повседневных команд (from_execution_preview / from_onboarding_profile /
+      from_new_feature / from_plan_built / from_specification / from_discovery_draft / from_review /
+      from_advice + константа _CMD_RU) вынесена из god-модуля presenter.py в отдельный
+      presenter_formatters.py — поведение не меняется (чистый перенос + ленивый ре-экспорт),
+      крупнейший модуль слоя коммуникации разрежается (1497 -> 1180 строк). Модуль ИСПОЛНЯЕТСЯ в
+      дочке на боевом пути прогона: presenter — это Human Communication Layer, через который
+      cli/ai_ops_cli зовёт `presenter.from_review(rep)`, `from_onboarding_profile`, `from_advice` и
+      соседей на командах review/onboard/advise/specify/plan/new/preview. Без файла в поставке
+      ленивый ре-экспорт (`getattr(presenter, "from_review")` -> импорт presenter_formatters) упал
+      бы у дочки ImportError'ом на первом же выводе (класс F-033, механизм зелёный у кита и
+      отсутствующий у дочки) — тем же способом, что соседи по разрежению god-модулей. Растёт только
+      счёт файлов (+1), объём в норме; потолок под факт 534 -> 535.
