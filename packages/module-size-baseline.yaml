@@ -29,7 +29,7 @@ ceilings:
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
   ai_ops_kit/providers/orchestrator_providers.py: 831
-  ai_ops_kit/intelligence/nightly_review.py: 741
+  ai_ops_kit/intelligence/nightly_review.py: 954
   ai_ops_kit/validation/validate_own_medicine.py: 732
   ai_ops_kit/gates/gate_executor.py: 726
   ai_ops_kit/engine/tool_broker.py: 725

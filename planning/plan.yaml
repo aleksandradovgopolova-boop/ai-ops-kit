@@ -239,11 +239,19 @@ goals:
   - id: nightly-product-review
     # заморозка: ночной обзор — новое умение целиком
     freeze_relation: extension
-    # ПРИОСТАНОВЛЕНА 2026-09-02 (решение владельца, roadmap-sync): все три исхода открыты, работы нет.
-    # Приоритет ушёл в closeout + uiux/storybook. В ROADMAP — «Дальше». Бэклог: #421, #422, #423.
-    status: paused
+    # АКТИВНА 2026-09-02 (issue #421): взят один исход — `delta_review_runs_nightly_and_briefs_the_owner`.
+    # Обзор умеет идти ночью РЕАЛЬНЫМ триггером (CI-workflow `schedule: cron`, install_schedule +
+    # schedule_status с честным detected/declared/absent) и БРИФУЕТ владельца доставкой (durable-инбокс
+    # + latest + receipt: произведён ≠ доставлен), а не печатью в stdout. Два других исхода
+    # (`no_direct_writes_to_main_ever`, `false_positive_rate_is_named`) остаются открыты — их работа
+    # отдельная (#422, #423).
+    status: active
     outcome:
-      # v0 — только наблюдение и предложение; класс автофикса пуст, пока точность не измерена.
+      # Механизм ПОСТРОЕН и доказан юнит-тестами: обзор умеет идти ночью (реальный CI-триггер
+      # `schedule: cron`, install_schedule + schedule_status) и доставляет бриф (durable-инбокс +
+      # receipt). Но исход держим FALSE до ЖИВОГО доказательства: реальный ночной прогон, который
+      # отработал и прислал владельцу бриф, ещё не наблюдался, и судейские ворота кита в этой среде
+      # не гонялись. «Зелёное значит проверенное» — флипнем в true по факту живого прогона (как #424).
       delta_review_runs_nightly_and_briefs_the_owner: false
       no_direct_writes_to_main_ever: false
       false_positive_rate_is_named: false
