@@ -15,6 +15,8 @@ from ai_ops_kit.validation.validate_func_size import (
     BASELINE_FILE,
     ENGINE_DIR,
     check,
+    check_all,
+    iter_scopes,
     load_baseline,
     measure_functions,
     render_report,
@@ -216,17 +218,70 @@ class TestRealBaselineConsistency:
         """Baseline-файл существует (ратчет не может работать без него)."""
         assert BASELINE_FILE.is_file()
 
-    def test_current_max_does_not_exceed_baseline(self):
-        """Текущий максимум в engine/ НЕ превышает объявленный потолок.
-
-        Если этот тест падает — кто-то добавил god-функцию сверх потолка.
-        Либо разбить её, либо осознанно поднять потолок (с объяснением).
-        """
-        funcs = measure_functions(ENGINE_DIR)
+    def test_baseline_declares_scopes(self):
+        """Baseline объявляет секцию scopes — иначе ратчет ничего не стережёт."""
         baseline = load_baseline(BASELINE_FILE)
-        ceiling = baseline.get("max_function_lines", 0)
-        actual_max = max((f["size"] for f in funcs), default=0)
-        assert actual_max <= ceiling, (
-            f"Текущий max {actual_max} строк превышает потолок {ceiling}. "
-            f"Разбей god-функцию или обнови baseline."
-        )
+        scopes = iter_scopes(baseline)
+        paths = {s["path"] for s in scopes}
+        # engine/ — исторический scope; четыре дома god-функций — новое покрытие.
+        assert "ai_ops_kit/engine/" in paths
+        for expected in ("ai_ops_kit/cli/", "ai_ops_kit/planning/",
+                         "ai_ops_kit/providers/", "ai_ops_kit/validation/"):
+            assert expected in paths, f"{expected} не покрыт ратчетом"
+
+    def test_all_scopes_within_ceiling(self):
+        """Ни один объявленный scope НЕ превышает свой потолок (весь пакет, не только engine/).
+
+        Если этот тест падает — кто-то добавил god-функцию сверх потолка в одном из
+        покрытых каталогов. Либо разбить её, либо осознанно поднять потолок (с объяснением).
+        """
+        baseline = load_baseline(BASELINE_FILE)
+        assert check_all(baseline) == []
+
+
+# ---------------------------------------------------------------------------
+# Регрессия: ратчет реально стережёт каталоги ВНЕ engine/
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestWiderScopeCatchesGodFunctions:
+    """Новая god-функция в cli/planning/providers/validation ловится, а не растёт свободно.
+
+    До расширения (func-size-ratchet-wider) ратчет мерил только engine/, и god-функция ВНЕ
+    engine/ не краснела. Эти тесты редели бы на старом одно-каталожном ратчете.
+    """
+
+    @staticmethod
+    def _make_pkg(tmp_path, scope_rel, func_lines, ceiling):
+        """Собрать искусственный pkg_root: один scope с функцией на func_lines строк."""
+        scope_dir = tmp_path / scope_rel
+        scope_dir.mkdir(parents=True)
+        body = "\n".join(f"    x{i} = {i}" for i in range(func_lines - 1))
+        (scope_dir / "mod.py").write_text(f"def god():\n{body}\n", encoding="utf-8")
+        baseline = {"scopes": [{"path": scope_rel, "max_function_lines": ceiling}]}
+        return baseline
+
+    @pytest.mark.parametrize("scope_rel", [
+        "ai_ops_kit/cli",
+        "ai_ops_kit/planning",
+        "ai_ops_kit/providers",
+        "ai_ops_kit/validation",
+    ])
+    def test_new_god_function_outside_engine_is_flagged(self, tmp_path, scope_rel):
+        """Функция сверх потолка в НЕ-engine каталоге краснеет (раньше росла свободно)."""
+        baseline = self._make_pkg(tmp_path, scope_rel, func_lines=250, ceiling=200)
+        errors = check_all(baseline, pkg_root=tmp_path)
+        assert len(errors) == 1
+        assert scope_rel in errors[0]
+        assert "превышает потолок" in errors[0]
+
+    def test_within_ceiling_stays_green(self, tmp_path):
+        """Функция ровно на потолке — зелено (ратчет не ложно-краснит)."""
+        baseline = self._make_pkg(tmp_path, "ai_ops_kit/cli", func_lines=200, ceiling=200)
+        assert check_all(baseline, pkg_root=tmp_path) == []
+
+    def test_missing_scopes_section_is_itself_an_error(self):
+        """Baseline без scopes — ратчет говорит «стеречь нечего», а не молча зеленеет."""
+        errors = check_all({})
+        assert len(errors) == 1
+        assert "нет секции scopes" in errors[0]
