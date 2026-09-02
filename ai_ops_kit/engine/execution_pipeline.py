@@ -53,6 +53,7 @@ from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     delivery_preflight as _delivery_preflight,
     managed_drift_preflight as _managed_drift_preflight,
 )
+from ai_ops_kit.engine import living_status as _living_status  # noqa: E402
 from ai_ops_kit.engine.pipeline_failure import (  # noqa: E402,F401
     _ENV_SYMPTOMS, _check_has_env_symptom, _env_proven_ok, _env_unqualified,
     _baseline_failure_summary, _failure_signal, _FAILURE_ID_PATTERNS,
@@ -1353,6 +1354,13 @@ def _commit_work(work_root, wid, task, is_git, applied, authored, shell_changed,
         tree_clean_before_checks = _tree_clean(work_root)
     elif commit and have_work:
         work_branch = f"ai-ops/{wid}"
+        # #404: доставленная работа меняет «что готово» -> обновляем living-status дочки В ТОМ ЖЕ
+        # коммите, иначе volatile-док протухает и status-freshness дочки блокирует авто-PR. Управляемого
+        # дока нет -> no-op. Best-effort: провал обновления статуса не должен рушить доставку правки.
+        try:
+            _living_status.refresh(work_root, wid, task)
+        except Exception:  # noqa: BLE001,S110 — обновление статус-дока best-effort, не рушит доставку
+            pass
         committed_sha = _commit_on_branch(work_root, work_branch,
                                           f"ai-ops: {task[:60]}")
         # Коммитить нечего, но HEAD ушёл от базы -> модель зафиксировала сама. Берём ЕЁ коммит: ground truth — git.
