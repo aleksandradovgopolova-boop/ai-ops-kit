@@ -66,6 +66,12 @@ def stage(tmp_path):
     text = re.sub(r"(^\s*source:\s*)\S+", rf"\g<1>{remote}", text, count=1, flags=re.M)
     # Отстаём на выпуск, иначе обновлять нечего и путь не проверяется.
     text = re.sub(r"(^\s*installed_version:\s*)\S+", r"\g<1>0.0.1", text, count=1, flags=re.M)
+    # Тест — про МЕХАНИЗМ фетча по адресу, не про совместимость версий: диапазон делаем
+    # всеядным, чтобы guard allowed_version_range (который в 4.0 отделяет major осознанно) не
+    # ловил здесь версию, которую отдаёт удалённый адрес (последний тег кита, каким бы он ни был).
+    if re.search(r"^\s*allowed_version_range:", text, flags=re.M):
+        text = re.sub(r'(^\s*allowed_version_range:\s*).*$', r'\g<1>">=0.0.1 <999.0.0"',
+                      text, count=1, flags=re.M)
     cfg.write_text(text, encoding="utf-8")
     _git("add", "-A", cwd=child)
     _git("commit", "-qm", "ai-ops init", cwd=child)

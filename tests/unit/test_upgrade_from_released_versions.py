@@ -117,7 +117,10 @@ def test_upgrade_from_released_version(tag, tmp_path):
                        for p in (child / "src").glob("*.py")}
 
         # ── обновление ТЕКУЩИМ китом ────────────────────────────────────────────────────────────
-        upd = _run(KIT / "installer" / "ai_ops.py", child, "update", "--in-place")
+        # v4.0: обновление с 3.x на 4.0 — МАЖОР, и guard allowed_version_range намеренно его
+        # останавливает без осознанного согласия. Моделируем документированный путь major-обновления
+        # (MIGRATION_GUIDE_4.0.md): --force. Для минор/патч-переходов флаг безвреден.
+        upd = _run(KIT / "installer" / "ai_ops.py", child, "update", "--in-place", "--force")
         assert upd.returncode == 0, f"update {tag} -> текущая упал:\n{upd.stdout[-900:]}"
 
         target = (KIT / "VERSION").read_text(encoding="utf-8").strip()
