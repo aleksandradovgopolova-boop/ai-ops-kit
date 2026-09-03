@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 352
+behavioral_count: 360
 structural_count: 61
-total_count: 413
-behavioral_share_pct: 85.23
+total_count: 421
+behavioral_share_pct: 85.51
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -195,3 +195,23 @@ raises:
       _warn_flat_entry_point, проверяя, что прямой запуск плоской точки предупреждает, а импорт
       шима и валидатор молчат), доля поведенческих выросла 85.19% -> 85.23%. Baseline пере-записан
       на фактический замер.
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 352
+    from_total: 413
+    to_behavioral: 360
+    to_total: 421
+    to_share_pct: 85.51
+    work: split-remaining-mega-test-files (issue #438, продолжение)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез трёх оставшихся мега-тест-файлов по
+      темам без потери и изменения тестов (тот же приём, что и #438). test_installer.py (1184 строк)
+      разрезан на 5 файлов (init-жизненный-цикл+footprint / doctor / delivery / entrypoint / config +
+      общий _installer_helpers.py), test_workpackage_executor.py (937) — на 4
+      (executor / resume / integrity / gates + _workpackage_helpers.py),
+      test_pipeline_characterization.py (891) — на 2 (пофазный / структурный +
+      _pipeline_char_helpers.py). Каждый новый файл, как и исходный, импортирует продуктовый код и
+      зовёт его -> все 8 новых собираемых файлов поведенческие (в installer-файлах якорь — функция
+      _load_installer с spec_from_file_location; helper-модули с префиксом `_` не собираются и в
+      замер не входят), структурных не прибавилось (61 без изменений), доля выросла 85.23% -> 85.51%.
+      Число собранных тестов ДО == ПОСЛЕ (46+66+20 = 132). Baseline пере-записан на фактический замер.
