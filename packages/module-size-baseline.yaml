@@ -23,6 +23,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli_intents.py: 944
   ai_ops_kit/engine/ai_ops_run.py: 1073
   ai_ops_kit/engine/workpackage_executor.py: 1066
+  ai_ops_kit/engine/execution_pipeline.py: 771
   ai_ops_kit/planning/delivery_plan.py: 1050
   ai_ops_kit/lifecycle/active_work.py: 1040
   ai_ops_kit/ui/presenter_formatters.py: 977
@@ -75,3 +76,18 @@ raises:
       ai_ops_cli.py. Потолок cli опущен под факт 1251 -> 962 (ратчет вниз). Спутник вырос 649 -> 944
       и перешёл порог 700 — поэтому ОСОЗНАННО вносится в ceilings с фактическим размером (иначе тест
       module-size покраснел бы «новый монолит сверх порога без записи»).
+  - at: '2026-09-03'
+    what: add_module
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 663 (ниже порога, не в baseline)'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 771'
+    work: split-run-pipeline — расщепление run_pipeline на фазовые in-file помощники _pipeline_*
+    why: >-
+      God-функция run_pipeline (399 строк, держала потолок func-size engine/) расщеплена на
+      приватные фазовые помощники в ТОМ ЖЕ файле (_pipeline_check_spec_drift/_resolve_policy/
+      _run_gates/_assess_readiness/_build_report/_check_invariants); run_pipeline ужат 399 -> 162,
+      потолок func-size engine/ опущен 399 -> 184 (следующий максимум _evaluate_security). Поведение
+      не менялось (чистый вынос), мутационная проба security-report-seam-pipeline-uses-projection
+      осталась дословно в _build_report. In-file вынос по конструкции добавляет структурную обвязку
+      (сигнатуры/распаковка/return-словари фаз), поэтому файл перешёл порог 700 с 663 на 771 — вносится
+      ОСОЗНАННО: рационале-комментарии перенесены дословно, а не срезаны ради счётчика строк. Ратчет
+      по-прежнему держит рост вниз от 771.
