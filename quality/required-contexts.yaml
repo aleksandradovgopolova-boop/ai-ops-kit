@@ -30,7 +30,10 @@ contexts:
   - package-quality / quality (selftests-a)
   - package-quality / quality (selftests-m)
   - package-quality / quality (contracts)
-  - package-quality / coverage
+  # coverage снят с обязательных 2026-09-03: держал стену ~10.8 мин на каждом PR, за окно прогонов
+  # не поймал ничего. Owner убрал его из branch protection; джоба переехала в nightly-coverage.yml
+  # (ночь + push в main + вручную). Здесь его больше нет намеренно — иначе валидатор (верно) краснит
+  # «объявлен, но джобы нет». Метрика жива, просто не блокирует PR.
   - package-quality / clean-install
   - package-quality / upgrade-path
   - package-quality / pipeline-e2e (3.12)

@@ -6,4 +6,10 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # байткод в дереве ломает проверку целостности managed
 cd "$(dirname "$0")/../.."
-python3 -m pytest -n auto --dist loadfile tests/ -q -m slow -k "test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h or test_i or test_j or test_k or test_l"
+# ЗАМЕР ЦЕНЫ (2026-09-03): группа a-l занимала ~10.1 мин против ~2.4 мин у m-z — перекос вчетверо,
+# и именно она держала стену package-quality. Граница сдвинута l -> h: i,j,k,l переезжают в группу
+# m-z. Расчёт по одному замеру (нагрузка ~пропорц. буквам внутри a-l): ~6.7 мин здесь, ~5.7 мин там.
+# Это ПЕРВЫЙ срез по единственной точке — следующий прогон даст фактические времена шардов, и
+# границу можно подвинуть точнее. Имена CI-контекстов НЕ меняются (пути скриптов те же), поэтому
+# required-статусы branch protection не ломаются.
+python3 -m pytest -n auto --dist loadfile tests/ -q -m slow -k "test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h"
