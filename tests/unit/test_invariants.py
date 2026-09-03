@@ -17,11 +17,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.critical_path]
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-from invariants import (  # noqa: E402
+from ai_ops_kit.gates.invariants import (  # noqa: E402
     ALL_INVARIANTS,
     check_invariant,
 )
-import budget as budget_mod  # noqa: E402
+from ai_ops_kit.shared import budget as budget_mod # noqa: E402
 
 
 # ============================================================================
@@ -453,7 +453,7 @@ class TestUsageLedgerIntegration:
     @settings(max_examples=50, deadline=2000)
     def test_usage_ledger_check_catches_unavailable_with_tokens(self, input_tokens, output_tokens):
         """usage_ledger.check() flags unavailable records with non-None tokens."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         rec = {
             "usage_status": "unavailable",
             "input_tokens": input_tokens,
@@ -479,7 +479,7 @@ class TestUsageLedgerIntegration:
     @settings(max_examples=50, deadline=2000)
     def test_usage_ledger_check_catches_measured_without_tokens(self, input_tokens, output_tokens):
         """usage_ledger.check() flags measured records with no tokens."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         rec = {
             "usage_status": "measured",
             "input_tokens": input_tokens,

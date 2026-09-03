@@ -18,8 +18,8 @@ import subprocess
 import pytest
 import yaml
 
-import active_work
-import ai_ops_run
+from ai_ops_kit.lifecycle import active_work
+from ai_ops_kit.engine import ai_ops_run
 
 
 def _repo(root):
@@ -211,7 +211,7 @@ class TestUnevaluatedBlueprintIsNotHealthy:
 
     def test_healthy_blueprint_with_closed_gates_is_done(self, tmp_path, monkeypatch):
         """positive: исправный путь не стал строже — оценили, проблем нет -> done."""
-        import workitem
+        from ai_ops_kit.lifecycle import workitem
 
         fd = self._feature_dir(tmp_path)
         monkeypatch.setattr(workitem.run_report, "build_report", lambda *a, **k: {"verdict": "OK"})
@@ -221,7 +221,7 @@ class TestUnevaluatedBlueprintIsNotHealthy:
 
     def test_unevaluatable_blueprint_blocks_instead_of_done(self, tmp_path, monkeypatch):
         """fail-closed: сбой оценки -> blocked, а НЕ done с пустым вердиктом."""
-        import workitem
+        from ai_ops_kit.lifecycle import workitem
 
         fd = self._feature_dir(tmp_path)
 
@@ -239,7 +239,7 @@ class TestUnevaluatedBlueprintIsNotHealthy:
 
     def test_problem_verdict_still_blocks(self, tmp_path, monkeypatch):
         """Регресс: явный PROBLEM блокировал и раньше — новая ветка его не обошла."""
-        import workitem
+        from ai_ops_kit.lifecycle import workitem
 
         fd = self._feature_dir(tmp_path)
         monkeypatch.setattr(workitem.run_report, "build_report",

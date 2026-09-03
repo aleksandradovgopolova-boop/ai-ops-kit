@@ -28,7 +28,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline  # noqa: E402
+from ai_ops_kit.engine import execution_pipeline # noqa: E402
 
 WID = "acc-rubber"
 # Спека ПОЛНА для L0 QUICK (goal/scope/expected_behavior/acceptance_criteria/constraints/

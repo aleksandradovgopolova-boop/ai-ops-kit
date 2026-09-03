@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from session_guardrails import (
+from ai_ops_kit.engops.session_guardrails import (
     SESSION_ECONOMY_DEFAULTS,
     check,
     classify_context,

@@ -22,8 +22,8 @@ import textwrap
 
 import pytest
 
-import ai_ops_run
-import orchestrator_providers as op
+from ai_ops_kit.engine import ai_ops_run
+from ai_ops_kit.providers import orchestrator_providers as op
 
 # env, в котором автовыбор разрешён: под pytest он иначе выключен самой autoresolve_enabled
 LIVE_ENV = {"AI_OPS_PROVIDER_AUTORESOLVE": "1"}

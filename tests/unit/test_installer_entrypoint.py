@@ -135,8 +135,9 @@ def test_direct_installer_call_leaves_no_bytecode(installed):
 
 
 @pytest.mark.parametrize("script", [
+    # v4.0: плоский слой tools/ снят. Напрямую из managed запускают валидаторы
+    # (ai_ops_kit/validation/*.py через _bootstrap); модули пакета зовутся `-m ai_ops_kit...`.
     pytest.param("ai_ops_kit/validation/validate_ai_ops_child.py", id="валидатор"),
-    pytest.param("tools/ai_ops_cli.py", id="плоский-алиас"),
 ])
 def test_running_from_managed_leaves_no_bytecode(installed, script):
     """R-39, третий и четвёртый входы: человек зовёт код ИЗ managed напрямую.

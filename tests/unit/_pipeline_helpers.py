@@ -8,7 +8,7 @@ from pathlib import Path
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline
+from ai_ops_kit.engine import execution_pipeline
 
 
 def _init_git(child_root):

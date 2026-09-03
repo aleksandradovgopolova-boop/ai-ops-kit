@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import run_plan
+from ai_ops_kit.engine import run_plan
 
 
 @pytest.mark.unit

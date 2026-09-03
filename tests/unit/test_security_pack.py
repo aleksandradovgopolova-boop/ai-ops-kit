@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from security_pack import (
+from ai_ops_kit.security.security_pack import (
     load_domains,
     run_pack,
 )

@@ -10,13 +10,13 @@ import tempfile
 
 import pytest
 
-from workpackage_executor import (
+from ai_ops_kit.engine.workpackage_executor import (
     Path,
     execute_sequence,
     json,
 )
 
-import atomic_planner
+from ai_ops_kit.engine import atomic_planner
 
 from _workpackage_helpers import (
     _author,

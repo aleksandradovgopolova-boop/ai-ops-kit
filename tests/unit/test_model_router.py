@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from model_router import (
+from ai_ops_kit.providers.model_router import (
     ALL_ROLES,
     _load,
     check_independence,

@@ -20,7 +20,7 @@ import subprocess
 
 import pytest
 
-import pipeline_git
+from ai_ops_kit.engine import pipeline_git
 
 
 def _git(root, *args):

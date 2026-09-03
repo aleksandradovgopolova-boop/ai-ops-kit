@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from concurrency_preflight import (
+from ai_ops_kit.gates.concurrency_preflight import (
     Path,
     _git,
     _parse_owner_repo,

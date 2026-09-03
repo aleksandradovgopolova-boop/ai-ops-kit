@@ -287,7 +287,7 @@ def test_lists_cover_every_validator_without_uniform_seam():
 
 @pytest.mark.unit
 @pytest.mark.parametrize("rel", sorted(
-    [f"tools/{p.name}" for p in (PKG / "tools").glob("*.py")] +
+    # v4.0: плоский слой `tools/` снят — точки входа теперь пакетные (`ai_ops_kit/**`).
     [f"ai_ops_kit/validation/{p.name}" for p in (PKG / "ai_ops_kit" / "validation").glob("*.py")] +
     ["installer/ai_ops.py"]))
 def test_module_description_is_a_real_docstring(rel):

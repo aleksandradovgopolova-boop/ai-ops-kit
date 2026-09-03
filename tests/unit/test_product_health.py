@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from product_health import (
+from ai_ops_kit.intelligence.product_health import (
     compute,
 )
 

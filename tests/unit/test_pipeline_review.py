@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline
+from ai_ops_kit.engine import execution_pipeline
 
 from _pipeline_helpers import _init_git
 
@@ -173,7 +173,7 @@ class TestRunPipelineSecurityPack:
         # похожий на настоящий.
         _aws = "AKIA" + "QRSTUVWX9012YZAB"
         sig = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         ops = iter([{"op": "write", "path": "src/leak.py",
                      "content": f'KEY = "{_aws}"\n'}, {"done": True}])
@@ -365,7 +365,7 @@ class TestRunPipelineSecurityReviewer:
     def test_security_reviewer_pass_closes_gate(self, child_root):
         _init_git(child_root)
         sig = {"task_type": "ENGINEERING", "size": "small", "risk": "medium", "affected_areas": ["core"]}
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         # Clean code + reviewer pass
         sec_reviewer = lambda c: '{"kind":"reviewer-result","status":"pass","summary":"clean"}'
@@ -397,7 +397,7 @@ class TestRunPipelineNewDependency:
     def test_new_dependency_triggers_security(self, child_root):
         _init_git(child_root)
         sig = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", block_push=True)
         ops = iter([{"op": "write", "path": "requirements.txt", "content": "flask\n"}, {"done": True}])
         report = execution_pipeline.run_pipeline(

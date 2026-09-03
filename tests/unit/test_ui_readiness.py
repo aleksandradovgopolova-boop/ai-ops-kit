@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from ui_readiness import (
+from ai_ops_kit.ui.ui_readiness import (
     Path,
     assess,
     check,

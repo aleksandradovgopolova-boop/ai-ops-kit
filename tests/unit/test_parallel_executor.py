@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from parallel_executor import (
+from ai_ops_kit.engine.parallel_executor import (
     execute_parallel,
 )
 

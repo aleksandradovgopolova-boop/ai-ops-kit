@@ -5,7 +5,7 @@
 Находка Phase B: reviewer-false-fail сконцентрирован в 4 UI-review-гейтах
 (`ux_review`, `design_system_usage`, `accessibility_review`, `visual_regression`) — их вешает разом
 трек VISUAL по одному булеву `ui_changed`, и все четыре blocking. Любой `warn`/сомнение/молчание
-модели по одному гейту блокирует всю правку (см. `tools/bench_lite.py`, `tools/gate_policy.py`).
+модели по одному гейту блокирует всю правку (см. `ai_ops_kit/devtools/bench_lite.py`, `ai_ops_kit/gates/gate_policy.py`).
 
 Правильный путь снижения false-fail — **не «довериться модели», а заменить часть субъективного
 ревью проверяемым UI-evidence.** Storybook + локальные test-artifacts дают факты, по которым часть
@@ -24,7 +24,7 @@ UI-гейтов закрывается детерминированно, а ре
 ## Контракт
 
 - Схема: `schemas/ui-evidence-bundle.schema.json` (`UIEvidenceBundle`).
-- Сборка: `tools/storybook_adapter.py --build <child_root> [--changed a.tsx,b.tsx] [--sha SHA]`.
+- Сборка: `ai_ops_kit/ui/storybook_adapter.py --build <child_root> [--changed a.tsx,b.tsx] [--sha SHA]`.
 - Валидация: `validation/validate_storybook_evidence.py <bundle.json>` (структура + семантика:
   статус нельзя разойтись с цифрами — нельзя фабриковать `pass`).
 

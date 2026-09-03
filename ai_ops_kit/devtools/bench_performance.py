@@ -36,7 +36,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 
-BASELINE_PATH = PKG / "tools" / ".bench-baseline.json"
+BASELINE_PATH = PKG / "ai_ops_kit" / "devtools" / ".bench-baseline.json"
 DEFAULT_ITERATIONS = 5
 DEFAULT_THRESHOLD = 2.0  # warning if >2x baseline
 REGRESSION_THRESHOLD = 5.0  # error if >5x baseline
@@ -166,7 +166,7 @@ def save_baseline(results: dict, path=None):
     """Сохранить результаты как baseline. path=None -> BASELINE_PATH репозитория.
 
     Путь берётся аргументом, а не подменой модульной глобали: селфтест запускается как
-    `python3 tools/bench_performance.py --selftest`, то есть модулем `__main__`, и его
+    `python3 -m ai_ops_kit.devtools.bench_performance --selftest`, то есть модулем `__main__`, и его
     `import bench_performance as bp` создавал ВТОРОЙ объект модуля. Подмена `bp.BASELINE_PATH`
     патчила копию, а save_baseline из `__main__` продолжал писать в настоящий файл репозитория —
     каждый прогон селфтеста молча переписывал baseline замерами текущей машины. Порог «медленнее

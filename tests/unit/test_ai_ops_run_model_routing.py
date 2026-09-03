@@ -22,7 +22,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 
 def _git_repo(root: Path):
@@ -65,8 +65,8 @@ def _run_routed(root, *, plan, trust_ready=True, key_avail=True, claude_bin=None
     with patch("ai_ops_kit.providers.model_router.plan_run", return_value=plan), \
          patch("ai_ops_kit.providers.provider_endpoints.key_available", return_value=key_avail), \
          patch("ai_ops_kit.providers.provider_endpoints.endpoint_for", return_value=ep), \
-         patch("ai_ops_run._load_klp_by_env", return_value={}), \
-         patch("ai_ops_run._provider_trust", return_value=trust), \
+         patch("ai_ops_kit.engine.ai_ops_run._load_klp_by_env", return_value={}), \
+         patch("ai_ops_kit.engine.ai_ops_run._provider_trust", return_value=trust), \
          patch("ai_ops_kit.providers.orchestrator.make_openai_provider",
                side_effect=lambda *a, **k: (lambda prompt: {"done": True})), \
          patch("ai_ops_kit.providers.orchestrator.claude_binary", return_value=claude_bin), \

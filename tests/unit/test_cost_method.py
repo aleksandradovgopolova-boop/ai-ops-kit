@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from cost_method import (
+from ai_ops_kit.providers.cost_method import (
     advise,
     check,
 )
@@ -61,7 +61,7 @@ class TestSkippedAdviceIsNamed:
 
     def test_broken_subadvisor_is_named_not_dropped(self, monkeypatch):
         """Сбой под-советчика -> в выдаче есть пункт «НЕ ОЦЕНЕНО», а не тишина."""
-        import cost_method
+        from ai_ops_kit.providers import cost_method
         from ai_ops_kit.engops import session_guardrails as sg
 
         def boom(*a, **k):
@@ -76,13 +76,13 @@ class TestSkippedAdviceIsNamed:
 
     def test_healthy_run_has_no_skipped_marker(self):
         """Обратная сторона: на исправных советчиках «НЕ ОЦЕНЕНО» не появляется."""
-        import cost_method
+        from ai_ops_kit.providers import cost_method
         out = cost_method.advise({"task_type": "QUICK"})
         assert not [o for o in out if "НЕ ОЦЕНЕНО" in str(o.get("advice"))], out
 
     def test_advice_still_returned_when_one_category_fails(self, monkeypatch):
         """fail-open сохранён: остальные советы на месте, команда не падает."""
-        import cost_method
+        from ai_ops_kit.providers import cost_method
         from ai_ops_kit.engops import session_guardrails as sg
         monkeypatch.setattr(sg, "load_policy", lambda *a, **k: (_ for _ in ()).throw(OSError("нет файла")))
         out = cost_method.advise({"task_type": "QUICK"})

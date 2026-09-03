@@ -7,9 +7,9 @@ description: >
 depends_on: [ai-ops-core]
 includes:
   - quality/**
-  - tools/gate_executor.py
-  - tools/project_detector.py
-  - tools/evidence_collector.py
+  - ai_ops_kit/gates/gate_executor.py
+  - ai_ops_kit/shared/project_detector.py
+  - ai_ops_kit/gates/evidence_collector.py
   - rules/quality/**
   - rules/design/**
   - rules/engineering/**

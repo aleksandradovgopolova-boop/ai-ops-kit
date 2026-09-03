@@ -18,9 +18,9 @@ from hypothesis import strategies as st
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import budget as budget_mod
-import usage_ledger
-import security_scan
+from ai_ops_kit.shared import budget as budget_mod
+from ai_ops_kit.shared import usage_ledger
+from ai_ops_kit.security import security_scan
 
 
 # ============================================================================
@@ -305,7 +305,7 @@ class TestPreflightProperties:
     @settings(max_examples=50, deadline=2000)
     def test_preflight_always_returns_required_keys(self, task_type):
         """Preflight must always return ok, blocked, checks, reasons regardless of input."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         with tempfile.TemporaryDirectory() as tmpdir:
             result = preflight.assess(
                 {"task_type": task_type}, tmpdir, "test-wid"
@@ -325,7 +325,7 @@ class TestPreflightProperties:
     @settings(max_examples=50, deadline=2000)
     def test_blocked_implies_reasons(self, task_type):
         """If blocked=True, reasons must be non-empty."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         with tempfile.TemporaryDirectory() as tmpdir:
             result = preflight.assess(
                 {"task_type": task_type}, tmpdir, "test-wid"
@@ -339,7 +339,7 @@ class TestPreflightProperties:
     @settings(max_examples=50, deadline=2000)
     def test_not_ok_implies_blocked(self, task_type):
         """If ok=False, blocked must be True (no silent failures)."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         with tempfile.TemporaryDirectory() as tmpdir:
             result = preflight.assess(
                 {"task_type": task_type}, tmpdir, "test-wid"
@@ -353,7 +353,7 @@ class TestPreflightProperties:
     @settings(max_examples=50, deadline=2000)
     def test_heavy_without_spec_blocked(self, task_type):
         """Heavy task types without spec artifact and without author must be blocked."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         with tempfile.TemporaryDirectory() as tmpdir:
             result = preflight.assess(
                 {"task_type": task_type}, tmpdir, "test-wid",
@@ -368,7 +368,7 @@ class TestPreflightProperties:
     @settings(max_examples=50, deadline=2000)
     def test_reevaluate_skips_build_preconditions(self, task_type):
         """reevaluate_only=True must not apply build-preconditions (spec, atomic)."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         with tempfile.TemporaryDirectory() as tmpdir:
             result = preflight.assess(
                 {"task_type": task_type}, tmpdir, "test-wid",

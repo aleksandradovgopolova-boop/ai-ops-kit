@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import tool_loop
+from ai_ops_kit.engine import tool_loop
 
 
 @pytest.mark.unit
@@ -58,8 +58,8 @@ class TestRunLoop:
     @pytest.fixture
     def loop_deps(self, tmp_path):
         """Minimal setup: import tool_broker, create a policy and a temp root."""
-        import tool_broker
-        import budget as budget_mod
+        from ai_ops_kit.engine import tool_broker
+        from ai_ops_kit.shared import budget as budget_mod
 
         root = tmp_path / "loop-root"
         root.mkdir()
@@ -223,7 +223,7 @@ class TestRunReview:
     @pytest.fixture
     def review_deps(self, tmp_path):
         """Read-only политика + temp root с файлом для чтения."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
 
         root = tmp_path / "review-root"
         root.mkdir()

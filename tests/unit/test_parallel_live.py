@@ -11,7 +11,7 @@ import tempfile
 
 import pytest
 
-from parallel_live import (
+from ai_ops_kit.engine.parallel_live import (
     Path,
     _ensure_identity,
     _git,

@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from effect_metrics import (
+from ai_ops_kit.intelligence.effect_metrics import (
     Path,
     build,
 )

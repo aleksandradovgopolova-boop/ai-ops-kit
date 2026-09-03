@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import pytest
 
-import ai_ops_cli
-import gate_executor
-import pipeline_helpers as ph
+from ai_ops_kit.cli import ai_ops_cli
+from ai_ops_kit.gates import gate_executor
+from ai_ops_kit.engine import pipeline_helpers as ph
 
 FULL = {"task_type": "QUICK", "size": "small", "risk": "low", "affected_areas": ["core"]}
 
@@ -59,7 +59,7 @@ class TestCompleteIntakePasses:
         _py_repo(tmp_path)
         seen = {}
 
-        import ai_ops_run
+        from ai_ops_kit.engine import ai_ops_run
 
         def _spy(task, signals, root, **kw):
             seen.update(signals or {})

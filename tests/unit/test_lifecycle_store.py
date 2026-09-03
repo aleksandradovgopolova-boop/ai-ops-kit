@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-import lifecycle_store
+from ai_ops_kit.shared import lifecycle_store
 
 
 @pytest.mark.unit

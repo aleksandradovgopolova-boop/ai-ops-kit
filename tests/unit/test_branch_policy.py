@@ -10,9 +10,9 @@ import tempfile
 
 import pytest
 
-from gitio import git  # noqa: F401
+from ai_ops_kit.shared.gitio import git  # noqa: F401
 
-from branch_policy import (
+from ai_ops_kit.engops.branch_policy import (
     DEFAULTS,
     Path,
     assess,

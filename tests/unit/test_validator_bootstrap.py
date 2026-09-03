@@ -72,7 +72,7 @@ def test_validators_start_without_pythonpath(tmp_path):
 def test_missing_bootstrap_is_caught(tmp_path):
     """fail-closed: без validation/_bootstrap.py тот же запуск падает — проверка не тавтология."""
     clone = tmp_path / "clone"
-    for rel in ("VERSION", "tools", "ai_ops_kit"):
+    for rel in ("VERSION", "ai_ops_kit"):
         src = PKG / rel
         dst = clone / rel
         dst.parent.mkdir(parents=True, exist_ok=True)

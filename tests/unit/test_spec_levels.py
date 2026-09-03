@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import spec_levels
+from ai_ops_kit.gates import spec_levels
 
 
 @pytest.mark.unit

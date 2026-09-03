@@ -25,7 +25,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from repo_audit import AnswersCorrupt, answers_path, read_answers, write_question_file
+from ai_ops_kit.planning.repo_audit import AnswersCorrupt, answers_path, read_answers, write_question_file
 
 ASK = {"questions": [{"id": "primary_user", "ask": "Кто основной пользователь продукта?"},
                      {"id": "main_goal_now", "ask": "Какая главная цель продукта сейчас?"}]}

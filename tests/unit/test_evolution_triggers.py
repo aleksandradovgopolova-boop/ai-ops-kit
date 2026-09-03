@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from evolution_triggers import (
+from ai_ops_kit.intelligence.evolution_triggers import (
     reg,
     triggers,
 )

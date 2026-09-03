@@ -15,7 +15,7 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import context_engine as ce
+from ai_ops_kit.context import context_engine as ce
 
 
 def _setup_child_policies(root: Path, *, afp_classes=None, dcp_secret_path=None, budget_tokens=None):

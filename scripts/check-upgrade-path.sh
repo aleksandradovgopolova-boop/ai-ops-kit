@@ -74,7 +74,19 @@ INSTALLED_BEFORE="$(python3 -c "import yaml;print(yaml.safe_load(open('.ai-ops.y
 # `--in-place`: путь CI. Политика `pr` уводит обновление в ветку, и это правильно для владельца, но
 # здесь нам нужно проверить САМО обновление, а не механизм его доставки (его проверяет отдельно
 # `test_installer`).
-python3 "$KIT/installer/ai_ops.py" update --in-place > "$WORK/update.log" 2>&1 \
+#
+# МАЖОР-ПЕРЕХОД требует ОСОЗНАННОГО `--force`: guard `allowed_version_range` НАМЕРЕННО не даёт
+# major авто-обновлять дочку (breaking-изменение — решение владельца, не побочный эффект). Здесь
+# моделируем документированный путь major-обновления (MIGRATION_GUIDE_4.0.md): при смене мажора
+# обновляемся с `--force`, при минор/патч — как обычно.
+PREV_MAJOR="${PREV_TAG#v}"; PREV_MAJOR="${PREV_MAJOR%%.*}"
+CUR_MAJOR="${CURRENT%%.*}"
+UPDATE_FLAGS="--in-place"
+if [ "${CUR_MAJOR}" -gt "${PREV_MAJOR}" ]; then
+  UPDATE_FLAGS="--in-place --force"
+  note "major-переход ${PREV_MAJOR}.x -> ${CUR_MAJOR}.x: обновление с --force (осознанный major)"
+fi
+python3 "$KIT/installer/ai_ops.py" update ${UPDATE_FLAGS} > "$WORK/update.log" 2>&1 \
   || { tail -40 "$WORK/update.log" >&2; fail "обновление вернуло ненулевой код"; }
 grep -q . "$WORK/update.log" || fail "обновление ничего не напечатало — код возврата не показатель"
 note "обновление прошло: $(head -1 "$WORK/update.log" | cut -c1-70)"

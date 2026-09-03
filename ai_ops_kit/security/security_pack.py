@@ -4,7 +4,7 @@
 Security review как набор ПРИМЕНИМЫХ доменов (security/security-domains.yaml), а не один вердикт.
 Проверяются только применимые к изменению домены (frontend-only не запускает database audit, но
 проверяет XSS/secrets). Детерминированные проверки (secret_scan/dependency_diff/injection_scan)
-берутся из tools/security_scan.py; остальное — вход для независимого security-reviewer/человека.
+берутся из ai_ops_kit/security/security_scan.py; остальное — вход для независимого security-reviewer/человека.
 
 Честность: домен нельзя закрыть фразой «уязвимостей нет». Авто-закрыть можно ТОЛЬКО домены, чьё
 required_evidence целиком покрыто пройденными детерминированными проверками (secrets, dependencies).

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-import budget as budget_mod
-from budget import Budget, BudgetExceeded
+from ai_ops_kit.shared import budget as budget_mod
+from ai_ops_kit.shared.budget import Budget, BudgetExceeded
 
 
 @pytest.mark.unit

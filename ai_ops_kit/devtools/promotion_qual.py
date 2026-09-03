@@ -213,7 +213,7 @@ def runbook(plan, provider=None, model=None):
     По умолчанию провайдер — kimi (moonshot) через openai-compatible; переопределяется provider/model
     или env AI_OPS_PROVIDER / AI_OPS_MODEL."""
     provider, model = _resolve_provider(provider, model)
-    common = 'GITHUB_TOKEN=$(gh auth token) python3 tools/ai_ops_run.py run "<task>" <scratch>'
+    common = 'GITHUB_TOKEN=$(gh auth token) python3 -m ai_ops_kit.engine.ai_ops_run run "<task>" <scratch>'
     prov = (f"--engine pipeline --provider {provider} --model {model} "
             "--execute --author --review --open-pr --context-shadow")
     # для openai-compatible (kimi/moonshot) ключ+endpoint читаются из env make_provider'ом
@@ -226,7 +226,7 @@ def runbook(plan, provider=None, model=None):
         "ts-react-storybook": env_note + ["cd <scratch> && npm ci && npm run build-storybook   # storybook-static/index.json",
                                f"{common} {prov}",
                                "проверить UIEvidenceBundle на integration-SHA (stories/interaction/a11y/visual)"],
-        "parallel-2": env_note + ["python3 tools/parallel_planner.py <scratch>/work-graph.yaml --json   # plan.valid=true",
+        "parallel-2": env_note + ["python3 -m ai_ops_kit.engine.parallel_planner <scratch>/work-graph.yaml --json   # plan.valid=true",
                        f"{common} {prov}   # bounded parallel-2 -> integration SHA -> один PR",
                        "integration_gate: полный доказательный набор package-результатов -> один draft PR"],
     }

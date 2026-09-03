@@ -21,7 +21,7 @@ from validate_storybook_evidence import (  # noqa: F401
 def good_bundle():
     """Build a valid bundle from the real storybook adapter."""
     sys.path.insert(0, str(PKG / "tools"))
-    import storybook_adapter
+    from ai_ops_kit.ui import storybook_adapter
 
     def _w(root, rel, obj):
         p = Path(root) / rel

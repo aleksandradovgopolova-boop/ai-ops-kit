@@ -19,7 +19,7 @@
                                                 (по умолчанию <child>/.ai/project/report-history/)
                 run_report.py --selftest
 История (JSONL, по файлу на фичу) коммитится с PR и служит сырьём для
-tools/effect_metrics.py («метрики эффекта»). Требует pyyaml.
+ai_ops_kit/intelligence/effect_metrics.py («метрики эффекта»). Требует pyyaml.
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ STAGES = ["discovery", "definition", "ux", "architecture", "delivery",
           "analytics", "documentation", "release", "monitoring", "adoption", "retrospective"]
 
 # v3.30: загрузка ПО ПУТИ К ФАЙЛУ заменена обычным импортом. После переезда кода в пакеты
-# tools/generate_artifacts.py стал тонким алиасом, и spec_from_file_location поднимал пустую
+# ai_ops_kit/shared/generate_artifacts.py стал тонким алиасом, и spec_from_file_location поднимал пустую
 # оболочку: подмену sys.modules внутри алиаса такая загрузка обходит, и модуль оставался без
 # своих функций (AttributeError: module 'ga' has no attribute 'cmd_new'). Обычный импорт даёт
 # настоящий модуль независимо от того, где физически лежит файл.

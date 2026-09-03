@@ -27,7 +27,7 @@ areas:
     title: Запрет утечек через промпты, логи, память, контекст
     status: partial
     severity: high
-    evidence: [rules/ai/PromptInjectionDefense.md, governance/information-boundaries.md, tools/orchestrator.py]
+    evidence: [rules/ai/PromptInjectionDefense.md, governance/information-boundaries.md, ai_ops_kit/providers/orchestrator.py]
     note: >
       Изоляция ролей (judge видит только опубликованное), запрет секретов в промптах.
       Пробел закрыт частично: единый аудит-лог действий (interaction-log) добавлен в
@@ -46,14 +46,14 @@ areas:
     title: Управление секретами, токенами, API-ключами
     status: implemented
     severity: critical
-    evidence: [rules/ai/SecretsAndSensitiveData.md, manifest/ai-ops-manifest.yaml, tools/orchestrator.py]
+    evidence: [rules/ai/SecretsAndSensitiveData.md, manifest/ai-ops-manifest.yaml, ai_ops_kit/providers/orchestrator.py]
     note: secrets_in_repo forbidden; ключи только из env (live-провайдеры), в логи не пишутся.
 
   - id: audit-log
     title: Аудит действий ИИ — кто, что, когда, что изменилось
     status: partial
     severity: high
-    evidence: [tools/orchestrator.py, governance/security-policies.md, registry/runtimes.yaml, runtime/robin/ROBIN.md]
+    evidence: [ai_ops_kit/providers/orchestrator.py, governance/security-policies.md, registry/runtimes.yaml, runtime/robin/ROBIN.md]
     note: >
       v2.20: orchestrator пишет append-only interaction-log (.ai/runtime/interaction-log.jsonl):
       ts, workflow, задача, статус, невыполненные гейты, провайдер. Плюс TaskState/GateReport.

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from context_retrieval import (
+from ai_ops_kit.context.context_retrieval import (
     PKG,
     Path,
     RetrievalCache,

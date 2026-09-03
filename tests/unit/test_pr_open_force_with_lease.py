@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-import pr_open
-from pr_open import open_draft_pr, _is_non_fast_forward
+from ai_ops_kit.delivery import pr_open
+from ai_ops_kit.delivery.pr_open import open_draft_pr, _is_non_fast_forward
 
 
 @pytest.fixture

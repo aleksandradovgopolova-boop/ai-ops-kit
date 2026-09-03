@@ -1,15 +1,15 @@
 # Kit Observability
 
-`tools/kit_observability.py` — метрики эффективности самого кита.
+`ai_ops_kit/devtools/kit_observability.py` — метрики эффективности самого кита.
 
 ## CLI
 
 ```bash
 # Человекочитаемый отчёт
-python3 tools/kit_observability.py <child_root>
+python3 ai_ops_kit/devtools/kit_observability.py <child_root>
 
 # JSON-формат
-python3 tools/kit_observability.py <child_root> --json
+python3 ai_ops_kit/devtools/kit_observability.py <child_root> --json
 ```
 
 ## Метрики

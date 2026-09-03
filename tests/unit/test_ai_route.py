@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_route import (
+from ai_ops_kit.engine.ai_route import (
     REQUIRED_KEYS,
     SCENARIOS,
     route,

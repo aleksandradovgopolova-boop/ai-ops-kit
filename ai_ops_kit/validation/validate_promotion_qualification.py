@@ -10,7 +10,7 @@
   4. runs покрывают все три обязательных вида (python-child / ts-react-storybook / parallel-2);
   5. negative_scenarios покрывают ВЕСЬ обязательный набор негативов (10 шт);
   6. exit_criteria покрывают ВЕСЬ обязательный набор критериев (8 шт: 0 leaks / 100% bound / …);
-  7. ЧЕСТНОСТЬ: каждый uses-инструмент существует в tools/ или validation/ (нет фантомных ссылок);
+  7. ЧЕСТНОСТЬ: каждый uses-инструмент существует в ai_ops_kit/ или validation/ (нет фантомных ссылок);
   8. blocked_by непуст (external-гейт live-квалификации объявлен явно, не спрятан).
 
 Использование:
@@ -42,7 +42,10 @@ REQUIRED_CRITERIA = {
 
 
 def _tool_exists(name, pkg=PKG):
-    return (pkg / "tools" / name).exists() or (pkg / "validation" / name).exists()
+    # v4.0: плоский слой `tools/` снят — инструмент ищется в пакетах ai_ops_kit/ (или validation/).
+    if (pkg / "validation" / name).exists():
+        return True
+    return any("__pycache__" not in p.parts for p in (pkg / "ai_ops_kit").rglob(name))
 
 
 def check(data, pkg=PKG):

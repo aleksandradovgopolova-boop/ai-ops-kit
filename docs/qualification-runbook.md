@@ -7,7 +7,7 @@
 > sonnet НЕ требуется. Оставлено как история квалификации, не текущий список задач.
 
 Как прогнать живую квалификацию движка на **реальном** child-репозитории с тулчейном и живой
-моделью. Харнесс (`tools/qual_run.py`) и пакет сценариев (`qualification/scenarios.yaml`) готовы;
+моделью. Харнесс (`ai_ops_kit/devtools/qual_run.py`) и пакет сценариев (`qualification/scenarios.yaml`) готовы;
 живой прогон делается на вашей машине (Mac/Linux), где есть модель и стек.
 
 Честно: пройдёт ли **модель** конкретный сценарий — вопрос модели. Задача квалификации — убедиться,
@@ -98,7 +98,7 @@ python3 .ai/managed/ai_ops_kit/devtools/qual_run.py . --tasks /tmp/s1.txt \
 (acceptance S10): `baseline.fixed` содержит починенное → `ready_for_pr=true`. Фактически: `fixed=[]`,
 `ready_for_pr=false`, `other_blocking_unmet=[]` — ready держит **исключительно** пустой `fixed`.
 
-Корень: `_diff_checks` (`tools/execution_pipeline.py:571`) считает `fixed` на уровне **чек-агрегата** —
+Корень: `_diff_checks` (`ai_ops_kit/engine/execution_pipeline.py:571`) считает `fixed` на уровне **чек-агрегата** —
 `fixed.append(name)` только когда чек целиком `fail→pass`. Раз чек `test` остаётся `fail` (из-за
 непрофильного узла), починенный профильный узел не засчитывается. Node-id (`_failure_ids`) используется
 лишь в сторону регрессий, не фиксов — асимметрия против заявки v2.84 про «structured-id baseline-diff».
@@ -209,7 +209,7 @@ write_scope pkg-2**. Дилигентная модель попытается з
 ```bash
 bash prep_seq_fixture.sh /tmp/qual-seq/eng   # собрать фикстуру (генератор вне кита)
 OPENAI_COMPATIBLE_BASE_URL="…/chat/completions" OPENAI_COMPATIBLE_API_KEY="…" \
-python3 tools/ai_ops_cli.py run \
+./ai-ops run \
   "Отрефактори расчёт скидок по подсистемам: discounts — таблица ставок; pricing — реализуй net_price из discounts; report — форматированная строка" \
   /tmp/qual-seq/eng \
   --signals '{"task_type":"ENGINEERING","size":"large","risk":"low","affected_areas":["discounts","pricing","report"]}' \

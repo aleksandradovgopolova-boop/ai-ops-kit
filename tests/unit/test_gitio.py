@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from gitio import git
+from ai_ops_kit.shared.gitio import git
 
 
 @pytest.mark.unit

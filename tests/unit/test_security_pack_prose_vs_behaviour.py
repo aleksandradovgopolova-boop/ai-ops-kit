@@ -16,7 +16,7 @@ security-ревьюера по четырём доменам. Причина —
 """
 from __future__ import annotations
 
-from security_pack import _is_prose, run_pack
+from ai_ops_kit.security.security_pack import _is_prose, run_pack
 
 DOC = "docs/implementation-status.md"
 DOC_TEXT = ("Логотип `BookTitleLogo` убран. Навигация построена на History API (`ROUTES`).\n"

@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from session_telemetry import (
+from ai_ops_kit.engops.session_telemetry import (
     check,
     snapshot,
     usage_ledger,

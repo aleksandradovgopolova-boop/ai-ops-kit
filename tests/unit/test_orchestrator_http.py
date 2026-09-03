@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from orchestrator_http import (
+from ai_ops_kit.providers.orchestrator_http import (
     _http_post_json,
 )
 

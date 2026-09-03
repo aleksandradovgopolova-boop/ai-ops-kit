@@ -65,14 +65,14 @@ def test_delivery_contains_bootstrap_for_every_shipped_importer(installed):
     на первой строке: `ModuleNotFoundError: No module named '_bootstrap'`. Проверка привязана
     к факту импорта, а не к списку имён.
 
-    Проверяются каталоги, ИЗ КОТОРЫХ запускают скрипты (`tools/`, `ai_ops_kit/validation/`): там sys.path[0]
-    — сам каталог, и `_bootstrap` обязан лежать рядом. Модули внутри `ai_ops_kit/**` сюда не
-    входят намеренно: в них входят через алиас, который путь уже поставил, — требовать копию
-    загрузчика в каждом пакете значило бы разводить его по дереву без нужды.
+    v4.0: плоский слой `tools/` снят — единственный каталог, ИЗ КОТОРОГО запускают скрипты
+    напрямую, это `ai_ops_kit/validation/` (валидаторы; там sys.path[0] — сам каталог, и
+    `_bootstrap` обязан лежать рядом). Остальные модули пакета зовутся `-m ai_ops_kit...`, корень
+    кладёт запускающий, копия загрузчика в каждом пакете не нужна.
     """
     managed = installed / ".ai" / "managed"
     missing = []
-    for d in ("tools", "validation"):
+    for d in ("ai_ops_kit/validation",):
         for f in sorted((managed / d).glob("*.py")):
             if f.name == "_bootstrap.py":
                 continue
@@ -91,11 +91,13 @@ def test_delivery_excludes_kit_development_assets(installed):
         "пакет квалификации движка (данные разработки кита) уехал в child"
     assert not (managed / "containers").exists(), \
         "эталонный контейнер кита уехал в child"
-    for dev_tool in ("bench_lite.py", "qual_run.py", "changelog_gen.py"):
-        assert not (managed / "tools" / dev_tool).exists(), f"dev-инструмент {dev_tool} в поставке"
+    # v4.0: dev-инструменты живут в ai_ops_kit/devtools/ (весь каталог исключён из поставки,
+    # DEV_ONLY); плоского tools/ больше нет.
+    assert not (managed / "ai_ops_kit" / "devtools").exists(), \
+        "каталог разработки ai_ops_kit/devtools/ уехал в child"
     for dev_val in ("validate_package_boundaries.py", "validate_qualification.py",
                     "validate_release_claims.py", "validate_container_assets.py"):
-        assert not (managed / "validation" / dev_val).exists(), \
+        assert not (managed / "ai_ops_kit" / "validation" / dev_val).exists(), \
             f"валидатор внутренних инвариантов кита {dev_val} в поставке"
 
 
@@ -168,7 +170,7 @@ def test_managed_set_excludes_are_declared_not_implicit(ai_ops):
     assert ai_ops.DEV_ONLY_FILES, "список dev-only файлов пуст"
     assert not (rels & ai_ops.DEV_ONLY_FILES), \
         f"объявленное исключение всё равно едет в дочку: {rels & ai_ops.DEV_ONLY_FILES}"
-    assert "tools/ai_ops_run.py" in rels
+    assert "ai_ops_kit/engine/ai_ops_run.py" in rels
     assert "ai_ops_kit/engine/ai_route.py" in rels
 
 

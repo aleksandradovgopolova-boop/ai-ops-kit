@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from storybook_query import (
+from ai_ops_kit.ui.storybook_query import (
     Path,
     catalog,
     component_stories,

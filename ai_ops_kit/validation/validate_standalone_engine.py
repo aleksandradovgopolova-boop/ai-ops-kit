@@ -3,15 +3,16 @@
 
 Аудит v2.79 (P0.3 / standalone): движок раньше жил только в клоне кита — child не мог
 запустить `ai-ops run` без внешнего `git clone` parent-пакета. v2.82 кладёт движок
-(tools/ + ai_ops_kit/ + их данные) в managed-слой (`.ai/managed/`), и PKG движка резолвится
+(пакет ai_ops_kit/ + его данные) в managed-слой (`.ai/managed/`), и PKG движка резолвится
 по маркеру VERSION в `.ai/managed/`. Этот валидатор ДОКАЗЫВАЕТ самодостаточность,
 а не декларирует её:
 
   1. completeness: строит managed-слой из manifest.update_policy.managed_set и проверяет, что
      в нём присутствует ВЕСЬ рантайм-замыкание движка (ENGINE_CLOSURE) — модули и данные.
      Если из managed_set выпадет файл замыкания — тест падает громко (не тихо в проде).
-  2. runtime: запускает движок как ОТДЕЛЬНЫЙ процесс из `.ai/managed/tools/ai_ops_run.py`
-     с ЧИСТЫМ окружением (PYTHONPATH снят, cwd = временный child, parent-кит НЕ на path) и
+  2. runtime: запускает движок как ОТДЕЛЬНЫЙ процесс пакетным входом
+     (`ai_ops_kit.engine` из корня `.ai/managed`) с ЧИСТЫМ окружением (PYTHONPATH снят,
+     cwd = временный child, parent-кит НЕ на path) и
      scripted-proposer'ом, который пишет файл и завершает. Успех = движок дошёл до реального
      коммита на ветке ai-ops/*, собрал evidence на ТОЧНОМ SHA и вернул ready_for_pr=True —
      всё без единого обращения к клону кита.
@@ -42,11 +43,14 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 # Рантайм-замыкание `ai-ops run --engine pipeline` (получено трассировкой открытых файлов и
 # импортированных модулей). Держим ЯВНО, чтобы регресс managed_set падал этим тестом.
 ENGINE_MODULES = [
-    "tools/ai_ops_run.py", "tools/execution_pipeline.py", "tools/tool_broker.py",
-    "tools/tool_loop.py", "tools/orchestrator.py", "tools/run_plan.py",
-    "tools/run_report.py", "tools/gate_executor.py", "tools/evidence_collector.py",
-    "tools/project_detector.py", "tools/budget.py", "tools/workitem.py",
-    "tools/active_work.py", "tools/worktree.py", "ai_ops_kit/engine/ai_route.py",
+    "ai_ops_kit/engine/ai_ops_run.py", "ai_ops_kit/engine/execution_pipeline.py",
+    "ai_ops_kit/engine/tool_broker.py", "ai_ops_kit/engine/tool_loop.py",
+    "ai_ops_kit/providers/orchestrator.py", "ai_ops_kit/engine/run_plan.py",
+    "ai_ops_kit/lifecycle/run_report.py", "ai_ops_kit/gates/gate_executor.py",
+    "ai_ops_kit/gates/evidence_collector.py", "ai_ops_kit/shared/project_detector.py",
+    "ai_ops_kit/shared/budget.py", "ai_ops_kit/lifecycle/workitem.py",
+    "ai_ops_kit/lifecycle/active_work.py", "ai_ops_kit/engine/worktree.py",
+    "ai_ops_kit/engine/ai_route.py",
 ]
 ENGINE_DATA = [
     "config/protected-paths.yaml", "quality/gates.yaml",
@@ -86,8 +90,7 @@ from pathlib import Path
 MANAGED = Path(sys.argv[1]).resolve()
 CHILD = Path(sys.argv[2]).resolve()
 # ЕДИНСТВЕННЫЙ источник кода — managed-слой; parent-кит на path НЕ добавляем.
-sys.path.insert(0, str(MANAGED / "tools"))
-sys.path.insert(0, str(MANAGED))          # v3.34: корень managed — оттуда импортируется ai_ops_kit.*
+sys.path.insert(0, str(MANAGED))          # корень managed — оттуда импортируется ai_ops_kit.* (пакетный вход, без плоского tools/)
 from ai_ops_kit.engine import execution_pipeline
 script = iter([
     {"op": "write", "path": "src/add.py", "content": "def add(a, b):\n    return a + b\n"},

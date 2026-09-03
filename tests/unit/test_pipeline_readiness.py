@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline
+from ai_ops_kit.engine import execution_pipeline
 
 from _pipeline_helpers import _QUICK_SIG, _init_git, _init_python_repo
 
@@ -423,8 +423,8 @@ class TestSecurityFailClosed:
 
     def test_scan_raises_security_unmet_not_ready(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
-        import security_pack as sp_mod
+        from ai_ops_kit.engine import tool_broker
+        from ai_ops_kit.security import security_pack as sp_mod
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
                    "affected_areas": ["core"]}
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
@@ -448,7 +448,7 @@ class TestSecurityForcedInQuick:
 
     def test_security_forced_evaluated(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol_dep = tool_broker.Policy(level="execution", block_push=True)
         it_dep = iter([{"op": "write", "path": "requirements.txt", "content": "flask\n"}, {"done": True}])
         rep_dep = execution_pipeline.run_pipeline(
@@ -466,7 +466,7 @@ class TestSecurityReviewerCloses:
 
     def test_reviewer_pass_closes_security(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
                    "affected_areas": ["core"]}
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
@@ -500,7 +500,7 @@ class TestSecurityGuard5:
 
     def test_qualified_judge_skips_guard5(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         sig_api = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
                    "affected_areas": ["core"], "api_change": True}
@@ -516,7 +516,7 @@ class TestSecurityGuard5:
 
     def test_no_qualified_judge_no_approval_fails(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         sig_api = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
                    "affected_areas": ["core"], "api_change": True}
@@ -540,9 +540,9 @@ class TestReevaluateOnly:
 
     def test_approval_lifts_guard5_via_reevaluate(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
-        import security_pack as sp_re
-        import approvals as appr_re
+        from ai_ops_kit.engine import tool_broker
+        from ai_ops_kit.security import security_pack as sp_re
+        from ai_ops_kit.gates import approvals as appr_re
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         sec_reviewer = lambda c: {"kind": "reviewer-result", "status": "pass",  # noqa: E731
                                   "summary": "чист"}
@@ -581,7 +581,7 @@ class TestSecretBoundary:
 
     def test_secret_boundary_without_human_blocks(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
                    "affected_areas": ["core"], "secret_boundary": True}
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
@@ -601,7 +601,7 @@ class TestBaselineDoesNotBypassGates:
 
     def test_ui_changed_ux_review_blocks_despite_no_regressions(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         sig_ui = dict(_QUICK_SIG, ui_changed=True)
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         it = iter([{"op": "write", "path": "src/p01.py", "content": "p=1\n"}, {"done": True}])
@@ -614,7 +614,7 @@ class TestBaselineDoesNotBypassGates:
 
     def test_gate_results_and_tested_revision_in_report(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         sig_ui = dict(_QUICK_SIG, ui_changed=True)
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         it = iter([{"op": "write", "path": "src/p01.py", "content": "p=1\n"}, {"done": True}])
@@ -687,13 +687,13 @@ class TestApprovalsRecordValid:
     """approvals._record_valid: рыхлая destructive-запись невалидна в обоих режимах."""
 
     def test_loose_destructive_invalid_both_modes(self):
-        import approvals as a4
+        from ai_ops_kit.gates import approvals as a4
         loose = {"approval": "destructive", "approved_by": "u@x", "scope": ".", "reason": "ok"}
         assert a4._record_valid(loose, now=a4._now_iso(), plan_hash="x") is False
         assert a4._record_valid(loose, now=a4._now_iso(), plan_hash="x", strict=True) is False
 
     def test_bound_destructive_passes_nonstrict_not_strict(self):
-        import approvals as a4
+        from ai_ops_kit.gates import approvals as a4
         bound = {"approval": "destructive", "approved_by": "u@x", "scope": ".",
                  "reason": "ok", "binds_to": "x"}
         assert a4._record_valid(bound, now=a4._now_iso(), plan_hash="x") is True

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import security_scan
+from ai_ops_kit.security import security_scan
 
 
 @pytest.mark.unit

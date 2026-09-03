@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-import pr_open
+from ai_ops_kit.delivery import pr_open
 
 pytestmark = pytest.mark.unit
 

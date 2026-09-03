@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import contracts
+from ai_ops_kit.shared import contracts
 
 
 @pytest.mark.unit

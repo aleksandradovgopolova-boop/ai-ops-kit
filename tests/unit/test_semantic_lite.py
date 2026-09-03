@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from semantic_lite import (
+from ai_ops_kit.context.semantic_lite import (
     Path,
     build_index,
     search,

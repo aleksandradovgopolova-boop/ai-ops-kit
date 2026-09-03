@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from security_enforcement import (
+from ai_ops_kit.security.security_enforcement import (
     PKG,
     enforce_memory_entry,
     hashlib,

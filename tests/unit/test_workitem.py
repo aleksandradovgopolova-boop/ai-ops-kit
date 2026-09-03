@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-import workitem
+from ai_ops_kit.lifecycle import workitem
 
 
 @pytest.mark.unit

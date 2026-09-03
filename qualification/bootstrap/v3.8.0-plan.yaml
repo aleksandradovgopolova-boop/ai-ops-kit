@@ -17,8 +17,8 @@ builds_over:
   - {name: FeatureBlueprint, ref: schemas/feature-blueprint.schema.json}
   - {name: RunPlan, ref: schemas/run-plan.schema.json}
   - {name: WorkGraph, ref: schemas/work-graph.schema.json}
-  - {name: ContextHybrid, ref: tools/context_hybrid.py}
-  - {name: DeliveryIntentReceipt, ref: tools/pr_open.py}
+  - {name: ContextHybrid, ref: ai_ops_kit/context/context_hybrid.py}
+  - {name: DeliveryIntentReceipt, ref: ai_ops_kit/delivery/pr_open.py}
   - {name: PostReleaseReadout, ref: schemas/post-release-readout.schema.json}
   - {name: FeatureLearning, ref: schemas/feature-learning.schema.json}
 
@@ -99,11 +99,11 @@ bootstrap_stages:
   - {id: architecture_adr,    produces: "системная архитектура + ADR",     uses: [decisions/adr]}
   - {id: data_schema,         produces: "схема данных"}
   - {id: backend,             produces: "backend-каркас"}
-  - {id: frontend_storybook,  produces: "frontend-каркас + Storybook",     uses: [tools/storybook_adapter.py]}
+  - {id: frontend_storybook,  produces: "frontend-каркас + Storybook",     uses: [ai_ops_kit/ui/storybook_adapter.py]}
   - {id: ci,                  produces: "CI"}
   - {id: observability,       produces: "logs/metrics/error handling"}
   - {id: vertical_feature,    produces: "первая вертикальная функция (сквозная)"}
-  - {id: delivery_pr,         produces: "один draft PR / release candidate", uses: [tools/pr_open.py]}
+  - {id: delivery_pr,         produces: "один draft PR / release candidate", uses: [ai_ops_kit/delivery/pr_open.py]}
 
 # Обязательные live readiness-сценарии (минимум на 2, лучше 3 репо: Python / TS-Node / смешанный).
 readiness_scenarios:

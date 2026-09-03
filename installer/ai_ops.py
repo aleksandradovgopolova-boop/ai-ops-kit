@@ -438,8 +438,9 @@ def materialize_runtime(child_root: Path):
     иначе после установки среда не видит сгенерированные точки входа. Возвращает число
     установленных команд. v3.14.0: адаптеры только для настроенных рантаймов + фильтр поверхности."""
     import os
-    sys.path.insert(0, str(PKG / "tools"))
-    import generate_runtime
+    if str(PKG) not in sys.path:
+        sys.path.insert(0, str(PKG))
+    from ai_ops_kit.shared import generate_runtime
     generate_runtime.generate(child_root, verbose=False,
                               runtimes=_configured_runtimes(),
                               command_filter=_surface_filter("commands"))
@@ -608,12 +609,12 @@ DEV_ONLY_TOOLS = frozenset({
 # Валидаторы, которые РЕАЛЬНО вызываются в child-репозитории. Источники (проверяемо grep'ом):
 #   ai_managed_checksums          — drift-detection managed-зоны (manifest.update_policy)
 #   validate_ai_ops_child         — валидация установки (child-CI, `ai-ops validate`)
-#   validate_claims/_references/_freshness            — tools/gate_executor.py
-#   validate_cross_artifacts/_feature_blueprint       — tools/run_report.py
-#   validate_plan_artifact/_requirements_artifact     — tools/pipeline_helpers.py
-#   validate_spec_artifact/_reviewer_result           — tools/pipeline_evidence.py, orchestrator
-#   validate_memory_governance                        — tools/security_enforcement.py
-#   validate_adr_registry/_quality_attributes         — tools/evolution_triggers.py
+#   validate_claims/_references/_freshness            — ai_ops_kit/gates/gate_executor.py
+#   validate_cross_artifacts/_feature_blueprint       — ai_ops_kit/lifecycle/run_report.py
+#   validate_plan_artifact/_requirements_artifact     — ai_ops_kit/engine/pipeline_helpers.py
+#   validate_spec_artifact/_reviewer_result           — ai_ops_kit/engine/pipeline_evidence.py, orchestrator
+#   validate_memory_governance                        — ai_ops_kit/security/security_enforcement.py
+#   validate_adr_registry/_quality_attributes         — ai_ops_kit/intelligence/evolution_triggers.py
 #   validate_surface_wiring/_scenario_evidence/_event_catalog/_openspec_change — quality/gates.yaml
 #   validate_engops_policy/_duties/_knowledge_graph/_storybook_evidence — политики и реестры в поставке
 #   validate_architecture_decision                    — транзитивный импорт из keep-set
@@ -799,7 +800,7 @@ def delivery_budget_errors(doc, shipped=None, exists=None):
         return ["реестр бюджета не разобран — проверять нечего"]
     ceilings = doc.get("ceilings") or {}
     raises = doc.get("raises") or []
-    for key in ("volume_bytes", "substantive_files", "alias_bytes"):
+    for key in ("volume_bytes", "substantive_files"):
         if not isinstance(ceilings.get(key), int):
             problems.append(f"ceilings.{key} не объявлен числом — потолка нет")
     vol = [r for r in raises if isinstance(r, dict) and r.get("what") == "volume"]
@@ -2579,9 +2580,9 @@ def cmd_doctor(argv=()):
     # v2.82 Standalone Child: движок должен быть в .ai/managed, чтобы `ai-ops run` работал без
     # внешнего клона кита. Наличие ai_ops_run.py в managed = движок установлен; если его нет,
     # это не всегда ошибка (child мог выбрать packages без ai-ops-execution) — сообщаем честно.
-    engine_entry = AI_DIR / "managed" / "tools" / "ai_ops_run.py"
+    engine_entry = AI_DIR / "managed" / "ai_ops_kit" / "engine" / "ai_ops_run.py"
     if engine_entry.exists():
-        _dprint("движок (standalone): ✓ .ai/managed/tools/ai_ops_run.py "
+        _dprint("движок (standalone): ✓ .ai/managed/ai_ops_kit/engine/ai_ops_run.py "
               "(ai-ops run работает без клона parent)")
     else:
         _dprint("движок (standalone): — не установлен (пакет ai-ops-execution не выбран? "
@@ -2594,11 +2595,11 @@ def cmd_doctor(argv=()):
     _dprint(f"openspec CLI: {'✓' if osp else osp_hint}")
     # v3.11.0 UI Evidence Readiness: честная зрелость UI-evidence (absent НЕ маскируем как проблему —
     # это применимо только к UI-продуктам; absent для не-UI child — норма). doctor только СООБЩАЕТ.
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "ui_readiness.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "ui" / "ui_readiness.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
     try:
-        import ui_readiness
+        from ai_ops_kit.ui import ui_readiness
         _m = ui_readiness.assess(".")["storybook_maturity"]
         _dprint(f"ui-evidence (Storybook): {_m}"
               + ("  — не UI-продукт? тогда норма (не маскируем)" if _m == "absent" else "")
@@ -2675,45 +2676,45 @@ def cmd_doctor(argv=()):
         else:
             _dprint(f"CI ребёнка: ✓ {len(_ci)} workflow согласованы с китом")
     # v3.13.0 Startup Context Budget: наблюдаемая стоимость стартового набора vs бюджет (advisory).
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "context_cost.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "context" / "context_cost.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
     try:
-        import context_cost
+        from ai_ops_kit.context import context_cost
         _dprint(context_cost.summary_line("."))
     except Exception as _e:  # noqa: BLE001 — оценка стоимости не роняет doctor
         _dprint(f"стоимость старта: недоступно ({_e})")
     # v3.19.0 Engineering Operating Model: операционная гигиена. doctor только СООБЩАЕТ (политика
     # коммитов + актуальность ветки против базы). Отставание базы — самый частый молчаливый дефект:
     # диф ветки все смотрят, её актуальность — никто. Не роняем doctor (это темп владельца, не поломка).
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "branch_policy.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "engops" / "branch_policy.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
     try:
-        import commit_policy
+        from ai_ops_kit.engops import commit_policy
         _dprint(commit_policy.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         _dprint(f"политика коммитов: недоступно ({_e})")
     try:
-        import branch_policy
+        from ai_ops_kit.engops import branch_policy
         _dprint(branch_policy.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         _dprint(f"актуальность ветки: недоступно ({_e})")
     # v3.20.0 EngOps срез 2: окружения и зрелость поставки. `not_detected`/`absent` НЕ маскируем —
     # для библиотеки/CLI это норма; расхождение «CI деплоит в необъявленное окружение» — сообщаем.
     try:
-        import environment_map
+        from ai_ops_kit.engops import environment_map
         _dprint(environment_map.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         _dprint(f"окружения: недоступно ({_e})")
     try:
-        import deploy_readiness
+        from ai_ops_kit.gates import deploy_readiness
         _dprint(deploy_readiness.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         _dprint(f"поставка (deploy): недоступно ({_e})")
     # v3.21.0 EngOps срез 3: экономическая граница ДО траты. unavailable НЕ выдаём за ноль.
     try:
-        import economic_preflight
+        from ai_ops_kit.gates import economic_preflight
         _dprint(economic_preflight.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         _dprint(f"экономика (оценка до прогона): недоступно ({_e})")
@@ -2887,11 +2888,11 @@ def cmd_delivery_proof(argv=()):
 def cmd_usage(argv):
     """v3.10.0 Usage Truth: показать ЧЕСТНУЮ стоимость задачи и продукта из usage-ledger.
     ai-ops usage [--workitem <wid>] [--json] — стоимость/токены по задаче + агрегат по продукту."""
-    # движок/тулы в child — .ai/managed/tools; в kit — tools/. Пробуем оба.
-    for _cand in (Path(".") / ".ai" / "managed" / "tools", PKG / "tools"):
-        if (_cand / "usage_ledger.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
-    import usage_ledger
+    # движок/пакет в child — .ai/managed; в kit — корень репозитория. Пробуем оба.
+    for _root in (Path(".") / ".ai" / "managed", PKG):
+        if (_root / "ai_ops_kit" / "shared" / "usage_ledger.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+    from ai_ops_kit.shared import usage_ledger
     rest = [a for a in argv[2:]]                 # флаги после 'usage'
     return usage_ledger.main(["."] + rest)
 
@@ -2899,10 +2900,10 @@ def cmd_usage(argv):
 def cmd_method(argv):
     """v3.18.0 Development Culture Guardrails (WP6): экономичный способ работы — советы в порядке
     приоритетов (гигиена сессии > делегирование > итерации > runtime > effort). Только советует."""
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "cost_method.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
-    import cost_method
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "providers" / "cost_method.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+    from ai_ops_kit.providers import cost_method
     return cost_method.main(["."] + [a for a in argv[2:]])
 
 
@@ -2910,10 +2911,10 @@ def cmd_session(argv):
     """v3.16.0 Development Culture Guardrails: гигиена сессии. `ai-ops session` — снимок телеметрии
     + SessionRecommendation (continue/compact/clear/new_session) с ТОЧНОЙ командой. Передайте
     `--context N` (из /context рантайма) для measured-оценки; иначе контекст оценивается по ledger."""
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "session_guardrails.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
-    import session_guardrails
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "engops" / "session_guardrails.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+    from ai_ops_kit.engops import session_guardrails
     return session_guardrails.main(["."] + [a for a in argv[2:]])
 
 
@@ -2933,10 +2934,10 @@ def cmd_subsession(argv):
     """
     args = [a for a in argv[2:]]
     root = "."
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "session_launcher.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
-    import session_launcher as _sl
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "engops" / "session_launcher.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+    from ai_ops_kit.engops import session_launcher as _sl
     from ai_ops_kit.engops import session_telemetry as _st
     from ai_ops_kit.ui import presenter as _pr
 
@@ -3006,37 +3007,37 @@ def cmd_engops(argv):
     `ai-ops engops` — политика + актуальность текущей ветки; `engops branch [--base X]` — вердикт
     по ветке; `engops commit --files ... --message "..."` — вердикт по предполагаемому коммиту.
     Жёсткие инварианты блокируют (rc=1), мягкие по умолчанию советуют."""
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "branch_policy.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "engops" / "branch_policy.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
     sub = argv[2] if len(argv) > 2 and not argv[2].startswith("--") else ""
     rest = [a for a in argv[(3 if sub else 2):]]
     if sub == "commit":
-        import commit_policy
+        from ai_ops_kit.engops import commit_policy
         return commit_policy.main(["."] + rest)
     if sub == "branch":
-        import branch_policy
+        from ai_ops_kit.engops import branch_policy
         return branch_policy.main(["."] + rest)
     if sub == "env":
-        import environment_map
+        from ai_ops_kit.engops import environment_map
         return environment_map.main(["."] + rest)
     if sub == "deploy":
-        import deploy_readiness
+        from ai_ops_kit.gates import deploy_readiness
         return deploy_readiness.main(["."] + rest)
     if sub == "cost":
-        import economic_preflight
+        from ai_ops_kit.gates import economic_preflight
         return economic_preflight.main(["."] + rest)
     if sub:
         print("usage: ai-ops engops [branch|commit|env|deploy|cost] ..."); return 2
-    import branch_policy
-    import commit_policy
-    import deploy_readiness
-    import environment_map
+    from ai_ops_kit.engops import branch_policy
+    from ai_ops_kit.engops import commit_policy
+    from ai_ops_kit.gates import deploy_readiness
+    from ai_ops_kit.engops import environment_map
     print(commit_policy.summary_line("."))
     print(branch_policy.summary_line("."))
     print(environment_map.summary_line("."))
     print(deploy_readiness.summary_line("."))
-    import economic_preflight
+    from ai_ops_kit.gates import economic_preflight
     print(economic_preflight.summary_line("."))
     return 0
 
@@ -3058,10 +3059,10 @@ def cmd_audit(argv):
         return product_audit.main([str(REPO_ROOT), *[a for a in argv[3:] if a.startswith("--")]])
     if sub != "architecture":
         print("usage: ai-ops audit architecture|product [--json]"); return 2
-    for _cand in (AI_DIR / "managed" / "tools", PKG / "tools"):
-        if (_cand / "architecture_baseline.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
-    import architecture_baseline
+    for _root in (AI_DIR / "managed", PKG):
+        if (_root / "ai_ops_kit" / "engops" / "architecture_baseline.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+    from ai_ops_kit.engops import architecture_baseline
     return architecture_baseline.main(["."] + [a for a in argv[3:]])
 
 
@@ -3075,11 +3076,11 @@ def cmd_ui_status(argv):
     ob = Path(".") / "AI-OPS-ONBOARDING.md"
     print(_onboarding_summary(ob if ob.exists() else None))
     print()
-    for _cand in (Path(".") / ".ai" / "managed" / "tools", PKG / "tools"):
-        if (_cand / "ui_readiness.py").is_file() and str(_cand) not in sys.path:
-            sys.path.insert(0, str(_cand))
+    for _root in (Path(".") / ".ai" / "managed", PKG):
+        if (_root / "ai_ops_kit" / "ui" / "ui_readiness.py").is_file() and str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
     try:
-        import ui_readiness
+        from ai_ops_kit.ui import ui_readiness
         print(ui_readiness._fmt(ui_readiness.assess(".")))
     except Exception as _e:  # noqa: BLE001 — недоступность readiness не должна ронять ui-status
         print(f"UI readiness: недоступно ({_e})")

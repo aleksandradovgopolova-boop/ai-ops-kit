@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 from _ai_ops_run_helpers import _git_init_commit
 
@@ -109,8 +109,8 @@ class TestReconcilePendingDelivery:
 
     def test_reconcile_found_matching(self, tmp_path):
         """Intent + matching PR on remote -> reconciled receipt."""
-        import lifecycle_store as _ls
-        import pr_open
+        from ai_ops_kit.shared import lifecycle_store as _ls
+        from ai_ops_kit.delivery import pr_open
         fdir = tmp_path / "feat"
         fdir.mkdir(parents=True)
         outbox = fdir / "delivery-outbox"
@@ -135,8 +135,8 @@ class TestReconcilePendingDelivery:
 
     def test_reconcile_absent(self, tmp_path):
         """Intent + PR absent on remote -> not-delivered receipt."""
-        import lifecycle_store as _ls
-        import pr_open
+        from ai_ops_kit.shared import lifecycle_store as _ls
+        from ai_ops_kit.delivery import pr_open
         fdir = tmp_path / "feat2"
         fdir.mkdir(parents=True)
         outbox = fdir / "delivery-outbox"
@@ -159,8 +159,8 @@ class TestReconcilePendingDelivery:
 
     def test_reconcile_mismatch(self, tmp_path):
         """Intent + PR with different SHA -> mismatch receipt."""
-        import lifecycle_store as _ls
-        import pr_open
+        from ai_ops_kit.shared import lifecycle_store as _ls
+        from ai_ops_kit.delivery import pr_open
         fdir = tmp_path / "feat3"
         fdir.mkdir(parents=True)
         outbox = fdir / "delivery-outbox"
@@ -184,8 +184,8 @@ class TestReconcilePendingDelivery:
 
     def test_reconcile_unavailable(self, tmp_path):
         """Intent + remote unavailable -> no receipt written."""
-        import lifecycle_store as _ls
-        import pr_open
+        from ai_ops_kit.shared import lifecycle_store as _ls
+        from ai_ops_kit.delivery import pr_open
         fdir = tmp_path / "feat4"
         fdir.mkdir(parents=True)
         outbox = fdir / "delivery-outbox"
@@ -208,8 +208,8 @@ class TestReconcilePendingDelivery:
 
     def test_reconcile_exception(self, tmp_path):
         """reconcile_delivery raises exception -> unavailable status."""
-        import lifecycle_store as _ls
-        import pr_open
+        from ai_ops_kit.shared import lifecycle_store as _ls
+        from ai_ops_kit.delivery import pr_open
         fdir = tmp_path / "feat5"
         fdir.mkdir(parents=True)
         outbox = fdir / "delivery-outbox"
@@ -472,7 +472,7 @@ class TestWriteBarrierRunPlan:
 
     def test_durable_runplan_failure_is_error(self, tmp_path):
         """Монкипатч durable_write на провал -> status=error и 'RunPlan' в error."""
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         root = tmp_path / "bar"
         root.mkdir()
         _git_init_commit(root)
@@ -580,7 +580,7 @@ class TestReconcileReceiptFields:
     """v3.0.17: строгая идентичность доставки — поля DeliveryReceipt и идемпотентность."""
 
     def _mk_intent(self, fdir, did, wid, branch, commit):
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         obx = fdir / "delivery-outbox"
         _ls.durable_write(obx / f"{did}.intent.yaml",
                           {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": did,
@@ -591,8 +591,8 @@ class TestReconcileReceiptFields:
 
     def test_reconciled_receipt_fields(self, tmp_path):
         """Строгая идентичность (head.sha==commit) -> sha_verified True + remote_sha + pr_url."""
-        import lifecycle_store as _ls
-        import pr_open
+        from ai_ops_kit.shared import lifecycle_store as _ls
+        from ai_ops_kit.delivery import pr_open
         root = tmp_path / "dlvroot"
         f1 = root / "features" / "dlv"; f1.mkdir(parents=True)
         rp1 = self._mk_intent(f1, "did1", "dlv", "ai-ops/dlv", "cafe1234")
@@ -613,7 +613,7 @@ class TestReconcileReceiptFields:
 
     def test_repeat_reconcile_returns_none(self, tmp_path):
         """Повторная реконсиляция -> None (Receipt уже есть, дубля нет)."""
-        import pr_open
+        from ai_ops_kit.delivery import pr_open
         root = tmp_path / "dlvroot2"
         f1 = root / "features" / "dlv"; f1.mkdir(parents=True)
         self._mk_intent(f1, "did1", "dlv", "ai-ops/dlv", "cafe1234")
@@ -695,7 +695,7 @@ class TestFixLoopIntegration:
 
     def test_fix_attempt_event_logged(self, fixloop_run):
         """Событие fix_attempt записано в lifecycle-журнал."""
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         root, _ = fixloop_run
         jr = _ls.journal_read(root / "features" / "fixloop" / "lifecycle-journal.jsonl")
         assert any(e.get("kind") == "fix_attempt" for e in jr["events"])

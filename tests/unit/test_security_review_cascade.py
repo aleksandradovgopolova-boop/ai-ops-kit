@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from security_review_cascade import (
+from ai_ops_kit.security.security_review_cascade import (
     check,
     run_cascade,
 )

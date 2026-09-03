@@ -10,7 +10,7 @@ import tempfile
 
 import pytest
 
-from workpackage_executor import (
+from ai_ops_kit.engine.workpackage_executor import (
     Path,
     _aggregate_close_security,
     _aggregate_code_review,
@@ -19,7 +19,7 @@ from workpackage_executor import (
     json,
 )
 
-import atomic_planner
+from ai_ops_kit.engine import atomic_planner
 
 from _workpackage_helpers import (
     _author,
@@ -269,7 +269,7 @@ class TestAggregateCodeReview:
 @pytest.mark.unit
 class TestAggregateCloseSecurity:
     def test_generic_reviewer_does_not_close_security(self):
-        import approvals as _appr_t
+        from ai_ops_kit.gates import approvals as _appr_t
         isha = "a" * 40
         agg_nr = {"overall": "needs_review", "needs_review": ["rate_limiting"], "results": []}
         gen_reviewer = lambda *a, **k: "VERDICT: pass"
@@ -280,7 +280,7 @@ class TestAggregateCloseSecurity:
         assert r_i.get("closed_by") is None
 
     def test_human_approval_on_integration_sha_closes(self):
-        import approvals as _appr_t
+        from ai_ops_kit.gates import approvals as _appr_t
         isha = "a" * 40
         agg_nr = {"overall": "needs_review", "needs_review": ["rate_limiting"], "results": []}
         gen_reviewer = lambda *a, **k: "VERDICT: pass"
@@ -296,7 +296,7 @@ class TestAggregateCloseSecurity:
             assert r_ii.get("closed_by") == "human-approval-integration-sha"
 
     def test_approval_on_different_sha_does_not_close(self):
-        import approvals as _appr_t
+        from ai_ops_kit.gates import approvals as _appr_t
         isha = "a" * 40
         agg_nr = {"overall": "needs_review", "needs_review": ["rate_limiting"], "results": []}
         gen_reviewer = lambda *a, **k: "VERDICT: pass"

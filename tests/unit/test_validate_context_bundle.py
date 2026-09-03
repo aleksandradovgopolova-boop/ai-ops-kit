@@ -68,7 +68,7 @@ class TestContextBundleValidation:
 
     def test_real_compiler_produces_valid_bundle(self, good_bundle):
         sys.path.insert(0, str(PKG / "tools"))
-        import context_compiler
+        from ai_ops_kit.context import context_compiler
         with tempfile.TemporaryDirectory() as td:
             (Path(td) / "package.json").write_text(
                 '{"dependencies":{"react":"^18"}}', encoding="utf-8")

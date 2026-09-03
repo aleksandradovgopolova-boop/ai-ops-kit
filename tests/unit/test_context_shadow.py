@@ -8,7 +8,7 @@ import yaml
 
 import pytest
 
-from context_shadow import (
+from ai_ops_kit.context.context_shadow import (
     Path,
     build_shadow,
     ce,

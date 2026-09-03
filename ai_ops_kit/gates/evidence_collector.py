@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stack-aware evidence collector (v3.26.0, Execution Engine — детерминированный сбор evidence).
 
-Замыкает Project Detector -> gate. RepositoryProfile (tools/project_detector.py) знает команды
+Замыкает Project Detector -> gate. RepositoryProfile (ai_ops_kit/shared/project_detector.py) знает команды
 build/lint/typecheck/test конкретного репо; этот коллектор ИСПОЛНЯЕТ их через Tool Broker
 (уровень execution) и превращает результат в структурный evidence для гейта
 `implementation_verification` — ровно по его evidence_schema (build/lint/typecheck/tests с

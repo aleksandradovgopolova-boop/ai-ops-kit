@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 
 @pytest.mark.critical_path
@@ -299,7 +299,7 @@ class TestUnresolvedIntents:
 
     def test_intent_without_receipt(self, tmp_path):
         """Intent without receipt -> unresolved."""
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         outbox = tmp_path / "feat" / "delivery-outbox"
         outbox.mkdir(parents=True)
         _ls.durable_write(outbox / "did1.intent.yaml",
@@ -314,7 +314,7 @@ class TestUnresolvedIntents:
 
     def test_intent_with_receipt_not_unresolved(self, tmp_path):
         """Intent with valid receipt -> NOT unresolved."""
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         outbox = tmp_path / "feat" / "delivery-outbox"
         outbox.mkdir(parents=True)
         _ls.durable_write(outbox / "did1.intent.yaml",
@@ -332,7 +332,7 @@ class TestUnresolvedIntents:
 
     def test_branch_filter(self, tmp_path):
         """Branch filter excludes intents on different branches."""
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         outbox = tmp_path / "feat" / "delivery-outbox"
         outbox.mkdir(parents=True)
         _ls.durable_write(outbox / "did1.intent.yaml",
@@ -482,7 +482,7 @@ class TestRunWithPipelineErrors:
             proposer=lambda c: next(pscript),
             feature="journal-test",
         )
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         jpath = child_root / "features" / "journal-test" / "lifecycle-journal.jsonl"
         jr = _ls.journal_read(jpath)
         assert jr["ok"]

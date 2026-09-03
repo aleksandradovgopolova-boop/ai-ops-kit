@@ -10,7 +10,7 @@ import tempfile
 
 import pytest
 
-from workpackage_executor import (
+from ai_ops_kit.engine.workpackage_executor import (
     Path,
     _collect_base_checks_at,
     _git,
@@ -18,7 +18,7 @@ from workpackage_executor import (
     execute_sequence,
 )
 
-import atomic_planner
+from ai_ops_kit.engine import atomic_planner
 
 from _workpackage_helpers import (
     _author,

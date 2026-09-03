@@ -1503,7 +1503,7 @@ probes:
   - tests/unit/test_delivery_budget.py
   file: tests/unit/test_delivery_budget.py
   find: '    return yaml.safe_load((KIT / BUDGET_REL).read_text(encoding="utf-8"))'
-  replace_with: '    return {"ceilings": {"volume_bytes": 4194304, "substantive_files": 999, "alias_bytes": 999999}, "raises": []}'
+  replace_with: '    return {"ceilings": {"volume_bytes": 4194304, "substantive_files": 999}, "raises": []}'
   tests:
   - tests/unit/test_delivery_budget.py
   why: 'ШОВ: охраны подъёма проверяют НАСТОЯЩИЙ реестр, а не заглушку. Мутация оставляет все проверки

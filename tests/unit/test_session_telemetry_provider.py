@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from session_telemetry_provider import (
+from ai_ops_kit.engops.session_telemetry_provider import (
     check,
     read_session_metadata,
 )

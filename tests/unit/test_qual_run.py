@@ -9,14 +9,14 @@ import tempfile
 
 import pytest
 
-from qual_run import (
+from ai_ops_kit.devtools.qual_run import (
     Path,
     evaluate_report,
     print_summary,
     run_qualification,
     slugify,
 )
-import run_plan
+from ai_ops_kit.engine import run_plan
 
 
 @pytest.fixture

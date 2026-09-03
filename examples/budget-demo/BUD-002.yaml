@@ -13,4 +13,4 @@ limits:
 on_exhaustion: fail_closed
 hard: true
 accounting: "budget.py charge_call() (max_model_calls детерминирован) + run_cost cost_usd_est"
-enforced_by: "tools/budget.py Budget (BudgetExceeded перед вызовом модели)"
+enforced_by: "ai_ops_kit/shared/budget.py Budget (BudgetExceeded перед вызовом модели)"

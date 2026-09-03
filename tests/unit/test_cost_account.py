@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from cost_account import (
+from ai_ops_kit.providers.cost_account import (
     PKG,
     compare_configs,
     cost_per_successful_change,

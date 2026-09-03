@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import changelog_gen
+from ai_ops_kit.devtools import changelog_gen
 
 
 @pytest.mark.unit

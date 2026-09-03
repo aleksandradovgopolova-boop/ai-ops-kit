@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from retrieval_bench import (
+from ai_ops_kit.devtools.retrieval_bench import (
     Path,
     run_bench,
 )
