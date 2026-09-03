@@ -259,10 +259,18 @@ goals:
   - id: outcome-and-analytics-loop
     # заморозка: аналитика исходов — новое умение
     freeze_relation: extension
-    # ПРИОСТАНОВЛЕНА 2026-09-02 (решение владельца, roadmap-sync): исход открыт, работы нет.
-    # В ROADMAP — «Дальше». Бэклог: #424.
-    status: paused
+    # ВОЗОБНОВЛЕНА 2026-09-02 (#424): исход в работе. Механизм сверки объявленного с доехавшим
+    # (event_arrival.assess) был закрыт ещё 2026-08-20; недостающее звено — МАШИННЫЙ ПРОИЗВОДИТЕЛЬ
+    # доказательства гейта events_verified_live. Он построен и проверен в этом PR
+    # (event_arrival.events_verified_live: unit 6 тестов + живой замер трёх состояний), но исход
+    # оставлен false ЧЕСТНО: производитель ещё НЕ подключён как источник evidence гейта
+    # analytics_runtime_verification (gate_executor берёт evidence из файла/вердикта судьи, а не
+    # зовёт производителя). Флип в true — после проводки producer -> evidence гейта (отдельный scope).
+    status: active
     outcome:
+      # false: producer факта построен и доказан (event_arrival.events_verified_live), но пока не
+      # проведён в gate_executor как источник evidence — «verified» есть как факт, «not declared»
+      # на уровне гейта ещё нет. См. #424.
       events_verified_in_runtime_not_declared: false
 
 # ЧТО ЗДЕСЬ ЛЕЖИТ, А ЧТО НЕТ (`plan-as-control-plane`, 2026-08-14). Активный план — это ответ на
