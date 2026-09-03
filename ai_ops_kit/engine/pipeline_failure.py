@@ -52,6 +52,44 @@ def _env_unqualified(checks):
     return not _env_proven_ok(checks)
 
 
+def _env_skipped_checks(checks):
+    """Проверки, НЕ выполнившиеся ИЗ-ЗА среды (нет инструмента: exit 127 / `command not found` /
+    `no module named`), а НЕ из-за кода. -> [(name, короткая_причина)], в порядке имён.
+
+    Нужно для ЧЕСТНОГО вердикта: когда pytest прошёл, а ruff/typecheck недоступны, гейт остаётся
+    незакрытым — но это дефицит СРЕДЫ, не кода. Без явного названия «гейт не закрыт» читается как
+    «код плохой». Здесь среда называется средой."""
+    out = []
+    for name in sorted((checks or {}).keys()):
+        c = (checks or {}).get(name) or {}
+        if c.get("status") != "fail" or not _check_has_env_symptom(c):
+            continue
+        reason = "инструмент недоступен"
+        for run in (c.get("runs") or []):
+            if run.get("ok"):
+                continue
+            tail = [ln for ln in (run.get("output_tail") or "").strip().splitlines() if ln.strip()]
+            if run.get("exit_code") == 127 or tail:
+                reason = (tail[-1].strip()[:80] if tail else f"exit {run.get('exit_code')}")
+                break
+        out.append((name, reason))
+    return out
+
+
+def _env_degraded_note(checks):
+    """Человеко-читаемая строка вердикта про env-дефицит — или None, если таких проверок нет.
+
+    Формулировка честная в обе стороны: детерминированные проверки, которые ОТРАБОТАЛИ, зелены; эти
+    ворота ПРОПУЩЕНЫ (среда), а не провалены (код). Не выдаёт незакрытый гейт за дефект правки."""
+    skipped = _env_skipped_checks(checks)
+    if not skipped:
+        return None
+    named = "; ".join(f"{n} ({why})" for n, why in skipped)
+    return ("инструменты недоступны в среде прогона (дефицит среды, не дефект кода): " + named
+            + " — детерминированные проверки, которые отработали, зелены; эти ворота ПРОПУЩЕНЫ, "
+              "не провалены. Полный вердикт требует чистой среды (CI) или установки инструментов.")
+
+
 def _baseline_failure_summary(checks, tail=500):
     """Свод падающих проверок базы с ФАКТИЧЕСКИМ выводом — чтобы модель знала, что чинить."""
     lines = []
