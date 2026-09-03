@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 351
+behavioral_count: 352
 structural_count: 61
-total_count: 412
-behavioral_share_pct: 85.19
+total_count: 413
+behavioral_share_pct: 85.23
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -181,3 +181,17 @@ raises:
       (test_experience_contract_required_stories.py — импортирует experience_contract И зовёт
       required_story_specs/required_stories_coverage), доля поведенческих выросла 85.16% -> 85.19%.
       Baseline пере-записан на фактический замер (после ребейза на main).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 351
+    from_total: 412
+    to_behavioral: 352
+    to_total: 413
+    to_share_pct: 85.23
+    work: deprecate-flat-tools-warn
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): warn-минор перед 4.0 добавил ПОВЕДЕНЧЕСКИЙ тест
+      (test_flat_tools_deprecation_warning.py — импортирует tools/_bootstrap И зовёт
+      _warn_flat_entry_point, проверяя, что прямой запуск плоской точки предупреждает, а импорт
+      шима и валидатор молчат), доля поведенческих выросла 85.19% -> 85.23%. Baseline пере-записан
+      на фактический замер.
