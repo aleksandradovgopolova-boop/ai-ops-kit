@@ -111,7 +111,7 @@ def test_run_report_says_the_move_is_humans(tmp_path):
     root = tmp_path / "child"
     root.mkdir()
     _init_git(root)
-    import tool_broker
+    from ai_ops_kit.engine import tool_broker
     ops = iter([{"op": "write", "path": ".github/workflows/deploy.yml",
                  "content": "on: push\njobs: {}\n"}, {"done": True}])
     report = execution_pipeline.run_pipeline(

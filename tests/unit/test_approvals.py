@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from approvals import (
+from ai_ops_kit.gates.approvals import (
     Path,
     _is_high_risk,
     check,

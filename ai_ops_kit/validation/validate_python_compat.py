@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Python-совместимость: PEP 604 union-аннотации без future-import ломают <3.10 (v2.69).
 
-finding квалификационного прогона (self-audit): tools/generate_artifacts.py использовал
+finding квалификационного прогона (self-audit): ai_ops_kit/shared/generate_artifacts.py использовал
 `str | None` в аннотации функции. На Python 3.9 (дефолт macOS CommandLineTools) аннотации
 вычисляются при импорте -> TypeError, и ВЕСЬ движок не грузился (ai_ops_run -> workitem ->
 run_report -> generate_artifacts). Кит заявляет широкую переносимость и ставится в child с
@@ -28,7 +28,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 # v3.33.2: добавлены ai_ops_kit (после переезда 3.31.0 РЕАЛЬНЫЙ код там, а в tools/ — тонкие
 # алиасы без аннотаций, то есть guard проверял пустое место) и tests (джоба python39-compat гоняет
 # на 3.9 контрактные тесты — значит и они обязаны быть совместимы).
-SCAN_DIRS = ["ai_ops_kit", "tools", "validation", "installer", "tests"]
+SCAN_DIRS = ["ai_ops_kit", "installer", "tests"]
 
 # Модули stdlib, появившиеся ПОЗЖЕ объявленного пола. Импорт такого модуля — не стилистика,
 # а гарантированный ModuleNotFoundError у пользователя со старым python. Пол берётся из

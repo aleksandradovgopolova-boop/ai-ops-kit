@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from lifecycle_intent import (
+from ai_ops_kit.lifecycle.lifecycle_intent import (
     ALL_STATES,
     derive,
     intent_to_lifecycle,

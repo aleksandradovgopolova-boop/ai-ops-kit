@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline
+from ai_ops_kit.engine import execution_pipeline
 
 from _pipeline_helpers import _QUICK_SIG, _init_git, _init_python_repo
 
@@ -36,7 +36,7 @@ class TestAuthorWithRetry:
     """Tests for _author_with_retry — retry logic for flaky author output."""
 
     def test_first_attempt_valid(self):
-        import budget as budget_mod
+        from ai_ops_kit.shared import budget as budget_mod
         bud = budget_mod.Budget.from_dict({"max_model_calls": 5})
         author = lambda prompt: "schema_version: 1\nkind: requirements-artifact\nrequirements:\n  - id: R1\n    statement: test\n    acceptance:\n      - when x then y\n"
         import validate_requirements_artifact as vra
@@ -47,7 +47,7 @@ class TestAuthorWithRetry:
         assert data["kind"] == "requirements-artifact"
 
     def test_flaky_first_then_valid(self):
-        import budget as budget_mod
+        from ai_ops_kit.shared import budget as budget_mod
         bud = budget_mod.Budget.from_dict({"max_model_calls": 5})
         calls = {"n": 0}
         def flaky_author(prompt):
@@ -62,7 +62,7 @@ class TestAuthorWithRetry:
         assert calls["n"] == 2
 
     def test_always_invalid(self):
-        import budget as budget_mod
+        from ai_ops_kit.shared import budget as budget_mod
         bud = budget_mod.Budget.from_dict({"max_model_calls": 5})
         author = lambda prompt: "always garbage"
         check = lambda data: ["invalid"] if not isinstance(data, dict) else ["still invalid"]
@@ -70,7 +70,7 @@ class TestAuthorWithRetry:
         assert len(errs) > 0
 
     def test_budget_exceeded(self):
-        import budget as budget_mod
+        from ai_ops_kit.shared import budget as budget_mod
         bud = budget_mod.Budget.from_dict({"max_model_calls": 0})
         author = lambda prompt: "schema_version: 1\nkind: requirements-artifact\nrequirements:\n  - id: R1\n    statement: test\n    acceptance:\n      - when x then y\n"
         import validate_requirements_artifact as vra
@@ -258,7 +258,7 @@ class TestSpecFirstGate:
 
     def test_incomplete_spec_blocks(self, child_root):
         _init_python_repo(child_root)
-        import spec_levels as sl
+        from ai_ops_kit.gates import spec_levels as sl
         sl.create_spec(child_root, "spec-fn", _QUICK_SIG)  # все разделы missing
         it_sf = iter([{"op": "write", "path": "src/sf.py", "content": "s=1\n"}, {"done": True}])
         rep_sf = execution_pipeline.run_pipeline(
@@ -271,7 +271,7 @@ class TestSpecFirstGate:
 
     def test_full_spec_does_not_block(self, child_root):
         _init_python_repo(child_root)
-        import spec_levels as sl
+        from ai_ops_kit.gates import spec_levels as sl
         import yaml as yaml_mod
         sp = child_root / "features" / "spec-fn2" / "spec.yaml"
         sp.parent.mkdir(parents=True, exist_ok=True)
@@ -294,7 +294,7 @@ class TestSpecDepthEngineering:
 
     def test_eng_without_author_blocked(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         sig_eng = {"task_type": "ENGINEERING", "size": "small", "risk": "medium",
                    "affected_areas": ["core"]}
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])

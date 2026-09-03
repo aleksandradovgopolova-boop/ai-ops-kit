@@ -17,7 +17,7 @@ pass». Ветка, созданная чтобы пропустить пров�
 """
 from __future__ import annotations
 
-from gate_executor import evaluate
+from ai_ops_kit.gates.gate_executor import evaluate
 
 GATE = "implementation_verification"
 DOCS_REASON = "изменение только документации — продуктовые проверки не применимы"
@@ -87,8 +87,8 @@ def test_collector_and_gate_agree_on_the_flags(tmp_path):
     константу теста с реестром и сборщик не вызывала вовсе. Тест шва, не трогающий шов, — это
     декорация; поймано мутацией, не чтением.
     """
-    import gate_executor as gx
-    from evidence_collector import collect
+    from ai_ops_kit.gates import gate_executor as gx
+    from ai_ops_kit.gates.evidence_collector import collect
     from ai_ops_kit.engine import tool_broker as _tb
 
     (tmp_path / "docs").mkdir()

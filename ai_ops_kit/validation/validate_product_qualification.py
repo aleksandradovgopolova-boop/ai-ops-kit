@@ -3,7 +3,7 @@
 
 Аудит требовал product-qualification: «ContextBundle меняет prompt; неполная спека не пускает в
 implementation; resume после сессии; auth/secret без человека не проходит; нет ложного green». Живые
-сценарии с МОДЕЛЬЮ гоняются на машине пользователя (qualification/scenarios.yaml + tools/qual_run.py,
+сценарии с МОДЕЛЬЮ гоняются на машине пользователя (qualification/scenarios.yaml + ai_ops_kit/devtools/qual_run.py,
 DeepSeek/стек — см. docs/qualification-runbook.md). Здесь — те же ГАРАНТИИ, но проверенные
 ДЕТЕРМИНИРОВАННО в CI через `ai_ops_run.run` со scripted-proposer (механика продукта, не качество
 правок модели). Это интеграционный уровень: не юнит-механика компонентов (это
@@ -276,7 +276,7 @@ def main(argv):
         ok = ok and passed
         print(f"{'PASS' if passed else 'FAIL'} {name}")
     print("НАПОМИНАНИЕ: живые сценарии с моделью (качество правок) — на машине пользователя "
-          "(qualification/scenarios.yaml + tools/qual_run.py, DeepSeek/стек). Здесь — ГАРАНТИИ продукта.")
+          "(qualification/scenarios.yaml + ai_ops_kit/devtools/qual_run.py, DeepSeek/стек). Здесь — ГАРАНТИИ продукта.")
     print("validate_product_qualification:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

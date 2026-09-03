@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generate_runtime import (
+from ai_ops_kit.shared.generate_runtime import (
     Path,
     RUNTIMES,
     check_drift,
@@ -39,7 +39,8 @@ class TestGenerate:
     def test_ai_run_content(self, generated_files):
         rn_files = [p for p in generated_files if p.stem == "ai-run"]
         rn_text = next((p.read_text(encoding="utf-8") for p in rn_files if "claude-code" in str(p)), "")
-        for token in ("ai_ops_run.py", "канонический вход", "run-report.json", "совместимый алиас"):
+        for token in ("ai_ops_kit.engine.ai_ops_run", "канонический вход", "run-report.json",
+                      "совместимый алиас"):
             assert token in rn_text, f"в ai-run нет '{token}'"
 
     def test_ai_start_task_for_each_runtime(self, generated_files):
@@ -55,7 +56,8 @@ class TestGenerate:
     def test_ai_start_task_full_flow(self, generated_files):
         st_files = [p for p in generated_files if p.stem == "ai-start-task"]
         st_text = next((p.read_text(encoding="utf-8") for p in st_files if "claude-code" in str(p)), "")
-        for token in ("concurrency_preflight.py", "worktree.py", "workitem.py", "active_work.py",
+        for token in ("ai_ops_kit.gates.concurrency_preflight", "ai_ops_kit.engine.worktree",
+                      "ai_ops_kit.lifecycle.workitem", "ai_ops_kit.lifecycle.active_work",
                       "workitems/", ".ai/managed/commands/task/ai-start-task.md"):
             assert token in st_text, f"ai-start-task разошёлся с canonical: нет '{token}'"
 

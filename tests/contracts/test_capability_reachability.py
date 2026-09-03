@@ -111,9 +111,16 @@ def _reachable(modules: dict[str, Path]) -> set[str]:
             roots.add(hard)
     roots |= {m for m in known if m.startswith(f"{PKG}.validation.")}
     roots |= _imports_in(PKG_ROOT / "installer" / "ai_ops.py", known)
-    # процессные шимы tools/<name>.py — модуль вызывается как инструмент
-    for shim in (PKG_ROOT / "tools").glob("*.py"):
-        roots |= set(by_basename.get(shim.stem, []))
+    # v4.0: плоский слой tools/ снят. Модуль, запускаемый как инструмент
+    # (`python3 -m ai_ops_kit.<pkg>.<mod>`), — тот, у кого есть блок `if __name__ == "__main__"`:
+    # его можно позвать процессом, значит он достижим по определению (раньше эту роль играл
+    # процессный шим tools/<name>.py над ним).
+    for m, p in modules.items():
+        try:
+            if re.search(r'^if __name__ == ["\']__main__["\']', p.read_text(encoding="utf-8", errors="ignore"), re.M):
+                roots.add(m)
+        except OSError:
+            pass
     # упоминания basename в поверхностях рантайм-диспетча
     blob_parts: list[str] = []
     for d in RUNTIME_WIRING_DIRS:

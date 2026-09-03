@@ -72,7 +72,7 @@ def _flat_product_modules(pkg_root: Path = PKG) -> frozenset[str]:
     """Плоские имена-модули, которые импортируют ПРОДУКТ через шим (AGENTS.md).
 
     Уходящий слой совместимости даёт плоские алиасы: `import context_engine` резолвится в
-    `tools/context_engine.py`, `import validate_x` — в валидатор. Отличить такой импорт от stdlib
+    `ai_ops_kit/context/context_engine.py`, `import validate_x` — в валидатор. Отличить такой импорт от stdlib
     можно ФАКТОМ: существует ли файл `tools/<имя>.py` или `ai_ops_kit/validation/<имя>.py`. Это
     честнее списка-памяти — множество считается из самого репозитория.
     """

@@ -39,8 +39,10 @@ pytestmark = pytest.mark.unit
 PKG = Path(__file__).resolve().parents[2]
 DOCS = PKG / "docs"
 
-# Записи о прошлом: не обещания о настоящем.
-PAST_RECORDS = ("docs/changelog", "docs/change-briefs", "docs/audit-report.md")
+# Записи о прошлом: не обещания о настоящем. Датированные аудиты (`docs/audit-<дата>/`) —
+# снимок на момент аудита: правило «путь обязан существовать сейчас» к ним неприменимо (в v4.0
+# они по делу упоминают снятый слой `tools/`, каким он был тогда).
+PAST_RECORDS = ("docs/changelog", "docs/change-briefs", "docs/audit-report.md", "docs/audit-2026")
 
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 CODE_PATH = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:py|md|ya?ml|json|sh|toml|cfg))`")

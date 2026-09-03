@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from economic_preflight import (
+from ai_ops_kit.gates.economic_preflight import (
     ESTIMATE_STATUS,
     Path,
     VERDICTS,

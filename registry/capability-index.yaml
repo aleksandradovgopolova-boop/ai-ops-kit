@@ -100,7 +100,7 @@ entries:
     capability: parallel_execution
     status: unsupported
     value: false
-    source: "tools/orchestrator.py — sequential-only; parallel scheduler planned"
+    source: "ai_ops_kit/providers/orchestrator.py — sequential-only; parallel scheduler planned"
     fallback: "sequential role isolation"
   - entity_kind: tool
     entity_id: openspec-cli

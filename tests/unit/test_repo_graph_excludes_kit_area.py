@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import warnings
 
-from repo_graph import _analyze, build_graph
+from ai_ops_kit.context.repo_graph import _analyze, build_graph
 
 
 def _child(tmp_path):

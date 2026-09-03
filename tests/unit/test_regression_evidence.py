@@ -19,8 +19,8 @@ import sys
 
 import pytest
 
-import ai_ops_run
-import regression_evidence as re_
+from ai_ops_kit.engine import ai_ops_run
+from ai_ops_kit.gates import regression_evidence as re_
 
 
 def _git(root, *args):

@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from repo_graph import (
+from ai_ops_kit.context.repo_graph import (
     Path,
     affected_tests,
     build_graph,
@@ -98,7 +98,7 @@ class TestRealKitGraph:
 
     def test_impact_gate_policy(self):
         real = build_graph()
-        imp_gp = impact(real, "tools/gate_policy.py")
+        imp_gp = impact(real, "ai_ops_kit/gates/gate_policy.py")
         assert "ai_ops_kit/engine/execution_pipeline.py" in imp_gp
         assert "ai_ops_kit/devtools/bench_lite.py" in imp_gp
 

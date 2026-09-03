@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline
+from ai_ops_kit.engine import execution_pipeline
 
 from _pipeline_helpers import _QUICK_SIG, _head_branch, _init_git, _init_python_repo
 
@@ -158,7 +158,7 @@ class TestRunPipelineCommit:
 
     def test_commit_creates_sha_and_branch(self, child_root):
         _init_git(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         ops = iter([{"op": "write", "path": "src/feat.py", "content": "x = 1\n"}, {"done": True}])
         report = execution_pipeline.run_pipeline(
@@ -382,7 +382,7 @@ class TestRunPipelinePlan:
 
     def test_external_plan_used(self, child_root):
         _init_git(child_root)
-        import run_plan
+        from ai_ops_kit.engine import run_plan
         plan = run_plan.build_plan({"task_type": "QUICK"}, workitem_id="ext-plan")
         report = execution_pipeline.run_pipeline(
             task="test",
@@ -401,7 +401,7 @@ class TestRunPipelineWriteScope:
 
     def test_write_out_of_scope_denied(self, child_root):
         _init_git(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         ops = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])
         report = execution_pipeline.run_pipeline(
@@ -420,7 +420,7 @@ class TestPipelineLoopReport:
     """Петля/отчёт run_pipeline: точные значения полей (dry QUICK, python-профиль)."""
 
     def _run_dry(self, child_root):
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         script = [
             {"op": "write", "path": "src/add.py", "content": "def add(a,b): return a+b\n"},
             {"op": "read", "path": "src/add.py"},
@@ -483,7 +483,7 @@ class TestPipelineLoopReport:
 
     def test_out_of_scope_write_file_not_created(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         it2 = iter([{"op": "write", "path": "config/x", "content": "y"}, {"done": True}])
         rep2 = execution_pipeline.run_pipeline(
@@ -498,7 +498,7 @@ class TestCommitNonIsolate:
     """commit=True без isolate: ветка ai-ops/*, evidence на точном SHA, ready True."""
 
     def _run_commit(self, child_root, feature="mul-fn"):
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         it_c = iter([
             {"op": "write", "path": "src/mul.py", "content": "def mul(a,b): return a*b\n"},
@@ -564,7 +564,7 @@ class TestApprovalsRecheckAfterDiff:
 
     def test_scope_not_covering_path_uncovered_secrets(self, child_root):
         _init_python_repo(child_root)
-        import approvals as appr
+        from ai_ops_kit.gates import approvals as appr
         appr.write_record(child_root, "mul-fn", "secrets", "u@x", "config/other.py", "ротация",
                           created_at="2026-07-05T00:00:00Z", binds_to="P",
                           expires_at="2027-01-01T00:00:00Z", risk="secret", source="user")
@@ -581,7 +581,7 @@ class TestRequireTestsEscalation:
 
     def test_require_tests_blocks_impl_verification(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", write_scope=["src/"])
         it_rt = iter([{"op": "write", "path": "src/q.py", "content": "x=1\n"}, {"done": True}])
         rep_rt = execution_pipeline.run_pipeline(
@@ -652,7 +652,7 @@ class TestIsolateRun:
 
     def test_shell_only_edit_still_commits(self, child_root):
         _init_python_repo(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol_sh = tool_broker.Policy(level="execution", write_scope=["src/"])
         it_sh = iter([
             {"op": "shell", "command": "python3 -c \"open('shelledit.py','w').write('s=1\\n')\""},

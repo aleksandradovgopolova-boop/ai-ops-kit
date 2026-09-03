@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from run_report import (
+from ai_ops_kit.lifecycle.run_report import (
     Path,
     build_report,
     ga,

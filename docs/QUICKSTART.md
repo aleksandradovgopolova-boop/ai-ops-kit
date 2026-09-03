@@ -82,7 +82,7 @@ python3 <kit>/tools/generate_artifacts.py scaffold features/my-feature --stage d
 ## 3. Проверка «хорошо или плохо» — одной командой
 
 ```bash
-python3 <kit>/tools/run_report.py features/my-feature --graph knowledge/graph.yaml
+PYTHONPATH=<kit> python3 -m ai_ops_kit.lifecycle.run_report features/my-feature --graph knowledge/graph.yaml
 ```
 
 Вердикт OK / WARN / PROBLEM: валидность blueprint, покрытие стадий, незаполненные
@@ -94,7 +94,7 @@ python3 <kit>/tools/run_report.py features/my-feature --graph knowledge/graph.ya
 Перед коммитом PR запускайте отчёт с записью среза:
 
 ```bash
-python3 <kit>/tools/run_report.py features/my-feature --graph knowledge/graph.yaml --record
+PYTHONPATH=<kit> python3 -m ai_ops_kit.lifecycle.run_report features/my-feature --graph knowledge/graph.yaml --record
 ```
 
 Срез (дата, вердикт, стадия, покрытие) допишется в `.ai/project/report-history/<фича>.jsonl`
@@ -182,7 +182,7 @@ ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI и
           for f in features/*/blueprint.yaml; do
             d="$(dirname "$f")"
             python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_feature_blueprint.py "$d"
-            python3 "$RUNNER_TEMP"/ai-ops-kit/tools/run_report.py "$d" --graph knowledge/graph.yaml
+            PYTHONPATH="$RUNNER_TEMP/ai-ops-kit" python3 -m ai_ops_kit.lifecycle.run_report "$d" --graph knowledge/graph.yaml
           done
 ```
 

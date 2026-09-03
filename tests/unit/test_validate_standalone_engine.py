@@ -45,7 +45,7 @@ class TestBuildManaged:
 
     def test_managed_layer_built_from_managed_set(self, engine_env):
         _, managed, _ = engine_env
-        assert (managed / "tools" / "ai_ops_run.py").exists()
+        assert (managed / "ai_ops_kit" / "engine" / "ai_ops_run.py").exists()
 
     def test_runtime_closure_complete(self, engine_env):
         _, managed, _ = engine_env
@@ -54,7 +54,7 @@ class TestBuildManaged:
 
     def test_engine_present_in_managed(self, engine_env):
         _, managed, _ = engine_env
-        assert (managed / "tools" / "ai_ops_run.py").exists()
+        assert (managed / "ai_ops_kit" / "engine" / "ai_ops_run.py").exists()
 
 
 @pytest.mark.unit
@@ -109,5 +109,5 @@ class TestCompleteness:
 
     def test_completeness_catches_missing_engine_file(self, engine_env):
         _, managed, _ = engine_env
-        (managed / "tools" / "tool_broker.py").unlink()
-        assert "tools/tool_broker.py" in missing_closure(managed)
+        (managed / "ai_ops_kit" / "engine" / "tool_broker.py").unlink()
+        assert "ai_ops_kit/engine/tool_broker.py" in missing_closure(managed)

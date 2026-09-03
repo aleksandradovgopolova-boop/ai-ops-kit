@@ -15,7 +15,7 @@ import textwrap
 import pytest
 import yaml
 
-import project_detector
+from ai_ops_kit.shared import project_detector
 
 
 def _py_repo(root, *, pytest_section=True, tests_dir=True, with_ai=True):
@@ -277,8 +277,8 @@ def test_consumers_use_single_detection_entrypoint(tmp_path):
     """context_compiler и engineering_advisor ходят через load_or_detect (общий кеш профиля)."""
     import inspect
 
-    import context_compiler
-    import engineering_advisor
+    from ai_ops_kit.context import context_compiler
+    from ai_ops_kit.engops import engineering_advisor
 
     assert "load_or_detect" in inspect.getsource(context_compiler.compile_bundle)
     assert "load_or_detect" in inspect.getsource(engineering_advisor._delivery_plan)
@@ -292,7 +292,7 @@ def test_consumers_use_single_detection_entrypoint(tmp_path):
 def test_compile_bundle_does_not_write_profile(tmp_path):
     """compile_bundle читает профиль, но не пишет его: через него проходит `preview`, а preview
     обязан не менять репозиторий. Регрессия: write=True здесь делал `preview onboard` действием."""
-    import context_compiler
+    from ai_ops_kit.context import context_compiler
 
     _py_repo(tmp_path)
     (tmp_path / ".ai").mkdir(exist_ok=True)     # каталог есть -> запись была бы разрешена
@@ -311,7 +311,7 @@ def test_compile_bundle_does_not_write_profile(tmp_path):
 @pytest.mark.unit
 def test_preview_onboard_leaves_repo_untouched(tmp_path):
     """`ai-ops preview onboard` не производит побочных эффектов — ни профиля, ни иных файлов."""
-    import ai_ops_cli
+    from ai_ops_kit.cli import ai_ops_cli
 
     _py_repo(tmp_path)
     (tmp_path / ".ai").mkdir(exist_ok=True)

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from pipeline_failure import (
+from ai_ops_kit.engine.pipeline_failure import (
     _diff_checks,
     _env_proven_ok,
     _failure_ids,

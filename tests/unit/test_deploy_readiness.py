@@ -16,7 +16,7 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import deploy_readiness as dr
+from ai_ops_kit.gates import deploy_readiness as dr
 
 
 @pytest.mark.unit

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from parallel_planner import (
+from ai_ops_kit.engine.parallel_planner import (
     WG_DEMO,
     can_parallel,
     integration_decision,

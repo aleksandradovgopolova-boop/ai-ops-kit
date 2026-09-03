@@ -29,14 +29,14 @@ class TestOrchestratorContracts:
 
     def test_make_provider_returns_callable_for_known(self):
         """make_provider() must return a callable for mock and claude-cli."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         for name in ("mock", "claude-cli"):
             provider = orchestrator.make_provider(name)
             assert callable(provider), f"make_provider({name}) returned non-callable"
 
     def test_mock_provider_returns_string(self):
         """Mock provider must return a string for any prompt."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         provider = orchestrator.make_provider("mock")
         result = provider("test prompt")
         assert isinstance(result, str)
@@ -46,7 +46,7 @@ class TestOrchestratorContracts:
         """Claude CLI provider must exercise full production path:
         command construction → invocation → timing → retry → JSON parsing → usage recording.
         This is the regression test for v3.21.1 NameError fix."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
 
         class FakeResult:
             def __init__(self, stdout="", returncode=0, stderr=""):
@@ -91,7 +91,7 @@ class TestOrchestratorContracts:
 
     def test_claude_cli_retry_on_failure(self):
         """Claude CLI must retry on transient failures (rc != 0)."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
 
         class FakeResult:
             def __init__(self, stdout="", returncode=0, stderr=""):
@@ -119,7 +119,7 @@ class TestOrchestratorContracts:
     def test_claude_cli_retry_on_transient_is_error(self, monkeypatch):
         """F-011 positive: rc==0, но синтетический is_error:true (напр. 529 Overloaded) — это транзиент.
         Механизм ДОЛЖЕН переждать (ретрай) и вернуть валидный результат, а не отдать ошибку за ответ."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         monkeypatch.setattr("time.sleep", lambda *a, **k: None)   # без реальных пауз
 
         class FakeResult:
@@ -143,7 +143,7 @@ class TestOrchestratorContracts:
     def test_claude_cli_is_error_not_passed_as_result(self, monkeypatch):
         """F-011 fail-closed: синтетический is_error:true НЕ должен стать зелёным результатом.
         Нетранзиентная ошибка (напр. auth) поднимается RuntimeError, а не возвращается как валидный ответ."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         monkeypatch.setattr("time.sleep", lambda *a, **k: None)
 
         class FakeResult:
@@ -160,7 +160,7 @@ class TestOrchestratorContracts:
     def test_claude_cli_error_not_truncated(self, monkeypatch):
         """F-011a: полный человекочитаемый текст ошибки claude сохраняется (парсинг content[].text),
         а не режется до 200 символов — иначе диагностика сбоя провайдера теряется ровно там, где нужна."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         monkeypatch.setattr("time.sleep", lambda *a, **k: None)
 
         class FakeResult:
@@ -177,7 +177,7 @@ class TestOrchestratorContracts:
 
     def test_claude_cli_read_only_tools(self):
         """Claude CLI must be restricted to read-only tools."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
 
         seen_cmd = []
         def capture_runner(cmd):
@@ -214,7 +214,7 @@ class TestToolBrokerContracts:
 
     def test_policy_engine_returns_dict_with_decision(self):
         """Policy.decide() must return a dict with 'allow' (bool) and 'reason' (str)."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="read-only")
         result = pol.decide({"op": "read", "path": "src/a.ts"})
         assert isinstance(result, dict)
@@ -223,14 +223,14 @@ class TestToolBrokerContracts:
 
     def test_policy_engine_read_always_allowed(self):
         """read-only level must allow read operations within the repo."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="read-only")
         result = pol.decide({"op": "read", "path": "src/a.ts"})
         assert result["allow"] is True
 
     def test_policy_engine_write_respects_level(self):
         """read-only level must deny write; controlled-write must allow it within scope."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol_ro = tool_broker.Policy(level="read-only")
         assert pol_ro.decide({"op": "write", "path": "src/a.ts"})["allow"] is False
 
@@ -240,7 +240,7 @@ class TestToolBrokerContracts:
 
     def test_execute_denied_has_no_side_effects(self, child_root):
         """execute() on a denied action must NOT create files or run commands."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="read-only")
         target = child_root / "src" / "should_not_exist.ts"
         result = tool_broker.execute(
@@ -253,7 +253,7 @@ class TestToolBrokerContracts:
 
     def test_scrub_env_removes_secrets(self, monkeypatch):
         """scrub_env() must strip unknown env vars (allowlist-based)."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         fake_env = {
             "PATH": "/usr/bin",
             "HOME": "/home/user",
@@ -270,7 +270,7 @@ class TestToolBrokerContracts:
 
     def test_block_push_blocks_writes(self):
         """block_push=True must deny git push commands."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", block_push=True)
         result = pol.decide({"op": "git", "command": "git push origin main"})
         assert result["allow"] is False
@@ -278,7 +278,7 @@ class TestToolBrokerContracts:
 
     def test_execute_returns_evidence_dict(self, child_root):
         """execute() must always return a dict with op, allowed, reason keys."""
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"])
         (child_root / "src").mkdir(exist_ok=True)
         (child_root / "src" / "test.txt").write_text("hello")
@@ -302,7 +302,7 @@ class TestGateExecutorContracts:
 
     def test_evaluate_gate_returns_required_keys(self):
         """evaluate_gate() must return a dict with schema_version, gate, status, blocking, etc."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         gates = gate_executor.load_gates()
         gate_id = "intake_completeness"
         gate = gates[gate_id]
@@ -315,7 +315,7 @@ class TestGateExecutorContracts:
 
     def test_deterministic_gate_pass_on_valid_input(self):
         """A deterministic gate with passing evidence must return status=pass."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         gates = gate_executor.load_gates()
         gate_id = "intake_completeness"
         gate = gates[gate_id]
@@ -328,7 +328,7 @@ class TestGateExecutorContracts:
 
     def test_deterministic_gate_fail_on_invalid_input(self):
         """A blocking gate without evidence must fail (fail-closed)."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         gates = gate_executor.load_gates()
         # Find a blocking gate
         blocking_gate_id = None
@@ -345,7 +345,7 @@ class TestGateExecutorContracts:
 
     def test_load_gates_returns_dict(self):
         """load_gates() must return a non-empty dict of gate definitions."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         gates = gate_executor.load_gates()
         assert isinstance(gates, dict)
         assert len(gates) > 0
@@ -355,13 +355,13 @@ class TestGateExecutorContracts:
 
     def test_collect_evidence_returns_dict(self, tmp_path):
         """collect_evidence() must return a dict (even if empty for missing artifacts)."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         result = gate_executor.collect_evidence("QUICK", tmp_path)
         assert isinstance(result, dict)
 
     def test_classify_returns_valid_kind(self):
         """classify() must return one of the known gate kinds."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         gates = gate_executor.load_gates()
         valid_kinds = {"human-approval", "deterministic", "ai-review", "writer-check"}
         for gid, g in gates.items():
@@ -370,7 +370,7 @@ class TestGateExecutorContracts:
 
     def test_validate_evidence_accepts_valid(self):
         """validate_evidence() must return no errors for well-formed evidence."""
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         evidence = {
             "some_gate": {
                 "status": "pass",
@@ -390,7 +390,7 @@ class TestPreflightContracts:
 
     def test_assess_returns_required_keys(self, child_root):
         """assess() must return a dict with schema_version, kind, ok, blocked, checks, reasons."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         result = preflight.assess(
             {"task_type": "QUICK"}, child_root, "w",
             payload={"text": "test"},
@@ -406,7 +406,7 @@ class TestPreflightContracts:
 
     def test_assess_blocked_implies_reasons(self, child_root):
         """When blocked=True, reasons must be non-empty."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         # Incomplete spec -> blocked
         result = preflight.assess(
             {"task_type": "QUICK"}, child_root, "w",
@@ -420,7 +420,7 @@ class TestPreflightContracts:
 
     def test_assess_quick_without_spec_not_blocked(self, child_root):
         """QUICK task without spec must NOT be blocked (spec is light for QUICK)."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         result = preflight.assess(
             {"task_type": "QUICK"}, child_root, "w",
             payload={"text": "test"},
@@ -432,7 +432,7 @@ class TestPreflightContracts:
 
     def test_assess_engineering_without_spec_blocked(self, child_root):
         """ENGINEERING (heavy) without spec and without --author must be blocked."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         result = preflight.assess(
             {"task_type": "ENGINEERING"}, child_root, "w",
             payload={"text": "test"},
@@ -444,7 +444,7 @@ class TestPreflightContracts:
 
     def test_assess_reevaluate_skips_build_preconditions(self, child_root):
         """reevaluate_only=True must skip spec-first/atomic build preconditions."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         result = preflight.assess(
             {"task_type": "ENGINEERING"}, child_root, "w",
             payload={"text": "test"},
@@ -459,7 +459,7 @@ class TestPreflightContracts:
 
     def test_assess_context_overflow_blocked(self, child_root):
         """Context budget overflow must block before execution."""
-        import preflight
+        from ai_ops_kit.gates import preflight
         result = preflight.assess(
             {"task_type": "ENGINEERING"}, child_root, "w",
             payload={"text": "test"},
@@ -487,7 +487,7 @@ class TestExecutionPipelineContracts:
         (класс `TestRunPipeline*`) — здесь остаётся дешёвая проверка импортируемости, и названа
         она тем, что делает.
         """
-        import execution_pipeline
+        from ai_ops_kit.engine import execution_pipeline
         assert callable(execution_pipeline.run_pipeline)
 
 
@@ -496,7 +496,7 @@ class TestUsageLedgerContracts:
 
     def test_append_writes_to_both_ledgers(self, child_root):
         """usage_ledger.append() must write to both task and product ledgers."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         records = [{
             "run_id": "test-run",
             "workitem_id": "test-wid",
@@ -524,7 +524,7 @@ class TestUsageLedgerContracts:
 
     def test_extra_context_stamped_on_records(self, child_root):
         """v3.24.0: extra_context must be stamped on all records."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         records = [{
             "run_id": "test-run-2",
             "input_tokens": 10,
@@ -545,7 +545,7 @@ class TestUsageLedgerContracts:
 
     def test_unavailable_never_zero(self):
         """usage_status=unavailable must have None tokens, not 0."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         record = {
             "usage_status": "unavailable",
             "input_tokens": None,  # Must be None, not 0
@@ -566,7 +566,7 @@ class TestLifecycleStoreContracts:
 
     def test_durable_write_atomic(self, child_root):
         """durable_write() must be atomic — invalid data never replaces valid."""
-        import lifecycle_store
+        from ai_ops_kit.shared import lifecycle_store
         path = child_root / "test.yaml"
         # Write valid data
         result = lifecycle_store.durable_write(str(path), {"kind": "test", "value": 1}, require_keys=["kind"])
@@ -584,7 +584,7 @@ class TestRegressions:
     def test_claude_cli_nameerror_fixed(self):
         """v3.21.1: NameError('time') in claude-cli must not recur.
         This was caused by 'import time as _t' but using 'time.monotonic()'."""
-        import orchestrator
+        from ai_ops_kit.providers import orchestrator
         import time  # This import must work
 
         class FakeResult:

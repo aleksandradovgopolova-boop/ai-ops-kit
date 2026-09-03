@@ -9,7 +9,7 @@ import os as _os
 
 import pytest
 
-from orchestrator_providers import (
+from ai_ops_kit.providers.orchestrator_providers import (
     PROVIDER_AUTORESOLVE_ENV,
     autoresolve_enabled,
     make_claude_cli_provider,

@@ -175,7 +175,7 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
 # «неизвестный провайдер», хотя реестр его объявляет — registry и код расходились.
 # ИСТОЧНИК ИСТИНЫ — registry/providers.yaml (key_env) и registry/models.yaml (default_model);
 # соответствие проверяется тестом tests/unit/test_provider_resolution.py (registry-consistency).
-# base_url — те же проверенные эндпоинты, что в tools/provider_endpoints.py; переопределяется env.
+# base_url — те же проверенные эндпоинты, что в ai_ops_kit/providers/provider_endpoints.py; переопределяется env.
 # Секрет НИКОГДА не в коде: здесь только ИМЯ переменной окружения.
 OPENAI_COMPATIBLE_VENDORS = {
     "deepseek": {"key_env": "DEEPSEEK_API_KEY", "base_url_env": "DEEPSEEK_BASE_URL",

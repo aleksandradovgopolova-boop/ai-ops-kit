@@ -15,20 +15,20 @@ from pathlib import Path
 
 import pytest
 
-# Add tools/ to path for imports.
-# v3.34: валидаторы переехали в ai_ops_kit/validation/. Плоское имя оставлено ЗДЕСЬ намеренно —
-# тесты импортируют валидатор как модуль (`from validate_x import check`), и переписывать 70
-# файлов ради формы импорта в харнессе смысла нет. Это не пояс: доказательство того, что
-# валидатор работает БЕЗ путей, даёт test_validator_runtime_contract — он запускает каждый
-# процессом из копии репозитория с вычищенным PYTHONPATH.
+# v4.0: плоский слой `tools/` СНЯТ. Продуктовый код тесты импортируют пакетно
+# (`from ai_ops_kit.<pkg> import <mod>`), поэтому `tools/` на пути больше не нужен и его тут нет.
+# Валидаторы по-прежнему импортируются как модуль по плоскому имени (`from validate_x import check`)
+# из `ai_ops_kit/validation/` — переписывать 70 файлов ради формы импорта в харнессе смысла нет.
+# Это не пояс: доказательство того, что валидатор работает БЕЗ путей, даёт
+# test_validator_runtime_contract — он запускает каждый процессом из копии репозитория с
+# вычищенным PYTHONPATH.
 PKG_ROOT = Path(__file__).resolve().parents[1]
-TOOLS_DIR = PKG_ROOT / "tools"
 VALIDATION_DIR = PKG_ROOT / "ai_ops_kit" / "validation"
 TESTS_DIR = PKG_ROOT / "tests"          # общие инструменты проб (`ambient.py`) импортируются по имени
 # session-ritual-validators-are-dead: session-модули в engops/ импортируют ai_ops_kit.shared,
 # поэтому PKG_ROOT обязан быть на пути. Валидаторам это не нужно (они на плоском имени), но и
 # не мешает — пакет уже существует.
-for p in (PKG_ROOT, TOOLS_DIR, VALIDATION_DIR, TESTS_DIR):
+for p in (PKG_ROOT, VALIDATION_DIR, TESTS_DIR):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 

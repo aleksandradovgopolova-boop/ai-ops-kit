@@ -63,7 +63,7 @@ def test_null_resume_from_revision_is_valid(valid_handoff):
 @pytest.mark.unit
 def test_real_build_handoff_is_valid():
     sys.path.insert(0, str(PKG / "tools"))
-    import run_handoff
+    from ai_ops_kit.engine import run_handoff
     h = run_handoff.build_handoff({
         "workitem_id": "f", "ready_for_pr": True,
         "commit": {"sha": "c" * 40, "branch": "ai-ops/f", "evidence_on_exact_sha": True},

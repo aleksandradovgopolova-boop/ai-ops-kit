@@ -36,7 +36,7 @@ pytestmark = pytest.mark.unit
 
 def _clone_without_bootstrap(tmp_path: Path) -> Path:
     clone = tmp_path / "clone"
-    for rel in ("VERSION", "tools", "ai_ops_kit"):
+    for rel in ("VERSION", "ai_ops_kit"):
         src, dst = PKG / rel, clone / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.is_dir():

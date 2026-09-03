@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from pipeline_evidence import (
+from ai_ops_kit.engine.pipeline_evidence import (
     _author_with_retry,
     _install_dependencies,
     _reevaluate_artifact_evidence,

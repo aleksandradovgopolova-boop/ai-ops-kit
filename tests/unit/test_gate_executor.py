@@ -15,7 +15,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import gate_executor
+from ai_ops_kit.gates import gate_executor
 
 
 @pytest.mark.critical_path

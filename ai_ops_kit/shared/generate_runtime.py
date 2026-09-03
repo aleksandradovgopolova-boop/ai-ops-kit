@@ -12,8 +12,8 @@
 руками не редактируются.
 
 Использование:
-  generate_runtime.py [child_root]   — сгенерировать (по умолчанию cwd)
-  generate_runtime.py --selftest     — генерация во временную папку + проверки
+  python3 -m ai_ops_kit.shared.generate_runtime [child_root]   — сгенерировать (по умолчанию cwd)
+  python3 -m ai_ops_kit.shared.generate_runtime --selftest     — генерация во временную папку + проверки
 
 Требует pyyaml.
 """
@@ -60,7 +60,7 @@ def render_command(wid, w, agents, runtime):
     return f"""{header}# ai-{wid.lower()} — {w.get('purpose', wid)}
 
 Сгенерировано из registry/workflows.yaml — НЕ редактировать вручную
-(перегенерация: python3 tools/generate_runtime.py).
+(перегенерация: python3 -m ai_ops_kit.shared.generate_runtime).
 
 ## Что делает
 Проводит задачу по workflow **{wid}** ({w.get('preferred_execution_mode')} / минимум
@@ -95,7 +95,7 @@ def render_start_task(runtime, workflows):
     return f"""{header}# ai-start-task — единая точка входа
 
 Сгенерировано из registry/ — НЕ редактировать вручную
-(перегенерация: python3 tools/generate_runtime.py).
+(перегенерация: python3 -m ai_ops_kit.shared.generate_runtime).
 
 > **Канонический вход — `ai-run`** (3.0-срез 1). `ai-start-task` сохраняется как совместимый
 > алиас той же спины (route→RunPlan→WorkItem→preflight→active-work) и не удаляется (снятие —
@@ -121,15 +121,17 @@ def render_start_task(runtime, workflows):
    - иначе → контракт по `selection_criteria.task_type`;
    - неизвестный task_type → **ENGINEERING** (честный default).
 4. Покажи пользователю выбранный workflow и **причину** (1–3 предложения).
-5. **Concurrency preflight** (пишущие workflow): `tools/concurrency_preflight.py --paths
-   <целевые файлы> --base origin/main` — открытые PR/свежие мержи по этим путям; при
-   collision перепроверь премиссу против актуального main до старта.
-6. **Изоляция**: git worktree под задачу — `tools/worktree.py add <id> --branch
-   <feature/…>` (работа не в main).
-7. **WorkItem** — единая сущность изменения: `tools/workitem.py start <features-dir> <id>
-   --task "…"` (связывает workflow + blueprint + прогон; один статус).
-8. **Реестр активных работ**: `tools/active_work.py register .ai/runtime/active-work.yaml
-   <id> --branch <ветка> --areas <зоны> --session <id> --workitem features/<id>/workitem.yaml`.
+5. **Concurrency preflight** (пишущие workflow): `PYTHONPATH=.ai/managed python3 -m
+   ai_ops_kit.gates.concurrency_preflight --paths <целевые файлы> --base origin/main` — открытые
+   PR/свежие мержи по этим путям; при collision перепроверь премиссу против актуального main до старта.
+6. **Изоляция**: git worktree под задачу — `PYTHONPATH=.ai/managed python3 -m
+   ai_ops_kit.engine.worktree add <id> --branch <feature/…>` (работа не в main).
+7. **WorkItem** — единая сущность изменения: `PYTHONPATH=.ai/managed python3 -m
+   ai_ops_kit.lifecycle.workitem start <features-dir> <id> --task "…"` (связывает workflow +
+   blueprint + прогон; один статус).
+8. **Реестр активных работ**: `PYTHONPATH=.ai/managed python3 -m ai_ops_kit.lifecycle.active_work
+   register .ai/runtime/active-work.yaml <id> --branch <ветка> --areas <зоны> --session <id>
+   --workitem features/<id>/workitem.yaml`.
 9. Инициализируй TaskState прогона (по WorkItem): `.ai/runtime/workitems/<id>/TaskState.yaml`.
 10. Передай управление команде выбранного маршрута: `{invoke}` (напр. ai-engineering).
     Для CRITICAL — сначала human approval, затем запуск.
@@ -146,7 +148,7 @@ def render_start_task(runtime, workflows):
 
 def render_ai_run(runtime, workflows):
     """КАНОНИЧЕСКИЙ вход (3.0-срез 1): задача -> контролируемое исполнение -> отчёт одной
-    транзакцией через контроллер tools/ai_ops_run.py. `ai-start-task` сохраняется как
+    транзакцией через контроллер ai_ops_kit/engine/ai_ops_run.py. `ai-start-task` сохраняется как
     совместимый алиас (та же спина route->RunPlan->WorkItem->preflight->active-work)."""
     header = ("---\ndescription: Канонический вход — задача в контролируемое исполнение и отчёт\n---\n"
               if runtime == "claude-code" else "")
@@ -154,7 +156,7 @@ def render_ai_run(runtime, workflows):
     return f"""{header}# ai-run — канонический вход (задача → исполнение → отчёт)
 
 Сгенерировано из registry/ — НЕ редактировать вручную
-(перегенерация: python3 tools/generate_runtime.py).
+(перегенерация: python3 -m ai_ops_kit.shared.generate_runtime).
 
 ## Что делает
 Единый транзакционный вход: классификация/маршрут → RunPlan (base_workflow + треки +
@@ -164,13 +166,15 @@ def render_ai_run(runtime, workflows):
 
 ## Порядок (исполняет этот раннтайм)
 ```
-tools/ai_ops_run.py run "<задача>" <child_root> --signals '<json сигналов>' \\
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engine.ai_ops_run run "<задача>" <child_root> \\
+    --signals '<json сигналов>' \\
     [--feature <имя-фичи>] [--runtime claude-code|generic-orchestrator] [--provider mock] [--execute]
 ```
 0. **Привязка к именованной фиче:** для реальной работы дай `--feature <имя>` — WorkItem
    ляжет на эту фичу, и срезы истории накопятся на неё. Без `--feature` id = `wi-<hash>`,
    и baseline метрик НЕ двигается (finding обкатки). Срез истории в claude-code пишется на
-   стадии `finish` (рантайм исполняет `run_report.py --record`), автозаписи «за стадию» нет.
+   стадии `finish` (рантайм исполняет `python3 -m ai_ops_kit.lifecycle.run_report --record`),
+   автозаписи «за стадию» нет.
 1. Контроллер строит RunPlan по сигналам и создаёт WorkItem (`features/<id>/run-plan.yaml`).
 2. Регистрирует активную работу (ветка/зоны/сессия) — conflict forecast.
 3. Исполнение: **claude-code** — контроллер готовит план и каркас, стадии/патчи/тесты
@@ -197,7 +201,7 @@ def render_ai_ops_init(runtime):
     return f"""{header}# ai-ops-init — разговорная установка и онбординг
 
 Сгенерировано из registry/ — НЕ редактировать вручную
-(перегенерация: python3 tools/generate_runtime.py).
+(перегенерация: python3 -m ai_ops_kit.shared.generate_runtime).
 
 ## Что делает
 Превращает «подключи AI Ops и подготовь репозиторий» в шаги, без ручных python-команд
@@ -275,7 +279,7 @@ def generate(child_root: Path, verbose=True, runtimes=None, command_filter=None)
             "registry/agents.yaml": sha256_file(PKG / "registry" / "agents.yaml"),
         },
         "generated": sorted(p.relative_to(child_root).as_posix() for p in out_files),
-        "note": "Do not edit by hand; regenerate with tools/generate_runtime.py",
+        "note": "Do not edit by hand; regenerate with python3 -m ai_ops_kit.shared.generate_runtime",
     }
     (child_root / ".ai" / "generated" / ".generation.json").write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

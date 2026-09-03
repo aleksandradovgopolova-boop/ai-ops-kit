@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Проверка UIEvidenceBundle (v3.1.7) — контракт UI-evidence из локальных артефактов child-репо.
 
-Bundle (schemas/ui-evidence-bundle.schema.json) собирается tools/storybook_adapter.py и станет
+Bundle (schemas/ui-evidence-bundle.schema.json) собирается ai_ops_kit/ui/storybook_adapter.py и станет
 источником для детерминированного закрытия части UI-гейтов (v3.1.8). Валидатор держит bundle
 честным — структурно И семантически, чтобы «нет данных» не проскочило как «чисто»:
 

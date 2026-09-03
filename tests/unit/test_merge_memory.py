@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from merge_memory import (
+from ai_ops_kit.lifecycle.merge_memory import (
     Path,
     record,
 )
@@ -76,7 +76,7 @@ class TestRecordWithHumanConfirmed:
 class TestGovernanceFailClosed:
     def test_enforcement_crash_blocks_record(self, td):
         """governance enforcement упал -> BLOCKED, файл НЕ создан (fail-closed)."""
-        import security_enforcement as _se
+        from ai_ops_kit.security import security_enforcement as _se
         _orig = _se.enforce_memory_entry
         _se.enforce_memory_entry = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
         try:

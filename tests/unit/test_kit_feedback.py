@@ -221,7 +221,7 @@ class TestOwnerReachesItThroughTheCommand:
 
     def _cli(self):
         sys.path.insert(0, str(PKG_ROOT / "tools"))
-        import ai_ops_cli
+        from ai_ops_kit.cli import ai_ops_cli
         return ai_ops_cli
 
     def test_command_records_with_evidence(self, tmp_path, capsys):

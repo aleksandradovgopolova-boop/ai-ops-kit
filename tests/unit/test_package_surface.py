@@ -1,43 +1,32 @@
-"""Пакетная поверхность ai_ops_kit: дом модуля — пакет, плоское имя — уходящий слой (v3.30-3.37).
+"""Пакетная поверхность ai_ops_kit: дом модуля — пакет.
 
-Переезд завершён: настоящий код живёт в `ai_ops_kit/<пакет>/`, а в `tools/` остались тонкие
-алиасы через подмену `sys.modules` — ОДИН объект модуля, не копия. Обычный шим (`from X import *`)
-создал бы второй объект со своим состоянием, и пересоздание глобали (как `drain_call_stats` в
-orchestrator_usage) разъехалось бы между копиями — этот класс дефектов уже стоил отдельной отладки.
+v4.0: плоский слой `tools/` СНЯТ. Раньше настоящий код жил в `ai_ops_kit/<пакет>/`, а в `tools/`
+лежали тонкие алиасы через подмену `sys.modules` для обратной совместимости; в 4.0 слой удалён
+физически, точки входа зовутся пакетно (`python3 -m ai_ops_kit.<pkg>.<mod>`). Проверки, стоявшие на
+самом факте существования плоского слоя (единственный дом, ровно одна сторона алиас, реестр
+`deprecated-surface.yaml`), сняты вместе со слоем.
 
-РЕШЕНИЕ 19.08.2026 (публичная граница). `AGENTS.md` запрещал новые алиасы, а этот файл требовал
-плоский дом КАЖДОМУ модулю пакета — правило и проверка тянули в разные стороны, и двенадцать
-модулей, родившихся в пакетах, падали ровно на противоречии. Выбрано правило: `tools/` — уровень
-`deprecated` публичной поверхности (docs/api/public-surface.md). Замер, на котором стоит выбор: из
-113 файлов в `tools/` 112 — алиасы, настоящий код остался только в `_bootstrap.py`. Слой заперт
-реестром `quality/deprecated-surface.yaml` и ходит только вниз.
-
-Три обязательных теста на capability (AGENTS.md):
-  * positive     — оба пути импорта дают ОДИН объект; реестр плоских имён совпадает с `tools/`;
-  * fail-closed  — модуль вне пакетов, модуль в двух пакетах и НОВЫЙ плоский алиас ловятся;
-                   dev-only не попадает в продуктовый пакет;
-  * side-effect  — состояние общее: правка через один путь видна через другой.
+Осталось два инварианта, не зависящих от плоского слоя:
+  * dev-only модули (installer.DEV_ONLY_TOOLS) не попадают в продуктовые пакеты — пользователь не
+    получает то, чего получать не должен;
+  * зона-исключение `validation` держит только точки входа, объявлена одним именем и не расползается.
 """
 from __future__ import annotations
 
 import ast
 import re
-import importlib
 from pathlib import Path
 
 import pytest
-
-import _bootstrap  # noqa: F401 — кладёт tools/ и корень в sys.path
 
 PKG = Path(__file__).resolve().parents[2]
 SURFACE = PKG / "ai_ops_kit"
 # v3.34: ЗОНА-ИСКЛЮЧЕНИЕ. `validation` — точки входа, а не модули движка: их основной способ
 # вызова — запуск процессом (CI, `ai-ops doctor`, pytest), и в этом режиме корня репозитория на
 # `sys.path` нет по определению. Поэтому валидатор обязан начинаться с плоского `import _bootstrap`
-# — единственного способа положить пути ДО того, как появится пакетное имя. Инварианты «плоский
-# алиас в tools/», «единственный дом» и «импорт с одним корнем» писались для кода, который
-# импортируют; распространить их сюда значило бы завести 76 алиасов в `tools/` — то есть раздуть
-# СЛЕДУЮЩЕЕ родовое имя ради формальной чистоты предыдущего.
+# — единственного способа положить пути ДО того, как появится пакетное имя. Инвариант «единственный
+# дом» писался для кода, который импортируют; распространить его сюда значило бы завести десятки
+# алиасов.
 #
 # Исключение объявлено ОДНИМ именем и проверяется на нерасползание (см. тест ниже): любой другой
 # пакет, пытающийся жить по этим правилам, поймается.
@@ -48,7 +37,7 @@ PRODUCT_PACKAGES = sorted(d.name for d in SURFACE.iterdir()
 
 
 def _aliases():
-    """{плоское имя: [пакеты, где он объявлен]}"""
+    """{имя модуля: [пакеты, где он объявлен]} — по всем продуктовым пакетам ai_ops_kit."""
     out = {}
     for d in sorted(SURFACE.iterdir()):
         if not d.is_dir() or d.name in ("__pycache__", EXEMPT_ZONE):
@@ -59,10 +48,6 @@ def _aliases():
     return out
 
 
-def _flat_modules():
-    return {p.stem for p in (PKG / "tools").glob("*.py")} - {"__init__"}
-
-
 def _dev_only():
     src = (PKG / "installer" / "ai_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
@@ -71,38 +56,6 @@ def _dev_only():
                 getattr(t, "id", None) == "DEV_ONLY_TOOLS" for t in node.targets):
             return set(ast.literal_eval(ast.unparse(node.value).replace("frozenset(", "").rstrip(")")))
     raise AssertionError("DEV_ONLY_TOOLS не найден в инсталляторе")
-
-
-# ---------------------------------------------------------------- positive ---
-
-@pytest.mark.unit
-@pytest.mark.parametrize("pkg", PRODUCT_PACKAGES)
-def test_package_modules_are_the_same_object(pkg):
-    """Алиас обязан БЫТЬ модулем, а не его копией — иначе состояние разъезжается.
-
-    `_bootstrap` исключён осознанно (v3.33): его тёзки в `tools/`, `validation/` и в пакете —
-    независимые модули по необходимости, потому что каждый обязан быть импортируем ДО того, как
-    настроены пути. Требование единственного объекта к ним неприменимо и безопасно: состояния они
-    не держат, а правка sys.path идемпотентна.
-    """
-    for f in sorted((SURFACE / pkg).glob("*.py")):
-        if f.name in ("__init__.py", "_bootstrap.py"):
-            continue
-        if not (PKG / "tools" / f.name).is_file():
-            continue          # плоского имени нет и не будет — deprecated-слой заперт, см. ниже
-        via_pkg = importlib.import_module(f"ai_ops_kit.{pkg}.{f.stem}")
-        flat = importlib.import_module(f.stem)
-        assert via_pkg is flat, f"{pkg}.{f.stem}: алиас — отдельный объект, состояние разъедется"
-
-
-@pytest.mark.unit
-def test_every_flat_module_has_exactly_one_home():
-    aliases = _aliases()
-    flat = _flat_modules() - {"_bootstrap"} | {"_bootstrap"}
-    homeless = sorted(flat - set(aliases))
-    assert not homeless, f"модули вне пакетной поверхности: {homeless}"
-    doubled = {m: p for m, p in aliases.items() if len(p) > 1}
-    assert not doubled, f"модуль объявлен в двух пакетах: {doubled}"
 
 
 # ------------------------------------------------------------- fail-closed ---
@@ -118,158 +71,7 @@ def test_dev_only_modules_are_not_in_product_packages():
     leaked = sorted(m for m in dev if any(p != "devtools" for p in aliases.get(m, [])))
     assert not leaked, f"dev-only модули лежат в продуктовых пакетах: {leaked}"
     missing = sorted(m for m in dev if "devtools" not in aliases.get(m, []))
-    assert not missing, f"dev-only модули без алиаса в devtools: {missing}"
-
-
-@pytest.mark.unit
-def test_exactly_one_side_is_an_alias():
-    """У каждого модуля ровно одна сторона — алиас, вторая — настоящий код.
-
-    Инвариант держится и ДО переезда (код в tools/, алиас в пакете), и ПОСЛЕ (код в пакете, алиас
-    в tools/ для обратной совместимости 661 импорта). Две копии кода или два алиаса одинаково
-    плохи: в первом случае правки расходятся, во втором модуля нет вообще.
-
-    Форма алиаса обязана быть подменой sys.modules: `from X import *` создал бы второй объект
-    модуля со своим состоянием — этот класс уже стоил отладки в orchestrator_usage и pr_open.
-
-    v3.33: `_bootstrap` — объявленное исключение. Его задача — положить пути ДО того, как станет
-    возможен любой импорт, поэтому он обязан существовать в каждом каталоге, откуда запускают код:
-    `tools/`, `ai_ops_kit/validation/` и внутри пакета. Три тёзки не расходятся по смыслу — каждый ищет корень
-    по маркеру VERSION и идемпотентно правит sys.path, состояния ни один не держит. Алиас здесь
-    невозможен: чтобы импортировать алиас, нужен путь, который кладёт как раз он.
-    """
-    BOOTSTRAP_BY_DESIGN = {"_bootstrap.py"}
-
-    def is_alias(path: Path) -> bool:
-        return "sys.modules[__name__]" in path.read_text(encoding="utf-8")
-
-    problems = []
-    for d in sorted(SURFACE.iterdir()):
-        # v3.34: зона-исключение алиасов не имеет и иметь не должна — валидаторы запускают
-        # процессом по пути, а импортируют пакетным именем. 76 алиасов в `tools/` раздули бы
-        # следующее родовое имя ради формальной чистоты предыдущего.
-        if not d.is_dir() or d.name in ("__pycache__", EXEMPT_ZONE):
-            continue
-        for f in sorted(d.glob("*.py")):
-            if f.name == "__init__.py" or f.name in BOOTSTRAP_BY_DESIGN:
-                continue
-            flat = PKG / "tools" / f.name
-            if not flat.is_file():
-                # Модуль, родившийся в пакете, плоского имени НЕ получает: слой совместимости
-                # объявлен уходящим (`deprecated`) и заперт реестром. Проверка «дом обязан быть
-                # плоским» писалась во время переезда, когда плоское имя было у каждого модуля;
-                # после переезда она требовала бы наращивать совместимость с тем, чего не было.
-                continue
-            sides = [is_alias(f), is_alias(flat)]
-            if sides.count(True) != 1:
-                where = "оба алиасы" if all(sides) else "оба с кодом"
-                problems.append(f"{d.name}/{f.name}: {where}")
-            for path in (f, flat):
-                if "import *" in path.read_text(encoding="utf-8"):
-                    problems.append(f"{path}: алиас через `import *` копирует состояние")
-    assert not problems, problems[:8]
-
-
-# -------------------------------------------------------- side-effect proof ---
-
-@pytest.mark.unit
-def test_state_is_really_shared():
-    """Правка через пакетный путь видна через плоский — доказательство единственности объекта."""
-    from ai_ops_kit.providers import orchestrator_usage as via_pkg
-    import orchestrator_usage as flat
-
-    marker = {"model": "package-surface-probe", "input_tokens": 1}
-    via_pkg._CALL_STATS.append(marker)
-    try:
-        assert marker in flat._CALL_STATS, "состояние не общее — это две копии модуля"
-    finally:
-        flat._CALL_STATS.remove(marker)
-
-
-@pytest.mark.unit
-def test_flat_aliases_are_self_sufficient():
-    """Плоский алиас обязан САМ уметь найти пакет.
-
-    Поймано CI: алиас делал `import ai_ops_kit...`, не положив корень в sys.path. Локально это
-    скрывала editable-установка (её .pth кладёт корень в любой процесс), а в CI и в
-    child-репозитории, где PYTHONPATH не задан, запуск файла напрямую падал с
-    ModuleNotFoundError. Тот же класс, что и «чеклист держался на editable-установке».
-    """
-    bad = []
-    for d in sorted(SURFACE.iterdir()):
-        if not d.is_dir() or d.name == "__pycache__":
-            continue
-        for f in sorted(d.glob("*.py")):
-            if f.name == "__init__.py":
-                continue
-            flat = PKG / "tools" / f.name
-            if not flat.is_file():
-                continue
-            src = flat.read_text(encoding="utf-8")
-            if "sys.modules[__name__]" not in src:
-                continue                      # настоящий код, не алиас
-            if "import _bootstrap" not in src:
-                bad.append(flat.name)
-    assert not bad, (
-        "алиасы импортируют пакет, не положив корень в sys.path — упадут вне editable-установки: "
-        f"{bad[:8]}")
-
-
-# --------------------------------------------------- deprecated-слой: храповик ---
-
-DEPRECATED_REGISTRY = PKG / "quality" / "deprecated-surface.yaml"
-
-
-def _declared_flat_surface():
-    """Реестр плоских имён: {алиасы}, {настоящий код}. Читается без pyyaml-специфики — простой
-    список `  - имя` под своим ключом, чтобы охрана поверхности не зависела от разбора схемы."""
-    import yaml
-    doc = yaml.safe_load(DEPRECATED_REGISTRY.read_text(encoding="utf-8"))
-    return set(doc.get("flat_module_aliases") or []), set(doc.get("real_code") or [])
-
-
-@pytest.mark.unit
-def test_deprecated_flat_surface_matches_the_registry():
-    """fail-closed: новый плоский алиас краснеет, удалённый обязан уйти из реестра.
-
-    Без этого запрет «новые алиасы не заводить» остаётся текстом в AGENTS.md — а объявленная
-    проверка, которая нигде не исполняется, и есть главный класс дефектов этого репозитория.
-    """
-    declared_aliases, declared_real = _declared_flat_surface()
-    real = _flat_modules()
-    declared = declared_aliases | declared_real
-
-    added = sorted(real - declared)
-    assert not added, (
-        f"новые плоские имена в tools/: {added}. Слой совместимости объявлен уходящим "
-        f"(docs/api/public-surface.md, уровень deprecated) и ходит только вниз: модуль, "
-        f"родившийся в пакете, плоского алиаса не получает. Если алиас всё же нужен внешнему "
-        f"вызову — это решение, и оно записывается в {DEPRECATED_REGISTRY.name} с причиной")
-
-    gone = sorted(declared - real)
-    assert not gone, (
-        f"в реестре объявлены плоские имена, которых уже нет: {gone}. Храповик ходит вниз — "
-        f"уберите их из {DEPRECATED_REGISTRY.name}")
-
-
-@pytest.mark.unit
-def test_registry_calls_alias_an_alias_and_code_a_code():
-    """side-effect: реестр обязан говорить правду о том, ЧТО он перечисляет.
-
-    Иначе однажды в `flat_module_aliases` окажется настоящий модуль, храповик его защитит как
-    «совместимость», и код навсегда останется в уходящем слое.
-    """
-    declared_aliases, declared_real = _declared_flat_surface()
-    wrong = []
-    for name in sorted(declared_aliases):
-        src = (PKG / "tools" / f"{name}.py").read_text(encoding="utf-8")
-        if "sys.modules[__name__]" not in src:
-            wrong.append(f"{name}: объявлен алиасом, а внутри настоящий код")
-    for name in sorted(declared_real):
-        src = (PKG / "tools" / f"{name}.py").read_text(encoding="utf-8")
-        if "sys.modules[__name__]" in src:
-            wrong.append(f"{name}: объявлен кодом, а внутри алиас")
-    assert not wrong, wrong
+    assert not missing, f"dev-only модули без дома в devtools: {missing}"
 
 
 # ------------------------------------------------------------- зона-исключение ---

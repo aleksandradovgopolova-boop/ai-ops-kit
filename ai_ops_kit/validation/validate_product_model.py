@@ -195,16 +195,19 @@ def _run_json(entry, args):
     подпроцесс объявлена в 3.34 как способ разобрать шесть таких же связей; здесь она применена
     сразу, чтобы срез не увеличивал долг, который сам же и называет.
 
-    Запуск идёт через плоскую точку входа `tools/<модуль>.py`: она кладёт корень в `sys.path`
-    (`_bootstrap`) и исполняет цель через runpy. Запуск файла из пакета напрямую корня на пути не
-    имеет — ровно дефект 3.31.1.
+    v4.0: плоский слой `tools/` снят — запуск идёт пакетно, `python3 -m ai_ops_kit.<pkg>.<mod>` из
+    корня кита (cwd=PKG кладёт корень на `sys.path`, поэтому `import ai_ops_kit...` резолвится).
+    Модуль ищется по имени точки входа в дереве пакета.
     """
-    exe = PKG / "tools" / entry
-    if not exe.is_file():
-        return None, f"точка входа не найдена: {exe}"
+    stem = entry[:-3] if entry.endswith(".py") else entry
+    hits = sorted(p for p in (PKG / "ai_ops_kit").rglob(f"{stem}.py")
+                  if "__pycache__" not in p.parts)
+    if not hits:
+        return None, f"точка входа не найдена: ai_ops_kit/**/{stem}.py"
+    mod = ".".join(hits[0].relative_to(PKG).with_suffix("").parts)
     try:
-        r = subprocess.run([sys.executable, str(exe), *args, "--json"],
-                           capture_output=True, text=True, timeout=120, check=False)
+        r = subprocess.run([sys.executable, "-m", mod, *args, "--json"],
+                           cwd=str(PKG), capture_output=True, text=True, timeout=120, check=False)
     except (OSError, subprocess.SubprocessError) as exc:
         return None, f"{entry} не запустился: {exc}"
     out = (r.stdout or "").strip()

@@ -12,7 +12,7 @@
   исполняет сам рантайм, следуя плану. status = `planned`. Кит не притворяется, что
   исполнил за рантайм.
 - **generic-orchestrator** (наш sequential-движок): контроллер реально прогоняет стадии
-  и гейты (tools/orchestrator.py) — status = done|blocked по evidence.
+  и гейты (ai_ops_kit/providers/orchestrator.py) — status = done|blocked по evidence.
 
 Аддитивно (2.x): ничего не ломает; `ai-ops run` как ОСНОВНОЙ путь и сплит на пакеты —
 цель 3.0.

@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from ui_evidence_collect import (
+from ai_ops_kit.ui.ui_evidence_collect import (
     Path,
     collect,
     is_ui_stack,

@@ -14,7 +14,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_cli
+from ai_ops_kit.cli import ai_ops_cli
 
 
 # ОБЪЯВЛЕННАЯ ПОВЕРХНОСТЬ ИНТЕНТОВ — ОДИН ИСТОЧНИК (сведено 19.08.2026).
@@ -499,7 +499,7 @@ class TestDegradedContextIsVisible:
     """
 
     def _broken_bundle(self, monkeypatch):
-        import context_compiler
+        from ai_ops_kit.context import context_compiler
 
         def _boom(*a, **kw):
             raise RuntimeError("реестр недоступен")

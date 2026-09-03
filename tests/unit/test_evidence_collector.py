@@ -9,7 +9,7 @@ import subprocess
 import pytest
 
 from ai_ops_kit.engine import tool_broker
-from evidence_collector import (
+from ai_ops_kit.gates.evidence_collector import (
     Path,
     collect,
     project_detector,
@@ -100,7 +100,7 @@ class TestCollectFailure:
 @pytest.mark.unit
 class TestGateEvidenceValidation:
     def test_evidence_valid_by_schema(self, git_repo, policy):
-        import gate_executor
+        from ai_ops_kit.gates import gate_executor
         prof = {"stacks": [{"language": "demo", "commands": {
             "build": "true", "lint": "true", "typecheck": None, "test": "python3 -c \"pass\""}}]}
         r = collect(prof, git_repo, policy, broker=tool_broker)

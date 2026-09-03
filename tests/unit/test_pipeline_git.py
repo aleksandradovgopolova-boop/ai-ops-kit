@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from pipeline_git import (
+from ai_ops_kit.engine.pipeline_git import (
     _git,
     _has_changes,
     _resolve_base,

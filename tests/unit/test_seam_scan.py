@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from seam_scan import (
+from ai_ops_kit.security.seam_scan import (
     gate_decision,
     scan_diff,
 )

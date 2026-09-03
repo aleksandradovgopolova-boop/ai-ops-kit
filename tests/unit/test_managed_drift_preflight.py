@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline_git import managed_drift_preflight
+from ai_ops_kit.engine.pipeline_git import managed_drift_preflight
 
 
 def _git(repo, *args):

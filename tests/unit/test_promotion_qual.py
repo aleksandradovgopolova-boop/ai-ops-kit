@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from promotion_qual import (
+from ai_ops_kit.devtools.promotion_qual import (
     execute,
     load_plan,
     preflight,

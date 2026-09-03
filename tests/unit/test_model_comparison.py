@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from model_comparison import (
+from ai_ops_kit.devtools.model_comparison import (
     DEMO,
     SCHEMA,
     _load_dir,

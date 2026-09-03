@@ -14,7 +14,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import preflight
+from ai_ops_kit.gates import preflight
 
 # Собранный ContextPayload для heavy-задач: без него heavy блокируется на context_payload,
 # и остальные гейты (spec/atomic/economics) остались бы непроверенными.
@@ -348,7 +348,7 @@ class TestApprovalsValidRecord:
     """secret_boundary с валидным, сверяемым ApprovalRecord -> approvals пройдены."""
 
     def test_secret_boundary_with_valid_approval_passes(self, child_root):
-        import approvals
+        from ai_ops_kit.gates import approvals
 
         fdir = child_root / "features" / "w"
         fdir.mkdir(parents=True, exist_ok=True)
@@ -397,8 +397,8 @@ class TestEconomicBudget:
 
     def test_ledger_recorded_estimate(self, child_root):
         """Side-effect proof: ledger записан и читается -> measured_history, sample=2, max=9.0."""
-        import economic_preflight
-        import usage_ledger
+        from ai_ops_kit.gates import economic_preflight
+        from ai_ops_kit.shared import usage_ledger
 
         for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
             usage_ledger.append(child_root, wid, [{
@@ -411,7 +411,7 @@ class TestEconomicBudget:
 
     def test_worst_run_over_limit_blocked(self, child_root):
         """Худший сравнимый прогон (9.0) дороже лимита (5) -> blocked ДО модели."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
             usage_ledger.append(child_root, wid, [{
                 "role": "writer", "cost": cost, "cost_status": "measured",
@@ -425,7 +425,7 @@ class TestEconomicBudget:
 
     def test_only_economics_blocks(self, child_root):
         """Блокирует именно экономика — других причин в reasons нет."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
             usage_ledger.append(child_root, wid, [{
                 "role": "writer", "cost": cost, "cost_status": "measured",
@@ -437,7 +437,7 @@ class TestEconomicBudget:
 
     def test_within_limit_not_blocked(self, child_root):
         """В пределах лимита -> экономика не блокирует."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
             usage_ledger.append(child_root, wid, [{
                 "role": "writer", "cost": cost, "cost_status": "measured",
@@ -450,7 +450,7 @@ class TestEconomicBudget:
 
     def test_no_execution_budget_not_blocked(self, child_root):
         """Лимита нет вовсе -> не выдумываем и не блокируем."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
             usage_ledger.append(child_root, wid, [{
                 "role": "writer", "cost": cost, "cost_status": "measured",
@@ -460,7 +460,7 @@ class TestEconomicBudget:
 
     def test_reevaluate_only_skips_economic(self, child_root):
         """reevaluate_only -> экономическая проверка не применяется, не блокирует."""
-        import usage_ledger
+        from ai_ops_kit.shared import usage_ledger
         for wid, cost in (("WI-a", 3.0), ("WI-b", 9.0)):
             usage_ledger.append(child_root, wid, [{
                 "role": "writer", "cost": cost, "cost_status": "measured",

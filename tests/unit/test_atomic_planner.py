@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import atomic_planner
+from ai_ops_kit.engine import atomic_planner
 
 
 @pytest.fixture

@@ -10,12 +10,12 @@ import tempfile
 
 import pytest
 
-from review_branch import (
+from ai_ops_kit.delivery.review_branch import (
     Path,
     _git,
     review,
 )
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 
 @pytest.fixture

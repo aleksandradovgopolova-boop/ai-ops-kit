@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from worktree import (
+from ai_ops_kit.engine.worktree import (
     Path,
     _branch_exists,
     _git,

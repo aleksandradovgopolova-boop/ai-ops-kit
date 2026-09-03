@@ -94,7 +94,7 @@ def test_run_report_shows_the_findings_behind_the_block(tmp_path):
     root = tmp_path / "child"
     root.mkdir()
     _init_git(root)
-    import tool_broker
+    from ai_ops_kit.engine import tool_broker
     ops = iter([{"op": "write", "path": "src/leak.py", "content": f'KEY = "{AWS_KEY}"\n'}, {"done": True}])
     report = execution_pipeline.run_pipeline(
         task="secret test", signals={"task_type": "ENGINEERING", "size": "small",
@@ -120,7 +120,7 @@ def test_gate_blocker_is_checkable_from_the_report(tmp_path):
     root = tmp_path / "child"
     root.mkdir()
     _init_git(root)
-    import tool_broker
+    from ai_ops_kit.engine import tool_broker
     ops = iter([{"op": "write", "path": "src/leak.py", "content": f'TOKEN = "{AWS_KEY}"\n'}, {"done": True}])
     report = execution_pipeline.run_pipeline(
         task="secret gate", signals={"task_type": "ENGINEERING", "size": "small",

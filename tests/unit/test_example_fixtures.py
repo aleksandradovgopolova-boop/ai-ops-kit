@@ -36,12 +36,12 @@ FIXTURE_CHECKS = [
     ("ai_ops_kit/validation/validate_work_graph.py", ["examples/work-graph-demo"]),
     ("ai_ops_kit/validation/validate_agent_evals.py", ["--all"]),
     ("ai_ops_kit/validation/ai_capability_selftest.py", []),
-    ("tools/model_comparison.py", ["examples/model-comparison-demo"]),
-    ("tools/parallel_planner.py", ["examples/work-graph-demo"]),
-    ("tools/product_health.py", ["examples/product-health-demo/input.yaml"]),
-    ("tools/promotion_qual.py", ["--verify-negatives"]),
-    ("tools/run_plan.py", ["validate"]),
-    ("tools/security_enforcement.py", ["--key-preflight", "examples/key-lifecycle-demo/KLP-001.yaml"]),
+    ("ai_ops_kit/devtools/model_comparison.py", ["examples/model-comparison-demo"]),
+    ("ai_ops_kit/engine/parallel_planner.py", ["examples/work-graph-demo"]),
+    ("ai_ops_kit/intelligence/product_health.py", ["examples/product-health-demo/input.yaml"]),
+    ("ai_ops_kit/devtools/promotion_qual.py", ["--verify-negatives"]),
+    ("ai_ops_kit/engine/run_plan.py", ["validate"]),
+    ("ai_ops_kit/security/security_enforcement.py", ["--key-preflight", "examples/key-lifecycle-demo/KLP-001.yaml"]),
 ]
 
 
@@ -60,7 +60,11 @@ def _env():
 @pytest.mark.slow
 @pytest.mark.parametrize("cmd,args", FIXTURE_CHECKS, ids=[c.split("/")[-1] for c, _ in FIXTURE_CHECKS])
 def test_validator_accepts_its_example(cmd, args):
-    r = subprocess.run([sys.executable, str(PKG / cmd), *args], cwd=PKG, env=_env(),
+    # v4.0: плоский слой tools/ снят — инструмент/валидатор запускается пакетно, `-m ai_ops_kit...`
+    # из корня кита (cwd=PKG кладёт корень на sys.path, PYTHONPATH не нужен — так же зовёт дочка из
+    # .ai/managed, без пояса).
+    module = cmd[:-3].replace("/", ".") if cmd.endswith(".py") else cmd
+    r = subprocess.run([sys.executable, "-m", module, *args], cwd=PKG, env=_env(),
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, (r.stdout + r.stderr)[-700:]
 

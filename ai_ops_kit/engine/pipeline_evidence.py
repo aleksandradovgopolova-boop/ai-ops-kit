@@ -192,7 +192,7 @@ def contour_consistency_evidence(child_root, wid, changed_files, timeout=120):
     ПОЧЕМУ ПОДПРОЦЕСС, А НЕ ИМПОРТ. Прямой вызов `ai_ops_kit.planning.contours` из движка добавил бы
     ребро `engine -> planning`, а вместе с ним новые циклы через `planning -> lifecycle`; ратчет
     `packages/layering.yaml` поймал бы это сразу. Шов тот же, что у `validate_product_model`:
-    точка входа `tools/contours.py` + машиночитаемый вывод.
+    точка входа `ai_ops_kit/planning/contours.py` + машиночитаемый вывод.
 
     Гейт ADVISORY: несогласованность даёт `warn`, а не `fail` (правило движения по roadmap —
     blocking только после обкатки на child-репозиториях). Недоступность инструмента тоже `warn`,
@@ -204,18 +204,22 @@ def contour_consistency_evidence(child_root, wid, changed_files, timeout=120):
     root = _P(child_root)
     entry = _P(__file__).resolve()
     pkg = next((x for x in entry.parents if (x / "VERSION").is_file()), entry.parents[2])
-    tool = pkg / "tools" / "contours.py"
+    # v4.0: плоский слой tools/ снят — инструмент связности контуров зовётся пакетно.
+    import os as _os
+    tool = pkg / "ai_ops_kit" / "planning" / "contours.py"
     if not tool.is_file():
         return {"status": "warn", "provided": [], "report": None,
                 "evidence": ["инструмент связности контуров недоступен — проверка НЕ проведена "
                              "(это не 'согласовано')"]}
-    args = [sys.executable, str(tool), "reconcile", str(root),
+    args = [sys.executable, "-m", "ai_ops_kit.planning.contours", "reconcile", str(root),
             "--files", ",".join(changed_files or []), "--json"]
     wi = root / "features" / str(wid) / "workitem.yaml"
     if wi.is_file():
         args += ["--workitem", str(wi)]
+    env = dict(_os.environ)
+    env["PYTHONPATH"] = str(pkg) + ((_os.pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else "")
     try:
-        r = _sp.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+        r = _sp.run(args, capture_output=True, text=True, timeout=timeout, check=False, env=env)
     except (OSError, _sp.SubprocessError) as e:
         return {"status": "warn", "provided": [], "report": None,
                 "evidence": [f"сверка контуров не выполнена ({type(e).__name__}) — "

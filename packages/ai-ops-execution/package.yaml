@@ -7,18 +7,18 @@ description: >
   core и quality (исполняет гейты).
 depends_on: [ai-ops-core, ai-ops-quality]
 includes:
-  - tools/ai_ops_run.py
-  - tools/execution_pipeline.py
-  - tools/lifecycle_store.py
-  - tools/gitio.py
-  - tools/orchestrator.py
-  - tools/run_plan.py
-  - tools/tool_broker.py
-  - tools/budget.py
-  - tools/tool_loop.py
-  - tools/workitem.py
-  - tools/active_work.py
-  - tools/worktree.py
-  - tools/concurrency_preflight.py
-  - tools/merge_memory.py
-  - tools/generate_runtime.py
+  - ai_ops_kit/engine/ai_ops_run.py
+  - ai_ops_kit/engine/execution_pipeline.py
+  - ai_ops_kit/shared/lifecycle_store.py
+  - ai_ops_kit/shared/gitio.py
+  - ai_ops_kit/providers/orchestrator.py
+  - ai_ops_kit/engine/run_plan.py
+  - ai_ops_kit/engine/tool_broker.py
+  - ai_ops_kit/shared/budget.py
+  - ai_ops_kit/engine/tool_loop.py
+  - ai_ops_kit/lifecycle/workitem.py
+  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/engine/worktree.py
+  - ai_ops_kit/gates/concurrency_preflight.py
+  - ai_ops_kit/lifecycle/merge_memory.py
+  - ai_ops_kit/shared/generate_runtime.py

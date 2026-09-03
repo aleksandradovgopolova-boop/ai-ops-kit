@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 from _ai_ops_run_helpers import _git_init_commit
 
@@ -242,7 +242,7 @@ class TestEnginePipelineExecution:
 
     def test_commit_barrier_ordering(self, pipeline_run):
         """commit-barrier: ready_for_delivery предшествует run_end по seq журнала."""
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         root, _, pfid = pipeline_run
         jr = _ls.journal_read(root / "features" / pfid / "lifecycle-journal.jsonl")
         seq_by_kind = {e["kind"]: e["seq"] for e in jr["events"]}
@@ -274,7 +274,7 @@ class TestF012ActiveWorkDeregistration:
 
     def test_deregistered_after_run(self, pipeline_run):
         """active-work содержит запись с id == workitem_id (снята с учёта по завершении)."""
-        import active_work
+        from ai_ops_kit.lifecycle import active_work
         root, _, pfid = pipeline_run
         awd = active_work.load(root / ".ai" / "runtime" / "active-work.yaml")
         entry = next((w for w in awd.get("active", []) if w.get("id") == pfid), None)
@@ -282,7 +282,7 @@ class TestF012ActiveWorkDeregistration:
 
     def test_status_reflects_outcome(self, pipeline_run):
         """done только при ready_for_pr, иначе blocked + status_reason."""
-        import active_work
+        from ai_ops_kit.lifecycle import active_work
         root, rp, pfid = pipeline_run
         awd = active_work.load(root / ".ai" / "runtime" / "active-work.yaml")
         entry = next((w for w in awd.get("active", []) if w.get("id") == pfid), None)
