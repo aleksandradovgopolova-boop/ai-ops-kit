@@ -4901,3 +4901,27 @@ work:
     #   affects: {delivery_operations: true, analytics_learning: true}.
     #   История прогона (severnaya/niti/bnbm/ии-среда, попытки 1–4 и ночные ре-прогоны 19.08) —
     #   в отчётах qualification/REAL-PRODUCT-*.md; закрывающий прогон — owner-led #701.
+
+  - id: release-helper-bumps-all-version-surfaces
+    title: >-
+      Релиз-помощник одной командой бампает все версионные поверхности и добавляет release-фрагмент
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-02'
+    pr: 392
+    evidence: tests/unit/test_release_bump_validators_green.py
+    result: >-
+      Реализация уже поставлена: `ai_ops_kit/devtools/release_bump.py` (влит #392) одной командой
+      атомарно правит все восемь версионных поверхностей (VERSION, manifest.package_version,
+      release-claims.version, release-notes.version, README, ROADMAP, раздел CHANGELOG и
+      release-newsfragment); канал берётся из release-claims, не зашит. Первую половину критерия
+      («версии совпадают во всех точках после команды») держал tests/unit/test_release_bump.py.
+      Эта работа закрыла ВТОРУЮ, до сих пор непокрытую половину критерия — «после команды оба
+      валидатора зелены»: tests/unit/test_release_bump_validators_green.py сверяет выход помощника
+      не его собственной проверкой, а РЕАЛЬНЫМИ версионными правилами обоих валидаторов
+      (validate_release_claims.authoritative_version_errors для README/ROADMAP и инвариант
+      manifest.package_version == VERSION из validate_ai_first_registry), плюс контроль остроты:
+      неподнятая поверхность краснит тот же валидатор. Полный контур check-fast зелёный.
+    # РАЗБОР: type: engineering; goal: kit-release-strategy; owner_role: engineer; value: medium;
+    #   write_scope: [ai_ops_kit/devtools/, tests/]. Реализация — #392; здесь закрыта acceptance-
+    #   проверка «оба валидатора зелены», которой не было в исходном тесте.
