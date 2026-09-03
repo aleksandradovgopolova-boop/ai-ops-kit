@@ -1,0 +1,36 @@
+name: nightly-quality
+# 2026-09-03 (замер CI, #462): стену package-quality на PR держал НЕ дисбаланс слоёв, а два тяжёлых
+# теста — мутационный гейт `test_every_declared_probe_of_the_kit_kills_its_mutant` (~6 мин, гоняет все
+# пробы кита) и агрегатный bench `TestRunBenchAggregate` (~2.5 мин, module-scoped прогон корпуса).
+# Перебалансировкой слоёв это не лечится (доказано замером длительностей). Оба помечены `nightly` и
+# сняты с пути каждого PR (селфтест-слои гоняют `-m "slow and not nightly"`); здесь они гоняются:
+#   - ночью (heartbeat);
+#   - на каждый push в main (сразу после слияния);
+#   - вручную (workflow_dispatch).
+# Размен (осознанный, как с покрытием): выживший мутант / ложно-зелёное ловится ночью и на main, а не
+# блокирует каждый PR. Мутационный гейт остаётся исполняемым и обязательным — просто вне критического
+# пути обратной связи. Вернуть его на PR быстрым — задача про распараллеливание (см. #462, вариант B).
+on:
+  schedule:
+    - cron: "37 3 * * *"   # ежедневно ~03:37 UTC (со сдвигом от nightly-coverage 03:17)
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  heavy-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml pytest pytest-xdist hypothesis
+      - name: "Тяжёлые гейты вне пути PR: мутационный гейт + агрегатный bench (-m nightly)"
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m pytest tests/ -q -n auto --dist loadfile -m nightly

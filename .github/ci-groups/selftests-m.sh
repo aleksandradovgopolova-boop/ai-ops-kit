@@ -10,4 +10,4 @@ cd "$(dirname "$0")/../.."
 # теперь берёт i..z (было m..z), чтобы выровнять время двух шардов. Партиция полная и непересекающаяся
 # по построению: здесь ровно `not (то, что в группе a)`, так что ни один slow-тест не потерян и не
 # гоняется дважды. Границу уточнить по фактическим временам следующего прогона.
-python3 -m pytest -n auto --dist loadfile tests/ -q -m slow -k "not (test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h)"
+python3 -m pytest -n auto --dist loadfile tests/ -q -m "slow and not nightly" -k "not (test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h)"
