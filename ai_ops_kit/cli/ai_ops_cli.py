@@ -591,7 +591,8 @@ def _process_gate(intent, task, child_root, signals, a, preview_mode):
     return None
 
 
-def main(argv):
+def _build_cli_arg_parser():
+    """Собрать argparse интент-CLI — тело main() без разбора аргументов и диспетчеризации."""
     ap = argparse.ArgumentParser(prog="ai_ops_cli.py")
     ap.add_argument("intent", choices=list(INTENTS) + ["preview"])
     ap.add_argument("rest", nargs="*")
@@ -665,6 +666,11 @@ def main(argv):
                     choices=["defect", "friction", "question", "idea"],
                     help="feedback: дефект / трение / вопрос / идея (по умолчанию выводится из улик)")
     ap.add_argument("--json", action="store_true")
+    return ap
+
+
+def main(argv):
+    ap = _build_cli_arg_parser()
     a = ap.parse_args(argv)
 
     intent = a.intent
@@ -727,10 +733,8 @@ def main(argv):
         # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
         # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
-        # `ai-ops resume --provider X --model Y` молча уходил в mock (политика/провайдер терялись).
-        # F-026: провайдера НЕ подставляем. Здесь стояло `a.provider or "mock"` — то есть путь
-        # человека всегда объявлял заглушку ЯВНО, и автовыбор живого провайдера в движке не мог
-        # сработать в принципе. Не задан — пусть решает та же логика, что у `run --execute`.
+        # `ai-ops resume --provider X` молча уходил в mock. F-026: провайдера НЕ подставляем (было
+        # `a.provider or "mock"` — заглушка ЯВНО); не задан — решает та же логика, что у `run --execute`.
         argv2 += ["--signals", a.signals]
         if a.provider:
             argv2 += ["--provider", a.provider]
@@ -818,21 +822,21 @@ def main(argv):
             _print_preview(pv)
 
     # только `run --execute` и `do` реально запускают движок; остальное — превью/делегация
-    # v3.22: `do` — alias для `run --execute` с авторазрешением блокировщиков (review_fix_attempts, author, open_pr)
+    return _main_run_execute(intent, task, child_root, signals, a, pv)
+
+
+def _main_run_execute(intent, task, child_root, signals, a, pv):
+    """Единственный путь, реально запускающий движок: `run --execute` и `do` (v3.22: `do` — alias
+    с авторазрешением блокировщиков review_fix_attempts/author/open_pr). Возвращает код возврата."""
     if (intent == "run" and a.execute) or intent == "do":
         from ai_ops_kit.engine import ai_ops_run
         from ai_ops_kit.engine import pipeline_helpers
-        # v3.38 (W3): регистрация подписчиков спутников — ЗДЕСЬ, на входе, а не в ядре.
-        # Ядро испускает события (ai_ops_run -> events.emit) и НЕ импортирует спутники
-        # (kernel-boundary); без этого импорта подписка engops зависела бы от того, тронул
-        # ли ДРУГОЙ интент пакет engops раньше. Явный импорт делает регистрацию видимой
-        # и статическому обходчику (test_capability_reachability).
+        # v3.38 (W3): регистрация подписчиков спутников — ЗДЕСЬ, на входе, а не в ядре (kernel-boundary:
+        # ядро испускает события и НЕ импортирует спутники). Явный импорт виден и test_capability_reachability.
         from ai_ops_kit.engops import session_events as _session_events  # noqa: F401
-        # v3.28.x (F-015, находка живой квалификации): intake-сигналы проверяем ДО старта.
-        # `size` требует блокирующий гейт intake_completeness, вывести его из репозитория нечем,
-        # и раньше пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона — в раунде C
-        # так сгорело 6 прогонов из 6, самый долгий 36 минут. Fail-closed сохраняется (exit 2,
-        # тот же код, что у незакрытого гейта), но платится секундами, а не часом работы модели.
+        # v3.28.x (F-015): intake-сигналы проверяем ДО старта — `size` требует блокирующий гейт
+        # intake_completeness, иначе пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона
+        # (раунд C: 6 из 6 прогонов сгорели). Fail-closed (exit 2), но платится секундами, а не часом.
         _missing = pipeline_helpers.missing_intake_signals(signals)
         if _missing:
             _hint = pipeline_helpers.intake_signals_hint(_missing, task)
@@ -840,18 +844,16 @@ def main(argv):
                 print(json.dumps({"kind": "intake-incomplete", "exit": 2,
                                   "missing": _missing, "hint": _hint}, ensure_ascii=False, indent=2))
             else:
-                # Готовая команда с ответом обязана дойти до человека на любом уровне детализации,
-                # иначе сообщение назовёт препятствие и не даст его убрать.
+                # Готовая команда с ответом обязана дойти до человека на любом уровне детализации.
                 _say(Path(child_root), "from_intake_gap", _missing,
                      pipeline_helpers.intake_signals_command(_missing))
             return 2
         flags = pv["will_do"]["auto_flags"]
-        # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и дальше идёт под своим именем во все
-        # ветки (sequential/обычная) — иначе автовыбор терялся бы по дороге, как уже было в v2.120/v3.0-rc2.
+        # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и идёт под своим именем во все ветки
+        # (sequential/обычная) — иначе автовыбор терялся бы по дороге (v2.120/v3.0-rc2).
         _pres = ai_ops_run.resolve_provider_for_run(a.provider, Path(child_root), execute=True,
                                                     quiet=a.json)
-        # F-026: прогон, в котором модель не вызывается, не доводится до вердикта — отказ с причиной
-        # (офлайн доступен, но как явный выбор: `--provider mock`).
+        # F-026: прогон без вызова модели не доводится до вердикта — отказ (офлайн только `--provider mock`).
         _refusal = ai_ops_run.live_provider_refusal(_pres, a.provider)
         if _refusal:
             if a.json:
@@ -867,9 +869,8 @@ def main(argv):
             flags["author"] = True
             flags["review"] = True
             a.open_pr = True
-        # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом).
-        # v2.120: sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget обычного
-        # пути — иначе тихая потеря containment и live-провайдера (дефект аудита P0.2).
+        # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом);
+        # sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget (аудит P0.2).
         if a.sequential:
             from ai_ops_kit.engine import atomic_planner
             from ai_ops_kit.engine import workpackage_executor
@@ -921,8 +922,7 @@ def main(argv):
         # v3.22: session guard ДО старта — snapshot + relation по факту + delegation
         _session_guard_before_start(Path(child_root), task, signals, a.feature)
         # v2.120: канонический вход ПРОВОДИТ провайдера/модель/base/open-pr/max-steps/require-fix в движок
-        # (дефект аудита P0.1: раньше уходило в mock и без пути до draft PR).
-        # v3.22: `do` добавляет review_fix_attempts=2 (авторазрешение блокировщиков)
+        # (аудит P0.1: раньше уходило в mock). v3.22: `do` добавляет review_fix_attempts=2.
         review_fix = 2 if intent == "do" else getattr(a, "review_fix_attempts", 0)
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
                              session=_session_identity(child_root),
