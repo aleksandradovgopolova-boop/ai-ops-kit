@@ -1,0 +1,43 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1171
+request_id: RR-017
+statement: >
+  ЛОВ АДВЕРСАРИАЛЬНОГО JUDGE (round 1 RR-017): у ai-sdlc ЕСТЬ операционный контур принятия решений
+  под другим именем — RFC-0035 «Decision Catalog / operator routing», status Draft, но
+  lifecycle: Implemented (implementedBy AISDLC-285..295, 11 фаз). Он определяет ресурс Decision со
+  схемой и каталогом-источником-истины, жизненный цикл proposed->open->deferred->answered->
+  superseded->archived (то есть с суперсессией, как DP кита), скоринг Stage-A/B/C с учётом
+  полноты evidence и корпусом примеров (decision-exemplars.yaml), НЕЗАВИСИМО порождаемую
+  рекомендацию рамки с confidence, rationale и стил-мэн контр-аргументами (каталог не получает
+  право выбора — он рекомендует), on-demand research-субагента, кладущего находки в вид решения, и
+  калибровочную петлю по override'ам. Значение для кита: это ФАЛЬСИФИЦИРУЕТ широкое утверждение
+  EV-1169/EV-1170, что «research-как-контракт-решений» — чистая уникальность кита. Осью различия
+  остаётся лишь узкое: у кита накопление EV между прогонами с provenance/freshness/memory-first и
+  writer≠judge НА САМИХ выводах исследования (RR->EV->DP как персистентная память фактов), тогда как
+  RFC-0035 — движок routing'а и приоритизации решений; но «у соседа нет контура решений» — неверно.
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — spec/rfcs/RFC-0035-decision-catalog-operator-routing.md"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/blob/main/spec/rfcs/RFC-0035-decision-catalog-operator-routing.md"
+  type: official_documentation
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "RFC-0035, прочитан независимым judge целиком 2026-09-02; фронтматтер status/lifecycle + фазы Phase 6 (Decision support surface), Phase 10 (Research subagent)"
+  quote: "lifecycle: Implemented"
+captured_at: "2026-09-02"
+captured_by: "независимый judge (adversarial), прогон RR-017 round 1"
+freshness:
+  volatile: true
+  expires_at: "2026-12-02"
+reliability:
+  level: high
+  rationale: >
+    Прочитан RFC первоисточника независимым актором (не writer'ом) целиком; статус и состав фаз
+    сняты с фронтматтера и тела. Это перекрывает пробел writer'а, который перечислил RFC-0001..0044
+    для EV-1168, но не открыл RFC-0035, прямо озаглавленный про решения. Негативная часть
+    (что именно ОСТАЁТСЯ узким у кита) — граница, а не измерение, и в EV-1169/1170 переведена в
+    квалификатор, не в абсолют.
+status: active
+superseded_by: null
