@@ -142,3 +142,73 @@ def test_the_night_review_asks_this_question_too(tmp_path):
     root = _child(tmp_path, seen={"task.completed": 1})
     names = [f["check"] for f in nr.run_checks(root)]
     assert "поступление событий" in names, names
+
+
+# ── events_verified_live: машинное доказательство гейта из выгрузки поступления ──────────────
+# Гейт analytics_runtime_verification объявлен mechanizable, но доказательство events_verified_live
+# производила ДЕКЛАРАЦИЯ судьи. Producer строит его из ФАКТА (сверки каталога с выгрузкой). Тот же
+# инвариант, что у assess: `unavailable != 0` — нет выгрузки даёт unknown, а не «met» и не «не met».
+
+@pytest.mark.unit
+def test_evidence_is_met_when_all_analytics_events_arrive(tmp_path):
+    """positive: выгрузка есть и все analytics-события доехали -> met is True."""
+    root = _child(tmp_path, seen={"task.completed": 5, "object.version_created": 2})
+    ev = ea.events_verified_live(root)
+    assert ev["name"] == "events_verified_live"
+    assert ev["met"] is True, ev
+    assert "доезжают" in ev["reason"]
+
+
+@pytest.mark.unit
+def test_evidence_is_unknown_without_arrival_dump_not_false(tmp_path):
+    """fail-closed для unknown: нет выгрузки -> met is None, НЕ met is False."""
+    ev = ea.events_verified_live(_child(tmp_path))
+    assert ev["met"] is None, ev
+    assert ev["met"] is not False
+    assert ev["reason"] and "положите её" in ev["reason"]
+
+
+@pytest.mark.unit
+def test_evidence_is_not_met_on_a_real_finding(tmp_path):
+    """находка: объявлено analytics-событие, выгрузка есть, события в ней нет -> met is False."""
+    root = _child(tmp_path, seen={"task.completed": 128})
+    ev = ea.events_verified_live(root)
+    assert ev["met"] is False, ev
+    assert "object.version_created" in ev["reason"]
+
+
+@pytest.mark.unit
+def test_evidence_undeclared_event_does_not_break_met(tmp_path):
+    """Дрейф в обратную сторону (событие вне каталога) — не «объявленное не доехало»: met остаётся True."""
+    root = _child(tmp_path, seen={"task.completed": 1, "object.version_created": 1,
+                                  "legacy.click": 3})
+    ev = ea.events_verified_live(root)
+    assert ev["met"] is True, ev
+    assert "legacy.click" in (ev.get("detail") or "")
+
+
+@pytest.mark.unit
+def test_evidence_producer_writes_nothing_and_makes_no_network(tmp_path, monkeypatch):
+    """side-effect proof: producer read-only — не создаёт файлов и не ходит в сеть."""
+    import socket
+    root = _child(tmp_path, seen={"task.completed": 1, "object.version_created": 1})
+    before = sorted(p.name for p in (root / "analytics").iterdir())
+
+    def _no_net(*a, **k):
+        raise AssertionError("producer вышел в сеть — а не должен")
+    monkeypatch.setattr(socket, "socket", _no_net)
+
+    ea.events_verified_live(root)
+    after = sorted(p.name for p in (root / "analytics").iterdir())
+    assert before == after, "producer изменил файлы продукта"
+
+
+@pytest.mark.unit
+def test_evidence_cli_exit_code_nonzero_only_on_finding(tmp_path, capsys):
+    """CLI --evidence: unknown и met -> 0; настоящая находка -> 1 (как у самой проверки)."""
+    assert ea.main(["event_arrival", str(_child(tmp_path)), "--evidence"]) == 0        # unknown
+    ok = _child(tmp_path / "ok", seen={"task.completed": 1, "object.version_created": 1})
+    assert ea.main(["event_arrival", str(ok), "--evidence"]) == 0                      # met
+    bad = _child(tmp_path / "bad", seen={"task.completed": 1})
+    assert ea.main(["event_arrival", str(bad), "--evidence"]) == 1                     # находка
+    capsys.readouterr()
