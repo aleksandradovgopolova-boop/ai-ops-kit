@@ -98,7 +98,7 @@ class TestRealKitGraph:
 
     def test_impact_gate_policy(self):
         real = build_graph()
-        imp_gp = impact(real, "tools/gate_policy.py")
+        imp_gp = impact(real, "ai_ops_kit/gates/gate_policy.py")
         assert "ai_ops_kit/engine/execution_pipeline.py" in imp_gp
         assert "ai_ops_kit/devtools/bench_lite.py" in imp_gp
 

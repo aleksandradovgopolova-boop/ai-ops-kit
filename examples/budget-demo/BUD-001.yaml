@@ -13,4 +13,4 @@ limits:
 on_exhaustion: fail_closed
 hard: true
 accounting: "trace run_cost (output_tokens, cost_usd_est) per attempt"
-enforced_by: "tools/budget.py Budget + ai_ops_run review_fix_attempts"
+enforced_by: "ai_ops_kit/shared/budget.py Budget + ai_ops_run review_fix_attempts"

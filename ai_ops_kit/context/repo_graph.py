@@ -27,7 +27,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 # v3.30: код движка переехал в пакеты ai_ops_kit/*. Без него граф видел только тонкие
 # алиасы в tools/ и терял РЕАЛЬНЫХ импортёров — анализ влияния (--impact) молча
 # недооценивал последствия правки.
-DEFAULT_SUBDIRS = ("ai_ops_kit", "tools", "validation")
+DEFAULT_SUBDIRS = ("ai_ops_kit",)
 JS_TS_EXTENSIONS = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")
 
 # `.ai/` — ОБЛАСТЬ КИТА В ДОЧКЕ, А НЕ КОД ПРОДУКТА (F-022, корень).

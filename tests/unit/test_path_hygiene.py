@@ -39,7 +39,7 @@ pytestmark = pytest.mark.unit
 # пересказ: проверка обязана ловить настоящий файл, а не свою идею о нём.
 BELT_TEMPLATE = (
     "import os, sys; [sys.path.insert(0, p) for p in ['{root}'] + "
-    "[os.path.join('{root}', d) for d in ('tools', 'validation')] "
+    "[os.path.join('{root}', d) for d in ('ai_ops_kit/validation',)] "
     "if os.path.isdir(p) and p not in sys.path]\n"
 )
 
@@ -78,9 +78,10 @@ def test_residual_belt_is_found(tmp_path):
     found = belts[0]
     assert found["severity"] == "blocking", "пояс не может быть advisory: он красит проверки зелёным"
     assert found["path"] == str(belt)
-    # Пояс подкладывает корень И два родовых каталога — отчёт обязан показать все три.
+    # Пояс подкладывает корень И каталог валидаторов (v4.0: плоский tools/ снят) — отчёт обязан
+    # показать оба.
     assert set(found["injected_paths"]) == {
-        str(PKG), f"{PKG}/tools", f"{PKG}/validation"}, found["injected_paths"]
+        str(PKG), f"{PKG}/ai_ops_kit/validation"}, found["injected_paths"]
     assert "rm -f" in found["fix"] and str(belt) in found["fix"], found["fix"]
     assert "pip uninstall" in found["fix"], "инструкция молчит о том, что pip файл не заберёт"
 

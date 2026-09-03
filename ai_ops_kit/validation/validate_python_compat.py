@@ -28,7 +28,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 # v3.33.2: добавлены ai_ops_kit (после переезда 3.31.0 РЕАЛЬНЫЙ код там, а в tools/ — тонкие
 # алиасы без аннотаций, то есть guard проверял пустое место) и tests (джоба python39-compat гоняет
 # на 3.9 контрактные тесты — значит и они обязаны быть совместимы).
-SCAN_DIRS = ["ai_ops_kit", "tools", "validation", "installer", "tests"]
+SCAN_DIRS = ["ai_ops_kit", "installer", "tests"]
 
 # Модули stdlib, появившиеся ПОЗЖЕ объявленного пола. Импорт такого модуля — не стилистика,
 # а гарантированный ModuleNotFoundError у пользователя со старым python. Пол берётся из

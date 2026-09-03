@@ -97,7 +97,10 @@ def _pip_owned_pth(site_dir: Path) -> frozenset:
     return frozenset(owned)
 
 # Родовые каталоги кита, которые пояс подкладывает как top-level имена.
-_KIT_DIRS = ("tools", "validation")
+# v4.0: плоский слой tools/ снят; плоско (top-level) импортируются только модули каталога
+# валидаторов (`ai_ops_kit/validation/` — там `_bootstrap` и `validate_*`), поэтому пояс,
+# скрывающий дефект, подкладывает именно его.
+_KIT_DIRS = ("ai_ops_kit/validation",)
 
 # Из пути пользовательского site достаём версию Python — чтобы подсказка называла ТОТ интерпретатор,
 # которому файл принадлежит, а не тот, которым запущен doctor.

@@ -69,8 +69,8 @@ def escalated_run(tmp_path_factory):
     with patch("ai_ops_kit.providers.model_router.plan_run", return_value=_plan_with_ladder()), \
          patch("ai_ops_kit.providers.provider_endpoints.key_available", return_value=True), \
          patch("ai_ops_kit.providers.provider_endpoints.endpoint_for", return_value=ep), \
-         patch("ai_ops_run._load_klp_by_env", return_value={}), \
-         patch("ai_ops_run._provider_trust", return_value=trust), \
+         patch("ai_ops_kit.engine.ai_ops_run._load_klp_by_env", return_value={}), \
+         patch("ai_ops_kit.engine.ai_ops_run._provider_trust", return_value=trust), \
          patch("ai_ops_kit.providers.orchestrator.make_openai_provider",
                side_effect=lambda *a, **k: (lambda prompt: {"done": True})), \
          patch("ai_ops_kit.engine.execution_pipeline.run_pipeline",

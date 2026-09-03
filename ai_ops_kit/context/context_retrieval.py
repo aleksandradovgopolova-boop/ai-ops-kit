@@ -69,7 +69,7 @@ MAX_FILE_BYTES = 512 * 1024          # один файл > 512KB не читае
 MAX_SCAN_FILES = 5000                # верхняя граница числа читаемых файлов
 
 
-def full_text_search(root, query: str, subdirs=("tools", "validation"), exts=RETRIEVAL_EXTS,
+def full_text_search(root, query: str, subdirs=("ai_ops_kit",), exts=RETRIEVAL_EXTS,
                      exclude_dirs=SCAN_EXCLUDE_DIRS, max_file_bytes=MAX_FILE_BYTES,
                      max_files=MAX_SCAN_FILES, path_filter=None):
     root = Path(root)
@@ -123,7 +123,7 @@ def role_allowed_classes(afp: dict, role: str):
 
 
 def build_view(root, query: str, role: str, allowed_classes, budget_tokens: int, sha=None,
-               repo_id=None, policy=None, strict=False, subdirs=("tools", "validation"),
+               repo_id=None, policy=None, strict=False, subdirs=("ai_ops_kit",),
                exts=RETRIEVAL_EXTS):
     root = Path(root)
     allowed = set(allowed_classes)

@@ -13,4 +13,4 @@ limits:
 on_exhaustion: escalate
 hard: true
 accounting: "per-package run_cost агрегат (v3.5 добавит package-trace)"
-enforced_by: "tools/budget.py Budget на пакет (workpackage_executor)"
+enforced_by: "ai_ops_kit/shared/budget.py Budget на пакет (workpackage_executor)"
