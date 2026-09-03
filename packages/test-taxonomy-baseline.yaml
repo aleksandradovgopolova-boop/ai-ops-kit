@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 336
+behavioral_count: 345
 structural_count: 60
-total_count: 396
-behavioral_share_pct: 84.85
+total_count: 405
+behavioral_share_pct: 85.19
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -71,3 +71,19 @@ raises:
       (test_module_size.py — импортирует validate_module_size И зовёт его), доля поведенческих
       выросла 84.81% -> 84.85%. Baseline пере-записан на фактический замер, чтобы ратчет держал уже
       улучшенную границу, а не устаревшую.
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 336
+    from_total: 396
+    to_behavioral: 345
+    to_total: 405
+    to_share_pct: 85.19
+    work: tests-verify-behavior (issue #438)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез мега-тест-файлов по темам без потери
+      и изменения тестов. test_execution_pipeline.py (3579 строк) разрезан на 6 поведенческих файлов
+      (setup/readiness/review/diagnostics/authoring + ядро), test_ai_ops_run.py (2344) — на 5
+      (providers/print/reporting/lifecycle + ядро). Каждый новый файл, как и исходный, импортирует
+      продуктовый код (execution_pipeline / ai_ops_run) И зовёт его -> все 9 новых файлов
+      поведенческие, структурных не прибавилось (60 без изменений), доля выросла 84.85% -> 85.19%.
+      Число собранных тестов ДО == ПОСЛЕ (489). Baseline пере-записан на фактический замер.
