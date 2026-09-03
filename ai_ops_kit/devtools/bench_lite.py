@@ -27,8 +27,8 @@ independent-review (легитимный минимальный код блок�
   cases[].shadow       — per-case shadow-diff current vs candidate (gate_policy.shadow_diff).
 
 CLI:
-  python3 tools/bench_lite.py --run [--out report.json]   # прогнать корпус, напечатать/сохранить отчёт
-  python3 tools/bench_lite.py --selftest                  # прогон + жёсткие проверки (для CI)
+  python3 -m ai_ops_kit.devtools.bench_lite --run [--out report.json]   # прогнать корпус, напечатать/сохранить отчёт
+  python3 -m ai_ops_kit.devtools.bench_lite --selftest                  # прогон + жёсткие проверки (для CI)
 """
 from __future__ import annotations
 

@@ -167,10 +167,10 @@ ruff check .
 python3 -m pytest tests/ --cov=ai_ops_kit --cov=installer --cov-report=term-missing
 
 # Benchmarks
-python3 tools/bench_performance.py --update-baseline
+python3 -m ai_ops_kit.devtools.bench_performance --update-baseline
 
 # Observability
-python3 tools/kit_observability.py .
+python3 -m ai_ops_kit.devtools.kit_observability .
 ```
 
 ## Лицензия

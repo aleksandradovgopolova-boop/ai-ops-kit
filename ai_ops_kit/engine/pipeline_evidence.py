@@ -192,7 +192,7 @@ def contour_consistency_evidence(child_root, wid, changed_files, timeout=120):
     ПОЧЕМУ ПОДПРОЦЕСС, А НЕ ИМПОРТ. Прямой вызов `ai_ops_kit.planning.contours` из движка добавил бы
     ребро `engine -> planning`, а вместе с ним новые циклы через `planning -> lifecycle`; ратчет
     `packages/layering.yaml` поймал бы это сразу. Шов тот же, что у `validate_product_model`:
-    точка входа `tools/contours.py` + машиночитаемый вывод.
+    точка входа `ai_ops_kit/planning/contours.py` + машиночитаемый вывод.
 
     Гейт ADVISORY: несогласованность даёт `warn`, а не `fail` (правило движения по roadmap —
     blocking только после обкатки на child-репозиториях). Недоступность инструмента тоже `warn`,

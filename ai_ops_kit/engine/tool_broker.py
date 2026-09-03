@@ -12,7 +12,7 @@ write_scope + config/protected-paths.yaml), НЕ модель. Broker испол
 
 Действие: {"op": read|write|shell|git, "path": ..., "command": ..., "content": ...}.
 
-Использование (программно; интегрируется в tools/orchestrator.py):
+Использование (программно; интегрируется в ai_ops_kit/providers/orchestrator.py):
   from tool_broker import Policy, execute
   pol = Policy(level="controlled-write", write_scope=["src/"])
   ev = execute({"op": "write", "path": "src/a.ts", "content": "..."}, root, pol)
