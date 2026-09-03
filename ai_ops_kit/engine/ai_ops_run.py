@@ -509,248 +509,112 @@ def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, instal
     return rep, None
 
 
-def run(task_text, signals, child_root: Path, features_dir=None,
-        runtime="claude-code", provider_name="mock", session="cli", execute=False,
-        feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
-        baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
-        sandbox=False, review=False, reviewer_proposer=None, takeover=False, takeover_reason=None,
-        author=False, author_proposer=None, install_deps=True,
-        resume=False, force_resume=False, base=None, write_scope=None, replan=False,
-        review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
-        context_shadow=False, context_hybrid=False, reevaluate_only=False,
-        progressive_escalation=False, provider_resolution=None):
-    signals = dict(signals or {})
-    signals.setdefault("task_text", task_text)
-    child_root = Path(child_root)
-    features_dir = Path(features_dir) if features_dir else child_root / "features"
+def _resolve_run_base(ctx, base):
+    """v3.0.8/3.0.9 (P0.1/P0.2): base -> КОНКРЕТНАЯ ВЕТКА один раз + полный BaseBinding; явная
+    несуществующая base -> ранний отказ (0 model calls). Возвращает (base, base_binding, err)."""
+    from ai_ops_kit.engine import execution_pipeline
+    child_root, feature = ctx.child_root, ctx.feature
+    _brr = execution_pipeline._resolve_base(child_root, base)
+    if _brr.get("mode") == "explicit" and not _brr.get("resolved"):
+        return base, None, {"schema_version": 1, "kind": "execution-pipeline",
+                "workitem_id": feature or "?",
+                "status": "error", "ready_for_pr": False,
+                "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
+                          f"({_brr.get('reason')}) — прогон не запущен (0 вызовов модели)"),
+                "base_binding": {k: _brr.get(k) for k in ("base_ref", "base_sha", "mode", "source")}}
+    if _brr.get("resolved"):
+        base = _brr.get("base_ref")   # конкретная ветка -> в run-settings, resume_preflight, pipeline
+    base_binding = {"kind": "BaseBinding",
+                    "base_ref": _brr.get("base_ref") or base, "base_sha": _brr.get("base_sha"),
+                    "mode": _brr.get("mode"), "source": _brr.get("source")}
+    return base, base_binding, None
 
-    # engine=pipeline (v2.63): собранный единый движок как РЕАЛЬНЫЙ путь из контроллера
-    # (adversarial-review: раньше execution_pipeline вызывался только из selftest). Делегируем
-    # весь прогон в execution_pipeline.run_pipeline; proposer — из провайдера (или передан).
-    if engine == "pipeline":
-        from ai_ops_kit.engine import execution_pipeline
-        from ai_ops_kit.engine import tool_loop
-        from ai_ops_kit.providers import orchestrator
-        # v3.0-rc2/rc4 (P0.1) Canonical Resume Context + immutable-resume: вынесено в
-        # _restore_resume_policy (K6-глубина). RunContext держит переписываемое состояние прогона:
-        # вынесенный блок мутирует ctx, а run() синхронизирует изменённые policy-поля обратно в
-        # локалы (downstream пока читает локалы; к ctx как источнику истины сходимся по мере выноса
-        # соседних блоков). Поведение сохранено: restore при resume, fail-closed на битом
-        # run-settings, immutable drift-отказ, F-027 продуктовая задача.
-        ctx = RunContext.from_run_args(
-            task_text=task_text, signals=signals, child_root=child_root, features_dir=features_dir,
-            feature=feature, provider_name=provider_name, model=model, runtime=runtime,
-            sandbox=sandbox, baseline_diff=baseline_diff, require_fix=require_fix, author=author,
-            review=review, open_pr=open_pr, write_scope=write_scope, max_steps=max_steps,
-            base=base, replan=replan)
-        _rrerr = _restore_resume_policy(ctx, resume)
-        if _rrerr:
-            return _rrerr
-        signals, task_text, _saved_task = ctx.signals, ctx.task_text, ctx.saved_task
-        sandbox, baseline_diff, require_fix = ctx.sandbox, ctx.baseline_diff, ctx.require_fix
-        author, review, open_pr = ctx.author, ctx.review, ctx.open_pr
-        write_scope, max_steps, base = ctx.write_scope, ctx.max_steps, ctx.base
-        # v3.0.8 (finding аудита P0.1): base РАЗРЕШАЕТСЯ В КОНКРЕТНУЮ ВЕТКУ ОДИН РАЗ здесь (до resume_preflight
-        # и до записи run-settings). Иначе fresh auto-run сохранял base=null -> resume передавал None в
-        # git rev-parse -> TypeError. На resume уже восстановлен сохранённый base (выше); для fresh —
-        # auto-резолв. Явная несуществующая base -> ранний честный отказ (0 model calls).
-        _brr = execution_pipeline._resolve_base(child_root, base)
-        if _brr.get("mode") == "explicit" and not _brr.get("resolved"):
-            return {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": feature or "?",
-                    "status": "error", "ready_for_pr": False,
-                    "error": (f"base-preflight: явная база '{base}' не разрешается в ветку "
-                              f"({_brr.get('reason')}) — прогон не запущен (0 вызовов модели)"),
-                    "base_binding": {k: _brr.get(k) for k in ("base_ref", "base_sha", "mode", "source")}}
-        if _brr.get("resolved"):
-            base = _brr.get("base_ref")   # конкретная ветка -> в run-settings, resume_preflight, pipeline
-        # v3.0.9 (finding аудита P0.2): полный BaseBinding (ref+sha+mode+source) сохраняется/восстанавливается,
-        # а не только имя ветки — чтобы resume восстанавливал ТОЧНУЮ базу исходного запуска (ловит force-push/
-        # смену upstream/пересоздание ветки, не только fast-forward).
-        base_binding = {"kind": "BaseBinding",
-                        "base_ref": _brr.get("base_ref") or base, "base_sha": _brr.get("base_sha"),
-                        "mode": _brr.get("mode"), "source": _brr.get("source")}
-        # v3.7.12 Router->runtime + JIT-trust + complexity-aware + provider-fallback: вынесено в
-        # _resolve_models (K6-глубина). Мутирует ctx (writer/reviewer model+prov, model_resolution,
-        # sec_qualified, klp/trust-*). preflight PRIMARY не пройден -> blocked-preflight (fail-closed).
-        _mrerr = _resolve_models(ctx)
-        if _mrerr:
-            return _mrerr
-        _writer_model, _writer_prov = ctx.writer_model, ctx.writer_prov
-        _rev_model, _rev_prov = ctx.rev_model, ctx.rev_prov
-        _model_resolution, _sec_qualified = ctx.model_resolution, ctx.sec_qualified
-        _klp_by_env, _trust_cache = ctx.klp_by_env, ctx.trust_cache
-        _trust_now, _trust_env = ctx.trust_now, ctx.trust_env
 
-        # v3.10.0 Usage Truth: обёртка провайдера ставит call-context (role/trigger/provider/runtime) перед
-        # вызовом -> _record_call пишет их в UsageRecord. run_id/workitem_id заполнит usage_ledger.append.
-        def _uctx(_prov, _role, _trigger, _prov_name):
-            if _prov is None:
-                return None
-            def _w(_prompt):
-                orchestrator.set_call_context(role=_role, trigger=_trigger, provider=_prov_name, runtime=runtime)
-                return _prov(_prompt)
-            return _w
-        _wname = ((_model_resolution or {}).get("writer") or {}).get("provider") or provider_name
-        _rname = ((_model_resolution or {}).get("reviewer") or {}).get("provider") or provider_name
-        prop = proposer or tool_loop.make_model_proposer(
-            _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname))
-        # v2.83/v3.7.12: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова);
-        # при router-режиме — по возможности ДРУГАЯ модель/вендор (полная независимость судьи).
-        rev_prop = reviewer_proposer
-        # СУДЬЯ ГОТОВИТСЯ ВСЕГДА, КОГДА ЕСТЬ ЖИВОЙ ПРОВАЙДЕР (полевой замер 14.08.2026). Прежде он
-        # создавался только при `review=True`, а этот флаг ставится автоподбором по классу задачи:
-        # для QUICK он False. Значит на правке документа — том самом классе, где родился B2-14, —
-        # сверять критерии было НЕКОМУ, и механизм молчал не потому, что всё хорошо. Создание
-        # обёртки провайдера ничего не стоит: вызовы происходят, только если кто-то судью позовёт.
-        # Ревью ГЕЙТОВ по-прежнему под флагом `review` — отвязана именно сверка критериев.
-        if rev_prop is None and provider_name != "mock":
-            if review:
-                # путь ревью гейтов: недоступный провайдер судьи — ошибка прогона, как и было
+def _build_run_proposers(ctx, proposer, reviewer_proposer, author_proposer):
+    """v3.7.12/v2.83/v2.86: собрать writer/reviewer/author-предложителей (writer ≠ judge); судья
+    готовится всегда при живом провайдере. Кладёт prop/rev_prop/auth_prop в ctx; возвращает `_uctx`
+    (обёртка call-context, её читает вынесенный fix-loop: role/trigger/provider/runtime)."""
+    from ai_ops_kit.engine import tool_loop
+    from ai_ops_kit.providers import orchestrator
+    runtime, provider_name = ctx.runtime, ctx.provider_name
+    _writer_model, _writer_prov = ctx.writer_model, ctx.writer_prov
+    _rev_model, _rev_prov = ctx.rev_model, ctx.rev_prov
+    _model_resolution = ctx.model_resolution
+
+    def _uctx(_prov, _role, _trigger, _prov_name):   # ставит call-context -> _record_call в UsageRecord
+        if _prov is None:
+            return None
+        def _w(_prompt):
+            orchestrator.set_call_context(role=_role, trigger=_trigger, provider=_prov_name, runtime=runtime)
+            return _prov(_prompt)
+        return _w
+    _wname = ((_model_resolution or {}).get("writer") or {}).get("provider") or provider_name
+    _rname = ((_model_resolution or {}).get("reviewer") or {}).get("provider") or provider_name
+    prop = proposer or tool_loop.make_model_proposer(
+        _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname))
+    # v2.83/v3.7.12: независимый ревьюер — ОТДЕЛЬНЫЙ провайдер (writer ≠ judge на уровне вызова).
+    rev_prop = reviewer_proposer
+    if rev_prop is None and provider_name != "mock":
+        if ctx.review:
+            # путь ревью гейтов: недоступный провайдер судьи — ошибка прогона, как и было
+            rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model),
+                             "code_review", "review", _rname)
+        else:
+            # путь сверки критериев: отсутствие судьи не роняет прогон (сверка скажет «недоступен»)
+            try:
                 rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model),
                                  "code_review", "review", _rname)
-            else:
-                # путь сверки критериев: судья ЖЕЛАТЕЛЕН, но его отсутствие не повод ронять прогон —
-                # сверка честно скажет «независимый ревьюер недоступен». Ронять здесь значило бы
-                # ломать прогоны, которым судья и не нужен (в т.ч. с фиктивными провайдерами тестов).
-                try:
-                    rev_prop = _uctx(_rev_prov or orchestrator.make_provider(provider_name, _rev_model),
-                                     "code_review", "review", _rname)
-                except (SystemExit, Exception):   # noqa: BLE001 — «судьи нет» называется в отчёте сверки
-                    rev_prop = None
-        # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
-        auth_prop = author_proposer
-        if author and auth_prop is None and provider_name != "mock":
-            auth_prop = _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname)
-        # resolved-предложители -> ctx: fix-loop (вынесен) читает/перевязывает их через ctx.
-        ctx.prop, ctx.rev_prop, ctx.auth_prop = prop, rev_prop, auth_prop
+            except (SystemExit, Exception):   # noqa: BLE001 — «судьи нет» называется в отчёте сверки
+                rev_prop = None
+    # v2.86: author-модель для артефактов requirements/plan (отдельный вызов провайдера).
+    auth_prop = author_proposer
+    if ctx.author and auth_prop is None and provider_name != "mock":
+        auth_prop = _uctx(_writer_prov or orchestrator.make_provider(provider_name, _writer_model), "implementation", "initial", _wname)
+    ctx.prop, ctx.rev_prop, ctx.auth_prop = prop, rev_prop, auth_prop   # fix-loop читает/перевязывает через ctx
+    return _uctx
 
-        # v2.94 (One Run Transaction, аудит #2): pipeline БОЛЬШЕ НЕ обходит lifecycle. Один план
-        # строится здесь и передаётся в движок (не второй раз внутри); WorkItem/RunPlan/active-work/
-        # concurrency-preflight/run-report — как в controller-пути. Прежде было «два мира»: движок
-        # возвращал отчёт, не создавая WorkItem/active-work/run-report.
-        plan = run_plan.build_plan(signals, workitem_id=feature)
-        fid = plan["workitem_id"]
 
-        # v3.0.16 Phase A (finding аудита #2): реконсиляция незавершённой доставки прошлого прогона —
-        # если остался DeliveryIntent (outcome_unknown), сверяем с remote и дописываем DeliveryReceipt
-        # ДО новой работы. Идемпотентно, ничего не создаёт. Best-effort (не роняет прогон).
-        try:
-            _rec = _reconcile_pending_delivery(features_dir, fid, child_root)
-        except Exception:  # noqa: BLE001
-            _rec = None
+def _run_preflight(ctx, fid, plan, bundle, payload, spec_cov, work_pkg,
+                   lifecycle_errors, reevaluate_only, provider_resolution):
+    """v2.115 Preflight Truth: проверки ДО запуска модели (fresh и resume). Возвращает
+    (pretruth, blocked_report): report != None -> ранний blocked-preflight (durable, 0 вызовов)."""
+    from ai_ops_kit.gates import preflight as _pf
+    signals, child_root, features_dir = ctx.signals, ctx.child_root, ctx.features_dir
+    runtime, provider_name, model = ctx.runtime, ctx.provider_name, ctx.model
+    pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
+                          spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors,
+                          author=ctx.author, reevaluate_only=reevaluate_only)
+    (features_dir / fid / "preflight.yaml").write_text(
+        yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    if not pretruth["blocked"]:
+        return pretruth, None
+    rep = {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
+           "status": "blocked", "engine": "pipeline", "runtime": runtime,
+           "provider": provider_name, "model": model, "ready_for_pr": False,
+           "overall_status": "blocked-preflight",
+           "error": "preflight не пройден (модель не запускалась, правок/коммита нет): "
+                    + "; ".join(pretruth["reasons"]),
+           "preflight": pretruth,
+           "loop": None, "commit": {"sha": None},   # честно: ни петли, ни коммита
+           "not_yet": pretruth["reasons"],
+           "profile": _profile_for_report(child_root),   # P1-3: даже блок честно показывает стек
+           "provider_resolution": dict(provider_resolution) if provider_resolution else None,
+           "lifecycle": {"workitem": f"features/{fid}/workitem.yaml",
+                         "run_plan": f"features/{fid}/run-plan.yaml",
+                         "preflight": f"features/{fid}/preflight.yaml"}}
+    if lifecycle_errors:
+        rep["lifecycle_errors"] = lifecycle_errors
+    _ls.merge_bookkeeping_losses(rep)   # утраты записей журнала — ДО записи отчёта на диск
+    _ls.durable_write_json(features_dir / fid / "run-report.json", rep)   # v3.0.14 (#2): атомарно
+    return pretruth, rep
 
-        # v2.109 Real Resume: продолжить WorkItem поверх подтверждённой работы (не начинать заново).
-        # Проверяем ДО регистрации/изменения состояния, чтобы честный ранний выход ничего не оставил.
-        # resume-preflight гейт (продолжение поверх подтверждённой работы) -> _resume_gate (K6).
-        pf, resume_ctx, _rerr = _resume_gate(child_root, fid, base, force_resume, resume)
-        if _rerr:
-            return _rerr
 
-        # durable lifecycle-start (workitem/RunPlan/run-settings/journal) -> _start_lifecycle (K6).
-        _attempt_id, _lcerr = _start_lifecycle(
-            features_dir, fid, task_text, signals, plan, engine, base, resume, execute,
-            _saved_task, sandbox, baseline_diff, require_fix, author, review, open_pr,
-            write_scope, max_steps, base_binding)
-        if _lcerr:
-            return _lcerr
-        # артефакты контекста -> _compile_context_artifacts (K6).
-        (lifecycle_errors, bundle, payload, _hybrid_prelude, _hybrid_fed,
-         spec_cov, work_pkg) = _compile_context_artifacts(
-            signals, child_root, features_dir, fid, plan, model,
-            context_hybrid, base_binding, task_text)
-        # v2.115 Preflight Truth: проверки ДО запуска модели. Блок -> tool loop НЕ запускается,
-        # правки/коммит НЕ создаются (Spec-First блокирует РЕАЛИЗАЦИЮ, а не только доставку). Единая
-        # точка: spec/атомарность/overflow/approvals/lifecycle. Выполняется и для fresh, и для resume.
-        from ai_ops_kit.gates import preflight as _pf
-        pretruth = _pf.assess(signals, child_root, fid, plan=plan, bundle=bundle, payload=payload,
-                              spec_cov=spec_cov, work_pkg=work_pkg, lifecycle_errors=lifecycle_errors,
-                              author=author, reevaluate_only=reevaluate_only)
-        (features_dir / fid / "preflight.yaml").write_text(
-            yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        if pretruth["blocked"]:
-            rep = {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
-                   "status": "blocked", "engine": "pipeline", "runtime": runtime,
-                   "provider": provider_name, "model": model, "ready_for_pr": False,
-                   "overall_status": "blocked-preflight",
-                   "error": "preflight не пройден (модель не запускалась, правок/коммита нет): "
-                            + "; ".join(pretruth["reasons"]),
-                   "preflight": pretruth,
-                   "loop": None, "commit": {"sha": None},   # честно: ни петли, ни коммита
-                   "not_yet": pretruth["reasons"],
-                   # P1-3: даже заблокированный прогон честно показывает распознанный стек
-                   "profile": _profile_for_report(child_root),
-                   "provider_resolution": dict(provider_resolution) if provider_resolution else None,
-                   "lifecycle": {"workitem": f"features/{fid}/workitem.yaml",
-                                 "run_plan": f"features/{fid}/run-plan.yaml",
-                                 "preflight": f"features/{fid}/preflight.yaml"}}
-            if lifecycle_errors:
-                rep["lifecycle_errors"] = lifecycle_errors
-            _ls.merge_bookkeeping_losses(rep)   # утраты записей журнала — ДО записи отчёта на диск
-            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)   # v3.0.14 (#2): атомарно
-            return rep
-
-        # регистрация active-work + concurrency-preflight -> _register_active_work (K6).
-        aw_path, preflight, _awerr = _register_active_work(
-            child_root, signals, write_scope, fid, session, lifecycle_errors,
-            takeover=takeover, takeover_reason=takeover_reason)
-        if _awerr:
-            return _awerr
-
-        # v2.107: если pipeline упадёт, active-work обязана закрыться (except+re-raise). v3.1.8/3.1.9
-        # калиброванное UI-enforcement, fix-loop с quality-эскалацией writer'а -> вынесено в
-        # _execute_with_fix_loop (K6). ctx несёт prop/rev_prop/auth_prop + model_resolution/trust;
-        # helper мутирует ctx и возвращает (rep, terminal_error): terminal_error != None -> ранний
-        # честный error-отчёт (durable-записан); KeyboardInterrupt/SystemExit пробрасывается.
-        _calib = bool(calibrated_enforcement)
-        rep, _exerr = _execute_with_fix_loop(
-            ctx, _uctx, execute=execute, plan=plan, discard_previous=discard_previous,
-            install_deps=install_deps, hybrid_prelude=_hybrid_prelude, calib=_calib,
-            ui_evidence=ui_evidence, reevaluate_only=reevaluate_only, resume=resume,
-            resume_ctx=resume_ctx, attempt_id=_attempt_id, fid=fid, aw_path=aw_path,
-            review_fix_attempts=review_fix_attempts, reviewer_proposer=reviewer_proposer,
-            author_proposer=author_proposer)
-        if _exerr is not None:
-            return _exerr
-        # provenance-поля отчёта -> _enrich_run_report (K6).
-        _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
-                           provider_resolution=provider_resolution, child_root=child_root,
-                           base_binding=base_binding, model_resolution=_model_resolution,
-                           writer_model=_writer_model, model=model, pretruth=pretruth,
-                           resume=resume, pf=(pf if resume else None), force_resume=force_resume, fid=fid,
-                           bundle=bundle, payload=payload, spec_cov=spec_cov,
-                           work_pkg=work_pkg, preflight=preflight)
-        # контекст-отчёты в rep -> _add_context_reports (K6).
-        _add_context_reports(rep, bundle=bundle, payload=payload, spec_cov=spec_cov,
-                             work_pkg=work_pkg, context_shadow=context_shadow,
-                             context_hybrid=context_hybrid, hybrid_fed=_hybrid_fed,
-                             child_root=child_root, task_text=task_text, fid=fid)
-        # v3.0.12 (finding аудита блок B): RunHandoff — состояние для resume, пишем DURABLE (атомарно +
-        # fsync + перечитывание). Сбой записи БОЛЬШЕ НЕ гаснет молча (иначе на диске остаётся handoff
-        # ПРОШЛОГО прогона, и resume продолжит с устаревшего состояния, думая, что оно свежее): фиксируем
-        # в lifecycle_errors и в отчёт. build_handoff строится ДО записи run-report, чтобы отразить его исход.
-        # v3.0.15 (finding аудита P0): ТРАНЗАКЦИОННЫЙ COMMIT BARRIER. Доставка (PR) происходит ТОЛЬКО ПОСЛЕ
-        # надёжной фиксации доказательств и состояния прогона. Порядок:
-        #   verification -> durable RunHandoff -> durable final report -> journal checkpoint ->
-        #   delivery -> durable delivery result -> run_end.
-        # Pipeline вызван с defer_delivery=True: он вернул ДОКАЗАННЫЙ результат + delivery_plan, но PR НЕ
-        # открыл. Критические записи здесь — БАРЬЕРЫ: если RunHandoff или final report не зафиксированы
-        # durable, доставка НЕ выполняется (fail-closed) — наружу нельзя отдавать то, что локально не зафиксировано.
-        # commit-barrier перед доставкой (RunHandoff+report durable, journal-checkpoint) -> _commit_barrier (K6).
-        _jname, _handoff_ok, _report_ok, _plan = _commit_barrier(
-            rep, child_root, features_dir, fid, lifecycle_errors)
-        # DELIVERY за commit-барьером (governance-gate -> DeliveryIntent -> внешнее действие ->
-        # DeliveryReceipt, outcome_unknown/fail-closed) -> _deliver (K6). Мутирует rep на месте.
-        _deliver(ctx, rep, plan=_plan, handoff_ok=_handoff_ok, report_ok=_report_ok,
-                 jname=_jname, fid=fid)
-        # агрегат стоимости прогона + usage-ledger + очистка call-context -> _finalize_run_cost (K6).
-        _finalize_run_cost(rep, orchestrator, model, _jname, fid, _attempt_id, signals,
-                           _plan, _model_resolution, child_root)
-        # финализация: run_completed + run_end + статус + снятие active-work -> _finalize_run (K6).
-        return _finalize_run(rep, fid, child_root, _jname, _attempt_id, aw_path)
-
-    # 1-2. RunPlan (route + треки + агрегированные гейты).
-    # feature (v2.51): привязка WorkItem к ИМЕНОВАННОЙ фиче — иначе wid=wi-<hash>, и срезы
-    # истории падают на новую фичу с 1 срезом (baseline не двигается — finding обкатки 5).
+def _run_controller_path(task_text, signals, child_root, features_dir, feature,
+                         runtime, provider_name, execute, session, write_scope):
+    """controller/planning-путь (engine=controller): RunPlan + каркас состояния, БЕЗ внешней доставки;
+    стадии исполняет рантайм/generic-orchestrator, execution+delivery-гарантии — только pipeline."""
+    # 1-2. RunPlan (route + треки + гейты). feature (v2.51): привязка WorkItem к ИМЕНОВАННОЙ фиче —
+    # иначе wid=wi-<hash>, и срезы истории падают на новую фичу с 1 срезом (finding обкатки 5).
     plan = run_plan.build_plan(signals, workitem_id=feature)
     fid = plan["workitem_id"]
     base_wf = plan["base_workflow"]
@@ -759,8 +623,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     workitem.start(str(features_dir), fid, task_text,
                    task_type=signals.get("task_type"), risk=signals.get("risk"))
 
-    # 4. RunPlan на диск — v3.0.16 Phase A (finding аудита #3): единые write-barriers и в этом пути.
-    # RunPlan — барьер: сбой durable-записи -> прогон не начинаем (0 исполнения).
+    # 4. RunPlan на диск — v3.0.16 Phase A (аудит #3): барьер, сбой durable-записи -> 0 исполнения.
     _pw2 = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan)
     if not _pw2.get("ok"):
         return {"schema_version": 1, "kind": "run-report", "workitem_id": fid, "status": "error",
@@ -806,16 +669,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         "gates": plan["gates"],
         "runtime": runtime, "execution": "orchestrated" if (execute or runtime == "generic-orchestrator") else "planned",
         "status": status, "run_state": run_state,
-        # честно: в planned run_state — ОБЕЩАНИЕ пути; папку workitems/<id>/ создаёт
-        # рантайм при реальном исполнении стадий, не контроллер. Не полагаться на её
-        # наличие после planned-прогона (finding обкатки v2.34).
+        # честно: в planned run_state — ОБЕЩАНИЕ пути; папку workitems/<id>/ создаёт рантайм при
+        # реальном исполнении, не контроллер — не полагаться на её наличие (finding обкатки v2.34).
         "run_state_materialized": run_state_materialized,
         "artifacts": {"workitem": f"features/{fid}/workitem.yaml",
                       "run_plan": f"features/{fid}/run-plan.yaml"},
-        # v3.0.16 Phase A (finding аудита #3): этот путь — planning/orchestration; ВНЕШНЯЯ ДОСТАВКА (PR) НЕ
-        # выполняется здесь. Транзакционные execution+delivery-гарантии (commit barrier, DeliveryIntent/
-        # Receipt, reconciliation) — ТОЛЬКО в pipeline-пути (engine=pipeline). Явно, чтобы путь не
-        # претендовал на те же гарантии.
+        # v3.0.16 Phase A (finding аудита #3): planning/orchestration-путь; ВНЕШНЯЯ ДОСТАВКА (PR) НЕ
+        # выполняется здесь — execution+delivery-гарантии ТОЛЬКО в pipeline (engine=pipeline).
         "delivery": {"requested": False, "status": "not-applicable",
                      "reason": "controller/planning путь: внешняя доставка не выполняется; "
                                "execution+delivery-гарантии — только engine=pipeline"},
@@ -825,6 +685,140 @@ def run(task_text, signals, child_root: Path, features_dir=None,
     if not _rw2.get("ok"):
         report["lifecycle_errors"] = [f"run-report durable-write: {_rw2.get('error')}"]
     return report
+
+
+def run(task_text, signals, child_root: Path, features_dir=None,
+        runtime="claude-code", provider_name="mock", session="cli", execute=False,
+        feature=None, engine="pipeline", proposer=None, open_pr=False, model=None,
+        baseline_diff=False, require_fix=False, max_steps=40, discard_previous=False,
+        sandbox=False, review=False, reviewer_proposer=None, takeover=False, takeover_reason=None,
+        author=False, author_proposer=None, install_deps=True,
+        resume=False, force_resume=False, base=None, write_scope=None, replan=False,
+        review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
+        context_shadow=False, context_hybrid=False, reevaluate_only=False,
+        progressive_escalation=False, provider_resolution=None):
+    signals = dict(signals or {})
+    signals.setdefault("task_text", task_text)
+    child_root = Path(child_root)
+    features_dir = Path(features_dir) if features_dir else child_root / "features"
+
+    # engine=pipeline (v2.63): собранный единый движок как РЕАЛЬНЫЙ путь из контроллера — весь
+    # прогон делегируется в execution_pipeline.run_pipeline; proposer — из провайдера (или передан).
+    if engine == "pipeline":
+        from ai_ops_kit.providers import orchestrator   # нужен ниже для _finalize_run_cost
+        # v3.0-rc2/rc4 (P0.1) Canonical Resume Context + immutable-resume -> _restore_resume_policy
+        # (K6). Блок мутирует ctx; run() синхронизирует изменённые policy-поля обратно в локалы
+        # (downstream читает локалы). Поведение сохранено: restore/fail-closed/immutable-drift/F-027.
+        ctx = RunContext.from_run_args(
+            task_text=task_text, signals=signals, child_root=child_root, features_dir=features_dir,
+            feature=feature, provider_name=provider_name, model=model, runtime=runtime,
+            sandbox=sandbox, baseline_diff=baseline_diff, require_fix=require_fix, author=author,
+            review=review, open_pr=open_pr, write_scope=write_scope, max_steps=max_steps,
+            base=base, replan=replan)
+        _rrerr = _restore_resume_policy(ctx, resume)
+        if _rrerr:
+            return _rrerr
+        signals, task_text, _saved_task = ctx.signals, ctx.task_text, ctx.saved_task
+        sandbox, baseline_diff, require_fix = ctx.sandbox, ctx.baseline_diff, ctx.require_fix
+        author, review, open_pr = ctx.author, ctx.review, ctx.open_pr
+        write_scope, max_steps, base = ctx.write_scope, ctx.max_steps, ctx.base
+        # base -> конкретная ветка + полный BaseBinding (0 model calls на явной несуществующей базе).
+        base, base_binding, _brerr = _resolve_run_base(ctx, base)
+        if _brerr is not None:
+            return _brerr
+        # v3.7.12 Router->runtime + JIT-trust + complexity-aware + provider-fallback -> _resolve_models
+        # (K6). Мутирует ctx; preflight PRIMARY не пройден -> blocked-preflight (fail-closed).
+        _mrerr = _resolve_models(ctx)
+        if _mrerr:
+            return _mrerr
+        # writer_model/model_resolution нужны отчёту/финализации; остальной routing/trust держит ctx.
+        _writer_model, _model_resolution = ctx.writer_model, ctx.model_resolution
+
+        _uctx = _build_run_proposers(ctx, proposer, reviewer_proposer, author_proposer)   # writer ≠ judge
+
+        # v2.94 (One Run Transaction, аудит #2): pipeline НЕ обходит lifecycle — один план строится здесь
+        # и передаётся в движок; WorkItem/RunPlan/active-work/run-report как в controller-пути.
+        plan = run_plan.build_plan(signals, workitem_id=feature)
+        fid = plan["workitem_id"]
+
+        # v3.0.16 Phase A (аудит #2): реконсиляция незавершённой доставки прошлого прогона ДО новой
+        # работы (DeliveryIntent outcome_unknown -> сверка с remote + DeliveryReceipt). Best-effort.
+        try:
+            _rec = _reconcile_pending_delivery(features_dir, fid, child_root)
+        except Exception:  # noqa: BLE001
+            _rec = None
+
+        # v2.109 Real Resume: продолжить WorkItem поверх подтверждённой работы (не заново), ДО изменения
+        # состояния — честный ранний выход ничего не оставит. resume-preflight -> _resume_gate (K6).
+        pf, resume_ctx, _rerr = _resume_gate(child_root, fid, base, force_resume, resume)
+        if _rerr:
+            return _rerr
+
+        # durable lifecycle-start (workitem/RunPlan/run-settings/journal) -> _start_lifecycle (K6).
+        _attempt_id, _lcerr = _start_lifecycle(
+            features_dir, fid, task_text, signals, plan, engine, base, resume, execute,
+            _saved_task, sandbox, baseline_diff, require_fix, author, review, open_pr,
+            write_scope, max_steps, base_binding)
+        if _lcerr:
+            return _lcerr
+        (lifecycle_errors, bundle, payload, _hybrid_prelude, _hybrid_fed,   # артефакты контекста
+         spec_cov, work_pkg) = _compile_context_artifacts(
+            signals, child_root, features_dir, fid, plan, model,
+            context_hybrid, base_binding, task_text)
+        # v2.115 Preflight Truth: spec/атомарность/overflow/approvals/lifecycle ДО запуска модели
+        # (Spec-First блокирует РЕАЛИЗАЦИЮ, а не только доставку) -> _run_preflight.
+        pretruth, _blocked = _run_preflight(ctx, fid, plan, bundle, payload, spec_cov, work_pkg,
+                                            lifecycle_errors, reevaluate_only, provider_resolution)
+        if _blocked is not None:
+            return _blocked
+
+        aw_path, preflight, _awerr = _register_active_work(   # active-work + concurrency-preflight
+            child_root, signals, write_scope, fid, session, lifecycle_errors,
+            takeover=takeover, takeover_reason=takeover_reason)
+        if _awerr:
+            return _awerr
+
+        # v2.107/v3.1.8/3.1.9: калиброванное UI-enforcement + fix-loop с quality-эскалацией writer'а ->
+        # _execute_with_fix_loop (K6). (rep, terminal_error): terminal_error != None -> ранний error-отчёт.
+        _calib = bool(calibrated_enforcement)
+        rep, _exerr = _execute_with_fix_loop(
+            ctx, _uctx, execute=execute, plan=plan, discard_previous=discard_previous,
+            install_deps=install_deps, hybrid_prelude=_hybrid_prelude, calib=_calib,
+            ui_evidence=ui_evidence, reevaluate_only=reevaluate_only, resume=resume,
+            resume_ctx=resume_ctx, attempt_id=_attempt_id, fid=fid, aw_path=aw_path,
+            review_fix_attempts=review_fix_attempts, reviewer_proposer=reviewer_proposer,
+            author_proposer=author_proposer)
+        if _exerr is not None:
+            return _exerr
+        _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
+                           provider_resolution=provider_resolution, child_root=child_root,
+                           base_binding=base_binding, model_resolution=_model_resolution,
+                           writer_model=_writer_model, model=model, pretruth=pretruth,
+                           resume=resume, pf=(pf if resume else None), force_resume=force_resume, fid=fid,
+                           bundle=bundle, payload=payload, spec_cov=spec_cov,
+                           work_pkg=work_pkg, preflight=preflight)
+        _add_context_reports(rep, bundle=bundle, payload=payload, spec_cov=spec_cov,
+                             work_pkg=work_pkg, context_shadow=context_shadow,
+                             context_hybrid=context_hybrid, hybrid_fed=_hybrid_fed,
+                             child_root=child_root, task_text=task_text, fid=fid)
+        # v3.0.12/v3.0.15 (аудит блок B/P0): ТРАНЗАКЦИОННЫЙ COMMIT BARRIER — доставка (PR) ТОЛЬКО ПОСЛЕ
+        # durable-фиксации доказательств/состояния. Порядок: verification -> durable RunHandoff ->
+        # durable final report -> journal checkpoint -> delivery -> durable delivery result -> run_end.
+        # Не зафиксированы durable -> доставка НЕ выполняется (fail-closed). -> _commit_barrier (K6).
+        _jname, _handoff_ok, _report_ok, _plan = _commit_barrier(
+            rep, child_root, features_dir, fid, lifecycle_errors)
+        # DELIVERY за commit-барьером (governance-gate -> DeliveryIntent -> DeliveryReceipt,
+        # outcome_unknown/fail-closed) -> _deliver (K6). Мутирует rep на месте.
+        _deliver(ctx, rep, plan=_plan, handoff_ok=_handoff_ok, report_ok=_report_ok,
+                 jname=_jname, fid=fid)
+        # агрегат стоимости + usage-ledger + очистка call-context; затем run_completed/run_end/статус.
+        _finalize_run_cost(rep, orchestrator, model, _jname, fid, _attempt_id, signals,
+                           _plan, _model_resolution, child_root)
+        return _finalize_run(rep, fid, child_root, _jname, _attempt_id, aw_path)
+
+    # engine=controller: RunPlan + каркас состояния (без внешней доставки) -> _run_controller_path.
+    return _run_controller_path(task_text, signals, child_root, features_dir, feature,
+                                runtime, provider_name, execute, session, write_scope)
 
 
 def exit_code(r):
@@ -850,7 +844,8 @@ def exit_code(r):
     return 1 if r.get("status") == "blocked" else 0
 
 
-def main(argv):
+def _build_run_arg_parser():
+    """Собрать argparse ai_ops_run (подкоманды run/resume) — тело main() без разбора аргументов."""
     ap = argparse.ArgumentParser(prog="ai_ops_run.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
     rp = sub.add_parser("run")
@@ -951,6 +946,11 @@ def main(argv):
     rs.add_argument("--replan", action="store_true",
                     help="осознанно сменить классификацию/policy при продолжении (не resume, а replan "
                          "с ревалидацией) — иначе смена task_type/risk/write_scope блокируется")
+    return ap
+
+
+def main(argv):
+    ap = _build_run_arg_parser()
     a = ap.parse_args(argv)
     if a.cmd == "resume":
         from ai_ops_kit.engine import run_handoff

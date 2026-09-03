@@ -27,12 +27,13 @@ scopes:
     max_function_file: execution_pipeline.py
     max_function_lineno: 833
 
-  # cli/ — точка входа CLI. main() исторически аккумулирует разбор аргументов и диспетч.
+  # cli/ — точка входа CLI. main() аккумулировала разбор аргументов и диспетч; разбор и путь
+  # run --execute/do вынесены в _build_cli_arg_parser/_main_run_execute (ратчет опущен 348 -> 154).
   - path: ai_ops_kit/cli/
-    max_function_lines: 348
+    max_function_lines: 154
     max_function: main
     max_function_file: ai_ops_cli.py
-    max_function_lineno: 1478
+    max_function_lineno: 672
 
   # planning/ — контур Planning & Execution.
   - path: ai_ops_kit/planning/
