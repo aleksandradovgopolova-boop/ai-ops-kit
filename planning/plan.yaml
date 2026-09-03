@@ -207,10 +207,9 @@ goals:
   - id: product-decision-loop
     # заморозка: решения владельца о процессе, не новое умение кита
     freeze_relation: run_condition
-    # ПРИОСТАНОВЛЕНА 2026-09-02 (решение владельца, roadmap-sync): открыт один исход (#417 baseline/
-    # target/guardrails), работы под ним нет. Держать под «Сейчас» значило бы объявлять занятость,
-    # которой нет. В ROADMAP — «Дальше»; вернётся вместе с работой. Бэклог: #417.
-    status: paused
+    # ВОЗОБНОВЛЕНА 2026-09-03 (#417): под открытый исход появилась работа — механизм
+    # feature_target (baseline/target/guardrails) в decision_loop: форм-проверка + гейт.
+    status: active
     outcome:
       # Четыре объекта вместо новых документов: Opportunity Brief, Product Decision Record,
       # Outcome Contract, Outcome Readout.
@@ -218,6 +217,15 @@ goals:
       # North Star принят (dp-005), brownfield не ужесточён (сказано что НЕ делаем),
       # anti-matryoshka принят (dp-006). Каждое решение называет альтернативу и отказ.
       decision_names_alternatives_and_what_is_not_done: true
+      # #417: механизм ЕСТЬ и доказан детерминированно — check_feature_target отказывает
+      # решению без полной тройки baseline/target/guardrails, propose такой файл не пишет
+      # (fail-closed), а gate_feature_decisions краснит каталог решений с неполной фичей
+      # (tests/unit/test_decision_feature_target.py, 6/6). Исход ОСТАЁТСЯ false осознанно:
+      # гейт живёт в decision_loop (модуль пока unwired, в дочку не едет) и не подключён к
+      # обязательному контуру — его никто не гоняет ни в CI, ни в run-гейтах, и ничто не
+      # заставляет фич-решение проходить через propose. Механизм готов, принудительной
+      # проводки нет — true будет, когда гейт станет обязательным. (Честность важнее галочки,
+      # ср. #424.)
       feature_has_baseline_target_and_guardrails: false
 
   - id: storybook-as-visual-contract
