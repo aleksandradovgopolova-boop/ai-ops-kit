@@ -1,0 +1,104 @@
+{
+  "$id": "typography",
+  "constitution_section": 26,
+  "note": "Шрифты, шкала, веса, семантические стили. UI_CONSTITUTION.md 26.",
+  "fonts": {
+    "sans": "\"Golos Text\", \"Inter\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+    "mono": "\"IBM Plex Mono\", \"JetBrains Mono\", ui-monospace, \"SF Mono\", Menlo, monospace"
+  },
+  "scale": {
+    "unit": "px",
+    "tokens": [
+      {
+        "id": "text.xs",
+        "size": 12,
+        "line_height": 16,
+        "tracking": "+0.01em",
+        "role": "подписи, юр. мелочь"
+      },
+      {
+        "id": "text.sm",
+        "size": 14,
+        "line_height": 20,
+        "tracking": "0",
+        "role": "вспомогательный текст, метки"
+      },
+      {
+        "id": "text.base",
+        "size": 16,
+        "line_height": 24,
+        "tracking": "0",
+        "role": "основной текст"
+      },
+      {
+        "id": "text.lg",
+        "size": 18,
+        "line_height": 28,
+        "tracking": "0",
+        "role": "крупный текст, лид-абзац"
+      },
+      {
+        "id": "text.xl",
+        "size": 20,
+        "line_height": 28,
+        "tracking": "0",
+        "role": "H4 / подзаголовок"
+      },
+      {
+        "id": "text.2xl",
+        "size": 24,
+        "line_height": 32,
+        "tracking": "-0.01em",
+        "role": "H3"
+      },
+      {
+        "id": "text.3xl",
+        "size": 30,
+        "line_height": 36,
+        "tracking": "-0.01em",
+        "role": "H2"
+      },
+      {
+        "id": "text.4xl",
+        "size": 36,
+        "line_height": 40,
+        "tracking": "-0.02em",
+        "role": "H1"
+      },
+      {
+        "id": "text.5xl",
+        "size": 48,
+        "line_height": 52,
+        "tracking": "-0.02em",
+        "role": "display"
+      },
+      {
+        "id": "text.6xl",
+        "size": 60,
+        "line_height": 64,
+        "tracking": "-0.02em",
+        "role": "крупный display"
+      }
+    ]
+  },
+  "weights": {
+    "regular": 400,
+    "medium": 500,
+    "semibold": 600,
+    "bold": 700
+  },
+  "semantic_styles": [
+    "display.lg",
+    "heading.1",
+    "heading.2",
+    "heading.3",
+    "heading.4",
+    "body.lg",
+    "body.md",
+    "body.sm",
+    "label",
+    "caption",
+    "overline",
+    "code"
+  ]
+}

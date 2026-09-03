@@ -1,0 +1,32 @@
+{
+  "$id": "shadows",
+  "constitution_section": 27,
+  "note": "Двухслойные тени = высота. UI_CONSTITUTION.md 27.",
+  "tokens": [
+    {
+      "id": "shadow.xs",
+      "value": "0 1px 2px rgba(15,16,16,.06)",
+      "use": ""
+    },
+    {
+      "id": "shadow.sm",
+      "value": "0 1px 2px rgba(15,16,16,.06), 0 1px 3px rgba(15,16,16,.10)",
+      "use": ""
+    },
+    {
+      "id": "shadow.md",
+      "value": "0 2px 4px -1px rgba(15,16,16,.06), 0 4px 8px -2px rgba(15,16,16,.10)",
+      "use": ""
+    },
+    {
+      "id": "shadow.lg",
+      "value": "0 4px 6px -2px rgba(15,16,16,.05), 0 12px 20px -4px rgba(15,16,16,.12)",
+      "use": ""
+    },
+    {
+      "id": "shadow.xl",
+      "value": "0 8px 10px -4px rgba(15,16,16,.06), 0 24px 40px -8px rgba(15,16,16,.16)",
+      "use": ""
+    }
+  ]
+}

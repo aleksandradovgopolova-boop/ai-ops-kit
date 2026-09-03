@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 543
+  substantive_files: 545
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -875,3 +875,25 @@ raises:
       же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же способом,
       что соседи ai_ops_run_print/ai_ops_run_reporting/ai_ops_run_lifecycle. Растёт только счёт
       файлов (+1), объём в норме; потолок под факт 542 -> 543.
+  - at: '2026-09-03'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 543
+    to_count: 545
+    measured_before: 543
+    measured_after: 544
+    work: uiux-token-capability-registries (#418) — схемы контракта дизайн-токенов и реестров
+    files:
+      - schemas/design-tokens.schema.json
+      - schemas/uiux-registry.schema.json
+    why_it_works_in_the_child: >-
+      В managed-поставку содержательно едут ДВЕ схемы (draft-07): design-tokens.schema.json и
+      uiux-registry.schema.json — формы контракта дизайн-токенов и реестров возможностей. Они
+      ПРИМЕНЯЮТСЯ у дочки: дочкин файл токенов/реестра валидируется против этой схемы (та же
+      механика, что schemas/experience-contract.schema.json из прошлого подъёма — схема едет, чтобы
+      дочка проверяла свой артефакт её формой). Остальные файлы работы (standards/uiux/design/tokens/*,
+      registries/*, validate-registries.py) — эталонные ДАННЫЕ и dev-инструмент кита, в managed_set НЕ
+      входят и в substantive не считаются (ЗАМЕЧЕНО при слиянии: сами данные дизайн-системы дочке ПОКА
+      не доставляются — это открытый пробел цели, честно отражённый исходом плана в false). Растёт
+      счёт файлов на +1 содержательный (543 -> 544 факт), объём в норме; потолок под факт 543 -> 545.
