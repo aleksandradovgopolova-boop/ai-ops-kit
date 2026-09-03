@@ -26,8 +26,18 @@ def _review_fix_context(rep):
         return None
     unmet = (rep.get("gates") or {}).get("unmet") or []
     parts = []
+    # ENV vs КОД (поле 02–03.09.2026): провал проверки из-за ОТСУТСТВИЯ инструмента (exit 127 /
+    # `command not found` / `no module named`) писатель починить НЕ может — он не ставит тулчейн в
+    # среду прогона. Прежде такой провал шёл писателю на итерацию как обычный блокер, и fix-цикл
+    # гонял его бесконечно на нехватке ruff/pytest/pyyaml (зависание живого заезда). Пропускаем
+    # env-обусловленные провалы: если они ОСТАЛИСЬ единственными, parts пуст -> None -> цикл честно
+    # завершается NOT_READY (ready_for_pr это не трогает — env-квалификация и так в base_ok, ложного
+    # green не возникает; гасится только бесполезный ретрай).
+    from ai_ops_kit.engine.pipeline_failure import _check_has_env_symptom
     for name, chk in (rep.get("checks") or {}).items():
         if (chk or {}).get("status") == "fail":
+            if _check_has_env_symptom(chk):
+                continue   # среда, не код — не зацикливаем писателя на недоступном инструменте
             tail = ""
             for run in (chk.get("runs") or []):
                 tail = (run.get("output_tail") or "")[-700:]

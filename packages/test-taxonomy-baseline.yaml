@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 346
+behavioral_count: 347
 structural_count: 60
-total_count: 406
-behavioral_share_pct: 85.22
+total_count: 407
+behavioral_share_pct: 85.26
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -100,3 +100,16 @@ raises:
       (test_writer_serialization_lock.py — импортирует orchestrator_providers И зовёт
       _writer_serialization_lock/_claude_cli_call/writer_lock_path), доля поведенческих выросла
       85.19% -> 85.22%. Baseline пере-записан на фактический замер (после ребейза на main с #438).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 346
+    from_total: 406
+    to_behavioral: 347
+    to_total: 407
+    to_share_pct: 85.26
+    work: fix-loop-skips-env-blockers
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): фикс «fix-цикл не зацикливает писателя на нехватке
+      инструментов» добавил ПОВЕДЕНЧЕСКИЙ тест (test_fix_loop_skips_env_blockers.py — импортирует
+      _review_fix_context И зовёт его), доля поведенческих выросла 85.22% -> 85.26%. Baseline
+      пере-записан на фактический замер (после ребейза на main с #453).
