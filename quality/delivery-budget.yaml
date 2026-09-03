@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 541
+  substantive_files: 542
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -832,3 +832,23 @@ raises:
       замок стоит у кита, а не у неё. Без файла в поставке `ai-ops`-проверка размера модулей у дочки
       звала бы отсутствующий валидатор (класс F-033), как было с validate_acceptance_result. Растёт
       только счёт файлов (+1), объём в норме; потолок под факт 540 -> 541.
+  - at: '2026-09-03'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 541
+    to_count: 542
+    measured_before: 538
+    measured_after: 539
+    work: deepcut-ai-ops-cli — вынос проб-свободных intent-хендлеров в спутник CLI
+    files:
+      - ai_ops_kit/cli/ai_ops_cli_intents.py
+    why_it_works_in_the_child: >-
+      Спутник CLI несёт проб-свободные обработчики намерений (products/delivery/model/contract/inspect/
+      plan/session), build_preview/_print_preview и _run_backlog, вынесенные из разросшегося
+      ai_ops_cli.py. Он ЕДЕТ в поставку и исполняется в дочке на каждом вызове `ai-ops`: диспетч
+      ai_ops_cli.py ре-экспортирует эти имена из спутника и регистрирует обработчики в общий реестр,
+      поэтому `ai-ops model`/`ai-ops contract`/`ai-ops delivery` и прочие у дочки идут через этот файл.
+      Без него ре-экспортный импорт (`from ai_ops_kit.cli.ai_ops_cli_intents import ...`) упал бы
+      ImportError'ом на первом же запуске CLI (класс F-033). Растёт только счёт файлов (+1), объём в
+      норме; потолок под факт 541 -> 542.

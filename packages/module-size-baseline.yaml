@@ -19,7 +19,8 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1855
+  ai_ops_kit/cli/ai_ops_cli.py: 962
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 944
   ai_ops_kit/engine/ai_ops_run.py: 1073
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/planning/delivery_plan.py: 1050
@@ -49,3 +50,28 @@ raises:
       крупнейший ai_ops_cli.py = 1855) — не завышены и не занижены. Поднять потолок или внести новый
       монолит можно только записью здесь: рост сверх потолка без записи — красный сигнал (файл
       отрос), а новый файл ≥ порога без записи — новый монолит, появившийся незамеченным.
+  - at: '2026-09-03'
+    what: lower_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1855'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1251'
+    work: deepcut-ai-ops-cli — вынос проб-свободных intent-хендлеров в спутник
+    why: >-
+      Крупнейший файл пакета разрежён: проб-свободные обработчики намерений (products/delivery/model/
+      contract/inspect/plan/session) вместе с build_preview/_print_preview/_run_backlog и хелперами
+      health/risks перенесены в новый ai_ops_kit/cli/ai_ops_cli_intents.py (649 строк, НИЖЕ порога 700,
+      поэтому в ceilings не вносится). Поведение не менялось — чистый перенос + ре-экспорт именами
+      ai_ops_cli, мутационные пробы (все 10 их несущих строк остались в ai_ops_cli.py) зелены. Ратчет
+      ходит вниз: потолок cli опущен под факт 1855 -> 1251.
+  - at: '2026-09-03'
+    what: lower_ceiling_and_add_module
+    from: 'ai_ops_cli.py = 1251; ai_ops_cli_intents.py < 700 (не в baseline)'
+    to: 'ai_ops_cli.py = 962; ai_ops_cli_intents.py = 944'
+    work: deepcut-ai-ops-cli — добор оставшихся проб-свободных intent-хендлеров (глубже)
+    why: >-
+      Вторая волна того же выноса: оставшиеся проб-свободные обработчики (roadmap/replan/new/
+      governance/bootstrap/discuss/health/team/onboard/doctor) и хелпер _copy_affects_from_plan
+      перенесены из ai_ops_cli.py в тот же спутник ai_ops_cli_intents.py. Поведение не менялось —
+      чистый перенос + ре-экспорт именами ai_ops_cli, все 10 мутационных проб остались в
+      ai_ops_cli.py. Потолок cli опущен под факт 1251 -> 962 (ратчет вниз). Спутник вырос 649 -> 944
+      и перешёл порог 700 — поэтому ОСОЗНАННО вносится в ceilings с фактическим размером (иначе тест
+      module-size покраснел бы «новый монолит сверх порога без записи»).
