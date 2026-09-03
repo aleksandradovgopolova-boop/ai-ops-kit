@@ -41,9 +41,9 @@ IMPACT_DOCS_ONLY = "docs_only"
 # Файлы, которые всегда требуют full verification (критическая инфраструктура)
 ALWAYS_FULL_PATTERNS = (
     "registry/", "schemas/", "quality/gates.yaml",
-    "tools/orchestrator.py", "tools/execution_pipeline.py",
-    "tools/preflight.py", "tools/gate_executor.py",
-    "tools/tool_broker.py", "tools/lifecycle_store.py",
+    "ai_ops_kit/providers/orchestrator.py", "ai_ops_kit/engine/execution_pipeline.py",
+    "ai_ops_kit/gates/preflight.py", "ai_ops_kit/gates/gate_executor.py",
+    "ai_ops_kit/engine/tool_broker.py", "ai_ops_kit/shared/lifecycle_store.py",
 )
 
 # Файлы, которые не требуют verification (документация, конфиги)

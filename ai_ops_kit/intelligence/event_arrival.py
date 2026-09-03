@@ -25,8 +25,15 @@ territория продукта, и лезть туда значило бы пр
 Больше кит не просит: имени и счётчика хватает, чтобы ответить на вопрос «доехало ли», а любые
 свойства события — это уже данные продукта, и им незачем покидать его периметр.
 
+МАШИННОЕ ДОКАЗАТЕЛЬСТВО ГЕЙТА. `events_verified_live(child_root)` отображает EventArrivalReport в
+одноимённое машинное доказательство гейта analytics_runtime_verification. До этого гейт был
+объявлен mechanizable (quality/gate-machinability.yaml), но само доказательство `events_verified_live`
+производила ДЕКЛАРАЦИЯ судьи — ровно тот разрыв, который называет исход работы: «verified in
+runtime, NOT declared». Теперь оно строится из факта — сверки каталога с выгрузкой поступления.
+
 Использование:
     event_arrival.py [child_root] [--json]
+    event_arrival.py [child_root] --evidence [--json]
 """
 from __future__ import annotations
 
@@ -50,6 +57,10 @@ CATALOG_PATHS = ("analytics/events.yaml", ".ai/project/analytics/events.yaml")
 # Событие, объявленное для аналитики, ОБЯЗАНО доезжать. `domain` и `audit` — внутренние записи
 # продукта: они могут не уходить во внешнюю аналитику вовсе, и требовать этого было бы придиркой.
 ARRIVAL_REQUIRED_KINDS = ("analytics",)
+
+# Имя машинного доказательства гейта analytics_runtime_verification, которое производит
+# events_verified_live() (объявлено в quality/gate-machinability.yaml как mechanizable).
+EVIDENCE_NAME = "events_verified_live"
 
 
 def _read_yaml(p: Path):
@@ -142,6 +153,43 @@ def assess(child_root) -> dict:
             "unknown": [], "evidence": ev["meta"], "verdict": verdict}
 
 
+def events_verified_live(child_root) -> dict:
+    """Машинное доказательство `events_verified_live` из выгрузки поступления.
+
+    Замыкает разрыв гейта analytics_runtime_verification: доказательство объявлено mechanizable,
+    но до сих пор его производила ДЕКЛАРАЦИЯ судьи. Здесь оно строится из факта — сверки каталога
+    с выгрузкой поступления (assess).
+
+    -> {"name", "met": True|False|None, "reason", "detail"}.
+
+    Инвариант `unavailable != zero` сохраняется:
+      met is None  — выгрузки/каталога нет или они не читаются: проверить нечем (НЕ провал);
+      met is False — выгрузка ЕСТЬ, а объявленное для аналитики событие в ней не встретилось
+                     (настоящая находка);
+      met is True  — выгрузка есть и все обязанные доезжать (kind=analytics) события доехали.
+
+    Событие вне каталога (дрейф в обратную сторону) НЕ роняет доказательство: это не «объявленное
+    не доехало». read-only, без сети — ровно то, что делает assess().
+    """
+    rep = assess(child_root)
+    if not rep.get("checked"):
+        return {"name": EVIDENCE_NAME, "met": None, "reason": rep.get("reason"),
+                "detail": rep.get("verdict")}
+    if rep["missing"]:
+        return {"name": EVIDENCE_NAME, "met": False,
+                "reason": "объявлено для аналитики, но в выгрузке поступления не встретилось: "
+                          + ", ".join(rep["missing"]),
+                "detail": rep.get("verdict")}
+    m = rep.get("evidence") or {}
+    where = (f"окно {m['window']}, источник {m.get('source', '—')}"
+             if m.get("window") else "выгрузка поступления")
+    detail = f"доехали {len(rep['arrived'])} из {rep['arrival_required']} ({where})"
+    if rep["undeclared"]:
+        detail += f"; вне каталога: {', '.join(rep['undeclared'])}"
+    return {"name": EVIDENCE_NAME, "met": True,
+            "reason": "все объявленные для аналитики события доезжают", "detail": detail}
+
+
 def render(rep: dict) -> str:
     L = []
     if not rep.get("checked"):
@@ -164,14 +212,23 @@ def render(rep: dict) -> str:
 def main(argv):
     root = "."
     js = "--json" in argv
+    want_evidence = "--evidence" in argv
     for a in argv[1:]:
         if not a.startswith("-"):
             root = a
             break
+    if want_evidence:
+        ev = events_verified_live(root)
+        if js:
+            print(json.dumps(ev, ensure_ascii=False, indent=2))
+        else:
+            state = {True: "met", False: "НЕ met", None: "unknown"}[ev["met"]]
+            print(f"{ev['name']}: {state} — {ev['reason']}")
+            if ev.get("detail"):
+                print(f"  {ev['detail']}")
+        return 1 if ev["met"] is False else 0
     rep = assess(root)
     print(json.dumps(rep, ensure_ascii=False, indent=2) if js else render(rep))
-    # Ненулевой код ТОЛЬКО на настоящей находке. «Не проверено» не отказ: иначе продукт без
-    # выгрузки краснел бы вечно, и проверку выключили бы целиком.
     return 1 if rep.get("missing") else 0
 
 

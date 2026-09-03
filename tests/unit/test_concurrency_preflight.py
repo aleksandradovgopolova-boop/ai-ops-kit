@@ -77,8 +77,11 @@ class TestPreflight:
 
 @pytest.mark.unit
 class TestRestFallback:
-    def test_rest_without_token_unavailable(self, git_repo):
+    def test_rest_without_token_unavailable(self, git_repo, monkeypatch):
         _saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        # #402: env пуст И gh-fallback пуст -> токена нет нигде
+        import ai_ops_kit.gates.concurrency_preflight as _cpmod
+        monkeypatch.setattr(_cpmod, "_github_token", lambda: None)
         try:
             rest = open_prs_via_rest(git_repo, ["f.txt"])
             assert rest["status"] == "unavailable" and "GITHUB_TOKEN" in rest["note"]

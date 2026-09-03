@@ -1,0 +1,12 @@
+# Фикстура EXP-004 запускается как модуль (`python -m events_cli`) и через `python -m pytest`,
+# НЕ устанавливается пакетно — поэтому здесь нет [build-system]/setuptools намеренно (иначе
+# security-scan кита верно флагует «новую зависимость»). Только метаданные + конфиг pytest.
+[project]
+name = "fixture-events-cli"
+version = "0.1.0"
+description = "Fixture CLI for EXP-004 head-to-head (stdlib only)"
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

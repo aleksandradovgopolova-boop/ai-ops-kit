@@ -103,9 +103,9 @@ answers() {
   note "$label: $(printf '%s' "$out" | head -1 | cut -c1-64)"
 }
 
-answers "ai-ops next"   python3 .ai/managed/tools/ai_ops_cli.py next .
-answers "ai-ops status" python3 .ai/managed/tools/ai_ops_cli.py status .
-answers "ai-ops model"  python3 .ai/managed/tools/ai_ops_cli.py model .
+answers "ai-ops next"   python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py next .
+answers "ai-ops status" python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py status .
+answers "ai-ops model"  python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py model .
 answers "doctor"        python3 "$KIT/installer/ai_ops.py" doctor
 
 # ------------------------------------------------------------------ 6. файлы ВЛАДЕЛЬЦА не тронуты

@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 532
+  substantive_files: 545
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -660,3 +660,240 @@ raises:
       файл — класс F-033, механизм зелёный у кита и недостижимый у дочки. Растёт только счёт файлов
       (+1: сам оркестратор; CLI вырос кодом, не файлом), объём в норме (managed 4186733 < 4420000);
       потолок под факт 531 -> 532.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 532
+    to_count: 533
+    measured_before: 531
+    measured_after: 532
+    work: status-freshness-delivery (#404)
+    files:
+      - ai_ops_kit/engine/living_status.py
+    why_it_works_in_the_child: >-
+      Модуль ИСПОЛНЯЕТСЯ в дочке на шаге доставки: прогон обновляет living-status дочки
+      (ProductStatus.md / PROJECT_STATUS.md) в том же коммите — дописывает факт доставки и бампает
+      reviewed_at, чтобы volatile-док не протух и required-проверка status-freshness дочки не
+      блокировала авто-PR (#404). Без файла в поставке автономный PR оставался бы немёржабельным по
+      правилам самой дочки — тот же класс «объявлено, но у дочки не исполняется». No-op без
+      управляемого дока (лжи не добавляем). Проба краснеет на дефекте: test_reddens_on_the_bug
+      требует stale ДО и ok ПОСЛЕ. Растёт только счёт файлов (+1), объём в норме; потолок под факт
+      531 -> 532.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 533
+    to_count: 534
+    measured_before: 532
+    measured_after: 533
+    work: split-ai-ops-run-print (разрежение god-модуля ai_ops_run)
+    files:
+      - ai_ops_kit/engine/ai_ops_run_print.py
+    why_it_works_in_the_child: >-
+      Печать человекочитаемого результата прогона (_print_pipeline / _print_contour_consistency /
+      print_human) вынесена из god-модуля ai_ops_run.py в отдельный ai_ops_run_print.py —
+      поведение не меняется (чистый перенос + ре-экспорт), крупнейший файл поставки разрежается
+      (2365 -> 2164 строки). Модуль ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ прогоне: это выходной путь
+      контроллера ai_ops_run — cli/ai_ops_cli зовёт `ai_ops_run.print_human(rep)` в конце команды
+      run, а сам ai_ops_run ре-экспортирует функции из нового модуля. Без файла в поставке этот
+      ре-экспортный импорт (`from ai_ops_kit.engine.ai_ops_run_print import ...`) упал бы у дочки
+      ImportError'ом на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у
+      дочки). Растёт только счёт файлов (+1), объём в норме; потолок под факт 533 -> 534.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 534
+    to_count: 535
+    measured_before: 533
+    measured_after: 534
+    work: split-execution-pipeline (разрежение god-модуля execution_pipeline)
+    files:
+      - ai_ops_kit/engine/pipeline_readiness.py
+    why_it_works_in_the_child: >-
+      Оценка готовности и security-вердикт (_assess_readiness / _build_not_yet_list /
+      _evaluate_security + приватный _context_budget_overflow) вынесены из god-модуля
+      execution_pipeline.py в отдельный pipeline_readiness.py — поведение не меняется (чистый
+      перенос + ре-экспорт), крупнейший файл движка разрежается (1417 -> 1046 строк). Модуль
+      ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ прогоне: _assemble_evidence зовёт _evaluate_security при сборке
+      security-гейта, а run_pipeline зовёт _assess_readiness и _build_not_yet_list на шаге
+      готовности — это часть основного пути исполнения контроллера. Без файла в поставке ре-экспортный
+      импорт (`from ai_ops_kit.engine.pipeline_readiness import ...`) упал бы у дочки ImportError'ом
+      на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же
+      способом, что соседи pipeline_helpers/pipeline_git/pipeline_evidence/pipeline_failure. Растёт
+      только счёт файлов (+1), объём в норме; потолок под факт 533 -> 534.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 535
+    to_count: 536
+    measured_before: 534
+    measured_after: 535
+    work: split-presenter (разрежение god-модуля presenter)
+    files:
+      - ai_ops_kit/ui/presenter_formatters.py
+    why_it_works_in_the_child: >-
+      Группа переводчиков повседневных команд (from_execution_preview / from_onboarding_profile /
+      from_new_feature / from_plan_built / from_specification / from_discovery_draft / from_review /
+      from_advice + константа _CMD_RU) вынесена из god-модуля presenter.py в отдельный
+      presenter_formatters.py — поведение не меняется (чистый перенос + ленивый ре-экспорт),
+      крупнейший модуль слоя коммуникации разрежается (1497 -> 1180 строк). Модуль ИСПОЛНЯЕТСЯ в
+      дочке на боевом пути прогона: presenter — это Human Communication Layer, через который
+      cli/ai_ops_cli зовёт `presenter.from_review(rep)`, `from_onboarding_profile`, `from_advice` и
+      соседей на командах review/onboard/advise/specify/plan/new/preview. Без файла в поставке
+      ленивый ре-экспорт (`getattr(presenter, "from_review")` -> импорт presenter_formatters) упал
+      бы у дочки ImportError'ом на первом же выводе (класс F-033, механизм зелёный у кита и
+      отсутствующий у дочки) — тем же способом, что соседи по разрежению god-модулей. Растёт только
+      счёт файлов (+1), объём в норме; потолок под факт 534 -> 535.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 536
+    to_count: 538
+    measured_before: 535
+    measured_after: 537
+    work: split-ai-ops-run (разрежение god-модуля ai_ops_run)
+    files:
+      - ai_ops_kit/engine/ai_ops_run_reporting.py
+      - ai_ops_kit/engine/ai_ops_run_lifecycle.py
+    why_it_works_in_the_child: >-
+      Отчётность прогона (_compile_context_artifacts / _add_context_reports / _enrich_run_report /
+      _review_fix_context) и жизненный цикл прогона (_start_lifecycle / _resume_gate / _commit_barrier /
+      _finalize_run / _finalize_run_cost / _deliver) вынесены из god-модуля ai_ops_run.py в два
+      модуля-спутника — поведение не меняется (чистый перенос + ре-экспорт), крупнейший файл движка
+      разрежается (2173 -> 1479 строк). Оба модуля ИСПОЛНЯЮТСЯ в дочке на КАЖДОМ прогоне `ai-ops run`:
+      run() зовёт _resume_gate/_start_lifecycle/_compile_context_artifacts на входе, _enrich_run_report/
+      _add_context_reports при сборке отчёта, _commit_barrier/_deliver/_finalize_run на доставке и
+      финализации — это основной путь исполнения контроллера. Без файлов в поставке ре-экспортные импорты
+      (`from ai_ops_kit.engine.ai_ops_run_reporting import ...` и `..._lifecycle import ...`) упали бы у
+      дочки ImportError'ом на первом же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у
+      дочки) — тем же способом, что сосед ai_ops_run_print. Растёт только счёт файлов (+2), объём в
+      норме; потолок под факт 536 -> 538.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 538
+    to_count: 539
+    measured_before: 535
+    measured_after: 536
+    work: deepcut-execution-pipeline (вынос isolation/evidence-кластера из execution_pipeline)
+    files:
+      - ai_ops_kit/engine/pipeline_setup.py
+    why_it_works_in_the_child: >-
+      Кластер обрамления tool-loop (_setup_isolation / _prepare_environment / _commit_work /
+      _assemble_evidence / _seam_scan_advisory) вынесен из god-модуля execution_pipeline.py в модуль-
+      спутник — поведение не меняется (чистый перенос + ре-экспорт), крупнейший файл движка разрежается
+      (1046 -> 664 строк), сам run_pipeline остаётся на месте. Модуль ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ
+      прогоне `ai-ops run`: run_pipeline зовёт _setup_isolation (base-binding + worktree-изоляция) на
+      входе, _prepare_environment (install-deps стека), _commit_work (фиксация правок на ветке) и
+      _assemble_evidence (сбор evidence на зафиксированном SHA + гейты) — это основной путь исполнения
+      конвейера. Без файла в поставке ре-экспортный импорт
+      (`from ai_ops_kit.engine.pipeline_setup import ...`) упал бы у дочки ImportError'ом на первом же
+      прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же способом, что
+      соседи по разрежению god-модулей движка. Растёт только счёт файлов (+1), объём в норме; потолок
+      под факт 538 -> 539.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 539
+    to_count: 540
+    measured_before: 536
+    measured_after: 537
+    work: tests-verify-behavior (issue #439) — метрика поведенческие vs структурные тесты
+    files:
+      - ai_ops_kit/validation/validate_test_taxonomy.py
+    why_it_works_in_the_child: >-
+      Валидатор таксономии тестов внесён в RUNTIME_VALIDATORS и потому едет в поставку: дочка запускает
+      его процессом (standalone, stdlib+pyyaml) над СВОИМИ tests/, чтобы мерить собственный перекос
+      «поведенческие vs структурные» и защищать его ратчетом вниз — тем же инструментом, что кит. Без
+      файла в поставке `ai-ops`-проверка таксономии у дочки звала бы отсутствующий валидатор (класс
+      F-033). Растёт только счёт файлов (+1), объём в норме; потолок под факт 539 -> 540.
+  - at: '2026-09-02'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 540
+    to_count: 541
+    measured_before: 537
+    measured_after: 538
+    work: module-size-ratchet — ратчет размера модуля, заморозить монолиты вниз
+    files:
+      - ai_ops_kit/validation/validate_module_size.py
+    why_it_works_in_the_child: >-
+      Валидатор размера модуля внесён в RUNTIME_VALIDATORS и потому едет в поставку: дочка запускает
+      его процессом (standalone, stdlib+pyyaml) над СВОИМИ ai_ops_kit/**/*.py, чтобы стеречь размеры
+      собственных файлов ратчетом вниз — ужатый монолит не должен молча отрасти только оттого, что
+      замок стоит у кита, а не у неё. Без файла в поставке `ai-ops`-проверка размера модулей у дочки
+      звала бы отсутствующий валидатор (класс F-033), как было с validate_acceptance_result. Растёт
+      только счёт файлов (+1), объём в норме; потолок под факт 540 -> 541.
+  - at: '2026-09-03'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 541
+    to_count: 542
+    measured_before: 538
+    measured_after: 539
+    work: deepcut-ai-ops-cli — вынос проб-свободных intent-хендлеров в спутник CLI
+    files:
+      - ai_ops_kit/cli/ai_ops_cli_intents.py
+    why_it_works_in_the_child: >-
+      Спутник CLI несёт проб-свободные обработчики намерений (products/delivery/model/contract/inspect/
+      plan/session), build_preview/_print_preview и _run_backlog, вынесенные из разросшегося
+      ai_ops_cli.py. Он ЕДЕТ в поставку и исполняется в дочке на каждом вызове `ai-ops`: диспетч
+      ai_ops_cli.py ре-экспортирует эти имена из спутника и регистрирует обработчики в общий реестр,
+      поэтому `ai-ops model`/`ai-ops contract`/`ai-ops delivery` и прочие у дочки идут через этот файл.
+      Без него ре-экспортный импорт (`from ai_ops_kit.cli.ai_ops_cli_intents import ...`) упал бы
+      ImportError'ом на первом же запуске CLI (класс F-033). Растёт только счёт файлов (+1), объём в
+      норме; потолок под факт 541 -> 542.
+  - at: '2026-09-03'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 542
+    to_count: 543
+    measured_before: 539
+    measured_after: 540
+    work: extract-ai-ops-run-exec — вынос проб-свободных run-хелперов в спутник движка
+    files:
+      - ai_ops_kit/engine/ai_ops_run_exec.py
+    why_it_works_in_the_child: >-
+      Спутник несёт проб-свободные хелперы прогона (fix-loop с quality-эскалацией writer'а,
+      argparse команды run/resume, резолв провайдера/базы, сбор proposers, preflight и exit_code),
+      вынесенные из god-модуля ai_ops_run.py — поведение не меняется (чистый перенос + ре-экспорт),
+      крупнейший файл движка разрежается (1073 -> ~412 строк). Модуль ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ
+      прогоне `ai-ops run`/`ai-ops resume`: run() зовёт _resolve_run_base/_build_run_proposers/
+      _run_preflight/_execute_with_fix_loop, а main() строит парсер и считает exit_code через эти
+      функции — это основной путь исполнения контроллера. Без файла в поставке ре-экспортный импорт
+      (`from ai_ops_kit.engine.ai_ops_run_exec import ...`) упал бы у дочки ImportError'ом на первом
+      же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же способом,
+      что соседи ai_ops_run_print/ai_ops_run_reporting/ai_ops_run_lifecycle. Растёт только счёт
+      файлов (+1), объём в норме; потолок под факт 542 -> 543.
+  - at: '2026-09-03'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 543
+    to_count: 545
+    measured_before: 543
+    measured_after: 544
+    work: uiux-token-capability-registries (#418) — схемы контракта дизайн-токенов и реестров
+    files:
+      - schemas/design-tokens.schema.json
+      - schemas/uiux-registry.schema.json
+    why_it_works_in_the_child: >-
+      В managed-поставку содержательно едут ДВЕ схемы (draft-07): design-tokens.schema.json и
+      uiux-registry.schema.json — формы контракта дизайн-токенов и реестров возможностей. Они
+      ПРИМЕНЯЮТСЯ у дочки: дочкин файл токенов/реестра валидируется против этой схемы (та же
+      механика, что schemas/experience-contract.schema.json из прошлого подъёма — схема едет, чтобы
+      дочка проверяла свой артефакт её формой). Остальные файлы работы (standards/uiux/design/tokens/*,
+      registries/*, validate-registries.py) — эталонные ДАННЫЕ и dev-инструмент кита, в managed_set НЕ
+      входят и в substantive не считаются (ЗАМЕЧЕНО при слиянии: сами данные дизайн-системы дочке ПОКА
+      не доставляются — это открытый пробел цели, честно отражённый исходом плана в false). Растёт
+      счёт файлов на +1 содержательный (543 -> 544 факт), объём в норме; потолок под факт 543 -> 545.

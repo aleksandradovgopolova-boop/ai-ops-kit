@@ -1,0 +1,58 @@
+{
+  "$id": "motion",
+  "constitution_section": 30,
+  "note": "Длительности и кривые движения. UI_CONSTITUTION.md 30.",
+  "duration": {
+    "unit": "ms",
+    "tokens": [
+      {
+        "id": "duration.instant",
+        "value": 0,
+        "use": "мгновенно"
+      },
+      {
+        "id": "duration.fast",
+        "value": 100,
+        "use": "hover"
+      },
+      {
+        "id": "duration.base",
+        "value": 150,
+        "use": "по умолчанию"
+      },
+      {
+        "id": "duration.moderate",
+        "value": 200,
+        "use": "поповеры"
+      },
+      {
+        "id": "duration.slow",
+        "value": 300,
+        "use": "модалки"
+      },
+      {
+        "id": "duration.slower",
+        "value": 500,
+        "use": "оркестрованные"
+      }
+    ]
+  },
+  "easing": [
+    {
+      "id": "ease.standard",
+      "value": "cubic-bezier(.2,0,0,1)",
+      "use": "по умолчанию"
+    },
+    {
+      "id": "ease.decelerate",
+      "value": "ease-out",
+      "use": "появление"
+    },
+    {
+      "id": "ease.accelerate",
+      "value": "ease-in",
+      "use": "исчезновение"
+    }
+  ],
+  "reduced_motion": "prefers-reduced-motion: reduce сводит анимации к мгновенным"
+}

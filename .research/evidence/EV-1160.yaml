@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1160
+request_id: RR-017
+statement: >
+  ai-sdlc-framework/ai-sdlc существует как публичный репозиторий под Apache-2.0: основной язык
+  TypeScript, описание «Declarative governance framework for AI-augmented software development
+  lifecycles», создан 2026-02-07, последний push 2026-08-24, 99 звёзд, 1264 коммита на main,
+  spec-версия v1alpha1. Монорепо (pnpm-workspace) с каталогами верхнего уровня: orchestrator,
+  pipeline-cli, conformance, dogfood, research, spec, sdk-go, sdk-python, sdk-typescript,
+  mcp-advisor, dashboard, ai-sdlc-plugin. Значение для кита: это прямой сосед по жанру, названный
+  владельцем поимённо; ось пересечения с китом определяется дальше по коду, не по описанию.
+evidence_type: documented_fact
+source:
+  title: "GitHub — ai-sdlc-framework/ai-sdlc (repos API + git tree main)"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc"
+  type: source_repository
+  published_at: "2026-02-07"
+  is_primary: true
+citation:
+  locator: "gh api /repos/ai-sdlc-framework/ai-sdlc и /git/trees/main, снято 2026-09-02"
+  quote: "Declarative governance framework for AI-augmented software development lifecycles"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017 (gh CLI, первичный источник)"
+freshness:
+  volatile: true
+  expires_at: "2026-12-02"
+reliability:
+  level: high
+  rationale: >
+    Первичный источник: GitHub API по репозиторию и дереву main, снято 2026-09-02. Звёзды и число
+    коммитов — метрики момента (volatile). Лицензия, язык, состав каталогов сняты с API, не с
+    маркетинговой страницы.
+status: active
+superseded_by: null

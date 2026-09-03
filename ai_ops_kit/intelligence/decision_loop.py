@@ -13,11 +13,16 @@
 - decided_at: когда принято решение
 - decided_by: кто принял
 - outcome: что получилось после реализации
+- feature_target: (опц.) три измеримых обязательства фичи — baseline (где мы
+  сейчас), target (куда идём) и guardrails (что не должно сломаться). Форму
+  проверяет check_feature_target; при её наличии решение получает
+  kind: feature-decision. Механизм ПРОВЕРЯЕТ форму, а не верит на слово.
 
 Хранение: .ai/project/decisions/YYYY-MM-DD-<id>.yaml
 
 Использование:
     decision_loop.py <child_root> propose --id <id> --proposal "текст" [--options "a,b,c"]
+        [--feature-target '{"baseline": {...}, "target": {...}, "guardrails": [...]}']
     decision_loop.py <child_root> decide --id <id> --status approved [--by "owner"]
     decision_loop.py <child_root> list [--status pending]
     decision_loop.py <child_root> --selftest
@@ -30,6 +35,90 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+
+# Допустимые направления движения метрики к target.
+DIRECTIONS = {"increase", "decrease", "hold"}
+
+
+def check_feature_target(ft) -> list[str]:
+    """Проверить ФОРМУ контракта feature_target; вернуть список ошибок.
+
+    Пустой список = валиден. Продуктовое решение о фиче обязано нести три
+    измеримых обязательства, иначе «фича с целью» — пустая декларация:
+
+      - baseline: где мы сейчас — непустые metric (что двигаем) и value;
+      - target:   куда идём — непустой value и direction ∈ {increase,decrease,hold};
+      - guardrails: что не должно сломаться — хотя бы один пункт с metric и bound.
+
+    Функция не судит о разумности чисел (это дело человека) — она отказывает
+    лишь тому, что не является измеримым обязательством по форме.
+    """
+    if not isinstance(ft, dict):
+        return ["feature_target: ожидается объект с baseline/target/guardrails"]
+
+    errors: list[str] = []
+
+    baseline = ft.get("baseline")
+    if not isinstance(baseline, dict):
+        errors.append("feature_target.baseline: отсутствует (нужны metric и value)")
+    else:
+        if not baseline.get("metric"):
+            errors.append("feature_target.baseline.metric: пусто (назови измеряемую метрику)")
+        if baseline.get("value") in (None, ""):
+            errors.append("feature_target.baseline.value: пусто (где мы сейчас)")
+
+    target = ft.get("target")
+    if not isinstance(target, dict):
+        errors.append("feature_target.target: отсутствует (нужны value и direction)")
+    else:
+        if target.get("value") in (None, ""):
+            errors.append("feature_target.target.value: пусто (куда хотим прийти)")
+        direction = target.get("direction")
+        if direction not in DIRECTIONS:
+            errors.append(
+                f"feature_target.target.direction: '{direction}' не в {sorted(DIRECTIONS)}")
+
+    guardrails = ft.get("guardrails")
+    if not isinstance(guardrails, list) or not guardrails:
+        errors.append("feature_target.guardrails: нужен хотя бы один пункт (metric + bound)")
+    else:
+        for i, g in enumerate(guardrails):
+            if not isinstance(g, dict) or not g.get("metric") or g.get("bound") in (None, ""):
+                errors.append(f"feature_target.guardrails[{i}]: нужны metric и bound")
+
+    return errors
+
+
+def gate_feature_decisions(decisions_dir: Path) -> list[str]:
+    """Гейт: каждое решение, объявленное фичей, несёт ВАЛИДНЫЙ feature_target.
+
+    Обходит каталог решений (.ai/project/decisions/*.yaml — пофайловые решения из
+    propose). Решение с kind: feature-decision ОБЯЗАНО нести feature_target,
+    проходящий check_feature_target; иначе гейт называет, чего не хватает. Решения
+    иных типов (product-decision и т.д.) не трогаются. Каталог читается только на
+    чтение и НЕ создаётся — его отсутствие не ошибка (фич-решений просто нет).
+
+    Возвращает список ошибок; пустой список = всё валидно. Механизм ПРОВЕРЯЕТ, а не
+    верит на слово: фичу, объявленную целью без измеримого обязательства, он краснит.
+    """
+    errors: list[str] = []
+    if not decisions_dir or not Path(decisions_dir).exists():
+        return errors
+    for f in sorted(Path(decisions_dir).glob("*.yaml")):
+        try:
+            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError) as exc:
+            errors.append(f"{f.name}: не читается ({exc})")
+            continue
+        if not isinstance(d, dict) or d.get("kind") != "feature-decision":
+            continue
+        ft = d.get("feature_target")
+        if ft is None:
+            errors.append(f"{f.name}: kind=feature-decision, но нет feature_target")
+            continue
+        for e in check_feature_target(ft):
+            errors.append(f"{f.name}: {e}")
+    return errors
 
 
 def _decisions_dir(root: Path) -> Path:
@@ -46,16 +135,30 @@ def _decision_path(root: Path, decision_id: str) -> Path:
 
 
 def propose(root: Path, decision_id: str, proposal: str, context: str = "",
-            options: list[str] | None = None, recommendation: str = "") -> dict:
-    """Propose a new decision."""
+            options: list[str] | None = None, recommendation: str = "",
+            feature_target: dict | None = None) -> dict:
+    """Propose a new decision.
+
+    Если передан feature_target, его форма проверяется ДО записи: невалидный
+    контракт возвращает error и файл НЕ пишется (fail-closed). Валидный —
+    сохраняется в решении, а kind становится feature-decision (это отличает
+    измеримое обязательство от свободного текста для гейта validate_decisions).
+    """
     path = _decision_path(root, decision_id)
 
     if path.exists():
         return {"error": f"Decision {decision_id} already exists"}
 
+    kind = "product-decision"
+    if feature_target is not None:
+        ft_errors = check_feature_target(feature_target)
+        if ft_errors:
+            return {"error": "invalid feature_target", "feature_target_errors": ft_errors}
+        kind = "feature-decision"
+
     decision = {
         "schema_version": 1,
-        "kind": "product-decision",
+        "kind": kind,
         "id": decision_id,
         "created_at": datetime.now().isoformat(),
         "proposal": proposal,
@@ -67,6 +170,8 @@ def propose(root: Path, decision_id: str, proposal: str, context: str = "",
         "decided_by": None,
         "outcome": None,
     }
+    if feature_target is not None:
+        decision["feature_target"] = feature_target
 
     path.write_text(yaml.dump(decision, allow_unicode=True, default_flow_style=False),
                     encoding="utf-8")
@@ -167,6 +272,8 @@ def main():
     propose_p.add_argument("--context", default="", help="Why it matters")
     propose_p.add_argument("--options", default="", help="Comma-separated alternatives")
     propose_p.add_argument("--recommendation", default="", help="AI recommendation")
+    propose_p.add_argument("--feature-target", default="",
+                           help="JSON: {baseline, target, guardrails} — измеримое обязательство фичи")
 
     # Decide
     decide_p = sub.add_parser("decide", help="Record a decision")
@@ -200,8 +307,19 @@ def main():
 
     if args.command == "propose":
         options = [o.strip() for o in args.options.split(",") if o.strip()] if args.options else []
-        result = propose(root, args.id, args.proposal, args.context, options, args.recommendation)
+        feature_target = None
+        if getattr(args, "feature_target", ""):
+            try:
+                feature_target = json.loads(args.feature_target)
+            except json.JSONDecodeError as exc:
+                print(json.dumps({"error": f"--feature-target: невалидный JSON ({exc})"},
+                                 indent=2, ensure_ascii=False))
+                return 1
+        result = propose(root, args.id, args.proposal, args.context, options,
+                         args.recommendation, feature_target)
         print(json.dumps(result, indent=2, ensure_ascii=False))
+        if "error" in result:
+            return 1
 
     elif args.command == "decide":
         result = decide(root, args.id, args.status, args.by, args.outcome)

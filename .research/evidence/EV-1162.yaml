@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1162
+request_id: RR-017
+statement: >
+  Цепочка кита воспроизведена у ai-sdlc ИСПОЛНЯЕМЫМ КОДОМ, а не инструкциями агенту. Каталог
+  orchestrator/src содержит ~90 модулей TypeScript, у большинства парный *.test.ts: admission*.ts
+  (фильтры допуска: blocked / in-flight / DoR / dispatchability), progressive-gates.ts (гейты
+  advisory -> soft-mandatory -> hard-mandatory), execute.ts (64 КБ — dispatch в изолированный git
+  worktree, конвейер Step 0-13: dev-агент -> 3 ревьюера -> подпись аттестации -> открытие PR),
+  review.ts / review-meta.ts / runners/review-agent.ts (ревью-стадии), provenance.ts, audit-*.ts
+  (журнал), compliance-clearance.ts, cost-governance.ts. Это тот же контур, что у кита (execution +
+  детерминированные gates + ревью + delivery-транзакция), выраженный кодом с тестами. Отличие от
+  mestre-yoda (EV прошлого прогона RR-014): там были markdown-инструкции, здесь — TypeScript-модули
+  и vitest-тесты в одном репозитории.
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — orchestrator/src (contents API, листинг модулей и тестов)"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/tree/main/orchestrator/src"
+  type: source_repository
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "gh api /contents/orchestrator/src — файлы admission*.ts, progressive-gates.ts, execute.ts (64370 б), review*.ts + парные .test.ts; снято 2026-09-02"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: true
+  expires_at: "2026-12-02"
+reliability:
+  level: high
+  rationale: >
+    Прочитан листинг каталога с размерами файлов и наличием парных тестов через contents API —
+    первичный источник. Наличие исполняемого кода и тестов доказано структурно; отдельные инварианты
+    (writer≠judge, аттестация) прочитаны построчно в EV-1163/EV-1164. Не читались все 90 модулей —
+    запись фиксирует, что контур реализован кодом, а не оценивает полноту каждого модуля.
+status: active
+superseded_by: null

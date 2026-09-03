@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1161
+request_id: RR-017
+statement: >
+  ai-sdlc позиционирует себя как «Decision Engine для spec-driven AI workflows» — половину
+  execution-and-governance спек-ориентированного стека. Тезис — cost asymmetry: решения оператора,
+  принятые заранее с полным контекстом, дёшевы и в основном верны, а решения ИИ в исполнении под
+  неопределённостью дороги и часто ошибочны; ценность рамки не «ИИ пишет код», а «ИИ детерминированно
+  исполняет хорошо специфицированные контракты». Роль оператора смещается к «decision steward»:
+  сформулировать открытые вопросы, разрешить их, подписать, наблюдать конвейер. ai-sdlc покрывает
+  половину contract -> shipped; фронт idea -> contract закрывает GitHub Spec Kit, стык — по
+  RFC-0036. Значение для кита: это НЕ code-generator-сосед; заявленная ось — governance доставки,
+  ровно поле кита.
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc README.md (раздел What this is / The problem)"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/blob/main/README.md"
+  type: official_documentation
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "README.md, разделы «What this is», «The five pillars», снято 2026-09-02"
+  quote: "AI executes well-specified contracts deterministically."
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: false
+reliability:
+  level: high
+  rationale: >
+    Прямая цитата из README первоисточника. Это самоописание автора рамки (заявление о намерении),
+    а не независимая оценка исполнения — что делает КОД, проверяется отдельными записями
+    (EV-1162..EV-1166).
+status: active
+superseded_by: null

@@ -1,0 +1,40 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1163
+request_id: RR-017
+statement: >
+  Инвариант writer≠judge у ai-sdlc подкреплён кодом-механизмом, а не только обещанием. Файл
+  orchestrator/src/harness/independence.ts (+ independence.test.ts) реализует enforceIndependence():
+  когда стадия объявляет requiresIndependentHarnessFrom, оркестратор фильтрует её цепочку harness'ей,
+  исключая тот harness, который ФАКТИЧЕСКИ прогнал названные вышестоящие стадии (а не тот, что
+  объявлен, — важно при fallback); если после фильтра цепочка пуста, функция возвращает
+  violated=true, и onFailure применяет вызывающий код (сам модуль onFailure не вызывает —
+  уточнение judge round 1). Отдельная validateIndependenceGraph() требует, чтобы ссылки указывали строго
+  вверх по конвейеру (иначе CyclicIndependenceConstraintError). Собственный docstring называет это
+  «load-bearing safety property for cross-harness review». Значение: это ровно инвариант кита
+  (автор изменения не может быть его судьёй), и он сильнее общего заявления EV-670 у
+  multi-agents-control-plane — здесь закрыт конкретный класс обхода (тихий коллапс ревью на harness
+  исполнителя через fallback).
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — orchestrator/src/harness/independence.ts"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/blob/main/orchestrator/src/harness/independence.ts"
+  type: source_repository
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "independence.ts, функции enforceIndependence / validateIndependenceGraph; прочитан целиком 2026-09-02"
+  quote: "This is the load-bearing safety property for cross-harness review (RFC §13.6) — without it, fallback can silently collapse review onto the same harness as the implementer."
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: false
+reliability:
+  level: high
+  rationale: >
+    Файл прочитан построчно с raw-контентом первоисточника; механизм и его свойство видны в коде и
+    docstring, не в маркетинге. Наличие independence.test.ts подтверждает, что свойство под тестом.
+    Не проверялось, что оркестратор всегда вызывает enforceIndependence на каждой ревью-стадии в
+    рантайме — запись доказывает существование и назначение механизма, не покрытие всех путей.
+status: active
+superseded_by: null

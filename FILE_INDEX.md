@@ -18,6 +18,7 @@
 - `FILE_INDEX.md` — этот файл
 - `LICENSE`
 - `MIGRATION_GUIDE.md`
+- `MIGRATION_GUIDE_4.0.md` — переход на 4.0: снятие плоского слоя `tools/` (warn-минор 3.40 предупреждает заранее)
 - `NOTICE.md`
 - `README.md`
 - `RELEASE_NOTES_v1.0.0.md`

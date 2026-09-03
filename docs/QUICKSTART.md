@@ -112,7 +112,7 @@ python3 <kit>/tools/effect_metrics.py    # PROBLEM-rate, динамика пок
 parent-кит для `ai-ops run` не нужно:
 
 ```bash
-python3 .ai/managed/tools/ai_ops_run.py run "почини падающий тест даты" . \
+python3 .ai/managed/ai_ops_kit/engine/ai_ops_run.py run "почини падающий тест даты" . \
   --engine pipeline --provider openai-compatible --model deepseek-chat \
   --execute --baseline-diff --sandbox --json
 ```
@@ -146,7 +146,7 @@ ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI и
 - **Preflight**: неполная `features/<id>/spec.yaml`, превышение context-budget, неподтверждённая
   декомпозиция или отсутствие нужного `ApprovalRecord` → прогон останавливается **до** tool-loop
   (`status=blocked`, коммита нет). Одобрение создаётся:
-  `python3 .ai/managed/tools/approvals.py record . <feature> --approval secrets --by you@x --scope config --reason "…"`.
+  `python3 .ai/managed/ai_ops_kit/gates/approvals.py record . <feature> --approval secrets --by you@x --scope config --reason "…"`.
 
 Граница: child-CI (раздел 4) по-прежнему клонирует kit по тегу — это пин версии для проверки
 установки, отдельный от пути исполнения движка.

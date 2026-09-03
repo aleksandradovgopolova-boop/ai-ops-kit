@@ -6,6 +6,7 @@ usage recording from orchestrator_usage.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -591,6 +592,51 @@ def _reset_hint(text):
     return m.group(1).strip().rstrip(".") if m else None
 
 
+def writer_lock_path():
+    """Путь машинного замка писателя. Переопределяется `AI_OPS_WRITER_LOCK_PATH`; по умолчанию —
+    файл в системном tmp, общий для ВСЕХ worktree и процессов на машине (worktree — отдельные
+    checkout'ы одного репо, поэтому замок в дереве репозитория их бы не сериализовал)."""
+    return os.environ.get("AI_OPS_WRITER_LOCK_PATH") or os.path.join(
+        tempfile.gettempdir(), "ai-ops-writer.lock")
+
+
+@contextlib.contextmanager
+def _writer_serialization_lock(notify=None):
+    """МАШИННЫЙ ЗАМОК ПИСАТЕЛЯ (поле 02–03.09.2026): один локальный `claude -p` за раз на всю
+    машину. Причина: локальный писатель — ЕДИНСТВЕННЫЙ разделяемый ресурс, и параллельные
+    `run --execute` из разных worktree конкурируют за него без координации — прогоны виснут на
+    старте (дочерний писатель не появляется, 0% CPU), и заезд приходится сериализовать руками.
+    Замок делает сериализацию встроенной: ждущие встают в ОЧЕРЕДЬ (блокирующий flock), а не
+    падают и не деадлочат. Освобождается при выходе И при смерти держателя (flock снимается ядром
+    на закрытии fd) — зависший прогон не запирает остальных навсегда. Держится только на время
+    самого subprocess-вызова, НЕ во время backoff — паузы не блокируют очередь.
+
+    Escape-hatch: `AI_OPS_WRITER_LOCK=0` — no-op (напр. один прогон, свой внешний планировщик).
+    Без `fcntl` (Windows) деградирует до no-op — не хуже прежнего поведения (как lifecycle_store)."""
+    if os.environ.get("AI_OPS_WRITER_LOCK", "1") == "0":
+        yield
+        return
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    f = open(writer_lock_path(), "w")
+    try:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)   # свободен — берём сразу
+        except OSError:
+            if notify:                                              # занят — сообщаем ОДИН раз и ждём
+                notify("ai-ops: жду освобождения писателя (сериализация параллельных прогонов)…")
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)                   # блокирующая очередь
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        finally:
+            f.close()
+
+
 def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
@@ -681,7 +727,14 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     for _attempt in range(max_attempts):
         _t0 = time.monotonic()
         try:
-            r = _run(cmd)
+            # Сериализуем ТОЛЬКО реальный subprocess-путь (runner=None). Инъекция runner (offline-
+            # selftest) писателя не вызывает — замок ей не нужен и оставил бы тесты медленными/
+            # зависящими от fcntl. Замок держится на время вызова, снимается на backoff (ниже).
+            if runner is None:
+                with _writer_serialization_lock(notify=lambda m: sys.stderr.write(m + "\n")):
+                    r = _run(cmd)
+            else:
+                r = _run(cmd)
         except subprocess.TimeoutExpired:   # обычно слишком большой промпт (весь транскрипт одним argv, см. F-011)
             last = "claude -p: таймаут subprocess (%ss) — вероятно слишком большой промпт" % timeout
             if _attempt + 1 >= max_attempts:

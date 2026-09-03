@@ -1,0 +1,211 @@
+# components.yaml — реестр возможностей UI/UX-стандарта (данные, не проза).
+# Волна 2 (#418). Каждая запись ссылается на правила Конституции (constitution_refs)
+# и токены (tokens); валидатор ловит расхождение реестра с Конституцией и токенами.
+# Продукт-дочка расширяет реестр своими записями, не редактируя источник стандарта.
+version: '1.0'
+kind: components
+note: 'Слои: foundations -> primitives -> components -> compositions -> patterns ->
+  templates (UI-013).'
+entries:
+- id: comp.button
+  name: Button
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-012
+  - UI-015
+  - UI-041
+  tokens:
+  - control.md
+  - radius.md
+  - color.action.primary
+  - color.action.onPrimary
+  - spacing.4
+  states:
+  - default
+  - hover
+  - focus-visible
+  - active
+  - disabled
+  - loading
+  - error
+- id: comp.icon-button
+  name: IconButton
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-015
+  tokens:
+  - control.md
+  - radius.md
+  - icon.md
+  states:
+  - default
+  - hover
+  - focus-visible
+  - active
+  - disabled
+- id: comp.input
+  name: Input
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-019
+  - UI-015
+  - UI-035
+  tokens:
+  - control.md
+  - radius.sm
+  - color.border.default
+  - color.text.primary
+  - spacing.3
+  states:
+  - default
+  - hover
+  - focus-visible
+  - disabled
+  - error
+  - read-only
+- id: comp.select
+  name: Select
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-019
+  - UI-015
+  tokens:
+  - control.md
+  - radius.sm
+  - color.border.default
+  - z.dropdown
+  states:
+  - default
+  - hover
+  - focus-visible
+  - disabled
+  - error
+- id: comp.checkbox
+  name: Checkbox
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-019
+  - UI-027
+  tokens:
+  - radius.sm
+  - color.action.primary
+  - icon.sm
+  states:
+  - default
+  - hover
+  - focus-visible
+  - selected
+  - disabled
+- id: comp.badge
+  name: Badge
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-027
+  tokens:
+  - radius.xs
+  - text.xs
+  - color.bg.subtle
+- id: comp.card
+  name: Card
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-013
+  - UI-014
+  tokens:
+  - radius.lg
+  - shadow.sm
+  - color.bg.surface
+  - spacing.4
+- id: comp.modal
+  name: Modal
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-018
+  - UI-035
+  tokens:
+  - radius.xl
+  - shadow.xl
+  - z.modal
+  - spacing.6
+  states:
+  - default
+  - loading
+  - error
+- id: comp.toast
+  name: Toast
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-017
+  - UI-027
+  tokens:
+  - radius.md
+  - shadow.lg
+  - z.toast
+  - duration.base
+- id: comp.tooltip
+  name: Tooltip
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-005
+  tokens:
+  - radius.sm
+  - shadow.md
+  - z.tooltip
+  - text.sm
+- id: comp.data-table
+  name: DataTable
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-031
+  - UI-032
+  tokens:
+  - color.border.default
+  - text.sm
+  - control.sm
+  states:
+  - default
+  - loading
+  - empty
+  - error
+- id: comp.filter-bar
+  name: FilterBar
+  layer: composition
+  status: canonical
+  constitution_refs:
+  - UI-012
+  - UI-031
+  tokens:
+  - spacing.3
+  - control.md
+  - radius.sm
+- id: comp.pagination
+  name: Pagination
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-031
+  tokens:
+  - control.sm
+  - spacing.2
+  - radius.sm
+- id: comp.empty-state
+  name: EmptyState
+  layer: component
+  status: canonical
+  constitution_refs:
+  - UI-036
+  tokens:
+  - spacing.8
+  - text.base
+  - color.text.secondary

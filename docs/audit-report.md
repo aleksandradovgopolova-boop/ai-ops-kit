@@ -49,7 +49,7 @@ Insights.
    (`ai_ops_kit/ui/presenter.py`, 16 переводчиков `from_*`).
 2. **Оператор кита** — тот, кто ставит и обновляет. Его поверхность — `installer/ai_ops.py`
    (1997 строк, 15 команд): `init`, `update`, `diff`, `status`, `doctor`, `validate`, `migrate`,
-   `verify-capabilities`, `onboard`, `audit`, `usage`, `session`, `method`, `engops`,
+   `verify-capabilities`, `ui-status`, `audit`, `usage`, `session`, `method`, `engops`,
    `delivery-proof`.
 
 **Какую задачу решает.** Не «сгенерировать код», а **не дать выдать несделанное за сделанное**:

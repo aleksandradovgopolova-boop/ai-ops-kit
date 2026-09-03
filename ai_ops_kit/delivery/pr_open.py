@@ -38,6 +38,14 @@ def _git(root, *args):
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
+def _is_non_fast_forward(err):
+    """#401: отличить отклонение push по расхождению веток (лечится --force-with-lease своей
+    delivery-ветки) от прочих ошибок push (сеть/права — форсить нельзя)."""
+    e = (err or "").lower()
+    return ("non-fast-forward" in e or "[rejected]" in e or " rejected " in e
+            or "fetch first" in e or "tip of your current branch is behind" in e)
+
+
 def _api_base():
     return os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
 
@@ -101,16 +109,32 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_i
                     "note": "не удалось определить дефолт-ветку репо (GitHub API); задай base явно"}
     if delivery_id:   # маркер для сверки/реконсиляции — вшит в тело PR
         body = f"{body}\n\n<!-- ai-ops-delivery-id: {delivery_id} -->"
+    pushed_sha = None
     if push:
         prc, _, perr = _git(root, "push", "-u", "origin", branch)
         if prc != 0:
-            return {"status": "error", "note": f"git push не удался (rc={prc}): {perr[:200]}"}
+            # #401: delivery-ветку кит считает СВОЕЙ. Отклонение non-fast-forward (её remote-версия
+            # разошлась — старый PR на старой базе) — не тупик: пере-пушим --force-with-lease. Это
+            # безопасно (падёт, если в ветку кто-то дописал неожиданно), а не роняем сырым rc=1.
+            if _is_non_fast_forward(perr):
+                prc, _, perr = _git(root, "push", "--force-with-lease", "origin", branch)
+            if prc != 0:
+                _hint = (" (ветка расходится с remote и --force-with-lease не прошёл — возможно, в неё "
+                         "дописали извне)" if _is_non_fast_forward(perr) else "")
+                return {"status": "error", "note": f"git push не удался (rc={prc}): {perr[:200]}{_hint}"}
+        # P0 (#399): после УСПЕШНОГО push авторитетный head-sha — это ЛОКАЛЬНО запушенный коммит
+        # (push прошёл => origin/<branch> == local <branch>, а PR head — это и есть ветка). Ответ
+        # GitHub API про head PR обновляется с задержкой: сразу после push он отдаёт СТАРЫЙ sha,
+        # из-за чего контроллер писал sha_verified=false на реально успешной доставке. Берём git-факт.
+        _rc, _out, _ = _git(root, "rev-parse", branch)
+        if _rc == 0 and _out.strip():
+            pushed_sha = _out.strip()
     # идемпотентность: PR для ветки уже открыт -> не создаём дубль, возвращаем его (+head_sha/base)
     existing = _find_open_pr(owner, name, branch, token)
     if existing:
         return {"status": "updated", "url": existing.get("html_url"), "number": existing.get("number"),
                 "draft": existing.get("draft", True), "repository": repository,
-                "head_sha": (existing.get("head") or {}).get("sha"),
+                "head_sha": pushed_sha or (existing.get("head") or {}).get("sha"),
                 "base": (existing.get("base") or {}).get("ref") or base,
                 "note": "PR для ветки уже открыт — ветка обновлена push'ем (идемпотентно)"}
     data, err = _gh_request(f"{_api_base()}/repos/{owner}/{name}/pulls", token,
@@ -123,7 +147,7 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_i
                         "нужна сверка с remote (reconciliation)"}
     return {"status": "opened", "url": data.get("html_url"), "number": data.get("number"),
             "draft": data.get("draft", True), "base": base, "repository": repository,
-            "head_sha": (data.get("head") or {}).get("sha")}
+            "head_sha": pushed_sha or (data.get("head") or {}).get("sha")}
 
 
 def _find_pr_for_branch(owner, name, branch, token, state="all"):

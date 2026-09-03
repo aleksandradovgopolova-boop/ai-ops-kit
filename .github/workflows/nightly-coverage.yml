@@ -1,0 +1,42 @@
+name: nightly-coverage
+# 2026-09-03 (замер CI): покрытие снято с пути каждого PR (держало стену ~10.8 мин, за окно прогонов
+# не поймало ни одного падения, тесты и так гоняются в группах quality). Owner убрал `coverage` из
+# обязательных проверок branch protection; здесь покрытие считается ВНЕ критического пути PR:
+#   - ночью (heartbeat), чтобы дрейф покрытия не копился незамеченным;
+#   - на каждый push в main (сразу после слияния — таймернее ночного);
+#   - вручную перед релизом (workflow_dispatch).
+# Порог остаётся РАТЧЕТОМ (пол 70%, замер 71%): полный набор даёт 71% (23 889 инструкций, 7 015 без
+# покрытия), один пункт запаса, чтобы честный рефакторинг не краснел на шуме. Поднимать можно и нужно;
+# опускать — только осознанно, как ратчет пар/циклов в packages/layering.yaml. Падение здесь — сигнал
+# на main/ночью, а НЕ блок PR (это осознанный размен: быстрый PR важнее гейта покрытия на каждом пуше).
+on:
+  schedule:
+    - cron: "17 3 * * *"   # ежедневно ~03:17 UTC
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml pytest pytest-cov pytest-xdist hypothesis
+      - name: "Покрытие продукта с порогом-ратчетом (пол 70%, замер 71%)"
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          # sysmon переводит coverage.py на sys.monitoring (CPython 3.12+) вместо трассировки каждой
+          # строки; джоба закреплена на 3.12. Неподдержанное значение -> джоба упадёт громко, а не
+          # станет тихо считать медленно.
+          COVERAGE_CORE: sysmon
+        run: |
+          python3 -m pytest tests/ -q -n auto --dist loadfile \
+            --cov=ai_ops_kit --cov=installer \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=70

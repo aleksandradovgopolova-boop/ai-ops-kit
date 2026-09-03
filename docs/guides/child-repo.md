@@ -60,8 +60,8 @@ your-project/
 
 ```bash
 # Метрики кита
-python3 .ai/managed/tools/kit_observability.py .
+python3 .ai/managed/ai_ops_kit/devtools/kit_observability.py .
 
 # Стоимость
-python3 .ai/managed/tools/usage_ledger.py --product .
+python3 .ai/managed/ai_ops_kit/shared/usage_ledger.py --product .
 ```

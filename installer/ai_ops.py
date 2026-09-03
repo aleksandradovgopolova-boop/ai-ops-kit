@@ -15,7 +15,9 @@
   migrate              — применить цепочку миграций манифеста (сейчас пустая, механизм готов)
   verify-capabilities  — offline capability self-test
   usage                — честная стоимость/токены задачи и продукта (v3.10.0 Usage Truth; [--workitem <wid>] [--json])
-  onboard              — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0)
+  ui-status            — зрелость UI-evidence (Storybook: absent/configured/runnable/verified) + шаблон скрипта (v3.11.0).
+                         Раньше называлась `onboard`, но так же зовётся интент движка «определить стек»
+                         (`./ai-ops onboard`) — имя переименовано, чтобы столкновения не было
   audit architecture   — read-only детерминированный снимок архитектуры на текущем SHA (12 осей; v3.15.0)
   drift                — read-only снимок рассинхрона между продуктовыми артефактами (документация↔код; v3.37)
   session              — гигиена сессии: телеметрия + рекомендация (continue/compact/clear/new; v3.16.0)
@@ -644,6 +646,17 @@ RUNTIME_VALIDATORS = frozenset({
     # исполняется У ДОЧКИ — считает состояние `.ai-ops/` (Missing/Invalid/Outdated/Valid). Не внести
     # имя сюда значило бы починить кит и не починить дочку (F-033), как было с validate_acceptance_result.
     "validate_product_layer",
+    # 2026-09-02, issue #439 (tests-verify-behavior): метрика «поведенческие vs структурные тесты»
+    # и ратчет её доли. Валидатор едет в дочку, чтобы она мерила ТАКСОНОМИЮ СВОИХ тестов тем же
+    # инструментом — перекос «читаем свои файлы вместо исполнения поведения» не должен быть виден
+    # только у кита. Standalone (stdlib+pyyaml, `import _bootstrap` не нужен), запускается процессом
+    # у дочки.
+    "validate_test_taxonomy",
+    # 2026-09-02 (module-size-ratchet): ратчет размера МОДУЛЯ — заморозить монолиты вниз. Валидатор
+    # едет в дочку, чтобы она стерегла размеры СВОИХ файлов ai_ops_kit/**/*.py тем же инструментом:
+    # ужатый монолит не должен молча отрастать только потому, что замок стоит у кита, а не у неё.
+    # Standalone (stdlib+pyyaml, `import _bootstrap` не нужен), запускается процессом у дочки.
+    "validate_module_size",
 })
 
 
@@ -2589,7 +2602,7 @@ def cmd_doctor(argv=()):
         _m = ui_readiness.assess(".")["storybook_maturity"]
         _dprint(f"ui-evidence (Storybook): {_m}"
               + ("  — не UI-продукт? тогда норма (не маскируем)" if _m == "absent" else "")
-              + ("   → `./ai-ops onboard` для деталей" if _m != "verified" else ""))
+              + ("   → `./ai-ops ui-status` для деталей" if _m != "verified" else ""))
     except Exception as _e:  # noqa: BLE001 — недоступность readiness не роняет doctor
         _dprint(f"ui-evidence (Storybook): недоступно ({_e})")
     # v3.12.0 Startup Context Budget: полнота обязательных документов контекста репозитория.
@@ -3052,9 +3065,13 @@ def cmd_audit(argv):
     return architecture_baseline.main(["."] + [a for a in argv[3:]])
 
 
-def cmd_onboard(argv):
+def cmd_ui_status(argv):
     """v3.11.0 UI Evidence Readiness: онбординг-сводка + ЧЕСТНАЯ зрелость UI-evidence (Storybook):
-    absent | configured | runnable | verified. Кит предлагает шаблон скрипта, НЕ ставит зависимости."""
+    absent | configured | runnable | verified. Кит предлагает шаблон скрипта, НЕ ставит зависимости.
+
+    Команда называлась `onboard`; переименована в `ui-status`, потому что интент движка `onboard`
+    (`ai_ops_kit/cli/ai_ops_cli.py`) определяет стек репозитория — это другое действие, а обёртка
+    `./ai-ops onboard` ведёт именно в него. Одно имя на два поведения убрано."""
     ob = Path(".") / "AI-OPS-ONBOARDING.md"
     print(_onboarding_summary(ob if ob.exists() else None))
     print()
@@ -3064,7 +3081,7 @@ def cmd_onboard(argv):
     try:
         import ui_readiness
         print(ui_readiness._fmt(ui_readiness.assess(".")))
-    except Exception as _e:  # noqa: BLE001 — недоступность readiness не должна ронять onboard
+    except Exception as _e:  # noqa: BLE001 — недоступность readiness не должна ронять ui-status
         print(f"UI readiness: недоступно ({_e})")
     return 0
 
@@ -3316,8 +3333,8 @@ def _dispatch(argv):
         return cmd_verify_capabilities()
     if cmd == "usage":
         return cmd_usage(argv)
-    if cmd == "onboard":
-        return cmd_onboard(argv)
+    if cmd == "ui-status":
+        return cmd_ui_status(argv)
     if cmd == "audit":
         return cmd_audit(argv)
     if cmd == "drift":

@@ -1,0 +1,83 @@
+{
+  "$id": "spacing",
+  "constitution_section": 23,
+  "unit": "px",
+  "note": "Шкала отступов под Tailwind (n -> n x 4px). UI_CONSTITUTION.md 23.",
+  "tokens": [
+    {
+      "id": "spacing.0",
+      "value": 0,
+      "use": "сброс"
+    },
+    {
+      "id": "spacing.0.5",
+      "value": 2,
+      "use": "зазор иконка-текст"
+    },
+    {
+      "id": "spacing.1",
+      "value": 4,
+      "use": "микроотступ"
+    },
+    {
+      "id": "spacing.2",
+      "value": 8,
+      "use": "базовый внутренний отступ"
+    },
+    {
+      "id": "spacing.3",
+      "value": 12,
+      "use": "компактные контролы"
+    },
+    {
+      "id": "spacing.4",
+      "value": 16,
+      "use": "стандартный padding"
+    },
+    {
+      "id": "spacing.5",
+      "value": 20,
+      "use": ""
+    },
+    {
+      "id": "spacing.6",
+      "value": 24,
+      "use": "между блоками"
+    },
+    {
+      "id": "spacing.8",
+      "value": 32,
+      "use": "между группами"
+    },
+    {
+      "id": "spacing.10",
+      "value": 40,
+      "use": ""
+    },
+    {
+      "id": "spacing.12",
+      "value": 48,
+      "use": "секционный"
+    },
+    {
+      "id": "spacing.16",
+      "value": 64,
+      "use": "крупная секция"
+    },
+    {
+      "id": "spacing.20",
+      "value": 80,
+      "use": ""
+    },
+    {
+      "id": "spacing.24",
+      "value": 96,
+      "use": "герой"
+    },
+    {
+      "id": "spacing.32",
+      "value": 128,
+      "use": "макс. разрыв"
+    }
+  ]
+}

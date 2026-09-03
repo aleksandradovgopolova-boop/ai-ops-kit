@@ -148,6 +148,7 @@ def bench_report():
 
 
 @pytest.mark.slow
+@pytest.mark.nightly  # ~2.5 мин: module-scoped bench_report гоняет весь корпус — снят с пути PR в ночь (#462)
 class TestRunBenchAggregate:
     """Агрегатные инварианты run_bench() (перенесены из монолитного селфтеста).
 

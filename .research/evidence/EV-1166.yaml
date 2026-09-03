@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1166
+request_id: RR-017
+statement: >
+  ai-sdlc делает dogfood — применяет собственную рамку к своей разработке. В репозитории есть
+  каталог dogfood/ (src, scripts, backlog, package.json, vitest.config.ts) и команда
+  `/ai-sdlc execute <task-id>` для прогона задач собственного backlog через конвейер; README и
+  dogfood/README описывают внутренний dogfood по backlog-задачам. Плюс каталог backlog/ верхнего
+  уровня и .backlog-drift.yml. Значение для кита: тот же принцип, что у кита (рамка ведёт свою
+  собственную разработку), реализован у соседа — это была одна из трёх осей, которыми EV-673
+  отличал кит («полная реализация + dogfood + research»); ось dogfood у ai-sdlc закрыта.
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — dogfood/ (contents API) + README раздел про internal dogfood"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/tree/main/dogfood"
+  type: source_repository
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "gh api /contents/dogfood (src, scripts, backlog) + README «Internal dogfood (backlog tasks)»; снято 2026-09-02"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: true
+  expires_at: "2026-12-02"
+reliability:
+  level: high
+  rationale: >
+    Наличие каталога dogfood/ с кодом и backlog подтверждено contents API первоисточника плюс
+    описанием в README. Не измерялась ДОЛЯ разработки, реально прошедшая через собственный конвейер
+    (у кита это подтверждалось живыми прогонами) — запись доказывает наличие dogfood-контура, не
+    его интенсивность.
+status: active
+superseded_by: null

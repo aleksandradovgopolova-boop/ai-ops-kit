@@ -27,6 +27,9 @@ PKG_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE = PKG_ROOT / "ai_ops_kit" / "engine" / "execution_pipeline.py"
 ORCHESTRATOR = PKG_ROOT / "ai_ops_kit" / "providers" / "orchestrator.py"
 RUN = PKG_ROOT / "ai_ops_kit" / "engine" / "ai_ops_run.py"
+# argparse-парсер команд run/resume вынесен в спутник ai_ops_run_exec (_build_run_arg_parser);
+# сигнатура run() осталась в ai_ops_run. Сырой дефолт --engine сверяем там, где он теперь живёт.
+RUN_EXEC = PKG_ROOT / "ai_ops_kit" / "engine" / "ai_ops_run_exec.py"
 README = PKG_ROOT / "README.md"
 
 # Признаки загрузки ИМЕНОВАННОГО агента (персоны), в отличие от резолва роли в модель.
@@ -44,7 +47,8 @@ def test_canonical_engine_default_is_pipeline():
                     if a.arg == "engine"), None)
     assert isinstance(default, ast.Constant) and default.value == "pipeline", (
         "дефолт engine в run() не 'pipeline' — канонический путь доставки размылся")
-    assert re.search(r'--engine".*?default="pipeline"', src, re.S), (
+    exec_src = RUN_EXEC.read_text(encoding="utf-8")
+    assert re.search(r'--engine".*?default="pipeline"', exec_src, re.S), (
         "argparse --engine по умолчанию не 'pipeline' — сырой дефолт разошёлся с продуктовым")
 
 

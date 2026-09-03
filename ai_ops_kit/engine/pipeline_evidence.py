@@ -492,6 +492,21 @@ def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_ro
         return sorted(set((changed_files and ["<security-domains-load-failed>"]) or []))
     if not triggered:
         return []
+    # writer≠judge как ПРОВЕРКА, а не следствие изоляции (аудит F2). ApprovalRecord'ы лежат вне git
+    # (`features/` в .gitignore), поэтому доверие к ним держалось только на том, ГДЕ их читают: на
+    # `--execute` writer заперт в отдельном worktree (child_root/.ai/worktrees/<wid>), а approval-store
+    # (child_root/features/<wid>/approvals) — ВНЕ его дерева, писать туда он не может. Но при work_root
+    # == child_root (isolate=False / библиотечный путь) store оказывается ВНУТРИ writable-дерева
+    # писателя: он мог создать себе одобрение сам за этот прогон. Такой store не доверяется — fail-closed:
+    # все триггернутые домены остаются uncovered (человек обязателен), сколько бы «валидных» записей там
+    # ни лежало. Разделение store и дерева писателя проверяется явно, а не подразумевается настройкой.
+    if diff_root is not None:
+        store = Path(approval_root) / "features" / str(wid) / "approvals"
+        try:
+            if store.resolve().is_relative_to(Path(diff_root).resolve()):
+                return sorted(triggered)
+        except (OSError, ValueError):
+            return sorted(triggered)   # не смогли доказать разделение store и дерева писателя -> fail-closed
     try:
         recs = _appr.load_approvals(approval_root, wid)
         now = _appr._now_iso()

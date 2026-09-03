@@ -9,6 +9,7 @@ import pytest
 from model_router import (
     ALL_ROLES,
     _load,
+    check_independence,
     escalation_decision,
     plan_run,
     resolve,
@@ -250,3 +251,59 @@ class TestWriterTier:
         plan = plan_run(roles_cfg, quals, models, signals={"task_type": "ENGINEERING"})
         assert isinstance(plan.get("preferred_writer_tier"), dict)
         assert plan["preferred_writer_tier"]["tier"] == "strong-executor"
+
+
+@pytest.mark.unit
+class TestIndependenceSurvivesEscalation:
+    """Страж writer≠judge не должен разрушаться, когда судья эскалирует на модель писателя.
+
+    Регрессия-ловушка: plan_run обеспечивает независимость ПРИ ПЛАНИРОВАНИИ, но судья
+    эскалируется во время прогона (escalation_decision -> fallback_class). check_independence
+    берёт ФАКТИЧЕСКИ выбранные модели (escalations=...) и обязан поймать коллапс fail-closed.
+    """
+
+    def _plan(self, writer_id, judge_id, judge_role="integration_judge"):
+        return {
+            "implementation": {"resolved": True, "model_id": writer_id},
+            "code_review": {"resolved": True, "model_id": "reviewer-model"},
+            "security_review": {"resolved": True, "model_id": "sec-model"},
+            "integration_judge": {"resolved": True, "model_id": judge_id},
+        }
+
+    def test_planning_time_independence_ok(self):
+        # Писатель и все судьи на разных моделях, эскалации нет -> независимо.
+        res = check_independence(self._plan("writer-A", "judge-B"))
+        assert res["independent"] is True
+        assert res["checked_after_escalation"] is False
+        assert res["violations"] == []
+
+    def test_escalation_collapse_is_caught(self):
+        # Судья эскалировал НА модель писателя -> инвариант нарушен, страж обязан это поймать.
+        plan = self._plan("writer-A", "judge-B")
+        res = check_independence(plan, escalations={"integration_judge": "writer-A"})
+        # Без стража этот прогон прошёл бы (план-время было чисто) — тест доказывает, что сторожит.
+        assert res["independent"] is False, "коллапс судья==писатель после эскалации обязан ловиться"
+        assert res["checked_after_escalation"] is True
+        assert any(v["judge_role"] == "integration_judge" and v["model_id"] == "writer-A"
+                   for v in res["violations"])
+
+    def test_escalation_to_distinct_model_stays_independent(self):
+        # Судья эскалировал на ДРУГУЮ модель (не писателя) -> независимость сохранена.
+        plan = self._plan("writer-A", "judge-B")
+        res = check_independence(plan, escalations={"integration_judge": "judge-C"})
+        assert res["independent"] is True
+        assert res["checked_after_escalation"] is True
+
+    def test_writer_escalation_onto_judge_is_caught(self):
+        # Симметрично: писатель эскалировал по ladder НА модель судьи -> тоже нарушение.
+        plan = self._plan("writer-A", "judge-B")
+        res = check_independence(plan, escalations={"implementation": "judge-B"})
+        assert res["independent"] is False
+        assert any(v["model_id"] == "judge-B" for v in res["violations"])
+
+    def test_plan_run_attaches_independence(self, roles_cfg, quals, models):
+        # plan_run обязан приложить исход планировочной проверки независимости к плану.
+        plan = plan_run(roles_cfg, quals, models)
+        assert "independence" in plan
+        assert plan["independence"]["kind"] == "IndependenceCheck"
+        assert plan["independence"]["independent"] is True

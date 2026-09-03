@@ -136,8 +136,12 @@ def test_delivery_pending_distinguishes_waiting_from_unwritten_code(rep, expecte
 
 
 def test_the_run_uses_the_predicate_and_names_the_waiting_state():
-    """ШОВ: предикат действительно стоит в решении о статусе работы, а не лежит рядом."""
-    src = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
+    """ШОВ: предикат действительно стоит в решении о статусе работы, а не лежит рядом.
+
+    Решение о статусе (`_finalize_run`) вынесено из god-модуля `ai_ops_run` в модуль-спутник
+    `ai_ops_run_lifecycle` (чистый перенос + ре-экспорт); шов сохранился, сместился лишь файл.
+    """
+    src = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
 
     assert 'if _st == "blocked" and delivery_pending(rep):' in src, "предикат не подключён к решению"
     assert "ждёт доставки: работа готова на ветке, новых правок нет" in src
@@ -165,8 +169,9 @@ def test_every_installer_command_is_routed_by_the_wrapper():
 
     B2-19: `usage` объявлена в справке установщика, но обёртка отправляла её в интент-CLI —
     `invalid choice: 'usage'`. Список в обёртке отставал от кода молча; теперь расхождение краснеет.
-    Пересечения (`status`, `onboard`) отданы интент-CLI осознанно: у владельца это вопросы к работе,
-    а не к киту, и для состояния кита есть отдельная команда `kit-status`.
+    Пересечение (`status`) отдано интент-CLI осознанно: у владельца это вопрос к работе, а не к
+    киту, и для состояния кита есть отдельная команда `kit-status`. Имя `onboard` раньше тоже было
+    пересечением, но команда установщика переименована в `ui-status` (2026-09-02) — совпадения нет.
     """
     import re
 
@@ -179,15 +184,16 @@ def test_every_installer_command_is_routed_by_the_wrapper():
             routed |= set(m.group(1).split("|"))
     # ОСОЗНАННЫЕ ПЕРЕСЕЧЕНИЯ: команда есть и у установщика, и у движка, и в дочке её обслуживает
     # ДВИЖОК — потому что установщик в поставку не едет, а движок едет.
-    #   status/onboard — у владельца это вопросы к работе, а не к киту (для состояния кита есть
-    #     отдельная `kit-status`);
+    #   status — у владельца это вопрос к работе, а не к киту (для состояния кита есть
+    #     отдельная `kit-status`); имя `onboard` раньше было здесь, но команда установщика с этим
+    #     именем переименована в `ui-status` (2026-09-02) — пересечения больше нет;
     #   session (19.08.2026) — интент перенесён в CLI работой `session-command-reaches-the-child`
     #     ровно ради дочки, но маршрут остался на установщике, и `./ai-ops session` в дочке без
     #     клона парента отвечал «исходник рядом не найден». Маршрут исправлен; здесь имя
     #     перечислено, чтобы проверка не требовала вернуть его установщику.
     #   doctor (19.08.2026) — в дочке отвечает движок (проверка силами самой дочки), полная
     #     проверка установщика доступна как `kit-doctor`, по образцу `status`/`kit-status`.
-    intent_owned = {"status", "onboard", "session", "doctor"}
+    intent_owned = {"status", "session", "doctor"}
 
     # НЕ ДЛЯ ВЛАДЕЛЬЦА — и это отдельная категория, а не «забыли». Команда обслуживает МАШИНУ и
     # работает на клоне parent'а, а не в дочке; вести её через обёртку дочки было бы неправдой о
@@ -260,9 +266,13 @@ def test_delivery_preflight_warns_before_spending(tmp_path, open_pr, expect):
 def test_delivery_preflight_is_wired_before_the_model_call():
     """ШОВ: предупреждение стоит в конвейере ДО петли, иначе оно приходит после траты."""
     src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    # deep-cut: preflight выполняется внутри _setup_isolation (pipeline_setup); в конвейере изоляция
+    # вызвана ДО tool_loop.run_loop, значит предупреждение звучит до первой траты модели.
+    setup_src = (PKG / "ai_ops_kit" / "engine" / "pipeline_setup.py").read_text(encoding="utf-8")
 
-    assert src.index("_delivery_preflight(") < src.index("tool_loop.run_loop"), (
-        "предупреждение о базе стоит после вызова модели — то есть после траты, как и было")
+    assert "_delivery_preflight(" in setup_src, "preflight ушёл из изоляции — предупреждение о базе не выполняется"
+    assert src.index("_setup_isolation(") < src.index("tool_loop.run_loop"), (
+        "изоляция (с preflight) стоит после вызова модели — то есть после траты, как и было")
     assert '"preflight": delivery_pf' in src, "предупреждение не доехало до отчёта"
 
 

@@ -1,0 +1,77 @@
+{
+  "$id": "controls",
+  "constitution_section": 28,
+  "note": "Высоты контролов и размеры иконок. UI_CONSTITUTION.md 28, 32.",
+  "control_height": {
+    "unit": "px",
+    "min_target_px": 44,
+    "tokens": [
+      {
+        "id": "control.sm",
+        "value": 32,
+        "use": "компактные тулбары, теги"
+      },
+      {
+        "id": "control.md",
+        "value": 40,
+        "use": "по умолчанию: кнопки, инпуты, селекты"
+      },
+      {
+        "id": "control.lg",
+        "value": 48,
+        "use": "приоритетные действия, мобильные формы"
+      }
+    ]
+  },
+  "button_height": {
+    "unit": "px",
+    "tokens": [
+      {
+        "id": "button.height.sm",
+        "value": 32,
+        "use": ""
+      },
+      {
+        "id": "button.height.md",
+        "value": 40,
+        "use": "по умолчанию"
+      },
+      {
+        "id": "button.height.lg",
+        "value": 48,
+        "use": ""
+      }
+    ]
+  },
+  "icon_button_sizes": [
+    24,
+    32,
+    40,
+    44
+  ],
+  "icon_size": {
+    "unit": "px",
+    "set": "Tabler Icons",
+    "tokens": [
+      {
+        "id": "icon.sm",
+        "value": 16,
+        "use": ""
+      },
+      {
+        "id": "icon.md",
+        "value": 20,
+        "use": ""
+      },
+      {
+        "id": "icon.lg",
+        "value": 24,
+        "use": ""
+      }
+    ]
+  },
+  "table_density": {
+    "comfortable": 48,
+    "compact": 40
+  }
+}

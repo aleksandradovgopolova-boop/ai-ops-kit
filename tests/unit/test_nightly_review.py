@@ -233,3 +233,80 @@ def test_a_real_verdict_is_still_taken_from_the_last_line(tmp_path):
         "sys.exit(1)\n", encoding="utf-8")
     f = next(x for x in nr.run_checks(root) if x["check"] == "ссылки")
     assert f["ok"] is False and "ведут в никуда" in f["detail"], f
+
+
+# ─── РАСПИСАНИЕ: обзор идёт ночью, а не по случаю ──────────────────────────────────────────────
+# `delta_review_runs_nightly_and_briefs_the_owner`. Кит НЕ крутит демон — «идёт ночью» значит,
+# что существует РЕАЛЬНЫЙ триггер (CI-workflow с `schedule: cron`, зовущий обзор), а не обещание
+# в конфиге. Честность та же, что у EnvironmentMap: объявлено ≠ видно в репозитории.
+
+
+@pytest.mark.unit
+def test_no_schedule_is_absent_not_pretend_nightly(repo):
+    """Пустая дочка: ночного триггера нет — так и сказать, а не выдать обещание за расписание."""
+    st = nr.schedule_status(repo)
+    assert st["state"] == "absent", st
+
+
+@pytest.mark.unit
+def test_config_asking_for_nightly_without_a_trigger_is_declared_not_detected(repo):
+    """Конфиг просит ночной обзор, но CI-триггера нет: расписание объявлено, но НЕ сработает."""
+    (repo / ".ai-ops.yaml").write_text("nightly:\n  enabled: true\n", encoding="utf-8")
+    st = nr.schedule_status(repo)
+    assert st["state"] == "declared_not_detected", st
+    assert "не сработает" in st["reason"] or "триггер" in st["reason"], st
+
+
+@pytest.mark.unit
+def test_installing_a_schedule_creates_a_real_nightly_trigger(repo):
+    """install_schedule кладёт workflow с `schedule: cron`, зовущий обзор -> статус detected."""
+    res = nr.install_schedule(repo, cron="0 3 * * *")
+    assert res["status"] in ("created", "updated"), res
+    wf = repo / res["workflow"]
+    assert wf.is_file(), res
+    text = wf.read_text(encoding="utf-8")
+    assert "schedule:" in text and "cron:" in text and "nightly_review" in text, text
+    st = nr.schedule_status(repo)
+    assert st["state"] == "detected", st
+    assert st["cron"] == "0 3 * * *", st
+
+
+@pytest.mark.unit
+def test_installing_a_schedule_is_idempotent(repo):
+    """Второй install не плодит второй workflow и не роняет — обновляет тот же файл."""
+    nr.install_schedule(repo, cron="0 3 * * *")
+    res = nr.install_schedule(repo, cron="30 2 * * *")
+    assert res["status"] == "updated", res
+    assert nr.schedule_status(repo)["cron"] == "30 2 * * *"
+
+
+# ─── БРИФ ДОХОДИТ ДО ВЛАДЕЛЬЦА: произведён ≠ доставлен ─────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_delivering_a_brief_writes_a_durable_inbox_and_receipt(repo):
+    """Бриф в stdout владельца не достигает. Доставка — инбокс + указатель latest + receipt."""
+    rec = nr.deliver_brief(repo, "# Утренний обзор\nтело брифа", date="2026-09-02")
+    assert rec["kind"] == "NightlyBriefReceipt", rec
+    dated = repo / rec["path"]
+    latest = repo / rec["latest"]
+    assert dated.is_file() and latest.is_file(), rec
+    assert "тело брифа" in dated.read_text(encoding="utf-8")
+    assert latest.read_text(encoding="utf-8") == dated.read_text(encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_run_nightly_produces_a_brief_and_delivers_it_to_the_owner(repo):
+    """Точка входа расписания: собрать дельту -> бриф -> доставить владельцу, вернуть receipt."""
+    out = nr.run_nightly(repo, date="2026-09-02")
+    assert out["brief"] and "Утренний обзор" in out["brief"], out
+    assert out["receipt"] and out["receipt"]["kind"] == "NightlyBriefReceipt", out
+    assert (repo / out["receipt"]["latest"]).is_file()
+
+
+@pytest.mark.unit
+def test_run_nightly_can_skip_delivery_when_asked(repo):
+    """`deliver=False` — бриф собран, но в инбокс не положен (для dry-прогонов и тестов)."""
+    out = nr.run_nightly(repo, deliver=False)
+    assert out["brief"] and out["receipt"] is None, out
+

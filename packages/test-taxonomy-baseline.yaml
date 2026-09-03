@@ -1,0 +1,217 @@
+# Ратчет доли ПОВЕДЕНЧЕСКИХ тестов против СТРУКТУРНЫХ (issue #439).
+#
+# ЗАЧЕМ. Перекос «тест читает свои файлы вместо того, чтобы исполнять поведение» рос молча: числа
+# не было. Структурный тест (открыл yaml/md/py по пути, утвердил на его форме) не ловит ни одной
+# регрессии продукта. Теперь доля поведенческих зафиксирована ратчетом вниз — как потолки размера
+# функций (packages/func-size-baseline.yaml): она не может незаметно упасть.
+#
+# Измеряется: validate_test_taxonomy.py (AST каждого tests/**/test_*.py; поведенческий =
+# импортирует продуктовый код кита И зовёт импортированный символ; структурный = всё остальное).
+# Эвристика и её честные границы — в докстринге валидатора.
+#
+# РАТЧЕТ ходит ТОЛЬКО ВНИЗ по структурности: доля поведенческих не может упасть ниже записанной.
+# Сравнение точное, целыми (перекрёстное умножение): current_beh * base_total >= base_beh * current_total.
+# Файлы добавлять можно; уронить долю поведенческих — нельзя. Осознанное снижение baseline
+# записывается в ленту `raises` ниже с обоснованием (по образцу func-size-baseline.yaml).
+#
+# ЗАМЕР ЧЕСТНЫЙ, НЕ ЗАВЫШЕН. Доля поведенческих здесь ВЫШЕ грубой оценки issue («~195 из ~391
+# структурных»): точный критерий «импортирует И зовёт» относит к поведенческим и тесты валидаторов,
+# которые читают реестр репозитория И вызывают валидатор над ним — issue сам велит считать такой
+# тест поведенческим («читает файлы И зовёт продуктовый код = behavioral»). Смещение классификатора —
+# в сторону СТРУКТУРНОГО: тест, лишь проверяющий `callable(x)` без вызова, считается структурным.
+schema_version: 1
+kind: test-taxonomy-ratchet
+
+# Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
+behavioral_count: 360
+structural_count: 61
+total_count: 421
+behavioral_share_pct: 85.51
+
+raises:
+  # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
+  # (например, крупный ввоз структурных фикстур-контрактов) добавляются сюда: дата, откуда/куда и
+  # ПОЧЕМУ снижение оправдано, а не «так вышло».
+  - at: '2026-09-02'
+    what: baseline_established
+    from_behavioral: null
+    from_total: null
+    to_behavioral: 334
+    to_total: 394
+    to_share_pct: 84.77
+    work: tests-verify-behavior (issue #439)
+    why: >-
+      Метрика заведена впервые: до неё перекос «структурные vs поведенческие» рос без числа. Порог
+      зафиксирован на фактическом замере кита (334 поведенческих из 394, 84.77%) — не завышен и не
+      занижен, а снят классификатором как есть. Снижать порог осознанно можно только записью здесь:
+      падение доли без записи — красный сигнал (поведенческий тест выродился в структурный либо
+      структурных добавили сверх порога).
+  - at: '2026-09-02'
+    what: baseline_raised_up
+    from_behavioral: 334
+    from_total: 394
+    to_behavioral: 335
+    to_total: 395
+    to_share_pct: 84.81
+    work: tests-verify-behavior (issue #437 слит в тот же день)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): #437 добавил поведенческий тест человеко-читаемого вывода
+      (test_run_output_human_readable.py), доля поведенческих выросла 84.77% -> 84.81%. Baseline
+      пере-записан на фактический замер, чтобы ратчет держал уже улучшенную границу, а не устаревшую.
+  - at: '2026-09-02'
+    what: baseline_raised_up
+    from_behavioral: 335
+    from_total: 395
+    to_behavioral: 336
+    to_total: 396
+    to_share_pct: 84.85
+    work: module-size-ratchet
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): ратчет размера модуля добавил ПОВЕДЕНЧЕСКИЙ тест
+      (test_module_size.py — импортирует validate_module_size И зовёт его), доля поведенческих
+      выросла 84.81% -> 84.85%. Baseline пере-записан на фактический замер, чтобы ратчет держал уже
+      улучшенную границу, а не устаревшую.
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 336
+    from_total: 396
+    to_behavioral: 345
+    to_total: 405
+    to_share_pct: 85.19
+    work: tests-verify-behavior (issue #438)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез мега-тест-файлов по темам без потери
+      и изменения тестов. test_execution_pipeline.py (3579 строк) разрезан на 6 поведенческих файлов
+      (setup/readiness/review/diagnostics/authoring + ядро), test_ai_ops_run.py (2344) — на 5
+      (providers/print/reporting/lifecycle + ядро). Каждый новый файл, как и исходный, импортирует
+      продуктовый код (execution_pipeline / ai_ops_run) И зовёт его -> все 9 новых файлов
+      поведенческие, структурных не прибавилось (60 без изменений), доля выросла 84.85% -> 85.19%.
+      Число собранных тестов ДО == ПОСЛЕ (489). Baseline пере-записан на фактический замер.
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 345
+    from_total: 405
+    to_behavioral: 346
+    to_total: 406
+    to_share_pct: 85.22
+    work: writer-serialization-lock
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): машинный замок писателя добавил ПОВЕДЕНЧЕСКИЙ тест
+      (test_writer_serialization_lock.py — импортирует orchestrator_providers И зовёт
+      _writer_serialization_lock/_claude_cli_call/writer_lock_path), доля поведенческих выросла
+      85.19% -> 85.22%. Baseline пере-записан на фактический замер (после ребейза на main с #438).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 346
+    from_total: 406
+    to_behavioral: 347
+    to_total: 407
+    to_share_pct: 85.26
+    work: fix-loop-skips-env-blockers
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): фикс «fix-цикл не зацикливает писателя на нехватке
+      инструментов» добавил ПОВЕДЕНЧЕСКИЙ тест (test_fix_loop_skips_env_blockers.py — импортирует
+      _review_fix_context И зовёт его), доля поведенческих выросла 85.22% -> 85.26%. Baseline
+      пере-записан на фактический замер (после ребейза на main с #453).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 347
+    from_total: 407
+    to_behavioral: 348
+    to_total: 408
+    to_share_pct: 85.29
+    work: verdict-names-env-degradation
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): фикс «вердикт называет дефицит среды средой» добавил
+      ПОВЕДЕНЧЕСКИЙ тест (test_verdict_names_env_degradation.py — импортирует _env_degraded_note/
+      _env_skipped_checks И зовёт их), доля поведенческих выросла 85.26% -> 85.29%. Baseline
+      пере-записан на фактический замер (после ребейза на main с #454/#458).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 348
+    from_total: 408
+    to_behavioral: 349
+    to_total: 409
+    to_share_pct: 85.33
+    work: release-helper-bumps-version-surfaces (#445)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа release-helper добавила ПОВЕДЕНЧЕСКИЙ тест
+      (test_release_bump_validators_green.py — импортирует validate_release_claims/
+      validate_ai_first_registry И зовёт их), доля поведенческих выросла 85.29% -> 85.33%.
+      Baseline пере-записан на фактический замер (после ребейза на main с тройкой durable-фиксов).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 349
+    from_total: 409
+    to_behavioral: 350
+    to_total: 410
+    to_share_pct: 85.37
+    work: product-decision-baseline-target-guardrails (#450)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа decision-loop добавила ПОВЕДЕНЧЕСКИЙ тест
+      (test_decision_feature_target.py — импортирует decision_loop И зовёт check_feature_target/
+      gate_feature_decisions), доля поведенческих выросла 85.33% -> 85.37%. Baseline пере-записан
+      на фактический замер (после ребейза на main).
+  - at: '2026-09-03'
+    what: baseline_lowered
+    from_behavioral: 350
+    from_total: 410
+    to_behavioral: 350
+    to_total: 411
+    to_share_pct: 85.16
+    work: uiux-token-capability-registries (#451)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.37% -> 85.16%): работа uiux-реестров добавила один СТРУКТУРНЫЙ
+      тест (test_uiux_tokens_and_registries.py — проверяет ФОРМУ данных-контракта: токены design/
+      tokens/*.json и реестры registries/*.yaml на соответствие схемам/Конституции, не исполняя
+      продуктовый код). Поведенческих НЕ убыло (350 без изменений) — добавился +1 структурный над
+      контрактными данными (ровно случай «крупный ввоз структурных фикстур-контрактов», названный в
+      шапке как законный повод для записи). Это не деградация поведенческого теста в структурный, а
+      новая проверка данных; снижение доли зафиксировано записью, а не проехало молча.
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 350
+    from_total: 411
+    to_behavioral: 351
+    to_total: 412
+    to_share_pct: 85.19
+    work: storybook-required-stories-from-contract (#452)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа storybook добавила ПОВЕДЕНЧЕСКИЙ тест
+      (test_experience_contract_required_stories.py — импортирует experience_contract И зовёт
+      required_story_specs/required_stories_coverage), доля поведенческих выросла 85.16% -> 85.19%.
+      Baseline пере-записан на фактический замер (после ребейза на main).
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 351
+    from_total: 412
+    to_behavioral: 352
+    to_total: 413
+    to_share_pct: 85.23
+    work: deprecate-flat-tools-warn
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): warn-минор перед 4.0 добавил ПОВЕДЕНЧЕСКИЙ тест
+      (test_flat_tools_deprecation_warning.py — импортирует tools/_bootstrap И зовёт
+      _warn_flat_entry_point, проверяя, что прямой запуск плоской точки предупреждает, а импорт
+      шима и валидатор молчат), доля поведенческих выросла 85.19% -> 85.23%. Baseline пере-записан
+      на фактический замер.
+  - at: '2026-09-03'
+    what: baseline_raised_up
+    from_behavioral: 352
+    from_total: 413
+    to_behavioral: 360
+    to_total: 421
+    to_share_pct: 85.51
+    work: split-remaining-mega-test-files (issue #438, продолжение)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез трёх оставшихся мега-тест-файлов по
+      темам без потери и изменения тестов (тот же приём, что и #438). test_installer.py (1184 строк)
+      разрезан на 5 файлов (init-жизненный-цикл+footprint / doctor / delivery / entrypoint / config +
+      общий _installer_helpers.py), test_workpackage_executor.py (937) — на 4
+      (executor / resume / integrity / gates + _workpackage_helpers.py),
+      test_pipeline_characterization.py (891) — на 2 (пофазный / структурный +
+      _pipeline_char_helpers.py). Каждый новый файл, как и исходный, импортирует продуктовый код и
+      зовёт его -> все 8 новых собираемых файлов поведенческие (в installer-файлах якорь — функция
+      _load_installer с spec_from_file_location; helper-модули с префиксом `_` не собираются и в
+      замер не входят), структурных не прибавилось (61 без изменений), доля выросла 85.23% -> 85.51%.
+      Число собранных тестов ДО == ПОСЛЕ (46+66+20 = 132). Baseline пере-записан на фактический замер.

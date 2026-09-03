@@ -1,0 +1,63 @@
+# templates.yaml — реестр возможностей UI/UX-стандарта (данные, не проза).
+# Волна 2 (#418). Каждая запись ссылается на правила Конституции (constitution_refs)
+# и токены (tokens); валидатор ловит расхождение реестра с Конституцией и токенами.
+# Продукт-дочка расширяет реестр своими записями, не редактируя источник стандарта.
+version: '1.0'
+kind: templates
+note: Шаблоны страниц §16. catalog_key покрывает §16 (нормализованные имена без англ.
+  скобок).
+entries:
+- id: tpl.list
+  catalog_key: список
+  name: Список (list)
+  constitution_refs:
+  - UI-008
+  - UI-031
+  patterns:
+  - pat.search
+  - pat.filter
+- id: tpl.detail
+  catalog_key: деталь
+  name: Деталь (detail)
+  constitution_refs:
+  - UI-008
+  - UI-009
+  patterns:
+  - pat.crud
+- id: tpl.create
+  catalog_key: создание
+  name: Создание (create)
+  constitution_refs:
+  - UI-019
+  - UI-009
+  patterns:
+  - pat.crud
+- id: tpl.edit
+  catalog_key: редактирование
+  name: Редактирование (edit)
+  constitution_refs:
+  - UI-019
+  patterns:
+  - pat.crud
+- id: tpl.dashboard
+  catalog_key: дашборд
+  name: Дашборд
+  constitution_refs:
+  - UI-008
+  patterns:
+  - pat.dashboard
+- id: tpl.search
+  catalog_key: поиск
+  name: Поиск
+  constitution_refs:
+  - UI-031
+  patterns:
+  - pat.search
+  - pat.filter
+- id: tpl.settings
+  catalog_key: настройки
+  name: Настройки
+  constitution_refs:
+  - UI-011
+  patterns:
+  - pat.settings

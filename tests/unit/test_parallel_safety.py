@@ -43,6 +43,37 @@ def test_a_pure_code_pr_is_clean():
 
 
 @pytest.mark.unit
+def test_a_plan_sync_pr_of_only_plan_and_docs_passes():
+    """РЕГРЕСС (баг ложного красного): план-синк из плана + доков — НЕ смешение.
+
+    ДО фикса `code` = «всё некоординационное», и ROADMAP.md/newsfragments/*.md/qualification/*.md
+    попадали в code -> mixed=True -> ложный красный на каждом законном план-синк-PR (#425).
+    Документация — работа одной руки координатора, как и чистый бухгалтерский PR; должна ПРОХОДИТЬ."""
+    changed = ["ROADMAP.md", "planning/plan.yaml", "newsfragments/x.chore.md",
+               "qualification/report.md", "docs/notes.md"]
+    rep = ps.diff_mixes_code_with_coordination(changed, COORD)
+    assert rep["mixed"] is False                      # ДО фикса было бы True
+    assert rep["coordination"] == ["planning/plan.yaml"]
+    assert rep["code"] == []                           # ни один док не считается кодом
+    assert rep["docs"] == sorted(["ROADMAP.md", "newsfragments/x.chore.md",
+                                   "qualification/report.md", "docs/notes.md"])
+
+
+@pytest.mark.unit
+def test_real_source_code_plus_plan_still_mixes_even_with_docs_present():
+    """КОНТРОЛЬ: тот же PR, но с настоящим `.py` рядом — снова смешение (страж не ослаб).
+
+    Уберёшь ветку `_is_doc` в фиксе — первый тест покраснеет; ослабишь её до «всё markdown+код
+    пропускать» — этот покраснеет. Исходный код + координация = DIRTY-дорожка N², красим."""
+    changed = ["ai_ops_kit/foo.py", "planning/plan.yaml", "ROADMAP.md",
+               "newsfragments/x.fix.md"]
+    rep = ps.diff_mixes_code_with_coordination(changed, COORD)
+    assert rep["mixed"] is True
+    assert rep["code"] == ["ai_ops_kit/foo.py"]        # только исходник, доки не тут
+    assert rep["coordination"] == ["planning/plan.yaml"]
+
+
+@pytest.mark.unit
 def test_a_pure_bookkeeping_pr_is_clean():
     """Только координационные файлы (PR координатора, одна рука) — допустимо, не смешение."""
     changed = ["planning/plan.yaml", "history/plan-history.yaml"]
@@ -221,6 +252,26 @@ def test_strict_reddens_in_the_child_context_via_defaults(tmp_path):
     (clean / "code.py").write_text("x=2\n", encoding="utf-8")
     git2("add", "-A"); git2("commit", "-qm", "code only")
     assert ps.main(["x", str(clean), "--base", base2, "--defaults", defaults, "--strict"]) == 0
+
+
+@pytest.mark.unit
+def test_strict_passes_a_plan_sync_pr_and_reddens_code_plus_plan(tmp_path):
+    """DONE-WHEN (сквозной): --strict пропускает план-синк (план + доки) кодом 0; код + план — 1."""
+    # ПЛАН-СИНК: план + ROADMAP + newsfragment -> зелёный (это и был ложно-красный случай #425)
+    sync = tmp_path / "sync"; git, base = _git_repo_with_base(sync)
+    (sync / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    (sync / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+    (sync / "newsfragments").mkdir()
+    (sync / "newsfragments" / "x.chore.md").write_text("синк плана\n", encoding="utf-8")
+    git("add", "-A"); git("commit", "-qm", "chore(plan): sync")
+    assert ps.main(["x", str(sync), "--base", base, "--strict"]) == 0
+
+    # КОД + ПЛАН: настоящий исходник рядом -> красный (код 1)
+    mix = tmp_path / "mix"; git2, base2 = _git_repo_with_base(mix)
+    (mix / "code.py").write_text("x=2\n", encoding="utf-8")
+    (mix / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    git2("add", "-A"); git2("commit", "-qm", "feature + plan")
+    assert ps.main(["x", str(mix), "--base", base2, "--strict"]) == 1
 
 
 @pytest.mark.unit

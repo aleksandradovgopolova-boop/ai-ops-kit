@@ -1,0 +1,48 @@
+{
+  "$id": "radius",
+  "constitution_section": 24,
+  "unit": "px",
+  "note": "Шкала радиусов. UI_CONSTITUTION.md 24.",
+  "tokens": [
+    {
+      "id": "radius.none",
+      "value": 0,
+      "use": "таблицы"
+    },
+    {
+      "id": "radius.xs",
+      "value": 2,
+      "use": "бейджи"
+    },
+    {
+      "id": "radius.sm",
+      "value": 4,
+      "use": "инпуты"
+    },
+    {
+      "id": "radius.md",
+      "value": 8,
+      "use": "по умолчанию"
+    },
+    {
+      "id": "radius.lg",
+      "value": 12,
+      "use": "крупные карточки"
+    },
+    {
+      "id": "radius.xl",
+      "value": 16,
+      "use": "модалки"
+    },
+    {
+      "id": "radius.2xl",
+      "value": 24,
+      "use": "герой-блоки"
+    },
+    {
+      "id": "radius.full",
+      "value": 9999,
+      "use": "аватары, pill"
+    }
+  ]
+}

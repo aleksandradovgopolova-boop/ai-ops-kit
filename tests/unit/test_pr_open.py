@@ -53,21 +53,27 @@ class TestPrPayload:
 class TestNoToken:
     def test_unavailable_without_token(self, git_repo, stash_gh):
         saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        real_token = pr_open._cp._github_token
+        pr_open._cp._github_token = lambda: None   # #402: и gh-fallback пуст -> токена нет нигде
         try:
             r = open_draft_pr(git_repo, "ai-ops/y", "T", "B")
             assert r["status"] == "unavailable"
             assert "GITHUB_TOKEN" in r["note"]
         finally:
+            pr_open._cp._github_token = real_token
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
 
     def test_unavailable_carries_payload(self, git_repo, stash_gh):
         saved = {k: os.environ.pop(k, None) for k in ("GITHUB_TOKEN", "GH_TOKEN")}
+        real_token = pr_open._cp._github_token
+        pr_open._cp._github_token = lambda: None   # #402: и gh-fallback пуст -> токена нет нигде
         try:
             r = open_draft_pr(git_repo, "ai-ops/y", "T", "B")
             assert r.get("payload", {}).get("draft") is True
         finally:
+            pr_open._cp._github_token = real_token
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
@@ -211,3 +217,71 @@ class TestReconcileDelivery:
         finally:
             pr_open._gh_request = real_gh
             pr_open._cp._github_token = real_token
+
+
+@pytest.mark.unit
+class TestP0AuthoritativePushedSha:
+    """#399: после УСПЕШНОГО push head_sha берётся из локально запушенного коммита (git-факт), а не
+    из ответа GitHub API про head PR — тот отстаёт на секунды и давал ложный sha_verified=false на
+    реально успешной доставке. Мокаем git (push ok + rev-parse=LOCAL) и API (отставший STALE)."""
+
+    LOCAL = "a6d2176f00000000000000000000000000000abc"
+    STALE = "0000000000000000000000000000000000stale0"
+
+    def _mock(self, existing_pr):
+        def fake_git(root, *args):
+            if args[:1] == ("remote",):
+                return (0, "https://github.com/o/r.git", "")
+            if args and args[0] == "push":
+                return (0, "", "")               # push успешен
+            if args and args[0] == "rev-parse":
+                return (0, self.LOCAL + "\n", "")  # локальный запушенный sha — авторитет
+            return (0, "", "")
+
+        def fake_gh(url, token, data=None, method="GET"):
+            if "pulls?head=" in url:
+                return (list(existing_pr), None)
+            if method == "POST":
+                return ({"html_url": "x", "number": 9, "draft": True,
+                         "head": {"sha": self.STALE}}, None)   # POST-ответ тоже отстаёт
+            return ({"default_branch": "main"}, None)
+        return fake_git, fake_gh
+
+    def test_updated_path_uses_pushed_sha_not_stale_api(self, stash_gh):
+        real_gh, real_git, real_tok = pr_open._gh_request, pr_open._git, pr_open._cp._github_token
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+            existing = [{"html_url": "u", "number": 3, "draft": True,
+                         "head": {"sha": self.STALE}, "base": {"ref": "main"}}]
+            pr_open._git, pr_open._gh_request = self._mock(existing)
+            r = open_draft_pr("/no/such/root", "ai-ops/z", "T", "B", base="main", push=True)
+            assert r["status"] == "updated"
+            assert r["head_sha"] == self.LOCAL     # git-факт
+            assert r["head_sha"] != self.STALE     # НЕ отставший ответ API (регрессия P0)
+        finally:
+            pr_open._gh_request, pr_open._git, pr_open._cp._github_token = real_gh, real_git, real_tok
+
+    def test_opened_path_uses_pushed_sha(self, stash_gh):
+        real_gh, real_git, real_tok = pr_open._gh_request, pr_open._git, pr_open._cp._github_token
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+            pr_open._git, pr_open._gh_request = self._mock([])   # PR ещё нет -> POST -> opened
+            r = open_draft_pr("/no/such/root", "ai-ops/z", "T", "B", base="main", push=True)
+            assert r["status"] == "opened"
+            assert r["head_sha"] == self.LOCAL     # и на пути opened — git-факт, не отставший POST-ответ
+        finally:
+            pr_open._gh_request, pr_open._git, pr_open._cp._github_token = real_gh, real_git, real_tok
+
+    def test_no_push_falls_back_to_api_sha(self, stash_gh):
+        """push=False -> локального факта нет -> честный fallback на sha из API (ветвь `pushed_sha or`)."""
+        real_gh, real_git, real_tok = pr_open._gh_request, pr_open._git, pr_open._cp._github_token
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+            existing = [{"html_url": "u", "number": 3, "draft": True,
+                         "head": {"sha": self.STALE}, "base": {"ref": "main"}}]
+            pr_open._git, pr_open._gh_request = self._mock(existing)
+            r = open_draft_pr("/no/such/root", "ai-ops/z", "T", "B", base="main", push=False)
+            assert r["status"] == "updated"
+            assert r["head_sha"] == self.STALE     # без push авторитета нет — берём, что даёт API
+        finally:
+            pr_open._gh_request, pr_open._git, pr_open._cp._github_token = real_gh, real_git, real_tok

@@ -1,0 +1,37 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1165
+request_id: RR-017
+statement: >
+  Delivery-транзакция и durable lifecycle у ai-sdlc есть по коду, но автономный оркестратор
+  помечен экспериментальным. `cli-orchestrator tick` обходит граф зависимостей, прогоняет фильтры
+  допуска, диспатчит задачи в изолированные git-worktree, гоняет конвейер Step 0-13, «карантинит»
+  провалы и возобновляется с checkpoint-коммитов при прерывании; PR «открываются сами». Полный
+  автономный режим включается флагом AI_SDLC_AUTONOMOUS_ORCHESTRATOR=experimental — то есть
+  механизм реализован (execute.ts 64 КБ, состояние в orchestrator/src/state, execute.head-restore
+  и execute.push-rebase тесты), но по собственной пометке автора ещё не в общем доступе. Значение
+  для кита: delivery-транзакция и возобновляемость воспроизведены, зрелость автономного контура —
+  экспериментальная, что снижает силу вывода «реплицировано в проде», не отменяя «реплицировано
+  кодом».
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc README.md (пиллар 2, Autonomous Pipeline Orchestrator) + orchestrator/src/execute.ts"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/blob/main/README.md"
+  type: official_documentation
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "README пиллар 2 (RFC-0015) + листинг execute*.ts / state/ в orchestrator/src; снято 2026-09-02"
+  quote: "pull requests open themselves"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: false
+reliability:
+  level: high
+  rationale: >
+    Delivery-механизм подтверждён README-цитатой и наличием кода/тестов (execute.head-restore,
+    execute.push-rebase, state/). Пометка experimental — прямое самоописание автора; квалификатор
+    зрелости взят из README, не домыслен. Живой прогон оркестратора не наблюдался.
+status: active
+superseded_by: null

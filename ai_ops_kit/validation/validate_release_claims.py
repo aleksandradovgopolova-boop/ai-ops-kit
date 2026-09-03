@@ -212,6 +212,17 @@ def authoritative_version_errors(data, pkg=PKG):
     return e
 
 
+def _minor_of(version) -> str:
+    """MAJOR.MINOR из версии X.Y.Z. Полевые доказательства привязаны к МИНОРУ: патч X.Y.Z наследует
+    обкатку любого патча того же минора (патч не меняет полевого поведения материально), иначе путь к
+    stable — беговая дорожка (каждый патч обнулял бы счётчик обкаток). Непарсимая версия возвращается
+    как есть — тогда сверка деградирует до точного совпадения, а не молча совпадает со всем."""
+    parts = str(version or "").strip().split(".")
+    if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+        return f"{parts[0]}.{parts[1]}"
+    return str(version or "").strip()
+
+
 def channel_errors(data):
     """Канал ЗАРАБОТАН, а не объявлен. -> список ошибок.
 
@@ -250,12 +261,14 @@ def channel_errors(data):
                 if not str(r.get(field) or "").strip():
                     e.append(f"field_evidence: запись без обязательного поля '{field}': {r} — "
                              f"доказательство, которое нельзя проверить, доказательством не считается")
+        target_minor = _minor_of(version)
         for_version = {str(r.get("repo")).strip() for r in rows
-                       if str(r.get("version") or "").strip() == version
+                       if _minor_of(r.get("version")) == target_minor
                        and str(r.get("outcome") or "").strip() == "ok"}
         if len(for_version) < need:
             e.append(f"channel: {chan} требует полевых доказательств минимум на {need} разных "
-                     f"репозиториях для версии {version}, а есть {len(for_version)} "
+                     f"репозиториях для минора {target_minor} (версия {version}, патчи наследуют "
+                     f"обкатку минора), а есть {len(for_version)} "
                      f"({', '.join(sorted(for_version)) or 'ни одного'}). Канал не заработан: "
                      f"поставьте `qualification`, пока обкатки нет — либо запишите доказательства.")
     if "product_layer_ready" in requires:

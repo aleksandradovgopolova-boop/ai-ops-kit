@@ -27,5 +27,5 @@ freshness:
 reliability:
   level: high
   rationale: "EV-670 верифицирован через web_fetch: code analysis подтверждает gates, receipts, SHA-binding, writer≠judge. Вывод основан на фактах, не на предположениях."
-status: active
-superseded_by: null
+status: superseded
+superseded_by: EV-1170

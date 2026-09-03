@@ -1,0 +1,88 @@
+{
+  "$id": "layout",
+  "constitution_section": 22,
+  "note": "Брейкпоинты, контейнеры, z-index. UI_CONSTITUTION.md 22, 31.",
+  "breakpoints": {
+    "unit": "px",
+    "tokens": [
+      {
+        "id": "breakpoint.sm",
+        "value": 640,
+        "use": "крупный телефон"
+      },
+      {
+        "id": "breakpoint.md",
+        "value": 768,
+        "use": "планшет"
+      },
+      {
+        "id": "breakpoint.lg",
+        "value": 1024,
+        "use": "ноутбук"
+      },
+      {
+        "id": "breakpoint.xl",
+        "value": 1280,
+        "use": "десктоп"
+      },
+      {
+        "id": "breakpoint.2xl",
+        "value": 1536,
+        "use": "широкий десктоп"
+      }
+    ]
+  },
+  "container": {
+    "max_content_width_px": 1280,
+    "text_measure_ch": 72,
+    "columns": {
+      "mobile": 4,
+      "tablet": 8,
+      "desktop": 12
+    }
+  },
+  "z_index": {
+    "tokens": [
+      {
+        "id": "z.base",
+        "value": 0,
+        "use": ""
+      },
+      {
+        "id": "z.dropdown",
+        "value": 1000,
+        "use": ""
+      },
+      {
+        "id": "z.sticky",
+        "value": 1100,
+        "use": ""
+      },
+      {
+        "id": "z.overlay",
+        "value": 1300,
+        "use": ""
+      },
+      {
+        "id": "z.modal",
+        "value": 1400,
+        "use": ""
+      },
+      {
+        "id": "z.popover",
+        "value": 1500,
+        "use": ""
+      },
+      {
+        "id": "z.toast",
+        "value": 1700,
+        "use": ""
+      },
+      {
+        "id": "z.tooltip",
+        "value": 1800,
+        "use": ""
+      }
+    ]
+  }
+}

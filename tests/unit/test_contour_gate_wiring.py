@@ -83,7 +83,9 @@ def test_pipeline_report_carries_the_findings():
     src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
     assert '"contour_consistency": contour_consistency' in src, \
         "полный отчёт гейта не попадает в отчёт прогона — до человека ему не дойти"
-    printer = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run.py").read_text(encoding="utf-8")
+    # Печать вывода прогона вынесена из god-модуля ai_ops_run в ai_ops_run_print (v3.x):
+    # разводку ищем там, где теперь живёт человекочитаемый вывод.
+    printer = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run_print.py").read_text(encoding="utf-8")
     tree = ast.parse(printer)
     called = {n.func.id for n in ast.walk(tree)
               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
