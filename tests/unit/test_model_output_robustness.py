@@ -17,8 +17,8 @@ import json
 
 import pytest
 
-import tool_broker
-import tool_loop
+from ai_ops_kit.engine import tool_broker
+from ai_ops_kit.engine import tool_loop
 
 
 # ---------------------------------------------------------------- positive ---

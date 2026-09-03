@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from pipeline_helpers import (
+from ai_ops_kit.engine.pipeline_helpers import (
     NO_SELF_REVIEW,
     _intake_evidence,
     _parse_yaml_block,

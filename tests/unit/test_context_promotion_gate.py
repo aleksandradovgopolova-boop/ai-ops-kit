@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from context_promotion_gate import (
+from ai_ops_kit.context.context_promotion_gate import (
     Path,
     check_promotion_readiness,
     sys,
@@ -14,7 +14,7 @@ from context_promotion_gate import (
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import context_engine as ce  # noqa: E402
+from ai_ops_kit.context import context_engine as ce # noqa: E402
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 
 def _git_repo(root: Path):
@@ -106,7 +106,7 @@ class TestQualityEscalationInFixLoop:
         assert att[-1]["model"] == "kimi-k2" and att[-1]["trigger"] == "quality_escalation"
 
     def test_fix_attempt_journalled(self, escalated_run):
-        import lifecycle_store as _ls
+        from ai_ops_kit.shared import lifecycle_store as _ls
         root, _ = escalated_run
         jr = _ls.journal_read(root / "features" / "fixesc" / "lifecycle-journal.jsonl")
         assert any(e.get("kind") == "fix_attempt" for e in jr["events"])

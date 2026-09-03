@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from context_hybrid import (
+from ai_ops_kit.context.context_hybrid import (
     Path,
     build_hybrid,
     build_hybrid_from_child,

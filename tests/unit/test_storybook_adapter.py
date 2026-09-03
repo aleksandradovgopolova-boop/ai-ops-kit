@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from storybook_adapter import (
+from ai_ops_kit.ui.storybook_adapter import (
     Path,
     _matches_changed,
     _write,

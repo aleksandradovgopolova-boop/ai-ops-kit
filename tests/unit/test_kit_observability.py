@@ -12,8 +12,8 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import kit_observability  # noqa: E402
-import usage_ledger  # noqa: E402
+from ai_ops_kit.devtools import kit_observability # noqa: E402
+from ai_ops_kit.shared import usage_ledger # noqa: E402
 
 pytestmark = [pytest.mark.unit]
 

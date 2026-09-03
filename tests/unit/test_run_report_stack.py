@@ -19,7 +19,7 @@ import subprocess
 
 import pytest
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 
 def _py_repo(root):
@@ -95,7 +95,7 @@ class TestUndeterminedStackIsAdmitted:
 
     def test_detector_failure_does_not_break_the_run(self, tmp_path, monkeypatch):
         """Сбой детектора не роняет отчёт: прогон уже сделан, потерять его из-за печати нельзя."""
-        import project_detector
+        from ai_ops_kit.shared import project_detector
 
         def _boom(_root):
             raise RuntimeError("детектор сломался")
@@ -105,7 +105,7 @@ class TestUndeterminedStackIsAdmitted:
 
     def test_detector_failure_keeps_profile_already_in_report(self, tmp_path, monkeypatch):
         """Если движок уже положил профиль в отчёт, сбой повторной детекции его не стирает."""
-        import project_detector
+        from ai_ops_kit.shared import project_detector
 
         monkeypatch.setattr(project_detector, "detect",
                             lambda _root: (_ for _ in ()).throw(RuntimeError("боль")))

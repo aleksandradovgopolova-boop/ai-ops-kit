@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from session_boundary import (
+from ai_ops_kit.engops.session_boundary import (
     CLASSES,
     check,
     classify,

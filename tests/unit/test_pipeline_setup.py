@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import execution_pipeline
+from ai_ops_kit.engine import execution_pipeline
 
 from _pipeline_helpers import _QUICK_SIG, _head_branch, _init_git, _init_python_repo
 
@@ -300,7 +300,7 @@ class TestInstallDependencies:
 
     def test_install_with_valid_command(self, child_root):
         _init_git(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", child_root=str(child_root))
         profile = {"stacks": [{"language": "python", "install_command": "true"}]}
         results = execution_pipeline._install_dependencies(profile, child_root, pol)
@@ -309,7 +309,7 @@ class TestInstallDependencies:
 
     def test_install_skips_none_command(self, child_root):
         _init_git(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", child_root=str(child_root))
         profile = {"stacks": [{"language": "go", "install_command": None}]}
         results = execution_pipeline._install_dependencies(profile, child_root, pol)
@@ -317,7 +317,7 @@ class TestInstallDependencies:
 
     def test_install_deduplicates_commands(self, child_root):
         _init_git(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", child_root=str(child_root))
         profile = {"stacks": [
             {"language": "node", "install_command": "true"},
@@ -328,7 +328,7 @@ class TestInstallDependencies:
 
     def test_install_empty_stacks(self, child_root):
         _init_git(child_root)
-        import tool_broker
+        from ai_ops_kit.engine import tool_broker
         pol = tool_broker.Policy(level="execution", child_root=str(child_root))
         profile = {"stacks": []}
         results = execution_pipeline._install_dependencies(profile, child_root, pol)

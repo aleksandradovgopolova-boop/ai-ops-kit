@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from engineering_advisor import (
+from ai_ops_kit.engops.engineering_advisor import (
     advise,
     check,
 )

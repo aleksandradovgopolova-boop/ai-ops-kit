@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from gate_policy import (
+from ai_ops_kit.gates.gate_policy import (
     SAFETY_UI_GATES,
     UI_GATES,
     _effective,

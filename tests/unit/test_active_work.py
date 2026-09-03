@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from active_work import (
+from ai_ops_kit.lifecycle.active_work import (
     ActiveWorkCorrupt,
     Path,
     classify,

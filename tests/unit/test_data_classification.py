@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from data_classification import (
+from ai_ops_kit.security.data_classification import (
     DEMO,
     _load,
     _policy_class,

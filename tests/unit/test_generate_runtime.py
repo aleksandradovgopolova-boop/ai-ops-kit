@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generate_runtime import (
+from ai_ops_kit.shared.generate_runtime import (
     Path,
     RUNTIMES,
     check_drift,

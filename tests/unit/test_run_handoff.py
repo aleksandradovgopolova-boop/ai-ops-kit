@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from run_handoff import (
+from ai_ops_kit.engine.run_handoff import (
     Path,
     _git,
     build_handoff,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-import verification_tiers
+from ai_ops_kit.gates import verification_tiers
 
 
 @pytest.mark.unit

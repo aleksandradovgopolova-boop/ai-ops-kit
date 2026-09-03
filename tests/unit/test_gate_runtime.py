@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from gate_runtime import (
+from ai_ops_kit.gates.gate_runtime import (
     can_deliver,
     decide,
     gate_result_v2,

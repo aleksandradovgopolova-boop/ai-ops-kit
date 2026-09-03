@@ -19,7 +19,7 @@ if str(PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(PKG_ROOT))
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_cli
+from ai_ops_kit.cli import ai_ops_cli
 from ai_ops_kit.engops import process_spend
 
 WID = "wi-export-csv"

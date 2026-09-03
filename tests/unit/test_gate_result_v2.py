@@ -11,7 +11,7 @@ import pytest
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
 
-from gate_result_v2 import (
+from ai_ops_kit.gates.gate_result_v2 import (
     STATUS_V2,
     calibrated_view,
     check,
@@ -129,7 +129,7 @@ class TestToV1:
 class TestCalibratedView:
     def test_advisory_abstain(self):
         sys.path.insert(0, str(PKG_ROOT / "tools"))
-        import gate_policy
+        from ai_ops_kit.gates import gate_policy
         dec = {d["gate"]: d for d in gate_policy.candidate_policy(
             {"ui_changed": True, "ui_impact": "internal"})}["ux_review"]
         view = calibrated_view("ux_review", True, dec, "warn", "advisory",
@@ -138,7 +138,7 @@ class TestCalibratedView:
 
     def test_block_fail(self):
         sys.path.insert(0, str(PKG_ROOT / "tools"))
-        import gate_policy
+        from ai_ops_kit.gates import gate_policy
         dec = {d["gate"]: d for d in gate_policy.candidate_policy(
             {"ui_changed": True, "ui_impact": "user_facing"})}["ux_review"]
         view = calibrated_view("ux_review", True, dec, "warn", "block",

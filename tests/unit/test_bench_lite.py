@@ -14,7 +14,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import bench_lite as bl
+from ai_ops_kit.devtools import bench_lite as bl
 
 
 @pytest.mark.unit

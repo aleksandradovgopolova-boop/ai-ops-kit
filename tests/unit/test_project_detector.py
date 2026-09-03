@@ -9,7 +9,7 @@ import tempfile
 
 import pytest
 
-from project_detector import (
+from ai_ops_kit.shared.project_detector import (
     PROFILE_REL,
     Path,
     detect,

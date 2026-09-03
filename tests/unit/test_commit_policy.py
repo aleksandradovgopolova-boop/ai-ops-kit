@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from commit_policy import (
+from ai_ops_kit.engops.commit_policy import (
     Path,
     ZONE_KIT_CONFIG,
     ZONE_KIT_MANAGED,

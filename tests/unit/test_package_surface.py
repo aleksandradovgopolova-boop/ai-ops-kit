@@ -176,7 +176,7 @@ def test_exactly_one_side_is_an_alias():
 def test_state_is_really_shared():
     """Правка через пакетный путь видна через плоский — доказательство единственности объекта."""
     from ai_ops_kit.providers import orchestrator_usage as via_pkg
-    import orchestrator_usage as flat
+    from ai_ops_kit.providers import orchestrator_usage as flat
 
     marker = {"model": "package-surface-probe", "input_tokens": 1}
     via_pkg._CALL_STATS.append(marker)

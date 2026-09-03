@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from repo_graph import (
+from ai_ops_kit.context.repo_graph import (
     Path,
     affected_tests,
     build_graph,

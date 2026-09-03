@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from context_cost import (
+from ai_ops_kit.context.context_cost import (
     Path,
     estimate,
     estimate_tokens,

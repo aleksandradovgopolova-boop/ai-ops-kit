@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from delegation_advisor import (
+from ai_ops_kit.engops.delegation_advisor import (
     advise,
     check,
 )

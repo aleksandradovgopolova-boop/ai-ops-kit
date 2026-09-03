@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-import bench_performance
+from ai_ops_kit.devtools import bench_performance
 
 
 @pytest.mark.unit

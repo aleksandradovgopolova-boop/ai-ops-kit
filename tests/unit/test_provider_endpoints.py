@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from provider_endpoints import (
+from ai_ops_kit.providers.provider_endpoints import (
     endpoint_for,
     key_available,
 )

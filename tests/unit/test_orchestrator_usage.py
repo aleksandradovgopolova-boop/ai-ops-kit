@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import pytest
 
-import orchestrator_usage
+from ai_ops_kit.providers import orchestrator_usage
 
-from orchestrator_usage import (
+from ai_ops_kit.providers.orchestrator_usage import (
     _record_call,
     clear_call_context,
     drain_call_stats,

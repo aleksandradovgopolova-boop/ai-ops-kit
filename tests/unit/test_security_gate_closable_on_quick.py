@@ -123,7 +123,7 @@ def test_quick_run_is_not_closed_by_a_substring_guess(tmp_path):
     root = tmp_path / "child"
     root.mkdir()
     _init_git(root)
-    import tool_broker
+    from ai_ops_kit.engine import tool_broker
     ops = iter([{"op": "write", "path": "src/reader.js",
                  "content": "const logger = console;\nconst route = '/x';\n"}, {"done": True}])
     report = execution_pipeline.run_pipeline(
@@ -149,7 +149,7 @@ def test_quick_run_with_a_real_reason_says_how_to_close_it(tmp_path):
     root = tmp_path / "child"
     root.mkdir()
     _init_git(root)
-    import tool_broker
+    from ai_ops_kit.engine import tool_broker
     ops = iter([{"op": "write", "path": ".github/workflows/deploy.yml",
                  "content": "on: push\njobs: {}\n"}, {"done": True}])
     report = execution_pipeline.run_pipeline(

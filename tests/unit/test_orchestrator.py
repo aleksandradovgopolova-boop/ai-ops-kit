@@ -16,8 +16,8 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import orchestrator
-import orchestrator_usage
+from ai_ops_kit.providers import orchestrator
+from ai_ops_kit.providers import orchestrator_usage
 
 # Полное evidence блокирующих гейтов QUICK — доводит workflow до done. В реальном прогоне его
 # дают reviewer-стадии/валидаторы; здесь подаём явно, как в исходном селфтесте, чтобы дойти до done.

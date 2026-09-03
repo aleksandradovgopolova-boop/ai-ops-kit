@@ -151,7 +151,7 @@ def test_active_work_registry_detects_overlapping_areas(tmp_path, capsys):
     12.08.2026 две сессии взяли из плана один и тот же срез `providers`, потому что реестр не вёлся
     вовсе. Механизм при этом был готов — здесь замер того, что он действительно отвечает.
     """
-    import active_work
+    from ai_ops_kit.lifecycle import active_work
 
     reg = tmp_path / "active-work.yaml"
     active_work.register(reg, "ratchet-providers", "engops/a",
@@ -193,7 +193,7 @@ def test_empty_index_is_not_a_violation(tmp_path):
 @pytest.mark.unit
 def test_shared_registry_is_the_same_from_every_worktree(tmp_path):
     """Один путь из основного дерева и из worktree — иначе сессии ведут РАЗНЫЕ реестры."""
-    import active_work
+    from ai_ops_kit.lifecycle import active_work
 
     main = tmp_path / "repo"
     main.mkdir()
@@ -219,7 +219,7 @@ def test_shared_registry_is_the_same_from_every_worktree(tmp_path):
 @pytest.mark.unit
 def test_shared_registry_refuses_outside_git(tmp_path):
     """Не git — честный отказ, а не путь в никуда: реестр молча «работать» не вправе."""
-    import active_work
+    from ai_ops_kit.lifecycle import active_work
 
     with pytest.raises(active_work.ActiveWorkCorrupt):
         active_work.shared_registry_path(tmp_path)
@@ -287,7 +287,7 @@ def _hook(tmp_path, files, python=None, extra_env=None):
 @pytest.fixture
 def foreign_claim():
     """Заявка ДРУГОЙ сессии в общем реестре этого репозитория — и уборка за собой."""
-    import active_work
+    from ai_ops_kit.lifecycle import active_work
 
     reg = active_work.shared_registry_path(KIT)
     existed = reg.read_text(encoding="utf-8") if reg.exists() else None

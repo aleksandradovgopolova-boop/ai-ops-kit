@@ -167,7 +167,7 @@ class TestProgressiveVerification:
         """docs-only изменения возвращают skip tier, не запускают product tests."""
         import sys
         sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
-        import verification_tiers
+        from ai_ops_kit.gates import verification_tiers
 
         tier = verification_tiers.decide_tier(["README.md", "docs/guide.md"])
         assert tier == "skip", "docs-only должен возвращать skip tier (WP4)"
@@ -176,7 +176,7 @@ class TestProgressiveVerification:
         """draft lifecycle_intent возвращает affected tier, не full."""
         import sys
         sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
-        import verification_tiers
+        from ai_ops_kit.gates import verification_tiers
 
         tier = verification_tiers.decide_tier(["tools/module.py"], lifecycle_intent="draft")
         assert tier == "affected", "draft intent должен возвращать affected tier (WP4)"
@@ -185,7 +185,7 @@ class TestProgressiveVerification:
         """merge_candidate lifecycle_intent возвращает full tier."""
         import sys
         sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
-        import verification_tiers
+        from ai_ops_kit.gates import verification_tiers
 
         tier = verification_tiers.decide_tier(["tools/module.py"], lifecycle_intent="merge_candidate")
         assert tier == "full", "merge_candidate intent должен возвращать full tier (WP4)"
@@ -194,7 +194,7 @@ class TestProgressiveVerification:
         """Если граф не нашёл затронутых тестов, возвращается impact_unknown, не 'не влияет'."""
         import sys
         sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
-        import verification_tiers
+        from ai_ops_kit.gates import verification_tiers
 
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -11,7 +11,7 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "tools"))
 
-import ai_ops_run
+from ai_ops_kit.engine import ai_ops_run
 
 
 @pytest.mark.critical_path
@@ -274,7 +274,7 @@ class TestProviderFailureTyped:
 
     def test_active_work_blocked_with_reason(self, boom_run):
         """Падение провайдера -> active-work снята как blocked, ConnectionResetError в status_reason."""
-        import active_work
+        from ai_ops_kit.lifecycle import active_work
         root, _ = boom_run
         awd = active_work.load(root / ".ai" / "runtime" / "active-work.yaml")
         entry = next((w for w in awd.get("active", []) if w.get("id") == "boomwi"), None)

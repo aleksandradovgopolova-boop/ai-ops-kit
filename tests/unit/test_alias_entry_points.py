@@ -94,6 +94,6 @@ def test_flat_name_and_package_name_are_one_object():
     """side-effect: правка запуска не сломала инвариант единственного объекта модуля."""
     sys.path.insert(0, str(TOOLS))
     import ai_ops_kit.engine.run_plan as pkg_mod      # noqa: E402
-    import run_plan as flat_mod                       # noqa: E402
+    from ai_ops_kit.engine import run_plan as flat_mod # noqa: E402
 
     assert flat_mod is pkg_mod, "плоское имя и пакетное дали РАЗНЫЕ объекты — состояние разъедется"

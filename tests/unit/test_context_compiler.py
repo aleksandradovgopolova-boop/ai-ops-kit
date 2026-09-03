@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from context_compiler import (
+from ai_ops_kit.context.context_compiler import (
     CONTEXT_BUDGET_DEFAULT,
     MODEL_CONTEXT,
     Path,

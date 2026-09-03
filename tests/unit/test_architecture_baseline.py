@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from architecture_baseline import (
+from ai_ops_kit.engops.architecture_baseline import (
     AXES,
     Path,
     analyze,

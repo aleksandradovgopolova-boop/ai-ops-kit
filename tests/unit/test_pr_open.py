@@ -10,9 +10,9 @@ import tempfile
 
 import pytest
 
-import pr_open
+from ai_ops_kit.delivery import pr_open
 
-from pr_open import (
+from ai_ops_kit.delivery.pr_open import (
     _pr_payload,
     open_draft_pr,
     reconcile_delivery,

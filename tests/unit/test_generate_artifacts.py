@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from generate_artifacts import (
+from ai_ops_kit.shared.generate_artifacts import (
     Path,
     cmd_add,
     cmd_check,

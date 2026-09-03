@@ -8,7 +8,7 @@ import tempfile
 
 import pytest
 
-from usage_ledger import (
+from ai_ops_kit.shared.usage_ledger import (
     aggregate,
     append,
     check,
