@@ -21,12 +21,12 @@ threshold: 700
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 962
   ai_ops_kit/cli/ai_ops_cli_intents.py: 944
-  ai_ops_kit/engine/ai_ops_run.py: 1073
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/planning/delivery_plan.py: 1050
   ai_ops_kit/lifecycle/active_work.py: 1040
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 965
+  ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
   ai_ops_kit/providers/orchestrator_providers.py: 831
   ai_ops_kit/intelligence/nightly_review.py: 741
@@ -75,3 +75,16 @@ raises:
       ai_ops_cli.py. Потолок cli опущен под факт 1251 -> 962 (ратчет вниз). Спутник вырос 649 -> 944
       и перешёл порог 700 — поэтому ОСОЗНАННО вносится в ceilings с фактическим размером (иначе тест
       module-size покраснел бы «новый монолит сверх порога без записи»).
+  - at: '2026-09-03'
+    what: drop_below_threshold_and_add_module
+    from: 'ai_ops_run.py = 1073; ai_ops_run_exec.py — не существовал'
+    to: 'ai_ops_run.py = 411 (НИЖЕ порога 700, снят с ceilings); ai_ops_run_exec.py = 703'
+    work: extract-ai-ops-run-exec — вынос проб-свободных run-хелперов в спутник движка
+    why: >-
+      Проб-свободные хелперы прогона (fix-loop с quality-эскалацией, argparse run/resume, резолв
+      провайдера/базы, сбор proposers, preflight, exit_code) вынесены из god-модуля ai_ops_run.py в
+      новый ai_ops_kit/engine/ai_ops_run_exec.py. Поведение не менялось — чистый перенос + ре-экспорт
+      именами ai_ops_run, все 4 мутационные пробы файла (в main/_run_controller_path) остались на
+      месте. ai_ops_run.py усох 1073 -> 411 и ушёл НИЖЕ порога 700 — снят с ceilings (ниже порога не
+      ограничивается). Спутник = 703 строки, выше порога — ОСОЗНАННО вносится в ceilings с фактическим
+      размером (иначе тест module-size покраснел бы «новый монолит сверх порога без записи»).
