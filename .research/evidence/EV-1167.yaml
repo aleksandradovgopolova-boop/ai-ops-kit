@@ -1,0 +1,38 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1167
+request_id: RR-017
+statement: >
+  Каталог research/ у ai-sdlc — это авторские отчёты, а НЕ операционный контур «запрос -> evidence
+  -> пакет решения», как research-модуль кита. В research/ ровно три markdown-файла:
+  ai-sdlc-foundation-research.md, ai-sdlc-framework-prd.md, ai-sdlc-v0.1-PRD-report.md — то есть
+  документы-исследования и PRD, а не versioned-схемы ResearchRequest/Evidence/DecisionPackage,
+  не накапливаемые EV-записи с provenance и freshness, не memory-first проверка и не writer≠judge
+  на выводах. Квалификатор охвата: проверено содержимое каталога research/ в публичном репо на
+  2026-09-02; отдельного пакета/сервиса «research-as-decision-evidence» под другим именем в
+  верхнеуровневых каталогах не обнаружено, но исчерпывающий поиск по всему дереву не проводился,
+  поэтому reliability не выше medium. Значение для кита: третья ось EV-673 («research») у ai-sdlc
+  как ОПЕРАЦИОННЫЙ контракт не закрыта — это остаётся кандидатом в уникальность кита.
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — research/ (contents API)"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/tree/main/research"
+  type: source_repository
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "gh api /contents/research — три .md-файла (foundation-research, framework-prd, v0.1-PRD-report); снято 2026-09-02"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: true
+  expires_at: "2026-12-02"
+reliability:
+  level: medium
+  rationale: >
+    Негативное утверждение («research — отчёты, не контур»): позитивная часть (в каталоге три
+    markdown-документа) снята с contents API первоисточника и надёжна; отрицательная часть («нет
+    операционного контракта research») ограничена охватом — смотрелся каталог research/ и верхний
+    уровень дерева, а не каждый модуль orchestrator/src. Поэтому medium, не high.
+status: active
+superseded_by: null

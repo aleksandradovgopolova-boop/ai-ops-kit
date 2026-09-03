@@ -1,0 +1,37 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1164
+request_id: RR-017
+statement: >
+  У ai-sdlc есть машиночитаемый провенанс изменения, привязанный к коммиту, и он в статусе
+  реализованного. RFC-0042 «Proof-of-Execution Attestation via In-Repo Merkle Transcripts»
+  во фронтматтере помечен status: Approved, lifecycle: Implemented, targetSpecVersion v1alpha1;
+  реализован цепочкой задач AISDLC-383.* + 409 (v6 default-on cutover, 2026-05-23): захват
+  транскриптов в ревьюер-субагентах, вычисление Merkle-корня, DSSE v6 envelope + signer + verifier
+  в workflow verify-attestation, а также валидация head-sha и защита от path-traversal (AISDLC-391).
+  README: аттестация требуется на main. Значение для кита: это реплика инварианта «evidence на
+  точном SHA» — изменение доставляется с криптографически проверяемым свидетельством исполнения,
+  привязанным к голове коммита.
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — spec/rfcs/RFC-0042-proof-of-execution-attestation.md (фронтматтер)"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/blob/main/spec/rfcs/RFC-0042-proof-of-execution-attestation.md"
+  type: official_documentation
+  published_at: "2026-05-28"
+  is_primary: true
+citation:
+  locator: "RFC-0042, YAML-фронтматтер (status/lifecycle/implementedBy) + заголовок; прочитан 2026-09-02"
+  quote: "status: Approved"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: false
+reliability:
+  level: high
+  rationale: >
+    Прочитан фронтматтер RFC первоисточника с явными полями статуса и списком реализующих задач;
+    подтверждается наличием audit-*.ts и provenance.ts в orchestrator/src (EV-1162). Не запускался
+    сам верификатор аттестаций — запись фиксирует объявленный и структурно подтверждённый статус
+    «реализовано», не результат живого прогона верификации.
+status: active
+superseded_by: null

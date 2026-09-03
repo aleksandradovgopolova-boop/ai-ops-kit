@@ -1,0 +1,39 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1168
+request_id: RR-017
+statement: >
+  По нескольким осям ai-sdlc ОПЕРЕЖАЕТ кит. (1) Спек-зрелость: формальный SPEC с Kubernetes-style
+  версионированием (v1alpha1) и 40+ RFC (RFC-0001..RFC-0044) с фронтматтером статуса/lifecycle и
+  списком реализующих задач; каталог conformance/ с runner и tests — исполняемый conformance-набор
+  на спецификацию. (2) Мультиязычная поверхность для adopter'ов: SDK на трёх языках (sdk-go,
+  sdk-python, sdk-typescript), Claude-плагин (ai-sdlc-plugin) и mcp-advisor. (3) Комплаенс как
+  первоклассный слой: compliance-clearance.ts + RFC-0022 выводят посадку на EU AI Act / NIST AI RMF
+  / ISO 42001; cost-governance.ts + RFC-0004 — управление стоимостью; RFC-0006 — governance
+  дизайн-системы. Значение для кита: заявление EV-673 «кит единственный с ПОЛНОЙ реализацией» надо
+  ослабить — по формальной спецификации, conformance, мультиязычным SDK и комплаенсу ai-sdlc
+  представлен шире кита (у кита — Python stdlib+pyyaml, установка копированием, без публичного SDK
+  и без формального conformance-набора на схему).
+evidence_type: documented_fact
+source:
+  title: "ai-sdlc — spec/rfcs (листинг RFC), conformance/, sdk-*/ (contents API)"
+  url: "https://github.com/ai-sdlc-framework/ai-sdlc/tree/main/spec/rfcs"
+  type: source_repository
+  published_at: "2026-08-24"
+  is_primary: true
+citation:
+  locator: "gh api /contents/spec/rfcs (RFC-0001..0044), /contents/conformance (runner, tests), дерево main (sdk-go/python/typescript, mcp-advisor, ai-sdlc-plugin); снято 2026-09-02"
+captured_at: "2026-09-02"
+captured_by: "research-модуль, прогон RR-017"
+freshness:
+  volatile: true
+  expires_at: "2026-12-02"
+reliability:
+  level: high
+  rationale: >
+    Наличие RFC-набора, conformance/, трёх SDK и комплаенс-модулей подтверждено contents API и
+    листингом RFC первоисточника. Сравнение «шире кита» опирается на известный факт о ките
+    (stdlib+pyyaml, установка копированием, единый язык) из AGENTS.md кита. Не оценивалось КАЧЕСТВО
+    conformance-набора и SDK построчно — запись фиксирует наличие и ширину осей, не их глубину.
+status: active
+superseded_by: null
