@@ -26,7 +26,7 @@ from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402
 
 def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_depth_missing,
                         spec_incomplete, spec_bad_status, context_overflow, approvals_cover_ok,
-                        approval_recheck, acceptance_block_reason=None):
+                        approval_recheck, acceptance_block_reason=None, checks=None):
     """Список «что ещё не сделано» — информирование вызывающего. v3.38 (K6): вынесено из run_pipeline."""
     # Импорт локальный: при выносе из run_pipeline (K6) ссылка _sl уехала от своего импорта —
     # NameError всплывал на живом пути spec-first (CI lint, F821), а не при импорте модуля.
@@ -65,6 +65,12 @@ def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_
         not_yet.insert(0, "human-approval: scope одобрения не покрывает изменённые пути ("
                        + ", ".join(u["domain"] for u in approval_recheck.get("uncovered") or [])
                        + ") — переодобри под фактический дифф")
+    # Честная атрибуция: проверки, не выполнившиеся ИЗ-ЗА среды (нет инструмента), называются
+    # средой, а не «гейт не закрыт» (что читается как дефект кода). Только если такие есть.
+    from ai_ops_kit.engine.pipeline_failure import _env_degraded_note
+    _env_note = _env_degraded_note(checks)
+    if _env_note:
+        not_yet.append(_env_note)
     return not_yet
 
 
