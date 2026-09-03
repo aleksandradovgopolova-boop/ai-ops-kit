@@ -29,7 +29,7 @@ ceilings:
   # Объём managed-поставки в байтах.
   volume_bytes: 4420000
   # Содержательные файлы (плоские алиасы совместимости не считаются — у них свой потолок).
-  substantive_files: 542
+  substantive_files: 543
   # Алиасы `tools/*.py`: ограничены отдельно, чтобы переходный слой не раздулся незаметно.
   alias_bytes: 204800
 
@@ -852,3 +852,26 @@ raises:
       Без него ре-экспортный импорт (`from ai_ops_kit.cli.ai_ops_cli_intents import ...`) упал бы
       ImportError'ом на первом же запуске CLI (класс F-033). Растёт только счёт файлов (+1), объём в
       норме; потолок под факт 541 -> 542.
+  - at: '2026-09-03'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 542
+    to_count: 543
+    measured_before: 539
+    measured_after: 540
+    work: extract-ai-ops-run-exec — вынос проб-свободных run-хелперов в спутник движка
+    files:
+      - ai_ops_kit/engine/ai_ops_run_exec.py
+    why_it_works_in_the_child: >-
+      Спутник несёт проб-свободные хелперы прогона (fix-loop с quality-эскалацией writer'а,
+      argparse команды run/resume, резолв провайдера/базы, сбор proposers, preflight и exit_code),
+      вынесенные из god-модуля ai_ops_run.py — поведение не меняется (чистый перенос + ре-экспорт),
+      крупнейший файл движка разрежается (1073 -> ~412 строк). Модуль ИСПОЛНЯЕТСЯ в дочке на КАЖДОМ
+      прогоне `ai-ops run`/`ai-ops resume`: run() зовёт _resolve_run_base/_build_run_proposers/
+      _run_preflight/_execute_with_fix_loop, а main() строит парсер и считает exit_code через эти
+      функции — это основной путь исполнения контроллера. Без файла в поставке ре-экспортный импорт
+      (`from ai_ops_kit.engine.ai_ops_run_exec import ...`) упал бы у дочки ImportError'ом на первом
+      же прогоне (класс F-033, механизм зелёный у кита и отсутствующий у дочки) — тем же способом,
+      что соседи ai_ops_run_print/ai_ops_run_reporting/ai_ops_run_lifecycle. Растёт только счёт
+      файлов (+1), объём в норме; потолок под факт 542 -> 543.
