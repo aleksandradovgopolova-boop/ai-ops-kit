@@ -56,15 +56,11 @@ def test_init_clean_repo_writes_real_files(child):
 
     # --- side-effect proof: файлы на диске, содержимое осмысленное ---
     managed = child / ".ai" / "managed"
-    engine = managed / "tools" / "ai_ops_run.py"
-    assert engine.is_file(), "движок .ai/managed/tools/ai_ops_run.py не записан на диск"
+    # v4.0: плоский слой `tools/` снят — движок доставляется пакетно, точка входа
+    # `ai_ops_kit/engine/ai_ops_run.py`, запуск `python3 -m ai_ops_kit.engine.ai_ops_run`.
+    engine = managed / "ai_ops_kit" / "engine" / "ai_ops_run.py"
+    assert engine.is_file(), "движок .ai/managed/ai_ops_kit/engine/ai_ops_run.py не записан на диск"
     engine_src = engine.read_text(encoding="utf-8")
-    # v3.30: код движка переехал в ai_ops_kit/engine/, плоский путь остался входной точкой
-    # (её знают документация и doctor). Проверяем обе стороны: алиас записан И код доехал.
-    if "sys.modules[__name__]" in engine_src:
-        real = managed / "ai_ops_kit" / "engine" / "ai_ops_run.py"
-        assert real.is_file(), "алиас записан, а кода движка в поставке нет"
-        engine_src = real.read_text(encoding="utf-8")
     assert "def main(" in engine_src and len(engine_src) > 1000, \
         "движок записан, но содержимое не похоже на исполняемый модуль"
 
@@ -187,14 +183,10 @@ def test_delivery_footprint_is_smaller_than_legacy(installed, ai_ops):
     managed = installed / ".ai" / "managed"
     files = [p for p in managed.rglob("*") if p.is_file()]
     total = sum(p.stat().st_size for p in files)
-    # v3.30: код переехал в пакеты ai_ops_kit/*, а плоские tools/*.py остались тонкими алиасами
-    # обратной совместимости — их в поставке ~87 файлов на 39 КиБ. Считать их в потолок значило бы
-    # либо ослабить потолок, либо запретить переходный слой. Поэтому потолок применяется к
-    # СОДЕРЖАТЕЛЬНЫМ файлам, а алиасы ограничены отдельно по объёму: раздуться незаметно не смогут.
-    aliases = [p for p in files if p.suffix == ".py"
-               and "sys.modules[__name__]" in p.read_text(encoding="utf-8", errors="ignore")]
-    alias_bytes = sum(p.stat().st_size for p in aliases)
-    substantive = len(files) - len(aliases)
+    # v4.0: плоский слой `tools/*.py` СНЯТ — тонких алиасов совместимости в поставке больше нет,
+    # отдельного `alias_bytes`-потолка тоже. Все поставляемые файлы содержательные, поэтому потолок
+    # содержательных файлов применяется ко ВСЕМ файлам напрямую (раньше из них вычитались алиасы).
+    substantive = len(files)
     # v3.35: потолок ПОДНЯТ 450 -> 470 осознанно. Product Operating Model едет в child по существу:
     # `ai-ops next`/`ai-ops model` работают В продуктовом репозитории, значит туда обязаны попасть
     # пакет `planning` (6 файлов), presenter, валидатор модели, две реестровые декларации, три
@@ -261,8 +253,6 @@ def test_delivery_footprint_is_smaller_than_legacy(installed, ai_ops):
     # первый же взгляд на состав дал находку — manifest на 252 КБ, 6.6% поставки в одном файле.
     assert substantive < _ceil["substantive_files"], ai_ops.footprint_breach_message(
         "содержательных файлов в managed", substantive, _ceil["substantive_files"], unit="файл(ов)")
-    assert alias_bytes < _ceil["alias_bytes"], ai_ops.footprint_breach_message(
-        "алиасы совместимости", alias_bytes, _ceil["alias_bytes"])
     # 2026-08-13: потолок объёма ПОДНЯТ 3.2 -> 3.3 МБ осознанно, и это замер, а не округление.
     # Запаса не оставалось вовсе: на базе e71a0c2 поставка занимала 3 354 556 Б при потолке
     # 3 355 443 Б — 887 БАЙТ, то есть следующий доставляемый файл любого размера уронил бы тест

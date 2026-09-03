@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 360
+behavioral_count: 358
 structural_count: 61
-total_count: 421
-behavioral_share_pct: 85.51
+total_count: 419
+behavioral_share_pct: 85.44
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -215,3 +215,18 @@ raises:
       _load_installer с spec_from_file_location; helper-модули с префиксом `_` не собираются и в
       замер не входят), структурных не прибавилось (61 без изменений), доля выросла 85.23% -> 85.51%.
       Число собранных тестов ДО == ПОСЛЕ (46+66+20 = 132). Baseline пере-записан на фактический замер.
+  - at: '2026-09-03'
+    what: baseline_lowered
+    from_behavioral: 360
+    from_total: 421
+    to_behavioral: 358
+    to_total: 419
+    to_share_pct: 85.44
+    work: major-4.0-remove-flat-tools
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.51% -> 85.44%): мажор 4.0 физически снял плоский слой `tools/`, и
+      вместе с ним удалены ДВА поведенческих теста, у которых пропал предмет — test_alias_entry_points.py
+      (проверял сами шимы-алиасы) и test_flat_tools_deprecation_warning.py (проверял предупреждение в
+      tools/_bootstrap.py о будущем сносе; снос состоялся). Это не деградация теста в структурный, а
+      удаление теста вместе с удалённым кодом: behavioral 360 -> 358, total 421 -> 419, structural 61
+      без изменений. Снижение зафиксировано записью, а не проехало молча.

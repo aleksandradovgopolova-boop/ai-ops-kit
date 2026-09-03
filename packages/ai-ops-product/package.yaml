@@ -19,7 +19,7 @@ includes:
   - rules/research/**
   - rules/documentation/**
   - rules/content/**
-  - tools/generate_artifacts.py
-  - tools/product_health.py
-  - tools/run_report.py
-  - tools/effect_metrics.py
+  - ai_ops_kit/shared/generate_artifacts.py
+  - ai_ops_kit/intelligence/product_health.py
+  - ai_ops_kit/lifecycle/run_report.py
+  - ai_ops_kit/intelligence/effect_metrics.py

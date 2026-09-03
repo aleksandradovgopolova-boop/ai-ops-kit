@@ -800,7 +800,7 @@ def delivery_budget_errors(doc, shipped=None, exists=None):
         return ["реестр бюджета не разобран — проверять нечего"]
     ceilings = doc.get("ceilings") or {}
     raises = doc.get("raises") or []
-    for key in ("volume_bytes", "substantive_files", "alias_bytes"):
+    for key in ("volume_bytes", "substantive_files"):
         if not isinstance(ceilings.get(key), int):
             problems.append(f"ceilings.{key} не объявлен числом — потолка нет")
     vol = [r for r in raises if isinstance(r, dict) and r.get("what") == "volume"]

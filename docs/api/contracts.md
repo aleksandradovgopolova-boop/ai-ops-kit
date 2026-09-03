@@ -1,6 +1,6 @@
 # TypedDict Contracts
 
-`tools/contracts.py` — типизированные контракты для ключевых структур данных.
+`ai_ops_kit/shared/contracts.py` — типизированные контракты для ключевых структур данных.
 
 ## UsageRecord
 

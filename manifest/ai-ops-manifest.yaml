@@ -436,11 +436,9 @@ update_policy:
     # файлы, принадлежащие ai-ops-execution/quality/..., ставятся при выборе этих пакетов;
     # без выбора packages (дефолт) — ставится всё. Полный self-contained доказан
     # validate_standalone_engine.py (subprocess из .ai/managed без parent на path).
-    # v3.30: код движка переехал в пакеты ai_ops_kit/*; tools/**/*.py остались тонкими
-    # алиасами обратной совместимости, поэтому в поставку нужны ОБА — иначе алиас в
-    # child-репозитории ссылается на несуществующий пакет.
+    # v4.0: плоский слой `tools/` СНЯТ. Движок и все точки входа — пакетные (`ai_ops_kit/**`),
+    # запуск скриптом идёт `python3 -m ai_ops_kit.<pkg>.<mod>` с PYTHONPATH=.ai/managed.
     - "ai_ops_kit/**/*.py"
-    - "tools/**/*.py"
     - "config/**/*"
     - "qualification/**/*"
     - "containers/*"

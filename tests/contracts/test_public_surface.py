@@ -187,11 +187,6 @@ def test_declared_ai_layout_is_what_the_installer_really_writes():
         f"описывает раскладку, которой нет, либо каталог перестал создаваться")
 
 
-@pytest.mark.contract
-def test_deprecated_level_points_at_a_real_registry():
-    """`deprecated` без реестра — обещание вывода без списка выводимого."""
-    rel = DECL["deprecated"]["flat_module_aliases"]["registry"]
-    registry = REPO / rel
-    assert registry.is_file(), f"реестр уходящей поверхности объявлен ({rel}), а файла нет"
-    doc = yaml.safe_load(registry.read_text(encoding="utf-8"))
-    assert doc.get("flat_module_aliases"), f"{rel}: реестр пуст — сокращать нечего"
+# v4.0: `test_deprecated_level_points_at_a_real_registry` снят — уходящая поверхность
+# `flat_module_aliases` (плоский слой tools/) в 4.0 удалена физически вместе с её реестром,
+# сокращать больше нечего.

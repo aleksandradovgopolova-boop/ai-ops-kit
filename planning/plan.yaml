@@ -142,7 +142,7 @@ goals:
       # требует повтора на втором живом репозитории. Поэтому цель closeout ещё не achieved.
       real_task_reaches_verified_pr_without_patching_the_kit: true
       repeated_on_two_different_live_repos: false
-      # ЗАКРЫТ 14.08: `quality/mutation-probes.yaml` + `devtools/mutation_probe.py` +
+      # ЗАКРЫТ 14.08: `quality/mutation-probes.yaml` + `devai_ops_kit/devtools/mutation_probe.py` +
       # `validate_mutation_probes` (75-й валидатор) + требование пробы ШВА на каждый механизм с
       # охранными пробами. Замер: 14 проб, 0 выживших, 0 непроверенных; правило шва нашло разрыв в
       # той же работе, где было введено.

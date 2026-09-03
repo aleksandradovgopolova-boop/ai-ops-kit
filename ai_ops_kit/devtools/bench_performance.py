@@ -36,7 +36,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 
-BASELINE_PATH = PKG / "tools" / ".bench-baseline.json"
+BASELINE_PATH = PKG / "ai_ops_kit" / "devtools" / ".bench-baseline.json"
 DEFAULT_ITERATIONS = 5
 DEFAULT_THRESHOLD = 2.0  # warning if >2x baseline
 REGRESSION_THRESHOLD = 5.0  # error if >5x baseline
