@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from _installer_helpers import installed
 
 KIT = Path(__file__).resolve().parents[2]
 INSTALLER = KIT / "installer" / "ai_ops.py"

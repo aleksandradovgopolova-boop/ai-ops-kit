@@ -23,7 +23,6 @@ from _workpackage_helpers import (
     _mkrepo,
     _pass_reviewer,
     _prop_for,
-    three_area_sig,
 )
 
 

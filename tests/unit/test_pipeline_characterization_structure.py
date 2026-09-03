@@ -25,7 +25,6 @@ from _pipeline_char_helpers import (
     _make_policy,
     _make_profile,
     _make_proposer,
-    child_repo,
 )
 
 

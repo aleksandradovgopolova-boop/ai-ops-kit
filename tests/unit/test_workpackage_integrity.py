@@ -27,7 +27,6 @@ from _workpackage_helpers import (
     _prop_ws,
     _reseal,
     _valid_plan,
-    three_area_sig,
 )
 
 

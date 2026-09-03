@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from _installer_helpers import (
-    child, installed, installed_copy, _run_cli, _git,
+    _run_cli, _git,
     LEAKY_PATHS, KEPT_PATHS, _check_ignored, _record_path,
 )
 

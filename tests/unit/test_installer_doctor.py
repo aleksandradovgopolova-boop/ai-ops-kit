@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from _installer_helpers import (
-    installed, installed_copy, _isolated_env, _write_belt, _user_site_of, _run_cli,
+    _isolated_env, _write_belt, _user_site_of, _run_cli,
 )
 
 KIT = Path(__file__).resolve().parents[2]
