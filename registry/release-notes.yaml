@@ -384,4 +384,4 @@ patch_note: '3.39.0 — Судья приёмки: кит сам сверяет 
   — в свежем child-репозитории валидатор падал с ModuleNotFoundError; проверка на это чистит PYTHONPATH,
   иначе она проверяла бы среду, а не код. Гейт regression_test_evidence остаётся advisory — переключение
   в blocking после живого раунда.'
-version: 3.39.4
+version: 3.40.0
