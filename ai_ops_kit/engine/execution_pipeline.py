@@ -477,7 +477,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     not_yet = _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad,
                                   spec_depth_missing, spec_incomplete, spec_bad_status,
                                   context_overflow, approvals_cover_ok, approval_recheck,
-                                  acceptance_block_reason=(acceptance_block_reason if acceptance_block else None))
+                                  acceptance_block_reason=(acceptance_block_reason if acceptance_block else None), checks=coll["checks"])
 
     report = {
         "schema_version": 1, "kind": "execution-pipeline",
