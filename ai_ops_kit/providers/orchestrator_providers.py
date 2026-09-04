@@ -696,6 +696,42 @@ def _writer_serialization_lock(notify=None):
             f.close()
 
 
+def _human_error(text):
+    # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
+    import json as _json
+    try:
+        d = _json.loads(text)
+    # Узкий тип (срез providers, 2026-08-12): ожидаемый отказ — «это не JSON», и тогда отдаём
+    # текст как есть. Любой другой тип здесь — дефект разбора, и он обязан всплыть.
+    except (ValueError, TypeError):
+        return (text or "").strip()[:2000]
+    parts = []
+    if d.get("error"):
+        parts.append(str(d.get("error")))
+    msg = d.get("message") if isinstance(d.get("message"), dict) else None
+    for blk in ((msg.get("content") if msg else None) or d.get("content") or []):
+        if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
+            parts.append(blk["text"])
+    return (" | ".join(parts) or (text or "").strip())[:2000]
+
+
+def _transient(text):
+    t = (text or "").lower()
+    # 19.08.2026 (заявка #160): список стал ЕДИНСТВЕННЫМ основанием повторять, поэтому в нём
+    # обязано быть и само слово. Сообщение, прямо называющее себя транзиентным, повторять
+    # можно; поймано существующим селфтестом провайдеров, чей образец так и звучал.
+    return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
+                                "500", "502", "503", "504", "internal server error",
+                                "temporarily", "transient", "server_error",
+                                "timeout", "timed out", "connection"))
+
+
+def _backoff(n):
+    import time
+    import random
+    time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
+
+
 def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
@@ -751,36 +787,6 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     import random
     # runner заменяет subprocess.run (не весь вызов) — production-path проходит в selftest
     _run = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
-
-    def _human_error(text):
-        # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
-        try:
-            d = _json.loads(text)
-        # Узкий тип (срез providers, 2026-08-12): ожидаемый отказ — «это не JSON», и тогда отдаём
-        # текст как есть. Любой другой тип здесь — дефект разбора, и он обязан всплыть.
-        except (ValueError, TypeError):
-            return (text or "").strip()[:2000]
-        parts = []
-        if d.get("error"):
-            parts.append(str(d.get("error")))
-        msg = d.get("message") if isinstance(d.get("message"), dict) else None
-        for blk in ((msg.get("content") if msg else None) or d.get("content") or []):
-            if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
-                parts.append(blk["text"])
-        return (" | ".join(parts) or (text or "").strip())[:2000]
-
-    def _transient(text):
-        t = (text or "").lower()
-        # 19.08.2026 (заявка #160): список стал ЕДИНСТВЕННЫМ основанием повторять, поэтому в нём
-        # обязано быть и само слово. Сообщение, прямо называющее себя транзиентным, повторять
-        # можно; поймано существующим селфтестом провайдеров, чей образец так и звучал.
-        return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
-                                    "500", "502", "503", "504", "internal server error",
-                                    "temporarily", "transient", "server_error",
-                                    "timeout", "timed out", "connection"))
-
-    def _backoff(n):
-        time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
 
     last = ""
     for _attempt in range(max_attempts):

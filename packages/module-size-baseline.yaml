@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 962
+  ai_ops_kit/cli/ai_ops_cli.py: 969
   ai_ops_kit/cli/ai_ops_cli_intents.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 771
@@ -29,7 +29,7 @@ ceilings:
   ai_ops_kit/planning/repo_audit.py: 965
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
-  ai_ops_kit/providers/orchestrator_providers.py: 831
+  ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 954
   ai_ops_kit/validation/validate_own_medicine.py: 732
   ai_ops_kit/gates/gate_executor.py: 726
@@ -117,3 +117,18 @@ raises:
       машине» — плюс два мутационно-охраняемых инварианта. Рост +33 над потолком оправдан новым
       поведением, а не разбуханием: рационале-комментарии написаны, а не срезаны. Ратчет держит рост
       вниз от 1073; вынос в спутник — отдельная работа, если файл продолжит расти.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'orchestrator_providers.py = 831; ai_ops_cli.py = 962'
+    to: 'orchestrator_providers.py = 909; ai_ops_cli.py = 969'
+    work: issue-160 — fail-fast, когда claude-cli структурно нерабочий в среде
+    why: >-
+      Полевой баг p1: `run --execute` изнутри сессии Claude получал синтетический api_error с нулевыми
+      токенами, кит гнал 5 бессмысленных ретраев и падал общим RuntimeError. Добавлены детектор
+      структурного отказа `_env_unavailable_envelope` + типизированный `ProviderEnvUnavailableError`
+      с человеческим сообщением в orchestrator_providers.py, и обработка нового типа на границе
+      CLI `_main_guarded` в ai_ops_cli.py (+7): фраза человеку с двумя выходами (терминал вне сессии /
+      `--provider` с ключом), exit 3, без трейсбека. Три вложенных помощника (`_human_error`/`_transient`/
+      `_backoff`) вынесены на уровень модуля, чтобы `_claude_cli_call` вернулась под потолок func-size
+      (183 -> 154; потолок providers/ опущен 170 -> 169 к факту run_workflow). Рост файла оправдан новым
+      поведением; рационале написаны, не срезаны. Ратчет держит рост вниз от новых потолков.
