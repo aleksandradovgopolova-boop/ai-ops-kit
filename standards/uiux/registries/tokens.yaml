@@ -1,0 +1,140 @@
+# tokens.yaml — реестр КОНТРАКТА дизайн-токенов (данные, не проза).
+# Волна 2 (#418). Не дублирует значения — их источник истины design/tokens/*.json (§21–§34).
+# Здесь объявлен ПУБЛИЧНЫЙ контракт: пространство имён -> роль -> файл-источник -> гарантия
+# стабильности + опорные стабильные id. Валидатор сверяет контракт с фактическими токенами:
+#   * каждый sample-id обязан существовать в design/tokens (иначе dangling_token);
+#   * каждое namespace обязано покрывать хотя бы один реальный токен (иначе empty_namespace);
+#   * каждый source обязан быть реальным файлом токенов (иначе missing_source).
+# Так контракт не может молча разойтись с данными. Capability-реестр ссылается сюда по namespace.
+version: '1.0'
+kind: tokens
+note: 'Публичная поверхность токенов = стабильные id-пути (UI-014, AI-004). Компонент знает роль
+  (color.action.primary), а не сырое значение (§21: primitive -> semantic -> component).'
+entries:
+- id: tok.spacing
+  namespace: spacing
+  role: Ритм и отступы — единая шкала (§23).
+  source: spacing.json
+  constitution_refs:
+  - UI-014
+  contract: Шкала целых px, сверяется с таблицей Конституции байт-в-байт; id не меняется при смене темы.
+  sample:
+  - spacing.2
+  - spacing.4
+  - spacing.6
+- id: tok.radius
+  namespace: radius
+  role: Радиусы скругления (§24).
+  source: radius.json
+  constitution_refs:
+  - UI-014
+  contract: Шкала сверяется с Конституцией; radius.full — полный круг.
+  sample:
+  - radius.sm
+  - radius.md
+  - radius.lg
+- id: tok.text
+  namespace: text
+  role: Типографическая шкала (§26).
+  source: typography.json
+  constitution_refs:
+  - UI-014
+  contract: Модульная шкала размеров; роль (text.base) стабильна при перекраске/смене шрифта.
+  sample:
+  - text.sm
+  - text.base
+  - text.xl
+- id: tok.color
+  namespace: color
+  role: Семантические роли цвета light/dark (§21, §25).
+  source: colors.json
+  constitution_refs:
+  - UI-014
+  - UI-004
+  contract: Трёхуровневая архитектура primitive -> semantic -> component; semantic ссылается на
+    primitive или литеральный hex. Смена бренда/темы переопределяет только semantic-слой.
+  sample:
+  - color.text.primary
+  - color.action.primary
+  - color.focus.ring
+- id: tok.shadow
+  namespace: shadow
+  role: Elevation / тени (§27).
+  source: shadows.json
+  constitution_refs:
+  - UI-014
+  contract: Пять ступеней подъёма; id стабилен независимо от темы.
+  sample:
+  - shadow.sm
+  - shadow.md
+  - shadow.xl
+- id: tok.control
+  namespace: control
+  role: Высоты интерактивных контролов (§28).
+  source: controls.json
+  constitution_refs:
+  - UI-014
+  - UI-015
+  contract: control.md — дефолт 40px; минимальная цель нажатия 44px (§32) обеспечивается компонентом.
+  sample:
+  - control.sm
+  - control.md
+  - control.lg
+- id: tok.icon
+  namespace: icon
+  role: Размеры иконок (§28, §32).
+  source: controls.json
+  constitution_refs:
+  - UI-014
+  contract: Набор Tabler Icons; размеры кратны шкале.
+  sample:
+  - icon.sm
+  - icon.md
+  - icon.lg
+- id: tok.z
+  namespace: z
+  role: Порядок наложения слоёв (§22, §31).
+  source: layout.json
+  constitution_refs:
+  - UI-014
+  contract: Именованные слои (z.modal, z.toast) вместо магических чисел z-index.
+  sample:
+  - z.dropdown
+  - z.modal
+  - z.toast
+- id: tok.breakpoint
+  namespace: breakpoint
+  role: Точки адаптива (§22).
+  source: layout.json
+  constitution_refs:
+  - UI-014
+  - UI-033
+  contract: Именованные брейкпоинты; адаптируется опыт, а не только вьюпорт (UI-033).
+  sample:
+  - breakpoint.sm
+  - breakpoint.md
+  - breakpoint.lg
+- id: tok.duration
+  namespace: duration
+  role: Длительности анимаций (§30).
+  source: motion.json
+  constitution_refs:
+  - UI-014
+  - UI-034
+  contract: Шкала длительностей; prefers-reduced-motion сводит их к мгновенным (UI-034, §30).
+  sample:
+  - duration.fast
+  - duration.base
+  - duration.slow
+- id: tok.ease
+  namespace: ease
+  role: Кривые ускорения движения (§30).
+  source: motion.json
+  constitution_refs:
+  - UI-014
+  - UI-034
+  contract: Стандартный набор кривых; движение сообщает, а не украшает (UI-034).
+  sample:
+  - ease.standard
+  - ease.decelerate
+  - ease.accelerate
