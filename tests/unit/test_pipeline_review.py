@@ -355,6 +355,28 @@ class TestRunPipelineReviewPass:
                    for r in (report["reviews"] or [])), report["reviews"]
         assert "ux_review" in report["gates"]["unmet"]
 
+    def test_review_pass_zero_reads_fabricated_lines_is_blocked(self, child_root):
+        """Заземление ревью поднято до уровня приёмки (Fix C, P0 04.09.2026): pass с 0 reads и evidence
+        на ДОСТАВЛЕННЫЙ файл, но с ВЫДУМАННЫМ диапазоном строк (500-520 в однострочном файле) —
+        остаётся рубер-штампом: кит читает файл и видит, что таких строк нет. Совпадения ИМЕНИ мало.
+        Мутация (снять сверку строк с файлом) роняет либо этот тест, либо grounded-тест выше."""
+        _init_git(child_root)
+        sig = {"task_type": "QUICK", "size": "small", "risk": "low",
+               "affected_areas": ["core"], "ui_changed": True}
+        # pass, 0 reads, evidence на доставленный файл, но строки выдуманы (файл в 1 строку)
+        fabricated = lambda prompt: (
+            '{"kind":"reviewer-result","status":"pass",'
+            '"checks":[{"id":"ok","status":"pass","evidence":[{"file":"src/rf2.py","lines":"500-520"}]}]}')
+        ops = iter([{"op": "write", "path": "src/rf2.py", "content": "f = 1\n"}, {"done": True}])
+        report = execution_pipeline.run_pipeline(
+            task="fabricated lines", signals=sig, child_root=child_root,
+            proposer=lambda ctx: next(ops), budget={"max_model_calls": 20},
+            feature="rf2-test", commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=fabricated)
+        assert any(r["gate"] == "ux_review" and r.get("closed_as") == "blocked"
+                   for r in (report["reviews"] or [])), report["reviews"]
+        assert "ux_review" in report["gates"]["unmet"]
+
 
 @pytest.mark.critical_path
 @pytest.mark.unit

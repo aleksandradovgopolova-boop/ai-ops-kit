@@ -7,6 +7,7 @@ security review, evidence re-evaluation, dependency installation.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -308,12 +309,38 @@ def _delivered_files(work_root, revision) -> set:
     return {ln.strip().lstrip("./") for ln in names.splitlines() if ln.strip()}
 
 
-def _review_cites_delivered_file(res, delivered) -> bool:
-    """Ссылается ли хоть одно evidence ревьюера на ДОСТАВЛЕННЫЙ файл? (заземление Fix C для ревью).
+def _cited_lines_confirmed(work_root, source, lines) -> bool:
+    """Прочитать ДОСТАВЛЕННЫЙ файл и подтвердить, что процитированный диапазон строк РЕАЛЕН.
 
-    Reviewer-result несёт `checks[].evidence[] = {file, lines}`. Если ревьюер сослался на файл,
-    реально входящий в правку, — кит ПОДТВЕРДИЛ, что вердикт коснулся доставленного артефакта, даже
-    когда судья не эмитил ceremonial read-op. Пустая/чужая ссылка заземлением не является."""
+    Заземление ревью поднято до уровня приёмки (Fix C, P0 04.09.2026). Прежде хватало совпадения
+    ИМЕНИ файла — содержимое не читалось, и `pass` проходил с ВЫДУМАННЫМ диапазоном строк при 0 reads
+    (остаточный рубер-штамп: у приёмки он закрыт сверкой цитаты по файлу, у ревьюеров — нет). Здесь
+    кит САМ читает файл тем же механизмом, что и приёмка (`_read_source` — тот же пакет engine, без
+    восходящего ребра слоёв), и сверяет цитату ревьюера: у ревьюер-evidence цитата — это `lines`
+    (диапазон в доставленном файле), поэтому «фрагмент присутствует в файле» = процитированные строки
+    существуют в нём. Диапазон за пределами файла (или пустой/неразбираемый) — цитата чтением НЕ
+    подтверждена: fail-closed, как рубер-штамп в приёмке."""
+    from ai_ops_kit.engine.acceptance_verify import _read_source  # переиспользование ВНУТРИ engine
+    body, _problem = _read_source(work_root, source)
+    if body is None:
+        return False
+    total = len(body.splitlines())
+    if total == 0:
+        return False
+    nums = [int(n) for n in re.findall(r"\d+", str(lines or ""))]
+    if not nums:
+        return False
+    return 1 <= min(nums) and max(nums) <= total
+
+
+def _review_cites_delivered_file(res, delivered, work_root) -> bool:
+    """Заземлена ли хоть одна evidence-цитата ревьюера ЧТЕНИЕМ доставленного файла? (Fix C для ревью).
+
+    Reviewer-result несёт `checks[].evidence[] = {file, lines}`. Заземление требует ДВУХ условий,
+    как в приёмке: (1) evidence ссылается на файл, реально входящий в правку (не пустая/чужая
+    ссылка); (2) кит ПРОЧИТАЛ этот файл и процитированный диапазон строк в нём ЕСТЬ (не выдуман).
+    Совпадения имени БЕЗ чтения содержимого — недостаточно: `pass` с выдуманными строками при 0
+    reads остаётся рубер-штампом и блокирующий гейт не закрывает."""
     if not delivered or not isinstance(res, dict):
         return False
     for c in res.get("checks") or []:
@@ -321,7 +348,9 @@ def _review_cites_delivered_file(res, delivered) -> bool:
             continue
         for ev in c.get("evidence") or []:
             f = ev.get("file") if isinstance(ev, dict) else None
-            if f and f.strip().lstrip("./") in delivered:
+            if not f or f.strip().lstrip("./") not in delivered:
+                continue
+            if _cited_lines_confirmed(work_root, f, ev.get("lines")):
                 return True
     return False
 
@@ -391,16 +420,19 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         # диффа и read-op детерминированно НЕ эмитит (тот же замер, что закрыл acceptance Fix C) —
         # поэтому КАЖДЫЙ настоящий code_review/architecture_review штамповался в fail, и ни один
         # прогон не мог закрыть блокирующее ревью (полевой блокер flip, ii-sreda). Теперь вовлечённость
-        # определяется тем, СВЕРЕН ли вердикт с ДОСТАВЛЕННЫМ файлом: кит сам знает состав правки
-        # (`delivered`), и если evidence ревьюера ссылается на файл из неё — вердикт коснулся эталона.
-        # Рубер-штампом остаётся pass, у которого И 0 reads, И ни одна ссылка не заземлена на правку
-        # (пустые/чужие evidence). Это НЕ ослабляет страж: фабрикация «pass без ничего» по-прежнему fail.
+        # определяется тем, СВЕРЕН ли вердикт с ДОСТАВЛЕННЫМ файлом ЧТЕНИЕМ (P0 04.09.2026 поднял
+        # заземление до уровня приёмки): кит сам знает состав правки (`delivered`), САМ читает файл и
+        # подтверждает, что процитированный ревьюером диапазон строк в нём РЕАЛЕН (не выдуман). Совпадения
+        # ИМЕНИ файла мало — иначе pass проходил с фиктивными строками при 0 reads. Рубер-штампом остаётся
+        # pass, у которого И 0 reads, И ни одна цитата не подтверждена чтением доставленного файла
+        # (пустые/чужие/выдуманные evidence). Это НЕ ослабляет страж: фабрикация «pass без ничего» — fail.
         if (status == "pass" and blocking and not rv.get("reads")
-                and not _review_cites_delivered_file(res, delivered)):
+                and not _review_cites_delivered_file(res, delivered, work_root)):
             gate_ev[gid] = {"status": "fail",
-                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) и ни одно "
-                                         f"evidence не сослалось на доставленный файл — рубер-штамп не "
-                                         f"закрывает блокирующий гейт @ {gid}; сверка с эталоном не доказана"],
+                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) и ни одна "
+                                         f"цитата не подтверждена чтением доставленного файла "
+                                         f"(строки выдуманы/файл чужой) — рубер-штамп не закрывает "
+                                         f"блокирующий гейт @ {gid}; сверка с эталоном не доказана"],
                             "checks": res.get("checks", []), "evidence": [ev_ref]}
             entry["closed_as"] = "blocked"
             entry["status"] = "fail"

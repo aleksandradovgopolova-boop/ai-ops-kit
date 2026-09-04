@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 373
-structural_count: 62
+behavioral_count: 374
+structural_count: 61
 total_count: 435
-behavioral_share_pct: 85.75
+behavioral_share_pct: 85.98
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -349,3 +349,15 @@ raises:
       Добавлен поведенческий тест-файл tests/unit/test_merge_preview.py (пробы merge-preview: итог
       слияния vs ветка, конфликт fail-closed). Доля поведенческих поднялась 85.71 -> 85.75% (порог
       ужесточён под факт). Замер: 373 из 435.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 373
+    from_total: 435
+    to_behavioral: 374
+    to_total: 435
+    to_share_pct: 85.98
+    work: review-grounding-reads-the-file (P0)
+    why: >-
+      Заземление ревью чтением файла + пробы сделали тест-файл ревью поведенческим (импортирует и
+      зовёт продукт). Доля поведенческих поднялась 85.75 -> 85.98% (порог ужесточён под факт; total
+      без изменений, один файл перешёл structural -> behavioral). Замер: 374 из 435.
