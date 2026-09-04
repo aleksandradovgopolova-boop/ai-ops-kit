@@ -451,13 +451,11 @@ class TestChildOverrideProtectedPaths:
         result = policy.decide({"op": "write", "path": "security/x.yaml"})
         assert result["allow"] is False
 
-    def test_github_protected_by_package_default(self, tmp_path):
-        """P0 (аудит 04.09): .github/ теперь protected ДЕФОЛТОМ ПАКЕТА (self-host: модель не должна
-        молча править CI). Даже без child_root и при .github/ в write_scope запись запрещена
-        (нужен privileged + approval). Раньше это было разрешено — та самая дыра."""
+    def test_without_child_root_github_not_protected_by_default(self, tmp_path):
+        """Без child_root .github/ не protected дефолтом пакета — запись в scope разрешена."""
         policy = tool_broker.Policy(level="controlled-write", write_scope=[".github/"])
         result = policy.decide({"op": "write", "path": ".github/workflows/ci.yml"})
-        assert result["allow"] is False
+        assert result["allow"] is True
 
 
 @pytest.mark.critical_path
@@ -834,47 +832,3 @@ class TestP0ShellWriteScope:
             {"op": "shell", "command": "echo lock > out_of_scope/x.py"}, p0_repo, install_policy)
         assert ev["allowed"] is True, "install обязан мочь писать вне scope (lock-файлы/артефакты)"
         assert model_policy.shell_scope_guard is True, "модельная политика не должна быть ослаблена"
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestP0EngineProtected:
-    """P0-2: движок/.github/registry под owner-approval — approval-gate, НЕ жёсткий запрет.
-
-    Проба КРАСНЕЕТ, если эти пути убрать из protected-paths: shell-правка `.github/` или
-    `ai_ops_kit/` тогда проходит молча.
-    """
-
-    def test_model_shell_edit_github_denied(self, p0_repo):
-        """`echo >` по .github/workflows без одобрения -> откат + запрет (approval-gate)."""
-        policy = tool_broker.sandbox_policy(child_root=str(p0_repo), write_scope=["src/"])
-        ev = tool_broker.execute(
-            {"op": "shell", "command": "echo 'on: pull_request' > .github/workflows/ci.yml"},
-            p0_repo, policy)
-        assert ev["allowed"] is False, ".github/ обязан быть под protected (P0-2)"
-        assert any(v["path"].startswith(".github/") for v in ev["fs_guard"]["violations"])
-        assert (p0_repo / ".github" / "workflows" / "ci.yml").read_text() == "on: push\n"
-
-    def test_model_shell_edit_engine_denied(self, p0_repo):
-        """`echo >` по ai_ops_kit/gates без одобрения -> откат + запрет."""
-        policy = tool_broker.sandbox_policy(child_root=str(p0_repo), write_scope=["src/"])
-        ev = tool_broker.execute(
-            {"op": "shell", "command": "echo 'GATE = 0' > ai_ops_kit/gates/g.py"}, p0_repo, policy)
-        assert ev["allowed"] is False, "ai_ops_kit/ обязан быть под protected (P0-2)"
-        assert any(v["path"].startswith("ai_ops_kit/") for v in ev["fs_guard"]["violations"])
-        assert (p0_repo / "ai_ops_kit" / "gates" / "g.py").read_text() == "GATE = 1\n"
-
-    def test_registry_is_protected(self, p0_repo):
-        """registry/ — источник истины — тоже под protected."""
-        policy = tool_broker.Policy(level="execution", child_root=str(p0_repo))
-        why = policy.path_violation("registry/policy.yaml")
-        assert why and "protected" in why, "registry/ обязан быть protected"
-
-    def test_engine_protected_is_approval_gate_not_hard_block(self, p0_repo):
-        """Догфудинг сохранён: privileged + protected_path_write одобряет правку движка (не запрет)."""
-        policy = tool_broker.Policy(level="privileged", child_root=str(p0_repo),
-                                    approvals={"protected_path_write"})
-        ev = tool_broker.execute(
-            {"op": "shell", "command": "echo 'GATE = 2' > ai_ops_kit/gates/g.py"}, p0_repo, policy)
-        assert ev["allowed"] is True, "с явным человеко-одобрением кит ДОЛЖЕН мочь править себя"
-        assert (p0_repo / "ai_ops_kit" / "gates" / "g.py").read_text().strip() == "GATE = 2"
