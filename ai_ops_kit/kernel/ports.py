@@ -102,8 +102,9 @@ class Change(TypedDict, total=False):
     profile: dict[str, Any]
 
 
-# RunContext — контекст прогона (вход PolicyPort).
-class RunContext(TypedDict, total=False):
+# PolicyContext — контекст РЕШЕНИЯ о допустимости действия (вход PolicyPort).
+# Не путать с engine.run_context.RunContext (dataclass, источник истины прогона).
+class PolicyContext(TypedDict, total=False):
     """Контекст принятия решения о допустимости действия.
 
     Включает: write_scope, sandbox (policy enforcement, не security isolation:
@@ -233,7 +234,7 @@ class PolicyPort(Protocol):
     Ядро зовёт decide() ПЕРЕД каждым действием исполнителя.
     """
 
-    def decide(self, action: Action, ctx: RunContext) -> Autonomy:
+    def decide(self, action: Action, ctx: PolicyContext) -> Autonomy:
         ...
 
 
