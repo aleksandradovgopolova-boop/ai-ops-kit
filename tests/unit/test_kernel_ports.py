@@ -25,7 +25,7 @@ def test_all_ports_importable():
         ExecutorPort, ContextPort, EvidenceProvider, GatePort,
         DeliveryPort, PolicyPort, ClassifierPort,
         ExecutionSpec, ExecutionResult, Evidence, Change,
-        RunContext, Action, Autonomy, Classification,
+        PolicyContext, Action, Autonomy, Classification,
     )
     # Protocol'ы — runtime_checkable
     for port in (ExecutorPort, ContextPort, EvidenceProvider, GatePort,
@@ -37,10 +37,10 @@ def test_typed_dicts_are_dicts():
     """TypedDict-контракты — подклассы dict (runtime-совместимость)."""
     from ai_ops_kit.kernel.ports import (
         ExecutionSpec, ExecutionResult, Evidence, Change,
-        RunContext, Action, Autonomy, Classification,
+        PolicyContext, Action, Autonomy, Classification,
     )
     for cls in (ExecutionSpec, ExecutionResult, Evidence, Change,
-                RunContext, Action, Autonomy, Classification):
+                PolicyContext, Action, Autonomy, Classification):
         assert issubclass(cls, dict)
 
 
