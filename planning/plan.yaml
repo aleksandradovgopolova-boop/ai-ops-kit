@@ -524,44 +524,53 @@ goals:
 work:
   - id: gate-measures-merge-result
     title: >-
-      coverage и footprint меряются против итога слияния, а не ветки PR
+      coverage и footprint меряются против ИТОГА СЛИЯНИЯ, а не ветки PR — механизмом самого кита,
+      без опоры на фичу форджа
     type: engineering
     goal: checks-that-run
-    status: waiting_on_owner
-    waiting_on: >-
-      Владелец включает «Require merge queue» для main через Settings → Rules → Rulesets (в
-      классическом Branch protection этой опции больше нет). Механизм слит (#311/#312) — до флипа
-      порог не мерится против итога слияния.
+    status: todo
     owner_role: engineer
     value: high
-    write_scope: [.github/, tests/]
+    write_scope: [ai_ops_kit/, .github/, tests/]
     finding: docs/parallel-execution-retro.md
     reason: >-
       Разбор 20.08: гейты меряют ветку PR; код лент, сложенный в main, дрейфует выше порога
       незаметно и всплывает на первом следующем PR, а не на виновнике (main тихо ушёл 490->498
-      файлов). Готово, когда порог проверяется на результате слияния (merge queue) — дрейф main
-      невозможен.
+      файлов). GitHub merge queue как решение ОТВЕРГНУТА: недоступна для личных репо, привязывает
+      инвариант к фиче одного форджа и делает поведение разным для личного репо и организации — а кит
+      абстрагирует runtime/провайдеров и обязан быть фордж- и репо-нейтральным. Готово, когда КИТ сам
+      измеряет порог против merge-preview (git merge-tree ветки PR с текущей целью) в своей проверке
+      или сгенерированном CI — одинаково на GitHub, GitLab и голом git, для личного репо и
+      организации, без нативной очереди.
     progress_note: >-
-      МЕХАНИЗМ СЛИТ (PR #311/#312, 26.08): merge_group-триггеры в required-workflow + контракт-страж (3 капкана, мутационная пара). ОСТАЁТСЯ включение очереди — репозиторная настройка «Require merge queue»: программная конфигурация ruleset отклонена GitHub (422), флип отложен владельцу. Порог мерится против итога слияния только когда очередь включена.
+      GitHub merge_group (#311/#312, 26.08) — ТУПИК: merge queue недоступна для личных репо (нет опции
+      ни в branch protection, ни в rulesets; API 422), и сама привязка инварианта к фиче GitHub
+      нарушает фордж-нейтральность кита. Пивот 04.09: инвариант держит сам кит через merge-preview
+      (git merge-tree + валидаторы), платформо- и репо-независимо. GitHub-специфичные merge_group-
+      триггеры — под снос отдельной работой.
   - id: merge-queue-not-handrolled
     title: >-
-      Слияние идёт родным GitHub merge queue с auto-merge, а не самодельным polling-циклом
+      Доставка дрейф-безопасна на ЛЮБОМ фордже: кит ре-верифицирует зелёный PR против ТЕКУЩЕЙ цели
+      перед слиянием, без опоры на нативную очередь платформы
     type: engineering
     goal: team-works-in-parallel
-    status: waiting_on_owner
-    waiting_on: >-
-      Владелец включает «Require merge queue» в защите main (Settings → Rules → Rulesets). Механизм
-      слит (#311/#312) — до включения green-PR вливается ручным merge, как сейчас.
+    status: todo
     owner_role: engineer
     value: high
-    write_scope: [.github/, docs/]
+    write_scope: [ai_ops_kit/, .github/, tests/]
     finding: docs/parallel-execution-retro.md
     reason: >-
       Разбор 20.08: ручной интегратор падал на таймаутах gh, отчитывался «влито» по факту запуска
-      команды, сверял SHA с пустой строкой. Готово, когда green-PR вливается родным merge queue без
-      ручного опроса; DIRTY не возникает (queue батчит и ребейзит сам).
+      команды, сверял SHA с пустой строкой. Родной GitHub merge queue как решение ОТВЕРГНУТ — привязка
+      к фордж-фиче, недоступной на личных репо и вне GitHub; кит не должен зависеть от типа репо или
+      форджа. Готово, когда доставка кита дрейф-безопасна СВОИМ механизмом: перед слиянием зелёный PR
+      ре-верифицируется против текущей цели (цель сдвинулась -> ре-прогон; устаревшее/DIRTY не
+      вливается), одинаково на GitHub, GitLab и голом git. Ровно это в ручном виде отработало в заезде
+      04.09 (обновить-против-цели -> ре-CI -> merge только на CLEAN, 15 PR) — productize как примитив.
     progress_note: >-
-      МЕХАНИЗМ СЛИТ (PR #311/#312, 26.08): merge_group в package-quality+pr-smoke, draft-фильтр и шаг заголовка PR gated, страж на мутации, раздел в docs/guides/ci.md. ОСТАЁТСЯ один флип владельца — «Require merge queue» в защите main; программный ruleset отклонён GitHub (422). До включения green-PR вливается ручным merge, как сейчас.
+      merge_group (#311/#312) отвергнут как фордж-зависимый. Пивот 04.09: дрейф-безопасность — свойство
+      доставки самого кита (ре-верификация против цели), а не нативной очереди платформы. Доказано
+      вручную в заезде 04.09 на 15 PR подряд (BEHIND -> update -> ре-CI -> merge на CLEAN).
   # lane-ships-small-prs закрыта в историю 2026-08-28 (код в PR #351): правило «малый PR» названо и
   # проверяется машиной (quality/pr-budget.yaml + ai_ops_kit/validation/validate_pr_size.py, advisory-
   # обкатка по образцу parallel-safety); половина «закрытие ленты = влиты/зелёные PR» — протокольное
