@@ -77,10 +77,11 @@ Continuous Improvement → (новый цикл Discovery).
 
 ## Как видение соотносится с архитектурой кита
 
-Видение реализуется штатными механизмами кита, без слома контрактов:
-этапы цикла — новые **workflow-контракты** (registry/workflows.yaml); проверки —
-новые **quality gates** (quality/gates.yaml); ревьюеры — **агенты** с обязательными
-eval-кейсами; генераторы — модули пакета **`ai_ops_kit`** по образцу generate_runtime
-(единый источник, drift-детект); Feature Blueprint и Knowledge Graph — **схемы и
-реестры** с валидаторами. Направление — в `ROADMAP.md` (четыре горизонта), пройденный путь —
-в `docs/changelog/roadmap-history.md`.
+Видение реализуется штатными механизмами кита, без слома контрактов. Движок —
+пакет **`ai_ops_kit/**`**; точки входа только пакетные (`python3 -m ai_ops_kit.<pkg>.<mod>`),
+плоский слой `tools/` физически снят в 4.0. Этапы цикла — новые **workflow-контракты**
+(registry/workflows.yaml); проверки — новые **quality gates** (quality/gates.yaml);
+ревьюеры — **агенты** с обязательными eval-кейсами; генераторы — модули пакета по образцу
+`ai_ops_kit/shared/generate_runtime.py` (единый источник, drift-детект); Feature Blueprint
+и Knowledge Graph — **схемы и реестры** с валидаторами. Направление — в `ROADMAP.md`
+(четыре горизонта), пройденный путь — в `docs/changelog/roadmap-history.md`.
