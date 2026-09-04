@@ -296,3 +296,58 @@ def _outcome_has_evidence():
     if not p.is_file():
         return False
     return bool((_y.safe_load(p.read_text(encoding="utf-8")) or {}).get("field_evidence"))
+
+
+class TestLiftingByOutcomeNeedsProvenEvidence:
+    """P0 (аудит 04.09.2026): исход, снимающий заморозку, — ручная булева декларация. Заморозку
+    держит `bool(outcome[FREEZE_OUTCOME])`, и снять её можно было, вписав `true` без единого
+    доказательства (класс F-002/F-005). `validate` теперь требует у снимающего заморозку исхода
+    полевое доказательство (`registry/release-claims.yaml -> field_evidence`), как история требует у
+    `done` место перепроверки. НЕ у всех исходов — только у того, что ГАСИТ заморозку.
+
+    Проверяется на ФИКСТУРЕ с временным корнем: настоящий план меняется каждый день, и настоящий
+    `field_evidence` непуст (там это проверяет `test_real_plan_of_this_repo_is_valid`).
+    """
+
+    def _write_evidence(self, root):
+        (root / "registry").mkdir(parents=True, exist_ok=True)
+        (root / "registry" / "release-claims.yaml").write_text(
+            "field_evidence:\n  - repo: some-child\n    outcome: ok\n", encoding="utf-8")
+
+    def _errs(self, plan, root):
+        return dp.validate(plan, _contours.load_model(), root=str(root))["errors"]
+
+    def _self_declared(self, e):
+        return dp.FREEZE_OUTCOME in e and "field_evidence" in e and "самодекларация" in e
+
+    def test_true_without_evidence_is_an_error(self, tmp_path):
+        """`true` без доказательства — снятие заморозки самодекларацией. Это дефект P0."""
+        errs = self._errs(_plan(reached=True), tmp_path)
+        assert any(self._self_declared(e) for e in errs), errs
+
+    def test_true_with_resolving_evidence_is_valid(self, tmp_path):
+        """Тот же `true`, но с резолвящимся полевым доказательством — валидно."""
+        self._write_evidence(tmp_path)
+        errs = self._errs(_plan(reached=True), tmp_path)
+        assert not any(self._self_declared(e) for e in errs), errs
+
+    def test_false_needs_no_evidence(self, tmp_path):
+        """Заморозка держится (исход `false`) — доказательства не требуется, проверка не бьёт."""
+        errs = self._errs(_plan(reached=False), tmp_path)
+        assert not any(self._self_declared(e) for e in errs), errs
+
+    def test_child_plan_without_freeze_goal_is_never_touched(self, tmp_path):
+        """Правило внутреннее для кита: план без цели заморозки проверка не трогает даже без
+        доказательства (иначе кит экспортировал бы свою политику в чужой CI)."""
+        child = {"schema_version": 1, "kind": dp.KIND,
+                 "goals": [{"id": "g-product", "status": "active", "outcome": {"x": True}}],
+                 "work": [{"id": "wi", "title": "Работа", "type": "engineering", "goal": "g-product",
+                           "status": "todo", "owner_role": "engineer", "depends_on": [],
+                           "write_scope": ["src/"], "value": "high"}]}
+        errs = self._errs(child, tmp_path)
+        assert not any("field_evidence" in e for e in errs), errs
+
+    def test_without_root_the_check_is_silent(self):
+        """Без корня доказательство негде резолвить — проверка молчит, как и прочие ссылочные."""
+        errs = dp.validate(_plan(reached=True), _contours.load_model())["errors"]
+        assert not any(self._self_declared(e) for e in errs), errs

@@ -415,3 +415,64 @@ def test_ceiling_unknown_stays_honest():
     """Контроль: неизмеримый расход остаётся degraded «не вижу», а не выдаётся за норму."""
     msg = PR.from_process_spend(_spend_check(state="unknown"))
     assert msg["status"] == "degraded"
+
+
+# ── страж лексики: заголовок работы не проносит жаргон человеку ──────────────────────────────────
+# Дыра, найденная аудитом 04.09: слой человеческого языка построен верно, но `title` работы приходит
+# из плана дочки и вставляется в `summary`/`next` ДОСЛОВНО. `hide`-список политики объявлял категории
+# терминов, но НИЧТО их не ловило — заголовок, написанный внутренним языком, доносил жаргон до
+# продакта в чистом виде. Эти пробы падают на дословной вставке (жаргон в выводе) и зеленеют после
+# маскировки; и отдельно стерегут, что перевод меняет ЯЗЫК, а не ФАКТЫ (для technical термины видны).
+
+# Чёрный список: `hide`-категории политики (gate id, SHA, ...) + конкретная лексика из находки.
+LEAK_BLACKLIST = ("merge queue", "auto-merge", "automerge", "polling", "coverage", "footprint",
+                  "pull request", "write_scope", "tested_revision", "GateResult", "preflight_block",
+                  "ApprovalRecord")
+
+
+def _jargon_title():
+    """Заголовок, написанный внутренним языком (по духу `example_bad` политики)."""
+    return ("coverage и footprint меряются против merge base — merge queue с auto-merge, "
+            "а не polling")
+
+
+def test_next_work_title_does_not_leak_jargon_to_product():
+    """`from_next_work`: жаргонный `title` не должен просочиться в человеческий вывод product."""
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "in_progress": [], "blocked": [], "not_ready": [], "parallel_skipped": [],
+           "ready": [], "parallel_with": [],
+           "next_best": {"id": "ARCH-01", "title": _jargon_title(),
+                         "owner_role": "architect", "score": 42, "unblocks": 3,
+                         "why": ["разблокирует 3 задачи"]}}
+    out = PR.render(PR.from_next_work(rep), audience="product")
+    for term in LEAK_BLACKLIST:
+        assert term.lower() not in out.lower(), f"жаргон просочился в вывод product: {term}"
+
+
+def test_active_work_title_does_not_leak_jargon_to_product():
+    """`from_active_work`: расхождение плана с заявками несёт жаргонный `title` — тоже маскируется."""
+    stale = [{"id": "w9", "title": _jargon_title()}]
+    msg = PR.from_active_work({"active": []}, crosscheck={"only_in_plan": stale,
+                                                          "registry_exists": True})
+    out = PR.render(msg, audience="product")
+    for term in LEAK_BLACKLIST:
+        assert term.lower() not in out.lower(), f"жаргон просочился в вывод product: {term}"
+
+
+def test_masking_changes_language_not_facts():
+    """Перевод меняет ЯЗЫК, а не ФАКТЫ: для `technical` внутренние термины остаются видны, а на
+    `product` заголовок не выброшен молча — он переведён (иначе «фикс» = удалить title)."""
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "in_progress": [], "blocked": [], "not_ready": [], "parallel_skipped": [],
+           "ready": [], "parallel_with": [],
+           "next_best": {"id": "ARCH-01", "title": _jargon_title(),
+                         "owner_role": "architect", "score": 1, "unblocks": 0,
+                         "why": ["готова"]}}
+    msg = PR.from_next_work(rep)
+    # technical/debug видят исходный язык — факты не потеряны.
+    assert "coverage" in PR.render(msg, audience="technical").lower()
+    # product видит перевод, а не пустоту: плоский эквивалент на месте термина.
+    product = PR.render(msg, audience="product").lower()
+    assert "покрытие тестами" in product and "объём поставки" in product

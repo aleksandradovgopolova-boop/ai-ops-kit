@@ -23,7 +23,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 773
-  ai_ops_kit/planning/delivery_plan.py: 1087
+  ai_ops_kit/planning/delivery_plan.py: 1140
   ai_ops_kit/lifecycle/active_work.py: 1073
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 759
@@ -188,4 +188,20 @@ raises:
       965 -> 759 (потолок опущен под факт). Спутник = 241 строка, НИЖЕ порога 700 — в ceilings не
       вносится (ниже порога не ограничивается). Мутационно-охраняемых строк у файла нет — переносить
       было нечего. Ратчет держит дальнейший рост вниз от 759.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/delivery_plan.py = 1087'
+    to: 'ai_ops_kit/planning/delivery_plan.py = 1140'
+    work: freeze-lift-needs-proven-outcome (P0)
+    why: >-
+      Снятие заморозки исходом требовало только `bool(outcome[...])` — `true` без единого
+      доказательства снимал заморозку и открывал канал stable (класс F-002/F-005, аудит 04.09.2026).
+      Добавлены помощники _freeze_lift_errors (обе половины снятия — решением и исходом — в одном
+      месте) и _field_evidence_present (fail-closed чтение registry/release-claims.yaml ->
+      field_evidence): исход `true` теперь ОБЯЗАН нести полевое доказательство, иначе validate
+      краснит «самодекларация, а не достигнутый исход». Прежний inline-блок проверки решения (28
+      строк) вынесен в тот же помощник — validate усохла 179 -> 157 (func-потолок опущен, не поднят).
+      Чистый прирост файла +53 строки — новое поведение плюс overhead двух помощников с рационале;
+      разбивать 1087-строчный контрол-плейн ради одного гейта непропорционально. Итог 1087 -> 1140
+      осознанно под факт. Ратчет держит рост вниз от 1140.
 
