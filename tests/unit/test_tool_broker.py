@@ -762,3 +762,73 @@ def test_scrub_does_not_touch_empty_output(monkeypatch):
     """Граница: пустой вывод не превращается в сообщение об утаивании (нечего утаивать)."""
     assert tool_broker._scrub_output("") == ""
     assert tool_broker._scrub_output(None) is None
+
+
+# ─── P0 (аудит 04.09): write_scope на shell-канале + движок/CI/реестры под owner-approval ──────
+
+def _git_p0(root, *args):
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+
+
+@pytest.fixture
+def p0_repo(tmp_path):
+    """Git-дерево, повторяющее self-host кита: src/ (в scope), out_of_scope/, .github/workflows/,
+    ai_ops_kit/gates/ — с закоммиченными файлами, чтобы сторож мог сверять delta и откатывать."""
+    repo = tmp_path / "selfhost"
+    for d in ("src", "out_of_scope", ".github/workflows", "ai_ops_kit/gates", "registry"):
+        (repo / d).mkdir(parents=True)
+    (repo / "src" / "main.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "out_of_scope" / "x.py").write_text("orig = 1\n", encoding="utf-8")
+    (repo / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
+    (repo / "ai_ops_kit" / "gates" / "g.py").write_text("GATE = 1\n", encoding="utf-8")
+    (repo / "registry" / "policy.yaml").write_text("k: v\n", encoding="utf-8")
+    _git_p0(repo, "init", "-q")
+    _git_p0(repo, "config", "user.email", "t@example.com")
+    _git_p0(repo, "config", "user.name", "t")
+    _git_p0(repo, "add", "-A")
+    _git_p0(repo, "commit", "-qm", "seed")
+    return repo
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestP0ShellWriteScope:
+    """P0-1: write_scope обязан enforce-иться и на shell-канале модельной петли, не только на write.
+
+    Проба КРАСНЕЕТ, если shell_scope_guard в sandbox_policy выключить: shell-запись мимо scope
+    тогда не откатывается и остаётся на диске.
+    """
+
+    def test_model_shell_out_of_scope_reverted_and_denied(self, p0_repo):
+        """Модель через `echo … > out_of_scope/x.py` пишет мимо write_scope=['src/'] -> откат + запрет."""
+        policy = tool_broker.sandbox_policy(child_root=str(p0_repo), write_scope=["src/"])
+        assert policy.shell_scope_guard is True, "sandbox_policy обязан включать scope-guard (P0-1)"
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo взлом > out_of_scope/x.py"}, p0_repo, policy)
+        assert ev["allowed"] is False, "shell мимо write_scope обязан быть помечен запрещённым"
+        assert ev["fs_guard"]["violations"], "нарушение scope должно попасть в evidence"
+        assert "write_scope" in ev["reason"]
+        assert (p0_repo / "out_of_scope" / "x.py").read_text() == "orig = 1\n", "правка не откачена"
+
+    def test_model_shell_in_scope_passes(self, p0_repo):
+        """In-scope shell-запись по-прежнему проходит: сторож судит только вне scope."""
+        policy = tool_broker.sandbox_policy(child_root=str(p0_repo), write_scope=["src/"])
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo 'y = 2' > src/main.py"}, p0_repo, policy)
+        assert ev["allowed"] is True, ev.get("reason")
+        assert ev["fs_guard"]["violations"] == []
+        assert (p0_repo / "src" / "main.py").read_text().strip() == "y = 2"
+
+    def test_install_policy_keeps_out_of_scope_writes(self, p0_repo):
+        """Разведение политик: фаза install пишет lock/артефакты вне scope и НЕ откатывается.
+
+        _install_dependencies снимает shell_scope_guard у КОПИИ политики — модельная петля остаётся
+        под guard, установка зависимостей нет."""
+        import copy
+        model_policy = tool_broker.sandbox_policy(child_root=str(p0_repo), write_scope=["src/"])
+        install_policy = copy.copy(model_policy)
+        install_policy.shell_scope_guard = False
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo lock > out_of_scope/x.py"}, p0_repo, install_policy)
+        assert ev["allowed"] is True, "install обязан мочь писать вне scope (lock-файлы/артефакты)"
+        assert model_policy.shell_scope_guard is True, "модельная политика не должна быть ослаблена"
