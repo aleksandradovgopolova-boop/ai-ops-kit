@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +41,22 @@ _FALLBACK_STATUS_LABEL = {"ok": "Готово", "needs_input": "Нужно тв�
                           "blocked": "Пока не могу продолжить", "done": "Готово",
                           "degraded": "Готово, но проверено не всё"}
 _CONTRACT = {}          # кэш разобранного контракта: {audiences, labels, default, config_key}
+
+# Глоссарий продуктового языка — аварийная копия РОВНО на случай недоступного реестра (источник
+# истины — `registry/communication-policy.yaml -> product_glossary`). Держать здесь основную копию
+# нельзя по той же причине, что и для статусов: реестр перестал бы быть источником истины для
+# собственной политики. Заголовок работы (`title`) приходит из плана дочки и может быть написан
+# внутренним языком; для аудитории `product` человеческие строки прогоняются через этот словарь.
+_FALLBACK_GLOSSARY = {
+    "merge queue": "очередь на слияние", "merge base": "итог слияния",
+    "merge-base": "итог слияния", "pull request": "запрос на слияние",
+    "auto-merge": "автослияние", "automerge": "автослияние", "write_scope": "область правок",
+    "tested_revision": "проверенная версия", "GateResult": "результат проверки",
+    "preflight_block": "предстартовая проверка", "ApprovalRecord": "запись согласования",
+    "coverage": "покрытие тестами", "footprint": "объём поставки", "polling": "опрос состояния",
+    "gate": "проверка", "SHA": "версия",  # «PR» намеренно НЕ здесь — продуктовый язык поставки.
+}
+_GLOSSARY = {}          # кэш: {"map": {term: plain}, "rx": compiled, "source": ...}
 
 
 def _q(n, one="вопрос", few="вопроса", many="вопросов"):
@@ -126,6 +143,53 @@ def audience_from_config(child_root, policy=None) -> str:
     return aud if aud in con["audiences"] else default
 
 
+def _glossary(policy=None) -> dict:
+    """Глоссарий продуктового языка ИЗ РЕЕСТРА: {term: plain}, скомпилированный в один regex.
+
+    Термины сопоставляются по границе слова, без учёта регистра; длинные фразы раньше коротких
+    («merge queue» до «merge»), иначе короткий термин съедал бы часть длинного. При недоступном
+    реестре работаем на аварийной копии и НЕ молчим об этом (`source`) — как и `_contract`.
+    """
+    if policy is None and _GLOSSARY:
+        return _GLOSSARY
+    src = "registry"
+    try:
+        data = policy if policy is not None else load_policy()
+        gmap = data.get("product_glossary")
+        if not isinstance(gmap, dict) or not gmap:
+            raise PolicyMissing("в политике коммуникации нет product_glossary")
+    except PolicyMissing:
+        gmap, src = dict(_FALLBACK_GLOSSARY), "fallback"
+    # Длинные ключи первыми, чтобы фраза побеждала входящее в неё слово.
+    terms = sorted((str(k) for k in gmap), key=len, reverse=True)
+    rx = re.compile("|".join(r"\b" + re.escape(t) + r"\b" for t in terms),
+                    re.IGNORECASE) if terms else None
+    lower = {str(k).lower(): str(v) for k, v in gmap.items()}
+    out = {"map": lower, "rx": rx, "source": src}
+    if policy is None:
+        _GLOSSARY.clear()
+        _GLOSSARY.update(out)
+    return out
+
+
+def _humanize(text: str, policy=None) -> str:
+    """Заменить внутреннюю лексику плоскими эквивалентами глоссария. Перевод меняет ЯЗЫК, а не факты.
+
+    Применяется к человеческим строкам ТОЛЬКО для аудитории `product`: заголовок работы приходит из
+    плана дочки дословно, и без этого фильтра «coverage/footprint/merge queue/auto-merge/polling»
+    просачивались бы в `summary`/`next`. Для `technical`/`debug` строки не трогаются — имена гейтов и
+    метрик им положены по `show`-списку политики.
+    """
+    if not text:
+        return text
+    g = _glossary(policy)
+    rx = g.get("rx")
+    if not rx:
+        return text
+    gmap = g["map"]
+    return rx.sub(lambda m: gmap.get(m.group(0).lower(), m.group(0)), text)
+
+
 def message(status, summary, why_it_matters=None, decision=None, next_steps=None,
             technical=None, headline=None) -> dict:
     """Собрать UserMessage.
@@ -167,26 +231,33 @@ def render(msg: dict, audience="product", show_technical=False) -> str:
     con = _contract()
     if audience not in con["audiences"]:
         audience = con["default"]
+    # МАСКИРОВКА ЛЕКСИКИ НА ПУТИ К ЧЕЛОВЕКУ. Заголовок работы (`title`) приходит из плана дочки и
+    # вставляется в `summary`/`next`/`why` дословно — если он написан внутренним языком, продакт
+    # получает жаргон. `hide`-список политики объявлял категории, но НИЧТО их не ловило (аудит
+    # 04.09). Фильтр применяется ТОЛЬКО для `product`: `technical`/`debug` имена гейтов и метрик
+    # видят по своему `show`-списку. Технические детали (payload ниже) не трогаются — они и так
+    # открыты по запросу, и там жаргон уместен.
+    h = _humanize if audience == "product" else (lambda s, policy=None: s)
     L = []
     label = msg.get("headline") or con["labels"].get(msg.get("status"), msg.get("status", ""))
-    L.append(f"{label}. {msg.get('summary', '')}".strip())
+    L.append(h(f"{label}. {msg.get('summary', '')}".strip()))
     if msg.get("why_it_matters"):
-        L.append(msg["why_it_matters"])
+        L.append(h(msg["why_it_matters"]))
 
     d = msg.get("decision")
     if d:
         L.append("")
-        L.append(f"Нужно от тебя: {d['question']}")
+        L.append(h(f"Нужно от тебя: {d['question']}"))
         if d.get("recommendation"):
-            L.append(f"Рекомендую: {d['recommendation']}")
+            L.append(h(f"Рекомендую: {d['recommendation']}"))
         if d.get("on_approve"):
-            L.append(f"Если согласен — {d['on_approve']}.")
+            L.append(h(f"Если согласен — {d['on_approve']}."))
         if d.get("on_reject"):
-            L.append(f"Если нет — {d['on_reject']}.")
+            L.append(h(f"Если нет — {d['on_reject']}."))
 
     if msg.get("next"):
         L.append("")
-        L.append("Дальше: " + "; ".join(msg["next"]) + ".")
+        L.append(h("Дальше: " + "; ".join(msg["next"]) + "."))
 
     tech = (msg.get("technical_details") or {})
     if tech.get("available"):
