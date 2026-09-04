@@ -108,6 +108,34 @@ def _norm_entry(e, default_appr="required"):
     return None
 
 
+# Движок, CI и реестры кита — под owner-approval ТОЛЬКО когда прогон идёт над САМИМ китом (self-host /
+# догфуд): кит, развивающий себя, всё ещё может править движок с явным одобрением владельца
+# (privileged + protected_path_write), но не молча тем же прогоном, который эти правила ослабляет.
+# ПОЧЕМУ не в config/protected-paths.yaml: тот дефолт применяется к КАЖДОЙ дочке, а дочка правит свой
+# .github/ в рамках write_scope легитимно (её .github/ уже прикрыт human-approval-доменом security-гейта).
+# Навязывать эти пути всем — ломать легитимную доставку дочки (откат PR #504). Поэтому они условны от
+# self-host, а не универсальны.
+SELF_HOST_PROTECTED = (".github/", "ai_ops_kit/", "registry/")
+
+
+def _is_kit_self_host(root) -> bool:
+    """Репозиторий-цель ЕСТЬ исходники кита (а не .ai/managed-слой дочки)?
+
+    Маркеры берём в корне цели и требуем ВСЕ сразу — это исходники кита, а не совпадение имени:
+      * пакет `ai_ops_kit/__init__.py` — сам движок лежит в корне (у дочки он под .ai/managed/, не тут);
+      * `VERSION` — файл версии пакета в корне (кит его не раздаёт дочке в корень);
+      * `manifest/ai-ops-manifest.yaml` — центральный манифест пакета (в дочку едет под .ai/managed/,
+        в корне его нет).
+    Тройка вместе однозначно отделяет клон кита от произвольной дочки: у дочки в корне нет ни одного из
+    трёх. При отсутствии child_root (root=None) — не self-host (карта пакета остаётся дефолтной)."""
+    if not root:
+        return False
+    root = Path(root)
+    return ((root / "ai_ops_kit" / "__init__.py").exists()
+            and (root / "VERSION").exists()
+            and (root / "manifest" / "ai-ops-manifest.yaml").exists())
+
+
 def _protected_prefixes(child_root=None):
     """Дефолт пакета + карта child'а (MERGE, не replace): child ДОБАВЛЯЕт к
     универсально-опасным путям, не отменяя их. Источники child'а:
@@ -123,6 +151,9 @@ def _protected_prefixes(child_root=None):
 
     for e in _load("config/protected-paths.yaml").get("protected_paths", []) or []:
         add(e)
+    if _is_kit_self_host(child_root):   # self-host: движок/CI/реестры под owner-approval (SEAM)
+        for p in SELF_HOST_PROTECTED:
+            add({"path": p, "approval": "owner_required"})
     if child_root:
         child_root = Path(child_root)
         cfg = child_root / ".ai-ops.yaml"

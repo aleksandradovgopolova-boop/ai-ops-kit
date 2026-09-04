@@ -33,7 +33,7 @@ ceilings:
   ai_ops_kit/intelligence/nightly_review.py: 954
   ai_ops_kit/validation/validate_own_medicine.py: 732
   ai_ops_kit/gates/gate_executor.py: 726
-  ai_ops_kit/engine/tool_broker.py: 725
+  ai_ops_kit/engine/tool_broker.py: 756
   ai_ops_kit/planning/contours.py: 724
 
 raises:
@@ -219,4 +219,19 @@ raises:
       pipeline_git._reverify_against_current_target (362 строки, НИЖЕ порога), в контроллере — только
       проводка. _deliver = 171 строка, ниже func-потолка engine/ (184). Итог 878 -> 897 осознанно
       под факт; ратчет держит рост вниз от 897.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 725'
+    to: 'ai_ops_kit/engine/tool_broker.py = 756'
+    work: self-host-protects-its-own-engine (P0-2)
+    why: >-
+      Движок/CI/реестры кита (.github/, ai_ops_kit/, registry/) при self-host (кит развивает себя)
+      теперь под owner-approval — но ТОЛЬКО когда цель прогона есть сам кит, не произвольная дочка
+      (откат PR #504 показал: навязывать эти пути всем ломает легитимную запись дочки в свой .github/
+      в рамках write_scope). Добавлены чистый детектор _is_kit_self_host (тройка корневых маркеров:
+      пакет + VERSION + manifest) и константа SELF_HOST_PROTECTED; _protected_prefixes добавляет эти
+      пути в карту ТОЛЬКО на self-host. +31 строка — детектор с рационале и врезка; расщеплять
+      725-строчный tool_broker ради одного условного правила непропорционально. Итог 725 -> 756
+      осознанно под факт. Ратчет держит рост вниз от 756.
+
 

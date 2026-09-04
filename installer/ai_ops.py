@@ -309,7 +309,7 @@ def earned_channel(claims: dict) -> str:
     return declared
 
 
-def resolve_update_ref(channel, repo_dir=None):
+def resolve_update_ref(channel, repo_dir=None, allowed_range=None):
     """Какую ревизию брать под запрошенный канал. -> dict.
 
     {"ref": str|None, "kind": "tag"|"branch"|None, "channel": str, "reason": str}
@@ -321,6 +321,16 @@ def resolve_update_ref(channel, repo_dir=None):
     ОТКАЗ ВМЕСТО ТИХОГО ОТКАТА НА HEAD. Если под запрошенный канал тега нет, функция возвращает
     `ref=None, kind=None` и НАЗЫВАЕТ причину. Молчаливый фолбэк на ветку воспроизвёл бы исходный
     дефект: дочка просила бы `stable` и получала `edge`, только теперь через новый механизм.
+
+    КАНДИДАТ ОБЯЗАН ПОПАДАТЬ В allowed_version_range ДОЧКИ (P1, аудит 04.09.2026). Без этого
+    новейший заработавший тег — например мажор v4.0.0 — затенял бы in-range теги: дочке на 3.x
+    предлагался бы 4.0.0, `cmd_update` видел бы его вне диапазона `>=3.0.0 <4.0.0` и падал бы, и
+    ежедневная джоба автообновления краснела бы КАЖДЫЙ день после мажорного выпуска. Хуже: дочка не
+    получала бы даже безопасный in-range 3.40.0, потому что его заслонял мажор. Поэтому среди
+    заработавших канал тегов выбирается новейший, который И попадает в диапазон дочки. Мажор-переход
+    остаётся осознанным решением владельца (расширить диапазон / `--force`), а не тем, что кит
+    предлагает сам. `allowed_range=None` — читать диапазон из `.ai-ops.yaml`; пустой диапазон —
+    ограничений нет (поведение как раньше).
     """
     ch = str(channel or "").strip().lower()
     if ch not in CHANNEL_ORDER:
@@ -331,11 +341,18 @@ def resolve_update_ref(channel, repo_dir=None):
                 "reason": "канал edge — это ветка по умолчанию, тег не выбирается"}
     want = CHANNEL_ORDER.index(ch)
     pairs = tag_channels(repo_dir)
+    rng = child_allowed_range() if allowed_range is None else str(allowed_range or "")
     # ПОНИЖЕНИЕ ОБНОВЛЕНИЕМ НЕ ЯВЛЯЕТСЯ — то же правило, что у `doctor` (B2-16). Без него запрос
     # `stable` увёл бы дочку с 3.36.12 на 3.36.10: старее и с дефектом, ради которого канал ввели.
     floor = installed_version() or "0"
+    range_blocked = []   # теги, что заработали канал, но вне диапазона дочки (напр. мажор)
     for tag, tag_ch, ver in pairs:
         if CHANNEL_ORDER.index(tag_ch) < want:
+            continue
+        # ВНЕ ДИАПАЗОНА — НЕ КАНДИДАТ. Мажорный тег, заслоняющий in-range теги, здесь пропускается,
+        # и поиск идёт дальше, к новейшему in-range. Так дочке на 3.x достаётся 3.40.0, а не 4.0.0.
+        if ver and rng and not version_in_range(ver, rng):
+            range_blocked.append((tag, ver))
             continue
         # РАВНАЯ ВЕРСИЯ — НЕ ПОНИЖЕНИЕ (правка 20.08.2026, поймано первым же живым прогоном
         # обновления без клона). Здесь стояло `<=`, и дочка, стоящая ровно на последнем выпуске
@@ -348,6 +365,17 @@ def resolve_update_ref(channel, repo_dir=None):
                                f"{floor}: это понижение, а не обновление. Обновление не выполняется")}
         return {"ref": tag, "kind": "tag", "channel": ch,
                 "reason": f"{tag} ЗАРАБОТАЛ канал '{tag_ch}' — не слабее запрошенного '{ch}'"}
+    # In-range кандидата нет, но заработавшие канал теги ЕСТЬ — и все они вне диапазона дочки
+    # (типично: вышел мажор v4.0.0, дочка на диапазоне 3.x). Это НЕ тупик и НЕ ошибка тегов:
+    # мажор-переход намеренно требует решения владельца. Называем и тег, и выход, чтобы владелец
+    # не пошёл чинить исправные теги.
+    if range_blocked and rng:
+        newest_tag, newest_ver = range_blocked[0]
+        return {"ref": None, "kind": None, "channel": ch, "range_blocked": True,
+                "reason": (f"под канал '{ch}' новейший заработавший тег — {newest_tag} ({newest_ver}), "
+                           f"но он вне allowed_version_range дочки '{rng}' (в диапазоне заработавших "
+                           f"тегов нет). Обновление пропущено: мажор-переход осознанный — расширьте "
+                           f"диапазон в .ai-ops.yaml или обновитесь с --force")}
     seen = ", ".join(f"{t}={c}" for t, c, _v in pairs[:3]) or "ни один тег не объявляет канал"
     # ОТКАЗ ОБЯЗАН НАЗЫВАТЬ ВЫХОД. Замер 20.08.2026: дочка на `stable` не может обновиться, пока ни
     # один тег не заработал `stable`; а `stable` зарабатывается полевыми доказательствами, которые
@@ -1705,13 +1733,20 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     if not version_in_range(target, allowed):
         report["compatibility"] = "incompatible"
         if not force:
-            report.update(status="blocked", human_approval_required=True,
+            # МЯГКИЙ ПРОПУСК, А НЕ ПАДЕНИЕ (P1, аудит 04.09.2026). Раньше здесь стоял `return 1`, и
+            # ежедневная джоба автообновления (`templates/ci/ai-ops-update.yml` -> `update
+            # --in-place`) КРАСНЕЛА каждый день после мажорного выпуска: target=4.0.0 вне диапазона
+            # 3.x дочки. Но выход за диапазон — не сбой: мажор-переход намеренно требует решения
+            # владельца (расширить диапазон / `--force`). Как и путь channel-none в resolve-ref,
+            # это чистый выход с уведомлением — джобе краснеть не с чего. Мажор-гейт цел: без явного
+            # согласия кит через мажор не переходит, он лишь не падает, сообщая об этом.
+            report.update(status="skipped", human_approval_required=True,
                           report=f"Целевая версия {target} вне allowed_version_range "
-                                 f"'{allowed}'. Обновление остановлено — расширьте диапазон "
-                                 f"в .ai-ops.yaml осознанно (major-переход) или запустите с --force.")
+                                 f"'{allowed}'. Обновление пропущено — мажор-переход осознанный: "
+                                 f"расширьте диапазон в .ai-ops.yaml или запустите с --force.")
             out = write_report(report)
-            print(report["report"]); print(f"отчёт: {out}")
-            return 1
+            print(f"⚠ {report['report']}"); print(f"отчёт: {out}")
+            return 0
         report["compatibility"] = "incompatible-forced"
 
     drift = detect_drift() or []

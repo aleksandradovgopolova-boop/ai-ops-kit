@@ -149,6 +149,30 @@ probes:
   why: 'Рубер-штамп (Fix C, 31.08.2026) — вердикт без единого чтения СУДЬЁЙ и без сверки хоть одной
     цитаты по ДОСТАВЛЕННОМУ файлу (кит его не читал): с эталоном не сверялись ничем. Снять страж —
     пропустить met, стоящий на одном диффе, который мог устареть. Принимать такое опаснее всего в приёмке.'
+- id: review-grounding-reads-the-file
+  kind: guard
+  file: ai_ops_kit/engine/pipeline_evidence.py
+  find: '    return 1 <= min(nums) and max(nums) <= total'
+  replace_with: '    return True'
+  tests:
+  - tests/unit/test_pipeline_review.py
+  why: 'Заземление ревью поднято до уровня приёмки (Fix C, P0 04.09.2026): pass ревьюера с 0 reads
+    закрывает блокирующий гейт ТОЛЬКО если кит сам прочитал доставленный файл и процитированный
+    диапазон строк в нём РЕАЛЕН. Снять сверку строк с файлом (вернуть True всегда) — вернуть остаточный
+    рубер-штамп: pass проходит с ВЫДУМАННЫМ диапазоном по одному совпадению имени файла.'
+- id: review-grounding-seam-run-reviews-calls-it
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/pipeline_evidence.py
+  file: ai_ops_kit/engine/pipeline_evidence.py
+  find: '                and not _review_cites_delivered_file(res, delivered, work_root)):'
+  replace_with: '                and not False):'
+  tests:
+  - tests/unit/test_pipeline_review.py
+  why: 'ШОВ: `_run_reviews` обязан ЗВАТЬ заземление на пути рубер-штампа. Обойти вызов (`not False`)
+    — рубер-штамп сработает и на ЗАЗЕМЛЁННОМ pass: интеграционный тест grounded-pass покраснеет. Без
+    шва механизм заземления мог бы стать зелёным и неиспользуемым — тот класс дефекта, ради которого
+    введены швы (B2-14: сверки не было, а отчёт сообщал delivered).'
 - id: acceptance-seam-pipeline-calls-check
   kind: seam
   covers:
@@ -1646,3 +1670,29 @@ probes:
     ТЕКУЩЕЙ цели дала stale. Снять guard (провалить в открытие PR) — вернуть ровно тот дефект, ради
     которого работа и делалась: устаревшее evidence выдаётся за проверенное, PR открывается на
     сдвинувшейся цели. Проба обязана покраснеть на тесте «сдвинутая цель НЕ открывает PR».'
+- id: self-host-protects-its-own-engine
+  kind: guard
+  file: ai_ops_kit/engine/tool_broker.py
+  find: '    if _is_kit_self_host(child_root):   # self-host: движок/CI/реестры под owner-approval (SEAM)'
+  replace_with: '    if False:   # self-host: движок/CI/реестры под owner-approval (SEAM)'
+  tests:
+  - tests/unit/test_tool_broker.py
+  why: 'P0-2 (аудит 04.09): движок/CI/реестры кита (.github/, ai_ops_kit/, registry/) под owner-approval
+    ТОЛЬКО когда прогон идёт над самим китом (self-host). Снять условие (if False) — и на self-host
+    движок перестаёт быть protected: модель через sed/echo> правит ai_ops_kit/gates или .github/workflows
+    без одобрения, и пост-фактум сторож молчит (ровно дыра, ради которой правило и заведено). Проба
+    TestP0SelfHostEngineProtected (write- и shell-канал, откат + запрет) обязана покраснеть.'
+- id: self-host-seam-policy-loads-protected-map
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/tool_broker.py
+  file: ai_ops_kit/engine/tool_broker.py
+  find: '        self.protected = _protected_prefixes(child_root)'
+  replace_with: '        self.protected = []  # SEAM-DISABLED'
+  tests:
+  - tests/unit/test_tool_broker.py
+  why: 'ШОВ: охрана self-host (и вся карта protected_paths) работает лишь пока Policy РЕАЛЬНО загружает
+    карту через _protected_prefixes(child_root) в __init__. Оборвать вызов (protected = []) — и охранные
+    пробы остаются зелёными на логике, но ни один prohibited-путь (security/, self-host движок, protected
+    дочки) больше не защищён: механизм отключён на входе. Тесты protected-путей в test_tool_broker.py
+    обязаны покраснеть.'
