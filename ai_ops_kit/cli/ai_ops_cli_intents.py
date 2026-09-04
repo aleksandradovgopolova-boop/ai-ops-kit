@@ -823,18 +823,22 @@ def _intent_roadmap(task, child_root, signals, a):
     if js:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
         return 0
-    labels = {"now": "СЕЙЧАС", "next": "СЛЕДУЮЩИЙ", "later": "ДАЛЬШЕ"}
+    labels = {"now": "СЕЙЧАС В РАБОТЕ", "next": "СЛЕДУЮЩИЙ РЕЗУЛЬТАТ", "later": "ПОЗЖЕ"}
     for h in ("now", "next", "later"):
         block = rep["roadmap"].get(h) or []
         print(f"{labels[h]}:")
         if not block:
             print("  (пусто)")
         for d in block:
-            print(f"  • {d['goal']}: исходы {d['reached']}/{d['total']}")
+            # Слаг — технический якорь; счётчик исходов подаём человеку словами, а не «0/2».
+            name = d.get("title") or d["goal"]
+            anchor = f" ({d['goal']})" if name != d["goal"] else ""
+            print(f"  • {name}{anchor}: "
+                  f"{roadmap_manager.humanize_outcomes(d['reached'], d['total'])}")
     if not rep["authored_present"]:
-        print("  · авторского ROADMAP.md нет — сверять с ним нечего (третье состояние)")
+        print("  · авторского обзора-файла ROADMAP.md нет — сверять с ним нечего (третье состояние)")
     for dv in rep["deviations"]:
-        print(f"  ⚠ отклонение: {dv}")
+        print(f"  ⚠ расхождение с обзором: {dv}")
     return 0
 
 
