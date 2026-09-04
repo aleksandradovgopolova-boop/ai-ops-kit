@@ -285,3 +285,38 @@ class TestP0AuthoritativePushedSha:
             assert r["head_sha"] == self.STALE     # без push авторитета нет — берём, что даёт API
         finally:
             pr_open._gh_request, pr_open._git, pr_open._cp._github_token = real_gh, real_git, real_tok
+
+
+@pytest.mark.unit
+class TestStatusDocsInPrBody:
+    """#404: тело сгенерированного PR явно сообщает, как прогон обошёлся со статус-доками —
+    обновил их или назвал причину-исключение. Так PR не упирается молча в собственный гейт свежести."""
+
+    def test_note_reports_update_when_doc_fresh(self):
+        note = pr_open._status_docs_note(
+            {"managed": True, "doc": "context/product/ProductStatus.md",
+             "reviewed_at": "2026-09-04", "fresh_today": True})
+        assert "обновлён этой доставкой" in note
+        assert "context/product/ProductStatus.md" in note
+
+    def test_note_names_exception_when_no_managed_doc(self):
+        note = pr_open._status_docs_note(
+            {"managed": False, "reason": "в репозитории нет статус-дока (living-status) — обновлять нечего"})
+        assert "причина-исключение" in note and "нет статус-дока" in note
+
+    def test_note_flags_stale_managed_doc(self):
+        note = pr_open._status_docs_note(
+            {"managed": True, "doc": "PROJECT_STATUS.md", "reviewed_at": "2026-01-01", "fresh_today": False})
+        assert "не обновлён этой доставкой" in note
+
+    def test_note_handles_missing_outcome(self):
+        """Отсутствующий исход (None) не роняет сборку — читается как «обновлять нечего»."""
+        assert "причина-исключение" in pr_open._status_docs_note(None)
+
+    def test_pr_body_embeds_status_note(self):
+        """Проба «краснеет на дефекте»: если сборка тела перестанет вкладывать строку про статус-доки,
+        причина-исключение исчезнет из тела PR и этот assert покраснеет."""
+        status = {"managed": False, "reason": "нет статус-дока"}
+        body = pr_open.pr_body("W-1", "main", "abcdef123456", "cafe4567", status)
+        assert "W-1" in body and "main" in body and "cafe4567" in body
+        assert "причина-исключение: нет статус-дока" in body
