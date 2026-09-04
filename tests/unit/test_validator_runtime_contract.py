@@ -64,6 +64,7 @@ STANDALONE = [
     "validate_model_roles",
     "validate_module_size",       # 02.09.2026: standalone, читает свой packages/module-size-baseline.yaml + ai_ops_kit/
     "validate_mutation_probes",
+    "validate_nightly_no_direct_main_write",  # 04.09.2026 (#422): standalone, AST-обход ночного пути (nightly_review/worktree/pr_open)
     "validate_openspec_change",
     "validate_own_medicine",
     "validate_package_boundaries",
