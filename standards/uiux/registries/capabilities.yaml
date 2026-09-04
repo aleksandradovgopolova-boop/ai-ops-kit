@@ -7,15 +7,28 @@
 #   * constitution_refs -> должны быть в rules.yaml (иначе dangling_rule_ref);
 #   * token_namespaces  -> должны быть объявлены в tokens.yaml (иначе dangling_namespace);
 #   * tokens            -> должны существовать в design/tokens (иначе dangling_token);
-#   * backed_by         -> id реального компонента/паттерна/шаблона (иначе dangling_local).
+#   * backed_by         -> id реального компонента/паттерна/шаблона (иначе dangling_local);
+#   * status            -> значение ИЗ ЗАКРЫТОГО СЛОВАРЯ (иначе unknown_status), а самый сильный
+#                          статус guaranteed_by_shipped_code ТРЕБУЕТ доказанного backing
+#                          (иначе unsubstantiated_guarantee) — статус проверяется данными, а не декларацией.
+#
+# ЧЕСТНАЯ ГРАДАЦИЯ СТАТУСА (ср. runtimes.yaml: documented/degraded/unsupported):
+#   * guaranteed_by_shipped_code — есть доказанный backing-код, едущий в дочку: запись несёт
+#       shipped_backing со списком путей, каждый из которых РЕАЛЬНО существует и лежит ВНЕ
+#       standards/uiux/** (этот стандарт-дерево в дочку не едет). Только тогда «гарантирует» правдиво;
+#   * required_by_standard — стандарт ТРЕБУЕТ возможность (правила Конституции + токены/каталог
+#       её описывают), но реализация/поставка не гарантирована: backed_by указывает лишь на
+#       каталожную запись (спека), а код в дочку не едет. Это не «гарантия», а требование;
+#   * planned — намечено, backing ещё не существует.
 version: '1.0'
 kind: capabilities
 note: 'Сквозные возможности системы. Каждая опирается на правила Конституции и на токены/компоненты
-  по id — заявка проверяема, а не декларативна.'
+  по id — заявка проверяема, а не декларативна. Поле status честно градуирует зрелость: пока backing —
+  лишь каталожная спека, а standards/uiux/** в дочку не едет, статус — required_by_standard, а не гарантия.'
 entries:
 - id: cap.tokenized-visuals
   name: Токенизация визуальных решений
-  status: guaranteed
+  status: required_by_standard
   summary: Все визуальные решения собираются из токенов, а не изобретаются (единый источник истины).
   constitution_refs:
   - UI-014
@@ -35,7 +48,7 @@ entries:
   - comp.input
 - id: cap.theming
   name: Темизация (light/dark, перекраска бренда)
-  status: guaranteed
+  status: required_by_standard
   summary: Смена темы или бренда переопределяет один semantic-слой цвета; id ролей стабильны.
   constitution_refs:
   - UI-014
@@ -53,7 +66,7 @@ entries:
   - comp.modal
 - id: cap.accessibility-aa
   name: Доступность WCAG 2.2 AA
-  status: guaranteed
+  status: required_by_standard
   summary: Контраст и видимость фокуса на базовом уровне; доступность не «улучшение», а норма.
   constitution_refs:
   - UI-025
@@ -70,7 +83,7 @@ entries:
   - comp.data-table
 - id: cap.keyboard-operable
   name: Клавиатурная управляемость
-  status: guaranteed
+  status: required_by_standard
   summary: Любой интерактивный элемент достижим и управляем с клавиатуры, фокус виден.
   constitution_refs:
   - UI-026
@@ -85,7 +98,7 @@ entries:
   - comp.modal
 - id: cap.non-color-signaling
   name: Сигнал не только цветом
-  status: guaranteed
+  status: required_by_standard
   summary: Состояние/значение передаётся текстом или иконкой, а не одним цветом.
   constitution_refs:
   - UI-027
@@ -97,7 +110,7 @@ entries:
   - comp.toast
 - id: cap.state-completeness
   name: Полнота состояний данных
-  status: guaranteed
+  status: required_by_standard
   summary: Загрузка, пустое, ошибка и наполненное — состояния первого класса, а не happy path.
   constitution_refs:
   - UI-032
@@ -111,7 +124,7 @@ entries:
   - comp.toast
 - id: cap.responsive
   name: Адаптивность и reflow
-  status: guaranteed
+  status: required_by_standard
   summary: Адаптируется опыт, а не только вьюпорт; устойчивость к масштабированию и reflow.
   constitution_refs:
   - UI-033
@@ -124,7 +137,7 @@ entries:
   - tpl.list
 - id: cap.purposeful-motion
   name: Осмысленное движение и reduced-motion
-  status: guaranteed
+  status: required_by_standard
   summary: Движение сообщает изменение; prefers-reduced-motion сводит анимации к мгновенным.
   constitution_refs:
   - UI-034
@@ -138,7 +151,7 @@ entries:
   - comp.modal
 - id: cap.localization
   name: Язык интерфейса как часть интерфейса
-  status: guaranteed
+  status: required_by_standard
   summary: Действия названы действиями, без языка реализации; текст проектируется, а не переводится позже.
   constitution_refs:
   - UI-022
@@ -151,7 +164,7 @@ entries:
   - comp.empty-state
 - id: cap.destructive-protection
   name: Защита деструктивных действий
-  status: guaranteed
+  status: required_by_standard
   summary: Риск определяет трение; деструктивные действия защищены подтверждением.
   constitution_refs:
   - UI-018

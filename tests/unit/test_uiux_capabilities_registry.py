@@ -161,6 +161,90 @@ def test_fail_closed_capability_dangling_backed_by(tmp_path):
         "валидатор не поймал ссылку capability на несуществующий компонент")
 
 
+# ─── честная градация статуса capability: проверяется данными, а не декларацией ──────────────────
+
+CAP_STATUS_VOCAB = {"guaranteed_by_shipped_code", "required_by_standard", "planned"}
+
+
+def test_committed_statuses_are_honest_gradation():
+    """STRUCTURAL: каждый закоммиченный статус — из закрытого словаря честной градации, и ни одна
+    запись не заявляет guaranteed_by_shipped_code (backing — каталожная спека, standards/uiux не едет)."""
+    caps = _load(CAPS_YAML)
+    entries = caps.get("entries", [])
+    assert entries, "capabilities.yaml без записей"
+    for e in entries:
+        st = e.get("status")
+        assert st in CAP_STATUS_VOCAB, e.get("id") + ": статус '" + str(st) + "' вне словаря"
+        if st == "guaranteed_by_shipped_code":
+            assert e.get("shipped_backing"), (
+                e.get("id") + ": guaranteed_by_shipped_code без shipped_backing — завышение")
+
+
+def test_fail_closed_capability_unknown_status(tmp_path):
+    """FAIL-CLOSED: статус вне закрытого словаря ловится как unknown_status, а не проходит молча."""
+    uiux = _copy(tmp_path)
+    p = uiux / "registries" / "capabilities.yaml"
+    data = _load(p)
+    data["entries"][0]["status"] = "guaranteed"  # старое самодекларативное значение — теперь недопустимо
+    _dump(p, data)
+    report = _run(uiux)
+    assert report["ok"] is False and _has(report, "unknown_status"), (
+        "валидатор не поймал статус вне закрытого словаря")
+
+
+def test_fail_closed_unsubstantiated_guarantee(tmp_path):
+    """FAIL-CLOSED (проба краснеет на дефекте): guaranteed_by_shipped_code без доказанного backing
+    (нет shipped_backing) → unsubstantiated_guarantee. Гарантия без едущего кода — красная."""
+    uiux = _copy(tmp_path)
+    p = uiux / "registries" / "capabilities.yaml"
+    data = _load(p)
+    data["entries"][0]["status"] = "guaranteed_by_shipped_code"  # без shipped_backing
+    data["entries"][0].pop("shipped_backing", None)
+    _dump(p, data)
+    report = _run(uiux)
+    assert report["ok"] is False and _has(report, "unsubstantiated_guarantee"), (
+        "валидатор не покраснел на гарантии без доказанного shipped_backing")
+
+
+def _copy_realdepth(tmp: Path) -> Path:
+    """Копия с реальной глубиной repo/standards/uiux — валидатор вычисляет REPO_ROOT = parents[1],
+    поэтому shipped_backing (repo-относительные пути) резолвятся как в настоящем дереве."""
+    dst = tmp / "standards" / "uiux"
+    shutil.copytree(STD, dst)
+    return dst
+
+
+def test_guarantee_backed_inside_standard_is_still_unsubstantiated(tmp_path):
+    """FAIL-CLOSED: shipped_backing, указывающий ВНУТРЬ standards/uiux/** (дерево-стандарт в дочку
+    не едет), не засчитывается за гарантию — по-прежнему unsubstantiated_guarantee."""
+    uiux = _copy_realdepth(tmp_path)  # REPO_ROOT валидатора = tmp_path
+    p = uiux / "registries" / "capabilities.yaml"
+    data = _load(p)
+    data["entries"][0]["status"] = "guaranteed_by_shipped_code"
+    # путь СУЩЕСТВУЕТ (внутри скопированного стандарта), но лежит в standards/uiux — не едет в дочку
+    data["entries"][0]["shipped_backing"] = ["standards/uiux/registries/capabilities.yaml"]
+    _dump(p, data)
+    report = _run(uiux)
+    assert report["ok"] is False and _has(report, "unsubstantiated_guarantee"), (
+        "backing внутри standards/uiux не должен считаться доказанной гарантией")
+
+
+def test_substantiated_guarantee_is_green(tmp_path):
+    """POSITIVE: guaranteed_by_shipped_code с shipped_backing на РЕАЛЬНЫЙ артефакт вне standards/uiux
+    — не краснит. Доказывает, что зелень честная (проба зеленеет ровно при доказанном backing)."""
+    uiux = _copy_realdepth(tmp_path)  # REPO_ROOT валидатора = tmp_path
+    (tmp_path / "shipped_real_component.py").write_text("# едущий в дочку артефакт\n", encoding="utf-8")
+    p = uiux / "registries" / "capabilities.yaml"
+    data = _load(p)
+    data["entries"][0]["status"] = "guaranteed_by_shipped_code"
+    data["entries"][0]["shipped_backing"] = ["shipped_real_component.py"]
+    _dump(p, data)
+    report = _run(uiux)
+    assert not _has(report, "unsubstantiated_guarantee"), (
+        "доказанный shipped_backing не должен краснить: " + json.dumps(
+            report.get("problems", []), ensure_ascii=False))
+
+
 # ─── side-effect: реестры реально читаются как данные ───────────────────────────────────────────
 
 def test_capabilities_validated_against_tokens_registry(tmp_path):
