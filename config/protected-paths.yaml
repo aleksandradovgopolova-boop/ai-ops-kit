@@ -14,3 +14,15 @@ protected_paths:
     approval: owner_required
   - path: config/protected-paths.yaml
     approval: owner_required
+  # P0 (аудит 04.09): при self-host (кит развивает сам себя) модель через shell — `sed -i`,
+  # `echo >` — могла молча править CI-конвейеры, движок и реестры-источники-истины, а пост-фактум
+  # сторож молчал (эти пути не были protected). Ставим их под owner_required: это APPROVAL-GATE,
+  # НЕ жёсткий запрет — кит ВСЁ ЕЩЁ может править себя, но только с явным человеко-одобрением
+  # (privileged + protected_path_write), а не втихую тем же прогоном, который эти же правила и
+  # ослабляет. Догфудинг сохранён (одобрил владелец — правь), молчаливый обход закрыт.
+  - path: .github/
+    approval: owner_required
+  - path: ai_ops_kit/
+    approval: owner_required
+  - path: registry/
+    approval: owner_required

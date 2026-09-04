@@ -407,13 +407,13 @@ def _command_binaries(cmd):
 
 
 def sandbox_policy(child_root=None, write_scope=None, allow_network=True):
-    """v2.81 Containment: усиленная политика для pipeline с живой моделью — shell по allowlist
-    dev-инструментов, доставка (git push) заблокирована. allow_network оставляем True по
-    умолчанию (npm ci/pip нуждаются в сети на этапе установки); отдельные шаги могут ужесточать.
-    ЧЕСТНО: это enforceable-подмножество; полная FS/сеть/ресурс-изоляция — контейнер (v2.81 доп.)."""
+    """v2.81 Containment: усиленная политика МОДЕЛЬНОЙ ПЕТЛИ — shell по allowlist, git push заблокирован,
+    allow_network=True по умолчанию (install нуждается в сети). P0 (аудит 04.09): shell_scope_guard=True —
+    write_scope enforce-ится и на shell (иначе `echo … > out_of_scope/x` писал мимо scope, а прямой write —
+    нет); фаза install берёт install-политику со снятым guard (см. _install_dependencies). Полн. изоляция — контейнер."""
     return Policy(level="execution", child_root=child_root, write_scope=write_scope,
                   shell_mode="allowlist", shell_allowlist=SANDBOX_SHELL_ALLOWLIST,
-                  allow_network=allow_network, block_push=True)
+                  allow_network=allow_network, block_push=True, shell_scope_guard=True)
 
 
 def _escapes_root(rel):
