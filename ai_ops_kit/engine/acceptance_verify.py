@@ -53,14 +53,8 @@ import sys
 import textwrap
 from pathlib import Path
 
-PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
-            Path(__file__).resolve().parents[1])
-for _p in (PKG / "validation",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-from ai_ops_kit.engine import tool_loop      # noqa: E402
-from ai_ops_kit.engine import tool_broker    # noqa: E402
+from ai_ops_kit.engine import tool_loop
+from ai_ops_kit.engine import tool_broker
 
 # Сколько файлов ревьюеру разрешено прочитать поверх диффа. Дифф он получает целиком (со stat), так
 # что чтения нужны для проверки контекста, а не для знакомства с изменением.

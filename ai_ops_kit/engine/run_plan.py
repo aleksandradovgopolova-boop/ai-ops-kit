@@ -63,8 +63,7 @@ def load(rel):
 def _base_workflow(signals):
     """base_workflow из ai_route; при сбое — честный fallback. -> (workflow, reasons, confidence)."""
     try:
-        sys.path.insert(0, str(PKG / "validation"))
-        from ai_ops_kit.shared import _bootstrap  # noqa: F401 — кладёт validation/ в sys.path ДО плоских импортов ниже
+        from ai_ops_kit.shared import _bootstrap  # noqa: F401 — импорт ради side-effect: кладёт корень пакета в sys.path
         from ai_ops_kit.engine import ai_route
         d = ai_route.route(signals)
         return d.get("workflow"), d.get("reasons", []), d.get("classification_confidence", "normal")

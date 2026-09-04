@@ -10,23 +10,17 @@ import json
 import sys
 from pathlib import Path
 
-PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
-            Path(__file__).resolve().parents[1])
-for _p in (PKG / "validation",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
+from ai_ops_kit.engine import tool_loop
+from ai_ops_kit.engine import tool_broker
+from ai_ops_kit.gates import gate_executor
+from ai_ops_kit.gates import gate_policy
 
-from ai_ops_kit.engine import tool_loop       # noqa: E402
-from ai_ops_kit.engine import tool_broker     # noqa: E402
-from ai_ops_kit.gates import gate_executor   # noqa: E402
-from ai_ops_kit.gates import gate_policy     # noqa: E402
-
-from ai_ops_kit.engine.pipeline_helpers import (   # noqa: E402
+from ai_ops_kit.engine.pipeline_helpers import (
     _parse_yaml_block, _openspec_validate, _authoring_specs,
     _reviewable_gates, _gate_checklist,
 )
-from ai_ops_kit.engine.pipeline_git import _change_context  # noqa: E402
-from ai_ops_kit.engine.pipeline_failure import _security_verdict_errors, _evidence_ref_errors  # noqa: E402
+from ai_ops_kit.engine.pipeline_git import _change_context
+from ai_ops_kit.engine.pipeline_failure import _security_verdict_errors, _evidence_ref_errors
 
 
 def _install_dependencies(profile, root, policy):

@@ -8,18 +8,9 @@ spec-depth/spec-first/приёмка/context-budget (readiness) и доменн�
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
-            Path(__file__).resolve().parents[1])
-for _p in (PKG / "validation",):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-from ai_ops_kit.engine.pipeline_git import _change_context_range  # noqa: E402
-from ai_ops_kit.engine.pipeline_failure import _diff_checks  # noqa: E402
-from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402
+from ai_ops_kit.engine.pipeline_git import _change_context_range
+from ai_ops_kit.engine.pipeline_failure import _diff_checks
+from ai_ops_kit.engine.pipeline_evidence import (
     _review_security, _human_approval_domains_uncovered,
 )
 
