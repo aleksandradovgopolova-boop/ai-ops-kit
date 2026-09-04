@@ -26,7 +26,7 @@ ceilings:
   ai_ops_kit/planning/delivery_plan.py: 1076
   ai_ops_kit/lifecycle/active_work.py: 1073
   ai_ops_kit/ui/presenter_formatters.py: 977
-  ai_ops_kit/planning/repo_audit.py: 965
+  ai_ops_kit/planning/repo_audit.py: 759
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
   ai_ops_kit/providers/orchestrator_providers.py: 909
@@ -168,3 +168,22 @@ raises:
       поведения в control-plane плана; логика прежних статусов не менялась. Разбивать 1050-строчный
       контрол-плейн ради статуса непропорционально — потолок поднят осознанно под факт. Ратчет держит
       рост вниз от 1076.
+  - at: '2026-09-04'
+    what: lower_ceiling
+    from: 'ai_ops_kit/planning/repo_audit.py = 965'
+    to: 'ai_ops_kit/planning/repo_audit.py = 759'
+    work: split-one-monolith-repo_audit — вынос проб-свободных хелперов файла ответов в спутник (P2)
+    why: >-
+      Группа проб-свободных помощников, работающих с файлом ответов владельца
+      (`.ai/project/onboarding-answers.yaml`) — ANSWERS_REL, answers_path, AnswersCorrupt,
+      read_answers, _ANSWER_KEY_RE, _inline_comment, _owner_comments, write_question_file — вынесена
+      из repo_audit.py в новый ai_ops_kit/planning/repo_audit_answers.py. Когерентная область
+      (единственный код, разбирающий и пересобирающий этот файл; у неё уже свои тесты
+      test_onboarding_answers_*), нулевая связь с остальным модулем. Поведение не менялось — чистый
+      перенос + ре-экспорт прежними именами (внешние импортёры repo_audit.write_question_file и
+      `from ...repo_audit import read_answers, answers_path, AnswersCorrupt` работают по-прежнему);
+      рационале-комментарии (F-020/F-021/F-023) перенесены дословно, не срезаны. repo_audit.py усох
+      965 -> 759 (потолок опущен под факт). Спутник = 241 строка, НИЖЕ порога 700 — в ceilings не
+      вносится (ниже порога не ограничивается). Мутационно-охраняемых строк у файла нет — переносить
+      было нечего. Ратчет держит дальнейший рост вниз от 759.
+
