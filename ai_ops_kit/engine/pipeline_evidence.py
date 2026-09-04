@@ -24,7 +24,16 @@ from ai_ops_kit.engine.pipeline_failure import _security_verdict_errors, _eviden
 
 
 def _install_dependencies(profile, root, policy):
-    """Поставить зависимости стеков (install_command) через Broker перед сбором evidence."""
+    """Поставить зависимости стеков (install_command) через Broker перед сбором evidence.
+
+    P0 (аудит 04.09): tool-loop модели теперь под shell_scope_guard=True (запись мимо write_scope
+    откатывается). Установка зависимостей — ДРУГАЯ фаза: `npm ci`/`pip`/сборка законно пишут
+    lock-файлы и артефакты ВНЕ write_scope, поэтому здесь берём install-политику со СНЯТЫМ
+    scope-guard. protected_paths и shell_path_guard остаются в силе — install по-прежнему НЕ может
+    молча писать в security/production/движок; ослабляется ровно write_scope, ничего больше."""
+    import copy
+    install_policy = copy.copy(policy)
+    install_policy.shell_scope_guard = False
     results = []
     seen = set()
     for stack in profile.get("stacks", []) or []:
@@ -32,7 +41,7 @@ def _install_dependencies(profile, root, policy):
         if not cmd or cmd in seen:
             continue
         seen.add(cmd)
-        ev = tool_broker.execute({"op": "shell", "command": cmd, "timeout": 600}, root, policy)
+        ev = tool_broker.execute({"op": "shell", "command": cmd, "timeout": 600}, root, install_policy)
         results.append({"language": stack.get("language"), "command": cmd,
                         "allowed": ev.get("allowed"), "ok": ev.get("ok", False),
                         "exit_code": ev.get("exit_code"),
