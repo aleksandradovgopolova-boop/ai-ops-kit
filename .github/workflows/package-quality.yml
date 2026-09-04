@@ -178,6 +178,28 @@ jobs:
       - name: "Security scan: секреты, зависимости, injection-surface"
         run: python3 ai_ops_kit/security/security_scan.py --base origin/main
 
+  # ADVISORY (работа `gate-measures-merge-result`, 04.09.2026). Гейты объёма меряют ВЕТКУ PR; код,
+  # сложенный в main параллельными лентами, дрейфует выше порога незаметно и всплывает падением на
+  # СЛЕДУЮЩЕМ PR, а не на виновнике (footprint main тихо ушёл 490 -> 498 файлов). GitHub merge queue
+  # меряет пороги на временном merge-коммите, но недоступна для личных репо и привязала бы кит к
+  # фиче форджа. Эта джоба держит тот же инвариант САМА, на чистом git: считает ДЕРЕВО СЛИЯНИЯ
+  # base+HEAD через `git merge-tree --write-tree` и меряет объём ИТОГА против потолка volume_bytes.
+  # НЕ-блокирующая (continue-on-error) и НЕ в required-contexts branch protection — как parallel-safety
+  # была advisory; промоутнёт владелец отдельным решением. Только на PR: `--base origin/<base_ref>`
+  # требует базу для сравнения, поэтому в merge_group/push джоба не запускается.
+  merge-footprint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true   # ADVISORY: печатает результат, но НЕ валит workflow
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # нужна полная история: считаем дерево слияния с origin/<base_ref>
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "Merge-preview footprint: объём ИТОГА слияния против потолка (git merge-tree)"
+        run: python3 -m ai_ops_kit.gates.merge_preview --base origin/${{ github.base_ref }} --head HEAD
+
   # 2026-09-03 (замер CI): джоба `coverage` УБРАНА С ПУТИ PR. Замер показал: она занимала ~10.8 мин
   # и держала стену package-quality, при этом за окно прогонов не завалила ничего, а тесты и так
   # гоняются в группах quality. Owner снял `coverage` из обязательных проверок branch protection,

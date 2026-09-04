@@ -1595,3 +1595,28 @@ probes:
     в execution_pipeline и валит интеграционный тест приёмки (он гоняет настоящий run_pipeline, а
     acceptance-гейт живёт внутри _assess_readiness). Шов проверяется с обеих сторон: у механизма исчезает
     точка входа, и это ломает ВЫЗОВ из конвейера.'
+- id: merge-preview-measures-result-against-ceiling
+  kind: guard
+  file: ai_ops_kit/gates/merge_preview.py
+  find: '    breached = merged_bytes > ceiling   # СЕРДЦЕ ПРОВЕРКИ: итог слияния против потолка'
+  replace_with: '    breached = merged_bytes < ceiling   # СЕРДЦЕ ПРОВЕРКИ: итог слияния против потолка'
+  tests:
+  - tests/unit/test_merge_preview.py
+  why: 'Сердце merge-preview (gate-measures-merge-result): вердикт «пробой» — это сравнение объёма
+    ИТОГА СЛИЯНИЯ с потолком volume_bytes. Перевернуть сравнение (> на <) — и дрейф выше потолка
+    объявляется «в пределах», а мелкие слияния — пробоем: ратчет объёма против итога слияния молча
+    инвертируется. Проба ветка-под-потолком/итог-над-потолком обязана покраснеть.'
+- id: merge-preview-seam-cli-calls-measure
+  kind: seam
+  covers:
+  - ai_ops_kit/gates/merge_preview.py
+  file: ai_ops_kit/gates/merge_preview.py
+  find: '    result = measure_merge_footprint(args.root, args.base, args.head)'
+  replace_with: '    result = measure_merge_footprint_DISABLED(args.root, args.base, args.head)'
+  tests:
+  - tests/unit/test_merge_preview.py
+  why: 'ШОВ: merge-preview — процессная точка входа (python3 -m ai_ops_kit.gates.merge_preview),
+    её зовёт advisory-джоба CI, а не импортирующий потребитель. Охранная проба сравнения ничего не
+    стоит, если CLI перестанет звать measure_merge_footprint: тогда exit-код перестаёт отражать
+    итог слияния. Оборвать вызов в main -> тест кода возврата CLI (пробой=1, в пределах=0) обязан
+    покраснеть.'
