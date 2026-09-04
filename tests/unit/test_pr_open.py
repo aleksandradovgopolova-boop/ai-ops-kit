@@ -296,7 +296,7 @@ class TestStatusDocsInPrBody:
         note = pr_open._status_docs_note(
             {"managed": True, "doc": "context/product/ProductStatus.md",
              "reviewed_at": "2026-09-04", "fresh_today": True})
-        assert "обновлён этой доставкой" in note
+        assert "свеж на дату доставки" in note
         assert "context/product/ProductStatus.md" in note
 
     def test_note_names_exception_when_no_managed_doc(self):
@@ -307,7 +307,7 @@ class TestStatusDocsInPrBody:
     def test_note_flags_stale_managed_doc(self):
         note = pr_open._status_docs_note(
             {"managed": True, "doc": "PROJECT_STATUS.md", "reviewed_at": "2026-01-01", "fresh_today": False})
-        assert "не обновлён этой доставкой" in note
+        assert "НЕ свеж на дату доставки" in note
 
     def test_note_handles_missing_outcome(self):
         """Отсутствующий исход (None) не роняет сборку — читается как «обновлять нечего»."""
