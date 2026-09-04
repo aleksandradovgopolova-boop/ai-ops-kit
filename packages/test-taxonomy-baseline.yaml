@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 360
+behavioral_count: 362
 structural_count: 61
-total_count: 421
-behavioral_share_pct: 85.51
+total_count: 423
+behavioral_share_pct: 85.58
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -249,3 +249,17 @@ raises:
       импортируют продуктовый код (acceptance_verify) И зовут его -> оба поведенческие, структурных
       не прибавилось (61 без изменений), доля выросла 85.44% -> 85.51%. Число собранных тестов
       ДО == ПОСЛЕ (53). Baseline пере-записан на фактический замер.
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 360
+    from_total: 421
+    to_behavioral: 362
+    to_total: 423
+    to_share_pct: 85.58
+    work: issue-406 — resume-флаги и гашение заявки мёртвой сессии по pid
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: работа #406 добавила два ПОВЕДЕНЧЕСКИХ теста
+      (test_resume_exec_only_flags.py, test_active_work_dead_session.py) — оба импортируют
+      продуктовый код (ai_ops_run / active_work) И зовут его, поэтому классифицируются как
+      behavioral. Структурных не прибавилось (61 без изменений), доля выросла 85.51% -> 85.58%.
+      Baseline пере-записан на фактический замер (360 -> 362 поведенческих из 423).
