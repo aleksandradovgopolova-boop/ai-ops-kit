@@ -8,7 +8,6 @@ from pathlib import Path as _StdPath
 import pytest
 
 PKG_ROOT = _StdPath(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.engine.workpackage_executor import (
     Path,

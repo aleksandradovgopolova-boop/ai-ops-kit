@@ -14,7 +14,6 @@ import pytest
 import yaml
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.providers import orchestrator
 from ai_ops_kit.providers import orchestrator_usage

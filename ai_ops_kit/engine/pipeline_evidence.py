@@ -12,7 +12,7 @@ from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-for _p in (PKG / "tools", PKG / "validation"):
+for _p in (PKG / "validation",):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
@@ -534,8 +534,8 @@ def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_ro
 #
 # Здесь стояло `sys.exit(selftest())`, а сама функция удалена в v3.30 вместе с переносом
 # селфтестов в pytest: любой запуск падал с `NameError`. Просто убрать блок — тоже неверно:
-# `tools/pipeline_evidence.py` остаётся объявленной точкой входа, и молчаливый выход с кодом 0 — тот
-# самый дефект, который ловит `tests/unit/test_alias_entry_points.py` («ноль и есть симптом»).
+# модуль остаётся запускаемой точкой входа (`python3 -m ai_ops_kit.engine.pipeline_evidence`), и молчаливый
+# выход с кодом 0 — тот самый дефект «ноль и есть симптом».
 # Поэтому вход делает осмысленную работу — печатает назначение модуля, как `invariants.py`.
 # Проверки модуля — в `tests/unit/`.
 if __name__ == "__main__":

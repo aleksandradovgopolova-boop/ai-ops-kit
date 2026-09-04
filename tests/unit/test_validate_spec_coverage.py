@@ -64,7 +64,6 @@ class TestValidateSpecCoverage:
         assert any("escalated_from" in e for e in check(bad_esc))
 
     def test_real_full_engineering_coverage_is_valid(self):
-        sys.path.insert(0, str(PKG / "tools"))
         from ai_ops_kit.gates import spec_levels
 
         cov = spec_levels.assess(
@@ -74,7 +73,6 @@ class TestValidateSpecCoverage:
         assert check(cov) == []
 
     def test_real_empty_quick_coverage_is_valid_by_form(self):
-        sys.path.insert(0, str(PKG / "tools"))
         from ai_ops_kit.gates import spec_levels
 
         cov2 = spec_levels.assess({"task_type": "QUICK"})

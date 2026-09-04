@@ -209,7 +209,6 @@ def test_every_installer_command_is_routed_by_the_wrapper():
     # ДВЕ СТОРОНЫ, А НЕ ОДНА. Слева — команда установщика без маршрута (недостижима). Справа —
     # имя, объявленное «за движком», которого движок не знает: тогда команда пропала бы совсем.
     import sys as _sys
-    _sys.path.insert(0, str(PKG / "tools"))
     from ai_ops_kit.cli import ai_ops_cli as _cli
     orphan = sorted(n for n in intent_owned if n not in _cli.INTENTS)
     assert not orphan, (f"объявлено, что команду обслуживает движок, но такого интента нет: "

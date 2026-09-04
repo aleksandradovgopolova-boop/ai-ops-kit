@@ -17,7 +17,7 @@ IDE и mypy получают навигацию и проверку; стары�
   WorkItemState      — состояние WorkItem
 
 Только аннотации, без runtime-логики. Импортируется как:
-  from contracts import UsageRecord, PreflightResult
+  from ai_ops_kit.shared.contracts import UsageRecord, PreflightResult
 """
 from __future__ import annotations
 
