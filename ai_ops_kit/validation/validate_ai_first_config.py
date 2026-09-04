@@ -8,7 +8,7 @@
   4. структурные ошибки в model-routing / tool-permissions / protected-paths;
   5. орфанный config/quality-gates.yaml (дубликат quality/gates.yaml — SoT).
 
-Использование:  python3 02_tools/ci/validate_ai_first_config.py
+Использование:  python3 -m ai_ops_kit.validation.validate_ai_first_config
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
 from __future__ import annotations

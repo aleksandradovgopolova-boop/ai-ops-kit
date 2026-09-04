@@ -10,7 +10,7 @@
   6. секреты: имена env — только UPPER_SNAKE; литеральных значений credentials быть не должно;
   7. запуск движка маршрутизации (ai_route) на примерах — форма решения корректна.
 
-Использование:  python3 02_tools/ci/validate_ai_first_providers.py
+Использование:  python3 -m ai_ops_kit.validation.validate_ai_first_providers
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
 from __future__ import annotations
