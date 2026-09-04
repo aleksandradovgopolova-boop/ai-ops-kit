@@ -23,7 +23,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 773
-  ai_ops_kit/planning/delivery_plan.py: 1050
+  ai_ops_kit/planning/delivery_plan.py: 1076
   ai_ops_kit/lifecycle/active_work.py: 1073
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 965
@@ -156,3 +156,15 @@ raises:
       «горизонт 'next'». Подача текста в CLI-обработчике выросла на +4 строки; логика проверки не
       менялась. Разбивать 944-строчный intents-спутник ради 4 строк непропорционально — потолок
       поднят осознанно под факт. Ратчет держит рост вниз от 948.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/delivery_plan.py = 1050'
+    to: 'ai_ops_kit/planning/delivery_plan.py = 1076'
+    work: plan-waiting-on-owner-state (P2)
+    why: >-
+      Добавлен честный статус waiting_on_owner (механизм готов, ждём названного действия владельца) с
+      обязательным полем waiting_on: валидация «waiting без названного действия = фантомное состояние»,
+      declared_running берёт только in_progress, resolve короткозамыкает статус. Это +26 строк реального
+      поведения в control-plane плана; логика прежних статусов не менялась. Разбивать 1050-строчный
+      контрол-плейн ради статуса непропорционально — потолок поднят осознанно под факт. Ратчет держит
+      рост вниз от 1076.
