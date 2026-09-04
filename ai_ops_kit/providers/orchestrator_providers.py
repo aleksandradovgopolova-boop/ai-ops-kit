@@ -572,6 +572,37 @@ class ProviderLimitError(RuntimeError):
                 f"(подробно: {self.detail})")
 
 
+class ProviderEnvUnavailableError(RuntimeError):
+    """Исполнитель структурно не запускается в ЭТОЙ среде — это не сетевой сбой и не дефект кита.
+
+    ПОВОД, заявка #160 (поле 18.08.2026, ИИ-Среда). Когда `run --execute` запущен ИЗНУТРИ уже
+    открытой сессии Claude Code, вложенный `claude -p` возвращается мгновенно синтетическим
+    конвертом-ошибкой, НЕ дойдя до модели: `duration_api_ms:0`, ноль токенов, `terminal_reason:
+    api_error`. Причина — сама среда (сессия внутри сессии), поэтому повтор её не лечит: прежде кит
+    делал пять бессмысленных попыток и ронял трейсбек «claude -p не удался после 5 попыток», а человек
+    не видел ни причины, ни выхода.
+
+    Отдельный тип, чтобы граница CLI назвала последствие и ОБА выхода фразой, а не трейсбеком, и чтобы
+    не спутать ни с транзиентным 529 (тот повторять НУЖНО, F-011), ни с исчерпанием лимита
+    (ProviderLimitError — там ждать сброса или менять провайдера, здесь — сменить среду запуска).
+    """
+
+    def __init__(self, provider, detail=""):
+        self.provider = provider
+        self.detail = detail
+        super().__init__(self.human_message())
+
+    def human_message(self):
+        base = (f"Исполнитель `{self.provider}` в этой среде запуститься не смог, поэтому работу "
+                "выполнить не удалось. Так бывает, когда запуск идёт изнутри уже открытой сессии "
+                "Claude — вложенный вызов обрывается сразу, не дойдя до модели, и повторять его "
+                "бесполезно.\n"
+                "  что сделать (одно из двух): запусти `run --execute` из обычного терминала, вне "
+                "сессии Claude; либо укажи другого исполнителя с ключом — "
+                "`--provider anthropic|openai|qwen`.")
+        return base + (f"\n  (подробно: {self.detail})" if self.detail else "")
+
+
 def _session_limit(text):
     """Отличить исчерпание ЛИМИТА СЕССИИ/КВОТЫ от транзиентного 5xx/529.
 
@@ -590,6 +621,34 @@ def _reset_hint(text):
     m = _re.search(r"(?:resets? at|try again at|after)\s+([0-9:apm\s\.]{3,20})", text or "",
                    _re.IGNORECASE)
     return m.group(1).strip().rstrip(".") if m else None
+
+
+def _env_unavailable_envelope(d):
+    """Распознать СТРУКТУРНЫЙ отказ среды по конверту claude-cli (заявка #160).
+
+    Сигнатура из поля: `is_error:true` + `terminal_reason:"api_error"` + `duration_api_ms:0` +
+    нулевые input/output-токены. Вложенный `claude -p` внутри активной сессии Claude Code
+    обрывается ДО обращения к модели — ни времени в API, ни токенов, — и это детерминированно:
+    повтор его не лечит, потому что причина в самой среде, а не в транзиентном сбое сети.
+
+    Проверяется отдельно от `_transient`/`_session_limit`: тот отказ повторять нужно, лимит — ждать
+    сброса, а этот — сменить среду запуска. Требуем ВСЕ признаки, чтобы не спутать со случайным
+    `is_error` (напр. 529 Overloaded несёт ненулевой duration_api_ms и попадает в транзиентную ветку).
+    """
+    if not isinstance(d, dict) or not d.get("is_error"):
+        return False
+    if str(d.get("terminal_reason") or "").strip().lower() != "api_error":
+        return False
+
+    def _is_zero(value):
+        try:
+            return int(value) == 0
+        except (TypeError, ValueError):
+            return False
+
+    return (_is_zero(d.get("duration_api_ms"))
+            and _is_zero(d.get("input_tokens"))
+            and _is_zero(d.get("output_tokens")))
 
 
 def writer_lock_path():
@@ -635,6 +694,42 @@ def _writer_serialization_lock(notify=None):
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         finally:
             f.close()
+
+
+def _human_error(text):
+    # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
+    import json as _json
+    try:
+        d = _json.loads(text)
+    # Узкий тип (срез providers, 2026-08-12): ожидаемый отказ — «это не JSON», и тогда отдаём
+    # текст как есть. Любой другой тип здесь — дефект разбора, и он обязан всплыть.
+    except (ValueError, TypeError):
+        return (text or "").strip()[:2000]
+    parts = []
+    if d.get("error"):
+        parts.append(str(d.get("error")))
+    msg = d.get("message") if isinstance(d.get("message"), dict) else None
+    for blk in ((msg.get("content") if msg else None) or d.get("content") or []):
+        if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
+            parts.append(blk["text"])
+    return (" | ".join(parts) or (text or "").strip())[:2000]
+
+
+def _transient(text):
+    t = (text or "").lower()
+    # 19.08.2026 (заявка #160): список стал ЕДИНСТВЕННЫМ основанием повторять, поэтому в нём
+    # обязано быть и само слово. Сообщение, прямо называющее себя транзиентным, повторять
+    # можно; поймано существующим селфтестом провайдеров, чей образец так и звучал.
+    return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
+                                "500", "502", "503", "504", "internal server error",
+                                "temporarily", "transient", "server_error",
+                                "timeout", "timed out", "connection"))
+
+
+def _backoff(n):
+    import time
+    import random
+    time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
 
 
 def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
@@ -693,36 +788,6 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     # runner заменяет subprocess.run (не весь вызов) — production-path проходит в selftest
     _run = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
 
-    def _human_error(text):
-        # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
-        try:
-            d = _json.loads(text)
-        # Узкий тип (срез providers, 2026-08-12): ожидаемый отказ — «это не JSON», и тогда отдаём
-        # текст как есть. Любой другой тип здесь — дефект разбора, и он обязан всплыть.
-        except (ValueError, TypeError):
-            return (text or "").strip()[:2000]
-        parts = []
-        if d.get("error"):
-            parts.append(str(d.get("error")))
-        msg = d.get("message") if isinstance(d.get("message"), dict) else None
-        for blk in ((msg.get("content") if msg else None) or d.get("content") or []):
-            if isinstance(blk, dict) and blk.get("type") == "text" and blk.get("text"):
-                parts.append(blk["text"])
-        return (" | ".join(parts) or (text or "").strip())[:2000]
-
-    def _transient(text):
-        t = (text or "").lower()
-        # 19.08.2026 (заявка #160): список стал ЕДИНСТВЕННЫМ основанием повторять, поэтому в нём
-        # обязано быть и само слово. Сообщение, прямо называющее себя транзиентным, повторять
-        # можно; поймано существующим селфтестом провайдеров, чей образец так и звучал.
-        return any(s in t for s in ("overloaded", "529", "429", "rate limit", "rate_limit",
-                                    "500", "502", "503", "504", "internal server error",
-                                    "temporarily", "transient", "server_error",
-                                    "timeout", "timed out", "connection"))
-
-    def _backoff(n):
-        time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
-
     last = ""
     for _attempt in range(max_attempts):
         _t0 = time.monotonic()
@@ -759,6 +824,11 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
                 return r.stdout
             if d.get("is_error"):   # синтетический конверт claude (rc=0!), напр. 529 Overloaded — НЕ валидный результат
                 last = _human_error(r.stdout)
+                # #160: СТРУКТУРНЫЙ ОТКАЗ СРЕДЫ (сессия внутри сессии) распознаётся ПЕРВЫМ — до
+                # транзиентной/лимитной веток. Признак (api_error + 0 токенов + duration_api_ms:0)
+                # детерминированный: повтор его не лечит. Наружу — последствие и оба выхода фразой.
+                if _env_unavailable_envelope(d):
+                    raise ProviderEnvUnavailableError("claude-cli", last)
                 # ЛИМИТ СЕССИИ/КВОТЫ — не транзиент: повтор бессмыслен, отвечаем человеку фразой.
                 if _session_limit(last):
                     raise ProviderLimitError("claude-cli", last, _reset_hint(last))
@@ -779,6 +849,14 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
                                       "claude-cli", d.get("model") or model or "claude-code-local")
             return result
         last = _human_error(r.stderr or r.stdout or "")
+        # #160: тот же синтетический конверт среды может прийти и с ненулевым кодом — разберём stdout
+        # и распознаём структурный отказ до транзиентной/лимитной веток (повтор его не лечит).
+        try:
+            _env_d = _json.loads(r.stdout)
+        except (ValueError, TypeError):
+            _env_d = None
+        if _env_unavailable_envelope(_env_d):
+            raise ProviderEnvUnavailableError("claude-cli", last)
         # ЛИМИТ СЕССИИ/КВОТЫ РАСПОЗНАЁТСЯ ПЕРВЫМ (obs 99aa67ef): его текст несёт «429», и без этой
         # ветки он попал бы в `_transient` и был бы повторён пять раз впустую, а затем упал бы
         # трейсбеком. Здесь — немедленная человеческая фраза и код возврата на границе CLI.

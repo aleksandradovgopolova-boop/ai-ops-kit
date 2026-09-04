@@ -45,7 +45,7 @@ scopes:
 
   # providers/ — адаптеры исполнителей и оркестрация workflow.
   - path: ai_ops_kit/providers/
-    max_function_lines: 170
+    max_function_lines: 169
     max_function: run_workflow
     max_function_file: orchestrator.py
     max_function_lineno: 149
