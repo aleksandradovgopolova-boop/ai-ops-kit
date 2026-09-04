@@ -11,7 +11,7 @@ tool-calling петле — чтобы «дал задачу» не превра
 (объявлено, не выдаётся за enforced).
 
 Использование (программно):
-  from budget import Budget, BudgetExceeded
+  from ai_ops_kit.shared.budget import Budget, BudgetExceeded
   b = Budget(max_model_calls=20)
   b.charge_call()          # перед каждым вызовом модели; бросит BudgetExceeded при превышении
 

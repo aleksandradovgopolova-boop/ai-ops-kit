@@ -67,7 +67,6 @@ class TestContextBundleValidation:
         assert any("estimated_tokens" in e for e in check(bad))
 
     def test_real_compiler_produces_valid_bundle(self, good_bundle):
-        sys.path.insert(0, str(PKG / "tools"))
         from ai_ops_kit.context import context_compiler
         with tempfile.TemporaryDirectory() as td:
             (Path(td) / "package.json").write_text(

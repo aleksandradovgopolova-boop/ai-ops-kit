@@ -175,7 +175,6 @@ def test_onboarding_path(child):
     plan_path = child / "planning" / "plan.yaml"
     assert plan_path.is_file(), "план не создан"
 
-    sys.path.insert(0, str(KIT / "tools"))
     from ai_ops_kit.planning import delivery_plan
     plan = delivery_plan.load(child)
     assert not delivery_plan.is_template(plan), (

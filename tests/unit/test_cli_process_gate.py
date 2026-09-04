@@ -17,7 +17,6 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(PKG_ROOT))
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.cli import ai_ops_cli
 from ai_ops_kit.engops import process_spend
