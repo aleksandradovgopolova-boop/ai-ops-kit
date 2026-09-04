@@ -409,6 +409,34 @@ def git_disagreements(plan, root):
     return out
 
 
+def _workitem_status_errors(w, where):
+    """Ошибки/предупреждения по СТАТУСУ работы: выводимый нельзя объявлять, закрытый живёт в истории,
+    вне словаря активного плана, и waiting_on_owner без названного действия — фантомное состояние.
+    Вынесено из validate (func-size, чистый перенос без смены поведения). -> (errors, warns)."""
+    errors, warns = [], []
+    st = w.get("status")
+    if st in DERIVED:
+        warns.append(f"{where}: статус '{st}' ВЫВОДИМЫЙ — объявлять его нельзя, он считается "
+                     f"из зависимостей/гейтов; объявляйте {list(DECLARABLE)}")
+    elif st in CLOSED_DECLARABLE:
+        errors.append(f"{where}: статус '{st}' — закрытая работа живёт в {HISTORY_REL}, "
+                      f"а не в активном плане. Активный план отвечает на вопрос «что идёт и что "
+                      f"взять следующим»; когда закрытое остаётся в нём, ответ приходится "
+                      f"вычитывать из архива (замер: 20 из 25 работ были `done`)")
+    elif st not in ACTIVE_DECLARABLE:
+        errors.append(f"{where}: status '{st}' вне словаря активного плана "
+                      f"({list(ACTIVE_DECLARABLE)}); закрытое — в {HISTORY_REL}")
+    # WAITING БЕЗ НАЗВАННОГО ДЕЙСТВИЯ — ФАНТОМНОЕ СОСТОЯНИЕ. Статус говорит «ждём владельца»,
+    # но пока не сказано ЧЕГО именно ждём, план неотличим от застрявшего: ровно та ловушка,
+    # ради которой статус и заведён. Поэтому `waiting_on` с непустым текстом — обязателен.
+    if st == OWNER_WAIT_STATUS and not str(w.get(OWNER_WAIT_KEY) or "").strip():
+        errors.append(f"{where}: статус '{OWNER_WAIT_STATUS}' без непустого '{OWNER_WAIT_KEY}' — "
+                      f"waiting без названного действия владельца это фантомное состояние: план "
+                      f"выглядит осмысленным, а чего он ждёт — нигде. Назовите ожидаемый шаг: "
+                      f"`{OWNER_WAIT_KEY}: <какое действие владельца разблокирует работу>`")
+    return errors, warns
+
+
 def validate(plan, model=None, closed=None, root=None):
     """Структура + семантика плана. -> {"errors": [...], "warnings": [...]}.
 
@@ -523,25 +551,8 @@ def validate(plan, model=None, closed=None, root=None):
                               f"выбирает роутер в момент запуска (иначе смена runtime "
                               f"переписывает план продукта)")
         st = w.get("status")
-        if st in DERIVED:
-            warns.append(f"{where}: статус '{st}' ВЫВОДИМЫЙ — объявлять его нельзя, он считается "
-                         f"из зависимостей/гейтов; объявляйте {list(DECLARABLE)}")
-        elif st in CLOSED_DECLARABLE:
-            errors.append(f"{where}: статус '{st}' — закрытая работа живёт в {HISTORY_REL}, "
-                          f"а не в активном плане. Активный план отвечает на вопрос «что идёт и что "
-                          f"взять следующим»; когда закрытое остаётся в нём, ответ приходится "
-                          f"вычитывать из архива (замер: 20 из 25 работ были `done`)")
-        elif st not in ACTIVE_DECLARABLE:
-            errors.append(f"{where}: status '{st}' вне словаря активного плана "
-                          f"({list(ACTIVE_DECLARABLE)}); закрытое — в {HISTORY_REL}")
-        # WAITING БЕЗ НАЗВАННОГО ДЕЙСТВИЯ — ФАНТОМНОЕ СОСТОЯНИЕ. Статус говорит «ждём владельца»,
-        # но пока не сказано ЧЕГО именно ждём, план неотличим от застрявшего: ровно та ловушка,
-        # ради которой статус и заведён. Поэтому `waiting_on` с непустым текстом — обязателен.
-        if st == OWNER_WAIT_STATUS and not str(w.get(OWNER_WAIT_KEY) or "").strip():
-            errors.append(f"{where}: статус '{OWNER_WAIT_STATUS}' без непустого '{OWNER_WAIT_KEY}' — "
-                          f"waiting без названного действия владельца это фантомное состояние: план "
-                          f"выглядит осмысленным, а чего он ждёт — нигде. Назовите ожидаемый шаг: "
-                          f"`{OWNER_WAIT_KEY}: <какое действие владельца разблокирует работу>`")
+        _se, _sw = _workitem_status_errors(w, where)
+        errors.extend(_se); warns.extend(_sw)
         # СВЯЗЬ С РЕАЛЬНОСТЬЮ. Открытый PR и статус `todo` — противоречие: PR существует, значит
         # работа начата. Проверяется ФОРМА (в файле есть `pr`), а не состояние GitHub: объявленное
         # состояние чужой системы стареет молча, а форма — нет.

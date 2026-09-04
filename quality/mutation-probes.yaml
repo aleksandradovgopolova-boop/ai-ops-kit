@@ -167,8 +167,8 @@ probes:
 - id: plan-closed-work-not-in-active
   kind: guard
   file: ai_ops_kit/planning/delivery_plan.py
-  find: '        elif st in CLOSED_DECLARABLE:'
-  replace_with: '        elif False:'
+  find: '    elif st in CLOSED_DECLARABLE:'
+  replace_with: '    elif False:'
   tests:
   - tests/unit/test_plan_control_plane.py
   why: Закрытая работа в активном плане возвращает то состояние, из-за которого план перестал быть управляющим

@@ -38,10 +38,10 @@ scopes:
 
   # planning/ — контур Planning & Execution.
   - path: ai_ops_kit/planning/
-    max_function_lines: 188
+    max_function_lines: 179
     max_function: validate
     max_function_file: delivery_plan.py
-    max_function_lineno: 402
+    max_function_lineno: 440
 
   # providers/ — адаптеры исполнителей и оркестрация workflow.
   - path: ai_ops_kit/providers/
