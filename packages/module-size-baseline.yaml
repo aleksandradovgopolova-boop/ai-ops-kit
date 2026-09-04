@@ -20,7 +20,7 @@ threshold: 700
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 969
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 944
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 773
   ai_ops_kit/planning/delivery_plan.py: 1050
@@ -145,3 +145,14 @@ raises:
       это не растит execution_pipeline), но сам вызов describe + проброс status_docs в отчёт стоят
       +2 строки. Разбивать 771-строчный оркестратор ради двух строк непропорционально; потолок поднят
       осознанно на +2 под факт. Ратчет держит дальнейший рост вниз от 773.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 944'
+    to: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 948'
+    work: roadmap-check-speaks-human (P2)
+    why: >-
+      _intent_roadmap теперь прогоняет вывод roadmap check через человеческие помощники
+      (HORIZON_HUMAN/humanize_outcomes в roadmap_manager), чтобы владелец не видел сырые слаги и
+      «горизонт 'next'». Подача текста в CLI-обработчике выросла на +4 строки; логика проверки не
+      менялась. Разбивать 944-строчный intents-спутник ради 4 строк непропорционально — потолок
+      поднят осознанно под факт. Ратчет держит рост вниз от 948.
