@@ -255,3 +255,13 @@ class TestIntegrationGate:
 
     def test_empty_workgraph_blocks(self):
         assert integration_gate([], {})["proceed"] is False
+
+    def test_aggregate_missing_integration_sha_no_pr(self):
+        # P2 fail-open: реальный aggregate-dict (all_pass) + integration_sha=None НЕ должен открывать PR.
+        # Прежде rev_ok коротил в True при None -> evidence мог быть привязан к НЕ-интеграционной ревизии.
+        g = integration_gate(
+            ["api", "ui"], GOOD_RESULTS, shared_contracts=["OrderContract"],
+            contract_shas={"OrderContract": CSHA},
+            aggregate={"all_pass": True, "tested_revision": INT}, integration_sha=None)
+        assert g["proceed"] is True
+        assert g["open_pr"] is False

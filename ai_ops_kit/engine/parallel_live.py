@@ -65,13 +65,22 @@ _INFRA_PREFIXES = (".ai/", "openspec/", "features/")
 
 
 def _glob_match(path, pat):
-    """write_scope-глоб. 'api/**' -> префикс; 'aa.py' -> точное; иначе fnmatch."""
+    """write_scope-глоб. 'api/**' и 'src/' (каталог) -> префикс; 'aa.py' -> точное; иначе fnmatch."""
     if pat.endswith("/**"):
         base = pat[:-3]
         return path == base or path.startswith(base + "/")
     if pat.endswith("**"):
         return path.startswith(pat[:-2])
-    return fnmatch.fnmatch(path, pat) or path == pat
+    if fnmatch.fnmatch(path, pat) or path == pat:
+        return True
+    # Запись-каталог без wildcard (голый сегмент 'quality' или trailing-slash 'src/') -> prefix-семантика,
+    # согласовано с parallel_planner._prefix/_overlap. Иначе легитимный 'quality/foo.py' не матчил бы
+    # scope='quality' и пакет ложно помечался fail (переблок хорошей работы). Точный файл ('calc.py')
+    # уже пойман ветками выше, так что prefix-fallback его не портит.
+    if not any(ch in pat for ch in "*?["):
+        base = pat.rstrip("/")
+        return bool(base) and (path == base or path.startswith(base + "/"))
+    return False
 
 
 def _changed_files(root, base_sha, head="HEAD"):
@@ -201,11 +210,26 @@ def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/int
     return runner
 
 
+def _porcelain_path(ln):
+    """Путь из строки `git status --porcelain` (`XY <path>`; переименование — `XY <old> -> <new>`).
+    Строка кончается ИМЕНЕМ файла, а не статусом, поэтому фильтровать `.ai/`-churn надо по пути."""
+    p = ln[3:] if len(ln) > 3 else ln.strip()
+    if " -> " in p:
+        p = p.split(" -> ", 1)[1]
+    return p.strip().strip('"')
+
+
 def preflight_disposable(child_root):
     """v3.7.1 (#2): runner делает reset --hard/clean -fd -> ЗАПРЕЩЕН в обычном рабочем checkout с
-    незакоммиченными файлами (уничтожил бы их). Требует чистый/disposable checkout. -> (ok, reason)."""
+    незакоммиченными файлами (уничтожил бы их). Требует чистый/disposable checkout. -> (ok, reason).
+    Послабление для `.ai/`-churn: строки porcelain кончаются ПУТЁМ (` M .ai/state.json` -> '.json'),
+    поэтому раньше `endswith('.ai')` не исключал ничего (no-op) — сверяем начало РЕАЛЬНОГО пути."""
+    def _is_ai_churn(ln):
+        p = _porcelain_path(ln)
+        return p == ".ai" or p.startswith(".ai/")
+
     st = _git(child_root, "status", "--porcelain", check=False)
-    dirty = [ln for ln in (st.stdout or "").splitlines() if ln.strip() and not ln.strip().endswith(".ai")]
+    dirty = [ln for ln in (st.stdout or "").splitlines() if ln.strip() and not _is_ai_churn(ln)]
     if dirty:
         return False, ("грязный checkout: runner делает reset --hard/clean -fd и уничтожит "
                        f"незакоммиченные файлы ({len(dirty)}). Нужен disposable-clone/чистый checkout.")
@@ -233,7 +257,15 @@ def run_live(wg, child_root, base_sha, task_map, signals, run_fn, open_pr=False,
     rec["concurrency_note"] = "серийно (max_parallel=1); настоящая конкурентность требует отдельных клонов на пакет"
     rec["pr"] = None
     if open_pr and rec.get("delivery", {}).get("open_pr") and repo_slug:
-        _git(child_root, "push", "-f", "-q", "origin", integration_branch, check=False)
+        # --force-with-lease (осознанно, как delivery/pr_open.py #401): безопаснее сырого -f — падёт,
+        # если в ветку дописали извне, вместо тихой затирки. Результат ПРОВЕРЯЕТСЯ: при сбое push
+        # возвращаем явную ошибку, а не глотаем rc и не идём в gh pr create с запутанной ошибкой.
+        push = _git(child_root, "push", "--force-with-lease", "-q", "origin", integration_branch, check=False)
+        if push.returncode != 0:
+            rec["pr"] = None
+            rec["push_error"] = (f"push --force-with-lease integration-ветки не удался "
+                                 f"(rc={push.returncode}): {(push.stderr or '').strip()[:200]}")
+            return rec
         title = f"[parallel-2] {wg.get('id')} fan-in @ {rec['integration_sha'][:12]}"
         body = (f"Автоматический parallel-2 fan-in (integration-SHA {rec['integration_sha'][:12]}).\n"
                 f"Пакеты: {', '.join(task_map)}. aggregate повторён на integration-SHA.\n\n"

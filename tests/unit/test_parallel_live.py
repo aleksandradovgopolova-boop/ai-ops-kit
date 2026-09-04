@@ -350,6 +350,14 @@ class TestHelpers:
         assert _glob_match("api/routes/x.py", "api/**")
         assert not _glob_match("ui/x.py", "api/**")
 
+    def test_glob_match_bare_dir_prefix(self):
+        # P2: запись-каталог без wildcard ('quality') и trailing-slash ('src/') -> prefix-семантика,
+        # чтобы вложенный 'quality/foo.py' был В scope (иначе пакет ложно fail). Точный файл всё ещё матчит.
+        assert _glob_match("quality/foo.py", "quality")
+        assert _glob_match("src/pkg/mod.py", "src/")
+        assert not _glob_match("other/foo.py", "quality")
+        assert _glob_match("calc.py", "calc.py")
+
     def test_scope_ok_infra_paths(self):
         ok, violations = _scope_ok([".ai/plan.yaml", "api/x.py", "ui/y.py"], ["api/**"])
         assert ok is False
