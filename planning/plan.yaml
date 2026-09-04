@@ -527,7 +527,11 @@ work:
       coverage и footprint меряются против итога слияния, а не ветки PR
     type: engineering
     goal: checks-that-run
-    status: in_progress
+    status: waiting_on_owner
+    waiting_on: >-
+      Владелец включает «Require merge queue» для main через Settings → Rules → Rulesets (в
+      классическом Branch protection этой опции больше нет). Механизм слит (#311/#312) — до флипа
+      порог не мерится против итога слияния.
     owner_role: engineer
     value: high
     write_scope: [.github/, tests/]
@@ -544,7 +548,10 @@ work:
       Слияние идёт родным GitHub merge queue с auto-merge, а не самодельным polling-циклом
     type: engineering
     goal: team-works-in-parallel
-    status: in_progress
+    status: waiting_on_owner
+    waiting_on: >-
+      Владелец включает «Require merge queue» в защите main (Settings → Rules → Rulesets). Механизм
+      слит (#311/#312) — до включения green-PR вливается ручным merge, как сейчас.
     owner_role: engineer
     value: high
     write_scope: [.github/, docs/]
