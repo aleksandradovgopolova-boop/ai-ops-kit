@@ -6,9 +6,6 @@ name: pr-smoke
 on:
   pull_request:
     branches: [main]
-  # v3.38 (merge-queue-not-handrolled): `smoke` — обязательный контекст защиты main; без этого
-  # триггера очередь слияния ждала бы его вечно (в merge_group событие pull_request не приходит).
-  merge_group:
 
 # Lane A1: минимальные привилегии — workflow получает только чтение контента.
 permissions:
@@ -37,11 +34,9 @@ jobs:
       # Проверка идёт ЧЕРЕЗ PYTEST, а не строкой в workflow: инвариант кита — проверка обязана быть
       # запускаемой локально и покрытой пробами. Первая редакция этой правки нарушила его инлайновым
       # python-скриптом, и собственный контур её на этом поймал.
-      # ТОЛЬКО на pull_request: в merge_group заголовка PR нет (событие другое), а PR_TITLE_CHECK=1
-      # захардкожен — проба сделала бы `pytest.fail` («ворота запущены, а PR_TITLE не передан»),
-      # `smoke` (обязательный контекст) упал бы, и очередь слияния повисла бы НАВСЕГДА. Заголовок к
-      # моменту очереди уже проверен на самом PR — второй раз не нужен. Это ровно капкан статусов,
-      # который вся эта работа и закрывает (merge-queue-not-handrolled).
+      # Шаг привязан к событию `pull_request`: заголовок PR берётся из
+      # `github.event.pull_request.title`, а PR_TITLE_CHECK=1 захардкожен — на любом другом событии
+      # заголовка нет, и проба сделала бы `pytest.fail` («ворота запущены, а PR_TITLE не передан»).
       - name: "заголовок PR — тема будущего коммита, формат обязателен"
         if: github.event_name == 'pull_request'
         env:
@@ -75,9 +70,8 @@ jobs:
   # history/plan-history.yaml, decisions/registry.yaml, registry/release-claims.yaml — и зелёная на
   # чистом), но пока НЕ внесена в обязательные контексты защиты main, поэтому красный тут виден, но
   # слияние жёстко не блокирует. Перевод в обязательные — решение владельца после обкатки: добавить
-  # `parallel-safety` в required status checks. Тогда же дать джобе исход в merge_group (сейчас она
-  # там пропускается: в merge_group нет PR-диффа, а обязательный пропущенный статус повесил бы
-  # очередь — тот же капкан, что у `smoke` выше).
+  # `parallel-safety` в required status checks. `if: pull_request` — джобе нужен PR-дифф против
+  # `origin/main`, которого на других событиях нет.
   parallel-safety:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -95,8 +89,8 @@ jobs:
   # «вся фаза одним PR» (повод замерен: дамп +2589 строк, docs/parallel-execution-retro.md §1.7),
   # но пока лишь ПЕЧАТАЕТ отчёт: потолки из quality/pr-budget.yaml — стартовый ратчет, обкатке нужна
   # статистика здоровых PR до перевода в --strict/required. Перевод в блокирующий и в обязательные
-  # контексты — решение владельца после обкатки. `if: pull_request` — тот же капкан статусов, что у
-  # parallel-safety: в merge_group PR-диффа нет, а обязательный пропущенный статус повесил бы очередь.
+  # контексты — решение владельца после обкатки. `if: pull_request` — как и parallel-safety, джобе
+  # нужен PR-дифф против `origin/main`, которого на других событиях нет.
   pr-size:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
