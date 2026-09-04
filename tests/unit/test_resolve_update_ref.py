@@ -170,6 +170,73 @@ def test_a_refusal_names_the_way_out(tmp_path, no_installed):
 
 
 @pytest.mark.unit
+def test_in_range_tag_wins_over_a_shadowing_major(tmp_path, no_installed):
+    """P1 (аудит 04.09.2026): дочка на 3.x с диапазоном 3.x и тегами [3.40.0, 4.0.0].
+
+    Оба тега заработали канал, но 4.0.0 вне диапазона дочки. Без учёта диапазона resolve отдал бы
+    новейший (4.0.0), `cmd_update` увидел бы его вне диапазона и упал бы — ежедневная джоба
+    краснела бы каждый день после мажора, а безопасный 3.40.0 был бы заслонён. Здесь проверяем:
+    выбирается новейший ЗАРАБОТАВШИЙ И in-range тег — 3.40.0.
+    """
+    repo = _repo(tmp_path, [
+        ("v3.40.0", _claims("3.40.0", "qualification")),
+        ("v4.0.0", _claims("4.0.0", "qualification")),
+    ])
+    res = installer.resolve_update_ref(
+        "qualification", repo, allowed_range=">=3.0.0 <4.0.0")
+    assert res["ref"] == "v3.40.0", res
+    assert res["kind"] == "tag"
+
+
+@pytest.mark.unit
+def test_only_major_earned_is_a_soft_skip_naming_the_way_out(tmp_path, no_installed):
+    """Когда ВСЕ заработавшие теги вне диапазона (только мажор) — не тупик, а осознанный пропуск.
+
+    resolve не выдаёт мажор молча и называет выход: расширить диапазон или --force. Мажор-гейт цел.
+    """
+    repo = _repo(tmp_path, [("v4.0.0", _claims("4.0.0", "qualification"))])
+    res = installer.resolve_update_ref(
+        "qualification", repo, allowed_range=">=3.0.0 <4.0.0")
+    assert res["ref"] is None, res
+    assert res.get("range_blocked") is True, res
+    assert "v4.0.0" in res["reason"] and "--force" in res["reason"], res["reason"]
+
+
+@pytest.mark.unit
+def test_empty_range_keeps_prior_behaviour(tmp_path, no_installed):
+    """Пустой allowed_version_range — ограничений нет: берётся новейший заработавший тег."""
+    repo = _repo(tmp_path, [
+        ("v3.40.0", _claims("3.40.0", "qualification")),
+        ("v4.0.0", _claims("4.0.0", "qualification")),
+    ])
+    assert installer.resolve_update_ref(
+        "qualification", repo, allowed_range="")["ref"] == "v4.0.0"
+
+
+@pytest.mark.unit
+def test_out_of_range_update_is_a_soft_skip_not_a_failure(monkeypatch):
+    """P1: target вне allowed_version_range -> пропуск с rc=0, а не падение с rc=1.
+
+    Ежедневная джоба автообновления (`update --in-place`) не должна краснеть после мажора: выход за
+    диапазон — не сбой, а осознанное решение владельца (расширить диапазон / --force). Раньше здесь
+    был `return 1`, и каждая живая дочка краснела бы ежедневно после 4.0.0.
+    """
+    monkeypatch.setattr(installer, "installed_version", lambda: "3.39.0")
+    monkeypatch.setattr(installer, "pkg_version", lambda: "4.0.0")
+    monkeypatch.setattr(installer, "child_allowed_range", lambda: ">=3.0.0 <4.0.0")
+    monkeypatch.setattr(installer, "child_update_policy", lambda: "manual")
+    monkeypatch.setattr(installer, "channel_gap",
+                        lambda *a, **k: {"satisfied": True, "message": ""})
+    captured = {}
+    monkeypatch.setattr(installer, "write_report",
+                        lambda rep: captured.update(rep) or "report.json")
+    rc = installer.cmd_update(force=False, in_place=True)
+    assert rc == 0, "выход за диапазон обязан быть мягким пропуском, а не rc=1"
+    assert captured.get("status") == "skipped", captured
+    assert "4.0.0" in captured.get("report", ""), captured
+
+
+@pytest.mark.unit
 def test_no_way_out_is_invented_when_there_is_none(tmp_path, no_installed):
     """Обратная сторона: тегов нет вовсе — предлагать «поставьте qualification» НЕЧЕГО.
 
