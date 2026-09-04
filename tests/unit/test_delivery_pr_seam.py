@@ -48,3 +48,40 @@ def test_deliver_pr_invokes_open_draft_pr(monkeypatch):
     # переименован) строка вызова в _deliver_pr падает AttributeError -> тест краснеет.
     assert dv["status"] == "opened"
     assert dv["pr"]["head_sha"] == "c0ffee"
+
+
+@pytest.mark.unit
+def test_deliver_pr_threads_status_docs_note_into_body(monkeypatch, tmp_path):
+    """#404-шов: _deliver_pr реально зовёт living_status.describe и вкладывает строку про статус-доки
+    в ТЕЛО PR. Если проводку в _deliver_pr откатить (перестать звать describe / pr_body), тело
+    лишится причины-исключения и этот assert покраснеет — шов доказан на интеграционном уровне."""
+    captured = {}
+    monkeypatch.setattr(pr_open._cp, "_github_token", lambda: "tok")
+
+    def fake_git(root, *args):
+        if args[:1] == ("remote",):
+            return (0, "https://github.com/o/r.git", "")
+        return (0, "c0ffee\n", "") if args[:1] == ("rev-parse",) else (0, "", "")
+
+    def fake_gh(url, token, data=None, method="GET"):
+        if "pulls?head=" in url:
+            return ([], None)
+        if method == "POST":
+            captured["body"] = (data or {}).get("body", "")
+            return ({"html_url": "u", "number": 1, "draft": True, "head": {"sha": "c0ffee"}}, None)
+        return ({"default_branch": "main"}, None)
+
+    monkeypatch.setattr(pr_open, "_git", fake_git)
+    monkeypatch.setattr(pr_open, "_gh_request", fake_gh)
+    monkeypatch.setattr(execution_pipeline, "_verify_remote_base",
+                        lambda work_root, base_ref, base_sha: {"verdict": "verified-equal"})
+
+    # tmp_path без статус-дока -> describe вернёт причину-исключение, и она обязана попасть в тело.
+    dv = execution_pipeline._deliver_pr(
+        str(tmp_path), "ai-ops/x", "main", "b0base", {"resolved": True}, "c0ffee", "W1", "задача",
+        delivery_id="d1")
+
+    assert dv["status"] == "opened"
+    assert "причина-исключение" in captured["body"] and "нет статус-дока" in captured["body"]
+    # исход также прокинут в отчёт доставки (аудируемость)
+    assert dv["status_docs"]["managed"] is False

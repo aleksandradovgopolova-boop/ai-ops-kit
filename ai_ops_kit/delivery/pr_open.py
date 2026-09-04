@@ -33,6 +33,31 @@ def _pr_payload(branch, title, body, base):
     return {"title": title, "head": branch, "base": base, "body": body or "", "draft": True}
 
 
+def _status_docs_note(status_docs):
+    """#404: одна строка про статус-доки для тела PR — обновление ИЛИ явная причина-исключение.
+    Так сгенерированный PR не упирается молча в собственный гейт свежести: либо статус-док обновлён
+    этой доставкой, либо в теле названа причина, почему обновлять было нечего. `status_docs` —
+    исход `living_status.describe` (движок считает его; здесь только форматируем). -> str."""
+    outcome = status_docs or {}
+    if outcome.get("managed"):
+        doc, reviewed = outcome.get("doc"), outcome.get("reviewed_at")
+        # Формулируем через НАБЛЮДАЕМЫЙ факт (свеж на дату доставки), а не «эта доставка обновила» —
+        # describe видит только reviewed_at, но не авторство бампа. Переусиливать не честно (#404-review).
+        if outcome.get("fresh_today"):
+            return f"Статус-док свеж на дату доставки: {doc} (reviewed_at {reviewed})."
+        return (f"Статус-док {doc} НЕ свеж на дату доставки (reviewed_at {reviewed}) — "
+                "проверь свежесть перед слиянием.")
+    return f"Статус-доки не обновлялись — причина-исключение: {outcome.get('reason')}."
+
+
+def pr_body(wid, base_ref, base_sha, committed_sha, status_docs):
+    """Тело draft PR автопрогона (чистая функция, тестируется offline). #404: включает явную строку
+    про статус-доки, чтобы у ревьюера был честный след — обновлено или почему нет."""
+    return (f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
+            f"({(base_sha or '?')[:12]}) → evidence на {committed_sha or '?'}.\n\n"
+            f"{_status_docs_note(status_docs)}")
+
+
 def _git(root, *args):
     from ai_ops_kit.shared import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом

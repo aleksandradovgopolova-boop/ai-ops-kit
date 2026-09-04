@@ -172,11 +172,13 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
                                f"{(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
         return delivery
     from ai_ops_kit.delivery import pr_open
+    from ai_ops_kit.engine import living_status as _living_status
+    # #404: тело PR называет судьбу статус-доков — обновлены или почему нет; read-only, не бросает.
+    status_docs = _living_status.describe(work_root)
     pr = pr_open.open_draft_pr(work_root, work_branch, title=f"ai-ops: {task[:60]}", base=base_ref,
-                               body=f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
-                                    f"({base_sha[:12]}) → evidence на {committed_sha}.",
+                               body=pr_open.pr_body(wid, base_ref, base_sha, committed_sha, status_docs),
                                delivery_id=delivery_id)
-    delivery.update(status=(pr or {}).get("status"), pr=pr)
+    delivery.update(status=(pr or {}).get("status"), pr=pr, status_docs=status_docs)
     return delivery
 
 
