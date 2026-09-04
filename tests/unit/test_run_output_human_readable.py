@@ -268,3 +268,68 @@ def test_from_review_product_text_has_no_internal_jargon():
     body = PR.render(msg, audience="product")
     assert "ready_for_merge" not in body
     assert "verdict" not in body
+
+
+# ── _print_pipeline: третий исход сверки — «выполнено, но лишь на слове судьи» (delivered≠verified)
+# B2-14/B2-18 закрыли «доставлено ≠ выполнено» и «сверено ≠ выполнено». Остаётся третий, самый
+# тихий, вид ложного green: критерий выполнен, но подтверждён ТОЛЬКО суждением судьи, без машинной
+# цитаты. Строка `judge_only` называет его прямо («проверь сам»); без теста она молчаливо исчезает,
+# и «выполнены все» снова читается как доказанное. Ни один существующий тест #437 её не трогает.
+
+def test_pipeline_acceptance_met_but_judge_only_is_flagged(capsys):
+    """met_all=True, но часть критериев только на слове судьи → строка «только суждение судьи…»."""
+    r = _pipeline_report(acceptance_criteria={
+        "declared": True, "verified": True, "met_all": True,
+        "count": 3, "quote_verified": False, "verifier": "acceptance-judge",
+        "reads": ["src/x.py"], "judge_only": ["AC-9"]})
+    _print_pipeline(r)
+    out = capsys.readouterr().out
+    assert "только суждение судьи, без машинного подтверждения" in out
+    assert "AC-9" in out
+    # Читателю прямо сказано, что доделать: сверить эти критерии самому.
+    assert "проверь сам" in out
+
+
+# ── _print_pipeline: КАНАЛ работы назван, а не выведен читателем (F-017) ───────────────────────
+# «правок через брокера 0» при непустом коммите читалось как «ничего не произошло». Кит обязан
+# НАЗВАТЬ канал (shell/model-commit), а не оставлять человека гадать. Строка появляется, только
+# когда файлы в коммите есть, а через брокера — ноль.
+
+def test_pipeline_names_out_of_broker_channel_when_broker_writes_are_zero(capsys):
+    """changed_files есть, applied_writes=0 → назван канал «напрямую в дереве», а не молчание."""
+    r = _pipeline_report(
+        loop={"stopped": "done", "steps": 2, "applied_writes": 0, "denied": 0},
+        commit={"sha": "beadfeed0000", "branch": "ai-ops/WI-437",
+                "changed_files": ["src/export.py"], "produced_by": "shell",
+                "evidence_on_exact_sha": True, "tree_clean_before_checks": True})
+    _print_pipeline(r)
+    out = capsys.readouterr().out
+    assert "работа произведена напрямую в дереве (writer или shell)" in out
+    assert "src/export.py" in out
+
+
+# ── _print_pipeline: провайдер mock ничего не пишет — режим назван, а не угадан (F-012) ────────
+
+def test_pipeline_mock_provider_without_work_names_external_executor(capsys):
+    """provider=mock и работа не произведена → «движок с провайдером mock кода НЕ пишет» + куда писать."""
+    r = _pipeline_report(
+        provider="mock", ready_for_pr=False,
+        loop={"stopped": "done", "steps": 1, "applied_writes": 0, "denied": 0},
+        commit={},
+        isolation={"worktree": ".worktrees/WI-437"})
+    _print_pipeline(r)
+    out = capsys.readouterr().out
+    assert "движок с провайдером mock кода НЕ пишет" in out
+    # Названо, ГДЕ писать и как переоценить — а не только что «пусто».
+    assert ".worktrees/WI-437" in out
+    assert "--reevaluate-only" in out
+
+
+# ── _print_pipeline: предупреждение о тестах доходит до человека ───────────────────────────────
+
+def test_pipeline_tests_warn_reaches_the_human(capsys):
+    """tests_warn в отчёте → предупреждение печатается, а не тонет в JSON."""
+    r = _pipeline_report(tests_warn="тесты не запускались: нет тестового окружения")
+    _print_pipeline(r)
+    out = capsys.readouterr().out
+    assert "тесты не запускались: нет тестового окружения" in out
