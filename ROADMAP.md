@@ -126,9 +126,14 @@ owner: product-team
     ЖИВОГО прогона (реальная ночная джоба, отработавшая и приславшая бриф, ещё не наблюдалась). Два
     других исхода (никаких прямых записей в `main`, false-positive rate назван) — работа не взята
     (`ep-2026-08-14-nightly-review`; #422, #423).
-  - `outcome-and-analytics-loop` — механизм есть: производитель `events_verified_live` даёт машинное
-    доказательство поступления событий (#448 слит). Исход держится `false`: producer НЕ подключён к
-    `gate_executor` как источник evidence — флип по проводке producer → гейт.
+  - `outcome-and-analytics-loop` — ДОСТИГНУТ 2026-09-04 (#424): проводка producer → гейт замкнута.
+    Производитель `events_verified_live` теперь ПИТАЕТ гейт `analytics_runtime_verification` как
+    источник evidence (`verify_analytics_runtime` → `gate_executor`), и вердикт машины авторитетен
+    над словом судьи — «verified in runtime» даёт машина, а не декларация. Стоит фактом, не
+    направлением; разбор — в `history/plan-history.yaml` (`analytics-runtime-evidence-wired`).
+    Оговорка честности: «достигнуто» = проводка авторитетна ПРИ ВЫЗОВЕ; рантайм-интеграция
+    post-release-гейта в конвейере (PRR зовёт `verify_analytics_runtime`) остаётся follow-up —
+    упирается в доступ к аналитическому бэкенду дочки, тот же живой прогон, что отложен у соседней цели.
 - Достигнутое убрано из «Сейчас» и живёт как факт, а не как направление: первый живой brownfield
   (`real-product-qualification`, продолжение — в `qualification-closeout`), автономия сессий под
   потолком (`session-autonomy-under-ceiling`), второй brownfield — `second-real-brownfield`

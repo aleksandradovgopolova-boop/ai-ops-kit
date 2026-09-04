@@ -3476,6 +3476,30 @@ work:
     #     # рантаймом. Тот же инвариант, что `unavailable != 0`.
     #
     #   # ─── nightly-product-review (решение владельца 14.08.2026, ep-2026-08-14-nightly-review) ──────
+  - id: analytics-runtime-evidence-wired
+    title: >-
+      Producer events_verified_live подключён к гейту analytics_runtime_verification
+    goal: outcome-and-analytics-loop
+    status: done
+    closed_at: '2026-09-04'
+    issue: 424
+    evidence: tests/unit/test_event_arrival.py
+    result: >-
+      ЗАКРЫТО 04.09.2026 (#424). Замкнута проводка producer -> гейт — последнее звено исхода
+      `events_verified_in_runtime_not_declared`. Машинный производитель `events_verified_live`
+      (построен 02.09) отдавал доказательство, но гейт `analytics_runtime_verification` его НЕ звал:
+      evidence приходил из файла/вердикта судьи, и «verified» держалось на СЛОВЕ судьи — ровно разрыв
+      «verified in runtime, NOT declared». Проводка: `intelligence/event_arrival.verify_analytics_runtime`
+      зовёт producer и оценивает гейт через `gates.gate_executor.evaluate_gate`, а
+      `gate_evidence_entry` делает машинный вердикт АВТОРИТЕТНЫМ для факта events_verified_live —
+      снимает слово судьи и ставит факт: met True -> доказательство в provided; met False -> гейт
+      красный с блокером о недоехавшем событии (слово судьи не переписывает находку); met None ->
+      доказательство НЕ фабрикуется (unknown != проверено), блокирующий гейт честно не закрыт.
+      СЛОИ: направление intelligence -> gates легально (вниз), `gates` не тянет `intelligence` вверх —
+      validate_layering зелёный (0 взаимных пар, 0 циклов; новое ребро в границах). ЗАМЕР: +6 юнитов
+      (positive гейт зелёный на живом приходе; fail-closed красный на находке ДАЖЕ при зелёном судье;
+      unknown честно не закрыт; side-effect — гейт ЗОВЁТ producer, а не читает статичный файл),
+      «краснеет на дефекте» доказан мутацией ветки met-False (3 теста краснеют). CLI: `--gate`.
   - id: own-medicine-checked
     title: >-
       Самоприменение культуры кита проверяется, а уроки поля записаны как культура

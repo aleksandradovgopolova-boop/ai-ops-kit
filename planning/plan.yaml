@@ -267,19 +267,21 @@ goals:
   - id: outcome-and-analytics-loop
     # заморозка: аналитика исходов — новое умение
     freeze_relation: extension
-    # ВОЗОБНОВЛЕНА 2026-09-02 (#424): исход в работе. Механизм сверки объявленного с доехавшим
-    # (event_arrival.assess) был закрыт ещё 2026-08-20; недостающее звено — МАШИННЫЙ ПРОИЗВОДИТЕЛЬ
-    # доказательства гейта events_verified_live. Он построен и проверен в этом PR
-    # (event_arrival.events_verified_live: unit 6 тестов + живой замер трёх состояний), но исход
-    # оставлен false ЧЕСТНО: производитель ещё НЕ подключён как источник evidence гейта
-    # analytics_runtime_verification (gate_executor берёт evidence из файла/вердикта судьи, а не
-    # зовёт производителя). Флип в true — после проводки producer -> evidence гейта (отдельный scope).
-    status: active
+    # ДОСТИГНУТА 2026-09-04 (#424): проводка producer -> гейт замкнута. Механизм сверки объявленного
+    # с доехавшим (event_arrival.assess) закрыт 2026-08-20; МАШИННЫЙ ПРОИЗВОДИТЕЛЬ
+    # (event_arrival.events_verified_live) построен 2026-09-02; недостающее звено — ПРОВОДКА
+    # производителя как источника evidence гейта analytics_runtime_verification — закрыто здесь
+    # (event_arrival.verify_analytics_runtime зовёт producer и оценивает гейт через
+    # gates.gate_executor; вердикт машины авторитетен и переписывает слово судьи). Направление
+    # intelligence -> gates легально по слоям (вниз). См. history: analytics-runtime-evidence-wired.
+    status: achieved
     outcome:
-      # false: producer факта построен и доказан (event_arrival.events_verified_live), но пока не
-      # проведён в gate_executor как источник evidence — «verified» есть как факт, «not declared»
-      # на уровне гейта ещё нет. См. #424.
-      events_verified_in_runtime_not_declared: false
+      # true: producer events_verified_live ПОДКЛЮЧЁН к оценке гейта как источник evidence —
+      # «verified in runtime» теперь даёт МАШИНА, а не декларация судьи («not declared» закрыто на
+      # уровне гейта). Доказано unit-тестами (positive/fail-closed/side-effect) + мутацией. См. #424.
+      # Оговорка: проводка авторитетна ПРИ ВЫЗОВЕ; рантайм-интеграция post-release-гейта в конвейере
+      # (PRR зовёт verify_analytics_runtime) — follow-up, упирается в аналитический бэкенд дочки.
+      events_verified_in_runtime_not_declared: true
 
 # ЧТО ЗДЕСЬ ЛЕЖИТ, А ЧТО НЕТ (`plan-as-control-plane`, 2026-08-14). Активный план — это ответ на
 # четыре вопроса управления: где мы, что идёт сейчас, что блокирует и чем, какую работу взять
