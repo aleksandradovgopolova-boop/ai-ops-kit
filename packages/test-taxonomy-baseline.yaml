@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 362
+behavioral_count: 367
 structural_count: 61
-total_count: 423
-behavioral_share_pct: 85.58
+total_count: 428
+behavioral_share_pct: 85.75
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -263,3 +263,22 @@ raises:
       продуктовый код (ai_ops_run / active_work) И зовут его, поэтому классифицируются как
       behavioral. Структурных не прибавилось (61 без изменений), доля выросла 85.51% -> 85.58%.
       Baseline пере-записан на фактический замер (360 -> 362 поведенческих из 423).
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 362
+    from_total: 423
+    to_behavioral: 367
+    to_total: 428
+    to_share_pct: 85.75
+    work: split-workpackage-executor-resume (issue #465, ускорение группы fast)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез двух самых тяжёлых по wall-clock файлов
+      группы `fast` тем же приёмом, что #438/#464. `--dist loadfile` пришпиливает файл к ОДНОМУ
+      воркеру, поэтому самый долгий файл серийно держит стену всей группы. Замер (изолированно, -n1):
+      test_workpackage_resume.py = 97s (в 2.4x тяжелее следующего), test_workpackage_executor.py = 41s.
+      resume разрезан по темам на 5 файлов (resume / resume_drift / retry / retry_errors /
+      retry_safety), executor — на 2 (executor happy-path / executor_plan: immutable+sandbox). Тела
+      тестов не менялись, число собранных ДО == ПОСЛЕ (resume 12, executor 14). Все новые файлы
+      импортируют продуктовый код (workpackage_executor/atomic_planner) И зовут его -> +5 файлов = +5
+      поведенческих, структурных не прибавилось (61 без изменений), доля выросла 85.58% -> 85.75%.
+      Baseline пере-записан на фактический замер (после ребейза на main с #478/#480).
