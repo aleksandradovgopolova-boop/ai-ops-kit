@@ -215,6 +215,53 @@ def _verify_remote_base(root, base_ref, base_sha):
     return {"verdict": "verified-moved", "remote_sha": remote_sha}
 
 
+def _merge_preview_state(root, target_ref, head_ref):
+    """best-effort: чистое ли ДЕРЕВО СЛИЯНИЯ target_ref+head_ref (фордж-нейтрально, чистый git).
+    -> 'clean' | 'conflict' | 'unknown'. Импорт merge_preview локальный: engine -> gates внутри
+    слоя capabilities (разрешено, направление одностороннее). Только ADVISORY: превью не удалось
+    (старый git / нет объекта / ошибка) -> 'unknown', вердикт дрейфа от него НЕ зависит."""
+    if not (target_ref and head_ref):
+        return "unknown"
+    try:
+        from ai_ops_kit.gates.merge_preview import merge_preview_tree
+        prev = merge_preview_tree(root, target_ref, head_ref)
+    except Exception:  # noqa: BLE001 — превью advisory, не роняет ре-верификацию
+        return "unknown"
+    if prev.get("ok"):
+        return "clean"
+    return "conflict" if "конфликт" in (prev.get("reason") or "") else "unknown"
+
+
+def _reverify_against_current_target(root, base_ref, base_sha, head_ref):
+    """Дрейф-безопасная ре-верификация evidence против ТЕКУЩЕЙ цели (фордж-нейтрально, чистый git).
+
+    Доказательство прогона проверок привязано к base_sha — итогу слияния, каким он был на момент
+    прогона. Сдвинулась цель (remote base) с тех пор -> evidence относится к СТАРОМУ итогу, а не к
+    текущему: выдать его за проверенное против фактического merge-состояния нельзя. Ровно это иначе
+    разруливается вручную (BEHIND -> update -> ре-CI -> merge на CLEAN); здесь — СВОЙСТВО доставки.
+
+    -> {"stale": bool, "verdict", "evidence_base", "current_target", "merge_preview", "reason"}:
+      verified-equal -> stale=False: цель не двигалась, доставка идёт как раньше (счастливый путь);
+      unverifiable   -> stale=False ЗДЕСЬ (не «проверено»): цель не сверить, downstream доставляет
+                        fail-closed как unavailable — устаревшее за свежее не выдаётся;
+      verified-moved -> stale=True: цель сдвинулась; PR НЕ открываем/не мержим — нужен ре-прогон
+                        проверок против новой цели. merge_preview подсказывает, чистое ли слияние
+                        с текущей целью (конфликт -> точно ре-прогон; clean -> достаточно ребейза),
+                        но вердикт stale от этого НЕ смягчается."""
+    rv = _verify_remote_base(root, base_ref, base_sha) or {}
+    verdict = rv.get("verdict")
+    if verdict != "verified-moved":
+        return {"stale": False, "verdict": verdict, "reason": rv.get("reason")}
+    target = rv.get("remote_sha")
+    merge_state = _merge_preview_state(root, base_ref, head_ref)
+    return {"stale": True, "verdict": verdict, "evidence_base": base_sha,
+            "current_target": target, "merge_preview": merge_state,
+            "reason": (f"цель сдвинулась: evidence проверено против {(base_sha or '?')[:12]}, а "
+                       f"remote-цель уже {(target or '?')[:12]} — доказательство относится к старому "
+                       f"итогу слияния. Нужен ре-прогон проверок против новой цели; PR не открыт "
+                       f"(слияние с текущей целью: {merge_state})")}
+
+
 def delivery_preflight(root, base_ref, base_sha, open_pr) -> dict | None:
     """Предупреждение о невозможной доставке ДО работы. -> dict или None, если предупреждать не о чем.
 

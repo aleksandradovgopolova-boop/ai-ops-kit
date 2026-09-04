@@ -1633,3 +1633,16 @@ probes:
     стоит, если CLI перестанет звать measure_merge_footprint: тогда exit-код перестаёт отражать
     итог слияния. Оборвать вызов в main -> тест кода возврата CLI (пробой=1, в пределах=0) обязан
     покраснеть.'
+- id: delivery-blocks-stale-evidence-against-current-target
+  kind: guard
+  file: ai_ops_kit/engine/execution_pipeline.py
+  find: '    if _rev.get("stale"):'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_delivery_drift_reverify.py
+  why: 'ДРЕЙФ-БЕЗОПАСНОСТЬ (merge-queue-not-handrolled): evidence привязано к base_sha прогона; если
+    цель (remote base) сдвинулась, доказательство относится к СТАРОМУ итогу слияния. Этот guard
+    fail-closed блокирует открытие PR (status=stale-needs-reverify), когда ре-верификация против
+    ТЕКУЩЕЙ цели дала stale. Снять guard (провалить в открытие PR) — вернуть ровно тот дефект, ради
+    которого работа и делалась: устаревшее evidence выдаётся за проверенное, PR открывается на
+    сдвинувшейся цели. Проба обязана покраснеть на тесте «сдвинутая цель НЕ открывает PR».'

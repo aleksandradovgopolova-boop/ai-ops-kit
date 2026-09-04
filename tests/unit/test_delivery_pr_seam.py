@@ -37,8 +37,11 @@ def test_deliver_pr_invokes_open_draft_pr(monkeypatch):
 
     monkeypatch.setattr(pr_open, "_git", fake_git)
     monkeypatch.setattr(pr_open, "_gh_request", fake_gh)
-    monkeypatch.setattr(execution_pipeline, "_verify_remote_base",
-                        lambda work_root, base_ref, base_sha: {"verdict": "verified-equal"})
+    # доставка ре-верифицирует evidence против ТЕКУЩЕЙ цели; здесь цель не двигалась (не stale) ->
+    # доставка идёт как раньше и достигает open_draft_pr.
+    monkeypatch.setattr(execution_pipeline, "_reverify_against_current_target",
+                        lambda work_root, base_ref, base_sha, head: {"stale": False,
+                                                                      "verdict": "verified-equal"})
 
     dv = execution_pipeline._deliver_pr(
         "/work", "ai-ops/x", "main", "b0base", {"resolved": True}, "c0ffee", "W1", "задача",
@@ -73,8 +76,11 @@ def test_deliver_pr_threads_status_docs_note_into_body(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pr_open, "_git", fake_git)
     monkeypatch.setattr(pr_open, "_gh_request", fake_gh)
-    monkeypatch.setattr(execution_pipeline, "_verify_remote_base",
-                        lambda work_root, base_ref, base_sha: {"verdict": "verified-equal"})
+    # доставка ре-верифицирует evidence против ТЕКУЩЕЙ цели; здесь цель не двигалась (не stale) ->
+    # доставка идёт как раньше и достигает open_draft_pr.
+    monkeypatch.setattr(execution_pipeline, "_reverify_against_current_target",
+                        lambda work_root, base_ref, base_sha, head: {"stale": False,
+                                                                      "verdict": "verified-equal"})
 
     # tmp_path без статус-дока -> describe вернёт причину-исключение, и она обязана попасть в тело.
     dv = execution_pipeline._deliver_pr(

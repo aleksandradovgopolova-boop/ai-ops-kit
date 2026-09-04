@@ -335,6 +335,25 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
         from ai_ops_kit.gates import concurrency_preflight as _cpp
         _branch = plan["work_branch"]
         _csha = plan["committed_sha"]
+        # ДРЕЙФ-БЕЗОПАСНАЯ РЕ-ВЕРИФИКАЦИЯ (перед DeliveryIntent): доказательство прогона привязано к
+        # base_sha — итогу слияния на момент проверок. Сдвинулась цель (remote base) с тех пор ->
+        # evidence относится к СТАРОМУ итогу; выдать его за проверенное против фактического merge
+        # нельзя. Fail-closed: помечаем stale-needs-reverify, Intent НЕ создаём и PR НЕ открываем
+        # (доставки устаревшего не будет) — нужен ре-прогон против новой цели. Цель не двигалась ->
+        # путь ниже без изменений (счастливый путь сохранён).
+        _reverify = execution_pipeline._reverify_against_current_target(
+            plan["work_root"], plan["base_ref"], plan["base_sha"], _csha)
+        if _reverify.get("stale"):
+            rep["delivery"] = {"requested": True, "status": "stale-needs-reverify",
+                               "evidence_base": _reverify.get("evidence_base"),
+                               "current_target": _reverify.get("current_target"),
+                               "merge_preview": _reverify.get("merge_preview"),
+                               "reason": _reverify.get("reason")}
+            rep["overall_status"] = "delivery-stale-needs-reverify"
+            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+            _ls.journal_append(jname, {"kind": "delivery_stale", "run_id": fid, "workitem_id": fid,
+                                       "current_target": _reverify.get("current_target")})
+            return
         # repository identity (owner/name из origin) — часть СТРОГОЙ идентичности доставки
         _ru = execution_pipeline._git(child_root, "remote", "get-url", "origin")
         _orn = _cpp._parse_owner_repo(_ru[1]) if _ru[0] == 0 else None
