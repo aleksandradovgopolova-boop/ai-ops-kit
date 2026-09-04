@@ -251,8 +251,8 @@ goals:
     # Обзор умеет идти ночью РЕАЛЬНЫМ триггером (CI-workflow `schedule: cron`, install_schedule +
     # schedule_status с честным detected/declared/absent) и БРИФУЕТ владельца доставкой (durable-инбокс
     # + latest + receipt: произведён ≠ доставлен), а не печатью в stdout. Два других исхода
-    # (`no_direct_writes_to_main_ever`, `false_positive_rate_is_named`) остаются открыты — их работа
-    # отдельная (#422, #423).
+    # `false_positive_rate_is_named` остаётся открыт (#423); `no_direct_writes_to_main_ever` ЗАКРЫТ
+    # 2026-09-04 (#422): проверяемый инвариант доставлен.
     status: active
     outcome:
       # Механизм ПОСТРОЕН и доказан юнит-тестами: обзор умеет идти ночью (реальный CI-триггер
@@ -261,7 +261,11 @@ goals:
       # отработал и прислал владельцу бриф, ещё не наблюдался, и судейские ворота кита в этой среде
       # не гонялись. «Зелёное значит проверенное» — флипнем в true по факту живого прогона (как #424).
       delta_review_runs_nightly_and_briefs_the_owner: false
-      no_direct_writes_to_main_ever: false
+      # true (#422): проверяемый инвариант — валидатор validate_nightly_no_direct_main_write AST-обходом
+      # ночного пути (оркестратор + worktree-шов + pr_open-шов) краснеет на прямой записи в main.
+      # Оговорка: R2 ловит литералы main/master, R3a — присутствие сравнения (не сам отказ; отказ
+      # покрыт поведенческим test_worktree). Границы названы в докстринге валидатора.
+      no_direct_writes_to_main_ever: true
       false_positive_rate_is_named: false
 
   - id: outcome-and-analytics-loop
@@ -488,7 +492,11 @@ goals:
       # чек-листы несут constitution_id, промпты ревьюеров цитируют ID, силу гейтов не меняли.
       constitution_is_source_and_gates_cite_its_ids: true
       # Волна 2 — токены-контракт + реестры компонентов/паттернов/шаблонов доступны агенту.
-      tokens_contract_and_capability_registries_available: false
+      # true (#418): реестры standards/uiux/registries/tokens.yaml (контракт дизайн-токенов) и
+      # capabilities.yaml (сквозные возможности UI-системы) добавлены как ПРОВЕРЯЕМЫЕ данные — их
+      # читает и валидирует standards/uiux/scripts/validate-registries.py (ссылочная целостность:
+      # dangling rule/token/namespace/local), схема uiux-registry.schema.json признаёт оба kind.
+      tokens_contract_and_capability_registries_available: true
       # Волна 3 — ревьюеры и ui-health углублены содержанием Конституции.
       reviewers_and_ui_health_deepened_from_constitution: false
       # Волна 4 — MCP-доступ к UI-системе (get_*/validate_*).

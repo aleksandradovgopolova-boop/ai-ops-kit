@@ -3500,6 +3500,46 @@ work:
       (positive гейт зелёный на живом приходе; fail-closed красный на находке ДАЖЕ при зелёном судье;
       unknown честно не закрыт; side-effect — гейт ЗОВЁТ producer, а не читает статичный файл),
       «краснеет на дефекте» доказан мутацией ветки met-False (3 теста краснеют). CLI: `--gate`.
+  - id: nightly-no-direct-main-write-is-checkable
+    title: >-
+      Инвариант «ночной обзор не пишет в main напрямую» стал проверкой
+    goal: nightly-product-review
+    status: done
+    closed_at: '2026-09-04'
+    issue: 422
+    evidence: tests/unit/test_validate_nightly_no_direct_main_write.py
+    result: >-
+      ЗАКРЫТО 04.09.2026 (#422). Запрет «класс A автоматизируем, но НИКОГДА в main» был ПРИНЦИПОМ в
+      комментарии nightly_review.py, а не проверкой: добавь кто-нибудь `_git(root, "push", "origin",
+      "main")` в путь автофикса — ни один тест бы не заметил. Доставлен валидатор
+      validate_nightly_no_direct_main_write: AST-обход РЕАЛЬНОГО исходника ночного пути (оркестратор
+      nightly_review + шов A worktree + шов B pr_open). R1 оркестратор без прямой git-мутации, R2 нет
+      git с литералом main/master, R3a worktree.add сохраняет отказ main, R3b pr_open draft-only.
+      Каждое правило краснеет на своём реальном дефекте (fail-closed тесты внедряют запись в main в
+      копию исходника). ОГОВОРКА: R2 ловит литералы (обход через вычисляемую переменную ограничен
+      R1+R3a), R3a — присутствие сравнения с main (сам отказ покрыт поведенческим test_worktree);
+      границы названы в докстринге. Исход `no_direct_writes_to_main_ever` -> true; цель остаётся
+      active (delta_review и false_positive_rate ещё открыты).
+  - id: uiux-token-and-capability-registries-available
+    title: >-
+      Реестры контракта токенов и capability доступны как проверяемые данные
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-09-04'
+    issue: 418
+    evidence: tests/unit/test_uiux_capabilities_registry.py
+    result: >-
+      ЗАКРЫТО 04.09.2026 (#418, Волна 2). Добавлены как ПРОВЕРЯЕМЫЕ данные: standards/uiux/registries/
+      tokens.yaml (контракт дизайн-токенов: имя -> роль/пространство/опорные id, сверяется с
+      design/tokens/*.json) и capabilities.yaml (сквозные возможности UI-системы: темизация, WCAG 2.2
+      AA, клавиатура, полнота состояний, адаптив, reduced-motion, локализация, защита деструктива —
+      каждая опирается на правила Конституции + пространства токенов + компоненты по id). Схема
+      uiux-registry.schema.json признаёт kind tokens/capabilities. Валидатор
+      standards/uiux/scripts/validate-registries.py читает оба реестра и краснеет на ссылочном разрыве
+      (dangling rule/token/namespace/local, missing_source). ЗАМЕР: 11 тестов (positive; fail-closed по
+      каждому классу разрыва; side-effect — удаление namespace из tokens.yaml роняет capability, значит
+      оба файла реально читаются). Исход `tokens_contract_and_capability_registries_available` -> true;
+      цель остаётся active (волны 3-4 открыты).
   - id: own-medicine-checked
     title: >-
       Самоприменение культуры кита проверяется, а уроки поля записаны как культура
