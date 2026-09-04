@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 358
+behavioral_count: 360
 structural_count: 61
-total_count: 419
-behavioral_share_pct: 85.44
+total_count: 421
+behavioral_share_pct: 85.51
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -230,3 +230,22 @@ raises:
       tools/_bootstrap.py о будущем сносе; снос состоялся). Это не деградация теста в структурный, а
       удаление теста вместе с удалённым кодом: behavioral 360 -> 358, total 421 -> 419, structural 61
       без изменений. Снижение зафиксировано записью, а не проехало молча.
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 358
+    from_total: 419
+    to_behavioral: 360
+    to_total: 421
+    to_share_pct: 85.51
+    work: split-test-acceptance-verify (issue #438, продолжение)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез четвёртого мега-тест-файла тем же
+      приёмом, что #438/#464. test_acceptance_verify.py (847 строк) разрезан на 3 файла по темам —
+      вердикт verify() (ядро, оно же test_acceptance_verify.py), разбор критериев parse_criteria/
+      criteria_from_spec (test_acceptance_criteria_parsing.py) и заземление цитат _ground_quote/
+      _post_state/_diff_by_file (test_acceptance_verify_grounding.py). Разрез вышел чище прежних:
+      общие хелперы (_provider/_read/_verdict, фикстура tree, CRITERIA/DIFF) нужны ТОЛЬКО ядру и
+      остались в нём инлайном — conftest не трогался, риска F811 нет вовсе. Оба отколотых файла
+      импортируют продуктовый код (acceptance_verify) И зовут его -> оба поведенческие, структурных
+      не прибавилось (61 без изменений), доля выросла 85.44% -> 85.51%. Число собранных тестов
+      ДО == ПОСЛЕ (53). Baseline пере-записан на фактический замер.
