@@ -22,7 +22,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 969
   ai_ops_kit/cli/ai_ops_cli_intents.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
-  ai_ops_kit/engine/execution_pipeline.py: 771
+  ai_ops_kit/engine/execution_pipeline.py: 773
   ai_ops_kit/planning/delivery_plan.py: 1050
   ai_ops_kit/lifecycle/active_work.py: 1073
   ai_ops_kit/ui/presenter_formatters.py: 977
@@ -132,3 +132,16 @@ raises:
       `_backoff`) вынесены на уровень модуля, чтобы `_claude_cli_call` вернулась под потолок func-size
       (183 -> 154; потолок providers/ опущен 170 -> 169 к факту run_workflow). Рост файла оправдан новым
       поведением; рационале написаны, не срезаны. Ратчет держит рост вниз от новых потолков.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 771'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 773'
+    work: run-names-status-docs-or-the-exception (#404)
+    why: >-
+      _deliver_pr теперь спрашивает living_status.describe(work_root) и вкладывает в тело draft PR
+      явную строку про статус-доки — обновлены этой доставкой или названа причина-исключение (нет
+      управляемого дока / шаблон / нет разметки свежести), чтобы сгенерированный PR не упирался молча
+      в собственный гейт свежести. Сборка тела вынесена в delivery/pr_open.pr_body (там ей место, и
+      это не растит execution_pipeline), но сам вызов describe + проброс status_docs в отчёт стоят
+      +2 строки. Разбивать 771-строчный оркестратор ради двух строк непропорционально; потолок поднят
+      осознанно на +2 под факт. Ратчет держит дальнейший рост вниз от 773.
