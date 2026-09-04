@@ -942,18 +942,25 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
 
 
 def _main_guarded(argv):
-    """Граница CLI: отказ провайдера по лимиту — человеку ФРАЗОЙ и кодом, а не трейсбеком.
+    """Граница CLI: отказ провайдера, который повтор не лечит, — человеку ФРАЗОЙ и кодом, а не трейсбеком.
 
     ЗАМЕР ПОЛЯ 20.08.2026 (obs 99aa67ef): при исчерпании лимита сессии claude-cli наружу выходил
     RuntimeError с полным питоновским трейсбеком. Провайдер теперь поднимает типизированный
     `ProviderLimitError`; здесь он превращается в сообщение и код возврата 3 («модель недоступна»).
-    Ловим ТОЛЬКО этот тип — прочие ошибки по-прежнему всплывают, чтобы дефекты не тонули в тихом
-    отказе.
+
+    ЗАЯВКА #160: та же граница ловит структурную недоступность исполнителя в этой среде (запуск
+    изнутри активной сессии Claude) — `ProviderEnvUnavailableError`. Наружу — последствие и оба
+    выхода фразой, код 3, без трейсбека и без пяти бессмысленных повторов внутри.
+
+    Ловим ТОЛЬКО эти типы — прочие ошибки по-прежнему всплывают, чтобы дефекты не тонули в тихом отказе.
     """
-    from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError
+    from ai_ops_kit.providers.orchestrator_providers import (
+        ProviderEnvUnavailableError,
+        ProviderLimitError,
+    )
     try:
         return main(argv)
-    except ProviderLimitError as e:
+    except (ProviderLimitError, ProviderEnvUnavailableError) as e:
         print(e.human_message(), file=sys.stderr)
         return 3
 
