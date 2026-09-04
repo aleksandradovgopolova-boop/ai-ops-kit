@@ -80,12 +80,59 @@ class TestBuildReport:
 
 @pytest.mark.unit
 class TestRecordReport:
-    def test_history_records(self, feature_dir):
+    def test_run_is_written_as_its_own_shard(self, feature_dir):
+        """Прогон = отдельный файл report-history/<feature>/<run-id>.jsonl, одна строка."""
+        fdir, td = feature_dir
+        r = build_report(fdir, None)
+        hist = td / "hist"
+        out = record_report(r, fdir, hist)
+        assert out.parent == hist / "demo-r", out
+        assert out.suffix == ".jsonl"
+        lines = out.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 1
+        assert "verdict" in json.loads(lines[0])
+
+    def test_parallel_runs_write_different_files(self, feature_dir):
+        """#148: два прогона пишут в РАЗНЫЕ шарды (нет общего append-файла -> нет merge-конфликта)."""
+        fdir, td = feature_dir
+        r = build_report(fdir, None)
+        hist = td / "hist"
+        a = record_report(r, fdir, hist)
+        b = record_report(r, fdir, hist)
+        assert a != b, "два прогона писали в один файл — вернулся known-conflict #148"
+        shards = sorted((hist / "demo-r").glob("*.jsonl"))
+        assert len(shards) == 2
+
+    def test_effect_metrics_aggregates_shards(self, feature_dir):
+        """Читатель агрегирует все шарды каталога фичи в одну историю."""
+        from ai_ops_kit.intelligence import effect_metrics
+
         fdir, td = feature_dir
         r = build_report(fdir, None)
         hist = td / "hist"
         record_report(r, fdir, hist)
         record_report(r, fdir, hist)
-        lines = (hist / "demo-r.jsonl").read_text(encoding="utf-8").strip().split("\n")
-        assert len(lines) == 2
-        assert "verdict" in json.loads(lines[0])
+        record_report(r, fdir, hist)
+        metrics = effect_metrics.build(hist)
+        assert metrics["per_feature"]["demo-r"]["runs"] == 3
+
+    def test_legacy_flat_file_and_shards_read_together(self, feature_dir):
+        """Обратная совместимость: старый плоский <feature>.jsonl читается вместе с шардами."""
+        from ai_ops_kit.intelligence import effect_metrics
+
+        fdir, td = feature_dir
+        r = build_report(fdir, None)
+        hist = td / "hist"
+        hist.mkdir(parents=True, exist_ok=True)
+        # старый плоский append-файл дочки (два среза)
+        legacy = {"schema_version": 1, "ts": "2026-08-01T10:00:00+00:00", "feature": "demo-r",
+                  "verdict": "OK", "current_stage": "discovery",
+                  "coverage": {"filled": 1}, "problems": 0, "warns": 0}
+        legacy2 = {**legacy, "ts": "2026-08-01T11:00:00+00:00", "verdict": "PROBLEM"}
+        (hist / "demo-r.jsonl").write_text(
+            json.dumps(legacy, ensure_ascii=False) + "\n"
+            + json.dumps(legacy2, ensure_ascii=False) + "\n", encoding="utf-8")
+        # плюс один новый шард
+        record_report(r, fdir, hist)
+        metrics = effect_metrics.build(hist)
+        assert metrics["per_feature"]["demo-r"]["runs"] == 3, "плоский файл или шард потерян при чтении"
