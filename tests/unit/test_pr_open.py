@@ -320,3 +320,40 @@ class TestStatusDocsInPrBody:
         body = pr_open.pr_body("W-1", "main", "abcdef123456", "cafe4567", status)
         assert "W-1" in body and "main" in body and "cafe4567" in body
         assert "причина-исключение: нет статус-дока" in body
+
+
+@pytest.mark.unit
+class TestPushErrorScrubsSecret:
+    """P2 (безопасность): если оператор ВРУЧНУЮ настроил origin со встроенным в URL токеном, git
+    печатает его в stderr push. Раньше stderr уходил в note (тело PR/отчёт) сырым. Теперь он проходит
+    через тот же скраб секретов, что кит применяет к evidence. Проба краснеет на дефекте: без скраба
+    токен виден в note."""
+
+    # ghp_ + ровно 36 [A-Za-z0-9] -> совпадает с SECRET_PATTERNS['github_pat'].
+    SECRET = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+    def _perr(self):
+        # Похоже на реальный вывод git при токене в remote-URL; НЕ non-fast-forward -> прямой возврат error.
+        return (f"fatal: unable to access 'https://{self.SECRET}@github.com/o/r.git/': "
+                "The requested URL returned error: 403")
+
+    def test_push_error_note_masks_secret(self, stash_gh):
+        real_git, real_tok = pr_open._git, pr_open._cp._github_token
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+
+            def fake_git(root, *args):
+                if args[:1] == ("remote",):
+                    return (0, "https://github.com/o/r.git", "")
+                if args and args[0] == "push":
+                    return (1, "", self._perr())      # push упал, stderr несёт секрет
+                return (0, "", "")
+
+            pr_open._git = fake_git
+            r = open_draft_pr("/no/such/root", "ai-ops/z", "T", "B", base="main", push=True)
+            assert r["status"] == "error"
+            assert self.SECRET not in r["note"]           # секрет замаскирован (без скраба — покраснеет)
+            assert "REDACTED-SECRET" in r["note"]         # маскировка сработала тем же механизмом кита
+            assert "rc=1" in r["note"]                     # полезная диагностика не потеряна
+        finally:
+            pr_open._git, pr_open._cp._github_token = real_git, real_tok

@@ -63,6 +63,16 @@ def _git(root, *args):
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
+def _scrub_git_output(text):
+    """P2 (безопасность): сырой stderr git может унести секрет в note/тело PR — если оператор ВРУЧНУЮ
+    настроил origin со встроенным в URL токеном, git печатает его в диагностике push. Пропускаем через
+    ТОТ ЖЕ скраб секретов, что кит применяет к evidence/output_tail (engine.tool_broker._scrub_output ->
+    security_scan.SECRET_PATTERNS, fail-closed), а не пишем свой regex. Скрабим ДО обрезки, чтобы срез не
+    оставил половину замаскированного секрета."""
+    from ai_ops_kit.engine.tool_broker import _scrub_output
+    return _scrub_output(text)
+
+
 def _is_non_fast_forward(err):
     """#401: отличить отклонение push по расхождению веток (лечится --force-with-lease своей
     delivery-ветки) от прочих ошибок push (сеть/права — форсить нельзя)."""
@@ -146,7 +156,8 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_i
             if prc != 0:
                 _hint = (" (ветка расходится с remote и --force-with-lease не прошёл — возможно, в неё "
                          "дописали извне)" if _is_non_fast_forward(perr) else "")
-                return {"status": "error", "note": f"git push не удался (rc={prc}): {perr[:200]}{_hint}"}
+                return {"status": "error",
+                        "note": f"git push не удался (rc={prc}): {_scrub_git_output(perr)[:200]}{_hint}"}
         # P0 (#399): после УСПЕШНОГО push авторитетный head-sha — это ЛОКАЛЬНО запушенный коммит
         # (push прошёл => origin/<branch> == local <branch>, а PR head — это и есть ветка). Ответ
         # GitHub API про head PR обновляется с задержкой: сразу после push он отдаёт СТАРЫЙ sha,
