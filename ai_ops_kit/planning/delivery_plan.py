@@ -478,34 +478,12 @@ def validate(plan, model=None, closed=None, root=None):
                           f"необязательным для этой цели")
         elif rel not in FREEZE_RELATIONS:
             errors.append(f"цель '{g['id']}': freeze_relation '{rel}' вне {list(FREEZE_RELATIONS)}")
-    # СНЯТИЕ ОБЯЗАНО ССЫЛАТЬСЯ НА СУЩЕСТВУЮЩЕЕ РЕШЕНИЕ. Иначе новое поле стало бы тем самым
-    # «разморозить вручную», от которого механизм и защищал: строка `freeze_lifted_by: почему-то`
-    # снимала бы правило без следа. Решение должно лежать в `decisions/registry.yaml` — там, где
-    # его увидит человек и переживёт сессия.
-    _lift = str((_fz or {}).get("lifted_by") or "").strip()
-    if _lift and root is not None:
-        _reg = Path(root) / "decisions" / "registry.yaml"
-        _known = False
-        if _reg.is_file():
-            try:
-                _doc = yaml.safe_load(_reg.read_text(encoding="utf-8")) or {}
-            except (OSError, yaml.YAMLError) as _e:
-                errors.append(f"заморозка снята решением '{_lift}', но decisions/registry.yaml "
-                              f"не разобран ({type(_e).__name__}) — сослаться не на что")
-                _doc = None
-            if _doc is not None:
-                _items = _doc.get("decisions") or _doc.get("episodes") or _doc.get("registry") or []
-                if isinstance(_items, dict):
-                    _known = _lift in _items
-                elif isinstance(_items, list):
-                    _known = any(str((d or {}).get("id")) == _lift for d in _items if isinstance(d, dict))
-                if not _known:
-                    errors.append(
-                        f"заморозка снята решением '{_lift}', которого нет в decisions/registry.yaml — "
-                        f"снятие без записанного решения это тихий обход правила, а не решение")
-        else:
-            errors.append(f"заморозка снята решением '{_lift}', но decisions/registry.yaml нет — "
-                          f"сослаться не на что")
+    # СНЯТИЕ ЗАМОРОЗКИ ОБЯЗАНО ОПИРАТЬСЯ НА ДОКАЗАТЕЛЬСТВО, А НЕ НА САМОДЕКЛАРАЦИЮ. Снять заморозку
+    # можно двумя способами (решением `freeze_lifted_by` и исходом, ставшим `true`), и каждый обязан
+    # чем-то подкрепляться: решение — записью в реестре, исход — полевым доказательством. Обе
+    # половины проверяет `_freeze_lift_errors` — вынесено в помощник, чтобы `validate` не росла за
+    # потолок и чтобы оба пути снятия были видны рядом.
+    errors.extend(_freeze_lift_errors(_fz, root))
     # Статус цели ТЕПЕРЬ ВЛИЯЕТ НА ПРИОРИТЕТ (`goal_priority`), поэтому опечатка в нём молча
     # переставляла бы весь план. Проверяем здесь — единственное место, где она видна человеку.
     for g in gl:
@@ -690,6 +668,81 @@ def freeze_state(plan) -> dict:
             "lifted_by": None, "outcome_reached": reached,
             "reason": (f"исход {FREEZE_OUTCOME} верен — заморозка снята" if reached else
                        f"исход {FREEZE_OUTCOME} ещё не верен — новые умения не принимаются")}
+
+
+def _field_evidence_present(root) -> bool:
+    """Есть ли полевое доказательство исхода снятия заморозки — `registry/release-claims.yaml`,
+    ключ `field_evidence`. Здесь же его требует и `test_the_real_plan_does_not_claim_an_outcome...`.
+
+    Fail-closed: файла нет или он не разобран — доказательства нет. «Не смог прочитать» не должно
+    читаться как «доказано», иначе снятие заморозки снова держалось бы на самодекларации.
+    """
+    p = Path(root) / "registry" / "release-claims.yaml"
+    if not p.is_file():
+        return False
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return False
+    return bool(doc.get("field_evidence"))
+
+
+def _freeze_lift_errors(fz, root) -> list:
+    """Ошибки контракта СНЯТИЯ заморозки. Заморозку снимают двумя способами, и каждый обязан
+    опираться на доказательство, а не на слово в плане:
+
+    1. решением человека (`freeze_lifted_by`) — решение обязано существовать в
+       `decisions/registry.yaml`, иначе строка `freeze_lifted_by: почему-то` снимала бы правило без
+       следа (это ровно «разморозить вручную», от чего механизм и защищал);
+    2. достигнутым исходом (`FREEZE_OUTCOME: true`) — исход, ставший верным, снимает заморозку САМ
+       ПО СЕБЕ (fail-closed `freeze_state`) и вдобавок открывает канал `stable`, поэтому `true`
+       обязан нести полевое доказательство (`registry/release-claims.yaml -> field_evidence`).
+       `true` без доказательства — самодекларация класса F-002/F-005: заморозку сняли, не доказав
+       исход (аудит 04.09.2026). `validate` прежде сверял только структуру, а не истинность исхода.
+
+    Проверка молчит без `root` (доказательство негде резолвить — как и остальные ссылочные проверки)
+    и на планах без цели заморозки (`applies=False`): правило внутреннее для репозитория кита, а не
+    для планов дочек.
+    """
+    errors = []
+    fz = fz or {}
+    if root is None:
+        return errors
+    lift = str(fz.get("lifted_by") or "").strip()
+    if lift:
+        reg = Path(root) / "decisions" / "registry.yaml"
+        if not reg.is_file():
+            errors.append(f"заморозка снята решением '{lift}', но decisions/registry.yaml нет — "
+                          f"сослаться не на что")
+        else:
+            doc = None
+            try:
+                doc = yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+            except (OSError, yaml.YAMLError) as e:
+                errors.append(f"заморозка снята решением '{lift}', но decisions/registry.yaml "
+                              f"не разобран ({type(e).__name__}) — сослаться не на что")
+            if doc is not None:
+                reg_items = doc.get("decisions") or doc.get("episodes") or doc.get("registry") or []
+                if isinstance(reg_items, dict):
+                    known = lift in reg_items
+                elif isinstance(reg_items, list):
+                    known = any(str((d or {}).get("id")) == lift
+                                for d in reg_items if isinstance(d, dict))
+                else:
+                    known = False
+                if not known:
+                    errors.append(
+                        f"заморозка снята решением '{lift}', которого нет в decisions/registry.yaml — "
+                        f"снятие без записанного решения это тихий обход правила, а не решение")
+    # ГЛАВНОЕ ЗАКРЫТИЕ (P0 04.09.2026): исход, ставший `true`, снимает заморозку — значит именно от
+    # него и требуется доказательство, независимо от того, названо ли ещё и решение.
+    if fz.get("applies") and fz.get("outcome_reached") and not _field_evidence_present(root):
+        errors.append(
+            f"заморозка {FREEZE_DECISION} снята исходом {FREEZE_OUTCOME}=true, но доказательства "
+            f"нет: registry/release-claims.yaml -> field_evidence пуст. `true` снимает заморозку и "
+            f"открывает канал stable, поэтому обязан нести полевое доказательство — иначе это "
+            f"самодекларация, а не достигнутый исход")
+    return errors
 
 
 def goal_freeze_relation(plan) -> dict:
