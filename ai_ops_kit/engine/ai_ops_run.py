@@ -292,6 +292,28 @@ def main(argv):
     a = ap.parse_args(argv)
     if a.cmd == "resume":
         from ai_ops_kit.engine import run_handoff
+        # #406: флаги, которые ПРИМЕНЯЮТСЯ только при реальном продолжении (--execute), не должны
+        # молча проглатываться на preflight. Раньше `resume --open-pr` без --execute печатал прогноз
+        # готовности и выходил, НИ РАЗУ не взглянув на флаг — человек уходил в уверенности, что PR
+        # откроется/заявка перенимается, а не происходило ничего. Тихо проигнорированный флаг = ложь
+        # об исходе; здесь он становится явным отказом с понятной причиной.
+        _exec_only = []
+        if getattr(a, "open_pr", False):
+            _exec_only.append("--open-pr")
+        if getattr(a, "takeover", False):
+            _exec_only.append("--takeover")
+        if _exec_only and not a.execute:
+            _msg = ("флаги " + ", ".join(_exec_only) + " действуют только при реальном продолжении "
+                    "работы — добавьте --execute. Без него resume лишь проверяет, можно ли "
+                    "продолжить, и ни открыть PR, ни перенять заявку не может (флаг был бы "
+                    "проигнорирован молча).")
+            if a.json:
+                print(json.dumps({"kind": "resume", "status": "error", "error": _msg,
+                                  "resume": {"requested": True, "resumed": False}},
+                                 ensure_ascii=False, indent=2))
+            else:
+                print(f"ai-ops resume {a.feature}: ОТКАЗ — {_msg}")
+            return 2
         pf = run_handoff.resume_preflight(a.child_root, a.feature, base=a.base)
         if not a.execute:
             if a.json:

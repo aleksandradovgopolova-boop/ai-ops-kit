@@ -417,8 +417,8 @@ probes:
 - id: claim-records-the-machine
   kind: guard
   file: ai_ops_kit/lifecycle/active_work.py
-  find: '                 "machine": _machine(), "started_at": at or _now_iso()}'
-  replace_with: '                 "started_at": at or _now_iso()}'
+  find: '                 "machine": _machine(), "started_at": at or _now_iso(),'
+  replace_with: '                 "started_at": at or _now_iso(),'
   tests:
   - tests/unit/test_local_claim_honest_reach.py
   why: 'Без машины в заявке «кто держит» теряет «где» — ровно то, из-за чего атрибуция инцидента

@@ -24,7 +24,7 @@ ceilings:
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 771
   ai_ops_kit/planning/delivery_plan.py: 1050
-  ai_ops_kit/lifecycle/active_work.py: 1040
+  ai_ops_kit/lifecycle/active_work.py: 1073
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 965
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
@@ -104,3 +104,16 @@ raises:
       месте. ai_ops_run.py усох 1073 -> 411 и ушёл НИЖЕ порога 700 — снят с ceilings (ниже порога не
       ограничивается). Спутник = 703 строки, выше порога — ОСОЗНАННО вносится в ceilings с фактическим
       размером (иначе тест module-size покраснел бы «новый монолит сверх порога без записи»).
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/lifecycle/active_work.py = 1040'
+    to: 'ai_ops_kit/lifecycle/active_work.py = 1073'
+    work: issue-406 — заявка мёртвой сессии гасится по pid
+    why: >-
+      Добавлена честная liveness-проверка держателя заявки: при register сохраняется owner_pid
+      процесса прогона, и заявка снимается сразу, как процесс на своей машине мёртв (holder_is_gone),
+      а не только по возрасту >12ч. Это несколько связанных мест — persist owner_pid, ветка
+      _pid_is_dead после машинного гейта, докстринги-рационале про «pid значим только на своей
+      машине» — плюс два мутационно-охраняемых инварианта. Рост +33 над потолком оправдан новым
+      поведением, а не разбуханием: рационале-комментарии написаны, а не срезаны. Ратчет держит рост
+      вниз от 1073; вынос в спутник — отдельная работа, если файл продолжит расти.
