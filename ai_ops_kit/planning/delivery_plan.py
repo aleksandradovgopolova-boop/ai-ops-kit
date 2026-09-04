@@ -13,7 +13,8 @@ delivery-plan. Элемент плана при этом — тот же **WorkI
 совпадение id даёт настоящую связь уровней, а не два несвязанных списка.
 
 СТАТУС НЕ ОБЪЯВЛЯЕТСЯ ТАМ, ГДЕ ЕГО МОЖНО ВЫВЕСТИ. Человек объявляет только факты, которых код не
-знает: `todo`, `in_progress`, `done`, `dropped`. `ready`/`blocked`/`waiting` — ВЫВОД из графа
+знает: `todo`, `in_progress`, `waiting_on_owner` (ждём названного шага владельца), `done`,
+`dropped`. `ready`/`blocked`/`waiting` — ВЫВОД из графа
 зависимостей, статуса WorkItem'а (гейты) и реестра активных работ. Приоритет источников:
 факт из WorkItem/гейтов > объявленный факт человека > вывод из графа. Объявленный `ready` при
 незакрытой зависимости не ломает файл, но становится ВИДИМЫМ расхождением — ровно так же, как
@@ -44,15 +45,24 @@ KIND = "delivery-plan"
 HISTORY_REL = "history/plan-history.yaml"
 HISTORY_KIND = "delivery-plan-history"
 
-DECLARABLE = ("todo", "in_progress", "done", "dropped")
+DECLARABLE = ("todo", "in_progress", "waiting_on_owner", "done", "dropped")
 DERIVED = ("ready", "blocked", "waiting")
 VALUE = ("high", "medium", "low")
+# «Механизм готов — ждём НАЗВАННОЕ действие владельца». Замер 04.09.2026: две работы простояли
+# `in_progress` ~9 дней, хотя код давно слит и они ждут одного шага в настройке GitHub («Require
+# merge queue»). `in_progress` лгал дважды: `status`/`next` считали их идущими, а сверка «идёт по
+# плану, но нет прогона» — брошенными. Ни то, ни другое: работа не движется и не брошена, она ждёт
+# человека. Статус ОБЪЯВЛЯЕМЫЙ (факт, который код вывести не может — что именно у владельца в
+# очереди), живёт в активном плане и ОБЯЗАН назвать ожидаемое действие в поле `waiting_on` — иначе
+# это фантомное состояние: план выглядит осмысленным, а чего он ждёт — нигде.
+OWNER_WAIT_STATUS = "waiting_on_owner"
+OWNER_WAIT_KEY = "waiting_on"
 # АКТИВНЫЙ план содержит только незакрытую работу (`plan-as-control-plane`, 2026-08-14). Закрытая
 # уезжает в `history/plan-history.yaml`. Повод — замер: план кита стал одновременно планом, бэклогом,
 # журналом расследований и отчётом квалификации, 20 из 25 работ были `done`, и чтобы ответить «что
 # идёт сейчас», приходилось читать разбор давно закрытых дефектов. Управляющий файл, в котором
 # управление занимает пятую часть, управляющим быть перестаёт.
-ACTIVE_DECLARABLE = ("todo", "in_progress")
+ACTIVE_DECLARABLE = ("todo", "in_progress", "waiting_on_owner")
 CLOSED_DECLARABLE = ("done", "dropped")
 # Поля-связки: чем работа привязана к реальности. Не обязательны, но их СМЫСЛ проверяется ниже.
 LINK_KEYS = ("pr", "branch", "commit", "evidence", "decision", "finding")
@@ -399,6 +409,34 @@ def git_disagreements(plan, root):
     return out
 
 
+def _workitem_status_errors(w, where):
+    """Ошибки/предупреждения по СТАТУСУ работы: выводимый нельзя объявлять, закрытый живёт в истории,
+    вне словаря активного плана, и waiting_on_owner без названного действия — фантомное состояние.
+    Вынесено из validate (func-size, чистый перенос без смены поведения). -> (errors, warns)."""
+    errors, warns = [], []
+    st = w.get("status")
+    if st in DERIVED:
+        warns.append(f"{where}: статус '{st}' ВЫВОДИМЫЙ — объявлять его нельзя, он считается "
+                     f"из зависимостей/гейтов; объявляйте {list(DECLARABLE)}")
+    elif st in CLOSED_DECLARABLE:
+        errors.append(f"{where}: статус '{st}' — закрытая работа живёт в {HISTORY_REL}, "
+                      f"а не в активном плане. Активный план отвечает на вопрос «что идёт и что "
+                      f"взять следующим»; когда закрытое остаётся в нём, ответ приходится "
+                      f"вычитывать из архива (замер: 20 из 25 работ были `done`)")
+    elif st not in ACTIVE_DECLARABLE:
+        errors.append(f"{where}: status '{st}' вне словаря активного плана "
+                      f"({list(ACTIVE_DECLARABLE)}); закрытое — в {HISTORY_REL}")
+    # WAITING БЕЗ НАЗВАННОГО ДЕЙСТВИЯ — ФАНТОМНОЕ СОСТОЯНИЕ. Статус говорит «ждём владельца»,
+    # но пока не сказано ЧЕГО именно ждём, план неотличим от застрявшего: ровно та ловушка,
+    # ради которой статус и заведён. Поэтому `waiting_on` с непустым текстом — обязателен.
+    if st == OWNER_WAIT_STATUS and not str(w.get(OWNER_WAIT_KEY) or "").strip():
+        errors.append(f"{where}: статус '{OWNER_WAIT_STATUS}' без непустого '{OWNER_WAIT_KEY}' — "
+                      f"waiting без названного действия владельца это фантомное состояние: план "
+                      f"выглядит осмысленным, а чего он ждёт — нигде. Назовите ожидаемый шаг: "
+                      f"`{OWNER_WAIT_KEY}: <какое действие владельца разблокирует работу>`")
+    return errors, warns
+
+
 def validate(plan, model=None, closed=None, root=None):
     """Структура + семантика плана. -> {"errors": [...], "warnings": [...]}.
 
@@ -513,17 +551,8 @@ def validate(plan, model=None, closed=None, root=None):
                               f"выбирает роутер в момент запуска (иначе смена runtime "
                               f"переписывает план продукта)")
         st = w.get("status")
-        if st in DERIVED:
-            warns.append(f"{where}: статус '{st}' ВЫВОДИМЫЙ — объявлять его нельзя, он считается "
-                         f"из зависимостей/гейтов; объявляйте {list(DECLARABLE)}")
-        elif st in CLOSED_DECLARABLE:
-            errors.append(f"{where}: статус '{st}' — закрытая работа живёт в {HISTORY_REL}, "
-                          f"а не в активном плане. Активный план отвечает на вопрос «что идёт и что "
-                          f"взять следующим»; когда закрытое остаётся в нём, ответ приходится "
-                          f"вычитывать из архива (замер: 20 из 25 работ были `done`)")
-        elif st not in ACTIVE_DECLARABLE:
-            errors.append(f"{where}: status '{st}' вне словаря активного плана "
-                          f"({list(ACTIVE_DECLARABLE)}); закрытое — в {HISTORY_REL}")
+        _se, _sw = _workitem_status_errors(w, where)
+        errors.extend(_se); warns.extend(_sw)
         # СВЯЗЬ С РЕАЛЬНОСТЬЮ. Открытый PR и статус `todo` — противоречие: PR существует, значит
         # работа начата. Проверяется ФОРМА (в файле есть `pr`), а не состояние GitHub: объявленное
         # состояние чужой системы стареет молча, а форма — нет.
@@ -913,7 +942,15 @@ def resolve(plan, child_root, model=None, active=None, closed=None):
             reasons.append(f"работа идёт сейчас: ветка {a.get('branch') or '?'}, "
                            f"сессия {a.get('session') or '?'}")
 
-        if status in ("done", "dropped", "in_progress"):
+        # WAITING-ON-OWNER — ОБЪЯВЛЕННОЕ, НЕ ВЫВОДИМОЕ. Ждём названного шага владельца, а не
+        # снятия графовой блокировки, поэтому статус не пересчитывается из зависимостей: иначе
+        # `waiting_on_owner` затёрся бы на `ready`/`waiting`/`blocked` и снова читался бы как
+        # «работа идёт/встала». Причину показываем ту, что назвал человек.
+        if status == OWNER_WAIT_STATUS and source == "declared":
+            reasons.append(f"механизм готов, ждёт названного действия владельца: "
+                           f"{str(w.get(OWNER_WAIT_KEY) or '').strip() or '?'}")
+
+        if status in ("done", "dropped", "in_progress", OWNER_WAIT_STATUS):
             out[wid] = {"status": status, "declared": declared, "source": source,
                         "reasons": reasons, "unblocks": len(_downstream(wid)),
                         "blocked_by": [], "conflicts_with": [],

@@ -156,3 +156,59 @@ def test_a_corrupt_history_is_not_read_as_empty(tmp_path):
 def test_no_history_file_is_a_legal_state(tmp_path):
     """Истории нет — законное состояние молодого репозитория, а не поломка."""
     assert dp.load_history(tmp_path) == []
+
+
+# ─── waiting_on_owner: механизм готов, ждём НАЗВАННОЕ действие владельца ──────────────────────────
+
+def test_waiting_on_owner_without_a_named_action_is_an_error():
+    """fail-closed: `waiting_on_owner` без непустого `waiting_on` — фантомное состояние.
+
+    Смысл статуса — «ждём НАЗВАННЫЙ шаг владельца». Пока шаг не назван, статус неотличим от
+    застрявшей работы: ровно та ловушка, ради которой статус и заведён. Поэтому валидатор требует
+    непустой `waiting_on`, а не соглашается на «ждём чего-то».
+    """
+    no_key = dp.validate(_plan({**ACTIVE_ITEM, "status": "waiting_on_owner"}))
+    blank = dp.validate(_plan({**ACTIVE_ITEM, "status": "waiting_on_owner", "waiting_on": "  "}))
+
+    assert any("waiting_on_owner" in e and "waiting_on" in e and "фантомное" in e
+               for e in no_key["errors"]), no_key["errors"]
+    assert any("waiting_on_owner" in e and "waiting_on" in e for e in blank["errors"]), blank["errors"]
+
+
+def test_waiting_on_owner_with_a_reason_is_valid_and_not_running(tmp_path):
+    """positive: `waiting_on_owner` с причиной валиден, но НЕ считается идущей работой.
+
+    Работа с этим статусом не движется и не брошена — она ждёт владельца. Значит валидатор её
+    принимает, `declared_running` её НЕ включает (иначе `status`/`next` считали бы её идущей и
+    сверка «идёт по плану, но нет прогона» пометила бы брошенной), а `resolve` показывает её как
+    `waiting_on_owner` с названной причиной, а не пересчитывает в `ready`/`blocked`/`waiting`.
+    """
+    reason = "владелец включает «Require merge queue» в настройках GitHub"
+    plan = _plan({**ACTIVE_ITEM, "status": "waiting_on_owner", "waiting_on": reason})
+
+    rep = dp.validate(plan)
+    assert rep["errors"] == [], rep["errors"]
+
+    # НЕ идёт: declared_running видит только in_progress.
+    assert dp.declared_running(plan) == []
+
+    # resolve сохраняет объявленный статус и причину, не подменяя выводом из графа.
+    res = dp.resolve(plan, tmp_path)
+    got = res["aktivnaya"]
+    assert got["status"] == "waiting_on_owner", got
+    assert got["source"] == "declared", got
+    assert got["drift"] is None, got
+    assert any(reason in r for r in got["reasons"]), got["reasons"]
+
+
+def test_waiting_on_owner_lives_in_the_active_plan_not_history():
+    """side-effect: waiting_on_owner — открытая работа активного плана, не закрытая.
+
+    Статус аддитивен: он вошёл в словарь активного плана и в объявляемые, но остался вне закрытых
+    (`done`/`dropped`) — waiting ≠ done ≠ in_progress. Иначе ждущая владельца работа либо уехала бы
+    в историю как завершённая, либо считалась бы идущей.
+    """
+    assert "waiting_on_owner" in dp.ACTIVE_DECLARABLE
+    assert "waiting_on_owner" in dp.DECLARABLE
+    assert "waiting_on_owner" not in dp.CLOSED_DECLARABLE
+    assert "waiting_on_owner" not in dp.DERIVED
