@@ -14,6 +14,9 @@
   * empty_namespace   — namespace контракта токенов не покрывает ни одного реального токена;
   * catalog_gap       — паттерн/шаблон из каталога §16 Конституции не покрыт реестром;
   * broken_tier       — semantic-цвет ссылается не на primitive-токен и не на литеральный hex (§21);
+  * unknown_status    — status capability вне закрытого словаря честной градации;
+  * unsubstantiated_guarantee — capability заявляет guaranteed_by_shipped_code без доказанного
+                        shipped_backing (нет реального едущего в дочку артефакта вне standards/uiux);
   * dup_id / bad_id   — дубли или пустые id токенов/записей.
 
 Запуск:  python standards/uiux/scripts/validate-registries.py [--json]
@@ -29,12 +32,36 @@ from pathlib import Path
 import yaml
 
 STD = Path(__file__).resolve().parents[1]
+REPO_ROOT = STD.parents[1]  # standards/uiux -> корень репозитория (для проверки shipped_backing)
 SRC = STD / "UI_CONSTITUTION.md"
 TOKENS_DIR = STD / "design" / "tokens"
 REG_DIR = STD / "registries"
 RULES_YAML = STD / "rules.yaml"
 
 HEX = re.compile(r"^#[0-9A-Fa-f]{3,8}$")
+
+# Закрытый словарь честной градации статуса capability (см. шапку capabilities.yaml).
+#   guaranteed_by_shipped_code — есть доказанный backing-код, едущий в дочку (shipped_backing);
+#   required_by_standard       — стандарт требует, но реализация/поставка не гарантирована;
+#   planned                    — намечено, backing ещё не существует.
+CAP_STATUS_VOCAB = ("guaranteed_by_shipped_code", "required_by_standard", "planned")
+
+
+def _shipped_backing_is_substantiated(entry):
+    """guaranteed_by_shipped_code правдив, только если shipped_backing НЕ пуст и КАЖДЫЙ путь
+    реально существует и лежит ВНЕ standards/uiux/** (это дерево-стандарт в дочку не едет).
+    Каталожная запись (comp./pat./tpl.) — спека, а не shipped-артефакт, и здесь не засчитывается."""
+    backing = entry.get("shipped_backing", [])
+    if not backing:
+        return False
+    std_dir = STD.resolve()
+    for rel in backing:
+        p = (REPO_ROOT / str(rel)).resolve()
+        if not p.exists():
+            return False
+        if p == std_dir or std_dir in p.parents:
+            return False  # внутри standards/uiux/** — не едет в дочку, гарантией не считается
+    return True
 
 
 def _walk_ids(obj):
@@ -224,6 +251,15 @@ def validate():
         for e in cap_reg.get("entries", []):
             eid = e.get("id", "")
             seen_cap.append(eid)
+            status = e.get("status", "")
+            if status not in CAP_STATUS_VOCAB:
+                problems.append("unknown_status: capabilities.yaml/" + eid + " -> статус '"
+                                + str(status) + "' вне закрытого словаря "
+                                + str(list(CAP_STATUS_VOCAB)))
+            elif status == "guaranteed_by_shipped_code" and not _shipped_backing_is_substantiated(e):
+                problems.append("unsubstantiated_guarantee: capabilities.yaml/" + eid
+                                + " -> статус guaranteed_by_shipped_code без доказанного shipped_backing"
+                                + " (нет едущего в дочку кода вне standards/uiux/**)")
             for ref in e.get("constitution_refs", []):
                 if ref not in rule_ids:
                     problems.append("dangling_rule_ref: capabilities.yaml/" + eid
