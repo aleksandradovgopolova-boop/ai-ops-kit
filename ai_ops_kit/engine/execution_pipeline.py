@@ -47,7 +47,7 @@ from ai_ops_kit.engine.pipeline_helpers import (  # noqa: E402,F401
 from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _git, _has_changes, _head_advanced, _tree_clean, _TOOL_CACHE_RE, _tree_clean_after_checks,
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
-    _verify_remote_base, _change_context, _change_context_range,
+    _verify_remote_base, _reverify_against_current_target, _change_context, _change_context_range,
     delivery_preflight as _delivery_preflight,
     managed_drift_preflight as _managed_drift_preflight,
 )
@@ -161,15 +161,15 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
                         reason=f"base '{base_ref}' не разрешилась в ветку: {base_binding.get('reason')} "
                                "— PR к произвольному HEAD не открываем")
         return delivery
-    _rv = _verify_remote_base(work_root, base_ref, base_sha)
-    if _rv.get("verdict") == "unverifiable":
+    _rev = _reverify_against_current_target(work_root, base_ref, base_sha, committed_sha)
+    if _rev.get("verdict") == "unverifiable":
         delivery.update(status="unavailable",
-                        reason=f"remote-base-unverified: {_rv.get('reason')} — доставка невозможна fail-closed")
+                        reason=f"remote-base-unverified: {_rev.get('reason')} — доставка невозможна fail-closed")
         return delivery
-    if _rv.get("verdict") == "verified-moved":
-        delivery.update(status="not-attempted",
-                        reason=f"remote base сдвинулась (validated {base_sha[:12]} != remote "
-                               f"{(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
+    if _rev.get("stale"):
+        delivery.update(status="stale-needs-reverify", reason=_rev.get("reason"),
+                        evidence_base=_rev.get("evidence_base"),
+                        current_target=_rev.get("current_target"), merge_preview=_rev.get("merge_preview"))
         return delivery
     from ai_ops_kit.delivery import pr_open
     from ai_ops_kit.engine import living_status as _living_status

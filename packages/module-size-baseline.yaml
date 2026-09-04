@@ -28,7 +28,7 @@ ceilings:
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 759
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 897
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 954
   ai_ops_kit/validation/validate_own_medicine.py: 732
@@ -206,6 +206,21 @@ raises:
       осознанно под факт. Ратчет держит рост вниз от 1140.
   - at: '2026-09-05'
     what: raise_ceiling
+    from: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 878'
+    to: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 897'
+    work: drift-safe-reverify (merge-queue-not-handrolled)
+    why: >-
+      Дрейф-безопасная доставка: транзакционный контроллер _deliver перед созданием DeliveryIntent
+      ре-верифицирует evidence против ТЕКУЩЕЙ цели (remote base). Сдвинулась цель с момента прогона
+      проверок -> доказательство привязано к СТАРОМУ итогу слияния; fail-closed помечаем
+      stale-needs-reverify, Intent не создаём и PR не открываем (нужен ре-прогон против новой цели).
+      Прибавка +19 строк — сам ранний гейт (вызов _reverify_against_current_target + запись stale в
+      отчёт/журнал + ранний выход) с рационале-комментарием; логика ре-верификации вынесена в
+      pipeline_git._reverify_against_current_target (362 строки, НИЖЕ порога), в контроллере — только
+      проводка. _deliver = 171 строка, ниже func-потолка engine/ (184). Итог 878 -> 897 осознанно
+      под факт; ратчет держит рост вниз от 897.
+  - at: '2026-09-05'
+    what: raise_ceiling
     from: 'ai_ops_kit/engine/tool_broker.py = 725'
     to: 'ai_ops_kit/engine/tool_broker.py = 756'
     work: self-host-protects-its-own-engine (P0-2)
@@ -218,4 +233,5 @@ raises:
       пути в карту ТОЛЬКО на self-host. +31 строка — детектор с рационале и врезка; расщеплять
       725-строчный tool_broker ради одного условного правила непропорционально. Итог 725 -> 756
       осознанно под факт. Ратчет держит рост вниз от 756.
+
 
