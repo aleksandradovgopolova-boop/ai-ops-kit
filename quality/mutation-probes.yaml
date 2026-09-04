@@ -1657,3 +1657,29 @@ probes:
     стоит, если CLI перестанет звать measure_merge_footprint: тогда exit-код перестаёт отражать
     итог слияния. Оборвать вызов в main -> тест кода возврата CLI (пробой=1, в пределах=0) обязан
     покраснеть.'
+- id: self-host-protects-its-own-engine
+  kind: guard
+  file: ai_ops_kit/engine/tool_broker.py
+  find: '    if _is_kit_self_host(child_root):   # self-host: движок/CI/реестры под owner-approval (SEAM)'
+  replace_with: '    if False:   # self-host: движок/CI/реестры под owner-approval (SEAM)'
+  tests:
+  - tests/unit/test_tool_broker.py
+  why: 'P0-2 (аудит 04.09): движок/CI/реестры кита (.github/, ai_ops_kit/, registry/) под owner-approval
+    ТОЛЬКО когда прогон идёт над самим китом (self-host). Снять условие (if False) — и на self-host
+    движок перестаёт быть protected: модель через sed/echo> правит ai_ops_kit/gates или .github/workflows
+    без одобрения, и пост-фактум сторож молчит (ровно дыра, ради которой правило и заведено). Проба
+    TestP0SelfHostEngineProtected (write- и shell-канал, откат + запрет) обязана покраснеть.'
+- id: self-host-seam-policy-loads-protected-map
+  kind: seam
+  covers:
+  - ai_ops_kit/engine/tool_broker.py
+  file: ai_ops_kit/engine/tool_broker.py
+  find: '        self.protected = _protected_prefixes(child_root)'
+  replace_with: '        self.protected = []  # SEAM-DISABLED'
+  tests:
+  - tests/unit/test_tool_broker.py
+  why: 'ШОВ: охрана self-host (и вся карта protected_paths) работает лишь пока Policy РЕАЛЬНО загружает
+    карту через _protected_prefixes(child_root) в __init__. Оборвать вызов (protected = []) — и охранные
+    пробы остаются зелёными на логике, но ни один prohibited-путь (security/, self-host движок, protected
+    дочки) больше не защищён: механизм отключён на входе. Тесты protected-путей в test_tool_broker.py
+    обязаны покраснеть.'
