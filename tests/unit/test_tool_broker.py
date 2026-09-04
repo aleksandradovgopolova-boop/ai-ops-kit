@@ -832,3 +832,133 @@ class TestP0ShellWriteScope:
             {"op": "shell", "command": "echo lock > out_of_scope/x.py"}, p0_repo, install_policy)
         assert ev["allowed"] is True, "install обязан мочь писать вне scope (lock-файлы/артефакты)"
         assert model_policy.shell_scope_guard is True, "модельная политика не должна быть ослаблена"
+
+
+def _make_kit_markers(root):
+    """Проставить корневые маркеры исходников кита: пакет + VERSION + манифест."""
+    (root / "ai_ops_kit").mkdir(parents=True, exist_ok=True)
+    (root / "ai_ops_kit" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "VERSION").write_text("4.0.0\n", encoding="utf-8")
+    (root / "manifest").mkdir(parents=True, exist_ok=True)
+    (root / "manifest" / "ai-ops-manifest.yaml").write_text("kind: ai-ops-manifest\n", encoding="utf-8")
+
+
+@pytest.fixture
+def self_host_repo(tmp_path):
+    """Клон исходников кита (self-host): корневые маркеры пакета + движок/CI/реестры с коммитом,
+    чтобы пост-фактум сторож shell мог сверить delta и откатить."""
+    repo = tmp_path / "kit"
+    for d in ("src", ".github/workflows", "ai_ops_kit/gates", "registry"):
+        (repo / d).mkdir(parents=True)
+    _make_kit_markers(repo)
+    (repo / "src" / "main.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
+    (repo / "ai_ops_kit" / "gates" / "g.py").write_text("GATE = 1\n", encoding="utf-8")
+    (repo / "registry" / "policy.yaml").write_text("k: v\n", encoding="utf-8")
+    _git_p0(repo, "init", "-q")
+    _git_p0(repo, "config", "user.email", "t@example.com")
+    _git_p0(repo, "config", "user.name", "t")
+    _git_p0(repo, "add", "-A")
+    _git_p0(repo, "commit", "-qm", "seed")
+    return repo
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestP0SelfHostEngineProtected:
+    """P0-2 (аудит 04.09): движок/CI/реестры кита (.github/, ai_ops_kit/, registry/) — под owner-approval,
+    но ТОЛЬКО когда прогон идёт над САМИМ китом (self-host / догфуд). Не approval — не хардблок: кит с
+    явным одобрением владельца править себя может, молча тем же прогоном — нет.
+
+    Пробы КРАСНЕЮТ, если снять self-host-условие (`if _is_kit_self_host(...)` -> `if False`): движок
+    перестанет быть protected на self-host, и правки .github/ / ai_ops_kit/ без одобрения пройдут.
+    """
+
+    # ── self-host: детект ──────────────────────────────────────────────────────────────────────
+    def test_detects_kit_sources_as_self_host(self, self_host_repo):
+        assert tool_broker._is_kit_self_host(self_host_repo) is True
+
+    def test_ordinary_child_is_not_self_host(self, tmp_path):
+        """Дочка (нет корневых маркеров кита) self-host'ом НЕ считается — движок не навязан."""
+        child = tmp_path / "child"
+        (child / "src").mkdir(parents=True)
+        (child / ".ai-ops.yaml").write_text("kind: ai-ops-child-config\n", encoding="utf-8")
+        assert tool_broker._is_kit_self_host(child) is False
+
+    def test_partial_markers_not_self_host(self, tmp_path):
+        """Одного пакета мало: без VERSION+манифеста — не self-host (не ловим совпадение имени)."""
+        root = tmp_path / "partial"
+        (root / "ai_ops_kit").mkdir(parents=True)
+        (root / "ai_ops_kit" / "__init__.py").write_text("", encoding="utf-8")
+        assert tool_broker._is_kit_self_host(root) is False
+
+    # ── self-host: движок под approval-gate (decide) ──────────────────────────────────────────
+    def test_self_host_engine_write_denied_without_approval(self, self_host_repo):
+        """Правка ai_ops_kit/ на self-host без privileged+approval — запрещена (даже в write_scope)."""
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=["ai_ops_kit/", "src/"], child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": "ai_ops_kit/gates/g.py"})
+        assert result["allow"] is False
+        assert "protected" in result["reason"]
+
+    def test_self_host_github_write_denied_without_approval(self, self_host_repo):
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=[".github/", "src/"], child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": ".github/workflows/ci.yml"})
+        assert result["allow"] is False
+
+    def test_self_host_registry_write_denied_without_approval(self, self_host_repo):
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=["registry/"], child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": "registry/policy.yaml"})
+        assert result["allow"] is False
+
+    def test_self_host_engine_write_allowed_with_owner_approval(self, self_host_repo):
+        """Approval-gate, НЕ хардблок: privileged + protected_path_write -> кит правит движок себе сам."""
+        policy = tool_broker.Policy(level="privileged", write_scope=["ai_ops_kit/"],
+                                    approvals={"protected_path_write"}, child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": "ai_ops_kit/gates/g.py"})
+        assert result["allow"] is True
+
+    def test_self_host_non_engine_path_still_allowed(self, self_host_repo):
+        """Обычный путь (src/) на self-host не задет — защита точечная, не тотальная."""
+        policy = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                    child_root=str(self_host_repo))
+        assert policy.decide({"op": "write", "path": "src/main.py"})["allow"] is True
+
+    # ── self-host: движок под сторожем shell (execute) ────────────────────────────────────────
+    def test_self_host_shell_edit_engine_reverted_and_denied(self, self_host_repo):
+        """`sed`/`echo >` по ai_ops_kit/gates на self-host без одобрения -> откат + запрет."""
+        policy = tool_broker.sandbox_policy(child_root=str(self_host_repo), write_scope=["ai_ops_kit/"])
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo 'GATE = 99' > ai_ops_kit/gates/g.py"}, self_host_repo, policy)
+        assert ev["allowed"] is False, "правка движка на self-host без одобрения обязана быть запрещена"
+        assert ev["fs_guard"]["violations"], "нарушение protected должно попасть в evidence"
+        assert (self_host_repo / "ai_ops_kit" / "gates" / "g.py").read_text() == "GATE = 1\n", "не откачено"
+
+    def test_self_host_shell_edit_github_reverted(self, self_host_repo):
+        policy = tool_broker.sandbox_policy(child_root=str(self_host_repo), write_scope=[".github/"])
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo 'on: pull_request' > .github/workflows/ci.yml"},
+            self_host_repo, policy)
+        assert ev["allowed"] is False
+        assert (self_host_repo / ".github" / "workflows" / "ci.yml").read_text() == "on: push\n"
+
+    # ── дочка (не кит): её .github/ в write_scope НЕ сломан ────────────────────────────────────
+    def test_ordinary_child_github_write_in_scope_allowed(self, tmp_path):
+        """РЕГРЕСС отката PR #504: обычная дочка пишет свой .github/ в рамках write_scope — РАЗРЕШЕНО.
+        Self-host-защита её не касается (нет корневых маркеров кита)."""
+        child = tmp_path / "child"
+        (child / ".github" / "workflows").mkdir(parents=True)
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=[".github/"], child_root=str(child))
+        result = policy.decide({"op": "write", "path": ".github/workflows/ci.yml"})
+        assert result["allow"] is True, "дочкина запись в свой .github/ не должна быть сломана"
+
+    def test_ordinary_child_engine_path_not_protected(self, tmp_path):
+        """У дочки нет ai_ops_kit/ как protected по self-host — обычный путь в scope разрешён."""
+        child = tmp_path / "child"
+        (child / "ai_ops_kit").mkdir(parents=True)
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=["ai_ops_kit/"], child_root=str(child))
+        assert policy.decide({"op": "write", "path": "ai_ops_kit/x.py"})["allow"] is True
