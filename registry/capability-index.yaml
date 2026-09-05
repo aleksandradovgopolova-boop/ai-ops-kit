@@ -110,6 +110,16 @@ entries:
     source: "OpenSpec docs/how-commands-work.md"
     limitations: "replace-only merge -> parallel-change data-loss risk"
     fallback: "our sync-before-archive discipline + guard validator"
+  # UI-система доступна как MCP-инструмент через минимальный read-only адаптер (не MCP-сервер).
+  - entity_kind: tool
+    entity_id: storybook-query
+    capability: mcp
+    status: declared
+    value: true
+    verification_required: true
+    source: "registry/tools.yaml storybook-query; ai_ops_kit/ui/storybook_query.py --json"
+    limitations: "минимальный read-only адаптер, а НЕ запущенный MCP-сервер/SaaS — полноценный сервер сознательно отложен (ревью владельца)"
+    fallback: "прямой CLI-вызов storybook_query.py --json"
 
 # Правило актуальности верификации.
 verification_policy:

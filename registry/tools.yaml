@@ -84,6 +84,21 @@ tools:
     permission_level: network
     purpose: "PR/issue/CI operations"
     status: documented
+  # UI-система дочки доступна агенту как MCP-инструмент через СУЩЕСТВУЮЩИЙ read-only адаптер
+  # ai_ops_kit/ui/storybook_query.py — не отдельный MCP-сервер/SaaS. Ревью владельца: Storybook MCP =
+  # минимальный адаптер, а не центр; полноценный MCP-сервер сознательно ОТЛОЖЕН («не сейчас»).
+  # Контракт вызова детерминирован: CLI `<child_root> [--related a.tsx,b.tsx] --json`; MCP-runtime
+  # оборачивает этот вход как tool. Доступ строго read-only — инструмент не даёт записи.
+  - id: storybook-query
+    protocol: mcp
+    deterministic: true
+    purpose: "read-only запросы к UI/Storybook-каталогу дочки: список компонентов, список stories, stories компонента, related-stories для изменённых файлов, метаданные story. Минимальный адаптер (НЕ MCP-сервер/SaaS): зовётся детерминированным tool-контрактом через CLI --json, MCP-runtime оборачивает вход. Полноценный MCP-сервер сознательно отложен (ревью владельца)."
+    permission_level: read-only
+    provides: [ui_component_list, ui_story_list, ui_component_stories, ui_related_stories, ui_story_meta]
+    source: "ai_ops_kit/ui/storybook_query.py (CLI: <child_root> [--related …] --json)"
+    minimal_adapter: true
+    full_mcp_server: deferred
+    status: declared
 
   # --- AI Product Pack (v2.4): opensource-инструменты eval/red-team/observability.
   # Опции (status: declared — в бою китом не верифицированы), НЕ зависимости;
