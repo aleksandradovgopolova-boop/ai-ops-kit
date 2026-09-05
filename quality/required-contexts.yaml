@@ -34,9 +34,15 @@ contexts:
   # не поймал ничего. Owner убрал его из branch protection; джоба переехала в nightly-coverage.yml
   # (ночь + push в main + вручную). Здесь его больше нет намеренно — иначе валидатор (верно) краснит
   # «объявлен, но джобы нет». Метрика жива, просто не блокирует PR.
-  - package-quality / clean-install
-  - package-quality / upgrade-path
+  # clean-install / upgrade-path / pipeline-e2e — compatibility-matrix: пол requires-python ">=3.12"
+  # проверяется на 3.12 И 3.13 (работа ci-python-matrix). Матрица переименовывает джобу в
+  # "<job> (<версия>)", поэтому объявляем КАЖДЫЙ вариант — иначе валидатор краснит «контекст без джобы».
+  - package-quality / clean-install (3.12)
+  - package-quality / clean-install (3.13)
+  - package-quality / upgrade-path (3.12)
+  - package-quality / upgrade-path (3.13)
   - package-quality / pipeline-e2e (3.12)
+  - package-quality / pipeline-e2e (3.13)
   # security-scan — детерминированный скан диффа PR (секреты + зависимости +
   # injection-surface). Возврат 1 = находки/ошибка, поэтому обязателен: красный
   # security-scan (утечка секрета, новая неодобренная зависимость) больше не сливается.
