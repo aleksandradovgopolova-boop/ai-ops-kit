@@ -211,6 +211,18 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
         _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
                      "latency_s": _lat, "cost_usd_est": _cost, "model": model}
         rep["cost"] = _cost_rep
+        # ROID (P1, аудит 10 ролей): стоимость прогона, ПРИВЯЗАННАЯ К ИСХОДУ. cost_account считал
+        # cost_per_successful_change, но модуль был дормантным (0 не-тестовых импортёров) — экономика
+        # мерилась в вакууме, не против реального результата. Здесь переиспользуем ту же чистую функцию
+        # с фактическими данными прогона: успешное ПРОВЕРЕННОЕ изменение = ready_for_pr (приёмка/доставка
+        # пройдены к этому моменту). Не проверено -> cost_per_change=None: стоимость есть, успешных
+        # изменений нет — честные потери, а не деление на ноль (честность держит сам cost_account).
+        from ai_ops_kit.providers import cost_account
+        _roid = cost_account.cost_per_successful_change(
+            {"calls_cost": _cost, "latency_s": _lat, "delivered_verified": bool(rep.get("ready_for_pr"))})
+        rep["roid"] = {"cost_per_successful_change": _roid["cost_per_change"],
+                       "total_cost": _roid["total_cost"], "delivered_verified": _roid["delivered_verified"],
+                       "note": _roid["note"]}
         _ls.journal_append(jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
                                     "attempt_id": attempt_id, **_cost_rep})
         # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)
