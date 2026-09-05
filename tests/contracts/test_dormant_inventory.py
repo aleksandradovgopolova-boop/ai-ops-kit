@@ -131,6 +131,22 @@ def _is_test_path(p: Path) -> bool:
     return "tests" in p.parts or p.name.startswith("test_") or p.name == "conftest.py"
 
 
+# Не-исходные деревья под корнем репо: gitignored git-worktree'ы (`.ai/worktrees/<…>/ai_ops_kit/…`),
+# editable-установки (`.venv/…/site-packages/ai_ops_kit/…`), кэши и артефакты сборки. Их `.py` — КОПИИ
+# пакета, а не рабочий код; засчитать их в импортёры значило бы счесть дормантный модуль проведённым
+# в контур из-за собственной копии. В чистом клоне CI их нет — потому тест там зелён; фильтр держит
+# корректность и локально (в worktree с populated `.ai/` или при editable-инсталле с `.venv` внутри).
+SKIP_DIRS = frozenset({
+    ".git", ".ai", ".claude", ".venv", "venv", "env", "node_modules",
+    "build", "dist", ".tox", ".mypy_cache", ".pytest_cache", "__pycache__", "site-packages",
+})
+
+
+def _is_skipped(p: Path) -> bool:
+    """Лежит ли путь в не-исходном дереве (копия пакета/кэш/venv) — такой файл в обходе игнорируется."""
+    return bool(SKIP_DIRS & set(p.parts))
+
+
 def _imports_in(path: Path, known: set[str]) -> set[str]:
     """Модули пакета, импортируемые файлом (включая функционально-локальные импорты)."""
     out: set[str] = set()
@@ -159,7 +175,7 @@ def _nontest_importers(modules: dict[str, Path]) -> dict[str, set[str]]:
     importers: dict[str, set[str]] = {m: set() for m in modules}
     pkg_dir = PKG_ROOT / PKG
     for p in PKG_ROOT.rglob("*.py"):
-        if "__pycache__" in p.parts or ".git" in p.parts or _is_test_path(p):
+        if _is_skipped(p) or _is_test_path(p):   # копии пакета вне рабочего дерева — не импортёры
             continue
         src = _dotted(p) if p.is_relative_to(pkg_dir) else str(p.relative_to(PKG_ROOT))
         for imp in _imports_in(p, known):
@@ -287,3 +303,32 @@ def test_planted_new_dormant_module_reddens():
     entry = f"{PKG}.validation.validate_brand_new"
     dormant2 = _find_dormant({entry}, ALLOWLIST_PREFIXES, set(ALLOWLIST_MODULES))
     assert entry not in dormant2, "новый валидатор — легит-вход по префиксу, не дормант"
+
+
+@pytest.mark.contract
+def test_non_source_trees_are_not_counted_as_importers():
+    """Копии пакета вне рабочего дерева НЕ считаются импортёрами (иначе дормант ложно «проведён»).
+
+    Обход идёт от КОРНЯ репо, а под ним могут лежать не-исходные деревья с полными копиями пакета:
+    gitignored git-worktree (`.ai/worktrees/…`) и editable-установка (`.venv/…/site-packages/…`).
+    Их файл `import ai_ops_kit.<модуль>` не должен зачесть дормантный модуль проведённым в контур.
+    """
+    copy_paths = [
+        PKG_ROOT / ".ai" / "worktrees" / "x" / "ai_ops_kit" / "engine" / "foo.py",
+        PKG_ROOT / ".venv" / "lib" / "python3.12" / "site-packages"
+        / "ai_ops_kit" / "intelligence" / "decision_loop.py",
+        PKG_ROOT / "node_modules" / "pkg" / "x.py",
+        PKG_ROOT / "build" / "lib" / "ai_ops_kit" / "engine" / "bar.py",
+    ]
+    for p in copy_paths:
+        assert _is_skipped(p), f"путь-копия обязан отбрасываться обходом: {p}"
+
+    # Настоящий исходник (в ai_ops_kit/ или installer/) обходом НЕ отбрасывается.
+    assert not _is_skipped(PKG_ROOT / "ai_ops_kit" / "engine" / "tool_broker.py")
+    assert not _is_skipped(PKG_ROOT / "installer" / "ai_ops.py")
+
+    # Интеграция: реальный обход зовёт предикат — на текущем дереве decision_loop остаётся 0-импортерным
+    # даже если рядом (в .ai/.venv) лежит его копия, потому что такие деревья пропускаются.
+    importers = _nontest_importers(_pkg_modules())
+    assert importers[f"{PKG}.intelligence.decision_loop"] == set(), \
+        "decision_loop обязан остаться дормантным — копии из не-исходных деревьев не в счёт"
