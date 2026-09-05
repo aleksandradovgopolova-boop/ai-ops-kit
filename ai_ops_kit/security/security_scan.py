@@ -28,7 +28,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ai_ops_kit.shared.gitio import git  # noqa: E402
+# security_scan.py запускается КАК СКРИПТ (`python3 ai_ops_kit/security/security_scan.py --base …`
+# в CI), поэтому НЕ импортирует пакет ai_ops_kit (иначе ModuleNotFoundError: sys.path[0] — каталог
+# скрипта, не корень). Git-вызовы здесь — raw subprocess с ЯВНЫМ timeout=: инвариант «git не висит
+# вечно» держится таймаутом, а не импортом gitio. Ратчет test_no_unbounded_git это допускает.
 
 # Секреты: известные форматы + generic key-in-quotes. Плейсхолдеры (xxxx/${...}/env) отсеиваем.
 SECRET_PATTERNS = [
@@ -406,11 +409,15 @@ def _looks_binary(data: bytes) -> bool:
 
 
 def _git_changed_files(root, base):
-    # Единый вход к git с таймаутом (см. shared/gitio): зависший git не вешает security-скан.
-    rc, out, _ = git(root, "diff", "--name-only", f"{base}..HEAD")
-    if rc != 0:
+    # RAW с явным timeout= (скрипт-режим — без импорта пакета): зависший git не вешает security-скан.
+    try:
+        r = subprocess.run(["git", "-C", str(root), "diff", "--name-only", f"{base}..HEAD"],
+                           capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired:
         return None
-    return [ln for ln in out.splitlines() if ln.strip()]
+    if r.returncode != 0:
+        return None
+    return [ln for ln in r.stdout.splitlines() if ln.strip()]
 
 
 def _read_files(root, rels):
@@ -451,9 +458,13 @@ def scan_repo(root, base=None):
     changed = _git_changed_files(root, base) if base else None
     if changed is None:
         # не git / нет базы: сканируем отслеживаемые текстовые файлы целиком (best-effort).
-        # Единый вход к git с таймаутом (см. shared/gitio).
-        rc, out, _ = git(root, "ls-files")
-        changed = [ln for ln in out.splitlines() if ln.strip()] if rc == 0 else []
+        # RAW с явным timeout= (скрипт-режим, см. _git_changed_files).
+        try:
+            r = subprocess.run(["git", "-C", str(root), "ls-files"],
+                               capture_output=True, text=True, timeout=90)
+            changed = [ln for ln in r.stdout.splitlines() if ln.strip()] if r.returncode == 0 else []
+        except subprocess.TimeoutExpired:
+            changed = []
     files = _read_files(root, changed)
     secrets = scan_secrets(files)
     injections = scan_injection(files)
