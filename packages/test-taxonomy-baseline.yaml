@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 376
+behavioral_count: 377
 structural_count: 65
-total_count: 441
-behavioral_share_pct: 85.26
+total_count: 442
+behavioral_share_pct: 85.29
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -445,3 +445,16 @@ raises:
       той же причине, что сосед test_resolve_update_ref.py — грузит installer через sys.path/importlib,
       и классификатор (ищет пакетный import ai_ops_kit) продуктовый вызов не видит. Поведенческих не
       убыло (376), прибавился один структурный (64 -> 65). Снижение зафиксировано записью, не молча.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 376
+    from_total: 441
+    to_behavioral: 377
+    to_total: 442
+    to_share_pct: 85.29
+    work: roid-cost-per-successful-change-wired (P1, аудит 10 ролей)
+    why: >-
+      Подъём порога ВВЕРХ: работа ROID провела cost_account в контур и добавила один ПОВЕДЕНЧЕСКИЙ
+      тест-файл (tests/unit/test_roid_cost_to_outcome.py) — импортирует cost_account/ai_ops_run_lifecycle
+      И зовёт их. Структурных не прибавилось (65), доля выросла 85.26% -> 85.29%. Baseline пере-записан
+      на факт (после ребейза на main с A/B/C/#9/#11).
