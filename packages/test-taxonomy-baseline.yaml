@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 378
+behavioral_count: 379
 structural_count: 66
-total_count: 444
-behavioral_share_pct: 85.14
+total_count: 445
+behavioral_share_pct: 85.17
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -472,3 +472,16 @@ raises:
       tests/contracts/test_no_mega_test_file.py (порог 850). Итог: +1 поведенческий файл (shell),
       +1 структурный (страж). Доля 85.29 -> 85.14 — снижение от структурного стража, зафиксировано
       записью, не молча.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 378
+    from_total: 444
+    to_behavioral: 379
+    to_total: 445
+    to_share_pct: 85.17
+    work: mcp-access-to-ui-system (#420)
+    why: >-
+      Подъём порога ВВЕРХ: работа объявила storybook_query MCP-инструментом (registry/tools.yaml +
+      capability-index) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл (test_mcp_access_to_ui_system.py) —
+      импортирует и зовёт storybook_query + валидатор. Структурных не прибавилось (66), доля выросла
+      85.14 -> 85.17%. Baseline пере-записан на факт.
