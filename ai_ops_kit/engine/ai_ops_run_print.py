@@ -73,8 +73,9 @@ def _print_pipeline(r):
     if _iso.get("sandboxed") is False and work_produced(r):
         _net = ("сеть доступна модельному shell" if _iso.get("network") == "on"
                 else "сеть ограничена")
-        print(f"  ⚠ прогон без песочницы (sandbox off), {_net} — для чувствительных прогонов "
-              "включите изоляцию (--sandbox / контейнер run-sandboxed.sh)")
+        print(f"  ⚠ прогон без песочницы (sandbox off), {_net}; изоляция условна — управляемость "
+              "брокером, не защита от недоверенного кода. Для чувствительных прогонов включите её: "
+              "--sandbox / контейнер run-sandboxed.sh")
     # F-014: от какой базы отрезан worktree — видно сразу, а не выясняется конфликтом при слиянии.
     _bb = r.get("base_binding") or (r.get("delivery") or {}).get("base_binding") or {}
     if _bb.get("base_ref"):
