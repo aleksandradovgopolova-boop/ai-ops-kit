@@ -175,6 +175,24 @@ jobs:
       - name: "Security scan: секреты, зависимости, injection-surface"
         run: python3 ai_ops_kit/security/security_scan.py --base origin/main
 
+  # Advisory (работа p1-merge-preview-delivered-footprint): объём ДОСТАВЛЯЕМОЙ части ИТОГА слияния —
+  # пересечение дерева-итога `git merge-tree origin/main HEAD` с managed_set дочки — против потолка
+  # volume_bytes. Меряет то, что реально поедет в дочку из РЕЗУЛЬТАТА слияния, а не ветку PR в одиночку
+  # и не всё дерево-итог (это делает merge_preview). НЕ блокирующая: запускается без --strict (всегда
+  # exit 0); новый job в обязательные статусы защиты ветки не входит без действия владельца — промоут
+  # отдельным решением. Только на PR: --base origin/main требует базы для превью слияния.
+  delivered-footprint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # нужен origin/main как база превью слияния
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "Advisory: footprint доставляемого итога слияния (merge-preview ∩ managed_set)"
+        run: python3 installer/delivered_merge_footprint.py --base origin/main --head HEAD
+
 
   # 2026-09-03 (замер CI): джоба `coverage` УБРАНА С ПУТИ PR. Замер показал: она занимала ~10.8 мин
   # и держала стену package-quality, при этом за окно прогонов не завалила ничего, а тесты и так
