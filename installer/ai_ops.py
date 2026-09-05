@@ -232,11 +232,21 @@ def channel_gap(pkg_root=None):
     if ok:
         return {"asked": asked, "offers": offers, "satisfied": True,
                 "message": f"канал обновлений: просят '{asked}', пакет даёт '{offers}'"}
+    # ПОЧЕМУ stable НЕ ПРЕДЛАГАЕТСЯ — говорится ЯВНО, а не «пакет заработал только qualification»
+    # (аудит P1). Обобщённая формулировка не называла, ЧЕГО не хватает; при запросе stable дочка
+    # видела объявленный канал, до которого нечем добраться. Теперь дефицит field_evidence назван с
+    # числами — «нужно ≥N подтверждений с разных репозиториев, есть M» — и назван доверенный способ
+    # его закрыть (владелец фиксирует доставку, а не автогенерация из прогона).
+    tail = ""
+    if asked == "stable":
+        st = stable_field_evidence_status(pkg_root)
+        if st and not st["offered"]:
+            tail = " " + st["reason"]
     return {"asked": asked, "offers": offers, "satisfied": False,
             "message": (f"канал обновлений: репозиторий просит '{asked}', а пакет заработал только "
                         f"'{offers}'. Обновление принесёт то, что есть, — не то, что объявлено. "
                         f"Либо дождитесь '{asked}', либо объявите в .ai-ops.yaml тот канал, "
-                        f"который вы действительно готовы принимать")}
+                        f"который вы действительно готовы принимать." + tail)}
 
 
 def tag_channels(repo_dir=None, limit=60):
@@ -307,6 +317,77 @@ def earned_channel(claims: dict) -> str:
             # (own_ci_green) тег всё же прошёл, иначе он не был бы выпущен.
             return CHANNEL_ORDER[max(0, CHANNEL_ORDER.index(declared) - 1)]
     return declared
+
+
+def _minor_of(version) -> str:
+    """MAJOR.MINOR из X.Y.Z. Полевое доказательство привязано к МИНОРУ: патч наследует обкатку
+    любого патча того же минора (патч не меняет полевого поведения материально), иначе путь к
+    stable — беговая дорожка, где каждый патч обнуляет счётчик обкаток. Непарсимая версия
+    возвращается как есть — сверка деградирует до точного совпадения, а не молча совпадает со всем.
+    Та же логика, что в validate_release_claims._minor_of, — здесь inline, чтобы installer не тянул
+    ребро в validation-слой ради одной строки."""
+    parts = str(version or "").strip().split(".")
+    if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+        return f"{parts[0]}.{parts[1]}"
+    return str(version or "").strip()
+
+
+def stable_field_evidence_status(pkg_root=None):
+    """Явный ответ на «предлагается ли stable этим пакетом и, если нет — ПОЧЕМУ». -> dict | None.
+
+    None — у пакета нет требования field_evidence для stable (объяснять нечего). Иначе:
+      {"offered": bool, "need": int, "have": int, "repos": [str],
+       "version": str, "minor": str, "reason": str}
+
+    ЗАЧЕМ (аудит P1). field_evidence НИКТО не пишет автоматически — его вносит владелец руками по
+    доверенному подтверждению, что версия доехала до живой дочки и там ничего не сломала. Значит при
+    пустом (или неполном) списке `stable` практически НЕДОСТИЖИМ, и раньше это было МОЛЧАЛИВО: дочка
+    видела объявленный канал stable, до которого нечем добраться, и не понимала, чего не хватает.
+    Здесь недостижимость названа ЯВНО и с числами — «нужно ≥N подтверждений с разных репозиториев,
+    есть M» — а не подменяется тихим откатом на qualification.
+
+    ★ЧЕСТНО, БЕЗ ФАБРИКАЦИИ: функция только ЧИТАЕТ факт (field_evidence) и объясняет дефицит. Она не
+    создаёт доказательств и не «замыкает петлю» из слабого сигнала («прогон прошёл» ≠ «доехало до
+    дочки и работает») — автозапись stable из недоверенного сигнала есть ровно тот класс F-002/F-005,
+    что кит и ловит. Захват field_evidence остаётся доверенным ручным/observed шагом владельца.★
+
+    Считаем ТАК ЖЕ, как gate stable в validate_release_claims: РАЗНЫЕ репозитории, чей минор совпадает
+    с текущим и outcome == 'ok'. Иначе «предлагается» здесь и «канал заработан» у валидатора разошлись
+    бы, и surface обещал бы то, чего релиз-гейт не признаёт.
+    """
+    p = Path(pkg_root or PKG) / "registry" / "release-claims.yaml"
+    if not p.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    spec = ((doc.get("channels") or {}).get("stable") or {})
+    requires = list(spec.get("requires") or [])
+    if "field_evidence" not in requires:
+        return None
+    need = int(spec.get("field_evidence_min_repos") or 1)
+    version = str(doc.get("version") or "").strip()
+    target = _minor_of(version)
+    rows = [r for r in (doc.get("field_evidence") or []) if isinstance(r, dict)]
+    repos = sorted({str(r.get("repo")).strip() for r in rows
+                    if _minor_of(r.get("version")) == target
+                    and str(r.get("outcome") or "").strip() == "ok"})
+    have = len(repos)
+    offered = have >= need
+    if offered:
+        reason = (f"stable предлагается: есть {have} полевых подтверждения из "
+                  f"{need} требуемых для минора {target} ({', '.join(repos)})")
+    else:
+        reason = (f"stable НЕ предлагается: нужно полевое подтверждение минимум с {need} разных "
+                  f"репозиториев для минора {target} (версия {version or '—'}, патчи наследуют "
+                  f"обкатку минора), есть {have} "
+                  f"({', '.join(repos) or 'ни одного'}). Пока обкатки нет — канал честно "
+                  f"остаётся qualification; поднимется он не объявлением, а тем, что владелец "
+                  f"зафиксирует ДОВЕРЕННОЕ подтверждение доставки (это ручной/observed шаг, "
+                  f"а не авто из прогона)")
+    return {"offered": offered, "need": need, "have": have, "repos": repos,
+            "version": version, "minor": target, "reason": reason}
 
 
 def resolve_update_ref(channel, repo_dir=None, allowed_range=None):
@@ -390,10 +471,18 @@ def resolve_update_ref(channel, repo_dir=None, allowed_range=None):
                    f"ранним получателем — поставьте `parent.update_channel: {best}` в .ai-ops.yaml; "
                    f"именно так и добываются полевые доказательства, без которых '{ch}' не наступит "
                    f"никогда")
+    # При запросе stable называем дефицит field_evidence ЧИСЛАМИ (P1): «нет тега» без «сколько
+    # обкаток не хватает» оставляет владельца гадать, что именно закрыть.
+    deficit = ""
+    if ch == "stable":
+        st = stable_field_evidence_status(repo_dir)
+        if st and not st["offered"]:
+            deficit = (f". Полевое подтверждение: есть {st['have']} из {st['need']} требуемых "
+                       f"(минор {st['minor']}); недостижимость stable — не дефект, а честный статус")
     return {"ref": None, "kind": None, "channel": ch, "best_earned": best,
             "reason": (f"под канал '{ch}' подходящего тега нет ({seen}). Обновление НЕ выполняется: "
                        f"взять ветку по умолчанию значило бы дать '{CHANNEL_ORDER[0]}' там, где "
-                       f"просили '{ch}'" + way_out)}
+                       f"просили '{ch}'" + way_out + deficit)}
 
 
 def cmd_resolve_ref(argv):
