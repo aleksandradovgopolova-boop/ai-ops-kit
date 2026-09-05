@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 379
+behavioral_count: 380
 structural_count: 66
-total_count: 445
-behavioral_share_pct: 85.17
+total_count: 446
+behavioral_share_pct: 85.2
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -485,3 +485,16 @@ raises:
       capability-index) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл (test_mcp_access_to_ui_system.py) —
       импортирует и зовёт storybook_query + валидатор. Структурных не прибавилось (66), доля выросла
       85.14 -> 85.17%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 379
+    from_total: 445
+    to_behavioral: 380
+    to_total: 446
+    to_share_pct: 85.2
+    work: reviewers-and-ui-health-deepened-from-constitution (#419)
+    why: >-
+      Подъём порога ВВЕРХ: работа углубила UI-health/ревьюеров из Конституции (constitution_coverage
+      читает rules.yaml) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_constitution_coverage_deepens_health_and_reviewers.py) — импортирует и зовёт продукт.
+      Структурных не прибавилось (66), доля 85.17 -> 85.20%. Baseline пере-записан на факт.
