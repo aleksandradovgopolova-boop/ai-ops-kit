@@ -28,7 +28,7 @@ ceilings:
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 759
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 897
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 909
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 954
   ai_ops_kit/validation/validate_own_medicine.py: 732
@@ -256,3 +256,15 @@ raises:
       ОГРАНИЧЕНИЕ — push-способный GITHUB_TOKEN остаётся в песочнице для чтения GitHub, полная
       гарантия требует read-only токена. +6 строк — рационале написано, а не срезано ради счётчика.
       Ратчет держит рост вниз от 762.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 897'
+    to: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 909'
+    work: roid-cost-per-successful-change-wired (P1, аудит 10 ролей)
+    why: >-
+      cost_account проведён в контур прогона: в _finalize_run_cost стоимость прогона привязана к
+      ИСХОДУ через cost_per_successful_change (ready_for_pr -> cost_per_change, иначе честные потери
+      без деления на ноль), результат кладётся в rep["roid"]. +12 строк — вызов чистой функции с
+      рационале рядом с уже собранным rep["cost"]; расщеплять 897-строчный lifecycle ради одного
+      аддитивного поля непропорционально (func-size не тронут — функция много ниже потолка engine/
+      184). Итог 897 -> 909 осознанно под факт. Ратчет держит рост вниз от 909.

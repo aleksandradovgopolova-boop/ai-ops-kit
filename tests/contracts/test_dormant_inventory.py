@@ -104,9 +104,6 @@ KNOWN_DORMANT: dict[str, str] = {
     f"{PKG}.intelligence.watch_contract":
         "контракт наблюдения для nightly review (цель nightly-product-review, active); "
         "installer.UNWIRED_MODULES, импортеров нет (nightly_review его не импортирует)",
-    f"{PKG}.providers.cost_account":
-        "пост-прогонная сверка расхода с BudgetContract (цель trustworthy-core, active); "
-        "экономику enforcement ведёт gates/economic_preflight ДО прогона — этот аудит 0 импортеров",
     f"{PKG}.security.security_review_cascade":
         "asymmetric fail-closed судья, ЯВНО experimental/qualification-only и НЕ подключён к "
         "рабочему security_review (сказано в докстринге модуля); 0 импортеров",
