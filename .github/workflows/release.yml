@@ -43,6 +43,30 @@ jobs:
             echo "needed=true" >> $GITHUB_OUTPUT
             echo "Тег $TAG отсутствует — release нужен"
           fi
+      # МУТАЦИОННЫЙ ГЕЙТ — ПРЕДУСЛОВИЕ ВЫПУСКА, И ИМЕННО СИНХРОННОЕ (работа `mutation-gate-on-release`).
+      # `test_every_declared_probe_of_the_kit_kills_its_mutant` доказывает, что тесты кита ЛОВЯТ
+      # регрессии (применяет объявленные мутации и проверяет, что охрана краснеет). Раньше он жил
+      # только в nightly-quality.yml — на cron ~03:37 UTC и на push в main, — а выпуск триггерится по
+      # `workflow_run` от package-quality и НЕ дожидался его. Итог: тег/Release могли выйти на коммите,
+      # для которого этот гейт не прогонялся вовсе (ночь идёт по расписанию и может лечь на ДРУГОЙ
+      # SHA). Ждать nightly здесь нельзя: расписание не гарантирует прогон ИМЕННО релизного коммита.
+      # Поэтому гейт гонится ЗДЕСЬ, синхронно, на релизном SHA (тот же checkout), тем же маркером
+      # `-m nightly`, что и nightly-quality. Падение гейта = падение джобы: тег/Release НЕ создаются.
+      # Стоит ПОСЛЕ проверки need_release — 6 минут не тратятся, если выпуск не нужен (идемпотентность).
+      - name: Установить Python для мутационного гейта
+        if: steps.check_release.outputs.needed == 'true'
+        uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Мутационный гейт на релизном коммите (предусловие выпуска)
+        if: steps.check_release.outputs.needed == 'true'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          pip install pyyaml pytest pytest-xdist hypothesis
+          # Тот же маркер, что в nightly-quality.yml; область сужена до самого мутационного гейта,
+          # чтобы выпуск ждал ровно доказательство «тесты ловят регрессии», а не агрегатный bench.
+          python3 -m pytest tests/unit/test_mutation_probe.py -q -m nightly
+
       - name: Создать тег и Release из CHANGELOG
         if: steps.check_release.outputs.needed == 'true'
         env:
