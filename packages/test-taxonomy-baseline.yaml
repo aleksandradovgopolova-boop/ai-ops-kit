@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 375
+behavioral_count: 376
 structural_count: 63
-total_count: 438
-behavioral_share_pct: 85.62
+total_count: 439
+behavioral_share_pct: 85.65
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -403,3 +403,17 @@ raises:
       импортирует и НЕ зовёт (тот же класс, что test_no_unbounded_git / test_no_monolith_funnel).
       Поведенческих не убыло (375 без изменений), прибавился один структурный (62 -> 63). Не деградация
       поведенческого теста, а новый структурный контракт; снижение зафиксировано записью, а не молча.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 375
+    from_total: 438
+    to_behavioral: 376
+    to_total: 439
+    to_share_pct: 85.65
+    work: constitution-id-ships (P1, аудит 10 ролей)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа «карта constitution_id едет в дочку» добавила один
+      ПОВЕДЕНЧЕСКИЙ тест-файл (tests/unit/test_constitution_map_ships_to_child.py) — импортирует
+      installer И зовёт managed_set()/package_ownership()/filter_by_packages(), доказывая резолв цитаты
+      ревьюера через границу поставки. Структурных не прибавилось (63 без изменений), доля выросла
+      85.62% -> 85.65%. Baseline пере-записан на фактический замер (после ребейза на main с A/B/C).
