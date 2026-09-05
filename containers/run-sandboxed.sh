@@ -66,24 +66,32 @@ git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/hea
 cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
 
 # Пробрасываем ТОЛЬКО имена секрет-переменных (значения берутся из окружения, не в образ).
-# GITHUB_TOKEN/GH_TOKEN нужны ДОВЕРЕННОМУ коду движка (pr_open) для draft-PR по REST API — это НЕ
-# git push и не даёт модели push сам по себе (git не берёт эти env для транспорта без креды в URL).
+# GITHUB_TOKEN/GH_TOKEN нужны для ЧТЕНИЯ GitHub (integrations: issues/PR как operational source) и
+# доверенному pr_open по REST. ЧЕСТНО: этот токен push-СПОСОБЕН — будь у модели канал его применить
+# (git-remote с токеном в URL или API-создание ref из скрипта), она могла бы им доставить. Поэтому
+# credential-less-конфиг ниже — НЕ полная гарантия для этого токена (см. ОГРАНИЧЕНИЕ там): явную
+# доставку им гейтят tool_broker (медиатор shell) + regex block_push, а не среда. Полная
+# credential-less-песочница потребовала бы read-only токена (без push-scope) или чтения GitHub
+# host-side — отдельное решение владельца.
 ENVFLAGS=()
 for v in OPENAI_COMPATIBLE_BASE_URL OPENAI_COMPATIBLE_API_KEY ANTHROPIC_API_KEY \
          OPENAI_API_KEY GITHUB_TOKEN GH_TOKEN; do
   [ -n "${!v:-}" ] && ENVFLAGS+=(-e "$v")
 done
 
-# Credential-less git для PUSH (жёсткая гарантия недоставки СРЕДОЙ, не regex).
-# Внутри jail'а у git нет ни одного канала получить креду для push:
+# Credential-less git для PUSH: снимаем АВТОМАТИЧЕСКИЕ каналы, которыми git сам добывает креду.
+# Внутри jail'а git не может получить креду ЧЕРЕЗ СВОИ штатные каналы:
 #   * credential.helper="" — отключаем любой ранее настроенный helper (через GIT_CONFIG_* env, а не
 #     `git config`, потому что root-fs read-only и писать в ~/.gitconfig некуда);
 #   * GIT_ASKPASS=/bin/false — запрос логина/пароля мгновенно возвращает ошибку;
 #   * GIT_TERMINAL_PROMPT=0 — push по HTTPS без креды НЕ виснет в интерактивном промпте, а сразу падёт.
 # ~/.git-credentials и SSH-agent в контейнер не монтируются и SSH_AUTH_SOCK не пробрасывается —
-# credential-файлы/сокеты хоста внутрь не попадают. Делаем это ПЕРВЫМ рубежом; regex block_push —
-# второй (defense-in-depth). Легитимное чтение (сеть к API/реестрам) не затронуто: гасим только
-# каналы креды git push/write, не egress вообще.
+# credential-файлы/сокеты хоста внутрь не попадают. Это закрывает АВТОМАТИЧЕСКИЙ канал креды; regex
+# block_push — второй рубеж (defense-in-depth). Легитимное чтение (сеть к API/реестрам) не затронуто.
+# ★ОГРАНИЧЕНИЕ (честно): это НЕ полная гарантия недоставки средой, пока в песочнице есть push-
+# способный GITHUB_TOKEN (нужен для чтения GitHub). Явную доставку им (токен в URL / API-создание ref
+# из скрипта) ловят tool_broker+regex, а не эта конфигурация. Полная гарантия = read-only токен (без
+# push-scope) или host-side чтение GitHub — отдельное решение владельца.
 CREDLESS_ENV=(
   -e GIT_ASKPASS=/bin/false
   -e GIT_TERMINAL_PROMPT=0

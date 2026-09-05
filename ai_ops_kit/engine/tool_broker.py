@@ -226,10 +226,13 @@ NETWORK_RE = re.compile(r"\b(curl|wget|nc|ncat|netcat|ssh|scp|sftp|telnet|rsync|
 # ВТОРОЙ рубеж (defense-in-depth), НЕ гарантия. _normalize снимает кавычки, продолжение строки и
 # backslash-escape; ПЕРЕМЕННЫЕ/eval (`p=push; git $p`) статически не ловятся — перечень обходов
 # держать в _normalize актуальным, иначе комментарий обещает больше, чем код (тот же класс, что R-33).
-# ПЕРВЫЙ рубеж — жёсткая гарантия недоставки СРЕДОЙ: песочница credential-less для push
-# (containers/run-sandboxed.sh + Dockerfile: credential.helper="", GIT_ASKPASS=/bin/false,
-# GIT_TERMINAL_PROMPT=0; токены/.git-credentials/SSH-agent внутрь не проброшены). У git нет канала
-# получить креду -> push падёт независимо от того, обошёл ли текст этот regex.
+# ПЕРВЫЙ рубеж — СРЕДА: песочница credential-less для push (containers/run-sandboxed.sh + Dockerfile:
+# credential.helper="", GIT_ASKPASS=/bin/false, GIT_TERMINAL_PROMPT=0; .git-credentials/SSH-agent
+# внутрь не проброшены). Это закрывает АВТОМАТИЧЕСКИЕ каналы, которыми git сам добывает креду —
+# push через них падёт независимо от regex. ЧЕСТНО, НЕ полная гарантия: GITHUB_TOKEN всё же в
+# песочнице (для чтения GitHub) и push-способен — явную доставку им (токен в URL / API из скрипта)
+# ловят этот regex + медиатор shell, а не среда. Полная гарантия средой = read-only токен без
+# push-scope или host-side чтение GitHub (решение владельца, см. run-sandboxed.sh ОГРАНИЧЕНИЕ).
 GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
 
 # v2.85/2.87: команду в allowlist-режиме проверяем ПОСЕГМЕНТНО (первый бинарь каждого сегмента),
