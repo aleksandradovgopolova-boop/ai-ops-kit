@@ -671,12 +671,10 @@ DEV_ONLY_PREFIXES = (
 UNWIRED_MODULES = frozenset({
     # `kernel/ports.py` побывал здесь ровно один коммит (2026-08-25) и УШЁЛ проводкой, а не решением:
     # транзакционный контроллер `ai_ops_run` сверяет свои параметры прогона с ExecutionSpec на каждом
-    # запуске (страж дрейфа контракта). Реализации портам по-прежнему не соответствуют — это записано
-    # в самом контроллере и остаётся долгом Phase B.
-    "ai_ops_kit/engops/delivery_size.py",
-    "ai_ops_kit/engops/merge_lifecycle.py",
-    "ai_ops_kit/engops/refusal_paths.py",
-    "ai_ops_kit/engops/session_thresholds.py",
+    # запуске (страж дрейфа контракта). `kernel/ports.py` — контракт ТИПОВ, не шов с реализациями.
+    # Четыре модуля-заготовки под Phase B (engops/{delivery_size,merge_lifecycle,refusal_paths,
+    # session_thresholds}) СНЯТЫ 2026-09-05: 0 импортеров, порту не соответствовали, дормантный
+    # инвентарь. Понадобится Phase B — реализации восстановят против Protocol'ов ports.py.
     "ai_ops_kit/intelligence/artifact_reality_check.py",
     "ai_ops_kit/intelligence/decision_loop.py",
     # `intelligence/nightly_review.py` УБРАН 20.08.2026: он подключён. Команда рантайма

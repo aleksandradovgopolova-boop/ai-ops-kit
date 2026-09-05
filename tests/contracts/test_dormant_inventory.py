@@ -74,15 +74,6 @@ KNOWN_DORMANT: dict[str, str] = {
     f"{PKG}.engine.parallel_live":
         "live-харнесс конкурентного мультипакетного прогона (цель team-works-in-parallel, active); "
         "ни один не-тестовый модуль его не импортирует, диспетч-команда его не зовёт",
-    f"{PKG}.engops.delivery_size":
-        "порт kernel (ExecutionSpec/ports.py), долг Phase B; реализация порту не соответствует — "
-        "модуль в installer.UNWIRED_MODULES (в дочку не едет), импортеров нет",
-    f"{PKG}.engops.merge_lifecycle":
-        "порт kernel (ports.py), долг Phase B; installer.UNWIRED_MODULES, импортеров нет",
-    f"{PKG}.engops.refusal_paths":
-        "порт kernel (ports.py), долг Phase B; installer.UNWIRED_MODULES, импортеров нет",
-    f"{PKG}.engops.session_thresholds":
-        "порт kernel (ports.py), долг Phase B; installer.UNWIRED_MODULES, импортеров нет",
     f"{PKG}.intelligence.artifact_reality_check":
         "сверка артефактов с реальным репо (цель ai-product-operations, achieved); "
         "installer.UNWIRED_MODULES, импортеров нет — построено, но в контур не проведено",

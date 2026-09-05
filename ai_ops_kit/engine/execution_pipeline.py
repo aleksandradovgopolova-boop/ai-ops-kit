@@ -193,10 +193,10 @@ def _pipeline_check_spec_drift(task, signals, child_root, feature, write_scope, 
                                max_steps, commit, baseline_diff, require_fix, sandbox,
                                review, author):
     """Фаза K0-проводки: параметры прогона обязаны оставаться подмножеством объявленного
-    контракта ядра (kernel/ports.ExecutionSpec). Это НЕ проверка реализации портов (реализации
-    им ещё не соответствуют — долг Phase B, записан в installer.UNWIRED_MODULES), а страж
-    дрейфа КОНТРАКТА: переименование поля в ports.py или новый параметр без записи в контракт
-    краснеет на каждом прогоне, в том числе в дочке."""
+    контракта ядра (kernel/ports.ExecutionSpec). kernel/ports — контракт ТИПОВ, не шов с
+    внедряемыми реализациями (Phase B DI не преследуется), поэтому это страж дрейфа КОНТРАКТА,
+    а не проверка реализаций: переименование поля в ports.py или новый параметр без записи в
+    контракт краснеет на каждом прогоне, в том числе в дочке."""
     from ai_ops_kit.kernel import ports as _kports
     _spec: _kports.ExecutionSpec = {
         "task": task, "signals": dict(signals or {}), "child_root": str(child_root),
