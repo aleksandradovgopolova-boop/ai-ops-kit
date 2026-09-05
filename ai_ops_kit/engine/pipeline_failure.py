@@ -170,6 +170,28 @@ def _diff_checks(baseline, after):
     return regressions, fixed
 
 
+def _baseline_status_flips(baseline, after):
+    """Проверки, чей статус pass<->fail РАЗЛИЧАЕТСЯ между базой и правкой (#405).
+
+    Это ровно те проверки, из-за которых baseline-diff (и производный `_iv_baseline_exempt`)
+    способен ПЕРЕВЕРНУТЬ вердикт readiness между двумя прогонами: date-зависимый/flaky тест,
+    оказавшийся `pass` при захвате базы и `fail` после (или наоборот), молча снимает или выдаёт
+    освобождение implementation_verification. Функция НЕ судит, регресс это или починка — она
+    только НАЗЫВАЕТ нестабильную проверку, чтобы флип вердикта был атрибутирован, а не безмолвен.
+
+    Детерминированна на одном входе: -> отсортированный список имён проверок.
+    """
+    baseline, after = baseline or {}, after or {}
+    real = ("pass", "fail")
+    flips = []
+    for name, a in after.items():
+        b = baseline.get(name) or {}
+        b_status, a_status = b.get("status"), a.get("status")
+        if b_status in real and a_status in real and b_status != a_status:
+            flips.append(name)
+    return sorted(flips)
+
+
 def _evidence_ref_errors(dom, ev_items, reviewer_reads=None):
     """v3.0.10 (finding аудита P1): evidence домена — СТРУКТУРНЫЕ ссылки (EvidenceRef), а не строка."""
     errs = []

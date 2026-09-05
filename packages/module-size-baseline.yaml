@@ -22,7 +22,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 969
   ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
-  ai_ops_kit/engine/execution_pipeline.py: 778
+  ai_ops_kit/engine/execution_pipeline.py: 779
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1068
   ai_ops_kit/ui/presenter_formatters.py: 977
@@ -290,3 +290,15 @@ raises:
       ★ОТМЕЧЕНО как кандидат на вынос: feedback/rate-машинерия (record_feedback/false_positive_rate/
       шарды) — когезивный ~100-строчный блок, его вынос в intelligence/review_feedback.py вернул бы
       nightly_review под 954; отдельная работа★. Ратчет держит рост вниз от 1088.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 778'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 779'
+    work: stabilize-readiness-verdict (#405)
+    why: >-
+      Отчёт baseline-diff теперь несёт поле `unstable_checks` — проверки, чей pass<->fail флип между
+      базой и правкой способен перевернуть вердикт readiness между прогонами (flaky/date-зависимый
+      тест). Их явное имя атрибутирует расхождение READY/NOT_READY недетерминизму ВХОДА, а не гейта.
+      +1 строка — проброс поля из _pipeline_assess_readiness в тело отчёта; разбивать 778-строчный
+      оркестратор ради одной строки непропорционально. Потолок поднят осознанно на +1 под факт;
+      ратчет держит дальнейший рост вниз от 779.
