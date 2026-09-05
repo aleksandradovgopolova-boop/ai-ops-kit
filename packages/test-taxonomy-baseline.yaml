@@ -24,9 +24,9 @@ kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
 behavioral_count: 376
-structural_count: 64
-total_count: 440
-behavioral_share_pct: 85.45
+structural_count: 65
+total_count: 441
+behavioral_share_pct: 85.26
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -431,3 +431,17 @@ raises:
       структурный — парсит скрипты контейнера и гоняет raw git в tmp (product-код кита не импортирует и
       не зовёт). Поведенческих не убыло (376 без изменений), прибавился один структурный (63 -> 64).
       Не деградация поведенческого теста, а новый структурный контракт; снижение зафиксировано записью.
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 376
+    from_total: 440
+    to_behavioral: 376
+    to_total: 441
+    to_share_pct: 85.26
+    work: stable-channel-honest (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.45% -> 85.26%): работа сделала недостижимость stable явной и
+      добавила один СТРУКТУРНЫЙ тест-файл (tests/unit/test_stable_channel_honest.py). Он структурен по
+      той же причине, что сосед test_resolve_update_ref.py — грузит installer через sys.path/importlib,
+      и классификатор (ищет пакетный import ai_ops_kit) продуктовый вызов не видит. Поведенческих не
+      убыло (376), прибавился один структурный (64 -> 65). Снижение зафиксировано записью, не молча.
