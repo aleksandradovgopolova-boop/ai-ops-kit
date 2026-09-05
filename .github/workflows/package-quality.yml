@@ -208,6 +208,11 @@ jobs:
   # в поставку. Джоба заодно проверяет заявку requirements.txt «нужен только pyyaml».
   clean-install:
     runs-on: ubuntu-latest
+    # НЕ матрица осознанно: матрица переименовала бы контекст статуса в `clean-install (3.12)`, а
+    # branch protection держит required-контекст `clean-install` по ИМЕНИ — переименование осиротило
+    # бы его, и все PR зависли бы BLOCKED (ровно инцидент python39-compat, ради которого заведён
+    # required-contexts). Совместимость с 3.13 доказывает `pipeline-e2e (3.13)` — полный прогон
+    # набора на 3.13; механика чистой установки (копирование файлов) версие-независима.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -225,6 +230,9 @@ jobs:
   # окружение и настоящая установка, а не имитация.
   upgrade-path:
     runs-on: ubuntu-latest
+    # НЕ матрица осознанно (та же причина, что у clean-install): переименование джобы в
+    # `upgrade-path (3.12)` осиротило бы required-контекст `upgrade-path` в branch protection.
+    # 3.13 покрывает `pipeline-e2e (3.13)`; механика обновления версие-независима.
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}          # нужны ТЕГИ: обновляемся с предыдущего выпуска
@@ -239,7 +247,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        # compatibility-matrix: пол requires-python = ">=3.12" обещает совместимость с 3.13+,
+        # поэтому e2e гоняется на 3.12 И 3.13, а не только на нижней границе — иначе обещанная
+        # совместимость объявлена, но не проверена. 3.14 сюда НЕ добавляем: не релизнута/нестабильна
+        # на раннерах (у кита на ней локально OOM в xdist), арбитр совместимости — этот CI.
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}
