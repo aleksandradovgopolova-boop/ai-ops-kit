@@ -431,7 +431,12 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
                     "undetermined": profile.get("undetermined", [])},
         "containment": _build_containment(sandbox, pol, loop),
         "loop": _build_loop_section(loop, applied),
-        "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
+        # P1 (аудит «непесочный дефолт + сеть ON»): поза изоляции ВИДНА, а не молчит. Дефолт
+        # sandbox=False НЕ флипаем (флип сломал бы прогоны без Docker) — закрываем находку ЧЕСТНОСТЬЮ:
+        # sandboxed/network едут в отчёт, а рендер называет пониженную изоляцию человеку.
+        "isolation": {"worktree": worktree_rel,     # каталог изоляции (None -> прогон в основном дереве)
+                      "sandboxed": bool(sandbox),
+                      "network": "on" if pol.allow_network else "restricted"},
         "base_binding": base_binding,              # v3.0.1 (P0): base_ref + base_sha, от которого форкнута ветка
         "resume": resume_info,                     # v2.109: продолжение поверх подтверждённой работы (None если resume не запрошен)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
