@@ -49,6 +49,13 @@ ALLOWED = (
     # без --strict — обкатка non-blocking). Логика покрыта юнит-тестами (test_pr_size), проводка —
     # отдельным тестом джобы (test_kit_pr_size_job).
     re.compile(r"^python3?\s+ai_ops_kit/validation/validate_pr_size\.py\b"),
+    # Доставляемый footprint итога слияния — тот же класс: детерминированная проверка ИТОГА слияния
+    # PR с origin/main (объём пересечения дерева-итога с managed_set против потолка volume_bytes), а
+    # не pytest-тест. Зовётся напрямую с `--base origin/main` (advisory, без --strict — non-blocking).
+    # Логика покрыта юнит-тестами (test_merge_preview, test_delivery_footprint_warning), проводка —
+    # тестом в test_merge_preview. Оркестратор живёт в installer/ (он один видит и merge-preview, и
+    # managed_set), поэтому путь — installer/, а не ai_ops_kit/.
+    re.compile(r"^python3?\s+installer/delivered_merge_footprint\.py\b"),
 )
 
 

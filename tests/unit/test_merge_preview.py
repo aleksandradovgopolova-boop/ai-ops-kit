@@ -177,3 +177,189 @@ def test_cli_exit_code_breached_vs_ok(tmp_path, capsys):
     # Тот же PR против БАЗЫ (target без крупного файла) — в пределах, exit 0.
     code_ok = merge_preview.main(["--base", base, "--head", "pr", "--root", str(root)])
     assert code_ok == 0
+
+
+# ─── merge_preview_entries: файлы дерева-итога с размерами (примитив под доставляемый footprint) ────
+
+def _tree_of(root, ref):
+    """SHA дерева верхнего уровня ссылки — для прямого замера entries на известном дереве."""
+    return _git(root, "rev-parse", f"{ref}^{{tree}}")
+
+
+def test_entries_list_blobs_with_their_sizes(tmp_path):
+    """merge_preview_entries отдаёт (путь, размер) для каждого blob'а дерева — без материализации."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    (root / "a.txt").write_text("x" * 123, encoding="utf-8")
+    sub = root / "pkg"
+    sub.mkdir()
+    (sub / "b.txt").write_text("y" * 45, encoding="utf-8")
+    _commit_all(root, "add files")
+
+    entries = dict(merge_preview.merge_preview_entries(str(root), _tree_of(root, "HEAD")))
+    # Рекурсивный обход: вложенный путь присутствует со своим размером.
+    assert entries["a.txt"] == 123, entries
+    assert entries["pkg/b.txt"] == 45, entries
+    # seed.txt из базы тоже виден (дерево-итог, а не diff).
+    assert "seed.txt" in entries
+
+
+def test_entries_empty_on_bad_tree_is_not_a_crash(tmp_path):
+    """Нечитаемое дерево -> пустой список, а не исключение (fail-closed решается по merge_preview_tree)."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    assert merge_preview.merge_preview_entries(str(root), "0" * 40) == []
+
+
+# ─── оркестратор доставляемого итога: merge-preview ∩ managed_set (installer/-слой) ────────────────
+
+def _load_orchestrator():
+    """Импортировать installer/delivered_merge_footprint без тяжёлого импорта самого инсталлятора.
+
+    Оркестратор берёт managed_set/потолок аргументами, поэтому его функция не зовёт `import ai_ops` —
+    тест кладёт installer/ на путь только чтобы найти модуль по имени."""
+    import sys
+    from pathlib import Path
+    inst = Path(__file__).resolve().parents[2] / "installer"
+    if str(inst) not in sys.path:
+        sys.path.insert(0, str(inst))
+    import delivered_merge_footprint as dmf
+    return dmf
+
+
+def test_delivered_footprint_is_merge_result_intersect_managed_set(tmp_path):
+    """(a) ДОСТАВЛЯЕМЫЙ объём = ПЕРЕСЕЧЕНИЕ дерева-итога слияния с managed_set, не всё дерево.
+
+    Итог слияния несёт и доставляемый файл, и НЕдоставляемый (dev-ассет). Оркестратор обязан
+    посчитать байты ТОЛЬКО доставляемого, игнорируя остальное дерево-итог."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "shipped.py").write_text("s" * 400, encoding="utf-8")     # доставляемый
+    (root / "devonly.txt").write_text("d" * 9000, encoding="utf-8")   # НЕ доставляемый (крупный)
+    _commit_all(root, "pr: one shipped, one dev-only")
+
+    _git(root, "checkout", "-q", "main")
+    (root / "target.py").write_text("t" * 500, encoding="utf-8")      # доставляемый, приехал с main
+    target = _commit_all(root, "target drift")
+    _git(root, "checkout", "-q", "pr")
+
+    managed = {"shipped.py", "target.py"}      # devonly.txt И seed.txt намеренно вне поставки
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", managed,
+                                        ceiling=10_000_000, fraction=0.10)
+    assert res["ok"] is True, res
+    # 400 + 500 доставляемых; 9000 dev-only в дерево-итог входит, но в СЧЁТ доставляемого — нет.
+    assert res["delivered_bytes"] == 900, res
+    assert res["delivered_files"] == 2, res
+    assert res["paths"] == ["shipped.py", "target.py"], res
+    assert res["breached"] is False
+
+
+def test_delivered_footprint_breaches_when_shipped_part_exceeds_ceiling(tmp_path):
+    """(b) Пробой: доставляемая часть итога сама превышает потолок -> breached=True."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "shipped.py").write_text("s" * 5000, encoding="utf-8")
+    _commit_all(root, "pr")
+    _git(root, "checkout", "-q", "main")
+    (root / "shipped_more.py").write_text("m" * 5000, encoding="utf-8")
+    target = _commit_all(root, "target")
+    _git(root, "checkout", "-q", "pr")
+
+    managed = {"shipped.py", "shipped_more.py"}
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", managed,
+                                        ceiling=9000, fraction=0.10)
+    assert res["ok"] is True, res
+    assert res["delivered_bytes"] == 10000, res
+    assert res["breached"] is True, "доставляемая часть 10000 Б обязана пробить потолок 9000 Б"
+
+
+def test_delivered_footprint_under_ceiling_passes(tmp_path):
+    """(c) Непробой: доставляемая часть под потолком -> breached=False, thin=False."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "shipped.py").write_text("s" * 100, encoding="utf-8")
+    _commit_all(root, "pr")
+    _git(root, "checkout", "-q", "main")
+    (root / "other.py").write_text("o" * 100, encoding="utf-8")
+    target = _commit_all(root, "target")
+    _git(root, "checkout", "-q", "pr")
+
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", {"shipped.py"},
+                                        ceiling=10_000, fraction=0.10)
+    assert res["ok"] is True and res["breached"] is False and res["thin"] is False, res
+    assert res["delivered_bytes"] == 100, res
+
+
+def test_delivered_footprint_is_fail_closed_on_conflict(tmp_path):
+    """Fail-closed: конфликт слияния -> ok=False, breached=False (пробой доставляемого НЕ утверждаем)."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "seed.txt").write_text("PR\n", encoding="utf-8")
+    _commit_all(root, "pr edits seed")
+    _git(root, "checkout", "-q", "main")
+    (root / "seed.txt").write_text("MAIN\n", encoding="utf-8")
+    target = _commit_all(root, "target edits same line")
+    _git(root, "checkout", "-q", "pr")
+
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", {"seed.txt"},
+                                        ceiling=10_000, fraction=0.10)
+    assert res["ok"] is False, res
+    assert res["breached"] is False, "итог не посчитан -> пробой доставляемого объёма не утверждается"
+    assert "конфликт" in res["reason"].lower()
+
+
+def test_delivered_footprint_cli_is_advisory_exit_zero(tmp_path, monkeypatch):
+    """CLI по умолчанию ADVISORY: даже при пробое доставляемого объёма exit 0; --strict -> 1.
+
+    managed_set/потолок подменяются, чтобы прогнать путь main() на настоящем git-репо без импорта
+    инсталлятора: проверяется именно строгость кода возврата (advisory vs strict)."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "shipped.py").write_text("s" * 5000, encoding="utf-8")
+    target_head = _commit_all(root, "pr")
+
+    monkeypatch.setattr(dmf, "_load_budget", lambda: (4000, 0.10))     # потолок ниже доставляемого
+    monkeypatch.setattr(dmf, "_load_managed_rels", lambda: {"shipped.py"})
+
+    code = dmf.main(["--base", target_head, "--head", "pr", "--root", str(root)])
+    assert code == 0, "advisory: пробой доставляемого объёма НЕ блокирует PR"
+
+    code_strict = dmf.main(["--base", target_head, "--head", "pr", "--root", str(root), "--strict"])
+    assert code_strict == 1, "--strict: пробой доставляемого объёма краснеет"
+
+
+def test_ci_wires_the_delivered_footprint_advisory_job():
+    """Проводка: package-quality.yml реально зовёт advisory-гейт доставляемого итога на PR.
+
+    Механизм без вызова из CI — самодекларация. Джоба advisory (без --strict), только на PR."""
+    import yaml
+    from pathlib import Path
+    wf = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "package-quality.yml"
+    doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
+    runs = [step.get("run", "") for job in doc["jobs"].values() for step in (job.get("steps") or [])]
+    calls = [r for r in runs if "installer/delivered_merge_footprint.py" in r]
+    assert calls, "package-quality.yml не зовёт installer/delivered_merge_footprint.py"
+    joined = "\n".join(calls)
+    assert "--base origin/main" in joined and "--head HEAD" in joined, joined
+    assert "--strict" not in joined, "гейт обязан оставаться advisory (без --strict) до промоута"

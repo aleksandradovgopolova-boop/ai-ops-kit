@@ -82,6 +82,37 @@ def merge_preview_tree(root, base_ref: str, head_ref: str) -> dict:
     return {"ok": False, "reason": reason}
 
 
+def merge_preview_entries(root, tree: str) -> list:
+    """Файлы дерева-итога слияния `tree` со своими размерами, БЕЗ материализации архива.
+
+    Читает дерево через `git ls-tree -r --long -z <tree>`: плоский рекурсивный обход, размер каждого
+    blob'а из индекса git, NUL-разделение записей. `-z` обязателен, а не украшение — при core.quotePath
+    (включён по умолчанию) не-ASCII путь пришёл бы в escape-кавычках и не совпал бы с относительным
+    путём managed_set; NUL отдаёт имена как есть, и путь с переводом строки/запятой не распадается.
+
+    -> список (relative_path, size_bytes) для каждого blob'а дерева. Gitlink'и/подмодули (у них в
+    поле размера стоит `-`, а не число) пропускаются.
+
+    Пустой список означает ЛИБО пустое дерево, ЛИБО что git не смог его прочитать — вызыватель обязан
+    отличать «нет доставляемых файлов» от «превью не удалось» ПО РЕЗУЛЬТАТУ `merge_preview_tree`
+    (fail-closed решается там, где считается итог), а не по длине этого списка.
+    """
+    rc, out, _ = gitio.git(root, "ls-tree", "-r", "--long", "-z", tree)
+    if rc != 0 or not out:
+        return []
+    entries = []
+    for record in out.split("\0"):
+        if not record or "\t" not in record:
+            continue
+        meta, path = record.split("\t", 1)
+        fields = meta.split()
+        # Формат --long: `<mode> <type> <sha> <size>` — размер только у blob'ов, у gitlink'ов `-`.
+        if len(fields) < 4 or fields[1] != "blob" or not fields[3].isdigit():
+            continue
+        entries.append((path, int(fields[3])))
+    return entries
+
+
 def _tree_bytes(root, tree: str) -> int:
     """Сумма байтов всех файлов дерева `tree` (кроме .git). Материализует дерево во временный
     каталог через `git archive -o <tar>` + stdlib tarfile, обходит файлы, суммирует st_size."""
