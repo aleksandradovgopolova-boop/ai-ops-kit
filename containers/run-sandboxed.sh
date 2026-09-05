@@ -14,6 +14,9 @@
 #   --memory/--cpus/--pids-limit   лимиты ресурсов (модель/сборка не съедят машину)
 #   --cap-drop=ALL + --security-opt=no-new-privileges   без привилегий/эскалации
 #   --user 10001 (non-root, зашит в образ)
+#   credential-less git (см. ниже): GIT_ASKPASS=/bin/false, GIT_TERMINAL_PROMPT=0, credential.helper=""
+#     -> `git push` из модельной петли НЕ имеет источника креды и падает быстро (не виснет в промпте),
+#        а не полагается на regex block_push. Это ПЕРВЫЙ (жёсткий) рубеж недоставки; regex — второй.
 #
 # ЧЕСТНО: сеть НЕ отключена — движку нужен egress к API модели и реестрам (npm/pip). Для жёсткого
 # контроля подставьте свой egress-allowlist прокси (см. docs/container-isolation.md) или задайте
@@ -63,11 +66,31 @@ git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/hea
 cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
 
 # Пробрасываем ТОЛЬКО имена секрет-переменных (значения берутся из окружения, не в образ).
+# GITHUB_TOKEN/GH_TOKEN нужны ДОВЕРЕННОМУ коду движка (pr_open) для draft-PR по REST API — это НЕ
+# git push и не даёт модели push сам по себе (git не берёт эти env для транспорта без креды в URL).
 ENVFLAGS=()
 for v in OPENAI_COMPATIBLE_BASE_URL OPENAI_COMPATIBLE_API_KEY ANTHROPIC_API_KEY \
          OPENAI_API_KEY GITHUB_TOKEN GH_TOKEN; do
   [ -n "${!v:-}" ] && ENVFLAGS+=(-e "$v")
 done
+
+# Credential-less git для PUSH (жёсткая гарантия недоставки СРЕДОЙ, не regex).
+# Внутри jail'а у git нет ни одного канала получить креду для push:
+#   * credential.helper="" — отключаем любой ранее настроенный helper (через GIT_CONFIG_* env, а не
+#     `git config`, потому что root-fs read-only и писать в ~/.gitconfig некуда);
+#   * GIT_ASKPASS=/bin/false — запрос логина/пароля мгновенно возвращает ошибку;
+#   * GIT_TERMINAL_PROMPT=0 — push по HTTPS без креды НЕ виснет в интерактивном промпте, а сразу падёт.
+# ~/.git-credentials и SSH-agent в контейнер не монтируются и SSH_AUTH_SOCK не пробрасывается —
+# credential-файлы/сокеты хоста внутрь не попадают. Делаем это ПЕРВЫМ рубежом; regex block_push —
+# второй (defense-in-depth). Легитимное чтение (сеть к API/реестрам) не затронуто: гасим только
+# каналы креды git push/write, не egress вообще.
+CREDLESS_ENV=(
+  -e GIT_ASKPASS=/bin/false
+  -e GIT_TERMINAL_PROMPT=0
+  -e GIT_CONFIG_COUNT=1
+  -e GIT_CONFIG_KEY_0=credential.helper
+  -e GIT_CONFIG_VALUE_0=
+)
 
 # 2. Запуск движка в jail'е над ОДНОРАЗОВЫМ клоном (не над основным репо).
 set +e
@@ -80,6 +103,7 @@ docker run --rm \
   --workdir /work \
   --memory "$MEM" --cpus "$CPUS" --pids-limit 512 \
   --cap-drop ALL --security-opt no-new-privileges \
+  "${CREDLESS_ENV[@]}" \
   "${ENVFLAGS[@]}" \
   "$IMAGE" \
   run "$TASK" /work "$@"

@@ -222,11 +222,14 @@ def _under(path: str, prefix: str, *, ignore_case: bool = False) -> bool:
 NETWORK_RE = re.compile(r"\b(curl|wget|nc|ncat|netcat|ssh|scp|sftp|telnet|rsync|ftp|"
                         r"nmap|dig|nslookup|http|https)\b", re.I)
 # git push из tool-loop: доставка ветки/PR — только доверенным кодом движка (pr_open), не моделью
-# (finding аудита v2.79 P0.2). ЧЕСТНО (v2.85, уточнено R-38): это best-effort текстовый денай.
-# _normalize снимает кавычки, продолжение строки и backslash-escape; ПЕРЕМЕННЫЕ/eval
-# (`p=push; git $p`) статически не ловятся — перечень обходов держать в _normalize актуальным,
-# иначе комментарий обещает больше, чем код (тот же класс, что R-33).
-# Жёсткая гарантия недоставки — окружение (нет push-credentials / git-wrapper), не regex.
+# (finding аудита v2.79 P0.2). ЧЕСТНО (v2.85, уточнено R-38): это best-effort текстовый денай —
+# ВТОРОЙ рубеж (defense-in-depth), НЕ гарантия. _normalize снимает кавычки, продолжение строки и
+# backslash-escape; ПЕРЕМЕННЫЕ/eval (`p=push; git $p`) статически не ловятся — перечень обходов
+# держать в _normalize актуальным, иначе комментарий обещает больше, чем код (тот же класс, что R-33).
+# ПЕРВЫЙ рубеж — жёсткая гарантия недоставки СРЕДОЙ: песочница credential-less для push
+# (containers/run-sandboxed.sh + Dockerfile: credential.helper="", GIT_ASKPASS=/bin/false,
+# GIT_TERMINAL_PROMPT=0; токены/.git-credentials/SSH-agent внутрь не проброшены). У git нет канала
+# получить креду -> push падёт независимо от того, обошёл ли текст этот regex.
 GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
 
 # v2.85/2.87: команду в allowlist-режиме проверяем ПОСЕГМЕНТНО (первый бинарь каждого сегмента),
