@@ -23,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+import uuid
 
 import yaml
 from datetime import datetime, timedelta
@@ -179,16 +180,133 @@ def last_confirmed(root: Path) -> dict | None:
     return doc if isinstance(doc, dict) else {"unreadable": "не объект"}
 
 
-def confirm_review(root: Path, sha: str | None = None) -> dict:
-    """Отметить обзор разобранным: следующая дельта пойдёт отсюда."""
+def confirm_review(root: Path, sha: str | None = None, dismissed=None) -> dict:
+    """Отметить обзор разобранным: следующая дельта пойдёт отсюда.
+
+    `dismissed` — флаги (имена проверок) ТЕКУЩЕГО обзора, которые владелец счёл ЛОЖНЫМИ
+    срабатываниями. Они уходят в обратную связь и питают ИЗМЕРЕННУЮ частоту ложных (см. ниже):
+    без обратной связи обзор не вправе называть свою точность числом. Флаги считаются здесь же,
+    ДО сдвига точки отсчёта, — так пометка привязана к реальным находкам, а не к вчерашним.
+    """
     rc, out, _ = _git(root, "rev-parse", "HEAD")
     head = sha or (out.strip() if rc == 0 else None)
     rec = {"schema_version": 1, "kind": "NightlyReviewConfirmation",
            "confirmed_at": datetime.now().isoformat(), "commit_sha": head}
+    flags = review_flags(collect_delta(root))
     p = Path(root) / CONFIRMED_REL
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    record_feedback(root, flags, dismissed, commit_sha=head, confirmed_at=rec["confirmed_at"])
     return rec
+
+
+# ─── ЧАСТОТА ЛОЖНЫХ СРАБАТЫВАНИЙ: обзор НАЗЫВАЕТ свою точность (или честно молчит) ──────────────
+#
+# Обзор ФЛАГАЕТ расхождения. Но флаг, чья точность не измерена, — тот же ложный green: владелец не
+# знает, чинить по нему или отмахнуться, а сам обзор становится кандидатом в «судит, но свою
+# точность не меряет» (F-002/F-005). Поэтому обзор называет, КАК ЧАСТО его флаги оказываются
+# ложными, — из ОБРАТНОЙ СВЯЗИ, а не из воздуха. Обратная связь берётся при подтверждении: владелец
+# помечает флаги, которые были ложными (`--confirm --dismiss <флаг>`).
+#
+# БЕЗ ФАБРИКАЦИИ. Пока подтверждённых обзоров с флагами меньше порога, частота НЕ ИЗМЕРЕНА — так и
+# говорим, называя порог, а не выдумываем число. Выдуманная точность — ровно тот дефект, что кит
+# ловит везде, и здесь он был бы вдвойне циничен: обзор соврал бы именно о своей правдивости.
+#
+# ХРАНЕНИЕ — ШАРДАМИ (учёт #148). Одна запись на подтверждённый обзор, отдельным файлом: слияние
+# веток объединяет каталог (union), общего конфликтного файла нет. Append-only: записи не
+# переписываются, только добавляются.
+
+FEEDBACK_DIR_REL = ".ai/project/nightly-review/feedback"
+# Порог: сколько подтверждённых обзоров С ФЛАГАМИ нужно, чтобы назвать частоту числом. Меньше —
+# «не измерено». Значение осознанно скромное (v0 обкатывается на ките), поднимается по решению.
+MIN_CONFIRMED_FOR_RATE = 3
+
+
+def review_flags(delta: dict) -> list[str]:
+    """Флаги обзора — доказанные расхождения (`ok is False`). Идентификатор флага = имя проверки.
+
+    «Не проверено» (`ok is None`) флагом НЕ считается: нельзя назвать ложным то, чего обзор не
+    утверждал. В знаменатель частоты идут только вещи, которые обзор действительно заявил.
+    """
+    return [f["check"] for f in delta.get("findings", []) if f.get("ok") is False]
+
+
+def _feedback_dir(root: Path) -> Path:
+    return Path(root) / FEEDBACK_DIR_REL
+
+
+def record_feedback(root: Path, flags, dismissed, *, commit_sha: str | None = None,
+                    confirmed_at: str | None = None) -> dict:
+    """Записать обратную связь по ОДНОМУ подтверждённому обзору отдельным файлом-шардом.
+
+    `flags` — все флаги обзора; `dismissed` — те из них, что владелец пометил ложными (⊆ flags;
+    пометки на несуществующие флаги отбрасываются — нельзя признать ложным то, чего не было).
+    Общего файла нет намеренно (#148): каждый обзор — свой шард, слияние веток = объединение.
+    """
+    flags = list(flags or [])
+    dismissed = [d for d in (dismissed or []) if d in flags]
+    at = confirmed_at or datetime.now().isoformat()
+    rec = {"schema_version": 1, "kind": "NightlyReviewFeedback",
+           "confirmed_at": at, "commit_sha": commit_sha,
+           "flags": flags, "dismissed": dismissed}
+    d = _feedback_dir(root)
+    d.mkdir(parents=True, exist_ok=True)
+    stamp = re.sub(r"[^0-9A-Za-z]", "", at)[:15] or "0"
+    shard = d / f"{stamp}-{(commit_sha or 'nosha')[:8]}-{uuid.uuid4().hex[:8]}.json"
+    shard.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return rec
+
+
+def read_feedback(root: Path) -> list[dict]:
+    """Все шарды обратной связи (union каталога). Битый шард пропускаем, не роняя счёт остальных."""
+    d = _feedback_dir(root)
+    if not d.is_dir():
+        return []
+    out = []
+    for p in sorted(d.glob("*.json")):
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and doc.get("kind") == "NightlyReviewFeedback":
+            out.append(doc)
+    return out
+
+
+def false_positive_rate(root: Path) -> dict:
+    """Частота ложных срабатываний обзора — ИЗМЕРЕННАЯ из обратной связи, или честное «не измерено».
+
+    -> {measured, rate, false_flags, total_flags, confirmed_reviews, threshold, reason}.
+    Считается по подтверждённым обзорам, у которых был ≥1 флаг: rate = ложные / все флаги. Пока
+    таких обзоров меньше MIN_CONFIRMED_FOR_RATE (или флагов вовсе не было) — measured=False, число
+    НЕ называется, называется порог. Третье состояние («не измерено») не сворачивается в «0%».
+    """
+    fb = read_feedback(root)
+    with_flags = [r for r in fb if r.get("flags")]
+    total = sum(len(r.get("flags", [])) for r in with_flags)
+    false = sum(len(r.get("dismissed", [])) for r in with_flags)
+    base = {"false_flags": false, "total_flags": total,
+            "confirmed_reviews": len(with_flags), "threshold": MIN_CONFIRMED_FOR_RATE}
+    if len(with_flags) < MIN_CONFIRMED_FOR_RATE or total == 0:
+        return {**base, "measured": False, "rate": None,
+                "reason": (f"не измерено: нужно ≥{MIN_CONFIRMED_FOR_RATE} подтверждённых обзоров "
+                           f"с флагами и пометкой ложных срабатываний "
+                           f"(пока {len(with_flags)})")}
+    return {**base, "measured": True, "rate": false / total,
+            "reason": (f"{false} ложных из {total} флагов "
+                       f"за {len(with_flags)} подтверждённых обзоров")}
+
+
+def format_false_positive_rate(fpr: dict) -> str:
+    """Одна строка о частоте ложных — первоклассно в брифе. «Не измерено» остаётся «не измерено»."""
+    if not fpr.get("measured"):
+        return (f"Частота ложных срабатываний: **не измерено** — {fpr.get('reason')}. "
+                f"Пока обзор не может сказать, насколько часто его флаги ошибочны, — доверять "
+                f"флагам на слово.")
+    pct = round(fpr["rate"] * 100)
+    return (f"Частота ложных срабатываний: **{pct}%** "
+            f"({fpr['false_flags']} ложных из {fpr['total_flags']} флагов "
+            f"за {fpr['confirmed_reviews']} подтверждённых обзоров).")
 
 
 def review_baseline(root: Path) -> dict:
@@ -382,6 +500,7 @@ def collect_delta(root: Path, since: str | None = None) -> dict:
         "ci": _check_ci_status(root),
         "prs": _check_open_prs(root),
         "findings": run_checks(root),
+        "false_positive_rate": false_positive_rate(root),
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -433,6 +552,14 @@ def format_brief(delta: dict, root: Path) -> str:
         L.append(f"- план: " + ", ".join(f"{k} — {v}" for k, v in sorted(plan["by_status"].items())))
     elif plan.get("error"):
         L.append(f"- план: {plan['error']}")
+
+    # 2.5 НАСКОЛЬКО ДОВЕРЯТЬ ФЛАГАМ — частота ложных срабатываний названа ПЕРВОКЛАССНО.
+    # Обзор, который флагает, но не меряет свою точность, неотличим от гадания. Число берётся из
+    # обратной связи владельца (`--confirm --dismiss`), а нет данных — говорим «не измерено», а не
+    # выдумываем процент.
+    fpr = delta.get("false_positive_rate") or false_positive_rate(root)
+    L += ["", "## Насколько можно доверять моим флагам", ""]
+    L.append(format_false_positive_rate(fpr))
 
     # 3. Чего НЕ стала делать и почему.
     L += ["", "## Чего я не стала делать и почему", ""]
@@ -862,6 +989,9 @@ def main():
     ap.add_argument("--json", action="store_true", help="Output delta as JSON")
     ap.add_argument("--confirm", action="store_true",
                     help="отметить обзор разобранным: завтрашняя дельта пойдёт отсюда")
+    ap.add_argument("--dismiss", action="append", default=None, metavar="ФЛАГ",
+                    help="с --confirm: пометить флаг (имя проверки) ложным срабатыванием — "
+                         "питает измеренную частоту ложных; можно указать несколько раз")
     ap.add_argument("--autofix", action="store_true",
                     help="собрать включённые правки класса A в один черновой PR (по умолчанию класс A пуст)")
     ap.add_argument("--dry-run", action="store_true",
@@ -898,9 +1028,13 @@ def main():
         # ПОДТВЕРЖДЕНИЕ — ДЕЙСТВИЕ ЧЕЛОВЕКА, а не факт отправки брифа. Отправленный и разобранный
         # обзор — разные вещи, и точку отсчёта двигает второе. Иначе пропущенная ночь молча
         # теряла бы изменения, а разобранная дважды показывала одни и те же находки.
-        rec = confirm_review(root)
+        rec = confirm_review(root, dismissed=args.dismiss)
         print(f"обзор подтверждён на {rec['commit_sha'] or 'неизвестном коммите'} "
               f"({rec['confirmed_at']}) — завтрашняя дельта пойдёт отсюда")
+        if args.dismiss:
+            print(f"помечено ложных срабатываний: {', '.join(args.dismiss)} — учтено в частоте")
+        fpr = false_positive_rate(root)
+        print(format_false_positive_rate(fpr))
         return 0
 
     if args.autofix:

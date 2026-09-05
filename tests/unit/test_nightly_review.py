@@ -310,3 +310,100 @@ def test_run_nightly_can_skip_delivery_when_asked(repo):
     out = nr.run_nightly(repo, deliver=False)
     assert out["brief"] and out["receipt"] is None, out
 
+
+# ─── ЧАСТОТА ЛОЖНЫХ СРАБАТЫВАНИЙ: обзор НАЗЫВАЕТ свою точность (или честно молчит) ──────────────
+# Исход роадмапа `false_positive_rate_is_named`. Обзор ФЛАГАЕТ расхождения — и обязан сказать, как
+# часто его флаги оказываются ложными. Без обратной связи число не выдумывается: «не измерено»
+# остаётся «не измерено» (F-002/F-005 — судить, но свою точность не мерить, запрещено).
+
+
+def _plant_failing_validator(root, name="validate_references"):
+    """Положить валидатор, который падает ПО СУЩЕСТВУ — обзор получит реальный флаг (`ok is False`)."""
+    vdir = root / "ai_ops_kit" / "validation"
+    vdir.mkdir(parents=True, exist_ok=True)
+    (vdir / f"{name}.py").write_text(
+        "import sys\nprint('REFERENCES: 3 ссылки ведут в никуда')\nsys.exit(1)\n", encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_without_feedback_the_rate_is_named_unmeasured_not_a_number(repo):
+    """(а) Данных нет — частота названа ЧЕСТНО «не измерено» + порог N, а НЕ выдуманное число."""
+    fpr = nr.false_positive_rate(repo)
+    assert fpr["measured"] is False and fpr["rate"] is None, fpr
+    assert fpr["threshold"] == nr.MIN_CONFIRMED_FOR_RATE
+    line = nr.format_false_positive_rate(fpr)
+    assert "не измерено" in line and f"≥{nr.MIN_CONFIRMED_FOR_RATE}" in line, line
+    assert "%" not in line, f"частота выдумана числом при отсутствии данных: {line}"
+
+
+@pytest.mark.unit
+def test_the_brief_names_the_false_positive_rate_first_class(repo):
+    """(в) Частота названа в брифе ПЕРВОКЛАССНО (свой раздел). Уберёшь поле — тест краснеет."""
+    delta = nr.collect_delta(repo)
+    assert "false_positive_rate" in delta, "частота не попала в дельту (--json её не назовёт)"
+    brief = nr.format_brief(delta, repo)
+    assert "## Насколько можно доверять моим флагам" in brief, brief[:800]
+    assert "Частота ложных срабатываний" in brief and "не измерено" in brief, brief[:800]
+
+
+@pytest.mark.unit
+def test_with_synthetic_history_the_rate_is_computed_and_named(repo):
+    """(б) K подтверждённых обзоров, M помеченных ложными → rate = ложные/все флаги, и НАЗВАН."""
+    # Три обзора по два флага; в двух — один флаг признан ложным. total=6, false=2 -> 33%.
+    nr.record_feedback(repo, ["ссылки", "документация"], ["ссылки"])
+    nr.record_feedback(repo, ["ссылки", "документация"], ["ссылки"])
+    nr.record_feedback(repo, ["ссылки", "документация"], [])
+    fpr = nr.false_positive_rate(repo)
+    assert fpr["measured"] is True, fpr
+    assert fpr["total_flags"] == 6 and fpr["false_flags"] == 2, fpr
+    assert abs(fpr["rate"] - 2 / 6) < 1e-9, fpr
+    line = nr.format_false_positive_rate(fpr)
+    assert "33%" in line, line
+    assert "33%" in nr.format_brief(nr.collect_delta(repo), repo)
+
+
+@pytest.mark.unit
+def test_below_threshold_stays_unmeasured_even_with_some_feedback(repo):
+    """Порог соблюдается: одного-двух обзоров мало — всё ещё «не измерено», без числа."""
+    nr.record_feedback(repo, ["ссылки"], ["ссылки"])
+    nr.record_feedback(repo, ["ссылки"], [])
+    fpr = nr.false_positive_rate(repo)   # 2 < 3
+    assert fpr["measured"] is False and fpr["rate"] is None, fpr
+
+
+@pytest.mark.unit
+def test_dismiss_at_confirm_accumulates_and_is_counted(repo):
+    """(г) `--dismiss` при подтверждении копится в durable-шардах и учитывается в частоте."""
+    _plant_failing_validator(repo)
+    # Флаг реально есть в текущем обзоре.
+    assert "ссылки" in nr.review_flags(nr.collect_delta(repo))
+    nr.confirm_review(repo, dismissed=["ссылки"])
+    fb = nr.read_feedback(repo)
+    assert len(fb) == 1 and fb[0]["flags"] == ["ссылки"] and fb[0]["dismissed"] == ["ссылки"], fb
+
+
+@pytest.mark.unit
+def test_dismissing_a_nonexistent_flag_is_dropped_not_fabricated(repo):
+    """Нельзя признать ложным то, чего обзор не заявлял: пометка на несуществующий флаг отброшена."""
+    rec = nr.record_feedback(repo, ["ссылки"], ["выдуманный-флаг", "ссылки"])
+    assert rec["dismissed"] == ["ссылки"], rec
+
+
+@pytest.mark.unit
+def test_feedback_is_sharded_one_file_per_review(repo):
+    """Хранение шардами (#148): каждый обзор — свой файл, общего конфликтного файла нет."""
+    nr.record_feedback(repo, ["a"], [])
+    nr.record_feedback(repo, ["b"], ["b"])
+    shards = list((repo / nr.FEEDBACK_DIR_REL).glob("*.json"))
+    assert len(shards) == 2, shards
+
+
+@pytest.mark.unit
+def test_a_broken_feedback_shard_is_skipped_not_fatal(repo):
+    """Битый шард не роняет счёт остальных — читаем что можем, а не падаем на первом же."""
+    d = repo / nr.FEEDBACK_DIR_REL
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "broken.json").write_text("{не json", encoding="utf-8")
+    nr.record_feedback(repo, ["a"], [])
+    assert len(nr.read_feedback(repo)) == 1
+
