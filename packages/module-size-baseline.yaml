@@ -30,7 +30,7 @@ ceilings:
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 909
   ai_ops_kit/providers/orchestrator_providers.py: 909
-  ai_ops_kit/intelligence/nightly_review.py: 954
+  ai_ops_kit/intelligence/nightly_review.py: 1088
   ai_ops_kit/validation/validate_own_medicine.py: 732
   ai_ops_kit/gates/gate_executor.py: 726
   ai_ops_kit/engine/tool_broker.py: 762
@@ -278,3 +278,15 @@ raises:
       (аудит «непесочный дефолт + сеть ON» закрыт честностью, дефолты НЕ флипались). +5 строк — поле
       + рационале-комментарий; расщеплять 773-строчный оркестратор ради одного поля непропорционально.
       Итог 773 -> 778 осознанно под факт. Ратчет держит рост вниз от 778.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/intelligence/nightly_review.py = 954'
+    to: 'ai_ops_kit/intelligence/nightly_review.py = 1088'
+    work: nightly-review-names-false-positive-rate (#423)
+    why: >-
+      Ночной обзор теперь ЧЕСТНО называет свою частоту ложных срабатываний: захват (confirm --dismiss),
+      шардовое хранение фидбэка (append-only, учитывает #148), расчёт rate из подтверждённых обзоров,
+      честное «не измерено» без фабрикации. +134 строки — реальная логика с рационале, не разбухание.
+      ★ОТМЕЧЕНО как кандидат на вынос: feedback/rate-машинерия (record_feedback/false_positive_rate/
+      шарды) — когезивный ~100-строчный блок, его вынос в intelligence/review_feedback.py вернул бы
+      nightly_review под 954; отдельная работа★. Ратчет держит рост вниз от 1088.
