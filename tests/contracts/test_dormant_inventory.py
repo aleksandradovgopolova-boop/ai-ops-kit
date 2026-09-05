@@ -131,7 +131,7 @@ def _is_test_path(p: Path) -> bool:
     return "tests" in p.parts or p.name.startswith("test_") or p.name == "conftest.py"
 
 
-# Не-исходные деревья под корнем репо: gitignored git-worktree'ы (`.ai/worktrees/<…>/ai_ops_kit/…`),
+# Не-исходные деревья ПОД корнем репо: gitignored git-worktree'ы (`.ai/worktrees/<…>/ai_ops_kit/…`),
 # editable-установки (`.venv/…/site-packages/ai_ops_kit/…`), кэши и артефакты сборки. Их `.py` — КОПИИ
 # пакета, а не рабочий код; засчитать их в импортёры значило бы счесть дормантный модуль проведённым
 # в контур из-за собственной копии. В чистом клоне CI их нет — потому тест там зелён; фильтр держит
@@ -142,9 +142,20 @@ SKIP_DIRS = frozenset({
 })
 
 
-def _is_skipped(p: Path) -> bool:
-    """Лежит ли путь в не-исходном дереве (копия пакета/кэш/venv) — такой файл в обходе игнорируется."""
-    return bool(SKIP_DIRS & set(p.parts))
+def _is_skipped(p: Path, root: Path = PKG_ROOT) -> bool:
+    """Лежит ли путь в не-исходном дереве ПОД `root` (копия пакета/кэш/venv) — тогда в обходе игнор.
+
+    Сегменты сверяются ОТНОСИТЕЛЬНО `root`, а не по абсолютному пути: сам корень репозитория может
+    лежать ПОД каталогом с именем из SKIP_DIRS — кит держит рабочие копии в `.ai/worktrees/` и
+    `.claude/worktrees/`, и полный путь тогда содержит `.ai`/`.claude` как ПРЕДКА корня. Матч по
+    абсолютным сегментам отбросил бы ВЕСЬ пакет из-за имени вышестоящей папки (все модули стали бы
+    «0 импортёров» → ложный дормант). Смотрим только то, что НИЖЕ корня.
+    """
+    try:
+        parts = set(p.relative_to(root).parts)
+    except ValueError:
+        parts = set(p.parts)          # путь вне корня (в обходе не встречается) — на всякий по полному
+    return bool(SKIP_DIRS & parts)
 
 
 def _imports_in(path: Path, known: set[str]) -> set[str]:
@@ -332,3 +343,25 @@ def test_non_source_trees_are_not_counted_as_importers():
     importers = _nontest_importers(_pkg_modules())
     assert importers[f"{PKG}.intelligence.decision_loop"] == set(), \
         "decision_loop обязан остаться дормантным — копии из не-исходных деревьев не в счёт"
+
+
+@pytest.mark.contract
+def test_skip_predicate_ignores_ancestor_named_like_non_source(tmp_path):
+    """Корень репо может лежать ПОД каталогом из SKIP_DIRS — предикат смотрит путь ОТНОСИТЕЛЬНО корня.
+
+    Кит держит рабочие копии в `.ai/worktrees/` и `.claude/worktrees/`: полный путь до корня тогда
+    содержит `.ai`/`.claude` как ПРЕДКА. Матч по абсолютным сегментам отбросил бы ВЕСЬ пакет из-за
+    имени вышестоящей папки — каждый модуль стал бы «0 импортёров», и весь инвентарь превратился бы в
+    ложный дормант. Этот тест воспроизводит сценарий синтетическим корнем (в CI корень лежит в
+    /home/runner/… без таких предков, поэтому иначе регресс там не виден).
+    """
+    root = tmp_path / ".claude" / "worktrees" / "wt"        # корень ПОД .claude — как у самого кита
+    src = root / "ai_ops_kit" / "engine" / "tool_broker.py"
+    nested_copy = root / ".ai" / "worktrees" / "c" / "ai_ops_kit" / "engine" / "x.py"
+
+    # Настоящий исходник НЕ скипается, хотя абсолютный путь содержит .claude как предок корня.
+    assert not _is_skipped(src, root=root), \
+        "исходник под корнем-в-.claude обязан считаться исходником (сегмент-предок не в счёт)"
+    # Копия ПОД корнем (в .ai/worktrees) — скипается по сегменту НИЖЕ корня.
+    assert _is_skipped(nested_copy, root=root), \
+        "копия пакета под корнем обязана отбрасываться"
