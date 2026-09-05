@@ -24,9 +24,9 @@ kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
 behavioral_count: 375
-structural_count: 61
-total_count: 436
-behavioral_share_pct: 86.01
+structural_count: 62
+total_count: 437
+behavioral_share_pct: 85.81
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -373,3 +373,18 @@ raises:
       Добавлен поведенческий тест-файл tests/unit/test_delivery_drift_reverify.py (11 проб дрейф-
       безопасной доставки: сдвиг цели -> stale-needs-reverify, PR не открывается). Доля поведенческих
       85.98 -> 86.01% (порог ужесточён под факт). Замер: 375 из 436.
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 375
+    from_total: 436
+    to_behavioral: 375
+    to_total: 437
+    to_share_pct: 85.81
+    work: gitio-timeout-consolidation (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (86.01% -> 85.81%): работа свела прямые git-субпроцессы на shared.gitio
+      с таймаутом и добавила один СТРУКТУРНЫЙ тест-файл (tests/contracts/test_no_unbounded_git.py). Он
+      законно структурный — AST-обходит исходники ai_ops_kit/ и утверждает инвариант «ни одного git без
+      timeout=», продуктовый код НЕ импортирует и НЕ зовёт (тот же класс, что test_no_monolith_funnel).
+      Поведенческих не убыло (375 без изменений), прибавился один структурный (61 -> 62). Не деградация
+      поведенческого теста, а новый структурный контракт; снижение зафиксировано записью, а не молча.
