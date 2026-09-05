@@ -119,6 +119,37 @@ def test_a_contract_without_a_goal_says_so_instead_of_inventing_one():
 
 
 @pytest.mark.unit
+def test_every_offered_option_carries_a_named_tradeoff():
+    """#416: варианты ПРЕДЛАГАЮТСЯ, и каждый несёт названный компромисс (исход
+    `experience_options_offered_with_tradeoffs`). Инвариант — проверка, не проза."""
+    options = ec.offer_design_options(_contract())
+    assert len(options) >= 2, "меньше двух вариантов — это не выбор"
+    for opt in options:
+        assert ec.option_tradeoff(opt), f"вариант без названной цены: {opt.get('name')}"
+    assert ec.check_design_options(options) == []
+
+
+@pytest.mark.unit
+def test_an_option_without_a_tradeoff_is_an_error_fail_closed(monkeypatch):
+    """#416 (б): вариант без осознанного компромисса — ошибка, набор не предлагается (fail-closed)."""
+    bad = [{"id": "x", "name": "Без цены", "description": "макет", "tradeoffs": {"pros": ["красиво"]}}]
+    assert ec.option_tradeoff(bad[0]) is None, "пустой cons — это не компромисс"
+    errors = ec.check_design_options(bad)
+    assert any("осознанного компромисса" in e for e in errors), errors
+    # offer_design_options — единственные ворота в контур: если генератор вернул вариант без
+    # цены, ворота ОБЯЗАНЫ закрыться (raise), а не отдать псевдовыбор наружу.
+    monkeypatch.setattr(ec, "generate_design_options", lambda _c: bad)
+    with pytest.raises(ValueError, match="осознанного компромисса"):
+        ec.offer_design_options(_contract())
+
+
+@pytest.mark.unit
+def test_empty_option_set_is_rejected():
+    """Пустой набор — тоже «предлагать нечего»: инвариант краснеет, а не пропускает молча."""
+    assert ec.check_design_options([]), "пустой набор вариантов должен быть ошибкой"
+
+
+@pytest.mark.unit
 def test_the_schema_matches_the_fields_the_code_requires():
     """Схема и код требуют ОДНО. Разойдутся — контракт будет валиден для одного и нет для другого."""
     schema = json.loads((PKG_ROOT / "schemas" / "experience-contract.schema.json")
