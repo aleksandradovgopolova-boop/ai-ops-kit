@@ -40,6 +40,7 @@ from pathlib import Path
 import yaml
 
 from ai_ops_kit.shared import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
+from ai_ops_kit.shared import gitio                    # единый вход к git с таймаутом (см. shared/gitio)
 
 STATUS = {"in-progress", "review", "blocked", "done", "superseded"}
 # `superseded` (18.08.2026, заявка #137): работа, изменения которой УЖЕ В БАЗЕ. Это не «done»
@@ -198,17 +199,15 @@ def _git_common_dir(start=None):
     """Каталог `.git`, ОБЩИЙ для всех рабочих копий репозитория. -> Path или None.
 
     None — «не измерили» (не git, git не установлен), и вызывающие говорят это, а не «заявок нет»."""
-    import subprocess
-
+    # Форма с `cwd=`, а не `-C`: единый вход к git с таймаутом через gitio.run (см. shared/gitio).
     cwd = str(start or Path.cwd())
     try:
-        r = subprocess.run(["git", "rev-parse", "--git-common-dir"],
-                           cwd=cwd, capture_output=True, text=True, check=False)
+        rc, out, _ = gitio.run(["rev-parse", "--git-common-dir"], cwd=cwd)
     except OSError:
         return None
-    if r.returncode != 0:
+    if rc != 0:
         return None
-    common = Path((r.stdout or "").strip())
+    common = Path(out)
     if not str(common):
         return None
     # `--git-common-dir` из корня репозитория отдаёт ОТНОСИТЕЛЬНЫЙ `.git` — разрешаем от cwd, иначе
@@ -537,12 +536,11 @@ def _divergence(child_root, branch, base):
     ПОЛЕ 17.08.2026: в дочке нашлась ветка ВПЕРЕДИ base на 1 коммит и ПОЗАДИ на 241 — проверка
     «содержится в base» по ОДНОМУ направлению давала «не влито» на давно закрытой задаче. Поэтому
     оба числа считаются и оба показываются: одно из них без другого вводит в заблуждение."""
-    import subprocess
-    r = subprocess.run(["git", "-C", str(child_root), "rev-list", "--left-right", "--count",
-                        f"{base}...{branch}"], capture_output=True, text=True)
-    if r.returncode != 0:
+    # Единый вход к git с таймаутом (см. shared/gitio).
+    rc, out, _ = gitio.git(child_root, "rev-list", "--left-right", "--count", f"{base}...{branch}")
+    if rc != 0:
         return None, None
-    parts = (r.stdout or "").split()
+    parts = out.split()
     if len(parts) != 2:
         return None, None
     try:
@@ -554,15 +552,14 @@ def _divergence(child_root, branch, base):
 
 def _same_ref(child_root, a, b) -> bool:
     """Указывают ли два имени на ОДНУ И ТУ ЖЕ ветку. -> bool (не разобрали — False, не угадываем)."""
-    import subprocess
+    # Единый вход к git с таймаутом (см. shared/gitio).
     if not a or not b:
         return False
     if str(a) == str(b):
         return True
     def full(name):
-        r = subprocess.run(["git", "-C", str(child_root), "rev-parse", "--symbolic-full-name",
-                            str(name)], capture_output=True, text=True)
-        return (r.stdout or "").strip() if r.returncode == 0 else None
+        rc, out, _ = gitio.git(child_root, "rev-parse", "--symbolic-full-name", str(name))
+        return out if rc == 0 else None
     fa, fb = full(a), full(b)
     return bool(fa) and fa == fb
 
@@ -585,7 +582,7 @@ def reconcile_with_base(entries, child_root, base=None):
     расхождения; если коммиты ветки уже содержатся в базе (`merge-base --is-ancestor`), запись
     помечается `superseded` с названной причиной и ДАТОЙ замера. Не измерили — говорим `None` и
     называем почему; отсутствие сверки не выдаётся за «не влито»."""
-    import subprocess
+    # Единый вход к git с таймаутом (см. shared/gitio).
     out = []
     src = list(entries or [])
     if not src:
@@ -619,8 +616,7 @@ def reconcile_with_base(entries, child_root, base=None):
                                    f"работы) — сверка невозможна, заявка остаётся как есть")
             out.append(e)
             continue
-        if subprocess.run(["git", "-C", str(child_root), "rev-parse", "--verify", "--quiet", branch],
-                          capture_output=True, text=True).returncode != 0:
+        if gitio.git(child_root, "rev-parse", "--verify", "--quiet", branch)[0] != 0:
             # ветки нет локально: сказать это, а не молча считать работу идущей
             e["merged_into_base"] = None
             e["reconcile_note"] = f"ветки '{branch}' нет в этом репозитории — сверка невозможна"
@@ -628,8 +624,7 @@ def reconcile_with_base(entries, child_root, base=None):
             continue
         ahead, behind = _divergence(child_root, branch, base_ref)
         e["ahead"], e["behind"] = ahead, behind
-        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor",
-                                 branch, base_ref], capture_output=True, text=True).returncode == 0
+        merged = gitio.git(child_root, "merge-base", "--is-ancestor", branch, base_ref)[0] == 0
         e["merged_into_base"] = merged
         if merged:
             e["status"] = "superseded"

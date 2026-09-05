@@ -38,6 +38,7 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared.gitio import git
 from ai_ops_kit.planning import contours as _contours
 
 PLAN_REL = "planning/plan.yaml"
@@ -333,11 +334,9 @@ def _trunk_ref(root):
     и в рабочей копии работы возвращает саму эту ветку. Замер 20.08.2026: из копии прогона сверка
     получалась `ai-ops/w` против `ai-ops/w` и объявляла любую заявку влитой. Здесь нужен ствол, и он
     берётся списком явных кандидатов — без догадок."""
-    import subprocess
+    # Единый вход к git с таймаутом (см. shared/gitio): зависший git не вешает сверку с базой.
     for cand in ("origin/main", "main", "origin/master", "master"):
-        r = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", cand],
-                           capture_output=True, text=True)
-        if r.returncode == 0:
+        if git(root, "rev-parse", "--verify", "--quiet", cand)[0] == 0:
             return cand
     return None
 
@@ -348,24 +347,20 @@ def _branch_state(root, branch, trunk):
     Состояния: `in-base` — коммиты ветки уже в стволе; `ahead` — ветка впереди; `absent` — ссылки нет
     ни локально, ни на origin (удалена после слияния либо не выкачана — РАЗЛИЧИТЬ НЕЛЬЗЯ, и мы не
     угадываем)."""
-    import subprocess
+    # Единый вход к git с таймаутом (см. shared/gitio).
     ref = None
     for cand in (branch, f"origin/{branch}"):
-        r = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", cand],
-                           capture_output=True, text=True)
-        if r.returncode == 0:
+        if git(root, "rev-parse", "--verify", "--quiet", cand)[0] == 0:
             ref = cand
             break
     if ref is None:
         return "absent", None
-    merged = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", ref, trunk],
-                            capture_output=True, text=True).returncode == 0
+    merged = git(root, "merge-base", "--is-ancestor", ref, trunk)[0] == 0
     if merged:
         return "in-base", 0
-    r = subprocess.run(["git", "-C", str(root), "rev-list", "--count", f"{trunk}..{ref}"],
-                       capture_output=True, text=True)
+    _rc, out, _ = git(root, "rev-list", "--count", f"{trunk}..{ref}")
     try:
-        ahead = int((r.stdout or "").strip())
+        ahead = int(out)
     except ValueError:
         ahead = None
     return "ahead", ahead

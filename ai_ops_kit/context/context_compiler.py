@@ -36,6 +36,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import project_detector    # noqa: E402
+from ai_ops_kit.shared.gitio import git           # noqa: E402
 
 CONTEXT_BUDGET_DEFAULT = 120_000   # токенов; override через signals["context_budget"] или config
 
@@ -261,9 +262,9 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None):
 
 
 def _git_head(root):
-    import subprocess
-    r = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
-    return r.stdout.strip() if r.returncode == 0 else None
+    # Единый вход к git с таймаутом (см. shared/gitio): зависший git не вешает компиляцию контекста.
+    rc, out, _ = git(root, "rev-parse", "HEAD")
+    return out if rc == 0 else None
 
 
 # Контекстные окна моделей (токены). Читаются из registry/models.yaml (SoT), не хардкод.

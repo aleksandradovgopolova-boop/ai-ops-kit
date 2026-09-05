@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from ai_ops_kit.shared.gitio import git
 
 # ВАЖНО (finding аудита исполнения): shell — НЕ полноценная security boundary. Статически
 # проверить произвольную команду нельзя, поэтому НА ВХОДЕ для shell действуют только timeout +
@@ -525,15 +526,14 @@ def scrub_env(env=None, passthrough=None):
 
 
 def _revision(root):
-    # finding аудита (P0.5): полный SHA (не --short) — надёжный идентификатор ревизии,
-    # к которому привязывается evidence; короткий SHA теоретически коллизирует.
-    rc = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
-                        capture_output=True, text=True)
-    return rc.stdout.strip() if rc.returncode == 0 else None
+    # P0.5: полный SHA (не --short) — надёжный идентификатор ревизии для evidence. gitio: таймаут.
+    code, out, _ = git(root, "rev-parse", "HEAD")
+    return out if code == 0 else None
 
 
 def _git_q(root, *args):
-    """git в root без интерактива. -> (rc, stdout). Ошибка git не роняет брокер."""
+    """git в root без интерактива. -> (rc, stdout). Ошибка git не роняет брокер.
+    RAW (не gitio.git): нужен env=scrub_env() и stdout ДОСЛОВНО для `_porcelain`; timeout= задан явно."""
     try:
         r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
                            timeout=60, env=scrub_env())

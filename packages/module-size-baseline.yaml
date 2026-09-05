@@ -23,8 +23,8 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 773
-  ai_ops_kit/planning/delivery_plan.py: 1140
-  ai_ops_kit/lifecycle/active_work.py: 1073
+  ai_ops_kit/planning/delivery_plan.py: 1135
+  ai_ops_kit/lifecycle/active_work.py: 1068
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 759
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
@@ -233,5 +233,17 @@ raises:
       пути в карту ТОЛЬКО на self-host. +31 строка — детектор с рационале и врезка; расщеплять
       725-строчный tool_broker ради одного условного правила непропорционально. Итог 725 -> 756
       осознанно под факт. Ратчет держит рост вниз от 756.
+  - at: '2026-09-05'
+    what: lower_ceiling
+    from: 'delivery_plan.py = 1140; active_work.py = 1073'
+    to: 'delivery_plan.py = 1135; active_work.py = 1068'
+    work: gitio-timeout-consolidation (P1, аудит 10 ролей)
+    why: >-
+      Прямые git-субпроцессы сведены на shared.gitio (один вход с таймаутом): вызовы вида
+      `subprocess.run(["git", "-C", str(root), …], capture_output=True, text=True)` заменены на
+      `gitio.git(root, …)`, а импорт `subprocess` там, где он стал не нужен, снят. Это чистое
+      усыхание, а не потеря поведения: delivery_plan.py 1140 -> 1135, active_work.py 1073 -> 1068.
+      Потолки опущены под факт (ратчет ходит вниз; усыхание тест module-size лишь просит пере-снять,
+      чтобы потолок == факту).
 
 

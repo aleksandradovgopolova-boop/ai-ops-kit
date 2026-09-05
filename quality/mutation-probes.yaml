@@ -646,8 +646,8 @@ probes:
 - id: registry-merged-work-detected-by-content
   kind: guard
   file: ai_ops_kit/lifecycle/active_work.py
-  find: '        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor",'
-  replace_with: '        merged = subprocess.run(["git", "-C", str(child_root), "merge-base", "--is-ancestor2",'
+  find: '        merged = gitio.git(child_root, "merge-base", "--is-ancestor", branch, base_ref)[0] == 0'
+  replace_with: '        merged = gitio.git(child_root, "merge-base", "--is-ancestor2", branch, base_ref)[0] == 0'
   tests:
   - tests/unit/test_registry_reconciles_with_base.py
   why: 'Влитость определяется СОДЕРЖАНИЕМ (коммиты ветки содержатся в базе), а не числом расхождения:
