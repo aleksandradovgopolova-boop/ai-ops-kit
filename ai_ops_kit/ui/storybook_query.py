@@ -9,6 +9,13 @@ read-only. Здесь — детерминированный read-only слой 
 файлов, метаданные story (title/name/importPath/tags). UI-evidence и exact-SHA — уже в
 storybook_adapter; здесь read-only навигация по каталогу для контекста агентов.
 
+MCP-ДОСТУП. UI-система объявлена MCP-доступным инструментом `storybook-query` в registry/tools.yaml
+(protocol: mcp, permission_level: read-only) и в registry/capability-index.yaml (tool/mcp). Доступ =
+этот минимальный read-only адаптер через MCP-декларацию: MCP-runtime оборачивает детерминированный
+вход `--json` как tool. Это НЕ отдельный MCP-сервер/SaaS — полноценный MCP-сервер сознательно отложен
+(ревью владельца: «Storybook MCP — минимальный адаптер, а не центр; полноценный сервер — не сейчас»).
+Инструмент строго read-only: не даёт записи (fail-closed по устройству — здесь нет мутирующих путей).
+
 CLI: storybook_query.py <child_root> [--related a.tsx,b.tsx] [--json] | --selftest
 """
 from __future__ import annotations

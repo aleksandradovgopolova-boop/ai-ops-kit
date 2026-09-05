@@ -99,8 +99,11 @@ KNOWN_DORMANT: dict[str, str] = {
         "asymmetric fail-closed судья, ЯВНО experimental/qualification-only и НЕ подключён к "
         "рабочему security_review (сказано в докстринге модуля); 0 импортеров",
     f"{PKG}.ui.storybook_query":
-        "read-only Storybook-адаптер (цель storybook-as-visual-contract, active); 0 импортеров — "
-        "запускается как MCP-инструмент, но в рабочий контур не проведён",
+        "read-only Storybook-адаптер (цель storybook-as-visual-contract, active); ОБЪЯВЛЕН "
+        "MCP-доступным инструментом storybook-query в registry/tools.yaml + capability-index.yaml "
+        "(доступ = минимальный read-only адаптер через MCP-декларацию, не MCP-сервер). Но 0 "
+        "не-тестовых Python-импортёров: реестровая декларация не создаёт импортёра, рабочий путь "
+        "его пока не зовёт — честно остаётся дормантным до проводки живым потребителем",
 }
 
 
