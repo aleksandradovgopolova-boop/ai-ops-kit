@@ -299,6 +299,57 @@ def generate_design_options(contract: dict) -> list[dict]:
     return options
 
 
+def option_tradeoff(option: dict) -> str | None:
+    """Названный компромисс варианта — непустой `tradeoffs.cons`. -> строка или None.
+
+    Осознанный компромисс — это то, чем ПЛАТЯТ за вариант (`cons`). Плюсы есть у любого макета;
+    вариант становится выбором только когда названа его цена. Нет цены -> None, и это ошибка,
+    а не мелочь оформления (см. `check_design_options`).
+    """
+    if not isinstance(option, dict):
+        return None
+    tr = option.get("tradeoffs")
+    if not isinstance(tr, dict):
+        return None
+    cons = [str(c).strip() for c in (tr.get("cons") or []) if str(c).strip()]
+    if not cons:
+        return None
+    return "; ".join(cons)
+
+
+def check_design_options(options: list) -> list[str]:
+    """Инвариант КОДОМ, а не прозой: КАЖДЫЙ вариант несёт названный компромисс. -> список ошибок.
+
+    Вариант без trade-off — это «вариант без осознанного компромисса»: он выглядит выбором, но не
+    даёт человеку, с чем его сравнивать, и молча выдаёт один макет за взвешенное решение. Такой
+    набор предлагать нельзя. Пустой список ошибок = набор можно предлагать человеку.
+    """
+    errors: list[str] = []
+    if not options:
+        errors.append("нет вариантов опыта — предлагать человеку нечего")
+    for i, opt in enumerate(options or []):
+        name = (isinstance(opt, dict) and (opt.get("name") or opt.get("id"))) or f"#{i}"
+        if option_tradeoff(opt) is None:
+            errors.append(f"вариант «{name}» без осознанного компромисса "
+                          f"(пустой tradeoffs.cons) — это не выбор, а один макет")
+    return errors
+
+
+def offer_design_options(contract: dict) -> list[dict]:
+    """Варианты опыта для контракта, каждый с НАЗВАННЫМ компромиссом. Fail-closed.
+
+    Это точка, через которую варианты попадают в рабочий контур (`engineering_advisor`): она
+    предлагает набор ТОЛЬКО если инвариант `check_design_options` выполнен. Вариант без trade-off
+    не проскакивает молча — функция бросает `ValueError`, и вызывающий обязан назвать дефект
+    человеку, а не показать псевдовыбор.
+    """
+    options = generate_design_options(contract)
+    errors = check_design_options(options)
+    if errors:
+        raise ValueError("варианты опыта без осознанного компромисса: " + "; ".join(errors))
+    return options
+
+
 def process_contract(contract_path: Path) -> dict:
     """Process Experience Contract and generate stories + options."""
     contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
