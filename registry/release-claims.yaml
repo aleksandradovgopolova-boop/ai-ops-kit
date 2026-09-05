@@ -219,7 +219,10 @@ evidence_scopes:
       объявленный пол requires-python, установку в чистое окружение, другие ОС. Ни один дефект
       совместимости здесь не виден в принципе — не потому что их нет, а потому что не с чем сравнить.
   compatibility-matrix:
-    obtained_by: "CI: джобы python39-compat, pipeline-e2e (3.9/3.12), clean-install"
+    # Охват называет ФАКТИЧЕСКИ гоняемые версии: пол requires-python = ">=3.12" проверяется на 3.12 и
+    # 3.13 (обещание совместимости с 3.13+ доказано, а не только объявлено). Прежний текст называл
+    # снятую джобу python39-compat и версии 3.9/3.12 — 3.9 снят как EOL, пол поднят до 3.12.
+    obtained_by: "CI: джобы pipeline-e2e, clean-install, upgrade-path (3.12/3.13)"
     covers: >
       объявленный пол requires-python и установку туда, где нет ни кита, ни pytest, ни PYTHONPATH.
     does_not_cover: >
