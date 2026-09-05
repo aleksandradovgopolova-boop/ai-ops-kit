@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,8 @@ import pytest
 PKG_ROOT = Path(__file__).resolve().parents[2]
 
 from ai_ops_kit.engine import execution_pipeline
+from ai_ops_kit.engine import pipeline_setup
+from ai_ops_kit.engine import tool_broker
 
 from _pipeline_helpers import _QUICK_SIG, _head_branch, _init_git, _init_python_repo
 
@@ -623,6 +626,111 @@ class TestResolveBaseAuto:
         rvb = execution_pipeline._verify_remote_base(child_root, orig, base_sha)
         assert rvb.get("verdict") == "unverifiable"
         assert rvb.get("reason")
+
+
+@pytest.mark.unit
+class TestSelfHostGateToolProvisioning:
+    """#468: прогон над САМИМ китом получает ворота-инструменты кита в среду прогона.
+
+    (а) self-host True -> шаг подготовки ПЫТАЕТСЯ провижинить (вызов + запись в prepare);
+    (б) self-host False (обычная дочка) -> подготовка НЕ изменилась (провижининга нет);
+    (в) провижининг не удался -> prepare_ok=False -> честная деградация (не green)."""
+
+    def _prepare(self, work_root):
+        pol = tool_broker.Policy(level="execution", child_root=str(work_root))
+        profile = {"stacks": []}
+        return pipeline_setup._prepare_environment(
+            profile, work_root, pol, True,
+            install_deps=True, isolate=True, baseline_diff=False)
+
+    def test_self_host_true_attempts_provisioning(self, child_root, monkeypatch):
+        _init_git(child_root)
+        calls = {"n": 0, "root": None}
+
+        def spy(work_root):
+            calls["n"] += 1
+            calls["root"] = work_root
+            return {"kind": "self-host-gate-tools", "ok": True, "bin_dir": "/coord/bin",
+                    "tools_present": ["ruff", "pytest"], "tools_missing": [],
+                    "reason": "провижинились из координаторского venv"}
+
+        monkeypatch.setattr(tool_broker, "_is_kit_self_host", lambda r: True)
+        monkeypatch.setattr(pipeline_setup, "_provision_kit_gate_tools", spy)
+        prepare, prepare_ok, _baseline, _mutated = self._prepare(child_root)
+        assert calls["n"] == 1                    # провижининг ВЫЗВАН
+        assert str(calls["root"]) == str(child_root)
+        entry = [p for p in (prepare or []) if p.get("language") == "kit-self-host"]
+        assert len(entry) == 1                    # факт провижининга В prepare (наблюдаемость)
+        assert entry[0]["ok"] is True
+        assert prepare_ok is True
+
+    def test_child_repo_unchanged(self, child_root, monkeypatch):
+        """self-host False: подготовка НЕ трогает среду провижинингом (путь дочек не изменён)."""
+        _init_git(child_root)
+        calls = {"n": 0}
+        monkeypatch.setattr(tool_broker, "_is_kit_self_host", lambda r: False)
+        monkeypatch.setattr(pipeline_setup, "_provision_kit_gate_tools",
+                            lambda r: calls.__setitem__("n", calls["n"] + 1))
+        prepare, prepare_ok, _baseline, _mutated = self._prepare(child_root)
+        assert calls["n"] == 0                    # провижининг НЕ вызван для дочки
+        assert not any(p.get("language") == "kit-self-host" for p in (prepare or []))
+        assert prepare_ok is True
+
+    def test_failed_provisioning_degrades_prepare_ok(self, child_root, monkeypatch):
+        """Провижининг не удался -> prepare_ok=False -> вердикт деградирует честно, не green."""
+        _init_git(child_root)
+
+        def failing(work_root):
+            return {"kind": "self-host-gate-tools", "ok": False, "bin_dir": None,
+                    "tools_present": [], "tools_missing": ["ruff", "pytest"],
+                    "reason": "координаторский venv без ворот-инструментов — деградирует честно"}
+
+        monkeypatch.setattr(tool_broker, "_is_kit_self_host", lambda r: True)
+        monkeypatch.setattr(pipeline_setup, "_provision_kit_gate_tools", failing)
+        prepare, prepare_ok, _baseline, _mutated = self._prepare(child_root)
+        assert prepare_ok is False                # ослабленная зелень НЕ выдаётся за настоящую
+        entry = [p for p in (prepare or []) if p.get("language") == "kit-self-host"]
+        assert entry and entry[0]["ok"] is False
+        # env_qualified = prepare_ok OR проверки реально отработали; при пустых checks -> не green
+        assert execution_pipeline._env_proven_ok({}) is False
+
+
+@pytest.mark.unit
+class TestProvisionKitGateTools:
+    """Юнит-тесты самого провижининга: переиспользование координаторского venv + деградация."""
+
+    def test_ok_when_anchor_tools_present(self, tmp_path, monkeypatch):
+        bin_dir = tmp_path / "venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "ruff").write_text("#!/bin/sh\n")
+        (bin_dir / "pytest").write_text("#!/bin/sh\n")
+        monkeypatch.setattr(pipeline_setup, "_coordinator_bin_dir", lambda: bin_dir)
+        monkeypatch.setenv("PATH", "/usr/bin")
+        res = pipeline_setup._provision_kit_gate_tools(tmp_path)
+        assert res["ok"] is True
+        assert set(res["tools_present"]) == {"ruff", "pytest"}
+        assert str(bin_dir) in os.environ["PATH"].split(os.pathsep)
+        assert os.environ["PATH"].split(os.pathsep)[0] == str(bin_dir)   # координатор ПЕРВЫЙ
+
+    def test_fail_when_tools_missing(self, tmp_path, monkeypatch):
+        bin_dir = tmp_path / "venv" / "bin"
+        bin_dir.mkdir(parents=True)   # пустой каталог — якорных инструментов нет
+        monkeypatch.setattr(pipeline_setup, "_coordinator_bin_dir", lambda: bin_dir)
+        res = pipeline_setup._provision_kit_gate_tools(tmp_path)
+        assert res["ok"] is False
+        assert "ruff" in res["tools_missing"] and "pytest" in res["tools_missing"]
+        assert "деградирует" in res["reason"]
+
+    def test_fail_when_no_coordinator(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(pipeline_setup, "_coordinator_bin_dir", lambda: None)
+        res = pipeline_setup._provision_kit_gate_tools(tmp_path)
+        assert res["ok"] is False
+        assert res["bin_dir"] is None
+
+    def test_coordinator_bin_dir_is_sys_executable_parent(self):
+        got = pipeline_setup._coordinator_bin_dir()
+        # под тестовым интерпретатором sys.executable существует -> parent-каталог возвращается
+        assert got == Path(sys.executable).parent
 
 
 @pytest.mark.unit

@@ -75,7 +75,7 @@ from ai_ops_kit.engine.pipeline_readiness import (  # noqa: E402,F401
 # тесты через execution_pipeline.X). run_pipeline остаётся здесь.
 from ai_ops_kit.engine.pipeline_setup import (  # noqa: E402,F401
     _setup_isolation, _prepare_environment, _commit_work, _assemble_evidence,
-    _seam_scan_advisory,
+    _seam_scan_advisory, _provision_kit_gate_tools, _coordinator_bin_dir,
 )
 
 

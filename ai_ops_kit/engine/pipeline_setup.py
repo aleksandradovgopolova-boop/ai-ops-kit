@@ -17,6 +17,8 @@ execution_pipeline — иначе получился бы цикл. `run_pipelin
 """
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 from ai_ops_kit.engine import tool_broker              # noqa: E402
@@ -169,9 +171,83 @@ def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
             "delivery_pf": delivery_pf}
 
 
+# #468 SELF-HOST GATE-TOOLS: когда кит строит САМ СЕБЯ (run --execute в изолированном
+# agent-worktree), песочница прогона не видит координаторского .venv, где стоят ворота-инструменты
+# (ruff/pytest/…), которыми судит готовность и которыми проверяет CI. Итог — прогон судит
+# ОСЛАБЛЕННЫМ набором (exit 127) и расходится с CI. Здесь среда прогона получает те же инструменты.
+#
+# Якорные инструменты: их присутствия в координаторском venv достаточно, чтобы отличить полный
+# dev-venv от голого окружения. Полный набор объявлен в requirements-dev.txt (ruff/pytest/
+# pytest-cov/pytest-xdist/hypothesis/mypy); проверять весь список тут незачем — venv либо dev, либо нет.
+_KIT_GATE_TOOL_ANCHORS = ("ruff", "pytest")
+
+
+def _coordinator_bin_dir():
+    """Каталог bin КООРДИНАТОРСКОГО интерпретатора (того, под которым исполняется сам кит).
+
+    Кит запущен как `<venv>/bin/python -m ai_ops_kit…`, поэтому `sys.executable` указывает в
+    координаторский venv, где уже стоят ворота-инструменты. Их каталог = parent от sys.executable.
+    None, если определить нельзя (тогда провижининг честно неуспешен)."""
+    try:
+        exe = Path(sys.executable)
+    except (TypeError, ValueError):
+        return None
+    return exe.parent if exe.name and exe.parent.is_dir() else None
+
+
+def _provision_kit_gate_tools(work_root):
+    """SELF-HOST: сделать ворота-инструменты кита (ruff/pytest/…) доступными среде прогона (#468).
+
+    Способ выбран НАИМЕНЕЕ ИНВАЗИВНЫЙ и без сети: ПЕРЕИСПОЛЬЗОВАТЬ уже подготовленный
+    координаторский venv (тот, под которым исполняется кит), добавив его bin в НАЧАЛО PATH среды
+    прогона. Версии инструментов совпадают с координаторскими один-в-один — никакого дрейфа
+    установки и никакой правки рантайм-зависимостей кита. Гейты профиля зовут голые `ruff check`/
+    `pytest`, и после этого шага shell прогона находит их на PATH ровно как координатор и CI.
+
+    ЧЕСТНАЯ ДЕГРАДАЦИЯ (не выдаём ослабленную зелень за настоящую): если каталог интерпретатора не
+    определить ЛИБО якорных инструментов там нет — возвращаем ok=False. Вызывающий кладёт этот
+    результат в `prepare`, поэтому prepare_ok становится False и вердикт готовности деградирует
+    штатным механизмом (#454/#456: env_qualified = prepare_ok OR проверки реально отработали).
+
+    -> dict {"kind","ok","reason","bin_dir","tools_present","tools_missing"} для наблюдаемости."""
+    bin_dir = _coordinator_bin_dir()
+    base = {"kind": "self-host-gate-tools"}
+    if bin_dir is None:
+        return {**base, "ok": False, "bin_dir": None, "tools_present": [],
+                "tools_missing": list(_KIT_GATE_TOOL_ANCHORS),
+                "reason": "координаторский интерпретатор не определить (sys.executable) — "
+                          "ворота-инструменты кита не провижинились; вердикт деградирует честно"}
+
+    def _has(tool):
+        return (bin_dir / tool).exists() or (bin_dir / f"{tool}.exe").exists()
+
+    present = [t for t in _KIT_GATE_TOOL_ANCHORS if _has(t)]
+    missing = [t for t in _KIT_GATE_TOOL_ANCHORS if t not in present]
+    if missing:
+        return {**base, "ok": False, "bin_dir": str(bin_dir), "tools_present": present,
+                "tools_missing": missing,
+                "reason": f"в координаторском venv ({bin_dir}) нет ворот-инструментов кита "
+                          f"{missing} — среда прогона не получит их; вердикт деградирует честно "
+                          f"(не выдаём ослабленную зелень за настоящую)"}
+    # bin координатора — В НАЧАЛО PATH: последующие shell-гейты (ruff/pytest) увидят его первым.
+    cur = os.environ.get("PATH", "")
+    parts = cur.split(os.pathsep) if cur else []
+    if str(bin_dir) not in parts:
+        os.environ["PATH"] = os.pathsep.join([str(bin_dir), *parts]) if parts else str(bin_dir)
+    return {**base, "ok": True, "bin_dir": str(bin_dir), "tools_present": present,
+            "tools_missing": [],
+            "reason": f"ворота-инструменты кита провижинились из координаторского venv ({bin_dir}) "
+                      f"— прогон судит НАСТОЯЩИМ набором (self-host), как CI"}
+
+
 def _prepare_environment(profile, work_root, pol, is_git, *, install_deps, isolate, baseline_diff):
     """Фаза install-deps: зависимости стека + baseline-evidence + откат мутаций подготовки до правок
-    модели. v3.38 (K6): вынесено из run_pipeline. -> (prepare, prepare_ok, baseline_checks, mutated)."""
+    модели. v3.38 (K6): вынесено из run_pipeline. -> (prepare, prepare_ok, baseline_checks, mutated).
+
+    #468 SELF-HOST: если цель прогона — САМ кит (tool_broker._is_kit_self_host), среда прогона
+    ДОПОЛНИТЕЛЬНО получает ворота-инструменты кита (ruff/pytest/…) из координаторского venv, чтобы
+    гейты исполнялись НАСТОЯЩИМ набором (как CI), а не ослабленным. Провал провижининга уходит в
+    `prepare` -> prepare_ok=False -> честная деградация вердикта. Путь ДОЧЕК (не self-host) не тронут."""
     # P0.6/v2.93: снимок untracked ДО install/baseline — удалить только НОВЫЕ (package-lock и т.п.),
     # не тронув untracked пользователя. Игнорируемые (node_modules) сюда не попадают.
     untracked_before_prep = _untracked(work_root) if is_git else set()
@@ -180,6 +256,16 @@ def _prepare_environment(profile, work_root, pol, is_git, *, install_deps, isola
     prepare = None
     if install_deps and isolate:
         prepare = _install_dependencies(profile, work_root, pol)
+        # #468 SELF-HOST: прогон над самим китом получает ворота-инструменты кита в среду прогона —
+        # так гейты исполняются НАСТОЯЩИМ набором (как CI). Только self-host; путь дочек не тронут.
+        if tool_broker._is_kit_self_host(work_root):
+            _prov = _provision_kit_gate_tools(work_root)
+            # Результат едет в `prepare` (наблюдаемость в отчёте) И влияет на prepare_ok: провал
+            # провижининга -> prepare_ok=False -> честная деградация (не ослабленная зелень).
+            prepare = (prepare or []) + [{
+                "language": "kit-self-host", "command": "provision gate-tools",
+                "allowed": True, "ok": _prov["ok"], "exit_code": None,
+                "output_tail": _prov["reason"][-200:]}]
     # P0.6: install обязан ПРОЙТИ — иначе baseline/проверки недостоверны, прогон не может быть ready.
     prepare_ok = (prepare is None) or all(p.get("ok") for p in prepare)
     # 3c. baseline-evidence: прогон проверок на БАЗЕ до правок — отличить пред-существующие провалы
