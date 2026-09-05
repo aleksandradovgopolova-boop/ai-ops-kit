@@ -24,9 +24,9 @@ kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
 behavioral_count: 376
-structural_count: 63
-total_count: 439
-behavioral_share_pct: 85.65
+structural_count: 64
+total_count: 440
+behavioral_share_pct: 85.45
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -417,3 +417,17 @@ raises:
       installer И зовёт managed_set()/package_ownership()/filter_by_packages(), доказывая резолв цитаты
       ревьюера через границу поставки. Структурных не прибавилось (63 без изменений), доля выросла
       85.62% -> 85.65%. Baseline пере-записан на фактический замер (после ребейза на main с A/B/C).
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 376
+    from_total: 439
+    to_behavioral: 376
+    to_total: 440
+    to_share_pct: 85.45
+    work: block-push-guaranteed-by-environment (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.65% -> 85.45%): работа сделала песочницу credential-less для push и
+      добавила один СТРУКТУРНЫЙ тест-файл (tests/unit/test_credentialless_push_env.py). Он законно
+      структурный — парсит скрипты контейнера и гоняет raw git в tmp (product-код кита не импортирует и
+      не зовёт). Поведенческих не убыло (376 без изменений), прибавился один структурный (63 -> 64).
+      Не деградация поведенческого теста, а новый структурный контракт; снижение зафиксировано записью.
