@@ -138,6 +138,8 @@ def code_changed(child_root):
     Смотрим и индекс, и рабочее дерево, и неотслеживаемые файлы: правка, которую ещё не закоммитили,
     — всё равно правка. Пути самого кита исключены (см. `_is_kit_path`).
     """
+    # RAW, а не gitio.git: `git status --porcelain` — вывод с значимой ведущей колонкой XY,
+    # а gitio.git стянул бы её через .strip(). timeout= задан явно (инвариант против зависаний).
     try:
         r = subprocess.run(["git", "-C", str(child_root), "status", "--porcelain"],
                            capture_output=True, text=True, timeout=20, check=False)

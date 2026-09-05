@@ -35,12 +35,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
 from ai_ops_kit.gates.regression_evidence import is_doc_path
 from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401
+from ai_ops_kit.shared.gitio import git  # noqa: E402
 
 # Фрагмент — файл вида <что-это>.<тип>.md. Типы читаем из того же pyproject, если он есть;
 # запасной набор — типы towncrier по умолчанию в этом репозитории.
@@ -48,8 +48,8 @@ _FALLBACK_TYPES = ("feat", "fix", "quality", "chore")
 
 
 def _git(root, *args):
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    # Единый вход к git с таймаутом (см. shared/gitio): та же сигнатура (rc, out, err).
+    return git(root, *args)
 
 
 def resolve_base(root, base=None):

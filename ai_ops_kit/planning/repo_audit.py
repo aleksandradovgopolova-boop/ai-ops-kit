@@ -45,6 +45,7 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared.gitio import git
 from ai_ops_kit.planning import contours as _contours
 
 # Расширения, считающиеся исходным кодом при классификации. Список узкий сознательно: markdown и
@@ -69,14 +70,13 @@ VERIFIED, INFERRED, PARTIAL, MISSING, UNKNOWN, STALE, USER_CONFIRMED = (
 
 
 def _git(root: Path, *args):
-    """git с проглоченной ошибкой. -> stdout|None. None означает «история не читается»,
-    и это НЕ ноль коммитов: разница между ними меняет класс репозитория."""
+    """git с проглоченной ошибкой (единый вход с таймаутом, см. shared/gitio). -> stdout|None.
+    None означает «история не читается», и это НЕ ноль коммитов: разница меняет класс репозитория."""
     try:
-        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
-                           timeout=20, check=False)
+        rc, out, _ = git(root, *args, timeout=20)
     except (OSError, subprocess.SubprocessError):
         return None
-    return r.stdout.strip() if r.returncode == 0 else None
+    return out if rc == 0 else None
 
 
 def _product_ci(root) -> list:

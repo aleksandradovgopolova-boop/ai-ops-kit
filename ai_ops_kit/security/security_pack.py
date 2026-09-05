@@ -28,6 +28,7 @@ from pathlib import Path
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.shared.gitio import git  # noqa: E402
 from ai_ops_kit.security import security_scan  # noqa: E402
 import yaml           # noqa: E402
 
@@ -126,20 +127,18 @@ def _root_commit_files(root, base):
     """ЕДИНСТВЕННЫЙ законный случай неразрешимой базы: `<sha>~1`, где `<sha>` — КОРНЕВОЙ коммит.
     Родителя нет ПО ПОСТРОЕНИЮ, и охват тогда — файлы самого коммита, а не весь репозиторий.
     -> список путей; None, если случай другой (тогда вызывающий обязан отказаться)."""
-    import subprocess
     m = re.fullmatch(r"(.+)~1", str(base))
     if not m:
         return None
     sha = m.group(1)
-    # родителя нет -> это корень; у любого другого коммита `<sha>^` разрешается
-    if subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", f"{sha}^"],
-                      capture_output=True, text=True).returncode == 0:
+    # родителя нет -> это корень; у любого другого коммита `<sha>^` разрешается.
+    # Единый вход к git с таймаутом (см. shared/gitio): зависший git не вешает сбор security-пакета.
+    if git(root, "rev-parse", "--verify", "--quiet", f"{sha}^")[0] == 0:
         return None
-    r = subprocess.run(["git", "-C", str(root), "diff-tree", "--root", "--no-commit-id",
-                        "--name-only", "-r", sha], capture_output=True, text=True)
-    if r.returncode != 0:
+    rc, out, _ = git(root, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", sha)
+    if rc != 0:
         return None
-    return [ln for ln in r.stdout.splitlines() if ln.strip()]
+    return [ln for ln in out.splitlines() if ln.strip()]
 
 
 def _scan_scope(child_root, base):

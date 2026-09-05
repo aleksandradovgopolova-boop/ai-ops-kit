@@ -28,6 +28,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ai_ops_kit.shared.gitio import git  # noqa: E402
+
 # Секреты: известные форматы + generic key-in-quotes. Плейсхолдеры (xxxx/${...}/env) отсеиваем.
 SECRET_PATTERNS = [
     ("aws_access_key_id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
@@ -404,11 +406,11 @@ def _looks_binary(data: bytes) -> bool:
 
 
 def _git_changed_files(root, base):
-    r = subprocess.run(["git", "-C", str(root), "diff", "--name-only", f"{base}..HEAD"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
+    # Единый вход к git с таймаутом (см. shared/gitio): зависший git не вешает security-скан.
+    rc, out, _ = git(root, "diff", "--name-only", f"{base}..HEAD")
+    if rc != 0:
         return None
-    return [ln for ln in r.stdout.splitlines() if ln.strip()]
+    return [ln for ln in out.splitlines() if ln.strip()]
 
 
 def _read_files(root, rels):
@@ -429,8 +431,14 @@ def _read_files(root, rels):
 
 
 def _git_show(root, ref, rel):
-    r = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{rel}"],
-                       capture_output=True, text=True)
+    # RAW, а не gitio.git: нужен ДОСЛОВНЫЙ снимок файла (`git show <ref>:<path>`), а gitio.git
+    # стягивает stdout через .strip() и срезал бы ведущие/хвостовые пробелы содержимого. timeout=
+    # обязателен явно — иначе зависший git повесил бы скан (тот же инвариант, что держит gitio).
+    try:
+        r = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{rel}"],
+                           capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired:
+        return ""
     return r.stdout if r.returncode == 0 else ""
 
 
@@ -442,9 +450,10 @@ def scan_repo(root, base=None):
     root = Path(root)
     changed = _git_changed_files(root, base) if base else None
     if changed is None:
-        # не git / нет базы: сканируем отслеживаемые текстовые файлы целиком (best-effort)
-        r = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True)
-        changed = [ln for ln in r.stdout.splitlines() if ln.strip()] if r.returncode == 0 else []
+        # не git / нет базы: сканируем отслеживаемые текстовые файлы целиком (best-effort).
+        # Единый вход к git с таймаутом (см. shared/gitio).
+        rc, out, _ = git(root, "ls-files")
+        changed = [ln for ln in out.splitlines() if ln.strip()] if rc == 0 else []
     files = _read_files(root, changed)
     secrets = scan_secrets(files)
     injections = scan_injection(files)

@@ -31,11 +31,21 @@ import tempfile
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import gitio       # noqa: E402
 from ai_ops_kit.engine import parallel_executor as pe   # noqa: E402
 
 
 def _git(root, *args, check=True):
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    # RAW-обёртка (а не gitio.git): вызыватели читают CompletedProcess — .stdout/.stderr/.returncode —
+    # и полагаются на порядок mutating-команд (checkout/reset/merge/push). timeout= обязателен по
+    # тому же инварианту, что держит gitio: зависший git не вешает fan-in. Таймаут -> синтетический
+    # rc=124, и check=True превратит его в RuntimeError, как любой другой сбой git.
+    try:
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                           timeout=gitio.GIT_TIMEOUT_DEFAULT)
+    except subprocess.TimeoutExpired:
+        r = subprocess.CompletedProcess(["git", "-C", str(root), *args], 124, "",
+                                        f"git timeout {gitio.GIT_TIMEOUT_DEFAULT}s")
     if check and r.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()[:200]}")
     return r
@@ -51,9 +61,8 @@ def _ensure_identity(root):
     настроек. Fallback ставится ТОЛЬКО когда идентичность не разрешается — реальные окружения
     (у пользователя/агента она есть) сохраняют свою и авторство коммитов не подменяется.
     """
-    probe = subprocess.run(["git", "-C", str(root), "var", "GIT_COMMITTER_IDENT"],
-                           capture_output=True, text=True)
-    if probe.returncode == 0:
+    # Единый вход к git с таймаутом (см. shared/gitio): читаем только rc.
+    if gitio.git(root, "var", "GIT_COMMITTER_IDENT")[0] == 0:
         return False
     _git(root, "config", "user.email", "ai-ops@local", check=False)
     _git(root, "config", "user.name", "AI Ops", check=False)
@@ -286,11 +295,12 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
     def runner(pkg):
         pid = pkg["id"]
         cpath = Path(clones_dir) / pid
-        cl = subprocess.run(["git", "clone", "-q", str(child_root), str(cpath)], capture_output=True, text=True)
-        if cl.returncode != 0:  # #7 fail-closed
+        # git clone — форма не под `-C`: единый вход с таймаутом через gitio.run (см. shared/gitio).
+        cl_rc, _, cl_err = gitio.run(["clone", "-q", str(child_root), str(cpath)])
+        if cl_rc != 0:  # #7 fail-closed
             clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}", "error": "clone-failed"}
             return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
-                    "error": f"clone: {cl.stderr.strip()[:160]}", "clone": str(cpath)}
+                    "error": f"clone: {cl_err[:160]}", "clone": str(cpath)}
         _ensure_identity(cpath)  # прогон пакета коммитит в этом клоне — идентичность не унаследована
         co = _git(cpath, "checkout", "-q", base_sha, check=False)
         if co.returncode != 0:  # #7 fail-closed
@@ -381,10 +391,11 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
     try:
         clones = {}
         iroot = Path(clones_dir) / "_integration"
-        cl = subprocess.run(["git", "clone", "-q", str(child_root), str(iroot)], capture_output=True, text=True)
-        if cl.returncode != 0:  # #7 fail-closed
+        # git clone — форма не под `-C`: единый вход с таймаутом через gitio.run (см. shared/gitio).
+        cl_rc, _, cl_err = gitio.run(["clone", "-q", str(child_root), str(iroot)])
+        if cl_rc != 0:  # #7 fail-closed
             return {"proceed": False, "stage": "isolation", "execution_concurrency": "concurrent",
-                    "isolation": "per-package-clone", "reason": f"integration clone: {cl.stderr.strip()[:160]}",
+                    "isolation": "per-package-clone", "reason": f"integration clone: {cl_err[:160]}",
                     "delivery": {"open_pr": False}, "delivery_plan": None, "pr": None}
         _ensure_identity(iroot)  # merge fan-in — это КОММИТ; клон не унаследовал идентичность
         clones["_integration"] = {"path": str(iroot)}
