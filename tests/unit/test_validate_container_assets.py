@@ -15,12 +15,16 @@ GOOD_DOCKERFILE = (
     "RUN pyyaml openspec\n"
     "COPY . /opt/ai-ops-kit\n"
     "USER runner\n"
+    "ENV GIT_ASKPASS=/bin/false GIT_TERMINAL_PROMPT=0 "
+    'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=""\n'
     'ENTRYPOINT ["x"]\n'
 )
 
 GOOD_WRAPPER = (
     'git clone --no-hardlinks --local "$CHILD_ABS" "$CLONE"\n'
     "docker run --read-only --tmpfs /tmp --memory 2g --cpus 2 --pids-limit 512 "
+    "-e GIT_ASKPASS=/bin/false -e GIT_TERMINAL_PROMPT=0 "
+    "-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=credential.helper -e GIT_CONFIG_VALUE_0= "
     '--cap-drop ALL --security-opt no-new-privileges --mount type=bind,src=${CLONE},dst=/work img\n'
     '"$SCRIPT_DIR/deliver-run-branches.sh" "$CLONE" "$CHILD_ABS" "$SNAP_BEFORE"\n'
 )
@@ -59,6 +63,27 @@ def test_wrapper_direct_child_mount():
     bad_wr = GOOD_WRAPPER.replace("src=${CLONE},dst=/work", "src=${CHILD_ABS},dst=/work")
     errs = check_wrapper(bad_wr)
     assert any("worktree-only" in e for e in errs)
+
+
+@pytest.mark.unit
+def test_wrapper_credentialless_push_markers():
+    """Wrapper объявляет credential-less git для push (ПЕРВЫЙ рубеж недоставки — среда)."""
+    assert check_wrapper(GOOD_WRAPPER) == []
+    for marker in ("GIT_ASKPASS=/bin/false", "GIT_TERMINAL_PROMPT=0",
+                   "GIT_CONFIG_KEY_0=credential.helper"):
+        assert marker in GOOD_WRAPPER
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("dropped", [
+    "GIT_ASKPASS=/bin/false",
+    "GIT_TERMINAL_PROMPT=0",
+    "GIT_CONFIG_KEY_0=credential.helper",
+])
+def test_wrapper_without_credentialless_fails_closed(dropped):
+    """Fail-closed: убери гарантию credential-less → валидатор краснеет (для wrapper и Dockerfile)."""
+    assert any(dropped in e for e in check_wrapper(GOOD_WRAPPER.replace(dropped, "")))
+    assert any(dropped in e for e in check_dockerfile(GOOD_DOCKERFILE.replace(dropped, "")))
 
 
 @pytest.mark.unit

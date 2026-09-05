@@ -222,11 +222,17 @@ def _under(path: str, prefix: str, *, ignore_case: bool = False) -> bool:
 NETWORK_RE = re.compile(r"\b(curl|wget|nc|ncat|netcat|ssh|scp|sftp|telnet|rsync|ftp|"
                         r"nmap|dig|nslookup|http|https)\b", re.I)
 # git push из tool-loop: доставка ветки/PR — только доверенным кодом движка (pr_open), не моделью
-# (finding аудита v2.79 P0.2). ЧЕСТНО (v2.85, уточнено R-38): это best-effort текстовый денай.
-# _normalize снимает кавычки, продолжение строки и backslash-escape; ПЕРЕМЕННЫЕ/eval
-# (`p=push; git $p`) статически не ловятся — перечень обходов держать в _normalize актуальным,
-# иначе комментарий обещает больше, чем код (тот же класс, что R-33).
-# Жёсткая гарантия недоставки — окружение (нет push-credentials / git-wrapper), не regex.
+# (finding аудита v2.79 P0.2). ЧЕСТНО (v2.85, уточнено R-38): это best-effort текстовый денай —
+# ВТОРОЙ рубеж (defense-in-depth), НЕ гарантия. _normalize снимает кавычки, продолжение строки и
+# backslash-escape; ПЕРЕМЕННЫЕ/eval (`p=push; git $p`) статически не ловятся — перечень обходов
+# держать в _normalize актуальным, иначе комментарий обещает больше, чем код (тот же класс, что R-33).
+# ПЕРВЫЙ рубеж — СРЕДА: песочница credential-less для push (containers/run-sandboxed.sh + Dockerfile:
+# credential.helper="", GIT_ASKPASS=/bin/false, GIT_TERMINAL_PROMPT=0; .git-credentials/SSH-agent
+# внутрь не проброшены). Это закрывает АВТОМАТИЧЕСКИЕ каналы, которыми git сам добывает креду —
+# push через них падёт независимо от regex. ЧЕСТНО, НЕ полная гарантия: GITHUB_TOKEN всё же в
+# песочнице (для чтения GitHub) и push-способен — явную доставку им (токен в URL / API из скрипта)
+# ловят этот regex + медиатор shell, а не среда. Полная гарантия средой = read-only токен без
+# push-scope или host-side чтение GitHub (решение владельца, см. run-sandboxed.sh ОГРАНИЧЕНИЕ).
 GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
 
 # v2.85/2.87: команду в allowlist-режиме проверяем ПОСЕГМЕНТНО (первый бинарь каждого сегмента),
