@@ -33,7 +33,7 @@ ceilings:
   ai_ops_kit/intelligence/nightly_review.py: 954
   ai_ops_kit/validation/validate_own_medicine.py: 732
   ai_ops_kit/gates/gate_executor.py: 726
-  ai_ops_kit/engine/tool_broker.py: 756
+  ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
 
 raises:
@@ -245,5 +245,14 @@ raises:
       усыхание, а не потеря поведения: delivery_plan.py 1140 -> 1135, active_work.py 1073 -> 1068.
       Потолки опущены под факт (ратчет ходит вниз; усыхание тест module-size лишь просит пере-снять,
       чтобы потолок == факту).
-
-
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 756'
+    to: 'ai_ops_kit/engine/tool_broker.py = 762'
+    work: block-push-guaranteed-by-environment (P1)
+    why: >-
+      Уточнён комментарий-рационале про рубежи недоставки: credential-less-песочница закрывает
+      АВТОМАТИЧЕСКИЕ каналы креды git (первый рубеж), regex block_push — второй; честно названо
+      ОГРАНИЧЕНИЕ — push-способный GITHUB_TOKEN остаётся в песочнице для чтения GitHub, полная
+      гарантия требует read-only токена. +6 строк — рационале написано, а не срезано ради счётчика.
+      Ратчет держит рост вниз от 762.
