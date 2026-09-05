@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 377
-structural_count: 65
-total_count: 442
-behavioral_share_pct: 85.29
+behavioral_count: 378
+structural_count: 66
+total_count: 444
+behavioral_share_pct: 85.14
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -458,3 +458,17 @@ raises:
       тест-файл (tests/unit/test_roid_cost_to_outcome.py) — импортирует cost_account/ai_ops_run_lifecycle
       И зовёт их. Структурных не прибавилось (65), доля выросла 85.26% -> 85.29%. Baseline пере-записан
       на факт (после ребейза на main с A/B/C/#9/#11).
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 377
+    from_total: 442
+    to_behavioral: 378
+    to_total: 444
+    to_share_pct: 85.14
+    work: split-tool-broker-test-and-mega-guard (#438)
+    why: >-
+      Разрез test_tool_broker.py (964 стр) на test_tool_broker.py + test_tool_broker_shell.py
+      (оба поведенческие, число собранных тестов 88==88) + новый СТРУКТУРНЫЙ страж
+      tests/contracts/test_no_mega_test_file.py (порог 850). Итог: +1 поведенческий файл (shell),
+      +1 структурный (страж). Доля 85.29 -> 85.14 — снижение от структурного стража, зафиксировано
+      записью, не молча.
