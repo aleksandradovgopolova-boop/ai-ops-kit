@@ -381,7 +381,8 @@ def _pipeline_assess_readiness(gates, coll, signals, plan, child_root, wid, work
         "approval_recheck": approval_recheck, "approvals_cover_ok": approvals_cover_ok,
         "contour_consistency": contour_consistency, "ready": ready, "ready_criterion": ready_criterion,
         "acceptance_block": acceptance_block, "acceptance_block_reason": acceptance_block_reason,
-        "baseline_diff": baseline_diff, "baseline_checks": baseline_checks}
+        "baseline_diff": baseline_diff, "baseline_checks": baseline_checks,
+        "unstable_checks": _rd.get("unstable_checks") or []}  # #405: pass<->fail флип, шум ВХОДА
 
 
 def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, applied,
@@ -493,8 +494,8 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
         "authored": authored,
         # baseline-diff: None вне режима; иначе — статусы проверок на базе + регрессии/починки
         "baseline": ({"checks": {k: (v or {}).get("status") for k, v in (baseline_checks or {}).items()},
-                      "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
-                     if baseline_diff else None),
+                      "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions,
+                      "unstable_checks": rd.get("unstable_checks") or []} if baseline_diff else None),
         "ready_criterion": ready_criterion,    # all-green | no-regressions
         # v2.106 enforcement: spec-depth (незакрытые разделы уровня, мапящиеся на unmet-гейты) и
         # context-budget overflow — блокируют ready наравне с гейтами.

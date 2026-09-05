@@ -209,11 +209,37 @@ def provided_from_artifacts(child_root, wid, work_root=None):
         rel = rel_tmpl.format(wid=wid)
         for base in roots_for_credit:
             p = base / rel
-            if p.exists():
+            if _artifact_credits(p):
                 provided[sid] = {"status": status,
                                  "note": f"засчитан по артефакту {rel}"}
                 break
     return provided
+
+
+def _artifact_credits(p):
+    """#405: артефакт засчитывает раздел, только если он РЕАЛЬНЫЙ, а не просто существует.
+
+    Прежде credit ставился по `p.exists()` — пустой или недописанный `plan.yaml` (0 байт/битый
+    YAML, напр. при частичной записи между двумя прогонами) молча засчитывал раздел `complete`,
+    из-за чего spec-complete (а с ним вердикт readiness) флипал от прогона к прогону. Теперь:
+    - каталог (openspec/changes/<wid>) — засчитывает по существованию (как раньше);
+    - `.yaml`-файл — только если непустой И парсится в непустую структуру (fail-closed: битый/пустой
+      файл детерминированно НЕ засчитывает, а не «то complete, то нет»).
+    """
+    try:
+        if p.is_dir():
+            return True
+        if not p.is_file():
+            return False
+        if p.suffix.lower() not in (".yaml", ".yml"):
+            return p.exists()
+        text = p.read_text(encoding="utf-8")
+        if not text.strip():
+            return False
+        import yaml
+        return bool(yaml.safe_load(text))
+    except Exception:  # noqa: BLE001 — битый/непрочитанный артефакт -> не засчитывает (fail-closed)
+        return False
 
 
 def assess_from_artifacts(signals, child_root, wid, work_root=None):
