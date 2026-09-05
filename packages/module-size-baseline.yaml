@@ -22,7 +22,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 969
   ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
-  ai_ops_kit/engine/execution_pipeline.py: 773
+  ai_ops_kit/engine/execution_pipeline.py: 778
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1068
   ai_ops_kit/ui/presenter_formatters.py: 977
@@ -268,3 +268,13 @@ raises:
       рационале рядом с уже собранным rep["cost"]; расщеплять 897-строчный lifecycle ради одного
       аддитивного поля непропорционально (func-size не тронут — функция много ниже потолка engine/
       184). Итог 897 -> 909 осознанно под факт. Ратчет держит рост вниз от 909.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 773'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 778'
+    work: sandbox-posture-visible (P1)
+    why: >-
+      Отчёт прогона делает позу изоляции видимой: в isolation-словарь добавлены sandboxed/network
+      (аудит «непесочный дефолт + сеть ON» закрыт честностью, дефолты НЕ флипались). +5 строк — поле
+      + рационале-комментарий; расщеплять 773-строчный оркестратор ради одного поля непропорционально.
+      Итог 773 -> 778 осознанно под факт. Ратчет держит рост вниз от 778.

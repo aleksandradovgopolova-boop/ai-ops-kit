@@ -149,6 +149,55 @@ class TestPrintPipeline:
         captured = capsys.readouterr()
         assert "need live proposer" in captured.out
 
+    # P1 (аудит «непесочный дефолт + сеть ON»): поза изоляции ВИДНА, а не молчит. Дефолт НЕ флипаем —
+    # находка закрывается честностью: пониженную изоляцию называем человеку, но ТОЛЬКО когда прогон
+    # реально работал (были правки), не на dry-run/preview.
+    @staticmethod
+    def _iso_report(*, sandboxed, network="on", applied_writes=2, sha="abc123def456"):
+        commit = {"sha": sha, "branch": "ai-ops/test", "evidence_on_exact_sha": True,
+                  "tree_clean_before_checks": True, "changed_files": ["a.py"]} if sha else {}
+        return {
+            "kind": "execution-pipeline", "status": "done", "workitem_id": "test-iso",
+            "ready_for_pr": True, "provider": "claude-cli", "runtime": "claude-code",
+            "loop": {"stopped": "done", "steps": 2, "applied_writes": applied_writes, "denied": 0},
+            "commit": commit,
+            "gates": {"evaluated": ["tests"], "unmet": [], "blocked": False},
+            "isolation": {"worktree": None, "sandboxed": sandboxed, "network": network},
+        }
+
+    def test_no_sandbox_real_work_prints_posture_note(self, capsys):
+        """(а) sandbox=False + реальные правки -> отчёт несёт sandboxed=False и печатается честная нота."""
+        report = self._iso_report(sandboxed=False, network="on", applied_writes=2)
+        assert report["isolation"]["sandboxed"] is False
+        ai_ops_run._print_pipeline(report)
+        out = capsys.readouterr().out
+        assert "без песочницы" in out
+        assert "sandbox off" in out
+        assert "сеть доступна модельному shell" in out
+        assert "run-sandboxed.sh" in out
+
+    def test_sandbox_on_no_posture_note(self, capsys):
+        """(б) sandbox=True -> пониженной изоляции нет, ноты нет."""
+        report = self._iso_report(sandboxed=True, network="restricted", applied_writes=2)
+        ai_ops_run._print_pipeline(report)
+        out = capsys.readouterr().out
+        assert "без песочницы" not in out
+
+    def test_no_sandbox_but_no_work_no_note(self, capsys):
+        """(в) dry-run/preview (без записей и коммита) -> ноту не сыплем, даже если sandbox off."""
+        report = self._iso_report(sandboxed=False, network="on", applied_writes=0, sha=None)
+        ai_ops_run._print_pipeline(report)
+        out = capsys.readouterr().out
+        assert "без песочницы" not in out
+
+    def test_posture_note_fail_closed_without_field(self, capsys):
+        """Fail-closed: убрать isolation.sandboxed -> поза снова невидима (ноты нет)."""
+        report = self._iso_report(sandboxed=False, network="on", applied_writes=2)
+        report["isolation"].pop("sandboxed")
+        ai_ops_run._print_pipeline(report)
+        out = capsys.readouterr().out
+        assert "без песочницы" not in out
+
 
 @pytest.mark.critical_path
 @pytest.mark.unit

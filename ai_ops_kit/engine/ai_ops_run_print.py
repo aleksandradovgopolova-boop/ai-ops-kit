@@ -62,8 +62,20 @@ def _print_pipeline(r):
         print("    напиши правки там, закоммить, затем переоцени гейты: "
               f"ai-ops run \"<задача>\" . --feature {r.get('workitem_id')} --execute --reevaluate-only")
         print("    или задай живого провайдера: --provider claude-cli (нужен claude в PATH)")
-    iso = (r.get("isolation") or {}).get("worktree")
+    _iso = r.get("isolation") or {}
+    iso = _iso.get("worktree")
     print(f"  изоляция: {iso or 'основное дерево (без worktree)'}")
+    # P1 (аудит «непесочный дефолт + сеть ON»): пониженную изоляцию НАЗЫВАЕМ, а не молчим. Дефолт
+    # sandbox=False не флипаем — иначе регресс на прогонах без Docker; находка закрывается ЧЕСТНОСТЬЮ.
+    # Ноту даём ТОЛЬКО когда прогон реально работал (были правки/коммит) без песочницы: work_produced
+    # отсекает dry-run/preview/reevaluate — нет записей, нет и ноты. Читаем поле отчёта, не пересчитываем:
+    # уберут isolation.sandboxed -> нота молчит (fail-closed, поза снова невидима).
+    if _iso.get("sandboxed") is False and work_produced(r):
+        _net = ("сеть доступна модельному shell" if _iso.get("network") == "on"
+                else "сеть ограничена")
+        print(f"  ⚠ прогон без песочницы (sandbox off), {_net}; изоляция условна — управляемость "
+              "брокером, не защита от недоверенного кода. Для чувствительных прогонов включите её: "
+              "--sandbox / контейнер run-sandboxed.sh")
     # F-014: от какой базы отрезан worktree — видно сразу, а не выясняется конфликтом при слиянии.
     _bb = r.get("base_binding") or (r.get("delivery") or {}).get("base_binding") or {}
     if _bb.get("base_ref"):
