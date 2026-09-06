@@ -22,6 +22,7 @@ entity_types:
   incident:      {description: "Инцидент эксплуатации"}
   experiment:    {description: "Эксперимент, проверяющий гипотезу"}
   insight:       {description: "Вывод из данных/инцидентов/экспериментов; вход следующего Discovery"}
+  outcome:       {description: "Проверяемый результат функции: baseline→target под guardrails и что реально измерено. Проекция OutcomeContract+OutcomeReadout (validate_product_objects).", attributes: [baseline, target, guardrails, measured, verdict]}
 
 # Допустимые связи: from -> to (валидатор отклоняет рёбра вне этого списка).
 relations:
@@ -45,3 +46,7 @@ relations:
   - {type: derived-from, from: insight,    to: experiment}
   - {type: feeds,        from: insight,    to: goal}
   - {type: feeds,        from: insight,    to: feature}
+  # Outcome: зачем функция существует и подтвердилась ли её ценность.
+  - {type: targets,      from: feature,    to: outcome}
+  - {type: measured-by,  from: outcome,    to: metric}
+  - {type: derived-from, from: insight,    to: outcome}

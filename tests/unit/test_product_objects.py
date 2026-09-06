@@ -181,3 +181,94 @@ def test_a_swapped_metric_is_caught():
     swapped = {**READOUT, "measured": {**READOUT["measured"], "metric": "clicks"}}
 
     assert any("подмена метрики" in e for e in vpo.cross_check(CONTRACT, swapped))
+
+
+# ─── outcome как узел графа: проекция + трассировка (#544) ────────────────────────────────────────
+
+from validate_knowledge_graph import load_dictionary, validate_graph  # noqa: E402
+
+
+def _feature_to_outcome_graph(outcome_fragment):
+    """Полный путь goal → initiative → epic → feature + фрагмент проекции outcome."""
+    return {
+        "schema_version": 1, "kind": "knowledge-graph",
+        "nodes": [
+            {"id": "grow-repeat", "type": "goal", "title": "Рост повторных покупок"},
+            {"id": "onboarding-init", "type": "initiative", "title": "Ускорить первый запуск"},
+            {"id": "provider-epic", "type": "epic", "title": "Выбор провайдера"},
+            {"id": "express-checkout", "type": "feature", "title": "Экспресс-чекаут"},
+            *outcome_fragment["nodes"],
+        ],
+        "edges": [
+            {"from": "grow-repeat", "type": "contains", "to": "onboarding-init"},
+            {"from": "onboarding-init", "type": "contains", "to": "provider-epic"},
+            {"from": "provider-epic", "type": "contains", "to": "express-checkout"},
+            *outcome_fragment["edges"],
+        ],
+    }
+
+
+def test_outcome_is_a_declared_entity_type_with_allowed_relations():
+    """`outcome` — тип первого класса в словаре, и ребро feature→outcome разрешено."""
+    types, rels = load_dictionary()
+
+    assert "outcome" in types
+    assert ("feature", "targets", "outcome") in rels
+
+
+def test_projection_yields_an_outcome_node_mirroring_the_contract():
+    """Проекция контракта+отчёта даёт ОДИН узел outcome с baseline/target/measured/verdict."""
+    frag = vpo.project_outcome(CONTRACT, READOUT, feature="express-checkout")
+    (node,) = frag["nodes"]
+
+    assert node["type"] == "outcome"
+    assert node["baseline"] == 0.58 and node["target"] == 0.75
+    assert node["measured"] == 0.71 and node["verdict"] == "no"
+    assert node["guardrails"] == ["время до первого агента"]
+    assert {"from": "express-checkout", "type": "targets", "to": node["id"]} in frag["edges"]
+
+
+def test_projection_without_a_readout_is_pending_not_met():
+    """Без отчёта вердикт — `pending` (состояние), а не выдуманный «met»/«unknown»."""
+    node = vpo.project_outcome(CONTRACT)["nodes"][0]
+
+    assert node["verdict"] == "pending"
+    assert "measured" not in node  # неизмеренное не подставляется нулём
+
+
+def test_projected_outcome_fragment_is_a_valid_graph(tmp_path):
+    """Спроецированный outcome встраивается в knowledge-graph и проходит валидатор связей."""
+    import yaml
+
+    frag = vpo.project_outcome(CONTRACT, READOUT, feature="express-checkout")
+    graph = _feature_to_outcome_graph(frag)
+    p = tmp_path / "graph.yaml"
+    p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
+    types, rels = load_dictionary()
+
+    assert validate_graph(p, types, rels) == []
+
+
+def test_trace_returns_the_full_goal_to_outcome_chain():
+    """«Зачем существует функция»: цепочка goal → … → feature и привязанный outcome, без пробелов."""
+    frag = vpo.project_outcome(CONTRACT, READOUT, feature="express-checkout")
+    trace = vpo.trace_feature_rationale(_feature_to_outcome_graph(frag), "express-checkout")
+
+    assert [n["type"] for n in trace["chain"]] == ["goal", "initiative", "epic", "feature"]
+    assert trace["outcome"] is not None and trace["outcome"]["verdict"] == "no"
+    assert trace["gaps"] == []
+
+
+def test_trace_reports_honest_gaps_instead_of_fabricating_links():
+    """Неполный граф (нет цели сверху, нет outcome) отдаёт частичную цепочку с НАЗВАННЫМИ пробелами."""
+    lonely = {
+        "schema_version": 1, "kind": "knowledge-graph",
+        "nodes": [{"id": "express-checkout", "type": "feature", "title": "Экспресс-чекаут"}],
+        "edges": [],
+    }
+    trace = vpo.trace_feature_rationale(lonely, "express-checkout")
+
+    assert [n["id"] for n in trace["chain"]] == ["express-checkout"]
+    assert trace["outcome"] is None
+    assert any("до цели" in g for g in trace["gaps"])
+    assert any("outcome" in g for g in trace["gaps"])

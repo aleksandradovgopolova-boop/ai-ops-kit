@@ -195,6 +195,108 @@ def cross_check(contract: dict, readout: dict) -> list:
     return errors
 
 
+def _slug(value: str) -> str:
+    """Приводит строку к id узла графа (`^[a-z0-9][a-z0-9-]*$`)."""
+    out = []
+    for ch in _text(value).lower():
+        if ch.isalnum():
+            out.append(ch)
+        elif out and out[-1] != "-":
+            out.append("-")
+    s = "".join(out).strip("-")
+    return s or "outcome"
+
+
+def project_outcome(contract: dict, readout: dict | None = None, *,
+                    outcome_id: str | None = None, feature: str | None = None) -> dict:
+    """Проецирует OutcomeContract (+ опциональный OutcomeReadout) в фрагмент Knowledge Graph.
+
+    Возвращает `{"nodes": [...], "edges": [...]}` в формате knowledge-graph.schema.json: outcome —
+    узел первого класса, а не документ сбоку. Атрибуты узла зеркалят контракт и отчёт (baseline,
+    target, guardrails, measured, verdict) — это ПРОЕКЦИЯ существующих артефактов, не новое хранилище.
+
+    `verdict` берётся из readout.target_met, а без отчёта честно помечается `pending` (не «unknown»
+    и не «met»): результат ещё не измерен — это состояние, а не оценка.
+    """
+    contract = contract or {}
+    metric = (contract.get("primary_metric") or {})
+    oid = _slug(outcome_id or metric.get("name") or contract.get("decision") or "outcome")
+    node = {
+        "id": oid,
+        "type": "outcome",
+        "title": _text(metric.get("name")) or oid,
+        "ref": _text(contract.get("decision")) or None,
+        "baseline": (contract.get("baseline") or {}).get("value"),
+        "target": (contract.get("target") or {}).get("value"),
+        "guardrails": [_text(g.get("name")) for g in (contract.get("guardrails") or [])
+                       if isinstance(g, dict) and _text(g.get("name"))],
+        "measured": None,
+        "verdict": "pending",
+    }
+    if readout:
+        node["measured"] = (readout.get("measured") or {}).get("value")
+        node["verdict"] = _text(readout.get("target_met")) or "pending"
+    node = {k: v for k, v in node.items() if v is not None}
+
+    fragment = {"nodes": [node], "edges": []}
+    if _text(feature):
+        fragment["edges"].append({"from": _text(feature), "type": "targets", "to": oid})
+    return fragment
+
+
+def trace_feature_rationale(graph: dict, feature_id: str) -> dict:
+    """«Зачем существует эта функция»: цепочка goal → … → feature → outcome по рёбрам графа.
+
+    Идёт ВВЕРХ по рёбрам `contains` (родитель функции — вплоть до цели) и ВПЕРЁД по ребру `targets`
+    к outcome. Возвращает честную цепочку: если данных на полный путь нет, отдаётся лучший доступный
+    фрагмент с НАЗВАННЫМИ пробелами (`gaps`), а не выдуманными связями.
+
+    Результат: `{"feature", "chain": [{id,type,title}], "outcome": {...}|None, "gaps": [...]}`.
+    chain упорядочена сверху вниз (цель первой), заканчивается запрошенной функцией.
+    """
+    nodes = {n.get("id"): n for n in (graph.get("nodes") or []) if isinstance(n, dict) and n.get("id")}
+    edges = [e for e in (graph.get("edges") or []) if isinstance(e, dict)]
+    gaps: list[str] = []
+
+    def summary(nid: str) -> dict:
+        n = nodes.get(nid, {})
+        return {"id": nid, "type": _text(n.get("type")) or "?", "title": _text(n.get("title")) or nid}
+
+    if feature_id not in nodes:
+        return {"feature": feature_id, "chain": [], "outcome": None,
+                "gaps": [f"узел '{feature_id}' отсутствует в графе — цепочку строить не от чего"]}
+
+    # Вверх по contains до цели.
+    chain_ids = [feature_id]
+    current, seen = feature_id, {feature_id}
+    while nodes.get(current, {}).get("type") != "goal":
+        parents = [e["from"] for e in edges if e.get("type") == "contains"
+                   and e.get("to") == current and e.get("from") in nodes]
+        parent = next((p for p in parents if p not in seen), None)
+        if parent is None:
+            gaps.append(f"нет родителя выше '{current}' — путь до цели (goal) неполон")
+            break
+        seen.add(parent)
+        chain_ids.insert(0, parent)
+        current = parent
+
+    # Вперёд к outcome.
+    outcome_ids = [e["to"] for e in edges if e.get("type") == "targets"
+                   and e.get("from") == feature_id and e.get("to") in nodes]
+    outcome = None
+    if outcome_ids:
+        onode = nodes[outcome_ids[0]]
+        outcome = {"id": outcome_ids[0], "verdict": _text(onode.get("verdict")) or "pending",
+                   "target": onode.get("target"), "measured": onode.get("measured"),
+                   "title": _text(onode.get("title")) or outcome_ids[0]}
+    else:
+        gaps.append(f"у '{feature_id}' нет outcome (ребро targets) — зачем функция существует, "
+                    f"не подтверждается измеримым результатом")
+
+    return {"feature": feature_id, "chain": [summary(i) for i in chain_ids],
+            "outcome": outcome, "gaps": gaps}
+
+
 def main(argv=None):
     argv = list(argv if argv is not None else sys.argv[1:])
     args = [a for a in argv if not a.startswith("--")]
