@@ -56,6 +56,12 @@ ALLOWED = (
     # тестом в test_merge_preview. Оркестратор живёт в installer/ (он один видит и merge-preview, и
     # managed_set), поэтому путь — installer/, а не ai_ops_kit/.
     re.compile(r"^python3?\s+installer/delivered_merge_footprint\.py\b"),
+    # Ночной дельта-обзор — операционная джоба, а не проверка: он ПРОИЗВОДИТ бриф владельцу
+    # (читает историю git, пишет бриф в файловую систему и в сводку прогона) по расписанию, и
+    # обернуть его в pytest нельзя — у него нет вердикта pass/fail, есть доставка. Логика обзора
+    # покрыта юнит-тестами (test_nightly_review), проводка расписания — тестом генератора
+    # workflow там же. Путь допускает префикс дочки `.ai/managed/` (в дочке скрипт едет из поставки).
+    re.compile(r"^python3?\s+(?:\.ai/managed/)?ai_ops_kit/intelligence/nightly_review\.py\b"),
 )
 
 
