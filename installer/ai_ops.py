@@ -773,6 +773,13 @@ RUNTIME_VALIDATORS = frozenset({
     # ужатый монолит не должен молча отрастать только потому, что замок стоит у кита, а не у неё.
     # Standalone (stdlib+pyyaml, `import _bootstrap` не нужен), запускается процессом у дочки.
     "validate_module_size",
+    # 2026-09-07, issue #545 (outcome-loop): пост-релизный путь `ai-ops readout` исполняется У ДОЧКИ
+    # (после её выпуска владелец сверяет приход событий в аналитику и сводит вердикт). Доставляемый
+    # оркестратор ai_ops_kit/cli/post_release_loop.py импортирует эти два валидатора; не внести их сюда
+    # значило бы починить кит и оставить дочке ImportError — ровно класс F-033, тот же, что
+    # validate_acceptance_result. Оба standalone (stdlib+pyyaml, `import _bootstrap` не нужен). Поймано
+    # тестом test_delivered_engine_does_not_import_undelivered_validators, а не рассуждением.
+    "validate_post_release_readout", "validate_product_objects",
 })
 
 
