@@ -19,8 +19,8 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1034
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 948
+  ai_ops_kit/cli/ai_ops_cli.py: 1040
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1225
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
   ai_ops_kit/planning/delivery_plan.py: 1135
@@ -336,3 +336,17 @@ raises:
       fail-first — процитированный пример больше не побеждает итог. +34 строки в gate_executor.
       Разбор вердикта — связная ответственность этого модуля, вынос ради 34 строк непропорционален.
       Потолок поднят осознанно под факт; ратчет держит рост вниз от 760.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 948; ai_ops_cli.py = 1034'
+    to: 'ai_ops_cli_intents.py = 1225; ai_ops_cli.py = 1040'
+    work: '#539: ai-ops explain owner surface'
+    why: >-
+      Новая владельческая команда `ai-ops explain` — одна read-only карточка «что с моей задачей
+      прямо сейчас» (стадия, что готово/идёт, что мешает и ПОЧЕМУ последствием, следующий шаг, оценка
+      стоимости). Проб-свободный обработчик и его read-only ассемблеры (active-work без persist,
+      workitem/run-plan/usage-ledger/living_status.describe) легли в спутник ai_ops_cli_intents.py
+      (+270) — там же, где остальные read-only intent-хендлеры; регистрация интента (INTENTS,
+      DIRECT_INTENTS, импорт+for-цикл) добавила +6 в ai_ops_cli.py. Карточка собирается из уже
+      существующих источников, вынос ради неё непропорционален; потолки подняты под факт, ратчет
+      держит рост вниз.
