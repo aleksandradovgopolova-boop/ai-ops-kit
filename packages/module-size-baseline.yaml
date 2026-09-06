@@ -32,7 +32,7 @@ ceilings:
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 732
-  ai_ops_kit/gates/gate_executor.py: 726
+  ai_ops_kit/gates/gate_executor.py: 760
   ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
 
@@ -325,3 +325,14 @@ raises:
       как QUICK без судьи. Блок сборки сигналов вынесен из main в _build_signals (ратчет func-size —
       main=154). ai_ops_cli.py — известный кандидат на вынос; расщепление монолита ради этой правки
       непропорционально задаче. Потолок поднят осознанно под факт; ратчет держит рост вниз от 1034.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/gates/gate_executor.py = 726'
+    to: 'ai_ops_kit/gates/gate_executor.py = 760'
+    work: code-review-reviewer-renders-a-parseable-verdict
+    why: >-
+      Надёжное извлечение вердикта code_review (полевой замер cockpit 06.09.2026): фолбэк по прозе
+      понимает needs_work и берёт ИТОГОВУЮ вердикт-строку по позиции (_last_prose_verdict), а не
+      fail-first — процитированный пример больше не побеждает итог. +34 строки в gate_executor.
+      Разбор вердикта — связная ответственность этого модуля, вынос ради 34 строк непропорционален.
+      Потолок поднят осознанно под факт; ратчет держит рост вниз от 760.
