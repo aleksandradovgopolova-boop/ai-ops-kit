@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 387
+behavioral_count: 388
 structural_count: 66
-total_count: 453
-behavioral_share_pct: 85.43
+total_count: 454
+behavioral_share_pct: 85.46
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -563,3 +563,17 @@ raises:
       ПОВЕДЕНЧЕСКИЙ тест-файл (test_work_view.py) — импортирует project_work/from_work_view и зовёт их
       над собранной дочкой. Структурных не прибавилось (66), доля 85.40 -> 85.43%. Baseline пере-записан
       на факт.
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 387
+    from_total: 453
+    to_behavioral: 388
+    to_total: 454
+    to_share_pct: 85.46
+    work: post-release-loop-wired (#545)
+    why: >-
+      Подъём порога ВВЕРХ: проводка пост-релизной петли (PRR -> verify_analytics_runtime ->
+      outcome-проекция -> один вердикт) добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_post_release_loop.py) — импортирует cli.post_release_loop И зовёт run_post_release/render,
+      а также presenter.from_post_release_loop. Структурных не прибавилось (66), доля 85.43 -> 85.46%.
+      Baseline пере-записан на фактический замер (387 -> 388 поведенческих из 454).

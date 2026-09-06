@@ -426,6 +426,80 @@ def from_next_work(rep: dict) -> dict:
                    "решение о заморозке": (rep.get("freeze") or {}).get("decision") or "—"})
 
 
+def from_post_release_loop(result: dict) -> dict:
+    """`post_release_loop.run_post_release()` -> UserMessage. Пост-релизная петля продукту.
+
+    Ошибку/неполноту объясняем ПОСЛЕДСТВИЕМ, не местом в коде: «выпуск рекомендовать не могу:
+    аналитика дочки ещё не поступила». Внутренние имена (гейт, events_verified_live, PRR) остаются
+    в технических деталях; наружу — что произошло, почему важно и что дальше.
+    """
+    a = result.get("analytics_runtime") or {}
+    prr = result.get("prr") or {}
+    verdict = result.get("verdict")
+    events = a.get("events_verified_live")
+    with_producer = a.get("evidence_with_producer", 1)
+    required = a.get("evidence_required", 4)
+    not_measured = a.get("evidence_not_measured") or []
+
+    tech = {
+        "verdict": verdict,
+        "readout_decision": result.get("readout_decision"),
+        "gate": a.get("gate"),
+        "gate_status": a.get("status"),
+        "events_verified_live": events,
+        "доказательств с источником": f"{with_producer} из {required}",
+        "not_measured": ", ".join(not_measured) or "—",
+        "PRR": (prr.get("id") or "не найден") if prr.get("found") else "не найден",
+        "outcome_flip_ready": result.get("outcome_flip_ready"),
+    }
+    if result.get("outcome"):
+        tech["outcome_verdict"] = result["outcome"].get("verdict")
+
+    # Общая для всех веток оговорка: гейт закрывается одним доказательством из четырёх, потому что у
+    # остальных трёх пока нет источника данных. Это НАЗЫВАЕТСЯ, а не прячется за «проверено».
+    gate_note = (f"Полную проверку аналитики после выпуска пока не закрыть: из четырёх её частей "
+                 f"измеримую основу имеет только одна, у остальных ({_human_evidence(not_measured)}) "
+                 f"ещё нет источника данных.")
+
+    if events == "unknown":
+        return message(
+            status="degraded", headline="Выпуск рекомендовать пока не могу",
+            summary="Продукт доставлен, но проверить, доходят ли события в аналитику, ещё нечем: "
+                    "выгрузка от продукта не поступила.",
+            why_it_matters="Без неё я не знаю, работает ли измерение результата — а значит не могу "
+                           "честно сказать, что выпуск удался. " + gate_note,
+            next_steps=["дождаться выгрузки аналитики после реального выпуска и повторить проверку"],
+            technical=tech)
+
+    if events == "not_verified":
+        return message(
+            status="blocked", headline="Аналитика после выпуска расходится с обещанным",
+            summary="Часть событий, которые продукт обещал слать, в выгрузке не встретилась.",
+            why_it_matters="Пока событие не доходит, измерять результат нечем, и продолжать как ни "
+                           "в чём не бывало нельзя. " + gate_note,
+            next_steps=["разобраться, почему объявленные события не доезжают, и перепроверить"],
+            technical=tech)
+
+    # events == "verified": приход подтверждён, но гейт закрыт одним доказательством из четырёх.
+    return message(
+        status="degraded", headline="События доходят, но проверка выпуска ещё неполная",
+        summary="События в аналитику приходят — это подтверждено выгрузкой.",
+        why_it_matters="Это ещё не полная проверка выпуска. " + gate_note,
+        next_steps=["продолжать наблюдение; полную готовность подтвердит только реальный выпуск "
+                    "с доступом к аналитике"],
+        technical=tech)
+
+
+def _human_evidence(names) -> str:
+    """Внутренние ключи доказательств -> человеческие слова (для product-аудитории)."""
+    ru = {
+        "no_pii_in_events": "нет ли персональных данных в событиях",
+        "cohort_identification_works": "работает ли разбиение на когорты",
+        "dashboard_receives_data": "доходят ли данные до дашборда",
+    }
+    return "; ".join(ru.get(n, n) for n in names) or "остальные проверки"
+
+
 def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                      crosscheck: dict = None) -> dict:
     """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
