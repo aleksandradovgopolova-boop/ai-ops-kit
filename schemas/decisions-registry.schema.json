@@ -39,7 +39,18 @@
           "context": {"type": "string"},
           "reversibility": {"enum": ["two-way", "one-way"]},
           "date": {"type": "string"},
-          "source": {"type": "string"}
+          "source": {"type": "string"},
+          "confidence": {"enum": ["low", "medium", "high"]},
+          "review_at": {"type": "string"},
+          "expected_outcome": {
+            "type": "object",
+            "required": ["metric", "baseline", "target"],
+            "properties": {
+              "metric": {"type": "string"},
+              "baseline": {"type": ["string", "number"]},
+              "target": {"type": ["string", "number"]}
+            }
+          }
         }
       }
     },
