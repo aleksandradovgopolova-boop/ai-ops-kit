@@ -71,9 +71,11 @@ ALLOWLIST_MODULES: dict[str, str] = {
 # только СОКРАЩАТЬСЯ: провели в контур (появился импортер) или объявили легит-входом — убрать
 # отсюда. Имя здесь — признанный долг «построено, но не проведено», а НЕ разрешение плодить такое.
 KNOWN_DORMANT: dict[str, str] = {
-    f"{PKG}.engine.parallel_live":
-        "live-харнесс конкурентного мультипакетного прогона (цель team-works-in-parallel, active); "
-        "ни один не-тестовый модуль его не импортирует, диспетч-команда его не зовёт",
+    # `engine/parallel_live` УБРАН ИЗ СПИСКА 2026-09-06 (#542): он ПРОВЕДЁН В КОНТУР. Тонкий диспетч
+    # `engine/parallel_live_dispatch` импортирует `run_live_concurrent` и вызывается из живого
+    # run-пути по явному opt-in `ai-ops run --parallel` (cli/ai_ops_cli). Появился не-тестовый
+    # импортёр — по правилу «список только сокращается» имя обязано уйти; об этом сказал бы
+    # `test_known_dormant_list_only_shrinks` (краснел бы, останься имя, раз модуль больше не дормантен).
     f"{PKG}.intelligence.artifact_reality_check":
         "сверка артефактов с реальным репо (цель ai-product-operations, achieved); "
         "installer.UNWIRED_MODULES, импортеров нет — построено, но в контур не проведено",
