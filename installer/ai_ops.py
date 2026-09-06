@@ -1189,6 +1189,30 @@ def bump_child_config(version):
     CHILD_CONFIG.write_text(new, encoding="utf-8")
 
 
+def widen_allowed_range(version):
+    """Расширить parent.allowed_version_range в .ai-ops.yaml до диапазона под мажор version.
+
+    ТОЛЬКО для осознанного мажор-перехода (`update --force` через границу мажора). Замер
+    06.09.2026 (дочка cockpit, `update --force` 3.39.0 -> 4.0.0): `bump_child_config` поднимал
+    installed_version до 4.0.0, но диапазон оставался '>=3.0.0 <4.0.0' — installed оказывалась
+    ВНЕ своего же allowed_version_range. Следствие: следующий штатный in-range апдейт молча
+    «пропускался» как вне диапазона (см. `cmd_update`: soft-skip при target ∉ allowed), а
+    `doctor` рапортовал «в порядке» — тихая заморозка обновлений.
+
+    Способ — тот же, что `cmd_init` (re.sub по полю), чтобы форматирование конфига владельца не
+    переписывалось целиком. -> новый диапазон (str), либо None, если поля в конфиге нет.
+    """
+    import re
+    text = CHILD_CONFIG.read_text(encoding="utf-8")
+    new_range = compatible_range_for(version)
+    new_text, n = re.subn(r'(allowed_version_range:\s*)"[^"]*"',
+                          rf'\g<1>"{new_range}"', text, count=1)
+    if n == 0:
+        return None
+    CHILD_CONFIG.write_text(new_text, encoding="utf-8")
+    return new_range
+
+
 def run_validators(names):
     results = []
     for n in names:
@@ -1917,6 +1941,22 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     n = write_checksums()
     write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
     bump_child_config(target)
+    # МАЖОР-ПЕРЕХОД ЧЕРЕЗ --force СОГЛАСУЕТ И ДИАПАЗОН, А НЕ ТОЛЬКО installed_version (замер
+    # 06.09.2026, дочка cockpit 3.39.0 -> 4.0.0). Иначе installed=4.0.0 остаётся ВНЕ своего же
+    # allowed_version_range '>=3.0.0 <4.0.0': следующий штатный in-range апдейт молча пропустится
+    # как вне диапазона, а `doctor` скажет «в порядке» — тихая заморозка обновлений. Делаем это
+    # ТОЛЬКО на форс-мажорном пути (`incompatible-forced`); штатный in-range апдейт диапазон не
+    # трогает. Порядок относительно backup важен: снимок footprint снят ВЫШЕ (с прежним диапазоном),
+    # поэтому при откате по упавшему smoke `restore_footprint` вернёт и installed, и диапазон вместе.
+    # Отложенный PR-путь применяет обновление вложенным `--in-place` в worktree, где REPO_ROOT — тот
+    # worktree, так что расширенный диапазон попадает и в подготовленную ветку.
+    if report["compatibility"] == "incompatible-forced":
+        _new_range = widen_allowed_range(target)
+        if _new_range:
+            report["allowed_range_widened"] = _new_range
+            print(f"⚠ allowed_version_range расширен до \"{_new_range}\" — мажор-переход "
+                  f"осознанный (--force). Без этого установленная {target} осталась бы вне своего "
+                  f"же диапазона, и следующее обновление молча пропустилось бы как несовместимое.")
     report["skills_synced"] = sync_skills(REPO_ROOT)
     report["commands_installed"] = materialize_runtime(REPO_ROOT)
     # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
@@ -2647,6 +2687,24 @@ def cmd_doctor(argv=()):
     elif inst != avail:
         _dprint(f"источник {PKG} СТАРШЕ установленного ({avail} < {inst}) — это не повод для "
                 f"update: понижение версии обновлением не является")
+    # installed ∈ allowed_version_range — ИНАЧЕ ТИХАЯ ЗАМОРОЗКА ОБНОВЛЕНИЙ (замер 06.09.2026,
+    # дочка cockpit после `update --force` 3.39.0 -> 4.0.0). При installed вне диапазона следующий
+    # штатный in-range апдейт молча пропускается как несовместимый (см. `cmd_update`: soft-skip),
+    # а doctor без этой строки рапортовал «версии: ✓» и «всё в порядке» — обновления замерли, но
+    # инструмент, который для этого и существует, об этом не сказал. Проверка рантайма: сверяем
+    # ФАКТ (installed) с ФАКТОМ (диапазон из конфига), а не наличие поля.
+    try:
+        _allowed = child_allowed_range()
+    except ChildConfigError as _e:  # noqa: BLE001 — битый конфиг не роняет doctor, но и не молчит
+        _dprint(f"⚠ диапазон версий: НЕ ПРОВЕРЕНО ({_e}) — это не «в порядке»")
+    else:
+        if inst and _allowed and not version_in_range(inst, _allowed):
+            _dprint(f"диапазон версий: ✗ установлена {inst}, но разрешённый диапазон "
+                    f"'{_allowed}' её не покрывает — следующее обновление молча пропустится как "
+                    f"вне диапазона; расширьте parent.allowed_version_range в .ai-ops.yaml "
+                    f"(если это осознанный мажор-переход — расширьте явно под новый мажор)")
+        elif inst and _allowed:
+            _dprint(f"диапазон версий: ✓ установленная {inst} в пределах '{_allowed}'")
     # КАНАЛ ГОВОРИТСЯ ВСЛУХ (19.08.2026, аудит). Поле `parent.update_channel` обязательно по схеме,
     # пишется в каждую дочку и до этой правки не читалось НИ ОДНОЙ строкой кода, тогда как
     # `ai-ops-update.yml` приносит ветку по умолчанию, то есть канал `edge`. Дочка объявляла
