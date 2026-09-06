@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 386
+behavioral_count: 387
 structural_count: 66
-total_count: 452
-behavioral_share_pct: 85.40
+total_count: 453
+behavioral_share_pct: 85.43
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -550,3 +550,16 @@ raises:
       needs_work и берёт последний вердикт) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
       (test_code_review_verdict_extraction_is_robust.py) — импортирует и зовёт продукт. Структурных не
       прибавилось (66), доля 85.30 -> 85.33%. Baseline пере-записан на факт.
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 386
+    from_total: 452
+    to_behavioral: 387
+    to_total: 453
+    to_share_pct: 85.43
+    work: work-view-projection (issue #549)
+    why: >-
+      Подъём порога ВВЕРХ: единая машинная проекция «работы» по id (lifecycle/work_view) добавила один
+      ПОВЕДЕНЧЕСКИЙ тест-файл (test_work_view.py) — импортирует project_work/from_work_view и зовёт их
+      над собранной дочкой. Структурных не прибавилось (66), доля 85.40 -> 85.43%. Baseline пере-записан
+      на факт.
