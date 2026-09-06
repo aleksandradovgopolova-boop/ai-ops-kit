@@ -1032,3 +1032,73 @@ work:
       валидирует экран через MCP (get_*/validate_*) вместо чтения файлов стандарта. Зависит от волн 2–3
       — отдавать по MCP нечего, пока реестры и проверки не наполнены. Готово, когда MCP-сервер отдаёт
       данные волны 2 и вердикты волны 3, и это проверено живым вызовом.
+
+  # ─── Находки живого прогона 06.09.2026 (cockpit на ките 4.x, фича free-tile-counter, commit
+  #     8293fe54, provider claude-cli). Обкатка мажорного update --force + детский green-path.
+  #     Каждая работа названа полевым замером этого прогона, не пересказом. ───────────────────────
+  - id: code-review-reviewer-renders-a-parseable-verdict
+    title: >-
+      Гейт code_review закрываем: независимый ревьюер (claude-cli) выдаёт разбираемый вердикт, а не
+      «нет заключения» — сегодня гейт не проходит по построению, независимо от качества правки
+    type: engineering
+    goal: trustworthy-core
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/gates/, ai_ops_kit/providers/, tests/]
+    reason: >-
+      Живой прогон 06.09.2026 (cockpit на ките 4.x, free-tile-counter, commit 8293fe54, provider
+      claude-cli): приёмочный судья вынес вердикт met, заземлённый на файл (Fix C работает), а гейт
+      code_review упал с blocker «нет заключения reviewer (code-reviewer) — гейт не пройден»,
+      evidence пуст, reviews:null. Это НЕ дубль закрытой работы про сообщение «почему вердикта нет»
+      (evidence_from_no_verdict в gates/gate_executor.py): та улучшила ФОРМУЛИРОВКУ отказа, а здесь
+      ревьюер не рождает вердикт вовсе — гейт не закрывается ни на какой правке, и автономный green
+      по построению недостижим. Тот же класс, что поле 2026-08-20 (obs «ревьюер не вынес вердикт»),
+      живой на 4.x. Готово, когда на живом прогоне claude-cli гейт code_review закрывается настоящим
+      вердиктом ревьюера (pass/needs_work с evidence на изменённый файл), а «нет заключения» остаётся
+      только для случая, когда ревьюер реально недоступен — отделённого от «ревьюер позван, но молчит».
+
+  - id: forced-major-update-reconciles-allowed-version-range
+    title: >-
+      После `update --force` через мажор конфиг согласован: installed_version попадает в
+      allowed_version_range, а doctor краснеет, если нет — сегодня версия молча остаётся вне диапазона
+    type: engineering
+    goal: kit-release-strategy
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [installer/, tests/]
+    reason: >-
+      Живой прогон 06.09.2026 (обновление cockpit 3.39.0 → 4.0.0 через `update --force`):
+      installed_version поднялся до 4.0.0, но allowed_version_range остался ">=3.0.0 <4.0.0" —
+      version_in_range(4.0.0, ">=3.0.0 <4.0.0")=False (проверено прямым вызовом), то есть
+      установленная версия вне собственного диапазона. compatible_range_for вызывается только на init
+      (когда конфига нет), update его не трогает. И doctor это не ловит: сверяет установленное с
+      пакетом (4.0.0=4.0.0 ✓), но не с allowed_version_range — печатает «всё в порядке». Следствие:
+      следующий штатный in-range апдейт молча «пропустится» как вне диапазона (мягкий скип
+      мажор-гейта), а doctor будет утверждать, что всё цело — тихая заморозка обновлений. Готово,
+      когда `update --force` через мажор либо осознанно расширяет диапазон под новый мажор, либо явно
+      печатает «расширьте allowed_version_range», И doctor краснеет на installed ∉ allowed
+      (замер: обновил форсом → doctor называет рассогласование, а не «всё в порядке»).
+
+  - id: level-signals-carry-across-specify-plan-run
+    title: >-
+      Сигналы уровня задачи (task_type/size/risk) переносятся между specify → plan → run — сегодня
+      ENGINEERING из specify не долетает до run, и задача молча едет как QUICK без судьи
+    type: engineering
+    goal: qualification-closeout
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [ai_ops_kit/cli/, ai_ops_kit/lifecycle/, tests/]
+    reason: >-
+      Живой прогон 06.09.2026 (cockpit, free-tile-counter): specify с --signals task_type=ENGINEERING
+      корректно поднял spec до L1 и дописал разделы, но plan без повторных --signals выдал run-plan
+      base_workflow=QUICK (гейты пусты), а run остановился, прося ТОЛЬКО size/risk одной строкой —
+      подсказка теряет task_type, и следование ей буквально откатывает задачу в QUICK (судья
+      code_review не запускается). Оператор обязан вручную склеивать {task_type,size,risk} в каждый
+      шаг; иначе ENGINEERING-задача тихо проходит как QUICK. Улучшение относительно поля есть
+      (спрашивает ДО траты), но переноса сигналов между шагами нет. Готово, когда сигналы, заданные
+      на specify, сохраняются в артефакте работы и подхватываются plan и run без повторного ввода, а
+      подсказка run не роняет уже известный task_type (замер: specify --signals ENGINEERING → run
+      исполняет ENGINEERING без повторных сигналов).
