@@ -322,7 +322,7 @@ probes:
 - id: specify-adds-sections-for-raised-level
   kind: guard
   file: ai_ops_kit/gates/spec_levels.py
-  find: '        return _add_missing_sections(sp, cls)'
+  find: '        return _add_missing_sections(sp, cls, signals)'
   replace_with: '        return sp, False, {"added": [], "error": None}'
   tests:
   - tests/unit/test_spec_levels.py
