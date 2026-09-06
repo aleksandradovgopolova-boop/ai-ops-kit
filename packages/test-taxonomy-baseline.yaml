@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 381
+behavioral_count: 382
 structural_count: 66
-total_count: 447
-behavioral_share_pct: 85.23
+total_count: 448
+behavioral_share_pct: 85.27
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -511,3 +511,16 @@ raises:
       unstable_checks называет flaky-проверку) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
       (test_readiness_determinism.py) — импортирует и зовёт продукт. Структурных не прибавилось (66),
       доля 85.20 -> 85.23%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 381
+    from_total: 447
+    to_behavioral: 382
+    to_total: 448
+    to_share_pct: 85.27
+    work: forced-major-update-reconciles-allowed-version-range
+    why: >-
+      Подъём порога ВВЕРХ: работа согласует allowed_version_range при `update --force` через мажор и
+      краснит doctor на installed ∉ allowed, добавив один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_update_force_major_reconciles_range.py) — импортирует installer и зовёт cmd_update/doctor.
+      Структурных не прибавилось (66), доля 85.23 -> 85.27%. Baseline пере-записан на факт.
