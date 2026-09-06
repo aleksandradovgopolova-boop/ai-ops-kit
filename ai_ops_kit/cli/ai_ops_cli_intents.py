@@ -1057,7 +1057,7 @@ def _explain_conflicts(focus, others):
     for o in others:
         theirs = [scope_prefix(x) for x in (o.get("affected_areas") or o.get("areas") or [])]
         if any(scopes_overlap(m, t) for m in mine for t in theirs):
-            hits.append(o.get("branch") or _explain_wid(o) or "другая работа")
+            hits.append(_explain_wid(o) or o.get("branch") or "другая работа")
     return sorted(set(hits))
 
 
@@ -1190,7 +1190,9 @@ def _explain_message(state):
     st = f["status"]
     label = _EXPLAIN_STATUS_LABEL.get(st, "в работе")
     cost = state.get("cost") or {}
-    where = (f"Веду в ветке {f['branch']}." if f.get("branch") else "Работа начата.")
+    # Имя ветки — жаргон для product-аудитории (как SHA/gate-id): держим его в technical, а в
+    # продуктовой строке говорим состоянием, не идентификатором. #539 judge-fix.
+    where = ("Работа идёт." if f.get("branch") else "Работа начата.")
     blocker = _explain_blocker(st, f.get("human_approval"), state.get("conflicts") or [])
     if blocker:
         why = "Что мешает: " + blocker + "."
