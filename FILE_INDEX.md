@@ -13,8 +13,9 @@
 - `.pre-commit-config.yaml`
 - `AGENTS.md`
 - `APPLY.md`
-- `CHANGELOG.md`
+- `CHANGELOG.md` — свежие релизы (свежее 3.38.0); детальная история — `DEVELOPMENT-HISTORY.md`
 - `CLAUDE.md`
+- `DEVELOPMENT-HISTORY.md` — детальная инженерная история релизов (3.37.0 → 3.20.1, архив), вынесена из `CHANGELOG.md`
 - `FILE_INDEX.md` — этот файл
 - `LICENSE`
 - `MIGRATION_GUIDE.md`
