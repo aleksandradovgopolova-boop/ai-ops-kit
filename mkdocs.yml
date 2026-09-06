@@ -26,25 +26,63 @@ theme:
 #
 # `QUICKSTART.md` — регистр как у файла. На macOS и Windows расхождение не видно, на Linux сборка
 # падает: тот же класс, что «у меня работает».
+# НАВИГАЦИЯ ОРГАНИЗОВАНА ПО ЧЕТЫРЁМ УРОВНЯМ (issue #547): START → USE → EXTEND → ARCHITECT —
+# по тому, ЧТО делает читатель, а не по тому, как устроен кит внутри. Пятая и шестая группы —
+# API-справочник и записи о прошлом (журнал версий, change-brief'ы, аудиты, ретро): они не входят
+# в четыре уровня и помечены как справочник/архив. Каждая существующая страница остаётся достижимой.
+# Правило прежнее: навигация называет ТОЛЬКО существующее и с ТЕМ ЖЕ регистром (см. шапку выше).
 nav:
   - Home: index.md
-  - Quickstart: QUICKSTART.md
-  - Architecture:
+  - START — первый день:
+    - Quickstart: QUICKSTART.md
+    - Что даёт кит: ONBOARDING.md
+    - Walkthrough: WALKTHROUGH.md
+    - Installation: guides/installation.md
+  - USE — каждый день:
+    - Гайд внедрения по ролям: adoption-guide.md
+    - Модель платформы: platform-model.md
+    - Каналы релиза: release-channels.md
+    - Параллельная работа: parallel-work.md
+    - Несколько сессий: parallel-sessions.md
+    - Qualification Runbook: qualification-runbook.md
+    - Дочерний репозиторий: guides/child-repo.md
+    - CI Configuration: guides/ci.md
+  - EXTEND — расширяете кит:
+    - Реестр как источник истины: architecture/registry.md
+    - Quality Gates: architecture/quality-gates.md
+    - Инженерный цикл: agent-guides/engineering-cycle.md
+    - Проверки перед коммитом: agent-guides/pre-commit-checklist.md
+    - Изоляция рантайма: container-isolation.md
+    - Secret-scanning в дочках: downstream-secret-scanning.md
+    - Метрики обкатки: dogfooding-metrics.md
+  - ARCHITECT — проектируете вглубь:
     - Overview: architecture/overview.md
     - Execution Engine: architecture/execution-engine.md
-    - Quality Gates: architecture/quality-gates.md
-    - Registry: architecture/registry.md
-  - API Reference:
-    - Contracts:
-      - TypedDict Contracts: api/contracts.md
-      - Invariants: api/invariants.md
-      - Public Surface: api/public-surface.md
-    - Operations:
-      - Kit Observability: api/kit-observability.md
-  - Guides:
-    - Installation: guides/installation.md
-    - Child Repository: guides/child-repo.md
-    - CI Configuration: guides/ci.md
+    - Architecture Constitution: architecture/ARCHITECTURE_CONSTITUTION.md
+    - Dependency DAG: architecture/DEPENDENCY_DAG.md
+    - Refactoring Map: architecture/REFACTORING_MAP.md
+    - Invariants: api/invariants.md
+    - Инженерный стандарт (требования): engineering-standard-requirements.md
+    - Продуктовые требования: PRODUCT-REQUIREMENTS.md
+  - Справочник (reference):
+    - TypedDict Contracts: api/contracts.md
+    - Public Surface: api/public-surface.md
+    - Kit Observability: api/kit-observability.md
+  - Записи о прошлом (archive):
+    - Change-brief'ы: change-briefs/README.md
+    - Distribution boundary (3.34): change-briefs/3.34-distribution-boundary-cleanup.md
+    - Product Operating Model (3.35): change-briefs/3.35-product-operating-model.md
+    - Журнал версий — roadmap: changelog/roadmap-history.md
+    - Журнал версий v3.0–v3.19: changelog/v3.0-v3.19.md
+    - Журнал версий v2: changelog/v2.md
+    - Журнал версий v0–v1: changelog/v0-v1.md
+    - Отчёт аудита: audit-report.md
+    - Аудит 2026-08-25: audit-2026-08-25/README.md
+    - Аудит 2026-08-25 — отчёт: audit-2026-08-25/audit-report.md
+    - Аудит 2026-08-25 — извлечение ядра: audit-2026-08-25/kernel-extraction.md
+    - Аудит 2026-08-25 — план лент: audit-2026-08-25/lanes-plan.md
+    - Ретро параллельного прогона: parallel-execution-retro.md
+    - Дизайн 3.0 (архив): 3.0-design.md
 
 markdown_extensions:
   - pymdownx.highlight:
