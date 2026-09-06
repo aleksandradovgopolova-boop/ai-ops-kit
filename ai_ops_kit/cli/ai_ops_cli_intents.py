@@ -1473,3 +1473,46 @@ def _intent_work(task, child_root, signals, a):
                                audience=presenter.audience_from_config(root)))
     # Код возврата — нашлась ли работа хоть в одном источнике: сведено -> 0; ни одного источника -> 2.
     return 0 if view.get("sources") else 2
+
+
+
+# ── ai-ops readout (#545): ЕДИНЫЙ пост-релизный путь одним вызовом ─────────────────────────────────
+# PRR -> verify_analytics_runtime -> outcome-проекция -> один вердикт. Обработчик проб-свободен: он
+# только читает (через оркестратор post_release_loop) и печатает; ничего в дочку не пишет и никакой
+# goal.outcome не флипает. Оркестратор живёт в пакете `cli` осознанно — только слой entrypoints вправе
+# звать И intelligence (event_arrival), И validation (оба валидатора PRR/outcome); см. его докстринг.
+def _readout_docs(a):
+    """Загрузить опциональные OutcomeContract/OutcomeReadout из путей флагов. -> (contract, readout)."""
+    from ai_ops_kit.cli import post_release_loop
+    contract = readout = None
+    cpath = getattr(a, "outcome_contract", None)
+    rpath = getattr(a, "outcome_readout", None)
+    if cpath:
+        contract, _ = post_release_loop._load_doc(Path(cpath))
+    if rpath:
+        readout, _ = post_release_loop._load_doc(Path(rpath))
+    return contract, readout
+
+
+def _intent_readout(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.cli import post_release_loop
+    from ai_ops_kit.ui import presenter
+    root = Path(child_root)
+    # PRR-ссылка: из --prr, иначе позиционным текстом задачи (если это путь), иначе поиск в дочке.
+    prr_ref = getattr(a, "prr", None) or (task or None)
+    contract, readout = _readout_docs(a)
+    result = post_release_loop.run_post_release(prr_ref, root, contract=contract,
+                                                readout=readout, feature=a.feature)
+    if js:
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    else:
+        aud = presenter.audience_from_config(root)
+        print(presenter.render(presenter.from_post_release_loop(result), audience=aud))
+        if aud != "product":
+            print()
+            print(post_release_loop.render(result))
+    # Код возврата — ГОТОВНОСТЬ РЕКОМЕНДОВАТЬ ВЫПУСК, а не «всё зелено»: приход событий подтверждён
+    # (partially_verified) -> 0; аналитика ещё не поступила или сигнал негативный -> 1 (честно, что
+    # рекомендовать выпуск нечем). Флип исхода цели ждёт реального выпуска (см. post_release_loop).
+    return 0 if result.get("verdict") == "partially_verified" else 1

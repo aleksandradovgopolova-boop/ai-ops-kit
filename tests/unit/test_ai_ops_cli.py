@@ -38,6 +38,10 @@ EXPECTED_INTENTS = {
     # #540: единая владельческая очередь «что ждёт моего решения» — решения/остановки/подтверждения/
     # обзор/предупреждения о выпуске одним списком (read-only).
     "inbox",
+    # #545 (outcome-loop): `readout` — ЕДИНЫЙ пост-релизный путь одним вызовом: PRR ->
+    # verify_analytics_runtime -> outcome-проекция -> один вердикт (read-only). Проводит в контур
+    # event_arrival.verify_analytics_runtime и validate_post_release_readout/validate_product_objects.
+    "readout",
     # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
     "bootstrap",
     # 2026-08-17: канал наблюдений о ките из дочки — данные, а не пересказ.

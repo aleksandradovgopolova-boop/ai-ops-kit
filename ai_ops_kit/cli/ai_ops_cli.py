@@ -116,6 +116,12 @@ INTENTS = {
     # предложением, автоматически не применяются.
     "replan":  ("перепланирование: сам переприоритизирует план под реальность (--apply — записать), "
                 "структурные изменения — предложением", "replan", False),
+    # #545 outcome-loop: ЕДИНЫЙ пост-релизный путь одним вызовом — PRR -> проверка прихода событий в
+    # аналитику -> проекция исхода -> один вердикт. Только чтение. Честный дефолт при отсутствии
+    # выгрузки аналитики -> «выпуск рекомендовать не могу», а не «healthy». Реальный флип исхода цели
+    # ждёт реального выпуска дочки.
+    "readout": ("пост-релизная петля: доставили -> дошли ли события в аналитику -> исход -> один "
+                "вердикт (без выгрузки аналитики — честно «ещё нечем проверить»)", "readout", False),
 }
 
 
@@ -125,7 +131,7 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan", "inbox", "work")
+                  "inspect", "replan", "inbox", "work", "readout")
 
 
 def resolve_flags(signals):
@@ -290,7 +296,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
-    _intent_explain, _intent_inbox, _intent_work,
+    _intent_explain, _intent_inbox, _intent_work, _intent_readout,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -305,7 +311,7 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("health", _intent_health), ("team", _intent_team),
                    ("onboard", _intent_onboard), ("doctor", _intent_doctor),
                    ("explain", _intent_explain), ("inbox", _intent_inbox),
-                   ("work", _intent_work)):
+                   ("work", _intent_work), ("readout", _intent_readout)):
     _intent(_name)(_fn)
 del _name, _fn
 
@@ -729,6 +735,13 @@ def _build_cli_arg_parser():
                          "по умолчанию .ai-ops/backlog.yaml")
     ap.add_argument("--milestone", default=None,
                     help="delivery: id milestone, под который строить delivery-план и прогноз")
+    # #545 readout (пост-релизная петля): PRR-файл и опциональные OutcomeContract/OutcomeReadout.
+    ap.add_argument("--prr", default=None,
+                    help="readout: путь к PRR-файлу (PostReleaseReadout); без него — поиск в дочке")
+    ap.add_argument("--outcome-contract", default=None, dest="outcome_contract",
+                    help="readout: путь к OutcomeContract для проекции исхода (опционально)")
+    ap.add_argument("--outcome-readout", default=None, dest="outcome_readout",
+                    help="readout: путь к OutcomeReadout (опционально; без него исход — pending)")
     ap.add_argument("--apply", action="store_true",
                     help="bootstrap: РЕАЛЬНО создать отсутствующие направление и план "
                          "(без флага — сухой прогон: показать, что будет создано)")
