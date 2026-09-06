@@ -42,7 +42,7 @@ lessons:
     grounding:
       - {file: quality/gates.yaml, contains: "падает на коде ДО правки и проходит"}
       - {file: ai_ops_kit/gates/regression_evidence.py, contains: "тест, который проходит и без исправления, ничего не доказывает"}
-      - {file: CHANGELOG.md, contains: "44 мутанта, 17 выживших"}
+      - {file: DEVELOPMENT-HISTORY.md, contains: "44 мутанта, 17 выживших"}
       - {file: pytest.ini, contains: "Мутационное ревью показало цену"}
 
   - id: local-green-is-not-ci-green
@@ -77,7 +77,7 @@ lessons:
       деревом правки. Проверка, которая сама себе стелет `PYTHONPATH`, проверяет не то, что обещает.
     grounding:
       - {file: installer/ai_ops.py, contains: "а не от глобального"}
-      - {file: CHANGELOG.md, contains: "«работает локально» из-за editable-установки"}
+      - {file: DEVELOPMENT-HISTORY.md, contains: "«работает локально» из-за editable-установки"}
       - {file: tests/unit/test_validator_runtime_contract.py, contains: "сама себе стелет путь"}
 
   - id: unavailable-is-not-zero
