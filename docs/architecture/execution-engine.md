@@ -40,7 +40,7 @@ Task → Preflight → Tool Loop → Evidence → Gates → Report → Delivery
 
 ### 4. Quality Gates
 
-35 <!-- claim:gates-total --> гейта с machine-readable контрактами:
+36 <!-- claim:gates-total --> гейта с machine-readable контрактами:
 - Deterministic (тесты, lint, security)
 - AI Review (модель оценивает качество)
 - Human Approval (для critical)

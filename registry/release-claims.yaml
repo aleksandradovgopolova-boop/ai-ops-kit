@@ -103,7 +103,7 @@ agents_count: 51
 # требование blocking: true у каждого гейта из mvp_blocking_gates (список блокеров без силы —
 # такая же ложь публичной поверхности, как устаревшее число). При изменении числа гейтов править
 # ОБА места: knowledge/claims.yaml (pattern-счётчик) и этот файл.
-gates_count: 35
+gates_count: 36
 mvp_blocking_count: 8
 # Верификация самих валидаторов (рекомендация №6 внешнего ревью).
 # validators_count / validators_externally_tested ЗДЕСЬ БОЛЬШЕ НЕ ХРАНЯТСЯ. Это были derived-числа —
