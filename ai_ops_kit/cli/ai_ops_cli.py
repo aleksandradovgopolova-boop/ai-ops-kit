@@ -202,6 +202,12 @@ def _build_signals(intent, task, child_root, a):
         signals["feature"] = a.feature
     if intent in _SIGNAL_CARRY_INTENTS:
         signals = _carry_stored_signals(task, child_root, signals, a.feature)
+    # #543 shadow->live: owner-флаг risk_calibrated_enforcement из .ai-ops.yaml -> в сигналы (если не
+    # задан явным --signals). По умолчанию ключа нет -> флаг OFF -> строгость гейтов не меняется.
+    from ai_ops_kit.gates import gate_executor as _ge
+    _rc = _ge.risk_calibrated_config(child_root)
+    if _rc is not None and "risk_calibrated_enforcement" not in (signals.get("gates") or {}):
+        signals.setdefault("gates", {})["risk_calibrated_enforcement"] = _rc
     return signals
 
 

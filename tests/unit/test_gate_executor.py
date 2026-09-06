@@ -543,3 +543,101 @@ class TestEvidenceFromNoVerdict:
             self.BLOCKING, gate_id="code_review", stopped="refusal: empty_answer", refusal=refusal)
         assert ev["status"] == "fail"
         assert "пустой" in self._said(ev)
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestRiskCalibratedEnforcement:
+    """#543 shadow->live: owner-флаг risk_calibrated_enforcement меняет ДЕЙСТВУЮЩУЮ строгость
+    UI-гейта в evaluate_gate/evaluate. По умолчанию OFF -> поведение НЕ меняется."""
+
+    _FAIL = {"status": "fail", "blockers": ["reviewer FAIL"], "evidence": ["e"]}
+
+    def _gate(self):
+        # UI-review-гейт как в реестре: read-only судья, блокирующий
+        return {"blocking": True, "review_mode": "read-only", "responsible_role": "ux-reviewer"}
+
+    # --- OFF (дефолт): строгость неизменна ---
+    def test_off_internal_ui_gate_stays_blocking(self):
+        r = gate_executor.evaluate_gate("ux_review", self._gate(),
+                                        {"ux_review": self._FAIL},
+                                        signals={"ui_impact": "internal"})
+        assert r["blocking"] is True and r["status"] == "fail"
+
+    def test_off_matches_no_signals(self):
+        # флаг отсутствует в сигналах == сегодняшнее поведение
+        base = gate_executor.evaluate_gate("ux_review", self._gate(),
+                                           {"ux_review": self._FAIL}, signals={})
+        internal = gate_executor.evaluate_gate("ux_review", self._gate(),
+                                               {"ux_review": self._FAIL},
+                                               signals={"ui_impact": "internal"})
+        assert base["blocking"] == internal["blocking"] == True  # noqa: E712
+        assert base["status"] == internal["status"] == "fail"
+
+    # --- ON: риск-калибровка ---
+    def _on(self, impact):
+        return {"ui_impact": impact, "gates": {"risk_calibrated_enforcement": True}}
+
+    def test_on_internal_low_risk_gate_becomes_advisory(self):
+        r = gate_executor.evaluate_gate("ux_review", self._gate(),
+                                        {"ux_review": self._FAIL},
+                                        signals=self._on("internal"))
+        assert r["blocking"] is False           # демотирован в advisory
+        assert r["status"] == "warn"            # fail на advisory-гейте -> warn, не fail
+        assert any("risk-calibrated" in w for w in r["warnings"])  # причина названа
+
+    def test_on_internal_accessibility_stays_blocking(self):
+        r = gate_executor.evaluate_gate("accessibility_review", self._gate(),
+                                        {"accessibility_review": self._FAIL},
+                                        signals=self._on("internal"))
+        assert r["blocking"] is True and r["status"] == "fail"     # safety-гейт не ослаблен
+
+    def test_on_critical_ui_gate_stays_blocking(self):
+        r = gate_executor.evaluate_gate("ux_review", self._gate(),
+                                        {"ux_review": self._FAIL},
+                                        signals=self._on("critical"))
+        assert r["blocking"] is True and r["status"] == "fail"
+
+    def test_on_flat_signal_also_works(self):
+        r = gate_executor.evaluate_gate(
+            "visual_regression", self._gate(), {"visual_regression": self._FAIL},
+            signals={"ui_impact": "internal", "risk_calibrated_enforcement": True})
+        assert r["blocking"] is False and r["status"] == "warn"
+
+    # --- evaluate() aggregation: enforcement реально флипает blocked/unmet ---
+    def test_evaluate_off_blocks_internal_ui_gate(self):
+        res = gate_executor.evaluate("QUICK", {"ux_review": self._FAIL},
+                                     gate_ids=["ux_review"], signals={"ui_impact": "internal"})
+        assert res["blocked"] is True and "ux_review" in res["unmet_gates"]
+
+    def test_evaluate_on_unblocks_internal_low_risk(self):
+        res = gate_executor.evaluate("QUICK", {"ux_review": self._FAIL},
+                                     gate_ids=["ux_review"], signals=self._on("internal"))
+        assert res["blocked"] is False and res["unmet_gates"] == []
+
+    def test_evaluate_on_critical_still_blocks(self):
+        res = gate_executor.evaluate("QUICK", {"ux_review": self._FAIL},
+                                     gate_ids=["ux_review"], signals=self._on("critical"))
+        assert res["blocked"] is True and "ux_review" in res["unmet_gates"]
+
+
+@pytest.mark.unit
+class TestRiskCalibratedConfig:
+    """risk_calibrated_config: owner-флаг из .ai-ops.yaml дочки (#543)."""
+
+    def test_absent_file(self, tmp_path):
+        assert gate_executor.risk_calibrated_config(tmp_path) is None
+
+    def test_key_absent(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text("communication:\n  audience: product\n", encoding="utf-8")
+        assert gate_executor.risk_calibrated_config(tmp_path) is None
+
+    def test_true(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text(
+            "gates:\n  risk_calibrated_enforcement: true\n", encoding="utf-8")
+        assert gate_executor.risk_calibrated_config(tmp_path) is True
+
+    def test_false(self, tmp_path):
+        (tmp_path / ".ai-ops.yaml").write_text(
+            "gates:\n  risk_calibrated_enforcement: false\n", encoding="utf-8")
+        assert gate_executor.risk_calibrated_config(tmp_path) is False

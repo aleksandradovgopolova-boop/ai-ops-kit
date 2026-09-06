@@ -34,6 +34,8 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.gates import gate_policy  # риск-калиброванная строгость под owner-флагом (#543)
+
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 # v3.34: валидаторы переехали в пакет. Путь один на модуль — чтобы следующий перенос правился
@@ -489,6 +491,27 @@ def load_workflows():
     return yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8")).get("workflows", {})
 
 
+def risk_calibrated_config(root) -> "bool | None":
+    """Owner-флаг `gates.risk_calibrated_enforcement` из .ai-ops.yaml ДОЧЕРНЕГО репозитория (#543).
+
+    None -> ключ не задан (флаг не инжектим -> остаётся дефолт OFF, поведение не меняется). Читает
+    репо-конфиг (не PKG кита): флаг — решение владельца конкретного продукта. Битый yaml/нет файла ->
+    None (fail-safe к OFF)."""
+    for name in (".ai-ops.yaml", ".ai-ops.yml"):
+        p = Path(root) / name
+        if not p.is_file():
+            continue
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return None
+        g = data.get("gates")
+        if isinstance(g, dict) and "risk_calibrated_enforcement" in g:
+            return bool(g.get("risk_calibrated_enforcement"))
+        return None
+    return None
+
+
 def override_effective(gate: dict, override) -> bool:
     """Снимает ли override блокировку гейта — с учётом ПОЛИТИКИ гейта (v2.16).
     Раньше любой override с by+reason обходил любой блокирующий гейт, игнорируя
@@ -600,7 +623,12 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     реально запускаемым валидатором проверка исполняется здесь; символические валидаторы
     и reviewer/human-гейты требуют внешнего evidence."""
     kind = classify(gate, signals)
-    blocking = bool(gate.get("blocking"))
+    # v3.2 (#543) shadow -> live: под owner-флагом risk_calibrated_enforcement строгость UI-гейта
+    # берётся из candidate_policy (internal low-risk -> advisory, critical/user_facing -> blocking).
+    # Флаг OFF (по умолчанию) -> строгость = статическая gate.blocking, поведение НЕ меняется.
+    blocking, _rc_reason = gate_policy.effective_enforcement(
+        gate_id, bool(gate.get("blocking")), signals or {},
+        enabled=gate_policy.risk_calibrated_enforcement_enabled(signals))
     required = gate.get("required_evidence", []) or []
     ev = dict((evidence or {}).get(gate_id) or {})
 
@@ -688,6 +716,17 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
                 warnings = warnings + [f"advisory (Вывод 1: сценарий, а не слой): не предъявлены "
                                        f"{', '.join(_adv_missing)} — «тесты есть» != «тест проходит "
                                        f"пользовательский сценарий тем же путём, что продукт»"]
+
+    # Демотия строгости по риск-калибровке (#543) — НАЗВАНА в warnings, а не молчалива: владелец
+    # видит, что блокировка снята политикой под его флагом, а не потерялась. Advisory-семантика та
+    # же, что у reviewer-калибровки в pipeline_evidence: fail демотированного гейта -> warn (не
+    # блокирует), а его блокеры переезжают в warnings (blockers остаются только на боевом fail).
+    if _rc_reason:
+        warnings = warnings + [_rc_reason]
+        if status == "fail":
+            warnings = warnings + [f"(advisory) {b}" for b in blockers]
+            blockers = []
+            status = "warn"
 
     result = {
         "schema_version": 1,

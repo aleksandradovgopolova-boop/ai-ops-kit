@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1045
+  ai_ops_kit/cli/ai_ops_cli.py: 1051
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1420
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
@@ -32,7 +32,7 @@ ceilings:
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 732
-  ai_ops_kit/gates/gate_executor.py: 781
+  ai_ops_kit/gates/gate_executor.py: 820
   ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
 
@@ -379,3 +379,25 @@ raises:
       gates -> intelligence). +21 строка. Ветка исполнения гейта — связная ответственность
       deterministic_run; вынос ради 21 строки непропорционален. Потолок поднят под факт; ратчет
       держит рост вниз от 781.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/gates/gate_executor.py = 781'
+    to: 'ai_ops_kit/gates/gate_executor.py = 820'
+    work: gate-policy-shadow-to-live
+    why: >-
+      #543: gate_policy shadow->live. evaluate_gate теперь считает ДЕЙСТВУЮЩУЮ строгость UI-гейта
+      через gate_policy.effective_enforcement под owner-флагом risk_calibrated_enforcement
+      (по умолчанию OFF -> строгость = статическая gate.blocking, поведение НЕ меняется). Чистая
+      сигнальная логика (флаг-ридер + матрица) лежит в gate_policy (тот же пакет, ниже порога);
+      в gate_executor +26 строк: импорт, расчёт effective blocking + named-warning о демотии в
+      evaluate_gate, и репо-конфиг-ридер risk_calibrated_config (.ai-ops.yaml -> owner-флаг).
+      Потолок поднят под факт; ратчет держит рост вниз от 820.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1040'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1046'
+    work: gate-policy-shadow-to-live
+    why: >-
+      #543: _build_signals инжектит owner-флаг risk_calibrated_enforcement из .ai-ops.yaml дочки в
+      сигналы прогона (если не задан явным --signals). +6 строк glue; ключа нет -> флаг OFF ->
+      поведение не меняется. Потолок поднят под факт; ратчет держит рост вниз от 1046.
