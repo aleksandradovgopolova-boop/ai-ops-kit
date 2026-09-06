@@ -157,6 +157,7 @@ experimental:
     - own_medicine
     - event_contract_consistency
     - surface_wiring_consistency
+    - feature_decision_quality
     - stakeholder_readiness
     - documentation_drift
     - documentation_updated
