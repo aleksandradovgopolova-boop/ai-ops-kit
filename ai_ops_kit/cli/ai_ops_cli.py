@@ -155,6 +155,67 @@ def _wid_for(task, signals, feature):
                                           workitem_id=feature)["workitem_id"]
 
 
+# Шаги, которые ПОДХВАТЫВАЮТ сохранённые на specify сигналы (полевой замер cockpit, 06.09.2026):
+# `specify` их пишет, эти шаги их читают. Перенос идёт только сюда, чтобы не менять поведение
+# команд, которые к сигналам уровня отношения не имеют (status/next/health/…).
+_SIGNAL_CARRY_INTENTS = ("specify", "plan", "run", "do")
+
+
+def _carry_stored_signals(task, child_root, signals, feature):
+    """Долить сигналы, сохранённые прошлым `specify` в features/<wid>/spec.yaml.
+
+    Правило слияния: сохранённое — БАЗА, переданное на этом вызове (--signals) — СВЕРХУ. Значит
+    явный --signals по-прежнему переопределяет сохранённое, а его отсутствие больше не откатывает
+    уровень: ENGINEERING-задача не едет молча как QUICK. Нет спеки / нет блока signals -> вернём
+    вход без изменений (обратная совместимость)."""
+    from ai_ops_kit.gates import spec_levels
+    try:
+        wid = _wid_for(task, signals, feature)
+        stored = spec_levels.carried_signals(Path(child_root), wid)
+    except Exception:  # noqa: BLE001 — перенос сигналов не должен ронять команду
+        return signals
+    if not stored:
+        return signals
+    return {**stored, **signals}
+
+
+def _build_signals(intent, task, child_root, a):
+    """Собрать сигналы вызова: --signals + feature + перенос сохранённого со specify.
+
+    Вынесено из `main` (ратчет func-size: main упиралась в потолок). Правило переноса — то же,
+    что у plan/run: сохранённое на specify — база, переданное на этом вызове — сверху (см.
+    `_carry_stored_signals`). Явный --signals по-прежнему побеждает; его отсутствие больше не
+    роняет уровень (ENGINEERING-задача не едет молча как QUICK). Перенос — только для интентов
+    `_SIGNAL_CARRY_INTENTS`, чтобы не менять поведение команд, к уровню отношения не имеющих.
+    """
+    signals = json.loads(a.signals)
+    if a.feature:
+        signals["feature"] = a.feature
+    if intent in _SIGNAL_CARRY_INTENTS:
+        signals = _carry_stored_signals(task, child_root, signals, a.feature)
+    return signals
+
+
+def _intake_command_carrying_task_type(missing, task_type):
+    """Готовая строка ответа на неполный intake, СОХРАНЯЮЩАЯ уже известный task_type.
+
+    Полевой замер (cockpit, 06.09.2026): `run` без size/risk печатал подсказку
+    `--signals '{"size":..,"risk":..}'` — без task_type. Оператор, следуя ей буквально, ронял
+    ENGINEERING в QUICK (base_workflow QUICK -> судья code_review не запускается). Поэтому task_type,
+    выведенный роутером или перенесённый со specify, встаёт в подсказку первым ключом. Формат — как
+    у pipeline_helpers.intake_signals_command, чтобы строка оставалась единообразной.
+    """
+    from ai_ops_kit.engine import pipeline_helpers
+    base = pipeline_helpers.intake_signals_command(missing)
+    if not task_type or not base:
+        return base
+    pairs = {"task_type": task_type}
+    for m in missing:
+        pairs[m["signal"]] = (m.get("allowed") or ["<значение>"])[0]
+    inner = ", ".join(f'"{k}":"{v}"' for k, v in pairs.items())
+    return f"--signals '{{{inner}}}'"
+
+
 def _say(child_root, translator, *args, **kwargs):
     """Внутренний отчёт -> человеческий текст. ЕДИНСТВЕННЫЙ путь наружу для команд намерений.
 
@@ -711,9 +772,9 @@ def main(argv):
         task = rest.pop(0)
     elif needs_task:
         task = ""
-    signals = json.loads(a.signals)
-    if a.feature:
-        signals["feature"] = a.feature
+    # Сигналы вызова + перенос сохранённого со specify (в _build_signals: ратчет func-size). ДО
+    # процессного гейта и диспетча — одни и те же сигналы видят и short_path/потолок, и план, и движок.
+    signals = _build_signals(intent, task, child_root, a)
 
     # ПЕРЕД процессным шагом: уже описанная работа идёт коротким путём, залипший разбор
     # останавливается вопросом владельцу. Место выбрано так, что ни один процессный шаг мимо не
@@ -839,14 +900,18 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
         # (раунд C: 6 из 6 прогонов сгорели). Fail-closed (exit 2), но платится секундами, а не часом.
         _missing = pipeline_helpers.missing_intake_signals(signals)
         if _missing:
+            # Подсказка сохраняет уже известный task_type (роутер/перенос со specify): следовать ей
+            # буквально не должно ронять уровень в QUICK (полевой замер cockpit 06.09.2026).
+            _cmd = _intake_command_carrying_task_type(_missing, signals.get("task_type"))
             _hint = pipeline_helpers.intake_signals_hint(_missing, task)
+            if _hint and signals.get("task_type"):
+                _hint = _hint[:-1] + [f"  добавь: {_cmd}"]
             if a.json:
                 print(json.dumps({"kind": "intake-incomplete", "exit": 2,
                                   "missing": _missing, "hint": _hint}, ensure_ascii=False, indent=2))
             else:
                 # Готовая команда с ответом обязана дойти до человека на любом уровне детализации.
-                _say(Path(child_root), "from_intake_gap", _missing,
-                     pipeline_helpers.intake_signals_command(_missing))
+                _say(Path(child_root), "from_intake_gap", _missing, _cmd)
             return 2
         flags = pv["will_do"]["auto_flags"]
         # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и идёт под своим именем во все ветки

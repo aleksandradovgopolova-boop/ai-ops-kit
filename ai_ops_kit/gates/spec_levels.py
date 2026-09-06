@@ -169,6 +169,41 @@ def _spec_path(child_root, wid):
     return Path(child_root) / "features" / str(wid) / "spec.yaml"
 
 
+# Полевой замер (cockpit, 06.09.2026, фича free-tile-counter): сигналы задачи (--signals) НЕ
+# переносились между шагами specify -> plan -> run. specify корректно поднимал spec до L1
+# ENGINEERING, а plan без повторного --signals выдавал base_workflow=QUICK — уровень spec и workflow
+# прогона считались независимо и расходились, из-за чего ENGINEERING-задача молча ехала как QUICK
+# (судья code_review не запускался). Лечим у источника: specify СОХРАНЯЕТ сырые сигналы в spec.yaml
+# (блок `signals:`), а plan/run их подхватывают, когда --signals на вызове не передан.
+# `feature` — это сам wid (путь), `task_text` — текст конкретного вызова; к классификации уровня оба
+# отношения не имеют и только зашумили бы перенос, поэтому в сохранённое не попадают.
+_NONCARRY_SIGNAL_KEYS = ("feature", "task_text")
+
+
+def _carryable_signals(signals):
+    """Сырые сигналы задачи для сохранения в spec.yaml — без per-invocation шума (см. выше)."""
+    return {k: v for k, v in dict(signals or {}).items() if k not in _NONCARRY_SIGNAL_KEYS}
+
+
+def carried_signals(child_root, wid):
+    """Сигналы, сохранённые предыдущим `specify` в features/<wid>/spec.yaml (блок `signals:`).
+
+    -> dict. Пусто, если спеки нет, блока signals нет или файл битый. Fail-closed: сомнение = пустой
+    перенос, поведение как раньше (QUICK по умолчанию). Репозитории без блока signals (созданные
+    прежними версиями) работают как прежде — обратная совместимость.
+    """
+    sp = _spec_path(child_root, wid)
+    if not sp.is_file():
+        return {}
+    try:
+        import yaml
+        doc = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — битый spec: перенос пуст, а не догадка
+        return {}
+    stored = doc.get("signals") if isinstance(doc, dict) else None
+    return dict(stored) if isinstance(stored, dict) else {}
+
+
 def provided_from_artifacts(child_root, wid, work_root=None):
     """v2.110: собрать provided-карту РАЗДЕЛОВ из РЕАЛЬНЫХ артефактов на диске (не из сигналов).
 
@@ -273,12 +308,15 @@ def create_spec(child_root, wid, signals, overwrite=False):
     cls = classify(signals)
     level = cls["level"]
     if sp.is_file() and not overwrite:
-        return _add_missing_sections(sp, cls)
+        return _add_missing_sections(sp, cls, signals)
     sections = {sid: {"status": "missing", "content": "", "note": None}
                 for sid in required_sections(level)}
     doc = {"schema_version": 1, "kind": "spec", "workitem_id": str(wid),
            "level": level, "level_name": cls["level_name"],
            "level_reason": cls["reason"],
+           # Сырые сигналы задачи -> plan/run подхватят их без повторного --signals (см. коммент
+           # у _NONCARRY_SIGNAL_KEYS: цена молчаливого отката ENGINEERING в QUICK).
+           "signals": _carryable_signals(signals),
            # F-013: словарь статусов — прямо в файле. Спеку заполняет человек или агент без
            # контекста исходников кита; раньше допустимые значения находились только чтением
            # spec_levels.py, а угаданное слово молча превращало раздел в «не заполнено».
@@ -297,14 +335,19 @@ def _render_spec(doc):
             + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
 
 
-def _add_missing_sections(sp, cls):
+def _add_missing_sections(sp, cls, signals=None):
     """F-029: дописать в существующий spec.yaml разделы, которых требует расчётный уровень.
     -> (path, created=False, {"added": [...], "error": None|str}). Заполненное не трогается;
     разделы не удаляются.
 
     Битый/непрочитанный файл НЕ переписываем: молча заменить описанное заготовками — потеря работы
     человека, а это дороже незакрытого гейта. Тогда added пуст, и вызывающий сообщает правду
-    («дописать не удалось»), а не выдаёт непроведённую правку за проведённую."""
+    («дописать не удалось»), а не выдаёт непроведённую правку за проведённую.
+
+    Сигналы переносятся тем же правилом, что у plan/run: сохранённое — база, переданное на этом
+    `specify` — сверху (явный --signals переопределяет). Если разделов дописывать нечего, но сигналы
+    изменились, файл всё равно перезаписывается — иначе перенос уровня терялся бы при повторном
+    specify без роста уровня."""
     import yaml
     level = cls["level"]
     try:
@@ -315,8 +358,12 @@ def _add_missing_sections(sp, cls):
         return sp, False, {"added": [], "error": "spec.yaml не содержит карты разделов (sections)"}
     sections = doc["sections"]
     added = [sid for sid in required_sections(level) if sid not in sections]
-    if not added:
+    stored = doc.get("signals") if isinstance(doc.get("signals"), dict) else {}
+    merged = {**stored, **_carryable_signals(signals)}
+    if not added and merged == stored:
         return sp, False, {"added": [], "error": None}
+    if merged:
+        doc["signals"] = merged
     for sid in added:
         sections[sid] = {"status": "missing", "content": "", "note": None}
     # Уровень поднимаем до расчётного и говорим ПОЧЕМУ; вниз не переписываем (нельзя понизить молча).

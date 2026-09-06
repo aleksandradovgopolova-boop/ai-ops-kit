@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 969
+  ai_ops_kit/cli/ai_ops_cli.py: 1034
   ai_ops_kit/cli/ai_ops_cli_intents.py: 948
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
@@ -313,3 +313,15 @@ raises:
       падал в CI на `import ai_ops_kit`/`import yaml`), права понижены до `contents: read`. +9 строк
       в чистом строителе `_workflow_yaml` (плюс рационале-докстринг). Модуль уже отмечен кандидатом на
       вынос feedback/rate-машинерии — сюда объём не добавляем. Ратчет держит рост вниз от 1097.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 969'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1034'
+    work: level-signals-carry-across-specify-plan-run
+    why: >-
+      Перенос сигналов уровня specify->plan->run (полевой замер cockpit 06.09.2026) добавил в CLI
+      читатель/слияние сохранённых сигналов (_carry_stored_signals, _build_signals) и подсказку intake,
+      сохраняющую task_type (_intake_command_carrying_task_type) — иначе ENGINEERING-задача молча ехала
+      как QUICK без судьи. Блок сборки сигналов вынесен из main в _build_signals (ратчет func-size —
+      main=154). ai_ops_cli.py — известный кандидат на вынос; расщепление монолита ради этой правки
+      непропорционально задаче. Потолок поднят осознанно под факт; ратчет держит рост вниз от 1034.
