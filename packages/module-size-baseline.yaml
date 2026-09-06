@@ -19,8 +19,8 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1040
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1227
+  ai_ops_kit/cli/ai_ops_cli.py: 1045
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1420
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
   ai_ops_kit/planning/delivery_plan.py: 1135
@@ -40,6 +40,21 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1227; ai_ops_cli.py = 1040'
+    to: 'ai_ops_cli_intents.py = 1420; ai_ops_cli.py = 1045'
+    work: '#540: ai-ops inbox owner queue'
+    why: >-
+      Новая владельческая команда `ai-ops inbox` — одна read-only очередь «что ждёт моего решения»:
+      решения (карточка что/варианты/рекомендация), остановленные работы, ждущие подтверждения,
+      свежий ночной обзор, предупреждения о выпуске. Проб-свободный обработчик и его read-only
+      ассемблеры (decision_loop-каталог напрямую без mkdir, active-work без persist через сборку
+      explain, nightly-review latest.md, product-health) легли в спутник ai_ops_cli_intents.py (+187)
+      — там же, где остальные read-only intent-хендлеры; регистрация интента (INTENTS, DIRECT_INTENTS,
+      импорт+for-цикл) добавила +5 в ai_ops_cli.py. Очередь агрегирует уже существующие источники,
+      вынос ради неё непропорционален; потолки подняты под факт, ратчет держит рост вниз.
+      ai_ops_cli_intents.py — известный кандидат на вынос read-only intent-хендлеров.
   - at: '2026-09-02'
     what: baseline_established
     from: null

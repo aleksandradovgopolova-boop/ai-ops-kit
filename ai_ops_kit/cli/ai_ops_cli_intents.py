@@ -1225,3 +1225,196 @@ def _intent_explain(task, child_root, signals, a):
     # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие работы: карточка собрана -> 0; недостоверный
     # реестр (собрать честно не смогли) -> 1. «Ничего не идёт» — это ответ, а не отказ, поэтому 0.
     return 0 if state.get("registry_ok") else 1
+
+
+# ── ai-ops inbox (#540): единая владельческая очередь «что ждёт моего решения» ────────────────────
+# Один список всего, что застряло на человеке: решения (компактная карточка что/варианты/рекомендация),
+# остановленные работы, работы, ждущие подтверждения, свежий ночной обзор и предупреждения о выпуске.
+# Команда ТОЛЬКО ЧИТАЕТ те же источники, что explain/health и каталог решений, и ничего не пишет и не
+# сверяет с записью — поэтому обработчик проб-свободен и живёт здесь. Пусто -> честное «ничего не
+# ждёт», а не выдуманный список; битый реестр идущих работ -> «не знаю, что ждёт» (не ложное «ничего»).
+
+
+def _inbox_decisions(child_root):
+    """Ожидающие решения владельца (product-decision, status pending) — read-only. Карточка:
+    что/варианты/рекомендация. Каталог решений читаем НАПРЯМУЮ, а не через его API-обёртку
+    (list-decisions): та на входе делает mkdir каталога, а inbox обязан ничего не писать. Сбой чтения
+    файла -> пропуск (решение молча НЕ показываем ложно)."""
+    import yaml
+    ddir = Path(child_root) / ".ai" / "project" / "decisions"
+    if not ddir.is_dir():
+        return []
+    out = []
+    for f in sorted(ddir.glob("*.yaml")):
+        try:
+            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError):
+            continue
+        if not isinstance(d, dict) or d.get("status") != "pending":
+            continue
+        out.append({"id": d.get("id"), "what": d.get("proposal") or d.get("id") or "решение",
+                    "options": [str(o) for o in (d.get("options") or [])],
+                    "recommendation": d.get("recommendation") or ""})
+    return out
+
+
+def _inbox_works(child_root):
+    """Идущие работы, застрявшие на человеке: остановленные (blocked/needs_more_evidence) и ждущие
+    подтверждения (needs_human_decision / требуется одобрение). Переиспользует read-only сборку
+    explain (реестр + сверка с базой БЕЗ persist). -> (blocked, reviews) либо (None, None) при
+    недостоверном реестре (сигнал «не знаю, что идёт», а не «ничего»)."""
+    root = Path(child_root)
+    active = _explain_active(root)                 # read-only, без persist
+    if active is None:
+        return None, None
+    blocked, reviews = [], []
+    for entry in active:
+        wid = _explain_wid(entry)
+        wi = _explain_workitem(root, wid)
+        st = wi.get("status") or "in_progress"
+        task = wi.get("task") or entry.get("title") or wid
+        if st in ("blocked", "needs_more_evidence"):
+            why = _explain_blocker(st, wi.get("human_approval_required"), []) or "продолжить нельзя"
+            blocked.append({"wid": wid, "task": task, "why": why})
+        elif st == "needs_human_decision" or wi.get("human_approval_required"):
+            reviews.append({"wid": wid, "task": task,
+                            "why": "работа затрагивает то, что я не меняю без твоего подтверждения"})
+    return blocked, reviews
+
+
+# Путь durable-инбокса ночных обзоров. Держим строкой, а НЕ импортом
+# nightly_review.BRIEFS_DIR_REL: этот модуль диспетчируется процессом (CI-workflow), и dormant-
+# инвентарь стережёт его «0 импортеров» как легит-вход — импорт ради одной константы пробил бы этот
+# инвариант. Формат стабилен (deliver_brief пишет ровно сюда).
+_INBOX_BRIEFS_LATEST_REL = ".ai/project/nightly-review/briefs/latest.md"
+
+
+def _inbox_insight(child_root):
+    """Свежий ночной обзор владельцу: доставлен ли бриф (`latest.md` в durable-инбоксе обзоров).
+    read-only. -> dict|None (None — обзора нет, а не «нечего сказать»)."""
+    latest = Path(child_root) / _INBOX_BRIEFS_LATEST_REL
+    if not latest.is_file():
+        return None
+    return {"what": "ночной обзор изменений — что поменялось и на что взглянуть",
+            "path": _INBOX_BRIEFS_LATEST_REL}
+
+
+def _inbox_release_warnings(child_root):
+    """Предупреждения о выпуске из живого здоровья продукта: band red/yellow -> выпускать рискованно.
+    Нет метрик/сбой сбора -> пусто (выдуманного предупреждения не даём). read-only (health считает
+    intelligence, как в contract/team)."""
+    rep = _product_health_report(child_root)
+    if not rep:
+        return []
+    band = (rep.get("band") or "").lower()
+    if band not in ("red", "yellow"):
+        return []
+    sev = "красное" if band == "red" else "жёлтое"
+    drivers = [str(x) for x in (rep.get("reasons") or [])][:3]
+    return [{"what": f"здоровье продукта {sev} — выпускать рискованно",
+             "why": "; ".join(drivers) if drivers else "см. здоровье продукта", "band": band}]
+
+
+def _inbox_collect(child_root):
+    """READ-ONLY снимок очереди владельца из всех источников. Ничего не пишет. -> dict."""
+    root = Path(child_root)
+    decisions = _inbox_decisions(root)
+    blocked, reviews = _inbox_works(root)
+    registry_ok = blocked is not None
+    insight = _inbox_insight(root)
+    warnings = _inbox_release_warnings(root)
+    total = (len(decisions) + len(blocked or []) + len(reviews or [])
+             + (1 if insight else 0) + len(warnings))
+    return {"registry_ok": registry_ok, "total": total, "decisions": decisions,
+            "blocked": blocked or [], "reviews": reviews or [], "insight": insight,
+            "warnings": warnings}
+
+
+def _inbox_status(queue):
+    """Статус контракта для очереди: решения/подтверждения -> нужно решение; остановки/предупреждения
+    -> заблокировано; иначе ок; недостоверный реестр -> degraded (не знаем, что застряло)."""
+    if not queue.get("registry_ok", True):
+        return "degraded"
+    if queue["decisions"] or queue["reviews"]:
+        return "needs_input"
+    if queue["blocked"] or queue["warnings"]:
+        return "blocked"
+    return "ok"
+
+
+def _inbox_counts(queue):
+    """Однострочная сводка очереди человеческими словами (без «0/N» и идентификаторов)."""
+    parts = []
+    if queue["decisions"]:
+        parts.append(f"решений — {len(queue['decisions'])}")
+    if queue["blocked"]:
+        parts.append(f"остановлено работ — {len(queue['blocked'])}")
+    if queue["reviews"]:
+        parts.append(f"ждут подтверждения — {len(queue['reviews'])}")
+    if queue["insight"]:
+        parts.append("свежий обзор")
+    if queue["warnings"]:
+        parts.append(f"предупреждений о выпуске — {len(queue['warnings'])}")
+    return ", ".join(parts)
+
+
+def _inbox_render(queue, aud):
+    """Очередь -> текст. Для аудитории `product` внутренняя лексика скрыта (глоссарий политики), а
+    идентификаторы работ/решений держим в технических деталях — как SHA/gate-id в explain. Пусто ->
+    честное «ничего не ждёт», битый реестр -> «не знаю, что ждёт» (не ложное «ничего»)."""
+    from ai_ops_kit.ui import presenter
+    h = (lambda s: presenter._humanize(s)) if aud == "product" else (lambda s: s)
+    L = presenter.statuses()
+    if not queue.get("registry_ok", True):
+        return (f"{L['degraded']}. Не знаю, что ждёт: запись об идущих работах повреждена.\n"
+                "Восстанови её и повтори — иначе я не поручусь, что ничего не застряло на тебе.")
+    if queue["total"] == 0:
+        return (f"{L['ok']}. Ничего не ждёт твоего решения.\n"
+                "Открытых решений, остановленных работ, непрочитанных обзоров и предупреждений о "
+                "выпуске нет.")
+    lines = [f"{L[_inbox_status(queue)]}. Тебя ждёт: {_inbox_counts(queue)}."]
+    for d in queue["decisions"]:
+        lines.append("")
+        lines.append(h(f"• Реши: {d['what']}"))
+        if d["options"]:
+            lines.append("    варианты: " + h("; ".join(d["options"])))
+        if d["recommendation"]:
+            lines.append("    " + h(f"рекомендую: {d['recommendation']}"))
+    for b in queue["blocked"]:
+        lines.append("")
+        lines.append(h(f"• Остановлена «{b['task']}»: {b['why']}"))
+    for r in queue["reviews"]:
+        lines.append("")
+        lines.append(h(f"• Ждёт подтверждения «{r['task']}»: {r['why']}"))
+    if queue["insight"]:
+        lines.append("")
+        lines.append(h(f"• Есть {queue['insight']['what']}"))
+    for w in queue["warnings"]:
+        lines.append("")
+        lines.append(h(f"• Предупреждение о выпуске: {w['what']}"))
+        if w.get("why"):
+            lines.append("    " + h(w["why"]))
+    lines.append("")
+    lines.append("Дальше: реши, что из очереди берём первым — по любому пункту скажу подробнее по запросу.")
+    if aud in ("technical", "debug"):
+        ids = [str(d["id"]) for d in queue["decisions"] if d.get("id")]
+        ids += [b["wid"] for b in queue["blocked"]] + [r["wid"] for r in queue["reviews"]]
+        if ids:
+            lines.append("")
+            lines.append("Технические детали:")
+            lines.append("  идентификаторы: " + ", ".join(ids))
+    return "\n".join(lines)
+
+
+def _intent_inbox(task, child_root, signals, a):
+    js = a.json
+    from ai_ops_kit.ui import presenter
+    root = Path(child_root)
+    queue = _inbox_collect(root)
+    if js:
+        print(json.dumps(queue, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(_inbox_render(queue, presenter.audience_from_config(root)))
+    # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие пунктов: очередь собрана -> 0 (в т.ч. пустая);
+    # недостоверный реестр идущих работ (честно собрать не смогли) -> 1.
+    return 0 if queue.get("registry_ok", True) else 1

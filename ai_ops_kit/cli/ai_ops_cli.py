@@ -62,6 +62,11 @@ INTENTS = {
     # мешает и ПОЧЕМУ (последствием, простыми словами), следующий шаг и оценка стоимости. Read-only.
     "explain": ("что с моей задачей прямо сейчас: стадия, что готово, что мешает и почему, "
                 "следующий шаг, оценка стоимости", "explain", False),
+    # #540: единая владельческая очередь — ОДИН список всего, что ждёт решения человека: решения
+    # (карточка что/варианты/рекомендация), остановленные работы, ждущие подтверждения, свежий ночной
+    # обзор, предупреждения о выпуске. Пусто -> честное «ничего не ждёт». Только чтение.
+    "inbox":   ("что ждёт твоего решения: решения, остановленные работы, подтверждения, обзор, "
+                "предупреждения о выпуске — одной очередью", "inbox", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
     # Product Contract (единый объект продукта): агрегирует идентичность, стандарт, артефакты слоя,
     # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
@@ -115,7 +120,7 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan")
+                  "inspect", "replan", "inbox")
 
 
 def resolve_flags(signals):
@@ -274,7 +279,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
-    _intent_explain,
+    _intent_explain, _intent_inbox,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -288,7 +293,7 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("bootstrap", _intent_bootstrap), ("discuss", _intent_discuss),
                    ("health", _intent_health), ("team", _intent_team),
                    ("onboard", _intent_onboard), ("doctor", _intent_doctor),
-                   ("explain", _intent_explain)):
+                   ("explain", _intent_explain), ("inbox", _intent_inbox)):
     _intent(_name)(_fn)
 del _name, _fn
 
