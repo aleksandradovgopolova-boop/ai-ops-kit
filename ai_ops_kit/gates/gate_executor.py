@@ -88,13 +88,40 @@ def load_evidence(path):
     return data
 
 
-# вердикт reviewer-стадии: строка вида "Recommendation: pass" / "status: passed" / "Вердикт: fail"
+# вердикт reviewer-стадии в ПРОЗЕ: строка вида "Recommendation: pass" / "status: passed" /
+# "Вердикт: fail" / "Recommendation: needs_work". Якорь на начало строки намеренный: слово внутри
+# фразы («passed the tests») вердиктом не считается.
 _VERDICT_PASS = re.compile(
     r"(?:^|\n)\s*(?:recommendation|verdict|вердикт|status|итог)\s*[:=]?\s*\(?\s*"
     r"(pass|passed|approved|одобрено|принято)\b", re.I)
+# needs_work / warn — ОТДЕЛЬНЫЙ класс, а не «почти pass»: на блокирующем гейте downstream
+# превращает его в блок (как структурный warn), поэтому терять его в фолбэке нельзя. Живой
+# code-reviewer часто заканчивает именно «Recommendation: needs_work» — раньше это не матчило ни
+# один из двух паттернов и давало no-verdict на валидном заключении.
+_VERDICT_WARN = re.compile(
+    r"(?:^|\n)\s*(?:recommendation|verdict|вердикт|status|итог)\s*[:=]?\s*\(?\s*"
+    r"(warn|warning|needs[_\s-]?work|нужны\s+правки|доработать|доработка|замечани)\b", re.I)
 _VERDICT_FAIL = re.compile(
     r"(?:^|\n)\s*(?:recommendation|verdict|вердикт|status|итог)\s*[:=]?\s*\(?\s*"
     r"(fail|failed|blocker|blocked|отклонено|провален)\b", re.I)
+
+
+def _last_prose_verdict(text):
+    """Последний вердикт-в-прозе -> 'pass'|'warn'|'fail'|None (берём ИТОГОВЫЙ, а не первый).
+
+    Прежде фолбэк проверял FAIL-паттерн ПЕРВЫМ и возвращал 'fail' при любом его совпадении. На тексте,
+    где судья цитирует пример «Вердикт: fail», а СВОЙ итог выносит 'pass' (или наоборот), это давало
+    вердикт, которого в заключении нет. Промпт роли требует вердикт В КОНЦЕ; всё раньше — цитата или
+    пример. Поэтому решает ПОСЛЕДНЯЯ вердикт-строка по позиции, а не приоритет одного класса над
+    другим — та же дисциплина «последний блок побеждает», что у extract_reviewer_json для JSON."""
+    if not text:
+        return None
+    best_pos, best = -1, None
+    for verdict, rx in (("pass", _VERDICT_PASS), ("warn", _VERDICT_WARN), ("fail", _VERDICT_FAIL)):
+        for m in rx.finditer(text):
+            if m.start() > best_pos:
+                best_pos, best = m.start(), verdict
+    return best
 
 
 def extract_reviewer_json(text):
@@ -157,20 +184,27 @@ def evidence_from_reviewer_result(gate: dict, rr: dict, source: str) -> dict:
 def evidence_from_markdown(gate: dict, text: str, source: str):
     """Фолбэк для артефактов без структурного заключения: строка вердикта в прозе.
     None — вердикта в тексте нет (и тогда гейт остаётся НЕзакрытым, а не «зелёным по умолчанию»)."""
-    if _VERDICT_FAIL.search(text or ""):
+    verdict = _last_prose_verdict(text or "")
+    if verdict is None:
+        return None
+    if verdict == "fail":
         return {"status": "fail", "blockers": [f"reviewer verdict FAIL @ {source}"],
                 "evidence": [source]}
-    if _VERDICT_PASS.search(text or ""):
-        # Дисциплина evidence (v2.16): «pass» ревьюера — доказательство ТОЛЬКО для
-        # ai-review гейтов (судья и есть evidence). Для детерминированных/human гейтов
-        # слово ревьюера НЕ фабрикует required_evidence (build_passed/tests_passed/…):
-        # их закрывают реальные валидаторы/факты, иначе «evidence» снова = «поверьте на слово».
-        if classify(gate) == "ai-review":
-            return {"status": "pass", "provided": list(gate.get("required_evidence", []) or []),
-                    "evidence": [f"reviewer verdict @ {source}"]}
-        # provided пуст -> при наличии required_evidence evaluate_gate честно даст fail
-        return {"status": "pass", "evidence": [f"reviewer verdict @ {source}"]}
-    return None
+    if verdict == "warn":
+        # warn/needs_work ревьюера — то же, что структурный warn: на блокирующем гейте downstream
+        # (evaluate_gate/_run_reviews) превращает его в блок. Тихим pass это не становится.
+        return {"status": "warn", "warnings": [f"reviewer verdict NEEDS_WORK/WARN @ {source}"],
+                "evidence": [source]}
+    # pass:
+    # Дисциплина evidence (v2.16): «pass» ревьюера — доказательство ТОЛЬКО для
+    # ai-review гейтов (судья и есть evidence). Для детерминированных/human гейтов
+    # слово ревьюера НЕ фабрикует required_evidence (build_passed/tests_passed/…):
+    # их закрывают реальные валидаторы/факты, иначе «evidence» снова = «поверьте на слово».
+    if classify(gate) == "ai-review":
+        return {"status": "pass", "provided": list(gate.get("required_evidence", []) or []),
+                "evidence": [f"reviewer verdict @ {source}"]}
+    # provided пуст -> при наличии required_evidence evaluate_gate честно даст fail
+    return {"status": "pass", "evidence": [f"reviewer verdict @ {source}"]}
 
 
 # Отказ провайдера, у которого причина «человеческая»: модель отказалась отвечать — тут нужен

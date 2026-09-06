@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 383
+behavioral_count: 384
 structural_count: 66
-total_count: 449
-behavioral_share_pct: 85.30
+total_count: 450
+behavioral_share_pct: 85.33
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -536,3 +536,17 @@ raises:
       Подъём порога ВВЕРХ: перенос сигналов уровня specify->plan->run (полевой замер cockpit
       06.09.2026) добавил один ПОВЕДЕНЧЕСКИЙ тест-файл (test_level_signals_carry.py) — импортирует и
       зовёт продукт. Структурных не прибавилось (66), доля 85.27 -> 85.30%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 383
+    from_total: 449
+    to_behavioral: 384
+    to_total: 450
+    to_share_pct: 85.33
+    work: code-review-reviewer-renders-a-parseable-verdict
+    why: >-
+      Подъём порога ВВЕРХ: работа сделала извлечение вердикта code_review надёжным (живой путь
+      ревьюера разбирает терминал тем же extract_reviewer_json, что и офлайн; фолбэк по прозе понимает
+      needs_work и берёт последний вердикт) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_code_review_verdict_extraction_is_robust.py) — импортирует и зовёт продукт. Структурных не
+      прибавилось (66), доля 85.30 -> 85.33%. Baseline пере-записан на факт.
