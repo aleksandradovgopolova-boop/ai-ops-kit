@@ -82,6 +82,10 @@ EXPECTED_INTENTS = {
     # источника (заявка/реестр идущих работ/граф пакетов/план) в одну карточку. Делает достижимым
     # lifecycle/work_view.
     "work",
+    # knowledge-graph-query: `graph build|trace <feature>|gaps` — Knowledge Graph как ЗАПРАШИВАЕМАЯ
+    # технология поверх registry/entities.yaml + validate_knowledge_graph. Собирает один граф из
+    # plan.yaml + FL-*.yaml + feature blueprints. Делает достижимым intelligence/knowledge_graph.
+    "graph",
 }
 
 

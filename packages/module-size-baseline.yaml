@@ -19,9 +19,9 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1087
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1518
-  ai_ops_kit/ui/presenter.py: 798
+  ai_ops_kit/cli/ai_ops_cli.py: 1096
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1648
+  ai_ops_kit/ui/presenter.py: 880
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
   ai_ops_kit/planning/delivery_plan.py: 1135
@@ -41,6 +41,25 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1518; ai_ops_cli.py = 1087; presenter.py = 798'
+    to: 'ai_ops_cli_intents.py = 1648; ai_ops_cli.py = 1096; presenter.py = 880'
+    work: 'knowledge-graph-query: Knowledge Graph как ЗАПРАШИВАЕМАЯ технология'
+    why: >-
+      Новый владельческий интент `ai-ops graph build|trace <feature>|gaps` — тонкий запрашиваемый
+      слой ПОВЕРХ существующего (registry/entities.yaml + validate_knowledge_graph): собирает один
+      граф из plan.yaml + FL-*.yaml + feature blueprints и отвечает на вопрос «зачем функция
+      существует и измерен ли её исход», который иначе требует ручного чтения трёх файлов.
+      Проб-свободный хендлер `_intent_graph` + помощники (`_graph_positionals`,
+      `_validate_graph_integrity`, `_graph_help`, подкоманда первым словом по образцу backlog) легли
+      в спутник read-only хендлеров ai_ops_cli_intents.py (+130); регистрация интента (INTENTS,
+      DIRECT_INTENTS, импорт+список хендлеров) добавила +9 в ai_ops_cli.py. Три переводчика
+      (`from_graph_build`/`from_graph_trace`/`from_graph_gaps`, продуктовый язык, пробел называется
+      пробелом) добавлены в presenter.py (+82). Сам сборщик и обход вынесены отдельным модулем
+      intelligence/knowledge_graph.py (335 строк, ниже порога 700, не в baseline). presenter.py и
+      ai_ops_cli_intents.py — известные кандидаты на вынос; потолки подняты под факт, ратчет держит
+      рост только вниз.
   - at: '2026-09-07'
     what: raise_ceiling
     from: 'ai_ops_cli_intents.py = 1475; ai_ops_cli.py = 1074; presenter.py = 724'

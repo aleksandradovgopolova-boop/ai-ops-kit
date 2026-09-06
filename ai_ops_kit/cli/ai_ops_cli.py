@@ -109,6 +109,14 @@ INTENTS = {
     # словом: classify | dedup | prioritize | graph. Без доступа к GitHub отвечает «не проверено»
     # с причиной, а не пустотой. Форма ещё меняется — интент experimental.
     "backlog": ("backlog из GitHub Issues: classify | dedup | prioritize | graph", "backlog", True),
+    # Knowledge Graph как ЗАПРАШИВАЕМАЯ технология (тонкий слой поверх registry/entities.yaml +
+    # validate_knowledge_graph). Подкоманда первым словом (как backlog): собирает один граф из
+    # plan.yaml + FL-*.yaml + feature blueprints и отвечает на вопрос, который иначе требует ручного
+    # чтения трёх файлов. `build` — собрать/показать (--apply — записать knowledge/graph.yaml);
+    # `trace <feature>` — цепочка goal→…→feature→outcome + вердикт + пробелы; `gaps` — что не
+    # покрыто измеримым результатом. Только чтение (кроме `build --apply`).
+    "graph":   ("knowledge graph: build | trace <feature> | gaps — зачем функция существует и "
+                "измерен ли её исход, из плана+обучения+blueprint одним графом", "graph", True),
     # Autonomous Replanning (Фаза 5, капстоун): цикл сам сводит приоритеты плана к реальности. Без
     # флага — отчёт (read-only превью: что переупорядочено и почему + структурные ПРЕДЛОЖЕНИЯ).
     # С `--apply` — записывает переприоритизацию (класс A, обратимо, состав работ не меняет) в
@@ -131,7 +139,7 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan", "inbox", "work", "readout")
+                  "inspect", "replan", "inbox", "work", "readout", "graph")
 
 
 def resolve_flags(signals):
@@ -296,7 +304,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
-    _intent_explain, _intent_inbox, _intent_work, _intent_readout,
+    _intent_explain, _intent_inbox, _intent_work, _intent_readout, _intent_graph,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -311,7 +319,8 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("health", _intent_health), ("team", _intent_team),
                    ("onboard", _intent_onboard), ("doctor", _intent_doctor),
                    ("explain", _intent_explain), ("inbox", _intent_inbox),
-                   ("work", _intent_work), ("readout", _intent_readout)):
+                   ("work", _intent_work), ("readout", _intent_readout),
+                   ("graph", _intent_graph)):
     _intent(_name)(_fn)
 del _name, _fn
 

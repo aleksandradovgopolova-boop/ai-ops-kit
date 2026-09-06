@@ -167,6 +167,13 @@ experimental:
     # Гейт закрывается 1 из 4 доказательств (у трёх нет producer'а -> not_measured). Форма вердикта
     # и состав ещё устаканиваются — потому experimental, а не stable.
     - readout
+    # knowledge-graph-query: `graph build|trace <feature>|gaps` — Knowledge Graph как ЗАПРАШИВАЕМАЯ
+    # технология поверх существующей схемы (registry/entities.yaml) и валидатора
+    # (validate_knowledge_graph). Собирает один граф из plan.yaml + FL-*.yaml + feature blueprints и
+    # отвечает на вопрос «зачем функция существует и измерен ли её исход», который иначе требует
+    # ручного чтения трёх файлов. Только чтение (кроме `build --apply`, пишущего knowledge/graph.yaml).
+    # Форма графа и набор вопросов ещё устаканиваются — потому experimental, а не stable.
+    - graph
   # Advisory-гейты: не блокируют, форма улик и applicability ещё уточняются.
   # Проверяется числом и списком — quality/gates.yaml -> blocking: false.
   advisory_gates:
