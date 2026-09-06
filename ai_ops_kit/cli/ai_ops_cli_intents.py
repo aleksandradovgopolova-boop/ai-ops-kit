@@ -1516,3 +1516,133 @@ def _intent_readout(task, child_root, signals, a):
     # (partially_verified) -> 0; аналитика ещё не поступила или сигнал негативный -> 1 (честно, что
     # рекомендовать выпуск нечем). Флип исхода цели ждёт реального выпуска (см. post_release_loop).
     return 0 if result.get("verdict") == "partially_verified" else 1
+
+
+# ── ai-ops graph (Knowledge Graph как ЗАПРАШИВАЕМАЯ технология) ────────────────────────────────────
+# Тонкий слой ПОВЕРХ существующего: сборщик — intelligence/knowledge_graph (ниже, зависимость вниз);
+# целостность — validation/validate_knowledge_graph (тот же слой entrypoints, звать вправе только
+# cli). Обработчик проб-свободен: строит граф из plan.yaml+FL+blueprint и печатает продуктовым
+# языком; в дочку пишет ТОЛЬКО `build --apply` (knowledge/graph.yaml).
+_GRAPH_SUBS = ("build", "trace", "gaps")
+
+
+def _graph_positionals(a):
+    """Позиционные интента `graph` без каталога репозитория: [sub, feature] в любом порядке вызова.
+
+    `./ai-ops` подставляет путь то в начало, то в хвост; каталогом ни подкоманда, ни id функции не
+    бывают, поэтому всё, что является каталогом, отбрасывается (тот же приём, что у `work`)."""
+    def _is_dir(p):
+        try:
+            return Path(p).is_dir()
+        except OSError:
+            return False
+    args = [x for x in (getattr(a, "rest", None) or []) if not _is_dir(x)]
+    sub = (args[0] if args else "").strip().lower()
+    feature = args[1] if len(args) > 1 else getattr(a, "feature", None)
+    return sub, feature
+
+
+def _validate_graph_integrity(graph, child_root):
+    """Прогнать собранный граф через validate_knowledge_graph. -> список ошибок целостности.
+
+    Пишет КОПИЮ во временный каталог с blueprint-путями, приведёнными к абсолютным, чтобы проверка
+    существования blueprint'а сработала без предположения о том, где ляжет graph.yaml, и без записи в
+    сам репозиторий (trace/gaps — только чтение)."""
+    import copy
+    import tempfile
+    import yaml as _yaml
+    from ai_ops_kit.validation import validate_knowledge_graph as vkg
+    graph_dir = Path(child_root) / "knowledge"
+    g = copy.deepcopy(graph)
+    for n in g.get("nodes") or []:
+        bp = n.get("blueprint")
+        if bp:
+            n["blueprint"] = str((graph_dir / bp).resolve())
+    types, rels = vkg.load_dictionary()
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "graph.yaml"
+        p.write_text(_yaml.safe_dump(g, allow_unicode=True), encoding="utf-8")
+        return vkg.validate_graph(p, types, rels)
+
+
+def _graph_help(js):
+    msg = ("graph: knowledge graph как запрашиваемая технология (поверх plan+обучение+blueprint).\n"
+           "Подкоманды:\n"
+           "  build             — собрать граф и показать (--apply — записать knowledge/graph.yaml)\n"
+           "  trace <feature>   — зачем функция существует: цепочка цель→…→функция→исход + вердикт\n"
+           "  gaps              — что не покрыто измеримым результатом (исходы/метрики/функции)\n"
+           "Пример: ./ai-ops graph trace express-checkout .")
+    if js:
+        print(json.dumps({"ok": False, "reason": "нужна подкоманда graph",
+                          "subcommands": list(_GRAPH_SUBS)}, ensure_ascii=False, indent=2))
+    else:
+        print(msg)
+
+
+def _intent_graph(task, child_root, signals, a):
+    """`ai-ops graph build|trace <feature>|gaps` — один граф из трёх источников, вопрос за проход."""
+    js = a.json
+    from ai_ops_kit.intelligence import knowledge_graph as kg
+    from ai_ops_kit.ui import presenter
+    root = Path(child_root)
+    sub, feature = _graph_positionals(a)
+    if sub not in _GRAPH_SUBS:
+        _graph_help(js)
+        return 2
+
+    graph = kg.build_graph(root)
+    integrity = _validate_graph_integrity(graph, root)
+    if integrity:
+        # Целостность важнее ответа: строить вывод на битом графе — врать. Называем ПОСЛЕДСТВИЕ.
+        if js:
+            print(json.dumps({"ok": False, "reason": "граф не прошёл проверку целостности",
+                              "errors": integrity}, ensure_ascii=False, indent=2))
+        else:
+            print(presenter.render(presenter.message(
+                status="blocked",
+                summary="Собрал граф из плана, обучения и паспортов функций, но он не сошёлся сам с "
+                        "собой — отвечать по нему не буду.",
+                why_it_matters="Ответ на битом графе хуже отсутствия ответа: он выглядит как факт.",
+                technical={"errors": integrity}), audience=presenter.audience_from_config(root)))
+        return 1
+
+    aud = presenter.audience_from_config(root)
+    if sub == "build":
+        wrote = None
+        if getattr(a, "apply", False):
+            import yaml as _yaml
+            out = root / "knowledge" / "graph.yaml"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(_yaml.safe_dump(graph, allow_unicode=True, sort_keys=False),
+                           encoding="utf-8")
+            wrote = out
+        if js:
+            print(json.dumps({"graph": graph, "written_to": str(wrote) if wrote else None},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(presenter.render(presenter.from_graph_build(graph, wrote), audience=aud))
+        return 0
+
+    if sub == "trace":
+        if not feature:
+            _graph_help(js)
+            return 2
+        result = kg.trace(graph, feature)
+        if js:
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(presenter.render(presenter.from_graph_trace(result), audience=aud))
+        # Код возврата — есть ли ПРОБЕЛЫ: полная цепочка с измеренным исходом -> 0, иначе 1 (честно,
+        # что ценность функции ещё не подтверждена измеримым результатом). Узла нет в графе -> 2.
+        if result.get("verdict") == "unknown":
+            return 2
+        return 0 if not result.get("gaps") else 1
+
+    # gaps
+    result = kg.gaps(graph)
+    if js:
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(presenter.render(presenter.from_graph_gaps(result), audience=aud))
+    total = sum(len(v) for v in result.values())
+    return 0 if total == 0 else 1
