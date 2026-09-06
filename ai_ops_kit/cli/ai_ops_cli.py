@@ -58,6 +58,10 @@ INTENTS = {
     "doctor":  ("проверить установку изнутри репозитория (полная проверка — у кита)", "doctor", False),
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
+    # #539: владельческая карточка одной задачи — что с ней прямо сейчас: стадия, что готово, что
+    # мешает и ПОЧЕМУ (последствием, простыми словами), следующий шаг и оценка стоимости. Read-only.
+    "explain": ("что с моей задачей прямо сейчас: стадия, что готово, что мешает и почему, "
+                "следующий шаг, оценка стоимости", "explain", False),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
     # Product Contract (единый объект продукта): агрегирует идентичность, стандарт, артефакты слоя,
     # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
@@ -109,7 +113,7 @@ INTENTS = {
 # `_run_intent`: расхождение означает «обработчик есть, до него не доходит» — молчаливый no-op с
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
-                  "next", "model", "bootstrap", "feedback", "session", "doctor",
+                  "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
                   "inspect", "replan")
 
@@ -270,6 +274,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
+    _intent_explain,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -282,7 +287,8 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("new", _intent_new), ("governance", _intent_governance),
                    ("bootstrap", _intent_bootstrap), ("discuss", _intent_discuss),
                    ("health", _intent_health), ("team", _intent_team),
-                   ("onboard", _intent_onboard), ("doctor", _intent_doctor)):
+                   ("onboard", _intent_onboard), ("doctor", _intent_doctor),
+                   ("explain", _intent_explain)):
     _intent(_name)(_fn)
 del _name, _fn
 
