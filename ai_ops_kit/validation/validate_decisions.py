@@ -10,7 +10,9 @@
   3. confidence ∈ {low, medium, high}; recurrence_count >= 0; review_date парсится;
   4. supersedes ссылается на существующий принцип (или null);
   5. derived_from ссылается на существующие эпизоды;
-  6. reversibility эпизода ∈ {two-way, one-way}; date парсится;
+  6. reversibility эпизода ∈ {two-way, one-way}; date парсится; опционально у эпизода
+     confidence ∈ {low, medium, high}, review_at парсится и expected_outcome — объект
+     с непустыми metric/baseline/target (все три поля необязательны, отсутствие — норма);
   7. outcomes.decision ссылается на существующий эпизод;
   8. предупреждение (не ошибка): ratified-принцип с recurrence_count < 2 и без
      контрпримеров — «принцип из одного случая» (калибровка из скилла decision-support).
@@ -65,6 +67,21 @@ def check(data: dict):
             errors.append(f"эпизод {eid}: reversibility '{e.get('reversibility')}' не в {REVERSIBILITY}")
         if not parse_date(e.get("date")):
             errors.append(f"эпизод {eid}: date не парсится (YYYY-MM-DD)")
+        # опциональная калибровка эпизода — проверяем форму, только если поле присутствует.
+        # Отсутствие любого из полей — норма (обратная совместимость со старыми эпизодами).
+        conf = e.get("confidence")
+        if conf is not None and conf not in CONFIDENCE:
+            errors.append(f"эпизод {eid}: confidence '{conf}' не в {CONFIDENCE}")
+        if e.get("review_at") is not None and not parse_date(e.get("review_at")):
+            errors.append(f"эпизод {eid}: review_at не парсится (YYYY-MM-DD)")
+        exp = e.get("expected_outcome")
+        if exp is not None:
+            if not isinstance(exp, dict):
+                errors.append(f"эпизод {eid}: expected_outcome должен быть объектом (metric/baseline/target)")
+            else:
+                for f in ("metric", "baseline", "target"):
+                    if exp.get(f) in (None, ""):
+                        errors.append(f"эпизод {eid}: expected_outcome.{f} пусто")
 
     seen = set()
     for p in principles:
