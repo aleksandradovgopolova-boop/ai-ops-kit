@@ -30,7 +30,7 @@ ceilings:
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 909
   ai_ops_kit/providers/orchestrator_providers.py: 909
-  ai_ops_kit/intelligence/nightly_review.py: 1088
+  ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 732
   ai_ops_kit/gates/gate_executor.py: 726
   ai_ops_kit/engine/tool_broker.py: 762
@@ -302,3 +302,14 @@ raises:
       +1 строка — проброс поля из _pipeline_assess_readiness в тело отчёта; разбивать 778-строчный
       оркестратор ради одной строки непропорционально. Потолок поднят осознанно на +1 под факт;
       ратчет держит дальнейший рост вниз от 779.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/intelligence/nightly_review.py = 1088'
+    to: 'ai_ops_kit/intelligence/nightly_review.py = 1097'
+    work: nightly-schedule-live (#421)
+    why: >-
+      #421: генератор ночного workflow чинит script-mode import + deps — в сгенерированный workflow
+      добавлены шаг `pip install pyyaml` и `PYTHONPATH` на шаге обзора (иначе запуск скрипта по пути
+      падал в CI на `import ai_ops_kit`/`import yaml`), права понижены до `contents: read`. +9 строк
+      в чистом строителе `_workflow_yaml` (плюс рационале-докстринг). Модуль уже отмечен кандидатом на
+      вынос feedback/rate-машинерии — сюда объём не добавляем. Ратчет держит рост вниз от 1097.
