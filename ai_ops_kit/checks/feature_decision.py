@@ -1,11 +1,11 @@
 """Проверяющая логика feature-решений — форма feature_target и гейт каталога решений.
 
-Вынесена из `intelligence/decision_loop.py` ВНИЗ в пакет `checks` (слой primitives, #541),
-чтобы контур гейтов звал её ВНИЗ: `gates.gate_executor` (ядро) не вправе импортировать
-`intelligence` (слой выше + kernel-boundary), а `checks` зависит только от stdlib и pyyaml и не
-тянет ничего из ai_ops_kit выше foundation. Тот же приём, которым в v3.38 развязали
-`рантайм -> validation`: чистую/read-only проверяющую логику держим в `checks`, а вызыватели —
-и `intelligence.decision_loop` (сверху вниз), и `gates.gate_executor` (сверху вниз) — импортируют её.
+Вынесена из слоя `intelligence` ВНИЗ в пакет `checks` (слой primitives, #541), чтобы контур
+гейтов звал её ВНИЗ: `gates.gate_executor` (ядро) не вправе импортировать слой `intelligence`
+(слой выше + kernel-boundary), а `checks` зависит только от stdlib и pyyaml и не тянет ничего из
+ai_ops_kit выше foundation. Тот же приём, которым в v3.38 развязали `рантайм -> validation`:
+чистую/read-only проверяющую логику держим в `checks`, а вызыватели — как из слоя `intelligence`,
+так и `gates.gate_executor` — импортируют её сверху вниз.
 
 Продуктовое решение о фиче обязано нести три измеримых обязательства — baseline (где мы сейчас),
 target (куда идём) и guardrails (что не должно сломаться). Форму ПРОВЕРЯЕТ механизм, а не декларация
