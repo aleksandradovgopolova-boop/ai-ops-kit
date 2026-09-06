@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1040
+  ai_ops_kit/cli/ai_ops_cli.py: 1057
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1227
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
@@ -364,3 +364,16 @@ raises:
       gates -> intelligence). +21 строка. Ветка исполнения гейта — связная ответственность
       deterministic_run; вынос ради 21 строки непропорционален. Потолок поднят под факт; ратчет
       держит рост вниз от 781.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1040'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1057'
+    work: wire run_live_concurrent opt-in
+    why: >-
+      #542: wire run_live_concurrent opt-in. У `ai-ops run` появился явный флаг `--parallel` (по
+      умолчанию ВЫКЛ, дефолт не меняется) и тонкая ветка диспетча в `_main_run_execute`, которая
+      зовёт `engine/parallel_live_dispatch.run_parallel_live` — так построенный, но дормантный
+      concurrent-путь (`parallel_live.run_live_concurrent`) получил живой вызыватель. Сама логика
+      (декомпозиция -> WorkGraph -> run_live_concurrent, печать, exit-код) вынесена в отдельный
+      модуль `parallel_live_dispatch` (ниже порога), в cli — только объявление флага + ~13 строк
+      маршрутизации. Потолок поднят под факт; ратчет держит рост вниз от 1057.

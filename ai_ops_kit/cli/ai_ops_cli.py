@@ -684,6 +684,10 @@ def _build_cli_arg_parser():
     ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--sequential", action="store_true",
                     help="run: неатомарную задачу исполнять по WorkPackages последовательно (v3.1)")
+    ap.add_argument("--parallel", action="store_true",
+                    help="run: ЯВНЫЙ opt-in настоящей конкурентности — мультипакетный план исполнить "
+                         "по disposable-клону на пакет с governed fan-in (#542). По умолчанию ВЫКЛ; "
+                         "атомарная задача откатывается в обычный прогон. Основной checkout не трогается")
     ap.add_argument("--open-pr", action="store_true",
                     help="run: открыть draft PR по результату (нужен GITHUB_TOKEN)")
     ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
@@ -940,6 +944,19 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
             flags["author"] = True
             flags["review"] = True
             a.open_pr = True
+        # #542: --parallel — ЯВНЫЙ opt-in настоящей конкурентности (disposable-клон на пакет, governed
+        # fan-in). Дефолт НЕ трогаем: ветка входит только при явном флаге. Атомарная задача -> None ->
+        # проваливаемся в обычный прогон ниже. Основной checkout не трогается (работа на клонах).
+        if getattr(a, "parallel", False):
+            from ai_ops_kit.engine import parallel_live_dispatch
+            _pwid = a.feature or _wid_for(task, signals, a.feature)
+            _prec = parallel_live_dispatch.run_parallel_live(
+                task, signals, Path(child_root), feature=_pwid, provider=provider, model=a.model,
+                base=a.base, open_pr=a.open_pr, max_steps=a.max_steps, repo_slug=getattr(a, "repo", None))
+            if _prec is not None:
+                parallel_live_dispatch.print_parallel(_prec)
+                return parallel_live_dispatch.exit_code(_prec)
+            print("— задача атомарна: конкурентный мультипакетный прогон не требуется, обычный прогон —")
         # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом);
         # sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget (аудит P0.2).
         if a.sequential:
