@@ -33,6 +33,8 @@ EXPECTED_INTENTS = {
     "do", "advise", "resume", "review", "status", "health",
     # v3.35 Product Operating Model: план продукта и понимание репозитория.
     "next", "model",
+    # #539: владельческая карточка одной задачи — «что с моей задачей прямо сейчас» (read-only).
+    "explain",
     # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
     "bootstrap",
     # 2026-08-17: канал наблюдений о ките из дочки — данные, а не пересказ.
@@ -526,3 +528,109 @@ class TestDegradedContextIsVisible:
         ai_ops_cli._print_preview(pv)
         out = capsys.readouterr().out
         assert "данные: агентов" in out and "КОНТЕКСТ НЕ СОБРАН" not in out
+
+
+# ── #539: ai-ops explain — владельческая карточка «что с моей задачей прямо сейчас» ──────────────
+# Проверяем ТРИ обязательства команды: (1) карточка собирается из состояния; (2) для аудитории
+# product внутренняя лексика/статусы скрыты, а блокер назван последствием, а не гейтом; (3) путь
+# «активной работы нет» отвечает, а не падает и не молчит успехом.
+import os
+
+from ai_ops_kit.cli import ai_ops_cli_intents as _intents
+from ai_ops_kit.ui import presenter as _presenter
+
+
+def _explain_run(argv, cwd):
+    old = os.getcwd()
+    try:
+        os.chdir(cwd)
+        return ai_ops_cli.main(argv)
+    finally:
+        os.chdir(old)
+
+
+def _focus_state(status="in_progress", conflicts=None, cost=None):
+    return {"registry_ok": True, "active_count": 1,
+            "focus": {"wid": "w-1", "task": "добавить экспорт в CSV",
+                      "workflow": "ENGINEERING", "status": status,
+                      "branch": "ai-ops/w-1", "human_approval": status == "needs_human_decision"},
+            "conflicts": conflicts or [],
+            "cost": cost or {"measured": True, "cost_usd": 0.42, "cost_complete": True,
+                             "calls": 3, "tokens": 1000},
+            "gates": 5, "living_status": {"managed": True, "fresh_today": True}}
+
+
+@pytest.mark.unit
+class TestExplainIntent:
+    """`ai-ops explain` — карточка задачи для владельца."""
+
+    def test_explain_is_registered_and_direct(self):
+        """Интент объявлен, исполняется (не превью), и его обработчик достижим."""
+        assert "explain" in ai_ops_cli.INTENTS
+        assert "explain" in ai_ops_cli.DIRECT_INTENTS
+        assert "explain" in ai_ops_cli._INTENT_HANDLERS
+
+    def test_card_assembles_from_focus_state(self):
+        """Карточка собирает задачу, стадию, стоимость и следующий шаг из снимка состояния."""
+        msg = _intents._explain_message(_focus_state())
+        out = _presenter.render(msg, audience="product")
+        assert "добавить экспорт в CSV" in out         # какая задача
+        assert "в работе" in out                       # стадия
+        assert "$0.42" in out                          # оценка стоимости
+        assert "Дальше:" in out                        # следующий шаг
+
+    def test_cost_unmeasured_is_honest_not_zero(self):
+        """Неизмеренная стоимость называется прямо, а не показывается нулём."""
+        out = _presenter.render(
+            _intents._explain_message(_focus_state(cost={"measured": False})),
+            audience="product")
+        assert "не измерена" in out
+        assert "$0.00" not in out
+
+    def test_blocker_is_a_consequence_not_a_gate_id(self):
+        """Блокер назван последствием простыми словами — без имени гейта/трейсбека."""
+        msg = _intents._explain_message(_focus_state(status="blocked"))
+        out = _presenter.render(msg, audience="product")
+        assert "Что мешает" in out
+        assert "не проверено" in out or "не готова" in out
+        assert msg["status"] == "blocked"
+        low = out.lower()
+        assert "gate" not in low and "code_review" not in low and "traceback" not in low
+
+    def test_needs_human_decision_asks_for_decision(self):
+        """Работа, ждущая человека, просит решение (статус needs_input, не blocked)."""
+        msg = _intents._explain_message(_focus_state(status="needs_human_decision"))
+        assert msg["status"] == "needs_input"
+        out = _presenter.render(msg, audience="product")
+        assert "реш" in out.lower()                     # «жду твоего решения» / «подтверди»
+
+    def test_scope_conflict_becomes_a_blocker(self):
+        """Пересечение области записи — тоже причина остановиться, названная последствием."""
+        line = _intents._explain_blocker("in_progress", False, ["ai-ops/other"])
+        assert line is not None
+        assert "перепишут одно место" in line
+        assert "ai-ops/other" in line
+
+    def test_product_audience_suppresses_jargon(self):
+        """Для product внутренний статус/workflow скрыты; на technical — доступны."""
+        msg = _intents._explain_message(_focus_state())
+        prod = _presenter.render(msg, audience="product")
+        tech = _presenter.render(msg, audience="technical")
+        assert "in_progress" not in prod and "ENGINEERING" not in prod
+        assert "in_progress" in tech                    # тот же факт доступен технической аудитории
+
+    def test_no_active_work_is_graceful(self, tmp_path, capsys):
+        """Чистый репозиторий без идущих работ отвечает карточкой, а не падает и не молчит успехом."""
+        rc = _explain_run(["explain", str(tmp_path)], tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "ничего не идёт" in out.lower()
+        assert "дальше" in out.lower()
+
+    def test_corrupt_registry_says_it_does_not_know(self, tmp_path):
+        """Битый реестр идущих работ -> «не знаю, что идёт» и код 1, а не ложное «ничего»."""
+        awp = tmp_path / ".ai" / "runtime" / "active-work.yaml"
+        awp.parent.mkdir(parents=True)
+        awp.write_text("kind: active-work\nactive: [ this: is: broken\n", encoding="utf-8")
+        rc = _explain_run(["explain", str(tmp_path)], tmp_path)
+        assert rc == 1
