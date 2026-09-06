@@ -35,6 +35,9 @@ EXPECTED_INTENTS = {
     "next", "model",
     # #539: владельческая карточка одной задачи — «что с моей задачей прямо сейчас» (read-only).
     "explain",
+    # #540: единая владельческая очередь «что ждёт моего решения» — решения/остановки/подтверждения/
+    # обзор/предупреждения о выпуске одним списком (read-only).
+    "inbox",
     # v3.35.2 (тир 4): BOOTSTRAP был строкой в реестре — стал командой.
     "bootstrap",
     # 2026-08-17: канал наблюдений о ките из дочки — данные, а не пересказ.
@@ -633,4 +636,130 @@ class TestExplainIntent:
         awp.parent.mkdir(parents=True)
         awp.write_text("kind: active-work\nactive: [ this: is: broken\n", encoding="utf-8")
         rc = _explain_run(["explain", str(tmp_path)], tmp_path)
+        assert rc == 1
+
+
+# ── #540: ai-ops inbox — единая владельческая очередь «что ждёт моего решения» ────────────────────
+# Проверяем ЧЕТЫРЕ обязательства: (1) очередь агрегирует из источников (решения с карточкой
+# что/варианты/рекомендация, остановки, подтверждения, обзор, предупреждения о выпуске); (2) пустая
+# очередь честна — «ничего не ждёт», а не выдуманный список; (3) для аудитории product скрыты
+# идентификаторы работ/решений (жаргон), а на technical — доступны; (4) битый реестр -> «не знаю,
+# что ждёт» и код 1, а не ложное «ничего».
+import yaml as _yaml
+
+
+def _make_queue(decisions=None, blocked=None, reviews=None, insight=None, warnings=None,
+                registry_ok=True):
+    d = decisions or []
+    b = blocked or []
+    r = reviews or []
+    w = warnings or []
+    total = len(d) + len(b) + len(r) + (1 if insight else 0) + len(w)
+    return {"registry_ok": registry_ok, "total": total, "decisions": d, "blocked": b,
+            "reviews": r, "insight": insight, "warnings": w}
+
+
+@pytest.mark.unit
+class TestInboxIntent:
+    """`ai-ops inbox` — очередь всего, что ждёт решения владельца."""
+
+    def test_inbox_is_registered_and_direct(self):
+        """Интент объявлен, исполняется (не превью), и его обработчик достижим."""
+        assert "inbox" in ai_ops_cli.INTENTS
+        assert "inbox" in ai_ops_cli.DIRECT_INTENTS
+        assert "inbox" in ai_ops_cli._INTENT_HANDLERS
+
+    def test_reads_only_pending_decisions_with_card(self, tmp_path):
+        """Источник решений: берутся только pending, с полями что/варианты/рекомендация."""
+        ddir = tmp_path / ".ai" / "project" / "decisions"
+        ddir.mkdir(parents=True)
+        (ddir / "2026-09-06-d1.yaml").write_text(_yaml.safe_dump(
+            {"id": "d1", "status": "pending", "proposal": "поднять таймаут доставки",
+             "options": ["30s", "60s"], "recommendation": "60s"}, allow_unicode=True),
+            encoding="utf-8")
+        (ddir / "2026-09-05-d0.yaml").write_text(_yaml.safe_dump(
+            {"id": "d0", "status": "approved", "proposal": "уже решено"}, allow_unicode=True),
+            encoding="utf-8")
+        got = _intents._inbox_decisions(tmp_path)
+        assert [x["id"] for x in got] == ["d1"]                 # approved не попал
+        assert got[0]["options"] == ["30s", "60s"]
+        assert got[0]["recommendation"] == "60s"
+
+    def test_decisions_dir_is_not_created_on_read(self, tmp_path):
+        """Чтение решений НЕ создаёт каталог: inbox только читает (в отличие от list_decisions)."""
+        assert _intents._inbox_decisions(tmp_path) == []
+        assert not (tmp_path / ".ai" / "project" / "decisions").exists()
+
+    def test_render_aggregates_all_buckets(self):
+        """Очередь показывает решения (карточкой), остановки, подтверждения, обзор и предупреждения."""
+        q = _make_queue(
+            decisions=[{"id": "d1", "what": "поднять таймаут", "options": ["30s", "60s"],
+                        "recommendation": "60s"}],
+            blocked=[{"wid": "w-1", "task": "экспорт в CSV", "why": "проверка не пройдена"}],
+            reviews=[{"wid": "w-2", "task": "смена схемы", "why": "жду подтверждения"}],
+            insight={"what": "ночной обзор изменений", "path": "x"},
+            warnings=[{"what": "здоровье продукта красное — выпускать рискованно", "why": "тесты"}])
+        out = _intents._inbox_render(q, "product")
+        assert "поднять таймаут" in out                         # решение
+        assert "варианты:" in out and "60s" in out              # карточка: варианты+рекомендация
+        assert "рекомендую" in out
+        assert "экспорт в CSV" in out                           # остановленная работа
+        assert "смена схемы" in out                             # ждёт подтверждения
+        assert "ночной обзор" in out                            # свежий обзор
+        assert "выпускать рискованно" in out                    # предупреждение о выпуске
+
+    def test_empty_queue_is_honest(self):
+        """Пустая очередь говорит «ничего не ждёт», а не показывает выдуманный список."""
+        out = _intents._inbox_render(_make_queue(), "product")
+        assert "Ничего не ждёт твоего решения." in out
+
+    def test_empty_on_clean_repo_returns_zero(self, tmp_path, capsys):
+        """Чистый репозиторий: команда отвечает пустой очередью и кодом 0, а не падает."""
+        rc = _explain_run(["inbox", str(tmp_path)], tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "ничего не ждёт" in out.lower()
+
+    def test_product_audience_suppresses_ids(self):
+        """Для product идентификаторы работ/решений скрыты; на technical — доступны."""
+        q = _make_queue(blocked=[{"wid": "w-42", "task": "экспорт в CSV",
+                                   "why": "проверка не пройдена"}])
+        prod = _intents._inbox_render(q, "product")
+        tech = _intents._inbox_render(q, "technical")
+        assert "w-42" not in prod                               # идентификатор скрыт от владельца
+        assert "экспорт в CSV" in prod                          # но сама задача названа
+        assert "w-42" in tech                                   # тот же факт доступен технической
+
+    def test_status_reflects_queue(self):
+        """Статус контракта: решения -> нужно решение; только остановки -> заблокировано; пусто -> ок."""
+        assert _intents._inbox_status(_make_queue(
+            decisions=[{"id": "d", "what": "x", "options": [], "recommendation": ""}])) == "needs_input"
+        assert _intents._inbox_status(_make_queue(
+            blocked=[{"wid": "w", "task": "t", "why": "y"}])) == "blocked"
+        assert _intents._inbox_status(_make_queue()) == "ok"
+        assert _intents._inbox_status(_make_queue(registry_ok=False)) == "degraded"
+
+    def test_release_warning_from_red_health(self, tmp_path, monkeypatch):
+        """Предупреждение о выпуске выводится из красного здоровья продукта (read-only источник)."""
+        monkeypatch.setattr(_intents, "_product_health_report",
+                            lambda root: {"band": "red", "reasons": ["CI красный"]})
+        warns = _intents._inbox_release_warnings(tmp_path)
+        assert len(warns) == 1
+        assert "рискованно" in warns[0]["what"]
+        # Зелёное/нет данных -> предупреждения нет (не выдумываем).
+        monkeypatch.setattr(_intents, "_product_health_report", lambda root: {"band": "green"})
+        assert _intents._inbox_release_warnings(tmp_path) == []
+        monkeypatch.setattr(_intents, "_product_health_report", lambda root: None)
+        assert _intents._inbox_release_warnings(tmp_path) == []
+
+    def test_corrupt_registry_says_it_does_not_know(self, tmp_path):
+        """Битый реестр идущих работ -> «не знаю, что ждёт» и код 1, а не ложное «ничего»."""
+        awp = tmp_path / ".ai" / "runtime" / "active-work.yaml"
+        awp.parent.mkdir(parents=True)
+        awp.write_text("kind: active-work\nactive: [ this: is: broken\n", encoding="utf-8")
+        q = _intents._inbox_collect(tmp_path)
+        assert q["registry_ok"] is False
+        out = _intents._inbox_render(q, "product")
+        assert "Не знаю, что ждёт" in out
+        rc = _explain_run(["inbox", str(tmp_path)], tmp_path)
         assert rc == 1
