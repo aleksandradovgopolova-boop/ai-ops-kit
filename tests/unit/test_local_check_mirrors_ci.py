@@ -26,7 +26,7 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 SCRIPT = PKG / "scripts" / "check-fast.sh"
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.slow]  # #465: мета-тест (гоняет pytest/ruff подпроцессом) — в slow, не держит fast-стену
 
 
 def _logging_python(tmp_path):

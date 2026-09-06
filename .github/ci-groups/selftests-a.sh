@@ -12,4 +12,4 @@ cd "$(dirname "$0")/../.."
 # Это ПЕРВЫЙ срез по единственной точке — следующий прогон даст фактические времена шардов, и
 # границу можно подвинуть точнее. Имена CI-контекстов НЕ меняются (пути скриптов те же), поэтому
 # required-статусы branch protection не ломаются.
-python3 -m pytest -n auto --dist loadfile tests/ -q -m "slow and not nightly" -k "test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h"
+python3 -m pytest -n auto --dist loadfile tests/ -q -m "slow and not nightly" -k "test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h or test_local_check or test_workpackage"

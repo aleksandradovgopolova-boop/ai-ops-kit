@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.slow  # #465: тяжёлый интеграционный/мета-тест — в slow (гоняется в selftests, не держит fast-стену)
 import yaml
 
 PKG = Path(__file__).resolve().parents[2]

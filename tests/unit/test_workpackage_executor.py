@@ -10,6 +10,8 @@ import tempfile
 
 import pytest
 
+pytestmark = pytest.mark.slow  # #465: тяжёлый интеграционный/мета-тест — в slow (гоняется в selftests, не держит fast-стену)
+
 from ai_ops_kit.engine.workpackage_executor import (
     Path,
     execute_sequence,
