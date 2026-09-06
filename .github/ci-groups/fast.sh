@@ -6,4 +6,4 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # байткод в дереве ломает проверку целостности managed
 cd "$(dirname "$0")/../.."
-python3 -m pytest -n auto --dist loadfile tests/ -q -m "not slow"
+python3 -m pytest -n auto --dist loadfile tests/ -q -m "not slow" --durations=30  # ЗАМЕР #465 (временно)
