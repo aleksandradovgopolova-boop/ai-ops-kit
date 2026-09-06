@@ -54,6 +54,7 @@ LLM-судьи или решение человека. В отчёте прог�
 | `contour_consistency` | validator | совещательный | validate-product-model |
 | `deploy_readiness` | validator | блокирующий | validate-deploy-readiness |
 | `event_contract_consistency` | validator | совещательный | validate-event-catalog |
+| `feature_decision_quality` | validator | совещательный | validate-feature-decisions |
 | `implementation_verification` | validator | блокирующий | validate-evidence |
 | `intake_completeness` | validator | блокирующий | validate-intake |
 | `knowledge_freshness` | validator | совещательный | validate-freshness |
@@ -86,7 +87,7 @@ LLM-судьи или решение человека. В отчёте прог�
 | `documentation_drift` | writer | совещательный | documentation-steward |
 
 
-**Итого: 17 машиной, 17 судьёй, 1 писателем, 0 человеком** (гейт `security` поднимается до
+**Итого: 18 машиной, 17 судьёй, 1 писателем, 0 человеком** (гейт `security` поднимается до
 человека сигналами задачи, а не постоянно).
 
 **Что изменилось 20.08.2026.** `documentation_updated` переведён из самозаявления в машинный:

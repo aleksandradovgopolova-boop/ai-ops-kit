@@ -555,6 +555,28 @@ gates:
     stale_detection: {bind_to: artifact_hashes}
     required_evidence: [human_recommendation, reversibility_classified, principles_checked]
 
+  feature_decision_quality:
+    id: feature_decision_quality
+    closed_by: validator
+    purpose: >
+      Продуктовое решение, объявленное фичей (kind: feature-decision), несёт ИЗМЕРИМОЕ
+      обязательство: baseline (где мы сейчас), target (куда идём) и guardrails (что не должно
+      сломаться). Проверяет МЕХАНИЗМ, а не декларация человека: gate_feature_decisions (вынесен вниз
+      в ai_ops_kit/checks/feature_decision.py) обходит каталог решений .ai/project/decisions и краснит
+      фичу, заявленную целью без валидного feature_target, называя, чего именно не хватает. Класс:
+      «фича с целью» без измеримого обязательства = пустая декларация. Активируется треком
+      FEATURE_DECISIONS по сигналу feature_decision_declared; для не-фич-задач трек не активирован —
+      честный explainable skip, а не тихий pass.
+    stage: decision-review
+    blocking: false          # advisory до обкатки на живых прогонах (как соседние consistency-гейты)
+    responsible_role: product-reviewer
+    review_mode: writer                       # детерминированный гейт: вердикт механизма, не ревью
+    validator: validate-feature-decisions     # runnable: ai_ops_kit/checks/feature_decision.gate_feature_decisions (через gate_executor.deterministic_run)
+    human_approval: false
+    applicability: [PRODUCT, DECISION, AI_FEATURE, ENGINEERING, CRITICAL]
+    stale_detection: {bind_to: artifact_hashes}
+    required_evidence: [feature_target_declared]
+
   knowledge_integrity:
     id: knowledge_integrity
     closed_by: validator

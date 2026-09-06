@@ -32,7 +32,7 @@ ceilings:
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 732
-  ai_ops_kit/gates/gate_executor.py: 760
+  ai_ops_kit/gates/gate_executor.py: 781
   ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
 
@@ -352,3 +352,15 @@ raises:
       держит рост вниз. +2 строки (1225→1227) — judge-fix: имя ветки убрано из продуктовой строки
       карточки (жаргон для product-аудитории, держим в technical). ai_ops_cli_intents.py — кандидат
       на вынос read-only intent-хендлеров, как отмечено для nightly_review.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/gates/gate_executor.py = 760'
+    to: 'ai_ops_kit/gates/gate_executor.py = 781'
+    work: wire-gate-feature-decisions
+    why: >-
+      #541: wire gate_feature_decisions. Гейт feature_decision_quality проведён в контур —
+      deterministic_run получил ветку validate-feature-decisions и исполнитель _feature_decisions_run
+      (читает .ai/project/decisions вниз через checks.feature_decision, без восходящего ребра
+      gates -> intelligence). +21 строка. Ветка исполнения гейта — связная ответственность
+      deterministic_run; вынос ради 21 строки непропорционален. Потолок поднят под факт; ратчет
+      держит рост вниз от 781.

@@ -356,7 +356,28 @@ def deterministic_run(validator):
         return _deploy_readiness_run()
     if validator == "validate-documentation-updated":
         return _documentation_updated_run()
+    if validator == "validate-feature-decisions":
+        return _feature_decisions_run()
     return None
+
+
+def _feature_decisions_run(base=None):
+    """#541: гейт `feature_decision_quality` — каждое решение kind=feature-decision несёт ВАЛИДНЫЙ
+    feature_target (baseline/target/guardrails). Проверяет МЕХАНИЗМ, а не декларация: обходит каталог
+    решений репозитория (.ai/project/decisions) и краснит фичу, объявленную целью без измеримого
+    обязательства, называя, чего не хватает.
+
+    Проверяющая логика лежит НИЖЕ по слоям — в `ai_ops_kit.checks.feature_decision` (primitives):
+    `gates` (ядро) не вправе импортировать `intelligence`, поэтому зовём вниз. Отсутствие каталога
+    решений — не ошибка (фич-решений просто нет) -> pass. Наличие неполного feature-decision -> fail
+    с блокером на каждый дефект."""
+    from ai_ops_kit.checks.feature_decision import gate_feature_decisions
+    b = Path(base) if base else Path.cwd()
+    errors = gate_feature_decisions(b / ".ai" / "project" / "decisions")
+    if errors:
+        checks = [{"id": f"feature_target_incomplete:{e}", "status": "fail"} for e in errors]
+        return "fail", checks, []
+    return "pass", [{"id": "feature_targets_valid", "status": "pass"}], ["feature_target_declared"]
 
 
 def _documentation_updated_run(base=None):

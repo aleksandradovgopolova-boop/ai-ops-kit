@@ -44,7 +44,7 @@ claims:
   - id: gate-count
     doc: "ROADMAP/докуметация о числе quality gates (quality/gates.yaml)"
     type: count
-    source: {path: ../quality/gates.yaml, pattern: '^    id: ', expected: 35}  # +own_medicine (самоприменение культуры китом, advisory)
+    source: {path: ../quality/gates.yaml, pattern: '^    id: ', expected: 36}  # +feature_decision_quality (#541: фича-решение несёт baseline/target/guardrails, advisory)
 
   - id: mvp-blocking-count
     doc: "AGENTS.md инвариант «blocking-гейтов MVP ≤ 8» (ровно 8 объявлено)"
