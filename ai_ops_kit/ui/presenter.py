@@ -532,6 +532,88 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                    "id": ", ".join(str(a.get("id") or "?") for a in active)})
 
 
+# #549: человеческие ярлыки статуса работы (внутренние коды -> статус UserMessage-контракта). Коды
+# приходят из workitem/active-work/plan, а наружу выходит один из четырёх статусов контракта.
+_WORK_VIEW_STATUS = {
+    "blocked": "blocked", "needs_more_evidence": "blocked",
+    "needs_human_decision": "needs_input",
+    "done": "ok", "in-progress": "ok", "in_progress": "ok", "review": "ok",
+    "draft": "ok", "todo": "ok",
+}
+# Человеческие имена четырёх источников проекции — для честной фразы «сведено из…», без внутренних
+# слов workitem/active-work/work-graph/plan.
+_WORK_VIEW_SOURCE_RU = {
+    "workitem": "заявка на работу", "active_work": "реестр идущих работ",
+    "work_graph": "граф пакетов работы", "plan": "план продукта",
+}
+_WORK_VIEW_ALL_SOURCES = ("workitem", "active_work", "work_graph", "plan")
+
+
+def from_work_view(view: dict) -> dict:
+    """Проекция «работы» (lifecycle.work_view.project_work) -> UserMessage. Ответ на «что известно
+    про эту работу», сведённое из четырёх источников в ОДНУ карточку.
+
+    Продуктовый язык: идентификатор ведущей сессии, области записи и пути-глобы — это жаргон (как
+    SHA/gate-id в explain), поэтому в человеческие строки они не идут сырьём — их место в технических
+    деталях. Наружу выходит смысл: чем занята работа, что про неё сведено и чего пока нет.
+    """
+    view = view or {}
+    title = view.get("title") or view.get("id") or "работа"
+    sources = view.get("sources") or []
+    if not sources:
+        # Работа не нашлась ни в одном источнике — честное «не знаю такой», а не пустая карточка,
+        # выданная за факт.
+        return message(
+            status="degraded", headline="Такой работы я не вижу",
+            summary=f"Ни в одном источнике нет работы с идентификатором «{view.get('id')}».",
+            why_it_matters="Собрать по ней нечего: заявки, записи об идущей работе, графа пакетов и "
+                           "строки в плане с таким идентификатором нет.",
+            next_steps=["проверь идентификатор работы или спроси «что дальше»"],
+            technical={"id": view.get("id"), "источники": "—"})
+
+    st = view.get("status")
+    status = _WORK_VIEW_STATUS.get(st, "ok")
+    # Чего НЕ хватает — называется, а не замалчивается: проекция честна о том, что сведено, а что нет.
+    missing = [s for s in _WORK_VIEW_ALL_SOURCES if s not in sources]
+    have_ru = ", ".join(_WORK_VIEW_SOURCE_RU[s] for s in sources)
+    miss_ru = ", ".join(_WORK_VIEW_SOURCE_RU[s] for s in missing)
+
+    # Кто ведёт — фактом, но без сырого идентификатора сессии: он в технических деталях.
+    agent_line = ("Сейчас работу кто-то ведёт." if view.get("current_agent")
+                  else "Активной сессии за работой сейчас нет.")
+    dcount = len(view.get("decisions") or [])
+    acount = len(view.get("artifacts") or [])
+    why = (f"Свёл всё, что известно, из {len(sources)} "
+           + _q(len(sources), "источника", "источников", "источников") + f": {have_ru}.")
+    if missing:
+        why += (f" Не нашёл: {miss_ru} — по этим сторонам работы данных пока нет.")
+
+    return message(
+        status=status,
+        headline=f"«{title}»",
+        summary=(agent_line
+                 + (f" Артефактов собрано: {acount}." if acount else "")
+                 + (f" Связанных решений: {dcount}." if dcount else "")),
+        why_it_matters=why,
+        next_steps=["подробности по любой стороне — по запросу"],
+        technical={"id": view.get("id"), "статус": st or "—",
+                   "стадия": view.get("lifecycle_intent") or "—",
+                   "ветка": view.get("branch") or "—",
+                   "ведущая сессия": view.get("current_agent") or "—",
+                   "участники": ", ".join(view.get("participants") or []) or "—",
+                   "области записи": ", ".join(view.get("write_scope") or []) or "—",
+                   "зависит от": ", ".join(view.get("depends_on") or []) or "—",
+                   "общие контракты": ", ".join(view.get("shared_contracts") or []) or "—",
+                   "артефакты": ", ".join(
+                       (a.get("path") or a.get("ref") or "?") for a in view.get("artifacts") or [])
+                       or "—",
+                   "доказательства": ", ".join(
+                       e.get("path") or "?" for e in view.get("evidence") or []) or "—",
+                   "решения": ", ".join(
+                       str(d.get("id") or "?") for d in view.get("decisions") or []) or "—",
+                   "источники": ", ".join(sources)})
+
+
 # ── Реэкспорт переводчиков, вынесенных в `presenter_formatters.py` ─────────────────────────────
 # Большинство переводчиков (и повседневных команд, и внутренних отчётов) вынесены в модуль-сосед
 # `presenter_formatters.py`, чтобы presenter не рос как god-модуль. Здесь остаются только контракт

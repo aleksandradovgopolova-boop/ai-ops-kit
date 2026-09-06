@@ -1418,3 +1418,58 @@ def _intent_inbox(task, child_root, signals, a):
     # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие пунктов: очередь собрана -> 0 (в т.ч. пустая);
     # недостоверный реестр идущих работ (честно собрать не смогли) -> 1.
     return 0 if queue.get("registry_ok", True) else 1
+
+
+# ── #549: ai-ops work — единая машинная ПРОЕКЦИЯ «работы» по id ────────────────────────────────────
+# Подкоманда первым словом (как backlog): `work show <id>`. Проекция read-only сводит четыре
+# источника (заявка/реестр идущих работ/граф пакетов/план) в одну карточку по id. Ничего не пишет.
+_WORK_SUBS = ("show",)
+
+
+def _work_positionals(child_root, a):
+    """Позиционные аргументы интента `work` БЕЗ каталога репозитория: подкоманда и id работы.
+
+    Каталог `./ai-ops` подставляет то в начало, то в хвост; здесь мы отбрасываем всё, что является
+    каталогом (подкоманда и id работы каталогами не бывают), и получаем [sub, id] в любом порядке
+    вызова. -> (sub, work_id)."""
+    def _is_dir(p):
+        # Не-путь (в т.ч. слишком длинный текст) = не каталог; is_dir() кидает OSError, не False (#161).
+        try:
+            return Path(p).is_dir()
+        except OSError:
+            return False
+    rest = list(getattr(a, "rest", None) or [])
+    args = [x for x in rest if not _is_dir(x)]
+    sub = (args[0] if args else "").strip().lower()
+    work_id = args[1] if len(args) > 1 else None
+    return sub, work_id
+
+
+def _intent_work(task, child_root, signals, a):
+    """`ai-ops work show <id>` — read-only карточка одной работы, сведённая из четырёх источников."""
+    js = a.json
+    from ai_ops_kit.lifecycle import work_view
+    from ai_ops_kit.ui import presenter
+    root = Path(child_root)
+    sub, work_id = _work_positionals(root, a)
+    if sub not in _WORK_SUBS or not work_id:
+        # Без подкоманды/id — назвать, что умеет, а не молча вернуть успех (тот же принцип, что backlog).
+        msg = ("work: единая проекция работы по id (только чтение). Подкоманда:\n"
+               "  show <id>   — карточка: стадия, ветка, кто ведёт, области, зависимости, "
+               "артефакты, решения — сведено из заявки/реестра/графа/плана\n"
+               "Пример: ./ai-ops work show arch-01 .")
+        if js:
+            print(json.dumps({"ok": False, "reason": f"нужно: work show <id> (дано: {sub or '—'})",
+                              "subcommands": list(_WORK_SUBS)}, ensure_ascii=False, indent=2))
+        else:
+            print(msg)
+        return 2
+
+    view = work_view.project_work(work_id, root)
+    if js:
+        print(json.dumps(view, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(presenter.render(presenter.from_work_view(view),
+                               audience=presenter.audience_from_config(root)))
+    # Код возврата — нашлась ли работа хоть в одном источнике: сведено -> 0; ни одного источника -> 2.
+    return 0 if view.get("sources") else 2

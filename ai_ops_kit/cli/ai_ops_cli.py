@@ -67,6 +67,11 @@ INTENTS = {
     # обзор, предупреждения о выпуске. Пусто -> честное «ничего не ждёт». Только чтение.
     "inbox":   ("что ждёт твоего решения: решения, остановленные работы, подтверждения, обзор, "
                 "предупреждения о выпуске — одной очередью", "inbox", False),
+    # #549: единая машинная ПРОЕКЦИЯ «работы» по id. Подкоманда первым словом (как backlog):
+    # `work show <id>` сводит четыре источника (заявка/реестр идущих работ/граф пакетов/план) в одну
+    # read-only карточку. Ничего не пишет, нового рантайма не заводит — агрегатор поверх существующего.
+    "work":    ("проекция одной работы по id: work show <id> — стадия, кто ведёт, области, "
+                "зависимости, артефакты, решения из четырёх источников", "work", True),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
     # Product Contract (единый объект продукта): агрегирует идентичность, стандарт, артефакты слоя,
     # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
@@ -120,7 +125,7 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan", "inbox")
+                  "inspect", "replan", "inbox", "work")
 
 
 def resolve_flags(signals):
@@ -285,7 +290,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
-    _intent_explain, _intent_inbox,
+    _intent_explain, _intent_inbox, _intent_work,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -299,7 +304,8 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("bootstrap", _intent_bootstrap), ("discuss", _intent_discuss),
                    ("health", _intent_health), ("team", _intent_team),
                    ("onboard", _intent_onboard), ("doctor", _intent_doctor),
-                   ("explain", _intent_explain), ("inbox", _intent_inbox)):
+                   ("explain", _intent_explain), ("inbox", _intent_inbox),
+                   ("work", _intent_work)):
     _intent(_name)(_fn)
 del _name, _fn
 
