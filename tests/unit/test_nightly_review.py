@@ -280,6 +280,20 @@ def test_installing_a_schedule_is_idempotent(repo):
     assert nr.schedule_status(repo)["cron"] == "30 2 * * *"
 
 
+@pytest.mark.unit
+def test_generated_workflow_is_import_safe_and_self_contained(repo):
+    """Сгенерированный workflow должен запуститься в CI зелёным: ставит pyyaml и даёт PYTHONPATH.
+
+    Без deps и без PYTHONPATH запуск скрипта по пути падает на `import ai_ops_kit`/`import yaml`
+    (script-mode не видит пакет), и «расписание есть» превращается в «расписание всегда красное».
+    """
+    res = nr.install_schedule(repo, cron="0 3 * * *")
+    text = (repo / res["workflow"]).read_text(encoding="utf-8")
+    assert "PYTHONPATH" in text, text
+    assert "pip install pyyaml" in text, text
+    assert "contents: read" in text, text
+
+
 # ─── БРИФ ДОХОДИТ ДО ВЛАДЕЛЬЦА: произведён ≠ доставлен ─────────────────────────────────────────
 
 

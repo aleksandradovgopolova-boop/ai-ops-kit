@@ -1,0 +1,23 @@
+# Сгенерировано AI Ops (nightly_review.install_schedule). Правьте cron через
+# `--install-schedule --cron ...` или .ai-ops.yaml (nightly.schedule).
+name: nightly-product-review
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Ночной дельта-обзор и бриф владельцу
+        env: {PYTHONPATH: "."}
+        run: python ai_ops_kit/intelligence/nightly_review.py . --deliver | tee -a "$GITHUB_STEP_SUMMARY"

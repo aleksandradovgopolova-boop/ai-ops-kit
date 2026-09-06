@@ -897,7 +897,14 @@ def schedule_status(root: Path) -> dict:
 
 
 def _workflow_yaml(cron: str, script_rel: str) -> str:
-    """Текст CI-workflow: ночной запуск обзора с доставкой брифа владельцу."""
+    """Текст CI-workflow: ночной запуск обзора с доставкой брифа владельцу.
+
+    PYTHONPATH — каталог, СОДЕРЖАЩИЙ пакет `ai_ops_kit` (в дочке `.ai/managed`, в ките `.`): без
+    него запуск скрипта по пути падает в CI на `import ai_ops_kit` (script-mode не видит пакет).
+    Права `contents: read` — обзор только читает git и пишет бриф в файловую систему раннера.
+    """
+    pkg_suffix = "ai_ops_kit/intelligence/nightly_review.py"
+    pythonpath = script_rel[:-len(pkg_suffix)].rstrip("/") or "."
     return (
         "# Сгенерировано AI Ops (nightly_review.install_schedule). Правьте cron через\n"
         "# `--install-schedule --cron ...` или .ai-ops.yaml (nightly.schedule).\n"
@@ -907,7 +914,7 @@ def _workflow_yaml(cron: str, script_rel: str) -> str:
         f"    - cron: \"{cron}\"\n"
         "  workflow_dispatch: {}\n"
         "permissions:\n"
-        "  contents: write\n"
+        "  contents: read\n"
         "jobs:\n"
         "  review:\n"
         "    runs-on: ubuntu-latest\n"
@@ -917,8 +924,10 @@ def _workflow_yaml(cron: str, script_rel: str) -> str:
         "          fetch-depth: 0\n"
         "      - uses: actions/setup-python@v5\n"
         "        with:\n"
-        "          python-version: \"3.x\"\n"
+        "          python-version: \"3.12\"\n"
+        "      - run: pip install pyyaml\n"
         "      - name: Ночной дельта-обзор и бриф владельцу\n"
+        f"        env: {{PYTHONPATH: \"{pythonpath}\"}}\n"
         f"        run: python {script_rel} . --deliver | tee -a \"$GITHUB_STEP_SUMMARY\"\n"
     )
 
