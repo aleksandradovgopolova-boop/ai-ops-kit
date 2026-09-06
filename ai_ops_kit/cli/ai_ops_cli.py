@@ -179,6 +179,23 @@ def _carry_stored_signals(task, child_root, signals, feature):
     return {**stored, **signals}
 
 
+def _build_signals(intent, task, child_root, a):
+    """Собрать сигналы вызова: --signals + feature + перенос сохранённого со specify.
+
+    Вынесено из `main` (ратчет func-size: main упиралась в потолок). Правило переноса — то же,
+    что у plan/run: сохранённое на specify — база, переданное на этом вызове — сверху (см.
+    `_carry_stored_signals`). Явный --signals по-прежнему побеждает; его отсутствие больше не
+    роняет уровень (ENGINEERING-задача не едет молча как QUICK). Перенос — только для интентов
+    `_SIGNAL_CARRY_INTENTS`, чтобы не менять поведение команд, к уровню отношения не имеющих.
+    """
+    signals = json.loads(a.signals)
+    if a.feature:
+        signals["feature"] = a.feature
+    if intent in _SIGNAL_CARRY_INTENTS:
+        signals = _carry_stored_signals(task, child_root, signals, a.feature)
+    return signals
+
+
 def _intake_command_carrying_task_type(missing, task_type):
     """Готовая строка ответа на неполный intake, СОХРАНЯЮЩАЯ уже известный task_type.
 
@@ -755,17 +772,9 @@ def main(argv):
         task = rest.pop(0)
     elif needs_task:
         task = ""
-    signals = json.loads(a.signals)
-    if a.feature:
-        signals["feature"] = a.feature
-
-    # Перенос сигналов уровня между шагами specify -> plan -> run (полевой замер cockpit,
-    # 06.09.2026, фича free-tile-counter). Сигналы, заданные на specify, сохранены в
-    # features/<wid>/spec.yaml и доливаются здесь, когда --signals на этом вызове их не задал.
-    # Сделано ДО процессного гейта и диспетча, чтобы одни и те же сигналы видели и short_path/потолок,
-    # и построение плана, и запуск движка. Явный --signals побеждает (сохранённое — база).
-    if intent in _SIGNAL_CARRY_INTENTS:
-        signals = _carry_stored_signals(task, child_root, signals, a.feature)
+    # Сигналы вызова + перенос сохранённого со specify (в _build_signals: ратчет func-size). ДО
+    # процессного гейта и диспетча — одни и те же сигналы видят и short_path/потолок, и план, и движок.
+    signals = _build_signals(intent, task, child_root, a)
 
     # ПЕРЕД процессным шагом: уже описанная работа идёт коротким путём, залипший разбор
     # останавливается вопросом владельцу. Место выбрано так, что ни один процессный шаг мимо не
