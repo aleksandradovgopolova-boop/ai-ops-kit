@@ -475,7 +475,7 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
         gate_ev, reviews = _run_reviews(reviewer_proposer, work_root, plan["gates"], gate_ev,
                                         signals, committed_sha, budget,
                                         calibrated_enforcement=calibrated_enforcement,
-                                        ui_evidence=ui_evidence)
+                                        ui_evidence=ui_evidence, child_root=child_root)
 
     # 6e. v2.95 -> v2.101 Security Pack: доменный security-вердикт -> gate_ev['security'].
     #     v3.38 (K6): тело вынесено в _evaluate_security (модуль pipeline_readiness, реэкспорт выше).

@@ -357,9 +357,18 @@ def _review_cites_delivered_file(res, delivered, work_root) -> bool:
 
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
                  max_reads=10, change_context=None,
-                 calibrated_enforcement=False, ui_evidence=None):
-    """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence."""
+                 calibrated_enforcement=False, ui_evidence=None, child_root=None):
+    """Прогнать независимые ревью для ai-review гейтов плана, у которых ещё нет evidence.
+
+    #160 (сессия Клода): перед вызовом провайдера смотрим, не оставил ли ОРКЕСТРАТОР валидный вердикт
+    в handoff-артефакте на ТЕКУЩЕЙ ревизии (artifact-first) — тогда берём его БЕЗ вызова провайдера.
+    А если провайдер ревьюера структурно недоступен в среде (`stopped=='env-unavailable'`), гейт не
+    уходит в глухой no-verdict, а встаёт в `awaiting_reviewer` с записанным запросом на ревью.
+    Handoff-артефакты живут под `child_root/.ai` (переживают пересборку worktree); при отсутствии
+    child_root — под work_root."""
     from ai_ops_kit.checks import reviewer_result as vrr  # чистая проверка вниз (лента №5)
+    from ai_ops_kit.engine import reviewer_handoff  # #160: handoff оркестратору (тот же слой engine)
+    handoff_root = child_root or work_root
     gates = gate_executor.load_gates()
     ro_policy = tool_broker.Policy(level="read-only", child_root=str(work_root))
     reviews = []
@@ -380,16 +389,42 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             continue
         g = gates.get(gid) or {}
         req = g.get("required_evidence", []) or []
-        reviewer = tool_loop.make_reviewer_proposer(
-            reviewer_proposer, gid, checklist=_gate_checklist(g),
-            required_evidence=req, reviewed_revision=revision)
-        rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
-                                  max_reads=max_reads, base_context=change_ctx,
-                                  required_evidence=req, reviewed_revision=revision)
+        # ARTIFACT-FIRST (#160 handoff): валидный вердикт оркестратора на ТЕКУЩЕМ SHA -> берём его БЕЗ
+        # вызова провайдера. Валидность (форма + gate + reviewed_revision==revision + writer≠judge)
+        # проверяет load_verdict; ЗАЗЕМЛЕНИЕ pass идёт НИЖЕ тем же путём, что живой вердикт (Fix C:
+        # рубер-штамп + _review_cites_delivered_file), поэтому здесь не дублируется и не расходится.
+        handoff_rr, _ = reviewer_handoff.load_verdict(handoff_root, gid, revision=revision)
+        if handoff_rr is not None:
+            rv = {"result": handoff_rr, "stopped": "handoff-artifact", "reads": [], "denied": [],
+                  "source": "handoff-artifact"}
+        else:
+            reviewer = tool_loop.make_reviewer_proposer(
+                reviewer_proposer, gid, checklist=_gate_checklist(g),
+                required_evidence=req, reviewed_revision=revision)
+            rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
+                                      max_reads=max_reads, base_context=change_ctx,
+                                      required_evidence=req, reviewed_revision=revision)
+            # HANDOFF-OPEN (#160): провайдер ревьюера недоступен в среде (сессия Клода) -> НЕ глухой
+            # no-verdict, а awaiting_reviewer: пишем запрос на ревью, гейт остаётся блокирующим (fail),
+            # но ОТЛИЧИМ — прогон не падает и оркестратор знает, что заполнить. resume перечитает вердикт.
+            if rv.get("stopped") == "env-unavailable":
+                aw = reviewer_handoff.open_request(
+                    handoff_root, gid, checklist=_gate_checklist(g), reviewed_revision=revision,
+                    changed_files=delivered, blocking=bool(g.get("blocking")), required_evidence=req)
+                gate_ev[gid] = aw
+                # entry.status="awaiting_reviewer" (НЕ "fail"): гейт-evidence блокирует (fail),
+                # но это ОЖИДАНИЕ ревью, а не отрицательный вердикт судьи — иначе _hard_stop счёл бы
+                # это reviewer-blocked и остановил бы цепочку. Как «awaiting author/review evidence»,
+                # awaiting_reviewer оставляет работу незавершённой, а не отравляет цепочку.
+                reviews.append({"gate": gid, "stopped": "env-unavailable", "reads": [],
+                                "denied": rv.get("denied"), "valid": False, "source": "handoff-request",
+                                "status": "awaiting_reviewer", "closed_as": "awaiting_reviewer",
+                                "reason": (aw.get("blockers") or aw.get("warnings") or [None])[0]})
+                continue
         res = rv.get("result")
         errs = vrr.check(res, gate_ids=valid_ids) if isinstance(res, dict) else ["ревьюер не вынес вердикт"]
         entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
-                 "denied": rv.get("denied"), "valid": not errs,
+                 "denied": rv.get("denied"), "valid": not errs, "source": rv.get("source"),
                  "status": (res or {}).get("status") if not errs else None,
                  "blockers": (res or {}).get("blockers") if isinstance(res, dict) else None,
                  "errors": errs or None}

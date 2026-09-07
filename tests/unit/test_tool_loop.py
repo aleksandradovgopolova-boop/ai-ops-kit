@@ -323,6 +323,23 @@ class TestRunReview:
         assert rev["refusal"]["reason"] == "empty_answer"
         assert rev["refusal"]["provider"] == "claude-cli"
 
+    def test_run_review_env_unavailable_is_named_not_crash(self, review_deps):
+        """#160 (сессия Клода): провайдер ревьюера СТРУКТУРНО недоступен в среде (вложенный claude -p)
+        -> run_review НЕ пробрасывает исключение (иначе падает весь прогон), а возвращает named
+        no-verdict `env-unavailable` c refusal-словарём. По нему _run_reviews открывает handoff."""
+        from ai_ops_kit.providers.orchestrator_providers import ProviderEnvUnavailableError
+        policy, root = review_deps
+
+        def env_unavailable(_ctx):
+            raise ProviderEnvUnavailableError("claude-cli", "duration_api_ms:0, 0 токенов")
+
+        rev = tool_loop.run_review(env_unavailable, root, policy, "code_review",
+                                   budget={"max_model_calls": 5})
+        assert rev["result"] is None
+        assert rev["stopped"] == "env-unavailable"
+        assert rev["refusal"]["reason"] == "env_unavailable"
+        assert rev["refusal"]["provider"] == "claude-cli"
+
     def test_run_review_force_verdict_after_reads(self, review_deps):
         """rc10: жадное чтение до лимита, затем на ФОРС-ХОДЕ выносится вердикт (не тихий no-verdict)."""
         policy, root = review_deps
