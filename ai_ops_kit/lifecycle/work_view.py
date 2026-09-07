@@ -174,6 +174,180 @@ def _evidence_refs(child_root: Path, work_id: str, workitem: dict | None) -> lis
     return out
 
 
+def _load_json(path: Path):
+    """Прочитать json read-only. Отсутствие/битость -> None (та же политика, что у `_load_yaml`:
+    проекция не падает из-за одного недоступного приёмника, а честно говорит, что его нет)."""
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _read_runs(child_root: Path, work_id: str) -> list:
+    """Прогоны работы — из РЕАЛЬНОГО приёмника, а не заглушка (issue #565).
+
+    Приёмник прогонов — событийный журнал `features/<id>/lifecycle-journal.jsonl`, который движок
+    (`engine/ai_ops_run_lifecycle.py`) дописывает по ходу прогона: run_start/run_cost/run_end и
+    события доставки. run_id == id работы; попытки различаются `attempt_id`. Сводим журнал в список
+    попыток: одна запись на попытку с её статусом (из run_end; если есть только run_start — попытка
+    ещё идёт). Журнала нет -> откат к последнему `run-report.json` (одна запись). Ни того, ни другого
+    -> [] (прогонов не было — честно, а не выдуманный).
+    -> список {attempt_id, run_id, status, events[]} (+ overall_status для отката к отчёту)."""
+    runs: list = []
+    jp = child_root / "features" / str(work_id) / "lifecycle-journal.jsonl"
+    if jp.is_file():
+        try:
+            lines = [ln for ln in jp.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        except OSError:
+            lines = []
+        by_attempt: dict = {}
+        order: list = []
+        for ln in lines:
+            try:
+                ev = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            key = str(ev.get("attempt_id") or ev.get("run_id") or "")
+            rec = by_attempt.get(key)
+            if rec is None:
+                rec = {"attempt_id": ev.get("attempt_id"), "run_id": ev.get("run_id"),
+                       "status": None, "events": []}
+                by_attempt[key] = rec
+                order.append(key)
+            kind = ev.get("kind")
+            if kind:
+                rec["events"].append(kind)
+            if kind == "run_end":
+                rec["status"] = ev.get("status")
+            elif kind == "run_start" and rec["status"] is None:
+                rec["status"] = "in_progress"
+        runs = [by_attempt[k] for k in order]
+    if not runs:
+        rr = _load_json(child_root / "features" / str(work_id) / "run-report.json")
+        if isinstance(rr, dict):
+            runs = [{"attempt_id": None, "run_id": str(work_id), "status": rr.get("status"),
+                     "overall_status": rr.get("overall_status"), "events": [], "source": "run-report"}]
+    return runs
+
+
+# Приёмник доставки: DeliveryReceipt в `features/<id>/delivery-outbox/<delivery_id>.receipt.yaml`
+# (движок пишет его в `engine/ai_ops_run_lifecycle.py`; форма — TypedDict DeliveryReceipt в
+# shared/contracts.py, JSON-схемы у него нет). Плюс исторические места, где receipt мог лежать.
+_DELIVERY_RECEIPT_FALLBACKS = ("features/{wid}/delivery-receipt.yaml",
+                               ".ai/runtime/delivery/{wid}/receipt.yaml")
+# Поля receipt, которые проекция выносит наружу (безопасные факты о доставке; секретов тут нет).
+_RECEIPT_FIELDS = ("delivery_id", "status", "pr_url", "pr_number", "branch", "commit_sha",
+                   "remote_sha", "sha_verified", "base_ref", "merged", "pr_state",
+                   "invariant_breaches")
+
+
+def _read_delivery(child_root: Path, work_id: str) -> dict | None:
+    """Доставка работы — из РЕАЛЬНОГО приёмника (issue #565): закрывает связь работа->PR.
+
+    Читает все DeliveryReceipt в `features/<id>/delivery-outbox/*.receipt.yaml` (+ исторические
+    места). Из них выводит список PR(ов) работы (pr_url/pr_number) — та самая связь, что раньше была
+    помечена TODO(#549) «отдельного источника у проекции нет». Источник ЕСТЬ — receipt. Ничего не
+    создаёт; receipts нет -> None (доставки не было). -> {receipts[], prs[]} | None."""
+    wid = str(work_id)
+    receipts: list = []
+    outbox = child_root / "features" / wid / "delivery-outbox"
+    seen_ids: set = set()
+    if outbox.is_dir():
+        for p in sorted(outbox.glob("*.receipt.yaml")):
+            data = _load_yaml(p)
+            if isinstance(data, dict) and str(data.get("kind")) == "DeliveryReceipt":
+                receipts.append(data)
+                if data.get("delivery_id"):
+                    seen_ids.add(str(data.get("delivery_id")))
+    for rel in _DELIVERY_RECEIPT_FALLBACKS:
+        data = _load_yaml(child_root / rel.format(wid=wid))
+        if isinstance(data, dict) and str(data.get("kind")) == "DeliveryReceipt":
+            if str(data.get("delivery_id") or "") not in seen_ids:
+                receipts.append(data)
+    if not receipts:
+        return None
+    compact = [{k: r.get(k) for k in _RECEIPT_FIELDS if r.get(k) is not None} for r in receipts]
+    prs: list = []
+    seen_pr: set = set()
+    for r in receipts:
+        url, num = r.get("pr_url"), r.get("pr_number")
+        if not (url or num):
+            continue
+        key = str(url or num)
+        if key in seen_pr:
+            continue
+        seen_pr.add(key)
+        prs.append({"url": url, "number": num, "status": r.get("status"),
+                    "sha_verified": r.get("sha_verified"), "merged": r.get("merged"),
+                    "pr_state": r.get("pr_state"), "branch": r.get("branch")})
+    return {"receipts": compact, "prs": prs}
+
+
+def _read_outcome(child_root: Path, work_id: str, plan_item: dict | None,
+                  plan_doc: dict | None) -> dict | None:
+    """Исход работы — из РЕАЛЬНЫХ приёмников (issue #565), READ-ONLY и БЕЗ флипа (#566 — не здесь).
+
+    Сводит то, что УЖЕ записано об исходе работы, из трёх мест (ничего не считает заново):
+      * план: цель работы (`work[].goal`) и её записанный `outcome` из `goals[]` — булевы флаги
+        пользы, которые флипает отдельный контур (#566). Здесь только читаем;
+      * PostReleaseReadout: `features/<id>/PRR-*.yaml` — `readout_decision` и band здоровья;
+      * OutcomeReadout: `features/<id>/*.yaml` (kind OutcomeReadout) — `target_met`.
+    Валидаторы/проекторы этих объектов живут в `validation`/`intelligence` (слои ВЫШЕ ядра), ядру
+    импортировать их нельзя — поэтому читаем по контракту схем, как и остальные источники.
+    Ничего не записано -> None (исход не измерен — честно). -> dict | None."""
+    wid = str(work_id)
+    out: dict = {}
+    goal_id = (plan_item or {}).get("goal")
+    if goal_id:
+        out["goal"] = goal_id
+        for g in (plan_doc or {}).get("goals") or []:
+            if isinstance(g, dict) and str(g.get("id") or "") == str(goal_id):
+                oc = g.get("outcome")
+                if isinstance(oc, dict) and oc:
+                    out["goal_outcome"] = oc
+                    out["goal_outcome_reached"] = all(bool(v) for v in oc.values())
+                break
+    for pat in (f"features/{wid}/PRR-*.yaml", f"features/{wid}/PRR-*.yml"):
+        found = False
+        for p in sorted(child_root.glob(pat)):
+            data = _load_yaml(p)
+            if isinstance(data, dict) and str(data.get("kind")) == "PostReleaseReadout":
+                out["prr"] = {"id": data.get("id"), "readout_decision": data.get("readout_decision"),
+                              "product_health_band": (data.get("product_health") or {}).get("band"),
+                              "path": str(p.relative_to(child_root))}
+                found = True
+                break
+        if found:
+            break
+    fdir = child_root / "features" / wid
+    if fdir.is_dir():
+        for p in sorted(fdir.glob("*.yaml")):
+            data = _load_yaml(p)
+            if isinstance(data, dict) and str(data.get("kind")) == "OutcomeReadout":
+                out["readout"] = {"target_met": data.get("target_met"),
+                                  "path": str(p.relative_to(child_root))}
+                break
+    # «Исход записан» ТОЛЬКО при СУЩЕСТВЕННЫХ данных (флаги цели / PRR / readout). Одна лишь ссылка
+    # работы на цель (`work[].goal`) исходом не является — иначе любая работа с целью выглядела бы
+    # так, будто её польза уже измерена. Пусто по существу -> None (исход не измерен — честно).
+    if not any(k in out for k in ("goal_outcome", "prr", "readout")):
+        return None
+    return out
+
+
+def _read_plan_doc(child_root: Path) -> dict | None:
+    """Весь plan.yaml (для целей/goals). Заготовку (`template: true`) НЕ читаем — тот же принцип,
+    что у `_read_plan_item`. -> dict | None."""
+    data = _load_yaml(child_root / "planning" / "plan.yaml")
+    if not isinstance(data, dict) or data.get("template"):
+        return None
+    return data
+
+
 def _union(*lists) -> list:
     """Порядок-сохраняющий union непустых строк из нескольких списков (дедупликация)."""
     seen, out = set(), []
@@ -208,23 +382,41 @@ def project_work(work_id, child_root) -> dict:
     НЕ попадает в `sources` (проекция честна о том, что сведено, а что отсутствует).
 
     Поля результата:
-      id, title, status, lifecycle_intent, branch,
-      current_agent, participants[], artifacts[], evidence[], decisions[],
+      id, title, status, workflow, lifecycle_intent, human_approval_required, branch,
+      current_agent, participants[], artifacts[] (вкл. ссылки kind=pr), evidence[], decisions[],
+      runs[], delivery{receipts,prs}|None, outcome{goal,goal_outcome,prr,readout}|None,
       write_scope[], depends_on[], shared_contracts[], sources[].
+
+    #565: runs/delivery/outcome и связь работа->PR — из реальных приёмников (журнал прогонов,
+    DeliveryReceipt, план+PRR+readout), а не заглушки. Проекция ЕДИНАЯ: `work show`, `explain`,
+    `status` и `next` берут per-work факты отсюда, а не каждый своим набором чтений (issue #565).
     """
     root = Path(child_root)
     wid = str(work_id)
 
     workitem = _read_workitem(root, wid)
     active = _read_active_entry(root, wid)
+    plan_doc = _read_plan_doc(root)
     plan_item = _read_plan_item(root, wid)
     work_graph = _read_work_graph(root, wid)
+
+    # #565: Work — хребет, а не витрина. Три раньше отсутствовавших поля читаются из РЕАЛЬНЫХ
+    # приёмников (журнал прогонов / delivery-receipt / план+PRR+readout), не заглушки.
+    runs = _read_runs(root, wid)
+    delivery = _read_delivery(root, wid)
+    outcome = _read_outcome(root, wid, plan_item, plan_doc)
 
     sources = [name for name, found in (
         ("workitem", workitem is not None),
         ("active_work", active is not None),
         ("work_graph", work_graph is not None),
         ("plan", plan_item is not None),
+        # #565: новые приёмники попадают в провенанс ТОЛЬКО когда реально что-то прочитано —
+        # их отсутствие у ранней работы законно и не выдаётся за пробел (см. presenter: они не в
+        # списке «обязательных» источников идентичности, поэтому не попадают в «не нашёл»).
+        ("runs", bool(runs)),
+        ("delivery", delivery is not None),
+        ("outcome", outcome is not None),
     ) if found]
 
     wi, aw, pi = workitem or {}, active or {}, plan_item or {}
@@ -251,9 +443,15 @@ def project_work(work_id, child_root) -> dict:
     depends_on = _union(g_dep, aw.get("depends_on") or [], pi.get("depends_on") or [])
     shared_contracts = _union(g_sc, aw.get("shared_contracts") or [])
 
-    # TODO(#549): artifacts частично — из workitem.paths + ветка. Ссылки на PR здесь нет: связь
-    #   работа->PR живёт в delivery-приёмнике, отдельного источника у проекции пока нет.
+    # #565: связь работа->PR закрыта — PR(ы) работы приходят из delivery-приёмника (receipt) и
+    # добавляются в artifacts как ссылки типа `pr`. Раньше это был TODO(#549): «отдельного источника
+    # у проекции пока нет». Источник — DeliveryReceipt.pr_url/pr_number.
     artifacts = _existing_artifacts(root, workitem, branch)
+    for _pr in (delivery or {}).get("prs") or []:
+        ref = _pr.get("url") or (f"#{_pr.get('number')}" if _pr.get("number") else None)
+        if ref:
+            artifacts.append({"kind": "pr", "ref": ref, "url": _pr.get("url"),
+                              "number": _pr.get("number")})
     evidence = _evidence_refs(root, wid, workitem)
     decisions = _read_related_decisions(root, wid, wi.get("id") or pi.get("goal"))
 
@@ -261,13 +459,19 @@ def project_work(work_id, child_root) -> dict:
         "id": wid,
         "title": title,
         "status": status,
+        "workflow": wi.get("workflow"),
         "lifecycle_intent": wi.get("lifecycle_intent"),
+        "human_approval_required": bool(wi.get("human_approval_required")),
         "branch": branch,
         "current_agent": current_agent,
         "participants": participants,
         "artifacts": artifacts,
         "evidence": evidence,
         "decisions": decisions,
+        # #565: хребет — прогоны, доставка (+PR), исход. Пусто/None = приёмник ничего не записал.
+        "runs": runs,
+        "delivery": delivery,
+        "outcome": outcome,
         "write_scope": write_scope,
         "depends_on": depends_on,
         "shared_contracts": shared_contracts,

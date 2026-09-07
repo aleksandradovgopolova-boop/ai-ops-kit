@@ -439,6 +439,106 @@ class TestRunPipelineNewDependency:
         assert report["ready_for_pr"] is False
 
 
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestReevaluateConsumesHandoffVerdict:
+    """#570-follow-up (живой прогон 07.09): записанный ОРКЕСТРАТОРОМ вердикт-артефакт закрывает
+    code_review на ШТАТНОМ reevaluate (0 model-вызовов, БЕЗ --review) — через РЕАЛЬНЫЙ поток
+    run_pipeline, а не только прямой вызов _run_reviews. Прежде artifact-first жил лишь внутри
+    _run_reviews, который зовётся только при --review с живым провайдером; поэтому валидный вердикт
+    не потреблялся и code_review оставался «нет заключения reviewer». Инвариант 0 false-green и
+    writer≠judge сохранены: устаревший-SHA / писательский / незаземлённый вердикт гейт НЕ закроет."""
+
+    ENG = {"task_type": "ENGINEERING", "size": "small", "risk": "low", "affected_areas": ["core"]}
+
+    def _commit_work(self, child_root, wid):
+        """Первый прогон: закоммитить ENGINEERING-работу; code_review остаётся незакрытым (ревьюер
+        не выносит вердикт). -> (sha, changed_file)."""
+        ops = iter([{"op": "write", "path": f"src/{wid}.py", "content": "def g():\n    return 42\n"},
+                     {"done": True}])
+        rep = execution_pipeline.run_pipeline(
+            task="engineering task", signals=self.ENG, child_root=child_root,
+            proposer=lambda c: next(ops), budget={"max_model_calls": 20}, feature=wid,
+            commit=True, isolate=True, install_deps=False,
+            review=True, reviewer_proposer=lambda p: '{"op":"noop"}')
+        return (rep.get("commit") or {}).get("sha"), f"src/{wid}.py"
+
+    def _write_verdict(self, child_root, sha, *, reviewer, evidence_file, revision=None):
+        from ai_ops_kit.engine import reviewer_handoff
+        vp = reviewer_handoff.verdict_path(str(child_root), "code_review")
+        vp.parent.mkdir(parents=True, exist_ok=True)
+        vp.write_text(json.dumps({
+            "schema_version": 1, "kind": "reviewer-result", "gate": "code_review", "status": "pass",
+            "reviewed_revision": revision or sha, "reviewer": reviewer,
+            "checks": [{"id": "cr", "status": "pass",
+                        "evidence": [{"file": evidence_file, "lines": "1-2"}]}]},
+            ensure_ascii=False), encoding="utf-8")
+
+    def _reevaluate(self, child_root, wid, spy=None):
+        """Штатный reevaluate: review=False (как `run --execute --reevaluate-only` без --review),
+        провайдер НЕ должен вызываться."""
+        return execution_pipeline.run_pipeline(
+            task="engineering task", signals=self.ENG, child_root=child_root,
+            proposer=lambda c: {"done": True}, budget={"max_model_calls": 20}, feature=wid,
+            commit=True, isolate=True, install_deps=False,
+            review=False, reviewer_proposer=spy, reevaluate_only=True)
+
+    def _cr(self, report):
+        return next((r for r in (report.get("reviews") or []) if r["gate"] == "code_review"), None)
+
+    def test_valid_verdict_closes_code_review_without_provider(self, child_root):
+        """Валидный ЗАЗЕМЛЁННЫЙ вердикт на committed SHA -> code_review ЗАКРЫТ на reevaluate; статус
+        из вердикта, source=handoff-artifact, провайдер НЕ вызван."""
+        _init_git(child_root)
+        sha, changed = self._commit_work(child_root, "cr-ok")
+        assert sha, "первый прогон не закоммитил работу"
+        self._write_verdict(child_root, sha, reviewer="orchestrator", evidence_file=changed)
+
+        called = {"n": 0}
+
+        def spy(_p):
+            called["n"] += 1
+            return '{"op":"noop"}'
+
+        rep2 = self._reevaluate(child_root, "cr-ok", spy=spy)
+        e = self._cr(rep2)
+        assert e is not None and e["source"] == "handoff-artifact", rep2.get("reviews")
+        assert e["status"] == "pass" and e.get("closed_as") == "pass"
+        assert "code_review" not in rep2["gates"]["unmet"]
+        assert called["n"] == 0, "провайдер ревьюера вызван на reevaluate — artifact-first не сработал"
+
+    def test_stale_sha_verdict_rejected_gate_blocked(self, child_root):
+        """Вердикт на УСТАРЕВШЕМ SHA не принимается -> code_review остаётся незакрытым (0 false-green)."""
+        _init_git(child_root)
+        sha, changed = self._commit_work(child_root, "cr-stale")
+        self._write_verdict(child_root, sha, reviewer="orchestrator", evidence_file=changed,
+                            revision="deadbeef" * 5)
+        rep2 = self._reevaluate(child_root, "cr-stale")
+        assert "code_review" in rep2["gates"]["unmet"]
+        e = self._cr(rep2)
+        assert e is None or e.get("status") != "pass", rep2.get("reviews")
+
+    def test_writer_attributed_verdict_rejected_gate_blocked(self, child_root):
+        """writer≠judge: вердикт, атрибутированный писателю (claude-code-local), гейт НЕ закрывает."""
+        _init_git(child_root)
+        sha, changed = self._commit_work(child_root, "cr-writer")
+        self._write_verdict(child_root, sha, reviewer="claude-code-local", evidence_file=changed)
+        rep2 = self._reevaluate(child_root, "cr-writer")
+        assert "code_review" in rep2["gates"]["unmet"]
+
+    def test_off_change_evidence_verdict_blocked(self, child_root):
+        """pass-вердикт с evidence на ЧУЖОЙ файл (не в правке) -> заземление не проходит -> blocked
+        (тот же страж рубер-штампа, что на живом пути)."""
+        _init_git(child_root)
+        sha, _changed = self._commit_work(child_root, "cr-off")
+        self._write_verdict(child_root, sha, reviewer="orchestrator",
+                            evidence_file="src/UNRELATED.py")
+        rep2 = self._reevaluate(child_root, "cr-off")
+        assert "code_review" in rep2["gates"]["unmet"]
+        e = self._cr(rep2)
+        assert e is not None and e.get("closed_as") == "blocked", rep2.get("reviews")
+
+
 # ============================================================================
 # MIGRATED FROM MONOLITH — test_execution_pipeline_selftest (weed round)
 # Каждое поведение перенесено с НАСТОЯЩЕЙ проверкой значения (не только наличия

@@ -79,9 +79,12 @@ KNOWN_DORMANT: dict[str, str] = {
     f"{PKG}.intelligence.artifact_reality_check":
         "сверка артефактов с реальным репо (цель ai-product-operations, achieved); "
         "installer.UNWIRED_MODULES, импортеров нет — построено, но в контур не проведено",
-    f"{PKG}.intelligence.decision_loop":
-        "product decision loop (цель product-decision-loop, active); installer.UNWIRED_MODULES, "
-        "импортеров нет — цикл решений написан, но ни один рабочий путь его не зовёт",
+    # `intelligence/decision_loop` УБРАН ИЗ СПИСКА 2026-09-07 (#564): он ПРОВЕДЁН В КОНТУР. Маршрут
+    # `run --execute`/`do` (cli/ai_ops_cli._decision_contract_gate) импортирует decision_loop и зовёт
+    # has_feature_decision_contract — для триггерного профиля (сигнал feature_decision_declared)
+    # отсутствие Decision-контракта закрывает продвижение fail-closed. Появился не-тестовый импортёр
+    # (cli — слой entrypoints, выше intelligence: импорт вниз разрешён) -> по правилу «список только
+    # сокращается» имя обязано уйти; иначе test_known_dormant_list_only_shrinks покраснел бы.
     f"{PKG}.intelligence.evolution_triggers":
         "замыкание governance-петли ADR↔Product Health (цель ai-product-operations, achieved); "
         "едет в дочку, но 0 импортеров — только сам импортирует валидаторы",
@@ -213,9 +216,12 @@ def test_importer_counter_is_correct_on_known_facts(tmp_path):
     modules = _pkg_modules()
     importers = _nontest_importers(modules)
 
-    # Реальные факты дерева.
-    assert importers[f"{PKG}.intelligence.decision_loop"] == set(), \
-        "decision_loop обязан иметь 0 не-тестовых импортеров (дормантный факт)"
+    # Реальные факты дерева. `artifact_reality_check` остаётся дормантным (0 импортеров) — берём его
+    # как эталон нуля; `decision_loop` с #564 ПРОВЕДЁН в маршрут, поэтому у него импортер уже есть.
+    assert importers[f"{PKG}.intelligence.artifact_reality_check"] == set(), \
+        "artifact_reality_check обязан иметь 0 не-тестовых импортеров (дормантный факт)"
+    assert len(importers[f"{PKG}.intelligence.decision_loop"]) >= 1, \
+        "decision_loop проведён в маршрут (#564) — у него обязан быть не-тестовый импортер (cli)"
     assert len(importers[f"{PKG}.engine.pipeline_evidence"]) >= 1, \
         "pipeline_evidence импортируется рабочим кодом — счётчик не должен занулять всё подряд"
     assert max((len(v) for v in importers.values()), default=0) >= 5, \
@@ -224,8 +230,8 @@ def test_importer_counter_is_correct_on_known_facts(tmp_path):
     # Синтетика: временный файл, импортирующий реальный модуль, засчитывается как импортёр.
     known = set(modules)
     probe = tmp_path / "probe_importer.py"
-    probe.write_text("from ai_ops_kit.intelligence import decision_loop\n", encoding="utf-8")
-    assert f"{PKG}.intelligence.decision_loop" in _imports_in(probe, known)
+    probe.write_text("from ai_ops_kit.intelligence import artifact_reality_check\n", encoding="utf-8")
+    assert f"{PKG}.intelligence.artifact_reality_check" in _imports_in(probe, known)
 
     # Самоимпорт не должен считаться проводкой: файл, «импортирующий сам себя», даёт 0.
     self_ref = _find_dormant({"pkg.mod.self"}, (), set())
@@ -320,7 +326,7 @@ def test_non_source_trees_are_not_counted_as_importers():
     copy_paths = [
         PKG_ROOT / ".ai" / "worktrees" / "x" / "ai_ops_kit" / "engine" / "foo.py",
         PKG_ROOT / ".venv" / "lib" / "python3.12" / "site-packages"
-        / "ai_ops_kit" / "intelligence" / "decision_loop.py",
+        / "ai_ops_kit" / "intelligence" / "artifact_reality_check.py",
         PKG_ROOT / "node_modules" / "pkg" / "x.py",
         PKG_ROOT / "build" / "lib" / "ai_ops_kit" / "engine" / "bar.py",
     ]
@@ -331,11 +337,11 @@ def test_non_source_trees_are_not_counted_as_importers():
     assert not _is_skipped(PKG_ROOT / "ai_ops_kit" / "engine" / "tool_broker.py")
     assert not _is_skipped(PKG_ROOT / "installer" / "ai_ops.py")
 
-    # Интеграция: реальный обход зовёт предикат — на текущем дереве decision_loop остаётся 0-импортерным
-    # даже если рядом (в .ai/.venv) лежит его копия, потому что такие деревья пропускаются.
+    # Интеграция: реальный обход зовёт предикат — на текущем дереве artifact_reality_check остаётся
+    # 0-импортерным даже если рядом (в .ai/.venv) лежит его копия, потому что такие деревья пропускаются.
     importers = _nontest_importers(_pkg_modules())
-    assert importers[f"{PKG}.intelligence.decision_loop"] == set(), \
-        "decision_loop обязан остаться дормантным — копии из не-исходных деревьев не в счёт"
+    assert importers[f"{PKG}.intelligence.artifact_reality_check"] == set(), \
+        "artifact_reality_check обязан остаться дормантным — копии из не-исходных деревьев не в счёт"
 
 
 @pytest.mark.contract

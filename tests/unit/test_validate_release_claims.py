@@ -118,8 +118,10 @@ def test_runtime_capability_drift_raises(base_claims):
 
 @pytest.mark.unit
 def test_forbidden_stale_marker_present_in_readme_raises(base_claims):
+    # Пробник — строка, заведомо присутствующая в README (подтверждает, что детектор
+    # запрещённых маркеров действительно сканирует текст, а не молчит вхолостую).
     assert any("устаревший маркер" in x
-               for x in check({**base_claims, "forbidden_stale_markers": ["Открытая"]}))
+               for x in check({**base_claims, "forbidden_stale_markers": ["AI-операционная"]}))
 
 
 @pytest.mark.unit

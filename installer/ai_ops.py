@@ -705,7 +705,13 @@ UNWIRED_MODULES = frozenset({
     # session_thresholds}) СНЯТЫ 2026-09-05: 0 импортеров, порту не соответствовали, дормантный
     # инвентарь. Понадобится Phase B — реализации восстановят против Protocol'ов ports.py.
     "ai_ops_kit/intelligence/artifact_reality_check.py",
-    "ai_ops_kit/intelligence/decision_loop.py",
+    # `intelligence/decision_loop.py` УБРАН ИЗ СПИСКА 2026-09-07 (#564): он ПОДКЛЮЧЁН. Маршрут
+    # `run --execute`/`do` (ai_ops_kit/cli/ai_ops_cli.py, `_decision_contract_gate`) импортирует его
+    # и зовёт `has_feature_decision_contract` — fail-closed присутствие Decision-контракта для
+    # триггерного профиля (сигнал feature_decision_declared). Значит модуль обязан ехать в дочку:
+    # оставить его в UNWIRED значило бы дать дочке cli, зовущий отсутствующий файл (класс F-033).
+    # Список сокращён ФАКТОМ подключения, а не решением — об этом сказал бы тест
+    # `test_unwired_modules_are_really_unwired` (краснел бы, останься имя, раз cli его называет).
     # `intelligence/nightly_review.py` УБРАН 20.08.2026: он подключён. Команда рантайма
     # `commands/maintenance/night-review.md` зовёт его в дочке, и Robin запускает по расписанию
     # (`runtime/robin/duties.example.yaml`, обязанность `nightly-review`). Не поставить его

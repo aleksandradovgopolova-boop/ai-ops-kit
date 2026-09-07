@@ -428,10 +428,37 @@ def _intent_status(task, child_root, signals, a):
             next_steps=["починить файл плана и повторить"],
             technical={"ошибка": str(e)}), audience=aud))
         cross = None
+    # #565: per-work идентичность (ветка/заголовок) идущей работы берётся из ЕДИНОЙ Work-проекции —
+    # того же источника, что у `work show` и `explain`. Делаем это ПОСЛЕ reconcile/persist/crosscheck
+    # (они видят исходный реестр — поведение записи не меняется) и только для показа: проекция
+    # прикрепляется к записи (видна в --json), ветка синхронизируется. Статус «идёт ли работа»
+    # остаётся за реестром — это верный источник именно для этого вопроса.
+    _enrich_running_with_work_view(child_root, team)
     print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
                                                       reconciled=reconciled, crosscheck=cross),
                            audience=aud))
     return 0
+
+
+def _enrich_running_with_work_view(child_root, team):
+    """READ-ONLY: прикрепить единую Work-проекцию к каждой идущей записи и синхронизировать ветку
+    из неё (issue #565). Ничего не пишет на диск и не меняет статус (за «идёт ли» отвечает реестр)."""
+    # project_work читает по контракту и не бросает на отсутствующих/битых источниках (каждый его
+    # reader глушит свой OSError/YAMLError у себя), поэтому обёртка-глушилка тут не нужна.
+    from ai_ops_kit.lifecycle import work_view
+    from ai_ops_kit.planning.delivery_plan import _workitem_key
+    for a in team or []:
+        wid = _workitem_key(a) or str(a.get("id") or "")
+        if not wid:
+            continue
+        v = work_view.project_work(wid, child_root)
+        if not v.get("sources"):
+            continue
+        a["work_view"] = v
+        if v.get("branch"):
+            a["branch"] = v["branch"]
+        if v.get("title") and not a.get("title"):
+            a["title"] = v["title"]
 
 
 @_intent("next")
@@ -449,7 +476,13 @@ def _intent_next(task, child_root, signals, a):
     except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
         print(f"ОШИБКА: {e}")
         return 1
+    # #567: предложенный кандидат из обратной петли Outcome→Insight. Живёт на слое CLI (entrypoints
+    # вправе звать intelligence вниз; next_work в `planning` тянуть вверх не может). НЕ ранжированная
+    # работа — черновик, активным станет только по решению человека; показываем ОТДЕЛЬНО.
+    from ai_ops_kit.cli.ai_ops_cli_intents import _inbox_outcome_candidate
+    candidate = _inbox_outcome_candidate(child_root)
     if js:
+        rep = dict(rep, outcome_candidate=candidate)
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
         # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
@@ -457,6 +490,10 @@ def _intent_next(task, child_root, signals, a):
         from ai_ops_kit.ui import presenter
         aud = presenter.audience_from_config(child_root)
         print(presenter.render(presenter.from_next_work(rep), audience=aud))
+        if candidate:
+            print(f"\n  Предложение по итогу релиза (черновик, требует решения): {candidate['what']}"
+                  f"\n      основано на {candidate.get('sources')} набл. (уверенность "
+                  f"{candidate.get('confidence')}); активной не станет без твоего решения")
         # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
         # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
         for _e in (rep.get("plan_errors") or []):
@@ -734,6 +771,11 @@ def _build_cli_arg_parser():
                     help="resume: доставить УЖЕ готовый READY-коммит без перезапуска писателя "
                          "(#403: перепроверка существующего HEAD без нового evidence-коммита, затем "
                          "доставка) — при сбое доставки после READY не плодит новые коммиты")
+    ap.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="run: ПЕРЕОЦЕНИТЬ гейты существующей фичи БЕЗ переавторинга и без вызова "
+                         "модели (план/SHA стабильны) — например, оркестратор записал вердикт-ревью "
+                         "или человек добавил ApprovalRecord: гейт закрывается по артефакту, работа "
+                         "доходит до ready/доставки. Нужен --execute + --feature. engine=pipeline")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
     ap.add_argument("--approved", default=None,
@@ -962,6 +1004,18 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                 # Готовая команда с ответом обязана дойти до человека на любом уровне детализации.
                 _say(Path(child_root), "from_intake_gap", _missing, _cmd)
             return 2
+        # #564: Decision Loop проведён в маршрут. Для триггерного профиля (заявлено фича-решение)
+        # отсутствие Decision-контракта закрывает продвижение fail-closed — ДО выбора провайдера и
+        # любой траты. Для остальных работ сигнал не взведён и гейт возвращает None (не мешает).
+        from ai_ops_kit.intelligence import decision_loop
+        _dc = decision_loop.decision_contract_gate(signals, child_root, task, a.feature)
+        if _dc is not None:
+            if a.json:
+                print(json.dumps(_dc, ensure_ascii=False, indent=2))
+            else:
+                print(f"ОТКАЗ: {_dc['message']}")
+                print(f"  завести контракт: {_dc['propose_command']}")
+            return _dc["exit"]
         flags = pv["will_do"]["auto_flags"]
         # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и идёт под своим именем во все ветки
         # (sequential/обычная) — иначе автовыбор терялся бы по дороге (v2.120/v3.0-rc2).
@@ -1061,6 +1115,13 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                              takeover_reason=getattr(a, "takeover_reason", None),
                              require_fix=flags.get("require_fix", False),
                              review_fix_attempts=review_fix,
+                             # #570-follow-up: `--reevaluate-only` теперь принимается и CLI-обёрткой
+                             # (`./ai-ops run ... --reevaluate-only`), а не только движком напрямую —
+                             # иначе штатная переоценка после записи вердикта-ревью падала бы
+                             # «unrecognized arguments». Уровень (task_type) берётся из сохранённых на
+                             # specify сигналов (`_carry_stored_signals`), поэтому ENGINEERING не
+                             # превращается молча в QUICK на переоценке без --signals.
+                             reevaluate_only=getattr(a, "reevaluate_only", False),
                              provider_resolution={k: _pres.get(k) for k in
                                                   ("provider", "source", "reason", "warning")})
         ai_ops_run.print_human(rep)

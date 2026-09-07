@@ -18,11 +18,9 @@
 - `DEVELOPMENT-HISTORY.md` — детальная инженерная история релизов (3.37.0 → 3.20.1, архив), вынесена из `CHANGELOG.md`
 - `FILE_INDEX.md` — этот файл
 - `LICENSE`
-- `MIGRATION_GUIDE.md`
 - `MIGRATION_GUIDE_4.0.md` — переход на 4.0: снятие плоского слоя `tools/` (warn-минор 3.40 предупреждает заранее)
 - `NOTICE.md`
-- `README.md`
-- `RELEASE_NOTES_v1.0.0.md`
+- `README.md` — обзор; актуальная витрина «что кит умеет сегодня» — `docs/capability-map.md` (built≠wired честно, генерируется из реестров)
 - `ROADMAP.md` — направление продукта: четыре горизонта (Сейчас / Следующий результат / Дальше / Later), контракт проверяется `ai_ops_kit/planning/roadmap.py`. История пути — `docs/changelog/roadmap-history.md`
 - `VERSION`
 - `VISION.md`
@@ -30,6 +28,16 @@
 - `pyproject.toml`, `setup.py` — дистрибутив (`pip install -e .`); включает `ai_ops_kit`
 - `pytest.ini` — маркеры (в т.ч. `slow`) и addopts контура
 - `requirements.txt` (рантайм: только pyyaml), `requirements-dev.txt` (pytest/hypothesis/ruff/mypy)
+
+## history/ (архив)
+
+Записи о прошлых состояниях: верны как история, но не описывают поведение текущего main.
+
+- `history/plan-history.yaml` — закрытые работы и цели, уехавшие из активного плана
+- `history/MIGRATION_GUIDE.md` — миграция со старой структуры агентов и 1.x→2.0; перенесён из корня
+  (#569): описывал дореформенную раскладку и ссылался на снятый в 4.0 слой `tools/`
+- `history/RELEASE_NOTES_v1.0.0.md` — заметки первого стабильного релиза v1.0.0 (zip-дистрибуция);
+  перенесён из корня (#569): исторический снимок одной версии, текущий мажор — 4.x
 
 ## planning/
 
@@ -48,6 +56,7 @@
 
 Документация для людей: Onboarding (ценность простым языком), Quickstart (+типовые ошибки), Walkthrough (сквозной сценарий), гайд внедрения по ролям, параллельные сессии.
 
+- `docs/capability-map.md` — витрина «что кит умеет сегодня»: capability → состояние (built / built≠wired / partial / planned) → как проверить. СГЕНЕРИРОВАНА из реестров и кода (`python3 -m ai_ops_kit.devtools.capability_inventory`), свежесть держит `tests/contracts/test_capability_inventory.py`
 - `docs/ONBOARDING.md`
 - `docs/QUICKSTART.md`
 - `docs/WALKTHROUGH.md`

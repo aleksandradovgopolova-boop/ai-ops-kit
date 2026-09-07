@@ -452,8 +452,40 @@ def from_post_release_loop(result: dict) -> dict:
         "PRR": (prr.get("id") or "не найден") if prr.get("found") else "не найден",
         "outcome_flip_ready": result.get("outcome_flip_ready"),
     }
+    ps = result.get("product_status") or {}
+    outcome_verdict = result.get("outcome_verdict") or "unknown"
     if result.get("outcome"):
-        tech["outcome_verdict"] = result["outcome"].get("verdict")
+        tech["outcome_declared"] = result["outcome"].get("verdict")
+        tech["outcome_measured"] = result["outcome"].get("measured_verdict")
+    if ps.get("label"):
+        tech["продуктовый статус"] = ps["label"]
+
+    # ПРОДУКТОВЫЙ ИТОГ СИЛЬНЕЕ ГОТОВНОСТИ ВЫПУСКА: если итог ИЗМЕРЕН (met/failed), говорим о нём
+    # первым — «технически done, продуктово нет» отличает хорошо сделанное от правильного (#566).
+    me = (result.get("outcome") or {}).get("measured_evaluation") or {}
+    if outcome_verdict == "failed":
+        done_green = ps.get("delivery_verified")
+        head = ("Сделано технически, но продукт цель не взял" if done_green
+                else "Продуктовый результат не достигнут")
+        summ = ("Доставка зелёная — изменение внедрено, тесты и проверки пройдены. Но измеренный "
+                "результат цель не берёт." if done_green
+                else "Измеренный результат по релизу цель не берёт.")
+        return message(
+            status="degraded", headline=head,
+            summary=summ,
+            why_it_matters="Это разные вещи: «мы хорошо сделали изменение» и «мы сделали правильное "
+                           "изменение». " + (me.get("reason") or ""),
+            next_steps=["вернуть вывод в discovery: цель не достигнута — решать, менять подход или "
+                        "откатывать по правилу решения из контракта"],
+            technical=tech)
+    if outcome_verdict == "met":
+        return message(
+            status="ok", headline="Продуктовый результат достигнут",
+            summary="Измеренный результат по релизу берёт цель, защитные метрики удержаны.",
+            why_it_matters=me.get("reason") or "Изменение оказалось правильным по измерению, а не "
+                                               "только доставленным.",
+            next_steps=["зафиксировать исход достигнутым по правилу решения из контракта"],
+            technical=tech)
 
     # Общая для всех веток оговорка: гейт закрывается одним доказательством из четырёх, потому что у
     # остальных трёх пока нет источника данных. Это НАЗЫВАЕТСЯ, а не прячется за «проверено».
@@ -619,7 +651,12 @@ _WORK_VIEW_STATUS = {
 _WORK_VIEW_SOURCE_RU = {
     "workitem": "заявка на работу", "active_work": "реестр идущих работ",
     "work_graph": "граф пакетов работы", "plan": "план продукта",
+    # #565: приёмники хребта — попадают в «сведено из…», когда реально прочитаны.
+    "runs": "прогоны", "delivery": "доставка", "outcome": "исход",
 }
+# «Обязательные» источники идентичности работы — их отсутствие называется как пробел («не нашёл…»).
+# runs/delivery/outcome сюда НЕ входят намеренно: у ранней работы их ещё нет, и это не пробел, а
+# стадия жизни. Их присутствие видно из самих полей, а провенанс — из `sources`.
 _WORK_VIEW_ALL_SOURCES = ("workitem", "active_work", "work_graph", "plan")
 
 
@@ -657,6 +694,23 @@ def from_work_view(view: dict) -> dict:
                   else "Активной сессии за работой сейчас нет.")
     dcount = len(view.get("decisions") or [])
     acount = len(view.get("artifacts") or [])
+    # #565: хребет — прогоны, доставка (PR), исход. В продуктовую строку идёт СМЫСЛ (доставлено ли,
+    # каков исход), сырьё (url PR, band здоровья) остаётся в технических деталях.
+    runs = view.get("runs") or []
+    delivery = view.get("delivery") or {}
+    prs = delivery.get("prs") or []
+    outcome = view.get("outcome") or {}
+    pr_nums = ", ".join(("#" + str(p.get("number")) if p.get("number") else (p.get("url") or "?"))
+                        for p in prs)
+    delivered_line = (f" Доставлена в PR {pr_nums}." if prs else "")
+    if outcome.get("goal_outcome_reached") is True:
+        outcome_line = " Исход: цель достигнута."
+    elif outcome.get("goal_outcome") is not None:
+        outcome_line = " Исход: цель ещё не достигнута."
+    elif outcome:
+        outcome_line = " Исход пока измеряется."
+    else:
+        outcome_line = ""
     why = (f"Свёл всё, что известно, из {len(sources)} "
            + _q(len(sources), "источника", "источников", "источников") + f": {have_ru}.")
     if missing:
@@ -666,13 +720,23 @@ def from_work_view(view: dict) -> dict:
         status=status,
         headline=f"«{title}»",
         summary=(agent_line
+                 + (f" Прогонов: {len(runs)}." if runs else "")
+                 + delivered_line + outcome_line
                  + (f" Артефактов собрано: {acount}." if acount else "")
                  + (f" Связанных решений: {dcount}." if dcount else "")),
         why_it_matters=why,
         next_steps=["подробности по любой стороне — по запросу"],
         technical={"id": view.get("id"), "статус": st or "—",
+                   "workflow": view.get("workflow") or "—",
                    "стадия": view.get("lifecycle_intent") or "—",
                    "ветка": view.get("branch") or "—",
+                   "прогонов": len(runs) if runs else "—",
+                   "PR": pr_nums or "—",
+                   "исход": (outcome.get("readout_decision")
+                             or (outcome.get("prr") or {}).get("readout_decision")
+                             or ("достигнут" if outcome.get("goal_outcome_reached")
+                                 else ("не достигнут" if outcome.get("goal_outcome") is not None
+                                       else "—"))),
                    "ведущая сессия": view.get("current_agent") or "—",
                    "участники": ", ".join(view.get("participants") or []) or "—",
                    "области записи": ", ".join(view.get("write_scope") or []) or "—",

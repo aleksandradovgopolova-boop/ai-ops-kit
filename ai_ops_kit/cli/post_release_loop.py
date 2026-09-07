@@ -34,9 +34,16 @@ Producer есть ТОЛЬКО у первого (`event_arrival`). Осталь
 помечаем их `not_measured`, а не выдумываем им producer'ы. Проводка сообщает «закрыто 1 из 4»
 последствием, а не прячет пробел.
 
-ФЛИП ИСХОДА НЕ ДЕЛАЕТСЯ ЗДЕСЬ. Реальный `goal.outcome=true` упирается в аналитику дочки и ждёт
-реального выпуска. Оркестратор ВОЗВРАЩАЕТ вердикт, но никакого `planning/plan.yaml` не трогает:
-`outcome_flip_ready` в результате всегда False до реального выпуска (см. TODO(#545) ниже).
+ВЕРДИКТ ПО ИТОГУ СЧИТАЕТСЯ ИЗ ЧИСЕЛ (#566). Когда после релиза приходит реальный замер (readout с
+`measured.value`+`measured_at`), `outcome_verdict` флипается из `unknown` в `met`/`failed` —
+`validate_product_objects.evaluate_outcome` сверяет baseline→measured против target и guardrails,
+а НЕ берёт человеческое `target_met`. При зелёной доставке (валидный PRR) и провале итога
+`product_status` явно говорит «технически done, продуктово нет».
+
+САМ ФЛИП goal.outcome НЕ ДЕЛАЕТСЯ ЗДЕСЬ. Оркестратор ВОЗВРАЩАЕТ вердикт и выставляет
+`outcome_flip_ready=True`, когда замер реален (met/failed), но `planning/plan.yaml` НЕ трогает:
+запись факта в план — отдельный координационный PR (код петли ≠ правка данных). Без замера
+`outcome_flip_ready` честно False.
 
 Использование:
     post_release_loop.py [child_root] [--prr <файл>] [--contract <файл>] [--readout <файл>]
@@ -157,11 +164,15 @@ def _assess_analytics(child_root: Path) -> dict:
 
 
 def _assess_outcome(contract, readout, feature) -> dict | None:
-    """Звено (d): проекция OutcomeContract(+Readout) в граф + трассировка «зачем функция».
+    """Звено (d): проекция OutcomeContract(+Readout) в граф + трассировка + ВЕРДИКТ ПО ЗАМЕРУ.
 
-    Композиция validate_product_objects.project_outcome + trace_feature_rationale. Без readout
-    verdict честно `pending` (результат ещё не измерен) — это состояние, а не оценка. Возвращает
-    None, если контракта нет: outcome-звено просто не участвует в этой петле.
+    Композиция validate_product_objects.project_outcome + trace_feature_rationale + evaluate_outcome.
+    Два разных вердикта живут рядом осознанно:
+      * `verdict` — ПРОЕКЦИЯ поля человека `target_met` в граф (декларация, для knowledge-graph);
+      * `measured_verdict` — вердикт, СЧИТАННЫЙ ИЗ ЧИСЕЛ реальным замером (met/failed/unknown). Это
+        он флипается из `unknown` в `met`/`failed`, когда после релиза приходит реальный замер.
+    `flip_ready` True, когда замер реален и дал met/failed — петля МОЖЕТ флипнуть goal.outcome
+    (сам флип — отдельный координационный PR; здесь ничего не пишется). Возвращает None без контракта.
     """
     if not isinstance(contract, dict):
         return None
@@ -171,14 +182,45 @@ def _assess_outcome(contract, readout, feature) -> dict | None:
     if feature:
         trace = vpo.trace_feature_rationale(graph, feature)
     node = (graph.get("nodes") or [{}])[0]
+    measured = vpo.evaluate_outcome(contract, readout)   # ФЛИП: met/failed/unknown ИЗ ЧИСЕЛ
     return {
         "projected": True,
         "verdict": node.get("verdict", "pending"),
+        "measured_verdict": measured["verdict"],
+        "measured_evaluation": measured,
+        "flip_ready": measured["verdict"] in ("met", "failed"),
         "outcome_id": node.get("id"),
         "graph": graph,
         "trace": trace,
         "gaps": (trace or {}).get("gaps", []),
     }
+
+
+def classify_product_status(delivery_verified: bool, outcome_verdict: str) -> dict:
+    """Свести состояние ДОСТАВКИ и вердикт по ПРОДУКТОВОМУ ИТОГУ в один явный статус (#566).
+
+    Главный различитель: доставка зелёная (merged/tests/gates/delivery ✓), а итог провален — это
+    «технически done, продуктово нет». Так «мы хорошо сделали изменение» отделяется от «мы сделали
+    ПРАВИЛЬНОЕ изменение». `delivery_verified` — доставка подтверждена (у петли это валидный PRR по
+    верифицированной доставке); `outcome_verdict` — met/failed/unknown из реального замера.
+
+    -> {"status", "label", "technically_done_not_product": bool, "delivery_verified", "outcome_verdict"}.
+    """
+    tech_done_not_product = bool(delivery_verified and outcome_verdict == "failed")
+    if tech_done_not_product:
+        key, label = "delivered_not_met", "технически done, продуктово нет"
+    elif outcome_verdict == "failed":
+        key, label = "outcome_failed", "продуктовый результат не достигнут"
+    elif outcome_verdict == "met" and delivery_verified:
+        key, label = "delivered_and_met", "доставлено, продуктовый результат достигнут"
+    elif outcome_verdict == "met":
+        key, label = "outcome_met", "продуктовый результат достигнут (доставка не подтверждена)"
+    else:  # unknown
+        key = "delivered_outcome_unmeasured" if delivery_verified else "outcome_unmeasured"
+        label = "итог по релизу ещё не измерен"
+    return {"status": key, "label": label,
+            "technically_done_not_product": tech_done_not_product,
+            "delivery_verified": bool(delivery_verified), "outcome_verdict": outcome_verdict}
 
 
 def _synthesize_verdict(prr: dict, analytics: dict, outcome: dict | None) -> dict:
@@ -235,8 +277,31 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     analytics = _assess_analytics(child_root)
     # (d) outcome-проекция + трассировка (если дан контракт).
     outcome = _assess_outcome(contract, readout, feature)
-    # (e) единый вердикт с честным дефолтом.
+    # (e) единый вердикт (аналитика/готовность выпуска) с честным дефолтом.
     synth = _synthesize_verdict(prr, analytics, outcome)
+
+    # (f) ВЕРДИКТ ПО ПРОДУКТОВОМУ ИТОГУ, посчитанный из реального замера, и явный продуктовый статус.
+    #     Доставка подтверждена = валидный PRR (валидатор PRR читает только верифицированную доставку,
+    #     delivery_receipt.sha_verified=true), поэтому «PRR валиден» — честный прокси «доставка зелёная».
+    delivery_verified = bool(prr.get("found") and prr.get("valid"))
+    outcome_verdict = (outcome or {}).get("measured_verdict", "unknown")
+    product_status = classify_product_status(delivery_verified, outcome_verdict)
+    # ФЛИП ГОТОВ, когда реальный замер дал met/failed. САМ ФЛИП goal.outcome — отдельный
+    # координационный PR (код петли ≠ правка данных плана); здесь по-прежнему ничего не пишется.
+    outcome_flip_ready = bool(outcome and outcome.get("flip_ready"))
+
+    # (g) ОБРАТНАЯ ПЕТЛЯ Outcome → Insight → кандидат-работа (#567). Замыкается ЗДЕСЬ по той же
+    #     причине, что и вердикт из чисел: только слой entrypoints вправе звать И intelligence, И
+    #     validation. Инсайт строится на РЕАЛЬНОМ замере (measured_evaluation): на `unknown` петля
+    #     возвращает None (нет данных — инсайт не фабрикуется). Кандидат — DRAFT (writer ≠ judge),
+    #     в дочку ничего не пишется. `no_insight_reason` честно называет, почему инсайта нет.
+    from ai_ops_kit.intelligence import outcome_insight
+    measured_eval = (outcome or {}).get("measured_evaluation")
+    loop = outcome_insight.from_outcome(contract, readout, measured_eval) if measured_eval else None
+    insight = (loop or {}).get("insight")
+    candidate_work = (loop or {}).get("candidate_work")
+    recommendation = (loop or {}).get("recommendation")
+    insight_gap = None if insight else outcome_insight.no_insight_reason(measured_eval)
 
     notes: list[str] = []
     if not prr["found"]:
@@ -246,6 +311,18 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     notes.append(f"гейт {GATE_ID}: доказательство с источником только "
                  f"{analytics['evidence_with_producer']} из {analytics['evidence_required']} "
                  f"({', '.join(EVIDENCE_WITHOUT_PRODUCER)} — not_measured, producer'а нет)")
+    if product_status["technically_done_not_product"]:
+        notes.append("технически done, продуктово нет: доставка зелёная, а измеренный итог провален "
+                     "(" + (outcome.get("measured_evaluation") or {}).get("reason", "") + ")")
+    elif outcome_verdict != "unknown":
+        notes.append(f"итог по релизу измерен: {outcome_verdict} "
+                     "(" + (outcome.get("measured_evaluation") or {}).get("reason", "") + ")")
+    if candidate_work:
+        notes.append(f"обратная петля: из измеренного итога родился инсайт (уверенность "
+                     f"{insight.get('confidence')}) и кандидат-работа «{candidate_work.get('title')}» "
+                     f"— черновик, активной не станет без твоего решения")
+    elif insight_gap:
+        notes.append(f"инсайт не строю: {insight_gap} (нет данных — не выдумываю)")
 
     return {
         "schema_version": 1,
@@ -254,15 +331,57 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
         "prr": prr,
         "analytics_runtime": analytics,
         "outcome": outcome,
+        # `verdict` — вердикт ГОТОВНОСТИ ВЫПУСКА (приход аналитики), как и был.
         "verdict": synth["verdict"],
         "readout_decision": synth["readout_decision"],
-        # ПРОВОДКА ВОЗВРАЩАЕТ ВЕРДИКТ, НО ФЛИП ИСХОДА ЖДЁТ РЕАЛЬНОГО ВЫПУСКА. Полное доказательство
-        # (все 4 + реальная выгрузка аналитики после deploy) в синтетике недостижимо, поэтому здесь
-        # ВСЕГДА False. TODO(#545): выставлять True только после реального выпуска дочки, когда
-        # аналитический бэкенд отдаёт выгрузку и гейт закрывается всеми четырьмя доказательствами.
-        "outcome_flip_ready": False,
+        # `outcome_verdict` — вердикт по ПРОДУКТОВОМУ ИТОГУ из реального замера: unknown -> met/failed.
+        "outcome_verdict": outcome_verdict,
+        # `product_status` — явный статус, в т.ч. «технически done, продуктово нет».
+        "product_status": product_status,
+        # ФЛИП ГОТОВ, когда пришёл реальный замер (met/failed). Без замера — False (честный дефолт).
+        # Сам флип goal.outcome не делается здесь: это отдельный координационный PR (см. #566).
+        "outcome_flip_ready": outcome_flip_ready,
+        # ОБРАТНАЯ ПЕТЛЯ (#567): инсайт из измеренного итога, кандидат-работа (DRAFT) и рекомендация
+        # с evidence. None, если итог не измерен (`insight_gap` называет почему). Ничего не пишется:
+        # кандидат виден в inbox/next, активной работой станет только по решению человека.
+        "insight": insight,
+        "candidate_work": candidate_work,
+        "recommendation": recommendation,
+        "insight_gap": insight_gap,
         "notes": notes,
     }
+
+
+# Где искать OutcomeContract/OutcomeReadout в дочке (те же места, что читают explain/inbox/next).
+_OUTCOME_CONTRACT_GLOBS = ("outcome-contract.yaml", ".ai/project/readout/outcome-contract.yaml",
+                           "features/*/outcome-contract.yaml")
+_OUTCOME_READOUT_GLOBS = ("outcome-readout.yaml", ".ai/project/readout/outcome-readout.yaml",
+                          "features/*/outcome-readout.yaml")
+
+
+def discover_and_run(child_root) -> dict | None:
+    """Найти OutcomeContract(+Readout) в стандартных местах и прогнать петлю. Read-only.
+
+    Единый путь автообнаружения для inbox/next (#567) и explain (#566) — один механизм, не второй.
+    -> результат `run_post_release` либо None (контракта нет — тогда и петли нет)."""
+    root = Path(child_root)
+
+    def _first(globs):
+        for pat in globs:
+            found = sorted(root.glob(pat))
+            if found:
+                return found[0]
+        return None
+
+    cpath = _first(_OUTCOME_CONTRACT_GLOBS)
+    if cpath is None:
+        return None
+    contract, _ = _load_doc(cpath)
+    if not isinstance(contract, dict) or contract.get("kind") != "OutcomeContract":
+        return None
+    rpath = _first(_OUTCOME_READOUT_GLOBS)
+    readout = _load_doc(rpath)[0] if rpath is not None else None
+    return run_post_release(None, root, contract=contract, readout=readout)
 
 
 # ── Человекочитаемый разбор (для --json=off из CLI используется presenter; здесь — технический) ──
@@ -282,9 +401,34 @@ def render(result: dict) -> str:
         L.append("  PRR: не найден")
     if result.get("outcome"):
         o = result["outcome"]
-        L.append(f"  outcome {o.get('outcome_id') or '—'}: verdict={o['verdict']}")
+        L.append(f"  outcome {o.get('outcome_id') or '—'}: declared={o['verdict']}, "
+                 f"measured={o.get('measured_verdict')} (flip_ready={o.get('flip_ready')})")
+        me = o.get("measured_evaluation") or {}
+        if me.get("reason"):
+            L.append(f"    · замер: {me['reason']}")
         for g in o.get("gaps") or []:
             L.append(f"    · пробел: {g}")
+    ps = result.get("product_status") or {}
+    if ps.get("label"):
+        L.append(f"  продуктовый статус: {ps['label']} "
+                 f"(доставка {'подтверждена' if ps.get('delivery_verified') else 'не подтверждена'}, "
+                 f"итог {ps.get('outcome_verdict')})")
+    ins, cand, rec = result.get("insight"), result.get("candidate_work"), result.get("recommendation")
+    if ins:
+        L.append(f"  инсайт {ins.get('id')}: {ins.get('headline')} (уверенность {ins.get('confidence')})")
+        epi = ins.get("epistemics") or {}
+        for k, ru in (("observed", "наблюдал"), ("inferred", "вывел"), ("unknown", "не знаю")):
+            for item in epi.get(k) or []:
+                L.append(f"    · {ru}: {item}")
+        if rec:
+            L.append(f"    рекомендация ({rec.get('sources')} набл., факты {len(rec.get('facts') or [])}, "
+                     f"допущения {len(rec.get('assumptions') or [])}, "
+                     f"критично неизвестно {len(rec.get('critical_unknowns') or [])}): {rec.get('proposal')}")
+        if cand:
+            L.append(f"    кандидат-работа {cand.get('id')} [{cand.get('status')}, требует решения "
+                     f"человека]: {cand.get('title')} (роль {cand.get('owner_role')})")
+    elif result.get("insight_gap"):
+        L.append(f"  инсайт не строю: {result['insight_gap']}")
     for n in result.get("notes") or []:
         L.append(f"  — {n}")
     return "\n".join(L)

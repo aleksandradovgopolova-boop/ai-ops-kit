@@ -1140,6 +1140,22 @@ def _explain_cost_tech(cost):
             + ("стоимость полная" if cost.get("cost_complete") else "стоимость неполная"))
 
 
+def _explain_outcome(child_root):
+    """Продуктовый ИТОГ по релизу для карточки explain (#566). Read-only, опционально.
+
+    Автообнаружение OutcomeContract(+Readout) и прогон делает ЕДИНЫЙ путь
+    post_release_loop.discover_and_run — тот же механизм, что у `readout`/`inbox`/`next`, не второй.
+    Нет артефактов -> None (карточка не меняется)."""
+    from ai_ops_kit.cli import post_release_loop
+    result = post_release_loop.discover_and_run(child_root)
+    if result is None:
+        return None
+    ev = (result.get("outcome") or {}).get("measured_evaluation") or {}
+    return {"product_status": result.get("product_status"),
+            "outcome_verdict": result.get("outcome_verdict"),
+            "reason": ev.get("reason"), "flip_ready": result.get("outcome_flip_ready")}
+
+
 def _explain_state(child_root):
     """READ-ONLY снимок «что с моей задачей прямо сейчас». Ничего не пишет. -> dict."""
     from ai_ops_kit.engine import living_status
@@ -1149,21 +1165,60 @@ def _explain_state(child_root):
     if active is None:
         return {"registry_ok": False, "focus": None, "living_status": doc}
     if not active:
-        return {"registry_ok": True, "focus": None, "active_count": 0, "living_status": doc}
+        return {"registry_ok": True, "focus": None, "active_count": 0, "living_status": doc,
+                "product_outcome": _explain_outcome(root)}
     focus = active[0]
     wid = _explain_wid(focus)
-    wi = _explain_workitem(root, wid)
-    status = wi.get("status") or "in_progress"
+    # #565: per-work факты берём из ЕДИНОЙ Work-проекции (тот же источник, что у `work show` и
+    # `status`), а не своим набором чтений workitem/active-work. Так explain и work show не расходятся.
+    from ai_ops_kit.lifecycle import work_view
+    view = work_view.project_work(wid, root)
+    status = view.get("status") or "in_progress"
     return {
         "registry_ok": True, "active_count": len(active),
-        "focus": {"wid": wid, "task": wi.get("task") or focus.get("title") or wid,
-                  "workflow": wi.get("workflow"), "status": status,
-                  "branch": focus.get("branch"),
-                  "human_approval": bool(wi.get("human_approval_required"))},
+        "focus": {"wid": wid, "task": view.get("title") or focus.get("title") or wid,
+                  "workflow": view.get("workflow"), "status": status,
+                  "branch": view.get("branch") or focus.get("branch"),
+                  "human_approval": bool(view.get("human_approval_required"))},
         "conflicts": _explain_conflicts(focus, active[1:]),
         "cost": _explain_cost(root, wid), "gates": _explain_gates(root, wid),
+        "work_view": view,
         "living_status": doc,
+        "product_outcome": _explain_outcome(root),
     }
+
+
+def _explain_apply_outcome(msg, po):
+    """Вплести продуктовый ИТОГ в карточку explain (#566): «технически done, продуктово нет» — явно.
+
+    Итог ещё не измерен (unknown) — карточку НЕ трогаем: unknown ≠ провал. Провал измеренного итога
+    при зелёной доставке — отдельный явный заголовок, чтобы «хорошо сделали» не читалось как «сделали
+    правильное»."""
+    if not po:
+        return msg
+    ps = po.get("product_status") or {}
+    verdict = po.get("outcome_verdict")
+    if verdict not in ("met", "failed"):
+        return msg
+    reason = po.get("reason") or ""
+    base_summary = (msg.get("summary") or "").rstrip(". ")
+    if ps.get("technically_done_not_product"):
+        msg["headline"] = "Технически done, продуктово нет"
+        msg["summary"] = base_summary + ". Доставка зелёная, но измеренный продуктовый результат " \
+                                        "цель не берёт."
+        msg["why_it_matters"] = ("«Сделали хорошо» и «сделали правильное» — это разные вещи. "
+                                 + reason).strip()
+        msg["status"] = "degraded"
+    elif verdict == "failed":
+        msg["summary"] = base_summary + ". Продуктовый результат по релизу не достигнут."
+        msg["why_it_matters"] = ((msg.get("why_it_matters") or "") + " " + reason).strip()
+        msg["status"] = "degraded"
+    else:  # met
+        msg["summary"] = base_summary + ". Продуктовый результат по релизу достигнут."
+    td = msg.setdefault("technical_details", {"available": True, "payload": {}})
+    td["available"] = True
+    td.setdefault("payload", {})["продуктовый итог"] = ps.get("label")
+    return msg
 
 
 def _explain_message(state):
@@ -1171,6 +1226,7 @@ def _explain_message(state):
     аудитории `product`; здесь мы лишь собираем факты и говорим блокер СЛЕДСТВИЕМ."""
     from ai_ops_kit.ui import presenter
     ls = _explain_living_note(state.get("living_status"))
+    po = state.get("product_outcome")
     if not state.get("registry_ok"):
         return presenter.message(
             status="degraded", headline="Не знаю, что идёт прямо сейчас",
@@ -1180,12 +1236,12 @@ def _explain_message(state):
             next_steps=["восстановить запись об идущих работах и повторить"],
             technical={"статус-док": ls})
     if state.get("focus") is None:
-        return presenter.message(
+        return _explain_apply_outcome(presenter.message(
             status="ok", headline="Прямо сейчас ничего не идёт",
             summary="Активной работы нет — ни одной начатой задачи.",
             why_it_matters="Сужу по заявкам на работу: открытых нет.",
             next_steps=["скажи, что взять, или спроси «что дальше» — предложу с обоснованием"],
-            technical={"идёт работ": 0, "статус-док": ls})
+            technical={"идёт работ": 0, "статус-док": ls}), po)
     f = state["focus"]
     st = f["status"]
     label = _EXPLAIN_STATUS_LABEL.get(st, "в работе")
@@ -1200,7 +1256,7 @@ def _explain_message(state):
     else:
         why = "Сейчас ничего не мешает — работа продолжается."
         status = "ok"
-    return presenter.message(
+    return _explain_apply_outcome(presenter.message(
         status=status, headline=f'«{f["task"]}» — {label}',
         summary=f"{where} {_explain_cost_line(cost)}",
         why_it_matters=why,
@@ -1210,7 +1266,7 @@ def _explain_message(state):
                    "оценка стоимости": _explain_cost_tech(cost), "ветка": f.get("branch") or "—",
                    "идёт работ всего": state.get("active_count"),
                    "пересечение областей": ", ".join(state.get("conflicts") or []) or "—",
-                   "статус-док": ls})
+                   "статус-док": ls}), po)
 
 
 def _intent_explain(task, child_root, signals, a):
@@ -1299,6 +1355,26 @@ def _inbox_insight(child_root):
             "path": _INBOX_BRIEFS_LATEST_REL}
 
 
+def _inbox_outcome_candidate(child_root):
+    """Кандидат-работа из обратной петли Outcome→Insight (#567) — ждёт решения владельца. read-only.
+
+    Автообнаружение контракта/отчёта и прогон петли делает ЕДИНЫЙ путь post_release_loop.discover_and_run
+    (тот же, что у `readout`/`explain` — один механизм). Инсайт рождается только на РЕАЛЬНОМ замере
+    (met/failed); на `unknown` кандидата нет — «нет данных», а не пункт очереди. Кандидат — DRAFT:
+    показываем как предложение с рекомендацией, активной работой без решения человека он не станет.
+    -> dict|None (None — контракта/инсайта/кандидата нет)."""
+    from ai_ops_kit.cli import post_release_loop
+    result = post_release_loop.discover_and_run(child_root) or {}
+    cand = result.get("candidate_work")
+    if not cand:
+        return None
+    rec, ins = result.get("recommendation") or {}, result.get("insight") or {}
+    return {"wid": cand.get("id"), "what": cand.get("title"), "confidence": ins.get("confidence"),
+            "proposal": rec.get("proposal") or "", "facts": rec.get("facts") or [],
+            "assumptions": rec.get("assumptions") or [],
+            "critical_unknowns": rec.get("critical_unknowns") or [], "sources": rec.get("sources")}
+
+
 def _inbox_release_warnings(child_root):
     """Предупреждения о выпуске из живого здоровья продукта: band red/yellow -> выпускать рискованно.
     Нет метрик/сбой сбора -> пусто (выдуманного предупреждения не даём). read-only (health считает
@@ -1322,12 +1398,13 @@ def _inbox_collect(child_root):
     blocked, reviews = _inbox_works(root)
     registry_ok = blocked is not None
     insight = _inbox_insight(root)
+    candidate = _inbox_outcome_candidate(root)   # #567: кандидат-работа из обратной петли
     warnings = _inbox_release_warnings(root)
     total = (len(decisions) + len(blocked or []) + len(reviews or [])
-             + (1 if insight else 0) + len(warnings))
+             + (1 if insight else 0) + (1 if candidate else 0) + len(warnings))
     return {"registry_ok": registry_ok, "total": total, "decisions": decisions,
             "blocked": blocked or [], "reviews": reviews or [], "insight": insight,
-            "warnings": warnings}
+            "candidate": candidate, "warnings": warnings}
 
 
 def _inbox_status(queue):
@@ -1335,7 +1412,7 @@ def _inbox_status(queue):
     -> заблокировано; иначе ок; недостоверный реестр -> degraded (не знаем, что застряло)."""
     if not queue.get("registry_ok", True):
         return "degraded"
-    if queue["decisions"] or queue["reviews"]:
+    if queue["decisions"] or queue["reviews"] or queue.get("candidate"):
         return "needs_input"
     if queue["blocked"] or queue["warnings"]:
         return "blocked"
@@ -1351,6 +1428,8 @@ def _inbox_counts(queue):
         parts.append(f"остановлено работ — {len(queue['blocked'])}")
     if queue["reviews"]:
         parts.append(f"ждут подтверждения — {len(queue['reviews'])}")
+    if queue.get("candidate"):
+        parts.append("предложенная работа по итогу релиза")
     if queue["insight"]:
         parts.append("свежий обзор")
     if queue["warnings"]:
@@ -1386,6 +1465,22 @@ def _inbox_render(queue, aud):
     for r in queue["reviews"]:
         lines.append("")
         lines.append(h(f"• Ждёт подтверждения «{r['task']}»: {r['why']}"))
+    c = queue.get("candidate")
+    if c:
+        # #567: рекомендация несёт evidence ДО предложения — сколько наблюдений, что факт, что
+        # допущение, что критично неизвестно; и только потом «предлагаю». Кандидат — черновик:
+        # не станет активной работой без решения владельца (writer ≠ judge).
+        lines.append("")
+        lines.append(h(f"• Предлагаю по итогу релиза: {c['what']}"))
+        lines.append("    " + h(f"на чём основано: наблюдений — {c.get('sources')}, "
+                                f"фактов — {len(c['facts'])}, допущений — {len(c['assumptions'])}, "
+                                f"критично неизвестно — {len(c['critical_unknowns'])} "
+                                f"(уверенность {c.get('confidence')})"))
+        for f_ in c["facts"][:3]:
+            lines.append("      " + h(f"факт: {f_}"))
+        for u in c["critical_unknowns"][:3]:
+            lines.append("      " + h(f"не знаю: {u}"))
+        lines.append("    " + h("это черновик — активной работой станет только по твоему решению"))
     if queue["insight"]:
         lines.append("")
         lines.append(h(f"• Есть {queue['insight']['what']}"))
