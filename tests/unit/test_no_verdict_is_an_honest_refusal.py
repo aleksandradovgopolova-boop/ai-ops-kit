@@ -67,7 +67,10 @@ def test_no_verdict_becomes_named_refusal_not_a_silent_stall(child_root):
 
 @pytest.mark.unit
 def test_provider_refusal_names_the_empty_answer(child_root):
-    """Провайдер судьи отказал (пустой ответ) -> причина названа человеческими словами, не «нет заключения»."""
+    """Провайдер судьи вернул ПУСТО на блокирующем гейте -> причина названа человеческими словами
+    («пустой»), не «нет заключения». #570-follow-up (07.09): пустой/структурно-немой ответ ведёт в
+    awaiting_reviewer (handoff оркестратору), а не в глухой no-verdict — но гейт по-прежнему НЕ
+    закрыт (0 false-green), и причина названа честно."""
     from ai_ops_kit.providers.response_contract import ProviderRefusal
     _init_git(child_root)
 
@@ -77,9 +80,77 @@ def test_provider_refusal_names_the_empty_answer(child_root):
 
     report = _run(child_root, refuses, "nv2")
     entry = _ux(report)
-    assert entry is not None and entry.get("closed_as") == "refused"
+    assert entry is not None and entry.get("closed_as") == "awaiting_reviewer"
     assert "пустой" in (entry.get("reason") or ""), entry
     assert "ux_review" in report["gates"]["unmet"]
+
+
+ENG_SIGNALS = {"task_type": "ENGINEERING", "size": "small", "risk": "low", "affected_areas": ["core"]}
+
+
+def _run_eng(child_root, reviewer, feature):
+    """Живой прогон ENGINEERING-задачи (гейт code_review блокирующий) с подменённым ревьюером."""
+    ops = iter([{"op": "write", "path": f"src/{feature}.py", "content": "def g():\n    return 1\n"},
+                 {"done": True}])
+    return execution_pipeline.run_pipeline(
+        task="engineering task", signals=ENG_SIGNALS, child_root=child_root,
+        proposer=lambda ctx: next(ops), budget={"max_model_calls": 30}, feature=feature,
+        commit=True, isolate=True, install_deps=False, review=True, reviewer_proposer=reviewer)
+
+
+def _cr(report):
+    return next((r for r in (report.get("reviews") or []) if r["gate"] == "code_review"), None)
+
+
+@pytest.mark.unit
+def test_empty_answer_on_blocking_gate_opens_awaiting_and_writes_request(child_root):
+    """#570-follow-up (07.09): ПУСТОЙ ответ провайдера (структурно немой) на БЛОКИРУЮЩЕМ code_review
+    -> awaiting_reviewer + записан машиночитаемый запрос на ревью (не generic no-verdict, не
+    hard-error). Гейт остаётся НЕ закрытым (0 false-green), причина названа честно («пустой»)."""
+    from ai_ops_kit.providers.response_contract import ProviderRefusal
+    from ai_ops_kit.engine import reviewer_handoff
+    _init_git(child_root)
+
+    def refuses(_p):
+        raise ProviderRefusal("empty_answer", "claude -p вернул пустой result (rc=0)",
+                              "claude-cli", "claude-code-local")
+
+    report = _run_eng(child_root, refuses, "cr_empty")
+    e = _cr(report)
+    assert e is not None and e.get("closed_as") == "awaiting_reviewer", report.get("reviews")
+    assert "пустой" in (e.get("reason") or ""), e
+    assert "code_review" in report["gates"]["unmet"]           # блокирующий гейт не закрыт
+    # запрос на ревью РЕАЛЬНО записан (оркестратор знает, что заполнить) — под child_root/.ai
+    assert reviewer_handoff.request_path(child_root, "code_review").is_file()
+
+
+@pytest.mark.unit
+def test_env_unavailable_on_blocking_gate_opens_awaiting_via_flow(child_root):
+    """Тот же handoff и для структурной недоступности среды (вложенный claude -p оборвался ДО модели)
+    на живом пути run_pipeline — awaiting_reviewer, запрос записан, гейт не закрыт."""
+    from ai_ops_kit.providers.orchestrator_providers import ProviderEnvUnavailableError
+    from ai_ops_kit.engine import reviewer_handoff
+    _init_git(child_root)
+
+    def env_down(_p):
+        raise ProviderEnvUnavailableError("claude-cli", "duration_api_ms:0")
+
+    report = _run_eng(child_root, env_down, "cr_env")
+    e = _cr(report)
+    assert e is not None and e.get("closed_as") == "awaiting_reviewer", report.get("reviews")
+    assert "code_review" in report["gates"]["unmet"]
+    assert reviewer_handoff.request_path(child_root, "code_review").is_file()
+
+
+@pytest.mark.unit
+def test_analysis_without_verdict_stays_named_refusal_not_awaiting(child_root):
+    """Граница: ревьюер ДАЛ разбор, но БЕЗ вердикта (проза, не пустой/структурно-немой ответ) ->
+    остаётся НАЗВАННЫМ no-verdict (refused), НЕ awaiting. Не всякий no-verdict — handoff."""
+    _init_git(child_root)
+    report = _run_eng(child_root, lambda _p: "Пока не могу заключить по этому диффу.", "cr_prose")
+    e = _cr(report)
+    assert e is not None and e.get("closed_as") == "refused", report.get("reviews")
+    assert "code_review" in report["gates"]["unmet"]
 
 
 @pytest.mark.unit

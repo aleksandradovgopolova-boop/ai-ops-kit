@@ -36,6 +36,7 @@ from ai_ops_kit.engine.pipeline_git import (  # noqa: E402
 )
 from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402
     _install_dependencies, _run_reviews, _reevaluate_artifact_evidence,
+    _consume_handoff_verdicts,
 )
 from ai_ops_kit.engine.pipeline_readiness import _evaluate_security  # noqa: E402
 
@@ -476,6 +477,15 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
                                         signals, committed_sha, budget,
                                         calibrated_enforcement=calibrated_enforcement,
                                         ui_evidence=ui_evidence, child_root=child_root)
+    elif committed_sha:
+        # #570 follow-up (живой прогон 07.09): без `--review` (штатный resume/reevaluate, 0
+        # model-вызовов) записанный оркестратором вердикт всё равно ПОТРЕБЛЯЕТСЯ. artifact-first не
+        # должен жить только внутри провайдерного пути `_run_reviews` — иначе валидный вердикт-артефакт
+        # не закрывал code_review на reevaluate, хотя load_verdict его принимает. Провайдер здесь НЕ
+        # вызывается; заземление и writer≠judge — те же (0 false-green).
+        gate_ev, reviews = _consume_handoff_verdicts(
+            work_root, plan["gates"], gate_ev, signals, committed_sha, child_root=child_root,
+            calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence)
 
     # 6e. v2.95 -> v2.101 Security Pack: доменный security-вердикт -> gate_ev['security'].
     #     v3.38 (K6): тело вынесено в _evaluate_security (модуль pipeline_readiness, реэкспорт выше).
