@@ -64,6 +64,9 @@ ALLOWLIST_MODULES: dict[str, str] = {
         "commands/maintenance/night-review.md зовёт процессом; Robin запускает по расписанию",
     f"{PKG}.lifecycle.merge_memory":
         "commands/task/ai-finish-task.md зовёт `ai_ops_kit.lifecycle.merge_memory record …`",
+    f"{PKG}.cli.entry":
+        "точка входа `ai-ops` из pyproject.toml -> [project.scripts]; console_scripts запускает "
+        "процессом (pip/pipx), а не импортом — нулевой импортер здесь норма по устройству",
 }
 
 # --- Замороженный потолок генуинно-дормантных модулей (2026-09-05, аудит 10 ролей). ---
